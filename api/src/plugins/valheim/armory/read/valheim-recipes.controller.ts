@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type {
   ValheimRecipeCatalogResponse,
   ValheimRecipePlanResponse,
+  ValheimRecipeStockResponse,
   ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import type { AuthenticatedExpressRequest } from '../../../../auth/types';
@@ -71,6 +72,26 @@ export class ValheimRecipesController {
       includeVehicles: parseIncludeVehicles(includeVehicles),
     };
     return this.recipes.plan(serverId, list, opts, req.user);
+  }
+
+  /**
+   * GET — ROK-1899: the viewer's stock totals in `/plan`'s scope (the
+   * crafting window greys what they cannot afford). Static path, so it is
+   * declared before `/:prefab/tree`.
+   */
+  @Get(`${BASE}/stock`)
+  @Header('Cache-Control', NO_STORE)
+  stock(
+    @Param('serverId', armoryIdPipe) serverId: number,
+    @Query('includePersonal') includePersonal: unknown,
+    @Query('includeVehicles') includeVehicles: unknown,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimRecipeStockResponse> {
+    const opts = {
+      includePersonal: parseIncludePersonal(includePersonal),
+      includeVehicles: parseIncludeVehicles(includeVehicles),
+    };
+    return this.recipes.stock(serverId, opts, req.user);
   }
 
   /** GET — one target's craft tree (`have`/`short` always null). */

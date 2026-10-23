@@ -9,11 +9,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { SQL } from 'drizzle-orm';
 import {
   ValheimRecipeCatalogResponseSchema,
+  VALHEIM_PLAN_QUANTITY_MAX,
   ValheimRecipePlanResponseSchema,
+  ValheimRecipeStockResponseSchema,
   ValheimRecipeTreeResponseSchema,
   type ValheimRecipeCatalogResponse,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeStockResponse,
   type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../../auth/types';
@@ -24,9 +27,10 @@ import { assertServerHubVisible } from './valheim-hub-guard.helpers';
 import { toMinuteIso } from './valheim-materials.mappers';
 import {
   catalogueEntries,
+  catalogueReadPrefabs,
   catalogueStations,
+  ingredientPrefabs,
   maxQualityLookup,
-  producedPrefabs,
   reachablePrefabs,
 } from './valheim-recipes.catalog.helpers';
 import { RecipeGraphCache, type RecipeGraph } from './valheim-recipes.graph';
@@ -70,25 +74,62 @@ export class ValheimRecipesService {
     await assertServerHubVisible(this.hubs, serverId, user);
     const body = await this.repo.read(async (r) => {
       const set = await r.latestSet(serverId);
-      if (!set) return emptyCatalogue();
-      const graph = await this.graph(r, set);
-      const prefabs = producedPrefabs(graph);
-      const cat = await r.materials.findCatalog(
-        serverId,
-        set.gameVersion,
-        prefabs,
-      );
-      return {
-        gameVersion: set.gameVersion,
-        capturedAt: toMinuteIso(set.capturedAt),
-        catalogFallback: cat !== null && !cat.exact,
-        entries: catalogueEntries(graph, cat?.items ?? null),
-        stations: catalogueStations(graph),
-        itemAtlas: projectCatalog([], cat).atlas,
-        recipeAtlas: await r.recipeAtlas(set),
-      };
+      return set ? this.catalogueIn(r, set) : emptyCatalogue();
     });
     return ValheimRecipeCatalogResponseSchema.parse(body);
+  }
+
+  /** One items read names the entries AND their ingredients (ROK-1899). */
+  private async catalogueIn(
+    r: RecipesReader,
+    set: ValheimRecipeSetRow,
+  ): Promise<ValheimRecipeCatalogResponse> {
+    const graph = await this.graph(r, set);
+    const cat = await r.materials.findCatalog(
+      set.pelicanServerId,
+      set.gameVersion,
+      catalogueReadPrefabs(graph),
+    );
+    const entries = catalogueEntries(graph, cat?.items ?? null);
+    const { items: ingredients, atlas } = projectCatalog(
+      ingredientPrefabs(entries),
+      cat,
+    );
+    return {
+      gameVersion: set.gameVersion,
+      capturedAt: toMinuteIso(set.capturedAt),
+      catalogFallback: cat !== null && !cat.exact,
+      entries,
+      stations: catalogueStations(graph),
+      ingredients,
+      itemAtlas: atlas,
+      recipeAtlas: await r.recipeAtlas(set),
+    };
+  }
+
+  /**
+   * `GET …/recipes/stock` (ROK-1899) — the viewer's chest totals in the SAME
+   * scope `/plan` nets against (D7), summed over qualities; no scan → `none`.
+   */
+  async stock(
+    serverId: number,
+    opts: PlanStockOptions,
+    user: AuthenticatedUser,
+  ): Promise<ValheimRecipeStockResponse> {
+    await assertServerHubVisible(this.hubs, serverId, user);
+    const scope = stockScope(user, opts);
+    const body = await this.repo.read(async (r) => {
+      const { scan, stock } = await loadStock(r, serverId, scope);
+      const totals = [...(stock ?? [])].map(
+        ([prefab, n]) => [prefab, Math.min(n, VALHEIM_PLAN_QUANTITY_MAX)] as const,
+      );
+      return {
+        stock: scan ? ('scan' as const) : ('none' as const),
+        capturedAt: scan ? toMinuteIso(scan.capturedAt) : null,
+        totals: Object.fromEntries(totals),
+      };
+    });
+    return ValheimRecipeStockResponseSchema.parse(body);
   }
 
   /** `GET …/recipes/:prefab/tree` — 404 when nothing builds the prefab. */
