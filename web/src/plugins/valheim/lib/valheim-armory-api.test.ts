@@ -5,12 +5,14 @@ import { SchemaValidationError } from '../../../lib/api/fetch-api';
 import {
     valheimCharacterClaimed,
     valheimCharactersHandler,
+    valheimClaimStatusHandler,
     valheimCharacterHandler,
     valheimCharacterDetail,
 } from '../../../test/mocks/valheim-armory-handlers';
 import {
     fetchValheimCharacter,
     fetchValheimCharacters,
+    fetchValheimClaimStatus,
     isNotFoundError,
     valheimBlobPath,
     valheimCharacterPath,
@@ -29,6 +31,12 @@ describe('valheim armory paths', () => {
         expect(valheimCharactersPath(7, 2, 25)).toBe(
             '/plugins/valheim/armory/characters?serverId=7&page=2&pageSize=25',
         );
+    });
+    it('adds unclaimed=1 only when the filter is on (ROK-1933)', () => {
+        expect(valheimCharactersPath(7, 1, 50, true)).toBe(
+            '/plugins/valheim/armory/characters?serverId=7&page=1&pageSize=50&unclaimed=1',
+        );
+        expect(valheimCharactersPath(7, 1, 50, false)).not.toContain('unclaimed');
     });
     it('builds the detail path', () => {
         expect(valheimCharacterPath(11)).toBe(
@@ -59,6 +67,15 @@ describe('valheim armory fetchers', () => {
         await expect(fetchValheimCharacters(7, 1)).resolves.toEqual({
             data: [valheimCharacterClaimed],
         });
+    });
+    it('fetches the claim status, shape-locked (ROK-1933)', async () => {
+        server.use(valheimClaimStatusHandler({ viewerHasClaim: false, unclaimedCount: 3 }));
+        await expect(fetchValheimClaimStatus(7)).resolves.toEqual({
+            viewerHasClaim: false,
+            unclaimedCount: 3,
+        });
+        server.use(valheimClaimStatusHandler({ viewerHasClaim: false, unclaimedCount: -1 }));
+        await expect(fetchValheimClaimStatus(7)).rejects.toBeInstanceOf(Error);
     });
     it('rejects a detail that breaks the contract (shape lock)', async () => {
         server.use(

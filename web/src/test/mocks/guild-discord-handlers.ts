@@ -5,7 +5,7 @@
  */
 import { http, HttpResponse } from 'msw';
 import type {
-    GuildDiscordChannelListDto, GuildDiscordChannelOptionDto, GuildDiscordMessageDto, GuildDiscordMirrorDto,
+    GuildDiscordChannelListDto, GuildDiscordChannelOptionDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, HubWelcomeResult,
 } from '@raid-ledger/contract';
 
 const GUILDS = 'http://localhost:3000/guilds';
@@ -38,7 +38,11 @@ export function okMirror(messages: GuildDiscordMessageDto[], channel = PUBLIC_CH
 
 export const NO_CHANNELS: GuildDiscordChannelListDto = { connected: true, channels: [] };
 
+/** ROK-1933 — the re-post route's default answer: a fresh, pinned welcome. */
+export const WELCOME_POSTED: HubWelcomeResult = { result: 'posted', pinned: true, warning: null };
+
 export const guildDiscordHandlers = [
+    http.post(`${GUILDS}/:id/discord/welcome`, () => HttpResponse.json(WELCOME_POSTED)),
     http.get(`${GUILDS}/:id/discord`, () => HttpResponse.json({ state: 'unset' })),
     http.get(`${GUILDS}/:id/discord/channels`, () => HttpResponse.json(NO_CHANNELS)),
 ];

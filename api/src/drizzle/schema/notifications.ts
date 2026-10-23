@@ -51,6 +51,7 @@ export const notifications = pgTable(
         'hub_event_tagged',
         'hub_proposal_submitted',
         'hub_proposal_reviewed',
+        'valheim_claim_suggestion',
         'system',
       ],
     }).notNull(),

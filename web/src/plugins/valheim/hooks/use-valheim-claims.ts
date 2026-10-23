@@ -19,7 +19,7 @@ import {
 import { valheimMaterialsKeys } from './use-valheim-materials';
 import { valheimRecipesKeys } from './use-valheim-recipes';
 
-/** Refetch the sheet, every list page and the claim history for `id`. */
+/** Refetch the sheet, every list page, the claim banner's status and the claim history for `id`. */
 export async function invalidateOwnership(
     qc: QueryClient,
     id: number,
@@ -30,6 +30,10 @@ export async function invalidateOwnership(
             queryKey: [...valheimArmoryKeys.all, 'characters'],
         }),
         qc.invalidateQueries({ queryKey: valheimClaimKeys.events(id) }),
+        // ROK-1933: the claim banner's per-server facts (every server — the row's id isn't its server).
+        qc.invalidateQueries({
+            queryKey: [...valheimArmoryKeys.all, 'claim-status'],
+        }),
         // ROK-1853 D9: personal chests follow the character's owner.
         qc.invalidateQueries({ queryKey: valheimMaterialsKeys.all }),
         // ROK-1854: the plan nets personal chests, which follow the owner too.

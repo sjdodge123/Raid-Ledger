@@ -21,6 +21,7 @@ import { insertSuppression } from './channel-lifecycle.store';
 import { unlinkAutoHubsForChannel } from './hub-channel-link.queries';
 import type {
   ApplyContext,
+  HubLinkResult,
   ItemOutcome,
   PlannedGame,
 } from './channel-lifecycle.types';
@@ -109,7 +110,7 @@ async function linkCreated(
   ctx: ApplyContext,
   game: PlannedGame,
   created: CreatedChannel,
-): Promise<number | null> {
+): Promise<HubLinkResult | null> {
   const current = await lockLifecycleBinding(ctx.db, created.bindingId);
   const planned = { channelId: created.channelId, gameId: game.row.gameId };
   const stale = staleLinkDetail(planned, current);
@@ -135,10 +136,11 @@ async function linkAfterCreate(
   item: ItemOutcome,
 ): Promise<ItemOutcome> {
   try {
-    const linkedHubs = await ctx.db.transaction((tx) =>
+    const linked = await ctx.db.transaction((tx) =>
       linkCreated({ ...ctx, db: tx }, game, created),
     );
-    return linkedHubs === null ? item : { ...item, linkedHubs };
+    if (linked === null) return item;
+    return { ...item, linkedHubs: linked.guildIds.length, linked };
   } catch (err) {
     if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
     Sentry.captureException(err, {
@@ -234,8 +236,24 @@ async function runOne(
     return cleanupInTx(ctx, game, err);
   }
   const { created, ...rest } = item;
-  if (created === undefined) return item;
-  return linkAfterCreate(ctx, game, created, rest);
+  const final =
+    created === undefined
+      ? item
+      : await linkAfterCreate(ctx, game, created, rest);
+  return announceCommitted(ctx, final);
+}
+
+/**
+ * ROK-1933 (Codex P2): every tx that linked hubs has committed by now — a
+ * rolled-back one threw into `cleanupInTx` / `linkAfterCreate`'s catch, so its
+ * ids never reach here. Announce them, and keep them out of the item.
+ */
+function announceCommitted(ctx: ApplyContext, item: ItemOutcome): ItemOutcome {
+  const { linked, ...rest } = item;
+  if (linked && linked.guildIds.length > 0) {
+    ctx.hubLinker.announceLinked?.(linked);
+  }
+  return rest;
 }
 
 /** Detail for creates deferred after the guild hit its channel cap. */

@@ -1,13 +1,23 @@
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Optional,
+  type OnModuleInit,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildDiscordManagedForDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import type { HubLinker } from './channel-lifecycle.types';
+import {
+  HUB_CHANNEL_EVENTS,
+  emitHubChannelEvent,
+} from '../../guilds/hub-channel.events';
+import type { HubLinker, HubLinkResult } from './channel-lifecycle.types';
 import type { LifecycleDb } from './channel-lifecycle.store';
 import {
   findManagedForChannel,
-  linkHubsForGame,
+  linkHubIdsForGame,
   selectHubNeedsLinkGameIds,
 } from './hub-channel-link.queries';
 import { registerSignal } from './game-activity.signals';
@@ -27,6 +37,7 @@ export class HubChannelLinkService implements HubLinker, OnModuleInit {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** L11 (D2): community-hub posts / joins / proposals count as activity. */
@@ -43,13 +54,33 @@ export class HubChannelLinkService implements HubLinker, OnModuleInit {
     return selectHubHoldGameIds(db ?? this.db, holdWindow(now, windowDays));
   }
 
-  /** Link every eligible channel-less hub of `gameId`; returns how many. */
-  linkHubsForGame(
+  /**
+   * Link every eligible channel-less hub of `gameId`; returns the linked hub
+   * ids. Emits nothing: under the lifecycle tick `db` is the per-game tx, so
+   * the caller announces via {@link announceLinked} once it commits (Codex P2).
+   */
+  async linkHubsForGame(
     gameId: number,
     channelId: string,
     db?: LifecycleDb,
-  ): Promise<number> {
-    return linkHubsForGame(db ?? this.db, gameId, channelId);
+  ): Promise<HubLinkResult> {
+    const guildIds = await linkHubIdsForGame(db ?? this.db, gameId, channelId);
+    return { channelId, guildIds };
+  }
+
+  /**
+   * ROK-1933: announce each committed link (`previousChannelId` is always
+   * null — only channel-less hubs are linkable). A throwing listener is
+   * contained by `emitHubChannelEvent`.
+   */
+  announceLinked({ channelId, guildIds }: HubLinkResult): void {
+    for (const guildId of guildIds) {
+      emitHubChannelEvent(this.events, HUB_CHANNEL_EVENTS.LINKED, {
+        guildId,
+        channelId,
+        previousChannelId: null,
+      });
+    }
   }
 
   /** Games with an eligible hub lacking a channel (feeds `hubNeedsLink`). */

@@ -4,9 +4,9 @@
  * clear the channel. Every response is parsed by its contract schema.
  */
 import type {
-    GuildDiscordChannelListDto, GuildDiscordMirrorDto, SetGuildDiscordChannelDto,
+    GuildDiscordChannelListDto, GuildDiscordMirrorDto, HubWelcomeResult, SetGuildDiscordChannelDto,
 } from '@raid-ledger/contract';
-import { GuildDiscordChannelListSchema, GuildDiscordMirrorSchema } from '@raid-ledger/contract';
+import { GuildDiscordChannelListSchema, GuildDiscordMirrorSchema, HubWelcomeResultSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 
 const base = (guildId: number): string => `/guilds/${guildId}/discord`;
@@ -26,4 +26,9 @@ export function putGuildDiscordChannel(guildId: number, body: SetGuildDiscordCha
 
 export function deleteGuildDiscordChannel(guildId: number): Promise<void> {
     return fetchApi<void>(`${base(guildId)}/channel`, { method: 'DELETE' });
+}
+
+/** ROK-1933 — post (or edit in place) the hub's welcome embed in its bound channel. No body. */
+export function postGuildDiscordWelcome(guildId: number): Promise<HubWelcomeResult> {
+    return fetchApi(`${base(guildId)}/welcome`, { method: 'POST' }, HubWelcomeResultSchema);
 }

@@ -189,11 +189,18 @@ describe('link_hub re-validates the locked binding (Codex r11 P2)', () => {
   it('a still-routed manual binding is linked without a topic rewrite', async () => {
     lock.mockResolvedValue({ ...CURRENT, autoManaged: false });
     const ctx = makeCtx();
-    jest.mocked(ctx.hubLinker.linkHubsForGame).mockResolvedValue(1);
+    jest
+      .mocked(ctx.hubLinker.linkHubsForGame)
+      .mockResolvedValue({ channelId: 'ch-7', guildIds: [1] });
     const item = await applyAction(ctx, planned('link_hub'));
     expect(ctx.hubLinker.linkHubsForGame).toHaveBeenCalledWith(7, 'ch-7', TX);
     expect(ops.setTopic).not.toHaveBeenCalled();
-    expect(item).toEqual({ outcome: 'done', detail: 'planned', linkedHubs: 1 });
+    expect(item).toEqual({
+      outcome: 'done',
+      detail: 'planned',
+      linkedHubs: 1,
+      linked: { channelId: 'ch-7', guildIds: [1] },
+    });
   });
 });
 

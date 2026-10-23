@@ -44,6 +44,12 @@ export interface HubGameWidget {
     component: LazyExoticComponent<ComponentType<HubWidgetCtx>>;
     /** Optional header control ("See all", a tab jump). */
     action?: ComponentType<HubWidgetCtx>;
+    /**
+     * `card` (default): core draws the `WidgetCard`. `none`: the body is the whole
+     * cell and owns its landmark and frame (a §4.7 callout such as a dismissible
+     * banner) — core keeps the cell id, span, Suspense and error boundary.
+     */
+    chrome?: 'card' | 'none';
     /** Hook-capable probe (may call queries); `false` hides the card. Omitted = always shown. */
     useVisible?: (ctx: HubWidgetCtx) => boolean;
 }
