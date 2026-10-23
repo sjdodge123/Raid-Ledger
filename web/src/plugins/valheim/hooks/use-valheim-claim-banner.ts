@@ -6,7 +6,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
-import { useValheimClaimStatus } from './use-valheim-characters';
+import { useValheimClaimStatus } from './use-valheim-claim-status';
 import {
     claimBannerVariant,
     readClaimBannerDismissed,

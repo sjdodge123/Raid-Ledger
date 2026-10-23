@@ -11,13 +11,11 @@ import {
 import type {
     ValheimCharacterDetail,
     ValheimCharacterSummary,
-    ValheimClaimStatusResponse,
 } from '@raid-ledger/contract';
 import { fetchWithAuth } from '../../../lib/api/fetch-api';
 import {
     fetchValheimCharacter,
     fetchValheimCharacters,
-    fetchValheimClaimStatus,
     isNotFoundError,
     valheimArmoryKeys,
     valheimBlobPath,
@@ -80,22 +78,6 @@ export function useValheimCharacterPages(serverId: number, unclaimed = false) {
         hasMore: (lastLoaded?.length ?? 0) >= VALHEIM_CHARACTERS_PAGE_SIZE,
         loadMore: () => (moreFailed ? void last?.refetch() : nextPage()),
     };
-}
-
-/**
- * ROK-1933 — the claim banner's server facts (viewer has a claim, unclaimed
- * count) in one request, whatever the list's size. `invalidateOwnership`
- * refreshes it after every claim, unclaim or reassign.
- */
-export function useValheimClaimStatus(
-    serverId: number,
-): UseQueryResult<ValheimClaimStatusResponse> {
-    return useQuery({
-        queryKey: valheimArmoryKeys.claimStatus(serverId),
-        queryFn: () => fetchValheimClaimStatus(serverId),
-        enabled: serverId > 0,
-        staleTime: 30_000,
-    });
 }
 
 /** One character sheet. A 404 is final — no retry loop on a dead link. */
