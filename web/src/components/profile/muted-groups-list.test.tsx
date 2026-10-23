@@ -43,8 +43,8 @@ describe('MutedGroupsList', () => {
     it('lists each muted group as a link to its hub with its game name', async () => {
         seed([VANGUARD, ONYX]);
         renderWithProviders(<MutedGroupsList />);
-        expect(await screen.findByRole('link', { name: 'Iron Vanguard' })).toHaveAttribute('href', '/guilds/7');
-        expect(screen.getByRole('link', { name: 'Onyx' })).toHaveAttribute('href', '/guilds/9');
+        expect(await screen.findByRole('link', { name: 'Iron Vanguard' })).toHaveAttribute('href', '/hubs/7');
+        expect(screen.getByRole('link', { name: 'Onyx' })).toHaveAttribute('href', '/hubs/9');
         expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
         expect(screen.getByTestId('muted-groups-list')).toBeInTheDocument();
     });

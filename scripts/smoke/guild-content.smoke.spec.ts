@@ -68,7 +68,7 @@ async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promi
 
 async function openGuildAs(page: Page, guild: SeededGuild, role: Role, hash = ''): Promise<void> {
     await signInOnboardedMember(page, guild.users[role].userId);
-    await page.goto(`/guilds/${guild.guildId}${hash}`);
+    await page.goto(`/hubs/${guild.guildId}${hash}`);
 }
 
 /** Every addon row (pinned first) in display order. */

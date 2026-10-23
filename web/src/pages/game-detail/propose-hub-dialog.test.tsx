@@ -124,7 +124,7 @@ describe('ProposeHubDialog — ROK-1892 staff proposals go live', () => {
         expect(screen.queryByText(/An admin reviews new hubs/)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Send for review' })).not.toBeInTheDocument();
         await fill('Owlbear Club', 'Casual co-op.', 'Create hub');
-        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/guilds/99'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/hubs/99'));
         expect(toast.success).toHaveBeenCalledWith('Your hub is live');
         expect(onClose).toHaveBeenCalled();
     });
@@ -147,7 +147,7 @@ describe('ProposeHubDialog — ROK-1892 staff proposals go live', () => {
         mockDesktop(true);
         renderDialog();
         await fill('Owlbear Club');
-        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/guilds/99'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/hubs/99'));
         expect(toast.success).toHaveBeenCalledWith('Your hub is live');
     });
 });

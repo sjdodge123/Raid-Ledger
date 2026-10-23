@@ -66,7 +66,7 @@ function AutoJoinedNotice({ prompt, onDismiss, pending }: { prompt: HubJoinPromp
         <div role="status" data-testid="hub-auto-joined"
             className="flex items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-foreground">
             <p className="min-w-0">
-                You joined <Link to={`/guilds/${prompt.hubId}`} className="font-semibold underline">{prompt.hubName}</Link> — leave anytime
+                You joined <Link to={`/hubs/${prompt.hubId}`} className="font-semibold underline">{prompt.hubName}</Link> — leave anytime
             </p>
             <Button variant="ghost" size="sm" disabled={pending} aria-label={`Close the ${prompt.hubName} notice`}
                 onClick={() => onDismiss(prompt)}>Close</Button>

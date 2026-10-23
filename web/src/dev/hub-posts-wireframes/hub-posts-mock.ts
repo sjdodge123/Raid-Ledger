@@ -48,7 +48,7 @@ export const MOCK_POSTS: readonly MockPost[] = [
 
 /** The deep link a post carries (spec A5): search param + the Posts tab hash. */
 export function deepLink(postId: number): string {
-    return `/guilds/${MOCK_GUILD.id}?post=${postId}#posts`;
+    return `/hubs/${MOCK_GUILD.id}?post=${postId}#posts`;
 }
 
 /** The Discord excerpt: first ~300 chars on a word boundary (spec §2.5). */

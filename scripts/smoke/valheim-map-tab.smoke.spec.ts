@@ -116,7 +116,7 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     const wide = isDesktop(testInfo);
 
     await page.goto(
-      `/guilds/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
+      `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
     );
     const map = page.getByRole("application", { name: "Valheim map" });
     await expect(map).toBeVisible({ timeout: 15_000 });

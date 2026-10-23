@@ -1,7 +1,7 @@
 /**
  * ROK-1830 — the hub module host API.
  *
- * `/guilds/:id` is a game-agnostic shell (`web/src/components/hub/`). Each game
+ * `/hubs/:id` is a game-agnostic shell (`web/src/components/hub/`). Each game
  * plugin contributes the parts only it can know — extra tabs, Overview
  * widgets, member rows/columns and hero pills — by handing a `HubModule` to
  * `PluginHandle.registerHubModule`. Core never imports a plugin's code; it

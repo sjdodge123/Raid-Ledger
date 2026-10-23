@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto, GuildProfile, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
+import { hubInviteListHandler } from '../../../test/mocks/hub-invite-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { HubSettingsProvider } from '../settings/hub-settings-context';
 import { HubSetupChecklist } from './setup-checklist';
@@ -37,7 +38,7 @@ function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: Hub
     );
 }
 
-describe('HubSetupChecklist', () => {
+describe('HubSetupChecklist — steps', () => {
     it('lists every step with its progress, and marks only what exists as done', async () => {
         serve({ ...EMPTY_PROFILE, rules: [{ title: 'Be on time', body: 'Invites at 19:45.' }] }, UNSET);
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
@@ -64,7 +65,8 @@ describe('HubSetupChecklist', () => {
         serve(EMPTY_PROFILE, UNSET);
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const blocked = await screen.findByTestId('setup-step-blocked-publish');
-        expect(blocked).toHaveTextContent('hidden-by-default hub is coming');
+        expect(blocked).toHaveTextContent('An admin can hide it in Guild settings → Visibility.');
+        expect(blocked).not.toHaveTextContent('hidden-by-default');
         // ROK-1840 r2 FAIL: the reason used to sit in the row's action cell,
         // which is `shrink-0` — a sentence-length reason kept its max-content
         // width and ran off the card at 375px. It now wraps under the label,
@@ -75,7 +77,9 @@ describe('HubSetupChecklist', () => {
         expect(blocked.className.split(/\s+/)).toEqual(expect.arrayContaining(['block', 'text-xs', 'text-dim']));
         expect(blocked.closest('.shrink-0'), 'nothing above it may refuse to shrink').toBeNull();
     });
+});
 
+describe('HubSetupChecklist — who sees it and how it goes away', () => {
     it('a viewer who cannot edit never sees it', async () => {
         serve(EMPTY_PROFILE, UNSET);
         const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit={false} modsConfigured={false} /></HubSettingsProvider>);
@@ -111,7 +115,9 @@ describe('HubSetupChecklist', () => {
         const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await waitFor(() => expect(container).toBeEmptyDOMElement());
     });
+});
 
+describe('HubSetupChecklist — blocked and omitted steps', () => {
     // Lead ruling 1: an Officer has no picker, so the Discord row says who to
     // ask — and, being blocked, it no longer keeps the card from finishing.
     it('an Officer sees an ask-your-Leader Discord row with no action', async () => {
@@ -129,5 +135,43 @@ describe('HubSetupChecklist', () => {
         renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} hasModSources={false} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await screen.findByTestId('setup-checklist');
         expect(screen.queryByTestId('setup-step-mods')).not.toBeInTheDocument();
+    });
+});
+
+// ROK-1891: a community hub's checklist is about inviting players, not importing a roster.
+describe('HubSetupChecklist — per hub kind (ROK-1891)', () => {
+    it('a community hub shows an invite step and no guild or raid wording', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        server.use(hubInviteListHandler({ items: [], liveByViewer: 0, perMemberCap: 5 }));
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canInvite canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-invite')).toHaveTextContent('Invite players to the hub');
+        // Approved string (pending-approval/_approved/ROK-1891-hub-copy STRINGS.md).
+        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent('Share the hub link so players can find it and join.');
+        const action = within(list).getByTestId('setup-step-action-invite');
+        expect(action).toHaveTextContent('Invite');
+        expect(within(list).queryByTestId('setup-step-roster')).not.toBeInTheDocument();
+        expect(within(list).queryByTestId('setup-step-publish')).not.toBeInTheDocument();
+        expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);
+        // The button opens #1742's invite-link dialog — the same one the Members tab's "Invite people" opens.
+        await userEvent.click(action);
+        expect(await screen.findByText('Invite people to Ashen Vanguard')).toBeInTheDocument();
+    });
+
+    it('a community viewer who cannot make invite links gets the invite step without a button', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canInvite={false} canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent('Share the hub link so players can find it and join.');
+        expect(within(list).queryByTestId('setup-step-action-invite')).not.toBeInTheDocument();
+    });
+
+    it('a server hub asks for its Discord channel and server info', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} hasModSources={false} kind="game_server" canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-discord')).toHaveTextContent('Link your Discord channel');
+        expect(within(list).getByTestId('setup-step-links')).toHaveTextContent('Add your server info');
+        expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);
     });
 });

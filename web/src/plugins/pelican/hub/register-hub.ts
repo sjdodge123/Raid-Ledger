@@ -1,6 +1,6 @@
 /**
  * ROK-1831 — the game-server hub module (`kind: 'game_server'`). Core's
- * `/guilds/:id` shell renders it while the Pelican plugin is active. No
+ * `/hubs/:id` shell renders it while the Pelican plugin is active. No
  * Officers, no rank bands; members are whoever played here in 90 days or
  * pressed Join. The hub name comes from the server (core has no name editor).
  */

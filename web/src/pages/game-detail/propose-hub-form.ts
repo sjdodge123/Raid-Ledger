@@ -65,7 +65,7 @@ export function useProposalForm(gameId: number, onDone: () => void): ProposalFor
             onSuccess: (hub) => {
                 reset();
                 onDone();
-                if (isLiveProposal(hub)) void navigate(`/guilds/${hub.id}`);
+                if (isLiveProposal(hub)) void navigate(`/hubs/${hub.id}`);
             },
             onError: (err) => setErrors(mapProposalError(err)),
         });

@@ -1,5 +1,5 @@
 /**
- * ROK-1830 — the WoW guild hub module. Everything the `/guilds/:id` shell
+ * ROK-1830 — the WoW guild hub module. Everything the `/hubs/:id` shell
  * cannot know about a WoW guild is declared here and handed to core through
  * `PluginHandle.registerHubModule`; core resolves it by `guild.kind` and drops
  * it the moment the Blizzard plugin is switched off.
