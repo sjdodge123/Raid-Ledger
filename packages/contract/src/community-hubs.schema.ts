@@ -169,6 +169,8 @@ export const ProposeBlockedReasonSchema = z.enum(['not-in-discord', 'limit-reach
 export const GameHubsSchema = z
   .object({
     hubs: z.array(HubDirectoryEntrySchema).max(50),
+    /** Every hub of this game visible to the viewer, past the 50-row `hubs` cap (ROK-1883). */
+    total: z.number().int().nonnegative(),
     myProposals: z.array(HubProposalSchema),
     canPropose: z.boolean(),
     proposeBlockedReason: ProposeBlockedReasonSchema.nullable(),
