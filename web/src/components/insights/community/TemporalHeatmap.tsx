@@ -8,7 +8,12 @@ interface Props {
     peakHours: CommunityTemporalResponseDto['peakHours'];
 }
 
-const CELL_BASE = 'h-5 rounded-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+/**
+ * Keyboard focus is an outline (outside the cell) so it never repaints the
+ * inset `PEAK_MARK` box-shadow ring — a focused peak keeps both marks.
+ */
+const CELL_BASE =
+    'h-5 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-success';
 
 /**
  * 7 × 24 activity heatmap. Cell shade is a percentile over the max

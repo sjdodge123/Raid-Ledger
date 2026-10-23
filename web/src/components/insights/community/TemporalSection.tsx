@@ -6,7 +6,7 @@ import { InsightsPanelShell } from './InsightsPanelShell';
  * ROK-1099 Temporal section — 7x24 activity heatmap with each weekday's
  * peak hours ringed on the cells (ROK-1936; the separate peak-hours chart
  * is gone). Names the snapshot's timezone; a pre-ROK-1936 snapshot with no
- * `timezone` field omits the line. Carries the TDD
+ * `timezone` field was bucketed in UTC, so it reads "Times in UTC". Carries the TDD
  * `community-insights-temporal` testid.
  */
 export function TemporalSection() {
@@ -25,7 +25,7 @@ export function TemporalSection() {
                     </h3>
                     <p className="text-xs text-muted mb-2">
                         Outlined cells are each day&apos;s peak hours.
-                        {q.data.timezone && <span> Times in {q.data.timezone}</span>}
+                        <span> Times in {q.data.timezone ?? 'UTC'}.</span>
                     </p>
                     <TemporalHeatmap heatmap={q.data.heatmap} peakHours={q.data.peakHours} />
                 </div>

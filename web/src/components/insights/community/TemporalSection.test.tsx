@@ -1,8 +1,9 @@
 /**
  * TemporalSection.test.tsx (ROK-1936)
  *
- * The section names the timezone its buckets were computed in, and omits
- * the line for a pre-ROK-1936 snapshot that carries no `timezone` field.
+ * The section names the timezone its buckets were computed in; a
+ * pre-ROK-1936 snapshot with no `timezone` field was bucketed in UTC, so it
+ * reads "Times in UTC".
  */
 import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
@@ -29,14 +30,14 @@ describe('TemporalSection', () => {
     it('names the timezone the buckets were computed in', async () => {
         serveTemporal({ ...basePayload, timezone: 'America/New_York' });
         renderWithProviders(<TemporalSection />);
-        expect(await screen.findByText('Times in America/New_York')).toBeInTheDocument();
+        expect(await screen.findByText('Times in America/New_York.')).toBeInTheDocument();
     });
 
-    it('omits the timezone line when the snapshot has no timezone', async () => {
+    it('reads "Times in UTC" when an old snapshot has no timezone', async () => {
         serveTemporal(basePayload);
         renderWithProviders(<TemporalSection />);
         expect(await screen.findByTestId('temporal-heatmap')).toBeInTheDocument();
-        expect(screen.queryByText(/^Times in /)).not.toBeInTheDocument();
+        expect(screen.getByText('Times in UTC.')).toBeInTheDocument();
     });
 
     it('marks peaks on the heatmap and no longer renders the peak-hours chart', async () => {
