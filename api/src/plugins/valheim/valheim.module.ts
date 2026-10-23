@@ -22,6 +22,8 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
 import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
+import { ValheimSkillDaysRepository } from './armory/valheim-skill-days.repository';
+import { SettingsModule } from '../../settings/settings.module';
 import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.hook';
 import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
 import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
@@ -46,7 +48,8 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
  */
 @Module({
   // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
-  imports: [ValheimLinkDemoSeedModule],
+  // ROK-1882 SettingsModule: the community default tz for skill play days.
+  imports: [ValheimLinkDemoSeedModule, SettingsModule],
   controllers: [
     ValheimLinkTokensAdminController,
     ValheimLinkIngestController,
@@ -73,6 +76,7 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
     ValheimLinkBlobService,
     // ROK-1835 armory importer (30 s drain) + Steam identity / claims.
     ValheimArmoryRepository,
+    ValheimSkillDaysRepository,
     ValheimArmoryImportService,
     ValheimArmoryImportCron,
     ValheimIdentityRepository,

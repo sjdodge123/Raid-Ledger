@@ -8,6 +8,8 @@ import { valheimSnapshotRow } from '../link/ingest/valheim-link-snapshot.helpers
 import type { ArmorySnapshot } from './valheim-armory.mappers';
 import type { ValheimArmoryRepository } from './valheim-armory.repository';
 import { ValheimArmoryImportService } from './valheim-armory-import.service';
+import type { ValheimSkillDaysRepository } from './valheim-skill-days.repository';
+import type { SettingsService } from '../../../settings/settings.service';
 
 const CAND = { id: 5, receivedAt: '2026-10-17 20:16:00.123456+00' };
 const tx = { tx: true };
@@ -41,11 +43,20 @@ function setup(locked: ArmorySnapshot | null) {
     blobExists: jest.fn().mockResolvedValue(true),
   };
   const hook = { onProfileUpserted: jest.fn().mockResolvedValue(undefined) };
+  const skillDays = {
+    findPriorSkills: jest.fn().mockResolvedValue(null),
+    recordDay: jest.fn().mockResolvedValue('2026-10-17'),
+  };
+  const settings = {
+    getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
+  };
   const svc = new ValheimArmoryImportService(
     repo as unknown as ValheimArmoryRepository,
     hook,
+    skillDays as unknown as ValheimSkillDaysRepository,
+    settings as unknown as SettingsService,
   );
-  return { repo, hook, svc };
+  return { repo, hook, skillDays, settings, svc };
 }
 
 describe('ValheimArmoryImportService', () => {
@@ -58,11 +69,30 @@ describe('ValheimArmoryImportService', () => {
     expect(repo.markStatus).toHaveBeenCalledWith(tx, CAND, 'imported', null);
   });
 
+  it('records the play day from the prior skills and the drain default tz (ROK-1882)', async () => {
+    const { skillDays, settings, svc } = setup(snap('character-vanilla'));
+    const prior = [{ id: 'Swords', level: 10, accumulator: 0 }];
+    skillDays.findPriorSkills.mockResolvedValue(prior);
+    await svc.drainOnce();
+    expect(settings.getDefaultTimezone).toHaveBeenCalledTimes(1);
+    expect(skillDays.findPriorSkills).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ pelicanServerId: 3 }),
+    );
+    expect(skillDays.recordDay).toHaveBeenCalledWith(
+      tx,
+      { id: 9 },
+      prior,
+      'America/New_York',
+    );
+  });
+
   it('marks an older snapshot skipped_stale and skips the hook', async () => {
-    const { repo, hook, svc } = setup(snap('character-eaqs'));
+    const { repo, hook, skillDays, svc } = setup(snap('character-eaqs'));
     repo.upsertProfile.mockResolvedValue(null);
     expect(await svc.importOne(CAND)).toBe('skipped_stale');
     expect(hook.onProfileUpserted).not.toHaveBeenCalled();
+    expect(skillDays.recordDay).not.toHaveBeenCalled();
     expect(repo.markStatus).toHaveBeenCalledWith(
       tx,
       CAND,

@@ -64,12 +64,12 @@ describe('PelicanServersTable — Mod link column', () => {
         expect(
             screen.getByRole('columnheader', { name: 'Mod link' }),
         ).toBeInTheDocument();
-        // 7 base columns (ROK-1831 adds Community hub) + the Mod link column.
+        // 8 base columns (ROK-1831 Community hub, ROK-1882 Timezone) + the Mod link column.
         expect(
             within(screen.getByTestId('pelican-server-row-7')).getAllByRole(
                 'cell',
             ),
-        ).toHaveLength(8);
+        ).toHaveLength(9);
         expect(
             await screen.findByTestId('valheim-link-token-7'),
         ).toBeInTheDocument();
@@ -84,11 +84,11 @@ describe('PelicanServersTable — Mod link column', () => {
         expect(
             screen.queryByRole('columnheader', { name: 'Mod link' }),
         ).not.toBeInTheDocument();
-        expect(screen.getAllByRole('columnheader')).toHaveLength(7);
+        expect(screen.getAllByRole('columnheader')).toHaveLength(8);
         expect(
             within(screen.getByTestId('pelican-server-row-7')).getAllByRole(
                 'cell',
             ),
-        ).toHaveLength(7);
+        ).toHaveLength(8);
     });
 });

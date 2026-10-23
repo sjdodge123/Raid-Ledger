@@ -32,6 +32,7 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
     gameSlug: 'valheim',
     showOnCalendar: true,
     presenceTracking: false,
+    timezone: null,
     currentState: 'running',
     isSuspended: false,
     statusCheckedAt: FRESH,
@@ -87,6 +88,7 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
       statusCheckedAt: FRESH.toISOString(),
       missing: false,
       communityHub: null,
+      timezone: null,
     });
     expect(PelicanServerRowSchema.parse(dto)).toEqual(dto);
   });
@@ -141,6 +143,10 @@ describe('toMappingSet (ROK-1094)', () => {
     expect(toMappingSet({ presenceTracking: true })).toEqual({
       presenceTracking: true,
     });
+    expect(toMappingSet({ timezone: null })).toEqual({ timezone: null });
+    expect(toMappingSet({ timezone: 'Europe/Berlin' })).toEqual({
+      timezone: 'Europe/Berlin',
+    });
   });
 });
 
@@ -157,9 +163,9 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     await expect(controller.updateServer(4, {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    // ROK-1795: `timezone` is no longer a field — the strict schema rejects it.
+    // ROK-1882: an unknown IANA zone is refused before the repository runs.
     await expect(
-      controller.updateServer(4, { timezone: 'Europe/Berlin' }),
+      controller.updateServer(4, { timezone: 'Not/AZone' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(updateMapping).not.toHaveBeenCalled();
   });
