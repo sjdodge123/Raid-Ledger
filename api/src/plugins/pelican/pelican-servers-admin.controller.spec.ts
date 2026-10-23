@@ -88,6 +88,7 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
       statusCheckedAt: FRESH.toISOString(),
       missing: false,
       communityHub: null,
+      timezone: null,
     });
     expect(PelicanServerRowSchema.parse(dto)).toEqual(dto);
   });
