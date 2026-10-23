@@ -13,6 +13,7 @@
  */
 import { Job, type Queue } from 'bullmq';
 import { ValheimCharacterMessageSchema } from '@raid-ledger/contract';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { truncateAllTables } from '../../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -21,6 +22,7 @@ import { DEFAULT_CHANNEL_PREFS } from '../../../../drizzle/schema/notification-p
 import { DiscordBotClientService } from '../../../../discord-bot/discord-bot-client.service';
 import { DiscordNotificationService } from '../../../../notifications/discord-notification.service';
 import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
+import { DISCORD_NOTIFICATION_FAILED } from '../../../../notifications/discord-notification.events';
 import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { claimSuggestKeys } from './valheim-claim-suggest.copy';
@@ -409,6 +411,46 @@ describe('ValheimClaimSuggestService.scan — a send that did not go', () => {
       expect(await held(keysOf(profileId, userId))).toEqual([true, true, true]);
     },
   );
+});
+
+describe('ValheimClaimSuggestService — a queued DM that finally failed', () => {
+  /** What the queue processor emits when a queued DM is never delivered. */
+  const failDelivery = (type: string, userId: number, profileId: number) =>
+    testApp.app
+      .get(EventEmitter2)
+      .emitAsync(DISCORD_NOTIFICATION_FAILED, {
+        type,
+        userId,
+        payload: { profileId },
+      });
+
+  it('releases all three keys, so a later scan asks again', async () => {
+    const w = await world();
+    const profileId = await playing(w);
+    const userId = await member(w, 'brannok');
+    expect(await scan()).toBe(1);
+
+    await failDelivery(CLAIM_SUGGEST_TYPE, userId, profileId);
+    expect(await held(keysOf(profileId, userId))).toEqual([
+      false,
+      false,
+      false,
+    ]);
+
+    clearRedis(['discord-notif:rate:']);
+    expect(await scan()).toBe(1);
+    expect(dispatchedTo()).toEqual([userId, userId]);
+  });
+
+  it('touches no key when another type finally failed', async () => {
+    const w = await world();
+    const profileId = await playing(w);
+    const userId = await member(w, 'brannok');
+    expect(await scan()).toBe(1);
+
+    await failDelivery('event_reminder', userId, profileId);
+    expect(await held(keysOf(profileId, userId))).toEqual([true, true, true]);
+  });
 });
 
 describe('ValheimClaimSuggestService.scan — skipped users', () => {

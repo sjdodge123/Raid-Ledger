@@ -12,8 +12,11 @@
  * still applies the per-type Discord opt-out, deactivation and the
  * no-Discord-id skip; a skip or a throw releases the keys (the
  * `lfg-affinity-dm.service.ts` release idiom) so the next scan retries.
+ * `dispatch` only QUEUES the DM: a queued DM that finally fails comes back
+ * as `notification.discord.failed`, which releases the same keys.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -21,6 +24,10 @@ import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import { NotificationDedupService } from '../../../../notifications/notification-dedup.service';
 import { DiscordNotificationService } from '../../../../notifications/discord-notification.service';
+import {
+  DISCORD_NOTIFICATION_FAILED,
+  type DiscordNotificationFailedEvent,
+} from '../../../../notifications/discord-notification.events';
 import { SettingsService } from '../../../../settings/settings.service';
 import { getClientUrl } from '../../../../settings/settings-bot.helpers';
 import {
@@ -175,6 +182,32 @@ export class ValheimClaimSuggestService {
       throw err;
     }
     return taken;
+  }
+
+  /**
+   * A queued claim DM was finally not delivered (retries spent, DMs closed,
+   * user gone): give back its pair, user and profile keys so a later scan
+   * may ask again. The declined key is the user's answer and stays. Never
+   * throws — a listener failure must not reach the queue processor.
+   */
+  @OnEvent(DISCORD_NOTIFICATION_FAILED)
+  async onDeliveryFailed(event: DiscordNotificationFailedEvent): Promise<void> {
+    if (event.type !== CLAIM_SUGGEST_TYPE) return;
+    const profileId = event.payload?.['profileId'];
+    if (typeof profileId !== 'number') return;
+    try {
+      await this.releaseKeys([
+        claimSuggestKeys.pair(profileId, event.userId),
+        claimSuggestKeys.user(event.userId),
+        claimSuggestKeys.profile(profileId),
+      ]);
+    } catch (err) {
+      this.logger.warn(
+        `Releasing claim keys for profile ${profileId} failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /** Give back keys whose DM never went out. */
