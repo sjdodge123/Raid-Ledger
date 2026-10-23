@@ -16,6 +16,7 @@ import {
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { HUB_CHANNEL_EVENTS } from '../../guilds/hub-channel.events';
+import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import {
   VALHEIM_GAME_SLUG,
@@ -117,6 +118,20 @@ function link(channelId: string, previousChannelId: string | null = null) {
   });
 }
 
+/**
+ * Install + activate the plugins the HTTP route needs. `HubKindActiveGuard`
+ * resolves the `game_server` kind through the pelican adapter, so pelican
+ * must be active; valheim owns the welcome. `truncateAllTables` may wipe
+ * `plugins`, so install first (as forever-config.integration.spec does).
+ */
+async function activateHubPlugins(): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  for (const slug of [PELICAN_PLUGIN_ID, VALHEIM_PLUGIN_ID]) {
+    await registry.ensureInstalled(slug);
+    await registry.activate(slug);
+  }
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   welcome = testApp.app.get(HubWelcomeService, { strict: false });
@@ -202,7 +217,7 @@ describe('hub welcome — re-post', () => {
   });
 
   it('POST guilds/:id/discord/welcome edits and returns the contract shape', async () => {
-    await testApp.app.get(PluginRegistryService).activate(VALHEIM_PLUGIN_ID);
+    await activateHubPlugins();
     await bind(hubId, 'c-a');
     await link('c-a');
     const res = await testApp.request
