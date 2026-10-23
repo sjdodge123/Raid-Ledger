@@ -2,8 +2,9 @@
  * ROK-1788 — pure helpers for the guild Discord mirror card and picker.
  */
 import type {
-    GuildDiscordChannelOptionDto, GuildDiscordMessageDto, GuildDiscordMirrorDto,
+    GuildDiscordChannelOptionDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, GuildKind,
 } from '@raid-ledger/contract';
+import { hubCopy } from '../hub-copy';
 
 /** Approved prototype `compact`: the card shows the newest 3 (operator ruling Q3). */
 export const MIRROR_VISIBLE_MESSAGES = 3;
@@ -52,20 +53,24 @@ export function canSaveChoice(choice: GuildDiscordChannelOptionDto | undefined, 
     return choice.visibility === 'public' || ack;
 }
 
-/** "the <server> Discord", or "the community Discord" when the server is unknown. */
-function serverPhrase(serverName: string | undefined): string {
-    return serverName ? `the ${serverName} Discord` : 'the community Discord';
+/** "the <server> Discord", or `fallback` ("the community Discord" by default) when the server is unknown. */
+function serverPhrase(serverName: string | undefined, fallback = 'the community Discord'): string {
+    return serverName ? `the ${serverName} Discord` : fallback;
 }
 
-/** Card blurb (approved copy "Latest from the <server> Discord"). */
-export function mirrorBlurb(mirror: GuildDiscordMirrorDto | undefined): string {
+/**
+ * Card blurb (approved copy "Latest from the <server> Discord"). With no server
+ * name it reads the hub kind's fallback — "the server's Discord" on a server
+ * hub (ROK-1891 ruling 2026-10-23), "the community Discord" elsewhere.
+ */
+export function mirrorBlurb(mirror: GuildDiscordMirrorDto | undefined, kind?: GuildKind): string {
     const serverName = mirror?.state === 'ok' ? mirror.channel.serverName : undefined;
-    return `Latest from ${serverPhrase(serverName)}`;
+    return `Latest from ${serverPhrase(serverName, hubCopy(kind).discordFallback)}`;
 }
 
-/** Picker hint naming the bot's server (operator ruling Q7). */
-export function pickerHint(serverName: string | undefined): string {
-    return `Channels in ${serverPhrase(serverName)} that Raid Ledger can read.`;
+/** Picker hint naming the bot's server (operator ruling Q7); unknown → the hub kind's fallback. */
+export function pickerHint(serverName: string | undefined, kind?: GuildKind): string {
+    return `Channels in ${serverPhrase(serverName, hubCopy(kind).discordFallback)} that Raid Ledger can read.`;
 }
 
 /**

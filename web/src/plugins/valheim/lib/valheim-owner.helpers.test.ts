@@ -10,9 +10,9 @@ import {
 const owner = { id: 3, username: 'member1', avatar: null };
 
 describe('ownerChip', () => {
-    it('flags an unclaimed character as a warning', () => {
+    it('labels an unclaimed character with a neutral chip (ROK-1933 mockup)', () => {
         expect(ownerChip({ claimedBy: null, claimSource: null })).toMatchObject(
-            { tone: 'warning', label: 'Unclaimed' },
+            { tone: 'neutral', label: 'Unclaimed' },
         );
     });
     it('names an admin assignment', () => {

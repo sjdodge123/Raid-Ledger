@@ -44,8 +44,8 @@ function BannerActions(props: ValheimClaimBannerViewProps): JSX.Element {
     );
 }
 
-/** §4.7 neutral instruction callout (spec Part 1 "Look"). */
-const CALLOUT_CLS = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 lg:flex-row lg:items-center';
+/** §4.7 neutral instruction callout (spec Part 1 "Look"); the desktop actions top-align with the copy (approved mockup). */
+const CALLOUT_CLS = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 lg:flex-row lg:items-start';
 
 /**
  * The Overview ×, pinned to the callout's top-right corner. The wrapper is what

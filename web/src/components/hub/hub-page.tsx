@@ -143,7 +143,7 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
     return (
         <Suspense fallback={null}>
             {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
-            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={onClose} />}
+            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} onClose={onClose} />}
         </Suspense>
     );
 }

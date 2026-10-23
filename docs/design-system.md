@@ -1442,8 +1442,9 @@ another tab (ROK-1599), a `Button variant="secondary" size="sm"` for one that op
 `text-xs text-dim` line that wraps **under the label**, inside the same block as the description. It must
 not live in the action cell — that cell is `shrink-0`, so a sentence-length reason keeps its max-content
 width (469px measured against a 375px viewport) and runs off the card on a phone (ROK-1840).
-**DON'T** hide a blocked step — list it with its reason; and don't count it toward the progress, or the
-checklist can never finish.
+**DON'T** hide a blocked step — list it with its reason. It counts in the `N of M done` total (ROK-1891
+ruling 2026-10-23: `M` is the rows listed, so a fresh server hub reads "0 of 6" above six rows) but never in
+"complete" — the card removes itself once every actionable step is done, or a blocked row would pin it open.
 
 **DON'T** derive "done" from stored progress. Each step reads the live page data (`useGuildProfile`,
 `useGuildDiscord`, the module's mod sources), so undoing the edit puts the step back; the whole card removes

@@ -74,28 +74,36 @@ describe('setupSteps', () => {
 });
 
 describe('setupProgress', () => {
-    it('counts only actionable steps, so a finished hub reads 7 of 7 and complete', () => {
+    // ROK-1891 ruling 2026-10-23: the total counts every listed row, blocked
+    // ones included; `complete` still only needs the actionable ones.
+    it('counts blocked rows in the total, yet a hub with every actionable step done is complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL, discord: BOUND, modsConfigured: true, hasNextRaid: true })));
-        expect(progress).toEqual({ done: 7, total: 7, pct: 100, complete: true, label: '7 of 7' });
+        expect(progress).toEqual({ done: 7, total: 9, pct: 78, complete: true, label: '7 of 9' });
     });
 
     it('a half-set-up hub is not complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL })));
-        expect(progress.label).toBe('4 of 7');
-        expect(progress.pct).toBe(57);
+        expect(progress.label).toBe('4 of 9');
+        expect(progress.pct).toBe(44);
         expect(progress.complete).toBe(false);
+    });
+
+    it('a fresh server hub reads 0 of 6 — the blocked Leader row is counted (ROK-1891 ruling)', () => {
+        const steps = setupSteps(input({ kind: 'game_server', hasModSources: false }));
+        expect(steps).toHaveLength(6);
+        expect(setupProgress(steps)).toEqual({ done: 0, total: 6, pct: 0, complete: false, label: '0 of 6' });
     });
 
     // Lead ruling 1: the blocked channel row must not pin the card open — an
     // Officer who has done everything else still sees it finish.
-    it('an Officer reaches 6 of 6 — the blocked channel row is not counted', () => {
-        // Countable for an Officer: roster, leader-post, rules, links, mods,
+    it('an Officer finishes at 6 of 9 — blocked rows are counted but never pin the card', () => {
+        // Actionable for an Officer: roster, leader-post, rules, links, mods,
         // next-raid. `leader` and `publish` are blocked for everyone; `discord`
-        // is blocked only here, so the total drops from 7 to 6, not the done.
+        // is blocked only here — all three count in the total, none in `complete`.
         const progress = setupProgress(setupSteps(input({
             profile: FULL, discord: UNSET, modsConfigured: true, hasNextRaid: true, canPickChannel: false,
         })));
-        expect(progress).toEqual({ done: 6, total: 6, pct: 100, complete: true, label: '6 of 6' });
+        expect(progress).toEqual({ done: 6, total: 9, pct: 67, complete: true, label: '6 of 9' });
     });
 });
 
