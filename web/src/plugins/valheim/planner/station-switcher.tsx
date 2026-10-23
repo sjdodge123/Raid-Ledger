@@ -2,7 +2,9 @@
  * ROK-1899 — the crafting window's station switcher (spec §3.1.1): a wrapping
  * segmented `RadioGroup` "Crafting station" of every station with ≥1 row in
  * the current mode (built or not — the hub has no world data yet, operator
- * ruling), then "By hand". The star badge shows the chosen station's
+ * ruling), then "By hand". Chips are content-width and wrap (the approved
+ * mockup), each with the catalogue station icon — initials only when the
+ * station has none. The star badge shows the chosen station's
  * catalogue max level ("★ max 5"); while searching nothing is chosen
  * (`value` null) and the badge hides.
  */
@@ -71,7 +73,7 @@ export function StationSwitcher({ groups, value, onChange, names, className }: S
                 label="Crafting station"
                 hideLabel
                 appearance="segmented"
-                className="min-w-0 flex-1"
+                className="min-w-0 flex-1 [&_label]:flex-none"
                 options={groups.map((g) => optionOf(g, names))}
                 // '' matches no option: the track shows no selection while searching.
                 value={value ?? ''}
