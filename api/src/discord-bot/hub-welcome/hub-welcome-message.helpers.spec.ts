@@ -15,12 +15,20 @@ import {
 } from './hub-welcome-message.helpers';
 
 const BOT = 'bot-1933';
+const HUB = 7;
 const PAYLOAD = { embeds: [], components: [] } as unknown as JoinPostPayload;
 
 function msg(
   id: string,
-  over: { authorId?: string; author?: string; title?: string } = {},
+  over: {
+    authorId?: string;
+    author?: string;
+    title?: string;
+    hubUrl?: string | null;
+  } = {},
 ): JoinPostMessage & { edit: jest.Mock } {
+  const url =
+    over.hubUrl === undefined ? `https://rl.test/hubs/${HUB}` : over.hubUrl;
   return {
     id,
     pinned: false,
@@ -30,6 +38,9 @@ function msg(
         author: { name: over.author ?? 'Raid Ledger' },
         title: over.title ?? 'Ashlands on Raid Ledger',
       },
+    ],
+    components: [
+      { type: 1, components: url === null ? [] : [{ type: 2, url }] },
     ],
     edit: jest.fn(() => Promise.resolve(undefined)),
     pin: jest.fn(() => Promise.resolve(undefined)),
@@ -63,50 +74,56 @@ function channel(opts: {
 }
 
 describe('isOwnHubWelcome', () => {
-  it('matches the bot author, the author line and this hub title', () => {
-    expect(isOwnHubWelcome(msg('a'), BOT, 'Ashlands')).toBe(true);
+  it("matches the bot author, the author line and this hub's link", () => {
+    expect(isOwnHubWelcome(msg('a'), BOT, HUB)).toBe(true);
+  });
+
+  it.each([
+    ['a renamed hub', { title: 'New Name on Raid Ledger' }],
+    [
+      'the claim button alone',
+      { hubUrl: `https://rl.test/hubs/${HUB}#characters` },
+    ],
+  ])('matches %s', (_label, over) => {
+    expect(isOwnHubWelcome(msg('a', over), BOT, HUB)).toBe(true);
   });
 
   it.each([
     ['another author', { authorId: 'someone' }],
-    ['a generic Raid Ledger embed', { title: 'Raid night tonight' }],
-    ["another hub's welcome", { title: 'Mistlands on Raid Ledger' }],
+    ['a Raid Ledger embed with no hub link', { hubUrl: null }],
+    ["another hub's welcome", { hubUrl: 'https://rl.test/hubs/8' }],
+    ['a hub id sharing a prefix', { hubUrl: `https://rl.test/hubs/${HUB}0` }],
     ['the join post', { author: '\u{1F44B} JOIN RAID LEDGER' }],
   ])('rejects %s', (_label, over) => {
-    expect(isOwnHubWelcome(msg('a', over), BOT, 'Ashlands')).toBe(false);
+    expect(isOwnHubWelcome(msg('a', over), BOT, HUB)).toBe(false);
   });
 });
 
 describe('locateHubWelcome', () => {
   it('returns the stored message when Discord still has it', async () => {
     const stored = msg('s1');
-    const found = await locateHubWelcome(
-      channel({ stored }),
-      's1',
-      BOT,
-      'Ashlands',
-    );
+    const found = await locateHubWelcome(channel({ stored }), 's1', BOT, HUB);
     expect(found?.id).toBe('s1');
   });
 
   it('falls back to a history scan on 10008', async () => {
     const orphan = msg('o1');
     const ch = channel({ stored: discordError(10008), recent: [orphan] });
-    const found = await locateHubWelcome(ch, 's1', BOT, 'Ashlands');
+    const found = await locateHubWelcome(ch, 's1', BOT, HUB);
     expect(found?.id).toBe('o1');
   });
 
   it('rethrows any other read failure (no duplicate)', async () => {
     const ch = channel({ stored: discordError(50001) });
-    await expect(locateHubWelcome(ch, 's1', BOT, 'Ashlands')).rejects.toThrow(
+    await expect(locateHubWelcome(ch, 's1', BOT, HUB)).rejects.toThrow(
       'Discord 50001',
     );
   });
 
   it('scans when no id is stored and ignores other hubs', async () => {
-    const other = msg('x', { title: 'Mistlands on Raid Ledger' });
+    const other = msg('x', { hubUrl: 'https://rl.test/hubs/8' });
     const ch = channel({ recent: [other] });
-    expect(await locateHubWelcome(ch, null, BOT, 'Ashlands')).toBeNull();
+    expect(await locateHubWelcome(ch, null, BOT, HUB)).toBeNull();
   });
 });
 

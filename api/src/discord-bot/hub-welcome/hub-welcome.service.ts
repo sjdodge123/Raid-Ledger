@@ -173,7 +173,7 @@ export class HubWelcomeService {
         channel,
         storedId,
         ctx.botUserId,
-        target.name,
+        target.guildId,
       );
       return writeHubWelcome(channel, located, payload);
     });

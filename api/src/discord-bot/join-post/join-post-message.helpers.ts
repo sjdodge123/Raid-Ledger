@@ -41,6 +41,15 @@ export interface JoinPostMessage {
     /** ROK-1933: the hub welcome is matched by title too. */
     title?: string | null;
   }>;
+  /**
+   * ROK-1933: the hub welcome is matched by its link button's `/hubs/<id>`
+   * URL. `type` keeps the element types non-weak so a real discord.js
+   * `Message` (whose components carry no `url`/`components`) still fits.
+   */
+  components?: ReadonlyArray<{
+    type: number;
+    components?: ReadonlyArray<{ type: number; url?: string | null }>;
+  }>;
   edit(payload: JoinPostPayload): Promise<unknown>;
   pin(reason?: string): Promise<unknown>;
 }

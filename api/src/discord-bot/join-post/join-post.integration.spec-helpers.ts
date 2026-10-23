@@ -36,6 +36,8 @@ export interface FakeMessage {
   pinned: boolean;
   author: { id: string };
   embeds: { author: { name: string } | null }[];
+  /** ROK-1933: the sent rows' JSON, so the hub-welcome scan sees the link. */
+  components: FakeComponentRow[];
   payload: unknown;
   edit: jest.Mock;
   pin: jest.Mock;
@@ -43,6 +45,17 @@ export interface FakeMessage {
 
 interface Payload {
   embeds: { toJSON(): { author?: { name: string } } }[];
+  components?: { toJSON(): FakeComponentRow }[];
+}
+
+/** A sent action row as Discord echoes it back (the fields the scan reads). */
+export interface FakeComponentRow {
+  type: number;
+  components?: { type: number; url?: string | null }[];
+}
+
+function componentsOf(payload: unknown): FakeComponentRow[] {
+  return ((payload as Payload).components ?? []).map((row) => row.toJSON());
 }
 
 function authorOf(payload: unknown): { name: string } | null {
@@ -57,6 +70,7 @@ function fakeMessage(id: string, payload: unknown): FakeMessage {
     pinned: false,
     author: { id: FAKE_BOT_ID },
     embeds: [{ author: authorOf(payload) }],
+    components: componentsOf(payload),
     payload,
     edit: jest.fn((next: unknown) => {
       msg.payload = next;

@@ -171,6 +171,23 @@ describe('hub welcome — linked event', () => {
     expect(chanA.store.get(first.message ?? '')?.edit).toHaveBeenCalledTimes(1);
   });
 
+  it('a renamed hub with a lost message id edits its welcome, never a duplicate', async () => {
+    await link('c-a');
+    const first = await stored();
+    await testApp.db
+      .update(schema.guildProfiles)
+      .set({ welcomeMessageId: null })
+      .where(eq(schema.guildProfiles.guildId, hubId));
+    await testApp.db
+      .update(schema.guilds)
+      .set({ name: 'Ashlands Reborn' })
+      .where(eq(schema.guilds.id, hubId));
+    await link('c-a', 'c-a');
+    expect(chanA.send).toHaveBeenCalledTimes(1);
+    expect(chanA.store.size).toBe(1);
+    expect((await stored()).message).toBe(first.message);
+  });
+
   it('two concurrent link events for one hub post once', async () => {
     await Promise.all([link('c-a'), link('c-a')]);
     expect(chanA.send).toHaveBeenCalledTimes(1);
