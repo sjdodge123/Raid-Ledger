@@ -164,13 +164,18 @@ export class ChannelLifecycleService {
     opts: ReconcileOptions,
     now: Date,
   ): Promise<GameLifecycleActivityRow[]> {
+    const windowDays = settings.recentActivityDays;
     const hubNeedsLinkGameIds =
       (await this.hubLinker.hubNeedsLinkGameIds?.(tx)) ?? new Set<number>();
+    const hubHoldGameIds =
+      (await this.hubLinker.hubHoldGameIds?.(now, windowDays, tx)) ??
+      new Set<number>();
     return selectGameLifecycleActivity(tx, {
       now,
-      windowDays: settings.recentActivityDays,
+      windowDays,
       guildId: guild.id,
       hubNeedsLinkGameIds,
+      hubHoldGameIds,
       ...(opts.gameIds ? { gameIds: opts.gameIds } : {}),
     });
   }

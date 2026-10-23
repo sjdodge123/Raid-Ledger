@@ -19,6 +19,8 @@ import {
   type ArmoryCandidate,
   type ArmorySnapshotStatus,
 } from './valheim-armory.repository';
+import { SettingsService } from '../../../settings/settings.service';
+import { ValheimSkillDaysRepository } from './valheim-skill-days.repository';
 
 /** Snapshots per drain (D1, FLAG Q12). */
 export const ARMORY_DRAIN_BATCH = 50;
@@ -47,6 +49,8 @@ export class ValheimArmoryImportService {
     private readonly repo: ValheimArmoryRepository,
     @Inject(VALHEIM_PROFILE_UPSERTED_HOOK)
     private readonly hook: ValheimProfileUpsertedHook,
+    private readonly skillDays: ValheimSkillDaysRepository,
+    private readonly settings: SettingsService,
   ) {}
 
   /** One drain pass over up to `limit` importable snapshots (specs call this). */
@@ -58,8 +62,12 @@ export class ValheimArmoryImportService {
       waiting_blob: 0,
       busy: 0,
     };
-    for (const c of await this.repo.listCandidates(limit)) {
-      summary[await this.importOne(c)] += 1;
+    const candidates = await this.repo.listCandidates(limit);
+    if (!candidates.length) return summary;
+    // ROK-1882: the community fallback for play-day bucketing, once per drain.
+    const defaultTz = await this.settings.getDefaultTimezone();
+    for (const c of candidates) {
+      summary[await this.importOne(c, defaultTz)] += 1;
     }
     return summary;
   }
@@ -69,9 +77,14 @@ export class ValheimArmoryImportService {
    * marks it `failed` with `internal:<err.name>` — no retry (FLAG Q9) — in a
    * separate statement, never a retry inside the poisoned transaction.
    */
-  async importOne(c: ArmoryCandidate): Promise<ArmoryImportOutcome> {
+  async importOne(
+    c: ArmoryCandidate,
+    defaultTz: string | null = null,
+  ): Promise<ArmoryImportOutcome> {
     try {
-      return await this.repo.db.transaction((tx) => this.importIn(tx, c));
+      return await this.repo.db.transaction((tx) =>
+        this.importIn(tx, c, defaultTz),
+      );
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : 'unknown';
       this.logger.error(
@@ -90,12 +103,13 @@ export class ValheimArmoryImportService {
   private async importIn(
     tx: ValheimLinkTx,
     c: ArmoryCandidate,
+    defaultTz: string | null,
   ): Promise<ArmoryImportOutcome> {
     const snap = await this.repo.lockSnapshot(tx, c);
     if (!snap) return 'busy';
     const checked = validateSnapshotPayload(snap);
     const applied: Applied = checked.ok
-      ? await this.apply(tx, snap, checked.message)
+      ? await this.apply(tx, snap, checked.message, defaultTz)
       : { status: 'failed', detail: checked.detail };
     const marked = await this.repo.markStatus(
       tx,
@@ -110,8 +124,11 @@ export class ValheimArmoryImportService {
     tx: ValheimLinkTx,
     snap: ArmorySnapshot,
     msg: ValheimLinkMessage,
+    defaultTz: string | null,
   ): Promise<Applied> {
-    if (msg.kind === 'character') return this.applyCharacter(tx, snap, msg);
+    if (msg.kind === 'character') {
+      return this.applyCharacter(tx, snap, msg, defaultTz);
+    }
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
     if (msg.kind === 'containers') return applyContainers(tx, snap, msg);
@@ -123,10 +140,19 @@ export class ValheimArmoryImportService {
     tx: ValheimLinkTx,
     snap: ArmorySnapshot,
     msg: Extract<ValheimLinkMessage, { kind: 'character' }>,
+    defaultTz: string | null,
   ): Promise<Applied> {
     const { values, truncated } = toProfileValues(snap, msg);
+    // ROK-1882: read the skills BEFORE the upsert overwrites them.
+    const prior = await this.skillDays.findPriorSkills(tx, values);
     const profile = await this.repo.upsertProfile(tx, values);
     if (!profile) return STALE;
+    await this.skillDays.recordDay(
+      tx,
+      profile,
+      prior ?? profile.skills,
+      defaultTz,
+    );
     await this.repo.backfillMapProfile(tx, profile);
     await this.hook.onProfileUpserted(tx, profile);
     const detail = truncated.length ? `truncated:${truncated.join(',')}` : null;

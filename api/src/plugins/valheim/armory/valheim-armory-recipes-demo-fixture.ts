@@ -174,6 +174,8 @@ const item = (
 /** Merged into the armory fixture catalogue (same 256×64 atlas, 4 cells). */
 export const RECIPES_DEMO_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
   SwordBronze: item('Bronze sword', 1, 4, 'OneHandedWeapon'),
+  /** ROK-1899: an affordable (Wood) row that also upgrades (q2 Wood 3, q3 Wood 6). */
+  Club: item('Club', 2, 3, 'OneHandedWeapon'),
   Bronze: item('Bronze', 1),
   Copper: item('Copper', 1),
   Tin: item('Tin', 0),

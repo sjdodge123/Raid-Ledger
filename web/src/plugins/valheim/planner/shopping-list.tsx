@@ -22,16 +22,20 @@ interface Props {
     onRemove: (index: number) => void;
 }
 
+/** "q2" for a craft from scratch, "q1→2" for an upgrade step (ROK-1899). */
+const qualityLabel = (t: PlannerTarget): string =>
+    t.fromQuality > 0 ? `q${t.fromQuality}→${t.quality}` : `q${t.quality}`;
+
 function TargetList({ targets, names, onRemove }: Omit<Props, 'plan'>): JSX.Element {
     return (
         <ul aria-label="Planned items" className="space-y-1">
             {targets.map((t, i) => {
                 const name = names.nameOf(t.prefab, t.kind);
                 return (
-                    <li key={`${t.prefab}:${t.kind}:${t.quality}`} className="flex items-center justify-between gap-2 text-sm text-foreground">
+                    <li key={`${t.prefab}:${t.kind}:${t.quality}:${t.fromQuality}`} className="flex items-center justify-between gap-2 text-sm text-foreground">
                         <span>
                             {name}
-                            {t.kind === 'item' && ` · q${t.quality}`} × {formatAmount(t.amount)}
+                            {t.kind === 'item' && ` · ${qualityLabel(t)}`} × {formatAmount(t.amount)}
                         </span>
                         <Button variant="ghost" size="sm" onClick={() => onRemove(i)} aria-label={`Remove ${name}`}>
                             Remove

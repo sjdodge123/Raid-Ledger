@@ -10,6 +10,7 @@ import { CalendarDaysIcon } from '@heroicons/react/24/outline';
 import type { GuildEventCardDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { NAV_CHIP_CLASS } from '../ui/nav-chip';
+import { hubCopy } from './hub-copy';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
 import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
 
@@ -38,13 +39,13 @@ function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | unde
 }
 
 /** Plain `<a href>`, not `NavChip`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
-function NextRaidChip({ raid, tab }: { raid: GuildEventCardDto; tab: string }): JSX.Element {
+function NextRaidChip({ raid, tab, label }: { raid: GuildEventCardDto; tab: string; label: string }): JSX.Element {
     return (
         <a href={`#${tab}`} className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
             <CalendarDaysIcon className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             {/* One inline text run, so a narrow screen wraps it as a sentence instead of splitting the count into its own flex column. */}
             <span className="min-w-0">
-                <span className="text-foreground">Next raid: {whenLabel(raid.startTime)}</span>{' '}
+                <span className="text-foreground">{label}: {whenLabel(raid.startTime)}</span>{' '}
                 <span className="whitespace-nowrap text-muted">· {signedShort(raid)}</span>
             </span>
         </a>
@@ -66,7 +67,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
     // Core always has an Events tab now (ROK-1830 S3c), so the chip always has
     // somewhere to land; a module only redirects it (WoW → its Raids tab).
     const jumpTab = mod?.eventsJumpTab ?? 'events';
-    const chip = nextRaid !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} /> : null;
+    const chip = nextRaid !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} label={hubCopy(ctx.page.guild.kind).nextEventLabel} /> : null;
     return (
         <header data-testid="guild-hero"
             className="mb-4 flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">

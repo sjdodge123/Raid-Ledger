@@ -1,9 +1,10 @@
 import type { EmbedBuilder } from 'discord.js';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 
 type ReplyEmbedDeps = Pick<
   SignupInteractionDeps,
-  'eventsService' | 'embedFactory' | 'settingsService' | 'logger'
+  'db' | 'eventsService' | 'embedFactory' | 'settingsService' | 'logger'
 >;
 
 /**
@@ -25,7 +26,14 @@ export async function buildReplyEmbed(
       clientUrl: process.env.CLIENT_URL ?? null,
       timezone,
     };
-    const { embed } = deps.embedFactory.buildEventEmbed(eventData, context);
+    // ROK-1895: the reply reuses the card, so it names the tagged hub too.
+    const hubCtx = await withEventHubLink(
+      deps.db,
+      context,
+      eventId,
+      deps.logger,
+    );
+    const { embed } = deps.embedFactory.buildEventEmbed(eventData, hubCtx);
     return embed;
   } catch (error) {
     deps.logger.warn(

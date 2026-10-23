@@ -12,6 +12,8 @@ export interface PlannerTarget {
     prefab: string;
     kind: PlannerKind;
     quality: number;
+    /** 0 = craft from scratch; q ≥ 1 = upgrade from that quality (ROK-1899 UPGRADE tab). */
+    fromQuality: number;
     amount: number;
 }
 
@@ -27,15 +29,17 @@ export interface PlannerFilters {
     includeVehicles: boolean;
 }
 
+/** Kind defaults to Items (ROK-1899): the crafting window opens on what you carry. */
 export const DEFAULT_PLANNER_FILTERS: PlannerFilters = {
-    kind: 'both',
+    kind: 'item',
     category: null,
     includePersonal: false,
     includeVehicles: true,
 };
 
+/** How many filters differ from DEFAULT_PLANNER_FILTERS (the funnel's badge). */
 export const activePlannerFilters = (f: PlannerFilters): number =>
-    (f.kind === 'both' ? 0 : 1) +
+    (f.kind === DEFAULT_PLANNER_FILTERS.kind ? 0 : 1) +
     (f.category === null ? 0 : 1) +
     (f.includePersonal ? 1 : 0) +
     (f.includeVehicles ? 0 : 1);
@@ -43,6 +47,9 @@ export const activePlannerFilters = (f: PlannerFilters): number =>
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =
     'Recipes arrive when an admin with the mod joins the server.';
+/** The crafting window's `stock:'none'` status line (ROK-1899 §3.4). */
+export const CRAFT_NO_SCAN_COPY =
+    'No chests scanned yet — every recipe is shown. Scan a chest in game to see what you can craft.';
 export const PLANNER_NO_STOCK_COPY =
     'No chest data yet — showing what each recipe costs.';
 
@@ -62,20 +69,23 @@ export function foldNodes(nodes: readonly ValheimPlanNode[]): PlanTreeNode[] {
     return roots;
 }
 
-/** `prefab:quality:amount:0:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
+/** `prefab:quality:amount:fromQuality:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
 export function serializeTargets(targets: readonly PlannerTarget[]): string {
-    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:0:${t.kind}`).join(',');
+    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:${t.fromQuality}:${t.kind}`).join(',');
 }
 
 /** The plan route's target cap — the list never grows past it. */
 export const PLANNER_TARGETS_MAX = VALHEIM_PLAN_TARGETS_MAX;
 
 /**
- * Adds `add` to the list: the same prefab + kind + quality merges amounts
- * (capped); a new target past PLANNER_TARGETS_MAX returns null (refused).
+ * Adds `add` to the list: the same prefab + kind + quality + fromQuality
+ * merges amounts (capped); a new target past PLANNER_TARGETS_MAX returns
+ * null (refused).
  */
 export function addPlannerTarget(list: readonly PlannerTarget[], add: PlannerTarget): PlannerTarget[] | null {
-    const i = list.findIndex((t) => t.prefab === add.prefab && t.kind === add.kind && t.quality === add.quality);
+    const i = list.findIndex(
+        (t) => t.prefab === add.prefab && t.kind === add.kind && t.quality === add.quality && t.fromQuality === add.fromQuality,
+    );
     if (i >= 0) return list.map((t, j) => (j === i ? { ...t, amount: Math.min(PLANNER_AMOUNT_MAX, t.amount + add.amount) } : t));
     return list.length >= PLANNER_TARGETS_MAX ? null : [...list, add];
 }
@@ -168,8 +178,10 @@ const StoredTargetsSchema = z
             prefab: z.string().min(1).max(128),
             kind: z.enum(['item', 'piece']),
             quality: z.number().int().min(1).max(10),
+            // Lists stored before ROK-1899 carry no fromQuality: from scratch.
+            fromQuality: z.number().int().min(0).max(9).default(0),
             amount: z.number().int().min(1).max(PLANNER_AMOUNT_MAX),
-        }),
+        }).refine((t) => t.fromQuality < t.quality),
     )
     .max(VALHEIM_PLAN_TARGETS_MAX);
 

@@ -11,7 +11,7 @@ import { StatusChip } from '../../components/ui/status-chip';
 import { useGameHubs, useJoinGameHub, useWithdrawProposal } from './use-game-hubs';
 import { isHubMember } from './hub-join';
 import { ProposeHubDialog } from './propose-hub-dialog';
-import { memberCountLabel } from '../../components/layout/hub-nav/my-hubs-queries';
+import { guildHref, memberCountLabel } from '../../components/layout/hub-nav/my-hubs-queries';
 
 const SHOWN = 3;
 type BlockedReason = NonNullable<GameHubs['proposeBlockedReason']>;
@@ -27,7 +27,7 @@ function HubRow({ hub, onJoin, joining }: { hub: HubDirectoryEntry; onJoin: () =
     return (
         <li className="flex items-center gap-3 py-2">
             <div className="min-w-0 flex-1">
-                <Link to={`/guilds/${hub.id}`} className="block truncate text-sm font-medium text-foreground hover:underline">{hub.name}</Link>
+                <Link to={guildHref(hub.id)} className="block truncate text-sm font-medium text-foreground hover:underline">{hub.name}</Link>
                 {hub.blurb && <p className="truncate text-xs text-muted">{hub.blurb}</p>}
             </div>
             <span className="shrink-0 text-xs text-muted">{memberCountLabel(hub.memberCount)}</span>

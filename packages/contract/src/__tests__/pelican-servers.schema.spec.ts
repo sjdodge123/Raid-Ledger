@@ -27,11 +27,15 @@ const row = {
 };
 
 describe('PelicanServerRowSchema', () => {
-    it('rejects the removed timezone and tzMismatch keys (ROK-1795)', () => {
+    it('accepts the play-day timezone (ROK-1882) but rejects the removed tzMismatch key (ROK-1795)', () => {
         expect(PelicanServerRowSchema.safeParse(row).success).toBe(true);
         expect(
             PelicanServerRowSchema.safeParse({ ...row, timezone: null }).success,
-        ).toBe(false);
+        ).toBe(true);
+        expect(
+            PelicanServerRowSchema.safeParse({ ...row, timezone: 'Europe/Berlin' })
+                .success,
+        ).toBe(true);
         expect(
             PelicanServerRowSchema.safeParse({ ...row, tzMismatch: false })
                 .success,
@@ -61,16 +65,20 @@ describe('PelicanServerUpdateSchema', () => {
         expect(PelicanServerUpdateSchema.safeParse({}).success).toBe(false);
     });
 
-    it.each([[''], ['America/New_York']])(
-        'rejects a timezone key (%j) — the field was removed (ROK-1795)',
+    // ROK-1882 (operator ruling 2026-10-23): `timezone` is back as the game
+    // server's play-day boundary only; schedules stay UTC (ROK-1795).
+    it('rejects an empty timezone (ROK-1882)', () => {
+        expect(PelicanServerUpdateSchema.safeParse({ timezone: '' }).success).toBe(
+            false,
+        );
+    });
+
+    it.each([['America/New_York'], [null]])(
+        'accepts a play-day timezone of %j (ROK-1882)',
         (timezone) => {
             expect(PelicanServerUpdateSchema.safeParse({ timezone }).success).toBe(
-                false,
+                true,
             );
-            expect(
-                PelicanServerUpdateSchema.safeParse({ timezone, gameId: 1 })
-                    .success,
-            ).toBe(false);
         },
     );
 

@@ -24,6 +24,14 @@ if [ -z "$server" ]; then
 fi
 shift
 
+# ROK-1847: the fleet dashboard's test-plan writes need X-Agent-Token. The value
+# lives outside the repo in a 600-mode file; load it when the app's env lacks it
+# (a desktop-launched app does not read ~/.zshenv).
+if [ -z "${RL_AGENT_TOKEN:-}" ] && [ -r "$HOME/.config/raid-ledger/rl-agent-token" ]; then
+  RL_AGENT_TOKEN="$(cat "$HOME/.config/raid-ledger/rl-agent-token")"
+  export RL_AGENT_TOKEN
+fi
+
 here="$(pwd)"
 # The first entry of `git worktree list` is always the main checkout.
 main="$(git -C "$here" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"

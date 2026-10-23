@@ -62,9 +62,18 @@ export interface EmbedEventData {
     runningLate?: boolean | null;
     /** ROK-1801: trusted marker after the bold name (` 🖥 on server`). */
     rosterSuffix?: string | null;
+    /** ROK-1888: an unlinked server player — rendered, not counted. */
+    uncounted?: boolean;
   }> | null;
   /** ROK-1801 Q4: unnamed server-only players, shown as `+N on server`. */
   serverAnonymousCount?: number;
+  /**
+   * ROK-1888: the Quick Play card leaves `serverAnonymousCount` out of its
+   * LIVE count. Unset on the lobby presence card, which still counts them.
+   */
+  serverAnonymousUncounted?: boolean;
+  /** ROK-1888 OQ4: a voice member has no RL account — show the join hint. */
+  discordOnlyPresent?: boolean;
   // ─── ROK-1460 widening seam ───────────────────────────────
   // `game` is the ONE place the event projection grows. ROK-1447 adds its
   // Quick Play badge inputs (price / co-op) here too; keep new fields optional
@@ -245,6 +254,7 @@ export class DiscordEmbedFactory {
       ...(clientUrl !== undefined ? { clientUrl } : {}),
       roster: buildRosterLine(event, this.emojiService),
       ...(options?.pollUrl !== undefined ? { pollUrl: options.pollUrl } : {}),
+      ...hubNamePart(context.hubLink),
       eventLink,
     });
     if (body) embed.setDescription(body);
@@ -306,4 +316,9 @@ function applyThumbnail(
   if (state === EMBED_STATES.CANCELLED) return;
   const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);
+}
+
+/** ROK-1895: the tagged hub's name for the body, omitted when absent. */
+function hubNamePart(link: HubLink | null | undefined): { hubName?: string } {
+  return link?.hubName ? { hubName: link.hubName } : {};
 }

@@ -3,7 +3,7 @@
  * the phone bottom bar. A hub member taps it for the "Your hubs" sheet; no
  * hubs, or the list still loading / failed → a plain link to `/hubs` (the
  * `HubsNavItem` D1 rule). It reads the same `useMyGuildsQuery` cache as the
- * header menu and the More drawer — no second fetch. Active on `/hubs` and on
+ * header menu — no second fetch. Active on `/hubs` and on
  * every hub page (`isHubsNavActive`).
  *
  * Layout: the slot fills its grid column; the 56px circle sits absolutely,

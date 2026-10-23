@@ -1,6 +1,7 @@
 import type { GuildSummary } from '@raid-ledger/contract';
 import {
   buildServerHubPage,
+  onlineCounts,
   recentArrivals,
   orderServerMembers,
   toServerMemberRow,
@@ -69,6 +70,7 @@ describe('server hub page helpers (ROK-1831)', () => {
         }),
       ],
       onlineSteamIds: new Set(['s1']),
+      claimedSteamIds: null,
       server: {
         pelicanServerId: 5,
         gameSlug: 'valheim',
@@ -95,6 +97,7 @@ describe('server hub page helpers — server block', () => {
       viewerId: 9,
       members: [],
       onlineSteamIds: new Set(),
+      claimedSteamIds: null,
       server: undefined,
     });
     expect(page.server).toBeUndefined();
@@ -136,6 +139,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
       viewerId: 9,
       members: [rec({ firstSeenAt: new Date('2026-10-01') })],
       onlineSteamIds: new Set(),
+      claimedSteamIds: null,
       server: {
         pelicanServerId: 5,
         gameSlug: 'valheim',
@@ -153,6 +157,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
       viewerId: 4,
       members: [rec({ userId: 4, lastSeenAt: new Date(), joinedAt: null })],
       onlineSteamIds: new Set(),
+      claimedSteamIds: null,
       server: {
         pelicanServerId: 5,
         gameSlug: 'valheim',
@@ -170,6 +175,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
       viewerId: 9,
       members: [rec({ firstSeenAt: new Date('2026-10-01') })],
       onlineSteamIds: new Set(),
+      claimedSteamIds: null,
       server: {
         pelicanServerId: 5,
         gameSlug: 'valheim',
@@ -183,7 +189,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
     expect(page.server?.viewerJoined).toBe(false);
   });
 
-  it('counts who is online for every viewer, visitors included (Codex r2 P3)', () => {
+  it('counts every player on the server, not just members, for every viewer (ROK-1932)', () => {
     const input = {
       guild,
       viewerId: 9,
@@ -193,6 +199,7 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
         rec({ memberId: 3, steamId: null }),
       ],
       onlineSteamIds: new Set(['s1', 's2', 'stranger']),
+      claimedSteamIds: new Set(['s1']),
       server: {
         pelicanServerId: 5,
         gameSlug: 'valheim',
@@ -202,8 +209,45 @@ describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
     };
     const visitor = buildServerHubPage({ ...input, role: 'visitor' });
     expect(visitor.ranks[0]?.members).toEqual([]);
-    expect(visitor.server?.onlineCount).toBe(2);
+    expect(visitor.server).toMatchObject({
+      onlineCount: 3,
+      unlinkedOnlineCount: 2,
+    });
     const member = buildServerHubPage({ ...input, role: 'member' });
-    expect(member.server?.onlineCount).toBe(2);
+    expect(member.server).toMatchObject({
+      onlineCount: 3,
+      unlinkedOnlineCount: 2,
+    });
+    // The Members tab still flags only member rows online, online first.
+    const flags = member.ranks[0]?.members.map((r) => r.server?.onlineNow);
+    expect(flags).toEqual([true, true, false]);
+  });
+});
+
+describe('onlineCounts (ROK-1932)', () => {
+  it('counts all online players and the ones nobody has claimed', () => {
+    expect(
+      onlineCounts(new Set(['a', 'b', 'c', 'd']), new Set(['b', 'd'])),
+    ).toEqual({ onlineCount: 4, unlinkedOnlineCount: 2 });
+  });
+
+  it('ignores claims for players who are not online', () => {
+    expect(onlineCounts(new Set(['a']), new Set(['a', 'gone']))).toEqual({
+      onlineCount: 1,
+      unlinkedOnlineCount: 0,
+    });
+  });
+
+  it('omits the unlinked count when the game has no characters to claim', () => {
+    expect(onlineCounts(new Set(['a', 'b']), null)).toEqual({
+      onlineCount: 2,
+    });
+  });
+
+  it('is zero and zero for an empty server', () => {
+    expect(onlineCounts(new Set(), new Set())).toEqual({
+      onlineCount: 0,
+      unlinkedOnlineCount: 0,
+    });
   });
 });

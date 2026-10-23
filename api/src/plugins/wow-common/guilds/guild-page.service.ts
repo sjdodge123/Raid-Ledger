@@ -24,7 +24,10 @@ import {
   findLinkedMemberRows,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
-import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
+import {
+  findHubGuild,
+  hubSummaryFor,
+} from '../../../guilds/guild-core.queries';
 import {
   findCharacterGuild,
   findImportedBy,
@@ -113,8 +116,8 @@ export class GuildPageService {
     if (!(await this.access.canView(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
-    const guild = await findGuild(this.db, guildId);
-    if (!guild) throw new NotFoundException('Guild not found');
+    const hub = await findHubGuild(this.db, guildId);
+    if (!hub) throw new NotFoundException('Guild not found');
     const [rows, importedBy, role] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),
@@ -125,7 +128,7 @@ export class GuildPageService {
       ? await loadRosterLinks(this.db, rows)
       : undefined;
     return {
-      guild: hubSummaryFor(guild, isStaff(actor)),
+      guild: hubSummaryFor(hub, isStaff(actor)),
       importedBy,
       viewer: viewerAccess(role),
       ranks: groupRoster(rows, links),

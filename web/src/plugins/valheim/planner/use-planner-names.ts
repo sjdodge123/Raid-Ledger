@@ -56,6 +56,8 @@ function splitCatalog(catalog: ValheimRecipeCatalogResponse): {
         const target = e.kind === 'piece' ? pieces : items;
         target[e.prefab] = { name: e.name, category: e.category, icon: e.icon };
     }
+    // ROK-1899: gathered/smelted ingredients outside the entries (a catalogue row only; else the prefab).
+    for (const [p, e] of Object.entries(catalog.ingredients)) items[p] ??= e;
     for (const s of catalog.stations)
         pieces[s.prefab] = { name: s.name, category: 'Station', icon: s.icon };
     return { items, pieces };

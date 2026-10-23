@@ -19,6 +19,7 @@ import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
+import { expectActiveHubTab } from './hub-tabs';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -69,7 +70,7 @@ async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promi
 
 async function openGuildAs(page: Page, guild: SeededGuild, role: Role, hash = ''): Promise<void> {
     await signInOnboardedMember(page, guild.users[role].userId);
-    await page.goto(`/guilds/${guild.guildId}${hash}`);
+    await page.goto(`/hubs/${guild.guildId}${hash}`);
 }
 
 test('GM: hero, rank-grouped members, character link, no Page editors card', async ({ page }, testInfo) => {
@@ -79,6 +80,7 @@ test('GM: hero, rank-grouped members, character link, no Page editors card', asy
         await expect(page.getByTestId('guild-overview')).toBeVisible();
         await expect(page.getByTestId('guild-editors-panel'), 'rank 0 confers no editor management (GM_RANK_IMPLIES_EDIT off)').toHaveCount(0);
         await page.goto(`/guilds/${guild.guildId}#members`);
+        await expect(page, 'a legacy /guilds/ link lands on /hubs/ with its tab (ROK-1891)').toHaveURL(new RegExp(`/hubs/${guild.guildId}#members$`));
         await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         for (const rank of [0, 1, 2, 3, 4]) {
             await expect(page.getByTestId(`guild-rank-${rank}`)).toBeVisible();
@@ -93,7 +95,7 @@ test('GM: hero, rank-grouped members, character link, no Page editors card', asy
 test('admin: the settings sheet holds the editors — the rank-1 grant inactive, the officer granted by name, a picker naming each linked account, and the "grant the Guild Master by name" hint', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInAsAdmin(page.context());
-        await page.goto(`/guilds/${guild.guildId}`);
+        await page.goto(`/hubs/${guild.guildId}`);
         const trigger = page.getByTestId('guild-settings-trigger');
         await expect(trigger, 'admins get the single settings entry point (ROK-1830 S4)').toBeVisible({ timeout: 15_000 });
         await trigger.click();
@@ -142,7 +144,7 @@ test('#members deep-links straight to the Members tab, and the retired #roster s
 
         // ROK-1830 D7-A: links shared before the rename keep working, and the
         // address bar is rewritten so the next copy of the link is current.
-        await page.goto(`/guilds/${guild.guildId}#roster`);
+        await page.goto(`/hubs/${guild.guildId}#roster`);
         await expect(tabs.locator('a[href="#members"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
         await expect(page.getByTestId('guild-members')).toBeVisible();
         await expect(page).toHaveURL(new RegExp('#members$'));
@@ -172,7 +174,7 @@ test('entry points: header Hubs menu row / drawer "Your hubs" reach the page; Pl
         await page.goto('/players');
         const card = page.getByTestId('players-guild-card');
         await expect(card, 'the member sees their guild on Players').toBeVisible({ timeout: 15_000 });
-        await expect(card.getByTestId('players-guild-open')).toHaveAttribute('href', `/guilds/${guild.guildId}`);
+        await expect(card.getByTestId('players-guild-open')).toHaveAttribute('href', `/hubs/${guild.guildId}`);
         const width = page.viewportSize()?.width ?? 0;
         const nav = page.getByRole('navigation', { name: 'Main navigation' });
         if (width >= HEADER_HUBS_MIN_WIDTH) {
@@ -180,17 +182,20 @@ test('entry points: header Hubs menu row / drawer "Your hubs" reach the page; Pl
             const trigger = nav.getByTestId('nav-hubs-menu-trigger');
             await expect(trigger, 'a guild member gets the Hubs menu from 768px').toBeVisible({ timeout: 15_000 });
             await trigger.click();
-            const row = page.getByRole('menu', { name: 'Hubs' }).locator(`a[href="/guilds/${guild.guildId}"]`);
+            const row = page.getByRole('menu', { name: 'Hubs' }).locator(`a[href="/hubs/${guild.guildId}"]`);
             await expect(row, 'the Hubs menu lists the guild').toBeVisible();
             await expect(row.getByTestId('hub-kind-chip'), 'a WoW guild row reads "Guild"').toContainText('Guild');
             await row.click();
         } else {
-            await page.getByRole('button', { name: 'Open menu' }).click();
-            const block = page.getByTestId('more-drawer-panel').getByTestId('drawer-your-guild');
-            await expect(block).toBeVisible();
-            await block.getByTestId('guild-entry-row').click();
+            // ROK-1890: the phone entry is the bottom bar's Hubs sheet (the More drawer lists no hubs).
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'a guild member gets the bottom Hubs sheet trigger').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const row = page.getByRole('dialog', { name: 'Your hubs' }).locator(`a[href="/hubs/${guild.guildId}"]`);
+            await expect(row, 'the Hubs sheet lists the guild').toBeVisible({ timeout: 15_000 });
+            await row.click();
         }
-        await expect(page).toHaveURL(new RegExp(`/guilds/${guild.guildId}(?:[?#]|$)`));
+        await expect(page).toHaveURL(new RegExp(`/hubs/${guild.guildId}(?:[?#]|$)`));
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
     });
 });
@@ -223,8 +228,7 @@ test('#events: the core tab carries the schedule, attendance and every tagged ev
 test('#raids: the WoW module tab keeps role composition and nothing core already shows', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#raids');
-        const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-        await expect(tabs.locator('a[href="#raids"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expectActiveHubTab(page, testInfo, 'Raids', 'raids');
         const tab = page.getByTestId('guild-raids-tab');
         await expect(tab).toBeVisible({ timeout: 15_000 });
         await expect(tab.getByTestId('guild-composition-tank')).toBeVisible();
@@ -303,7 +307,7 @@ test('plain member: no setup checklist, and Resources frames the addons as Recom
         await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('setup-checklist'), 'the checklist is for editors').toHaveCount(0);
 
-        await page.goto(`/guilds/${guild.guildId}#resources`);
+        await page.goto(`/hubs/${guild.guildId}#resources`);
         const frame = page.getByTestId('guild-recommended-mods');
         await expect(frame, 'the core frame now heads the WoW list (ROK-1830 S5b, D8-B)').toBeVisible({ timeout: 15_000 });
         await expect(frame.getByRole('heading', { name: 'Recommended mods' })).toBeVisible();

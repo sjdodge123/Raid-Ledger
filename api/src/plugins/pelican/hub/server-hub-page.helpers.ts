@@ -85,44 +85,56 @@ export interface ServerHubPageInput {
   role: LadderRole;
   viewerId: number;
   members: ServerMemberRecord[];
-  onlineSteamIds: Set<string>;
+  /** Distinct SteamIDs on the server right now (presence keys players by SteamID). */
+  onlineSteamIds: ReadonlySet<string>;
+  /**
+   * ROK-1932: the online SteamIDs with a character claimed by any Raid Ledger
+   * user; null when the game has no characters to claim (count omitted).
+   */
+  claimedSteamIds: ReadonlySet<string> | null;
   /** The hero block minus `viewerJoined`; undefined when the server is gone or unmapped. */
   server: Omit<GuildPageServer, 'viewerJoined'> | undefined;
 }
 
-function withViewer(
-  server: Omit<GuildPageServer, 'viewerJoined'>,
-  viewer: { joined: boolean; onlineCount: number },
-  members: readonly ServerMemberRecord[] | null,
-): GuildPageServer {
-  const base = {
-    ...server,
-    viewerJoined: viewer.joined,
-    onlineCount: viewer.onlineCount,
-  };
-  if (members === null) return base;
-  return { ...base, recentArrivals: recentArrivals(members) };
+/** The hero's head-counts: every player online, and how many are unclaimed. */
+interface OnlineCounts {
+  onlineCount: number;
+  unlinkedOnlineCount?: number;
 }
 
 /**
- * The hero block for this viewer. `onlineCount` is counted for every viewer
- * — a visitor gets no rows to count (Codex r2 P3).
+ * ROK-1932: counts every player on the server, claimed or not — not just hub
+ * members — so the hero matches who is actually playing. Numbers only, so a
+ * visitor gets them too.
+ */
+export function onlineCounts(
+  online: ReadonlySet<string>,
+  claimed: ReadonlySet<string> | null,
+): OnlineCounts {
+  if (claimed === null) return { onlineCount: online.size };
+  const unlinked = [...online].filter((id) => !claimed.has(id)).length;
+  return { onlineCount: online.size, unlinkedOnlineCount: unlinked };
+}
+
+/**
+ * The hero block for this viewer. Counts go to every viewer (Codex r2 P3);
+ * recent arrivals only to non-visitors.
  */
 function serverBlock(
   input: ServerHubPageInput,
   server: Omit<GuildPageServer, 'viewerJoined'>,
-  rows: readonly GuildMemberRow[],
   visitor: boolean,
 ): GuildPageServer {
   // `members` is already the L-2 current set (manual not left OR seen inside
   // the window and after any Leave), so presence-only members count as joined.
   const joined = input.members.some((r) => r.userId === input.viewerId);
-  const onlineCount = rows.filter((r) => r.server?.onlineNow === true).length;
-  return withViewer(
-    server,
-    { joined, onlineCount },
-    visitor ? null : input.members,
-  );
+  const base: GuildPageServer = {
+    ...server,
+    viewerJoined: joined,
+    ...onlineCounts(input.onlineSteamIds, input.claimedSteamIds),
+  };
+  if (visitor) return base;
+  return { ...base, recentArrivals: recentArrivals(input.members) };
 }
 
 /**
@@ -151,7 +163,7 @@ export function buildServerHubPage(input: ServerHubPageInput): GuildPage {
     ],
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
     ...(input.server
-      ? { server: serverBlock(input, input.server, rows, visitor) }
+      ? { server: serverBlock(input, input.server, visitor) }
       : {}),
   };
 }

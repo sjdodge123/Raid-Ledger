@@ -14,6 +14,7 @@
 import { lazy, Suspense, type JSX } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { GuildKind, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { hubCopy } from '../hub-copy';
 import { GuildAttendance } from './guild-attendance';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
@@ -42,7 +43,7 @@ export function HubEventsTab({ query, kind, page }: EventsTabProps): JSX.Element
     if (query.error) {
         return (
             <div className="py-12 text-center" data-testid="guild-events-error">
-                <p className="text-sm text-muted">We couldn&apos;t load this guild&apos;s events. Try again in a moment.</p>
+                <p className="text-sm text-muted">We couldn&apos;t load this {hubCopy(kind).noun}&apos;s events. Try again in a moment.</p>
             </div>
         );
     }

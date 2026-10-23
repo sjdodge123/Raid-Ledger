@@ -36,7 +36,8 @@ export const pelicanServers = pgTable(
     /** ROK-1800: admin opt-in — tail this server's console for player presence. */
     presenceTracking: boolean('presence_tracking').notNull().default(false),
     /** Per-server IANA tz override (validated at the API). */
-    // ROK-1795: unread since Pelican crons are always UTC; dropped in a follow-up
+    // ROK-1795: Pelican crons ignore it (always UTC). ROK-1882 reads it as the
+    // server's play-day boundary for Valheim skill trends — do NOT drop.
     timezone: text('timezone'),
     /** Raw Pelican `stats.current_state`, ≤32 chars. */
     currentState: text('current_state'),

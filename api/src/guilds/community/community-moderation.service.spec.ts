@@ -26,6 +26,7 @@ jest.mock('./community-hub.reads', () => ({
   liveCommunityRole: jest.fn(),
 }));
 jest.mock('./community-proposals.users');
+jest.mock('./invites/hub-invites.queries');
 
 const AT = new Date('2026-10-01T00:00:00Z');
 const leader: GuildActor = { id: 1, role: 'member' };
@@ -45,6 +46,8 @@ function memberRow(
     bannedAt: null,
     bannedBy: null,
     banReason: null,
+    joinSource: null,
+    inviteId: null,
     createdAt: AT,
     updatedAt: AT,
     ...over,
@@ -75,6 +78,7 @@ const HUB: schema.GuildSelect = {
   reviewedAt: null,
   archivedAt: null,
   archivedReason: null,
+  autoMembership: 'off',
   createdAt: AT,
   updatedAt: AT,
 };

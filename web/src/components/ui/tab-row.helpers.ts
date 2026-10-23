@@ -28,7 +28,8 @@ export function tabFromHash(
     defaultId: string,
     aliases: Readonly<Record<string, string>> = {},
 ): string {
-    const raw = hash.replace(/^#/, '');
+    // ROK-1889: a tab may carry its own params (`#map?x=…`) — the id is before `?`.
+    const raw = hash.replace(/^#/, '').split('?')[0] ?? '';
     const id = aliases[raw] ?? raw;
     return ids.includes(id) ? id : defaultId;
 }

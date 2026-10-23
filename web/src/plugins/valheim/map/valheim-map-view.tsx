@@ -4,7 +4,7 @@
  * composes MapViewport → base <img> + FogCanvas + PinLayer, and owns the layer
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import type { ValheimMapMeta } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import {
@@ -19,6 +19,8 @@ import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
 import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
+import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
+import { ChestFocusMarker } from './chest-focus-marker';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -215,19 +217,46 @@ interface MapFrameProps {
     status: MapStatusProps;
 }
 
+/** The pannable texture: map layers, plus the ROK-1889 chest marker. */
+interface FrameViewportProps {
+    layers: LayerProps;
+    onCommands: (c: MapViewportCommands) => void;
+}
+
+function FrameViewport({ layers, onCommands }: FrameViewportProps) {
+    const chest = useContext(ChestFocusContext);
+    const grid = layers.meta.grid;
+    return (
+        <MapViewport
+            contentSize={grid.textureSize}
+            label="Valheim map"
+            onCommands={onCommands}
+            className="absolute inset-0"
+        >
+            {(vp) => (
+                <>
+                    <MapLayers layers={layers} scale={vp.scale} />
+                    {chest && (
+                        <ChestFocusMarker
+                            grid={grid}
+                            scale={vp.scale}
+                            chest={chest}
+                        />
+                    )}
+                </>
+            )}
+        </MapViewport>
+    );
+}
+
 /** Viewport + status chip + overlay controls in the sized frame (D10). */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
+    const chest = useContext(ChestFocusContext);
+    useCentreOnChest(commands, layers.meta.grid, chest);
     return (
         <div className={className ? `${FRAME} ${className}` : FRAME}>
-            <MapViewport
-                contentSize={layers.meta.grid.textureSize}
-                label="Valheim map"
-                onCommands={setCommands}
-                className="absolute inset-0"
-            >
-                {(vp) => <MapLayers layers={layers} scale={vp.scale} />}
-            </MapViewport>
+            <FrameViewport layers={layers} onCommands={setCommands} />
             <MapStatus {...status} />
             <MapLegend />
             <div className="absolute right-2 top-2 z-10">

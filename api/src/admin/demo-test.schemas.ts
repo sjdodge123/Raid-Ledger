@@ -65,6 +65,11 @@ export const AwaitProcessingSchema = z.object({
   timeoutMs: z.number().int().positive().max(60_000).optional(),
 });
 
+/** Optional target user for clear-game-time-confirmation; default = caller. */
+export const ClearGameTimeConfirmationSchema = z.object({
+  userId: z.number().int().positive().optional(),
+});
+
 export const SetSteamAppIdSchema = z.object({
   gameId: z.number().int().positive(),
   steamAppId: z.number().int().positive(),

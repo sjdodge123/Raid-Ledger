@@ -12,6 +12,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuthGuard } from '@nestjs/passport';
 import {
+  isValidIanaTimezone,
   PelicanServerListResponseSchema,
   PelicanServerRowSchema,
   PelicanServerUpdateSchema,
@@ -66,7 +67,7 @@ export class PelicanServersAdminController {
     });
   }
 
-  /** PATCH /admin/plugins/pelican/servers/:id — game, calendar visibility, Quick Play detection. */
+  /** PATCH /admin/plugins/pelican/servers/:id — game, calendar visibility, Quick Play detection, timezone. */
   @Patch('servers/:id')
   async updateServer(
     @Param('id', ParseIntPipe) id: number,
@@ -77,6 +78,9 @@ export class PelicanServersAdminController {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message));
     }
     const patch = parsed.data;
+    if (patch.timezone != null && !isValidIanaTimezone(patch.timezone)) {
+      throw new BadRequestException('Unknown timezone');
+    }
     const result = await this.servers.updateMapping(id, patch, (slug) =>
       this.presenceSupported(slug),
     );

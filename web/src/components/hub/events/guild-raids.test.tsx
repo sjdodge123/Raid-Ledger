@@ -57,7 +57,7 @@ function serve(raids: GuildRaidsDto | null, status = 200): void {
 
 function renderPage(hash = ''): void {
     window.location.hash = hash;
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 afterEach(() => { window.location.hash = ''; });

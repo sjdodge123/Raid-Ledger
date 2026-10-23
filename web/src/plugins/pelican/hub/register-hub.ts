@@ -1,15 +1,15 @@
 /**
  * ROK-1831 — the game-server hub module (`kind: 'game_server'`). Core's
- * `/guilds/:id` shell renders it while the Pelican plugin is active. No
+ * `/hubs/:id` shell renders it while the Pelican plugin is active. No
  * Officers, no rank bands; members are whoever played here in 90 days or
  * pressed Join. The hub name comes from the server (core has no name editor).
  */
 import type { CoreWidgetId, HubCtx, HubModule } from '../../hub-module';
 import { JoinLeavePill, ServerStatusPill } from './server-hero';
 import { SERVER_MEMBER_COLUMNS } from './server-member-columns';
-import { QuickPlayTab } from './quick-play-tab';
-import { serverHubGameTabs } from './server-hub-game-tabs';
+import { LazyQuickPlayTab } from './quick-play-tab-lazy';
 import { RecentArrivalsWidget } from './recent-arrivals-widget';
+import { LazyServerHoursWidget } from './server-hours-widget-lazy';
 
 /** A visitor gets no member rows (server-side), so the empty line invites a Join. */
 export const SERVER_MEMBERS_VISITOR_EMPTY = 'Join to see who plays here';
@@ -25,10 +25,13 @@ export function serverCoreWidgetVisible(id: CoreWidgetId, { page }: HubCtx): boo
 
 export const pelicanHubModule: HubModule = {
     kind: 'game_server',
-    get tabs() {
-        return [{ id: 'quick-play', label: 'Quick Play', order: 10, component: QuickPlayTab }, ...serverHubGameTabs()];
-    },
-    overviewWidgets: [{ id: 'recent-arrivals', order: 55, component: RecentArrivalsWidget, visible: ({ page }) => page.server !== undefined }],
+    // Per-game tabs (Valheim's Characters/Map/...) come from core's `registerHubGameTab` merge (ROK-1912).
+    tabs: [{ id: 'quick-play', label: 'Quick Play', order: 10, component: LazyQuickPlayTab }],
+    overviewWidgets: [
+        // ROK-1876: every viewer (operator ruling 2026-10-21) — hours are not sensitive.
+        { id: 'server-hours', order: 50, component: LazyServerHoursWidget, visible: ({ page }) => page.server !== undefined },
+        { id: 'recent-arrivals', order: 55, component: RecentArrivalsWidget, visible: ({ page }) => page.server !== undefined },
+    ],
     coreWidgetVisible: serverCoreWidgetVisible,
     memberColumns: SERVER_MEMBER_COLUMNS,
     heroPills: [ServerStatusPill, JoinLeavePill],

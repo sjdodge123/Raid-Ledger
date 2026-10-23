@@ -40,6 +40,7 @@ import {
   LinkDiscordSchema,
   EnableNotificationsSchema,
   AwaitProcessingSchema,
+  ClearGameTimeConfirmationSchema,
   SeedSlowQueriesLogSchema,
 } from './demo-test.schemas';
 import { DemoTestService } from './demo-test.service';
@@ -151,13 +152,21 @@ export class DemoTestCoreController {
     return { success: true };
   }
 
-  /** Clear game_time_confirmed_at for the authenticated user -- DEMO_MODE only (ROK-999). */
+  /**
+   * Clear game_time_confirmed_at -- DEMO_MODE only (ROK-999). Defaults to the
+   * caller; an optional `{ userId }` targets another user so per-project smoke
+   * fixture users can be reset without sharing the admin's state.
+   */
   @Post('clear-game-time-confirmation')
   @HttpCode(HttpStatus.OK)
   async clearGameTimeConfirmationForTest(
     @Request() req: AuthenticatedRequest,
+    @Body() body?: unknown,
   ): Promise<{ success: boolean }> {
-    await this.demoTestService.clearGameTimeConfirmationForTest(req.user.id);
+    const parsed = parseDemoBody(ClearGameTimeConfirmationSchema, body ?? {});
+    await this.demoTestService.clearGameTimeConfirmationForTest(
+      parsed.userId ?? req.user.id,
+    );
     return { success: true };
   }
 
