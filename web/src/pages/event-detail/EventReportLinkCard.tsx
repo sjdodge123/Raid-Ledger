@@ -5,6 +5,12 @@
  * empty state and Add / Edit / Remove — before, during and after the event,
  * since the topbar Edit button is gone once an event has ended. This card is
  * the link's only writer.
+ *
+ * Only games whose plugin declares report-link support (the WoW plugin, for
+ * WoW-family games) get the empty state and editor — core holds no game
+ * knowledge. A link stored on any other event (game changed after linking, a
+ * direct DB write) still shows read-only so no data is lost, never with the
+ * "Add" CTA or Edit / Remove.
  */
 import { useState, type FormEvent, type JSX } from 'react';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
@@ -21,6 +27,7 @@ import { Input } from '../../components/ui/input';
 import { errorBodyOf } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
 import { useUpdateEventReportLink } from '../../hooks/use-event-report-link';
+import { useEventReportLinksSupported } from '../../plugins/event-report-links';
 
 const ACTION_ROW = 'flex flex-col gap-2 sm:flex-row';
 
@@ -164,10 +171,11 @@ function useReportLinkActions(eventId: number) {
 }
 
 export function EventReportLinkCard({ event, canManage, isCancelled }: {
-    event: Pick<EventResponseDto, 'id' | 'reportUrl'>; canManage: boolean; isCancelled: boolean;
+    event: Pick<EventResponseDto, 'id' | 'reportUrl' | 'game'>; canManage: boolean; isCancelled: boolean;
 }): JSX.Element | null {
     const reportUrl = event.reportUrl ?? null;
-    const editable = canManage && !isCancelled;
+    const supported = useEventReportLinksSupported(event.game?.slug);
+    const editable = supported && canManage && !isCancelled;
     const actions = useReportLinkActions(event.id);
     if (!editable && (reportUrl === null || !isLinkable(reportUrl))) return null;
     return (

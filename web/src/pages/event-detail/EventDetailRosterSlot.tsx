@@ -2,7 +2,7 @@
  * Roster slot section components for Event Detail page.
  * Extracted from event-detail-page.tsx for file size compliance (ROK-719).
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto, ViewerRosterWithAssignments } from '../../lib/api/viewer-event-schemas';
@@ -43,17 +43,23 @@ function buildStickyExtra(isAuthenticated: boolean, event: EventResponseDto, ros
     );
 }
 
-/** Roster slot section with RosterBuilder */
-export function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user }: {
+/**
+ * Roster slot section with RosterBuilder. `hubPrompt` (ROK-1893 P1) renders
+ * directly under the header that carries the viewer's Join / signed-up state,
+ * so the "Join <hub>?" prompt is on screen right after a signup.
+ */
+export function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user, hubPrompt }: {
     event: EventResponseDto; eventId: number; roster: ViewerEventRosterDto | undefined; rosterAssignments: ViewerRosterWithAssignments | undefined;
     isAuthenticated: boolean; isSignedUp: boolean; userSignup: { status: string } | undefined;
     canManageRoster: boolean; canJoinSlot: boolean; isMMOGame: boolean; handlers: ReturnType<typeof useEventDetailHandlers>; user: { id: number } | null | undefined;
+    hubPrompt?: ReactNode;
 }): JSX.Element | null {
     if (!rosterAssignments) return null;
     return (
         <div className="event-detail-slots" id="event-roster-section">
             <RosterSlotHeader event={event} canManageRoster={canManageRoster} canJoinSlot={canJoinSlot} isMMOGame={isMMOGame}
                 isAuthenticated={isAuthenticated} isSignedUp={isSignedUp} userSignup={userSignup} handlers={handlers} />
+            {hubPrompt}
             <RosterBuilder pool={rosterAssignments.pool as never} assignments={rosterAssignments.assignments as never} slots={rosterAssignments.slots as never}
                 onRosterChange={handlers.handleRosterChange as never} canEdit={canManageRoster} onSlotClick={handlers.handleSlotClick} canJoin={canJoinSlot}
                 currentUserId={user?.id}

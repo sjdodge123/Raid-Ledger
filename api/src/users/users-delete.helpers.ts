@@ -183,6 +183,8 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubCommunityMembers,
     column: schema.hubCommunityMembers.userId,
   },
+  // ROK-1893: hub join prompts are personal UI state (CASCADE).
+  { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {
@@ -262,6 +264,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // row, so the claim stays pointed at the banned user there.
   schema.valheimProfiles,
   schema.valheimProfileClaimEvents,
+  // ROK-1893: `hub_invites.created_by` is SET NULL; the row stays as the
+  // hub's history, but the community wipe (community-user-wipe.helpers)
+  // revokes every open link the user made first, so none keeps working.
+  schema.hubInvites,
 ];
 
 /**

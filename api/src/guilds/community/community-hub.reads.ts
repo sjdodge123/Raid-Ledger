@@ -86,6 +86,7 @@ export async function loadCommunityMembers(
       displayName: u.displayName,
       avatar: u.customAvatarUrl,
       deactivatedAt: u.deactivatedAt,
+      joinSource: m.joinSource,
     })
     .from(m)
     .innerJoin(u, eq(u.id, m.userId))
