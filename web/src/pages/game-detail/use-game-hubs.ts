@@ -1,7 +1,10 @@
 /**
- * ROK-1870 — the game page "Community hubs" card: its read
- * (`GET /hubs/by-game/:gameId`, key `['game-hubs', gameId]`), the optimistic
- * inline Join, proposal submit and proposal withdraw.
+ * ROK-1870 — the game page Hubs card: its read (`GET /hubs/by-game/:gameId`,
+ * key `['game-hubs', gameId, viewer]`), the optimistic inline Join, proposal
+ * submit and proposal withdraw.
+ * ROK-1883: the payload carries per-viewer WoW / server membership (and the
+ * staff-only `hidden` flag), so the key ends in the viewer scope (ROK-1314) —
+ * a sign-out + sign-in never shows the previous viewer's rows.
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import {
@@ -14,12 +17,16 @@ import {
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api/fetch-api';
 import { toast } from '../../lib/toast';
+import { useViewerCacheScope } from '../../hooks/use-auth';
 import { invalidateHubMembership } from '../../components/hub/community/invalidate-hub-membership';
 import { requestHubJoin, withJoin } from './hub-join';
 
-/** Query key for one game's community hubs card. */
-export function gameHubsKey(gameId: number): readonly ['game-hubs', number] {
-    return ['game-hubs', gameId];
+/** The viewer scope a key ends in (`useViewerCacheScope`). */
+type ViewerScope = number | 'anon';
+
+/** Query key for one game's Hubs card, as one viewer sees it. */
+export function gameHubsKey(gameId: number, viewer: ViewerScope): readonly ['game-hubs', number, ViewerScope] {
+    return ['game-hubs', gameId, viewer];
 }
 
 /** Every game's card — the D12 proposal limit is global, so a submit/withdraw changes them all. */
@@ -28,7 +35,7 @@ const ALL_GAME_HUBS = ['game-hubs'] as const;
 /** Read the game's hubs, the viewer's proposals and whether they may propose. */
 export function useGameHubs(gameId: number): UseQueryResult<GameHubs> {
     return useQuery({
-        queryKey: gameHubsKey(gameId),
+        queryKey: gameHubsKey(gameId, useViewerCacheScope()),
         queryFn: () => fetchApi(`/hubs/by-game/${gameId}`, {}, GameHubsSchema),
     });
 }
@@ -42,7 +49,7 @@ function patchHub(data: GameHubs, hubId: number, memberCount?: number): GameHubs
 /** Optimistic inline Join from the card; rolls back + toasts on error. */
 export function useJoinGameHub(gameId: number): UseMutationResult<CommunityHubJoinResponse, Error, number, JoinContext> {
     const qc = useQueryClient();
-    const key = gameHubsKey(gameId);
+    const key = gameHubsKey(gameId, useViewerCacheScope());
     return useMutation<CommunityHubJoinResponse, Error, number, JoinContext>({
         mutationFn: (hubId) => requestHubJoin(hubId, true),
         onMutate: async (hubId) => {
@@ -85,7 +92,7 @@ export function isLiveProposal(proposal: HubProposal): boolean {
  */
 export function useProposeHub(gameId: number): UseMutationResult<HubProposal, Error, CreateHubProposalDto> {
     const qc = useQueryClient();
-    const key = gameHubsKey(gameId);
+    const key = gameHubsKey(gameId, useViewerCacheScope());
     return useMutation<HubProposal, Error, CreateHubProposalDto>({
         mutationFn: (body) => fetchApi('/hubs/proposals', { method: 'POST', body: JSON.stringify(body) }, HubProposalSchema),
         onSuccess: (proposal) => {

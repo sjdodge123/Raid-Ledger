@@ -38,7 +38,7 @@ export async function listGuildsOfGame(
   const rows = await db
     .select()
     .from(guilds)
-    .where(eq(guilds.gameId, gameId))
+    .where(and(eq(guilds.gameId, gameId), eq(guilds.kind, 'wow_guild')))
     .orderBy(asc(guilds.name));
   return rows.map(toGuildSummary);
 }

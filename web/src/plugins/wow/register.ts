@@ -16,7 +16,6 @@ import { CharacterDetailOwnerActions } from './slots/character-detail-owner-acti
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
 import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
 import { PlayersGuildCard } from './slots/players-guild-card';
-import { GameDetailGuilds } from './slots/game-detail-guilds';
 import { foreverIdentityProvider } from './forever-identity-provider';
 import { wowHubModule } from './hub/register-hub';
 import { supportsEventReportLinks } from './lib/report-links';
@@ -45,7 +44,6 @@ blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
 blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
 blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
 blizzard.registerSlot('players:header-cards', PlayersGuildCard);
-blizzard.registerSlot('game-detail:sections', GameDetailGuilds);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);
 blizzard.registerEventReportLinks(supportsEventReportLinks);

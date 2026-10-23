@@ -29,7 +29,14 @@ export const CommunityHubsSeedSchema = z
 /** The seed's ids for smoke specs + the fleet plan. */
 export interface CommunityHubsSeedResult {
   gameId: number;
-  hubIds: { crew: number; solo: number; archived: number };
+  /** ROK-1883: `server` is a HIDDEN game_server hub, `guild` a wow_guild. */
+  hubIds: {
+    crew: number;
+    solo: number;
+    archived: number;
+    server: number;
+    guild: number;
+  };
   leaderUserId: number;
   /** Crew's live non-leaders: `[officer, member×4]`. */
   memberUserIds: number[];

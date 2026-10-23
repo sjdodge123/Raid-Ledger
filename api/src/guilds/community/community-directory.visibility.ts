@@ -4,7 +4,8 @@ import { GUILD_KINDS, type GuildKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 
 /**
- * ROK-1875 D8/D9 — which hubs `GET /hubs` may list for a viewer, per kind.
+ * ROK-1875 D8/D9 — which hubs `GET /hubs` (and, since ROK-1883, the game
+ * page's `GET /hubs/by-game/:gameId`) may list for a viewer, per kind.
  * Membership for non-community kinds arrives as an id list from the hub-kind
  * adapters (core never imports plugin predicates — ROK-1733 boundary).
  */
@@ -23,7 +24,7 @@ export interface DirectoryScope {
   kinds: GuildKind[];
   /** Hub ids the viewer belongs to, unioned over every live adapter. */
   memberIds: number[];
-  /** Admin / operator. */
+  /** Admin / operator (`isStaff`): sees hidden hubs, flagged `hidden`. */
   staff: boolean;
 }
 
@@ -32,8 +33,13 @@ function idIn(ids: number[]): SQL {
   return ids.length === 0 ? sql`false` : inArray(g.id, ids);
 }
 
+/**
+ * One kind's rule. ROK-1883: staff (`isStaff`) waive `hidden_at IS NULL` on
+ * every kind; community still needs `status = 'active'` for everyone, so
+ * proposed / archived hubs stay in the admin queue.
+ */
 function kindBranch(kind: GuildKind, scope: DirectoryScope): SQL | undefined {
-  const notHidden = isNull(g.hiddenAt);
+  const notHidden = scope.staff ? undefined : isNull(g.hiddenAt);
   if (kind === 'game_community') {
     return and(eq(g.kind, kind), eq(g.status, 'active'), notHidden);
   }

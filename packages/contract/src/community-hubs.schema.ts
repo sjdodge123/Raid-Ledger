@@ -143,6 +143,11 @@ export const HubDirectoryEntrySchema = z
     viewer: HubViewerStateSchema,
     /** ROK-1875: the hub's kind — the directory lists community, game-server and WoW guild hubs. */
     kind: GuildKindSchema,
+    /**
+     * ROK-1883: staff only — true when an admin hid the hub. Staff see hidden
+     * hubs (marked "Hidden"); everyone else never receives them, nor this key.
+     */
+    hidden: z.boolean().optional(),
   })
   .strict();
 export type HubDirectoryEntry = z.infer<typeof HubDirectoryEntrySchema>;
@@ -164,6 +169,8 @@ export const ProposeBlockedReasonSchema = z.enum(['not-in-discord', 'limit-reach
 export const GameHubsSchema = z
   .object({
     hubs: z.array(HubDirectoryEntrySchema).max(50),
+    /** Every hub of this game visible to the viewer, past the 50-row `hubs` cap (ROK-1883). */
+    total: z.number().int().nonnegative(),
     myProposals: z.array(HubProposalSchema),
     canPropose: z.boolean(),
     proposeBlockedReason: ProposeBlockedReasonSchema.nullable(),

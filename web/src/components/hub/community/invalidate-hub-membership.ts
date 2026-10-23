@@ -1,7 +1,7 @@
 /**
  * ROK-1870 — one Join / Leave / member command changes what four surfaces
  * show: the nav's "your hubs" (`/guilds/mine`), the hub page itself, every
- * game page "Community hubs" card and every `/hubs` directory listing (any
+ * game page Hubs card (ROK-1883) and every `/hubs` directory listing (any
  * filter set — a `membership=not-joined` list must drop a joined hub).
  */
 import type { QueryClient } from '@tanstack/react-query';

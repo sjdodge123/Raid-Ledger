@@ -34,9 +34,10 @@ export function createMockHubProposal(overrides: Partial<HubProposal> = {}): Hub
     };
 }
 
-/** `GET /hubs/by-game/:gameId` payload. */
+/** `GET /hubs/by-game/:gameId` payload; `total` defaults to the distinct hub ids given. */
 export function createMockGameHubs(overrides: Partial<GameHubs> = {}): GameHubs {
-    return { hubs: [], myProposals: [], canPropose: true, proposeBlockedReason: null, ...overrides };
+    const total = new Set((overrides.hubs ?? []).map((h) => h.id)).size;
+    return { hubs: [], total, myProposals: [], canPropose: true, proposeBlockedReason: null, ...overrides };
 }
 
 /** ROK-1875: a game-server hub row (no leader; membership is presence-driven). */
@@ -45,6 +46,32 @@ export function createMockServerHubEntry(overrides: Partial<HubDirectoryEntry> =
         id: 310, gameId: 7, gameName: 'Valheim', name: 'Valheim — Gamernight', blurb: null,
         memberCount: 12, leaderName: null, viewer: 'not-member', kind: 'game_server', ...overrides,
     });
+}
+
+/** ROK-1883: a WoW guild hub row (membership is character-driven; no leader). */
+export function createMockGuildHubEntry(overrides: Partial<HubDirectoryEntry> = {}): HubDirectoryEntry {
+    return createMockHubEntry({
+        id: 420, name: 'Lantern Watch', blurb: 'Whitemane · Alliance raiding guild', memberCount: 38,
+        leaderName: null, viewer: 'member', kind: 'wow_guild', ...overrides,
+    });
+}
+
+/**
+ * ROK-1883 — a `GET /hubs/by-game/5` payload with every kind, joined first: a
+ * guild and a server hub the viewer is in, then a community hub to join.
+ * `staff` adds the staff-only `hidden` flag to each row and a hidden server hub.
+ */
+export function createMockGameHubsAllKinds(opts: { staff?: boolean } = {}): GameHubs {
+    const staff = opts.staff === true;
+    const flag = (hidden: boolean): Partial<HubDirectoryEntry> => (staff ? { hidden } : {});
+    const onGame = { gameId: 5, gameName: "Baldur's Gate 3" };
+    const hubs = [
+        createMockGuildHubEntry({ ...onGame, ...flag(false) }),
+        createMockServerHubEntry({ ...onGame, name: 'Forever Test Realm', viewer: 'member', ...flag(false) }),
+        ...(staff ? [createMockServerHubEntry({ ...onGame, id: 311, name: 'Valheim Dedicated', memberCount: 4, hidden: true })] : []),
+        createMockHubEntry({ name: 'Dungeon Night Crew', memberCount: 9, ...flag(false) }),
+    ];
+    return createMockGameHubs({ hubs });
 }
 
 /** `GET /hubs` payload; `kinds` defaults to the kinds of its items in `GUILD_KINDS` order. */

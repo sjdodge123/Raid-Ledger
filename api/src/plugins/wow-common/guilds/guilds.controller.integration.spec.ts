@@ -5,7 +5,7 @@
  * `by-character`, `?gameId` and `/mine`.
  */
 import * as bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -41,6 +41,42 @@ async function insertGuild(name: string): Promise<number> {
     'guild',
   );
   return g.id;
+}
+
+/** A server + a community hub on the game; `plain` joins the community. */
+async function insertOtherKindHubs(): Promise<number[]> {
+  const base = { gameId: testApp.seed.game.id, region: 'us' } as const;
+  const hubs = await testApp.db
+    .insert(schema.guilds)
+    .values([
+      {
+        ...base,
+        kind: 'game_server',
+        source: 'pelican',
+        name: 'A Server',
+        nameKey: 'a server',
+      },
+      {
+        ...base,
+        kind: 'game_community',
+        source: 'community',
+        name: 'A Crew',
+        nameKey: 'a crew',
+      },
+    ])
+    .returning({ id: schema.guilds.id });
+  const [plain] = nonEmpty(
+    await testApp.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.username, 'plain')),
+    'plain user',
+  );
+  const crew = nonEmpty(hubs.slice(1), 'community hub')[0];
+  await testApp.db
+    .insert(schema.hubCommunityMembers)
+    .values({ guildId: crew.id, userId: plain.id, role: 'member' });
+  return hubs.map((h) => h.id);
 }
 
 /** A user with a local login + a character + (optionally) a member row. */
@@ -421,6 +457,23 @@ describe('GET /?gameId= and /mine', () => {
     expect(await names('removed')).toEqual([]);
     expect(await names('admin')).toEqual(['Ledger Keepers', 'Other Guild']);
     expect((await get('?gameId=abc', 'plain')).status).toBe(400);
+  });
+
+  it('lists WoW guilds only — never a server or community hub (ROK-1883)', async () => {
+    const extra = await insertOtherKindHubs();
+    try {
+      const q = `?gameId=${testApp.seed.game.id}`;
+      const kinds = async (who: Who | 'admin') =>
+        ((await get(q, who)).body.guilds as { kind: string }[]).map(
+          (g) => g.kind,
+        );
+      expect(await kinds('admin')).toEqual(['wow_guild', 'wow_guild']);
+      expect(await kinds('plain')).toEqual(['wow_guild']);
+    } finally {
+      await testApp.db
+        .delete(schema.guilds)
+        .where(inArray(schema.guilds.id, extra));
+    }
   });
 
   it('/mine carries the viewer rank and edit right', async () => {
