@@ -28,6 +28,8 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 const KEY = plannerStorageKey(7);
 const STORED = JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, amount: 2 }]);
+/** What a fresh add saves (ROK-1899: fromQuality persisted; STORED is the older shape, still loaded). */
+const SAVED = JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, fromQuality: 0, amount: 2 }]);
 let treeHits: string[];
 let planHits: string[];
 
@@ -92,7 +94,7 @@ describe('ValheimPlannerTab', () => {
         const list = await screen.findByRole('region', { name: 'Shopping list' });
         expect(await within(list).findByRole('cell', { name: 'Leather scraps' })).toBeInTheDocument();
         await waitFor(() => expect(screen.getByTestId('valheim-planner-header')).toHaveTextContent(/Chests scanned [67] min ago/));
-        expect(localStorage.getItem(KEY)).toBe(STORED);
+        expect(localStorage.getItem(KEY)).toBe(SAVED);
         await user.click(within(list).getByRole('button', { name: 'Remove Iron sword' }));
         expect(screen.queryByRole('region', { name: 'Shopping list' })).toBeNull();
         expect(localStorage.getItem(KEY)).toBeNull();

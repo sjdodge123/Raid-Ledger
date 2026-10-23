@@ -30,7 +30,7 @@ import { usePlannerNames } from './use-planner-names';
 type Entry = ValheimRecipeCatalogEntry;
 
 function addTarget(list: readonly PlannerTarget[], e: Entry, quality: number, amount: number): PlannerTarget[] | null {
-    return addPlannerTarget(list, { prefab: e.prefab, kind: e.kind, quality: e.kind === 'piece' ? 1 : quality, amount });
+    return addPlannerTarget(list, { prefab: e.prefab, kind: e.kind, quality: e.kind === 'piece' ? 1 : quality, fromQuality: 0, amount });
 }
 
 function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
