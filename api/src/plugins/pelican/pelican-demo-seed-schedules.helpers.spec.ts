@@ -5,6 +5,7 @@
  */
 import {
   OUTSIDE_HOURS_LEAD_H,
+  hasUnknownHubScheduleSet,
   hubServerSchedules,
   parseHubScheduleSet,
   runningServerSchedules,
@@ -27,6 +28,22 @@ describe('parseHubScheduleSet', () => {
     ['start_only', null],
   ])('%j → %j', (body, expected) => {
     expect(parseHubScheduleSet(body)).toBe(expected);
+  });
+});
+
+describe('hasUnknownHubScheduleSet (the controller 400s on it)', () => {
+  it.each([
+    [{ schedules: 'start-only' }, true],
+    [{ schedules: 'bogus', withSchedules: true }, true],
+    [{ schedules: 7 }, true],
+    [{ schedules: null }, true],
+    [{ schedules: 'start_only' }, false],
+    [{ schedules: undefined }, false],
+    [{ withSchedules: true }, false],
+    [{}, false],
+    [null, false],
+  ])('%j → %j', (body, expected) => {
+    expect(hasUnknownHubScheduleSet(body)).toBe(expected);
   });
 });
 

@@ -174,6 +174,16 @@ export function parseHubScheduleSet(body: unknown): HubScheduleSet | null {
   return legacy ? 'running' : null;
 }
 
+/**
+ * True when the body names a `schedules` value that is not a known set (a typo
+ * like `'start-only'`); the controller answers 400 instead of seeding none.
+ */
+export function hasUnknownHubScheduleSet(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  if (!('schedules' in body) || body.schedules === undefined) return false;
+  return !isHubScheduleSet(body.schedules);
+}
+
 /** The schedule rows for one server-hub fixture set. */
 export function hubServerSchedules(
   set: HubScheduleSet,
