@@ -17,6 +17,7 @@ import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
+import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
@@ -42,7 +43,7 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             if (schedulingMatchId) {
                 // ROK-1844: signups need the winning slot — without one just close the poll.
                 const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).catch(() => {
+                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).then(() => invalidateHubPolls(queryClient), () => {
                     toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
                 });
             }

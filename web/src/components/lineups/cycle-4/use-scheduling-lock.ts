@@ -36,6 +36,7 @@ import {
   countDistinctVoters,
 } from '../../../pages/scheduling/threshold';
 import { resolvePollStatus } from './scheduling-poll-status';
+import { invalidateHubPolls } from '../../hub/events/hub-polls-api';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
@@ -131,6 +132,7 @@ function useLockCommit(
 ): (slot: ScheduleSlotWithVotesDto) => void {
   const navigate = useNavigate();
   const reschedule = useRescheduleEvent(match.linkedEventId ?? 0);
+  const qc = useQueryClient();
   return (slot: ScheduleSlotWithVotesDto): void => {
     const start = new Date(slot.proposedTime);
     if (start <= new Date()) {
@@ -147,7 +149,7 @@ function useLockCommit(
           onSuccess: () => {
             // startTime must be the same instant as slot.proposedTime — the
             // backend matches it to a slot by Date-getTime equality (ROK-1031).
-            void completeStandalonePoll(matchId, eventId, start.toISOString());
+            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => invalidateHubPolls(qc));
             toast.success('Event rescheduled');
           },
           onError: (err) =>
