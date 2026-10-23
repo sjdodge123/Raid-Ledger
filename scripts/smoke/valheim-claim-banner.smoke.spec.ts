@@ -67,7 +67,6 @@ async function seed(worker: number): Promise<Fixture> {
 }
 
 const banner = (page: Page) => page.getByRole("region", { name: BANNER });
-page.getByRole("region", { name: /Characters/ });
 
 async function openOverview(page: Page, f: Fixture): Promise<void> {
   await page.goto(`/guilds/${f.guildId}`);
