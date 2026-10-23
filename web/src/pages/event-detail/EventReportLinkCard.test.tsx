@@ -5,7 +5,7 @@
  * back into that cache.
  */
 import type { JSX } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -14,6 +14,8 @@ import type { EventResponseDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../test/render-helpers';
 import { createMockEvent } from '../../test/factories';
+import { clearRegistry, registerPlugin } from '../../plugins/plugin-registry';
+import { usePluginStore } from '../../stores/plugin-store';
 import { EventReportLinkCard } from './EventReportLinkCard';
 
 vi.mock('../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -22,6 +24,17 @@ const EVENT_ID = 1;
 const REPORT_LINK_URL = `http://localhost:3000/events/${EVENT_ID}/report-link`;
 const DETAIL_KEY = ['events', EVENT_ID, 'detail'];
 const WCL = 'https://www.warcraftlogs.com/reports/AbC123#fight=4';
+const LOGS_PLUGIN = 'test-logs';
+const VALHEIM = { id: 7, name: 'Valheim', slug: 'valheim', coverUrl: null };
+const WOW_CLASSIC = { id: 8, name: 'World of Warcraft Classic', slug: 'world-of-warcraft-classic', coverUrl: null };
+
+/** A plugin that owns the WoW-family games and declares report-link support for them, active. */
+beforeEach(() => {
+    clearRegistry();
+    registerPlugin(LOGS_PLUGIN, { icon: 'x', color: 'blue', label: 'Test' })
+        .registerEventReportLinks((gameSlug) => gameSlug.startsWith('world-of-warcraft'));
+    usePluginStore.setState({ activeSlugs: new Set([LOGS_PLUGIN]) });
+});
 
 type Bundle = { event: EventResponseDto };
 
@@ -31,9 +44,10 @@ function CardFromCache({ canManage, isCancelled }: { canManage: boolean; isCance
     return <EventReportLinkCard event={data.event} canManage={canManage} isCancelled={isCancelled} />;
 }
 
-function renderCard(reportUrl: string | null, opts: { canManage?: boolean; isCancelled?: boolean } = {}) {
+function renderCard(reportUrl: string | null, opts: { canManage?: boolean; isCancelled?: boolean; game?: unknown } = {}) {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData<Bundle>(DETAIL_KEY, { event: createMockEvent({ id: EVENT_ID, reportUrl }) });
+    const game = opts.game === undefined ? {} : { game: opts.game };
+    queryClient.setQueryData<Bundle>(DETAIL_KEY, { event: createMockEvent({ id: EVENT_ID, reportUrl, ...game }) });
     return renderWithProviders(
         <CardFromCache canManage={opts.canManage ?? false} isCancelled={opts.isCancelled ?? false} />,
         { queryClient },
@@ -179,6 +193,37 @@ describe('EventReportLinkCard', () => {
 
     it('W8b: a cancelled event with no link renders nothing, even for a manager', () => {
         renderCard(null, { canManage: true, isCancelled: true });
+        expect(screen.queryByTestId('event-report-link-card')).toBeNull();
+    });
+});
+
+describe('EventReportLinkCard — only games whose plugin declares report links', () => {
+    it('G1: a Valheim event shows a manager no Logs card at all', () => {
+        renderCard(null, { canManage: true, game: VALHEIM });
+        expect(screen.queryByTestId('event-report-link-card')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add report link' })).toBeNull();
+    });
+
+    it('G2: a WoW Classic event shows a manager the card with "Add report link"', () => {
+        renderCard(null, { canManage: true, game: WOW_CLASSIC });
+        expect(screen.getByTestId('event-report-link-card')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add report link' })).toBeInTheDocument();
+    });
+
+    it('G3: a non-WoW event with a stored link shows it read-only — no Add / Edit / Remove', () => {
+        renderCard(WCL, { canManage: true, game: VALHEIM });
+        expect(screen.getByRole('link', { name: 'View report on Warcraft Logs' })).toHaveAttribute('href', WCL);
+        expectNoManageButtons();
+    });
+
+    it('G4: a WoW event shows no Add CTA while the declaring plugin is inactive', () => {
+        usePluginStore.setState({ activeSlugs: new Set<string>() });
+        renderCard(null, { canManage: true, game: WOW_CLASSIC });
+        expect(screen.queryByTestId('event-report-link-card')).toBeNull();
+    });
+
+    it('G5: an event with no game shows a manager no Logs card', () => {
+        renderCard(null, { canManage: true, game: null });
         expect(screen.queryByTestId('event-report-link-card')).toBeNull();
     });
 });
