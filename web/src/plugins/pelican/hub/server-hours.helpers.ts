@@ -20,7 +20,12 @@ import { powerLine, weekRows, type WeekRow } from './server-hours-week.helpers';
 
 /** Operator ruling 2026-10-21 (kept by ROK-1877 Q3): the empty copy is always this, whatever the state. */
 export const SERVER_HOURS_EMPTY = 'No set hours';
-const RANGE_MS = 7 * DAY_MS;
+/**
+ * Seven local days ahead, plus slack: a fall-back week's seven local days are 7d+1h, and the hook
+ * floors `now` to the UTC hour, which in a half-hour zone (Asia/Kolkata) sits 30 min before local
+ * midnight. Two hours covers both, so the 7th day's last hour is always fetched (review r1).
+ */
+const RANGE_MS = 7 * DAY_MS + 2 * HOUR_MS;
 /** Look-behind so today's already-ended windows still count towards today's weekly pattern (a local day is at most 25h). */
 const LOOKBACK_MS = DAY_MS + 2 * HOUR_MS;
 
@@ -48,7 +53,7 @@ export interface ServerHoursInput {
     tz: string;
 }
 
-/** Seven days ahead of `now`, plus a day of look-behind for today's earlier windows. */
+/** Seven local days ahead of `now` (with DST / half-hour-zone slack), plus a day of look-behind for today's earlier windows. */
 export function hoursRange(now: number): CalendarLayerRange {
     return { from: new Date(now - LOOKBACK_MS).toISOString(), to: new Date(now + RANGE_MS).toISOString() };
 }

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GameServerCalendarItemDto } from '@raid-ledger/contract';
 import { buildServerHours, hoursRange, nowModel } from './server-hours.helpers';
+import { nextMidnight } from './server-hours-time.helpers';
 
 const mine = { serverKey: '4', serverName: 'Valheim', gameId: 7, provider: 'pelican' };
 const other = { ...mine, serverKey: '99', serverName: 'Other' };
@@ -86,12 +87,30 @@ describe('buildServerHours (ROK-1876)', () => {
 });
 
 describe('hoursRange', () => {
-    it('asks for seven days ahead plus 26h of look-behind, so today\'s earlier windows count towards its pattern (ROK-1877)', () => {
-        expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-13T10:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
+    it('asks for seven days + 2h ahead plus 26h of look-behind, so today\'s earlier windows count towards its pattern (ROK-1877)', () => {
+        expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-13T10:00:00.000Z', to: '2026-10-21T14:00:00.000Z' });
     });
 });
 
 /** ROK-1877 §3 — the now line: live state first, schedule second, never contradictory. */
+describe('hoursRange covers the whole 7th local day (ROK-1877 review r1)', () => {
+    /** The hook's range anchor: `now` floored to the UTC hour (`use-server-hours.ts`). */
+    const anchored = (now: number) => hoursRange(Math.floor(now / 3_600_000) * 3_600_000);
+    const endOfSeventhDay = (now: number, tz: string) => {
+        let end = now;
+        for (let i = 0; i < 7; i++) end = nextMidnight(end, tz);
+        return end;
+    };
+    it.each([
+        ['Asia/Kolkata, 10 min after local midnight', '2026-10-19T18:40:00Z', 'Asia/Kolkata'],
+        ['America/New_York, 10 min after midnight in the fall-back week', '2026-10-26T04:10:00Z', 'America/New_York'],
+    ])('%s', (_label, at, tz) => {
+        const now = Date.parse(at);
+        const end = endOfSeventhDay(now, tz);
+        expect(new Date(anchored(now).to).getTime() >= end ? 'covered' : `ends ${anchored(now).to}, 7th day ends ${new Date(end).toISOString()}`).toBe('covered');
+    });
+});
+
 describe('nowModel (ROK-1877)', () => {
     const evening = [items[0], items[1]].filter((i): i is Extract<GameServerCalendarItemDto, { kind: 'window' }> => i?.kind === 'window');
     const at = (iso: string) => Date.parse(iso);
