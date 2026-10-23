@@ -103,6 +103,18 @@ describe('ServerPresenceTracker — death and respawn', () => {
     ]);
   });
 
+  it('steamIdOfCharacter names the paired player, null for an unknown name (ROK-1930)', () => {
+    run(tracker, [join(A), character('Bjorn'), join(B), character('Freya')]);
+    expect(tracker.steamIdOfCharacter('Bjorn')).toBe(A);
+    expect(tracker.steamIdOfCharacter('Freya')).toBe(B);
+    expect(tracker.steamIdOfCharacter('Ghost')).toBeNull();
+  });
+
+  it('steamIdOfCharacter is null for a still-pending handshake (ROK-1930)', () => {
+    run(tracker, [join(A)]);
+    expect(tracker.steamIdOfCharacter('Bjorn')).toBeNull();
+  });
+
   it('a 0:0 line never pairs to a pending handshake', () => {
     expect(run(tracker, [join(B), character('Ghost', true)])).toEqual([]);
     expect(tracker.snapshot()).toEqual([]);
