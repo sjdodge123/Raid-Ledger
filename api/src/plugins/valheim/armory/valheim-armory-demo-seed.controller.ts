@@ -20,6 +20,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { PelicanConfigService } from '../../pelican/pelican-config.service';
+import { SettingsService } from '../../../settings/settings.service';
 import { ensureValheimDemoPlugins } from '../link/valheim-link-demo-seed.controller';
 import {
   VALHEIM_LINK_FIXTURE_SLOTS,
@@ -32,6 +33,11 @@ import {
   type ArmoryCharacterFixtureRequest,
 } from './valheim-armory-demo-seed.helpers';
 import { ARMORY_FIXTURE_KEYS } from './valheim-armory-demo-sheet';
+import {
+  DEMO_SKILL_DAY_COUNTS,
+  seedArmorySkillDays,
+  type DemoSkillDayCount,
+} from './valheim-armory-skill-days-demo.helpers';
 
 const RequestSchema = z
   .object({
@@ -44,6 +50,11 @@ const RequestSchema = z
     claimedBy: z.number().int().positive().nullable(),
     withCatalog: z.boolean(),
     extraRows: z.boolean(),
+    /** ROK-1882: 3 seeds a 3-play-day skill trend; 0 (default) none. */
+    skillDays: z.union([
+      z.literal(DEMO_SKILL_DAY_COUNTS[0]),
+      z.literal(DEMO_SKILL_DAY_COUNTS[1]),
+    ]),
   })
   .partial()
   .strict();
@@ -55,16 +66,21 @@ export interface ArmoryCharacterFixture {
   guildId: number | null;
 }
 
-function parseRequest(body: unknown): ArmoryCharacterFixtureRequest {
+type SeedRequest = ArmoryCharacterFixtureRequest & {
+  skillDays: DemoSkillDayCount;
+};
+
+function parseRequest(body: unknown): SeedRequest {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      'Expected { slot?, key?: "c1"|"c2"|"c3", claimedBy?: userId | null, withCatalog?, extraRows? }',
+      'Expected { slot?, key?: "c1"|"c2"|"c3", claimedBy?: userId | null, withCatalog?, extraRows?, skillDays?: 0 | 3 }',
     );
   }
   const { slot = 0, key = 'c1', claimedBy = null } = parsed.data;
   const { withCatalog = true, extraRows = false } = parsed.data;
-  return { slot, key, claimedBy, withCatalog, extraRows };
+  const { skillDays = 0 } = parsed.data;
+  return { slot, key, claimedBy, withCatalog, extraRows, skillDays };
 }
 
 /** `claimedBy` must name a real user — a readable 400, not an FK 500. */
@@ -102,7 +118,8 @@ async function findHubId(
  * and a modded prefab) on the slot's Valheim Pelican server, plus the item
  * catalogue and real atlas/icon PNGs unless `withCatalog: false`. The
  * ROK-1837 map fixture's character is a separate `map` identity, so
- * re-seeding `c1` never touches it or the map's `profile_id`.
+ * re-seeding `c1` never touches it or the map's `profile_id`. ROK-1882:
+ * `skillDays: 3` adds a 3-play-day skill history (Swords +4.1).
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -111,6 +128,7 @@ export class ValheimArmoryDemoSeedController {
   constructor(
     private readonly registry: PluginRegistryService,
     private readonly pelicanConfig: PelicanConfigService,
+    private readonly settings: SettingsService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -134,6 +152,9 @@ export class ValheimArmoryDemoSeedController {
       new Date(),
     );
     const characterId = await seedArmoryCharacter(this.db, serverId, req);
+    await seedArmorySkillDays(this.db, characterId, req.skillDays, {
+      defaultTz: await this.settings.getDefaultTimezone(),
+    });
     return {
       characterId,
       serverId,

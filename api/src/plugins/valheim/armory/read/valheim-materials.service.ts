@@ -16,6 +16,11 @@ import type {
 import type { AuthenticatedUser } from '../../../../auth/types';
 import type { ValheimContainerScan } from '../../../../drizzle/schema';
 import { projectCatalog } from './valheim-armory-catalog.helpers';
+import {
+  toChestFocus,
+  type ChestFocusQuery,
+  type ValheimChestFocus,
+} from './valheim-chest-focus.helpers';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { assertServerHubVisible } from './valheim-hub-guard.helpers';
 import {
@@ -164,6 +169,25 @@ export class ValheimMaterialsService {
     });
     if (!found) throw new NotFoundException(CONTAINER_NOT_FOUND);
     return { ...toContainerSummary(found.summary), stacks: found.stacks };
+  }
+
+  /**
+   * ROK-1889 `GET …/chest-focus` — the Map tab's chest marker, through the
+   * list's visibility rules (vehicles included): gone OR hidden → the same 404.
+   */
+  async chestAt(
+    serverId: number,
+    user: AuthenticatedUser,
+    q: ChestFocusQuery,
+  ): Promise<ValheimChestFocus> {
+    await this.assertHub(serverId, user);
+    const scope = this.scope(user, true);
+    const row = await this.repo.read(async (r) => {
+      const scan = await r.latestScan(serverId);
+      return scan ? r.findContainerAt(scan.id, scope, q) : null;
+    });
+    if (!row) throw new NotFoundException(CONTAINER_NOT_FOUND);
+    return toChestFocus(row, q.item);
   }
 
   private scope(user: AuthenticatedUser, includeVehicles: boolean): SQL {

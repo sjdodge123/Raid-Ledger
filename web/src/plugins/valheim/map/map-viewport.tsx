@@ -7,13 +7,15 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { surfaceClass, useMapViewport } from './use-map-viewport';
-import type { Viewport } from './map-viewport.math';
+import type { Point, Viewport } from './map-viewport.math';
 
 /** Imperative zoom commands handed to the parent's controls (L5b). */
 export interface MapViewportCommands {
     zoomIn: () => void;
     zoomOut: () => void;
     fit: () => void;
+    /** ROK-1889: centre (and zoom in) on a texture-px point. */
+    centreOn: (point: Point) => void;
 }
 
 export interface MapViewportProps {
@@ -56,11 +58,12 @@ function TextureLayer({ size, transform, children }: TextureLayerProps) {
 
 function MapViewportSurface(props: MapViewportProps) {
     const { contentSize, label, onCommands, className, children } = props;
-    const { ref, viewport, transform, handlers, style, zoomIn, zoomOut, fit } =
-        useMapViewport(contentSize);
+    const api = useMapViewport(contentSize);
+    const { ref, viewport, transform, handlers, style } = api;
+    const { zoomIn, zoomOut, fit, centreOn } = api;
     useEffect(() => {
-        onCommands?.({ zoomIn, zoomOut, fit });
-    }, [onCommands, zoomIn, zoomOut, fit]);
+        onCommands?.({ zoomIn, zoomOut, fit, centreOn });
+    }, [onCommands, zoomIn, zoomOut, fit, centreOn]);
     return (
         <div
             ref={ref}

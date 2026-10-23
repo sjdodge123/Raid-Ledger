@@ -67,7 +67,7 @@ function Frames(): JSX.Element {
                 desktop={<PostsListMock />} phone={<PostsListMock />} />
             <Frame id="w3b" title="W3b — Posts tab: editing a post" note="Edit in place. A relayed post warns that Discord is not changed (ruling: edits never re-send)."
                 desktop={<PostsListMock editingId={27} />} phone={<PostsListMock editingId={27} />} />
-            <Frame id="w4" title="W4 — Deep link /guilds/7?post=31#posts" note="The linked post leads, expanded and outlined; “All posts” returns to the list. A deleted post’s link explains itself."
+            <Frame id="w4" title="W4 — Deep link /hubs/7?post=31#posts" note="The linked post leads, expanded and outlined; “All posts” returns to the list. A deleted post’s link explains itself."
                 desktop={<DeepLinkMock />} phone={<DeepLinkMock removed />} />
             <Frame id="w5" title="W5 — Delete confirm" note="Modal at ≥1024px, bottom sheet below (§4.4)."
                 desktop={<DeleteConfirmMock layout="desktop" />} phone={<DeleteConfirmMock layout="phone" />} />

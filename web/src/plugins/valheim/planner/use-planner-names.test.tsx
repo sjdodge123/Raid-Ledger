@@ -22,7 +22,7 @@ const catalog = {
     itemAtlas: atlas(SHA_A),
     entries: [
         ...base.entries,
-        { prefab: 'IronScrap', kind: 'item' as const, name: 'Iron scrap', category: 'Material', icon: at(0), maxQuality: 1, sources: { recipes: 0, processes: 0 } },
+        { prefab: 'IronScrap', kind: 'item' as const, name: 'Iron scrap', category: 'Material', icon: at(0), maxQuality: 1, sources: { recipes: 0, processes: 0 }, craft: null, upgrades: [] },
     ],
 };
 const tree: PlannerNameSource = {

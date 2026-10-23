@@ -9,6 +9,7 @@ import type { HubDirectoryEntry } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { buttonClass } from '../ui/button-classes';
 import { StatusChip } from '../ui/status-chip';
+import { guildHref } from '../layout/hub-nav/my-hubs-queries';
 
 /** One hub row's action inputs: the hub, the inline Join and whether it is in flight. */
 export interface HubViewerActionProps {
@@ -19,7 +20,7 @@ export interface HubViewerActionProps {
 
 function ViewLink({ hub }: { hub: HubDirectoryEntry }): JSX.Element {
     return (
-        <Link to={`/guilds/${hub.id}`} aria-label={`View ${hub.name}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+        <Link to={guildHref(hub.id)} aria-label={`View ${hub.name}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
             View
         </Link>
     );

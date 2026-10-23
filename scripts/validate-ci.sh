@@ -27,6 +27,19 @@
 #                                        # ride on GitHub. Migration/infra
 #                                        # changes still get full local
 #                                        # validation automatically.
+#   ./scripts/validate-ci.sh --scoped    # LIGHTEST PRE-PUSH GATE (2026-10-22):
+#                                        # build + typecheck + lint ONLY for what
+#                                        # the diff vs origin/main touches
+#                                        # (scripts/scoped-gate-plan.mjs maps
+#                                        # paths to targets; scripts/smoke/** ->
+#                                        # the smoke tsconfig only, docs -> none).
+#                                        # REFUSES (exit 2, naming --static or
+#                                        # --full) on contract, migrations,
+#                                        # package*.json, Dockerfile/nginx/
+#                                        # entrypoint, root config, an unknown
+#                                        # path, or an api+web diff. A PASS writes
+#                                        # the pre-push sentinel (gate_tier
+#                                        # scoped). Excludes every other tier flag.
 #   ./scripts/validate-ci.sh --scope=auto # Narrow build+typecheck+lint to the
 #                                        # single changed workspace (+contract)
 #                                        # when the diff touches only api/ or only
@@ -289,6 +302,9 @@ fleet_mode=false
 # migration/container checks only. Skips unit, integration, and all e2e.
 # Behavioral coverage is deferred to GitHub CI. See the usage header.
 static_mode=false
+# scoped_mode (--scoped): build + typecheck + lint for the diff's own targets
+# only (scripts/scoped-gate-plan.mjs). See the usage header.
+scoped_mode=false
 # scope_mode (--scope=all|api|web|auto): narrows build/typecheck/lint to a single
 # changed workspace (+contract) instead of all three. Default "all" preserves the
 # legacy whole-monorepo gate exactly. "auto" resolves to detected_workspace (set in
@@ -1620,6 +1636,10 @@ run_migration_validation() {
   # silently SKIPPED by Drizzle on every DB past that entry (0176 never reached
   # prod). `|| return 1` so the guard's exit 3 is never read as a run_step code.
   node "$REPO_ROOT/scripts/check-migration-merge-order.mjs" || return 1
+  # Two PRs claimed the same migration number: a branch-only entry whose idx
+  # collides with origin/main's TIP (not the merge base — what main took since
+  # you branched). Fix: ./scripts/renumber-branch-migrations.sh.
+  node "$REPO_ROOT/scripts/check-migration-index-collision.mjs" || return 1
   # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
   # drizzle-kit never checks the link, only prevId collisions.
   node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
@@ -2608,6 +2628,116 @@ run_default_gate() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# --scoped tier (2026-10-22): build + typecheck + lint for the diff's targets.
+# The row names keep the Build / TypeScript / Lint prefixes and add a
+# `Scoped plan` row: tools/mcp-rl-fleet/src/gate-summary.ts::scopedGateGreen
+# keys the `scoped` sentinel tier on exactly these.
+# ---------------------------------------------------------------------------
+SCOPED_TARGETS=""
+
+# The branch's own changes: merge-base diff + uncommitted + untracked files.
+# --no-renames: a rename lists BOTH paths, so moving a file out of
+# packages/contract/** still escalates. Any git failure returns non-zero —
+# the caller refuses rather than planning from a partial file list.
+_scoped_changed_files() {
+  local committed uncommitted untracked
+  committed=$(git diff --no-renames --name-only origin/main...HEAD) || return 1
+  uncommitted=$(git diff --no-renames --name-only HEAD) || return 1
+  untracked=$(git ls-files --others --exclude-standard) || return 1
+  printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | sort -u
+}
+
+_scoped_has() {
+  case " $SCOPED_TARGETS " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+run_scoped_build() {
+  if ! _scoped_has api && ! _scoped_has web && ! _scoped_has smoke; then
+    echo "no buildable target in: $SCOPED_TARGETS"
+    skip_step
+    return 0
+  fi
+  npm run build -w packages/contract || return $?
+  if _scoped_has api; then npm run build -w api || return $?; fi
+  if _scoped_has web; then npm run build -w web || return $?; fi
+  return 0
+}
+
+run_scoped_typecheck() {
+  local ran=false t
+  if _scoped_has api; then npx tsc --noEmit -p api/tsconfig.json || return $?; ran=true; fi
+  if _scoped_has web; then
+    npx tsc --noEmit -p web/tsconfig.app.json || return $?
+    npx tsc --noEmit -p web/tsconfig.node.json || return $?
+    npx tsc --noEmit -p web/tsconfig.test.json || return $?
+    ran=true
+  fi
+  if _scoped_has api || _scoped_has web || _scoped_has smoke; then
+    npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json || return $?
+    ran=true
+  fi
+  for t in $SCOPED_TARGETS; do
+    case "$t" in
+      tool:test-bot) _ensure_test_bot_deps || return $?
+        npx tsc --noEmit -p tools/test-bot/tsconfig.json || return $?; ran=true ;;
+      tool:*) if [ -f "tools/${t#tool:}/tsconfig.json" ]; then
+          npx tsc --noEmit -p "tools/${t#tool:}/tsconfig.json" || return $?; ran=true
+        fi ;;
+    esac
+  done
+  if ! $ran; then echo "nothing to typecheck in: $SCOPED_TARGETS"; skip_step; fi
+  return 0
+}
+
+run_scoped_lint() {
+  local ran=false
+  if _scoped_has api; then
+    npm run lint -w api || return $?
+    npm run prettier:check -w api || return $?
+    ran=true
+  fi
+  if _scoped_has web; then npm run lint -w web || return $?; ran=true; fi
+  if _scoped_has tool:test-bot; then
+    (cd "$REPO_ROOT/tools/test-bot" && npm run lint) || return $?
+    ran=true
+  fi
+  if ! $ran; then echo "nothing to lint in: $SCOPED_TARGETS"; skip_step; fi
+  return 0
+}
+
+run_scoped_gate() {
+  local files plan rc=0
+  # Fail closed, like scripts/smoke/surface-hash.sh: without the base the plan
+  # would see only uncommitted files and could vouch for a contract/web commit.
+  if ! git rev-parse --verify -q 'origin/main^{commit}' >/dev/null; then
+    echo -e "${RED}--scoped refused: origin/main does not resolve — run 'git fetch origin main' and rerun.${NC}" >&2
+    exit 2
+  fi
+  if ! files=$(_scoped_changed_files); then
+    echo -e "${RED}--scoped refused: git could not list the branch's changed files.${NC}" >&2
+    exit 2
+  fi
+  plan=$(printf '%s\n' "$files" | node "$REPO_ROOT/scripts/scoped-gate-plan.mjs") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo -e "${RED}--scoped refused (selector exit $rc) — see the reason above and rerun with the tier it names.${NC}" >&2
+    exit 2
+  fi
+  SCOPED_TARGETS="$plan"
+  [ "$SCOPED_TARGETS" = "none" ] && SCOPED_TARGETS=""
+  echo -e "  --scoped targets: ${YELLOW}${plan}${NC}"
+  run_step "Scoped plan (${plan})" true
+  run_step "Build (scoped)" run_scoped_build
+  run_step "TypeScript (scoped)" run_scoped_typecheck
+  run_step "Lint (scoped)" run_scoped_lint
+  if _scoped_has web; then run_step "Bundle size budget" run_bundle_budget; fi
+  if _scoped_has scripts; then
+    run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
+    run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs
+  fi
+}
+
 # A Playwright FAIL is deferred (see RUN_STEP_DEFER_FAIL) so the Discord smoke
 # row still reports. Nothing may print "All checks passed!" after it.
 _exit_if_deferred_fail() {
@@ -2639,6 +2769,7 @@ main() {
     case "$1" in
       --full) shift ;;
       --static) static_mode=true; shift ;;
+      --scoped) scoped_mode=true; shift ;;
       --scope=*) scope_mode="${1#--scope=}"; shift ;;
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
@@ -2701,6 +2832,22 @@ main() {
   # conflict exits 2 (invocation error) — including --only-e2e, which predates
   # only_mode and used to fall through to an exit 1 here, contradicting the
   # usage text and making the failure indistinguishable from a failed check.
+  # --scoped is its own tier: pairing it with another tier or a narrowing flag
+  # asks for two contradictory gates. Same exit-2 contract as --static.
+  if $scoped_mode; then
+    local scoped_conflict=""
+    if $static_mode; then scoped_conflict="--static"; fi
+    if $fleet_mode; then scoped_conflict="--fleet"; fi
+    if [ -n "$only_mode" ]; then scoped_conflict="--only-${only_mode}"; fi
+    if [ "$e2e_mode" = "on" ]; then scoped_conflict="--with-e2e"; fi
+    if $contrast_audit; then scoped_conflict="--contrast-audit"; fi
+    if [ "$scope_mode" != "all" ]; then scoped_conflict="--scope=${scope_mode}"; fi
+    if [ -n "$scoped_conflict" ]; then
+      echo -e "${RED}--scoped and ${scoped_conflict} are mutually exclusive (--scoped is a tier of its own).${NC}" >&2
+      exit 2
+    fi
+  fi
+
   if $static_mode && [ -n "$only_mode" ]; then
     # NOT `[ ... ] && detail=...`: a false test makes that list return 1, and
     # `set -e` would abort the script with exit 1 — the very code this guard
@@ -2746,6 +2893,7 @@ main() {
     # --static, --no-e2e, --only-unit, --only-integration, and --contrast-audit
     # (which swaps the Playwright tier for the sweep under --only-e2e).
     if $static_mode; then specs_conflict="--static"; fi
+    if $scoped_mode; then specs_conflict="--scoped"; fi
     if [ "$e2e_mode" = "off" ]; then specs_conflict="--no-e2e"; fi
     case "$only_mode" in unit|integration) specs_conflict="--only-${only_mode}" ;; esac
     if $contrast_audit; then specs_conflict="--contrast-audit"; fi
@@ -2803,10 +2951,14 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
   # here with $? preserved.
   trap _validate_ci_on_exit EXIT
 
-  case "$only_mode" in
-    integration|unit) run_narrowed_gate "$only_mode" ;;
-    *) run_default_gate ;;
-  esac
+  if $scoped_mode; then
+    run_scoped_gate
+  else
+    case "$only_mode" in
+      integration|unit) run_narrowed_gate "$only_mode" ;;
+      *) run_default_gate ;;
+    esac
+  fi
 
   _exit_if_deferred_fail
   print_summary

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GuildKindSchema } from './guilds.schema.js';
+import { GuildKindSchema, HubStatusSchema } from './guilds.schema.js';
 
 /**
  * ROK-1870 — game community hubs: a third hub kind for games with no Pelican
@@ -52,6 +52,8 @@ export const HubProposalSchema = z
     blurb: z.string(),
     proposedBy: UserRefSchema,
     createdAt: isoDate,
+    /** ROK-1892 — the hub's status after the call: a staff proposal is `active` at once; absent ⇒ `proposed` (older payloads). */
+    status: HubStatusSchema.optional(),
   })
   .strict();
 export type HubProposal = z.infer<typeof HubProposalSchema>;

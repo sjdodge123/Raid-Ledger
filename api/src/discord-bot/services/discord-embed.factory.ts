@@ -254,6 +254,7 @@ export class DiscordEmbedFactory {
       ...(clientUrl !== undefined ? { clientUrl } : {}),
       roster: buildRosterLine(event, this.emojiService),
       ...(options?.pollUrl !== undefined ? { pollUrl: options.pollUrl } : {}),
+      ...hubNamePart(context.hubLink),
       eventLink,
     });
     if (body) embed.setDescription(body);
@@ -315,4 +316,9 @@ function applyThumbnail(
   if (state === EMBED_STATES.CANCELLED) return;
   const thumbnail = absoluteEmbedImageUrl(event.game?.coverUrl);
   if (thumbnail) embed.setThumbnail(thumbnail);
+}
+
+/** ROK-1895: the tagged hub's name for the body, omitted when absent. */
+function hubNamePart(link: HubLink | null | undefined): { hubName?: string } {
+  return link?.hubName ? { hubName: link.hubName } : {};
 }

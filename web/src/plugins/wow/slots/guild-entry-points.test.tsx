@@ -58,7 +58,7 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         const card = await screen.findByTestId('players-guild-card');
         expect(card).toHaveTextContent('Iron Vanguard');
         expect(screen.getByTestId('players-guild-member-count')).toHaveTextContent('12 members');
-        expect(screen.getByTestId('players-guild-open')).toHaveAttribute('href', '/guilds/11');
+        expect(screen.getByTestId('players-guild-open')).toHaveAttribute('href', '/hubs/11');
     });
 
     it('two guilds → two cards', async () => {
@@ -126,7 +126,7 @@ describe('CharacterGuildBadge (character-detail:header-badges)', () => {
             HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined, gmPostHeadline: undefined }, rankName: 'Officer', viewerCanOpen: true } })));
         renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
         const badge = await screen.findByTestId('character-guild-badge');
-        expect(badge).toHaveAttribute('href', '/guilds/11');
+        expect(badge).toHaveAttribute('href', '/hubs/11');
         expect(badge).toHaveTextContent('Iron Vanguard');
         expect(badge).toHaveTextContent('Officer');
     });

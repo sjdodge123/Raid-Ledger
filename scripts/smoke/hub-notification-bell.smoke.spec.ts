@@ -60,7 +60,7 @@ async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promi
 /** Sign in as the seeded member, open the group page, return the member's JWT. */
 async function openAsMember(page: Page, guild: SeededGuild): Promise<string> {
     const jwt = await signInOnboardedMember(page, guild.users.member.userId);
-    await page.goto(`/guilds/${guild.guildId}`);
+    await page.goto(`/hubs/${guild.guildId}`);
     await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
     return jwt;
 }
@@ -139,7 +139,7 @@ test('/profile/notifications lists the muted group and Unmute removes it', async
         await expect(page.locator('#notif-hub_event_tagged'), 'the Group events row renders').toBeVisible();
         const list = page.getByTestId('muted-groups-list');
         await expect(list, 'the muted-groups list must render').toBeVisible();
-        const item = list.locator('li', { has: page.locator(`a[href="/guilds/${guild.guildId}"]`) });
+        const item = list.locator('li', { has: page.locator(`a[href="/hubs/${guild.guildId}"]`) });
         await expect(item, 'the muted group must be listed').toHaveCount(1);
 
         await item.getByRole('button', { name: /^Unmute / }).click();
@@ -153,7 +153,7 @@ test('/profile/notifications lists the muted group and Unmute removes it', async
 test('visitor: a non-member sees no bell', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInOnboardedMember(page, guild.users.outsider.userId);
-        await page.goto(`/guilds/${guild.guildId}`);
+        await page.goto(`/hubs/${guild.guildId}`);
         await expect(page.getByTestId('guild-not-member')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('hub-notify-bell'), 'D11: the bell is member-only').toHaveCount(0);
     });

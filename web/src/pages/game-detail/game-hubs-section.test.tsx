@@ -124,10 +124,10 @@ describe('GameHubsSection — one card for every kind (ROK-1883)', () => {
         renderCard();
         const guild = await rowFor('Lantern Watch');
         expect(within(guild).getByTestId('hub-kind-chip')).toHaveTextContent('Guild');
-        expect(within(guild).getByRole('link', { name: 'View Lantern Watch' })).toHaveAttribute('href', '/guilds/420');
+        expect(within(guild).getByRole('link', { name: 'View Lantern Watch' })).toHaveAttribute('href', '/hubs/420');
         const srv = await rowFor('Forever Test Realm');
         expect(within(srv).getByTestId('hub-kind-chip')).toHaveTextContent('Server');
-        expect(within(srv).getByRole('link', { name: 'View Forever Test Realm' })).toHaveAttribute('href', '/guilds/310');
+        expect(within(srv).getByRole('link', { name: 'View Forever Test Realm' })).toHaveAttribute('href', '/hubs/310');
         const community = await rowFor('Dungeon Night Crew');
         expect(within(community).getByTestId('hub-kind-chip')).toHaveTextContent('Community');
         expect(within(community).getByRole('button', { name: 'Join Dungeon Night Crew' })).toBeEnabled();

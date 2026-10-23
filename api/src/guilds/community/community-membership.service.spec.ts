@@ -13,6 +13,8 @@ import * as lookup from './community-hub.lookup';
 import * as reads from './community-hub.reads';
 import * as mq from './community-membership.queries';
 import { CommunityMembershipService } from './community-membership.service';
+import * as invites from './invites/hub-invites.queries';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 jest.mock('./community-hub.lookup', () => ({
   ...jest.requireActual('./community-hub.lookup'),
@@ -22,6 +24,7 @@ jest.mock('./community-hub.lookup', () => ({
   assertInDiscord: jest.fn(),
 }));
 jest.mock('./community-membership.queries');
+jest.mock('./invites/hub-invites.queries');
 jest.mock('./community-hub.reads', () => ({
   ...jest.requireActual('./community-hub.reads'),
   liveCommunityRole: jest.fn(),
@@ -42,12 +45,45 @@ const row = (
   bannedAt: null,
   bannedBy: null,
   banReason: null,
+  joinSource: null,
+  inviteId: null,
   createdAt: AT,
   updatedAt: AT,
   ...over,
 });
+/** The hub `requireCommunityHub` hands `join` (its game feeds the nudge). */
+const HUB: schema.GuildSelect = {
+  id: 7,
+  gameId: 9,
+  kind: 'game_community',
+  region: 'community',
+  name: 'Crew',
+  nameKey: 'crew',
+  realmSlug: null,
+  guildSlug: null,
+  faction: null,
+  memberCount: 2,
+  source: 'community',
+  lastSnapshotAt: null,
+  rawRealm: null,
+  pelicanServerId: null,
+  hiddenAt: null,
+  status: 'active',
+  blurb: '',
+  proposedBy: 1,
+  blizzardGuildId: null,
+  reviewedBy: 1,
+  reviewedAt: AT,
+  archivedAt: null,
+  archivedReason: null,
+  autoMembership: 'off',
+  createdAt: AT,
+  updatedAt: AT,
+};
 const order: string[] = [];
 const adapter = { resolveLadder: jest.fn() };
+/** ROK-1873 (D8/D12): the channel-lifecycle nudge a join fires. */
+const touch = jest.fn();
 /** The handle the mocked transaction hands its callback. */
 const TX = { tx: true };
 const db = {
@@ -68,14 +104,26 @@ beforeEach(async () => {
       CommunityMembershipService,
       { provide: DrizzleAsyncProvider, useValue: db },
       { provide: CommunityHubKindAdapter, useValue: adapter },
+      { provide: GameActivityNudge, useValue: { touch } },
     ],
   }).compile();
   svc = mod.get(CommunityMembershipService);
+  jest.mocked(lookup.requireCommunityHub).mockResolvedValue(HUB);
   jest.mocked(mq.lockHubRow).mockImplementation(() => {
     order.push('lock');
     return Promise.resolve({ status: 'active' });
   });
+  jest.mocked(invites.revokeUserInvites).mockImplementation(() => {
+    order.push('revoke');
+    return Promise.resolve();
+  });
 });
+
+/** ROK-1893: the member's links into the hub are revoked inside the same tx. */
+function expectInvitesRevokedOnTx(userId: number): void {
+  expect(invites.revokeUserInvites).toHaveBeenCalledWith(TX, userId, 7);
+  expect(order.slice(-2)).toEqual(['revoke', 'commit']);
+}
 
 describe('leave as leader (D13)', () => {
   it('counts under the hub lock and refuses with company — nothing written', async () => {
@@ -94,6 +142,14 @@ describe('leave as leader (D13)', () => {
     jest.mocked(lookup.countLiveMembers).mockResolvedValue(1);
     await svc.leave(actor, 7);
     expect(lookup.archiveHub).toHaveBeenCalledWith(TX, 7, 'empty');
+    expectInvitesRevokedOnTx(actor.id);
+  });
+
+  it("a plain member leaving revokes their links on the leave's tx", async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({}));
+    await svc.leave(actor, 7);
+    expect(mq.markLeft).toHaveBeenCalledWith(TX, 7, actor.id, null);
+    expectInvitesRevokedOnTx(actor.id);
   });
 });
 
@@ -118,6 +174,91 @@ describe('join', () => {
     });
     expect(order).toEqual(['begin', 'lock', 'upsert', 'commit']);
   });
+
+  it("ROK-1873: a join nudges the hub game's channel lifecycle", async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(3);
+    await svc.join(actor, 7);
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('ROK-1873: a banned join (403) never nudges', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({ bannedAt: AT }));
+    await expect(svc.join(actor, 7)).rejects.toThrow(ForbiddenException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('ROK-1873: a throwing nudge never fails the join', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(3);
+    touch.mockImplementationOnce(() => {
+      throw new Error('queue down');
+    });
+    await expect(svc.join(actor, 7)).resolves.toMatchObject({ joined: true });
+  });
+});
+
+describe('joinVia (ROK-1893 D3)', () => {
+  it('writes the join source + invite id and reports a new live row', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'active' });
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+    await expect(
+      svc.joinVia(1, 7, 'invite', { inviteId: 9, requireDiscord: false }),
+    ).resolves.toEqual({ joined: true, memberCount: 4 });
+    expect(mq.upsertJoin).toHaveBeenCalledWith(TX, 7, 1, 'member', {
+      joinSource: 'invite',
+      inviteId: 9,
+    });
+    expect(lookup.assertInDiscord).not.toHaveBeenCalled();
+  });
+
+  it('an already-live member is a no-op join (joined: false)', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(row({}));
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'active' });
+    jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+    jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+    const out = await svc.joinVia(1, 7, 'invite', { inviteId: 9 });
+    expect(out.joined).toBe(false);
+  });
+
+  it.each(['invite', 'auto', 'prompt'] as const)(
+    'ROK-1873: a %s join nudges the game once, after the commit',
+    async (source) => {
+      jest.mocked(mq.findMembership).mockResolvedValue(null);
+      jest.mocked(mq.upsertJoin).mockResolvedValue(row({}));
+      jest.mocked(mq.refreshMemberCount).mockResolvedValue(4);
+      touch.mockImplementationOnce(() => {
+        order.push('nudge');
+      });
+      await svc.joinVia(1, 7, source, { requireDiscord: false });
+      expect(touch).toHaveBeenCalledTimes(1);
+      expect(touch).toHaveBeenCalledWith(9);
+      expect(order).toEqual(['begin', 'lock', 'commit', 'nudge']);
+    },
+  );
+
+  it('ROK-1873: a join refused under the lock (hub archived) never nudges', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest.mocked(mq.lockHubRow).mockResolvedValue({ status: 'archived' });
+    await expect(
+      svc.joinVia(1, 7, 'auto', { requireDiscord: false }),
+    ).rejects.toThrow(NotFoundException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('checks Discord by default for a non-member', async () => {
+    jest.mocked(mq.findMembership).mockResolvedValue(null);
+    jest
+      .mocked(lookup.assertInDiscord)
+      .mockRejectedValueOnce(new ForbiddenException('discord'));
+    await expect(svc.joinVia(1, 7, 'auto')).rejects.toThrow('discord');
+    expect(mq.upsertJoin).not.toHaveBeenCalled();
+  });
 });
 
 describe('role-sensitive writes serialise with transfers (M22)', () => {
@@ -134,6 +275,7 @@ describe('role-sensitive writes serialise with transfers (M22)', () => {
     expect(order).toEqual(['begin', 'lock', 'read']);
     expect(mq.findMembership).toHaveBeenCalledWith(TX, 7, 3);
     expect(mq.markLeft).not.toHaveBeenCalled();
+    expect(invites.revokeUserInvites).not.toHaveBeenCalled();
   });
 
   it('setRole reads the target under the hub lock — never demotes the new leader', async () => {
@@ -186,6 +328,7 @@ describe('caller role is read on the lock tx, never the pool (Codex r4)', () => 
     await expect(svc.remove(actor, 7, 3)).resolves.toBeUndefined();
     expectRoleReadOnTx();
     expect(mq.markLeft).toHaveBeenCalledWith(TX, 7, 3, actor.id);
+    expectInvitesRevokedOnTx(3);
   });
 
   it('staff need no hub membership (no role read)', async () => {

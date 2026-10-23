@@ -122,4 +122,39 @@ describe('setupSteps — game_community hubs (ROK-1870)', () => {
         expect(ids({ kind: 'game_community' })).not.toContain('leader');
         expect(ids({})).toContain('leader');
     });
+
+    it('swaps the roster import for an invite step and drops Publish (ROK-1891)', () => {
+        expect(ids({ kind: 'game_community', hasModSources: false })).toEqual(['invite', 'leader-post', 'rules', 'links', 'discord', 'next-raid']);
+        const invite = setupSteps(input({ kind: 'game_community', memberCount: 1 })).find((s) => s.id === 'invite');
+        expect(invite?.label).toBe('Invite players to the hub');
+        // Approved string (pending-approval/_approved/ROK-1891-hub-copy STRINGS.md); the action opens #1742's invite dialog.
+        expect(invite?.description).toBe('Share the hub link so players can find it and join.');
+        expect(invite?.actionLabel).toBe('Invite');
+        expect(invite?.action).toEqual({ kind: 'invite' });
+        expect(invite?.done).toBe(false);
+        expect(setupSteps(input({ kind: 'game_community', memberCount: 2 })).find((s) => s.id === 'invite')?.done).toBe(true);
+    });
+});
+
+describe('setupSteps — no WoW wording off WoW hubs (ROK-1891)', () => {
+    const wording = (kind: 'game_server' | 'game_community'): string => setupSteps(input({ kind, hasModSources: false }))
+        .map((s) => [s.label, s.description, s.actionLabel, s.action.kind === 'blocked' ? s.action.reason : ''].join(' '))
+        .join(' | ');
+
+    it.each(['game_server', 'game_community'] as const)('%s steps never say guild, raid, roster or guildmates', (kind) => {
+        expect(wording(kind)).not.toMatch(/guild|raid|roster/i);
+    });
+
+    it('a server hub links its Discord channel and adds server info', () => {
+        const steps = setupSteps(input({ kind: 'game_server', hasModSources: false }));
+        expect(steps.find((s) => s.id === 'discord')?.label).toBe('Link your Discord channel');
+        expect(steps.find((s) => s.id === 'links')?.label).toBe('Add your server info');
+    });
+
+    it('a WoW guild keeps its guild wording', () => {
+        const steps = setupSteps(input({ kind: 'wow_guild' }));
+        expect(steps.find((s) => s.id === 'roster')?.label).toBe('Import your roster');
+        expect(steps.find((s) => s.id === 'rules')?.label).toBe('Add your guild rules');
+        expect(steps.find((s) => s.id === 'next-raid')?.label).toBe('Tag your next raid');
+    });
 });

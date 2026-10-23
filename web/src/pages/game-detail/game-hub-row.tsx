@@ -7,7 +7,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { HubKindChip } from '../../components/layout/hub-nav/hub-kind-chip';
-import { memberCountLabel } from '../../components/layout/hub-nav/my-hubs-queries';
+import { guildHref, memberCountLabel } from '../../components/layout/hub-nav/my-hubs-queries';
 import { HubHiddenChip, HubViewerAction, type HubViewerActionProps } from '../../components/hub/hub-row-bits';
 
 /** A Hubs-card row; `data-hub-id` lets tests assert no hub renders twice. */
@@ -18,7 +18,7 @@ export function GameHubRow(props: HubViewerActionProps): JSX.Element {
         <li className="flex items-center gap-3 py-2" data-testid="game-hub-row" data-hub-id={hub.id}>
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
-                    <Link to={`/guilds/${hub.id}`} className="block truncate text-sm font-medium text-foreground hover:underline">{hub.name}</Link>
+                    <Link to={guildHref(hub.id)} className="block truncate text-sm font-medium text-foreground hover:underline">{hub.name}</Link>
                     <p className="truncate text-xs text-muted">{meta}</p>
                 </div>
                 <span className="flex shrink-0 items-center gap-1.5">

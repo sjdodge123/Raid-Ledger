@@ -9,7 +9,12 @@ vi.mock('../../../hooks/use-media-query', () => ({
 
 function props(over: Partial<MapControlsProps> = {}): MapControlsProps {
     return {
-        commands: { zoomIn: vi.fn(), zoomOut: vi.fn(), fit: vi.fn() },
+        commands: {
+            zoomIn: vi.fn(),
+            zoomOut: vi.fn(),
+            fit: vi.fn(),
+            centreOn: vi.fn(),
+        },
         showShared: false,
         onShowShared: vi.fn(),
         sharedAvailable: true,

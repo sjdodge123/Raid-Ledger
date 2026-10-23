@@ -29,6 +29,8 @@ import { BossDataRefreshService } from './boss-data-refresh.service';
 import { QuestProgressController } from './quest-progress.controller';
 import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
+import { EventQuestReadinessController } from './event-quest-readiness.controller';
+import { EventQuestReadinessService } from './event-quest-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -50,6 +52,12 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
+import { RosterFactSource } from './facts/roster.fact-source';
+import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
+import { CharacterRowFactSource } from './facts/character-row.fact-source';
+import { WowFactsService } from './facts/wow-facts.service';
+import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
+import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule, GuildsCoreModule],
@@ -61,6 +69,7 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
+    EventQuestReadinessController,
     AddonImportController,
     AddonImportAdminController,
     CharacterQuestsController,
@@ -84,6 +93,7 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     BossDataRefreshService,
     QuestProgressService,
     QuestProgressReadService,
+    EventQuestReadinessService,
     AddonImportService,
     AddonCharacterUnlinkService,
     AddonImportCreateService,
@@ -99,6 +109,14 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     GuildRaidsService,
     GuildAddonsService,
     WowHubKindAdapter,
+    // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
+    RosterFactSource,
+    AddonSnapshotFactSource,
+    CharacterRowFactSource,
+    WowFactsService,
+    // ROK-1913: roster-insights endpoint + its import-invalidated cache.
+    RosterInsightsCache,
+    RosterInsightsService,
   ],
   exports: [
     BlizzardService,
@@ -107,6 +125,7 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
+    WowFactsService,
     GuildsCoreModule,
   ],
 })

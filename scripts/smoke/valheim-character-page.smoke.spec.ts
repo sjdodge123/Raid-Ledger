@@ -13,7 +13,8 @@
  * bands, trophies), an item tile's detail (popover ≥1024px, BottomSheet on
  * phones) with a new-tab wiki link, the claim flow (confirm → "Claimed", the
  * button gone, a history row), no Claim on another user's character, the
- * admin "Change owner" sheet with its history, and the not-found state.
+ * admin "Change owner" sheet with its history, the not-found state, and
+ * (ROK-1882) a skill trend chip from the `skillDays: 3` seed.
  * Deterministic waits only (web-first assertions).
  */
 import type { Locator, Page } from "@playwright/test";
@@ -35,6 +36,8 @@ type SeedRequest = {
   withCatalog: boolean;
   extraRows?: boolean;
   claimedBy: number | null;
+  /** ROK-1882 — seed this many play days of skill history (lane 3's DEMO seed field). */
+  skillDays?: number;
 };
 
 /** Install-or-activate through the admin plugin API (pelican-quick-play-switch pattern). */
@@ -87,6 +90,7 @@ async function seedBoth(slot: number): Promise<{ c1: number; c2: number }> {
     withCatalog: true,
     extraRows: true,
     claimedBy: null,
+    skillDays: 3,
   });
   const c2 = await seedCharacter(token, {
     slot,
@@ -132,6 +136,41 @@ async function assertSections(page: Page): Promise<void> {
       .getByRole("region", { name: "Trophies" })
       .getByLabel("Trophies", { exact: true }),
   ).toBeVisible();
+}
+
+/**
+ * ROK-1882 — the seeded 3 play days give a skill row a "+N over 3 sessions"
+ * chip whose accessible name is the full per-day sentence; tapping it shows the
+ * per-day line under the meter. The meter count is unchanged (assertSections)
+ * and the row never pushes the page sideways (desktop and 375px phone).
+ */
+async function assertSkillTrend(page: Page): Promise<void> {
+  const skills = page.getByRole("region", { name: "Skills" });
+  const chip = skills
+    .getByRole("button", {
+      name: /over 3 sessions: .+ on [A-Z][a-z]{2} \d{1,2}/,
+    })
+    .first();
+  await chip.scrollIntoViewIfNeeded();
+  await expect(chip).toHaveText(/^[+\u2212]\d+\.\d over 3 sessions$/);
+  await expect(chip).toHaveAttribute("aria-expanded", "false");
+  const detailId = await chip.getAttribute("aria-controls");
+  expect(detailId, "trend chip has no aria-controls").toBeTruthy();
+  const detail = page.locator(`[id="${detailId ?? ""}"]`);
+  await expect(detail).toBeHidden();
+  await chip.click();
+  await expect(chip).toHaveAttribute("aria-expanded", "true");
+  await expect(detail).toBeVisible();
+  await expect(detail).toHaveText(
+    /^[A-Z][a-z]{2} \d{1,2} (?:[+\u2212]\d+\.\d|no change)(?: \u00b7 [A-Z][a-z]{2} \d{1,2} (?:[+\u2212]\d+\.\d|no change)){2}$/,
+  );
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(
+    overflow,
+    "page scrolls sideways with the trend chip",
+  ).toBeLessThanOrEqual(0);
 }
 
 /** Opens the Wood tile's detail: popover at ≥1024px, BottomSheet below. Checks the wiki link, then closes. */
@@ -192,6 +231,7 @@ test.describe("Valheim character page (ROK-1836)", () => {
     await expect(h1).toContainText("World Fixtureheim");
     await expect(h1.getByText("Unclaimed", { exact: true })).toBeVisible();
     await assertSections(page);
+    await assertSkillTrend(page);
     await assertItemDetail(page, wide);
 
     // Claim flow, then the claim shows in the admin history.

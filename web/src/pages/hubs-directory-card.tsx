@@ -7,7 +7,7 @@
  * ROK-1883: the action and the staff-only Hidden chip are the shared
  * `hub-row-bits` the game page's Hubs card renders too.
  */
-import { memberCountLabel } from '../components/layout/hub-nav/my-hubs-queries';
+import { guildHref, memberCountLabel } from '../components/layout/hub-nav/my-hubs-queries';
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { HubKindChip } from '../components/layout/hub-nav/hub-kind-chip';
@@ -28,7 +28,7 @@ export function HubDirectoryCard(props: HubCardProps): JSX.Element {
                 <HubHiddenChip hub={hub} />
                 <HubKindChip kind={hub.kind} />
             </div>
-            <Link to={`/guilds/${hub.id}`} className="text-base font-semibold text-foreground hover:underline">{hub.name}</Link>
+            <Link to={guildHref(hub.id)} className="text-base font-semibold text-foreground hover:underline">{hub.name}</Link>
             {hub.blurb && <p className="line-clamp-2 text-sm text-secondary">{hub.blurb}</p>}
             <div className="mt-auto flex items-center gap-2 pt-1">
                 <span className="flex-1 text-xs text-muted">

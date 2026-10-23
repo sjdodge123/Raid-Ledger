@@ -18,6 +18,7 @@ import { CharacterCreateHeaderActions } from './slots/character-create-header-ac
 import { PlayersGuildCard } from './slots/players-guild-card';
 import { foreverIdentityProvider } from './forever-identity-provider';
 import { wowHubModule } from './hub/register-hub';
+import { supportsEventReportLinks } from './lib/report-links';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -45,3 +46,4 @@ blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
 blizzard.registerSlot('players:header-cards', PlayersGuildCard);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);
+blizzard.registerEventReportLinks(supportsEventReportLinks);

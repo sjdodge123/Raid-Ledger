@@ -6,6 +6,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
 import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
+import { LegacyHubRedirect } from './components/routing/legacy-hub-redirect';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
@@ -13,7 +14,7 @@ import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
-  JoinPage, InvitePage, PollSharePage, PrivacyPage,
+  JoinPage, InvitePage, PollSharePage, HubInvitePage, PrivacyPage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
   GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage, GuildPage,
   PlayersPage, EventMetricsPage,
@@ -142,7 +143,11 @@ export function AppRoutes() {
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
+      <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      {/* ROK-1891: old hub links (Discord, notifications, bookmarks) → /hubs/… */}
+      <Route path="/guilds/:id" element={<LegacyHubRedirect />} />
+      <Route path="/guilds/:id/*" element={<LegacyHubRedirect />} />
 
       <Route element={<AuthGuard />}>
         <Route path="/onboarding" element={<OnboardingWizardPage />} />
@@ -155,7 +160,7 @@ export function AppRoutes() {
         <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
-        <Route path="/guilds/:id" element={<GuildPage />} />
+        <Route path="/hubs/:id" element={<GuildPage />} />
         <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/events" element={<EventsPage />} />

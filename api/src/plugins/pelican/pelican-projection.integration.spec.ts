@@ -266,8 +266,10 @@ describe('GET /game-servers/calendar — Pelican projection (ROK-1096)', () => {
   });
 });
 
-describe('GET /admin/plugins/pelican/servers — no timezone fields (ROK-1795)', () => {
-  it('lists rows without timezone or tzMismatch, even for a stale NY column', async () => {
+// Operator ruling 2026-10-23: ROK-1882 brings `timezone` back as the play-day
+// boundary only (schedules stay UTC, ROK-1795); `tzMismatch` stays removed.
+describe('GET /admin/plugins/pelican/servers — play-day timezone only (ROK-1795, ROK-1882)', () => {
+  it('lists the column as the play-day timezone and never a tzMismatch', async () => {
     const server = await insertServer(N.main, { timezone: NY });
     await insertSchedule(server.id, '0 4 * * *', 'restart', {
       nextRunAt: new Date('2026-11-03T04:00:00.000Z'),
@@ -278,7 +280,7 @@ describe('GET /admin/plugins/pelican/servers — no timezone fields (ROK-1795)',
     expect(res.status).toBe(200);
     const body = PelicanServerListResponseSchema.parse(res.body);
     expect(body.data.map((r) => r.id)).toEqual([server.id]);
-    expect(res.text).not.toContain('timezone');
+    expect(body.data[0]?.timezone).toBe(NY);
     expect(res.text).not.toContain('tzMismatch');
   });
 });

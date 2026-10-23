@@ -201,3 +201,27 @@ describe('FilterFab', () => {
         expect(screen.getByTestId('filter-fab').style.bottom).toBe(bottom);
     });
 });
+
+describe('FilterFab — page clearance marker (ROK-1889)', () => {
+    // index.css keys --filter-fab-clearance off `:root:has([data-filter-fab])`, so the
+    // marker must exist exactly while a Filters FAB is in the document.
+    const marked = (): number => document.querySelectorAll('[data-filter-fab]').length;
+
+    it('renders [data-filter-fab] while a Filters FAB is mounted so --filter-fab-clearance applies', () => {
+        mockViewportWidth(390);
+        const first = renderWithProviders(<FilterFab activeCount={0} isOpen={false} onClick={vi.fn()} />);
+        const second = renderWithProviders(<FilterFab activeCount={0} isOpen={false} onClick={vi.fn()} />);
+        expect(marked(), 'both FABs carry the marker').toBe(2);
+        first.unmount();
+        expect(marked(), 'one FAB still mounted').toBe(1);
+        second.unmount();
+        expect(marked(), 'no FAB left').toBe(0);
+    });
+
+    it('renders no [data-filter-fab] at 1024px and up, where FilterEntry renders no FAB', () => {
+        mockViewportWidth(1280);
+        const { unmount } = renderEntry();
+        expect(marked()).toBe(0);
+        unmount();
+    });
+});

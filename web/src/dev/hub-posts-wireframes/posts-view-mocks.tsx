@@ -36,7 +36,7 @@ export function PostsListMock({ editingId }: { editingId?: number }): JSX.Elemen
     );
 }
 
-/** W5 — `/guilds/7?post=31#posts`: the linked post leads, highlighted and expanded. */
+/** W5 — `/hubs/7?post=31#posts`: the linked post leads, highlighted and expanded. */
 export function DeepLinkMock({ removed = false }: { removed?: boolean }): JSX.Element {
     return (
         <section aria-label="Linked post" data-testid={`wf-deep-link${removed ? '-removed' : ''}`} className="flex flex-col gap-3">

@@ -39,6 +39,7 @@ import {
 import {
   findValheimGameId,
   parseServerHubSlot,
+  parseServerHubWithSchedules,
   seedServerHub,
   type ServerHubFixture,
 } from './pelican-demo-seed-hub.helpers';
@@ -102,7 +103,8 @@ export class PelicanDemoSeedController {
    * ROK-1831 server-hub fixture: the slot's Valheim-mapped server with its
    * community hub on, four member rows (online, seen 10 d, joined never
    * played, seen 100 d = not a member), an outsider and one past Quick Play
-   * session. Body `{ slot? }` (default 0). Idempotent — re-run to reset.
+   * session. Body `{ slot?, withSchedules? }` (default 0, false; ROK-1876
+   * `withSchedules` adds calendar-visible schedules). Idempotent — re-run.
    */
   @Post('pelican/server-hub')
   @HttpCode(HttpStatus.OK)
@@ -112,7 +114,8 @@ export class PelicanDemoSeedController {
     const gameId = await findValheimGameId(this.db);
     if (gameId === null) throw new NotFoundException('No Valheim game');
     await this.ensureDemoPelican();
-    return seedServerHub(this.db, slot, gameId, new Date());
+    const withSchedules = parseServerHubWithSchedules(body);
+    return seedServerHub(this.db, slot, gameId, new Date(), withSchedules);
   }
 
   private async ensureDemoPelican(): Promise<void> {

@@ -11,6 +11,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { guilds } from './guilds';
 import { users } from './users';
+import { hubInvites } from './hub-invites';
 
 /**
  * ROK-1870 D3: membership of a game community hub
@@ -49,6 +50,19 @@ export const hubCommunityMembers = pgTable(
       onDelete: 'set null',
     }),
     banReason: varchar('ban_reason', { length: 200 }),
+    /**
+     * ROK-1893 P1 (M2): how the current live row came about — the hub page's
+     * Join (`manual`), an invite link (`invite`), auto-membership (`auto`) or
+     * the signup "Join <hub>?" prompt (`prompt`). Null for rows that predate it.
+     */
+    joinSource: varchar('join_source', {
+      length: 10,
+      enum: ['manual', 'invite', 'auto', 'prompt'],
+    }),
+    /** ROK-1893 P1 (M2): the link redeemed when `join_source = 'invite'`. */
+    inviteId: integer('invite_id').references(() => hubInvites.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -60,6 +74,10 @@ export const hubCommunityMembers = pgTable(
     check(
       'hub_community_members_role_check',
       sql`${table.role} IN ('leader', 'officer', 'member')`,
+    ),
+    check(
+      'hub_community_members_join_source_check',
+      sql`${table.joinSource} IS NULL OR ${table.joinSource} IN ('manual', 'invite', 'auto', 'prompt')`,
     ),
     uniqueIndex('idx_hub_community_members_guild_user').on(
       table.guildId,
@@ -75,6 +93,7 @@ export const hubCommunityMembers = pgTable(
     index('idx_hub_community_members_user_id').on(table.userId),
     index('idx_hub_community_members_removed_by').on(table.removedBy),
     index('idx_hub_community_members_banned_by').on(table.bannedBy),
+    index('idx_hub_community_members_invite_id').on(table.inviteId),
     /** Live-member counts and lists. */
     index('idx_hub_community_members_live')
       .on(table.guildId)
