@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
-import { ValheimClaimStatusSchema } from '@raid-ledger/contract';
+import { ValheimClaimStatusResponseSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -74,7 +74,7 @@ async function claimStatus(serverId: number, user: ClaimDriveUser) {
     .get(`/plugins/valheim/armory/servers/${serverId}/claim-status`)
     .set(bearer(await tokenFor(user)));
   expect(res.status).toBe(200);
-  return ValheimClaimStatusSchema.parse(res.body);
+  return ValheimClaimStatusResponseSchema.parse(res.body);
 }
 
 async function profilesOn(serverId: number) {
