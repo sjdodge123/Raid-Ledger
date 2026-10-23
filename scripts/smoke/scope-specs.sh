@@ -181,15 +181,49 @@ specs_visiting() {
   grep -lE "[\"'\`}]$1([\"'\`/?#\$]|\$)" "$SPEC_DIR"/*.smoke.spec.ts 2>/dev/null || true
 }
 
+# Specs whose quoted URL continues past route prefix $1 with `/<more>` — a
+# visit to a DETAIL page under it (`/hubs/12`), not the bare list (`/hubs?game=`).
+specs_visiting_detail() {
+  grep -lE "[\"'\`}]$1/[^\"'\`/?#]" "$SPEC_DIR"/*.smoke.spec.ts 2>/dev/null || true
+}
+
+# Route prefixes that render the same page family (ROK-1891): `/guilds/:id`
+# redirects to the canonical `/hubs/:id`, so a spec reaching the hub page by
+# either path covers a change to either route. Space-separated `a=b` pairs.
+ROUTE_ALIASES="/guilds=/hubs"
+
+# $1 plus every prefix aliased to it.
+route_prefix_family() {
+  local pair
+  echo "$1"
+  for pair in $ROUTE_ALIASES; do
+    [ "${pair%%=*}" = "$1" ] && echo "${pair#*=}"
+    [ "${pair#*=}" = "$1" ] && echo "${pair%%=*}"
+  done
+  return 0
+}
+
 # Specs for one absolute route path. /dev/** is DEMO_MODE-only: no spec. The
 # static prefix (up to the first :param or *) is tried, then its first segment.
+# A parameterised route (`/hubs/:id`) prefers specs visiting a detail URL under
+# the prefix, so the list page at the bare prefix (`/hubs`, a different
+# component) does not drag its specs in; with no such spec it falls back to the
+# bare-prefix match. Aliased prefixes (ROUTE_ALIASES) are matched together.
 # Returns 1 when the path is unmappable or nothing visits it.
 specs_for_route() {
-  local p="$1" prefix out
+  local p="$1" prefix out="" fam a
   case "$p" in /dev | /dev/*) return 0 ;; esac
   prefix=$(echo "$p" | awk -F/ '{ o = ""; for (i = 2; i <= NF; i++) { if ($i == "" || $i ~ /^[:*]/) break; o = o "/" $i } print o }')
   echo "$prefix" | grep -qE '^(/[A-Za-z0-9_-]+)+$' || return 1
-  out=$(specs_visiting "$prefix")
+  fam=$(route_prefix_family "$prefix")
+  if [ "$p" != "$prefix" ]; then
+    for a in $fam; do out="$out$(specs_visiting_detail "$a")"$'\n'; done
+    out=$(echo "$out" | sed '/^$/d' | sort -u)
+  fi
+  if [ -z "$out" ]; then
+    for a in $fam; do out="$out$(specs_visiting "$a")"$'\n'; done
+    out=$(echo "$out" | sed '/^$/d' | sort -u)
+  fi
   [ -z "$out" ] && out=$(specs_visiting "/$(echo "${prefix#/}" | cut -d/ -f1)")
   [ -n "$out" ] || return 1
   echo "$out"
