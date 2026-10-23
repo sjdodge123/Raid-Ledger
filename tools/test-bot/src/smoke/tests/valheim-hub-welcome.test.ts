@@ -25,6 +25,7 @@ import {
   type SimpleMessage,
 } from "../../helpers/messages.js";
 import { SmokeAssertionError } from "../assert.js";
+import { cleanupClaimDrive } from "../claim-drive-cleanup.js";
 import { pickJoinPostChannel } from "../join-post-channel.js";
 import type { DiscordChannel, SmokeTest, TestContext } from "../types.js";
 
@@ -153,6 +154,17 @@ async function unbind(ctx: TestContext, guildId: number): Promise<void> {
 
 async function welcomePostRepostClear(ctx: TestContext): Promise<void> {
   const channel = pickWelcomeChannel(ctx);
+  try {
+    await postRepostClear(ctx, channel);
+  } finally {
+    await cleanupClaimDrive(ctx, WORKER); // ROK-1933: no fixture users leak
+  }
+}
+
+async function postRepostClear(
+  ctx: TestContext,
+  channel: DiscordChannel,
+): Promise<void> {
   const run = Date.now().toString(36);
   const title = welcomeTitle(run);
   const guildId = await seedHub(ctx, run);

@@ -23,10 +23,12 @@
  *     the deployed builder renders them and the buttons for this type.
  *
  * Button presses are integration-tested (bots cannot click another bot's
- * components). No Discord channel is written, so nothing needs cleaning.
+ * components). No Discord channel is written; the fixture's users,
+ * characters and sighting are deleted in `finally` (`claim-drive-cleanup`).
  */
 import { assertEmbedRenderRules, SmokeAssertionError } from "../assert.js";
 import type { SimpleEmbed } from "../../helpers/messages.js";
+import { cleanupClaimDrive } from "../claim-drive-cleanup.js";
 import type { SmokeTest, TestContext } from "../types.js";
 
 /** A worker slot the Playwright claim spec (workers 0..N) does not use. */
@@ -175,6 +177,14 @@ function expectButtons(dm: RenderedClaimDm, profileId: number, hubUrl: string): 
 }
 
 async function claimDmRendersButtons(ctx: TestContext): Promise<void> {
+  try {
+    await scanAndRender(ctx);
+  } finally {
+    await cleanupClaimDrive(ctx, WORKER); // ROK-1933: no fixture users leak
+  }
+}
+
+async function scanAndRender(ctx: TestContext): Promise<void> {
   const fx = await seedSighting(ctx);
   await expectScanQueues(ctx);
   const hubUrl = `${CLIENT_URL}/hubs/${String(fx.guildId)}#characters`;

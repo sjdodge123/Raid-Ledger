@@ -8,6 +8,7 @@ import {
   Inject,
   NotFoundException,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -15,6 +16,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import { AdminGuard } from '../../../auth/admin.guard';
+import type { AuthenticatedRequest } from '../../../auth/types';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -39,6 +41,20 @@ import {
   clearClaimDriveSighting,
   insertClaimDriveSighting,
 } from './valheim-claim-drive-demo-sighting.helpers';
+import {
+  cleanupClaimDrive,
+  type ClaimDriveCleanup,
+} from './valheim-claim-drive-demo-cleanup.helpers';
+
+const CleanupSchema = z
+  .object({
+    worker: z
+      .number()
+      .int()
+      .min(0)
+      .max(VALHEIM_LINK_FIXTURE_SLOTS - 1),
+  })
+  .strict();
 
 const RequestSchema = z
   .object({
@@ -81,6 +97,8 @@ function parseRequest(body: unknown): ClaimDriveRequest {
  * `sighting: true` also starts a live Quick Play where a Steam-only player has
  * been on B's matching character for 20 min — what one claim-suggest scan
  * (`POST .../claim-suggest-scan`) needs to DM B.
+ * `claim-drive-cleanup` deletes a worker's fixture users, characters and
+ * sighting (`reset-to-seed` keeps users), so a smoke can leave none behind.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -128,6 +146,22 @@ export class ValheimClaimDriveDemoSeedController {
         )
       : null;
     return { serverId, guildId, users, characters, eventId };
+  }
+
+  /** Delete `worker`'s fixture users, characters and sighting. */
+  @Post('claim-drive-cleanup')
+  @HttpCode(HttpStatus.OK)
+  cleanup(
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ClaimDriveCleanup> {
+    const parsed = CleanupSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(
+        `Expected { worker: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1} }`,
+      );
+    }
+    return cleanupClaimDrive(this.db, parsed.data.worker, req.user.id);
   }
 
   /** Refuse a taken `bDiscordId`, find the Valheim game, enable the plugins. */

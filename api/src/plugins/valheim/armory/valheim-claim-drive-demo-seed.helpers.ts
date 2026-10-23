@@ -73,6 +73,14 @@ export function claimDriveServerName(
   return nameSuffix ? `${base} ${nameSuffix}` : base;
 }
 
+/** The worker's fixture server's (stable) Pelican panel UUID. */
+export function claimDrivePanelUuid(worker: number): string {
+  return `00000000-0000-4000-8000-0000001933${pad2(worker)}`;
+}
+
+/** Username prefixes of users A and B (`<prefix><fixtureTag>`). */
+export const CLAIM_DRIVE_USERNAME_PREFIXES = ['cdA', 'cdB'] as const;
+
 /** Upsert the worker's own Valheim server row; returns its id. */
 export async function upsertClaimDriveServer(
   db: Db,
@@ -84,7 +92,7 @@ export async function upsertClaimDriveServer(
   const [row] = await db
     .insert(S)
     .values({
-      panelUuid: `00000000-0000-4000-8000-0000001933${pad2(worker)}`,
+      panelUuid: claimDrivePanelUuid(worker),
       identifier: `cdfix${worker}v`,
       name,
       gameId,
@@ -168,12 +176,12 @@ export async function insertClaimDriveUsers(
 ): Promise<{ a: ClaimDriveUser; b: ClaimDriveUser }> {
   const snow = claimDriveSnowflakes();
   const a = await insertHubUser(db, guildId, {
-    username: `cdA${tag}`,
+    username: `${CLAIM_DRIVE_USERNAME_PREFIXES[0]}${tag}`,
     displayName: `Ashgrim ${tag}`.slice(0, 30),
     discordId: snow.a,
   });
   const b = await insertHubUser(db, guildId, {
-    username: `cdB${tag}`,
+    username: `${CLAIM_DRIVE_USERNAME_PREFIXES[1]}${tag}`,
     displayName: `${B_NAME_STEM}${tag}`.slice(0, 30),
     discordId: bDiscordId ?? snow.b,
   });
