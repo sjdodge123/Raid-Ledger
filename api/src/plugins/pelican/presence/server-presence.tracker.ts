@@ -42,6 +42,8 @@ interface Entry {
  * - A character line whose name AND owner id belong to a present player is
  *   that player's respawn, and any `0:0` line is a death — neither leaves nor
  *   pairs. The same name from another owner is a new player (ROK-1802).
+ *   The session records deaths itself (ROK-1930), asking
+ *   {@link ServerPresenceTracker.steamIdOfCharacter} who died first.
  * - A `heartbeat` count is trusted: 0 → everyone leaves; fewer than tracked →
  *   the longest-silent leave; more than tracked → still-pending handshakes are
  *   promoted unnamed (oldest first) and any remaining excess sets
@@ -101,6 +103,17 @@ export class ServerPresenceTracker {
   /** The owner id of a present player's character, else null (ROK-1822 r3). */
   ownerOf(steamId: string): string | null {
     return this.present.get(steamId)?.owner ?? null;
+  }
+
+  /**
+   * The SteamID64 of the first present player named `name`, else null
+   * (ROK-1930 D3) — the precedence `findCharacter` uses with no owner, which
+   * is all a death line carries. Read-only: touches no lastSeen.
+   */
+  steamIdOfCharacter(name: string): string | null {
+    for (const [steamId, entry] of this.present)
+      if (entry.name === name) return steamId;
+    return null;
   }
 
   /** Replace all state with a persisted roster (RL restart path). Emits nothing. */

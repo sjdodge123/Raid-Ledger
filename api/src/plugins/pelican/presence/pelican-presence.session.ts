@@ -13,9 +13,11 @@ import {
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
+  safeParse,
   toPresentPlayers,
   toSinkPlayer,
 } from './pelican-presence.helpers';
+import { PresenceDeathRecorder } from './pelican-presence.deaths';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
 import {
@@ -23,6 +25,7 @@ import {
   type ServerPresenceChangedPayload,
   type ServerRosterPlayer,
 } from './server-presence.reader';
+import type { ServerDeathSink } from './server-death.sink';
 import type {
   ServerPresenceSink,
   ServerPresenceSource,
@@ -48,6 +51,8 @@ export interface PresenceSessionOptions {
   getCredentials: ConsoleCredentialsSource;
   parser: GameLogParser;
   sink: ServerPresenceSink;
+  /** ROK-1930: records deaths; unbound → none are recorded. */
+  deathSink?: ServerDeathSink;
   logger: PresenceLogger;
   socketFactory?: WingsSocketFactory;
   now?: () => number;
@@ -72,6 +77,7 @@ export class PelicanPresenceSession {
   private readonly held = new UntrackedHeldPlayers();
   private readonly watermark = new ReplayWatermark();
   private readonly stats = new LiveLineStats();
+  private readonly deaths: PresenceDeathRecorder;
   private readonly now: () => number;
   private socket: PelicanConsoleSocket | null = null;
   private replay: Buffered[] | null = null;
@@ -92,6 +98,12 @@ export class PelicanPresenceSession {
 
   constructor(private readonly opts: PresenceSessionOptions) {
     this.now = opts.now ?? Date.now;
+    this.deaths = new PresenceDeathRecorder({
+      source: opts.source,
+      sink: opts.deathSink,
+      logger: opts.logger,
+      enqueue: (method, call) => this.enqueue(method, () => call()),
+    });
   }
 
   get serverId(): number {
@@ -168,7 +180,7 @@ export class PelicanPresenceSession {
 
   private onLine(line: string): void {
     const mode = this.replay ? 'replay' : 'live';
-    const event = this.parse(line);
+    const event = safeParse(this.opts, line);
     const admitted = event !== null && this.watermark.admit(event.loggedAt);
     if (mode === 'live') this.stats.record(event !== null, admitted);
     if (!event || !admitted) return;
@@ -187,43 +199,20 @@ export class PelicanPresenceSession {
     }
   }
 
-  private parse(line: string): GamePresenceEvent | null {
-    try {
-      return this.opts.parser.parse(line);
-    } catch (err) {
-      this.opts.logger.warn(
-        `Presence parser threw for server ${this.serverId}: ${errName(err)}`,
-      );
-      return null;
-    }
-  }
-
   private applyLive(event: GamePresenceEvent, at: Date): void {
     if (event.kind === 'server-stopping')
       return this.emptyAll('server-stopping line');
+    this.deaths.observe(event, this.tracker, at);
     const before = this.tracker.snapshotWithOwners();
     const changes = this.tracker.apply(event, at);
     this.forward(changes);
     this.forwardOwners(before, changes);
-    this.forwardHeldLeaves(event);
+    const tracked = this.tracker.snapshot().length;
+    for (const steamId of this.held.departures(event, tracked))
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
-  }
-
-  /**
-   * Codex r4: a held player the tracker never saw may be enrolled by a
-   * heartbeat, so their disconnect line — or a count with no room left for
-   * them — must still reach the sink, or their row never closes.
-   */
-  private forwardHeldLeaves(event: GamePresenceEvent): void {
-    let gone: string[] = [];
-    if (event.kind === 'leave' && this.held.forget(event.steamId))
-      gone = [event.steamId];
-    else if (event.kind === 'heartbeat')
-      gone = this.held.fit(event.count, this.tracker.snapshot().length);
-    for (const steamId of gone)
-      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
   }
 
   private onReachable(): void {
@@ -270,7 +259,10 @@ export class PelicanPresenceSession {
     if (!buffered) return;
     // With owners (ROK-1822 r4): a restore must not null a hydrated owner.
     const before = this.tracker.snapshotWithOwners();
-    for (const { event, at } of buffered) this.tracker.apply(event, at);
+    for (const { event, at } of buffered) {
+      this.deaths.observe(event, this.tracker, at); // ROK-1930: before apply
+      this.tracker.apply(event, at);
+    }
     if (this.cold) this.tracker.restore(before);
     this.cold = false;
     const rehydrated = this.history;
