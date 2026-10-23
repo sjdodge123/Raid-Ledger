@@ -66,6 +66,7 @@ describe('DesignSystemPage', () => {
         'Pattern — own-calendar busy band and radio cards',
         'Pattern — server-schedule layer (plugin calendar layers)',
         'Forms — the form primitives',
+        'Pattern — plugin hub widgets',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
@@ -671,5 +672,23 @@ describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
         const toolbar = await within(forms).findByRole('toolbar', { name: 'Formatting' }, { timeout: 5000 });
         expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument();
         expect(within(forms).getByTestId('ds-md-editor')).toHaveAttribute('data-md-editor');
+    });
+});
+
+describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('renders a sample HubGameWidget through the real cell builder: ready, skeleton and contained error', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-hub-widgets');
+        expect(await within(demo).findByTestId('ds-hub-widget-body')).toBeInTheDocument();
+        expect(within(demo).getByRole('heading', { name: 'Class breakdown' })).toBeInTheDocument();
+        expect(within(demo).getByTestId('hub-widget-loading')).toHaveAttribute('aria-busy', 'true');
+        expect(await within(demo).findByRole('alert')).toHaveTextContent("Couldn't load this widget.");
+        expect(document.getElementById('hub-widget-ds-demo-classes')).not.toBeNull();
     });
 });

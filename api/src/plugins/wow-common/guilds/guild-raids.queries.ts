@@ -76,6 +76,7 @@ export interface UpcomingRow {
   maxAttendees: number | null;
   signupCount: number;
   viewerStatus: string | null;
+  contentInstances: unknown;
 }
 
 /** Upcoming card columns; exported for the subquery-correlation guard. */
@@ -86,6 +87,7 @@ export function upcomingFields(viewerId: number) {
     duration: events.duration,
     slotConfig: events.slotConfig,
     maxAttendees: events.maxAttendees,
+    contentInstances: events.contentInstances,
     signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${LIVE_SIGNED})`,
     viewerStatus: sql<
       string | null
