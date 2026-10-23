@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto, GuildProfile, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
+import { hubInviteListHandler } from '../../../test/mocks/hub-invite-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { HubSettingsProvider } from '../settings/hub-settings-context';
 import { HubSetupChecklist } from './setup-checklist';
@@ -141,16 +142,28 @@ describe('HubSetupChecklist — blocked and omitted steps', () => {
 describe('HubSetupChecklist — per hub kind (ROK-1891)', () => {
     it('a community hub shows an invite step and no guild or raid wording', async () => {
         serve(EMPTY_PROFILE, UNSET);
-        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canEdit modsConfigured={false} /></HubSettingsProvider>);
+        server.use(hubInviteListHandler({ items: [], liveByViewer: 0, perMemberCap: 5 }));
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canInvite canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
         expect(within(list).getByTestId('setup-step-invite')).toHaveTextContent('Invite players to the hub');
-        // The Members tab has no share control: the copy names the page link and the Join button instead.
-        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent("Send players this page's link — they join with the Join button at the top.");
-        expect(within(list).getByTestId('setup-step-action-invite')).toHaveAttribute('href', '#members');
-        expect(within(list).getByTestId('setup-step-action-invite')).toHaveTextContent('View members');
+        // Approved string (pending-approval/_approved/ROK-1891-hub-copy STRINGS.md).
+        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent('Share the hub link so players can find it and join.');
+        const action = within(list).getByTestId('setup-step-action-invite');
+        expect(action).toHaveTextContent('Invite');
         expect(within(list).queryByTestId('setup-step-roster')).not.toBeInTheDocument();
         expect(within(list).queryByTestId('setup-step-publish')).not.toBeInTheDocument();
         expect(list.textContent ?? '').not.toMatch(/guild|raid|roster/i);
+        // The button opens #1742's invite-link dialog — the same one the Members tab's "Invite people" opens.
+        await userEvent.click(action);
+        expect(await screen.findByText('Invite people to Ashen Vanguard')).toBeInTheDocument();
+    });
+
+    it('a community viewer who cannot make invite links gets the invite step without a button', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} memberCount={1} hasModSources={false} kind="game_community" canInvite={false} canEdit modsConfigured={false} /></HubSettingsProvider>);
+        const list = await screen.findByTestId('setup-checklist');
+        expect(within(list).getByTestId('setup-step-desc-invite')).toHaveTextContent('Share the hub link so players can find it and join.');
+        expect(within(list).queryByTestId('setup-step-action-invite')).not.toBeInTheDocument();
     });
 
     it('a server hub asks for its Discord channel and server info', async () => {

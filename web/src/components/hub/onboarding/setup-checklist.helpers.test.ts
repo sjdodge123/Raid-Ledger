@@ -127,6 +127,10 @@ describe('setupSteps — game_community hubs (ROK-1870)', () => {
         expect(ids({ kind: 'game_community', hasModSources: false })).toEqual(['invite', 'leader-post', 'rules', 'links', 'discord', 'next-raid']);
         const invite = setupSteps(input({ kind: 'game_community', memberCount: 1 })).find((s) => s.id === 'invite');
         expect(invite?.label).toBe('Invite players to the hub');
+        // Approved string (pending-approval/_approved/ROK-1891-hub-copy STRINGS.md); the action opens #1742's invite dialog.
+        expect(invite?.description).toBe('Share the hub link so players can find it and join.');
+        expect(invite?.actionLabel).toBe('Invite');
+        expect(invite?.action).toEqual({ kind: 'invite' });
         expect(invite?.done).toBe(false);
         expect(setupSteps(input({ kind: 'game_community', memberCount: 2 })).find((s) => s.id === 'invite')?.done).toBe(true);
     });

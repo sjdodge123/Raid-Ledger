@@ -14,6 +14,7 @@ import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { useHubSettings } from './settings/hub-settings-context';
 import { gameWidgetCells, type GameWidgetCell } from './hub-widget-cells';
 import { usePluginStore } from '../../stores/plugin-store';
+import { canInvite } from './community/community-invite-helpers';
 
 /**
  * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
@@ -55,7 +56,8 @@ interface Cell {
 }
 
 /** The core band. Module widgets land between these orders — WoW uses 50/60. */
-function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null, mods: ModsState): Cell[] {
+function coreCells(ctx: HubCtx, onChangeChannel: (() => void) | null, mods: ModsState): Cell[] {
+    const { page, raids } = ctx;
     const data = raids.data;
     // Above everything on purpose: it is the one widget that tells an editor
     // what is still missing, and it removes itself once nothing is. A span-1
@@ -70,7 +72,7 @@ function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null
                 <Suspense fallback={null}>
                     <HubSetupChecklist guildId={page.guild.id} canEdit guildName={page.guild.name} memberCount={page.guild.memberCount}
                         nextRaid={data === undefined ? undefined : data.nextRaid}
-                        modsConfigured={mods.configured} hasModSources={mods.hasSources} kind={page.guild.kind} />
+                        modsConfigured={mods.configured} hasModSources={mods.hasSources} kind={page.guild.kind} canInvite={canInvite(ctx)} />
                 </Suspense>
             ),
         }]

@@ -11,7 +11,7 @@
 import type { GuildDiscordMirrorDto, GuildKind, GuildProfile } from '@raid-ledger/contract';
 
 /** How a step is acted on: a tab hash, or an overlay only the page can open. */
-export type SetupStepAction = { kind: 'tab'; hash: string } | { kind: 'channel' } | { kind: 'blocked'; reason: string };
+export type SetupStepAction = { kind: 'tab'; hash: string } | { kind: 'channel' } | { kind: 'invite' } | { kind: 'blocked'; reason: string };
 
 export interface SetupStep {
     id: string;
@@ -73,13 +73,13 @@ const KIND_COPY: Readonly<Record<GuildKind, Readonly<Record<string, StepCopy>>>>
 
 /**
  * ROK-1891: a community hub grows by invitation, not a roster import. The proposer is member one.
- * There is no share/invite control yet (the Members tab lists who joined), so the copy names the
- * page link + the hero's Join button, and the action opens Members, where the step's progress shows.
+ * Approved copy (pending-approval/_approved/ROK-1891-hub-copy); the action opens #1742's
+ * invite-link dialog, which the page shows only to a viewer who may make invite links.
  */
 function inviteStep(memberCount: number): SetupStep {
     return {
-        id: 'invite', label: 'Invite players to the hub', description: "Send players this page's link — they join with the Join button at the top.",
-        done: memberCount > 1, action: { kind: 'tab', hash: '#members' }, actionLabel: 'View members',
+        id: 'invite', label: 'Invite players to the hub', description: 'Share the hub link so players can find it and join.',
+        done: memberCount > 1, action: { kind: 'invite' }, actionLabel: 'Invite',
     };
 }
 
