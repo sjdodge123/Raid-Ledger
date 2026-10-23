@@ -55,7 +55,7 @@ export async function withContentGuild(
 
 export async function openGuildAs(page: Page, guild: SeededGuild, role: Role, suffix = ''): Promise<void> {
     await signInOnboardedMember(page, guild.users[role].userId);
-    await page.goto(`/guilds/${guild.guildId}${suffix}`);
+    await page.goto(`/hubs/${guild.guildId}${suffix}`);
 }
 
 /** Wait for the lazy editor chunk inside `frame`; return its contenteditable. */

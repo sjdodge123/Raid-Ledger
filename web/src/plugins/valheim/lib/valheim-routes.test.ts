@@ -8,7 +8,7 @@ import {
 
 describe('valheim routes', () => {
     it('builds the hub Characters tab path', () =>
-        expect(hubCharactersPath(4)).toBe('/guilds/4#characters'));
+        expect(hubCharactersPath(4)).toBe('/hubs/4#characters'));
     it('builds the character href', () =>
         expect(valheimCharacterHref(11)).toBe('/valheim/characters/11'));
     it.each([
@@ -25,9 +25,9 @@ describe('valheim routes', () => {
     ])('parses route id %s as %s', (raw, want) =>
         expect(parseCharacterId(raw)).toBe(want),
     );
-    it('trusts only an in-app /guilds/ hub path from router state', () => {
-        expect(hubPathFrom({ hubPath: '/guilds/4#characters' })).toBe(
-            '/guilds/4#characters',
+    it('trusts only an in-app /hubs/ hub path from router state', () => {
+        expect(hubPathFrom({ hubPath: '/hubs/4#characters' })).toBe(
+            '/hubs/4#characters',
         );
         expect(hubPathFrom({ hubPath: 'https://evil.example/' })).toBeNull();
         expect(hubPathFrom({ hubPath: 4 })).toBeNull();

@@ -2,6 +2,8 @@ import { inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { pelicanServers } from '../../drizzle/schema';
+import type { PelicanTx } from './pelican-plugin-lock.helpers';
+import { syncServerHub } from './hub/server-hub-toggle.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -87,13 +89,13 @@ function fixtureRows(req: QuickPlayFixtureRequest, now: Date) {
   ];
 }
 
-/** Upsert the slot's two rows back to their initial state (re-run = reset). */
-export async function seedQuickPlayFixture(
-  db: Db,
+/** Upsert the slot's two server rows; returns what the hub sync needs. */
+function upsertFixtureRows(
+  tx: PelicanTx,
   req: QuickPlayFixtureRequest,
   now: Date,
-): Promise<QuickPlayFixture> {
-  const rows = await db
+) {
+  return tx
     .insert(pelicanServers)
     .values(fixtureRows(req, now))
     .onConflictDoUpdate({
@@ -107,7 +109,26 @@ export async function seedQuickPlayFixture(
         missingSince: null,
       },
     })
-    .returning({ id: pelicanServers.id, panelUuid: pelicanServers.panelUuid });
+    .returning({
+      id: pelicanServers.id,
+      panelUuid: pelicanServers.panelUuid,
+      name: pelicanServers.name,
+      gameId: pelicanServers.gameId,
+    });
+}
+
+/** Upsert the slot's two rows back to their initial state (re-run = reset). */
+export async function seedQuickPlayFixture(
+  db: Db,
+  req: QuickPlayFixtureRequest,
+  now: Date,
+): Promise<QuickPlayFixture> {
+  const rows = await db.transaction(async (tx) => {
+    const upserted = await upsertFixtureRows(tx, req, now);
+    // Keep any hub of these servers on the server's game, as the admin patch does.
+    for (const row of upserted) await syncServerHub(tx, row, now);
+    return upserted;
+  });
   const [mappedUuid, unmappedUuid] = slotUuids(req.slot);
   const idOf = (uuid: string) => rows.find((r) => r.panelUuid === uuid)?.id;
   const mappedId = idOf(mappedUuid);

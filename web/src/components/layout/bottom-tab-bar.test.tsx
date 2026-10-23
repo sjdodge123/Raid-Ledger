@@ -101,7 +101,7 @@ describe('BottomTabBar — the centre Hubs button', () => {
         const sheet = await screen.findByRole('dialog', { name: 'Your hubs' });
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
         const rows = within(sheet).getAllByTestId('guild-entry-row');
-        expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/guilds/31', '/guilds/21']);
+        expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/hubs/31', '/hubs/21']);
         expect(within(sheet).getAllByTestId('hub-kind-chip').map((c) => c.textContent)).toEqual(['Server', 'Community']);
         expect(within(sheet).getByTestId('bottom-hubs-browse-all')).toHaveAttribute('href', '/hubs');
     });
@@ -139,7 +139,7 @@ describe('BottomTabBar — the centre Hubs button', () => {
 
     it('is active (aria-current="page") on a hub page and on /hubs, not elsewhere', async () => {
         serve(TWO);
-        renderBar('/guilds/31');
+        renderBar('/hubs/31');
         expect(await screen.findByTestId('bottom-hubs-trigger')).toHaveAttribute('aria-current', 'page');
     });
 

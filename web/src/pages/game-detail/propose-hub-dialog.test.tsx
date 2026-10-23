@@ -5,23 +5,48 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
-import { communityHubHandlers } from '../../test/handlers/community-hubs';
+import { communityHubHandlers, createMockHubProposal } from '../../test/handlers/community-hubs';
 import { mockDesktop } from '../../test/handlers/media';
+import { toast } from '../../lib/toast';
 import { ProposeHubDialog } from './propose-hub-dialog';
 
 const API = 'http://localhost:3000';
+const auth = vi.hoisted(() => ({ role: 'member' as 'member' | 'operator' | 'admin' }));
+const navigate = vi.hoisted(() => vi.fn());
+
+vi.mock('../../hooks/use-auth', async (orig) => ({
+    ...(await orig<typeof import('../../hooks/use-auth')>()),
+    useAuth: () => ({ user: { id: 1, username: 'You', role: auth.role }, isLoading: false }),
+}));
+vi.mock('react-router-dom', async (orig) => ({
+    ...(await orig<typeof import('react-router-dom')>()),
+    useNavigate: () => navigate,
+}));
+vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+/** The POST answers with the server's `status` — the only thing that decides the outcome (ROK-1892). */
+function respondWith(status: 'proposed' | 'active'): void {
+    server.use(http.post(`${API}/hubs/proposals`, () =>
+        HttpResponse.json(createMockHubProposal({ id: 99, status }), { status: 201 })));
+}
 
 function renderDialog(onClose = vi.fn()): void {
     renderWithProviders(<ProposeHubDialog isOpen onClose={onClose} gameId={5} gameName="Baldur's Gate 3" />);
 }
 
-async function fill(name: string, blurb = 'Casual co-op.'): Promise<void> {
+async function fill(name: string, blurb = 'Casual co-op.', submit = 'Send for review'): Promise<void> {
     await userEvent.type(screen.getByLabelText('Hub name'), name);
     await userEvent.type(screen.getByLabelText('Short description'), blurb);
-    await userEvent.click(screen.getByRole('button', { name: 'Send for review' }));
+    await userEvent.click(screen.getByRole('button', { name: submit }));
 }
 
-afterEach(() => { server.resetHandlers(); vi.restoreAllMocks(); });
+afterEach(() => {
+    server.resetHandlers();
+    vi.restoreAllMocks();
+    vi.mocked(toast.success).mockClear();
+    navigate.mockClear();
+    auth.role = 'member';
+});
 
 describe('ProposeHubDialog', () => {
     it('W3: a 2-character name is refused before any request', async () => {
@@ -74,5 +99,55 @@ describe('ProposeHubDialog', () => {
         renderDialog();
         expect(screen.getByTestId('bottom-sheet-footer')).toBeInTheDocument();
         expect(screen.queryByTestId('modal-footer')).not.toBeInTheDocument();
+    });
+});
+
+describe('ProposeHubDialog — ROK-1892 staff proposals go live', () => {
+    it('ROK-1892: a member is told an admin reviews it, and stays on the page', async () => {
+        server.use(...communityHubHandlers());
+        mockDesktop(true);
+        renderDialog();
+        expect(screen.getByText(/An admin reviews new hubs/)).toBeInTheDocument();
+        await fill('Owlbear Club');
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Sent for review'));
+        expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it.each(['admin', 'operator'] as const)('ROK-1892: an %s sees "goes live" copy and an active response lands on the live hub', async (role) => {
+        auth.role = role;
+        server.use(...communityHubHandlers());
+        respondWith('active');
+        mockDesktop(true);
+        const onClose = vi.fn();
+        renderDialog(onClose);
+        expect(screen.getByText(/skips review and goes live right away/)).toBeInTheDocument();
+        expect(screen.queryByText(/An admin reviews new hubs/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Send for review' })).not.toBeInTheDocument();
+        await fill('Owlbear Club', 'Casual co-op.', 'Create hub');
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/hubs/99'));
+        expect(toast.success).toHaveBeenCalledWith('Your hub is live');
+        expect(onClose).toHaveBeenCalled();
+    });
+
+    it('ROK-1892: the response decides — an admin whose POST comes back `proposed` stays on the page, sent for review', async () => {
+        auth.role = 'admin';
+        server.use(...communityHubHandlers());
+        respondWith('proposed');
+        mockDesktop(true);
+        renderDialog();
+        await fill('Owlbear Club', 'Casual co-op.', 'Create hub');
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Sent for review'));
+        expect(toast.success).not.toHaveBeenCalledWith('Your hub is live');
+        expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('ROK-1892: an `active` response goes live even for a member session (no role inference)', async () => {
+        server.use(...communityHubHandlers());
+        respondWith('active');
+        mockDesktop(true);
+        renderDialog();
+        await fill('Owlbear Club');
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('/hubs/99'));
+        expect(toast.success).toHaveBeenCalledWith('Your hub is live');
     });
 });

@@ -22,11 +22,12 @@ type Db = PostgresJsDatabase<typeof schema>;
 /**
  * A `pelican_servers` row plus the mapped game's name (ROK-1094). The panel
  * uuid and identifier are never selected, so they cannot leak from here.
- * `timezone` is unread since Pelican crons are always UTC (ROK-1795).
+ * `timezone` is the server's play-day boundary (ROK-1882); Pelican crons
+ * themselves stay UTC (ROK-1795).
  */
 export type PelicanAdminServerRow = Omit<
   PelicanServerRow,
-  'panelUuid' | 'identifier' | 'timezone'
+  'panelUuid' | 'identifier'
 > & {
   gameName: string | null;
   gameSlug: string | null;
@@ -48,7 +49,7 @@ export type PresenceSupportCheck = (gameSlug: string | null) => boolean;
 
 type MappingSet = Pick<
   NewPelicanServer,
-  'gameId' | 'showOnCalendar' | 'presenceTracking'
+  'gameId' | 'showOnCalendar' | 'presenceTracking' | 'timezone'
 >;
 
 /** Only the keys the admin sent. */
@@ -61,6 +62,7 @@ export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
     ...(patch.presenceTracking !== undefined
       ? { presenceTracking: patch.presenceTracking }
       : {}),
+    ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
   };
 }
 
@@ -182,6 +184,7 @@ function getServerColumns() {
     gameId: pelicanServers.gameId,
     showOnCalendar: pelicanServers.showOnCalendar,
     presenceTracking: pelicanServers.presenceTracking,
+    timezone: pelicanServers.timezone,
     currentState: pelicanServers.currentState,
     isSuspended: pelicanServers.isSuspended,
     statusCheckedAt: pelicanServers.statusCheckedAt,

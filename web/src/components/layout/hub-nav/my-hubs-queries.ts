@@ -11,6 +11,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { MyGuildsSchema, type MyGuild } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
+import { HUB_PAGE_PREFIX } from '../../routing/hub-paths';
 
 const STALE_MS = 60_000;
 
@@ -22,9 +23,9 @@ export function memberCountLabel(count: number): string {
     return `${count} ${count === 1 ? 'member' : 'members'}`;
 }
 
-/** The hub page of one hub. */
+/** The hub page of one hub — `/hubs/:id` for every kind (ROK-1891). */
 export function guildHref(guildId: number): string {
-    return `/guilds/${guildId}`;
+    return `${HUB_PAGE_PREFIX}${guildId}`;
 }
 
 /**

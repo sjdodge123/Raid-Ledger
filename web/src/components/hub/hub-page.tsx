@@ -1,5 +1,5 @@
 /**
- * ROK-1785/ROK-1830 — `/guilds/:id`: the game-agnostic hub shell — hero +
+ * ROK-1785/ROK-1830 — `/hubs/:id` (was `/guilds/:id`, ROK-1891): the game-agnostic hub shell — hero +
  * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
  * hero pills come from the hub module registered for `guild.kind`
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
@@ -22,7 +22,7 @@ import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
 import { postIdFromSearch } from './posts/post-link';
-import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubModuleTabs, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
@@ -31,7 +31,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { hubCopy } from './hub-copy';
+import { hubCopy, hubSectionsLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
@@ -102,7 +102,7 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
         );
     }
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
-    const tab = mod?.tabs.find((t) => t.id === active);
+    const tab = hubModuleTabs(mod).find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
     return <HubOverview ctx={ctx} module={mod} mods={mods} />;
 }
@@ -188,7 +188,7 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
                             {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
-                <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
+                <TabRow tabs={tabs} activeId={active} label={hubSectionsLabel(ctx.page.guild.kind)} className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
             </div>

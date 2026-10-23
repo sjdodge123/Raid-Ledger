@@ -24,7 +24,12 @@ import {
 } from './server-hub-membership.queries';
 import { ServerHubMembershipService } from './server-hub-membership.service';
 import { buildServerHubPage } from './server-hub-page.helpers';
-import { loadServerBlock, loadServerMembers } from './server-hub-page.queries';
+import {
+  claimedOnlineSteamIds,
+  loadServerBlock,
+  loadServerMembers,
+} from './server-hub-page.queries';
+import { VALHEIM_GAME_SLUG } from '../../valheim/valheim.constants';
 
 /**
  * ROK-1831 L-1: Pelican owns the `game_server` hub kind. Ladder (v1, no
@@ -75,17 +80,21 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
     if (!hub) throw new NotFoundException('Guild not found');
     const { guild } = hub;
     const now = new Date();
-    const [members, role, server] = await Promise.all([
+    const online = this.membership.onlineSteamIds(guild.pelicanServerId);
+    const [members, role, server, claimed] = await Promise.all([
       loadServerMembers(this.db, guildId, now),
       this.resolveLadder(actor, guildId),
       loadServerBlock(this.db, guild.pelicanServerId, now),
+      claimedOnlineSteamIds(this.db, guild.pelicanServerId, online),
     ]);
     return buildServerHubPage({
       guild: hubSummaryFor(hub, isStaff(actor)),
       role,
       viewerId: actor.id,
       members,
-      onlineSteamIds: this.membership.onlineSteamIds(guild.pelicanServerId),
+      onlineSteamIds: online,
+      // Only Valheim has characters to claim; elsewhere the count is unknown.
+      claimedSteamIds: server?.gameSlug === VALHEIM_GAME_SLUG ? claimed : null,
       server,
     });
   }

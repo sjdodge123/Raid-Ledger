@@ -10,7 +10,9 @@
  *
  * "N online" reads the in-memory presence roster, which no fixture can fill
  * (the demo panel is unreachable), so the pill is checked against the API's
- * own `onlineNow` count rather than a hardcoded 1.
+ * own `server.onlineCount` / `unlinkedOnlineCount` rather than hardcoded
+ * numbers (ROK-1932). With no presence the seed yields "0 online" and no
+ * nudge; the nudge's link branch is covered by `server-hero.test.tsx`.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
@@ -29,7 +31,10 @@ interface Hub {
 }
 
 interface PageMember { name: string; server?: { onlineNow: boolean } }
-interface HubPage { ranks: { members: PageMember[] }[] }
+interface HubPage {
+    ranks: { members: PageMember[] }[];
+    server?: { onlineCount?: number; unlinkedOnlineCount?: number };
+}
 
 const ADMIN_PELICAN = '/admin/settings/integrations/plugin/pelican/pelican-panel';
 
@@ -52,6 +57,14 @@ async function members(token: string, guildId: number): Promise<PageMember[]> {
     return (body?.ranks ?? []).flatMap((g) => g.members);
 }
 
+/** The hero's numbers as the API sends them (ROK-1932); a missing `onlineCount` fails the spec. */
+async function heroCounts(token: string, guildId: number): Promise<{ online: number; unlinked: number }> {
+    const body = (await apiGet(token, `/guilds/${guildId}`)) as HubPage | null;
+    const online = body?.server?.onlineCount;
+    if (typeof online !== 'number') throw new Error(`hub ${guildId}: server.onlineCount missing from the API`);
+    return { online, unlinked: body?.server?.unlinkedOnlineCount ?? 0 };
+}
+
 /** Poll the API roster until `name` is (or is no longer) a member. */
 async function waitForMember(token: string, hub: Hub, name: string, present: boolean): Promise<void> {
     await pollForCondition(async () => {
@@ -68,12 +81,19 @@ test.describe('Server community hub (ROK-1831)', () => {
     test('hub page: status pill, online count, Members columns; the 100-day player is absent', async ({ page }) => {
         const token = await getAdminToken();
         const hub = await seedHub(token);
-        const online = (await members(token, hub.guildId)).filter((m) => m.server?.onlineNow === true).length;
-        await page.goto(`/guilds/${hub.guildId}`);
+        const counts = await heroCounts(token, hub.guildId);
+        await page.goto(`/hubs/${hub.guildId}`);
         await expect(page.getByTestId('server-hub-status')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('server-hub-online')).toHaveText(`${online} online`);
+        await expect(page.getByTestId('server-hub-online')).toHaveText(`${counts.online} online`);
+        const nudge = page.getByTestId('server-hub-unlinked');
+        if (counts.unlinked > 0) {
+            await expect(nudge).toHaveText(`${counts.unlinked} not linked yet`);
+            await expect(nudge).toHaveAttribute('href', '#characters');
+        } else {
+            await expect(nudge, 'no nudge when every online player is linked').toHaveCount(0);
+        }
 
-        await page.goto(`/guilds/${hub.guildId}#members`);
+        await page.goto(`/hubs/${hub.guildId}#members`);
         await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         const a = memberRow(page, userName(hub.slot, 'online'));
         await expect(a.getByTestId('server-member-character')).toHaveText('Bjorn');
@@ -90,7 +110,7 @@ test.describe('Server community hub (ROK-1831)', () => {
         const hub = await seedHub(token);
         const name = userName(hub.slot, 'outsider');
         await signInOnboardedMember(page, hub.userIds.outsider);
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         await page.getByTestId('server-hub-join').click({ timeout: 15_000 });
         await waitForMember(token, hub, name, true);
         await expect(page.getByTestId('server-hub-leave')).toBeVisible();
@@ -104,7 +124,7 @@ test.describe('Server community hub (ROK-1831)', () => {
 
     test('Quick Play tab lists the seeded session', async ({ page }) => {
         const hub = await seedHub(await getAdminToken());
-        await page.goto(`/guilds/${hub.guildId}#quick-play`);
+        await page.goto(`/hubs/${hub.guildId}#quick-play`);
         await expect(page.getByTestId('server-hub-quick-play')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('server-hub-quick-play-row')).toHaveCount(1);
     });
@@ -118,10 +138,10 @@ test.describe('Server community hub (ROK-1831)', () => {
             await setHubSwitch(page, hub, false);
             await expect(page.getByTestId(`pelican-server-${hub.serverId}-hub-hidden`).filter({ visible: true })).toBeVisible();
 
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('server-hub-status'), 'staff still sees a hidden hub').toBeVisible({ timeout: 15_000 });
             await signInOnboardedMember(page, hub.userIds.outsider);
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('guild-not-found')).toBeVisible({ timeout: 15_000 });
 
             await signInAsAdmin(page.context());
@@ -129,7 +149,7 @@ test.describe('Server community hub (ROK-1831)', () => {
             await setHubSwitch(page, hub, true);
             await expect(page.getByTestId(`pelican-server-${hub.serverId}-hub-open`).filter({ visible: true })).toBeVisible();
             await signInOnboardedMember(page, hub.userIds.outsider);
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('server-hub-join')).toBeVisible({ timeout: 15_000 });
         } finally {
             await apiPatch(token, servers, { communityHub: true }).catch(() => undefined);
@@ -155,7 +175,7 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
     test('phone: hidden tabs sit in More; choosing one navigates and the trigger shows its name as active', async ({ page }) => {
         const hub = await seedHub(await getAdminToken());
         await page.setViewportSize(PHONE);
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         const trigger = page.getByTestId('tab-row-more-trigger');
         await expect(trigger, 'a phone row overflows into More').toBeVisible({ timeout: 15_000 });
         await expect(trigger).toContainText('More');
@@ -178,7 +198,7 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
 
     test('Resources comes right after Events in the tab order', async ({ page }) => {
         const hub = await seedHub(await getAdminToken());
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         await expect(page.getByTestId('tab-row-scroller')).toBeVisible({ timeout: 15_000 });
         const order = await tabOrder(page);
         expect(order.slice(0, 4), `tab order: ${order.join(', ')}`).toEqual(['overview', 'members', 'events', 'resources']);
@@ -187,14 +207,14 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
     test('Server hours: seeded schedules show day rows and the restart; no schedules shows "No set hours"', async ({ page }) => {
         const token = await getAdminToken();
         const hub = await seedHub(token, true);
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         const card = page.locator('#server-hub-hours');
         await expect(card.getByTestId('server-hub-hours-row').first(), 'withSchedules gives the card a window').toBeVisible({ timeout: 15_000 });
         await expect(card.getByTestId('server-hub-hours-restart')).toBeVisible();
         await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
 
         await seedHub(token);
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         await expect(card.getByTestId('server-hub-hours-empty')).toHaveText('No set hours', { timeout: 15_000 });
         await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
     });
@@ -202,7 +222,7 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
     test('phone: the last Members card ends 16px above the bottom bar and its raised Hubs circle', async ({ page }) => {
         const hub = await seedHub(await getAdminToken());
         await page.setViewportSize(PHONE);
-        await page.goto(`/guilds/${hub.guildId}#members`);
+        await page.goto(`/hubs/${hub.guildId}#members`);
         const last = page.getByTestId('guild-members').getByTestId('guild-member-row').filter({ visible: true }).last();
         await expect(last).toBeVisible({ timeout: 15_000 });
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

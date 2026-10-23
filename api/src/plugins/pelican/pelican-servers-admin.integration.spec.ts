@@ -1,8 +1,8 @@
 /**
  * ROK-1094 — Pelican admin servers table against a real database:
  * `GET /admin/plugins/pelican/servers`, `PATCH /admin/plugins/pelican/servers/:id`.
- * Covers the leak-free row shape, the mapping edits (game, Show on calendar;
- * no timezone since ROK-1795 — Pelican crons are always UTC), the mapping
+ * Covers the leak-free row shape, the mapping edits (game, Show on calendar,
+ * the play-day timezone — ROK-1882; Pelican crons stay UTC, ROK-1795), the mapping
  * surviving a re-sync (incl. while missing),
  * the member-facing visibility filter and the guards.
  *
@@ -247,13 +247,32 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
   });
 });
 
-describe('PATCH /admin/plugins/pelican/servers/:id — no timezone (ROK-1795)', () => {
-  it('rejects the removed timezone field with 400 and leaves the row unchanged', async () => {
+describe('PATCH /admin/plugins/pelican/servers/:id — timezone (ROK-1882)', () => {
+  it('sets an IANA zone, returns it on the row and in the list, then clears it with null', async () => {
     const server = await insertServer(1);
-    const res = await patchServer(server.id, { timezone: 'America/Chicago' });
+    const set = await patchServer(server.id, { timezone: 'Europe/Berlin' });
+    expect(set.status).toBe(200);
+    expect(PelicanServerRowSchema.parse(set.body).timezone).toBe(
+      'Europe/Berlin',
+    );
+    expect((await reload(server.id)).timezone).toBe('Europe/Berlin');
+    const list = PelicanServerListResponseSchema.parse(
+      (await getServers()).body,
+    );
+    expect(list.data.map((r) => r.timezone)).toEqual(['Europe/Berlin']);
+
+    const cleared = await patchServer(server.id, { timezone: null });
+    expect(cleared.status).toBe(200);
+    expect(PelicanServerRowSchema.parse(cleared.body).timezone).toBeNull();
+    expect((await reload(server.id)).timezone).toBeNull();
+  });
+
+  it('rejects an unknown zone with 400 and leaves the stored zone unchanged', async () => {
+    const server = await insertServer(1, { timezone: 'America/Chicago' });
+    const res = await patchServer(server.id, { timezone: 'Not/AZone' });
     expect(res.status).toBe(400);
     expect(await reload(server.id)).toMatchObject({
-      timezone: null,
+      timezone: 'America/Chicago',
       showOnCalendar: true,
     });
   });

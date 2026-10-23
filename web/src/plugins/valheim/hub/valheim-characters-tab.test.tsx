@@ -34,12 +34,12 @@ function renderTab() {
     return renderWithProviders(
         <Routes>
             <Route
-                path="/guilds/:id"
+                path="/hubs/:id"
                 element={<ValheimCharactersTab serverId={7} />}
             />
             <Route path="/valheim/characters/:id" element={<Landed />} />
         </Routes>,
-        { initialEntries: ['/guilds/4'] },
+        { initialEntries: ['/hubs/4'] },
     );
 }
 
@@ -81,7 +81,7 @@ describe('ValheimCharactersTab', () => {
         await userEvent.click(link);
         expect(
             screen.getByText(
-                'landed /valheim/characters/12 from {"hubPath":"/guilds/4#characters"}',
+                'landed /valheim/characters/12 from {"hubPath":"/hubs/4#characters"}',
             ),
         ).toBeInTheDocument();
     });

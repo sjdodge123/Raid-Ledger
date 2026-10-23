@@ -10,8 +10,8 @@ import type { Page, TestInfo } from '@playwright/test';
 import { expect } from './base';
 import { isDesktop } from './helpers';
 
-/** The guild/server hub page's tab-row `<nav>` label. */
-export const HUB_TABS_NAV = 'Guild page sections';
+/** The hub page's tab-row `<nav>` label — per kind: "Guild", "Server" or "Hub page sections" (ROK-1891). */
+export const HUB_TABS_NAV = /^(Guild|Server|Hub) page sections$/;
 
 /**
  * The tab `id` (its `#hash`, without the `#`) is the active hub tab. Desktop

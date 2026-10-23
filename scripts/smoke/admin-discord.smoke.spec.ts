@@ -13,6 +13,7 @@ import { test, expect } from "./base";
 import { isPhoneLayout } from './helpers';
 import { apiGet, getAdminToken, pollForCondition } from "./api-helpers";
 import { filterBenignErrors } from "./console-filter";
+import { DISCORD_BOT_OPTIONAL } from "./discord-bot";
 
 /**
  * ROK-1247: Pre-warm Discord admin queries before asserting on the panels.
@@ -233,7 +234,9 @@ test.describe("Admin Discord — Connection", () => {
 // Channels panel
 // ---------------------------------------------------------------------------
 
-test.describe("Admin Discord — Channels", () => {
+// Bot-gated page, opened without a bot in CI: these tests assert only the
+// bot-independent chrome and check the bot-only controls conditionally.
+test.describe("Admin Discord — Channels", { annotation: DISCORD_BOT_OPTIONAL }, () => {
   test("renders channel selectors and routing info", async ({ page }) => {
     await pollDiscordBotStatus();
     await page.goto("/admin/settings/discord/channels");
@@ -289,7 +292,9 @@ test.describe("Admin Discord — Channels", () => {
 // Features panel
 // ---------------------------------------------------------------------------
 
-test.describe("Admin Discord — Features", () => {
+// Bot-gated page, opened without a bot in CI: these tests assert only the
+// bot-independent chrome and check the bot-only controls conditionally.
+test.describe("Admin Discord — Features", { annotation: DISCORD_BOT_OPTIONAL }, () => {
   test("renders feature toggles and info sections", async ({ page }) => {
     await pollDiscordBotStatus();
     await page.goto("/admin/settings/discord/features");
@@ -398,7 +403,7 @@ test.describe("Admin Discord — Panel navigation", () => {
 // No console errors across all panels
 // ---------------------------------------------------------------------------
 
-test.describe("Admin Discord — No critical errors", () => {
+test.describe("Admin Discord — No critical errors", { annotation: DISCORD_BOT_OPTIONAL }, () => {
   test("all panels load without critical console errors", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (msg) => {
@@ -446,7 +451,7 @@ test.describe("Admin Discord — No critical errors", () => {
 // is absent rather than false-failing on a bindingless CI env.
 // ---------------------------------------------------------------------------
 
-test.describe("Admin Discord — ROK-1416 binding editor", () => {
+test.describe("Admin Discord — ROK-1416 binding editor", { annotation: DISCORD_BOT_OPTIONAL }, () => {
   test('renders a working create-binding form (wires the dead "add one below" affordance)', async ({
     page,
   }) => {

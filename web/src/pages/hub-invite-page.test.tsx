@@ -34,7 +34,7 @@ function renderPage(token = 'tok_abc'): void {
             <LocationProbe />
             <Routes>
                 <Route path="/h/:token" element={<HubInvitePage />} />
-                <Route path="/guilds/:id" element={<p>Hub page</p>} />
+                <Route path="/hubs/:id" element={<p>Hub page</p>} />
             </Routes>
         </>,
         { initialEntries: [`/h/${token}`] },
@@ -114,7 +114,7 @@ describe('HubInvitePage', () => {
         );
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Join Night Owls' }));
-        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/guilds/7'));
+        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/hubs/7'));
         expect(joins).toEqual(['tok_abc']);
     });
 
@@ -134,6 +134,6 @@ describe('HubInvitePage', () => {
         server.use(hubInvitePreviewHandler(createMockHubInvitePreview({ alreadyMember: true })));
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Open Night Owls' }));
-        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/guilds/7'));
+        await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/hubs/7'));
     });
 });

@@ -4,7 +4,7 @@ import { errorBodyOf, httpStatusOf } from '../../lib/api/api-error';
 import type { DeadReason } from './hub-invite-cards';
 
 export const hubInvitePath = (token: string): string => `/h/${encodeURIComponent(token)}`;
-export const hubPath = (hubId: number): string => `/guilds/${hubId}`;
+export const hubPath = (hubId: number): string => `/hubs/${hubId}`;
 
 /** 404 → unknown/unavailable link; 410 → the `state` in the body (L2: join's expired/revoked/exhausted). */
 export function deadReasonFromError(err: unknown): DeadReason | null {
