@@ -51,6 +51,8 @@ export interface CraftingWindow {
     selected: RankedRow | null;
     /** Picking a row never writes into the search box. */
     select: (row: CraftRow) => void;
+    /** Clear the selection, so the detail column shows its idle view again. */
+    deselect: () => void;
     /** The UPGRADE count on the mode switch. */
     upgradeCount: number;
     emptyReason: CraftEmptyReason;
@@ -106,11 +108,12 @@ export function useCraftingWindow(input: CraftingWindowInput): CraftingWindow {
     const setMode = useCallback((m: CraftMode) => (setModeState(m), setSelectedKey(null)), [setSelectedKey]);
     const selectStation = useCallback((key: string) => (setChosen(key), setSearch('')), []);
     const select = useCallback((row: CraftRow) => setSelectedKey(rowKey(row)), [setSelectedKey]);
+    const deselect = useCallback(() => setSelectedKey(null), [setSelectedKey]);
     const clearAll = useCallback(() => (setSearch(''), onFilters(DEFAULT_PLANNER_FILTERS)), [onFilters]);
     const emptyReason: CraftEmptyReason = rows.length > 0 ? null : !searching && mode === 'upgrade' ? 'no-upgrades' : 'no-match';
     return {
         mode, setMode, groups, stationKey: searching ? null : (current?.key ?? null), selectedGroup: searching ? null : current,
-        selectStation, search, setSearch, searching, rows, selectedKey: sel.selectedKey, selected: sel.selected, select,
+        selectStation, search, setSearch, searching, rows, selectedKey: sel.selectedKey, selected: sel.selected, select, deselect,
         upgradeCount, emptyReason, clearAll,
     };
 }

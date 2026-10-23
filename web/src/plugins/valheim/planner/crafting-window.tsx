@@ -6,9 +6,11 @@
  * the right. Below `DESKTOP_MQ` the list goes full width and a row opens
  * the detail in a `BottomSheet`. The caller owns `filters` (they also set
  * the stock scope); stock totals are null while loading, on error or with no
- * scan, so rows stay neutral.
+ * scan, so rows stay neutral. On desktop, Escape on the list or the pane (or
+ * the pane's "Back to your list") clears the selection and puts focus back on
+ * the list; on phones closing the sheet hands back the list instead.
  */
-import { useCallback, useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type JSX, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { FilterEntry, FilterEntryTrigger } from '../../../components/ui/filter-entry';
@@ -101,13 +103,20 @@ const listLabel = (vm: WindowModel): string => {
     return `${vm.selectedGroup?.label ?? 'Station'} ${vm.mode === 'craft' ? 'recipes' : 'upgrades'}`;
 };
 
-function ListColumn({ vm, props, stock, onSelect }: { vm: WindowModel; props: CraftingWindowProps; stock: StockQuery; onSelect: (row: CraftRow) => void }): JSX.Element {
+type KeyHandler = (e: KeyboardEvent<HTMLElement>) => void;
+
+interface ListColumnProps { vm: WindowModel; props: CraftingWindowProps; stock: StockQuery; onSelect: (row: CraftRow) => void; onEscape: KeyHandler; listRef: RefObject<HTMLDivElement | null> }
+
+function ListColumn({ vm, props, stock, onSelect, onEscape, listRef }: ListColumnProps): JSX.Element {
     return (
         <div className="space-y-2">
             <SearchRow vm={vm} props={props} />
             {vm.searching && <p role="status" className="text-xs text-muted">Matches from every station</p>}
-            <RecipeList label={listLabel(vm)} rows={vm.rows} selectedKey={vm.selectedKey} onSelect={onSelect} names={props.names}
-                showStation={vm.searching} busy={stock.isFetching} empty={<ListEmpty vm={vm} />} />
+            {/* Escape bubbling up from a row clears the selection (the rows are the focusable controls). */}
+            <div ref={listRef} onKeyDown={onEscape}>
+                <RecipeList label={listLabel(vm)} rows={vm.rows} selectedKey={vm.selectedKey} onSelect={onSelect} names={props.names}
+                    showStation={vm.searching} busy={stock.isFetching} empty={<ListEmpty vm={vm} />} />
+            </div>
         </div>
     );
 }
@@ -136,10 +145,31 @@ function useWindow(props: CraftingWindowProps, desktop: boolean) {
     return { stock, vm, sheetOpen, setSheetOpen, onSelect, detail };
 }
 
+/**
+ * Desktop deselect: `onBack` clears the selection and focuses the list's tab
+ * stop (the row last focused, else the first); `onEscape` does the same for
+ * an Escape nobody else handled while a row is selected.
+ */
+function useDeselect(vm: WindowModel, desktop: boolean): { listRef: RefObject<HTMLDivElement | null>; onBack: () => void; onEscape: KeyHandler } {
+    const listRef = useRef<HTMLDivElement>(null);
+    const { deselect, selected } = vm;
+    const onBack = useCallback(() => {
+        deselect();
+        listRef.current?.querySelector<HTMLElement>('[data-ri][tabindex="0"]')?.focus();
+    }, [deselect]);
+    const onEscape = useCallback((e: KeyboardEvent<HTMLElement>) => {
+        if (e.key !== 'Escape' || e.defaultPrevented || !desktop || selected === null) return;
+        e.preventDefault();
+        onBack();
+    }, [desktop, selected, onBack]);
+    return { listRef, onBack, onEscape };
+}
+
 /** The crafting window; see the module doc. */
 export function CraftingWindow(props: CraftingWindowProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const { stock, vm, sheetOpen, setSheetOpen, onSelect, detail } = useWindow(props, desktop);
+    const { listRef, onBack, onEscape } = useDeselect(vm, desktop);
     const selected = vm.selected;
     const key = selected === null ? '' : `${vm.mode}:${rowKey(selected)}`;
     return (
@@ -147,8 +177,10 @@ export function CraftingWindow(props: CraftingWindowProps): JSX.Element {
             <WindowHeader vm={vm} names={props.names} />
             <StockStatus stock={stock} />
             <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(20rem,24rem)_1fr]">
-                <ListColumn vm={vm} props={props} stock={stock} onSelect={onSelect} />
-                <div className="min-w-0">{desktop && selected !== null ? <CraftDetail key={key} {...detail} row={selected} /> : props.idle}</div>
+                <ListColumn vm={vm} props={props} stock={stock} onSelect={onSelect} onEscape={onEscape} listRef={listRef} />
+                <div className="min-w-0" onKeyDown={onEscape}>
+                    {desktop && selected !== null ? <CraftDetail key={key} {...detail} row={selected} onBack={onBack} /> : props.idle}
+                </div>
             </div>
             {!desktop && selected !== null && (
                 <CraftDetailSheet key={key} {...detail} row={selected} isOpen={sheetOpen} onClose={() => setSheetOpen(false)} />
