@@ -24,8 +24,8 @@ export interface PinFilterBarState {
 
 export interface PinFilterView {
     pins: readonly ValheimMapPin[];
-    deathsOnly: boolean;
-    onDeathsOnly: (on: boolean) => void;
+    /** Spread into `MapLayerState` — the "Death pins only" switch. */
+    controls: { deathsOnly: boolean; onDeathsOnly: (on: boolean) => void };
     bar: PinFilterBarState | null;
 }
 
@@ -56,5 +56,5 @@ export function usePinFilter({ characterId, serverId, meta }: PinFilterArgs): Pi
     const bar: PinFilterBarState | null = filter.deathsOnly
         ? { scope: filter.scope, count: pins.length, loading: showAll && server.isPending, onClear: () => write(false) }
         : null;
-    return { pins, deathsOnly: filter.deathsOnly, onDeathsOnly: write, bar };
+    return { pins, controls: { deathsOnly: filter.deathsOnly, onDeathsOnly: write }, bar };
 }
