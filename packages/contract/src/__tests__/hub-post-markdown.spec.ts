@@ -8,6 +8,7 @@ import {
   findHubPostMarkdownViolation,
   isSafeMarkdownHref,
   markdownToPlainText,
+  parseHubPostHeading,
 } from '../hub-post-markdown.js';
 
 describe('findHubPostMarkdownViolation', () => {
@@ -90,7 +91,46 @@ describe('markdownToPlainText', () => {
     ['\\*literal\\* stars', '*literal* stars'],
     ['go to <https://x.y/a>', 'go to https://x.y/a'],
     ['snake_case_name stays', 'snake_case_name stays'],
+    ['# Raid **night**\n## Time\n### Loot', 'Raid night\nTime\nLoot'],
+    ['#### four\n#nospace', '#### four\n#nospace'],
+    ['- # in a list', '• # in a list'],
   ])('%j → %j', (body, plain) => {
     expect(markdownToPlainText(body)).toBe(plain);
+  });
+});
+
+describe('parseHubPostHeading (ROK-1898)', () => {
+  it.each([
+    ['# Raid', 1, 2, 'Raid'],
+    ['## Raid **night**', 2, 3, 'Raid **night**'],
+    ['### Loot  ', 3, 4, 'Loot  '],
+    ['# #tag', 1, 2, '#tag'],
+  ] as const)('%j → level %i', (line, level, markerLength, text) => {
+    expect(parseHubPostHeading(line)).toEqual({ level, markerLength, text });
+  });
+
+  it.each([
+    ['#### four is plain text', '#### four'],
+    ['no space after the marker', '#nospace'],
+    ['an empty heading', '# '],
+    ['a bare marker', '###'],
+    ['an indented marker', ' # Raid'],
+    ['a tab instead of a space', '#\tRaid'],
+    ['a heading inside a list item', '- # Raid'],
+    ['a heading in a numbered item', '1. ## Raid'],
+    ['an escaped marker', '\\# Raid'],
+  ])('%s → null', (_label, line) => {
+    expect(parseHubPostHeading(line)).toBeNull();
+  });
+
+  it('headings are legal subset text, not violations', () => {
+    expect(findHubPostMarkdownViolation('# A\n## B\n### C\n#### D')).toBeNull();
+  });
+
+  it('a 4000-char run of # is parsed in bounded time', () => {
+    const started = performance.now();
+    expect(parseHubPostHeading('#'.repeat(4000))).toBeNull();
+    expect(markdownToPlainText('# x\n'.repeat(1000))).toBe('x\n'.repeat(1000));
+    expect(performance.now() - started).toBeLessThan(50);
   });
 });
