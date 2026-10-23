@@ -8,3 +8,13 @@
  */
 export { HubSetupChecklist } from './onboarding/setup-checklist';
 export { HubArrangeGate } from './arrange/hub-arrange-gate';
+
+/**
+ * ROK-1918 L6 — the arrange-list pieces the `/dev/design-system` demo reuses.
+ * Importing them from their own files would make Rollup split them into a
+ * shared chunk, which adds a path to this loader's preload list in `hub-page`
+ * (measured: 12.8 → 12.9 KB gz). Through here the demo just depends on this chunk.
+ */
+export { ArrangeRow } from './arrange/arrange-row';
+export { moveAnnouncement, moveRow, moveTo, toggleRow } from './arrange/arrange-draft';
+export { DRAG_MQ, useRowDrag } from './arrange/use-row-drag';

@@ -7,7 +7,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import type { HubLayoutEntry } from '../layout/resolve-hub-layout';
 import { renderWithProviders } from '../../../test/render-helpers';
-import HubArrangeMode, { DRAG_MQ } from './hub-arrange-mode';
+import HubArrangeMode from './hub-arrange-mode';
+import { DRAG_MQ } from './use-row-drag';
 
 function entry(id: string, title: string): HubLayoutEntry {
     return { id, title, defaultOrder: 10, span: 1, audience: 'everyone', defaultOn: true };

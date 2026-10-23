@@ -9,6 +9,10 @@
  * a drag without it.
  */
 import { useCallback, useState, type DragEvent } from 'react';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
+
+/** Native DnD does not fire on touch, and tablets get the phone layout (spec §2.4). */
+export const DRAG_MQ = `${DESKTOP_MQ} and (pointer: fine)`;
 
 export interface DragHandleProps {
     draggable: true;

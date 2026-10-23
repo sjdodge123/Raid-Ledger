@@ -13,17 +13,14 @@ import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useMediaQuery } from '../../../hooks/use-media-query';
-import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import type { ArrangedEntry, HubLayoutEntry } from '../layout/resolve-hub-layout';
 import { AddWidgetPicker } from './add-widget-picker';
 import { ArrangeFooter } from './arrange-footer';
 import { ArrangeRow } from './arrange-row';
 import { useArrangeState } from './use-arrange-state';
-import { useRowDrag } from './use-row-drag';
+import { DRAG_MQ, useRowDrag } from './use-row-drag';
 import { widgetOwner } from './widget-owner';
 
-/** Native DnD does not fire on touch, and tablets get the phone layout (spec §2.4). */
-export const DRAG_MQ = `${DESKTOP_MQ} and (pointer: fine)`;
 
 export interface HubArrangeModeProps {
     guildId: number;

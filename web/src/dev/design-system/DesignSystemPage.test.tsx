@@ -712,4 +712,14 @@ describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
         expect(await within(demo).findByRole('alert')).toHaveTextContent("Couldn't load this widget.");
         expect(document.getElementById('hub-widget-ds-demo-classes')).not.toBeNull();
     });
+
+    it('renders the arrange list (§4.28) through the real ArrangeRow: arrows reorder and announce', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-arrange-list');
+        fireEvent.click(await within(demo).findByRole('button', { name: 'Move Latest post down' }));
+        expect(within(demo).getAllByRole('listitem')[1]).toHaveAttribute('data-testid', 'arrange-row-gm-post');
+        expect(within(demo).getByTestId('ds-arrange-live')).toHaveTextContent('Latest post moved to position 2 of 4.');
+        expect(within(demo).getByTestId('arrange-row-discord')).toHaveAttribute('data-hidden', 'true');
+    });
 });
