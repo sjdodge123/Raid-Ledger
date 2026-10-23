@@ -9,6 +9,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useValheimClaimStatus } from './use-valheim-claim-status';
 import {
     claimBannerVariant,
+    isClaimBannerViewer,
     readClaimBannerDismissed,
     writeClaimBannerDismissed,
     type ClaimBannerVariant,
@@ -41,10 +42,10 @@ export function useClaimBannerVariant(serverId: number): ClaimBannerVariant | nu
     });
 }
 
-/** The Overview card's `useVisible` probe: a banner to show and not dismissed here. */
+/** The Overview card's `useVisible` probe: a hub member with a banner to show, not dismissed here. */
 export function useClaimBannerWidgetVisible(ctx: HubWidgetCtx): boolean {
     const serverId = ctx.page.server?.pelicanServerId ?? 0;
     const variant = useClaimBannerVariant(serverId);
     const [dismissed] = useClaimBannerDismissed(serverId);
-    return serverId > 0 && variant !== null && !dismissed;
+    return serverId > 0 && isClaimBannerViewer(ctx.page.viewer) && variant !== null && !dismissed;
 }

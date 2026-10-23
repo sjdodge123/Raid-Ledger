@@ -6,6 +6,7 @@
 import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
 import { ValheimCharactersTab } from './valheim-characters-tab';
+import { isClaimBannerViewer } from './valheim-claim-banner.helpers';
 
 export default function ValheimCharactersHubTab({
     page,
@@ -15,7 +16,7 @@ export default function ValheimCharactersHubTab({
     return (
         <ValheimCharactersTab
             serverId={serverId}
-            showClaimBanner={page.viewer.role !== 'visitor'}
+            showClaimBanner={isClaimBannerViewer(page.viewer)}
         />
     );
 }

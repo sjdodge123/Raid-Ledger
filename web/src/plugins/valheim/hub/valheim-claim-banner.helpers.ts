@@ -2,6 +2,8 @@
  * ROK-1933 Part 1 — the claim banner's copy, visibility rule and the Overview
  * dismiss memory. Pure helpers so the rule is unit-tested apart from the UI.
  */
+import type { GuildViewerAccess } from '@raid-ledger/contract';
+import { hubBellVisible } from '../../../components/hub/hub-notify-bell.helpers';
 import type { ValheimClaimStatusResponse } from '@raid-ledger/contract';
 
 /**
@@ -78,4 +80,14 @@ export function writeClaimBannerDismissed(serverId: number): void {
     } catch {
         // Private mode / quota: the dismiss lasts for this render only.
     }
+}
+
+/**
+ * Spec Part 1 "Who sees it": hub members only. Staff and editor rights alone do
+ * not count — the API ladders an admin as `leader` on every hub, so the member
+ * signal is the page's `notificationsMuted`, which it sends only to real members
+ * (the notify bell's rule, `hubBellVisible`).
+ */
+export function isClaimBannerViewer(viewer: GuildViewerAccess): boolean {
+    return hubBellVisible(viewer);
 }
