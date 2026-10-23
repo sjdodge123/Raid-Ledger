@@ -78,4 +78,25 @@ describe('ensureSeedUser', () => {
     const patch: unknown = db.set.mock.calls[0]?.[0];
     expect(patch).not.toHaveProperty('discordId');
   });
+
+  it('returns the concurrent winner when its own insert loses the race', async () => {
+    // Two parallel first-run seeds both miss the user; the loser's insert hits
+    // users_discord_id_unique and must re-read the winner, not 500.
+    db.limit
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 42, discordId: seedDiscordId('community-leader') },
+      ]);
+    db.returning.mockResolvedValueOnce([]);
+    expect(await ensureSeedUser(typed(), 'community-leader')).toBe(42);
+    expect(db.onConflictDoNothing).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails loudly when the snowflake belongs to a non-seed user', async () => {
+    db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    db.returning.mockResolvedValueOnce([]);
+    await expect(ensureSeedUser(typed(), 'community-solo')).rejects.toThrow(
+      'community-solo: its snowflake is taken by another user',
+    );
+  });
 });

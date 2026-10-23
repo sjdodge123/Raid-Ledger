@@ -78,6 +78,8 @@ export * from './schema/hub-posts';
 export * from './schema/guild-recommended-addons';
 export * from './schema/hub-server-members';
 export * from './schema/hub-community-members';
+export * from './schema/hub-invites';
+export * from './schema/hub-join-prompts';
 export * from './schema/hub-onboarding-dismissals';
 export * from './schema/calendar-connections';
 export * from './schema/calendar-busy-blocks';

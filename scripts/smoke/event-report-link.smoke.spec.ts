@@ -11,6 +11,10 @@
  *     Warcraft Logs link saves and renders, Edit swaps it for a
  *     foreverlogs.gg link, and Remove clears it back to the empty state.
  *
+ * Both events are seeded on a WoW-family game: the card only offers Add /
+ * Edit / Remove for games whose plugin declares report links (the WoW
+ * plugin, auto-installed at boot) — a Valheim event shows no Logs card.
+ *
  * Every write is confirmed on `GET /events/:id` before the next UI assertion
  * (TESTING.md → "When to poll the API instead of the UI"). Selectors are
  * viewport-agnostic, so both Playwright projects run every test.
@@ -40,11 +44,20 @@ let linkedEventId: number | null = null;
 /** Event seeded with NO link — the organiser edit flow (S2) drives it. */
 let blankEventId: number | null = null;
 
-async function createEvent(title: string): Promise<number> {
+/** A configured WoW-family game — the only games the Logs card offers Add / Edit / Remove for. */
+async function findWowGameId(): Promise<number> {
+    const registry = (await apiGet(token, '/games/configured')) as { data?: Array<{ id: number; slug: string }> } | null;
+    const wow = registry?.data?.find((g) => g.slug === 'world-of-warcraft' || g.slug.startsWith('world-of-warcraft-'));
+    if (!wow) throw new Error('no configured WoW-family game to seed the report-link events on');
+    return wow.id;
+}
+
+async function createEvent(title: string, gameId: number): Promise<number> {
     const start = new Date(Date.now() + 2 * 86_400_000);
     const end = new Date(start.getTime() + 2 * 3_600_000);
     const event = (await apiPost(token, '/events', {
         title,
+        gameId,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
         maxAttendees: 10,
@@ -86,8 +99,9 @@ async function expectSafeExternalLink(link: Locator, href: string, site: string)
 test.beforeAll(async ({}, testInfo) => {
     token = await getAdminToken();
     const tag = `${testInfo.project.name}-${Date.now()}`;
-    linkedEventId = await createEvent(`smoke-report-link-linked-${tag}`); // claimed before any assertion
-    blankEventId = await createEvent(`smoke-report-link-blank-${tag}`);
+    const gameId = await findWowGameId();
+    linkedEventId = await createEvent(`smoke-report-link-linked-${tag}`, gameId); // claimed before any assertion
+    blankEventId = await createEvent(`smoke-report-link-blank-${tag}`, gameId);
     const patched = (await apiPatch(token, `/events/${linkedEventId}/report-link`, { reportUrl: WCL_URL })) as {
         reportUrl?: string | null;
     };

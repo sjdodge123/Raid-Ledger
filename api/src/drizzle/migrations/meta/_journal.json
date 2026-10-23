@@ -1723,6 +1723,20 @@
       "when": 1792533918301,
       "tag": "0246_hub_posts_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1792644701916,
+      "tag": "0247_hub_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1792644776709,
+      "tag": "0248_hub_auto_membership_join_prompts",
+      "breakpoints": true
     }
   ]
 }
