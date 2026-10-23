@@ -35,6 +35,10 @@ export interface RovingList {
     onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
     /** Spread onto item `i`'s focusable element. */
     itemProps: (i: number) => RovingItemProps;
+    /** The index holding the tab stop (for memoised rows that build their own props). */
+    stop: number;
+    /** Stable: record that item `i` took focus. */
+    focusIndex: (i: number) => void;
 }
 
 /**
@@ -59,5 +63,5 @@ export function useRovingList(count: number, selected: number): RovingList {
         (i: number): RovingItemProps => ({ tabIndex: i === stop ? 0 : -1, 'data-ri': i, onFocus: () => setFocused(i) }),
         [stop],
     );
-    return { onKeyDown, itemProps };
+    return { onKeyDown, itemProps, stop, focusIndex: setFocused };
 }
