@@ -10,26 +10,27 @@ import {
     ValheimDeathPinsResponseSchema,
 } from "../valheim-deaths.schema.js";
 
-const STEAM = "76561198000000001";
 const player = {
-    steamId: STEAM,
+    key: "c7",
     name: "Ragnar",
     deaths: 3,
     lastDeathAt: "2026-10-20T18:00:00.000Z",
     characterId: 7,
 };
-const pin = { x: 10.5, z: -20, steamId: STEAM, characterName: "Ragnar", type: "Death" };
+const pin = { x: 10.5, z: -20, characterId: 7, characterName: "Ragnar", type: "Death" };
 
 describe("ValheimDeathPlayerSchema", () => {
     it("parses an attributed player and a name-only one", () => {
         expect(ValheimDeathPlayerSchema.parse(player)).toEqual(player);
-        const nameOnly = { ...player, steamId: null, characterId: null };
+        const nameOnly = { ...player, key: "nRagnar", characterId: null };
         expect(ValheimDeathPlayerSchema.parse(nameOnly)).toEqual(nameOnly);
     });
-    it("rejects zero deaths, an empty name, a bad SteamID and extra keys", () => {
+    it("rejects zero deaths, an empty name, a bad key, a SteamID and extra keys", () => {
         expect(ValheimDeathPlayerSchema.safeParse({ ...player, deaths: 0 }).success).toBe(false);
         expect(ValheimDeathPlayerSchema.safeParse({ ...player, name: "" }).success).toBe(false);
-        expect(ValheimDeathPlayerSchema.safeParse({ ...player, steamId: "123" }).success).toBe(false);
+        expect(ValheimDeathPlayerSchema.safeParse({ ...player, key: "" }).success).toBe(false);
+        expect(ValheimDeathPlayerSchema.safeParse({ ...player, key: "76561198000000001" }).success).toBe(false);
+        expect(ValheimDeathPlayerSchema.safeParse({ ...player, steamId: "76561198000000001" }).success).toBe(false);
         expect(ValheimDeathPlayerSchema.safeParse({ ...player, userId: 1 }).success).toBe(false);
     });
 });
@@ -55,8 +56,9 @@ describe("ValheimDeathPinSchema / ValheimDeathPinsResponseSchema", () => {
         const r = { worldUid: "1234567890123", pins: [pin] };
         expect(ValheimDeathPinsResponseSchema.parse(r)).toEqual(r);
     });
-    it("rejects a pin with no SteamID or an unknown key", () => {
-        expect(ValheimDeathPinSchema.safeParse({ ...pin, steamId: null }).success).toBe(false);
+    it("parses an unlinked pin; rejects a SteamID or an unknown key", () => {
+        expect(ValheimDeathPinSchema.parse({ ...pin, characterId: null })).toEqual({ ...pin, characterId: null });
+        expect(ValheimDeathPinSchema.safeParse({ ...pin, steamId: "76561198000000001" }).success).toBe(false);
         expect(ValheimDeathPinSchema.safeParse({ ...pin, at: "x" }).success).toBe(false);
     });
 });
