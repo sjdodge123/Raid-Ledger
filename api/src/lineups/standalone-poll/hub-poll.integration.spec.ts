@@ -466,3 +466,66 @@ describe('hub polls — lock-in membership + explicit guildId', () => {
     expect(guildId).toBe(other.id);
   });
 });
+
+/** A future slot on the match with a YES vote from `voterId`; returns its id. */
+async function addFutureYesSlot(matchId: number, voterId: number) {
+  const [slot] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date('2099-10-10T21:00:00.000Z'),
+        suggestedBy: 'user',
+      })
+      .returning(),
+    'slot',
+  );
+  await testApp.db
+    .insert(schema.communityLineupScheduleVotes)
+    .values({ slotId: slot.id, userId: voterId, stance: 'yes' });
+  return slot.id;
+}
+
+/** Expires the poll, locks it in via create-from-slot, returns the event's guild_id. */
+async function expiredLockInGuildId(
+  who: Who,
+  poll: { matchId: number; lineupId: number },
+): Promise<number | null> {
+  const slotId = await addFutureYesSlot(poll.matchId, who.id);
+  await testApp.db
+    .update(schema.communityLineups)
+    .set({ status: 'archived' })
+    .where(eq(schema.communityLineups.id, poll.lineupId));
+  const res = await testApp.request
+    .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/create-event`)
+    .set('Authorization', `Bearer ${who.token}`)
+    .send({ slotId });
+  expect(res.status).toBe(201);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ guildId: schema.events.guildId })
+      .from(schema.events)
+      .where(eq(schema.events.id, (res.body as { eventId: number }).eventId)),
+    'event',
+  );
+  return row.guildId;
+}
+
+describe('hub polls — expired-poll lock-in (create-from-slot)', () => {
+  it('the event created from an expired hub poll inherits the hub', async () => {
+    const member = await mkUser();
+    const hub = await mkHub(await mkUser(), [member]);
+    const poll = await createPoll(member.token, { hubId: hub.id });
+    expect(poll.status).toBe(201);
+    expect(await expiredLockInGuildId(member, pollIds(poll.body))).toBe(hub.id);
+  });
+
+  it('a banned creator does not put the expired-poll event on the hub', async () => {
+    const member = await mkUser();
+    const hub = await mkHub(await mkUser(), [member]);
+    const poll = await createPoll(member.token, { hubId: hub.id });
+    expect(poll.status).toBe(201);
+    await dropMember(hub.id, member, 'bannedAt');
+    expect(await expiredLockInGuildId(member, pollIds(poll.body))).toBeNull();
+  });
+});
