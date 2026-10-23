@@ -5,12 +5,13 @@
  * (the REC wording); the operator has not ruled Q2 yet, so every string the
  * player reads lives in `CLAIM_SUGGEST_COPY` and nowhere else.
  */
+import {
+  VALHEIM_CLAIM_BUTTON_IDS,
+  VALHEIM_CLAIM_BUTTON_LABELS,
+} from '../../../../notifications/notification-embed.valheim-claim.constants';
 
-/** Button custom ids; the L3 listener routes on these prefixes. */
-export const VALHEIM_CLAIM_BUTTON_IDS = {
-  YES: 'vclaim:yes',
-  NO: 'vclaim:no',
-} as const;
+/** Button custom ids (owned by notifications); the L3 listener routes on these. */
+export { VALHEIM_CLAIM_BUTTON_IDS };
 
 /** The DM's player-facing strings (placeholder until Q2 is ruled). */
 export const CLAIM_SUGGEST_COPY = {
@@ -23,9 +24,7 @@ export const CLAIM_SUGGEST_COPY = {
   reasonBoth: ", while you're in voice, and the name looks like yours.",
   ask: "If it's your character, claim it to see its gear, skills and chests on Raid Ledger.",
   tip: 'Tip: link Steam once and every character you play is claimed automatically.',
-  yes: "Yes, it's mine",
-  no: 'Not me',
-  openHub: 'Open the hub',
+  ...VALHEIM_CLAIM_BUTTON_LABELS,
 } as const;
 
 const DAY_SECONDS = 24 * 60 * 60;

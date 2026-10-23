@@ -5,9 +5,9 @@
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
-  CLAIM_SUGGEST_COPY,
   VALHEIM_CLAIM_BUTTON_IDS,
-} from '../plugins/valheim/armory/identity/valheim-claim-suggest.copy';
+  VALHEIM_CLAIM_BUTTON_LABELS as CLAIM_SUGGEST_COPY,
+} from './notification-embed.valheim-claim.constants';
 
 /** The profile id from the payload, or null when absent or malformed. */
 function profileIdOf(
