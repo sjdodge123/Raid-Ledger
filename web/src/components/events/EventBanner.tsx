@@ -8,6 +8,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { SeriesBadge } from './SeriesBadge';
 import { HUB_PAGE_PREFIX } from '../routing/hub-paths';
+import { hubCopy } from '../hub/hub-copy';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -89,11 +90,11 @@ function GameBadge({ game }: { game: NonNullable<EventBannerProps['game']> }) {
     );
 }
 
-/** ROK-1893 §10.4: the hub link beside `GameBadge` — same pill + link class; "<name> hub" per the approved wireframe. */
+/** ROK-1893 §10.4: the hub link beside `GameBadge` — same pill + link class; "<name> <kind noun>" (ROK-1891: "Fable guild", "Ashlands server", "BG3 Friends hub"). */
 function HubBadge({ hub }: { hub: EventHubRef }) {
     return (
         <Link to={`${HUB_PAGE_PREFIX}${hub.id}`} className="event-banner__game event-banner__game--link" data-testid="event-banner-hub">
-            <span role="img" aria-hidden="true">⌂</span> {hub.name} hub
+            <span role="img" aria-hidden="true">⌂</span> {hub.name} {hubCopy(hub.kind).noun}
         </Link>
     );
 }

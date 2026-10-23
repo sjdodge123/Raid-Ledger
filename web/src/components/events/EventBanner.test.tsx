@@ -162,6 +162,18 @@ describe('hub link (ROK-1893 V5)', () => {
             expect(link.className).toContain('event-banner__game--link');
         });
 
+        it('names a WoW guild hub with its kind noun, not "hub" (ROK-1891)', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 3, name: 'Fable', kind: 'wow_guild' }} />);
+            const text = screen.getByTestId('event-banner-hub').textContent ?? '';
+            expect(text).toContain('Fable guild');
+            expect(text).not.toContain('Fable hub');
+        });
+
+        it('names a game-server hub "<name> server"', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 4, name: 'Ashlands', kind: 'game_server' }} />);
+            expect(screen.getByTestId('event-banner-hub').textContent).toContain('Ashlands server');
+        });
+
         it('renders no hub link when hub is null', () => {
             renderWithRouter(<EventBanner {...mockProps} hub={null} />);
             expect(screen.queryByTestId('event-banner-hub')).not.toBeInTheDocument();
