@@ -220,7 +220,7 @@ describe('ValheimPlannerTab', () => {
 
     it('an item and a piece sharing a prefab keep their own names', async () => {
         const base = recipeCatalogFixture();
-        const shared = { prefab: 'Shared', category: 'Misc', icon: null, maxQuality: 1, sources: { recipes: 1, processes: 0 } };
+        const shared = { prefab: 'Shared', category: 'Misc', icon: null, maxQuality: 1, sources: { recipes: 1, processes: 0 }, craft: null, upgrades: [] };
         server.use(valheimRecipeCatalogHandler({
             ...base,
             entries: [...base.entries, { ...shared, kind: 'item', name: 'Shared item' }, { ...shared, kind: 'piece', name: 'Shared piece' }],
