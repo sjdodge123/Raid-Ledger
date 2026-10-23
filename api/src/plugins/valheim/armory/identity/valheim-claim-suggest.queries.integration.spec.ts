@@ -168,6 +168,7 @@ async function insertUser(
     steamId?: string;
     displayName?: string;
     deactivated?: boolean;
+    banned?: boolean;
   } = {},
 ): Promise<number> {
   const [row] = nonEmpty(
@@ -180,6 +181,7 @@ async function insertUser(
         steamId: opts.steamId ?? null,
         displayName: opts.displayName ?? null,
         deactivatedAt: opts.deactivated === true ? new Date() : null,
+        bannedAt: opts.banned === true ? new Date() : null,
       })
       .returning({ id: schema.users.id }),
     `user ${username}`,
@@ -343,6 +345,7 @@ describe('findClaimCandidates — exclusions', () => {
     const w = await world();
     const noDiscord = await insertUser('nodiscord', { discordId: null });
     const gone = await insertUser('gone', { deactivated: true });
+    const banned = await insertUser('banned', { banned: true });
     const otherSteam = await insertUser('othersteam', { steamId: OTHER_STEAM });
     const owner = await insertUser('owner');
     await insertProfile(w.serverId, {
@@ -350,7 +353,7 @@ describe('findClaimCandidates — exclusions', () => {
       steamId: OTHER_STEAM,
       claimedBy: owner,
     });
-    for (const id of [noDiscord, gone, otherSteam, owner])
+    for (const id of [noDiscord, gone, banned, otherSteam, owner])
       await joinHub(w.guildId, id);
     await insertUser('stranger');
     await joinVoice(

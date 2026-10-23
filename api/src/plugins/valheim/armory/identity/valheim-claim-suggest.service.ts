@@ -26,6 +26,7 @@ import { getClientUrl } from '../../../../settings/settings-bot.helpers';
 import {
   CLAIM_SUGGEST_MIN_AGE_MS,
   findClaimCandidates,
+  findDiscordOptedOut,
   findUnclaimedSightings,
   type ClaimSighting,
 } from './valheim-claim-suggest.queries';
@@ -116,18 +117,28 @@ export class ValheimClaimSuggestService {
     return sent;
   }
 
-  /** The single top candidate, Not-me users removed BEFORE the pick. */
+  /**
+   * The single top candidate, Not-me and opted-out users removed BEFORE the
+   * pick — so neither shadows the next candidate or churns the keys per tick.
+   */
   private async pickCandidate(
     s: ClaimSighting,
     now: Date,
   ): Promise<ClaimCandidate | null> {
     const all = await findClaimCandidates(this.db, s, now);
+    const optedOut = await findDiscordOptedOut(
+      this.db,
+      all.map((c) => c.userId),
+      CLAIM_SUGGEST_TYPE,
+    );
     const declined = await Promise.all(
       all.map((c) =>
         this.dedup.isMarked(claimSuggestKeys.declined(s.profileId, c.userId)),
       ),
     );
-    const open = all.filter((_, i) => declined[i] !== true);
+    const open = all.filter(
+      (c, i) => declined[i] !== true && !optedOut.has(c.userId),
+    );
     const userId = pickClaimCandidate(s, open);
     return open.find((c) => c.userId === userId) ?? null;
   }

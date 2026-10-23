@@ -10,6 +10,7 @@ import {
   asc,
   eq,
   exists,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -19,6 +20,8 @@ import {
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../../drizzle/schema';
+import type { NotificationType } from '../../../../drizzle/schema/notification-preferences';
+import { discordDisabledTypes } from '../../../../notifications/notification-mapping.helpers';
 import { serverHubMemberPredicate } from '../../../pelican/hub/server-hub-membership.helpers';
 import type { ClaimCandidate } from './valheim-claim-suggest.helpers';
 
@@ -171,6 +174,7 @@ export async function findClaimCandidates(
       and(
         isNotNull(u.discordId),
         isNull(u.deactivatedAt),
+        isNull(u.bannedAt),
         or(hubMember(db, s.guildId, now), sql`${voice} IS NOT NULL`),
         noClaimHere(db, s.pelicanServerId),
         or(isNull(u.steamId), eq(u.steamId, s.steamId)),
@@ -178,6 +182,29 @@ export async function findClaimCandidates(
     )
     .orderBy(asc(u.id));
   return rows.map(toCandidate);
+}
+
+/**
+ * The users among `userIds` whose resolved Discord channel is off for `type`
+ * (no prefs row resolves to the defaults) — the same rule `dispatch` applies,
+ * run before the pick so an opted-out user never shadows the next candidate.
+ */
+export async function findDiscordOptedOut(
+  db: Db,
+  userIds: readonly number[],
+  type: NotificationType,
+): Promise<Set<number>> {
+  if (userIds.length === 0) return new Set();
+  const prefs = schema.userNotificationPreferences;
+  const rows = await db
+    .select({ userId: prefs.userId, channelPrefs: prefs.channelPrefs })
+    .from(prefs)
+    .where(inArray(prefs.userId, [...userIds]));
+  return new Set(
+    rows
+      .filter((r) => discordDisabledTypes(r.channelPrefs).has(type))
+      .map((r) => r.userId),
+  );
 }
 
 /** Collapse a row's names (deduped, nulls dropped) into a matcher candidate. */

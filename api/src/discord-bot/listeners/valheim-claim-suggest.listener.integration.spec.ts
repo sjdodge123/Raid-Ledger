@@ -226,6 +226,47 @@ describe('ValheimClaimSuggestListener Yes / Not me (ROK-1933 L3)', () => {
   });
 });
 
+describe('ValheimClaimSuggestListener — repeat Not me and hidden hub (ROK-1933 review)', () => {
+  it('a second Not me press keeps the next candidate’s 24h character key', async () => {
+    const a = await insertUser();
+    const b = await insertUser();
+    const profileId = await insertProfile();
+    await asked(profileId, a.userId);
+    touched.push(claimSuggestKeys.declined(profileId, a.userId));
+    await listener.handleButtonInteraction(
+      press(`vclaim:no:${profileId}`, a.discordId).interaction,
+    );
+    await asked(profileId, b.userId);
+
+    const again = press(`vclaim:no:${profileId}`, a.discordId);
+    await listener.handleButtonInteraction(again.interaction);
+
+    expect(await dedup.isMarked(claimSuggestKeys.profile(profileId))).toBe(
+      true,
+    );
+  });
+
+  it('Yes on a character whose hub is hidden is refused and claims nothing', async () => {
+    const a = await insertUser();
+    const profileId = await insertProfile();
+    await asked(profileId, a.userId);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.kind, 'game_server'));
+
+    const p = press(`vclaim:yes:${profileId}`, a.discordId);
+    await listener.handleButtonInteraction(p.interaction);
+
+    expect((await ownerOf(profileId)).claimedBy).toBeNull();
+    expect(await claimEvents(profileId, a.userId)).toHaveLength(0);
+    expect(p.editReply).toHaveBeenCalledWith({
+      content: CLAIM_REPLY_COPY.unavailable,
+      components: [],
+    });
+  });
+});
+
 describe('ValheimClaimSuggestListener — already claimed and wrong clicker (ROK-1933 L3)', () => {
   it('Yes on a character someone else claimed answers with the 409 copy and changes nothing', async () => {
     const a = await insertUser();

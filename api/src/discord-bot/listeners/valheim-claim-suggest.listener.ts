@@ -151,13 +151,18 @@ export class ValheimClaimSuggestListener {
     return edit(CLAIM_REPLY_COPY.claimed(s.name, url));
   }
 
-  /** Not me: suppress this pair forever and free the character's 24h key. */
+  /**
+   * Not me: suppress this pair forever and free the character's 24h key —
+   * only on the press that newly declines, so a repeat press cannot free the
+   * slot the NEXT candidate's DM now holds.
+   */
   private async no(profileId: number, userId: number): Promise<ClaimOutcome> {
-    await this.dedup.checkAndMarkSent(
+    const already = await this.dedup.checkAndMarkSent(
       claimSuggestKeys.declined(profileId, userId),
       null,
     );
-    await this.dedup.releaseKey(claimSuggestKeys.profile(profileId));
+    if (!already)
+      await this.dedup.releaseKey(claimSuggestKeys.profile(profileId));
     return edit(CLAIM_REPLY_COPY.declined(await this.nameOf(profileId)));
   }
 

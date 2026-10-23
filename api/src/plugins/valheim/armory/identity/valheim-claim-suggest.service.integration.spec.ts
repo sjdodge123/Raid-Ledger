@@ -412,7 +412,7 @@ describe('ValheimClaimSuggestService.scan — a send that did not go', () => {
 });
 
 describe('ValheimClaimSuggestService.scan — skipped users', () => {
-  it('skips a user who turned the DM off, and frees the keys', async () => {
+  it('never picks a user who turned the DM off, and claims no keys', async () => {
     const w = await world();
     const profileId = await playing(w);
     const userId = await member(w, 'brannok');
@@ -420,11 +420,26 @@ describe('ValheimClaimSuggestService.scan — skipped users', () => {
 
     expect(await scan()).toBe(0);
 
-    expect(dispatchedTo()).toEqual([userId]);
-    await expect(dispatchSpy.mock.results[0]?.value).resolves.toBe(false);
+    expect(dispatchedTo()).toEqual([]);
     expect(addSpy).not.toHaveBeenCalled();
     expect(await held(keysOf(profileId, userId))).toEqual([
       false,
+      false,
+      false,
+    ]);
+  });
+
+  it('an opted-out top match does not shadow the next candidate', async () => {
+    const w = await world();
+    const profileId = await playing(w);
+    const optedOut = await member(w, 'brannok');
+    const next = await member(w, 'brannokk');
+    await optOut(optedOut);
+
+    expect(await scan()).toBe(1);
+
+    expect(dispatchedTo()).toEqual([next]);
+    expect(await held(keysOf(profileId, optedOut).slice(1))).toEqual([
       false,
       false,
     ]);
