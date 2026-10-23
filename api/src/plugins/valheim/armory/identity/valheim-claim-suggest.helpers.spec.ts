@@ -104,7 +104,6 @@ describe('pickClaimCandidate — names', () => {
     ]);
     expect(pick).toBeNull();
   });
-
 });
 
 describe('pickClaimCandidate — Steam and voice', () => {
