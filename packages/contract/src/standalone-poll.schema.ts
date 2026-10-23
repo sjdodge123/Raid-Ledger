@@ -31,9 +31,18 @@ export const CreateSchedulingPollSchema = z.object({
     minVoteThreshold: z.number().int().positive().optional(),
     /** ROK-1750: poll visibility. Absent = `public`. */
     visibility: StandalonePollVisibilitySchema.optional(),
+    /**
+     * ROK-1893 P3: tag the poll to a community hub (caller must be a live
+     * member or staff; same game). A reschedule poll inherits its event's hub
+     * server-side instead, so the two are exclusive.
+     */
+    hubId: z.number().int().positive().optional(),
 }).refine((d) => !(d.visibility === 'private' && d.linkedEventId !== undefined), {
     message: 'A reschedule poll (linkedEventId) cannot be private',
     path: ['visibility'],
+}).refine((d) => !(d.hubId !== undefined && d.linkedEventId !== undefined), {
+    message: "A reschedule poll inherits its event's hub; do not pass hubId",
+    path: ['hubId'],
 });
 
 export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>;
@@ -106,6 +115,8 @@ export const ActiveStandalonePollSchema = z.object({
     slotCount: z.number(),
     /** ROK-1750: poll visibility (drives the banner's Private chip). */
     visibility: StandalonePollVisibilitySchema.optional(),
+    /** ROK-1893 P3: the hub the poll is tagged to (drives the hub chip); null/absent = none or hidden. */
+    hub: z.object({ id: z.number().int(), name: z.string() }).nullable().optional(),
 });
 
 export type ActiveStandalonePollDto = z.infer<typeof ActiveStandalonePollSchema>;

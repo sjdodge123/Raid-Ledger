@@ -7,7 +7,9 @@
  * to a Discord channel — only the members the creator picked get the poll DM.
  * The poll card is the only channel-posting path a standalone poll has at
  * create time (nudge / rally DM match members; the expiry sweep only edits an
- * existing card, and a private poll never gets one).
+ * existing card, and a private poll never gets one). A hub-tagged poll
+ * (ROK-1893 P3) is held to the same quiet fan-out until P2b gives it the
+ * hub's own channel.
  */
 import type { StandalonePollVisibility } from '@raid-ledger/contract';
 import type { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
@@ -22,42 +24,36 @@ const noop = (): void => {};
 export interface CreateFanoutDeps {
   notifications: Pick<
     StandalonePollNotificationService,
-    'notifyInterestedUsers' | 'notifyPickedMembers'
+    'notifyInterestedUsers' | 'notifyPickedMembers' | 'notifyRosterReschedule'
   >;
   pollEmbed: Pick<SchedulingPollEmbedService, 'firePostInitialEmbed'>;
   /** ROK-1431: channel-lifecycle activity nudge (absent in narrow test graphs). */
   nudge?: Pick<GameActivityNudge, 'touch'> | undefined;
 }
 
+type FanoutIds = { lineupId: number; matchId: number; creatorId: number };
+
 /** Fire-and-forget: the create-time DMs + channel card a poll may send. */
 export function fireCreateFanout(
   deps: CreateFanoutDeps,
   game: PollGame,
-  ids: { lineupId: number; matchId: number; creatorId: number },
+  ids: FanoutIds,
   input: CreatePollInput,
   pickedIds: number[],
   visibility: StandalonePollVisibility,
+  hubId: number | null = null,
 ): void {
   GameActivityNudge.safeTouch(deps.nudge, game.id);
-  const fanout = resolveCreateFanout(visibility);
-  if (fanout.interestBroadcast) {
-    void deps.notifications
-      .notifyInterestedUsers(
-        game.id,
-        game.name,
-        ids.lineupId,
-        ids.matchId,
-        ids.creatorId,
-        game.coverUrl,
-        input.linkedEventId,
-        input.broadcastExcludeUserIds,
-      )
-      .catch(noop);
-  }
+  // ROK-1893 P3 ruling 2026-10-23: a hub poll stays on its hub (see resolver).
+  const fanout = resolveCreateFanout(
+    visibility,
+    hubId !== null,
+    input.linkedEventId !== undefined,
+  );
+  if (fanout.interestBroadcast) fireInterestBroadcast(deps, game, ids, input);
   if (fanout.pickedMembersDm) {
-    void deps.notifications
-      .notifyPickedMembers(pickedIds, game.name, ids, game.coverUrl)
-      .catch(noop);
+    const roster = fanout.rosterRescheduleDm ? input.linkedEventId : undefined;
+    fireQuietDms(deps, game, ids, pickedIds, roster);
   }
   if (fanout.channelEmbed) {
     deps.pollEmbed.firePostInitialEmbed(
@@ -66,4 +62,52 @@ export function fireCreateFanout(
       game.id,
     );
   }
+}
+
+/** The generic game-interest broadcast (its roster split included). */
+function fireInterestBroadcast(
+  deps: CreateFanoutDeps,
+  game: PollGame,
+  ids: FanoutIds,
+  input: CreatePollInput,
+): void {
+  void deps.notifications
+    .notifyInterestedUsers(
+      game.id,
+      game.name,
+      ids.lineupId,
+      ids.matchId,
+      ids.creatorId,
+      game.coverUrl,
+      input.linkedEventId,
+      input.broadcastExcludeUserIds,
+    )
+    .catch(noop);
+}
+
+/**
+ * The quiet fan-out: on a hub-tagged reschedule poll the event roster's
+ * reschedule DM first, then the picked members not already told by it.
+ */
+function fireQuietDms(
+  deps: CreateFanoutDeps,
+  game: PollGame,
+  ids: FanoutIds,
+  pickedIds: number[],
+  rosterEventId: number | undefined,
+): void {
+  const told =
+    rosterEventId === undefined
+      ? Promise.resolve<number[]>([])
+      : deps.notifications.notifyRosterReschedule(game, ids, rosterEventId);
+  void told
+    .then((toldIds) =>
+      deps.notifications.notifyPickedMembers(
+        pickedIds.filter((id) => !toldIds.includes(id)),
+        game.name,
+        ids,
+        game.coverUrl,
+      ),
+    )
+    .catch(noop);
 }

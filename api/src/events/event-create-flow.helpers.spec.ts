@@ -20,6 +20,9 @@ jest.mock('./event-create.helpers', () => ({
   insertSingleEvent: jest.fn(),
   buildBaseValues: jest.fn(() => ({})),
   resolveRecurrenceGroupId: jest.fn(() => null),
+  inheritPollHub: jest.fn((_db: unknown, dto: CreateEventDto) =>
+    Promise.resolve(dto),
+  ),
 }));
 jest.mock('./event-response.helpers', () => ({
   buildLifecyclePayload: jest.fn(() => ({})),

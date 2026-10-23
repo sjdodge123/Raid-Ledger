@@ -7,8 +7,8 @@ import { hubBellVisible } from '../../../components/hub/hub-notify-bell.helpers'
 import type { ValheimClaimStatusResponse } from '@raid-ledger/contract';
 
 /**
- * Every banner string in one place. PENDING operator approval (ITEM.md Q1,
- * recommendation A) — reword here only.
+ * Every banner string in one place. APPROVED by the operator 2026-10-23
+ * (ITEM.md Q1, recommendation A) — reword here only.
  */
 export const CLAIM_BANNER_COPY = {
     linkHeading: (server: string): string => `Playing on ${server}?`,

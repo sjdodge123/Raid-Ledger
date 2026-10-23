@@ -28,7 +28,7 @@
  * and Voting keep their SubmitBar — they spend a budget, so "I'm finished" is
  * real information there.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { lazy, Suspense, useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { useSuggestSlot } from '../../../hooks/use-scheduling';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
@@ -69,6 +69,11 @@ import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
 import { SchedulingPendingVoters } from './SchedulingPendingVoters';
 import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
 
+/** ROK-1893 P3: most polls have no hub — load the hub block only when one does. */
+const SchedulingHubPanel = lazy(() =>
+  import('./SchedulingHubPanel').then((m) => ({ default: m.SchedulingHubPanel })),
+);
+
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
   lineupId: number;
@@ -92,7 +97,7 @@ export function SchedulingComposite(
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
-  const lock = useSchedulingLock(poll.match, matchId, lineupId);
+  const lock = useSchedulingLock(poll.match, matchId, lineupId, poll.hub?.id ?? null);
   // ROK-1610: an expired poll the viewer may still finish. Its lock-in is a
   // different write (no refetch-must-be-open guard, no create form), so when
   // it is live the ladder's per-row lock routes here instead.
@@ -215,6 +220,11 @@ export function SchedulingComposite(
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
       />
+      {poll.hub && (
+        <Suspense fallback={null}>
+          <SchedulingHubPanel poll={poll} lineupId={lineupId} matchId={matchId} />
+        </Suspense>
+      )}
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
         lockedInTime={poll.lockedInTime ?? null}

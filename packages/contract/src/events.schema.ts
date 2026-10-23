@@ -70,8 +70,10 @@ export const CreateEventSchema = z
     lfgGameId: z.number().int().positive().optional(),
     /** ROK-1787: tag the event (and every recurring instance) to a guild.
      *  Only an editor of that guild (or an admin) may set it; the guild must
-     *  belong to the event's game, so a gameId is required. */
-    guildId: z.number().int().positive().optional(),
+     *  belong to the event's game, so a gameId is required.
+     *  ROK-1893 P3: `null` = explicitly untagged — an event created from a hub
+     *  poll then does NOT inherit the poll's hub (absent = inherit). */
+    guildId: z.number().int().positive().nullable().optional(),
     /** ROK-1844: the standalone scheduling poll (match id) this event is
      *  created from (`/events/new?matchId=`). Persisted as
      *  `events.created_from_poll_id`; completing that poll may sign its
@@ -86,7 +88,7 @@ export const CreateEventSchema = z
     message: "lfgGameId must match gameId",
     path: ["lfgGameId"],
   })
-  .refine((d) => d.guildId === undefined || d.gameId !== undefined, {
+  .refine((d) => d.guildId == null || d.gameId !== undefined, {
     message: "guildId requires gameId",
     path: ["guildId"],
   });

@@ -17,6 +17,8 @@ import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
+import { invalidateHubPolls } from '../hub/events/hub-polls-api';
+import { InheritedHubLine } from './inherited-hub-line';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
@@ -42,7 +44,7 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             if (schedulingMatchId) {
                 // ROK-1844: signups need the winning slot — without one just close the poll.
                 const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).catch(() => {
+                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).then(() => invalidateHubPolls(queryClient), () => {
                     toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
                 });
             }
@@ -111,7 +113,7 @@ function useTemplateActions(form: FormState) {
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
-    followupForEventId?: number | null, originalGuildId: number | null = null) {
+    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const [firstErrorKey] = Object.keys(validationErrors);
@@ -120,18 +122,21 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
-    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId));
+    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId, pollHubId));
 }
 
 function useCreateEventFormState(
     editEvent?: EventResponseDto, seriesScope?: SeriesScope,
     initialGame?: EventFormProps['initialGame'], initialStartTime?: string | null,
     schedulingMatchId?: number | null, copyFromEvent?: EventResponseDto | null,
+    initialGuildId: number | null = null,
 ) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
     const [form, setForm] = useState<FormState>(() => {
         const state = getInitialState(editEvent, resolved, initialStartTime, copyFromEvent);
+        // ROK-1893 P3: a hub poll's lock-in preselects its hub.
+        if (!editEvent && initialGuildId !== null) state.guildId = initialGuildId;
         if (!editEvent && initialGame) {
             state.game = initialGame as FormState['game'];
             // A copy source already carries the previous event's own slot count
@@ -159,16 +164,18 @@ function useCreateEventFormState(
     return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent, initialGuildId }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null);
+    // ROK-1893 P3: the hub of the poll being locked in (its guildId deep-link param).
+    const pollHubId = schedulingMatchId != null ? initialGuildId ?? null : null;
 
     return (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
-                registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />
+                registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} pollHubId={pollHubId} />
             <div className="border-t border-edge-subtle" />
             <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
                 endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
@@ -195,12 +202,14 @@ function GuildFieldSlot({ gameId, guildId, setForm }: {
     return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange }} />;
 }
 
-function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading }: {
+function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId }: {
     form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
     registryGameId: number | null | undefined;
     errors: FormErrors; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
     isEditMode: boolean;
     interestCount: number; interestLoading: boolean;
+    /** ROK-1893 P3: the hub a poll lock-in inherits (null = none). */
+    pollHubId: number | null;
 }) {
     const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
 
@@ -228,7 +237,10 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
                 interestCount={interestCount} interestLoading={interestLoading}
                 slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
             />
-            <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} />
+            {/* ROK-1893 P3: an inherited hub is shown (and clearable) in core — the plugin picker hides it from plain members. */}
+            {pollHubId !== null && form.guildId === pollHubId
+                ? <InheritedHubLine hubId={pollHubId} onRemove={() => setForm((prev) => ({ ...prev, guildId: null }))} />
+                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} />}
         </FormSection>
     );
 }

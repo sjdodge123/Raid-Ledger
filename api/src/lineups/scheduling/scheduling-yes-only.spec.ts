@@ -121,6 +121,21 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     const hearted = at(mockAutoHeart.mock.calls, 0)[2];
     expect(hearted.map((v) => v.userId)).toEqual([10, 12]);
   });
+
+  it('passes the match id as schedulingMatchId so the event inherits the poll hub (ROK-1893 P3)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    const deps = buildDeps();
+    await createLockedInEvent(
+      deps,
+      { id: 3, gameId: 7 },
+      { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+      10,
+      false,
+    );
+    const create = deps.eventsService.create as jest.Mock;
+    const dto = at(create.mock.calls, 0)[1] as { schedulingMatchId?: number };
+    expect(dto.schedulingMatchId).toBe(3);
+  });
 });
 
 describe('splitYesVotersBySlot — the standalone poll split (BLOCKER-2)', () => {

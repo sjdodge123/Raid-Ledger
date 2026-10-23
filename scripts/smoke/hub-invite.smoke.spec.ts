@@ -20,7 +20,7 @@
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import type { TestWorld } from './test-world';
-import { apiGet, apiPost, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
@@ -139,9 +139,17 @@ async function setModeAsLeader(page: Page, seed: Seed, label: 'Off' | 'Suggest' 
     await expect.poll(() => autoMode(seed.hubIds.crew), { message: `mode ${label} must reach the API` }).toBe(label.toLowerCase());
 }
 
-/** A future event on the seed game tagged to "Seed Crew"; its id is claimed before any assertion. */
+/** Events createHubEvent made; deleted after each test (the admin is auto-signed-up to them). */
+const createdHubEvents: number[] = [];
+
+/**
+ * A future event on the seed game tagged to "Seed Crew"; its id is claimed before any assertion.
+ * Pinned to 04:00 UTC, an hour no scheduling fixture uses: at "now + 3d" it covered the admin's
+ * templated evening hour, and a leaked copy made the scheduling-poll heatmap read that hour busy.
+ */
 async function createHubEvent(world: TestWorld, seed: Seed): Promise<number> {
     const start = new Date(Date.now() + 3 * 24 * 3600_000);
+    start.setUTCHours(4, 0, 0, 0);
     const end = new Date(start.getTime() + 2 * 3600_000);
     const event = (await apiPost(await world.token(), '/events', {
         title: world.uid('hub-event'),
@@ -151,7 +159,9 @@ async function createHubEvent(world: TestWorld, seed: Seed): Promise<number> {
         endTime: end.toISOString(),
         maxAttendees: 10,
     })) as { id?: number } | null;
-    return must(event?.id, `POST /events (tagged) → ${JSON.stringify(event)}`);
+    const id = must(event?.id, `POST /events (tagged) → ${JSON.stringify(event)}`);
+    createdHubEvents.push(id);
+    return id;
 }
 
 /** The outsider signs up through the real route, then waits for the post-commit prompt. */
@@ -201,6 +211,11 @@ test.describe('hub invite links', () => {
 });
 
 test.describe('hub auto-membership', () => {
+    test.afterEach(async () => {
+        const token = await getAdminToken();
+        for (const id of createdHubEvents.splice(0)) await apiDelete(token, `/events/${id}`);
+    });
+
     test('suggest: the signer sees "Join Seed Crew?" on the event page; Not now hides it', async ({ page, world }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, seed.leaderUserId);

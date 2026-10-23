@@ -54,6 +54,8 @@ export interface EventFormProps {
     schedulingMatchId?: number | null;
     /** ROK-1874: lineup of that poll — lets the form re-read it and warn when the slot's yes-voters overflow the roster. */
     schedulingLineupId?: number | null;
+    /** ROK-1893 P3: preselect this hub in the guild field (a hub poll's lock-in). Create mode only. */
+    initialGuildId?: number | null;
     /** ROK-1371: ended event this create is a follow-up to. Threaded into the
      *  CreateEvent DTO (create mode only) so the server fans out sign-up DMs. */
     followupForEventId?: number | null;

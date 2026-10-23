@@ -36,6 +36,7 @@ import {
   countDistinctVoters,
 } from '../../../pages/scheduling/threshold';
 import { resolvePollStatus } from './scheduling-poll-status';
+import { invalidateHubPolls } from '../../hub/events/hub-polls-api';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
@@ -99,10 +100,10 @@ export interface SchedulingLock {
   cancelLock: () => void;
 }
 
-/** `/events/new` target for locking an unlinked poll's slot. */
-function createEventUrl(
+/** `/events/new` target for locking an unlinked poll's slot. Exported for its spec. */
+export function createEventUrl(
   match: MatchDetailResponseDto,
-  ids: { matchId: number; lineupId: number },
+  ids: { matchId: number; lineupId: number; hubId?: number | null },
   slot: ScheduleSlotWithVotesDto,
 ): string {
   const params = new URLSearchParams();
@@ -112,6 +113,8 @@ function createEventUrl(
   // ROK-1874: the create form re-reads this poll to warn when the slot's
   // yes-voters overflow the roster.
   params.set('lineupId', String(ids.lineupId));
+  // ROK-1893 P3: a hub poll's event inherits the hub — the form preselects it.
+  if (ids.hubId != null) params.set('guildId', String(ids.hubId));
   // Follow-up polls carry the ended event so the create form prefills from
   // it. Ordinary polls have no source event and open with defaults.
   if (match.followupForEventId != null) {
@@ -125,9 +128,11 @@ function useLockCommit(
   match: MatchDetailResponseDto,
   matchId: number,
   lineupId: number,
+  hubId: number | null,
 ): (slot: ScheduleSlotWithVotesDto) => void {
   const navigate = useNavigate();
   const reschedule = useRescheduleEvent(match.linkedEventId ?? 0);
+  const qc = useQueryClient();
   return (slot: ScheduleSlotWithVotesDto): void => {
     const start = new Date(slot.proposedTime);
     if (start <= new Date()) {
@@ -144,7 +149,7 @@ function useLockCommit(
           onSuccess: () => {
             // startTime must be the same instant as slot.proposedTime — the
             // backend matches it to a slot by Date-getTime equality (ROK-1031).
-            void completeStandalonePoll(matchId, eventId, start.toISOString());
+            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => invalidateHubPolls(qc));
             toast.success('Event rescheduled');
           },
           onError: (err) =>
@@ -155,7 +160,7 @@ function useLockCommit(
       );
       return;
     }
-    navigate(createEventUrl(match, { matchId, lineupId }, slot));
+    navigate(createEventUrl(match, { matchId, lineupId, hubId }, slot));
   };
 }
 
@@ -164,8 +169,10 @@ export function useSchedulingLock(
   match: MatchDetailResponseDto,
   matchId: number,
   lineupId: number,
+  /** ROK-1893 P3: the poll's hub, carried into the create-event deep link. */
+  hubId: number | null = null,
 ): SchedulingLock {
-  const commit = useLockCommit(match, matchId, lineupId);
+  const commit = useLockCommit(match, matchId, lineupId, hubId);
   const qc = useQueryClient();
   const inFlight = useRef(false);
   const [refreshing, setRefreshing] = useState(false);

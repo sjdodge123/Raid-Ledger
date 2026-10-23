@@ -67,7 +67,7 @@ describe('ValheimCharactersTab', () => {
         ).toBeInTheDocument();
         expect(screen.getByText('Unclaimed')).toHaveAttribute(
             'data-tone',
-            'warning',
+            'neutral',
         );
         expect(screen.getAllByText('member1')).toHaveLength(2);
         expect(screen.getAllByText('World Midgard')).toHaveLength(3);

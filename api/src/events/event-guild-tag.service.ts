@@ -37,7 +37,7 @@ export class EventGuildTagService {
 
   /** Create: a guildId is checked against the new event's game. */
   async assertCreate(actor: Actor, dto: CreateEventDto): Promise<void> {
-    if (dto.guildId === undefined) return;
+    if (dto.guildId == null) return; // absent or explicit untag (ROK-1893 P3)
     await this.assertCanTag(actor, dto.guildId, dto.gameId ?? null);
   }
 

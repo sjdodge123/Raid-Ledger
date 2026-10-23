@@ -101,8 +101,9 @@ export const LEADER_BLOCKED_REASON = 'An admin is the hub Leader for now — nam
 
 /**
  * Lead ruling 1: an Officer has no channel picker, so the step renders as a
- * non-actionable "ask your Leader" row. Blocked steps leave `countable`, so it
- * no longer pins the card below 100% — the checklist can still self-remove.
+ * non-actionable "ask your Leader" row. Blocked rows count in the total (ROK-1891
+ * ruling 2026-10-23: the count matches the rows listed) but not in `complete`,
+ * so a blocked row never keeps the checklist from self-removing.
  */
 export const CHANNEL_BLOCKED_REASON = 'Ask your Leader or an admin to set the hub channel.';
 
@@ -170,18 +171,19 @@ export interface SetupProgress {
     done: number;
     /** 0–100, for the progress bar the S0 prototype puts above the rows. */
     pct: number;
-    /** Blocked steps are excluded — one of them can never be ticked, so counting it would pin the checklist below 100% forever. */
+    /** Every listed row, blocked ones included, so "0 of 6" sits above six rows (ROK-1891 ruling 2026-10-23). */
     total: number;
+    /** Every actionable (non-blocked) step is done — a blocked row can never be ticked, so it must not pin the card open. */
     complete: boolean;
     label: string;
 }
 
 export function setupProgress(steps: readonly SetupStep[]): SetupProgress {
-    const countable = steps.filter((s) => s.action.kind !== 'blocked');
-    const done = countable.filter((s) => s.done).length;
-    const total = countable.length;
+    const done = steps.filter((s) => s.done).length;
+    const total = steps.length;
+    const complete = steps.every((s) => s.done || s.action.kind === 'blocked');
     return {
         done, total, pct: total === 0 ? 100 : Math.round((done / total) * 100),
-        complete: done === total, label: `${done} of ${total}`,
+        complete, label: `${done} of ${total}`,
     };
 }

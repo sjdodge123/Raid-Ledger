@@ -14,7 +14,7 @@
 import { useMemo, type JSX, type ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import type {
-    GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, ThreadMessageMentionDto,
+    GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, GuildKind, ThreadMessageMentionDto,
 } from '@raid-ledger/contract';
 import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
 import { DiscordMarkup } from '../../discord/DiscordMarkup';
@@ -144,10 +144,12 @@ interface MirrorProps {
     canEdit: boolean;
     /** Opens the picker behind the settings sheet; `null` for a viewer who may not pick (D10/Q4). */
     onChangeChannel?: (() => void) | null;
+    /** ROK-1891 — picks the blurb's fallback phrase ("the server's Discord" on a server hub). */
+    kind?: GuildKind | undefined;
 }
 
 /** Hidden while loading (no layout jump) and, while nothing is bound, for anyone who cannot pick. */
-export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }: MirrorProps): JSX.Element | null {
+export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null, kind }: MirrorProps): JSX.Element | null {
     const query = useGuildDiscord(guildId);
     const mirror = query.data;
     // Gated on the affordance, not on `canEdit`: an Officer may edit content
@@ -161,7 +163,7 @@ export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }:
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
-                blurb={mirrorBlurb(mirror)} action={action} />
+                blurb={mirrorBlurb(mirror, kind)} action={action} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
         </section>
     );

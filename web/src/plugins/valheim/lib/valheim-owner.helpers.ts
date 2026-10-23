@@ -13,13 +13,17 @@ export interface OwnerChip {
     title: string;
 }
 
-/** Unclaimed (warning) · Claimed · Assigned by an admin (neutral) — colour is never the only signal. */
+/**
+ * Unclaimed · Claimed · Assigned by an admin — all neutral (ROK-1933 approved
+ * mockup, 2026-10-23: an unclaimed character is a state, not a warning). The
+ * label carries the meaning; colour is never the only signal.
+ */
 export function ownerChip(
     c: Pick<ValheimCharacterSummary, 'claimedBy' | 'claimSource'>,
 ): OwnerChip {
     if (c.claimedBy === null)
         return {
-            tone: 'warning',
+            tone: 'neutral',
             label: 'Unclaimed',
             title: 'No one has claimed this character yet',
         };
