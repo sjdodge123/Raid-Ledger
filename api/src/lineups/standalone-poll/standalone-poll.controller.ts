@@ -44,6 +44,7 @@ function toCreatePollInput(data: CreateSchedulingPollDto): CreatePollInput {
     memberUserIds,
     minVoteThreshold,
     visibility,
+    hubId,
     ...rest
   } = data;
   return {
@@ -53,6 +54,7 @@ function toCreatePollInput(data: CreateSchedulingPollDto): CreatePollInput {
     ...(durationHours !== undefined ? { durationHours } : {}),
     ...(memberUserIds !== undefined ? { memberUserIds } : {}),
     ...(minVoteThreshold !== undefined ? { minVoteThreshold } : {}),
+    ...(hubId !== undefined ? { hubId } : {}),
   };
 }
 

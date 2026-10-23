@@ -36,6 +36,7 @@ import {
   SERVER_PRESENCE_SINK,
   type ServerPresenceSink,
 } from './server-presence.sink';
+import { SERVER_DEATH_SINK, type ServerDeathSink } from './server-death.sink';
 
 /** Optional override of the Wings socket factory (specs only). */
 export const PRESENCE_SOCKET_FACTORY = Symbol('PRESENCE_SOCKET_FACTORY');
@@ -93,6 +94,10 @@ export class PelicanPresenceSupervisor
     @Optional()
     @Inject(PRESENCE_SOCKET_FACTORY)
     private readonly socketFactory: WingsSocketFactory | null = null,
+    /** ROK-1930: bound by a game plugin that records deaths. */
+    @Optional()
+    @Inject(SERVER_DEATH_SINK)
+    private readonly deathSink: ServerDeathSink | null = null,
   ) {}
 
   /** Server ids with an open session. */
@@ -272,6 +277,7 @@ export class PelicanPresenceSupervisor
       getCredentials: (id) => this.currentCredentials(id),
       parser,
       sink: this.sink,
+      ...(this.deathSink ? { deathSink: this.deathSink } : {}),
       logger: this.logger,
       onChanged: (src) => this.events.emit(SERVER_PRESENCE_EVENTS.CHANGED, src),
       ...(this.socketFactory ? { socketFactory: this.socketFactory } : {}),

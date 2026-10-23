@@ -227,6 +227,8 @@ export const ScheduleVoteVoterSchema = z.object({
   avatar: z.string().nullable(),
   discordId: z.string().nullable(),
   customAvatarUrl: z.string().nullable(),
+  /** ROK-1893 P3: on a hub-tagged poll, whether this voter is a live hub member. */
+  isHubMember: z.boolean().optional(),
 });
 
 /** Enriched slot with voter details. */
@@ -330,6 +332,19 @@ export const SchedulePollPageResponseSchema = z.object({
    * participate (creator / invitee / admin) on a private poll.
    */
   shareToken: z.string().nullable().optional(),
+  /**
+   * ROK-1893 P3: the hub the poll is tagged to — null when untagged or the hub
+   * is hidden/archived. `viewerIsMember` drives the "Join hub" button.
+   */
+  hub: z
+    .object({
+      id: z.number().int(),
+      name: z.string(),
+      memberCount: z.number().int().nonnegative(),
+      viewerIsMember: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

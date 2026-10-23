@@ -49,7 +49,7 @@ function coreSpecs(ctx: HubCtx, onChangeChannel: (() => void) | null): CoreSpec[
     const copy = hubCopy(kind);
     const cells: CoreSpec[] = [
         { id: 'gm-post', order: 10, span: 1, title: copy.leaderPostHeading, description: 'The latest leader post.', node: <LazyLatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={kind} canOpenPosts={page.viewer.role !== 'visitor'} /> },
-        { id: 'discord', order: 20, span: 1, title: 'Discord channel', description: 'Recent messages from a linked Discord channel.', node: <LazyDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /> },
+        { id: 'discord', order: 20, span: 1, title: 'Discord channel', description: 'Recent messages from a linked Discord channel.', node: <LazyDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} kind={page.guild.kind} /> },
     ];
     const data = raids.data;
     if (!data) return cells;

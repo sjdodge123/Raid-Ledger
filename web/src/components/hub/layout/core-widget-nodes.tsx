@@ -4,6 +4,7 @@
  */
 import { lazy, Suspense, type JSX } from 'react';
 import type { LatestPostCardProps } from '../posts/latest-post-card';
+import type { GuildKind } from '@raid-ledger/contract';
 
 /**
  * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
@@ -31,6 +32,7 @@ interface DiscordMirrorNodeProps {
     guildId: number;
     canEdit: boolean;
     onChangeChannel: (() => void) | null;
+    kind: GuildKind;
 }
 
 export function LazyDiscordMirror(props: DiscordMirrorNodeProps): JSX.Element {

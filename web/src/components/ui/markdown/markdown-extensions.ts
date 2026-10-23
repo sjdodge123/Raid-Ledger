@@ -3,9 +3,10 @@
  *
  * The ProseMirror schema IS the allow-list: only the D14 subset is registered
  * (paragraph, hard break, bold, italic, strike, code, link, flat bullet and
- * numbered lists), so pasted headings/images/tables/underline cannot exist in
- * the document. Classes come from `MD_CLASSES` (D22) so the editor looks like
- * `MarkdownBlock`. Block tokens outside the subset (headings, quotes, code
+ * numbered lists, and — ROK-1898 — `#`–`###` headings via `PostHeading`), so
+ * pasted h4–h6/images/tables/underline cannot exist in the document. Classes
+ * come from `MD_CLASSES` (D22) so the editor looks like `MarkdownBlock`. Block
+ * tokens outside the subset (quotes, code
  * blocks, rules, tables, HTML) parse as LITERAL paragraph text — the same way
  * `MarkdownBlock` renders them — instead of throwing and blanking the editor
  * (A6 probe: an unregistered token empties the document).
@@ -26,8 +27,9 @@ import { Markdown } from '@tiptap/markdown';
 import { isSafeMarkdownHref } from '@raid-ledger/contract';
 import { MD_CLASSES } from './markdown-classes';
 import { LiteralInlineHtml } from './markdown-inline-html';
+import { PostHeading } from './markdown-heading';
 
-const LITERAL_BLOCK_TOKENS = ['heading', 'blockquote', 'code', 'hr', 'table', 'html', 'lheading'] as const;
+const LITERAL_BLOCK_TOKENS = ['blockquote', 'code', 'hr', 'table', 'html', 'lheading'] as const;
 
 /**
  * Inline tokens outside the subset that stay literal text. Stored `![alt](url)`
@@ -94,6 +96,7 @@ export function buildMarkdownExtensions(opts: { placeholder?: string; onLinkShor
         BulletList.configure({ HTMLAttributes: { class: MD_CLASSES.ul } }),
         OrderedList.configure({ HTMLAttributes: { class: MD_CLASSES.ol } }),
         FlatListItem.configure({ HTMLAttributes: { class: MD_CLASSES.li } }),
+        PostHeading,
         Placeholder.configure({ placeholder: opts.placeholder ?? '' }),
         LinkShortcut.configure({ onOpen: opts.onLinkShortcut }),
         Markdown.configure({ markedOptions: { breaks: true, gfm: true } }),

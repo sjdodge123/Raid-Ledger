@@ -17,6 +17,7 @@ import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { games } from './games';
 import { events } from './events';
+import { guilds } from './guilds';
 
 export type LineupStatus = 'building' | 'voting' | 'decided' | 'archived';
 
@@ -236,10 +237,18 @@ export const communityLineups = pgTable(
     tieAnnounceChannelId: text('tie_announce_channel_id'),
     /** D7: message id of the tie announcement. Cleared on a 10008 from Discord. */
     tieAnnounceMessageId: text('tie_announce_message_id'),
+    /**
+     * ROK-1893 P3: the community hub a standalone scheduling poll is tagged to.
+     * Null = untagged. SET NULL so deleting a hub never deletes its polls.
+     */
+    guildId: integer('guild_id').references(() => guilds.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
+    index('idx_community_lineups_guild_id').on(table.guildId),
     // ROK-1750: share tokens are unique when set; public lineups leave it null.
     uniqueIndex('uq_community_lineups_share_token')
       .on(table.shareToken)

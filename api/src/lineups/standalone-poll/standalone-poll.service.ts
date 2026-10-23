@@ -7,7 +7,6 @@ import {
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
   ConflictException,
   forwardRef,
   Optional,
@@ -25,7 +24,7 @@ import { scheduleTransitionBestEffort } from '../queue/lineup-phase-schedule.hel
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
-  findGameById,
+  requirePollGame,
   filterValidUserIds,
   insertDecidedLineup,
   insertSchedulingMatch,
@@ -60,6 +59,7 @@ import {
 } from './standalone-poll-share.helpers';
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
+import { resolvePollHubId } from './standalone-poll-hub.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -73,6 +73,7 @@ export interface CreatePollInput {
   memberUserIds?: number[];
   /** Minimum unique voters before organizer is notified (ROK-1015). */
   minVoteThreshold?: number;
+  hubId?: number; // ROK-1893 P3: hub tag (exclusive with linkedEventId)
   /**
    * ROK-1371: user IDs to EXCLUDE from the game-interest broadcast because they
    * are already receiving the targeted post-event follow-up DM. Internal-only
@@ -242,7 +243,7 @@ export class StandalonePollService {
   ): Promise<SchedulingPollResponseDto> {
     assertVisibilityAllowed(input.visibility, input.linkedEventId);
     const share = buildShareSettings(input.visibility);
-    const game = await this.validateGame(input.gameId);
+    const game = await requirePollGame(this.db, input.gameId);
     if (input.linkedEventId) {
       // ROK-1370 (P1): opening a poll linked to an event is destructive — only
       // the event owner or an admin may do it (404 preserved when missing).
@@ -253,6 +254,7 @@ export class StandalonePollService {
         isAdmin,
       );
     }
+    const hubId = await resolvePollHubId(this.db, input, userId, isAdmin);
     const phaseDeadline = this.computeDeadline(input.durationHours);
     const lineup = await insertDecidedLineup(
       this.db,
@@ -260,6 +262,7 @@ export class StandalonePollService {
       input.linkedEventId,
       phaseDeadline,
       share,
+      hubId,
     );
     const match = await insertSchedulingMatch(
       this.db,
@@ -303,6 +306,7 @@ export class StandalonePollService {
       input,
       pickedIds,
       share.visibility,
+      hubId,
     );
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount, share);
@@ -323,15 +327,6 @@ export class StandalonePollService {
     }
     const count = await countActiveEventSignups(this.db, input.linkedEventId);
     return count > 0 ? count : undefined;
-  }
-
-  /** Validate game exists, throw 404 if not. */
-  private async validateGame(
-    gameId: number,
-  ): Promise<{ id: number; name: string; coverUrl: string | null }> {
-    const game = await findGameById(this.db, gameId);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
   }
 
   /** Compute phase deadline from durationHours, defaulting to 2 weeks. */

@@ -1,3 +1,5 @@
+import type { GameLogParser } from '../../plugin-host/extension-points';
+import type { GamePresenceEvent } from './presence-events';
 import type { PresenceChange, PresentPlayer } from './server-presence.tracker';
 import type { ServerPresencePlayer } from './server-presence.sink';
 
@@ -155,4 +157,26 @@ export class LiveLineStats {
 
 export function errName(err: unknown): string {
   return err instanceof Error ? err.name : 'unknown error';
+}
+
+/**
+ * The parser's event for one console line, or null when it threw (logged by
+ * error name only — never the line, which can carry secrets).
+ */
+export function safeParse(
+  opts: {
+    source: { pelicanServerId: number };
+    parser: GameLogParser;
+    logger: { warn(message: string): void };
+  },
+  line: string,
+): GamePresenceEvent | null {
+  try {
+    return opts.parser.parse(line);
+  } catch (err) {
+    opts.logger.warn(
+      `Presence parser threw for server ${opts.source.pelicanServerId}: ${errName(err)}`,
+    );
+    return null;
+  }
 }

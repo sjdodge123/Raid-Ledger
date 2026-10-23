@@ -200,4 +200,9 @@ describe('POST /admin/test/pelican/server-hub (ROK-1831)', () => {
     );
     expect(results.map((r) => r.status)).toEqual([400, 400, 400, 400]);
   });
+
+  it('rejects an unknown schedules set with 400 instead of seeding none (ROK-1877)', async () => {
+    const res = await post(ROUTE, { schedules: 'start-only' });
+    expect(res.status).toBe(400);
+  });
 });

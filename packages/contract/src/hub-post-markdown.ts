@@ -6,8 +6,9 @@
  * Grammar (spec D14): paragraphs and line breaks; **bold** / __bold__;
  * *italic* / _italic_; ~~strike~~; `inline code`; [text](href) and
  * <https://…> autolinks whose href is http(s) or single-slash site-relative;
- * bullet (-, *, +) and numbered (1.) lists, one level deep. Anything else
- * (headings, images, tables) is plain text. Raw HTML is never allowed.
+ * bullet (-, *, +) and numbered (1.) lists, one level deep; ATX headings
+ * `#`, `##`, `###` (ROK-1898 — see `parseHubPostHeading`). Anything else
+ * (`####`+, images, tables) is plain text. Raw HTML is never allowed.
  *
  * Pure, no dependencies. The violation scanner is a single forward pass over
  * the source with precomputed "next `>` / next newline / next `)`" tables, so
@@ -25,6 +26,51 @@ export function isSafeMarkdownHref(href: string): boolean {
   if ([...href].some(isUnsafeHrefChar)) return false;
   if (/^https?:\/\//.test(href)) return true;
   return href.startsWith('/') && !/^\/[/\\]/.test(href);
+}
+
+/** Deepest heading level the subset renders; `####`+ stays plain text. */
+export const HUB_POST_MAX_HEADING_LEVEL = 3;
+
+export type HubPostHeadingLevel = 1 | 2 | 3;
+
+export interface HubPostHeading {
+  level: HubPostHeadingLevel;
+  /** Source length of the marker including the spaces after it (`## ` → 3, `#  ` → 3). */
+  markerLength: number;
+  /** The heading's inline markdown source, after the marker. */
+  text: string;
+}
+
+/**
+ * The ATX heading a single source line opens (ROK-1898), or null. A heading is
+ * 1–3 `#` at column 0, one or more spaces, then non-blank text: `# Raid` and
+ * `#  Raid` are headings (text `Raid` — the spaces belong to the marker);
+ * `#Raid`, `#\tRaid`, `# `, ` # Raid` and `#### Raid` are plain text. Only a whole line
+ * can be a heading — `- # Raid` is a list item whose text is `# Raid`. No
+ * closing `#` sequence is stripped. Bounded loop, no regex.
+ */
+export function parseHubPostHeading(line: string): HubPostHeading | null {
+  let n = 0;
+  while (n <= HUB_POST_MAX_HEADING_LEVEL && line[n] === '#') n++;
+  if (n === 0 || n > HUB_POST_MAX_HEADING_LEVEL || line[n] !== ' ') return null;
+  let m = n + 1;
+  while (line[m] === ' ') m++;
+  const text = line.slice(m);
+  if (text.trim() === '') return null;
+  const level: HubPostHeadingLevel = n === 1 ? 1 : n === 2 ? 2 : 3;
+  return { level, markerLength: m, text };
+}
+
+/** `body` with every heading line's marker removed (code spans are per-line here). */
+function stripHeadingMarkers(body: string): string {
+  return body
+    .split('\n')
+    .map((line) => {
+      const text = parseHubPostHeading(line)?.text;
+      // Heading text is literal: escape a leading list bullet so the later list-prefix pass keeps it.
+      return text === undefined ? line : text.replace(/^[-*+](?=\s|$)/, '\\$&');
+    })
+    .join('\n');
 }
 
 export type HubPostMarkdownViolation = 'html' | 'unsafe-link';
@@ -148,8 +194,9 @@ function stripInline(seg: string): string {
   return out.replace(new RegExp(MARK, 'g'), () => escaped[k++] ?? '');
 }
 
-/** Plain text for headlines and notifications: markers gone, links → their text. */
-export function markdownToPlainText(body: string): string {
+/** Plain text for headlines and notifications: markers (heading too) gone, links → their text. */
+export function markdownToPlainText(source: string): string {
+  const body = stripHeadingMarkers(source);
   let out = '';
   let seg = '';
   let i = 0;

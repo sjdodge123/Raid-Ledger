@@ -161,7 +161,13 @@ export async function createLockedInEvent(
     recurring,
     playerCap,
   );
-  const event = await deps.eventsService.create(userId, dto);
+  // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags the
+  // event with the poll's hub (creator-membership rule included) — the
+  // expired-poll lock-in otherwise lands untagged, off the hub's Events tab.
+  const event = await deps.eventsService.create(userId, {
+    ...dto,
+    schedulingMatchId: matchId,
+  });
   await updateMatchLinkedEvent(db, matchId, event.id);
   // ROK-1617: YES voters only. A member who answered "that time does not work"
   // must not be rostered onto — or auto-hearted for — exactly that time.

@@ -93,7 +93,10 @@ interface PanelProps {
 function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
-    if (active === 'events') return <HubEventsTab query={ctx.raids} kind={ctx.page.guild.kind} />;
+    if (active === 'events') {
+        const Lead = mod?.eventsLead;
+        return <HubEventsTab query={ctx.raids} kind={page.guild.kind} lead={Lead && <Lead {...ctx} />} />;
+    }
     if (active === 'posts') {
         return (
             <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
@@ -140,7 +143,7 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
     return (
         <Suspense fallback={null}>
             {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
-            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={onClose} />}
+            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} onClose={onClose} />}
         </Suspense>
     );
 }
