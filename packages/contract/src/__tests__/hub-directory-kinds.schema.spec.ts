@@ -64,8 +64,11 @@ describe('HubDirectoryQuerySchema.kind', () => {
 
 describe('GameHubsSchema', () => {
   it('parses game-page hubs that carry their kind', () => {
-    const hubs = { hubs: [{ ...entry, kind: 'game_community' }], myProposals: [], canPropose: true, proposeBlockedReason: null };
+    const hubs = { hubs: [{ ...entry, kind: 'game_community' }], total: 1, myProposals: [], canPropose: true, proposeBlockedReason: null };
     expect(GameHubsSchema.safeParse(hubs).success).toBe(true);
+    // ROK-1883: `total` is required — the card needs it to show "See all" past the 50-row cap.
+    const { total: _omit, ...withoutTotal } = hubs;
+    expect(GameHubsSchema.safeParse(withoutTotal).success).toBe(false);
   });
 });
 
