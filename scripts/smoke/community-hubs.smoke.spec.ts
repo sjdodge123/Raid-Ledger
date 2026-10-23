@@ -17,7 +17,7 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { API_BASE, apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
@@ -90,6 +90,22 @@ async function seedHubs(testInfo: TestInfo): Promise<Seed> {
         throw new Error(`[community-hubs] seed: ${JSON.stringify(body)}`);
     }
     return body as Seed;
+}
+
+/**
+ * Install + activate a plugin through the real admin plugin API (the
+ * `pelican-quick-play-switch.smoke.spec.ts` pattern). `game_server` hubs are
+ * listed only while their owner, Pelican, is active (`HubKindRegistry.active`),
+ * and nothing auto-installs it, so a run of this spec alone never lists the
+ * seeded server hub without this. A failed install (already installed, or a
+ * sibling worker won the race) falls through to activate, which must succeed.
+ */
+async function ensurePluginActive(token: string, pluginId: string): Promise<void> {
+    const init = { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
+    const install = await fetch(`${API_BASE}/admin/plugins/${pluginId}/install`, init);
+    if (install.ok) return;
+    const activate = await fetch(`${API_BASE}/admin/plugins/${pluginId}/activate`, init);
+    if (!activate.ok) throw new Error(`failed to enable the ${pluginId} plugin: install ${install.status}, activate ${activate.status}`);
 }
 
 async function gameHubs(jwt: string, gameId: number): Promise<GameHubsBody> {
@@ -367,8 +383,9 @@ function directoryCard(page: Page, name: string): Locator {
 
 test.describe('community hubs — admin', () => {
     test('one Hubs card lists every kind once; staff see the hidden server hub marked Hidden (ROK-1883)', async ({ page }, testInfo) => {
-        const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
+        await ensurePluginActive(admin, 'pelican');
+        const seed = await seedHubs(testInfo);
         const body = (await apiGet(admin, `/hubs/by-game/${seed.gameId}`)) as { hubs?: Array<DirectoryEntry & { kind?: string; hidden?: boolean }> } | null;
         const hubs = must(body?.hubs, 'admin by-game hubs');
         const byId = (id: number): (DirectoryEntry & { kind?: string; hidden?: boolean }) | undefined => hubs.find((h) => h.id === id);
