@@ -74,14 +74,14 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // ROK-1918: the hub's saved layout; `null`/absent = registry default (the pre-1918 Overview).
     const prefs = ctx.page.widgetPrefs ?? null;
     const layout = resolveHubLayout(catalog, prefs, ctx.page.viewer);
-    const { id: guildId } = ctx.page.guild;
-    const { canEdit } = ctx.page.viewer;
-    // Arrange mode belongs to ONE hub and needs edit rights. A switch to another
-    // cached hub (same tree position) or a refetch that drops `canEdit` leaves it
-    // in the same commit — no stale draft, no grid left hidden with no way out.
-    const [arrangingFor, setArrangingFor] = useState<number | null>(null);
-    if (arrangingFor !== null && (arrangingFor !== guildId || !canEdit)) setArrangingFor(null);
-    const arranging = canEdit && arrangingFor === guildId;
+    const { page } = ctx;
+    // Arrange mode belongs to ONE hub (0 = not arranging; ids are positive) and
+    // needs edit rights. A switch to another cached hub (same tree position) or a
+    // refetch that drops `canEdit` leaves it in the same commit — arrange mode
+    // unmounts, its draft goes with it, and the grid shows again. The gate clears
+    // the stale id (`hub-arrange-gate`), keeping the bytes out of `hub-page`.
+    const [arrangingFor, setArrangingFor] = useState(0);
+    const arranging = page.viewer.canEdit && arrangingFor === page.guild.id;
     // One tree position for the grid (hidden, not unmounted, while arranging):
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
@@ -90,12 +90,12 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </div>
     );
-    if (!canEdit) return grid;
+    if (!page.viewer.canEdit) return grid;
     return (
         <>
             <Suspense fallback={null}>
-                <HubArrangeGate key={guildId} guildId={guildId} kind={ctx.page.guild.kind} layout={layout} prefs={prefs}
-                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={(on) => setArrangingFor(on ? guildId : null)} />
+                <HubArrangeGate guildId={page.guild.id} kind={page.guild.kind} layout={layout} prefs={prefs}
+                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={(on) => setArrangingFor(on ? page.guild.id : 0)} />
             </Suspense>
             {grid}
         </>

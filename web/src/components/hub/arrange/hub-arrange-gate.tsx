@@ -7,7 +7,7 @@
  * `HubOverview` at one tree position (hidden while arranging), so neither the
  * chunk loading nor leaving arrange mode remounts its widgets.
  */
-import type { JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import { Squares2X2Icon } from '@heroicons/react/24/outline';
 import type { HubWidgetPrefs } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
@@ -31,6 +31,10 @@ export interface HubArrangeGateProps {
 }
 
 export function HubArrangeGate({ guildId, kind, layout, prefs, raidsUnavailable, arranging, onArrange }: HubArrangeGateProps): JSX.Element {
+    // `HubOverview` keys arrange mode to a hub id, so a switch to another hub
+    // closes it in the same commit; this clears the stale id afterwards, so a
+    // return to the first hub does not reopen it (idempotent — StrictMode-safe).
+    useEffect(() => { if (!arranging) onArrange(false); }, [arranging, onArrange]);
     if (arranging) {
         return <HubArrangeMode guildId={guildId} kind={kind} arranged={layout.arranged} available={layout.available} prefs={prefs} onExit={() => onArrange(false)} />;
     }
