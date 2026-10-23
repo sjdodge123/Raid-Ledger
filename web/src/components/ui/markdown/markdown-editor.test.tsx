@@ -4,7 +4,7 @@
  * and the contract guarantee (no output trips findHubPostMarkdownViolation).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Editor } from '@tiptap/core';
 import { findHubPostMarkdownViolation } from '@raid-ledger/contract';
@@ -343,6 +343,23 @@ describe('MarkdownEditor headings in a list item (ROK-1898 review r2)', () => {
         expect(screen.getByTestId('md-tool-bold'), 'non-heading actions stay enabled').toBeEnabled();
         act(() => { editor.commands.setTextSelection(editor.state.doc.content.size - 1); });
         for (const b of heads) expect(b, `${b.dataset['testid']} in a paragraph`).toBeEnabled();
+    });
+
+    it('the Tab stop leaves a heading button that becomes disabled, and arrow keys skip H1–H3 (Codex P2)', () => {
+        const { editor } = setup('- item\n\npara');
+        act(() => { editor.commands.setTextSelection(editor.state.doc.content.size - 1); });
+        act(() => { screen.getByTestId('md-tool-h1').focus(); });
+        expect(screen.getByTestId('md-tool-h1')).toHaveAttribute('tabindex', '0');
+        act(() => { editor.commands.setTextSelection(3); });
+        const stops = within(screen.getByRole('toolbar')).getAllByRole('button').filter((b) => b.tabIndex === 0);
+        expect(stops.map((b) => b.dataset['testid'])).toEqual(['md-tool-bold']);
+        act(() => { screen.getByTestId('md-tool-numbers').focus(); });
+        fireEvent.keyDown(screen.getByRole('toolbar'), { key: 'ArrowRight' });
+        expect(document.activeElement, 'ArrowRight from Numbers wraps past H1–H3').toBe(screen.getByTestId('md-tool-bold'));
+        fireEvent.keyDown(screen.getByRole('toolbar'), { key: 'ArrowLeft' });
+        expect(document.activeElement, 'ArrowLeft from Bold wraps past H1–H3').toBe(screen.getByTestId('md-tool-numbers'));
+        fireEvent.keyDown(screen.getByRole('toolbar'), { key: 'End' });
+        expect(document.activeElement, 'End lands on the last enabled button').toBe(screen.getByTestId('md-tool-numbers'));
     });
 
     it.each([1, 2, 3])('Mod-Alt-%i in a list item is consumed and leaves the doc unchanged', (level) => {
