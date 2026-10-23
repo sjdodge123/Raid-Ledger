@@ -65,7 +65,7 @@ describe('ServerHoursWidget (ROK-1876)', () => {
         expect(screen.getByRole('heading', { name: 'Server hours' })).toBeInTheDocument();
         await waitFor(() => expect(screen.getAllByTestId('server-hub-hours-row').length).toBeGreaterThan(0));
         expect(screen.getAllByTestId('server-hub-hours-row')).toHaveLength(2);
-        expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · opens /);
+        expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online now · outside its usual hours/);
         expect(screen.getByTestId('server-hub-hours-restart')).toHaveTextContent(/^Restart · /);
     });
 
@@ -81,9 +81,9 @@ describe('ServerHoursWidget (ROK-1876)', () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         serve([{ kind: 'window', ...base, serverKey: '4', start: at(90_000), end: at(2 * H), label: 'Open', source: 'schedule' }]);
         renderWidget();
-        await waitFor(() => expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · opens /));
+        await waitFor(() => expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online now · outside its usual hours/));
         await act(async () => { await vi.advanceTimersByTimeAsync(3 * 60_000); });
-        expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online · closes /);
+        expect(screen.getByTestId('server-hub-hours-now')).toHaveTextContent(/^Online now · until /);
     });
 
     it('reserves the card while the hours chunk loads, so the Overview does not shift (review fix-delta MINOR)', async () => {

@@ -1,8 +1,12 @@
 /**
- * ROK-1876 L3 — the server hub's "Server hours" model, from the
+ * ROK-1876 L3 / ROK-1877 L1 — the server hub's "Server hours" model, from the
  * `GET /game-servers/calendar` items. Pure and Intl-only (it loads with the
  * hub module at boot). `serverKey` is `String(pelican_servers.id)`, the same
  * id the hub DTO carries as `page.server.pelicanServerId`.
+ *
+ * The now line puts the live state first and the schedule second, and never
+ * contradicts itself: a manual start reads "outside its usual hours", a stop
+ * or crash inside the hours reads "usually up until …" (ROK-1877 Q2/Q7).
  */
 import type {
     GameServerCalendarItemDto,
@@ -11,16 +15,33 @@ import type {
     GameServerWindowItemDto,
 } from '@raid-ledger/contract';
 import type { CalendarLayerRange } from '../../calendar-layer';
-import { STATE_LABELS, formatLocalTime } from '../calendar/pelican-calendar-items.helpers';
+import { DAY_MS, HOUR_MS, dayLabel, whenLabel, windowSpans } from './server-hours-time.helpers';
+import { powerLine, weekRows, type WeekRow } from './server-hours-week.helpers';
 
-/** Operator ruling 2026-10-21: the empty copy is always this, whatever the state. */
+/** Operator ruling 2026-10-21 (kept by ROK-1877 Q3): the empty copy is always this, whatever the state. */
 export const SERVER_HOURS_EMPTY = 'No set hours';
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 const RANGE_MS = 7 * DAY_MS;
+/** Look-behind so today's already-ended windows still count towards today's weekly pattern (a local day is at most 25h). */
+const LOOKBACK_MS = DAY_MS + 2 * HOUR_MS;
+
+export type NowTone = 'online' | 'offline' | 'warn' | 'neutral';
+/** The now line in parts: `head` ("Online now"), the schedule `tail` ("until 10:00 PM"), an optional second line. */
+export interface NowModel { tone: NowTone; head: string; tail: string | null; sub: string | null }
 
 export interface ServerHoursDay { key: string; day: string; spans: string }
-export interface ServerHours { nowLine: string; days: ServerHoursDay[]; restartLine: string | null }
+export interface ServerHours {
+    /** `head · tail` as one string (the existing test id's text). */
+    nowLine: string;
+    now: NowModel;
+    /** ROK-1876's one-row-per-day list (open windows under today); superseded on the card by `weekRows`. */
+    days: ServerHoursDay[];
+    weekRows: WeekRow[];
+    startLine: string | null;
+    stopLine: string | null;
+    restartLine: string | null;
+    /** No weekly rows and no start/stop line: the card shows {@link SERVER_HOURS_EMPTY}. */
+    empty: boolean;
+}
 
 export interface ServerHoursInput {
     items: readonly GameServerCalendarItemDto[];
@@ -30,27 +51,9 @@ export interface ServerHoursInput {
     tz: string;
 }
 
-/** The next seven days from `now`. */
+/** Seven days ahead of `now`, plus a day of look-behind for today's earlier windows. */
 export function hoursRange(now: number): CalendarLayerRange {
-    return { from: new Date(now).toISOString(), to: new Date(now + RANGE_MS).toISOString() };
-}
-
-/** "2026-10-14" in `tz` — the day-grouping key. */
-function dayKey(ms: number, tz: string): string {
-    return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz }).format(ms);
-}
-
-/** "Today" for the viewer's current day, otherwise the short weekday ("Thu"). */
-function dayLabel(ms: number, now: number, tz: string): string {
-    if (dayKey(ms, tz) === dayKey(now, tz)) return 'Today';
-    return new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: tz }).format(ms);
-}
-
-/** "6:00 PM" today, "Fri 6:00 PM" on any other day. */
-function whenLabel(iso: string, now: number, tz: string): string {
-    const day = dayLabel(Date.parse(iso), now, tz);
-    const time = formatLocalTime(iso, tz);
-    return day === 'Today' ? time : `${day} ${time}`;
+    return { from: new Date(now - LOOKBACK_MS).toISOString(), to: new Date(now + RANGE_MS).toISOString() };
 }
 
 function ownItems(items: readonly GameServerCalendarItemDto[], pelicanServerId: number) {
@@ -61,58 +64,26 @@ function ownItems(items: readonly GameServerCalendarItemDto[], pelicanServerId: 
     return { windows, markers };
 }
 
-function nowLine(state: GameServerState, windows: readonly GameServerWindowItemDto[], now: number, tz: string): string {
-    const label = STATE_LABELS[state];
+const TRANSIENT_HEAD: Partial<Record<GameServerState, string>> = { starting: 'Starting…', stopping: 'Stopping…', unknown: 'Status unknown' };
+
+/** The schedule tail shared by S1/S2/S5/S8: "until 10:00 PM" inside a window, "next up Sat 2:00 PM" before one. */
+function scheduleTail(open: GameServerWindowItemDto | undefined, next: GameServerWindowItemDto | undefined, now: number, tz: string): string | null {
+    if (open) return `until ${whenLabel(Date.parse(open.end), now, tz)}`;
+    return next ? `next up ${whenLabel(Date.parse(next.start), now, tz)}` : null;
+}
+
+/** Spec §3 S1–S6 and S8. Only windows that have not ended count. */
+export function nowModel(state: GameServerState, windows: readonly GameServerWindowItemDto[], now: number, tz: string): NowModel {
     const open = windows.find((w) => Date.parse(w.start) <= now && Date.parse(w.end) > now);
-    if (open) return `${label} · closes ${whenLabel(open.end, now, tz)}`;
     const next = windows.find((w) => Date.parse(w.start) > now);
-    return next ? `${label} · opens ${whenLabel(next.start, now, tz)}` : label;
-}
-
-/** The instant of the first local midnight after `ms` in `tz`; re-checked against the day key so a 23h/25h DST day lands on midnight. */
-function nextMidnight(ms: number, tz: string): number {
-    const parts = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZone: tz }).formatToParts(ms);
-    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-    const elapsed = ((part('hour') * 60 + part('minute')) * 60 + part('second')) * 1000 + (ms % 1000);
-    const candidate = ms - elapsed + DAY_MS;
-    if (dayKey(candidate, tz) === dayKey(ms, tz)) return candidate + HOUR_MS;
-    if (dayKey(candidate - 1, tz) !== dayKey(ms, tz)) return candidate - HOUR_MS;
-    return candidate;
-}
-
-interface DaySpan { key: string; anchor: number; span: string }
-
-/** A 24h+ window as one span per local day: "from 10:00 PM", "All day", "until 6:00 AM". Days before `from` are skipped. */
-function multiDaySpans(start: number, end: number, from: number, tz: string): DaySpan[] {
-    const spans: DaySpan[] = [];
-    const startKey = dayKey(start, tz);
-    for (let cursor = from; cursor < end;) {
-        const midnight = nextMidnight(cursor, tz);
-        const key = dayKey(cursor, tz);
-        const endsHere = end < midnight;
-        const span = key === startKey ? startDaySpan(start, end, endsHere, tz) : endsHere ? `until ${clock(end, tz)}` : 'All day';
-        spans.push({ key, anchor: cursor, span });
-        cursor = midnight;
+    const transient = TRANSIENT_HEAD[state];
+    if (transient !== undefined) return { tone: 'neutral', head: transient, tail: scheduleTail(open, next, now, tz), sub: null };
+    if (state === 'running') {
+        if (open || !next) return { tone: 'online', head: 'Online now', tail: scheduleTail(open, undefined, now, tz), sub: null };
+        return { tone: 'online', head: 'Online now', tail: 'outside its usual hours', sub: `Next scheduled: ${whenLabel(Date.parse(next.start), now, tz)}` };
     }
-    return spans;
-}
-
-/** The start day's span; a 24h window inside one 25h DST day ends there too, so it gets both ends. */
-function startDaySpan(start: number, end: number, endsHere: boolean, tz: string): string {
-    return endsHere ? `${clock(start, tz)} – ${clock(end, tz)}` : `from ${clock(start, tz)}`;
-}
-
-function clock(ms: number, tz: string): string {
-    return formatLocalTime(new Date(ms).toISOString(), tz);
-}
-
-/** Under 24h stays one "6:00 PM – 2:00 AM" span on its first (or today's) day; longer windows split per local day (Codex r1). */
-function windowSpans(w: GameServerWindowItemDto, now: number, tz: string): DaySpan[] {
-    const start = Date.parse(w.start);
-    const end = Date.parse(w.end);
-    const from = Math.max(start, now);
-    if (end - start >= DAY_MS) return multiDaySpans(start, end, from, tz);
-    return [{ key: dayKey(from, tz), anchor: from, span: `${clock(start, tz)} – ${clock(end, tz)}` }];
+    if (open) return { tone: 'warn', head: 'Offline', tail: `usually up until ${whenLabel(Date.parse(open.end), now, tz)}`, sub: null };
+    return { tone: 'offline', head: 'Offline', tail: scheduleTail(undefined, next, now, tz), sub: null };
 }
 
 /** One row per day with a window that has not ended; an open window sits under today. */
@@ -129,14 +100,21 @@ function dayRows(windows: readonly GameServerWindowItemDto[], now: number, tz: s
     return [...rows.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
-function restartLine(markers: readonly GameServerMarkerItemDto[], now: number, tz: string): string | null {
-    const next = markers.find((m) => m.effect === 'restart' && Date.parse(m.at) >= now);
-    if (!next) return null;
-    return `Restart · ${dayLabel(Date.parse(next.at), now, tz)} ${formatLocalTime(next.at, tz)}`;
-}
-
-/** The widget's whole model; `days: []` is the empty state. */
+/** The widget's whole model; `empty` is the "No set hours" state. */
 export function buildServerHours({ items, pelicanServerId, state, now, tz }: ServerHoursInput): ServerHours {
     const { windows, markers } = ownItems(items, pelicanServerId);
-    return { nowLine: nowLine(state, windows, now, tz), days: dayRows(windows, now, tz), restartLine: restartLine(markers, now, tz) };
+    const nowPart = nowModel(state, windows, now, tz);
+    const week = weekRows(windows, now, tz);
+    const startLine = powerLine('start', markers, now, tz);
+    const stopLine = powerLine('stop', markers, now, tz);
+    return {
+        nowLine: nowPart.tail === null ? nowPart.head : `${nowPart.head} · ${nowPart.tail}`,
+        now: nowPart,
+        days: dayRows(windows, now, tz),
+        weekRows: week,
+        startLine,
+        stopLine,
+        restartLine: powerLine('restart', markers, now, tz),
+        empty: week.length === 0 && startLine === null && stopLine === null,
+    };
 }

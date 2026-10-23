@@ -1,7 +1,7 @@
-/** ROK-1876 L3 — the server-hours widget's pure model: server filter, now line, day rows, restart line. */
+/** ROK-1876 L3 / ROK-1877 L1 — the server-hours widget's pure model: server filter, now line, day rows, restart line. */
 import { describe, expect, it } from 'vitest';
 import type { GameServerCalendarItemDto } from '@raid-ledger/contract';
-import { buildServerHours, hoursRange } from './server-hours.helpers';
+import { buildServerHours, hoursRange, nowModel } from './server-hours.helpers';
 
 const mine = { serverKey: '4', serverName: 'Valheim', gameId: 7, provider: 'pelican' };
 const other = { ...mine, serverKey: '99', serverName: 'Other' };
@@ -26,9 +26,9 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(build({ tz: 'America/New_York' }).days[0]).toEqual({ key: '2026-10-14', day: 'Today', spans: '2:00 PM – 10:00 PM' });
     });
 
-    it('says when the next window opens, or when the open one closes', () => {
-        expect(build().nowLine).toBe('Offline · opens 6:00 PM');
-        expect(build({ state: 'running', now: Date.parse('2026-10-14T20:00:00Z') }).nowLine).toBe('Online · closes Thu 2:00 AM');
+    it('says when the next window is up, or until when the open one runs (ROK-1877 Q7)', () => {
+        expect(build().nowLine).toBe('Offline · next up 6:00 PM');
+        expect(build({ state: 'running', now: Date.parse('2026-10-14T20:00:00Z') }).nowLine).toBe('Online now · until Thu 2:00 AM');
     });
 
     it('drops windows that already ended and keeps an open one under today', () => {
@@ -44,8 +44,10 @@ describe('buildServerHours (ROK-1876)', () => {
     it('has no day rows when the server has no windows (the empty state)', () => {
         const hours = build({ pelicanServerId: 5, state: 'running' });
         expect(hours.days).toEqual([]);
-        expect(hours.nowLine).toBe('Online');
+        expect(hours.nowLine).toBe('Online now');
         expect(hours.restartLine).toBeNull();
+        expect(hours.weekRows).toEqual([]);
+        expect(hours.empty).toBe(true);
     });
 
     it('splits a multi-day window into one row per local day instead of one overnight span (Codex r1 P2)', () => {
@@ -84,7 +86,51 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(days).toEqual([{ key: '2026-11-01', day: 'Sun', spans: '12:30 AM – 11:30 PM' }]);
     });
 
-    it('asks for seven days from now', () => {
-        expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-14T12:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
+    it('asks for seven days ahead plus 26h of look-behind, so today\'s earlier windows count towards its pattern (ROK-1877)', () => {
+        expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-13T10:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
+    });
+});
+
+/** ROK-1877 §3 — the now line: live state first, schedule second, never contradictory. */
+describe('nowModel (ROK-1877)', () => {
+    const evening = [items[0], items[1]].filter((i): i is Extract<GameServerCalendarItemDto, { kind: 'window' }> => i?.kind === 'window');
+    const at = (iso: string) => Date.parse(iso);
+    const model = (state: Parameters<typeof nowModel>[0], iso: string, tz = 'UTC') => nowModel(state, evening, at(iso), tz);
+
+    it('S1 online in hours: "Online now · until" the end, with the weekday when it ends on another day', () => {
+        expect(model('running', '2026-10-15T13:10:00Z')).toEqual({ tone: 'online', head: 'Online now', tail: 'until 1:40 PM', sub: null });
+        expect(model('running', '2026-10-14T20:00:00Z').tail).toBe('until Thu 2:00 AM');
+    });
+
+    it('S2 offline before a window: "Offline · next up", today without a weekday, another day with one', () => {
+        expect(model('offline', '2026-10-14T12:00:00Z')).toEqual({ tone: 'offline', head: 'Offline', tail: 'next up 6:00 PM', sub: null });
+        expect(model('offline', '2026-10-15T03:00:00Z', 'America/New_York').tail, 'still Wed 11 PM in New York').toBe('next up Thu 9:00 AM');
+        expect(model('offline', '2026-10-15T03:00:00Z').tail).toBe('next up 1:00 PM');
+        expect(model('offline', '2026-10-15T03:00:00Z', 'Asia/Tokyo').tail, 'noon Thu in Tokyo, the window is 10 PM the same day').toBe('next up 10:00 PM');
+    });
+
+    it('S2 on another day names the weekday', () => {
+        expect(nowModel('offline', evening.slice(1), at('2026-10-14T12:00:00Z'), 'UTC').tail).toBe('next up Thu 1:00 PM');
+    });
+
+    it('S3 manual start outside its hours: no "opens" contradiction, the next window moves to a sub-line', () => {
+        expect(model('running', '2026-10-15T05:00:00Z')).toEqual({ tone: 'online', head: 'Online now', tail: 'outside its usual hours', sub: 'Next scheduled: 1:00 PM' });
+        expect(model('running', '2026-10-14T12:00:00Z').sub).toBe('Next scheduled: 6:00 PM');
+    });
+
+    it('S4 down inside its hours: a warning tone and "usually up until"', () => {
+        expect(model('offline', '2026-10-14T20:00:00Z')).toEqual({ tone: 'warn', head: 'Offline', tail: 'usually up until Thu 2:00 AM', sub: null });
+    });
+
+    it('S5 starting/stopping and S8 unknown: a neutral head with the S1/S2 schedule tail', () => {
+        expect(model('starting', '2026-10-14T20:00:00Z')).toEqual({ tone: 'neutral', head: 'Starting…', tail: 'until Thu 2:00 AM', sub: null });
+        expect(model('stopping', '2026-10-14T12:00:00Z')).toEqual({ tone: 'neutral', head: 'Stopping…', tail: 'next up 6:00 PM', sub: null });
+        expect(model('unknown', '2026-10-14T12:00:00Z')).toEqual({ tone: 'neutral', head: 'Status unknown', tail: 'next up 6:00 PM', sub: null });
+    });
+
+    it('S6 no windows ahead: the live state alone, never "outside its usual hours"', () => {
+        expect(model('running', '2026-10-16T00:00:00Z')).toEqual({ tone: 'online', head: 'Online now', tail: null, sub: null });
+        expect(model('offline', '2026-10-16T00:00:00Z')).toEqual({ tone: 'offline', head: 'Offline', tail: null, sub: null });
+        expect(nowModel('unknown', [], at('2026-10-16T00:00:00Z'), 'UTC')).toEqual({ tone: 'neutral', head: 'Status unknown', tail: null, sub: null });
     });
 });
