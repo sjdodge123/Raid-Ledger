@@ -126,10 +126,15 @@ export const rowPrefabs = (list: Locator) =>
     els.map((e) => e.getAttribute("data-prefab") ?? ""),
   );
 
-/** Choose a segmented radio (station or mode) and confirm it took. */
+/**
+ * Choose a segmented radio (station or mode) and confirm it took. The native
+ * radio is `sr-only` and its label's content sits on top of it, so the click
+ * goes to the enclosing `<label>` — the segment the user actually taps (the
+ * same pattern as `games-filters.ts::pickPlayers`).
+ */
 export async function chooseRadio(group: Locator, name: string | RegExp) {
   const radio = group.getByRole("radio", { name });
-  await radio.check();
+  await radio.locator("xpath=ancestor::label[1]").click();
   await expect(radio).toBeChecked();
 }
 
