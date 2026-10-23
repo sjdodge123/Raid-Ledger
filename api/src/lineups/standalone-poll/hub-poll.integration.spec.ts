@@ -5,7 +5,7 @@
  * reschedule polls inheriting the event's hub, and an event created from a
  * hub poll's match inheriting the hub (D16). Fleet-only.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -375,5 +375,94 @@ describe('hub polls — lock-in', () => {
       'event',
     );
     expect(row.guildId).toBe(hub.id);
+  });
+});
+
+/** POST /events from the poll's match as `token`; returns the stored guild_id. */
+async function lockInGuildId(
+  token: string,
+  matchId: number,
+  extra: Record<string, unknown> = {},
+): Promise<number | null> {
+  const start = new Date(Date.now() + 3 * 864e5);
+  const res = await testApp.request
+    .post('/events')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      title: 'Hub lock-in',
+      gameId: testApp.seed.game.id,
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + 72e5).toISOString(),
+      schedulingMatchId: matchId,
+      ...extra,
+    });
+  expect(res.status).toBe(201);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ guildId: schema.events.guildId })
+      .from(schema.events)
+      .where(eq(schema.events.id, (res.body as { id: number }).id)),
+    'event',
+  );
+  return row.guildId;
+}
+
+/** Marks `who` banned or departed in `hubId` (the P1 membership columns). */
+async function dropMember(
+  hubId: number,
+  who: Who,
+  column: 'bannedAt' | 'leftAt',
+): Promise<void> {
+  await testApp.db
+    .update(schema.hubCommunityMembers)
+    .set({ [column]: new Date() })
+    .where(
+      and(
+        eq(schema.hubCommunityMembers.guildId, hubId),
+        eq(schema.hubCommunityMembers.userId, who.id),
+      ),
+    );
+}
+
+describe('hub polls — lock-in membership + explicit guildId', () => {
+  it.each(['bannedAt', 'leftAt'] as const)(
+    'a creator whose membership has %s set does not put the event on the hub',
+    async (column) => {
+      const member = await mkUser();
+      const hub = await mkHub(await mkUser(), [member]);
+      const poll = await createPoll(member.token, { hubId: hub.id });
+      expect(poll.status).toBe(201);
+      await dropMember(hub.id, member, column);
+      const guildId = await lockInGuildId(
+        member.token,
+        pollIds(poll.body).matchId,
+      );
+      expect(guildId).toBeNull();
+    },
+  );
+
+  it('an explicit guildId: null opts the event out of the inherited hub', async () => {
+    const leader = await mkUser();
+    const hub = await mkHub(leader);
+    const poll = await createPoll(leader.token, { hubId: hub.id });
+    const guildId = await lockInGuildId(
+      leader.token,
+      pollIds(poll.body).matchId,
+      { guildId: null },
+    );
+    expect(guildId).toBeNull();
+  });
+
+  it('P-7: an explicit different guildId wins over the poll hub', async () => {
+    const leader = await mkUser();
+    const hub = await mkHub(leader);
+    const other = await mkHub(await mkUser());
+    const poll = await createPoll(leader.token, { hubId: hub.id });
+    const guildId = await lockInGuildId(
+      adminToken,
+      pollIds(poll.body).matchId,
+      { guildId: other.id },
+    );
+    expect(guildId).toBe(other.id);
   });
 });
