@@ -150,9 +150,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerGameServerProvider() {
             addGameServerProvider(slug);
         },
-        registerEventReportLinks(supports) {
-            addEventReportLinkPredicate(slug, supports);
-        },
+        registerEventReportLinks: (supports) => addEventReportLinkPredicate(slug, supports),
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },

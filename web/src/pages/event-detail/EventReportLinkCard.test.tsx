@@ -44,7 +44,7 @@ function CardFromCache({ canManage, isCancelled }: { canManage: boolean; isCance
     return <EventReportLinkCard event={data.event} canManage={canManage} isCancelled={isCancelled} />;
 }
 
-function renderCard(reportUrl: string | null, opts: { canManage?: boolean; isCancelled?: boolean; game?: unknown } = {}) {
+function renderCard(reportUrl: string | null, opts: { canManage?: boolean; isCancelled?: boolean; game?: EventResponseDto['game'] } = {}) {
     const queryClient = createTestQueryClient();
     const game = opts.game === undefined ? {} : { game: opts.game };
     queryClient.setQueryData<Bundle>(DETAIL_KEY, { event: createMockEvent({ id: EVENT_ID, reportUrl, ...game }) });
