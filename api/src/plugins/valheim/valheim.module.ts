@@ -45,7 +45,6 @@ import { ValheimMaterialsService } from './armory/read/valheim-materials.service
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
-import { SettingsModule } from '../../settings/settings.module';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 
 /**

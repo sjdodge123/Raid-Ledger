@@ -16637,6 +16637,84 @@
         }
       },
       "isRLSEnabled": false
+    },
+    "public.valheim_profile_skill_days": {
+      "name": "valheim_profile_skill_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "profile_id": {
+          "name": "profile_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "play_date": {
+          "name": "play_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_skills": {
+          "name": "start_skills",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_skills": {
+          "name": "end_skills",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk": {
+          "name": "valheim_profile_skill_days_profile_id_valheim_profiles_id_fk",
+          "tableFrom": "valheim_profile_skill_days",
+          "tableTo": "valheim_profiles",
+          "columnsFrom": [
+            "profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_profile_skill_days_profile_date_uq": {
+          "name": "valheim_profile_skill_days_profile_date_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "profile_id",
+            "play_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {},
