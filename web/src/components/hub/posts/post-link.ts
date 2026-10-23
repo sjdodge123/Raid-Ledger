@@ -13,7 +13,7 @@ export function postIdFromSearch(search: string): number | null {
     return id > 0 ? id : null;
 }
 
-/** `${origin}/guilds/<id>?post=<postId>#posts` — the same shape the server links to. */
+/** `${origin}/hubs/<id>?post=<postId>#posts` (ROK-1891; the server's `/guilds/` links redirect here). */
 export function postDeepLink(guildId: number, postId: number): string {
-    return `${window.location.origin}/guilds/${guildId}?post=${postId}#posts`;
+    return `${window.location.origin}/hubs/${guildId}?post=${postId}#posts`;
 }

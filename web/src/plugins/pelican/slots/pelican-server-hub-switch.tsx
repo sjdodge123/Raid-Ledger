@@ -16,7 +16,7 @@ function HubHint({ row, id }: { row: PelicanServerRowDto; id: string }): JSX.Ele
     const hub = row.communityHub ?? null;
     if (hub !== null && !hub.hidden) {
         return (
-            <Link to={`/guilds/${hub.guildId}`} data-testid={`pelican-server-${row.id}-hub-open`}
+            <Link to={`/hubs/${hub.guildId}`} data-testid={`pelican-server-${row.id}-hub-open`}
                 className={`rounded-sm text-xs text-success underline underline-offset-2 ${FOCUS_RING}`}>Open hub</Link>
         );
     }

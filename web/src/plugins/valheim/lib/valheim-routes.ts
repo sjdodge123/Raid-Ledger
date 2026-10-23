@@ -14,7 +14,7 @@ export function parseCharacterId(raw: string | undefined): number | null {
 
 /** The hub's Characters tab — the crumb target when router state carries no hub path. */
 export function hubCharactersPath(hubId: number): string {
-    return `/guilds/${hubId}#characters`;
+    return `/hubs/${hubId}#characters`;
 }
 
 /** Only an in-app hub path from router state is trusted for the crumb. */
@@ -22,5 +22,5 @@ export function hubPathFrom(state: unknown): string | null {
     if (typeof state !== 'object' || state === null || !('hubPath' in state))
         return null;
     const p = state.hubPath;
-    return typeof p === 'string' && p.startsWith('/guilds/') ? p : null;
+    return typeof p === 'string' && p.startsWith('/hubs/') ? p : null;
 }

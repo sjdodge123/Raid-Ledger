@@ -22,9 +22,9 @@ export function memberCountLabel(count: number): string {
     return `${count} ${count === 1 ? 'member' : 'members'}`;
 }
 
-/** The hub page of one hub. */
+/** The hub page of one hub — `/hubs/:id` for every kind (ROK-1891). */
 export function guildHref(guildId: number): string {
-    return `/guilds/${guildId}`;
+    return `/hubs/${guildId}`;
 }
 
 /**

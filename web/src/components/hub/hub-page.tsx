@@ -1,5 +1,5 @@
 /**
- * ROK-1785/ROK-1830 — `/guilds/:id`: the game-agnostic hub shell — hero +
+ * ROK-1785/ROK-1830 — `/hubs/:id` (was `/guilds/:id`, ROK-1891): the game-agnostic hub shell — hero +
  * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
  * hero pills come from the hub module registered for `guild.kind`
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.

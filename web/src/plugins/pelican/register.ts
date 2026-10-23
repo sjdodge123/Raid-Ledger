@@ -25,5 +25,5 @@ pelican.registerCalendarLayer({
 // Feeds the generic GET /game-servers/status — the event page's status chip (ROK-1776).
 pelican.registerGameServerProvider();
 
-// The game-server community hub at /guilds/:id for kind game_server (ROK-1831).
+// The game-server community hub at /hubs/:id for kind game_server (ROK-1831).
 pelican.registerHubModule(pelicanHubModule);

@@ -1,6 +1,6 @@
 /**
  * ROK-1785 entry F (badge): the character page's guild badge — crest, guild
- * name and rank. It links to `/guilds/:id` only when the viewer may open that
+ * name and rank. It links to `/hubs/:id` only when the viewer may open that
  * page (`viewerCanOpen`); otherwise it is plain text. Nothing when the
  * character has no guild.
  */
