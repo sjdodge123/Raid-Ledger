@@ -152,7 +152,37 @@ describe('memoization (ROK-343)', () => {
 
 }
 
+function eventbannerHubGroup() {
+describe('hub link (ROK-1893 V5)', () => {
+        it('renders a HubBadge linking /hubs/:id with the kind noun', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 7, name: 'BG3 Friends', kind: 'game_community' }} />);
+            const link = screen.getByTestId('event-banner-hub');
+            expect(link.getAttribute('href')).toBe('/hubs/7');
+            expect(link.textContent).toContain('BG3 Friends hub');
+            expect(link.className).toContain('event-banner__game--link');
+        });
+
+        it('names a WoW guild hub with its kind noun, not "hub" (ROK-1891)', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 3, name: 'Fable', kind: 'wow_guild' }} />);
+            const text = screen.getByTestId('event-banner-hub').textContent ?? '';
+            expect(text).toContain('Fable guild');
+            expect(text).not.toContain('Fable hub');
+        });
+
+        it('names a game-server hub "<name> server"', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={{ id: 4, name: 'Ashlands', kind: 'game_server' }} />);
+            expect(screen.getByTestId('event-banner-hub').textContent).toContain('Ashlands server');
+        });
+
+        it('renders no hub link when hub is null', () => {
+            renderWithRouter(<EventBanner {...mockProps} hub={null} />);
+            expect(screen.queryByTestId('event-banner-hub')).not.toBeInTheDocument();
+        });
+    });
+}
+
 describe('EventBanner', () => {
+    eventbannerHubGroup();
     eventbannerGroup1();
     eventbannerGroup2();
     eventbannerGroup3();

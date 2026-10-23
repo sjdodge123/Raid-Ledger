@@ -461,3 +461,16 @@ describe('DayEventCard — series badge (ROK-429)', () => {
         expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
     });
 });
+
+describe('DayEventCard — hub suffix (ROK-1893)', () => {
+    it('shows "<game> · <hub>" on the game line when the event has a hub', () => {
+        const { container } = renderCard(createMockEvent({ hub: { id: 7, name: 'BG3 Friends', kind: 'game_community' } }));
+        expect(container.querySelector('.day-event-game')?.textContent).toBe('World of Warcraft · BG3 Friends');
+    });
+
+    it('shows the game alone when the hub is null', () => {
+        const { container } = renderCard(createMockEvent({ hub: null }));
+        expect(container.querySelector('.day-event-game')?.textContent).toBe('World of Warcraft');
+        expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
+    });
+});

@@ -188,3 +188,40 @@ describe('WeekEventCard — series badge (ROK-429)', () => {
         expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
     });
 });
+
+describe('WeekEventCard — hub suffix (ROK-1893 V3)', () => {
+    const hub = { id: 7, name: 'BG3 Friends', kind: 'game_community' as const };
+
+    it('compact tier shows "<game> · <hub>" on the game line', () => {
+        const { container } = renderCard(eventWithDuration(180, { hub }));
+        expect(container.querySelector('.week-event-game')?.textContent).toBe('World of Warcraft · BG3 Friends');
+    });
+
+    it('standard tier shows the hub suffix too', () => {
+        renderCard(eventWithDuration(300, { hub }));
+        expect(screen.getByTestId('event-hub-label').textContent).toBe(' · BG3 Friends');
+    });
+
+    it('minimal tier omits the visible label and carries the hub in the block title', () => {
+        const { container } = renderCard(eventWithDuration(120, { hub }));
+        expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
+        expect(container.querySelector('.week-event-block')?.getAttribute('title')).toBe('Test Raid · BG3 Friends');
+        expect(screen.getByTestId('week-minimal-hub')).toHaveTextContent('· BG3 Friends');
+    });
+
+    it('an untagged event (hub null) shows no suffix and no title', () => {
+        const { container } = renderCard(eventWithDuration(180, { hub: null }));
+        expect(container.querySelector('.week-event-game')?.textContent).toBe('World of Warcraft');
+        expect(container.querySelector('.week-event-block')?.hasAttribute('title')).toBe(false);
+        expect(screen.queryByTestId('week-minimal-hub')).not.toBeInTheDocument();
+    });
+});
+
+describe('WeekEventCard — hub survives a clipped card (ROK-1893 P4 verify FAIL a)', () => {
+    const hub = { id: 7, name: 'BG3 Friends', kind: 'game_community' as const };
+
+    it.each([180, 300])('a %i-minute (compact/standard) card carries the hub in its block title', (mins) => {
+        const { container } = renderCard(eventWithDuration(mins, { hub }));
+        expect(container.querySelector('.week-event-block')?.getAttribute('title')).toBe('Test Raid · BG3 Friends');
+    });
+});

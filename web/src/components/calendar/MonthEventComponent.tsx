@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { format } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
 import type { CalendarEvent } from './CalendarView';
+import { hubSuffixText } from './event-hub-label.helpers';
 
 interface MonthEventComponentProps {
     event: CalendarEvent;
@@ -18,9 +19,10 @@ function chipStyle(coverUrl: string | null | undefined, bgColor: string) {
     };
 }
 
+/** ROK-1893 R23: the hub rides in the tooltip + sr-only text only — no visible marker on a month chip. */
 function chipTitle(event: CalendarEvent) {
     const gameName = event.resource?.game?.name;
-    return `${event.title}${gameName ? ` (${gameName})` : ''}`;
+    return `${event.title}${gameName ? ` (${gameName})` : ''}${hubSuffixText(event.resource?.hub)}`;
 }
 
 export function MonthEventComponent({ event, eventOverlapsGameTime, onChipClick }: MonthEventComponentProps) {
@@ -28,6 +30,7 @@ export function MonthEventComponent({ event, eventOverlapsGameTime, onChipClick 
     const overlaps = eventOverlapsGameTime(event.start, event.end);
     const handleClick = useCallback((e: React.MouseEvent) => onChipClick(e, event.start), [onChipClick, event.start]);
 
+    const hubSuffix = hubSuffixText(event.resource?.hub);
     return (
         <div className="calendar-event-chip" title={chipTitle(event)} onClick={handleClick} style={chipStyle(event.resource?.game?.coverUrl, colors.bg)}>
             {overlaps && (
@@ -35,6 +38,7 @@ export function MonthEventComponent({ event, eventOverlapsGameTime, onChipClick 
             )}
             <span className="event-chip-time">{format(event.start, 'ha').toLowerCase()}</span>
             <span className="event-chip-title">{event.title}</span>
+            {hubSuffix && <span className="sr-only" data-testid="month-chip-hub">{hubSuffix}</span>}
         </div>
     );
 }

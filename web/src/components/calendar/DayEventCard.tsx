@@ -7,6 +7,7 @@ import { isMMOSlotConfig } from '../../utils/game-utils';
 import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
+import { EventHubLabel } from './event-hub-label';
 import { SignupConfirmationModal } from '../events/signup-confirmation-modal';
 import { useDayEventSignup } from './use-day-event-signup';
 import { SeriesBadge } from '../events/SeriesBadge';
@@ -135,7 +136,7 @@ function DayEventBlockContent({ event, d }: { event: CalendarEvent; d: ReturnTyp
                 </div>
             </div>
             <div className="day-event-meta">
-                <span className="day-event-game">{d.gameName}</span>
+                <span className={event.resource?.hub ? 'day-event-game truncate max-w-full' : 'day-event-game'}>{d.gameName}<EventHubLabel hub={event.resource?.hub} className="opacity-80" /></span>
                 <span className="day-event-time">{format(event.start, 'h:mm a')}{event.end ? ` - ${format(event.end, 'h:mm a')}` : ''}</span>
                 {event.resource?.creator?.username && <span className="day-event-creator">by {event.resource.creator.username}</span>}
             </div>
