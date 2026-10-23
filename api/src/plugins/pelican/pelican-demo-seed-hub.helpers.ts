@@ -4,7 +4,10 @@ import * as schema from '../../drizzle/schema';
 import type { PelicanTx } from './pelican-plugin-lock.helpers';
 import { applyCommunityHub } from './hub/server-hub-toggle.helpers';
 import { refreshMemberCount } from './hub/server-hub-membership.queries';
-import { runningServerSchedules } from './pelican-demo-seed-schedules.helpers';
+import {
+  hubServerSchedules,
+  type HubScheduleSet,
+} from './pelican-demo-seed-schedules.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const DAY_MS = 86_400_000;
@@ -52,21 +55,6 @@ export function parseServerHubSlot(body: unknown): number | null {
     typeof body === 'object' && body !== null && 'slot' in body ? body.slot : 0;
   if (typeof raw !== 'number' || !Number.isInteger(raw)) return null;
   return raw >= 0 && raw < SERVER_HUB_FIXTURE_SLOTS ? raw : null;
-}
-
-/**
- * ROK-1876: `{ withSchedules: true }` also shows the server on the calendar
- * and gives it the `seed-servers` running schedules (an 18:00–02:00 UTC
- * window, a 13:00–13:40 window, a 04:00 restart), so the hub's "Server hours"
- * card has rows. Anything else (absent, false, non-boolean) = no schedules.
- */
-export function parseServerHubWithSchedules(body: unknown): boolean {
-  return (
-    typeof body === 'object' &&
-    body !== null &&
-    'withSchedules' in body &&
-    body.withSchedules === true
-  );
 }
 
 /** The display name the hub's Members list shows for a cast member. */
@@ -177,16 +165,17 @@ async function upsertServer(
   return row;
 }
 
-/** Replace the server's schedules: none, or the running demo set. */
+/** Replace the server's schedules: none, or one demo set (ROK-1877). */
 async function resetSchedules(
   tx: PelicanTx,
   serverId: number,
-  withSchedules: boolean,
+  schedules: HubScheduleSet | null,
+  now: Date,
 ): Promise<void> {
   const s = schema.pelicanSchedules;
   await tx.delete(s).where(eq(s.serverId, serverId));
-  if (withSchedules)
-    await tx.insert(s).values(runningServerSchedules(serverId));
+  if (schedules !== null)
+    await tx.insert(s).values(hubServerSchedules(schedules, serverId, now));
 }
 
 async function hubGuildId(tx: PelicanTx, serverId: number): Promise<number> {
@@ -297,19 +286,20 @@ export async function findValheimGameId(db: Db): Promise<number | null> {
  * Reset the slot's server hub (re-run = same server, guild and users): the
  * hub on and visible, members online / seen 10 d / joined-never-played /
  * seen 100 d (not a member), an outsider, one past Quick Play session;
- * `withSchedules` adds the calendar-visible schedules (else none).
+ * `schedules` adds a calendar-visible schedule set (ROK-1876/1877; else none).
  */
 export async function seedServerHub(
   db: Db,
   slot: number,
   gameId: number,
   now: Date,
-  withSchedules = false,
+  schedules: HubScheduleSet | null = null,
 ): Promise<ServerHubFixture> {
   return db.transaction(async (tx) => {
     const userIds = await upsertUsers(tx, slot);
-    const server = await upsertServer(tx, slot, gameId, now, withSchedules);
-    await resetSchedules(tx, server.id, withSchedules);
+    const onCalendar = schedules !== null;
+    const server = await upsertServer(tx, slot, gameId, now, onCalendar);
+    await resetSchedules(tx, server.id, schedules, now);
     await applyCommunityHub(
       tx,
       { id: server.id, name: server.name, gameId },
