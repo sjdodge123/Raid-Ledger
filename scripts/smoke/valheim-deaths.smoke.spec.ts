@@ -210,24 +210,40 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     );
   });
 
-  test("visitor: no Deaths card on the Overview", async ({
+  test("visitor: no Deaths card on the Overview, and the deaths read is a 404", async ({
     page,
   }, testInfo) => {
     const f = await seed(testInfo.parallelIndex);
     await signInContextAs(page.context(), f.users.visitor.id);
-    const statuses: number[] = [];
-    page.on("response", (r) => {
-      if (new URL(r.url()).pathname.endsWith(`/servers/${f.serverId}/deaths`))
-        statuses.push(r.status());
-    });
+    // Both registered BEFORE navigation: the boot refresh mints the visitor's
+    // token; the hub page read is what the Overview cards gate on.
+    const refresh = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        new URL(r.url()).pathname.endsWith("/auth/refresh"),
+      { timeout: 15_000 },
+    );
+    const hubRead = responseTo(page, `/guilds/${f.guildId}`);
     await page.goto(`/hubs/${f.guildId}`);
+    const hub = await hubRead;
+    expect(hub.status(), `hub page read answered ${hub.status()}`).toBe(200);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
       timeout: 15_000,
     });
-    await page.waitForLoadState("networkidle");
     await expect(deathsList(page)).toHaveCount(0);
     await expect(page.getByTestId("valheim-deaths-show-all")).toHaveCount(0);
-    // If the page asked at all, the server refused it (D6: visitors get 404).
-    expect(statuses.every((s) => s === 404)).toBe(true);
+
+    // D6: the card is hidden client-side, so prove the server refuses too.
+    const boot = await refresh;
+    const jwt = ((await boot.json()) as { access_token?: unknown })
+      .access_token;
+    expect(typeof jwt, "visitor boot refresh returned an access_token").toBe(
+      "string",
+    );
+    const direct = await page.context().request.get(
+      `${API_BASE}/plugins/valheim/armory/servers/${f.serverId}/deaths`,
+      { headers: { Authorization: `Bearer ${String(jwt)}` } },
+    );
+    expect(direct.status(), "visitor deaths read (D6)").toBe(404);
   });
 });
