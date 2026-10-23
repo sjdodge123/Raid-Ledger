@@ -1,3 +1,4 @@
+import type { HubCtx } from '../hub-module';
 import { registerPlugin } from '../plugin-registry';
 import { ValheimLinkTokenControl } from './slots/valheim-link-token-control';
 import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-lazy';
@@ -15,12 +16,19 @@ const valheim = registerPlugin('valheim', {
 // The mod-link token control on each Pelican admin server row; self-filters to Valheim-mapped rows.
 valheim.registerSlot('pelican-server:row-extras', ValheimLinkTokenControl);
 
+/**
+ * Every Valheim tab reads the hub's server block; a `game_community` hub of Valheim, or a server hub
+ * whose mapping was cleared, has none, so the tabs stay out of the band rather than render blank.
+ */
+const hasServer = ({ page }: HubCtx): boolean => page.server !== undefined;
+
 // The hub Characters tab (ROK-1836) — only on hubs of the Valheim game.
 valheim.registerHubGameTab(['valheim'], {
     id: 'characters',
     label: 'Characters',
     order: 15,
     component: LazyValheimCharactersHubTab,
+    visible: hasServer,
 });
 
 // The hub Map tab (ROK-1837) — only on hubs of the Valheim game; the map is a lazy chunk.
@@ -29,6 +37,7 @@ valheim.registerHubGameTab(['valheim'], {
     label: 'Map',
     order: 20,
     component: LazyValheimMapHubTab,
+    visible: hasServer,
 });
 
 // The hub Materials tab (ROK-1853) — chest totals; only on hubs of the Valheim game.
@@ -37,6 +46,7 @@ valheim.registerHubGameTab(['valheim'], {
     label: 'Materials',
     order: 25,
     component: LazyValheimMaterialsHubTab,
+    visible: hasServer,
 });
 
 // The hub Planner tab (ROK-1854 D10) — recipe trees + a shopping list; only on hubs of the Valheim game.
@@ -45,4 +55,5 @@ valheim.registerHubGameTab(['valheim'], {
     label: 'Planner',
     order: 30,
     component: LazyValheimPlannerHubTab,
+    visible: hasServer,
 });

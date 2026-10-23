@@ -1,5 +1,5 @@
 /** ROK-1912 (epic ROK-1905 H3) — game-scoped hub tabs on every hub kind. */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { GuildPage } from '@raid-ledger/contract';
 import type { HubCtx, HubModule, HubTab } from './hub-module';
 import { clearRegistry, registerPlugin } from './plugin-registry';
@@ -95,5 +95,30 @@ describe('hub tab frame merges game tabs into every kind', () => {
         expect(visibleHubTabIds(hubTabs(community, ctx('game_community', 'valheim'), false))).toContain('map');
         expect(visibleHubTabIds(hubTabs(community, ctx('game_community', 'minecraft'), false))).not.toContain('map');
         expect(visibleHubTabIds(hubTabs(undefined, ctx('wow_guild', 'world-of-warcraft'), false))).not.toContain('map');
+    });
+});
+
+describe('tab-id collisions — core and module tabs win over game tabs', () => {
+    const withMap: HubModule = {
+        kind: 'game_server', tabs: [tab({ id: 'map', label: 'Module map', order: 50 })],
+        overviewWidgets: [], memberColumns: [], heroPills: [], memberRows: () => [],
+    };
+    afterEach(() => vi.restoreAllMocks());
+
+    it('drops a game tab whose id a module tab already uses, with a dev warning', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        registerPlugin('valheim', { icon: 'x', color: 'c', label: 'Valheim' }).registerHubGameTab(['valheim'], tab());
+        expect(hubModuleTabs(withMap).map((t) => t.label)).toEqual(['Module map']);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('"map"'));
+    });
+
+    it('drops a game tab named like a core tab, and a second plugin’s duplicate id', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        registerPlugin('valheim', { icon: 'x', color: 'c', label: 'Valheim' }).registerHubGameTab(['valheim'], tab({ id: 'members' }));
+        registerPlugin('wow', { icon: 'x', color: 'c', label: 'WoW' }).registerHubGameTab(['valheim'], tab({ id: 'raids', label: 'A' }));
+        registerPlugin('extra', { icon: 'x', color: 'c', label: 'X' }).registerHubGameTab(['valheim'], tab({ id: 'raids', label: 'B' }));
+        expect(hubModuleTabs(undefined).map((t) => `${t.id}:${t.label}`)).toEqual(['raids:A']);
+        const ids = hubTabs(undefined, ctx('game_server', 'valheim'), true, true).map((t) => t.id);
+        expect(new Set(ids).size).toBe(ids.length);
     });
 });

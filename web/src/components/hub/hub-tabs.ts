@@ -28,12 +28,25 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
     return ctx.page.viewer.role !== 'visitor';
 }
 
+/** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. */
+const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
+
 /**
  * The module band: the kind module's own tabs plus every plugin's game tabs
  * (ROK-1912 `registerHubGameTab`), each game tab gated on `page.guild.gameSlug`.
+ * A game tab whose id core, the module or an earlier game tab already uses is
+ * dropped (dev warning) — a duplicate id would mean a duplicate React key and
+ * the wrong panel behind the `#<id>` hash.
  */
 export function hubModuleTabs(mod: HubModule | undefined): HubTab[] {
-    return [...(mod?.tabs ?? []), ...hubGameTabs()];
+    const own = mod?.tabs ?? [];
+    const taken = new Set([...CORE_TAB_IDS, ...own.map((t) => t.id)]);
+    const games = hubGameTabs().filter((t) => {
+        if (!taken.has(t.id)) return taken.add(t.id), true;
+        if (import.meta.env.DEV) console.warn(`[hub] game tab "${t.id}" collides with an existing hub tab id; dropped`);
+        return false;
+    });
+    return [...own, ...games];
 }
 
 /** Resources joins once it has content, or straight away for an editor; Posts once there is a post and the viewer may open it. */
