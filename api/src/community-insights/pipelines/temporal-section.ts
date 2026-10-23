@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -14,15 +15,24 @@ type Db = PostgresJsDatabase<typeof schema>;
 const PEAK_HOURS_PER_WEEKDAY = 3;
 const WINDOW_DAYS = 30;
 const FALLBACK_TIMEZONE = 'UTC';
+const logger = new Logger('TemporalSection');
 
 /**
- * Community default timezone → the zone the heatmap buckets in. A missing,
- * blank or unknown zone falls back to UTC so a bad setting can never break
- * the nightly refresh (ROK-1936).
+ * Community default timezone → the zone the heatmap buckets in (ROK-1936).
+ * Accepts only `UTC` or an IANA `Area/Location` name, after Intl
+ * canonicalisation. Anything else — missing, blank, unknown, a bare
+ * offset string like `+05:00` (Postgres reads that as
+ * POSIX, sign flipped) — falls back to UTC so a bad setting can never break
+ * or silently skew the nightly refresh.
  */
 export function resolveHeatmapTimezone(raw: string | null | undefined): string {
   const tz = raw?.trim() ?? '';
-  return isValidIanaTimezone(tz) ? tz : FALLBACK_TIMEZONE;
+  if (!isValidIanaTimezone(tz)) return FALLBACK_TIMEZONE;
+  const canonical = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+  }).resolvedOptions().timeZone;
+  const accepted = canonical === FALLBACK_TIMEZONE || canonical.includes('/');
+  return accepted ? canonical : FALLBACK_TIMEZONE;
 }
 
 /**
@@ -36,10 +46,34 @@ export async function buildTemporalSection(
   snapshotDate: string,
   rawTimezone?: string | null,
 ): Promise<CommunityTemporalResponseDto> {
-  const timezone = resolveHeatmapTimezone(rawTimezone);
-  const heatmap = await loadHeatmap(db, timezone);
+  const resolved = resolveHeatmapTimezone(rawTimezone);
+  const { heatmap, timezone } = await loadHeatmapWithFallback(db, resolved);
   const peakHours = computePeakHours(heatmap);
   return { snapshotDate, heatmap, peakHours, timezone };
+}
+
+/**
+ * Runs the heatmap query in `timezone`; if Postgres rejects the zone (an
+ * ICU/tzdata skew — Intl knows it, the DB image does not) retries ONCE in
+ * UTC rather than dropping the section. Safe to catch-and-retry: the query
+ * runs on the pool via `db.execute`, not inside a transaction. A failure of
+ * the UTC query itself propagates.
+ */
+async function loadHeatmapWithFallback(
+  db: Db,
+  timezone: string,
+): Promise<{ heatmap: TemporalHeatmapCellDto[]; timezone: string }> {
+  try {
+    return { heatmap: await loadHeatmap(db, timezone), timezone };
+  } catch (err: unknown) {
+    if (timezone === FALLBACK_TIMEZONE) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Heatmap query failed for timezone "${timezone}" (${reason}); retrying in UTC`,
+    );
+    const heatmap = await loadHeatmap(db, FALLBACK_TIMEZONE);
+    return { heatmap, timezone: FALLBACK_TIMEZONE };
+  }
 }
 
 /**
