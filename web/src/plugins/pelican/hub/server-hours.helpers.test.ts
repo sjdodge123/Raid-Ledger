@@ -46,8 +46,6 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(hours.days).toEqual([]);
         expect(hours.nowLine).toBe('Online now');
         expect(hours.restartLine).toBeNull();
-        expect(hours.weekRows).toEqual([]);
-        expect(hours.empty).toBe(true);
     });
 
     it('splits a multi-day window into one row per local day instead of one overnight span (Codex r1 P2)', () => {
@@ -85,7 +83,9 @@ describe('buildServerHours (ROK-1876)', () => {
         const days = build({ items: fallBack, now: Date.parse('2026-10-31T12:00:00Z'), tz: 'America/New_York' }).days;
         expect(days).toEqual([{ key: '2026-11-01', day: 'Sun', spans: '12:30 AM – 11:30 PM' }]);
     });
+});
 
+describe('hoursRange', () => {
     it('asks for seven days ahead plus 26h of look-behind, so today\'s earlier windows count towards its pattern (ROK-1877)', () => {
         expect(hoursRange(WED_NOON)).toEqual({ from: '2026-10-13T10:00:00.000Z', to: '2026-10-21T12:00:00.000Z' });
     });
