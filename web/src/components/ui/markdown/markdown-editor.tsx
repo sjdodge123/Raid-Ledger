@@ -8,6 +8,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import type { Editor } from '@tiptap/core';
 import { useFieldContext, useFieldControlProps } from '../field-context';
 import { CharCounter } from '../char-counter';
 import { FIELD_FRAME_BASE, FOCUS_WITHIN_RING } from '../form-classes';
@@ -52,6 +53,23 @@ function useA11y(p: MarkdownEditorProps, countId: string): Record<string, string
     return attrs;
 }
 
+/**
+ * ROK-1898: once the editor exists, emit its saved form when it differs from `value`. A legacy
+ * (backfilled) body can hold raw HTML (`<b>`) the editor shows as literal text and saves escaped
+ * (`\<b>`); without this an untouched body was resubmitted raw and refused ("Posts can't contain
+ * HTML"). The draft now always equals what the author sees. A body the editor saved is byte-stable
+ * on reload, so normal posts never emit here.
+ */
+function useEmitSavedFormOnLoad(editor: Editor, value: string, onChange: (md: string) => void, lastRef: { current: string }): void {
+    const initial = useRef({ value, onChange });
+    useEffect(() => {
+        const md = serializeEditorMarkdown(editor);
+        if (md === initial.current.value) return;
+        lastRef.current = md;
+        initial.current.onChange(md);
+    }, [editor, lastRef]);
+}
+
 /** Emits normalised markdown upward and re-syncs when the parent swaps `value`. */
 function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>, setLinkOpen: (open: boolean) => void) {
     const last = useRef(p.value);
@@ -64,6 +82,7 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
         onUpdate: ({ editor: e }) => { const md = serializeEditorMarkdown(e); last.current = md; p.onChange(md); },
     }, [extensions]);
+    useEmitSavedFormOnLoad(editor, p.value, p.onChange, last);
     useEffect(() => { editor.setOptions({ editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists } }); }, [editor, attrs]);
     useEffect(() => { editor.setEditable(!p.disabled); }, [editor, p.disabled]);
     useEffect(() => {
