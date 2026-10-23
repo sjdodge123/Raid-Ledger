@@ -5,16 +5,17 @@
  */
 import type { ValheimDeathPlayer } from '@raid-ledger/contract';
 import { CHARACTER_PARAM } from '../map/map-selection';
+import { DEATHS_SHOW_ALL_HREF, DEATH_PINS, PINS_PARAM } from '../map/pin-filter-params';
 
-/** The Map tab's pin-type filter param (L4 `map/pin-filter.ts` reads the same name). */
-export const DEATH_PINS_PARAM = 'pins';
-export const DEATH_PINS_VALUE = 'death';
+/** The Map tab's pin-type filter param (shared with `map/pin-filter.ts`). */
+export const DEATH_PINS_PARAM = PINS_PARAM;
+export const DEATH_PINS_VALUE = DEATH_PINS;
 /** Q5: the widget shows at most this many bars. */
 export const MAX_DEATH_ROWS = 8;
 
 /** "Show all": the server-wide death layer on the Map tab. */
 export function deathsShowAllHref(): string {
-    return `?${new URLSearchParams({ [DEATH_PINS_PARAM]: DEATH_PINS_VALUE }).toString()}#map`;
+    return DEATHS_SHOW_ALL_HREF;
 }
 
 /** One bar's Map-tab link, or null when the bar has no character to open. */

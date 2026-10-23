@@ -2,11 +2,11 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { deathsShowAllHref } from './valheim-deaths.helpers';
+import { DEATHS_SHOW_ALL_HREF } from '../map/pin-filter-params';
 
 export function ValheimDeathsShowAll(): JSX.Element {
     return (
-        <Link to={deathsShowAllHref()} data-testid="valheim-deaths-show-all"
+        <Link to={DEATHS_SHOW_ALL_HREF} data-testid="valheim-deaths-show-all"
             className={`inline-flex min-h-[44px] items-center rounded-sm text-sm font-medium text-success hover:underline ${FOCUS_RING}`}>
             Show all
         </Link>

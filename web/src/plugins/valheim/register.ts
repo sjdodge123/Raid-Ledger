@@ -9,7 +9,7 @@ import { LazyValheimClaimBannerWidget } from './hub/valheim-claim-banner-widget-
 import { useClaimBannerWidgetVisible } from './hooks/use-valheim-claim-banner';
 import { LazyValheimDeathsWidget } from './hub/valheim-deaths-widget-lazy';
 import { ValheimDeathsShowAll } from './hub/valheim-deaths-show-all';
-import { useDeathsWidgetVisible } from './hooks/use-valheim-deaths';
+import { useDeathsWidgetVisible } from './hooks/use-valheim-deaths-visible';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
