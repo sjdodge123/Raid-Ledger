@@ -164,6 +164,8 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   `components/insights/community/temporal-heatmap.utils.ts`, ROK-1936): `foreground` contrasts with every
   green shade in both families, and `ring-inset` paints inside the cell so the grid keeps its size on a phone.
   The cell's `title` carries the label ("Sat 9pm · 17 sessions"); the shade stays the data.
+  Keyboard focus on such a cell is an outline (`focus-visible:outline-2 focus-visible:outline-offset-1
+  focus-visible:outline-success`), not a ring, so a focused peak keeps its mark.
 
 **Semantic-hue ratchet (TDB:1770, ROK-1586).** `web/src/styles/semantic-hue.guard.test.ts` counts every raw
 `emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `border-{t,r,b,l,x,y,s,e}-`
