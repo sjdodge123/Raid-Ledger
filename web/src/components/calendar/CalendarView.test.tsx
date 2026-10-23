@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CalendarView } from './CalendarView';
 import { useCalendarViewStore } from '../../stores/calendar-view-store';
 import { createMockEvent } from '../../test/factories';
+import { useCalendarHubFilterStore, NO_HUB, type HubKey } from '../../pages/calendar/use-calendar-hub-filter';
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 
@@ -281,5 +282,25 @@ describe('CalendarView — schedule event navigation (ROK-691)', () => {
                 state: expect.objectContaining({ fromCalendar: true }),
             }),
         );
+    });
+});
+
+describe('CalendarView — hub-filtered empty state (ROK-1893)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useCalendarViewStore.setState({ viewPref: 'week' });
+    });
+    afterEach(() => {
+        useCalendarHubFilterStore.getState().showAll();
+    });
+
+    it('shows a filter-aware empty line + "Show all hubs" while the hub filter hides events (ROK-1893)', () => {
+        useCalendarHubFilterStore.setState({ hidden: new Set<HubKey>([NO_HUB]) });
+        renderWithProviders(<CalendarView />);
+        expect(screen.getByText('No events match your filters')).toBeInTheDocument();
+        expect(screen.queryByText('No events this week')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Show all hubs' }));
+        expect(useCalendarHubFilterStore.getState().hidden.size).toBe(0);
+        expect(screen.getByText('No events this week')).toBeInTheDocument();
     });
 });

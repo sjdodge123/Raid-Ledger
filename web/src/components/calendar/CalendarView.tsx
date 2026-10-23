@@ -27,7 +27,7 @@ import { LayerDayColumnWrapper } from './layers/LayerDayColumnWrapper';
 import { LayerBackgroundEventWrapper } from './layers/LayerBackgroundEventWrapper';
 import { LayerMonthDateHeader } from './layers/LayerMonthDateHeader';
 import { useZonedLayerRange } from './layers/use-zoned-layer-range';
-import { useHubFilteredEvents } from '../../pages/calendar/use-calendar-hub-filter';
+import { useHubFilteredEvents, useCalendarHubFilterStore } from '../../pages/calendar/use-calendar-hub-filter';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
 import './layers/calendar-layers.css';
@@ -146,13 +146,25 @@ function useCalendarNavigation(currentDate: Date, setCurrentDate: (d: Date) => v
     return { handlePrev, handleNext, handleToday };
 }
 
+/** Empty grid. While the Hubs filter hides something, say so and offer to show every hub (ROK-1893). */
 function CalendarEmptyState({ view }: { view: View }) {
     const navigate = useNavigate();
+    const hubFilterActive = useCalendarHubFilterStore((st) => st.hidden.size > 0);
+    const showAllHubs = useCalendarHubFilterStore((st) => st.showAll);
     return (
         <div className="calendar-empty">
             <div className="empty-icon">📅</div>
-            <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
-            <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
+            {hubFilterActive ? (
+                <>
+                    <p>No events match your filters</p>
+                    <button onClick={showAllHubs} className="empty-cta">Show all hubs</button>
+                </>
+            ) : (
+                <>
+                    <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
+                    <button onClick={() => navigate('/events/new')} className="empty-cta">Create Event</button>
+                </>
+            )}
         </div>
     );
 }
