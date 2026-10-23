@@ -134,7 +134,11 @@ describe('CommunityDirectoryService.byGame (ROK-1883)', () => {
 
   it('carries the full visible total past the 50-row cap (Codex P2)', async () => {
     const joined = Array.from({ length: 50 }, (_, i) => joinedEntry(i + 1));
-    listMock.mockResolvedValue({ items: joined, nextCursor: 'more', total: 73 });
+    listMock.mockResolvedValue({
+      items: joined,
+      nextCursor: 'more',
+      total: 73,
+    });
     const { service } = build(['game_community'], []);
     const res = await service.byGame({ id: 7, role: 'member' }, 42);
     expect(res.hubs).toHaveLength(50);
