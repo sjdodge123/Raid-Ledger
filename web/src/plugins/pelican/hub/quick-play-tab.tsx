@@ -9,6 +9,7 @@ import type { HubQuickPlayItem } from '@raid-ledger/contract';
 import type { HubCtx } from '../../hub-module';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { useHubQuickPlay } from './server-hub-api';
+import { QUICK_PLAY_LOADING } from './quick-play-loading';
 
 function durationLabel(item: HubQuickPlayItem): string {
     if (item.endedAt === null) return 'Live now';
@@ -31,7 +32,7 @@ function SessionRow({ item }: { item: HubQuickPlayItem }): JSX.Element {
 /** Tab body; loading skeleton, error line and empty state per design-system §4.5/§4.6. */
 export function QuickPlayTab({ page }: HubCtx): JSX.Element {
     const query = useHubQuickPlay(page.guild.id);
-    if (query.isPending) return <div aria-busy="true" className="h-24 animate-pulse rounded-lg border border-edge bg-surface" data-testid="server-hub-quick-play-loading" />;
+    if (query.isPending) return QUICK_PLAY_LOADING;
     if (query.isError) return <p role="alert" className="text-sm text-danger">Couldn’t load Quick Play sessions. Try again later.</p>;
     if (query.data.data.length === 0) {
         return <p className="py-8 text-center text-sm text-muted" data-testid="server-hub-quick-play-empty">No Quick Play sessions on this server yet.</p>;

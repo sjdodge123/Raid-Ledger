@@ -37,6 +37,7 @@ import {
   type UpcomingRow,
 } from './guild-raids.queries';
 import { loadRosterRows } from './guild-roster.helpers';
+import { toContentInstanceCards } from '../../../events/event-content-cards.helpers';
 
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
@@ -50,6 +51,7 @@ function toCard(row: UpcomingRow): GuildEventCardDto {
     signupCount: row.signupCount,
     needed: neededFor(row.slotConfig, row.maxAttendees),
     viewerStatus: status.success ? status.data : null,
+    contentInstances: toContentInstanceCards(row.contentInstances),
   };
 }
 

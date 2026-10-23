@@ -52,8 +52,11 @@ function jwtSubject(jwt: string): number {
  * jti, so same-second mints for one user no longer collide — distinct users
  * are kept anyway, so each project's replay check (B) only ever sees its own
  * user's single-use link spent.
- * Fixture slots 8 and 9 are used by no other smoke spec; the fixture upsert
- * keeps them active and onboarded, so AuthGuard never detours to /onboarding.
+ * Fixture slots 8 and 9 are shared with scheduling-poll (its ROK-1564 describe
+ * uses 7/8/9 for game-time checks); the overlap is harmless since this spec
+ * writes no game-time state and each session has its own refresh family. The
+ * fixture upsert keeps them active and onboarded, so AuthGuard never detours
+ * to /onboarding.
  */
 const SIGN_IN_USER_BY_PROJECT: Readonly<Record<string, 'admin' | number>> = {
     desktop: 'admin',

@@ -10,7 +10,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { HubKindAdapter } from '../../plugins/plugin-host/extension-points';
 import { isStaff, type GuildActor } from '../guild-access.service';
-import { findGuild, hubSummaryFor } from '../guild-core.queries';
+import { findGuild, findHubGuild, hubSummaryFor } from '../guild-core.queries';
 import { loadCommunityHubEvents } from './community-events.queries';
 import { buildCommunityHubPage } from './community-hub-page.helpers';
 import {
@@ -78,8 +78,9 @@ export class CommunityHubKindAdapter implements HubKindAdapter {
   }
 
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
-    const guild = await findGuild(this.db, guildId);
-    if (!guild) throw new NotFoundException('Guild not found');
+    const hub = await findHubGuild(this.db, guildId);
+    if (!hub) throw new NotFoundException('Guild not found');
+    const { guild } = hub;
     const staff = isStaff(actor);
     const [members, role, discord] = await Promise.all([
       loadCommunityMembers(this.db, guildId),
@@ -87,7 +88,7 @@ export class CommunityHubKindAdapter implements HubKindAdapter {
       loadDiscordFields(this.db, actor.id),
     ]);
     return buildCommunityHubPage({
-      guild: hubSummaryFor(guild, staff),
+      guild: hubSummaryFor(hub, staff),
       status: guild.status,
       blurb: guild.blurb,
       role,

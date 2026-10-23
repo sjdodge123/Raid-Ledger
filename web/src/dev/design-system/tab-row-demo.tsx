@@ -31,14 +31,20 @@ export function TabRowDemo(): JSX.Element {
     const scoped = useIsScopedFamily();
     const label = TABS.find((t) => t.id === active)?.label ?? 'Overview';
     return (
-        <StateFrame label="TabRow — hash-synced tab links" note="Click a tab: the URL hash changes and Back returns. Narrow the window: the row scrolls, the page doesn't.">
+        <StateFrame label="TabRow — hash-synced tab links" note="Click a tab: the URL hash changes and Back returns. The 320px rows below put what doesn't fit into More; a hidden active tab names the trigger.">
             <div className="w-full min-w-0" data-testid="ds-tab-row">
                 <TabRow tabs={TABS} activeId={active} label="Demo page sections" className="mb-3" />
                 <div id={scoped ? undefined : tabPanelId('ds', active)} role="region" aria-label={label}
                     className="rounded-lg border border-edge bg-surface p-3 text-sm text-secondary">
                     {label} panel
                 </div>
+                {/* ROK-1876 More menu: same tabs + hash, so a pick from More moves the underline onto the trigger. */}
+                <div className="mt-4 flex w-[320px] max-w-full flex-col gap-4" data-testid="ds-tab-row-more">
+                    <TabRow tabs={TABS} activeId={active} label="Demo page sections, phone" />
+                    <TabRow tabs={TABS} activeId="resources" label="Demo page sections, Resources active" />
+                </div>
             </div>
         </StateFrame>
     );
 }
+

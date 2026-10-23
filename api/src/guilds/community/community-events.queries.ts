@@ -7,6 +7,7 @@ import {
   type GuildRecentEventDto,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { toContentInstanceCards } from '../../events/event-content-cards.helpers';
 
 /**
  * ROK-1870 L3 — the core "events tagged to this hub" read (`events.guild_id`)
@@ -55,6 +56,7 @@ async function loadUpcoming(
       title: events.title,
       duration: events.duration,
       maxAttendees: events.maxAttendees,
+      contentInstances: events.contentInstances,
       signupCount: signupCount(LIVE),
       viewerStatus: sql<
         string | null
@@ -75,6 +77,7 @@ function toEventCard(r: {
   maxAttendees: number | null;
   signupCount: number;
   viewerStatus: string | null;
+  contentInstances: unknown;
 }): GuildEventCardDto {
   const status = GuildViewerStatusSchema.safeParse(r.viewerStatus);
   return {
@@ -85,6 +88,7 @@ function toEventCard(r: {
     signupCount: r.signupCount,
     needed: r.maxAttendees,
     viewerStatus: status.success ? status.data : null,
+    contentInstances: toContentInstanceCards(r.contentInstances),
   };
 }
 

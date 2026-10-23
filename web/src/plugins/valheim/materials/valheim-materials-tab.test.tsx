@@ -41,6 +41,8 @@ const sharedList = () =>
 
 beforeEach(() => {
     media.desktop = false;
+    // ROK-1889: the selected item lives in the hash — start every test without one.
+    window.history.replaceState(null, '', '/');
     server.use(valheimContainersHandler(), valheimContainerHandler());
 });
 
@@ -408,7 +410,11 @@ describe('ValheimMaterialsTab', () => {
             server.use(valheimMaterialsHandler(materialsFixture()));
             renderTab();
             const wood = await woodToggle();
-            expect(wood).toHaveClass('justify-start', 'text-left', '[&>[data-button-label]]:w-full');
+            expect(wood).toHaveClass(
+                'justify-start',
+                'text-left',
+                '[&>[data-button-label]]:w-full',
+            );
         });
 
         it('phone: a row click selects the item, refetches with prefab=, and Clear resets', async () => {

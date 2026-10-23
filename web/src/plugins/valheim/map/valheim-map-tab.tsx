@@ -25,6 +25,8 @@ import {
 } from './map-selection';
 import { ValheimMapView } from './valheim-map-view';
 import { MapError } from './map-error';
+import { ChestFocusCard } from './chest-focus-card';
+import { ChestFocusContext, useChestFocus } from './use-chest-focus';
 
 export interface ValheimMapTabProps {
     /** The hub's Pelican server id. */
@@ -203,7 +205,20 @@ function ServerCharacters({
     );
 }
 
+/** ROK-1889: the chest focus card above the map; the marker reads the context. */
 export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
+    const focus = useChestFocus(serverId);
+    return (
+        <ChestFocusContext.Provider value={focus.query.data ?? null}>
+            <div className="grid gap-3">
+                <ChestFocusCard target={focus.target} query={focus.query} />
+                <MapTabBody serverId={serverId} />
+            </div>
+        </ChestFocusContext.Provider>
+    );
+}
+
+function MapTabBody({ serverId }: ValheimMapTabProps) {
     const params = new URLSearchParams(useLocation().search);
     const characters = useValheimServerCharacters(serverId);
     if (characters.isPending)
