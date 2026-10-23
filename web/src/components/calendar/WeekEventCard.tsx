@@ -58,9 +58,13 @@ function WeekEventGameLine({ event, tier }: { event: CalendarEvent; tier: Tier }
     );
 }
 
-function minimalHubTitle(event: CalendarEvent, tier: Tier): string | undefined {
+/**
+ * `<title> · <hub>` tooltip on every tier: overlapping Week cards can be 28–84px tall,
+ * so even a compact/standard card can clip its game line (ROK-1893 P4 verify).
+ */
+function hubBlockTitle(event: CalendarEvent): string | undefined {
     const suffix = hubSuffixText(event.resource?.hub);
-    return tier === 'minimal' && suffix ? `${event.title}${suffix}` : undefined;
+    return suffix ? `${event.title}${suffix}` : undefined;
 }
 
 /** The minimal tier shows no hub line; screen readers still get it (a `title` alone is unreliable). */
@@ -92,7 +96,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
     const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
 
     return (
-        <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} title={minimalHubTitle(event, tier)} style={{
+        <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} title={hubBlockTitle(event)} style={{
             backgroundImage: coverUrl
                 ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
                 : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,

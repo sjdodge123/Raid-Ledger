@@ -216,3 +216,12 @@ describe('WeekEventCard — hub suffix (ROK-1893 V3)', () => {
         expect(screen.queryByTestId('week-minimal-hub')).not.toBeInTheDocument();
     });
 });
+
+describe('WeekEventCard — hub survives a clipped card (ROK-1893 P4 verify FAIL a)', () => {
+    const hub = { id: 7, name: 'BG3 Friends', kind: 'game_community' as const };
+
+    it.each([180, 300])('a %i-minute (compact/standard) card carries the hub in its block title', (mins) => {
+        const { container } = renderCard(eventWithDuration(mins, { hub }));
+        expect(container.querySelector('.week-event-block')?.getAttribute('title')).toBe('Test Raid · BG3 Friends');
+    });
+});
