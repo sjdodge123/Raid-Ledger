@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ValheimDeathPin, ValheimMapPin } from '@raid-ledger/contract';
 import { deathsMapHref, deathsShowAllHref } from '../hub/valheim-deaths.helpers';
-import { filterPins, parsePinFilter, writePinFilter } from './pin-filter';
+import { filterPins, parsePinFilter, writePinFilter, writeSelection } from './pin-filter';
 
 const qs = (s: string) => new URLSearchParams(s);
 const own = (type: string, label: string): ValheimMapPin =>
@@ -51,5 +51,26 @@ describe('filterPins', () => {
             { type: 'Death', label: 'Ragnhild', x: 1, z: 2, checked: false, shared: false },
         ]);
         expect(filterPins(pins, { deathsOnly: true, scope: 'server' }, undefined)).toEqual([]);
+    });
+});
+
+describe('writeSelection (review fix: Show all scope stays explicit)', () => {
+    it('a world pick in Show all stays Show all — only vm changes', () => {
+        const next = writeSelection(qs('pins=death&vm=3'), { characterId: 5, mapId: 9, world: true });
+        expect(next.toString()).toBe('pins=death&vm=9');
+        expect(parsePinFilter(next)).toEqual({ deathsOnly: true, scope: 'server' });
+    });
+
+    it("a character pick in Show all is explicit: vc lands in the URL and the scope is that character's", () => {
+        const next = writeSelection(qs('pins=death&vm=3'), { characterId: 8, mapId: null, world: false });
+        expect(next.toString()).toBe('pins=death&vc=8');
+        expect(parsePinFilter(next)).toEqual({ deathsOnly: true, scope: 'character' });
+    });
+
+    it('outside Show all a world pick still pins the shown character', () => {
+        expect(writeSelection(qs('vm=3'), { characterId: 5, mapId: 9, world: true }).toString())
+            .toBe('vm=9&vc=5');
+        expect(writeSelection(qs('pins=death&vc=5'), { characterId: 5, mapId: 9, world: true }).toString())
+            .toBe('pins=death&vc=5&vm=9');
     });
 });

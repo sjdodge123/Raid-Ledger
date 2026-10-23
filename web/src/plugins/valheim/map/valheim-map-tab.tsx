@@ -24,6 +24,7 @@ import {
     worldLabel,
 } from './map-selection';
 import { ValheimMapView } from './valheim-map-view';
+import { writeSelection } from './pin-filter';
 import { MapError } from './map-error';
 import { ChestFocusCard } from './chest-focus-card';
 import { ChestFocusContext, useChestFocus } from './use-chest-focus';
@@ -41,15 +42,16 @@ function Empty({ text }: { text: string }) {
     );
 }
 
-/** Write the selection to the query string, keeping the `#map` hash. */
+/** Write the selection to the query string, keeping the `#map` hash and the pin scope. */
 function useSelectionWriter() {
     const location = useLocation();
     const navigate = useNavigate();
-    return (characterId: number, mapId: number | null) => {
-        const params = new URLSearchParams(location.search);
-        params.set(CHARACTER_PARAM, String(characterId));
-        if (mapId === null) params.delete(MAP_PARAM);
-        else params.set(MAP_PARAM, String(mapId));
+    return (characterId: number, mapId: number | null, world: boolean) => {
+        const params = writeSelection(new URLSearchParams(location.search), {
+            characterId,
+            mapId,
+            world,
+        });
         navigate(
             { search: `?${params.toString()}`, hash: location.hash },
             { replace: true },
@@ -108,7 +110,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                 label="Character"
                 value={characterId}
                 options={characters}
-                onPick={(id) => write(id, null)}
+                onPick={(id) => write(id, null, false)}
             />
             {maps.length > 1 && mapId !== null && (
                 <Picker
@@ -116,7 +118,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                     label="World"
                     value={mapId}
                     options={worldOptions(maps)}
-                    onPick={(id) => write(characterId, id)}
+                    onPick={(id) => write(characterId, id, true)}
                 />
             )}
         </div>
