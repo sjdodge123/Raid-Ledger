@@ -4,6 +4,12 @@
  * "Next raid" chip that jumps to the module's events tab. Everything
  * game-specific (realm, faction, the LedgerLink import line) arrives through
  * the hub module's `heroPills` / `heroNote`.
+ *
+ * ROK-1884 — below `lg` the header is a grid: crest · one-line title · actions
+ * on the first row, then the chip row (and blurb / next-raid / note) full
+ * width beneath, so the chips never crowd the title or the buttons. The
+ * wrappers are `display: contents` there and turn back into the original
+ * flex boxes at `lg`, which stays as it was.
  */
 import type { JSX, ReactNode } from 'react';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
@@ -23,7 +29,7 @@ function crestInitials(name: string): string {
 function Crest({ name }: { name: string }): JSX.Element {
     return (
         <div aria-hidden="true"
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-2 border-edge-strong bg-surface text-xl font-bold text-secondary sm:h-20 sm:w-20 sm:text-2xl">
+            className="col-start-1 row-start-1 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-2 border-edge-strong bg-surface text-xl font-bold text-secondary sm:h-20 sm:w-20 sm:text-2xl">
             {crestInitials(name)}
         </div>
     );
@@ -31,7 +37,7 @@ function Crest({ name }: { name: string }): JSX.Element {
 
 function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     return (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+        <div className="col-span-full flex flex-wrap items-center gap-2 text-sm text-muted" data-testid="hub-hero-chips">
             {(mod?.heroPills ?? []).map((Pill, i) => <Pill key={`hero-pill-${i}`} {...ctx} />)}
             <span data-testid="guild-member-count">{memberCountLabel(ctx.page.guild.memberCount)}</span>
         </div>
@@ -52,6 +58,14 @@ function NextRaidChip({ raid, tab, label }: { raid: GuildEventCardDto; tab: stri
     );
 }
 
+/** Below `lg`: crest | title | actions, then full-width rows. At `lg`: the original flex row. */
+export const HERO_CLASS =
+    'mb-4 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex lg:flex-row lg:justify-between lg:gap-4';
+
+/** One line with an ellipsis below `lg`; wraps as before at `lg`. */
+export const TITLE_CLASS =
+    'col-start-2 row-start-1 min-w-0 truncate text-2xl font-bold text-foreground sm:text-3xl lg:mb-2 lg:overflow-visible lg:whitespace-normal lg:break-words';
+
 interface HubHeroProps {
     ctx: HubCtx;
     module: HubModule | undefined;
@@ -69,21 +83,20 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
     const jumpTab = mod?.eventsJumpTab ?? 'events';
     const chip = nextRaid !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} label={hubCopy(ctx.page.guild.kind).nextEventLabel} /> : null;
     return (
-        <header data-testid="guild-hero"
-            className="mb-4 flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
+        <header data-testid="guild-hero" className={HERO_CLASS}>
+            <div className="contents lg:flex lg:min-w-0 lg:items-center lg:gap-4" data-testid="hub-hero-identity">
                 <Crest name={ctx.page.guild.name} />
-                <div className="min-w-0">
-                    <h1 className="mb-2 break-words text-2xl font-bold text-foreground sm:text-3xl">{ctx.page.guild.name}</h1>
-                    {blurb && <p className="mb-2 break-words text-sm text-secondary" data-testid="hub-hero-blurb">{blurb}</p>}
+                <div className="contents lg:block lg:min-w-0">
+                    <h1 className={TITLE_CLASS} title={ctx.page.guild.name}>{ctx.page.guild.name}</h1>
+                    {blurb && <p className="col-span-full break-words text-sm text-secondary lg:mb-2" data-testid="hub-hero-blurb">{blurb}</p>}
                     <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>
             {(chip || line || action) && (
-                <div className="flex flex-col items-start gap-2 lg:items-end">
-                    {chip}
-                    {line && <p className="text-xs text-dim">{line}</p>}
-                    {action}
+                <div className="contents lg:flex lg:flex-col lg:items-end lg:gap-2" data-testid="hub-hero-side">
+                    {chip && <div className="col-span-full lg:contents">{chip}</div>}
+                    {line && <p className="col-span-full text-xs text-dim">{line}</p>}
+                    {action && <div className="col-start-3 row-start-1 lg:contents" data-testid="hub-hero-actions">{action}</div>}
                 </div>
             )}
         </header>
