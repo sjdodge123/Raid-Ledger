@@ -125,16 +125,24 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
 
 /** The map, a detail-fetch error with Retry, or the no-map empty state. */
 function CharacterMapBody({
+    serverId,
     characterId,
     mapId,
     detail,
 }: {
+    serverId: number;
     characterId: number;
     mapId: number | null;
     detail: ReturnType<typeof useValheimCharacterMaps>;
 }) {
     if (mapId !== null)
-        return <ValheimMapView characterId={characterId} mapId={mapId} />;
+        return (
+            <ValheimMapView
+                serverId={serverId}
+                characterId={characterId}
+                mapId={mapId}
+            />
+        );
     if (detail.error)
         return (
             <MapError
@@ -149,10 +157,12 @@ function CharacterMapBody({
 
 /** The selected character's world picker + map, once the character list is in. */
 function CharacterMap({
+    serverId,
     rows,
     characterId,
     param,
 }: {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     characterId: number;
     param: string | null;
@@ -169,6 +179,7 @@ function CharacterMap({
                 mapId={mapId}
             />
             <CharacterMapBody
+                serverId={serverId}
                 characterId={characterId}
                 mapId={mapId}
                 detail={detail}
@@ -179,9 +190,11 @@ function CharacterMap({
 
 /** The character list is in: pick the selected character (query, own, first). */
 function ServerCharacters({
+    serverId,
     rows,
     params,
 }: {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     params: URLSearchParams;
 }) {
@@ -198,6 +211,7 @@ function ServerCharacters({
     }
     return (
         <CharacterMap
+            serverId={serverId}
             rows={rows}
             characterId={characterId}
             param={params.get(MAP_PARAM)}
@@ -233,7 +247,13 @@ function MapTabBody({ serverId }: ValheimMapTabProps) {
         return (
             <Empty text="Characters could not be loaded. Try again later." />
         );
-    return <ServerCharacters rows={characters.data} params={params} />;
+    return (
+        <ServerCharacters
+            serverId={serverId}
+            rows={characters.data}
+            params={params}
+        />
+    );
 }
 
 export default ValheimMapTab;
