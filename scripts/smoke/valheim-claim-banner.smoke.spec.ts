@@ -16,6 +16,7 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { API_BASE, apiPost, getAdminToken } from "./api-helpers";
 import { signInContextAs } from "./browser-session";
+import { expectHubTabReachable } from "./hub-tabs";
 
 const FIXTURE = "/admin/test/valheim/claim-drive-fixture";
 const BANNER = "Claim your character";
@@ -165,9 +166,9 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await openCharacters(page, f, true);
     await expect(banner(page)).toHaveCount(0);
     await openOverview(page, f);
-    await expect(
-      page.getByRole("link", { name: /Characters/ }).first(),
-    ).toBeVisible();
+    // The Characters tab stays reachable from the Overview — in the row, or
+    // (phone, ROK-1876) folded into the More menu.
+    await expectHubTabReachable(page, /Characters/, "characters");
     await expect(banner(page)).toHaveCount(0);
   });
 
