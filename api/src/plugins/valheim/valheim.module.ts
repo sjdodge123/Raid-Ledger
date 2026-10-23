@@ -43,6 +43,7 @@ import { ValheimRecipesController } from './armory/read/valheim-recipes.controll
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { SettingsModule } from '../../settings/settings.module';
+import { CronJobModule } from '../../cron-jobs/cron-job.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -54,11 +55,13 @@ import { SettingsModule } from '../../settings/settings.module';
   // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
   // ROK-1933 L2: NotificationModule for the claim-suggestion DM; L3:
   // DiscordBotModule for the bot client the DM-button listener binds to;
-  // SettingsModule for the claim-suggest service's client URL.
+  // SettingsModule for the claim-suggest service's client URL; CronJobModule
+  // for the claim-suggest cron's run tracking.
   imports: [
     ValheimLinkDemoSeedModule,
     NotificationModule,
     SettingsModule,
+    CronJobModule,
     forwardRef(() => DiscordBotModule),
   ],
   controllers: [
