@@ -29,6 +29,8 @@ import { BossDataRefreshService } from './boss-data-refresh.service';
 import { QuestProgressController } from './quest-progress.controller';
 import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
+import { EventQuestReadinessController } from './event-quest-readiness.controller';
+import { EventQuestReadinessService } from './event-quest-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -65,6 +67,7 @@ import { WowFactsService } from './facts/wow-facts.service';
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
+    EventQuestReadinessController,
     AddonImportController,
     AddonImportAdminController,
     CharacterQuestsController,
@@ -88,6 +91,7 @@ import { WowFactsService } from './facts/wow-facts.service';
     BossDataRefreshService,
     QuestProgressService,
     QuestProgressReadService,
+    EventQuestReadinessService,
     AddonImportService,
     AddonCharacterUnlinkService,
     AddonImportCreateService,
