@@ -79,6 +79,10 @@ describe('buildUpcomingPollsQuery', () => {
     expect(text).toContain("AND l.visibility = 'public'");
   });
 
+  it('leaves hub-tagged polls out (ROK-1893 P3 ruling 2026-10-23)', () => {
+    expect(text).toContain('AND l.guild_id IS NULL');
+  });
+
   it('orders by deadline (no-deadline last) and caps the list', () => {
     expect(text).toContain('ORDER BY l.phase_deadline ASC NULLS LAST');
     expect(text).toContain(`LIMIT ${UPCOMING_POLL_LIMIT}`);

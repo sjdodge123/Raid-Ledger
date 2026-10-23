@@ -131,6 +131,7 @@ export function buildUpcomingPollsQuery(): SQL {
     JOIN games g ON g.id = m.game_id
     WHERE ${votableStandalonePollSql()}
       AND l.visibility = 'public'
+      AND l.guild_id IS NULL -- ROK-1893 P3 ruling 2026-10-23: hub polls stay on their hub
     ORDER BY l.phase_deadline ASC NULLS LAST, m.id ASC
     LIMIT ${sql.raw(String(UPCOMING_POLL_LIMIT))}
   `;

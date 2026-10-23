@@ -129,6 +129,8 @@ export interface HubModule {
     memberSearch?: (row: HubMemberRow) => string;
     /** Band above the groups in the Members frame (WoW: role counts). */
     membersSummary?: ComponentType<HubCtx>;
+    /** Block above the core Events tab widgets (ROK-1893 P3, community hubs: Open polls). Lives in the module's own chunk. */
+    eventsLead?: ComponentType<HubCtx>;
     /** Sub-title under the Members heading. */
     membersBlurb?: (page: GuildPage) => string;
     /** Shown instead of the groups when there are none (a function can read the page, e.g. visitor vs member). */

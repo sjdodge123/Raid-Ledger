@@ -7,6 +7,30 @@ import type { CreateEventDto } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { generateRecurringDates } from './recurrence.util';
 import { defined } from '../common/defined.helpers';
+import {
+  findMatchPollHub,
+  isLiveHubMemberOrStaff,
+} from '../lineups/standalone-poll/standalone-poll-hub.helpers';
+
+/**
+ * ROK-1893 P3 (D16): an event created from a hub poll's match inherits the
+ * poll's hub as its guild tag — only when the client sent none, the hub is
+ * still visible, the event is for the hub's game, and the event's creator is
+ * still a live (not left, not banned) member of the hub or staff.
+ */
+export async function inheritPollHub(
+  db: PostgresJsDatabase<typeof schema>,
+  dto: CreateEventDto,
+  creatorId: number,
+): Promise<CreateEventDto> {
+  if (dto.guildId !== undefined || dto.schedulingMatchId === undefined) {
+    return dto;
+  }
+  const hub = await findMatchPollHub(db, dto.schedulingMatchId);
+  if (!hub || hub.gameId !== dto.gameId) return dto;
+  if (!(await isLiveHubMemberOrStaff(db, hub.id, creatorId))) return dto;
+  return { ...dto, guildId: hub.id };
+}
 
 /** Builds the base insert values shared by single and recurring events. */
 export function buildBaseValues(
