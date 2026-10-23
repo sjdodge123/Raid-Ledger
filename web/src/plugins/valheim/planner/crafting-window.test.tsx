@@ -174,7 +174,10 @@ describe('CraftingWindow', () => {
         renderWindow();
         await user.click(await screen.findByRole('button', { name: 'Bronze' }));
         const sheet = await screen.findByRole('dialog');
-        expect(within(sheet).queryByText('Loading the breakdown…')).toBeNull();
+        const details = within(sheet).getByText('Full breakdown').closest('details');
+        // Collapsed: neither the loading line nor a tree is mounted, so no request has fired.
+        expect(details?.querySelector('summary + div')?.childElementCount).toBe(0);
+        expect(treeHits).toEqual([]);
         await user.click(within(sheet).getByText('Full breakdown'));
         await waitFor(() => expect(treeHits).toHaveLength(1));
     });
