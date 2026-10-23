@@ -42,6 +42,7 @@ import { ValheimMaterialsService } from './armory/read/valheim-materials.service
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
+import { SettingsModule } from '../../settings/settings.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -52,10 +53,12 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 @Module({
   // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
   // ROK-1933 L2: NotificationModule for the claim-suggestion DM; L3:
-  // DiscordBotModule for the bot client the DM-button listener binds to.
+  // DiscordBotModule for the bot client the DM-button listener binds to;
+  // SettingsModule for the claim-suggest service's client URL.
   imports: [
     ValheimLinkDemoSeedModule,
     NotificationModule,
+    SettingsModule,
     forwardRef(() => DiscordBotModule),
   ],
   controllers: [
