@@ -7,6 +7,7 @@
  */
 import { useState, type JSX } from 'react';
 import { CharacterLink } from '../../../components/hub/character-link';
+import { Button } from '../../../components/ui/button';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useRosterInsights } from './use-roster-insights';
 import { ProfessionsEmpty } from './professions-empty';
@@ -40,14 +41,16 @@ function ProfessionRow({ profession }: { profession: RosterProfession }): JSX.El
     const bestSkill = best ? formatSkill(best.skill, best.maxSkill) : null;
     return (
         <li className="py-1.5">
-            <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
-                className="flex w-full min-h-[40px] items-center justify-between gap-2 rounded-sm text-left text-sm hover:opacity-80">
-                <span className="min-w-0 truncate font-medium text-foreground">{profession.name}</span>
-                <span className="shrink-0 text-xs text-muted">
-                    {memberCount(profession.members.length)}
-                    {bestSkill !== null && <> · best <span className="tabular-nums text-foreground">{bestSkill}</span></>}
+            <Button type="button" variant="bare" fullWidth aria-expanded={open} onClick={() => setOpen((v) => !v)}
+                className="min-h-[40px] rounded-sm text-left text-sm hover:opacity-80">
+                <span className="flex w-full items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-foreground">{profession.name}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                        {memberCount(profession.members.length)}
+                        {bestSkill !== null && <> · best <span className="tabular-nums text-foreground">{bestSkill}</span></>}
+                    </span>
                 </span>
-            </button>
+            </Button>
             {open && <MemberList name={profession.name} members={profession.members} />}
         </li>
     );
