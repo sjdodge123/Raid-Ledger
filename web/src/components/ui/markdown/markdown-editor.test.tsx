@@ -52,7 +52,7 @@ describe('MarkdownEditor (V10)', () => {
 
     it.each([
         ['bold', '**raid**'], ['italic', '*raid*'], ['strike', '~~raid~~'], ['code', '`raid`'],
-        ['bullets', '- raid'], ['numbers', '1. raid'],
+        ['bullets', '- raid'], ['numbers', '1. raid'], ['h1', '# raid'], ['h2', '## raid'], ['h3', '### raid'],
     ])('toolbar %s on a selection emits %j', (key, expected) => {
         const { editor, last } = setup('raid');
         editor.commands.selectAll();
@@ -98,8 +98,9 @@ describe('MarkdownEditor (V10) — keyboard, paste, contract', () => {
         const { editor, last } = setup('');
         editor.view.pasteHTML('<h1>T</h1><p><u>u</u> <img src="x"><a href="javascript:x">j</a></p><table><tr><td>c</td></tr></table>');
         const md = last();
-        for (const bad of ['#', '<', '![', 'javascript', '|']) expect(md).not.toContain(bad);
-        expect(md).toContain('T');
+        for (const bad of ['<', '![', 'javascript', '|']) expect(md).not.toContain(bad);
+        // ROK-1898: an h1–h3 is now in the subset — it pastes as a heading of that level.
+        expect(md.startsWith('# T\n\n')).toBe(true);
     });
 
     it('paste: nested lists flatten', () => {
@@ -117,9 +118,10 @@ describe('MarkdownEditor (V10) — keyboard, paste, contract', () => {
     });
 
     it('legacy block syntax loads as literal text instead of blanking the editor', () => {
-        const { editor } = setup('# Raid\n\n> quote');
-        expect(editor.getText()).toContain('# Raid');
+        const { editor, el } = setup('#### Raid\n\n> quote\n\n# Loot');
+        expect(editor.getText()).toContain('#### Raid');
         expect(editor.getText()).toContain('> quote');
+        expect(el.querySelector('h3')?.textContent, 'ROK-1898: `# ` is a heading, not legacy text').toBe('Loot');
     });
 
     it('counter shows source length and 4001 is invalid', () => {
@@ -255,5 +257,56 @@ describe('MarkdownEditor — stored nested lists load flat (Codex r12)', () => {
         editor.commands.keyboardShortcut('Enter');
         expect(listItemCount(editor), 'Enter at the end of "parent" adds an item').toBe(3);
         expect(schemaError(editor)).toBeNull();
+    });
+});
+
+/** Type `text` one character at a time through the view's text-input handlers (input rules run). */
+function typeText(editor: Editor, text: string): void {
+    for (const ch of text) {
+        const { from, to } = editor.state.selection;
+        const tr = (): ReturnType<typeof editor.state.tr.insertText> => editor.state.tr.insertText(ch, from, to);
+        const handled = editor.view.someProp('handleTextInput', (f) => f(editor.view, from, to, ch, tr));
+        if (!handled) editor.view.dispatch(tr());
+    }
+}
+
+describe('MarkdownEditor headings (ROK-1898)', () => {
+    it.each([['# Raid', 'h3'], ['## Raid', 'h4'], ['### Raid', 'h5']])('typing %j converts the paragraph into a card-level <%s>', (md, tag) => {
+        const { editor, el, last } = setup('');
+        typeText(editor, md);
+        expect(last()).toBe(md);
+        expect(el.querySelector(tag)?.textContent).toBe('Raid');
+    });
+
+    it('typing "#### " stays a literal paragraph (levels 1–3 only)', () => {
+        const { editor, el, last } = setup('');
+        typeText(editor, '#### Raid');
+        expect(el.querySelector('h3, h4, h5, h6')).toBeNull();
+        expect(last()).toBe('#### Raid');
+    });
+
+    it('a stored heading round-trips and the toolbar button reads pressed on it', () => {
+        const { editor } = setup('## Loot rules\n\nbody');
+        expect(normalizeEditorMarkdown(editor.getMarkdown())).toBe('## Loot rules\n\nbody');
+        editor.commands.setTextSelection(3);
+        fireEvent.click(screen.getByTestId('md-tool-h2'));
+        expect(screen.getByTestId('md-tool-h2')).toHaveAttribute('aria-pressed', 'false');
+    });
+});
+
+describe('MarkdownEditor — a legacy body with raw HTML (ROK-1898)', () => {
+    it('emits the escaped saved form on load, so an untouched save passes the HTML check', () => {
+        const legacy = 'Raid <b>night</b>\r\n\r\n\r\nBring flasks';
+        const { onChange, last } = setup(legacy);
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(last()).toBe('Raid \\<b>night\\</b>\n\nBring flasks');
+        expect(findHubPostMarkdownViolation(last())).toBeNull();
+        const shown = render(<MarkdownBlock text={last()} />).container.textContent;
+        expect(shown).toBe(render(<MarkdownBlock text={legacy} />).container.textContent);
+    });
+
+    it('a body the editor already saved emits nothing on load', () => {
+        const { onChange } = setup('**Raid** \\<b>night\n\n## Loot');
+        expect(onChange).not.toHaveBeenCalled();
     });
 });

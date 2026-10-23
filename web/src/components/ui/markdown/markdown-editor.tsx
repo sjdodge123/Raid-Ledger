@@ -58,15 +58,16 @@ function useA11y(p: MarkdownEditorProps, countId: string): Record<string, string
  * (backfilled) body can hold raw HTML (`<b>`) the editor shows as literal text and saves escaped
  * (`\<b>`); without this an untouched body was resubmitted raw and refused ("Posts can't contain
  * HTML"). The draft now always equals what the author sees. A body the editor saved is byte-stable
- * on reload, so normal posts never emit here.
+ * on reload, so normal posts never emit here. (`setEditable` is called with `emitUpdate: false`,
+ * and `onUpdate` drops an unchanged value, so this deliberate emit is the only one on mount.)
  */
-function useEmitSavedFormOnLoad(editor: Editor, value: string, onChange: (md: string) => void, lastRef: { current: string }): void {
-    const initial = useRef({ value, onChange });
+function useEmitSavedFormOnLoad(editor: Editor, onChange: (md: string) => void, lastRef: { current: string }): void {
+    const onLoad = useRef(onChange);
     useEffect(() => {
         const md = serializeEditorMarkdown(editor);
-        if (md === initial.current.value) return;
+        if (md === lastRef.current) return;
         lastRef.current = md;
-        initial.current.onChange(md);
+        onLoad.current(md);
     }, [editor, lastRef]);
 }
 
@@ -80,11 +81,17 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
     const editor = useEditor({
         extensions, content: loadStoredMarkdown(p.value), editable: !p.disabled,
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
-        onUpdate: ({ editor: e }) => { const md = serializeEditorMarkdown(e); last.current = md; p.onChange(md); },
+        onUpdate: ({ editor: e }) => {
+            const md = serializeEditorMarkdown(e);
+            if (md === last.current) return;
+            last.current = md;
+            p.onChange(md);
+        },
     }, [extensions]);
-    useEmitSavedFormOnLoad(editor, p.value, p.onChange, last);
+    useEmitSavedFormOnLoad(editor, p.onChange, last);
     useEffect(() => { editor.setOptions({ editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists } }); }, [editor, attrs]);
-    useEffect(() => { editor.setEditable(!p.disabled); }, [editor, p.disabled]);
+    // No `update` on an editability flip — it changes no content (the load emit above is deliberate).
+    useEffect(() => { editor.setEditable(!p.disabled, false); }, [editor, p.disabled]);
     useEffect(() => {
         if (p.value === last.current) return;
         last.current = p.value;
