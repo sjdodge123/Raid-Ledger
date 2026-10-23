@@ -8,11 +8,9 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts';
+import { chartAxisProps, chartBarTooltipProps, chartGridProps } from '../ui/chart-chrome';
 import { useGameAttendance } from '../../hooks/use-analytics';
 
-const TOOLTIP_STYLE = {
-    backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6',
-};
 
 function formatGameData(games: { gameName: string; avgAttendanceRate: number; avgNoShowRate: number; totalEvents: number }[]) {
     return games.map((g) => ({
@@ -28,10 +26,10 @@ function GameBarChart({ data }: { data: ReturnType<typeof formatGameData> }) {
     return (
         <ResponsiveContainer width="100%" height={280}>
             <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
-                <YAxis stroke="#9CA3AF" fontSize={12} tickFormatter={(val: number) => `${val}%`} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={((value: number | undefined, name: string | undefined) => [`${value ?? 0}%`, name ?? '']) as never} />
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="name" {...chartAxisProps} fontSize={12} />
+                <YAxis {...chartAxisProps} fontSize={12} tickFormatter={(val: number) => `${val}%`} />
+                <Tooltip {...chartBarTooltipProps} formatter={((value: number | undefined, name: string | undefined) => [`${value ?? 0}%`, name ?? '']) as never} />
                 <Legend />
                 <Bar dataKey="attendance" fill="#34D399" name="Attendance %" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="noShow" fill="#F87171" name="No-Show %" radius={[4, 4, 0, 0]} />

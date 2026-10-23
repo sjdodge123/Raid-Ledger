@@ -1,6 +1,7 @@
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import { chartAxisProps, chartBarTooltipProps, chartGridProps } from '../../ui/chart-chrome';
 import type { CommunityTemporalResponseDto } from '@raid-ledger/contract';
 
 interface Props {
@@ -24,10 +25,10 @@ export function PeakHoursChart({ peakHours }: Props) {
         <div className="h-60 w-full" data-testid="peak-hours-chart">
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={rows}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-                    <XAxis dataKey="day" stroke="#a1a1aa" fontSize={11} />
-                    <YAxis stroke="#a1a1aa" fontSize={11} allowDecimals={false} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+                    <CartesianGrid {...chartGridProps} />
+                    <XAxis dataKey="day" {...chartAxisProps} fontSize={11} />
+                    <YAxis {...chartAxisProps} fontSize={11} allowDecimals={false} />
+                    <Tooltip {...chartBarTooltipProps} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {stackKeys.map((k, i) => (
                         <Bar key={k} dataKey={k} stackId="peak"

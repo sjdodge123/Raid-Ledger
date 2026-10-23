@@ -1,6 +1,7 @@
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { chartAxisProps, chartBarTooltipProps, chartGridProps } from '../../ui/chart-chrome';
 import type { CommunityEngagementResponseDto } from '@raid-ledger/contract';
 
 interface Props {
@@ -19,10 +20,10 @@ export function IntensityHistogram({ buckets }: Props) {
         <div className="h-60 w-full" data-testid="intensity-histogram">
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-                    <XAxis dataKey="label" stroke="#a1a1aa" fontSize={11} />
-                    <YAxis stroke="#a1a1aa" fontSize={11} allowDecimals={false} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+                    <CartesianGrid {...chartGridProps} />
+                    <XAxis dataKey="label" {...chartAxisProps} fontSize={11} />
+                    <YAxis {...chartAxisProps} fontSize={11} allowDecimals={false} />
+                    <Tooltip {...chartBarTooltipProps} />
                     <Bar dataKey="userCount" fill="#38bdf8" isAnimationActive={false} />
                 </BarChart>
             </ResponsiveContainer>
