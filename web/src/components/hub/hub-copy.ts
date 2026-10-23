@@ -37,6 +37,8 @@ export interface HubCopy {
     /** ROK-1891 — the full Events section heading and blurb. */
     eventsTitle: string;
     eventsBlurb: string;
+    /** ROK-1891 — the Discord mirror blurb's phrase when the bot's server name is unknown. */
+    discordFallback: string;
 }
 
 /** ROK-1891 — the schedule card on hubs that are not WoW guilds (operator ruling). */
@@ -71,6 +73,7 @@ const WOW_COPY: HubCopy = {
     nextEventLabel: 'Next raid',
     eventsTitle: 'Guild events',
     eventsBlurb: 'Raids and runs scheduled for this guild.',
+    discordFallback: 'the community Discord',
 };
 
 const SERVER_COPY: HubCopy = {
@@ -94,6 +97,7 @@ const SERVER_COPY: HubCopy = {
     nextEventLabel: 'Next event',
     eventsTitle: 'Server events',
     eventsBlurb: 'Sessions and events scheduled for this server.',
+    discordFallback: "the server's Discord",
 };
 
 /** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
@@ -118,6 +122,7 @@ const COMMUNITY_COPY: HubCopy = {
     nextEventLabel: 'Next event',
     eventsTitle: 'Hub events',
     eventsBlurb: 'Sessions and events scheduled for this hub.',
+    discordFallback: 'the community Discord',
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {
