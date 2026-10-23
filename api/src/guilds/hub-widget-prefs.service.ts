@@ -16,6 +16,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import type { GuildActor } from './guild-access.service';
 import { findGuild } from './guild-core.queries';
+import { HUB_NOT_FOUND } from './hub-hidden.helpers';
 import { findProfileRow, upsertProfile } from './guild-profile.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -81,7 +82,7 @@ export class HubWidgetPrefsService {
     }
     const widgetPrefs = 'reset' in parsed.data ? null : parsed.data;
     if (!(await findGuild(this.db, guildId))) {
-      throw new NotFoundException('Guild not found');
+      throw new NotFoundException(HUB_NOT_FOUND);
     }
     await upsertProfile(this.db, guildId, {
       widgetPrefs,
