@@ -1,4 +1,4 @@
-/** ROK-1876 L3 / ROK-1877 L1 — the server-hours widget's pure model: server filter, now line, day rows, restart line. */
+/** ROK-1876 L3 / ROK-1877 L1 — the server-hours widget's pure model: server filter, now line, week rows, restart line. */
 import { describe, expect, it } from 'vitest';
 import type { GameServerCalendarItemDto } from '@raid-ledger/contract';
 import { buildServerHours, hoursRange, nowModel } from './server-hours.helpers';
@@ -19,11 +19,11 @@ const build = (over: Partial<Parameters<typeof buildServerHours>[0]> = {}) =>
 
 describe('buildServerHours (ROK-1876)', () => {
     it('lists one row per day for this server only, in the viewer timezone', () => {
-        expect(build().days).toEqual([
-            { key: '2026-10-14', day: 'Today', spans: '6:00 PM – 2:00 AM' },
-            { key: '2026-10-15', day: 'Thu', spans: '1:00 PM – 1:40 PM' },
+        expect(build().weekRows).toEqual([
+            { key: '2026-10-14', label: 'Wed', spans: '6:00 PM – 2:00 AM' },
+            { key: '2026-10-15', label: 'Thu', spans: '1:00 PM – 1:40 PM' },
         ]);
-        expect(build({ tz: 'America/New_York' }).days[0]).toEqual({ key: '2026-10-14', day: 'Today', spans: '2:00 PM – 10:00 PM' });
+        expect(build({ tz: 'America/New_York' }).weekRows[0]).toEqual({ key: '2026-10-14', label: 'Wed', spans: '2:00 PM – 10:00 PM' });
     });
 
     it('says when the next window is up, or until when the open one runs (ROK-1877 Q7)', () => {
@@ -31,9 +31,10 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(build({ state: 'running', now: Date.parse('2026-10-14T20:00:00Z') }).nowLine).toBe('Online now · until Thu 2:00 AM');
     });
 
-    it('drops windows that already ended and keeps an open one under today', () => {
-        const days = build({ now: Date.parse('2026-10-15T01:00:00Z') }).days;
-        expect(days).toEqual([{ key: '2026-10-15', day: 'Today', spans: '6:00 PM – 2:00 AM, 1:00 PM – 1:40 PM' }]);
+    it('starts the week at today: an overnight window that began yesterday sits on yesterday, the now line carries it (ROK-1877)', () => {
+        const hours = build({ state: 'running', now: Date.parse('2026-10-15T01:00:00Z') });
+        expect(hours.weekRows).toEqual([{ key: '2026-10-15', label: 'Thu', spans: '1:00 PM – 1:40 PM' }]);
+        expect(hours.nowLine).toBe('Online now · until 2:00 AM');
     });
 
     it('shows the next restart of this server, ignoring other effects and servers', () => {
@@ -41,9 +42,10 @@ describe('buildServerHours (ROK-1876)', () => {
         expect(build({ now: Date.parse('2026-10-15T05:00:00Z') }).restartLine).toBeNull();
     });
 
-    it('has no day rows when the server has no windows (the empty state)', () => {
+    it('has no week rows when the server has no windows (the empty state)', () => {
         const hours = build({ pelicanServerId: 5, state: 'running' });
-        expect(hours.days).toEqual([]);
+        expect(hours.weekRows).toEqual([]);
+        expect(hours.empty).toBe(true);
         expect(hours.nowLine).toBe('Online now');
         expect(hours.restartLine).toBeNull();
     });
@@ -53,25 +55,23 @@ describe('buildServerHours (ROK-1876)', () => {
         const long: GameServerCalendarItemDto[] = [
             { kind: 'window', ...mine, start: '2026-10-11T22:00:00Z', end: '2026-10-18T06:00:00Z', label: 'Week', source: 'schedule' },
         ];
-        expect(build({ items: long }).days).toEqual([
-            { key: '2026-10-14', day: 'Today', spans: 'All day' },
-            { key: '2026-10-15', day: 'Thu', spans: 'All day' },
-            { key: '2026-10-16', day: 'Fri', spans: 'All day' },
-            { key: '2026-10-17', day: 'Sat', spans: 'All day' },
-            { key: '2026-10-18', day: 'Sun', spans: 'until 6:00 AM' },
+        expect(build({ items: long }).weekRows).toEqual([
+            { key: '2026-10-14', label: 'Wed–Sat', spans: 'All day' },
+            { key: '2026-10-18', label: 'Sun', spans: 'until 6:00 AM' },
         ]);
-        const fromSat = build({ items: long, now: Date.parse('2026-10-10T12:00:00Z') }).days;
-        expect(fromSat[0]).toEqual({ key: '2026-10-11', day: 'Sun', spans: 'from 10:00 PM' });
-        expect(fromSat.map((d) => d.key)).toEqual(['2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18']);
+        expect(build({ items: long, now: Date.parse('2026-10-10T12:00:00Z') }).weekRows).toEqual([
+            { key: '2026-10-11', label: 'Sun', spans: 'from 10:00 PM' },
+            { key: '2026-10-12', label: 'Mon–Fri', spans: 'All day' },
+        ]);
     });
 
     it('drops the empty tail when a multi-day window ends exactly at midnight', () => {
         const toMidnight: GameServerCalendarItemDto[] = [
             { kind: 'window', ...mine, start: '2026-10-14T18:00:00Z', end: '2026-10-16T00:00:00Z', label: 'Two days', source: 'schedule' },
         ];
-        expect(build({ items: toMidnight }).days).toEqual([
-            { key: '2026-10-14', day: 'Today', spans: 'from 6:00 PM' },
-            { key: '2026-10-15', day: 'Thu', spans: 'All day' },
+        expect(build({ items: toMidnight }).weekRows).toEqual([
+            { key: '2026-10-14', label: 'Wed', spans: 'from 6:00 PM' },
+            { key: '2026-10-15', label: 'Thu', spans: 'All day' },
         ]);
     });
 
@@ -80,8 +80,8 @@ describe('buildServerHours (ROK-1876)', () => {
         const fallBack: GameServerCalendarItemDto[] = [
             { kind: 'window', ...mine, start: '2026-11-01T04:30:00Z', end: '2026-11-02T04:30:00Z', label: 'Long day', source: 'schedule' },
         ];
-        const days = build({ items: fallBack, now: Date.parse('2026-10-31T12:00:00Z'), tz: 'America/New_York' }).days;
-        expect(days).toEqual([{ key: '2026-11-01', day: 'Sun', spans: '12:30 AM – 11:30 PM' }]);
+        const rows = build({ items: fallBack, now: Date.parse('2026-10-31T12:00:00Z'), tz: 'America/New_York' }).weekRows;
+        expect(rows).toEqual([{ key: '2026-11-01', label: 'Sun', spans: '12:30 AM – 11:30 PM' }]);
     });
 });
 

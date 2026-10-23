@@ -15,7 +15,7 @@ import type {
     GameServerWindowItemDto,
 } from '@raid-ledger/contract';
 import type { CalendarLayerRange } from '../../calendar-layer';
-import { DAY_MS, HOUR_MS, dayLabel, whenLabel, windowSpans } from './server-hours-time.helpers';
+import { DAY_MS, HOUR_MS, whenLabel } from './server-hours-time.helpers';
 import { powerLine, weekRows, type WeekRow } from './server-hours-week.helpers';
 
 /** Operator ruling 2026-10-21 (kept by ROK-1877 Q3): the empty copy is always this, whatever the state. */
@@ -28,13 +28,10 @@ export type NowTone = 'online' | 'offline' | 'warn' | 'neutral';
 /** The now line in parts: `head` ("Online now"), the schedule `tail` ("until 10:00 PM"), an optional second line. */
 export interface NowModel { tone: NowTone; head: string; tail: string | null; sub: string | null }
 
-export interface ServerHoursDay { key: string; day: string; spans: string }
 export interface ServerHours {
     /** `head · tail` as one string (the existing test id's text). */
     nowLine: string;
     now: NowModel;
-    /** ROK-1876's one-row-per-day list (open windows under today); superseded on the card by `weekRows`. */
-    days: ServerHoursDay[];
     weekRows: WeekRow[];
     startLine: string | null;
     stopLine: string | null;
@@ -86,20 +83,6 @@ export function nowModel(state: GameServerState, windows: readonly GameServerWin
     return { tone: 'offline', head: 'Offline', tail: scheduleTail(undefined, next, now, tz), sub: null };
 }
 
-/** One row per day with a window that has not ended; an open window sits under today. */
-function dayRows(windows: readonly GameServerWindowItemDto[], now: number, tz: string): ServerHoursDay[] {
-    const rows = new Map<string, ServerHoursDay>();
-    for (const w of windows) {
-        if (Date.parse(w.end) <= now) continue;
-        for (const { key, anchor, span } of windowSpans(w, now, tz)) {
-            const row = rows.get(key);
-            if (row) row.spans = `${row.spans}, ${span}`;
-            else rows.set(key, { key, day: dayLabel(anchor, now, tz), spans: span });
-        }
-    }
-    return [...rows.values()].sort((a, b) => a.key.localeCompare(b.key));
-}
-
 /** The widget's whole model; `empty` is the "No set hours" state. */
 export function buildServerHours({ items, pelicanServerId, state, now, tz }: ServerHoursInput): ServerHours {
     const { windows, markers } = ownItems(items, pelicanServerId);
@@ -110,7 +93,6 @@ export function buildServerHours({ items, pelicanServerId, state, now, tz }: Ser
     return {
         nowLine: nowPart.tail === null ? nowPart.head : `${nowPart.head} · ${nowPart.tail}`,
         now: nowPart,
-        days: dayRows(windows, now, tz),
         weekRows: week,
         startLine,
         stopLine,
