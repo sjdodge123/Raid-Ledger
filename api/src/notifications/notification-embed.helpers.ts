@@ -65,6 +65,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   // ROK-1870: a proposal waiting on staff; its review outcome.
   hub_proposal_submitted: 'needs_you',
   hub_proposal_reviewed: 'done',
+  // ROK-1933: asks the player to confirm a character is theirs.
+  valheim_claim_suggestion: 'needs_you',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -105,68 +107,74 @@ export const NOTIFICATION_EMBED_AUTHORS = {
   DEPARTURE_PROMOTED: '■ ROSTER UPDATED',
 } as const;
 
+/** Emoji per notification type. */
+const TYPE_EMOJI: Record<string, string> = {
+  event_reminder: '⏰',
+  new_event: '📅',
+  subscribed_game: '🎮',
+  slot_vacated: '🚪',
+  member_returned: '🔙',
+  bench_promoted: '🎉',
+  roster_reassigned: '🔄',
+  tentative_displaced: '⏳',
+  event_rescheduled: '📆',
+  event_delayed: '⏰',
+  running_late: '🏃',
+  event_cancelled: '❌',
+  achievement_unlocked: '🏆',
+  level_up: '⬆️',
+  missed_event_nudge: '👋',
+  recruitment_reminder: '📢',
+  lineup_steam_nudge: '🔗',
+  community_lineup: '🎯',
+  lfg_invite: '👥',
+  lfg_player_invite: '✉️',
+  hub_leader_post: '📣',
+  hub_event_tagged: '🛡️',
+  hub_proposal_submitted: '🗳️',
+  hub_proposal_reviewed: '🏕️',
+  valheim_claim_suggestion: '🛡️',
+  role_gap_alert: '\u26A0\uFE0F',
+};
+
 /** Get emoji for notification type. */
 export function getEmojiForType(type: NotificationType): string {
-  const map: Record<string, string> = {
-    event_reminder: '⏰',
-    new_event: '📅',
-    subscribed_game: '🎮',
-    slot_vacated: '🚪',
-    member_returned: '🔙',
-    bench_promoted: '🎉',
-    roster_reassigned: '🔄',
-    tentative_displaced: '⏳',
-    event_rescheduled: '📆',
-    event_delayed: '⏰',
-    running_late: '🏃',
-    event_cancelled: '❌',
-    achievement_unlocked: '🏆',
-    level_up: '⬆️',
-    missed_event_nudge: '👋',
-    recruitment_reminder: '📢',
-    lineup_steam_nudge: '🔗',
-    community_lineup: '🎯',
-    lfg_invite: '👥',
-    lfg_player_invite: '✉️',
-    hub_leader_post: '📣',
-    hub_event_tagged: '🛡️',
-    hub_proposal_submitted: '🗳️',
-    hub_proposal_reviewed: '🏕️',
-    role_gap_alert: '\u26A0\uFE0F',
-  };
-  return map[type] ?? '🔔';
+  return TYPE_EMOJI[type] ?? '🔔';
 }
+
+/** Human-readable label per notification type. */
+const TYPE_LABEL: Record<string, string> = {
+  event_reminder: 'Event Reminder',
+  new_event: 'New Event',
+  subscribed_game: 'Game Activity',
+  slot_vacated: 'Slot Vacated',
+  member_returned: 'Member Returned',
+  bench_promoted: 'Bench Promoted',
+  roster_reassigned: 'Roster Reassigned',
+  tentative_displaced: 'Tentative Displaced',
+  event_rescheduled: 'Event Rescheduled',
+  event_delayed: 'Event Delayed',
+  running_late: 'Running Late',
+  event_cancelled: 'Event Cancelled',
+  achievement_unlocked: 'Achievement',
+  level_up: 'Level Up',
+  missed_event_nudge: 'Missed Event',
+  recruitment_reminder: 'Recruitment Reminder',
+  lineup_steam_nudge: 'Steam Link Nudge',
+  community_lineup: 'Community Lineup',
+  lfg_invite: 'LFG Group Forming',
+  lfg_player_invite: 'LFG Invite',
+  hub_leader_post: 'Group Post',
+  hub_event_tagged: 'Group Event',
+  hub_proposal_submitted: 'Hub Proposal',
+  hub_proposal_reviewed: 'Hub Proposal Reviewed',
+  valheim_claim_suggestion: 'Raid Ledger · Valheim',
+  role_gap_alert: 'Role Gap Alert',
+};
 
 /** Get human-readable label for notification type. */
 export function getTypeLabel(type: NotificationType): string {
-  const map: Record<string, string> = {
-    event_reminder: 'Event Reminder',
-    new_event: 'New Event',
-    subscribed_game: 'Game Activity',
-    slot_vacated: 'Slot Vacated',
-    member_returned: 'Member Returned',
-    bench_promoted: 'Bench Promoted',
-    roster_reassigned: 'Roster Reassigned',
-    tentative_displaced: 'Tentative Displaced',
-    event_rescheduled: 'Event Rescheduled',
-    event_delayed: 'Event Delayed',
-    running_late: 'Running Late',
-    event_cancelled: 'Event Cancelled',
-    achievement_unlocked: 'Achievement',
-    level_up: 'Level Up',
-    missed_event_nudge: 'Missed Event',
-    recruitment_reminder: 'Recruitment Reminder',
-    lineup_steam_nudge: 'Steam Link Nudge',
-    community_lineup: 'Community Lineup',
-    lfg_invite: 'LFG Group Forming',
-    lfg_player_invite: 'LFG Invite',
-    hub_leader_post: 'Group Post',
-    hub_event_tagged: 'Group Event',
-    hub_proposal_submitted: 'Hub Proposal',
-    hub_proposal_reviewed: 'Hub Proposal Reviewed',
-    role_gap_alert: 'Role Gap Alert',
-  };
-  return map[type] ?? 'Notification';
+  return TYPE_LABEL[type] ?? 'Notification';
 }
 
 /** Add a field to an embed if the payload value is truthy. */

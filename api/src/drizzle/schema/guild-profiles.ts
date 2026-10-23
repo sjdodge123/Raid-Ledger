@@ -58,6 +58,13 @@ export const guildProfiles = pgTable(
     discordChannelSource: varchar('discord_channel_source', {
       length: 6,
     }).$type<'auto' | 'manual'>(),
+    /**
+     * ROK-1933 (D10): where the hub welcome embed was last posted, and its
+     * message id — so a re-link or re-post EDITS the pinned message instead
+     * of duplicating it. NULL = never posted (or cleared with the channel).
+     */
+    welcomeChannelId: text('welcome_channel_id'),
+    welcomeMessageId: text('welcome_message_id'),
     /** ROK-1868 A4: the composer's "Also post to Discord" default (last choice). */
     postRelayDefault: boolean('post_relay_default').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })

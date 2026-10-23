@@ -37,16 +37,27 @@ export function useValheimCharacters(
 }
 
 /**
+ * How many pages to load, reset to 1 whenever the `unclaimed` filter flips
+ * (a stored count belongs to the filter it was grown under).
+ */
+function usePageCount(unclaimed: boolean): [number, () => void] {
+    const [state, setState] = useState({ unclaimed, count: 1 });
+    const count = state.unclaimed === unclaimed ? state.count : 1;
+    return [count, () => setState({ unclaimed, count: count + 1 })];
+}
+
+/**
  * Every loaded page of a server's characters, accumulated ("Load more"). The
  * list response's `total` is optional, so `hasMore` = the last loaded page was full.
  * A failed further page keeps the loaded rows; `loadMore` then retries it.
+ * `unclaimed` filters server-side (ROK-1933), so every page stays full.
  */
-export function useValheimCharacterPages(serverId: number) {
-    const [pageCount, setPageCount] = useState(1);
+export function useValheimCharacterPages(serverId: number, unclaimed = false) {
+    const [pageCount, nextPage] = usePageCount(unclaimed);
     const results = useQueries({
         queries: Array.from({ length: pageCount }, (_, i) => ({
-            queryKey: valheimArmoryKeys.list(serverId, i + 1),
-            queryFn: () => fetchValheimCharacters(serverId, i + 1),
+            queryKey: valheimArmoryKeys.list(serverId, i + 1, unclaimed),
+            queryFn: () => fetchValheimCharacters(serverId, i + 1, unclaimed),
             enabled: serverId > 0,
             staleTime: 30_000,
         })),
@@ -65,8 +76,7 @@ export function useValheimCharacterPages(serverId: number) {
         loadingMore: pageCount > 1 && last?.isFetching === true,
         moreFailed,
         hasMore: (lastLoaded?.length ?? 0) >= VALHEIM_CHARACTERS_PAGE_SIZE,
-        loadMore: () =>
-            moreFailed ? void last?.refetch() : setPageCount((n) => n + 1),
+        loadMore: () => (moreFailed ? void last?.refetch() : nextPage()),
     };
 }
 

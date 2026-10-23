@@ -1,8 +1,17 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type {
   ValheimCharacterDetail,
   ValheimCharacterListResponse,
+  ValheimClaimStatusResponse,
   ValheimMapMeta,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../../../../auth/admin.guard';
@@ -36,13 +45,26 @@ const idPipe = armoryIdPipe;
 export class ValheimArmoryReadController {
   constructor(private readonly reads: ValheimArmoryReadService) {}
 
-  /** GET — characters sorted by name; `serverId`, `page`, `pageSize` ≤100. */
+  /**
+   * GET — characters sorted by name; `serverId`, `page`, `pageSize` ≤100,
+   * `unclaimed=1` (ROK-1933) filters server-side so pages stay correct.
+   */
   @Get('plugins/valheim/armory/characters')
   list(
     @Query() query: unknown,
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimCharacterListResponse> {
     return this.reads.list(parseArmoryListQuery(query), req.user);
+  }
+
+  /** GET (ROK-1933) — the claim banner's facts; viewer-dependent, never cached. */
+  @Get('plugins/valheim/armory/servers/:serverId/claim-status')
+  @Header('Cache-Control', 'private, no-store')
+  claimStatus(
+    @Param('serverId', idPipe) serverId: number,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimClaimStatusResponse> {
+    return this.reads.claimStatus(serverId, req.user);
   }
 
   /** GET — one character's sheet, map refs and the server's hub id. */

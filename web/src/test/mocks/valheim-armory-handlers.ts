@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type {
     ValheimCharacterDetail,
     ValheimCharacterSummary,
+    ValheimClaimStatusResponse,
     ValheimClaimEvent,
     ValheimItemStack,
     ValheimSkillTrend,
@@ -14,6 +15,7 @@ import type {
 const API_BASE = 'http://localhost:3000';
 export const VALHEIM_CHARACTERS_URL = `${API_BASE}/plugins/valheim/armory/characters`;
 export const VALHEIM_CHARACTER_URL = `${VALHEIM_CHARACTERS_URL}/:id`;
+export const VALHEIM_CLAIM_STATUS_URL = `${API_BASE}/plugins/valheim/armory/servers/:serverId/claim-status`;
 
 export const valheimCharacterUnclaimed: ValheimCharacterSummary = {
     id: 11,
@@ -58,10 +60,19 @@ export function valheimCharacterDetail(
     };
 }
 
+/** The list route; honours `unclaimed=1` like the API (ROK-1933). */
 export function valheimCharactersHandler(rows: ValheimCharacterSummary[]) {
-    return http.get(VALHEIM_CHARACTERS_URL, () =>
-        HttpResponse.json({ data: rows }),
-    );
+    return http.get(VALHEIM_CHARACTERS_URL, ({ request }) => {
+        const unclaimed = new URL(request.url).searchParams.get('unclaimed') === '1';
+        return HttpResponse.json({ data: unclaimed ? rows.filter((r) => r.claimedBy === null) : rows });
+    });
+}
+
+/** ROK-1933 — `…/claim-status`; a plain record lets a spec send an off-contract body. */
+export function valheimClaimStatusHandler(
+    status: ValheimClaimStatusResponse | Record<string, unknown>,
+) {
+    return http.get(VALHEIM_CLAIM_STATUS_URL, () => HttpResponse.json(status));
 }
 
 /** `null` answers 404; a plain record lets a spec send an off-contract body. */
