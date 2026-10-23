@@ -1,6 +1,7 @@
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import { chartAxisProps, chartLineTooltipProps, chartGridProps } from '../../ui/chart-chrome';
 import type { CommunityRadarResponseDto, TasteProfilePoolAxis } from '@raid-ledger/contract';
 import { axisLabel } from '../../taste-profile/taste-profile-helpers';
 import { reshape } from './taste-drift-helpers';
@@ -29,10 +30,10 @@ export function TasteDriftChart({ driftSeries }: Props) {
         <div className="h-60 w-full" data-testid="taste-drift-chart">
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rows}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-                    <XAxis dataKey="weekStart" stroke="#a1a1aa" fontSize={11} />
-                    <YAxis stroke="#a1a1aa" fontSize={11} domain={[0, 100]} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+                    <CartesianGrid {...chartGridProps} />
+                    <XAxis dataKey="weekStart" {...chartAxisProps} fontSize={11} />
+                    <YAxis {...chartAxisProps} fontSize={11} domain={[0, 100]} />
+                    <Tooltip {...chartLineTooltipProps} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     {topAxes.map((axis, i) => (
                         <Line key={axis} type="monotone" dataKey={axis}
