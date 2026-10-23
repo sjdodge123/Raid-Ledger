@@ -46,6 +46,11 @@ describe('LegacyHubRedirect', () => {
         renderAt('/guilds/310#characters');
         expect(screen.getByTestId('location')).toHaveTextContent(/^\/hubs\/310#characters$/);
     });
+
+    it('redirects a mixed-case /Guilds/ link instead of looping on it (Codex P2)', () => {
+        renderAt('/Guilds/7#members');
+        expect(screen.getByTestId('location')).toHaveTextContent(/^\/hubs\/7#members$/);
+    });
 });
 
 describe('hubPathFromLegacy', () => {
@@ -53,5 +58,6 @@ describe('hubPathFromLegacy', () => {
         expect(hubPathFromLegacy('/guilds/12')).toBe('/hubs/12');
         expect(hubPathFromLegacy('/hubs/12')).toBe('/hubs/12');
         expect(hubPathFromLegacy('/plugins/wow/guilds/12')).toBe('/plugins/wow/guilds/12');
+        expect(hubPathFromLegacy('/GUILDS/12')).toBe('/hubs/12');
     });
 });
