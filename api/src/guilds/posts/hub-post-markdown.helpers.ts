@@ -5,6 +5,9 @@
  * - `markdownExcerpt` — the Discord relay excerpt: budgets VISIBLE characters,
  *   never cuts inside a link or code span, closes every open delimiter before
  *   the `…`, absolutises app-relative links and escapes Discord-only syntax.
+ *   Subset headings (ROK-1898) relay as Discord `#`/`##`/`###` headings; a
+ *   heading the budget cuts is demoted to plain text, so Discord never shows
+ *   a truncated heading.
  *
  * No DB, no Nest. No regex runs against the whole user body except two
  * single-quantifier, linear ones (`\r\n?`, `\n{3,}`).
@@ -80,14 +83,14 @@ function cutText(raw: string, remaining: number): string {
   return raw.slice(0, end);
 }
 
-/** Drop trailing whitespace, line breaks, bare list markers and empty openers. */
+/** Drop trailing whitespace, line breaks, bare list/heading markers and empty openers. */
 function trimTail(out: Piece[], stack: string[]): void {
   for (let last = out[out.length - 1]; last; last = out[out.length - 1]) {
     if (last.kind === 'text') {
       last.str = last.str.trimEnd();
       if (last.str) return;
     } else if (last.kind === 'open') stack.pop();
-    else if (last.kind !== 'break' && last.kind !== 'marker') return;
+    else if (!['break', 'marker', 'heading'].includes(last.kind)) return;
     out.pop();
   }
 }
@@ -96,19 +99,27 @@ function join(out: Piece[]): string {
   return out.map((p) => p.str).join('');
 }
 
-/** Render tokens within a visible budget; `…` (outside the closers) only when something was cut. */
+/**
+ * Render tokens within a visible budget; `…` (outside the closers) only when
+ * something was cut. A cut inside a heading line drops that line's heading
+ * marker first: the partial line ends as plain text, never a cut heading.
+ */
 function renderExcerpt(tokens: ExcerptToken[], visible: number): string {
   const out: Piece[] = [];
   const stack: string[] = [];
   let used = 0;
+  let headingAt = -1;
   for (const t of tokens) {
     const v = visibleOf(t);
     if (used + v > visible) {
+      if (headingAt !== -1) out.splice(headingAt, 1);
       const part = t.kind === 'text' ? cutText(t.raw, visible - used) : '';
       if (part) out.push({ kind: 'text', str: escapeDiscordText(part) });
       trimTail(out, stack);
       return `${join(out)}${[...stack].reverse().join('')}…`;
     }
+    if (t.kind === 'heading') headingAt = out.length;
+    else if (t.kind === 'break') headingAt = -1;
     out.push(pieceOf(t));
     used += v;
     if (t.kind === 'open') stack.push(t.src);

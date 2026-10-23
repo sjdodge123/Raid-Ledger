@@ -3,15 +3,22 @@
  *
  * Turns one line of hub-post markdown into tokens the excerpt renderer can
  * budget: cuttable `text`, indivisible `atom`s (escapes, code spans, links,
- * Discord escapes), list `marker`s, and matched `open`/`close` delimiters.
+ * Discord escapes), list `marker`s, `heading` markers (ROK-1898 — `#`–`###`
+ * pass through as Discord's own heading syntax), and matched `open`/`close`
+ * delimiters.
  * Single forward pass; the only regex runs on a bounded `<…>` candidate.
  */
-import { isSafeMarkdownHref, markdownToPlainText } from '@raid-ledger/contract';
+import {
+  isSafeMarkdownHref,
+  markdownToPlainText,
+  parseHubPostHeading,
+} from '@raid-ledger/contract';
 
 export type ExcerptToken =
   | { kind: 'text'; raw: string }
   | { kind: 'atom'; src: string; visible: number }
   | { kind: 'marker'; src: string }
+  | { kind: 'heading'; src: string }
   | { kind: 'open'; src: string }
   | { kind: 'close'; src: string }
   | { kind: 'break' };
@@ -81,19 +88,49 @@ function listMarkerLength(line: string): number {
   return n > 0 && line[n] === '.' && line[n + 1] === ' ' ? n + 2 : 0;
 }
 
-/** Markers and the line-start Discord escapes (`#`, `>`, `-#`, ```` ``` ````). */
-function lineStart(ctx: Ctx): number {
-  const { line, out } = ctx;
-  const marker = listMarkerLength(line);
-  if (marker > 0) {
-    out.push({ kind: 'marker', src: line.slice(0, marker) });
-    return marker;
+/** A list marker at `at` that is not a list here (heading text): escaped literal. */
+function escapeListMarker(ctx: Ctx, at: number, marker: number): number {
+  const digits = marker - 2;
+  if (digits === 0) {
+    ctx.out.push(atom(`\\${ctx.line[at] ?? ''}`, 1));
+    return at + 1;
   }
-  if (line.startsWith('```')) return (out.push(atom('\\`\\`\\`', 3)), 3);
-  if (line.startsWith('-#')) return (out.push(atom('\\-', 1)), 1);
-  const c = line[0];
-  if (c === '#' || c === '>') return (out.push(atom(`\\${c}`, 1)), 1);
-  return 0;
+  pushText(ctx.out, ctx.line.slice(at, at + digits));
+  ctx.out.push(atom('\\.', 1));
+  return at + digits + 1;
+}
+
+/**
+ * Block syntax at `at`: a list marker (only when `allowList`) and the Discord
+ * line-start escapes (`#`, `>`, `-#`, ```` ``` ````, and list markers) — also
+ * applied to list-item and heading text, so `- # x` never renders as a
+ * Discord heading and a heading demoted to text by a cut stays plain.
+ */
+function blockStart(ctx: Ctx, at: number, allowList: boolean): number {
+  const rest = ctx.line.slice(at);
+  const marker = listMarkerLength(rest);
+  if (marker > 0 && allowList) {
+    ctx.out.push({ kind: 'marker', src: rest.slice(0, marker) });
+    return blockStart(ctx, at + marker, false);
+  }
+  if (marker > 0) return escapeListMarker(ctx, at, marker);
+  if (rest.startsWith('```'))
+    return (ctx.out.push(atom('\\`\\`\\`', 3)), at + 3);
+  if (rest.startsWith('-#')) return (ctx.out.push(atom('\\-', 1)), at + 1);
+  const c = rest[0];
+  if (c === '#' || c === '>') return (ctx.out.push(atom(`\\${c}`, 1)), at + 1);
+  return at;
+}
+
+/** A subset heading's marker (ROK-1898) or a list marker, then the line-start escapes. */
+function lineStart(ctx: Ctx): number {
+  const heading = parseHubPostHeading(ctx.line);
+  if (!heading) return blockStart(ctx, 0, true);
+  ctx.out.push({
+    kind: 'heading',
+    src: `${'#'.repeat(heading.level)} `,
+  });
+  return blockStart(ctx, heading.markerLength, false);
 }
 
 /** A backtick run: a whole code span (atomic) or escaped literal backticks. */

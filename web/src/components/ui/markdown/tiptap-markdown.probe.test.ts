@@ -15,6 +15,8 @@ import Italic from '@tiptap/extension-italic';
 import Strike from '@tiptap/extension-strike';
 import Code from '@tiptap/extension-code';
 import { Markdown } from '@tiptap/markdown';
+import { buildMarkdownExtensions } from './markdown-extensions';
+import { MD_CLASSES } from './markdown-classes';
 
 const EXT = [Document, Paragraph, Text, HardBreak, Bold, Italic, Strike, Code, Markdown];
 let editor: Editor | null = null;
@@ -43,6 +45,7 @@ describe('@tiptap/markdown 3.31.4 surface (A6)', () => {
         expect(e.getHTML()).toBe('<p><strong>x</strong></p>');
     });
 
+    // ROK-1898: so `guardLineStarts` must escape a paragraph line that starts `# ` itself — else it reads back as a heading.
     it('a typed "# hi" is NOT escaped (block syntax at line start stays literal)', () => {
         expect(typed('# hi')).toBe('# hi');
     });
@@ -55,6 +58,7 @@ describe('@tiptap/markdown 3.31.4 surface (A6)', () => {
         e.view.dispatch(e.state.tr.insertText('<div>', 2));
         expect(e.getMarkdown()).toBe('`x<div>`');
     });
+    // Bare surface only: the production list registers `PostHeading` (ROK-1898), probed below.
     it('an unregistered block token (heading) throws inside setContent -> empty doc', () => {
         expect(make('# hi').getMarkdown()).toBe('');
     });
@@ -75,5 +79,23 @@ describe('@tiptap/markdown 3.31.4 surface (A6)', () => {
 
     it('paragraphs are separated by one blank line', () => {
         expect(make('a\n\nb').getMarkdown()).toBe('a\n\nb');
+    });
+});
+
+describe('PostHeading on the same surface (ROK-1898)', () => {
+    function prod(content: string): Editor {
+        editor = new Editor({ extensions: buildMarkdownExtensions({ onLinkShortcut: () => undefined }), content, contentType: 'markdown' });
+        return editor;
+    }
+
+    it.each([['# hi', 'h3'], ['## hi', 'h4'], ['### hi', 'h5']])('a GFM %j token parses to a card-level <%s> and serialises back', (md, tag) => {
+        const e = prod(md);
+        expect(e.getHTML()).toContain(`<${tag} `);
+        expect(e.getMarkdown()).toBe(md);
+    });
+
+    it('a level-4 GFM heading token is literal paragraph text', () => {
+        const e = prod('#### hi');
+        expect(e.getHTML()).toBe(`<p class="${MD_CLASSES.p}">#### hi</p>`);
     });
 });
