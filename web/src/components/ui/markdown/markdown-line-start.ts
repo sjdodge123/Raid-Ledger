@@ -6,7 +6,8 @@
  * `MarkdownBlock` then shows a LIST. Before serialising, such a line start gets a private-use
  * sentinel in front of its marker (bullet) or delimiter (ordered); after serialising the sentinel
  * becomes `\`, so the stored line is `\- raid` / `1\. raid` and reads back as the same text.
- * (`*` needs no guard: TipTap escapes it itself.) Code-marked text is left alone.
+ * (`*` needs no guard: TipTap escapes it itself.) ROK-1898: a `#`–`###` + space line start gets
+ * the sentinel before its `#` (stored `\# raid`), or it would read back as a heading. Code-marked text is left alone.
  */
 import type { JSONContent } from '@tiptap/core';
 
@@ -14,9 +15,12 @@ export const LINE_START_SENTINEL = '';
 
 const ORDERED = /^([ \t]*\d{1,9})(?=\.(?:[ \t]|$))/;
 const BULLET = /^([ \t]*)(?=[-+](?:[ \t]|$))/;
+/** `#`–`###` + space at column 0 reads back as a heading (ROK-1898); TipTap never escapes `#`. */
+const HEADING = /^(?=#{1,3} )/;
 
 function guardText(text: string): string {
     if (ORDERED.test(text)) return text.replace(ORDERED, `$1${LINE_START_SENTINEL}`);
+    if (HEADING.test(text)) return `${LINE_START_SENTINEL}${text}`;
     return text.replace(BULLET, `$1${LINE_START_SENTINEL}`);
 }
 

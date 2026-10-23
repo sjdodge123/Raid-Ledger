@@ -5,13 +5,17 @@
  * flatten into the same list); an indented non-marker line, or any non-marker
  * line after a hard-break line (trailing two spaces / `\`), continues the
  * previous item (rendered after a `<br>`); everything else is a paragraph
- * whose single newlines are `<br>`s. Headings, quotes, rules, tables and HTML
- * are NOT recognised — they are paragraph text, rendered literally.
+ * whose single newlines are `<br>`s. A line that is a `#`–`###` heading
+ * (`parseHubPostHeading`: column 0, one or more spaces, non-blank text — ROK-1898) is a
+ * one-line heading block that ends whatever block was open. Quotes, rules,
+ * tables, HTML and `####`+ are NOT recognised — paragraph text, rendered literally.
  */
+import { parseHubPostHeading, type HubPostHeadingLevel } from '@raid-ledger/contract';
 
 /** One rendered block; every `lines` entry is one line of inline Markdown. */
 export type MarkdownBlockNode =
     | { kind: 'p'; lines: string[] }
+    | { kind: 'h'; level: HubPostHeadingLevel; text: string }
     | { kind: 'ul'; items: string[][] }
     | { kind: 'ol'; start: number; items: string[][] };
 
@@ -62,6 +66,7 @@ function extend(cur: MarkdownBlockNode | null, raw: string, item: ListLine | nul
         cur.items.push([item.text]);
         return true;
     }
+    if (cur.kind === 'h') return false;
     if (cur.kind === 'p') {
         cur.lines.push(raw);
         return true;
@@ -79,6 +84,7 @@ function extend(cur: MarkdownBlockNode | null, raw: string, item: ListLine | nul
 function finish(block: MarkdownBlockNode): MarkdownBlockNode {
     const tidy = (lines: string[]): string[] =>
         lines.map((l, i) => (i < lines.length - 1 ? stripBreakMarker(l) : l.trim()));
+    if (block.kind === 'h') return { ...block, text: block.text.trim() };
     return block.kind === 'p' ? { kind: 'p', lines: tidy(block.lines) } : { ...block, items: block.items.map(tidy) };
 }
 
@@ -89,6 +95,12 @@ export function parseBlocks(text: string): MarkdownBlockNode[] {
     for (const raw of text.split(/\r?\n/)) {
         if (raw.trim() === '') {
             cur = null;
+            continue;
+        }
+        const heading = parseHubPostHeading(raw);
+        if (heading) {
+            cur = { kind: 'h', level: heading.level, text: heading.text };
+            blocks.push(cur);
             continue;
         }
         const item = listLine(raw);

@@ -8,6 +8,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import type { Editor } from '@tiptap/core';
 import { useFieldContext, useFieldControlProps } from '../field-context';
 import { CharCounter } from '../char-counter';
 import { FIELD_FRAME_BASE, FOCUS_WITHIN_RING } from '../form-classes';
@@ -52,6 +53,40 @@ function useA11y(p: MarkdownEditorProps, countId: string): Record<string, string
     return attrs;
 }
 
+/**
+ * ROK-1898: once the editor exists, emit its saved form when it differs from `value`. A legacy
+ * (backfilled) body can hold raw HTML (`<b>`) the editor shows as literal text and saves escaped
+ * (`\<b>`); without this an untouched body was resubmitted raw and refused ("Posts can't contain
+ * HTML"). The draft now always equals what the author sees. A body the editor saved is byte-stable
+ * on reload, so normal posts never emit here. (`setEditable` is called with `emitUpdate: false`,
+ * and `onUpdate` drops an unchanged value, so this deliberate emit is the only one on mount.)
+ */
+function useEmitSavedFormOnLoad(editor: Editor, onChange: (md: string) => void, lastRef: { current: string }): void {
+    const onLoad = useRef(onChange);
+    useEffect(() => { emitSavedForm(editor, lastRef, onLoad.current); }, [editor, lastRef]);
+}
+
+/** Emit the editor's saved form when it differs from what was last emitted / received. */
+function emitSavedForm(editor: Editor, lastRef: { current: string }, onChange: (md: string) => void): void {
+    const md = serializeEditorMarkdown(editor);
+    if (md === lastRef.current) return;
+    lastRef.current = md;
+    onChange(md);
+}
+
+/** Re-sync when the parent swaps `value`; a legacy body that arrives late gets the same saved-form emit. */
+function useResyncValue(editor: Editor, value: string, onChange: (md: string) => void, lastRef: { current: string }): void {
+    const seen = useRef(value); // only a NEW value re-syncs — the mount value already loaded
+    useEffect(() => {
+        if (value === seen.current) return;
+        seen.current = value;
+        if (value === lastRef.current) return;
+        lastRef.current = value;
+        editor.commands.setContent(loadStoredMarkdown(value), { emitUpdate: false });
+        emitSavedForm(editor, lastRef, onChange);
+    }, [editor, value, onChange, lastRef]);
+}
+
 /** Emits normalised markdown upward and re-syncs when the parent swaps `value`. */
 function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>, setLinkOpen: (open: boolean) => void) {
     const last = useRef(p.value);
@@ -62,15 +97,18 @@ function useMarkdownEditor(p: MarkdownEditorProps, attrs: Record<string, string>
     const editor = useEditor({
         extensions, content: loadStoredMarkdown(p.value), editable: !p.disabled,
         autofocus: p.autoFocus ? 'end' : false, editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists },
-        onUpdate: ({ editor: e }) => { const md = serializeEditorMarkdown(e); last.current = md; p.onChange(md); },
+        onUpdate: ({ editor: e }) => {
+            const md = serializeEditorMarkdown(e);
+            if (md === last.current) return;
+            last.current = md;
+            p.onChange(md);
+        },
     }, [extensions]);
+    useEmitSavedFormOnLoad(editor, p.onChange, last);
     useEffect(() => { editor.setOptions({ editorProps: { attributes: attrs, transformPastedHTML: flattenPastedLists } }); }, [editor, attrs]);
-    useEffect(() => { editor.setEditable(!p.disabled); }, [editor, p.disabled]);
-    useEffect(() => {
-        if (p.value === last.current) return;
-        last.current = p.value;
-        editor.commands.setContent(loadStoredMarkdown(p.value), { emitUpdate: false });
-    }, [editor, p.value]);
+    // No `update` on an editability flip — it changes no content (the load emit above is deliberate).
+    useEffect(() => { editor.setEditable(!p.disabled, false); }, [editor, p.disabled]);
+    useResyncValue(editor, p.value, p.onChange, last);
     return editor;
 }
 
