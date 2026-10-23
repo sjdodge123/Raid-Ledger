@@ -4,7 +4,10 @@ import {
   ValheimCatalogIconSchema,
   ValheimMapBaseMapSchema,
 } from "./valheim-armory.schema.js";
-import { ValheimPrefabIdSchema } from "./valheim-link-common.schema.js";
+import {
+  VALHEIM_LINK_REQUIREMENTS_MAX,
+  ValheimPrefabIdSchema,
+} from "./valheim-link-common.schema.js";
 import { ValheimProcessorTypeSchema } from "./valheim-link-recipes-processing.schema.js";
 
 /**
@@ -25,6 +28,39 @@ export const VALHEIM_PLAN_QUANTITY_MAX = 1_000_000_000;
 const count = z.number().int().min(0).max(VALHEIM_PLAN_QUANTITY_MAX);
 const quality = z.number().int().min(1).max(10);
 
+/** One crafting or upgrade step's direct cost (ROK-1899): station, level and ingredients. */
+export const ValheimRecipeCostSchema = z
+  .object({
+    station: ValheimPrefabIdSchema.nullable(),
+    stationLevel: z.number().int().min(0),
+    /** Any ONE resource covers the cost (e.g. a choice of meats). */
+    anyOneOf: z.boolean(),
+    resources: z
+      .array(
+        z
+          .object({ prefab: ValheimPrefabIdSchema, amount: z.number().int().min(1) })
+          .strict(),
+      )
+      .max(VALHEIM_LINK_REQUIREMENTS_MAX),
+  })
+  .strict();
+export type ValheimRecipeCost = z.infer<typeof ValheimRecipeCostSchema>;
+
+/** The CRAFT tab: how quality 1 is made. */
+export const ValheimRecipeCraftSchema = ValheimRecipeCostSchema.extend({
+  via: z.enum(["recipe", "piece", "process"]),
+  /** Output per craft ("Wood arrow ×20"). */
+  amount: z.number().int().min(1),
+}).strict();
+export type ValheimRecipeCraft = z.infer<typeof ValheimRecipeCraftSchema>;
+
+/** The UPGRADE tab: the step that produces `quality` from `quality - 1`. */
+export const ValheimRecipeUpgradeSchema = ValheimRecipeCostSchema.extend({
+  quality: z.number().int().min(2).max(10),
+  upgraderStation: z.boolean(),
+}).strict();
+export type ValheimRecipeUpgrade = z.infer<typeof ValheimRecipeUpgradeSchema>;
+
 export const ValheimRecipeCatalogEntrySchema = z
   .object({
     prefab: ValheimPrefabIdSchema,
@@ -36,6 +72,10 @@ export const ValheimRecipeCatalogEntrySchema = z
     maxQuality: quality,
     /** `recipes` 0 and `processes` 0 = gathered. */
     sources: z.object({ recipes: count, processes: count }).strict(),
+    /** Null when nothing crafts or processes it (gathered). */
+    craft: ValheimRecipeCraftSchema.nullable(),
+    /** Qualities 2..maxQuality in order; empty for pieces and maxQuality 1. */
+    upgrades: z.array(ValheimRecipeUpgradeSchema).max(9),
   })
   .strict();
 export type ValheimRecipeCatalogEntry = z.infer<
@@ -62,6 +102,8 @@ export const ValheimRecipeCatalogResponseSchema = z
     catalogFallback: z.boolean(),
     entries: z.array(ValheimRecipeCatalogEntrySchema),
     stations: z.array(ValheimRecipeStationSchema),
+    /** Names + icons for every prefab named in any entry's `craft`/`upgrades` resources. */
+    ingredients: z.record(z.string(), ValheimCatalogEntrySchema),
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
   })
@@ -196,4 +238,17 @@ export const ValheimRecipePlanResponseSchema = z
   .strict();
 export type ValheimRecipePlanResponse = z.infer<
   typeof ValheimRecipePlanResponseSchema
+>;
+
+/** `GET …/recipes/stock` (ROK-1899): the viewer's netted chest totals, same scope as `/plan`. */
+export const ValheimRecipeStockResponseSchema = z
+  .object({
+    stock: z.enum(["scan", "none"]),
+    capturedAt: z.string().nullable(),
+    /** prefab → count, summed across qualities. */
+    totals: z.record(z.string(), count),
+  })
+  .strict();
+export type ValheimRecipeStockResponse = z.infer<
+  typeof ValheimRecipeStockResponseSchema
 >;
