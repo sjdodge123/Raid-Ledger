@@ -2,7 +2,8 @@
  * ROK-1930 L2 — `GET plugins/valheim/armory/servers/:serverId/deaths`
  * against a real database: D6 access (member / staff → 200; visitor,
  * hidden hub, unknown server → the hub 404), D7 grouping + NULL-steam
- * resolution, D9 `characterId`, the sort and `since`.
+ * resolution, D9 `characterId`, the sort and `since`; D13 no SteamID
+ * anywhere in the body and a stable, unique `key` per bar.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -109,15 +110,23 @@ async function profile(steamId: string, name: string, capturedH: number) {
   return row.id;
 }
 
+/** Every object key in a JSON value, at any depth. */
+function allKeys(v: unknown): string[] {
+  if (Array.isArray(v)) return v.flatMap(allKeys);
+  if (v === null || typeof v !== 'object') return [];
+  return Object.entries(v).flatMap(([k, x]) => [k, ...allKeys(x)]);
+}
+
 async function deathsOf(t: string): Promise<ValheimDeathsResponse> {
   const res = await get(server, t);
   expect(res.status).toBe(200);
   expect(res.headers['cache-control']).toBe('private, no-store');
+  expect(allKeys(res.body).filter((k) => /steam/i.test(k))).toEqual([]);
   return ValheimDeathsResponseSchema.parse(res.body);
 }
 const bars = (r: ValheimDeathsResponse) =>
   r.players.map(
-    (p) => `${p.name}|${p.steamId ?? '-'}|${p.deaths}|${p.characterId ?? '-'}`,
+    (p) => `${p.name}|${p.key}|${p.deaths}|${p.characterId ?? '-'}`,
   );
 
 beforeAll(async () => {
@@ -163,8 +172,10 @@ beforeEach(async () => {
 describe('GET …/servers/:serverId/deaths — access (D6)', () => {
   it('serves a hub member and a staff non-member', async () => {
     await death('Ragnar', A, 1);
-    expect(bars(await deathsOf(tokens.member))).toEqual([`Ragnar|${A}|1|-`]);
-    expect(bars(await deathsOf(tokens.operator))).toEqual([`Ragnar|${A}|1|-`]);
+    expect(bars(await deathsOf(tokens.member))).toEqual(['Ragnar|nRagnar|1|-']);
+    expect(bars(await deathsOf(tokens.operator))).toEqual([
+      'Ragnar|nRagnar|1|-',
+    ]);
   });
 
   it('answers a signed-in visitor with the hub 404', async () => {
@@ -204,9 +215,9 @@ describe('GET …/servers/:serverId/deaths — counts (D7/D9)', () => {
     await death('Bjorn', B, 7);
     const r = await deathsOf(tokens.member);
     expect(bars(r)).toEqual([
-      `Ragnar|${A}|3|-`,
-      `Bjorn|${B}|2|-`,
-      `Cyra|${C}|1|-`,
+      'Ragnar|nRagnar|3|-',
+      'Bjorn|nBjorn|2|-',
+      'Cyra|nCyra|1|-',
     ]);
     expect(r.since).toBe(hour(2).toISOString());
   });
@@ -217,7 +228,7 @@ describe('GET …/servers/:serverId/deaths — counts (D7/D9)', () => {
     await death('Ragnar', A, 2);
     await death('Ragnar', null, 3);
     const r = await deathsOf(tokens.member);
-    expect(bars(r)).toEqual([`Ragnar|${A}|2|${newer}`]);
+    expect(bars(r)).toEqual([`Ragnar|c${newer}|2|${newer}`]);
     expect(r.players[0]?.characterId).not.toBe(older);
   });
 
@@ -225,7 +236,7 @@ describe('GET …/servers/:serverId/deaths — counts (D7/D9)', () => {
     await profile(A, 'Twin', 1);
     await profile(B, 'Twin', 1);
     await death('Twin', null, 2);
-    expect(bars(await deathsOf(tokens.member))).toEqual(['Twin|-|1|-']);
+    expect(bars(await deathsOf(tokens.member))).toEqual(['Twin|nTwin|1|-']);
   });
 
   it('counts only this server and still shows players with no hub membership', async () => {
@@ -250,6 +261,29 @@ describe('GET …/servers/:serverId/deaths — counts (D7/D9)', () => {
       loggedAt: '10/20/2026 01:00:00',
       occurredAt: hour(1),
     });
-    expect(bars(await deathsOf(tokens.member))).toEqual([`Ragnar|${A}|1|-`]);
+    expect(bars(await deathsOf(tokens.member))).toEqual(['Ragnar|nRagnar|1|-']);
+  });
+});
+
+describe('GET …/servers/:serverId/deaths — opaque keys (D13)', () => {
+  it('gives every bar a unique key that holds across reads as counts change', async () => {
+    const id = await profile(A, 'Ragnar', 1);
+    await death('Ragnar', A, 2);
+    await death('Sam', B, 3);
+    await death('Sam', null, 4);
+    const keysOf = (r: ValheimDeathsResponse) =>
+      r.players.map((p) => p.key).sort();
+    const first = await deathsOf(tokens.member);
+    expect(new Set(first.players.map((p) => p.key)).size).toBe(
+      first.players.length,
+    );
+    for (const h of [5, 6, 7]) await death('Sam', null, h);
+    const second = await deathsOf(tokens.member);
+    expect(bars(second)).toEqual([
+      'Sam|nSam~2|4|-',
+      'Sam|nSam|1|-',
+      `Ragnar|c${id}|1|${id}`,
+    ]);
+    expect(keysOf(second)).toEqual(keysOf(first));
   });
 });

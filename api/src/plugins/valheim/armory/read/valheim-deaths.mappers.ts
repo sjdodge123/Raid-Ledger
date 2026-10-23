@@ -3,6 +3,8 @@
  * D7: a bar per SteamID; a NULL-steam bucket takes the SteamID of the ONE
  * profile on the server with that character name, otherwise it stays a
  * name-only bar (no link). D9: `characterId` = the player's newest profile.
+ * D13: SteamIDs group bars here and never leave — each bar carries an
+ * opaque `key` instead.
  */
 import type {
   ValheimDeathPlayer,
@@ -22,6 +24,7 @@ interface Bar {
   steamId: string | null;
   name: string;
   deaths: number;
+  first: number;
   last: Date;
 }
 
@@ -62,11 +65,13 @@ function mergeBars(counts: DeathCounts): Bar[] {
         steamId,
         name: g.characterName,
         deaths: g.deaths,
+        first: g.firstDeathAt?.getTime() ?? g.lastDeathAt.getTime(),
         last: g.lastDeathAt,
       });
       continue;
     }
     prev.deaths += g.deaths;
+    prev.first = Math.min(prev.first, g.firstDeathAt?.getTime() ?? prev.first);
     if (g.lastDeathAt > prev.last) {
       prev.last = g.lastDeathAt;
       prev.name = g.characterName;
@@ -93,17 +98,50 @@ function earliest(groups: DeathGroupRow[]): string | null {
   return times.length === 0 ? null : new Date(Math.min(...times)).toISOString();
 }
 
+interface KeyedBar extends Bar {
+  key: string;
+  characterId: number | null;
+}
+
+/**
+ * D13: `c<characterId>`, else `n<name>`. Two unlinked bars can share a name
+ * (an unprofiled SteamID and a name-only bucket); the later first-death gets
+ * `~2`, `~3`… so keys stay unique and stable as counts change.
+ */
+function withKeys(bars: Bar[], profiles: DeathProfileRow[]): KeyedBar[] {
+  const keyed = bars.map((b) => {
+    const characterId = latestCharacterId(b.steamId, profiles);
+    const name = b.name.slice(0, NAME_MAX);
+    const key = characterId === null ? `n${name}` : `c${characterId}`;
+    return { ...b, name, key, characterId };
+  });
+  const seen = new Map<string, number>();
+  const byFirst = [...keyed].sort(
+    (a, b) =>
+      a.first - b.first || (a.steamId ?? '').localeCompare(b.steamId ?? ''),
+  );
+  for (const b of byFirst) {
+    const n = (seen.get(b.key) ?? 0) + 1;
+    seen.set(b.key, n);
+    if (n > 1) b.key = `${b.key}~${n}`;
+  }
+  return keyed;
+}
+
 /** The `GET …/servers/:serverId/deaths` body. */
 export function toDeathsResponse(counts: DeathCounts): ValheimDeathsResponse {
-  const players: ValheimDeathPlayer[] = mergeBars(counts)
+  const players: ValheimDeathPlayer[] = withKeys(
+    mergeBars(counts),
+    counts.profiles,
+  )
     .sort(compareBars)
     .slice(0, MAX_DEATH_PLAYERS)
     .map((b) => ({
-      steamId: b.steamId,
-      name: b.name.slice(0, NAME_MAX),
+      key: b.key,
+      name: b.name,
       deaths: b.deaths,
       lastDeathAt: b.last.toISOString(),
-      characterId: latestCharacterId(b.steamId, counts.profiles),
+      characterId: b.characterId,
     }));
   return { players, since: earliest(counts.groups) };
 }

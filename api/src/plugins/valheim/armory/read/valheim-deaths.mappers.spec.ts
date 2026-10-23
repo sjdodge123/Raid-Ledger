@@ -28,7 +28,7 @@ const prof = (o: Partial<DeathProfileRow>): DeathProfileRow => ({
 });
 const rows = (groups: DeathGroupRow[], profiles: DeathProfileRow[] = []) =>
   toDeathsResponse({ groups, profiles }).players.map(
-    (p) => `${p.name}|${p.steamId ?? '-'}|${p.deaths}|${p.characterId ?? '-'}`,
+    (p) => `${p.name}|${p.key}|${p.deaths}|${p.characterId ?? '-'}`,
   );
 
 describe('toDeathsResponse', () => {
@@ -40,10 +40,10 @@ describe('toDeathsResponse', () => {
       group({ characterName: 'Di', deaths: 4 }),
     ]);
     expect(out).toEqual([
-      'Di|-|4|-',
-      'Cy|-|2|-',
-      'Al|' + B + '|2|-',
-      'Bo|' + A + '|2|-',
+      'Di|nDi|4|-',
+      'Cy|nCy|2|-',
+      'Al|nAl|2|-',
+      'Bo|nBo|2|-',
     ]);
   });
 
@@ -65,7 +65,7 @@ describe('toDeathsResponse', () => {
       ],
       [prof({ id: 9 })],
     );
-    expect(out).toEqual([`Ragnar|${A}|3|9`]);
+    expect(out).toEqual(['Ragnar|c9|3|9']);
   });
 
   it('keeps a NULL-steam bucket name-only when two profiles share the name', () => {
@@ -76,7 +76,7 @@ describe('toDeathsResponse', () => {
         prof({ id: 2, name: 'Twin', steamId: B }),
       ],
     );
-    expect(out).toEqual(['Twin|-|2|-']);
+    expect(out).toEqual(['Twin|nTwin|2|-']);
   });
 
   it('names the bar after the newest death and links the newest profile (D9)', () => {
@@ -90,7 +90,7 @@ describe('toDeathsResponse', () => {
         prof({ id: 4, name: 'New', capturedAt: at(7) }),
       ],
     );
-    expect(out).toEqual([`New|${A}|2|4`]);
+    expect(out).toEqual(['New|c4|2|4']);
   });
 
   it('reports since = the earliest death, null and [] when there are none', () => {
@@ -106,6 +106,39 @@ describe('toDeathsResponse', () => {
       players: [],
       since: null,
     });
+  });
+
+  it('never emits a SteamID; suffixes a shared unlinked name by first death (D13)', () => {
+    const r = toDeathsResponse({
+      groups: [
+        group({
+          steamId: B,
+          characterName: 'Sam',
+          firstDeathAt: at(4),
+          lastDeathAt: at(4),
+        }),
+        group({
+          steamId: null,
+          characterName: 'Sam',
+          firstDeathAt: at(2),
+          lastDeathAt: at(2),
+        }),
+        group({
+          steamId: A,
+          characterName: 'Sam',
+          deaths: 3,
+          firstDeathAt: at(1),
+          lastDeathAt: at(1),
+        }),
+      ],
+      profiles: [],
+    });
+    expect(r.players.map((p) => `${p.key}|${p.deaths}`)).toEqual([
+      'nSam|3',
+      'nSam~3|1',
+      'nSam~2|1',
+    ]);
+    expect(JSON.stringify(r)).not.toMatch(/steamId|7656119800000000/);
   });
 
   it(`caps the list at ${MAX_DEATH_PLAYERS} bars`, () => {
