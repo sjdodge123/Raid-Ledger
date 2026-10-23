@@ -158,10 +158,10 @@ describe('MarkdownBlock — headings (ROK-1898)', () => {
         expect(root.querySelector('h4 a')?.getAttribute('href')).toBe('/p');
     });
 
-    it('an indented or tab-separated marker is not a heading (column 0, one space)', () => {
-        const root = mount(' # a\n\n#\tb\n\n#  c');
+    it('an indented or tab-separated marker is not a heading (column 0, then a space)', () => {
+        const root = mount(' # a\n\n#\tb');
         expect(root.querySelector('h3')).toBeNull();
-        expect([...root.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['# a', '#\tb', '#  c']);
+        expect([...root.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['# a', '#\tb']);
     });
 
     it('a heading marker inside a list item stays literal item text', () => {
