@@ -7,7 +7,7 @@ import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guilds } = schema;
+const { guilds, games } = schema;
 
 export async function findGuild(
   db: Db,
@@ -16,6 +16,30 @@ export async function findGuild(
   const [row] = await db
     .select()
     .from(guilds)
+    .where(eq(guilds.id, guildId))
+    .limit(1);
+  return row ?? null;
+}
+
+/** A hub's guild row plus its game's slug (ROK-1909) — what the page builders read. */
+export interface HubGuildRow {
+  guild: schema.GuildSelect;
+  gameSlug: string | null;
+}
+
+/**
+ * The guild row joined to its game in ONE read, so every hub kind's page can
+ * carry `guild.gameSlug` for plugin widgets to gate on (ROK-1909). Null when
+ * the guild does not exist.
+ */
+export async function findHubGuild(
+  db: Db,
+  guildId: number,
+): Promise<HubGuildRow | null> {
+  const [row] = await db
+    .select({ guild: guilds, gameSlug: games.slug })
+    .from(guilds)
+    .leftJoin(games, eq(games.id, guilds.gameId))
     .where(eq(guilds.id, guildId))
     .limit(1);
   return row ?? null;
@@ -77,12 +101,14 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
 /**
  * ROK-1831 L-5: the summary a hub page sends — staff also get `hidden` so the
  * settings Hide switch reflects (and can clear) `hidden_at`. Non-staff never
- * reach a hidden hub, so the flag is omitted for them.
+ * reach a hidden hub, so the flag is omitted for them. ROK-1909: also carries
+ * the game's slug (`findHubGuild`).
  */
-export function hubSummaryFor(
-  row: schema.GuildSelect,
-  staff: boolean,
-): GuildSummary {
-  const summary = toGuildSummary(row);
+export function hubSummaryFor(hub: HubGuildRow, staff: boolean): GuildSummary {
+  const { guild: row, gameSlug } = hub;
+  const summary: GuildSummary = {
+    ...toGuildSummary(row),
+    ...(gameSlug === null ? {} : { gameSlug }),
+  };
   return staff ? { ...summary, hidden: row.hiddenAt !== null } : summary;
 }
