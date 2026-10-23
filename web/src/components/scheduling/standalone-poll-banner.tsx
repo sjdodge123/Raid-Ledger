@@ -1,14 +1,12 @@
 /**
  * Banner for active standalone scheduling polls on the events page (ROK-977).
  * Shows links to polls the user can participate in.
- * ROK-1893 P3: a hub-tagged poll carries a hub chip.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
 import { useActiveStandalonePolls } from '../../hooks/use-standalone-poll';
 import { coverSrcSetProps } from '../../lib/igdb-image';
-import { StatusChip } from '../ui/status-chip';
 
 function PollLink({ poll }: { poll: ActiveStandalonePollDto }): JSX.Element {
   return (
@@ -25,8 +23,6 @@ function PollLink({ poll }: { poll: ActiveStandalonePollDto }): JSX.Element {
       <span className="text-muted text-xs">
         {poll.slotCount} {poll.slotCount === 1 ? 'slot' : 'slots'}
       </span>
-      {/* ROK-1893 P3 (ruling 8d): a hub-tagged poll names its hub. */}
-      {poll.hub && <StatusChip tone="neutral" title={`Tagged to the ${poll.hub.name} hub`}>{poll.hub.name}</StatusChip>}
       <span className="text-cyan-400 text-xs font-medium">Vote →</span>
     </Link>
   );

@@ -11,7 +11,8 @@
  *
  *  1. A crew member opens the hub's Events tab → New poll → the modal is
  *     locked to the hub's game and "Tagged to Seed Crew" → Create; the poll is
- *     in the hub's Open polls AND carries the hub chip in the events-page banner.
+ *     in the hub's Open polls and NOT in the events-page banner (operator
+ *     ruling 2026-10-23: a hub poll shows only on its hub until P2b).
  *  2. The poll page names its hub ("Hub: Seed Crew") and marks a member voter.
  *  3. A signed-in non-member of Seed Solo sees "Join hub" on a Solo poll,
  *     joins, the card goes away and the API reports them a member.
@@ -131,7 +132,7 @@ async function openHubEvents(page: Page, hubId: number): Promise<void> {
 }
 
 test.describe('hub polls', () => {
-    test('Events tab → New poll (hub-locked) → listed in Open polls and chipped in the events banner', async ({ page }, testInfo) => {
+    test('Events tab → New poll (hub-locked) → listed in Open polls, kept off the events banner', async ({ page }, testInfo) => {
         const { seed, game } = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         await openHubEvents(page, seed.hubIds.crew);
@@ -158,10 +159,13 @@ test.describe('hub polls', () => {
         await expect(row, 'Open polls lists the new poll (exactly once)').toHaveCount(1, { timeout: 15_000 });
         await expect(row.getByRole('link', { name: game.name })).toHaveAttribute('href', pollHref(poll));
 
+        // Ruling 2026-10-23: the banner's API list leaves hub polls out — the
+        // poll is confirmed on the hub list above, so an absence here is real.
+        const banner = ((await apiGet(jwt, '/scheduling-polls/active')) ?? []) as Array<{ matchId: number }>;
+        expect(banner.map((p) => p.matchId), 'the site-wide polls list omits the hub poll').not.toContain(poll.matchId);
         await page.goto('/events');
-        const bannerLink = page.getByTestId('standalone-poll-banner').locator(`a[href="${pollHref(poll)}"]`);
-        await expect(bannerLink, 'the site-wide polls banner lists the hub poll').toHaveCount(1, { timeout: 20_000 });
-        await expect(bannerLink, 'the banner entry carries the hub chip').toContainText('Seed Crew');
+        await expect(page.getByRole('heading', { level: 1 }).first(), 'the events page rendered').toBeVisible({ timeout: 20_000 });
+        await expect(page.locator(`a[href="${pollHref(poll)}"]`), 'the events banner has no link to the hub poll').toHaveCount(0);
     });
 
     test('poll page: "Hub: Seed Crew" links the hub and a member voter carries the Member mark', async ({ page }, testInfo) => {
