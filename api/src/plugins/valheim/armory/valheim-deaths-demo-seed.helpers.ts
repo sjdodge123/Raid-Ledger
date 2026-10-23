@@ -217,6 +217,16 @@ async function insertDeaths(
   await db.insert(schema.valheimPlayerDeaths).values(rows);
 }
 
+async function insertProfile(
+  db: Db,
+  values: NewValheimProfile,
+): Promise<number> {
+  const P = schema.valheimProfiles;
+  const [row] = await db.insert(P).values(values).returning({ id: P.id });
+  if (!row) throw new Error('deaths fixture: profile insert returned no row');
+  return row.id;
+}
+
 async function insertMap(db: Db, values: NewValheimMap): Promise<number> {
   const M = schema.valheimMaps;
   const [map] = await db.insert(M).values(values).returning({ id: M.id });
@@ -231,18 +241,10 @@ async function seedCharacter(
   k: number,
 ): Promise<DeathsFixtureCharacter> {
   const values = profileValues(ctx.serverId, ctx.worker, k, plan.name);
-  const P = schema.valheimProfiles;
-  const [profile] = await db.insert(P).values(values).returning({ id: P.id });
-  if (!profile)
-    throw new Error('deaths fixture: profile insert returned no row');
+  const profile = { ...values, id: await insertProfile(db, values) };
   const mapId = await insertMap(
     db,
-    mapValues(
-      ctx.serverId,
-      { ...values, id: profile.id },
-      plan.pins,
-      ctx.baseMapSha256,
-    ),
+    mapValues(ctx.serverId, profile, plan.pins, ctx.baseMapSha256),
   );
   const steamId = plan.steamAttributed ? values.steamId : null;
   await insertDeaths(
