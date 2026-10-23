@@ -62,6 +62,7 @@ const hubRow: schema.GuildSelect = {
   reviewedAt: null,
   archivedAt: null,
   archivedReason: null,
+  autoMembership: 'off',
   createdAt: SEEN,
   updatedAt: SEEN,
 };

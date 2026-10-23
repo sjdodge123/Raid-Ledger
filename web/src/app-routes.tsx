@@ -13,7 +13,7 @@ import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
-  JoinPage, InvitePage, PollSharePage, PrivacyPage,
+  JoinPage, InvitePage, PollSharePage, HubInvitePage, PrivacyPage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
   GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage, GuildPage,
   PlayersPage, EventMetricsPage,
@@ -142,6 +142,7 @@ export function AppRoutes() {
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
+      <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
 
       <Route element={<AuthGuard />}>

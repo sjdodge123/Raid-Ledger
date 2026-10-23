@@ -104,24 +104,31 @@ async function refreshSeedUser(
     .where(eq(schema.users.id, hit.id));
 }
 
-/**
- * A user by username, created A2-eligible (synthetic snowflake, seen in the
- * Discord guild) if absent; an existing user keeps its role and real link.
- */
-export async function ensureSeedUser(
+/** The seed user's `{id, discordId}` by username, if present. */
+async function findSeedUser(
   db: Db,
   username: string,
-): Promise<number> {
+): Promise<{ id: number; discordId: string | null } | undefined> {
   const u = schema.users;
   const [hit] = await db
     .select({ id: u.id, discordId: u.discordId })
     .from(u)
     .where(eq(u.username, username))
     .limit(1);
-  if (hit) {
-    await refreshSeedUser(db, hit, username);
-    return hit.id;
-  }
+  return hit;
+}
+
+/**
+ * Insert the seed user; `undefined` when a concurrent seed won the race. The
+ * snowflake is deterministic per username, so two parallel first-run seeds
+ * (Playwright's desktop/mobile/tablet projects on a freshly reset env DB)
+ * collide on `users_discord_id_unique` — DO NOTHING instead of a 500.
+ */
+async function insertSeedUser(
+  db: Db,
+  username: string,
+): Promise<number | undefined> {
+  const u = schema.users;
   const [row] = await db
     .insert(u)
     .values({
@@ -130,9 +137,34 @@ export async function ensureSeedUser(
       role: 'member',
       guildMemberSeenAt: new Date(),
     })
+    .onConflictDoNothing({ target: u.discordId })
     .returning({ id: u.id });
-  if (!row) throw new Error(`seed user ${username} insert returned no row`);
-  return row.id;
+  return row?.id;
+}
+
+/**
+ * A user by username, created A2-eligible (synthetic snowflake, seen in the
+ * Discord guild) if absent; an existing user keeps its role and real link.
+ * Safe under concurrent seeds: a lost insert race re-reads the winner's row.
+ */
+export async function ensureSeedUser(
+  db: Db,
+  username: string,
+): Promise<number> {
+  const hit = await findSeedUser(db, username);
+  if (hit) {
+    await refreshSeedUser(db, hit, username);
+    return hit.id;
+  }
+  const created = await insertSeedUser(db, username);
+  if (created !== undefined) return created;
+  const winner = await findSeedUser(db, username);
+  if (!winner) {
+    throw new Error(
+      `seed user ${username}: its snowflake is taken by another user`,
+    );
+  }
+  return winner.id;
 }
 
 /** Insert an active hub led by `leaderId`. */

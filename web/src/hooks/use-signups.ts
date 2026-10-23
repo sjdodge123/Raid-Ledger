@@ -3,6 +3,7 @@ import { signupForEvent, cancelSignup, confirmSignup, updateSignupStatus } from 
 import type { UpdateSignupStatusDto } from '@raid-ledger/contract';
 import { invalidateRosterQueries } from './use-roster';
 import { eventCopyKey } from './use-calendar-sync';
+import { HUB_JOIN_PROMPTS_KEY, watchHubJoinPrompts } from '../components/hub/community/hub-join-prompts-keys';
 
 /** Roster + this viewer's calendar copy (ROK-1596: a sign-up/cancel changes the copy's state). */
 function invalidateAfterSignupChange(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
@@ -21,7 +22,13 @@ export function useSignup(eventId: number) {
     return useMutation({
         mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number; characterId?: string; preferredRoles?: string[] }) =>
             signupForEvent(eventId, options),
-        onSuccess: () => invalidateAfterSignupChange(queryClient, eventId),
+        onSuccess: () => {
+            invalidateAfterSignupChange(queryClient, eventId);
+            // ROK-1893 — the API may raise a hub join prompt for this signup, but in a
+            // post-commit listener: open a bounded watch so the event page polls for it.
+            watchHubJoinPrompts(queryClient, eventId);
+            void queryClient.invalidateQueries({ queryKey: HUB_JOIN_PROMPTS_KEY });
+        },
     });
 }
 
