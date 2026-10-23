@@ -68,6 +68,10 @@ vi.mock('../plugins', () => ({
     PluginSlot: () => null,
 }));
 
+vi.mock('../components/hub/community/hub-join-prompt-lazy', () => ({
+    HubJoinPromptsLazy: () => <div data-testid="hub-join-prompts-mount" />,
+}));
+
 function buildDetailFixture() {
     return {
         event: {
@@ -375,5 +379,17 @@ describe('EventDetailPage — schema validation soft error (ROK-1237)', () => {
         expect(text).not.toMatch(/"code":\s*"invalid_enum_value"/);
         expect(text).not.toMatch(/"code":\s*"invalid_type"/);
         expect(text).not.toMatch(/Required/);
+    });
+});
+
+describe('EventDetailPage — hub join prompt placement (ROK-1893 P1)', () => {
+    it('renders the "Join <hub>?" prompt right under the signup header, above the roster', async () => {
+        renderEventDetailPage();
+        const prompt = await screen.findByTestId('hub-join-prompts-mount', {}, { timeout: 4000 });
+        const section = document.getElementById('event-roster-section');
+        const header = section?.querySelector('.event-detail-slots__header');
+        expect(section?.contains(prompt)).toBe(true);
+        expect(header?.nextElementSibling).toBe(prompt);
+        expect(screen.getAllByTestId('hub-join-prompts-mount')).toHaveLength(1);
     });
 });

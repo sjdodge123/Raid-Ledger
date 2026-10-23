@@ -87,8 +87,13 @@ export class CommunityHubKindAdapter implements HubKindAdapter {
       this.resolveLadder(actor, guildId),
       loadDiscordFields(this.db, actor.id),
     ]);
+    // ROK-1893: the auto-membership mode is shown to the Leader + staff only.
+    const summary = hubSummaryFor(hub, staff);
     return buildCommunityHubPage({
-      guild: hubSummaryFor(hub, staff),
+      guild:
+        role === 'leader'
+          ? { ...summary, autoMembership: guild.autoMembership }
+          : summary,
       status: guild.status,
       blurb: guild.blurb,
       role,

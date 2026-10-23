@@ -10,6 +10,7 @@ import { CommunityJoinPill, CommunityKindPill } from './community-hero';
 import { CommunityJoinedCell, CommunityPlayerCell, CommunityRoleCell } from './community-member-cells';
 import { CommunityMemberActions } from './community-member-actions';
 import { CommunitySettingsSections } from './community-settings';
+import { HubInviteAction } from './community-invites-section';
 
 const COMMUNITY_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
     { id: 'player', header: 'Player', cell: CommunityPlayerCell },
@@ -27,6 +28,8 @@ export const communityHubModule: HubModule = {
     coreWidgetVisible: () => true,
     memberColumns: COMMUNITY_MEMBER_COLUMNS,
     memberActions: CommunityMemberActions,
+    /** ROK-1893 §8a(a): every live member gets "Invite people" on the Members tab. */
+    membersSummary: HubInviteAction,
     settingsSections: CommunitySettingsSections,
     heroPills: [CommunityKindPill, CommunityJoinPill],
     memberRows: (page) => page.ranks.flatMap((g) => g.members),

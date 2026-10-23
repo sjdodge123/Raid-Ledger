@@ -1,6 +1,10 @@
-import { z } from 'zod';
-import { CharacterRoleSchema } from './characters.schema.js';
-import { GameServerStateSchema } from './game-servers.schema.js';
+import { z } from "zod";
+import { CharacterRoleSchema } from "./characters.schema.js";
+import { GameServerStateSchema } from "./game-servers.schema.js";
+import {
+  HubAutoMembershipModeSchema,
+  HubJoinSourceSchema,
+} from "./hub-invite.schema.js";
 
 /**
  * ROK-1785 (S1 of ROK-1781): guild page `/guilds/:id` — read shapes and the
@@ -17,12 +21,16 @@ const isoDate = z.iso.datetime({ offset: true });
  * hub with no server and no guild (`game_community`, ROK-1870 — members
  * propose it, an admin approves it, anyone in the Discord guild can Join).
  */
-export const GUILD_KINDS = ['wow_guild', 'game_server', 'game_community'] as const;
+export const GUILD_KINDS = [
+  "wow_guild",
+  "game_server",
+  "game_community",
+] as const;
 export const GuildKindSchema = z.enum(GUILD_KINDS);
 export type GuildKind = z.infer<typeof GuildKindSchema>;
 
 /** ROK-1870 — a community hub's life: proposed → active → archived. */
-export const HUB_STATUSES = ['proposed', 'active', 'archived'] as const;
+export const HUB_STATUSES = ["proposed", "active", "archived"] as const;
 export const HubStatusSchema = z.enum(HUB_STATUSES);
 export type HubStatus = z.infer<typeof HubStatusSchema>;
 
@@ -31,7 +39,7 @@ export type HubStatus = z.infer<typeof HubStatusSchema>;
  * leader|officer and `canManageEditors` is leader; both stay on the viewer
  * object so existing clients keep working.
  */
-export const LADDER_ROLES = ['leader', 'officer', 'member', 'visitor'] as const;
+export const LADDER_ROLES = ["leader", "officer", "member", "visitor"] as const;
 export const LadderRoleSchema = z.enum(LADDER_ROLES);
 export type LadderRole = z.infer<typeof LadderRoleSchema>;
 
@@ -67,6 +75,8 @@ export const GuildSummarySchema = z
     status: HubStatusSchema.optional(),
     /** ROK-1870 — the short blurb a community hub was proposed with. */
     blurb: z.string().max(280).nullable().optional(),
+    /** ROK-1893 — community hubs only, sent to the hub Leader and staff. */
+    autoMembership: HubAutoMembershipModeSchema.optional(),
     /**
      * ROK-1906 — the hub's game slug, so plugin widgets and tabs can gate by
      * game on every hub kind (a `wow_guild` hub cannot otherwise tell Forever
@@ -82,8 +92,10 @@ export const GuildMemberCommunitySchema = z
   .object({
     /** The member's `users.id` — the id every `/hubs/:id/members/:userId` route takes (`memberId` is the row id). */
     userId: id,
-    role: z.enum(['leader', 'officer', 'member']),
+    role: z.enum(["leader", "officer", "member"]),
     joinedAt: isoDate,
+    /** ROK-1893 — how they joined; null on rows that predate it. */
+    joinSource: HubJoinSourceSchema.nullable().optional(),
   })
   .strict();
 export type GuildMemberCommunity = z.infer<typeof GuildMemberCommunitySchema>;
@@ -96,7 +108,7 @@ export const GuildMemberServerSchema = z
     /** Last in-game character name presence saw on this server. */
     characterName: z.string().nullable(),
     /** The last way they qualified: seen on the server, or pressed Join. */
-    source: z.enum(['presence', 'manual']),
+    source: z.enum(["presence", "manual"]),
     /** First sighting or Join (`hub_server_members.first_seen_at`); optional so older fixtures parse. */
     firstSeenAt: isoDate.nullable().optional(),
   })
@@ -198,9 +210,15 @@ export const GuildPageCommunitySchema = z
     viewerJoined: z.boolean(),
     viewerBanned: z.boolean(),
     canJoin: z.boolean(),
-    joinBlockedReason: z.enum(['not-in-discord', 'banned', 'archived']).nullable(),
+    joinBlockedReason: z
+      .enum(["not-in-discord", "banned", "archived"])
+      .nullable(),
     leader: z
-      .object({ userId: id, username: z.string(), avatarUrl: z.string().nullable() })
+      .object({
+        userId: id,
+        username: z.string(),
+        avatarUrl: z.string().nullable(),
+      })
       .strict()
       .nullable(),
   })
@@ -262,7 +280,7 @@ export const CharacterGuildSchema = z
   .strict();
 export type CharacterGuild = z.infer<typeof CharacterGuildSchema>;
 
-export const GUILD_EDITOR_KINDS = ['rank', 'member'] as const;
+export const GUILD_EDITOR_KINDS = ["rank", "member"] as const;
 export const GuildEditorKindSchema = z.enum(GUILD_EDITOR_KINDS);
 export type GuildEditorKind = z.infer<typeof GuildEditorKindSchema>;
 
@@ -296,14 +314,14 @@ export const GuildEditorListSchema = z
 export type GuildEditorList = z.infer<typeof GuildEditorListSchema>;
 
 /** `POST /plugins/wow/guilds/:id/editors` — rank 0 is the GM, never granted. */
-export const CreateGuildEditorSchema = z.discriminatedUnion('kind', [
+export const CreateGuildEditorSchema = z.discriminatedUnion("kind", [
   z
     .object({
-      kind: z.literal('rank'),
+      kind: z.literal("rank"),
       rankIndex: z.number().int().positive(),
     })
     .strict(),
-  z.object({ kind: z.literal('member'), guildMemberId: id }).strict(),
+  z.object({ kind: z.literal("member"), guildMemberId: id }).strict(),
 ]);
 export type CreateGuildEditorInput = z.infer<typeof CreateGuildEditorSchema>;
 
