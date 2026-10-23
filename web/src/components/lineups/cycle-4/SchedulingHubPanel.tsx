@@ -57,7 +57,7 @@ export function SchedulingHubPanel({ poll, lineupId, matchId }: {
     return (
         <div className="space-y-2" data-testid="scheduling-hub-panel">
             <p className="text-xs text-muted">
-                Hub: <Link to={`/guilds/${hub.id}`} className="text-foreground underline hover:no-underline">{hub.name}</Link>
+                Hub: <Link to={`/hubs/${hub.id}`} className="text-foreground underline hover:no-underline">{hub.name}</Link>
             </p>
             <VoterChips voters={voters} />
             {user && !hub.viewerIsMember && <JoinHubCard hub={hub} voted={voted} onJoined={refetch} />}

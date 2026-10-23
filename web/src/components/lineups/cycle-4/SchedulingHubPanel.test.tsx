@@ -40,7 +40,7 @@ describe('SchedulingHubPanel (ROK-1893 P3)', () => {
 
     it('links the hub and marks only live hub members, once per voter', () => {
         renderWithProviders(<SchedulingHubPanel poll={buildPoll(HUB)} lineupId={40} matchId={41} />);
-        expect(screen.getByRole('link', { name: 'Tavern Regulars' })).toHaveAttribute('href', '/guilds/7');
+        expect(screen.getByRole('link', { name: 'Tavern Regulars' })).toHaveAttribute('href', '/hubs/7');
         const chips = within(screen.getByRole('list', { name: 'Voters' })).getAllByRole('listitem');
         expect(chips.map((c) => c.textContent), 'each voter once, Member only on the hub member').toEqual(['MirelleMember', 'Kestrel', 'You']);
     });

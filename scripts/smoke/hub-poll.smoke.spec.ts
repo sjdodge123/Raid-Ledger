@@ -124,7 +124,7 @@ function pollHref(poll: { lineupId: number; matchId: number }): string {
 }
 
 async function openHubEvents(page: Page, hubId: number): Promise<void> {
-    await page.goto(`/guilds/${hubId}#events`);
+    await page.goto(`/hubs/${hubId}#events`);
     await expect(page.getByTestId('hub-polls-section'), 'a community hub Events tab lists its open polls').toBeVisible({
         timeout: 20_000,
     });
@@ -183,7 +183,7 @@ test.describe('hub polls', () => {
         await page.goto(pollHref(poll));
         const panel = page.getByTestId('scheduling-hub-panel');
         await expect(panel, 'a hub-tagged poll renders its hub block').toBeVisible({ timeout: 20_000 });
-        await expect(panel.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
+        await expect(panel.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
         const chip = panel.getByTestId('scheduling-hub-voters').getByRole('listitem').filter({ hasText: voter.displayName });
         await expect(chip, 'the member voter is listed once').toHaveCount(1, { timeout: 15_000 });
         await expect(chip.getByText('Member', { exact: true }), 'the member voter carries the Member mark').toBeVisible();
