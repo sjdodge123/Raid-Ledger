@@ -42,8 +42,12 @@ function deathSink() {
   return { playerDied: jest.fn(() => Promise.resolve()) };
 }
 
-/** Recorder + real tracker, fed in the session's order: observe, then apply. */
-function recorderHarness(sink: ServerDeathSink | undefined = deathSink()) {
+/**
+ * Recorder + real tracker, fed in the session's order: observe, then apply.
+ * `sink` is required (no default) so `recorderHarness(undefined)` really
+ * binds no sink — a default parameter would fire on `undefined`.
+ */
+function recorderHarness(sink: ServerDeathSink | undefined) {
   const logger = { warn: jest.fn() };
   const tracker = new ServerPresenceTracker();
   const calls: Array<Promise<void>> = [];
@@ -60,7 +64,7 @@ function recorderHarness(sink: ServerDeathSink | undefined = deathSink()) {
     }
     return Promise.all(calls);
   };
-  return { logger, recorder, feed };
+  return { logger, recorder, feed, queued: () => calls.length };
 }
 
 describe('PresenceDeathRecorder (ROK-1930)', () => {
@@ -113,7 +117,11 @@ describe('PresenceDeathRecorder (ROK-1930)', () => {
 
   it('does nothing and never throws with no sink bound', async () => {
     const h = recorderHarness(undefined);
-    await expect(h.feed([ev.char('Bjorn', true, T(1))])).resolves.toEqual([]);
+    // toStrictEqual: toEqual treats `[undefined]` (one queued sink call) as `[]`.
+    await expect(
+      h.feed([ev.char('Bjorn', true, T(1))]),
+    ).resolves.toStrictEqual([]);
+    expect(h.queued()).toBe(0);
     expect(h.logger.warn).not.toHaveBeenCalled();
   });
 });
