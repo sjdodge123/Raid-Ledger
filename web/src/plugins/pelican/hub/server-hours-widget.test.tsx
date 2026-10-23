@@ -176,6 +176,12 @@ describe('ServerHoursWidget body and power lines (ROK-1877)', () => {
         expect(screen.getByTestId('server-hub-hours-row')).toHaveTextContent('Mon–Fri5:00 PM – 9:00 PM');
     });
 
+    it('still reads "Mon–Fri" on a Tuesday, when the run wraps the 7-day window', async () => {
+        const weekdays = days('2026-10-19', 8, (d) => (new Date(d).getUTCDay() % 6 === 0 ? [] : [win(d + 17 * H, d + 21 * H)]));
+        await show(weekdays, { state: 'offline', now: Date.parse('2026-10-20T12:00:00Z'), tz: 'UTC' });
+        expect(rowLabels()).toEqual(['Mon–Fri']);
+    });
+
     it('splits the DST-shifted Sunday into its own row (US fall-back 2026-11-01)', async () => {
         await show(demo('2026-10-25'), { now: Date.parse('2026-10-26T19:00:00Z') });
         expect(rowLabels()).toEqual(['Mon–Sat', 'Sun']);

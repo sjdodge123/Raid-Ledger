@@ -56,12 +56,41 @@ describe('weekRows (ROK-1877 Q6)', () => {
         ]);
     });
 
-    it('merges only consecutive days ("Mon–Fri", then a separate "Sun") and ignores days outside this week', () => {
+});
+
+describe('weekRows across the week\'s end, DST and edges (ROK-1877 review r1)', () => {
+    it('merges across the week\'s end: Sun + Mon–Fri viewed on Monday is one "Sun–Fri" row, days outside this week ignored', () => {
         const evening = (d: string) => win(`${d}T17:00:00Z`, `${d}T21:00:00Z`);
         const windows = ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-25', '2026-10-26'].map(evening);
         expect(weekRows(windows, Date.parse('2026-10-19T08:00:00Z'), 'UTC')).toEqual([
-            { key: '2026-10-19', label: 'Mon–Fri', spans: '5:00 PM – 9:00 PM' },
-            { key: '2026-10-25', label: 'Sun', spans: '5:00 PM – 9:00 PM' },
+            { key: '2026-10-19', label: 'Sun–Fri', spans: '5:00 PM – 9:00 PM' },
+        ]);
+    });
+
+    it('keeps "Mon–Fri" when viewed on a Tuesday (the run wraps the 7-day window)', () => {
+        const windows = everyDay('2026-10-19', 8, (d) => [win(iso(d + 17 * 3_600_000), iso(d + 21 * 3_600_000))])
+            .filter((w) => ![6, 0].includes(new Date(w.start).getUTCDay()));
+        expect(weekRows(windows, Date.parse('2026-10-20T08:00:00Z'), 'UTC')).toEqual([
+            { key: '2026-10-20', label: 'Mon–Fri', spans: '5:00 PM – 9:00 PM' },
+        ]);
+    });
+
+    it('keeps "Fri, Sat" when viewed on a Saturday, today\'s run first, then "Sun–Thu"', () => {
+        const windows = [
+            win('2026-10-17T18:00:00Z', '2026-10-18T02:00:00Z'),
+            ...everyDay('2026-10-18', 5, (d) => [win(iso(d + 19 * 3_600_000), iso(d + 23 * 3_600_000))]),
+            win('2026-10-23T18:00:00Z', '2026-10-24T02:00:00Z'),
+        ];
+        expect(weekRows(windows, Date.parse('2026-10-17T11:00:00Z'), 'UTC')).toEqual([
+            { key: '2026-10-17', label: 'Fri, Sat', spans: '6:00 PM – 2:00 AM' },
+            { key: '2026-10-18', label: 'Sun–Thu', spans: '7:00 PM – 11:00 PM' },
+        ]);
+    });
+
+    it('never merges across a DST change: viewed Wed of the fall-back week, "Wed–Sat" then the shifted "Sun–Tue"', () => {
+        expect(weekRows(demoWindows('2026-10-27', 9), Date.parse('2026-10-28T19:00:00Z'), NY)).toEqual([
+            { key: '2026-10-28', label: 'Wed–Sat', spans: DEMO_SPANS },
+            { key: '2026-11-01', label: 'Sun–Tue', spans: '8:00 AM – 8:40 AM, 1:00 PM – 9:00 PM' },
         ]);
     });
 
