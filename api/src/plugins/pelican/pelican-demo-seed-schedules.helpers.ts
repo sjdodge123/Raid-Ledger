@@ -3,6 +3,8 @@
  * window + a nightly restart on the running+mapped server — plus (ROK-1774)
  * a backup in the restart's minute (coincident markers) and a short midday
  * window (short-window label) — and one nightly restart on the offline row.
+ * ROK-1877 adds two opt-in server-hub sets: a start-only power schedule and a
+ * window kept clear of `now` (a manual start outside the usual hours).
  * Every cron is UTC, as Pelican panel crons always are (ROK-1795).
  */
 import type { NewPelicanSchedule } from '../../drizzle/schema';
@@ -110,4 +112,75 @@ export function offlineServerSchedules(
     effectOffsetS: 0,
   };
   return [toRow(serverId, 1, spec, nextRunAt)];
+}
+
+/** ROK-1877: a daily 14:00 UTC start with no matching stop (spec D6 / S7). */
+const START_ONLY: DemoScheduleSpec = {
+  name: 'Afternoon open',
+  expr: '0 14 * * *',
+  effect: 'start',
+  effectOffsetS: 0,
+};
+
+/** Hours from `now` to the outside-hours window's start; it lasts one hour. */
+export const OUTSIDE_HOURS_LEAD_H = 3;
+
+/**
+ * A daily one-hour window starting `OUTSIDE_HOURS_LEAD_H` whole UTC hours
+ * after `now`'s hour, so a running server seeded at `now` is outside it
+ * (spec S3) for at least two hours, whatever the wall clock says.
+ */
+function outsideHoursSpecs(now: Date): DemoScheduleSpec[] {
+  const startH = (now.getUTCHours() + OUTSIDE_HOURS_LEAD_H) % 24;
+  const stopH = (startH + 1) % 24;
+  return [
+    {
+      name: 'Evening open',
+      expr: `0 ${startH} * * *`,
+      effect: 'start',
+      effectOffsetS: 0,
+    },
+    {
+      name: 'Evening close',
+      expr: `0 ${stopH} * * *`,
+      effect: 'stop',
+      effectOffsetS: 0,
+    },
+  ];
+}
+
+/** The server-hub fixture's schedule sets (`running` = the seed-servers set). */
+export type HubScheduleSet = 'running' | 'start_only' | 'outside_hours';
+const HUB_SCHEDULE_SETS: readonly HubScheduleSet[] = [
+  'running',
+  'start_only',
+  'outside_hours',
+];
+
+function isHubScheduleSet(v: unknown): v is HubScheduleSet {
+  return HUB_SCHEDULE_SETS.some((s) => s === v);
+}
+
+/**
+ * The set from an untrusted body: `{ schedules: '<set>' }` wins, else
+ * ROK-1876's `{ withSchedules: true }` = `running`; anything else = none.
+ */
+export function parseHubScheduleSet(body: unknown): HubScheduleSet | null {
+  if (typeof body !== 'object' || body === null) return null;
+  if ('schedules' in body && isHubScheduleSet(body.schedules)) {
+    return body.schedules;
+  }
+  const legacy = 'withSchedules' in body && body.withSchedules === true;
+  return legacy ? 'running' : null;
+}
+
+/** The schedule rows for one server-hub fixture set. */
+export function hubServerSchedules(
+  set: HubScheduleSet,
+  serverId: number,
+  now: Date,
+): NewPelicanSchedule[] {
+  if (set === 'running') return runningServerSchedules(serverId);
+  const specs = set === 'start_only' ? [START_ONLY] : outsideHoursSpecs(now);
+  return specs.map((spec, i) => toRow(serverId, i + 1, spec, null));
 }
