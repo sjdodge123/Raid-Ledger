@@ -85,7 +85,7 @@ async function bindAsAdmin(fx: Fixture, privateAck?: boolean): Promise<void> {
 async function openOverview(page: Page, guildId: number): Promise<void> {
     const mirrorRead = page.waitForResponse((r) =>
         r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(`/guilds/${guildId}/discord`));
-    await page.goto(`/guilds/${guildId}`);
+    await page.goto(`/hubs/${guildId}`);
     expect((await mirrorRead).status(), 'GET .../discord answers 200').toBe(200);
 }
 

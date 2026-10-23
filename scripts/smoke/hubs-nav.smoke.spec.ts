@@ -101,7 +101,7 @@ async function seedMember(page: Page, testInfo: TestInfo): Promise<Seed> {
 }
 
 function rowFor(scope: Locator | Page, hubId: number): Locator {
-    return scope.locator(`a[href="/guilds/${hubId}"]`);
+    return scope.locator(`a[href="/hubs/${hubId}"]`);
 }
 
 async function openDrawer(page: Page): Promise<Locator> {
@@ -271,7 +271,7 @@ test.describe('Hubs nav (ROK-1875)', () => {
         await expect(server.getByTestId('hub-kind-chip'), 'the server card reads "Server"').toContainText('Server', { timeout: 20_000 });
         await expect(server.getByRole('button', { name: /^Join / }), 'a server card has no Join').toHaveCount(0);
         await server.getByRole('link', { name: `View ${seed.serverHubName}` }).click();
-        await expect(page).toHaveURL(new RegExp(`/guilds/${seed.serverHubId}(?:[?#]|$)`));
+        await expect(page).toHaveURL(new RegExp(`/hubs/${seed.serverHubId}(?:[?#]|$)`));
         await expect(page.getByTestId('server-hub-status'), 'View opens the server hub page').toBeVisible({ timeout: 15_000 });
     });
 
