@@ -4,6 +4,7 @@ import { ScheduleView } from './ScheduleView';
 import type { CalendarEvent } from './CalendarView';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
+import { useCalendarHubFilterStore, NO_HUB, type HubKey } from '../../pages/calendar/use-calendar-hub-filter';
 
 const MOCK_NOW = new Date('2026-02-10T12:00:00Z');
 
@@ -485,5 +486,21 @@ describe('ScheduleView — hub suffix (ROK-1893 V4)', () => {
         render(<ScheduleView {...defaultProps} events={[makeCalendarEvent(1, 'Raid night', start, end, { hub: null })]} />);
         expect(screen.getByText('World of Warcraft')).toBeInTheDocument();
         expect(screen.queryByTestId('event-hub-label')).not.toBeInTheDocument();
+    });
+});
+
+describe('ScheduleView — hub-filtered empty state (ROK-1893 P4 verify FAIL c)', () => {
+    afterEach(() => {
+        useCalendarHubFilterStore.getState().showAll();
+    });
+
+    it('says "No events match your filters" and "Show all hubs" resets the hub filter', () => {
+        useCalendarHubFilterStore.setState({ hidden: new Set<HubKey>([NO_HUB]) });
+        render(<ScheduleView {...defaultProps} events={[]} />);
+        expect(screen.getByText('No events match your filters')).toBeInTheDocument();
+        expect(screen.queryByText('No events scheduled')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Show all hubs' }));
+        expect(useCalendarHubFilterStore.getState().hidden.size).toBe(0);
+        expect(screen.getByText('No events scheduled')).toBeInTheDocument();
     });
 });
