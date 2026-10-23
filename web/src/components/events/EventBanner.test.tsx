@@ -154,10 +154,10 @@ describe('memoization (ROK-343)', () => {
 
 function eventbannerHubGroup() {
 describe('hub link (ROK-1893 V5)', () => {
-        it('renders a HubBadge linking /guilds/:id with the kind noun', () => {
+        it('renders a HubBadge linking /hubs/:id with the kind noun', () => {
             renderWithRouter(<EventBanner {...mockProps} hub={{ id: 7, name: 'BG3 Friends', kind: 'game_community' }} />);
             const link = screen.getByTestId('event-banner-hub');
-            expect(link.getAttribute('href')).toBe('/guilds/7');
+            expect(link.getAttribute('href')).toBe('/hubs/7');
             expect(link.textContent).toContain('BG3 Friends hub');
             expect(link.className).toContain('event-banner__game--link');
         });

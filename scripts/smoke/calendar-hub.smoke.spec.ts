@@ -146,9 +146,9 @@ test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
         await page.goto(`/events/${seed.hubEvent.id}`);
         const link = page.getByTestId('event-banner-hub').filter({ visible: true }).first();
         await expect(link).toBeVisible({ timeout: 15_000 });
-        await expect(link).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
+        await expect(link).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
         await expect(link).toContainText(`${HUB_NAME} hub`);
         await link.click();
-        await expect(page).toHaveURL(new RegExp(`/guilds/${seed.hubIds.crew}(?:[/?#]|$)`), { timeout: 15_000 });
+        await expect(page).toHaveURL(new RegExp(`/hubs/${seed.hubIds.crew}(?:[/?#]|$)`), { timeout: 15_000 });
     });
 });
