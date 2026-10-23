@@ -6,6 +6,8 @@
  * the community hub module's `eventsLead` slot (that module's chunk, never the
  * hub page's); the modal loads on demand.
  */
+import { useAuth } from '../../../hooks/use-auth';
+import { canCreateHubPoll } from './hub-polls.helpers';
 import { lazy, Suspense, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
@@ -69,8 +71,9 @@ export function HubPollsSection({ hubId, hubName, gameId, canCreate }: HubPollsS
     );
 }
 
-/** The community module's `eventsLead` slot: this hub's polls; live members get "New poll". */
+/** The community module's `eventsLead` slot: this hub's polls; live members and staff get "New poll". */
 export function CommunityHubPolls({ page }: HubCtx): JSX.Element {
     const { guild } = page;
-    return <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={page.community?.viewerJoined === true} />;
+    const { user } = useAuth();
+    return <HubPollsSection hubId={guild.id} hubName={guild.name} gameId={guild.gameId} canCreate={canCreateHubPoll(page.community?.viewerJoined === true, user)} />;
 }

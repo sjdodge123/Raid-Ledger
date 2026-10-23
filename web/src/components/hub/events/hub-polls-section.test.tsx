@@ -9,6 +9,8 @@ import userEvent from '@testing-library/user-event';
 import { server } from '../../../test/mocks/server';
 import { createMockActivePoll, hubPollsHandlers, type HubPollsCalls } from '../../../test/mocks/hub-polls-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
+import type { User } from '../../../hooks/use-auth';
+import { canCreateHubPoll } from './hub-polls.helpers';
 import { buildCommunityPage } from '../../../test/factories/community-hub';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { communityHubModule } from '../community/community-hub-module';
@@ -73,5 +75,14 @@ describe('communityHubModule.eventsLead (ROK-1893 P3)', () => {
         renderWithProviders(<Lead page={buildCommunityPage({ community: { viewerJoined: false } })} raids={raids} />);
         await screen.findAllByTestId('hub-poll-row');
         expect(screen.queryByRole('button', { name: 'New poll' }), 'a visitor gets no New poll').toBeNull();
+    });
+});
+
+describe('canCreateHubPoll (ROK-1893 P3)', () => {
+    it('lets a joined member or staff create, not a plain non-member', () => {
+        expect(canCreateHubPoll(true, null), 'joined member').toBe(true);
+        expect(canCreateHubPoll(false, { id: 1, role: 'admin' } as User), 'admin').toBe(true);
+        expect(canCreateHubPoll(false, { id: 1, role: 'operator' } as User), 'operator').toBe(true);
+        expect(canCreateHubPoll(false, { id: 1, role: 'member' } as User), 'plain non-member').toBe(false);
     });
 });
