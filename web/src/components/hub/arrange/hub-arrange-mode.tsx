@@ -32,6 +32,13 @@ export interface HubArrangeModeProps {
     onExit: () => void;
 }
 
+/**
+ * `grid-cols-1` (= minmax(0,1fr)) plus the `<ol>`'s `min-w-0`: without them the
+ * phone column sizes to the longest untruncated title and every row's Hide
+ * button lands off-screen (ROK-1918 e2e).
+ */
+const LAYOUT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]';
+
 const RESET_COPY = { title: 'Restore the default layout?', keepLabel: 'Cancel', discardLabel: 'Reset' };
 
 function ArrangeHeader({ onAdd, canDrag }: { onAdd: () => void; canDrag: boolean }): JSX.Element {
@@ -72,8 +79,8 @@ export default function HubArrangeMode({ guildId, kind, arranged, available, pre
     return (
         <section data-testid="hub-arrange-mode" aria-label="Arrange the Overview">
             <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-                <ol ref={bindList} className="flex flex-col gap-2" aria-label="Overview widgets, in order">
+            <div className={LAYOUT} data-testid="arrange-layout">
+                <ol ref={bindList} className="flex min-w-0 flex-col gap-2" aria-label="Overview widgets, in order">
                     {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
                 <ArrangePreview entries={s.rows.filter((r) => r.on).map((r) => r.entry)} />

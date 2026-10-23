@@ -153,6 +153,15 @@ describe('arrange mode — editing the list (ROK-1918 L5)', () => {
         expect(rowIds(list)).toEqual(before);
     });
 
+    it('lays the list in a minmax(0,1fr) column so long titles truncate on phones', async () => {
+        const user = userEvent.setup();
+        serve(PAGE);
+        const list = await openArrange(user);
+        // jsdom has no layout; these classes are what keep a phone row inside the viewport (ROK-1918 e2e).
+        expect(screen.getByTestId('arrange-layout').className, 'implicit auto track = rows wider than the phone').toMatch(/(^|\s)grid-cols-1(\s|$)/);
+        expect(list.className, 'the <ol> must be allowed to shrink below its min-content width').toMatch(/(^|\s)min-w-0(\s|$)/);
+    });
+
     it('hides a row in place, dimmed, and shows it again', async () => {
         const user = userEvent.setup();
         serve(PAGE);

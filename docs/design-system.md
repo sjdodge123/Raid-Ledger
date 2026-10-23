@@ -1576,7 +1576,10 @@ says. The list shows every widget, in saved order, including hidden and empty on
   is one click and it keeps its slot.
 - **Add** opens a picker (`Modal max-w-lg` at ≥1024px, `BottomSheet` below — §4.4); an added widget lands at
   the top, shown.
-- **Footer** (sticky): `Reset to default` (`ghost`, confirms) · `Cancel` (`secondary`, dirty guard →
+- **Layout.** The list sits in `grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem]` with a `min-w-0` `<ol>`.
+  Keep the explicit `grid-cols-1`: an implicit `auto` track sizes to the longest untruncated title, so on a
+  phone every row outgrows the viewport and its Hide button is clipped off-screen (ROK-1918 e2e).
+- **Footer** (sticky, docked above the phone bottom bar with `bottom-[var(--bottom-nav-clearance)] md:bottom-0` — the ROK-1875 bottom-nav pattern note): `Reset to default` (`ghost`, confirms) · `Cancel` (`secondary`, dirty guard →
   `DiscardChangesConfirm`) · `Save layout` (`primary`, disabled until dirty). Save writes the full order,
   hidden rows included.
 - **Leaving with an unsaved draft** (`use-arrange-leave-guard.ts`). Cancel and an **in-hub tab switch** (any

@@ -55,6 +55,7 @@ describe('bottom-nav clearance (ROK-1875)', () => {
         'components/features/game-time/SelectedBlockInspector.tsx',
         'components/features/game-time/phone/DayBlockEditor.tsx',
         'components/hub/hub-page.tsx',
+        'components/hub/arrange/arrange-footer.tsx',
     ])('%s docks above the circle via --bottom-nav-clearance', (path) => {
         expect(source(path)).toContain('var(--bottom-nav-clearance)');
     });
