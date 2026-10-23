@@ -1,5 +1,5 @@
 {
-  "id": "49993c44-28aa-469a-b9cc-6bb2943b6059",
+  "id": "9ef1f496-2d45-4ed3-aece-e78954d82de2",
   "prevId": "0ba07d18-dae8-4c80-aaaf-45905f3f6f5a",
   "version": "7",
   "dialect": "postgresql",
@@ -7076,12 +7076,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7098,21 +7092,6 @@
         }
       },
       "indexes": {
-        "idx_community_lineups_guild_id": {
-          "name": "idx_community_lineups_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "uq_community_lineups_share_token": {
           "name": "uq_community_lineups_share_token",
           "columns": [
@@ -7205,19 +7184,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "tie_pick_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "community_lineups_guild_id_guilds_id_fk": {
-          "name": "community_lineups_guild_id_guilds_id_fk",
-          "tableFrom": "community_lineups",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
           ],
           "columnsTo": [
             "id"
@@ -12721,6 +12687,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "join_source": {
+          "name": "join_source",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "invite_id": {
+          "name": "invite_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12819,6 +12797,21 @@
           "method": "btree",
           "with": {}
         },
+        "idx_hub_community_members_invite_id": {
+          "name": "idx_hub_community_members_invite_id",
+          "columns": [
+            {
+              "expression": "invite_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_hub_community_members_live": {
           "name": "idx_hub_community_members_live",
           "columns": [
@@ -12888,6 +12881,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "hub_community_members_invite_id_hub_invites_id_fk": {
+          "name": "hub_community_members_invite_id_hub_invites_id_fk",
+          "tableFrom": "hub_community_members",
+          "tableTo": "hub_invites",
+          "columnsFrom": [
+            "invite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12897,6 +12903,172 @@
         "hub_community_members_role_check": {
           "name": "hub_community_members_role_check",
           "value": "\"hub_community_members\".\"role\" IN ('leader', 'officer', 'member')"
+        },
+        "hub_community_members_join_source_check": {
+          "name": "hub_community_members_join_source_check",
+          "value": "\"hub_community_members\".\"join_source\" IS NULL OR \"hub_community_members\".\"join_source\" IN ('manual', 'invite', 'auto', 'prompt')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.hub_invites": {
+      "name": "hub_invites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_uses": {
+          "name": "max_uses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "use_count": {
+          "name": "use_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_hub_invites_guild_id": {
+          "name": "idx_hub_invites_guild_id",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_invites_created_by": {
+          "name": "idx_hub_invites_created_by",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_hub_invites_live_by_maker": {
+          "name": "idx_hub_invites_live_by_maker",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"hub_invites\".\"revoked_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hub_invites_guild_id_guilds_id_fk": {
+          "name": "hub_invites_guild_id_guilds_id_fk",
+          "tableFrom": "hub_invites",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hub_invites_created_by_users_id_fk": {
+          "name": "hub_invites_created_by_users_id_fk",
+          "tableFrom": "hub_invites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hub_invites_token_unique": {
+          "name": "hub_invites_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "hub_invites_max_uses_check": {
+          "name": "hub_invites_max_uses_check",
+          "value": "\"hub_invites\".\"max_uses\" IS NULL OR \"hub_invites\".\"max_uses\" > 0"
         }
       },
       "isRLSEnabled": false
