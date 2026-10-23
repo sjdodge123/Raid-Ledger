@@ -42,7 +42,10 @@ export function hubModuleTabs(mod: HubModule | undefined): HubTab[] {
     const own = mod?.tabs ?? [];
     const taken = new Set([...CORE_TAB_IDS, ...own.map((t) => t.id)]);
     const games = hubGameTabs().filter((t) => {
-        if (!taken.has(t.id)) return taken.add(t.id), true;
+        if (!taken.has(t.id)) {
+            taken.add(t.id);
+            return true;
+        }
         if (import.meta.env.DEV) console.warn(`[hub] game tab "${t.id}" collides with an existing hub tab id; dropped`);
         return false;
     });
