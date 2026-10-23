@@ -88,6 +88,7 @@ describe('HubSettingsTrigger — icon-only below sm (ROK-1884)', () => {
         renderWithProviders(<HubSettingsTrigger onOpen={() => undefined} label="Server settings" />);
         const button = screen.getByRole('button', { name: 'Server settings' });
         expect(button).toHaveClass('min-h-[44px]', 'min-w-[44px]');
-        expect(screen.getByTestId('guild-settings-trigger-label')).toHaveClass('sr-only', 'sm:not-sr-only');
+        expect(screen.getByTestId('guild-settings-trigger-label')).toHaveClass('hidden', 'sm:inline');
+        expect(screen.getByTestId('guild-settings-trigger-label')).not.toHaveClass('sr-only');
     });
 });
