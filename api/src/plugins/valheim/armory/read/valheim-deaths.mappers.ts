@@ -108,10 +108,18 @@ interface KeyedBar extends Bar {
   characterId: number | null;
 }
 
+/** Earliest first death, then SteamID, then name: a total order on bars. */
+const byFirstDeath = (a: KeyedBar, b: KeyedBar): number =>
+  a.first - b.first ||
+  (a.steamId ?? '').localeCompare(b.steamId ?? '') ||
+  (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+
 /**
  * D13: `c<characterId>`, else `n<name>`. Two unlinked bars can share a name
- * (an unprofiled SteamID and a name-only bucket); the later first-death gets
- * `~2`, `~3`… so keys stay unique and stable as counts change.
+ * (an unprofiled SteamID and a name-only bucket); in first-death order a
+ * taken key gets the lowest free `~2`, `~3`… Checking against every key
+ * already handed out keeps keys unique even when a real name is `Sam~2`,
+ * and the order ignores counts, so keys hold as deaths are added.
  */
 function withKeys(bars: Bar[], profiles: DeathProfileRow[]): KeyedBar[] {
   const keyed = bars.map((b) => {
@@ -120,15 +128,12 @@ function withKeys(bars: Bar[], profiles: DeathProfileRow[]): KeyedBar[] {
     const key = characterId === null ? `n${name}` : `c${characterId}`;
     return { ...b, name, key, characterId };
   });
-  const seen = new Map<string, number>();
-  const byFirst = [...keyed].sort(
-    (a, b) =>
-      a.first - b.first || (a.steamId ?? '').localeCompare(b.steamId ?? ''),
-  );
-  for (const b of byFirst) {
-    const n = (seen.get(b.key) ?? 0) + 1;
-    seen.set(b.key, n);
-    if (n > 1) b.key = `${b.key}~${n}`;
+  const taken = new Set<string>();
+  for (const b of [...keyed].sort(byFirstDeath)) {
+    let key = b.key;
+    for (let n = 2; taken.has(key); n += 1) key = `${b.key}~${n}`;
+    taken.add(key);
+    b.key = key;
   }
   return keyed;
 }

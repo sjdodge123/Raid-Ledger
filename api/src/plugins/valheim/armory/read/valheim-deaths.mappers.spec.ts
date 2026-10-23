@@ -145,6 +145,24 @@ describe('toDeathsResponse', () => {
     expect(JSON.stringify(r)).not.toMatch(/steamId|7656119800000000/);
   });
 
+  it('keeps keys unique when a real name looks like a suffixed key (Sam, Sam, Sam~2)', () => {
+    const groups = [
+      group({ steamId: A, characterName: 'Sam', firstDeathAt: at(1) }),
+      group({ steamId: null, characterName: 'Sam', firstDeathAt: at(2) }),
+      group({ steamId: B, characterName: 'Sam~2', firstDeathAt: at(3) }),
+    ];
+    const keyByName = (gs: DeathGroupRow[]) =>
+      toDeathsResponse({ groups: gs, profiles: [] })
+        .players.map((p) => `${p.name}@${p.key}`)
+        .sort();
+    const keys = keyByName(groups);
+    expect(keys).toEqual(['Sam@nSam', 'Sam@nSam~2', 'Sam~2@nSam~2~2']);
+    expect(keyByName([...groups].reverse())).toEqual(keys);
+    expect(
+      keyByName([groups[1], groups[2], groups[0]].flatMap((g) => g ?? [])),
+    ).toEqual(keys);
+  });
+
   it(`caps the list at ${MAX_DEATH_PLAYERS} bars`, () => {
     const many = Array.from({ length: MAX_DEATH_PLAYERS + 5 }, (_, i) =>
       group({ characterName: `p${i}` }),
