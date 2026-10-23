@@ -1,6 +1,6 @@
 /**
  * ROK-1933 Codex P2: a claim DM that the queue finally failed to deliver
- * gives back its three dedupe keys, so a later scan can ask again.
+ * gives back only its permanent pair key; the 24h keys still hold.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../../drizzle/schema';
@@ -30,19 +30,23 @@ const released = (): string[] =>
 beforeEach(() => jest.clearAllMocks());
 
 describe('ValheimClaimSuggestService.onDeliveryFailed', () => {
-  it('releases the pair, user and profile keys of a failed claim DM', async () => {
+  it('releases only the pair key of a failed claim DM', async () => {
     await service().onDeliveryFailed({
       type: CLAIM_SUGGEST_TYPE,
       userId: 42,
       payload: { profileId: 7, guildId: 3 },
     });
-    expect(released()).toEqual(
-      [
-        claimSuggestKeys.pair(7, 42),
-        claimSuggestKeys.user(42),
-        claimSuggestKeys.profile(7),
-      ].sort(),
-    );
+    expect(released()).toEqual([claimSuggestKeys.pair(7, 42)]);
+  });
+
+  it('keeps the 24h user and profile keys, so a retry waits a day', async () => {
+    await service().onDeliveryFailed({
+      type: CLAIM_SUGGEST_TYPE,
+      userId: 42,
+      payload: { profileId: 7 },
+    });
+    expect(released()).not.toContain(claimSuggestKeys.user(42));
+    expect(released()).not.toContain(claimSuggestKeys.profile(7));
   });
 
   it('leaves the declined key alone', async () => {

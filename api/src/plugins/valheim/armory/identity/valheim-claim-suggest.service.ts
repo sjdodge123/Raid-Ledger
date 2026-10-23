@@ -13,7 +13,7 @@
  * no-Discord-id skip; a skip or a throw releases the keys (the
  * `lfg-affinity-dm.service.ts` release idiom) so the next scan retries.
  * `dispatch` only QUEUES the DM: a queued DM that finally fails comes back
- * as `notification.discord.failed`, which releases the same keys.
+ * as `notification.discord.failed`, which releases the pair key only.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -186,9 +186,12 @@ export class ValheimClaimSuggestService {
 
   /**
    * A queued claim DM was finally not delivered (retries spent, DMs closed,
-   * user gone): give back its pair, user and profile keys so a later scan
-   * may ask again. The declined key is the user's answer and stays. Never
-   * throws — a listener failure must not reach the queue processor.
+   * user gone): give back ONLY its permanent pair key, so the pair may be
+   * asked again once the 24h user and profile keys lapse. Releasing those
+   * too would re-ask a closed-DM user every scan and trip the 3-strike rule
+   * that switches off all their DMs. The declined key is the user's answer
+   * and stays. Never throws — a listener failure must not reach the queue
+   * processor.
    */
   @OnEvent(DISCORD_NOTIFICATION_FAILED)
   async onDeliveryFailed(event: DiscordNotificationFailedEvent): Promise<void> {
@@ -196,11 +199,9 @@ export class ValheimClaimSuggestService {
     const profileId = event.payload?.['profileId'];
     if (typeof profileId !== 'number') return;
     try {
-      await this.releaseKeys([
+      await this.dedup.releaseKey(
         claimSuggestKeys.pair(profileId, event.userId),
-        claimSuggestKeys.user(event.userId),
-        claimSuggestKeys.profile(profileId),
-      ]);
+      );
     } catch (err) {
       this.logger.warn(
         `Releasing claim keys for profile ${profileId} failed: ${

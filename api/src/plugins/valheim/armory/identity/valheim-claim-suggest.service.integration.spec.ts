@@ -422,20 +422,29 @@ describe('ValheimClaimSuggestService — a queued DM that finally failed', () =>
       payload: { profileId },
     });
 
-  it('releases all three keys, so a later scan asks again', async () => {
+  it('releases only the pair key; no re-ask inside 24h', async () => {
     const w = await world();
     const profileId = await playing(w);
     const userId = await member(w, 'brannok');
     expect(await scan()).toBe(1);
 
     await failDelivery(CLAIM_SUGGEST_TYPE, userId, profileId);
-    expect(await held(keysOf(profileId, userId))).toEqual([
-      false,
-      false,
-      false,
-    ]);
+    expect(await held(keysOf(profileId, userId))).toEqual([true, true, false]);
 
     clearRedis(['discord-notif:rate:']);
+    expect(await scan()).toBe(0);
+    expect(dispatchedTo()).toEqual([userId]);
+  });
+
+  it('asks again once the 24h keys lapse', async () => {
+    const w = await world();
+    const profileId = await playing(w);
+    const userId = await member(w, 'brannok');
+    expect(await scan()).toBe(1);
+
+    await failDelivery(CLAIM_SUGGEST_TYPE, userId, profileId);
+    await lapseDailyKeys(profileId, userId);
+
     expect(await scan()).toBe(1);
     expect(dispatchedTo()).toEqual([userId, userId]);
   });
