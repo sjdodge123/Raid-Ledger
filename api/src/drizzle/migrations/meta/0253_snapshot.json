@@ -7076,6 +7076,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7092,6 +7098,21 @@
         }
       },
       "indexes": {
+        "idx_community_lineups_guild_id": {
+          "name": "idx_community_lineups_guild_id",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "uq_community_lineups_share_token": {
           "name": "uq_community_lineups_share_token",
           "columns": [
@@ -7184,6 +7205,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "tie_pick_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "community_lineups_guild_id_guilds_id_fk": {
+          "name": "community_lineups_guild_id_guilds_id_fk",
+          "tableFrom": "community_lineups",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
           ],
           "columnsTo": [
             "id"
