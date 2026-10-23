@@ -19,6 +19,7 @@ import { PlayersGuildCard } from './slots/players-guild-card';
 import { foreverIdentityProvider } from './forever-identity-provider';
 import { wowHubModule } from './hub/register-hub';
 import { supportsEventReportLinks } from './lib/report-links';
+import { registerClassLevelWidgets } from './hub-widgets/class-level.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -47,3 +48,4 @@ blizzard.registerSlot('players:header-cards', PlayersGuildCard);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);
 blizzard.registerEventReportLinks(supportsEventReportLinks);
+registerClassLevelWidgets(blizzard);
