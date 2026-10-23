@@ -115,6 +115,18 @@ describe("HubWidgetPrefsSchema", () => {
     });
     expect(result.error?.issues[0]?.path).toEqual(["config", "generic:text", "title"]);
   });
+
+  // Codex P2: the schema lookup must not resolve inherited props
+  // (`constructor` → Function → TypeError → API 500 instead of 400).
+  it.each([
+    ["constructor", { constructor: {} }],
+    ["__proto__", JSON.parse('{"__proto__": {}}') as Record<string, unknown>],
+    ["toString", JSON.parse('{"toString": {}}') as Record<string, unknown>],
+  ])("rejects a config keyed %s without throwing", (_, config) => {
+    let result: ReturnType<typeof HubWidgetPrefsSchema.safeParse> | undefined;
+    expect(() => { result = HubWidgetPrefsSchema.safeParse({ ...prefs, config }); }).not.toThrow();
+    expect(result?.success).toBe(false);
+  });
 });
 
 describe("HubTextWidgetConfigSchema", () => {

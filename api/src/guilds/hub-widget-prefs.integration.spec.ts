@@ -271,6 +271,15 @@ describe('400 on a bad body (zod.flatten)', () => {
       },
     ],
     [
+      // Codex P2: an inherited-prop key once threw in the schema → 500.
+      'config keyed by an inherited prop (constructor)',
+      { order: [], hidden: [], added: [], config: { constructor: {} } },
+      {
+        formErrors: [],
+        fieldErrors: { config: ['Widget does not accept settings'] },
+      },
+    ],
+    [
       'an oversize layout',
       { order: longIds, hidden: longIds, added: longIds },
       {

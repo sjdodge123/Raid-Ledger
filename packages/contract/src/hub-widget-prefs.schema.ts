@@ -42,10 +42,28 @@ export type HubTextWidgetConfig = z.infer<typeof HubTextWidgetConfigSchema>;
  * The only widgets that accept `config` in v1. Plugin widgets get none (Q7):
  * the API cannot see web-side plugin schemas, so any other key is rejected.
  */
-const CONFIG_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  "generic:text": HubTextWidgetConfigSchema,
-};
-export const HUB_CONFIGURABLE_WIDGET_IDS = Object.keys(CONFIG_SCHEMAS);
+/**
+ * A `Map`, not an object literal: a lookup by a user-supplied key must never
+ * resolve an inherited prop (`config: { constructor: {} }` found
+ * `Object.prototype.constructor` and threw — an API 500, not a 400).
+ */
+const CONFIG_SCHEMAS: ReadonlyMap<string, z.ZodType> = new Map<string, z.ZodType>([
+  ["generic:text", HubTextWidgetConfigSchema],
+]);
+export const HUB_CONFIGURABLE_WIDGET_IDS = [...CONFIG_SCHEMAS.keys()];
+
+/**
+ * An own `__proto__` key (`JSON.parse` makes one) is rejected outright: zod's
+ * record parser silently drops it, which would turn a hostile body into a
+ * quiet 200 instead of the 400 every other unknown widget id gets.
+ */
+function hasNoProtoKey(value: unknown): boolean {
+  return (
+    typeof value !== "object" ||
+    value === null ||
+    !Object.prototype.hasOwnProperty.call(value, "__proto__")
+  );
+}
 
 const idList = z
   .array(HubWidgetIdSchema)
@@ -59,7 +77,7 @@ function checkConfig(
   ctx: z.RefinementCtx,
 ): void {
   for (const [key, value] of Object.entries(config)) {
-    const schema = CONFIG_SCHEMAS[key];
+    const schema = CONFIG_SCHEMAS.get(key);
     if (!schema) {
       ctx.addIssue({
         code: "custom",
@@ -88,7 +106,12 @@ export const HubWidgetPrefsSchema = z
     /** Default-OFF (opt-in) widgets the hub turned on. */
     added: idList,
     /** Per-widget settings, keyed by widget id (generic widgets only in v1). */
-    config: z.record(HubWidgetIdSchema, z.unknown()).default({}),
+    config: z
+      .custom<Record<string, unknown>>(hasNoProtoKey, {
+        message: "Widget does not accept settings",
+      })
+      .pipe(z.record(HubWidgetIdSchema, z.unknown()))
+      .default({}),
   })
   .strict()
   .superRefine((prefs, ctx) => {
