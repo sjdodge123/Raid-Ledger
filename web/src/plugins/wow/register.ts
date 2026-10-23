@@ -21,6 +21,7 @@ import { wowHubModule } from './hub/register-hub';
 import { supportsEventReportLinks } from './lib/report-links';
 import { registerClassLevelWidgets } from './hub-widgets/class-level.register';
 import { registerRolesWidget } from './hub-widgets/roles.register';
+import { professionsWidget } from './hub-widgets/professions.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -51,3 +52,4 @@ blizzard.registerHubModule(wowHubModule);
 blizzard.registerEventReportLinks(supportsEventReportLinks);
 registerClassLevelWidgets(blizzard);
 registerRolesWidget(blizzard);
+blizzard.registerHubWidget(professionsWidget);
