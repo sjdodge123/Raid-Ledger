@@ -1,7 +1,8 @@
 /**
  * ROK-1893 P3 — hub-tagged scheduling polls against a real database:
  * create with `hubId` (member / non-member / wrong game / hidden hub), the
- * poll page `hub` + `isHubMember`, the active list `hub`, `GET /hubs/:id/polls`,
+ * poll page `hub` + `isHubMember`, `GET /hubs/:id/polls` (the banner list omits
+ * hub polls — ruling 2026-10-23),
  * reschedule polls inheriting the event's hub, and an event created from a
  * hub poll's match inheriting the hub (D16). Fleet-only.
  */
@@ -166,7 +167,7 @@ describe('hub polls — create with hubId', () => {
 });
 
 describe('hub polls — reads', () => {
-  it('poll page carries hub + isHubMember; active list + hub list carry hub', async () => {
+  it('poll page carries hub + isHubMember; hub list carries it, banner list omits it', async () => {
     const leader = await mkUser();
     const outsider = await mkUser();
     const hub = await mkHub(leader);
@@ -195,14 +196,17 @@ describe('hub polls — reads', () => {
     expect(voters.find((v) => v.userId === outsider.id)?.isHubMember).toBe(
       false,
     );
+    // Operator ruling 2026-10-23: a hub poll is NOT on the site-wide banner
+    // list; it is on its hub's list, carrying the hub.
     const active = await get('/scheduling-polls/active', outsider.token);
-    expect(
-      (active.body as ListItem[]).find((p) => p.matchId === matchId)?.hub,
-    ).toEqual({ id: hub.id, name: hub.name });
+    expect(active.status).toBe(200);
+    expect((active.body as ListItem[]).map((p) => p.matchId)).not.toContain(
+      matchId,
+    );
     const hubList = await get(`/hubs/${hub.id}/polls`, outsider.token);
     expect(hubList.status).toBe(200);
-    expect((hubList.body as ListItem[]).map((p) => p.matchId)).toEqual([
-      matchId,
+    expect(hubList.body as ListItem[]).toEqual([
+      expect.objectContaining({ matchId, hub: { id: hub.id, name: hub.name } }),
     ]);
   });
 });
@@ -246,7 +250,7 @@ describe('hub polls — hub list', () => {
 });
 
 describe('hub polls — hidden hub', () => {
-  it('hidden hub: page hub null, no voter flags, empty hub list', async () => {
+  it('hidden hub: page hub null, no voter flags, empty hub list, off the banner', async () => {
     const leader = await mkUser();
     const hub = await mkHub(leader);
     const res = await createPoll(leader.token, { hubId: hub.id });
@@ -263,10 +267,11 @@ describe('hub polls — hidden hub', () => {
     );
     expect(page.body.hub).toBeNull();
     expect(page.body.slots[0]?.votes[0]).not.toHaveProperty('isHubMember');
+    // Ruling 2026-10-23: still hub-tagged, so still off the banner list.
     const active = await get('/scheduling-polls/active', adminToken);
-    const item = (active.body as ListItem[]).find((p) => p.matchId === matchId);
-    expect(item).toBeDefined();
-    expect(item?.hub).toBeNull();
+    expect((active.body as ListItem[]).map((p) => p.matchId)).not.toContain(
+      matchId,
+    );
     const hubList = await get(`/hubs/${hub.id}/polls`, adminToken);
     expect(hubList.body).toEqual([]);
   });

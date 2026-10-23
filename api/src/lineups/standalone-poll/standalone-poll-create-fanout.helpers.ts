@@ -7,7 +7,9 @@
  * to a Discord channel — only the members the creator picked get the poll DM.
  * The poll card is the only channel-posting path a standalone poll has at
  * create time (nudge / rally DM match members; the expiry sweep only edits an
- * existing card, and a private poll never gets one).
+ * existing card, and a private poll never gets one). A hub-tagged poll
+ * (ROK-1893 P3) is held to the same quiet fan-out until P2b gives it the
+ * hub's own channel.
  */
 import type { StandalonePollVisibility } from '@raid-ledger/contract';
 import type { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
@@ -37,9 +39,11 @@ export function fireCreateFanout(
   input: CreatePollInput,
   pickedIds: number[],
   visibility: StandalonePollVisibility,
+  hubId: number | null = null,
 ): void {
   GameActivityNudge.safeTouch(deps.nudge, game.id);
-  const fanout = resolveCreateFanout(visibility);
+  // ROK-1893 P3 ruling 2026-10-23: a hub poll stays on its hub (see resolver).
+  const fanout = resolveCreateFanout(visibility, hubId !== null);
   if (fanout.interestBroadcast) {
     void deps.notifications
       .notifyInterestedUsers(

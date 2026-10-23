@@ -29,10 +29,15 @@ export type ActiveStandalonePoll = ActiveStandalonePollDto & {
   hub: { id: number; name: string } | null;
 };
 
-/** Hub-list filter: polls tagged to `hubId`, and only while that hub is visible. */
+/**
+ * Hub-list filter: polls tagged to `hubId`, and only while that hub is
+ * visible. Without a `hubId` (the site-wide banner) hub-tagged polls are
+ * left out entirely — operator ruling 2026-10-23: a hub poll shows only on
+ * its hub until P2b routes it to the hub's own Discord channel.
+ */
 function hubFilterSql(hubId: number | undefined): SQL {
   return hubId === undefined
-    ? sql``
+    ? sql`AND l.guild_id IS NULL`
     : sql`AND l.guild_id = ${hubId} AND hg.id IS NOT NULL`;
 }
 
@@ -63,7 +68,8 @@ function toActivePoll(row: ActivePollRow): ActiveStandalonePoll {
  * `votableStandalonePollSql` (shared with the weekly digest, ROK-1771) — and
  * visible to the caller (public, admin, creator or invitee; ROK-1750).
  * ROK-1893 P3: `hub` comes from one LEFT JOIN on a VISIBLE community hub; a
- * `hubId` narrows the list to polls tagged to that hub.
+ * `hubId` narrows the list to polls tagged to that hub, and its absence
+ * drops every hub-tagged poll (see `hubFilterSql`).
  */
 export async function findActiveStandalonePolls(
   db: Db,

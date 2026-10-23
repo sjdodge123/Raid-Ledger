@@ -98,6 +98,17 @@ describe('resolveCreateFanout (channel gate)', () => {
       pickedMembersDm: false,
     });
   });
+
+  it.each(['public', 'private'] as const)(
+    'hub-tagged %s poll: no broadcast, no channel card, picked-member DM (ROK-1893 P3)',
+    (visibility) => {
+      expect(resolveCreateFanout(visibility, true)).toEqual({
+        interestBroadcast: false,
+        channelEmbed: false,
+        pickedMembersDm: true,
+      });
+    },
+  );
 });
 
 describe('canResetShareToken (R2)', () => {

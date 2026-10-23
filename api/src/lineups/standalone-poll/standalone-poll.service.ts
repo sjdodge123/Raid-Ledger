@@ -306,6 +306,7 @@ export class StandalonePollService {
       input,
       pickedIds,
       share.visibility,
+      hubId,
     );
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount, share);

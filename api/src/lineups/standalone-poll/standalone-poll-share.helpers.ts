@@ -68,15 +68,21 @@ export interface CreateFanout {
 /**
  * Spec §3 / A6: a private poll is never broadcast and never posted to a
  * channel — only the members the creator picked hear about it.
+ *
+ * ROK-1893 P3 (operator ruling 2026-10-23): a HUB-tagged poll shows only on
+ * its hub until P2b routes it to the hub's own channel — no default-channel
+ * card and no game-interest broadcast, whatever its visibility. Its picked
+ * members still get the targeted DM, as on a private poll.
  */
 export function resolveCreateFanout(
   visibility: StandalonePollVisibility,
+  hubTagged = false,
 ): CreateFanout {
-  const isPrivate = visibility === 'private';
+  const quiet = visibility === 'private' || hubTagged;
   return {
-    interestBroadcast: !isPrivate,
-    channelEmbed: !isPrivate,
-    pickedMembersDm: isPrivate,
+    interestBroadcast: !quiet,
+    channelEmbed: !quiet,
+    pickedMembersDm: quiet,
   };
 }
 
