@@ -258,7 +258,7 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
         await page.goto(`/hubs/${hub.guildId}`);
         const card = page.locator('#server-hub-hours');
         await expect(card.getByTestId('server-hub-hours-start'), 'a 14:00 UTC start with no stop = S7')
-            .toHaveText(/^Starts · (daily|Today|Tomorrow|Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} [AP]M$/, { timeout: 15_000 });
+            .toHaveText(/^Starts · (daily|Today|Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} [AP]M$/, { timeout: 15_000 });
         await expect(card.getByTestId('server-hub-hours-now')).toHaveText('Online now');
         await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
         await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
