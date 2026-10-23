@@ -10,7 +10,11 @@ import {
   check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { GuildLinkGroup, GuildRuleSection } from '@raid-ledger/contract';
+import type {
+  GuildLinkGroup,
+  GuildRuleSection,
+  HubWidgetPrefs,
+} from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
 
@@ -67,6 +71,11 @@ export const guildProfiles = pgTable(
     welcomeMessageId: text('welcome_message_id'),
     /** ROK-1868 A4: the composer's "Also post to Discord" default (last choice). */
     postRelayDefault: boolean('post_relay_default').default(false).notNull(),
+    /**
+     * ROK-1918: the hub Overview layout (arrange mode) — order, hidden,
+     * added and per-widget config. NULL = registry default (Reset writes it).
+     */
+    widgetPrefs: jsonb('widget_prefs').$type<HubWidgetPrefs>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

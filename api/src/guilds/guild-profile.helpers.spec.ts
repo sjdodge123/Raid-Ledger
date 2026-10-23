@@ -22,6 +22,7 @@ function row(over: Partial<GuildProfileSelect>): GuildProfileSelect {
     discordChannelId: null,
     discordChannelPrivateAck: false,
     postRelayDefault: false,
+    widgetPrefs: null,
     discordChannelSetBy: null,
     discordChannelSetAt: null,
     discordChannelSource: null,
