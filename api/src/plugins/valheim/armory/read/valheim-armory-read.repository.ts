@@ -125,6 +125,30 @@ export class ValheimArmoryReadRepository {
     return row?.n ?? 0;
   }
 
+  /**
+   * ROK-1933 claim banner: one scan of the server's profiles — how many are
+   * unclaimed, and whether `viewerId` claimed any of them.
+   */
+  async claimStatus(
+    serverId: number,
+    viewerId: number,
+  ): Promise<{ viewerHasClaim: boolean; unclaimedCount: number }> {
+    const [row] = await this.db
+      .select({
+        unclaimedCount:
+          sql<number>`count(*) FILTER (WHERE ${p.claimedBy} IS NULL)`.mapWith(
+            Number,
+          ),
+        viewerHasClaim: sql<boolean>`COALESCE(bool_or(${p.claimedBy} = ${viewerId}), false)`,
+      })
+      .from(p)
+      .where(eq(p.pelicanServerId, serverId));
+    return {
+      viewerHasClaim: row?.viewerHasClaim === true,
+      unclaimedCount: row?.unclaimedCount ?? 0,
+    };
+  }
+
   /** The ROK-1831 community hub keyed to a Pelican server, or null. */
   async findServerHub(
     serverId: number,

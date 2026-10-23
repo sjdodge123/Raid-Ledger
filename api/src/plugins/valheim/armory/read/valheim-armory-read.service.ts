@@ -5,6 +5,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ValheimCharacterDetail,
+  ValheimClaimStatusResponse,
   ValheimCharacterListResponse,
   ValheimCharacterSummary,
   ValheimMapMeta,
@@ -59,6 +60,19 @@ export class ValheimArmoryReadService {
       hideHiddenHubs: !isStaff(actor),
     });
     return { data: rows.map(toSummary), total };
+  }
+
+  /**
+   * ROK-1933 — the hub claim banner's facts for one server. A hidden hub is
+   * 404 `Guild not found` for non-staff (the server-keyed L-5 rule, as blobs);
+   * a server with no hub passes, as the list does.
+   */
+  async claimStatus(
+    serverId: number,
+    actor: GuildActor,
+  ): Promise<ValheimClaimStatusResponse> {
+    await assertServerHubVisible(this.repo, actor, serverId);
+    return this.repo.claimStatus(serverId, actor.id);
   }
 
   /** Admin owner-management list page (`unclaimed` filter honoured). */
