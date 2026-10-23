@@ -150,8 +150,8 @@ describe('hub poll lists (ruling 2026-10-23)', () => {
       .get(`/hubs/${hub.id}/polls`)
       .set('Authorization', `Bearer ${leader.token}`);
     expect(hubList.status).toBe(200);
-    expect((hubList.body as { matchId: number }[]).map((p) => p.matchId)).toEqual(
-      [hubPoll.id],
-    );
+    expect(
+      (hubList.body as { matchId: number }[]).map((p) => p.matchId),
+    ).toEqual([hubPoll.id]);
   });
 });
