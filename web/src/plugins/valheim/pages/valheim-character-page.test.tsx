@@ -68,7 +68,7 @@ describe('ValheimCharacterPage', () => {
         expect(await screen.findByText('No owner yet')).toBeInTheDocument();
         expect(screen.getByText('Unclaimed')).toHaveAttribute(
             'data-tone',
-            'warning',
+            'neutral',
         );
     });
 
