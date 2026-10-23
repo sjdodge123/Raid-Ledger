@@ -4,7 +4,7 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -15,6 +15,7 @@ import type {
   ArmoryMapRefRow,
   ArmoryProfileReadRow,
 } from './valheim-armory-read.mappers';
+import type { SkillTrendDayRow } from './valheim-skill-trend.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const {
@@ -26,6 +27,7 @@ const {
 const blobs = schema.valheimLinkBlobs;
 const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
+const skillDays = schema.valheimProfileSkillDays;
 
 /** List filters + page window. */
 export interface ArmoryListFilter {
@@ -199,6 +201,20 @@ export class ValheimArmoryReadRepository {
       .from(m)
       .where(eq(m.profileId, profileId))
       .orderBy(asc(m.worldUid), asc(m.id));
+  }
+
+  /** ROK-1882: the character's newest `limit` play days, newest first. */
+  listSkillDays(profileId: number, limit: number): Promise<SkillTrendDayRow[]> {
+    return this.db
+      .select({
+        playDate: skillDays.playDate,
+        startSkills: skillDays.startSkills,
+        endSkills: skillDays.endSkills,
+      })
+      .from(skillDays)
+      .where(eq(skillDays.profileId, profileId))
+      .orderBy(desc(skillDays.playDate))
+      .limit(limit);
   }
 
   /** A map that belongs to the character, or null. */

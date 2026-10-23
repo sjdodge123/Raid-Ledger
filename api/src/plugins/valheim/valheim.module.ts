@@ -22,6 +22,8 @@ import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module'
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
 import { ValheimArmoryRepository } from './armory/valheim-armory.repository';
+import { ValheimSkillDaysRepository } from './armory/valheim-skill-days.repository';
+import { SettingsModule } from '../../settings/settings.module';
 import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.hook';
 import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
 import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
@@ -56,7 +58,8 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
   // ROK-1833 DEMO_MODE fixture route (admin + DemoModeGuard).
   // ROK-1933 L2: NotificationModule for the claim-suggestion DM; L3:
   // DiscordBotModule for the bot client the DM-button listener binds to;
-  // SettingsModule for the claim-suggest service's client URL; CronJobModule
+  // SettingsModule for the claim-suggest service's client URL (and ROK-1882's
+  // community default tz for skill play days); CronJobModule
   // for the claim-suggest cron's run tracking.
   imports: [
     ValheimLinkDemoSeedModule,
@@ -93,6 +96,7 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     ValheimLinkBlobService,
     // ROK-1835 armory importer (30 s drain) + Steam identity / claims.
     ValheimArmoryRepository,
+    ValheimSkillDaysRepository,
     ValheimArmoryImportService,
     ValheimArmoryImportCron,
     ValheimIdentityRepository,

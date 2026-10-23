@@ -9,6 +9,7 @@ import type {
     ValheimClaimStatusResponse,
     ValheimClaimEvent,
     ValheimItemStack,
+    ValheimSkillTrend,
 } from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
@@ -158,6 +159,20 @@ function sheetInventory(
         ],
     };
 }
+
+/**
+ * ROK-1882 — the character's last 3 play days, newest first (the API shape:
+ * gains only, |gain| ≥ 0.05). Swords climbs +2.0 / +1.6 / +0.5 = "+4.1 over 3
+ * sessions"; Run idles on Oct 18 (a hollow dot, "no change"); the modded skill
+ * nets a death-penalty loss (−1.2, danger chip).
+ */
+export const valheimSkillTrend: ValheimSkillTrend = {
+    days: [
+        { date: '2026-10-20', gains: { Swords: 2.0, Run: 0.75, '-1287461328': -1.5 } },
+        { date: '2026-10-18', gains: { Swords: 1.6, '-1287461328': 0.3 } },
+        { date: '2026-10-15', gains: { Swords: 0.5, Run: 0.25 } },
+    ],
+};
 
 /** A full sheet: 8×7 EAQS grid (2 equipment rows + 1 quick-slot row), one unknown prefab. */
 export function valheimSheetFixture(

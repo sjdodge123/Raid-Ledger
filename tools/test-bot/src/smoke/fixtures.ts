@@ -581,13 +581,17 @@ export interface FixtureUser {
  * @param attempts - How many times to try before giving up.
  * @param slot - Fixture slot 1..9 (idempotent PER SLOT); use a higher slot
  *   when one smoke needs several distinct non-admin users.
+ * @param opts - `guildMember: true` also stamps `guild_member_seen_at`, making
+ *   the user "in the Discord" (ROK-1870 A2 — hub Join/Propose). Opt-in.
  * @returns The fixture user's id, Discord id, and its own API client.
  */
 export async function seedFixtureUser(
   api: ApiClient,
   attempts = 3,
   slot = 1,
+  opts: { guildMember?: boolean } = {},
 ): Promise<FixtureUser> {
+  const body = { slot, ...(opts.guildMember ? { guildMember: true } : {}) };
   let lastError = "";
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
@@ -595,7 +599,7 @@ export async function seedFixtureUser(
         userId: number;
         discordId: string;
         jwt: string;
-      }>("/admin/test/seed-fixture-user", { slot });
+      }>("/admin/test/seed-fixture-user", body);
       const scoped = new ApiClient(SMOKE.apiUrl, res.jwt);
       scoped.userId = res.userId;
       return { userId: res.userId, discordId: res.discordId, api: scoped };

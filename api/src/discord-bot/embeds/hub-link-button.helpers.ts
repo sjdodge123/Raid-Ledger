@@ -16,6 +16,12 @@ export const HUBS_LINK_LABEL = 'Hubs';
 export interface HubLink {
   url: string;
   label: typeof HUB_LINK_LABEL | typeof HUBS_LINK_LABEL;
+  /**
+   * ROK-1895: the hub's display name — set ONLY when the link targets the
+   * event's explicit `guild_id` tag (never for a game-derived hub), so the
+   * event card body can name the hub the event belongs to.
+   */
+  hubName?: string;
 }
 
 /**

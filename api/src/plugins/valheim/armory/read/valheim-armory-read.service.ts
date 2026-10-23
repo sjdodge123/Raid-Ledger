@@ -31,6 +31,7 @@ import {
   assertServerHubVisible,
   refuseHiddenHub,
 } from './valheim-armory-hub-visibility.helpers';
+import { SKILL_TREND_DAYS, toSkillTrend } from './valheim-skill-trend.mappers';
 import { containedBlobPath } from './valheim-armory-map-bytes.service';
 import {
   ValheimArmoryReadRepository,
@@ -115,13 +116,15 @@ export class ValheimArmoryReadService {
     const hub = await this.repo.findServerHub(row.pelicanServerId);
     refuseHiddenHub(hub, actor);
     const prefabs = referencedPrefabs(row);
-    const [maps, catalog] = await Promise.all([
+    const [maps, catalog, days] = await Promise.all([
       this.repo.listMapRefs(id),
       this.repo.findCatalog(row.pelicanServerId, row.gameVersion, prefabs),
+      this.repo.listSkillDays(id, SKILL_TREND_DAYS),
     ]);
     const sheet = toDetail(row, maps);
     const hubId = hub?.id ?? null;
-    return { ...sheet, ...projectCatalog(prefabs, catalog), hubId };
+    const skillTrend = toSkillTrend(days);
+    return { ...sheet, ...projectCatalog(prefabs, catalog), hubId, skillTrend };
   }
 
   /**

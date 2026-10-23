@@ -11,6 +11,7 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { isOperatorOrAdmin, useAuth } from '../../hooks/use-auth';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useProposalForm, type ProposalForm } from './propose-hub-form';
 
@@ -24,7 +25,15 @@ export interface ProposeHubDialogProps {
     gameName: string;
 }
 
-function ProposalFields({ form, gameName }: { form: ProposalForm; gameName: string }): JSX.Element {
+/** ROK-1892: an admin/operator's hub skips review and goes live on submit. */
+const COPY = {
+    review: { hint: "An admin reviews new hubs — usually within a day. You'll lead it once approved.", submit: 'Send for review' },
+    live: { hint: "You're staff, so it skips review and goes live right away — you'll lead it.", submit: 'Create hub' },
+} as const;
+
+interface FormProps { form: ProposalForm; live: boolean }
+
+function ProposalFields({ form, gameName, live }: FormProps & { gameName: string }): JSX.Element {
     const onSubmit = (e: FormEvent): void => { e.preventDefault(); form.submit(); };
     return (
         <form id={FORM_ID} noValidate onSubmit={onSubmit} className="space-y-4">
@@ -41,16 +50,16 @@ function ProposalFields({ form, gameName }: { form: ProposalForm; gameName: stri
                 <Textarea value={form.blurb} maxLength={HUB_BLURB_MAX} showCount rows={3} invalid={Boolean(form.errors.blurb)}
                     onChange={(e) => form.setBlurb(e.target.value)} />
             </Field>
-            <p className="text-xs text-muted">An admin reviews new hubs — usually within a day. You&apos;ll lead it once approved.</p>
+            <p className="text-xs text-muted">{COPY[live ? 'live' : 'review'].hint}</p>
         </form>
     );
 }
 
-function Footer({ form, onCancel, full }: { form: ProposalForm; onCancel: () => void; full: boolean }): JSX.Element {
+function Footer({ form, live, onCancel, full }: FormProps & { onCancel: () => void; full: boolean }): JSX.Element {
     return (
         <>
             <Button variant="ghost" fullWidth={full} onClick={onCancel}>Cancel</Button>
-            <Button variant="primary" fullWidth={full} type="submit" form={FORM_ID} loading={form.isPending}>Send for review</Button>
+            <Button variant="primary" fullWidth={full} type="submit" form={FORM_ID} loading={form.isPending}>{COPY[live ? 'live' : 'review'].submit}</Button>
         </>
     );
 }
@@ -58,11 +67,13 @@ function Footer({ form, onCancel, full }: { form: ProposalForm; onCancel: () => 
 /** The proposal form, split Modal / BottomSheet by viewport. */
 export function ProposeHubDialog({ isOpen, onClose, gameId, gameName }: ProposeHubDialogProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    /** Pre-submit copy only; the outcome (toast + navigate) follows the response's `status`. */
+    const live = isOperatorOrAdmin(useAuth().user);
     const form = useProposalForm(gameId, onClose);
     const cancel = (): void => { form.reset(); onClose(); };
-    const body = <ProposalFields form={form} gameName={gameName} />;
+    const body = <ProposalFields form={form} live={live} gameName={gameName} />;
     if (isDesktop) {
-        return <Modal isOpen={isOpen} onClose={cancel} title={TITLE} footer={<Footer form={form} onCancel={cancel} full={false} />}>{body}</Modal>;
+        return <Modal isOpen={isOpen} onClose={cancel} title={TITLE} footer={<Footer form={form} live={live} onCancel={cancel} full={false} />}>{body}</Modal>;
     }
-    return <BottomSheet isOpen={isOpen} onClose={cancel} title={TITLE} initiallyExpanded footer={<Footer form={form} onCancel={cancel} full />}>{body}</BottomSheet>;
+    return <BottomSheet isOpen={isOpen} onClose={cancel} title={TITLE} initiallyExpanded footer={<Footer form={form} live={live} onCancel={cancel} full />}>{body}</BottomSheet>;
 }

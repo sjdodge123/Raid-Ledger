@@ -48,6 +48,7 @@ export function applyServerPatch(
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: patch.showOnCalendar }),
         ...(patch.presenceTracking === undefined ? {} : { presenceTracking: patch.presenceTracking }),
+        ...(patch.timezone === undefined ? {} : { timezone: patch.timezone }),
         ...(patch.gameId === undefined ? {} : {
             gameId: patch.gameId,
             gameName: patch.gameId === null ? null : gameName ?? row.gameName,
@@ -63,6 +64,7 @@ export function restoreServerFields(
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: prev.showOnCalendar }),
         ...(patch.presenceTracking === undefined ? {} : { presenceTracking: prev.presenceTracking }),
+        ...(patch.timezone === undefined ? {} : { timezone: prev.timezone ?? null }),
         ...(patch.gameId === undefined ? {} : { gameId: prev.gameId, gameName: prev.gameName }),
     };
 }
