@@ -68,9 +68,9 @@ export function mirrorBlurb(mirror: GuildDiscordMirrorDto | undefined, kind?: Gu
     return `Latest from ${serverPhrase(serverName, hubCopy(kind).discordFallback)}`;
 }
 
-/** Picker hint naming the bot's server (operator ruling Q7). */
-export function pickerHint(serverName: string | undefined): string {
-    return `Channels in ${serverPhrase(serverName)} that Raid Ledger can read.`;
+/** Picker hint naming the bot's server (operator ruling Q7); unknown → the hub kind's fallback. */
+export function pickerHint(serverName: string | undefined, kind?: GuildKind): string {
+    return `Channels in ${serverPhrase(serverName, hubCopy(kind).discordFallback)} that Raid Ledger can read.`;
 }
 
 /**

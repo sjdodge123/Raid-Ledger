@@ -54,27 +54,6 @@ describe('GuildDiscordMirror — ok', () => {
         expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
     });
 
-    it.each([['wow_guild'], ['game_community']] as const)('keeps "the community Discord" fallback on a %s hub', async (kind) => {
-        serve(okMirror([discordMessage(1)]));
-        renderCard(false, null, kind);
-        await screen.findByRole('heading', { name: '#announcements' });
-        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
-    });
-
-    it('falls back to "the server\'s Discord" on a server hub (ROK-1891 ruling)', async () => {
-        serve(okMirror([discordMessage(1)]));
-        renderCard(false, null, 'game_server');
-        await screen.findByRole('heading', { name: '#announcements' });
-        expect(screen.getByText(/^Latest from/).textContent).toBe("Latest from the server's Discord");
-    });
-
-    it('still names the bot\'s server on a server hub when the name is known', async () => {
-        serve(okMirror([discordMessage(1)], undefined, 'Keepers HQ'));
-        renderCard(false, null, 'game_server');
-        await screen.findByRole('heading', { name: '#announcements' });
-        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the Keepers HQ Discord');
-    });
-
     it('links out to the channel in a new tab and says it is read-only', async () => {
         serve(okMirror([discordMessage(1)]));
         renderCard(false);
@@ -114,6 +93,29 @@ describe('GuildDiscordMirror — ok', () => {
         renderCard(false);
         expect(await screen.findByTestId('guild-discord-state-empty')).toHaveTextContent('No messages in #announcements yet.');
         expect(screen.getByTestId('guild-discord-open')).toBeInTheDocument();
+    });
+});
+
+describe('GuildDiscordMirror — blurb per hub kind', () => {
+    it.each([['wow_guild'], ['game_community']] as const)('keeps "the community Discord" fallback on a %s hub', async (kind) => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, kind);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
+    });
+
+    it('falls back to "the server\'s Discord" on a server hub (ROK-1891 ruling)', async () => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe("Latest from the server's Discord");
+    });
+
+    it('still names the bot\'s server on a server hub when the name is known', async () => {
+        serve(okMirror([discordMessage(1)], undefined, 'Keepers HQ'));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the Keepers HQ Discord');
     });
 });
 
