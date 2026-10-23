@@ -67,8 +67,7 @@ async function seed(worker: number): Promise<Fixture> {
 }
 
 const banner = (page: Page) => page.getByRole("region", { name: BANNER });
-const charactersList = (page: Page) =>
-  page.getByRole("region", { name: /Characters/ });
+page.getByRole("region", { name: /Characters/ });
 
 async function openOverview(page: Page, f: Fixture): Promise<void> {
   await page.goto(`/guilds/${f.guildId}`);
@@ -107,9 +106,9 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await signInContextAs(page.context(), f.users.b.id);
 
     await openOverview(page, f);
-    await expect(banner(page)).toBeVisible();
+    await expect(banner(page).first()).toBeVisible();
     await openCharacters(page, f);
-    await expect(banner(page)).toBeVisible();
+    await expect(banner(page).first()).toBeVisible();
 
     const filter = page.getByRole("button", { name: "Unclaimed only" });
     await filter.click();
@@ -141,7 +140,7 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await signInContextAs(page.context(), f.users.b.id);
 
     await openOverview(page, f);
-    await banner(page).getByRole("button", { name: "Dismiss" }).click();
+    await banner(page).getByRole("button", { name: "Dismiss" }).first().click();
     await expect(banner(page)).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({
@@ -150,7 +149,7 @@ test.describe("Valheim hub — claim banner (ROK-1933)", () => {
     await expect(banner(page)).toHaveCount(0);
 
     await openCharacters(page, f);
-    await expect(banner(page)).toBeVisible();
+    await expect(banner(page).first()).toBeVisible();
     await expect(
       banner(page).getByRole("button", { name: "Dismiss" }),
     ).toHaveCount(0);
