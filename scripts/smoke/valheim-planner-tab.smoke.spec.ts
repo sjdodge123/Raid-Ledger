@@ -1,93 +1,44 @@
 /**
- * ROK-1854 L5 — the Valheim hub Planner tab.
+ * ROK-1854 L5 — the Valheim hub Planner tab: the requirement tree, the plan
+ * netted against chests, the shopping list and the personal-chests switch.
  *
- * Seed: `POST /admin/test/valheim/recipes-fixture { worker }` (DEMO_MODE)
- * runs the ROK-1853 containers seed for THIS worker (Pelican row + hub, owner
- * and member viewers), then imports through the real importers the golden
- * `recipes-vanilla` set extended with a Bronze chain (Bronze ← Copper 2 + Tin
- * 1; Copper/Tin smelted from ore with Coal fuel; Coal from a kiln), the
- * catalogue names, and one more public chest holding 40 Copper and no Tin.
- *
- * The picker is a Combobox; the tree is a list labelled "What <name> needs"
- * (a picked target) or "What your list needs" (the plan); the shopping list
- * keeps its targets in localStorage per server. No pixel or timing assumptions.
+ * Seed + locators: `./valheim-planner-fixture` (the recipes fixture: a Bronze
+ * chain and one public chest holding 40 Copper and no Tin). ROK-1899 replaced
+ * the target combobox with the crafting window, so targets are picked from
+ * the recipe list (search → row) and added from the detail pane / sheet; the
+ * tree is a list labelled "What <name>  needs" (the selection's "Full
+ * breakdown") or "What your list needs" (the plan, in the idle column). The
+ * shopping list keeps its targets in localStorage per server.
  */
-import type { Browser, Page, TestInfo } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { API_BASE, apiGet, apiPost, getAdminToken } from "./api-helpers";
-import { signInContextAs } from "./browser-session";
+import { apiGet, getAdminToken } from "./api-helpers";
 import { isDesktop } from "./helpers";
+import {
+  type RecipesFixture,
+  addSelected,
+  addToList,
+  openBreakdown,
+  openPlanner,
+  pageAs,
+  pickRow,
+  planned,
+  recipesPath,
+  seedRecipes,
+  showPlanPane,
+} from "./valheim-planner-fixture";
 
-const FIXTURE = "/admin/test/valheim/recipes-fixture";
-const SLOTS = 16;
-/** Prefabs that appear exactly once in the Bronze tree. Coal does not:
- * it fuels both smelts (and each Coal fuel row has its kiln child). */
-const UNIQUE = ["Copper", "Tin", "CopperOre", "TinOre"];
-
-interface RecipesFixture {
-  serverId: number;
-  hubId: number;
-  guildId: number;
-  guildPageUrl: string;
-  memberUserId: number;
-  ownerUserId: number;
-}
+/** Prefabs that appear exactly once in the netted Bronze breakdown. Copper
+ * ore does not: the chests' 40 Copper cover the 2 needed, so Copper never
+ * expands (the plan route only expands what stock leaves short). Coal does
+ * not either: each Coal fuel row has its kiln child. */
+const UNIQUE = ["Copper", "Tin", "TinOre"];
 
 interface PlanLeaf {
   prefab: string;
   need: number;
   have: number;
   short: number;
-}
-
-/** Install-or-activate through the admin plugin API (valheim-map-tab pattern). */
-async function ensurePluginActive(token: string, pluginId: string) {
-  const init = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  };
-  const base = `${API_BASE}/admin/plugins/${pluginId}`;
-  const install = await fetch(`${base}/install`, init);
-  if (install.ok) return;
-  const activate = await fetch(`${base}/activate`, init);
-  if (!activate.ok)
-    throw new Error(
-      `failed to enable ${pluginId}: install ${install.status}, activate ${activate.status}`,
-    );
-}
-
-const recipesPath = (f: RecipesFixture, rest = "") =>
-  `/plugins/valheim/armory/servers/${f.serverId}/recipes${rest}`;
-
-async function seedRecipes(testInfo: TestInfo): Promise<RecipesFixture> {
-  const token = await getAdminToken();
-  await ensurePluginActive(token, "pelican");
-  await ensurePluginActive(token, "valheim");
-  const body = (await apiPost(token, FIXTURE, {
-    worker: testInfo.parallelIndex % SLOTS,
-  })) as Partial<RecipesFixture> | null;
-  expect(
-    body?.guildId,
-    `recipes fixture seed failed: ${JSON.stringify(body)}`,
-  ).toEqual(expect.any(Number));
-  const f = body as RecipesFixture;
-  // The seed commits before it answers; poll anyway so a lagging read can
-  // never hand the page an empty catalogue.
-  await expect
-    .poll(
-      async () => {
-        const c = (await apiGet(token, recipesPath(f))) as {
-          entries?: { name: string }[];
-        } | null;
-        return (c?.entries ?? []).some((e) => e.name === "Bronze");
-      },
-      { message: "the catalogue never listed Bronze", timeout: 15_000 },
-    )
-    .toBe(true);
-  return f;
 }
 
 /** The plan's shopping list for `targets`, read as the admin. */
@@ -103,25 +54,6 @@ async function planLeaves(f: RecipesFixture, targets: string) {
 const leafNeed = (leaves: PlanLeaf[], prefab: string) =>
   leaves.find((l) => l.prefab === prefab)?.need ?? 0;
 
-/** A fresh, signed-in context for `userId` at this project's viewport. */
-async function pageAs(browser: Browser, page: Page, userId: number) {
-  const viewport = page.viewportSize();
-  const context = await browser.newContext({
-    ...(viewport ? { viewport } : {}),
-    storageState: { cookies: [], origins: [] },
-  });
-  await signInContextAs(context, userId);
-  return { context, page: await context.newPage() };
-}
-
-async function openPlanner(page: Page, f: RecipesFixture) {
-  await page.goto(f.guildPageUrl);
-  await expect(picker(page)).toBeVisible({ timeout: 15_000 });
-}
-
-const picker = (page: Page) =>
-  page.getByRole("combobox", { name: "Search an item or piece" });
-
 const tree = (page: Page, name: string) =>
   page.getByRole("list", { name: `What ${name} needs` });
 
@@ -131,19 +63,6 @@ const row = (page: Page, list: string, prefab: string) =>
   tree(page, list).locator(
     `[data-testid="valheim-planner-row"][data-prefab="${prefab}"]`,
   );
-
-async function pick(page: Page, query: string, option: string) {
-  await picker(page).fill(query);
-  await page.getByRole("option", { name: option, exact: true }).click();
-}
-
-async function addToList(page: Page, query: string, option: string) {
-  await pick(page, query, option);
-  await page.getByRole("button", { name: "Add to list" }).click();
-}
-
-const planned = (page: Page) =>
-  page.getByRole("list", { name: "Planned items" }).getByRole("listitem");
 
 const gatherRow = (page: Page, name: string) =>
   page
@@ -159,26 +78,34 @@ test.describe("Valheim hub — Planner tab (ROK-1854)", () => {
     browser,
   }, testInfo) => {
     const f = await seedRecipes(testInfo);
+    const wide = isDesktop(testInfo);
     const member = await pageAs(browser, page, f.memberUserId);
     try {
       const p = member.page;
       await openPlanner(p, f);
 
-      // Searching "Bronze" opens its full craft tree (no stock netting yet).
-      await pick(p, "Bronze", "Bronze");
+      // Searching "Bronze" and picking its row shows its craft tree in the
+      // "Full breakdown", netted against the chests (the plan route at q1):
+      // covered Copper stops there, the short Tin expands into Tin ore.
+      await pickRow(p, "Bronze", "Bronze");
+      await openBreakdown(p, wide);
       for (const prefab of UNIQUE)
         await expect(row(p, "Bronze", prefab)).toHaveCount(1);
+      await expect(row(p, "Bronze", "Copper")).toContainText("Have 40");
+      await expect(row(p, "Bronze", "Tin")).toContainText("Short 1");
+      await expect(row(p, "Bronze", "CopperOre")).toHaveCount(0);
       await expect(row(p, "Bronze", "Coal").first()).toBeVisible();
 
       // On the list, the plan nets against chests: the 40 Copper in the
       // chests cover the 2 needed (have = the stock available).
-      await p.getByRole("button", { name: "Add to list" }).click();
+      await addSelected(p, wide);
       await expect(planned(p)).toHaveCount(1);
+      await showPlanPane(p, wide);
       await expect(row(p, "your list", "Copper")).toContainText("Have 40");
       await expect(row(p, "your list", "Tin")).toContainText("Short 1");
 
       // A second target: the shopping list sums both targets' leaves.
-      await addToList(p, "Bronze sword", "Bronze sword");
+      await addToList(p, wide, "Bronze sword", "SwordBronze");
       await expect(planned(p)).toHaveCount(2);
       const [bronze, sword, both] = await Promise.all([
         planLeaves(f, "Bronze:1:1"),

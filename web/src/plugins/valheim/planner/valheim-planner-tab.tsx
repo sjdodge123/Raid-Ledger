@@ -1,46 +1,20 @@
 /**
- * ROK-1854 D10 — the hub Planner tab: pick a target, preview its
- * requirement tree, add it to a shopping list netted against the chests.
- * ≥1024px two columns (picker + list | tree); below, stacked with the list
- * after the tree. The list is kept per browser per server (D12).
+ * ROK-1854 D10 / ROK-1899 — the hub Planner tab: the crafting window
+ * (station switcher, CRAFT / UPGRADE, recipe list + detail) over the
+ * shopping list netted against the chests. While nothing is selected the
+ * detail column shows what the list needs (the plan's tree). The list is
+ * kept per browser per server (D12).
  */
-import { useMemo, useState, type JSX } from 'react';
-import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
+import { useMemo, type JSX } from 'react';
+import type { ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { useNow } from '../../../hooks/use-now';
 import { MapError } from '../map/map-error';
-import { useValheimMaterials } from '../hooks/use-valheim-materials';
-import { useValheimRecipeCatalog, useValheimRecipePlan, useValheimRecipeTree } from '../hooks/use-valheim-recipes';
-import { loadPlannerTargets, savePlannerTargets } from './planner-storage';
-import { PlannerTargetPicker } from './planner-target-picker';
-import {
-    addPlannerTarget,
-    DEFAULT_PLANNER_FILTERS,
-    PLANNER_TARGETS_MAX,
-    PLANNER_NO_SET_COPY,
-    PLANNER_NO_STOCK_COPY,
-    serializeTargets,
-    stockAgeLabel,
-    type PlannerFilters,
-    type PlannerTarget,
-} from './planner.helpers';
+import { useValheimRecipeCatalog } from '../hooks/use-valheim-recipes';
+import { CraftingWindow } from './crafting-window';
+import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
 import { ShoppingList } from './shopping-list';
-import { usePlannerNames } from './use-planner-names';
-
-type Entry = ValheimRecipeCatalogEntry;
-
-function addTarget(list: readonly PlannerTarget[], e: Entry, quality: number, amount: number): PlannerTarget[] | null {
-    return addPlannerTarget(list, { prefab: e.prefab, kind: e.kind, quality: e.kind === 'piece' ? 1 : quality, amount });
-}
-
-function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
-    const [targets, setTargets] = useState(() => loadPlannerTargets(serverId));
-    const update = (next: PlannerTarget[]): void => {
-        setTargets(next);
-        savePlannerTargets(serverId, next);
-    };
-    return [targets, update];
-}
+import { usePlannerState, type PlannerState } from './use-planner-state';
 
 function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResponse; capturedAt: string | null }): JSX.Element {
     const now = useNow();
@@ -52,70 +26,28 @@ function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResp
     );
 }
 
-function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogResponse) {
-    const [filters, setFilters] = useState<PlannerFilters>(DEFAULT_PLANNER_FILTERS);
-    const [picked, setPicked] = useState<Entry | null>(null);
-    const [quality, setQuality] = useState(1);
-    const [targets, setTargets] = usePlannerTargets(serverId);
-    const hasPersonal = useValheimMaterials(serverId, filters.includeVehicles).data?.personal != null;
-    const plan = useValheimRecipePlan(serverId, serializeTargets(targets), filters.includePersonal && hasPersonal, filters.includeVehicles);
-    const tree = useValheimRecipeTree(serverId, picked?.prefab ?? null, picked?.kind ?? 'item', quality);
-    // Rows come from the tree while a pick is open, else from the plan (TreePane).
-    const names = usePlannerNames(serverId, catalog, plan.data, tree.data, picked !== null ? 'tree' : 'plan');
-    const onPick = (e: Entry | null): void => {
-        setPicked(e);
-        setQuality(1);
-    };
-    const onAdd = (amount: number): void => {
-        if (picked === null) return;
-        const next = addTarget(targets, picked, quality, amount);
-        if (next === null) return; // at the cap: never persist an over-cap list
-        setTargets(next);
-        setPicked(null);
-    };
-    const onRemove = (i: number): void => setTargets(targets.filter((_, j) => j !== i));
-    const atCap = targets.length >= PLANNER_TARGETS_MAX;
-    return { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap };
-}
-
-type PlannerState = ReturnType<typeof usePlannerState>;
-
-/** The tree column: the active response, its error with a Retry, or the idle prompt. */
-function TreePane({ picked, plan, tree, names }: Pick<PlannerState, 'picked' | 'plan' | 'tree' | 'names'>): JSX.Element {
-    const active = picked !== null ? tree : plan;
-    const rootKinds = useMemo(
-        () => (picked !== null ? [picked.kind] : (plan.data?.targets.map((t) => t.kind) ?? [])),
-        [picked, plan.data],
-    );
-    const label = picked !== null ? `What ${picked.name} needs` : 'What your list needs';
-    if (active.data !== undefined)
-        return <RecipeTree key={label} nodes={active.data.nodes} truncated={active.data.truncated} names={names} label={label} rootKinds={rootKinds} />;
-    if (active.isError) {
-        const text = picked !== null ? `Couldn’t load what ${picked.name} needs.` : 'Couldn’t load your list’s plan.';
-        return <MapError text={text} onRetry={() => void active.refetch()} />;
-    }
+/** The idle detail column: what the list needs, its error with a Retry, or the idle prompt. */
+function PlanPane({ plan, names }: Pick<PlannerState, 'plan' | 'names'>): JSX.Element {
+    const rootKinds = useMemo(() => plan.data?.targets.map((t) => t.kind) ?? [], [plan.data]);
+    if (plan.data !== undefined)
+        return (
+            <div className="space-y-2">
+                {plan.data.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
+                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds} />
+            </div>
+        );
+    if (plan.isError) return <MapError text="Couldn’t load your list’s plan." onRetry={() => void plan.refetch()} />;
     return <p className="text-sm text-muted">Pick an item or piece to see what it takes.</p>;
 }
 
 function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
-    const { filters, setFilters, picked, onPick, quality, setQuality, targets, hasPersonal, plan, tree, names, onAdd, onRemove, atCap } =
-        usePlannerState(serverId, catalog);
+    const s = usePlannerState(serverId, catalog);
     return (
         <div className="space-y-4">
-            <HeaderLine catalog={catalog} capturedAt={plan.data?.stock === 'scan' ? plan.data.capturedAt : null} />
-            <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2">
-                <div className="lg:col-start-1 lg:row-start-1">
-                    <PlannerTargetPicker entries={catalog.entries} filters={filters} onFilters={setFilters} hasPersonal={hasPersonal}
-                        picked={picked} onPick={onPick} quality={quality} onQuality={setQuality} onAdd={onAdd} atCap={atCap} />
-                </div>
-                <div className="space-y-2 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-                    {picked === null && plan.data?.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                    <TreePane picked={picked} plan={plan} tree={tree} names={names} />
-                </div>
-                <div className="lg:col-start-1 lg:row-start-2">
-                    <ShoppingList targets={targets} plan={plan.data} names={names} onRemove={onRemove} />
-                </div>
-            </div>
+            <HeaderLine catalog={catalog} capturedAt={s.plan.data?.stock === 'scan' ? s.plan.data.capturedAt : null} />
+            <CraftingWindow serverId={serverId} catalog={catalog} filters={s.filters} onFilters={s.setFilters} hasPersonal={s.hasPersonal}
+                names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} />} />
+            <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} />
         </div>
     );
 }

@@ -9,6 +9,8 @@ import {
     havePct,
     parseStoredTargets,
     serializeTargets,
+    DEFAULT_PLANNER_FILTERS,
+    activePlannerFilters,
     addPlannerTarget,
     PLANNER_TARGETS_MAX,
     shoppingListText,
@@ -36,14 +38,15 @@ describe('foldNodes', () => {
 });
 
 describe('formatting', () => {
-    it('serialises targets as prefab:quality:amount:0:kind', () => {
+    it('serialises targets as prefab:quality:amount:fromQuality:kind', () => {
         expect(serializeTargets([
-            { prefab: 'SwordIron', kind: 'item', quality: 2, amount: 3 },
-            { prefab: 'piece_chest', kind: 'piece', quality: 1, amount: 1 },
-        ])).toBe('SwordIron:2:3:0:item,piece_chest:1:1:0:piece');
+            { prefab: 'SwordIron', kind: 'item', quality: 2, fromQuality: 0, amount: 3 },
+            { prefab: 'SwordIron', kind: 'item', quality: 3, fromQuality: 2, amount: 1 },
+            { prefab: 'piece_chest', kind: 'piece', quality: 1, fromQuality: 0, amount: 1 },
+        ])).toBe('SwordIron:2:3:0:item,SwordIron:3:1:2:item,piece_chest:1:1:0:piece');
     });
-    it('merges a target only on the same prefab + kind + quality; refuses a new one at the cap', () => {
-        const item = { prefab: 'Shared', kind: 'item', quality: 1, amount: 2 } as const;
+    it('merges a target only on the same prefab + kind + quality + fromQuality; refuses a new one at the cap', () => {
+        const item = { prefab: 'Shared', kind: 'item', quality: 1, fromQuality: 0, amount: 2 } as const;
         const piece = { ...item, kind: 'piece' } as const;
         const both = addPlannerTarget([item], piece);
         expect(both).toEqual([item, piece]);
@@ -51,6 +54,12 @@ describe('formatting', () => {
         const full = Array.from({ length: PLANNER_TARGETS_MAX }, (_, i) => ({ ...item, prefab: `P${i}` }));
         expect(addPlannerTarget(full, piece)).toBeNull();
         expect(addPlannerTarget(full, { ...item, prefab: 'P0' })?.length).toBe(PLANNER_TARGETS_MAX);
+    });
+    it('keeps an upgrade step apart from a from-scratch craft of the same quality', () => {
+        const scratch = { prefab: 'SwordIron', kind: 'item', quality: 3, fromQuality: 0, amount: 1 } as const;
+        const upgrade = { ...scratch, fromQuality: 2 } as const;
+        expect(addPlannerTarget([scratch], upgrade)).toEqual([scratch, upgrade]);
+        expect(addPlannerTarget([scratch, upgrade], { ...upgrade, amount: 2 })).toEqual([scratch, { ...upgrade, amount: 3 }]);
     });
     it('renders null as an em dash and groups thousands', () => {
         expect(formatAmount(null)).toBe('—');
@@ -87,12 +96,26 @@ describe('viaChips', () => {
 
 describe('parseStoredTargets', () => {
     it('reads a valid list', () => {
-        const list = [{ prefab: 'Club', kind: 'item', quality: 2, amount: 4 }];
+        const list = [{ prefab: 'Club', kind: 'item', quality: 3, fromQuality: 2, amount: 4 }];
         expect(parseStoredTargets(JSON.stringify(list))).toEqual(list);
+    });
+    it('reads a list stored before fromQuality existed as from-scratch crafts', () => {
+        const old = [{ prefab: 'Club', kind: 'item', quality: 2, amount: 4 }];
+        expect(parseStoredTargets(JSON.stringify(old))).toEqual([{ ...old[0], fromQuality: 0 }]);
     });
     it('drops unparseable or off-schema storage', () => {
         expect(parseStoredTargets(null)).toEqual([]);
         expect(parseStoredTargets('{nope')).toEqual([]);
         expect(parseStoredTargets(JSON.stringify([{ prefab: 'Club', kind: 'item', quality: 11, amount: 1 }]))).toEqual([]);
+        expect(parseStoredTargets(JSON.stringify([{ prefab: 'Club', kind: 'item', quality: 2, fromQuality: 2, amount: 1 }]))).toEqual([]);
+    });
+});
+
+describe('planner filters', () => {
+    it('defaults Kind to Items and counts only changes from the defaults', () => {
+        expect(DEFAULT_PLANNER_FILTERS.kind).toBe('item');
+        expect(activePlannerFilters(DEFAULT_PLANNER_FILTERS)).toBe(0);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'both' })).toBe(1);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'piece', category: 'Weapon', includePersonal: true, includeVehicles: false })).toBe(4);
     });
 });
