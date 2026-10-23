@@ -47,6 +47,20 @@ function SwitchRow(props: { text: string; children: React.ReactNode }) {
     );
 }
 
+/** ROK-1930 Q4 — the third switch; writes `?pins=death` through the view's filter hook. */
+function DeathsOnlySwitch({ deathsOnly, onDeathsOnly }: MapLayerState) {
+    if (!onDeathsOnly) return null;
+    return (
+        <SwitchRow text={DEATHS_LABEL}>
+            <Switch
+                label={DEATHS_LABEL}
+                checked={deathsOnly ?? false}
+                onChange={onDeathsOnly}
+            />
+        </SwitchRow>
+    );
+}
+
 /** The layer switches — shared by the inline panel and the phone sheet. */
 export function LayerSwitches(props: MapLayerState) {
     const hintId = useId();
@@ -74,15 +88,7 @@ export function LayerSwitches(props: MapLayerState) {
                     onChange={props.onPinLabels}
                 />
             </SwitchRow>
-            {props.onDeathsOnly && (
-                <SwitchRow text={DEATHS_LABEL}>
-                    <Switch
-                        label={DEATHS_LABEL}
-                        checked={props.deathsOnly ?? false}
-                        onChange={props.onDeathsOnly}
-                    />
-                </SwitchRow>
-            )}
+            <DeathsOnlySwitch {...props} />
         </div>
     );
 }

@@ -21,7 +21,7 @@ import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
-import { usePinFilter } from './use-pin-filter';
+import { usePinFilter, type PinFilterView } from './use-pin-filter';
 import { PinFilterBar } from './pin-filter-bar';
 
 export interface ValheimMapViewProps {
@@ -187,6 +187,11 @@ function layerStatus(
     return { ready: meta.baseMap?.ready === true, failed, sharedFailed };
 }
 
+const pinFilterControls = (f: PinFilterView) => ({
+    deathsOnly: f.deathsOnly,
+    onDeathsOnly: f.onDeathsOnly,
+});
+
 /** Switch state + fetched layers for a loaded meta. */
 function useMapReadyState(props: ReadyProps) {
     const [showShared, setShowShared] = useState(false);
@@ -214,8 +219,7 @@ function useMapReadyState(props: ReadyProps) {
         sharedAvailable,
         pinLabels,
         onPinLabels: setPinLabels,
-        deathsOnly: pinFilter.deathsOnly,
-        onDeathsOnly: pinFilter.onDeathsOnly,
+        ...pinFilterControls(pinFilter),
     };
     const status = layerStatus(props.meta, base.error !== null, sharedFailed);
     return { layers, controls, personal, status, bar: pinFilter.bar };

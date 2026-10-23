@@ -156,17 +156,15 @@ function CharacterMapBody({
 }
 
 /** The selected character's world picker + map, once the character list is in. */
-function CharacterMap({
-    serverId,
-    rows,
-    characterId,
-    param,
-}: {
+interface CharacterMapProps {
     serverId: number;
     rows: ValheimCharacterSummary[];
     characterId: number;
     param: string | null;
-}) {
+}
+
+function CharacterMap(props: CharacterMapProps) {
+    const { serverId, rows, characterId, param } = props;
     const detail = useValheimCharacterMaps(characterId);
     const maps = detail.data?.id === characterId ? detail.data.maps : [];
     const mapId = pickMapId(maps, param);
