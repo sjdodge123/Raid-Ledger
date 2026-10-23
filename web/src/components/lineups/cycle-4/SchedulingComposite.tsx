@@ -28,7 +28,7 @@
  * and Voting keep their SubmitBar — they spend a budget, so "I'm finished" is
  * real information there.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { lazy, Suspense, useMemo, useState, type JSX } from 'react';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { useSuggestSlot } from '../../../hooks/use-scheduling';
 import { useLineupMatches } from '../../../hooks/use-lineup-matches';
@@ -44,7 +44,6 @@ import { useSchedulingLock } from './use-scheduling-lock';
 import { useExpiredLockIn } from './use-expired-lock-in';
 import { useSchedulingLadder } from './use-scheduling-ladder';
 import { SchedulingToolbar } from './SchedulingToolbar';
-import { SchedulingHubPanel } from './SchedulingHubPanel';
 import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
@@ -69,6 +68,11 @@ import { useVoteSource } from './use-vote-source';
 import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
 import { SchedulingPendingVoters } from './SchedulingPendingVoters';
 import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
+
+/** ROK-1893 P3: most polls have no hub — load the hub block only when one does. */
+const SchedulingHubPanel = lazy(() =>
+  import('./SchedulingHubPanel').then((m) => ({ default: m.SchedulingHubPanel })),
+);
 
 export interface SchedulingCompositeProps {
   poll: SchedulePollPageResponseDto;
@@ -216,7 +220,11 @@ export function SchedulingComposite(
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
       />
-      <SchedulingHubPanel poll={poll} lineupId={lineupId} matchId={matchId} />
+      {poll.hub && (
+        <Suspense fallback={null}>
+          <SchedulingHubPanel poll={poll} lineupId={lineupId} matchId={matchId} />
+        </Suspense>
+      )}
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
         lockedInTime={poll.lockedInTime ?? null}
