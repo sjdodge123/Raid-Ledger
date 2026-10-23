@@ -20,7 +20,7 @@ export interface ArrangeFooterProps {
 
 export function ArrangeFooter({ dirty, saving, error, onReset, onCancel, onSave }: ArrangeFooterProps): JSX.Element {
     return (
-        <div className="sticky bottom-[var(--bottom-nav-clearance)] z-10 -mx-1 mt-4 flex flex-wrap items-center gap-2 border-t border-edge bg-surface px-1 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:bottom-0"
+        <div className="sticky bottom-[var(--bottom-nav-clearance)] z-10 mt-4 flex flex-wrap items-center gap-2 border-t border-edge bg-surface py-3 md:bottom-0 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]"
             data-testid="arrange-footer">
             <Button variant="ghost" size="sm" onClick={onReset} disabled={saving} data-testid="arrange-reset">Reset to default</Button>
             <span className="flex-1" />

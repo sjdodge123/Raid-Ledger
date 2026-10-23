@@ -100,7 +100,9 @@ async function expectRowsFitViewport(mode: Locator): Promise<void> {
     const widths = await mode.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
     expect(widths.scroll, `arrange mode overflows sideways (scrollWidth ${widths.scroll} > clientWidth ${widths.client})`)
         .toBeLessThanOrEqual(widths.client);
-    const clipped = await mode.locator('ol[aria-label="Overview widgets, in order"] > li button[aria-pressed]').evaluateAll(
+    const toggles = mode.locator('ol[aria-label="Overview widgets, in order"] > li button[aria-pressed]');
+    expect(await toggles.count(), 'the arrange list renders a Hide/Show button per row').toBeGreaterThan(0);
+    const clipped = await toggles.evaluateAll(
         (buttons) => buttons.filter((b) => {
             const r = b.getBoundingClientRect();
             return r.left < 0 || r.right > window.innerWidth;
