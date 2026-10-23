@@ -65,6 +65,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   // ROK-1870: a proposal waiting on staff; its review outcome.
   hub_proposal_submitted: 'needs_you',
   hub_proposal_reviewed: 'done',
+  // ROK-1933: asks the player to confirm a character is theirs.
+  valheim_claim_suggestion: 'needs_you',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -132,6 +134,7 @@ export function getEmojiForType(type: NotificationType): string {
     hub_event_tagged: '🛡️',
     hub_proposal_submitted: '🗳️',
     hub_proposal_reviewed: '🏕️',
+    valheim_claim_suggestion: '🛡️',
     role_gap_alert: '\u26A0\uFE0F',
   };
   return map[type] ?? '🔔';
@@ -164,6 +167,7 @@ export function getTypeLabel(type: NotificationType): string {
     hub_event_tagged: 'Group Event',
     hub_proposal_submitted: 'Hub Proposal',
     hub_proposal_reviewed: 'Hub Proposal Reviewed',
+    valheim_claim_suggestion: 'Raid Ledger · Valheim',
     role_gap_alert: 'Role Gap Alert',
   };
   return map[type] ?? 'Notification';
