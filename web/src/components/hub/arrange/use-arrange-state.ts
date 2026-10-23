@@ -21,7 +21,7 @@ export interface ArrangeStateInput {
     onExit: () => void;
 }
 
-/** Leaving the page (reload, close, external link) with an unsaved draft asks first. */
+/** Leaving the page (reload, close, external link) with an unsaved draft asks first. In-hub tab switches: `use-arrange-leave-guard`. */
 function useBeforeUnloadWhile(dirty: boolean): void {
     useEffect(() => {
         if (!dirty) return undefined;
@@ -61,7 +61,9 @@ function useDraftRows(arranged: ArrangeStateInput['arranged']) {
 }
 
 function useSaveFlow({ guildId, prefs, onExit }: Omit<ArrangeStateInput, 'arranged'>) {
-    const mutation = useSaveWidgetPrefs(guildId);
+    // Captured with the draft: a prop change can never retarget this draft's save.
+    const [hubId] = useState(guildId);
+    const mutation = useSaveWidgetPrefs();
     const [error, setError] = useState<string | null>(null);
     const handlers = useCallback((done: string) => ({
         onSuccess: () => { toast.success(done); onExit(); },
@@ -70,8 +72,8 @@ function useSaveFlow({ guildId, prefs, onExit }: Omit<ArrangeStateInput, 'arrang
             setError("Couldn't save the layout. Try again.");
         },
     }), [onExit]);
-    const save = (rows: readonly Row[]): void => { setError(null); mutation.mutate(buildPrefsBody(rows, prefs), handlers('Layout saved')); };
-    const reset = (): void => { setError(null); mutation.mutate({ reset: true }, handlers('Default layout restored')); };
+    const save = (rows: readonly Row[]): void => { setError(null); mutation.mutate({ guildId: hubId, body: buildPrefsBody(rows, prefs) }, handlers('Layout saved')); };
+    const reset = (): void => { setError(null); mutation.mutate({ guildId: hubId, body: { reset: true } }, handlers('Default layout restored')); };
     return { save, reset, saving: mutation.isPending, error };
 }
 
