@@ -14,7 +14,7 @@
  * numbers (ROK-1932). With no presence the seed yields "0 online" and no
  * nudge; the nudge's link branch is covered by `server-hero.test.tsx`.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
@@ -43,9 +43,13 @@ function userName(slot: number, role: Role): string {
     return `Hub ${slot} ${role[0]?.toUpperCase() ?? ''}${role.slice(1)}`;
 }
 
-async function seedHub(token: string, withSchedules = false): Promise<Hub> {
+/** ROK-1877 schedule sets: `true` = the running set (ROK-1876's `withSchedules`). */
+type ScheduleSet = boolean | 'start_only' | 'outside_hours';
+
+async function seedHub(token: string, schedules: ScheduleSet = false): Promise<Hub> {
     const slot = 1 + (test.info().parallelIndex % 15);
-    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot, withSchedules })) as Partial<Hub> | null;
+    const set = typeof schedules === 'string' ? { schedules } : { withSchedules: schedules };
+    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot, ...set })) as Partial<Hub> | null;
     if (typeof body?.guildId !== 'number' || typeof body.serverId !== 'number' || !body.userIds) {
         throw new Error(`server-hub seed failed: ${JSON.stringify(body)}`);
     }
@@ -160,6 +164,22 @@ test.describe('Server community hub (ROK-1831)', () => {
 /** A phone viewport, set per test so both projects run the phone cases (the bottom bar is CSS `md:hidden`). */
 const PHONE = { width: 375, height: 812 };
 
+const DAY = '(Mon|Tue|Wed|Thu|Fri|Sat|Sun)';
+/** A D2 merged-week label: "Every day", "Mon–Fri", "Fri, Sat" or one day. */
+const DAY_LABEL = new RegExp(`^(Every day|${DAY}((–|, )${DAY})?)$`);
+
+/**
+ * The seeded daily windows collapse to at most three week rows: one in a
+ * fixed-offset zone, up to three when a DST change splits the week (ROK-1877 D2).
+ */
+async function expectMergedWeek(card: Locator): Promise<void> {
+    const rows = card.getByTestId('server-hub-hours-row');
+    await expect(rows.first()).toBeVisible({ timeout: 15_000 });
+    const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-day-label') ?? ''));
+    expect(labels.length, `seven daily windows merge: ${labels.join(' | ')}`).toBeLessThanOrEqual(3);
+    for (const label of labels) expect(label, 'a merged-week day label').toMatch(DAY_LABEL);
+}
+
 function must<T>(value: T | undefined | null, label: string): T {
     if (value === undefined || value === null) throw new Error(`missing: ${label}`);
     return value;
@@ -212,11 +232,37 @@ test.describe('Server hub phone UX (ROK-1876)', () => {
         await expect(card.getByTestId('server-hub-hours-row').first(), 'withSchedules gives the card a window').toBeVisible({ timeout: 15_000 });
         await expect(card.getByTestId('server-hub-hours-restart')).toBeVisible();
         await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
+        // ROK-1877: running inside 18:00–02:00 / 13:00–13:40 UTC or outside them — wall clock decides which.
+        await expect(card.getByTestId('server-hub-hours-now')).toHaveText(/^Online now · (until .+|outside its usual hours)$/);
+        await expectMergedWeek(card);
 
         await seedHub(token);
         await page.goto(`/hubs/${hub.guildId}`);
         await expect(card.getByTestId('server-hub-hours-empty')).toHaveText('No set hours', { timeout: 15_000 });
         await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
+    });
+
+    test('Server hours (ROK-1877): a manual start outside the hours says so and names the next window', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken(), 'outside_hours');
+        await page.goto(`/hubs/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-now'), 'running, window 3 h ahead = S3')
+            .toHaveText('Online now · outside its usual hours', { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-sub')).toHaveText(/^Next scheduled: (\S+ )?\d{1,2}:\d{2} [AP]M$/);
+        await expect(card.getByTestId('server-hub-hours-dot')).toHaveAttribute('data-tone', 'online');
+        await expectMergedWeek(card);
+    });
+
+    test('Server hours (ROK-1877): a start-only schedule shows a Starts line, no rows and no "No set hours"', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken(), 'start_only');
+        await page.goto(`/hubs/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-start'), 'a 14:00 UTC start with no stop = S7')
+            .toHaveText(/^Starts · (daily|Today|Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} [AP]M$/, { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-now')).toHaveText('Online now');
+        await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
+        await expect(card.getByTestId('server-hub-hours-stop')).toHaveCount(0);
     });
 
     test('phone: the last Members card ends 16px above the bottom bar and its raised Hubs circle', async ({ page }) => {
