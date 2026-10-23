@@ -3,7 +3,7 @@
  * hub's Pelican server id; `charactersHubTab` in `register.ts` adapts it to
  * the ROK-1831 `HubTab` seam once that lands.
  */
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { useValheimCharacterPages } from '../hooks/use-valheim-characters';
@@ -12,6 +12,7 @@ import { ValheimClaimBanner } from './valheim-claim-banner';
 import {
     CLAIM_BANNER_COPY,
     CLAIM_FILTER_PARAM,
+    withUnclaimedParam,
 } from './valheim-claim-banner.helpers';
 
 function Quiet({ children, role }: { children: string; role?: 'alert' }) {
@@ -108,14 +109,17 @@ function countLabel(pages: ReturnType<typeof useValheimCharacterPages>): string 
 }
 
 /** ROK-1933: the "Unclaimed only" toggle; the banner's Pick jumps here with it on. */
+/**
+ * The `?unclaimed=1` filter. The hash is passed through explicitly:
+ * `setSearchParams` navigates to a bare `?…`, which drops `#characters` and
+ * sends the hub (its tab lives in the hash) back to Overview (ROK-1933 B1).
+ */
 function useUnclaimedFilter(): [boolean, () => void] {
-    const [params, setParams] = useSearchParams();
-    const on = params.get(CLAIM_FILTER_PARAM) === '1';
+    const { search, hash } = useLocation();
+    const navigate = useNavigate();
+    const on = new URLSearchParams(search).get(CLAIM_FILTER_PARAM) === '1';
     const toggle = (): void => {
-        const next = new URLSearchParams(params);
-        if (on) next.delete(CLAIM_FILTER_PARAM);
-        else next.set(CLAIM_FILTER_PARAM, '1');
-        setParams(next, { replace: true });
+        navigate({ search: withUnclaimedParam(search, !on), hash }, { replace: true });
     };
     return [on, toggle];
 }

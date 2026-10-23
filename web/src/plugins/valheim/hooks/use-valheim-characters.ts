@@ -84,8 +84,8 @@ export function useValheimCharacterPages(serverId: number, unclaimed = false) {
 
 /**
  * ROK-1933 — the claim banner's server facts (viewer has a claim, unclaimed
- * count) in one request, whatever the list's size. Under `valheimArmoryKeys.all`,
- * so a claim's invalidation refreshes it.
+ * count) in one request, whatever the list's size. `invalidateOwnership`
+ * refreshes it after every claim, unclaim or reassign.
  */
 export function useValheimClaimStatus(
     serverId: number,

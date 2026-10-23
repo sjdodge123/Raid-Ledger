@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { JSX } from 'react';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
@@ -12,7 +13,9 @@ import {
     valheimCharacterClaimed,
     valheimCharacterUnclaimed,
 } from '../../../test/mocks/valheim-armory-handlers';
+import { useLocation } from 'react-router-dom';
 import { valheimArmoryKeys } from '../lib/valheim-armory-api';
+import { invalidateOwnership } from '../hooks/use-valheim-claims';
 import { ValheimCharactersTab } from './valheim-characters-tab';
 import { ValheimClaimBanner } from './valheim-claim-banner';
 
@@ -56,7 +59,17 @@ beforeEach(() => {
         })),
     );
 });
-afterEach(() => localStorage.clear());
+afterEach(() => {
+    localStorage.clear();
+    window.history.replaceState(null, '', '/');
+});
+
+/** The router's current URL, so a test can see what a navigate kept or dropped. */
+function LocationProbe(): JSX.Element {
+    const { search, hash } = useLocation();
+    return <output data-testid="router-url">{`${search}${hash}`}</output>;
+}
+const routerUrl = (): string => screen.getByTestId('router-url').textContent ?? '';
 
 /** Claim status pre-seeded, so a missing banner means "dismissed", never "still loading". */
 function overview(queryClient = createTestQueryClient()): void {
@@ -91,13 +104,14 @@ describe('claim banner — Characters tab', () => {
         expect(screen.getByRole('button', { name: 'Pick my character' })).toBeInTheDocument();
     });
 
-    it('hides after the viewer claims (characters query invalidated)', async () => {
+    it('hides after the viewer claims (the claim mutation\'s own invalidation)', async () => {
         const queryClient = createTestQueryClient();
         renderWithProviders(<ValheimCharactersTab serverId={7} />, { queryClient });
         expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
         // Another character stays unclaimed, so only the viewer's claim can hide it.
         rows = [{ ...valheimCharacterUnclaimed, id: 99, name: 'Other' }, mine()];
-        await queryClient.invalidateQueries({ queryKey: valheimArmoryKeys.all });
+        // What useClaimCharacter/useAssignOwner run on settle — not a hand-picked key.
+        await invalidateOwnership(queryClient, 99);
         await waitFor(() => expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument());
     });
 
@@ -129,6 +143,21 @@ describe('claim banner — Characters tab', () => {
     });
 });
 
+describe('claim banner — Characters tab inside the hub frame', () => {
+    it('the Unclaimed only toggle keeps #characters (the hub reads its tab from the hash)', async () => {
+        renderWithProviders(<><ValheimCharactersTab serverId={7} /><LocationProbe /></>, { initialEntries: ['/hubs/4?post=3#characters'] });
+        await userEvent.click(await screen.findByRole('button', { name: 'Unclaimed only' }));
+        expect(routerUrl()).toBe('?post=3&unclaimed=1#characters');
+        await userEvent.click(screen.getByRole('button', { name: 'Unclaimed only' }));
+        expect(routerUrl()).toBe('?post=3#characters');
+    });
+
+    it('draws its own "Claim your character" region on the tab', async () => {
+        renderWithProviders(<ValheimCharactersTab serverId={7} />);
+        expect(await screen.findByRole('region', { name: 'Claim your character' })).toBeInTheDocument();
+    });
+});
+
 describe('claim banner — Overview', () => {
     it('a dismiss hides it and is remembered across renders', async () => {
         overview();
@@ -137,5 +166,22 @@ describe('claim banner — Overview', () => {
         expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument();
         overview();
         expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument();
+    });
+
+    it('leaves the region to the Overview card, so the name is not duplicated', () => {
+        overview();
+        expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Claim your character' })).not.toBeInTheDocument();
+    });
+
+    it('Pick my character switches tabs with a hash write and keeps other params', async () => {
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(valheimArmoryKeys.claimStatus(7), { viewerHasClaim: false, unclaimedCount: 1 });
+        renderWithProviders(<><ValheimClaimBanner serverId={7} dismissible /><LocationProbe /></>, { initialEntries: ['/hubs/4?post=3'], queryClient });
+        const changes: string[] = [];
+        window.addEventListener('hashchange', () => changes.push(window.location.hash));
+        await userEvent.click(screen.getByRole('button', { name: 'Pick my character' }));
+        expect(routerUrl()).toContain('?post=3&unclaimed=1');
+        await waitFor(() => expect(changes).toEqual(['#characters']));
     });
 });

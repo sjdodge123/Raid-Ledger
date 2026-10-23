@@ -29,6 +29,14 @@ export type ClaimBannerVariant = 'link-steam' | 'pick-only';
 /** Search param that filters the Characters tab to unclaimed rows (D4). */
 export const CLAIM_FILTER_PARAM = 'unclaimed';
 
+/** `search` with the unclaimed filter set or cleared; every other param kept (`?post=`). */
+export function withUnclaimedParam(search: string, on: boolean): string {
+    const next = new URLSearchParams(search);
+    if (on) next.set(CLAIM_FILTER_PARAM, '1');
+    else next.delete(CLAIM_FILTER_PARAM);
+    return next.size ? `?${next.toString()}` : '';
+}
+
 export interface ClaimBannerInput {
     /** The server's claim facts (`…/claim-status`); null while unknown. */
     status: ValheimClaimStatusResponse | null;
