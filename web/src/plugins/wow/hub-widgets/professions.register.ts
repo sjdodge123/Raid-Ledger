@@ -1,7 +1,8 @@
 /**
  * ROK-1923 (epic ROK-1905 H8) — registers the WoW: Forever "Guild professions"
- * hub Overview widget (W4). Members-only (`audience: 'members'`; the API also
- * omits `professions` for visitors). The card hides when the payload has no
+ * hub Overview widget (W4). Members + staff only: the API omits `professions`
+ * for visitors, so `audience` is 'everyone' and `useVisible` does the gating
+ * (a 'members' audience would hide it from non-member staff). The card hides when the payload has no
  * `professions` key and shows the empty state when the array is empty.
  */
 import { lazy } from 'react';
@@ -23,7 +24,7 @@ export const professionsWidget: HubGameWidget = {
     kinds: ['wow_guild'],
     order: 85,
     span: 1,
-    audience: 'members',
+    audience: 'everyone',
     component: lazy(() => import('./professions-widget')),
     useVisible: useProfessionsVisible,
 };
