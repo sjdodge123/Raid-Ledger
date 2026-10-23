@@ -1,7 +1,8 @@
 /**
  * ROK-1899 — CRAFT | UPGRADE (spec §3.1.2): a segmented `RadioGroup`, not
  * `TabRow` — the hub already owns the URL hash for its tabs. UPGRADE carries
- * the number of upgradable rows under the current filters.
+ * the number of upgradable rows under the current filters. Each segment is
+ * at least 120px wide (the approved mockup).
  */
 import type { JSX } from 'react';
 import { RadioGroup } from '../../../components/ui/radio-group';
@@ -21,7 +22,7 @@ export function CraftModeSwitch({ value, onChange, upgradeCount, className }: Cr
             label="Mode"
             hideLabel
             appearance="segmented"
-            className={className}
+            className={`[&_label]:min-w-[120px] ${className ?? ''}`}
             value={value}
             onChange={onChange}
             options={[
