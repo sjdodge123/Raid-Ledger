@@ -87,3 +87,48 @@ export function buildClaimSuggestText(input: ClaimSuggestCopyInput): {
 export function buildClaimHubUrl(clientUrl: string, guildId: number): string {
   return `${clientUrl}/hubs/${guildId}#characters`;
 }
+
+/** The character sheet (the Yes confirmation links it). */
+export function buildClaimCharacterUrl(
+  clientUrl: string,
+  profileId: number,
+): string {
+  return `${clientUrl}/valheim/characters/${profileId}`;
+}
+
+/** The DM's after-press edits (L3; placeholder until Q2 is ruled). */
+export const CLAIM_REPLY_COPY = {
+  claimed: (name: string, url: string): string =>
+    `Claimed — ${name} is yours. [View ${name}](${url})`,
+  takenByOther: (name: string): string =>
+    `Someone already claimed ${name}. If that's wrong, ask a hub leader.`,
+  alreadyYours: 'You already claimed it.',
+  declined: (name: string): string =>
+    `Got it — we won't ask you about ${name} again.`,
+  /** Ephemeral: the clicker is not the user this DM asked. */
+  notForYou: "This question wasn't for you, so nothing changed.",
+  /** The character is gone or its hub is hidden. */
+  unavailable: "That character isn't available any more.",
+  fallbackName: 'that character',
+  error: 'Something went wrong. Please try again.',
+} as const;
+
+/** A parsed `vclaim:<yes|no>:<profileId>` button press. */
+export interface ClaimButtonPress {
+  action: 'yes' | 'no';
+  profileId: number;
+}
+
+/**
+ * Parse a claim-DM button id.
+ *
+ * @param customId - The interaction's custom id.
+ * @returns The press, or null when this is not a well-formed claim button.
+ */
+export function parseClaimButtonId(customId: string): ClaimButtonPress | null {
+  const match = /^vclaim:(yes|no):(\d+)$/.exec(customId);
+  if (!match) return null;
+  const profileId = Number(match[2]);
+  if (!Number.isSafeInteger(profileId) || profileId <= 0) return null;
+  return { action: match[1] === 'yes' ? 'yes' : 'no', profileId };
+}

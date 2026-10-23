@@ -1,6 +1,9 @@
 import {
+  CLAIM_REPLY_COPY,
   VALHEIM_CLAIM_BUTTON_IDS,
+  buildClaimCharacterUrl,
   buildClaimHubUrl,
+  parseClaimButtonId,
   buildClaimSuggestText,
   claimSuggestKeys,
 } from './valheim-claim-suggest.copy';
@@ -80,6 +83,57 @@ describe('claim-suggest keys and ids', () => {
   it('links the hub Characters tab', () => {
     expect(buildClaimHubUrl('https://rl.test', 12)).toBe(
       'https://rl.test/hubs/12#characters',
+    );
+  });
+});
+
+describe('parseClaimButtonId (ROK-1933 L3)', () => {
+  it('reads the action and profile id from both buttons', () => {
+    expect(parseClaimButtonId('vclaim:yes:42')).toEqual({
+      action: 'yes',
+      profileId: 42,
+    });
+    expect(parseClaimButtonId('vclaim:no:7')).toEqual({
+      action: 'no',
+      profileId: 7,
+    });
+  });
+
+  it('refuses other prefixes and malformed ids', () => {
+    for (const id of [
+      'lfg:decline:1',
+      'vclaim:maybe:1',
+      'vclaim:yes:',
+      'vclaim:yes:0',
+      'vclaim:yes:1x',
+      'vclaim:yes:-3',
+    ]) {
+      expect(`${id} -> ${JSON.stringify(parseClaimButtonId(id))}`).toBe(
+        `${id} -> null`,
+      );
+    }
+  });
+});
+
+describe('after-press copy (ROK-1933 L3)', () => {
+  it('confirms a claim with a link to the character', () => {
+    expect(
+      CLAIM_REPLY_COPY.claimed(
+        'Brindlemoss',
+        buildClaimCharacterUrl('https://rl.test', 9),
+      ),
+    ).toBe(
+      'Claimed — Brindlemoss is yours. [View Brindlemoss](https://rl.test/valheim/characters/9)',
+    );
+  });
+
+  it('answers a 409, an own claim and a Not me', () => {
+    expect(CLAIM_REPLY_COPY.takenByOther('Brindlemoss')).toBe(
+      "Someone already claimed Brindlemoss. If that's wrong, ask a hub leader.",
+    );
+    expect(CLAIM_REPLY_COPY.alreadyYours).toBe('You already claimed it.');
+    expect(CLAIM_REPLY_COPY.declined('Brindlemoss')).toBe(
+      "Got it — we won't ask you about Brindlemoss again.",
     );
   });
 });
