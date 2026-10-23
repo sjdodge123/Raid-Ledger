@@ -24,6 +24,7 @@ import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
+import { dismissGameTimeCheck } from './helpers';
 
 interface Seed {
     gameId: number;
@@ -192,6 +193,7 @@ test.describe('hub polls', () => {
         );
 
         await page.goto(pollHref(poll));
+        await dismissGameTimeCheck(page);
         const panel = page.getByTestId('scheduling-hub-panel');
         await expect(panel, 'a hub-tagged poll renders its hub block').toBeVisible({ timeout: 20_000 });
         await expect(panel.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
@@ -209,6 +211,8 @@ test.describe('hub polls', () => {
         expect(await viewerOf(jwt, seed.gameId, seed.hubIds.solo), 'the actor starts outside Seed Solo').toBe('not-member');
 
         await page.goto(pollHref(poll));
+        // The never-confirmed actor gets the game-time check (modal / phone sheet), which covers the page.
+        await dismissGameTimeCheck(page);
         const panel = page.getByTestId('scheduling-hub-panel');
         await expect(panel.getByRole('link', { name: 'Seed Solo' })).toBeVisible({ timeout: 20_000 });
         const card = panel.getByTestId('scheduling-hub-join');
