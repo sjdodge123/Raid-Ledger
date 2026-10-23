@@ -332,6 +332,48 @@ describe('AdHocEventService — voice', () => {
     });
   });
 
+  describe('ROK-1888 — one event across channels', () => {
+    it('adoptEvent shares the live state (one memberSet) with the existing key', async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(210, 'binding-a', 'WoW');
+      await service.handleVoiceJoin('binding-a', baseMember, baseBinding);
+
+      service.adoptEvent('binding-b', 1, 210);
+
+      const a = service.getActiveState('binding-a', 1);
+      const b = service.getActiveState('binding-b', 1);
+      expect(b).toBe(a);
+      expect([...(b?.memberSet ?? [])]).toEqual(['discord-123']);
+    });
+
+    it("a join from channel B edits the creating binding's card", async () => {
+      mocks.settingsService.get.mockResolvedValue('true');
+      mockNewEventCreation(220, 'binding-a', 'WoW');
+      await service.handleVoiceJoin('binding-a', baseMember, baseBinding);
+      service.adoptEvent('binding-b', 1, 220);
+      mocks.notificationService.queueUpdate.mockClear();
+      mocks.db.limit.mockResolvedValueOnce([
+        { id: 220, adHocStatus: 'live', channelBindingId: 'binding-a' },
+      ]);
+      mocks.db.returning.mockResolvedValueOnce([]);
+
+      await service.handleVoiceJoin(
+        'binding-b',
+        { ...baseMember, discordUserId: 'discord-b' },
+        baseBinding,
+      );
+
+      expect(mocks.notificationService.queueUpdate).toHaveBeenCalledWith(
+        220,
+        'binding-a',
+      );
+      expect(mocks.notificationService.queueUpdate).not.toHaveBeenCalledWith(
+        220,
+        'binding-b',
+      );
+    });
+  });
+
   describe('handleVoiceLeave', () => {
     it('does nothing when no active event for binding', async () => {
       await service.handleVoiceLeave('nonexistent-binding', 'discord-123');

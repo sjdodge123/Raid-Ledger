@@ -26,7 +26,7 @@ function serveFeed(): void {
     }));
 }
 
-function renderTab(path = '/guilds/7', canEdit = false) {
+function renderTab(path = '/hubs/7', canEdit = false) {
     return renderWithProviders(<HubPostsTab guildId={7} canEdit={canEdit} isLeader={canEdit} kind="wow_guild" />, { initialEntries: [path] });
 }
 
@@ -48,7 +48,7 @@ describe('HubPostsTab (V5)', () => {
     });
 
     it('?post=4 expands and highlights the loaded post', async () => {
-        renderTab('/guilds/7?post=4');
+        renderTab('/hubs/7?post=4');
         await screen.findByText('Fourth post');
         const item = screen.getByText('Fourth post').closest('article');
         expect(item, 'the linked post must be marked current').toHaveAttribute('aria-current', 'true');
@@ -59,7 +59,7 @@ describe('HubPostsTab (V5)', () => {
 
     it('?post=3 fetches a post that is not on the first page and leads with it', async () => {
         server.use(http.get(`${POSTS}/3`, () => HttpResponse.json(buildHubPost({ id: 3, body: 'Third post' }))));
-        renderTab('/guilds/7?post=3');
+        renderTab('/hubs/7?post=3');
         const lead = await screen.findByTestId('hub-post-linked');
         expect(within(lead).getByText('Third post')).toBeInTheDocument();
         expect(within(lead).getByRole('article')).toHaveAttribute('aria-current', 'true');
@@ -67,7 +67,7 @@ describe('HubPostsTab (V5)', () => {
 
     it('a removed post (404) says so above the feed', async () => {
         server.use(http.get(`${POSTS}/9`, () => HttpResponse.json({ message: 'Not found' }, { status: 404 })));
-        renderTab('/guilds/7?post=9');
+        renderTab('/hubs/7?post=9');
         expect(await screen.findByText('This post was removed.')).toBeInTheDocument();
         expect(await screen.findByText('Fifth post'), 'the feed still renders below the notice').toBeInTheDocument();
     });
@@ -78,7 +78,7 @@ describe('HubPostsTab (V5)', () => {
             if (!new URL(request.url).searchParams.get('cursor')) return HttpResponse.json({ posts: PAGE_1, nextCursor: 'c1' });
             return failOlder ? HttpResponse.json({ message: 'boom' }, { status: 500 }) : HttpResponse.json({ posts: PAGE_2, nextCursor: null });
         }));
-        renderTab('/guilds/7', true);
+        renderTab('/hubs/7', true);
         await screen.findByText('Fifth post');
         const first = screen.getAllByTestId('hub-post-item')[0];
         if (!first) throw new Error('no post item rendered');
@@ -102,7 +102,7 @@ describe('HubPostsTab (V5)', () => {
 
     it('on a phone the delete confirm is a BottomSheet', async () => {
         media.desktop = false;
-        renderTab('/guilds/7', true);
+        renderTab('/hubs/7', true);
         await screen.findByText('Fifth post');
         const first = screen.getAllByTestId('hub-post-item')[0];
         if (!first) throw new Error('no post item rendered');
@@ -115,7 +115,7 @@ describe('HubPostsTab (V5)', () => {
     it('on desktop the delete confirm is a Modal and Delete calls the API', async () => {
         const deleted: string[] = [];
         server.use(http.delete(`${POSTS}/:postId`, ({ params }) => { deleted.push(String(params['postId'])); return new HttpResponse(null, { status: 204 }); }));
-        renderTab('/guilds/7', true);
+        renderTab('/hubs/7', true);
         await screen.findByText('Fifth post');
         const first = screen.getAllByTestId('hub-post-item')[0];
         if (!first) throw new Error('no post item rendered');

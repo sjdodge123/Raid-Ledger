@@ -144,7 +144,39 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
     const names = (result?.signupMentions ?? []).map((m) => m.username);
     expect(names).toEqual(['Ana']);
     expect(result?.serverAnonymousCount).toBe(1);
+    // ROK-1888 ruling 2 reverses ROK-1801 Q4 on the Quick Play card: the
+    // anonymous player shows as +1 on server but is NOT counted.
+    expect(result?.signupCount).toBe(1);
+    expect(result?.serverAnonymousUncounted).toBe(true);
+  });
+
+  it('labels a named unlinked server player and leaves it out of the count (ROK-1888)', async () => {
+    mockEventAndGame(mockDb);
+    const participants: AdHocParticipant[] = [
+      { discordUserId: 'u1', discordUsername: 'Ana', isActive: true },
+      {
+        discordUserId: null,
+        discordUsername: 'Loanati',
+        isActive: true,
+        unlinkedOnServer: true,
+      },
+      {
+        discordUserId: 'u2',
+        discordUsername: 'Bo',
+        isActive: true,
+        discordOnly: true,
+      },
+    ];
+    const result = await buildEmbedEventData(deps, 1, participants);
+    const loanati = (result?.signupMentions ?? []).find(
+      (m) => m.username === 'Loanati',
+    );
+    expect(loanati).toMatchObject({
+      rosterSuffix: ' · on server',
+      uncounted: true,
+    });
     expect(result?.signupCount).toBe(2);
+    expect(result?.discordOnlyPresent).toBe(true);
   });
 
   it('active participants do NOT have status property', async () => {

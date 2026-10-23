@@ -29,6 +29,8 @@ import type { RoomSource } from './channel-presence-room.snapshot';
 export const ON_SERVER_MARK = ' \u{1F5A5}';
 /** ` 🖥 on server` — on the game's server, not in this voice channel. */
 export const SERVER_ONLY_MARK = ' \u{1F5A5} on server';
+/** ROK-1888: the Quick Play card's uncounted label, beside the 🖥 marks. */
+export { UNLINKED_SERVER_SUFFIX } from './ad-hoc-anonymous-row.helpers';
 
 /** What the evented union reads off a group (detected or rendered). */
 type RosterGroup = Pick<

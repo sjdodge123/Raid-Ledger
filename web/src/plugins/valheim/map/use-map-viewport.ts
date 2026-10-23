@@ -229,7 +229,11 @@ function useViewportCommands(dispatch: Dispatch<ViewportAction>) {
         [dispatch],
     );
     const fit = useCallback(() => dispatch({ type: 'fit' }), [dispatch]);
-    return { zoomIn, zoomOut, fit };
+    const centreOn = useCallback(
+        (point: Point) => dispatch({ type: 'centre', point }),
+        [dispatch],
+    );
+    return { zoomIn, zoomOut, fit, centreOn };
 }
 
 /**
@@ -266,6 +270,7 @@ export interface MapViewportApi {
     zoomIn: () => void;
     zoomOut: () => void;
     fit: () => void;
+    centreOn: (point: Point) => void;
 }
 
 /** Viewport state for a `contentSize`² texture (the grid's `textureSize`); key the caller on it — a new size needs a remount. */
@@ -279,7 +284,7 @@ export function useMapViewport(contentSize: number): MapViewportApi {
     useViewportSize(ref, dispatch);
     useWheelZoom(ref, dispatch);
     const handlers = usePointerHandlers(dispatch);
-    const { zoomIn, zoomOut, fit } = useViewportCommands(dispatch);
+    const { zoomIn, zoomOut, fit, centreOn } = useViewportCommands(dispatch);
     const { scale, x, y } = state.vp;
     const transform = `translate(${x}px, ${y}px) scale(${scale})`;
     return {
@@ -291,5 +296,6 @@ export function useMapViewport(contentSize: number): MapViewportApi {
         zoomIn,
         zoomOut,
         fit,
+        centreOn,
     };
 }

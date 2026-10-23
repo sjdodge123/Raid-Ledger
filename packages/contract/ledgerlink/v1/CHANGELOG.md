@@ -111,3 +111,5 @@ Newest first. Every entry states **additive** or **breaking** (see
   9 invalid.
 
 - 2026-10-05 v1 — fixture fix, additive: guild fixtures now include the exporter; wire format unchanged.
+
+- 2026-10-22 v1 — **Additive (stays v1).** Wire format unchanged. Metadata only: `$id` moved off a private instance to the public repo path (ROK-1897).

@@ -7,8 +7,8 @@ import { hubIdFromPath, isHubsNavActive } from './use-hub-nav-active';
 
 describe('isHubsNavActive', () => {
     it('parses the hub id from a hub path only', () => {
-        expect(hubIdFromPath('/guilds/310')).toBe(310);
-        expect(hubIdFromPath('/guilds/310/settings')).toBe(310);
+        expect(hubIdFromPath('/hubs/310')).toBe(310);
+        expect(hubIdFromPath('/hubs/310/settings')).toBe(310);
         expect(hubIdFromPath('/players')).toBe(0);
     });
 
@@ -17,8 +17,8 @@ describe('isHubsNavActive', () => {
     });
 
     it('every hub page lights Hubs, whatever its kind', () => {
-        expect(isHubsNavActive('/guilds/310')).toBe(true);
-        expect(isHubsNavActive('/guilds/11/settings')).toBe(true);
+        expect(isHubsNavActive('/hubs/310')).toBe(true);
+        expect(isHubsNavActive('/hubs/11/settings')).toBe(true);
     });
 
     it('other pages do not', () => {

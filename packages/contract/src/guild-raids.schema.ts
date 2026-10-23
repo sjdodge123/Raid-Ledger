@@ -22,6 +22,14 @@ export const GuildEventCardSchema = z.object({
   /** Sum of slotConfig role counts, else maxAttendees; null = uncapped. */
   needed: z.number().int().nullable(),
   viewerStatus: GuildViewerStatusSchema,
+  /**
+   * ROK-1906 — the dungeons/raids the event is planned for (`content_instances`),
+   * so the dungeon-quests widget can pick events with content. Optional.
+   */
+  contentInstances: z
+    .array(z.object({ id: z.number().int(), name: z.string().max(200) }))
+    .max(20)
+    .optional(),
 });
 export type GuildEventCardDto = z.infer<typeof GuildEventCardSchema>;
 

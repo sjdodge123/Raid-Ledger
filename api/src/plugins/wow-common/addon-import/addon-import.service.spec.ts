@@ -4,6 +4,7 @@
  * thrown, and one audit row per attempt. DB-backed behaviour lives in
  * `addon-import.integration.spec.ts`.
  */
+import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
 import { ForbiddenException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
@@ -13,7 +14,7 @@ import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
-import { applyChar } from './addon-import-char.apply';
+import { applyChar, previewChar } from './addon-import-char.apply';
 import { decodeImportPaste, decodeImportString } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { AddonImportService } from './addon-import.service';
@@ -83,14 +84,18 @@ function setup() {
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
   const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
+  const insightsCache = {
+    invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
     itemMeta as unknown as WowItemMetaService,
     realmRulesets as unknown as ForeverRealmRulesetsService,
+    insightsCache as unknown as RosterInsightsCache,
   );
-  return { service, characters, audit, itemMeta };
+  return { service, characters, audit, itemMeta, insightsCache };
 }
 
 const binding = (errors: AddonImportError[] = []) => ({
@@ -161,6 +166,31 @@ describe('AddonImportService', () => {
       expect.objectContaining({ tx: TX, characterId: CHAR_ID }),
       expect.objectContaining({ pinGuid: 'Player-1-A' }),
     );
+  });
+
+  describe('roster-insights invalidation (ROK-1913)', () => {
+    it("an applied import invalidates the imported character's guild insights", async () => {
+      const { service, insightsCache } = setup();
+      (applyChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, body);
+      expect(insightsCache.invalidateForCharacter).toHaveBeenCalledTimes(1);
+      expect(insightsCache.invalidateForCharacter).toHaveBeenCalledWith(
+        CHAR_ID,
+      );
+    });
+
+    it('a dry run never invalidates', async () => {
+      const { service, insightsCache } = setup();
+      (previewChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, { ...body, dryRun: true });
+      expect(insightsCache.invalidateForCharacter).not.toHaveBeenCalled();
+    });
   });
 
   describe('Wowhead gear enqueue (ROK-1727)', () => {

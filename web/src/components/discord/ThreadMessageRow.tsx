@@ -24,6 +24,11 @@ export interface ThreadMessageRowProps {
      * channel mirror's embed block). Display only, like the rest of the row.
      */
     children?: ReactNode;
+    /**
+     * ROK-1878: replaces the default tokenized body (the guild mirror renders
+     * content through `DiscordMarkup`). Omit it to keep the ROK-1483 body.
+     */
+    body?: ReactNode;
 }
 
 const AVATAR_CLASS = 'h-8 w-8 shrink-0 rounded-full';
@@ -152,6 +157,7 @@ function AttachmentList({
 export function ThreadMessageRow({
     message,
     children,
+    body,
 }: ThreadMessageRowProps): JSX.Element {
     const tokens = useMemo(
         () => tokenize(message.content, message.mentions),
@@ -168,7 +174,8 @@ export function ThreadMessageRow({
             />
             <div className="min-w-0 flex-1">
                 <MessageMeta message={message} />
-                {message.content !== '' && <DiscordText tokens={tokens} />}
+                {message.content !== '' &&
+                    (body ?? <DiscordText tokens={tokens} />)}
                 {children}
                 <AttachmentList attachments={message.attachments} />
                 <ThreadMessageReactions reactions={message.reactions} />

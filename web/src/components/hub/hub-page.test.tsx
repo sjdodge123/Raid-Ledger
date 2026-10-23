@@ -1,5 +1,5 @@
 /**
- * ROK-1785: `/guilds/:id` — members grouped by rank, the hidden tabs, the
+ * ROK-1785: `/hubs/:id` — members grouped by rank, the hidden tabs, the
  * friendly 403 state, and (ROK-1830 S4) the Guild settings sheet — the single
  * entry point for editors, the Discord picker and hub visibility, shown only
  * to `viewer.canManageEditors`.
@@ -55,7 +55,7 @@ function serve(page: GuildPageDto | null, status = 200, editors: GuildEditor[] =
 }
 
 function renderPage() {
-    return renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    return renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
@@ -320,7 +320,7 @@ describe('GuildPage — deep link to a deleted last post (ROK-1868 AC3)', () => 
             http.get(`${BASE}/posts`, () => HttpResponse.json({ posts: [], nextCursor: null })),
             http.get(`${BASE}/posts/99`, () => HttpResponse.json({ message: 'gone' }, { status: 404 })),
         );
-        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7?post=99#posts'] });
+        renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7?post=99#posts'] });
         await waitFor(() => expect(screen.queryByTestId('hub-post-removed')?.textContent ?? null,
             'a ?post= link on an empty hub must reach the removed notice, not fall back to Overview').toBe('This post was removed.'), { timeout: 3000 });
     });
@@ -356,7 +356,7 @@ describe('GuildPage — overview-only visitors never see the member-only Posts t
     it('a visitor following ?post=<id>#posts lands on the Overview, not a 403 screen', async () => {
         window.location.hash = '#posts';
         serveVisitor();
-        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7?post=3#posts'] });
+        renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7?post=3#posts'] });
         expect(await tabLabels(), 'a ?post= link must not surface Posts for a visitor').toEqual(['Overview', 'Members', 'Events', 'Raids']);
         expect(screen.queryByTestId('hub-posts-tab'), 'the Posts panel must not open for a visitor').toBeNull();
         expect(await screen.findByTestId('guild-gm-post-body')).toHaveTextContent('Raid night is Thursday.');

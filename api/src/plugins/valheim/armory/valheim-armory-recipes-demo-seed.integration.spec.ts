@@ -7,6 +7,7 @@
 import {
   ValheimRecipeCatalogResponseSchema,
   ValheimRecipePlanResponseSchema,
+  ValheimRecipeStockResponseSchema,
 } from '@raid-ledger/contract';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -107,6 +108,39 @@ describe('POST /admin/test/valheim/recipes-fixture (ROK-1854 L5)', () => {
     const node = (p: string) => nodes.find((n) => n.prefab === p);
     expect(node('Copper')).toMatchObject({ quantity: 2, have: 40, short: 0 });
     expect(node('Tin')).toMatchObject({ quantity: 1, have: 0, short: 1 });
+  });
+
+  it('ROK-1899: the crafting window gets affordable, short and upgradable rows', async () => {
+    const f = await seed();
+    const member = bearer(await sign(f.memberUserId));
+    const cat = await testApp.request.get(recipesUrl(f.serverId)).set(member);
+    const st = await testApp.request
+      .get(recipesUrl(f.serverId, '/stock'))
+      .set(member);
+    expect({ cat: cat.status, stock: st.status }).toEqual({
+      cat: 200,
+      stock: 200,
+    });
+    const { entries } = ValheimRecipeCatalogResponseSchema.parse(cat.body);
+    const { stock, totals } = ValheimRecipeStockResponseSchema.parse(st.body);
+    const entry = (p: string) =>
+      entries.find((e) => e.prefab === p && e.kind === 'item');
+    const covered = (p: string) =>
+      (entry(p)?.craft?.resources ?? []).map(
+        (r) => (totals[r.prefab] ?? 0) >= r.amount,
+      );
+    expect(stock).toBe('scan');
+    expect(covered('Club')).toEqual([true]);
+    expect(covered('Bronze')).toEqual([true, false]);
+    expect(
+      entry('Club')?.upgrades.map((u) => [u.quality, u.resources]),
+    ).toEqual([
+      [2, [{ prefab: 'Wood', amount: 3 }]],
+      [3, [{ prefab: 'Wood', amount: 6 }]],
+    ]);
+    expect(entry('SwordBronze')?.upgrades.map((u) => u.quality)).toEqual([
+      2, 3, 4,
+    ]);
   });
 
   it('is idempotent: a re-run returns the same body, one set, one scan', async () => {

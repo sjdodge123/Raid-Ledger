@@ -17,7 +17,7 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
@@ -153,7 +153,7 @@ test.describe('community hubs — member', () => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         const card = await openGamePage(page, seed.gameId);
-        await expect(card.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
+        await expect(card.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
         await expect(card.getByRole('link', { name: 'Seed Old Guard' }), 'archived hubs are not listed').toHaveCount(0);
         await expect(card.getByRole('link', { name: 'Seed Hopefuls' }), 'proposed hubs are not listed').toHaveCount(0);
 
@@ -224,14 +224,14 @@ test.describe('community hubs — member', () => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         const username = crewUsername(1 + slotOf(testInfo));
-        await page.goto(`/guilds/${seed.hubIds.solo}`);
+        await page.goto(`/hubs/${seed.hubIds.solo}`);
         await expect(page.getByTestId('community-hub-kind')).toBeVisible({ timeout: 20_000 });
 
         await page.getByTestId('community-hub-join').click();
         await expect.poll(() => viewerOf(jwt, seed.gameId, seed.hubIds.solo), { message: 'Join must reach the API' }).toBe('member');
         await expect(page.getByTestId('community-hub-leave')).toBeVisible({ timeout: 15_000 });
 
-        await page.goto(`/guilds/${seed.hubIds.solo}#members`);
+        await page.goto(`/hubs/${seed.hubIds.solo}#members`);
         await expect(memberRow(page, username), 'the Members tab lists the new member').toHaveCount(1, { timeout: 15_000 });
 
         await page.getByTestId('community-hub-leave').click();
@@ -242,10 +242,13 @@ test.describe('community hubs — member', () => {
         await expect(page.getByTestId('community-hub-join')).toBeVisible({ timeout: 15_000 });
     });
 
-    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the More drawer (phone)', async ({ page }, testInfo) => {
+    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the bottom Hubs sheet (phone)', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, actorId(seed, testInfo));
-        await page.goto('/calendar');
+        // Not /calendar: on phones it smooth-scrolls to today after mount, so useScrollDirection slides the
+        // bottom bar off-screen and the trigger click times out "outside of the viewport". /players never
+        // scrolls itself (same fix as hubs-nav.smoke.spec.ts NAV_START).
+        await page.goto('/players');
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) {
             // ROK-1875: the actor is in Seed Crew, so the header Hubs item is a menu (not a plain link).
@@ -256,10 +259,13 @@ test.describe('community hubs — member', () => {
             await expect(browse, '"Browse all hubs" closes the Hubs menu').toBeVisible({ timeout: 15_000 });
             await browse.click();
         } else {
-            await page.getByRole('button', { name: 'Open menu' }).click();
-            const row = page.getByTestId('more-drawer-panel').getByTestId('drawer-hubs-link');
-            await expect(row, 'phone: the Hubs row in the More drawer').toBeVisible({ timeout: 15_000 });
-            await row.click();
+            // ROK-1890: the More drawer no longer lists hubs; the bottom bar's Hubs sheet is the phone entry.
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'phone: a hub member gets the bottom Hubs sheet trigger').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const browse = page.getByRole('dialog', { name: 'Your hubs' }).getByTestId('bottom-hubs-browse-all');
+            await expect(browse, 'phone: "Browse all hubs" in the bottom Hubs sheet').toBeVisible({ timeout: 15_000 });
+            await browse.click();
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
@@ -273,7 +279,8 @@ test.describe('community hubs — signed out', () => {
         await page.goto('/');
         await expect(page.locator('body')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Hubs', exact: true }), 'no Hubs link without a session').toHaveCount(0);
-        await expect(page.getByTestId('drawer-hubs-link')).toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-link'), 'no bottom Hubs link without a session').toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-trigger'), 'no bottom Hubs sheet without a session').toHaveCount(0);
     });
 });
 
@@ -283,7 +290,7 @@ test.describe('community hubs — leader', () => {
         const admin = await getAdminToken();
         const target = crewUsername(4);
         await signInOnboardedMember(page, seed.leaderUserId);
-        await page.goto(`/guilds/${seed.hubIds.crew}#members`);
+        await page.goto(`/hubs/${seed.hubIds.crew}#members`);
         const row = memberRow(page, target);
         await expect(row).toHaveCount(1, { timeout: 20_000 });
 
@@ -306,12 +313,23 @@ test.describe('community hubs — leader', () => {
         await expect(memberRow(page, target), 'the removed member is gone after a reload').toHaveCount(0, { timeout: 15_000 });
     });
 
+    // ROK-1891: the leader's Overview checklist talks about a hub, never a WoW guild.
+    test('Overview setup checklist has an invite step and no guild or raid wording', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        await signInOnboardedMember(page, seed.leaderUserId);
+        await page.goto(`/hubs/${seed.hubIds.crew}`);
+        const checklist = page.getByTestId('setup-checklist');
+        await expect(checklist, 'the leader sees the setup checklist').toBeVisible({ timeout: 20_000 });
+        await expect(checklist.getByTestId('setup-step-invite')).toContainText('Invite players to the hub');
+        await expect(checklist, 'no WoW wording on a community hub checklist').not.toContainText(/guild|raid|roster/i);
+    });
+
     test('settings: save the blurb, then Archive the hub', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
         const blurb = `Smoke blurb ${testInfo.project.name} ${Date.now().toString(36)}`;
         await signInOnboardedMember(page, seed.leaderUserId);
-        await page.goto(`/guilds/${seed.hubIds.crew}`);
+        await page.goto(`/hubs/${seed.hubIds.crew}`);
         await page.getByTestId('guild-settings-trigger').click({ timeout: 20_000 });
         const sheet = page.getByTestId('guild-settings-sheet');
         await expect(sheet).toBeVisible();
@@ -332,6 +350,34 @@ test.describe('community hubs — leader', () => {
 });
 
 test.describe('community hubs — admin', () => {
+    test('ROK-1892: an admin proposal skips review and lands on the live hub', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        const admin = await getAdminToken();
+        // Unique per project AND per run (D11); archived below so the game's card stays clean.
+        const name = `Staff Hub ${testInfo.project.name} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const card = await openGamePage(page, seed.gameId);
+
+        await card.getByRole('button', { name: 'Start a community hub' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Start a community hub' });
+        await expect(dialog.getByText(/skips review and goes live right away/)).toBeVisible();
+        await dialog.getByLabel('Hub name').fill(name);
+        await dialog.getByLabel('Short description').fill('A staff smoke-test hub.');
+        await page.getByRole('button', { name: 'Create hub' }).click();
+
+        await expect(page, 'a staff proposer lands on the new hub').toHaveURL(/\/hubs\/\d+$/, { timeout: 20_000 });
+        const hubId = Number(must(/\/hubs\/(\d+)$/.exec(page.url())?.[1], 'hub id in the URL'));
+        try {
+            await expect.poll(async () => (await hubEntry(admin, seed.gameId, hubId))?.name, {
+                message: 'the hub is listed as active on its game',
+            }).toBe(name);
+            const queue = (await apiGet(admin, '/admin/hubs/proposals')) as { items?: Array<{ id: number }> } | null;
+            expect((queue?.items ?? []).map((p) => p.id), 'no review-queue entry').not.toContain(hubId);
+            await expect(page.getByRole('heading', { name, level: 1 }), 'the hub page renders').toBeVisible({ timeout: 15_000 });
+        } finally {
+            await apiPatch(admin, `/hubs/${hubId}/status`, { status: 'archived' }).catch(() => undefined);
+        }
+    });
+
     test('Admin → Hubs approves the seeded proposal; the proposer gets the notification', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();

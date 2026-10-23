@@ -138,7 +138,7 @@ export function AttendanceTracker({ eventId, isOrganizer }: AttendanceTrackerPro
     const markedCount = summary.attended + summary.noShow + summary.excused;
 
     return (
-        <div className="rounded-lg border border-edge bg-panel/50 p-4 space-y-4">
+        <div data-testid="attendance-tracker" className="rounded-lg border border-edge bg-panel/50 p-4 space-y-4">
             <AttendanceHeader isOrganizer={isOrganizer} editMode={editMode} onToggle={() => setEditMode(!editMode)} />
             <AttendanceSummaryBar summary={summary} />
             {markedCount > 0 && <AttendanceRates summary={summary} />}

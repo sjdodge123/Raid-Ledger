@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import type { PelicanServerRowDto } from '@raid-ledger/contract';
 import { Switch } from '../../../components/ui/switch';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { HUB_PAGE_PREFIX } from '../../../components/routing/hub-paths';
 import type { ServerUpdateHandler } from './pelican-server-row';
 import { HUB_NO_GAME_HINT, hubOn } from './pelican-server-hub.helpers';
 
@@ -16,7 +17,7 @@ function HubHint({ row, id }: { row: PelicanServerRowDto; id: string }): JSX.Ele
     const hub = row.communityHub ?? null;
     if (hub !== null && !hub.hidden) {
         return (
-            <Link to={`/guilds/${hub.guildId}`} data-testid={`pelican-server-${row.id}-hub-open`}
+            <Link to={`${HUB_PAGE_PREFIX}${hub.guildId}`} data-testid={`pelican-server-${row.id}-hub-open`}
                 className={`rounded-sm text-xs text-success underline underline-offset-2 ${FOCUS_RING}`}>Open hub</Link>
         );
     }

@@ -5,9 +5,10 @@
  * (pending-for-game, limit, not-in-discord, 429).
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HUB_BLURB_MAX, HUB_NAME_MAX, HUB_NAME_MIN, HubNameSchema } from '@raid-ledger/contract';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { useProposeHub } from './use-game-hubs';
+import { isLiveProposal, useProposeHub } from './use-game-hubs';
 
 export interface ProposalErrors { name?: string | undefined; blurb?: string | undefined; banner?: string | undefined }
 
@@ -45,11 +46,15 @@ export interface ProposalForm {
     reset: () => void;
 }
 
-/** Form state for one game's proposal; closes via `onDone` on success. */
+/**
+ * Form state for one game's proposal; closes via `onDone` on success. A
+ * response that is already a live hub (ROK-1892: staff) opens the hub page.
+ */
 export function useProposalForm(gameId: number, onDone: () => void): ProposalForm {
     const [name, setName] = useState('');
     const [blurb, setBlurb] = useState('');
     const [errors, setErrors] = useState<ProposalErrors>({});
+    const navigate = useNavigate();
     const mutation = useProposeHub(gameId);
     const reset = (): void => { setName(''); setBlurb(''); setErrors({}); };
     const submit = (): void => {
@@ -57,7 +62,11 @@ export function useProposalForm(gameId: number, onDone: () => void): ProposalFor
         setErrors(found);
         if (found.name || found.blurb) return;
         mutation.mutate({ gameId, name: name.trim(), blurb: blurb.trim() }, {
-            onSuccess: () => { reset(); onDone(); },
+            onSuccess: (hub) => {
+                reset();
+                onDone();
+                if (isLiveProposal(hub)) void navigate(`/hubs/${hub.id}`);
+            },
             onError: (err) => setErrors(mapProposalError(err)),
         });
     };

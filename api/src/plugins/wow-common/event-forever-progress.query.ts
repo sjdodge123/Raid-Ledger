@@ -196,3 +196,15 @@ export function loadForeverMemberProgress(
 ): Promise<ForeverEventProgress | null> {
   return loadProgress(db, eventId, userId);
 }
+
+/**
+ * ROK-1911: the event's quest set (instance match + chain steps) for stored
+ * `content_instances`, from the same memoised known-quest read as above.
+ */
+export async function loadEventQuestSet(
+  db: Db,
+  contentInstances: unknown,
+): Promise<ReturnType<typeof selectEventQuests>> {
+  const known = await loadKnownQuests(db);
+  return selectEventQuests(known, contentInstanceIds(contentInstances));
+}

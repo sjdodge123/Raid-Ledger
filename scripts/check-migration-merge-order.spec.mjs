@@ -26,6 +26,7 @@ test('the 0176 shape — inserted mid-journal with an older when — fails and i
     [['0176_lfg_invites', true, false]],
   );
   assert.match(formatReport(violations, 'origin/main'), /Renumber it/);
+  assert.match(formatReport(violations, 'origin/main'), /\.\/scripts\/renumber-branch-migrations\.sh/);
 });
 
 test('a new tail entry stamped older than the base max fails and points at fix-migration-order.sh', () => {

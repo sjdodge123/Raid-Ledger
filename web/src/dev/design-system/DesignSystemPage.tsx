@@ -21,7 +21,9 @@ import { CalendarBusySection } from './calendar-busy-section';
 import { CalendarLayerSection } from './calendar-layer-section';
 import { CalendarHubSection } from './calendar-hub-section';
 import { MapViewportSection } from './map-viewport-section';
+import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
+import { HubWidgetsSection } from './hub-widgets-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -40,6 +42,7 @@ const NAV = [
     { id: 'calendar-busy', label: 'Own busy band' },
     { id: 'calendar-hub', label: 'Hub suffix' },
     { id: 'map-viewport', label: 'Map viewport' },
+    { id: 'hub-widgets', label: 'Hub widgets' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -87,6 +90,8 @@ function Sections(): JSX.Element {
             <CalendarLayerSection />
             <CalendarHubSection />
             <MapViewportSection />
+            <SkillTrendSection />
+            <HubWidgetsSection />
         </>
     );
 }

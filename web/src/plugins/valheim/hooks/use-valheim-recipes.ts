@@ -8,9 +8,11 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
     ValheimRecipeCatalogResponseSchema,
     ValheimRecipePlanResponseSchema,
+    ValheimRecipeStockResponseSchema,
     ValheimRecipeTreeResponseSchema,
     type ValheimRecipeCatalogResponse,
     type ValheimRecipePlanResponse,
+    type ValheimRecipeStockResponse,
     type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
@@ -58,6 +60,8 @@ export const valheimRecipesKeys = {
             personal,
             vehicles,
         ] as const,
+    stock: (scope: Scope, serverId: number, personal: boolean, vehicles: boolean) =>
+        [...valheimRecipesKeys.all, scope, serverId, 'stock', personal, vehicles] as const,
 };
 
 function recipesPath(serverId: number, rest: string, q?: URLSearchParams): string {
@@ -123,6 +127,31 @@ export function useValheimRecipePlan(
         // An emptied list keeps no placeholder: the deleted plan must not linger.
         placeholderData: (prev, prevQuery) =>
             targets === '' ? undefined : sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
+        retry: false,
+    });
+}
+
+/**
+ * ROK-1899 `GET …/recipes/stock?includePersonal&includeVehicles` — the
+ * viewer's netted chest totals (same scope as `/plan`) the crafting window
+ * greys rows against. Pass `includePersonal && hasPersonal`.
+ */
+export function useValheimRecipeStock(
+    serverId: number,
+    includePersonal: boolean,
+    includeVehicles: boolean,
+): UseQueryResult<ValheimRecipeStockResponse> {
+    const scope = useViewerCacheScope();
+    const q = new URLSearchParams({
+        includePersonal: String(includePersonal),
+        includeVehicles: String(includeVehicles),
+    });
+    return useQuery({
+        queryKey: valheimRecipesKeys.stock(scope, serverId, includePersonal, includeVehicles),
+        queryFn: () =>
+            fetchApi(recipesPath(serverId, '/stock', q), {}, ValheimRecipeStockResponseSchema),
+        placeholderData: (prev, prevQuery) =>
+            sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
     });
 }

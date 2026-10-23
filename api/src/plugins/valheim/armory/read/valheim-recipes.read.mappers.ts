@@ -188,6 +188,7 @@ export function emptyCatalogue(): ValheimRecipeCatalogResponse {
     catalogFallback: false,
     entries: [],
     stations: [],
+    ingredients: {},
     itemAtlas: null,
     recipeAtlas: null,
   };
