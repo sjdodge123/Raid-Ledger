@@ -33,6 +33,8 @@ export interface RecipeGraph {
   processors: Map<string, ValheimProcessor>;
   stations: Map<string, ValheimCraftingStation>;
   pieces: Map<string, ValheimPiece>;
+  /** ROK-1948: prefabs with a source in the full graph but none here (spoiler-pruned graphs only). */
+  withheld?: ReadonlySet<string>;
 }
 
 function compareText(a: string, b: string): number {
