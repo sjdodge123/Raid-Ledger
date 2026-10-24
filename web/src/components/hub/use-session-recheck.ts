@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { refreshWithOutcome } from '../../lib/api/refresh-client';
 import { getAuthMethod } from '../../lib/api/silent-reauth';
+import { httpStatusOf } from '../../lib/api/api-error';
 
 /** What the hub's 401 screen shows while/after it re-checks the session. */
 export type SessionCheck = 'checking' | 'rejected' | 'indeterminate';
@@ -11,15 +12,25 @@ async function checkSession(): Promise<'ok' | SessionCheck> {
     return (await refreshWithOutcome()).kind;
 }
 
+/** A refetch after an `ok` re-check: null = it landed (keep 'checking' until unmount). */
+function afterRecovery({ error }: { error: unknown }): SessionCheck | null {
+    if (!error) return null;
+    return httpStatusOf(error) === 401 ? 'rejected' : 'indeterminate';
+}
+
 /**
  * ROK-1947: a hub request's 401 does not prove the session is over — a phone
  * waking up may have hit a 503/429/network blip on the transparent refresh.
  * Re-check through the shared single-flight refresh: `ok` → `onRecovered`
  * (refetch the hub); `rejected` → the sign-in prompt; `indeterminate` → a
- * "couldn't reach the server" state whose `retry` runs the check again. If the
- * refetch after an `ok` still 401s, the session is treated as rejected.
+ * "couldn't reach the server" state whose `retry` runs the check again. The
+ * refetch's own result decides what follows an `ok`: still a 401 → rejected;
+ * any other error → indeterminate; success → stay 'checking' while the page
+ * swaps this screen out (no "session expired" frame on the success path).
  */
-export function useSessionRecheck(onRecovered: () => unknown): { state: SessionCheck; retry: () => void } {
+export function useSessionRecheck(
+    onRecovered: () => Promise<{ error: unknown }>,
+): { state: SessionCheck; retry: () => void } {
     const [attempt, setAttempt] = useState(0);
     const [state, setState] = useState<SessionCheck>('checking');
     const recoveredRef = useRef(onRecovered);
@@ -30,9 +41,8 @@ export function useSessionRecheck(onRecovered: () => unknown): { state: SessionC
         let live = true;
         void (async () => {
             const outcome = await checkSession();
-            if (outcome === 'ok') await Promise.resolve(recoveredRef.current());
-            // Still mounted after a recovered refetch = the hub still answers 401.
-            if (live) setState(outcome === 'ok' ? 'rejected' : outcome);
+            const next = outcome === 'ok' ? afterRecovery(await recoveredRef.current()) : outcome;
+            if (live && next !== null) setState(next);
         })();
         return () => {
             live = false;

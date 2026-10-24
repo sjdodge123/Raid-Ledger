@@ -63,7 +63,7 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
  * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
  * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
  */
-function SessionExpired({ onRecovered }: { onRecovered: () => unknown }): JSX.Element {
+function SessionExpired({ onRecovered }: { onRecovered: () => Promise<{ error: unknown }> }): JSX.Element {
     const signIn = useSignInAgain();
     const { state, retry } = useSessionRecheck(onRecovered);
     if (state === 'checking') return <LoadingState />;
@@ -85,7 +85,6 @@ function SessionExpired({ onRecovered }: { onRecovered: () => unknown }): JSX.El
 
 function ErrorState({ error, onRetry }: { error: Error; onRetry: () => unknown }): JSX.Element {
     const status = httpStatusOf(error);
-    if (status === 401) return <SessionExpired onRecovered={onRetry} />;
     if (status === 403) {
         return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
     }
@@ -264,7 +263,13 @@ export function GuildPage(): JSX.Element {
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
-    if (query.error) return <ErrorState error={query.error} onRetry={() => query.refetch({ cancelRefetch: false })} />;
+    const refetchPage = () => query.refetch({ cancelRefetch: false });
+    // A drop of the viewer's caches (useAuth's REJECTED refresh) resets the
+    // page query and leaves it idle with no token to refetch it — that is a
+    // session question too, never a skeleton forever (ROK-1947).
+    const stranded = query.status === 'pending' && query.fetchStatus === 'idle';
+    if (stranded || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={refetchPage} />;
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;

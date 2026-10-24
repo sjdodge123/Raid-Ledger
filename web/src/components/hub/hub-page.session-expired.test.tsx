@@ -7,13 +7,14 @@
  * a refresh that lands refetches the hub and shows it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
-import { renderWithProviders } from '../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../test/render-helpers';
+import { dropViewerPrivateCaches } from '../../hooks/viewer-private-caches';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { AUTH_METHOD_KEY, USER_CACHE_KEY } from '../../lib/api/auth-storage-keys';
 import { GuildPage } from './hub-page';
@@ -60,14 +61,26 @@ function serve(...statuses: number[]): void {
     );
 }
 
-function renderPage() {
+function renderPage(queryClient = createTestQueryClient()) {
     return renderWithProviders(
         <Routes>
             <Route path="/hubs/:id" element={<GuildPage />} />
             <Route path="/" element={<p data-testid="login-screen">login</p>} />
         </Routes>,
-        { initialEntries: ['/hubs/7'] },
+        { initialEntries: ['/hubs/7'], queryClient },
     );
+}
+
+/** Every `data-testid` the page ever inserted, so a one-frame flash is caught. */
+function recordTestIds(): { seen: Set<string>; stop: () => void } {
+    const seen = new Set<string>();
+    const observer = new MutationObserver((records) => {
+        for (const node of records.flatMap((r) => [...r.addedNodes])) {
+            if (node instanceof HTMLElement && node.dataset.testid) seen.add(node.dataset.testid);
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return { seen, stop: () => observer.disconnect() };
 }
 
 beforeEach(() => { activateWowPlugin(); refreshCalls = 0; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
@@ -108,13 +121,27 @@ describe('GuildPage — expired session (ROK-1947)', () => {
         expect(await screen.findByTestId('guild-hero'), 'Try again re-runs the check and shows the hub').toBeInTheDocument();
     });
 
+    it('a session drop that resets the hub query (a rejected useAuth refresh) still offers Sign in', async () => {
+        serve(503);
+        const queryClient = createTestQueryClient();
+        renderPage(queryClient);
+        expect(await screen.findByTestId('guild-session-expired')).toHaveTextContent(EXPIRED);
+        // What useAuth's handleRefreshFailure does: reset the observed page query, no token to refetch it.
+        act(() => dropViewerPrivateCaches(queryClient));
+        await waitFor(() => {
+            expect(screen.queryByTestId('guild-session-expired'), 'a reset, idle hub query must offer Sign in, not an endless skeleton').not.toBeNull();
+        }, { timeout: 3000 });
+    });
+
     it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         // The request's own 401 backstop refresh blips (503); the re-check's refresh lands.
         serve(503, 200);
+        const ids = recordTestIds();
         renderPage();
         expect(await screen.findByTestId('guild-hero'), 'a refresh that lands must show the hub').toBeInTheDocument();
-        expect(screen.queryByTestId('guild-session-expired')).toBeNull();
+        ids.stop();
+        expect([...ids.seen], 'a recovered re-check must never flash "session expired"').not.toContain('guild-session-expired');
         expect(localStorage.getItem(AUTH_METHOD_KEY), 'the viewer stays signed in').toBe('discord');
     });
 });
