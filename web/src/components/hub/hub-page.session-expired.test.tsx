@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
@@ -160,7 +160,7 @@ describe('GuildPage — expired session (ROK-1947)', () => {
 });
 
 describe('GuildPage — session drops and recovery (ROK-1947)', () => {
-    it('a session drop that strands an in-flight hub query offers Sign in, with no refresh of its own', async () => {
+    it('a pending+idle hub query (a cache drop or an impersonation hand-off) shows the skeleton, never the expired prompt', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         serve(503);
         let hubRequested = false;
@@ -171,22 +171,20 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
             return HttpResponse.json({ message: 'gone' }, { status: 500 });
         }));
         const queryClient = createTestQueryClient();
-        // The drop that strands the page is useAuth's REJECTED refresh, which
-        // settles `['auth','me']` to null (handleRefreshFailure) and keeps the
-        // marker. Seeding that state keeps useAuth's own check out of the count:
-        // left errored, the Sign in button's useAuth would refetch it on mount.
+        // Keep useAuth's own `/auth/me` check out of the count.
         queryClient.setQueryData(['auth', 'me'], null);
         renderPage(queryClient);
         await waitFor(() => expect(hubRequested, 'the hub request must be in flight').toBe(true));
-        const before = refreshCalls;
-        // What useAuth's handleRefreshFailure does: reset the observed page query, no token to refetch it.
+        // A drop of the viewer's caches (useAuth's rejected refresh, or
+        // cross-tab-auth's followIdentityChange before it re-mints the token)
+        // resets the observed page query and leaves it idle.
         act(() => dropViewerPrivateCaches(queryClient));
-        await waitFor(() => expect(screen.queryByTestId('guild-loading'), 'a stranded hub query must not sit on the skeleton').toBeNull());
-        expect(screen.queryByTestId('guild-session-expired'), 'a stranded hub query means the session is over: offer Sign in').not.toBeNull();
-        expect(refreshCalls, 'the drop already decided the session; the stranded page must not refresh again').toBe(before);
-        expect(posts.map((p) => p.origin), 'the stranded page never re-checks the session').not.toContain('recheck');
+        expect(screen.queryByTestId('guild-session-expired'), 'a pending+idle query is not a rejected session: Sign in there would revoke a live hand-off').toBeNull();
+        expect(screen.getByTestId('guild-loading'), 'a pending+idle hub query shows the skeleton').toBeInTheDocument();
         release();
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(screen.queryByTestId('guild-session-expired'), 'the stranded request settling must not raise the prompt either').toBeNull();
+        expect(posts.map((p) => p.origin), 'a pending+idle page never re-checks the session').not.toContain('recheck');
     });
 
     it('under AuthGuard, a rejected useAuth refresh on the hub lands on the login screen with the hub saved', async () => {
@@ -214,6 +212,26 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
         // screen itself must add none.
         expect(after.filter((p) => p.stranded), 'no refresh POST while the stranded Sign in screen is up').toEqual([]);
         expect(after.map((p) => p.origin), 'every POST is useAuth or a request backstop').not.toContain('other');
+    });
+
+    it('a refresh that lands but a hub GET that still 401s settles on Sign in after ONE re-check, with no loop', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        serve(200);
+        // An uncached hub whose refreshed GET still 401s, with real network
+        // latency so the refetch's own "fetching" frame renders.
+        server.use(http.get(`${API}/guilds/7`, async () => {
+            await delay(20);
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }));
+        const queryClient = createTestQueryClient();
+        renderPage(queryClient);
+        const rechecks = () => posts.filter((p) => p.origin === 'recheck').length;
+        await waitFor(() => expect(screen.queryByTestId('guild-session-expired') !== null || rechecks() > 1, 'the re-check must settle or repeat').toBe(true));
+        expect(rechecks(), 'one 401 -> one re-check refresh; a still-401 refetch must not start another').toBe(1);
+        expect(screen.getByTestId('guild-session-expired'), 'a refetch that still 401s means the session is rejected').toHaveTextContent(EXPIRED);
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(rechecks(), 'Sign in is final: no further re-check once the refetch settled').toBe(1);
+        expect(screen.getByTestId('guild-session-expired'), 'Sign in stays up').toBeInTheDocument();
     });
 
     it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
