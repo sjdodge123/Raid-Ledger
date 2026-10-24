@@ -4,7 +4,17 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNull,
+  notExists,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -267,7 +277,10 @@ export class ValheimArmoryReadRepository {
     return row ?? null;
   }
 
-  /** A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6). */
+  /**
+   * A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6) —
+   * never a base map of that server (ROK-1949 D8: those are served masked).
+   */
   async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
     const [row] = await this.db
       .select({ storagePath: blobs.storagePath })
@@ -277,6 +290,17 @@ export class ValheimArmoryReadRepository {
           eq(blobs.pelicanServerId, serverId),
           eq(blobs.sha256, sha256),
           eq(blobs.contentType, 'image/png'),
+          notExists(
+            this.db
+              .select({ one: sql`1` })
+              .from(m)
+              .where(
+                and(
+                  eq(m.pelicanServerId, serverId),
+                  eq(m.baseMapSha256, sha256),
+                ),
+              ),
+          ),
         ),
       )
       .limit(1);
