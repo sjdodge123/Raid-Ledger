@@ -3591,3 +3591,8 @@ same day (#1278, #1279, #1280).
 - **low** `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — one hub lookup per poll even when every reminder is deduped. Suggested: resolve the hub only after dedupe finds a recipient.
 - **med** `web/src/components/hub/hub-page.tsx:266` — the ROK-1947 recovery latch keys only on `dataUpdatedAt`; a 403/404/5xx from another refetch path can sit behind a stale Sign in until reload. Suggested: also store/compare `errorUpdatedAt`.
 - **low** `web/src/lib/api/resume-refresh.ts:44-47` — a batch refetch that never settles keeps the batch guard set and drops later refresh notifications. Suggested: race the batch with a ~15 s timeout.
+### 2026-10-24 — feat/rok-1859-chest-bases (surfaced during review, deferred)
+
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials-bases.queries.ts:60` — `selectStackSums` returns one row per chest per item to Node (fine at prod's ~111 chests, but ~10^5–10^6 rows per Materials read at the 50k-container cap) and redoes the work of `totals()`. Suggested: sum per base in SQL after the base assignment.
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials.service.ts:184` — the chest detail route reads the whole scope's base inputs to number one chest (O(scan) per detail open). Suggested: cache the base view per transaction, or store the base/index with the scan.
+- **low** `web/src/plugins/valheim/map/use-chest-layer.ts:134` — the Map's Chests layer (on by default) pulls the full `/materials` read only for base display names. Suggested: add `bases` (key, x, z) to the `/containers` list response (additive contract change) and drop the `/materials` call.
