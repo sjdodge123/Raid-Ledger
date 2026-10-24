@@ -75,6 +75,20 @@ describe('ValheimMaterialsTab — Base filter (ROK-1859)', () => {
         ]);
     });
 
+    it('the chest detail is titled with the display name', async () => {
+        server.use(valheimMaterialsHandler(withBases()));
+        renderTab();
+        const list = await screen.findByRole('list', { name: 'Chests' });
+        await userEvent.click(
+            within(list).getByRole('button', { name: /Wood chest 2/ }),
+        );
+        expect(
+            await screen.findByRole('heading', {
+                name: 'Wood chest 2 · Base near x 3, z 53',
+            }),
+        ).toBeInTheDocument();
+    });
+
     it('choosing a base swaps in its totals, narrows the chests and writes base= to the hash', async () => {
         server.use(valheimMaterialsHandler(withBases()));
         renderTab();
