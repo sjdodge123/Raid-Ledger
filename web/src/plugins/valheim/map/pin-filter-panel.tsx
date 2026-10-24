@@ -26,7 +26,13 @@ export interface PinFilterPanelProps {
     onClearAll: () => void;
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+function Section({
+    title,
+    children,
+}: {
+    title: string;
+    children: ReactNode;
+}): JSX.Element {
     return (
         <section className="grid gap-2" aria-label={title}>
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -35,19 +41,39 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
     );
 }
 
-function TypeChips({ filter, onToggle, onAll }: {
-    filter: PinFilter; onToggle: PinFilterPanelState['onToggleType']; onAll: () => void;
+function TypeChips({
+    filter,
+    onToggle,
+    onAll,
+}: {
+    filter: PinFilter;
+    onToggle: PinFilterPanelState['onToggleType'];
+    onAll: () => void;
 }): JSX.Element {
     return (
         <Section title="Pin types">
-            <div className="flex flex-wrap gap-2" data-testid="map-pin-filter-types">
+            <div
+                className="flex flex-wrap gap-2"
+                data-testid="map-pin-filter-types"
+            >
                 {PIN_TYPE_GROUPS.map((g) => (
-                    <FilterChip key={g.id} label={g.label} icon={g.Icon} testId={`map-pin-type-${g.id}`}
-                        pressed={filter.types?.has(g.id) === true} onPressedChange={() => onToggle(g.id)} />
+                    <FilterChip
+                        key={g.id}
+                        label={g.label}
+                        icon={g.Icon}
+                        testId={`map-pin-type-${g.id}`}
+                        pressed={filter.types?.has(g.id) === true}
+                        onPressedChange={() => onToggle(g.id)}
+                    />
                 ))}
             </div>
-            <Button variant="ghost" size="md" className="justify-self-start" disabled={filter.types === null}
-                onClick={onAll}>
+            <Button
+                variant="ghost"
+                size="md"
+                className="justify-self-start"
+                disabled={filter.types === null}
+                onClick={onAll}
+            >
                 All types
             </Button>
         </Section>
@@ -59,7 +85,13 @@ function TypeChips({ filter, onToggle, onAll }: {
  * `query` this box did not send (Back/Forward, a link) replaces the draft; the
  * commit of the box's own debounced write does not, so typing past it survives.
  */
-function LabelSearch({ query, onChange }: { query: string; onChange: PinFilterPanelState['onChange'] }): JSX.Element {
+function LabelSearch({
+    query,
+    onChange,
+}: {
+    query: string;
+    onChange: PinFilterPanelState['onChange'];
+}): JSX.Element {
     const [text, setText] = useState(query);
     const [synced, setSynced] = useState(query);
     const [lastSent, setLastSent] = useState(query);
@@ -71,13 +103,21 @@ function LabelSearch({ query, onChange }: { query: string; onChange: PinFilterPa
         }
     }
     const send = (q: string): void => {
-        setLastSent(q);
+        // The URL stores `q` normalised (pin-filter.ts writePinFilter); remember that form.
+        setLastSent(q.trim().slice(0, PIN_QUERY_MAX));
         onChange({ query: q });
     };
     return (
         <Section title="Search labels">
-            <SearchInput value={text} onChange={setText} label="Search pin labels" maxLength={PIN_QUERY_MAX}
-                placeholder="Pin label" onSearch={send} onClear={() => send('')} />
+            <SearchInput
+                value={text}
+                onChange={setText}
+                label="Search pin labels"
+                maxLength={PIN_QUERY_MAX}
+                placeholder="Pin label"
+                onSearch={send}
+                onClear={() => send('')}
+            />
         </Section>
     );
 }
@@ -87,7 +127,13 @@ function LabelSearch({ query, onChange }: { query: string; onChange: PinFilterPa
  * transition, so a box bound straight to `checked` would snap back unchecked
  * until it lands. A new `checked` (the write, a clear, a reload) wins.
  */
-function HideCrossed({ checked, onChange }: { checked: boolean; onChange: PinFilterPanelState['onChange'] }): JSX.Element {
+function HideCrossed({
+    checked,
+    onChange,
+}: {
+    checked: boolean;
+    onChange: PinFilterPanelState['onChange'];
+}): JSX.Element {
     const [shown, setShown] = useState(checked);
     const [synced, setSynced] = useState(checked);
     if (synced !== checked) {
@@ -95,25 +141,53 @@ function HideCrossed({ checked, onChange }: { checked: boolean; onChange: PinFil
         setShown(checked);
     }
     return (
-        <Checkbox label="Hide crossed-out pins" checked={shown}
+        <Checkbox
+            label="Hide crossed-out pins"
+            checked={shown}
             onChange={(e) => {
                 setShown(e.target.checked);
                 onChange({ hideCrossed: e.target.checked });
-            }} />
+            }}
+        />
     );
 }
 
 /** The four filter sections in the shared filter entry. */
-export function PinFilterPanel({ panel, serverId, isOpen, onOpenChange, resetKey, onClearAll }: PinFilterPanelProps): JSX.Element {
+export function PinFilterPanel({
+    panel,
+    serverId,
+    isOpen,
+    onOpenChange,
+    resetKey,
+    onClearAll,
+}: PinFilterPanelProps): JSX.Element {
     const { filter, onChange } = panel;
     return (
-        <FilterEntry activeCount={panel.activeCount} isOpen={isOpen} onOpenChange={onOpenChange} onClearAll={onClearAll}>
+        <FilterEntry
+            activeCount={panel.activeCount}
+            isOpen={isOpen}
+            onOpenChange={onOpenChange}
+            onClearAll={onClearAll}
+        >
             <div className="grid gap-4" data-testid="map-pin-filter-panel">
-                <TypeChips filter={filter} onToggle={panel.onToggleType} onAll={() => onChange({ types: null })} />
+                <TypeChips
+                    filter={filter}
+                    onToggle={panel.onToggleType}
+                    onAll={() => onChange({ types: null })}
+                />
                 {panel.playersAvailable && serverId !== undefined && (
-                    <PinFilterPlayers key={`players-${resetKey}`} players={filter.players} serverId={serverId} onChange={onChange} />
+                    <PinFilterPlayers
+                        key={`players-${resetKey}`}
+                        players={filter.players}
+                        serverId={serverId}
+                        onChange={onChange}
+                    />
                 )}
-                <LabelSearch key={`search-${resetKey}`} query={filter.query} onChange={onChange} />
+                <LabelSearch
+                    key={`search-${resetKey}`}
+                    query={filter.query}
+                    onChange={onChange}
+                />
                 <HideCrossed checked={filter.hideCrossed} onChange={onChange} />
             </div>
         </FilterEntry>
