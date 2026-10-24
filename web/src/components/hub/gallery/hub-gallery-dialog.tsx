@@ -7,7 +7,7 @@
  * Hide / Unhide; staff Remove (two-step, inline — no stacked confirm). Closing
  * (Escape, ×, backdrop, swipe) returns focus to the element that opened it.
  */
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { isOperatorOrAdmin, useAuth } from '../../../hooks/use-auth';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
@@ -39,17 +39,23 @@ function useViewerNav(pages: HubGalleryPages, index: number, setIndex: (i: numbe
     return { prev, next };
 }
 
-function useArrowKeys(active: boolean, prev: (() => void) | null, next: (() => void) | null): void {
+/** True when `target` sits inside the dialog that holds `scope` (keys aimed at the page behind it are not ours). */
+function inDialog(scope: RefObject<HTMLElement | null>, target: EventTarget | null): boolean {
+    const root = scope.current?.closest('[role="dialog"]') ?? scope.current;
+    return root != null && target instanceof Node && root.contains(target);
+}
+
+function useArrowKeys(scope: RefObject<HTMLElement | null>, active: boolean, prev: (() => void) | null, next: (() => void) | null): void {
     useEffect(() => {
         if (!active) return undefined;
         const onKey = (e: KeyboardEvent): void => {
-            if (isTyping(e.target)) return;
+            if (!inDialog(scope, e.target) || isTyping(e.target)) return;
             if (e.key === 'ArrowLeft' && prev !== null) { e.preventDefault(); prev(); }
             if (e.key === 'ArrowRight' && next !== null) { e.preventDefault(); next(); }
         };
         document.addEventListener('keydown', onKey);
         return () => document.removeEventListener('keydown', onKey);
-    }, [active, prev, next]);
+    }, [scope, active, prev, next]);
 }
 
 function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
@@ -70,12 +76,13 @@ interface GalleryBodyProps {
     index: number;
     nav: ReturnType<typeof useViewerNav>;
     onOpen: (index: number) => void;
+    scope: RefObject<HTMLDivElement | null>;
 }
 
-function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen }: GalleryBodyProps): JSX.Element {
+function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope }: GalleryBodyProps): JSX.Element {
     const item = pages.items[index];
     return (
-        <div className="flex flex-col gap-3">
+        <div ref={scope} className="flex flex-col gap-3">
             <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />
             {pages.loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
             {!pages.loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
@@ -98,12 +105,13 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     const index = Math.max(0, Math.min(rawIndex, pages.items.length - 1));
     const item = pages.items[index];
     const nav = useViewerNav(pages, index, setIndex);
-    useArrowKeys(mode === 'viewer' && item !== undefined, nav.prev, nav.next);
+    const scope = useRef<HTMLDivElement>(null);
+    useArrowKeys(scope, mode === 'viewer' && item !== undefined, nav.prev, nav.next);
     const close = useCloseAndReturnFocus(request);
     const changeFilter = (f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); };
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
-            nav={nav} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
+            nav={nav} scope={scope} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
     );
     const footer = (
         <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' ? item : undefined} pages={pages}
