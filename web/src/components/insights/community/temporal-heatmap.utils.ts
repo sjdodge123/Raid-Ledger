@@ -29,10 +29,15 @@ export function formatHour12(hour: number): string {
 
 /** Tooltip text for a peak cell, e.g. "Sat 9pm · 17 sessions". */
 export function peakCellLabel(dayLabel: string, hour: number, activity: number): string {
-    return `${dayLabel} ${formatHour12(hour)} · ${activity} sessions`;
+    return `${dayLabel} ${formatHour12(hour)} · ${sessionsLabel(activity)}`;
 }
 
 /** Index each weekday's top hours by cell key → that hour's session count. */
 export function buildPeakMap(peakHours: PeakHours): Map<string, number> {
     return new Map(peakHours.map((p) => [cellKey(p.weekday, p.hour), p.activity]));
+}
+
+/** "1 session" / "3 sessions". */
+export function sessionsLabel(count: number): string {
+    return `${count} ${count === 1 ? 'session' : 'sessions'}`;
 }

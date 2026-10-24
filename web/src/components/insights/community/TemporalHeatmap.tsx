@@ -1,6 +1,6 @@
 import type { CommunityTemporalResponseDto } from '@raid-ledger/contract';
 import {
-    WEEKDAY_LABELS, PEAK_MARK, buildPeakMap, cellKey, peakCellLabel,
+    WEEKDAY_LABELS, PEAK_MARK, buildPeakMap, cellKey, peakCellLabel, sessionsLabel,
 } from './temporal-heatmap.utils';
 
 interface Props {
@@ -83,7 +83,7 @@ function cellA11y(label: string, hour: number, activity: number, peakActivity: n
     'aria-label': string; title?: string; 'data-peak'?: 'true'; className: string;
 } {
     if (peakActivity === undefined) {
-        return { 'aria-label': `${label}, ${hour}:00 — ${activity} sessions`, className: CELL_BASE };
+        return { 'aria-label': `${label}, ${hour}:00 — ${sessionsLabel(activity)}`, className: CELL_BASE };
     }
     const peakLabel = peakCellLabel(label, hour, peakActivity);
     return {

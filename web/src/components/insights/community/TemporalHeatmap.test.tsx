@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TemporalHeatmap } from './TemporalHeatmap';
+import { sessionsLabel } from './temporal-heatmap.utils';
 
 describe('TemporalHeatmap', () => {
     it('renders empty state for no data', () => {
@@ -20,6 +21,12 @@ describe('TemporalHeatmap', () => {
         );
         expect(screen.getByTestId('temporal-heatmap')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Mon, 20:00 — 12 sessions/i })).toBeInTheDocument();
+    });
+
+    it('says "1 session" for a single session and "N sessions" otherwise', () => {
+        expect(sessionsLabel(1)).toBe('1 session');
+        expect(sessionsLabel(0)).toBe('0 sessions');
+        expect(sessionsLabel(17)).toBe('17 sessions');
     });
 
     describe('peak hours on the heatmap (ROK-1936)', () => {
