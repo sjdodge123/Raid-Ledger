@@ -272,7 +272,7 @@ export function GuildPage(): JSX.Element {
     // so the session is already decided: offer Sign in, never re-check it (a
     // second refresh would race another tab's cookie rotation) and never a
     // skeleton forever (ROK-1947). AuthGuard usually redirects first.
-    if (query.status === 'pending' && query.fetchStatus === 'idle') return <SessionExpired onRecovered={refetchPage} />;
+    if (query.status === 'pending' && query.fetchStatus === 'idle') return <SignInPrompt />;
     if (httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={refetchPage} />;
     if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
