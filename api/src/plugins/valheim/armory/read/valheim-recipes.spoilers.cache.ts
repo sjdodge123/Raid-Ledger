@@ -93,8 +93,8 @@ export async function visibleRecipes(
 
 /**
  * Catalogue stations; while protected the `★ max N` badge is clamped (Q4) at
- * stations where a piece built there is hidden. A graph without
- * `hiddenPiecesAt` clamps every station (fail closed).
+ * every station once any piece is hidden; nothing hidden → real values. A
+ * graph without `hiddenPiecesAt` clamps every station (fail closed).
  */
 export function shownStations(
   graph: RecipeGraph,

@@ -111,7 +111,7 @@ describe('shownStations (Q4) on the demo seed', () => {
     ).toEqual({ piece_workbench: 5, forge: 7 });
   });
 
-  it("'early' preset: a piece built at the Workbench is hidden, so its badge is clamped below 5", () => {
+  it("'early' preset: a piece is hidden, so the Workbench badge is clamped below 5", () => {
     const out = badges(RECIPES_DEMO_EARLY_KNOWN);
     expect(Object.keys(out)).toEqual(['piece_workbench']);
     expect(out.piece_workbench).toBeLessThan(5);

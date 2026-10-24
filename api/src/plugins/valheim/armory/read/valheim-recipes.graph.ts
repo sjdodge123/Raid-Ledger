@@ -37,8 +37,8 @@ export interface RecipeGraph {
   withheld?: ReadonlySet<string>;
   /**
    * ROK-1948 Q4: stations with a piece built there that the pruning hid — a
-   * possible undiscovered extension, so the `★ max N` badge is clamped only
-   * there (spoiler-pruned graphs only).
+   * possible undiscovered extension. Non-empty → every `★ max N` badge is
+   * clamped; empty → none is (spoiler-pruned graphs only).
    */
   hiddenPiecesAt?: ReadonlySet<string>;
 }

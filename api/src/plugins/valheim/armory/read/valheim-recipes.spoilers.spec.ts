@@ -433,13 +433,22 @@ describe('clampStationLevels (Q4)', () => {
     expect(clampStationLevels([station('forge', 7)], [])[0]?.maxLevel).toBe(1);
   });
 
-  it('clamps only stations in hiddenAt; the rest keep their real maxLevel', () => {
+  it('any hidden piece clamps EVERY station, not only the one it is built at', () => {
     const out = clampStationLevels(
       [station('piece_workbench', 5), station('forge', 7)],
       [entry(1, [2, 3])],
       new Set(['forge']),
     );
-    expect(out.map((s) => s.maxLevel)).toEqual([5, 1]);
+    expect(out.map((s) => s.maxLevel)).toEqual([3, 1]);
+  });
+
+  it('no hidden piece anywhere keeps every real maxLevel', () => {
+    const out = clampStationLevels(
+      [station('piece_workbench', 5), station('forge', 7)],
+      [entry(1, [2, 3])],
+      new Set(),
+    );
+    expect(out.map((s) => s.maxLevel)).toEqual([5, 7]);
   });
 
   it('never exceeds the real maxLevel', () => {

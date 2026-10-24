@@ -246,11 +246,12 @@ export function spoilerGraph(
 /**
  * Q4 (ruled): a station's `maxLevel` would reveal how many upgrades exist, so
  * clamp it to the highest level a shown craft or upgrade step needs there
- * (min 1, never above the real value). Apply only while `protected`, and only
- * at stations in `hiddenAt` (a piece built there is hidden — A4's extensions);
- * where every such piece is visible the real value reveals nothing (spec §6
- * L3: an all-knowing server keeps ROK-1899's `max 5`). No `hiddenAt` → clamp
- * every station.
+ * (min 1, never above the real value). Apply only while `protected`, and to
+ * EVERY station as soon as any piece is hidden (`hiddenAt` non-empty): the
+ * export has no `extends` field, so a hidden extension cannot be tied to the
+ * station it upgrades (fail closed). When no piece is hidden the real values
+ * reveal nothing (spec §6 L3: an all-knowing server keeps ROK-1899's
+ * `max 5`). No `hiddenAt` → clamp every station.
  */
 export function clampStationLevels(
   stations: readonly ValheimRecipeStation[],
@@ -265,9 +266,9 @@ export function clampStationLevels(
     if (e.craft) note(e.craft.station, e.craft.stationLevel);
     for (const u of e.upgrades) note(u.station, u.stationLevel);
   }
-  return stations.map((s) =>
-    hiddenAt === undefined || hiddenAt.has(s.prefab)
-      ? { ...s, maxLevel: Math.min(s.maxLevel, need.get(s.prefab) ?? 1) }
-      : s,
-  );
+  if (hiddenAt !== undefined && hiddenAt.size === 0) return [...stations];
+  return stations.map((s) => ({
+    ...s,
+    maxLevel: Math.min(s.maxLevel, need.get(s.prefab) ?? 1),
+  }));
 }
