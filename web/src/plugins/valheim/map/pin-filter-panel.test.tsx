@@ -28,6 +28,7 @@ const RULED_ORDER = [
     'death',
     'bed',
     'portal',
+    'scanned-portal',
     'boss',
     'home',
     'fire',
@@ -61,6 +62,9 @@ function summaryState(over: Partial<PinFilterSummary> = {}): PinFilterSummary {
         truncated: false,
         onRetry: vi.fn(),
         onClear: vi.fn(),
+        portalsError: false,
+        portalsOmitted: 0,
+        onRetryPortals: vi.fn(),
         ...over,
     };
 }
@@ -89,7 +93,7 @@ beforeEach(() => {
 });
 
 describe('PinFilterPanel — pin types (S18)', () => {
-    it('renders all 11 chips in the ruled order, none pressed for every type', () => {
+    it('renders all 12 chips in the ruled order, none pressed for every type', () => {
         renderFilters(panelState());
         const chips = within(
             screen.getByTestId('map-pin-filter-types'),
@@ -277,6 +281,22 @@ describe('PinSummaryLine (D15)', () => {
         );
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
         expect(onClear).toHaveBeenCalledTimes(1);
+    });
+
+    it('ROK-1946 D15: a failed portal layer shows its own danger chip + Retry; omitted portals are counted', () => {
+        const onRetryPortals = vi.fn();
+        renderWithProviders(
+            <PinSummaryLine
+                summary={summaryState({ portalsError: true, portalsOmitted: 4, onRetryPortals })}
+                onClear={vi.fn()}
+            />,
+        );
+        const line = screen.getByRole('status');
+        expect(line).toHaveTextContent('Portals could not be loaded');
+        expect(line).toHaveTextContent('Some portals were not uploaded (4).');
+        expect(line).not.toHaveTextContent('Pins could not be loaded');
+        fireEvent.click(within(line).getByRole('button', { name: 'Retry' }));
+        expect(onRetryPortals).toHaveBeenCalledTimes(1);
     });
 
     it('no active filters and no pins says nothing extra', () => {
