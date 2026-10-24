@@ -24,6 +24,12 @@ import {
   spoilerGraph,
 } from './valheim-recipes.spoilers';
 
+/** What the cache reads: the server's profile fingerprint and lists. */
+export type SpoilerReader = Pick<
+  RecipesReader,
+  'profileFingerprint' | 'serverKnownLists'
+>;
+
 /** The graph every projection runs on, and the response-level status. */
 export interface VisibleRecipes {
   graph: RecipeGraph;
@@ -63,7 +69,7 @@ export class VisibleGraphCache {
 
 /** The server-wide status alone (no set yet → nothing to prune). */
 export async function serverSpoilers(
-  r: RecipesReader,
+  r: SpoilerReader,
   serverId: number,
 ): Promise<ValheimRecipeSpoilers> {
   return serverKnown(await r.serverKnownLists(serverId)).status;
@@ -72,7 +78,7 @@ export async function serverSpoilers(
 /** `full` pruned to what anyone on the set's server has discovered. */
 export async function visibleRecipes(
   cache: VisibleGraphCache,
-  r: RecipesReader,
+  r: SpoilerReader,
   set: ValheimRecipeSetRow,
   full: RecipeGraph,
 ): Promise<VisibleRecipes> {
