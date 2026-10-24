@@ -1,16 +1,22 @@
 /** ROK-1853 — "where is it": the visible chests, each opening its contents. */
 import type { JSX } from 'react';
-import type { ValheimContainerSummary } from '@raid-ledger/contract';
+import type {
+    ValheimContainerSummary,
+    ValheimMaterialsBase,
+} from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { buttonClass } from '../../../components/ui/button-classes';
 import { StatusChip } from '../../../components/ui/status-chip';
 import type { ItemIconContext } from '../character/use-item-icons';
 import { MapPinIcon } from '@heroicons/react/24/outline';
 import { chestFocusHash } from '../map/chest-focus';
-import { chestLabel, formatCoords } from './materials.helpers';
+import { chestDisplayName } from './materials-bases.helpers';
+import { formatCoords } from './materials.helpers';
 
 interface ChestListProps {
     containers: readonly ValheimContainerSummary[];
+    /** ROK-1859: names each chest "Wood chest 2 · Base near x…, z…". */
+    bases: readonly ValheimMaterialsBase[];
     ctx: ItemIconContext;
     onOpen: (chest: ValheimContainerSummary) => void;
     /** ROK-1889: the filtered item's prefab — carried into the map link. */
@@ -27,17 +33,17 @@ const MAP_LINK_CLASS = buttonClass({
 function MapLink({
     chest,
     holding,
-    ctx,
+    name,
 }: {
     chest: ValheimContainerSummary;
     holding: string | null;
-    ctx: ItemIconContext;
+    name: string;
 }): JSX.Element {
     const { prefab, x, y, z } = chest;
     return (
         <a
             href={chestFocusHash({ prefab, x, y, z, item: holding })}
-            aria-label={`Show ${chestLabel(chest, ctx)} at ${formatCoords(x, z)} on the map`}
+            aria-label={`Show ${name} at ${formatCoords(x, z)} on the map`}
             data-testid="valheim-chest-map-link"
             className={MAP_LINK_CLASS}
         >
@@ -78,15 +84,15 @@ function ChestChips({
 
 function ChestRowText({
     chest,
-    ctx,
+    name,
 }: {
     chest: ValheimContainerSummary;
-    ctx: ItemIconContext;
+    name: string;
 }): JSX.Element {
     return (
         <span className="min-w-0 flex-1">
             <span className="block truncate text-sm text-foreground">
-                {chestLabel(chest, ctx)}
+                {name}
             </span>
             <span className="block text-xs text-muted tabular-nums">
                 {formatCoords(chest.x, chest.z)} · {chest.usedSlots}/
@@ -98,12 +104,12 @@ function ChestRowText({
 
 function ChestRow({
     chest,
-    ctx,
+    name,
     onOpen,
     holding,
 }: {
     chest: ValheimContainerSummary;
-    ctx: ItemIconContext;
+    name: string;
     onOpen: (chest: ValheimContainerSummary) => void;
     holding: string | null;
 }): JSX.Element {
@@ -115,16 +121,17 @@ function ChestRow({
                 onClick={() => onOpen(chest)}
                 className="min-w-0 flex-1 justify-start text-left"
             >
-                <ChestRowText chest={chest} ctx={ctx} />
+                <ChestRowText chest={chest} name={name} />
                 <ChestChips chest={chest} />
             </Button>
-            <MapLink chest={chest} holding={holding} ctx={ctx} />
+            <MapLink chest={chest} holding={holding} name={name} />
         </li>
     );
 }
 
 export function ChestList({
     containers,
+    bases,
     ctx,
     onOpen,
     holding = null,
@@ -141,7 +148,7 @@ export function ChestList({
                 <ChestRow
                     key={c.key}
                     chest={c}
-                    ctx={ctx}
+                    name={chestDisplayName(c, bases, ctx)}
                     onOpen={onOpen}
                     holding={holding}
                 />
