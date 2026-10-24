@@ -232,6 +232,8 @@ export * from './valheim-materials.schema.js';
 export * from './valheim-recipes.schema.js';
 // Hub Deaths widget + death-pin layer (ROK-1930).
 export * from './valheim-deaths.schema.js';
+// Map tab cross-player pin layer (ROK-1943).
+export * from './valheim-server-pins.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
