@@ -86,12 +86,15 @@ type ReliabilityRow = Record<string, unknown> & {
  * ROK-1938: at most one `late` voice row per signup. LATERAL + LIMIT 1 so a
  * signup matched by both discord id and user id never multiplies COUNT(*).
  * Literal aliases only — no column interpolation (correlated refs bind wrong).
+ * The outer attended check lets non-attended signups skip the index lookup;
+ * LATE_COUNT still filters on it, so results are unchanged.
  */
 const LATE_VOICE_JOIN = sql`
   LEFT JOIN LATERAL (
     SELECT 1 AS hit
     FROM event_voice_sessions v
-    WHERE v.event_id = es.event_id
+    WHERE es.attendance_status = 'attended'
+      AND v.event_id = es.event_id
       AND v.classification = 'late'
       AND (v.discord_user_id = es.discord_user_id OR v.user_id = es.user_id)
     LIMIT 1
