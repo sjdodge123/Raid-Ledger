@@ -156,3 +156,32 @@ export async function mergeRecipesDemoCatalog(
     .returning({ id: C.id });
   if (rows.length === 0) throw new Error('recipes fixture: no catalogue row');
 }
+
+/**
+ * ROK-1862 — what the owner's claimed character (`c1`) has learned: every
+ * result and piece the demo set lists EXCEPT Bronze sword (contract form:
+ * result prefabs), so the Planner shows Club known and Bronze sword "Not
+ * discovered yet". The unclaimed member stays the "no character" case.
+ */
+export const RECIPES_DEMO_UNDISCOVERED = 'SwordBronze';
+export const RECIPES_DEMO_OWNER_KNOWN: readonly string[] = [
+  ...new Set([
+    ...RECIPES.recipes.map((r) => r.result),
+    ...RECIPES.pieces.map((p) => p.prefab),
+  ]),
+].filter((p) => p !== RECIPES_DEMO_UNDISCOVERED);
+
+/** Write the owner's known list onto every profile it claims on the server. */
+export async function setRecipesDemoOwnerKnowledge(
+  db: Db,
+  serverId: number,
+  ownerUserId: number,
+): Promise<void> {
+  const P = schema.valheimProfiles;
+  const rows = await db
+    .update(P)
+    .set({ knownRecipes: [...RECIPES_DEMO_OWNER_KNOWN] })
+    .where(and(eq(P.pelicanServerId, serverId), eq(P.claimedBy, ownerUserId)))
+    .returning({ id: P.id });
+  if (rows.length === 0) throw new Error('recipes fixture: no owner profile');
+}
