@@ -46,9 +46,16 @@ export interface MapPinFiltersProps {
 export function MapPinFilters({ filter, serverId }: MapPinFiltersProps): JSX.Element {
     const [isOpen, setOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
+    const [clearing, setClearing] = useState(false);
     const { panel, summary } = filter;
-    const clear = (): void => {
+    // The router commits the cleared URL in a transition: remount the local
+    // inputs (search text, Choose) only once it lands, so they seed from it.
+    if (clearing && panel.activeCount === 0) {
+        setClearing(false);
         setResetKey((k) => k + 1);
+    }
+    const clear = (): void => {
+        setClearing(true);
         panel.onClearAll();
     };
     return (

@@ -21,7 +21,7 @@ export interface PinFilterPanelProps {
     serverId?: number | undefined;
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    /** Bumped by the owner on every clear so local inputs (search text, Choose) reset. */
+    /** Bumped by the owner once a clear has committed, so local inputs (search text, Choose) reset. */
     resetKey: number;
     onClearAll: () => void;
 }
