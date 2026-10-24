@@ -30,7 +30,13 @@ let server: number;
 let hubId: number;
 let tokens: Record<'member' | 'visitor' | 'operator', string>;
 
-type P = { prefab: string; x: number; y: number | null; z: number; tag: string };
+type P = {
+  prefab: string;
+  x: number;
+  y: number | null;
+  z: number;
+  tag: string;
+};
 const url = (s: number, w?: string) =>
   `/plugins/valheim/armory/servers/${s}/portals${w ? `?worldUid=${w}` : ''}`;
 const get = (s: number, t: string | null, w?: string) => {
@@ -43,7 +49,12 @@ async function makeServer(n: number): Promise<number> {
   const [row] = nonEmpty(
     await testApp.db
       .insert(schema.pelicanServers)
-      .values({ panelUuid: s.uuid, identifier: s.identifier, name: s.name, gameId })
+      .values({
+        panelUuid: s.uuid,
+        identifier: s.identifier,
+        name: s.name,
+        gameId,
+      })
       .returning({ id: schema.pelicanServers.id }),
     `server ${n}`,
   );
@@ -58,7 +69,10 @@ async function makeUser(name: string, role: 'member' | 'operator' = 'member') {
       .returning({ id: schema.users.id }),
     `user ${name}`,
   );
-  return { id: u.id, token: await signTestAccessToken(testApp, { sub: u.id, username: name }) };
+  return {
+    id: u.id,
+    token: await signTestAccessToken(testApp, { sub: u.id, username: name }),
+  };
 }
 
 async function makeMember(name: string): Promise<string> {
@@ -103,7 +117,10 @@ const portal = (x: number, z: number, tag: string): P => ({
   tag,
 });
 
-async function portalsOf(t: string, w?: string): Promise<ValheimServerPortalsResponse> {
+async function portalsOf(
+  t: string,
+  w?: string,
+): Promise<ValheimServerPortalsResponse> {
   const res = await get(server, t, w);
   expect({ status: res.status, cache: res.headers['cache-control'] }).toEqual({
     status: 200,
