@@ -15,7 +15,7 @@ const HUB = `${CLIENT}/hubs/12`;
 const POLL = `${CLIENT}/community-lineup/7/schedule/42`;
 
 /** [label, url] for primary + inline buttons, in the order the row sends them. */
-function row(payload: Record<string, unknown>): [string?, string?][] {
+function row(payload: Record<string, unknown>): [string | undefined, string][] {
   const primary = buildPrimaryButton(
     'community_lineup',
     'n-1',
@@ -82,7 +82,9 @@ describe('poll DM Hub button (ROK-1896 D7)', () => {
       ['Hub', HUB],
     ]);
   });
+});
 
+describe('poll DM Hub button — only a valid hubId (ROK-1896 D6)', () => {
   it('adds no Hub button without a hubId', () => {
     const labels = row({ ...poll, subtype: 'standalone_scheduling_poll' }).map(
       ([label]) => label,
