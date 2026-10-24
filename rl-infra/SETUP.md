@@ -80,7 +80,9 @@ qm set 200 --serial0 socket --vga serial0
 
 `--balloon 8192` lets Proxmox reclaim RAM from this VM down to 8 GB if the
 host gets pressured (e.g. you grow pelican-panel later). Set `--balloon 0` to
-disable; the VM will then hold the full 16 GB hard.
+disable; the VM will then hold the full 16 GB hard. While the balloon is on, the admission ledger caps its budget at the
+guest's live `MemTotal` minus `RL_ADMISSION_RESERVE_MB` (ROK-1902; see the
+README's admission section).
 
 ### Optional — Proxmox memory ballooning (ROK-1470)
 
