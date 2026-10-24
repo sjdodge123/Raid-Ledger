@@ -237,9 +237,20 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
       res.headers()["etag"] ?? "",
       "base-map ETag must be the masked m1- format, not the unmasked sha256",
     ).toMatch(/^"m1-[0-9a-f]{40}"$/);
-    const png = await res.body();
-    const n = png.readUInt32BE(16); // IHDR width of a square texture
+    // Re-fetch the same URL ourselves: the page's response body can be empty when
+    // the browser revalidates a cached copy (the tablet project reruns the page).
     const token = await getAdminToken();
+    const direct = await fetch(res.url(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(direct.status, "base-map re-fetch must return the masked bytes").toBe(200);
+    expect(
+      direct.headers.get("etag") ?? "",
+      "re-fetched base-map ETag must be the masked m1- format",
+    ).toMatch(/^"m1-[0-9a-f]{40}"$/);
+    const png = Buffer.from(await direct.arrayBuffer());
+    expect(png.length, "base-map body must be a PNG").toBeGreaterThan(33);
+    const n = png.readUInt32BE(16); // IHDR width of a square texture
     const personal = await fetchFogBits(token, fixture, "personal");
     const shared = await fetchFogBits(token, fixture, "shared");
     expect(personal.length, "personal bitset is ⌈n²/8⌉ bytes").toBe(
