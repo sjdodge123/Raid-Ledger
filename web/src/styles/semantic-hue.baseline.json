@@ -1,5 +1,5 @@
 {
-  "__total": 661,
+  "__total": 665,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -119,6 +119,7 @@
   "components/ui/StartupGate.tsx": 3,
   "components/ui/button-classes.ts": 4,
   "components/ui/fab.tsx": 3,
+  "components/ui/filter-chip-classes.ts": 4,
   "components/ui/loading-spinner.tsx": 1,
   "components/ui/markdown/markdown-classes.ts": 1,
   "components/ui/pull-to-refresh.tsx": 1,
