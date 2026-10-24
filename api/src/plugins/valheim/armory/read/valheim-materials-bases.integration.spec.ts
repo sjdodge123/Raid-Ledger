@@ -5,6 +5,7 @@
  * from both bases, so a base built from private chests would merge them.
  * Containers go through the real snapshot → importer path.
  */
+import { asc } from 'drizzle-orm';
 import {
   ValheimContainerDetailSchema,
   ValheimContainerListResponseSchema,
@@ -68,7 +69,15 @@ const box = (over: Partial<Box>): Box => ({
 });
 
 const CHESTS = {
-  a1: box({ x: 0, items: [item('Wood', 50), item('Stone', 20)] }),
+  a1: box({
+    x: 0,
+    items: [
+      item('Wood', 50),
+      item('Stone', 20),
+      item('arrow_wood', 3),
+      item('Barley', 2),
+    ],
+  }),
   a2: box({
     x: 30,
     privacy: 'group',
@@ -311,6 +320,27 @@ describe('materials bases (ROK-1859)', () => {
         order,
       });
     }
+  });
+
+  it('mixed-case prefabs list in the database ORDER BY order, not JS default order', async () => {
+    const stacks = schema.valheimContainerStacks;
+    const rows = await testApp.db
+      .selectDistinct({ prefab: stacks.prefab })
+      .from(stacks)
+      .orderBy(asc(stacks.prefab));
+    const sqlOrder = rows.map((r) => r.prefab);
+    const on = await materials(tokens.member);
+    const prefabsOf = (l: readonly ValheimMaterialStack[]) => [
+      ...new Set(l.map((s) => s.prefab)),
+    ];
+    expect(prefabsOf(on.shared.totals)).toEqual(
+      sqlOrder.filter((p) => prefabsOf(on.shared.totals).includes(p)),
+    );
+    const baseA = on.bases?.find((b) => b.key === BASE_A);
+    expect(baseA && prefabsOf(baseA.totals)).toEqual(
+      sqlOrder.filter((p) => baseA && prefabsOf(baseA.totals).includes(p)),
+    );
+    expect(prefabsOf(baseA?.totals ?? [])).toContain('arrow_wood');
   });
 
   it('same scan read twice → deep-equal bases, byBase and chest places', async () => {
