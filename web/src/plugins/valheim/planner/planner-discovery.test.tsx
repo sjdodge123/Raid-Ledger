@@ -85,8 +85,9 @@ describe('Planner rows', () => {
         renderWithProviders(<Harness hide />);
         await screen.findByRole('button', { name: 'Bronze' });
         expect(swordRow()).toBeNull();
-        await userEvent.setup().type(screen.getByRole('searchbox', { name: 'Search an item or piece' }), 'sword');
-        await screen.findByRole('button', { name: 'Clear search and filters' });
+        await userEvent.setup().type(screen.getByRole('searchbox', { name: 'Search an item or piece' }), 'bronze');
+        // The Bronze axe matches the search too, so it must be listed — the sword must not.
+        await waitFor(() => expect(screen.getByRole('button', { name: /Bronze axe/ })).toBeInTheDocument());
         expect(swordRow()).toBeNull();
     });
 });
