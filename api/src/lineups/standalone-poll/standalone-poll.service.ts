@@ -197,10 +197,8 @@ export class StandalonePollService {
     creatorId?: number,
   ): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
-    const allVoters = await findScheduleVotes(
-      this.db,
-      slots.map((s) => s.id),
-    );
+    const slotIds = slots.map((s) => s.id);
+    const allVoters = await findScheduleVotes(this.db, slotIds);
     // ROK-1617: yes-votes only on both sides of the split — see
     // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
     const { selectedVoters, otherVoters } = splitYesVotersBySlot(

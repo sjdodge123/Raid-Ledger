@@ -154,6 +154,21 @@ export interface NotifyPollVotersDeps {
 }
 
 /**
+ * The chosen time formatter, per recipient timezone (ROK-1112): preference →
+ * guild default → 'UTC'. One batch query for every recipient — no N+1.
+ */
+async function pollTimeFormatter(
+  deps: NotifyPollVotersDeps,
+  userIds: number[],
+  chosenTime: string,
+): Promise<(userId: number) => string> {
+  const guildDefault =
+    (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
+  const tz = await resolveUserTimezones(deps.db, userIds, guildDefault);
+  return (userId) => formatPollTime(chosenTime, tz.get(userId) ?? guildDefault);
+}
+
+/**
  * Fire-and-forget DMs to all poll voters (ROK-1031). The chosen time is
  * formatted PER RECIPIENT in their own timezone (ROK-1112) — preference →
  * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
@@ -171,25 +186,22 @@ export async function notifyPollVoters(
   gameName: string,
   hub: PollHubPayload = {},
 ): Promise<void> {
-  const guildDefault =
-    (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
   const selectedIds = [...new Set(selected.map((v) => v.userId))];
   const otherIds = [...new Set(others.map((v) => v.userId))];
-  // One batch query for every recipient's timezone — no per-voter N+1.
-  const tz = await resolveUserTimezones(
-    deps.db,
+  const timeOf = await pollTimeFormatter(
+    deps,
     [...selectedIds, ...otherIds],
-    guildDefault,
+    chosenTime,
   );
   for (const uid of selectedIds) {
-    const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
+    const at = timeOf(uid);
     const sent = benched.includes(uid)
       ? deps.notifications.notifyAutoBenched(uid, gameName, at, eventId, hub)
       : deps.notifications.notifyAutoSignup(uid, gameName, at, eventId, hub);
     sent.catch(noop);
   }
   for (const uid of otherIds) {
-    const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
+    const at = timeOf(uid);
     deps.notifications.notifyPollOutcome(uid, at, eventId, hub).catch(noop);
   }
 }
