@@ -69,6 +69,13 @@ describe('validateSnapshotPayload', () => {
     });
   });
 
+  it('refuses a portals payload: not importable until ROK-1946 (ROK-1944)', () => {
+    expect(validateSnapshotPayload(snapshotOf('portals-vanilla'))).toEqual({
+      ok: false,
+      detail: 'invalid:kind_unsupported',
+    });
+  });
+
   it('fails when a key column disagrees with the payload identity', () => {
     const snap = { ...snapshotOf('map-personal'), playerId: '1' };
     expect(validateSnapshotPayload(snap)).toEqual({

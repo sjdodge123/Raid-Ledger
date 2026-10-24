@@ -8,7 +8,6 @@ import {
   type ValheimCharacterMessage,
   type ValheimItemDefinition,
   type ValheimItemsMessage,
-  type ValheimLinkMessage,
   type ValheimMapMessage,
 } from '@raid-ledger/contract';
 import type { z } from 'zod';
