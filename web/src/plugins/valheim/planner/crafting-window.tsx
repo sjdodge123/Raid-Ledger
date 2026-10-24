@@ -131,7 +131,7 @@ function useWindow(props: CraftingWindowProps, desktop: boolean) {
     const personal = filters.includePersonal && hasPersonal;
     const stock = useValheimRecipeStock(serverId, personal, filters.includeVehicles);
     const totals = !stock.isError && stock.data?.stock === 'scan' ? stock.data.totals : null;
-    const vm = useCraftingWindow({ entries: catalog.entries, stations: catalog.stations, filters, onFilters, totals });
+    const vm = useCraftingWindow({ entries: catalog.entries, stations: catalog.stations, filters, onFilters, totals, stationName: props.names.stationName });
     const [sheetOpen, setSheetOpen] = useState(false);
     const { select } = vm;
     // Only a phone pick opens the sheet: a desktop pick must not pop one if the viewport later narrows.

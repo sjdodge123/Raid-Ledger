@@ -10,7 +10,8 @@
  * Covers: the station switcher, search narrowing across stations, affordable
  * rows first and short rows greyed, the selection's slots with have/need,
  * "Add to list" landing in the shopping list, an UPGRADE step adding a
- * "q1→2" target, and the phone BottomSheet. Waits are web-first assertions
+ * "q1→2" target, the phone BottomSheet, and (ROK-1934) process-only items —
+ * smelted bars and cooked food — reachable through search only. Waits are web-first assertions
  * and `expect.poll` (rows re-rank once the stock query lands) — never sleeps.
  */
 import type { Page } from "@playwright/test";
@@ -28,6 +29,7 @@ import {
   pickRow,
   planned,
   rowPrefabs,
+  showPlanPane,
   searchBox,
   seedRecipes,
   stationSwitcher,
@@ -38,6 +40,12 @@ const recipeList = (page: Page, name: string) =>
 
 const slot = (page: Page, wide: boolean, name: string | RegExp) =>
   detailScope(page, wide).getByRole("listitem", { name });
+
+/** A row of the plan's "What your list needs" tree, by its OWN prefab. */
+const planRow = (page: Page, prefab: string) =>
+  page
+    .getByRole("list", { name: "What your list needs" })
+    .locator(`[data-testid="valheim-planner-row"][data-prefab="${prefab}"]`);
 
 /** The selection's title: the pane's accent heading, or the sheet's name. */
 async function expectTitle(page: Page, wide: boolean, title: string) {
@@ -209,6 +217,87 @@ test.describe("Valheim hub — Planner crafting window (ROK-1899)", () => {
       await addSelected(p, wide);
       await expect(planned(p)).toHaveCount(1);
       await expect(planned(p).first()).toContainText("Club · q1→2 × 1");
+    } finally {
+      await member.context.close();
+    }
+  });
+
+  test("search reaches process-only items: Iron at the Smelter adds to the list; cooked food is found", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const f = await seedRecipes(testInfo);
+    const wide = isDesktop(testInfo);
+    const member = await pageAs(browser, page, f.memberUserId);
+    try {
+      const p = member.page;
+      await openPlanner(p, f);
+      const switcher = stationSwitcher(p);
+      await expect(
+        switcher.getByRole("radio", { name: "Forge" }),
+      ).toBeVisible();
+      const chipsBefore = await switcher.ariaSnapshot();
+
+      // "iron" finds the smelted bar (named by its processor) beside the
+      // Forge's Iron sword; the switcher gains no processor chip.
+      await searchBox(p).fill("iron");
+      const matches = recipeList(p, "Matches from every station");
+      await expect
+        .poll(async () => (await rowPrefabs(matches)).sort(), {
+          message: "'iron' matches the smelted Iron bar and the Iron sword",
+        })
+        .toEqual(["Iron", "SwordIron"]);
+      await expect(craftRows(matches, "Iron")).toContainText("Smelter");
+      await expect(craftRows(matches, "SwordIron")).toContainText("Forge");
+      for (const name of ["Smelter", "Charcoal kiln", "Cooking station"])
+        await expect(
+          switcher.getByRole("radio", { name }),
+          `no "${name}" chip in the station switcher`,
+        ).toHaveCount(0);
+      await expect(switcher.getByRole("radio", { checked: true })).toHaveCount(
+        0,
+      );
+
+      // The detail names the processor (no level) and adds Iron to the list.
+      await pickRow(p, "iron", "Iron");
+      await expectTitle(p, wide, "Iron");
+      const scope = detailScope(p, wide);
+      await expect(
+        scope.getByTestId("valheim-craft-star-slot"),
+      ).toHaveAccessibleName("Smelter");
+      await expect(
+        scope.getByTestId("valheim-craft-process-note"),
+      ).toContainText("Processed at Smelter");
+      await addSelected(p, wide);
+      await expect(planned(p)).toHaveCount(1);
+      await expect(planned(p).first()).toContainText("Iron");
+
+      // The plan smelts Scrap iron and burns Coal (from the kiln).
+      await showPlanPane(p, wide);
+      await expect(planRow(p, "Iron").first()).toContainText("Smelter");
+      await expect(planRow(p, "IronScrap").first()).toBeVisible();
+      await expect(planRow(p, "Coal").first()).toBeVisible();
+
+      // Cooked food is found by "cooked" and by "meat", at its station.
+      for (const term of ["cooked", "meat"]) {
+        await searchBox(p).fill(term);
+        await expect
+          .poll(() => rowPrefabs(matches), {
+            message: `'${term}' matches Cooked meat only`,
+          })
+          .toEqual(["CookedMeat"]);
+        await expect(craftRows(matches, "CookedMeat")).toContainText(
+          "Cooking station",
+        );
+      }
+
+      // Clearing the search restores exactly the chips shown before it.
+      await searchBox(p).fill("");
+      await expect
+        .poll(() => switcher.ariaSnapshot(), {
+          message: "the station switcher's chips are unchanged",
+        })
+        .toEqual(chipsBefore);
     } finally {
       await member.context.close();
     }

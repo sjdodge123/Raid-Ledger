@@ -58,6 +58,8 @@ export interface StationGroup {
 
 export const BY_HAND_KEY = '__hand__';
 export const BY_HAND_LABEL = 'By hand';
+/** ROK-1934 — search-only rows for process outputs key as `process:<processor>`, never a crafting-station key. */
+export const PROCESS_KEY_PREFIX = 'process:';
 
 /** The held count of `prefab`; own keys only, so `constructor`/`toString` read 0, never an inherited function. */
 export function heldOf(totals: StockTotals, prefab: string): number {
@@ -132,13 +134,36 @@ export function stationGroups(
     );
 }
 
-/** Rows across every group whose name or prefab contains `text` (case-insensitive); blank text → none. */
-export function searchRows(groups: readonly StationGroup[], text: string): CraftRow[] {
+/**
+ * ROK-1934 — CRAFT rows for process-only entries (`craft.via === 'process'`:
+ * bars, cooked food, kiln and fermenter outputs) that pass Kind/Category.
+ * Search only (operator ruling 2026-10-23): `stationGroups` never sees them,
+ * so the switcher gains no processor entry. Labelled by `stationName`.
+ */
+export function processRows(
+    entries: readonly ValheimRecipeCatalogEntry[],
+    filters: Pick<PlannerFilters, 'kind' | 'category'>,
+    stationName: (prefab: string) => string,
+): CraftRow[] {
+    const rows: CraftRow[] = [];
+    for (const entry of entries) {
+        const craft = entry.craft;
+        if (craft === null || craft.via !== 'process' || craft.station === null || !passes(entry, filters)) continue;
+        rows.push({ entry, cost: craft, stationKey: PROCESS_KEY_PREFIX + craft.station, stationLabel: stationName(craft.station) });
+    }
+    return rows;
+}
+
+/**
+ * Rows across every group, then `extra` (process rows), whose name or prefab
+ * contains `text` (case-insensitive); blank text → none.
+ */
+export function searchRows(groups: readonly StationGroup[], text: string, extra: readonly CraftRow[] = []): CraftRow[] {
     const needle = text.trim().toLowerCase();
     if (needle === '') return [];
-    return groups.flatMap((g) =>
-        g.rows.filter((r) => r.entry.name.toLowerCase().includes(needle) || r.entry.prefab.toLowerCase().includes(needle)),
-    );
+    const hit = (r: CraftRow): boolean =>
+        r.entry.name.toLowerCase().includes(needle) || r.entry.prefab.toLowerCase().includes(needle);
+    return [...groups.flatMap((g) => g.rows), ...extra].filter(hit);
 }
 
 const RANK: Record<Affordability['state'], number> = { can: 0, short: 1, unknown: 2 };
