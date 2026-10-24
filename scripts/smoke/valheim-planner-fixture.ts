@@ -21,7 +21,7 @@
 import type { Browser, Locator, Page, TestInfo } from "@playwright/test";
 import { expect } from "./base";
 import { API_BASE, apiGet, apiPost, getAdminToken } from "./api-helpers";
-import { signInContextAs } from "./browser-session";
+import { signInContextAs, signInContextWithJwt } from "./browser-session";
 
 const FIXTURE = "/admin/test/valheim/recipes-fixture";
 const SLOTS = 16;
@@ -57,13 +57,46 @@ async function ensurePluginActive(token: string, pluginId: string) {
 export const recipesPath = (f: RecipesFixture, rest = "") =>
   `/plugins/valheim/armory/servers/${f.serverId}/recipes${rest}`;
 
-/** Seed this worker's recipes fixture and wait until its catalogue lists Bronze. */
-export async function seedRecipes(testInfo: TestInfo): Promise<RecipesFixture> {
+/**
+ * ROK-1948 seed presets: `all` (default) — an unclaimed scout knows the whole
+ * demo set, so nothing is hidden; `early` — every character on the server
+ * knows only Workbench + Club + Cultivator (protection hides the Forge, Bronze
+ * and the swords); `none` — every list is `[]` (protection off, full set).
+ */
+export type RecipesSpoilersPreset = "all" | "early" | "none";
+
+interface CatalogProbe {
+  spoilers?: string;
+  entries?: { name: string }[];
+}
+
+/** What the catalogue must show before the page may load, per preset. */
+const READY: Record<
+  RecipesSpoilersPreset,
+  (c: CatalogProbe | null) => boolean
+> = {
+  all: (c) => (c?.entries ?? []).some((e) => e.name === "Bronze"),
+  early: (c) =>
+    c?.spoilers === "protected" &&
+    (c.entries ?? []).some((e) => e.name === "Cultivator") &&
+    !(c.entries ?? []).some((e) => e.name === "Bronze"),
+  none: (c) =>
+    c?.spoilers === "off-no-data" &&
+    (c.entries ?? []).some((e) => e.name === "Bronze"),
+};
+
+/** Seed this worker's recipes fixture and wait until its catalogue matches `spoilers`. */
+export async function seedRecipes(
+  testInfo: TestInfo,
+  opts: { spoilers?: RecipesSpoilersPreset } = {},
+): Promise<RecipesFixture> {
+  const spoilers = opts.spoilers ?? "all";
   const token = await getAdminToken();
   await ensurePluginActive(token, "pelican");
   await ensurePluginActive(token, "valheim");
   const body = (await apiPost(token, FIXTURE, {
     worker: testInfo.parallelIndex % SLOTS,
+    ...(opts.spoilers === undefined ? {} : { spoilers }),
   })) as Partial<RecipesFixture> | null;
   expect(
     body?.guildId,
@@ -71,29 +104,42 @@ export async function seedRecipes(testInfo: TestInfo): Promise<RecipesFixture> {
   ).toEqual(expect.any(Number));
   const f = body as RecipesFixture;
   // The seed commits before it answers; poll anyway so a lagging read can
-  // never hand the page an empty catalogue.
+  // never hand the page a stale catalogue.
   await expect
     .poll(
-      async () => {
-        const c = (await apiGet(token, recipesPath(f))) as {
-          entries?: { name: string }[];
-        } | null;
-        return (c?.entries ?? []).some((e) => e.name === "Bronze");
+      async () =>
+        READY[spoilers](
+          (await apiGet(token, recipesPath(f))) as CatalogProbe | null,
+        ),
+      {
+        message: `the catalogue never matched the '${spoilers}' preset`,
+        timeout: 15_000,
       },
-      { message: "the catalogue never listed Bronze", timeout: 15_000 },
     )
     .toBe(true);
   return f;
 }
 
-/** A fresh, signed-in context for `userId` at this project's viewport. */
-export async function pageAs(browser: Browser, page: Page, userId: number) {
+/** A fresh context at this project's viewport (no session yet). */
+async function freshContext(browser: Browser, page: Page) {
   const viewport = page.viewportSize();
-  const context = await browser.newContext({
+  return browser.newContext({
     ...(viewport ? { viewport } : {}),
     storageState: { cookies: [], origins: [] },
   });
+}
+
+/** A fresh, signed-in context for `userId` at this project's viewport. */
+export async function pageAs(browser: Browser, page: Page, userId: number) {
+  const context = await freshContext(browser, page);
   await signInContextAs(context, userId);
+  return { context, page: await context.newPage() };
+}
+
+/** A fresh context signed in as the smoke admin (the site admin, not a hub owner). */
+export async function pageAsAdmin(browser: Browser, page: Page) {
+  const context = await freshContext(browser, page);
+  await signInContextWithJwt(context, await getAdminToken());
   return { context, page: await context.newPage() };
 }
 
