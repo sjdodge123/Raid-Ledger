@@ -55,6 +55,17 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
   let mockDb: MockDb;
   let db: Db;
 
+  /** First `from` = the vector rows; the presence query ends at `where`. */
+  function mockRows(
+    rows: typeof VECTOR_ROWS,
+    presenceIds: number[] = rows.map((r) => r.userId),
+  ): void {
+    mockDb.from.mockResolvedValueOnce(rows);
+    mockDb.where.mockResolvedValueOnce(
+      presenceIds.map((userId) => ({ userId })),
+    );
+  }
+
   beforeEach(() => {
     mockDb = createDrizzleMock();
     db = mockDb as unknown as Db;
@@ -62,19 +73,19 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
   });
 
   it('returns 0 and issues no UPDATE when no vectors exist', async () => {
-    mockDb.from.mockResolvedValue([]);
+    mockRows([]);
     await expect(refreshArchetypesFromCurrentMetrics(db)).resolves.toBe(0);
     expect(mockDb.execute).not.toHaveBeenCalled();
   });
 
   it('batches every archetype update into a single round-trip', async () => {
-    mockDb.from.mockResolvedValue(VECTOR_ROWS);
+    mockRows(VECTOR_ROWS);
     await expect(refreshArchetypesFromCurrentMetrics(db)).resolves.toBe(3);
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
 
   it('parameterizes one (user_id, archetype) tuple per row with the derived archetype', async () => {
-    mockDb.from.mockResolvedValue(VECTOR_ROWS);
+    mockRows(VECTOR_ROWS);
     await refreshArchetypesFromCurrentMetrics(db);
     const sqlArg = mockDb.execute.mock.calls[0][0] as SQL;
     const query = new PgDialect().sqlToQuery(sqlArg);
@@ -91,6 +102,7 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
       const archetype = JSON.parse(query.params[i * 2 + 1] as string);
       expect(archetype).toEqual(
         deriveArchetype({
+          hasPresenceData: true,
           intensityMetrics: row.intensityMetrics,
           dimensions: row.dimensions,
         }),
@@ -99,7 +111,7 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
   });
 
   it('derives tier-correct archetypes from the current metrics', async () => {
-    mockDb.from.mockResolvedValue(VECTOR_ROWS);
+    mockRows(VECTOR_ROWS);
     await refreshArchetypesFromCurrentMetrics(db);
     const sqlArg = mockDb.execute.mock.calls[0][0] as SQL;
     const query = new PgDialect().sqlToQuery(sqlArg);
@@ -109,5 +121,18 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
           .intensityTier,
     );
     expect(tiers).toEqual(['Hardcore', 'Casual', 'Dedicated']);
+  });
+
+  it('titles a vector row with no presence data Newcomer (ROK-1935)', async () => {
+    mockRows(VECTOR_ROWS, [1, 3]);
+    await refreshArchetypesFromCurrentMetrics(db);
+    const sqlArg = mockDb.execute.mock.calls[0][0] as SQL;
+    const query = new PgDialect().sqlToQuery(sqlArg);
+    const tiers = [1, 3, 5].map(
+      (i) =>
+        (JSON.parse(query.params[i] as string) as { intensityTier: string })
+          .intensityTier,
+    );
+    expect(tiers).toEqual(['Hardcore', 'Newcomer', 'Dedicated']);
   });
 });

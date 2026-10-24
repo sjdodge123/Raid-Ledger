@@ -7,7 +7,10 @@
 import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { deriveArchetype } from '../taste-profile/archetype.helpers';
+import {
+  loadPresenceUserIds,
+  retitleFromIntensity,
+} from '../taste-profile/archetype-retitle.helpers';
 import type {
   GeneratedGameActivityRollup,
   GeneratedPlayhistoryInterest,
@@ -120,11 +123,13 @@ export async function refreshArchetypesFromCurrentMetrics(
     })
     .from(schema.playerTasteVectors);
   if (rows.length === 0) return 0;
+  const presenceUserIds = await loadPresenceUserIds(db);
   const valueTuples = rows.map((row) => {
-    const archetype = deriveArchetype({
-      intensityMetrics: row.intensityMetrics,
-      dimensions: row.dimensions,
-    });
+    const { archetype } = retitleFromIntensity(
+      row.intensityMetrics,
+      row.dimensions,
+      presenceUserIds.has(row.userId),
+    );
     return sql`(${row.userId}::integer, ${JSON.stringify(archetype)}::jsonb)`;
   });
   await db.execute(sql`
