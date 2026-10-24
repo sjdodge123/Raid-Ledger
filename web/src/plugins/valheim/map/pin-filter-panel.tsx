@@ -65,6 +65,27 @@ function LabelSearch({ query, onChange }: { query: string; onChange: PinFilterPa
     );
 }
 
+/**
+ * The box holds the click locally: the router commits the URL write in a
+ * transition, so a box bound straight to `checked` would snap back unchecked
+ * until it lands. A new `checked` (the write, a clear, a reload) wins.
+ */
+function HideCrossed({ checked, onChange }: { checked: boolean; onChange: PinFilterPanelState['onChange'] }): JSX.Element {
+    const [shown, setShown] = useState(checked);
+    const [synced, setSynced] = useState(checked);
+    if (synced !== checked) {
+        setSynced(checked);
+        setShown(checked);
+    }
+    return (
+        <Checkbox label="Hide crossed-out pins" checked={shown}
+            onChange={(e) => {
+                setShown(e.target.checked);
+                onChange({ hideCrossed: e.target.checked });
+            }} />
+    );
+}
+
 /** The four filter sections in the shared filter entry. */
 export function PinFilterPanel({ panel, serverId, isOpen, onOpenChange, resetKey, onClearAll }: PinFilterPanelProps): JSX.Element {
     const { filter, onChange } = panel;
@@ -73,11 +94,10 @@ export function PinFilterPanel({ panel, serverId, isOpen, onOpenChange, resetKey
             <div className="grid gap-4" data-testid="map-pin-filter-panel">
                 <TypeChips filter={filter} onToggle={panel.onToggleType} onAll={() => onChange({ types: null })} />
                 {panel.playersAvailable && serverId !== undefined && (
-                    <PinFilterPlayers key={resetKey} players={filter.players} serverId={serverId} onChange={onChange} />
+                    <PinFilterPlayers key={`players-${resetKey}`} players={filter.players} serverId={serverId} onChange={onChange} />
                 )}
-                <LabelSearch key={resetKey} query={filter.query} onChange={onChange} />
-                <Checkbox label="Hide crossed-out pins" checked={filter.hideCrossed}
-                    onChange={(e) => onChange({ hideCrossed: e.target.checked })} />
+                <LabelSearch key={`search-${resetKey}`} query={filter.query} onChange={onChange} />
+                <HideCrossed checked={filter.hideCrossed} onChange={onChange} />
             </div>
         </FilterEntry>
     );

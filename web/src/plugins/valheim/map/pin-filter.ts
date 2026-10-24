@@ -8,6 +8,7 @@
  * Death, every player. The first write normalises a legacy URL to the explicit
  * `players=all` + `vc` form so the implied scope never flips under the user.
  */
+import { VALHEIM_SERVER_PINS_PLAYERS_MAX } from '@raid-ledger/contract';
 import { CHARACTER_PARAM, MAP_PARAM } from './map-selection';
 import {
     ALL_PLAYERS, CROSSED_PARAM, DEATH_PINS, HIDE_CROSSED, PINS_PARAM, PLAYERS_PARAM, QUERY_PARAM,
@@ -40,7 +41,8 @@ function parseTypes(raw: string | null): ReadonlySet<PinTypeGroupId> | null {
 
 function parsePlayerIds(raw: string): readonly number[] {
     const ids = raw.split(',').filter((t) => /^[1-9]\d{0,9}$/.test(t)).map(Number);
-    return [...new Set(ids.filter((n) => n <= 2147483647))];
+    // Capped at the server's limit so an over-long shared URL can't 400 the read.
+    return [...new Set(ids.filter((n) => n <= 2147483647))].slice(0, VALHEIM_SERVER_PINS_PLAYERS_MAX);
 }
 
 /** The old "Show all" link: `pins=death` alone, scope implied by the missing `vc`. */
