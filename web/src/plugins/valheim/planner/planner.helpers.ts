@@ -4,7 +4,7 @@
  * chips, and (de)serialise the stored shopping list behind a schema guard.
  */
 import { z } from 'zod';
-import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia, type ValheimRecipeDiscovery } from '@raid-ledger/contract';
 
 export type PlannerKind = 'item' | 'piece';
 
@@ -27,6 +27,8 @@ export interface PlannerFilters {
     category: string | null;
     includePersonal: boolean;
     includeVehicles: boolean;
+    /** ROK-1862 — hide rows the viewer's character has not learned; honoured only when discovery is `known`. */
+    hideUndiscovered: boolean;
 }
 
 /** Kind defaults to Items (ROK-1899): the crafting window opens on what you carry. */
@@ -35,6 +37,7 @@ export const DEFAULT_PLANNER_FILTERS: PlannerFilters = {
     category: null,
     includePersonal: false,
     includeVehicles: true,
+    hideUndiscovered: false,
 };
 
 /** How many filters differ from DEFAULT_PLANNER_FILTERS (the funnel's badge). */
@@ -42,7 +45,28 @@ export const activePlannerFilters = (f: PlannerFilters): number =>
     (f.kind === DEFAULT_PLANNER_FILTERS.kind ? 0 : 1) +
     (f.category === null ? 0 : 1) +
     (f.includePersonal ? 1 : 0) +
-    (f.includeVehicles ? 0 : 1);
+    (f.includeVehicles ? 0 : 1) +
+    (f.hideUndiscovered ? 1 : 0);
+
+/** ROK-1862 copy (spec §5). */
+export const DISCOVERY_CHIP_COPY = 'Not discovered yet';
+export const DISCOVERY_CHIP_TITLE = 'Your character hasn’t learned this recipe yet';
+export const DISCOVERY_FILTER_LABEL = 'Hide undiscovered';
+export const DISCOVERY_HINT: Record<Exclude<ValheimRecipeDiscovery, 'known'>, string> = {
+    'no-character': 'Claim your character on this server to use this filter.',
+    truncated: 'Your character knows too many recipes to check.',
+};
+
+/** The filter only narrows when the server could read the viewer's known list. */
+export const hidesUndiscovered = (f: Pick<PlannerFilters, 'hideUndiscovered'>, discovery: ValheimRecipeDiscovery | undefined): boolean =>
+    f.hideUndiscovered && discovery === 'known';
+
+/** ROK-1862 Q2 — drop undiscovered plan nodes (and the subtree under them) when the filter applies. */
+export function pruneUndiscovered(roots: readonly PlanTreeNode[]): PlanTreeNode[] {
+    return roots
+        .filter((t) => t.node.discovered !== false)
+        .map((t) => ({ node: t.node, children: pruneUndiscovered(t.children) }));
+}
 
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =

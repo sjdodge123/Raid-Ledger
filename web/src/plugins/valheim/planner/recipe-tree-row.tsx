@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ItemIcon } from '../character/item-icon';
 import { resolveItem } from '../character/item-icon.helpers';
+import { DiscoveryChip } from './discovery-chip';
 import { HaveNeedBar } from './have-need-bar';
 import { formatAmount, viaChips, type PlannerKind } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
@@ -80,6 +81,7 @@ export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onTogg
                         {name}
                     </span>
                     <Counts node={node} />
+                    {node.discovered === false && <DiscoveryChip />}
                 </div>
                 <HaveNeedBar have={node.have} need={node.quantity} name={name} />
                 <ViaChips node={node} names={names} />
