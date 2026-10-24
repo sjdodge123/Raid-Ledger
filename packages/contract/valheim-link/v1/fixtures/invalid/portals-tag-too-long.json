@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "portals",
+  "worldUid": "1234567890123",
+  "omitted": 0,
+  "portals": [
+    {
+      "prefab": "portal_wood",
+      "x": 1,
+      "y": 1,
+      "z": 1,
+      "tag": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "prefab": "portal_wood",
+      "x": 410,
+      "y": 28,
+      "z": 902.25,
+      "tag": "swamp"
+    }
+  ]
+}

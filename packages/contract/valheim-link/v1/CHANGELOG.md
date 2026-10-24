@@ -3,6 +3,23 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-23 (additive) — `portals`
+
+- **Additive.** New message `kind: "portals"` (ROK-1944): every portal in the
+  world from the mod's server-side scan, sent alongside `containers` (every
+  ~10 minutes), keyed (`serverId`, `worldUid`). Each message is a **full
+  snapshot** — latest `capturedAt` (the scan time) wins and replaces the
+  world's portals, so a destroyed portal disappears; no deltas. Per portal:
+  `prefab` (open set: `portal_wood`, `portal_stone`, modded portals such as
+  AdvancedPortals / XPortal), `x`, `y` (nullable), `z`, `tag` (≤ 64 chars,
+  may be empty); plus `omitted`. (`prefab`, `x`, `y`, `z`) is unique. Caps:
+  4 096 portals; body cap `VALHEIM_LINK_PORTALS_MAX_BYTES` 4 MiB (largest
+  schema-valid ≈ 2.36 MB, pinned by the largest-message spec). A new value in
+  the closed `kind` enum is additive under §9: the server ships first — it
+  validates and answers 202 `accepted` without storing until ROK-1946 lands.
+  `schema.json` regenerated; fixtures `portals-vanilla`, `portals-modded` and
+  7 invalid.
+
 ## v1 — 2026-10-21 (no schema change) — `recipes` per-quality formula for Valheim 1.0.x
 
 - **No schema, field or enum change** (documentation and semantics only;

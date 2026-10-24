@@ -7,7 +7,8 @@
  * it, or a module section reports content of its own (ROK-1830 — core asks
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
- * A 403 (not a member) is a friendly empty state.
+ * A 403 (not a member) is a friendly empty state; a 401 that survived the
+ * refresh re-checks the session — sign in only once it is rejected (ROK-1947).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
@@ -35,6 +36,8 @@ import { hubCopy, hubSectionsLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
+import { useSignInAgain } from './use-sign-in-again';
+import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -56,7 +59,34 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
 }
 
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): JSX.Element {
+/** ROK-1947: the session is over — Sign in ends it and returns here after. */
+function SignInPrompt(): JSX.Element {
+    const signIn = useSignInAgain();
+    return (
+        <Notice testId="guild-session-expired">
+            <p className="mb-4 text-sm text-muted">Your session expired. Sign in again to see this hub.</p>
+            <Button onClick={signIn}>Sign in</Button>
+        </Notice>
+    );
+}
+
+/**
+ * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
+ * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
+ */
+function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryResult> }): JSX.Element {
+    const { state, retry } = useSessionRecheck(onRecovered);
+    if (state === 'checking') return <LoadingState />;
+    if (state === 'rejected') return <SignInPrompt />;
+    return (
+        <Notice testId="guild-session-unreachable">
+            <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
+            <Button variant="secondary" onClick={retry}>Try again</Button>
+        </Notice>
+    );
+}
+
+function ErrorState({ error, onRetry }: { error: Error; onRetry: () => unknown }): JSX.Element {
     const status = httpStatusOf(error);
     if (status === 403) {
         return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
@@ -67,7 +97,7 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): 
     return (
         <Notice testId="guild-error">
             <p className="mb-4 text-sm text-muted">We couldn&apos;t load this guild. Try again in a moment.</p>
-            <Button variant="secondary" onClick={onRetry}>Try again</Button>
+            <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
 }
@@ -222,6 +252,27 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     );
 }
 
+type RecoveryLatch = { guildId: number; dataUpdatedAt: number };
+
+/**
+ * ROK-1947: the recovery refetch clears an uncached query's error, so the
+ * re-check screen is held until it lands, or the next 401 would remount it
+ * and loop. The latch is keyed to the hub and to the data it started from:
+ * a later success that did not come through it (a resume refresh refetching
+ * the 401'd query) or another hub voids it, so a stale Sign in never stays up.
+ */
+function useRecoveryLatch(query: ReturnType<typeof useGuildPage>, guildId: number) {
+    const [latch, setLatch] = useState<RecoveryLatch | null>(null);
+    const recovering = latch !== null && latch.guildId === guildId && latch.dataUpdatedAt === query.dataUpdatedAt;
+    const recoverPage = async () => {
+        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt });
+        const result = await query.refetch({ cancelRefetch: false });
+        if (result.status === 'success') setLatch(null);
+        return result;
+    };
+    return { recovering, recoverPage };
+}
+
 export function GuildPage(): JSX.Element {
     const { id } = useParams<{ id: string }>();
     const guildId = Number(id);
@@ -233,10 +284,13 @@ export function GuildPage(): JSX.Element {
     // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
     const modulePending = useHubModulePending(query.data?.guild.kind);
     const moduleError = useHubModuleLoadError(query.data?.guild.kind);
+    const { recovering, recoverPage } = useRecoveryLatch(query, guildId);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
-    if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+    const refetchPage = () => query.refetch({ cancelRefetch: false });
+    if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;

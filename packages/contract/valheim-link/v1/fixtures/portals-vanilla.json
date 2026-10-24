@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "portals",
+  "worldUid": "1234567890123",
+  "omitted": 0,
+  "portals": [
+    {
+      "prefab": "portal_wood",
+      "x": -12.5,
+      "y": 33.25,
+      "z": 48,
+      "tag": "home"
+    },
+    {
+      "prefab": "portal_wood",
+      "x": 1820.75,
+      "y": 41.5,
+      "z": -655,
+      "tag": "home"
+    },
+    {
+      "prefab": "portal_wood",
+      "x": 410,
+      "y": 28,
+      "z": 902.25,
+      "tag": "swamp"
+    },
+    {
+      "prefab": "portal_stone",
+      "x": -3100,
+      "y": 60.5,
+      "z": 2210.5,
+      "tag": "ashlands"
+    },
+    {
+      "prefab": "portal_wood",
+      "x": 64,
+      "y": 30,
+      "z": 64,
+      "tag": ""
+    }
+  ]
+}

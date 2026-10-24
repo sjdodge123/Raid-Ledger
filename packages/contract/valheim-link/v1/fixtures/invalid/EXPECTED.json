@@ -194,5 +194,33 @@
   "recipes-unknown-key": {
     "path": "recipes.0",
     "code": "unrecognized_keys"
+  },
+  "portals-duplicate-position": {
+    "path": "portals.1",
+    "code": "custom"
+  },
+  "portals-tag-too-long": {
+    "path": "portals.0.tag",
+    "code": "too_big"
+  },
+  "portals-coord-out-of-range": {
+    "path": "portals.0.x",
+    "code": "too_big"
+  },
+  "portals-missing-z": {
+    "path": "portals.0.z",
+    "code": "invalid_type"
+  },
+  "portals-bad-prefab": {
+    "path": "portals.0.prefab",
+    "code": "invalid_format"
+  },
+  "portals-unknown-key": {
+    "path": "portals.0",
+    "code": "unrecognized_keys"
+  },
+  "portals-omitted-negative": {
+    "path": "omitted",
+    "code": "too_small"
   }
 }

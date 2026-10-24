@@ -2,7 +2,8 @@
  * ROK-1899 — a small crafting catalogue for the window's hook and component
  * tests: Bronze (Copper + Tin) at the Forge, a Bronze buckler at the
  * Workbench (so "bro" spans two stations), an upgradable Bronze axe, a
- * by-hand Club, a ×20 Wood arrow, a piece and a process output.
+ * by-hand Club, a ×20 Wood arrow, a piece and two process outputs
+ * (ROK-1934: Copper at the smelter, Cooked meat at the cooking station).
  */
 import type { ValheimRecipeCatalogEntry, ValheimRecipeCost, ValheimRecipeStation } from '@raid-ledger/contract';
 
@@ -48,6 +49,10 @@ export const CRAFT_ENTRIES: ValheimRecipeCatalogEntry[] = [
     item('Copper', 'Copper', 'smelter', [['CopperOre', 1]], {
         category: 'Material',
         craft: { ...cost('smelter', 0, [['CopperOre', 1]]), via: 'process', amount: 1 },
+    }),
+    item('CookedMeat', 'Cooked meat', 'piece_cookingstation', [['RawMeat', 1]], {
+        category: 'Food',
+        craft: { ...cost('piece_cookingstation', 0, [['RawMeat', 1]]), via: 'process', amount: 1 },
     }),
 ];
 
