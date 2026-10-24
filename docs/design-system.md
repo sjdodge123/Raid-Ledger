@@ -130,6 +130,10 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   scheme repaints the token; it cannot repaint `bg-emerald-500`.
 - **DO** use raw hues for *categorical* accents — a genre badge, a chart series, a wireframe
   BEFORE/AFTER — where the colour promises nothing.
+- **DON'T** hardcode a hex or `rgba(255,255,255,…)` in chart **chrome** (tooltip box, title, value lines,
+  cursor, axis, grid). Spread `chart-chrome.ts` (§3.1, ROK-1937) — a navy `#0f172a` tooltip with no
+  `itemStyle` rendered black values on navy, and dark-on-dark titles in every light scheme. Only the
+  series fills/strokes stay raw hues.
 - **DO** put the opacity modifier on the token (`bg-success/10`, `border-warning/30`): it works at any
   alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
   `bg-amber-500/70` had none; `bg-warning/70` needs none.
@@ -157,7 +161,15 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
   `WishlistBadge`, the rating chip); a cyan CTA that must read the same in both families is `bg-cyan-700 hover:bg-cyan-800 text-white` (white 5.28 / 7.22:1; "Schedule a Game", TDB:2050 — `text-foreground` there would go `#0f172a` on light, 3.38:1); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
   (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
-- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
+- **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class. Same for the community
+  insights `TemporalHeatmap`'s `rgba(34,197,94,a)` activity alpha.
+- **A highlighted cell on a data-shaded grid is an inset ring, never a new fill.** The community "When the
+  Community Plays" heatmap marks each weekday's peak hours with `PEAK_MARK` (`ring-2 ring-inset ring-foreground`,
+  `components/insights/community/temporal-heatmap.utils.ts`, ROK-1936): `foreground` contrasts with every
+  green shade in both families, and `ring-inset` paints inside the cell so the grid keeps its size on a phone.
+  The cell's `title` carries the label ("Sat 9pm · 17 sessions"); the shade stays the data.
+  Keyboard focus on such a cell is an outline (`focus-visible:outline-2 focus-visible:outline-offset-1
+  focus-visible:outline-success`), not a ring, so a focused peak keeps its mark.
 
 **Semantic-hue ratchet (TDB:1770, ROK-1586).** `web/src/styles/semantic-hue.guard.test.ts` counts every raw
 `emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `border-{t,r,b,l,x,y,s,e}-`
@@ -328,6 +340,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `markdown/lazy-markdown-editor.tsx` → `LazyMarkdownEditor` (ROK-1868) | **The only import path** for the WYSIWYG Markdown editor: `lazy(() => import('./markdown-editor'))` + a frame-shaped `aria-busy` loading `div` ("Loading editor", sr-only) + an error boundary that falls back to `Textarea showCount` with the same `value`/`onChange` (a failed chunk never blocks posting). `lazy-markdown-editor.guard.test.ts` fails any file outside `ui/markdown/**` importing `@tiptap/*` or `markdown-editor` statically | Composing multi-paragraph formatted text that `MarkdownBlock` renders (hub posts) — §4.26 | same props as `MarkdownEditor` |
 | `markdown/markdown-editor.tsx` → `MarkdownEditor` (ROK-1868, default export = the lazy chunk `markdown-editor-<hash>.js`, ~139 KB gz) | TipTap 3 editor restricted to the hub-post subset (paragraph, hard break, bold, italic, strike, code, link, flat bullet/numbered lists); emits markdown via `getMarkdown()` + `normalizeEditorMarkdown`. Frame `div[data-md-editor]` = `FIELD_FRAME_BASE` + `FOCUS_WITHIN_RING`; the `contenteditable` is `role="textbox" aria-multiline`, `outline-none`, `text-base lg:text-sm`; classes from `MD_CLASSES`. Counter = `CharCounter` on the markdown SOURCE length | Never import directly — use `LazyMarkdownEditor` | `value` (markdown), `onChange(md)`, `maxLength`, `id?` / `aria-labelledby?` / `aria-describedby?` (wired by `Field`), `invalid?`, `disabled?`, `placeholder?`, `autoFocus?`, `testId?` |
 | `markdown/markdown-toolbar.tsx` + `markdown/markdown-link-row.tsx` (ROK-1868, internal to the editor) | The formatting toolbar (`role="toolbar" aria-label="Formatting"`, one Tab stop, ←/→/Home/End roving tabindex; `Button variant="ghost" size="sm" iconOnly` with `aria-pressed`, `aria-keyshortcuts`, platform `title`; active `bg-overlay text-foreground`, idle `text-muted`; one `flex-nowrap overflow-x-auto` row below `lg`) and the inline link row under it (`Field` "Link address" + `Input type="url"` in a `noValidate` form, Apply, Remove link; bare host → `https://`, unsafe href → the contract's field error; Esc returns focus) | Not reusable on their own — part of `MarkdownEditor` | — |
+| `chart-chrome.ts` → chart tooltip / axis chrome (ROK-1937) | The recharts chrome every chart shares, on CSS vars only: `chartBarTooltipProps` / `chartLineTooltipProps` (spread onto `<Tooltip>` — `contentStyle` `var(--color-panel)` fill + `var(--color-edge)` border + 8px radius, `labelStyle` and `itemStyle` in `var(--color-foreground)`, and a bar `--color-overlay` band / line `--color-edge-strong` rule `cursor`), `chartAxisProps` (`<XAxis>`/`<YAxis>`: `--color-muted` line + ticks), `chartGridProps` (`<CartesianGrid>`: dashed `--color-edge`), `chartPolarGridProps` + `chartPolarTick` (radar). The pieces are exported singly too (`chartTooltipContentStyle`, `chartTooltipLabelStyle`, `chartTooltipItemStyle`, `chartBarCursor`, `chartLineCursor`). `itemStyle` is load-bearing: recharts 3 paints a value line `entry.color \|\| '#000'`, and a `<Bar>` coloured through `<Cell>`s has no `entry.color`, so without it the value renders black. No `/dev/design-system` demo — the charts render on `/insights` and the event metrics page. | Every recharts chart — Community Insights, analytics. Series colours stay with the chart (categorical, §2.2) | spread the props; pass `fontSize` / `tickFormatter` / `horizontal` alongside |
 | `CopyButton.tsx` → `CopyButton` | Icon copy-to-clipboard with checkmark + error toast | Copying invite codes, URLs | `text`, `className` |
 | `ConnectivityBanner.tsx` | Offline/reconnecting banner | Mounted app-level | — |
 | `DiscordJoinBanner.tsx` | Dismissible "join the Discord" banner (ROK-425) | Mounted app-level | — |

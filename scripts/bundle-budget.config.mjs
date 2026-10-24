@@ -80,7 +80,7 @@ const LAZY_NAMED = [
   { name: 'use-auth', kb: 3.9, why: 'api client + auth hooks; +0.4 KB ROK-1811 viewer-private cache drop on identity change. ROK-1803 re-measured 3.7 -> 3.9 KB: with the contract package `sideEffects: false` the contract schemas the auth hooks use now ship with them instead of in the old shared `dist` chunk' },
   { name: 'schemas', kb: 25.11, why: "zod v4 runtime only (zod/v4/core + classic + the en locale; 0 contract modules per the .js.map sources) — rolldown names it after zod's schemas module. ROK-1803: `packages/contract/package.json` `sideEffects: false` lets rolldown tree-shake the @raid-ledger/contract barrel per importer, so each schema now ships with the chunks that use it. Before: one shared `dist` chunk (zod + every contract schema) 48.8 KB gz; after: this zod-only chunk 25.1 KB gz, sum of all JS 1171.6 -> 1165.7 KB gz. A schema used only by a lazy route no longer reaches this chunk (measured: +0.95 KB on lfg-group-page, 0 here). zod's own size moves it, contract schemas never should" },
   { name: 'lineup-detail-page', kb: 27.51, why: 'route' },
-  { name: 'BarChart', kb: 26.64, why: 'recharts bar chart' },
+  { name: 'chart-chrome', kb: 26.64, why: 'recharts (bar/line/radar) — ROK-1937: the shared token tooltip/axis module web/src/components/ui/chart-chrome.ts now sits in this shared chunk, so rolldown names it after that module (was `BarChart`); same chunk, +0.26 KB gz measured, baseline unchanged' },
   { name: 'games-page', kb: 19.7, why: 'route' },
   { name: 'scheduling-poll-page', kb: 16.29, why: 'route' },
   { name: 'SchedulingWireframesPage', kb: 16.18, why: 'DEMO_MODE dev route' },
