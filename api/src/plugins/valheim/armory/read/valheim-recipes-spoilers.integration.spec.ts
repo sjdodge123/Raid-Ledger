@@ -28,6 +28,7 @@ import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
+import { RecipesReader } from './valheim-recipes.read.repository';
 import { ensureFixtureHubId } from '../valheim-armory-map-hub.helpers';
 import { ARMORY_KNOWN_LIST_MAX } from '../valheim-armory.mappers';
 import {
@@ -254,6 +255,18 @@ describe('Planner spoiler protection (ROK-1948)', () => {
       stations: ['piece_workbench'],
       sameForAll: true,
     });
+  });
+
+  it('D5: four viewers share ONE pruned-graph build (no viewer term in the cache key)', async () => {
+    await addProfile('1000000000000001', { recipes: BENCH_CLUB });
+    const imp = await sign(ownerId, testApp.seed.adminUser.id);
+    const lists = jest.spyOn(RecipesReader.prototype, 'serverKnownLists');
+    try {
+      for (const t of [admin, member, claimed, imp]) await catalogue(t);
+      expect({ builds: lists.mock.calls.length }).toEqual({ builds: 1 });
+    } finally {
+      lists.mockRestore();
+    }
   });
 
   it('AC1: /tree of a hidden item 404s like an unknown prefab; no body names it', async () => {
