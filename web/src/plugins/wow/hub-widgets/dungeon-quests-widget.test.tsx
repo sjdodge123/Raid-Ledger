@@ -9,7 +9,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import {
     ALDRIC_CHARACTER_ID, contentEvent, emptyDatasetReadiness, guildRaidsHandler, questReadinessHandler,
     readinessFixture, type ReadinessReply,
-} from '../../../test/handlers/forever-quests';
+} from '../../../test/handlers/forever-hub-widgets';
 import { clearRegistry, registerPlugin } from '../../plugin-registry';
 import { gameWidgetCells } from '../../../components/hub/hub-widget-cells';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';

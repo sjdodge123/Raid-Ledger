@@ -10,9 +10,9 @@ import type { GuildPage } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders, createTestQueryClient } from '../../../test/render-helpers';
 import {
-    MY_CHAR_ID, NO_PROFESSIONS_FIXTURE, PROF_CHAR_A, PROF_CHAR_B, PROFESSIONS_FIXTURE, VISITOR_FIXTURE,
+    MOCK_CHAR_IDS, NO_PROFESSIONS_FIXTURE, PROFESSIONS_FIXTURE, VISITOR_FIXTURE,
     foreverCharacter, myCharactersHandler, rosterInsightsHandler,
-} from '../../../test/mocks/roster-insights-professions-handlers';
+} from '../../../test/handlers/forever-hub-widgets';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import ProfessionsWidget from './professions-widget';
 import { useProfessionsVisible } from './professions.register';
@@ -40,7 +40,7 @@ function renderWidget(): void {
 
 describe('ProfessionsWidget', () => {
     it('lists each profession with its member count and best known skill', async () => {
-        server.use(rosterInsightsHandler(PROFESSIONS_FIXTURE));
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
         renderWidget();
         const alchemy = await screen.findByRole('button', { name: /Alchemy/ });
         expect(alchemy).toHaveTextContent('2 members');
@@ -50,15 +50,15 @@ describe('ProfessionsWidget', () => {
     });
 
     it('expands a profession to its members, each linking to their character by uuid', async () => {
-        server.use(rosterInsightsHandler(PROFESSIONS_FIXTURE));
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
         renderWidget();
         const alchemy = await screen.findByRole('button', { name: /Alchemy/ });
         expect(alchemy).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByRole('link', { name: 'Brewa' })).toBeNull();
         await userEvent.click(alchemy);
         expect(alchemy).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByRole('link', { name: 'Brewa' })).toHaveAttribute('href', `/characters/${PROF_CHAR_A}`);
-        expect(screen.getByRole('link', { name: 'Mixer' })).toHaveAttribute('href', `/characters/${PROF_CHAR_B}`);
+        expect(screen.getByRole('link', { name: 'Brewa' })).toHaveAttribute('href', `/characters/${MOCK_CHAR_IDS.thrall}`);
+        expect(screen.getByRole('link', { name: 'Mixer' })).toHaveAttribute('href', `/characters/${MOCK_CHAR_IDS.jaina}`);
         const list = screen.getByRole('list', { name: 'Alchemy members' });
         expect(within(list).getByText('225/300')).toBeInTheDocument();
         expect(within(list).getByText('manual')).toBeInTheDocument();
@@ -66,22 +66,22 @@ describe('ProfessionsWidget', () => {
     });
 
     it('shows a freshness footer', async () => {
-        server.use(rosterInsightsHandler(PROFESSIONS_FIXTURE));
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
         renderWidget();
         expect(await screen.findByTestId('professions-footer')).toHaveTextContent('2 characters with professions');
     });
 
     it('invites the viewer to set professions on their own Forever character when none are set', async () => {
-        server.use(rosterInsightsHandler(NO_PROFESSIONS_FIXTURE),
-            myCharactersHandler([foreverCharacter(MY_CHAR_ID, 3)]));
+        server.use(rosterInsightsHandler({ all: NO_PROFESSIONS_FIXTURE }),
+            myCharactersHandler([foreverCharacter(MOCK_CHAR_IDS.mine, 3)]));
         renderWidget();
         expect(await screen.findByText(/No one has set their professions yet/)).toBeInTheDocument();
         const link = await screen.findByRole('link', { name: 'Set your professions' });
-        expect(link).toHaveAttribute('href', `/characters/${MY_CHAR_ID}`);
+        expect(link).toHaveAttribute('href', `/characters/${MOCK_CHAR_IDS.mine}`);
     });
 
     it('explains how to add professions when the viewer has no Forever character', async () => {
-        server.use(rosterInsightsHandler(NO_PROFESSIONS_FIXTURE), myCharactersHandler([]));
+        server.use(rosterInsightsHandler({ all: NO_PROFESSIONS_FIXTURE }), myCharactersHandler([]));
         renderWidget();
         expect(await screen.findByText(/add them from their character page/)).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'Set your professions' })).toBeNull();
@@ -94,13 +94,13 @@ describe('useProfessionsVisible', () => {
     }
 
     it('hides the card for a visitor payload (no professions key)', async () => {
-        server.use(rosterInsightsHandler(VISITOR_FIXTURE));
+        server.use(rosterInsightsHandler({ all: VISITOR_FIXTURE }));
         const { result } = renderHook(() => useProfessionsVisible(ctx()), { wrapper });
         await waitFor(() => expect(result.current).toBe(false));
     });
 
     it('shows the card (empty state) when professions is an empty array', async () => {
-        server.use(rosterInsightsHandler(NO_PROFESSIONS_FIXTURE));
+        server.use(rosterInsightsHandler({ all: NO_PROFESSIONS_FIXTURE }));
         const { result } = renderHook(() => useProfessionsVisible(ctx()), { wrapper });
         await waitFor(() => expect(result.current).toBe(true));
     });

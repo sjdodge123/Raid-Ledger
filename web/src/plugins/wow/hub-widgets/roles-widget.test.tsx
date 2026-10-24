@@ -9,7 +9,7 @@ import { clearRegistry, registerPlugin } from '../../plugin-registry';
 import { gameWidgetCells } from '../../../components/hub/hub-widget-cells';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
-import { ROSTER_INSIGHTS_URL, rosterInsightsRolesHandler, rosterInsightsWithRoles } from '../../../test/handlers/roster-insights-roles';
+import { ROLES_FIXTURE, ROSTER_INSIGHTS_URL, rosterInsightsHandler, rosterInsightsWithRoles } from '../../../test/handlers/forever-hub-widgets';
 import { hasKnownRoles } from './roles.helpers';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { registerRolesWidget } from './roles.register';
@@ -43,7 +43,7 @@ beforeEach(() => {
 
 describe('Role breakdown widget', () => {
     it('shows a Dungeon-ready and a Raid-ready band with every role count, to a visitor too', async () => {
-        server.use(rosterInsightsRolesHandler());
+        server.use(rosterInsightsHandler({ all: ROLES_FIXTURE }));
         renderWithProviders(<Harness />);
         const dungeon = await screen.findByTestId('forever-roles-band-dungeon');
         expect(within(dungeon).getByText('Dungeon-ready')).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('Role breakdown widget', () => {
     });
 
     it('uses the shared role icons and links every role to the Members tab', async () => {
-        server.use(rosterInsightsRolesHandler());
+        server.use(rosterInsightsHandler({ all: ROLES_FIXTURE }));
         renderWithProviders(<Harness />);
         const tank = await screen.findByTestId('forever-roles-dungeon-tank');
         expect(within(tank).getByRole('img', { name: 'tank' })).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('Role breakdown widget', () => {
     });
 
     it('shows a neutral freshness footer for recent data', async () => {
-        server.use(rosterInsightsRolesHandler(rosterInsightsWithRoles({ raid: { tank: 1, healer: 0, dps: 0, unknown: 0 } }, new Date(Date.now() - 3 * DAY).toISOString())));
+        server.use(rosterInsightsHandler({ all: rosterInsightsWithRoles({ raid: { tank: 1, healer: 0, dps: 0, unknown: 0 } }, new Date(Date.now() - 3 * DAY).toISOString()) }));
         renderWithProviders(<Harness />);
         const footer = await screen.findByTestId('forever-roles-freshness');
         expect(footer).toHaveTextContent('via LedgerLink · as of 3 days ago');
@@ -94,7 +94,7 @@ describe('Role breakdown widget', () => {
     });
 
     it('turns the freshness footer to the warning tone past 14 days', async () => {
-        server.use(rosterInsightsRolesHandler(rosterInsightsWithRoles({ raid: { tank: 1, healer: 0, dps: 0, unknown: 0 } }, new Date(Date.now() - 20 * DAY).toISOString())));
+        server.use(rosterInsightsHandler({ all: rosterInsightsWithRoles({ raid: { tank: 1, healer: 0, dps: 0, unknown: 0 } }, new Date(Date.now() - 20 * DAY).toISOString()) }));
         renderWithProviders(<Harness />);
         const footer = await screen.findByTestId('forever-roles-freshness');
         expect(footer).toHaveTextContent('as of 20 days ago');

@@ -8,7 +8,7 @@ import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     MOCK_CHAR_IDS, createEmptyRosterInsights, createMockRosterInsights, daysAgoIso, rosterInsightsHandler,
-} from '../../../test/handlers/wow-roster-insights';
+} from '../../../test/handlers/forever-hub-widgets';
 import { clearRegistry, registerPlugin } from '../../plugin-registry';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { gameWidgetCells } from '../../../components/hub/hub-widget-cells';
