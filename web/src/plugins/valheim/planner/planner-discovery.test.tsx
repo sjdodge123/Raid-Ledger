@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState, type JSX } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse, ValheimRecipeDiscovery } from '@raid-ledger/contract';
+import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse, ValheimRecipeDiscovery } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { recipeCatalogFixture, valheimRecipePlanHandler, valheimRecipeStockHandler, valheimRecipeTreeHandler } from '../../../test/mocks/valheim-recipes-handlers';
@@ -11,6 +11,7 @@ import { CRAFT_ENTRIES, CRAFT_STATIONS, CRAFT_TOTALS } from './crafting.test-fix
 import { CraftingWindow } from './crafting-window';
 import { DEFAULT_PLANNER_FILTERS, DISCOVERY_CHIP_TITLE, DISCOVERY_HINT, type PlannerFilters } from './planner.helpers';
 import { PlannerFilterControls } from './planner-filters';
+import { RecipeTree } from './recipe-tree';
 import type { PlannerNames } from './use-planner-names';
 
 vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: () => true }));
@@ -81,5 +82,24 @@ describe('Planner rows', () => {
         await userEvent.setup().type(screen.getByRole('searchbox', { name: 'Search an item or piece' }), 'sword');
         await screen.findByRole('button', { name: 'Clear search and filters' });
         expect(swordRow()).toBeNull();
+    });
+});
+
+describe('plan tree rows', () => {
+    const node = (id: number, prefab: string, discovered: boolean | null): ValheimPlanNode => ({
+        id, parentId: null, prefab, quantity: 1, via: { type: 'gathered' }, alternatives: 0, crafts: 0, have: null, short: null, discovered,
+    });
+    const nodes = [node(1, 'SwordBronze', false), node(2, 'Wood', null)];
+    const tree = (hide: boolean) =>
+        render(<RecipeTree nodes={nodes} truncated={false} names={names} label="What your list needs" rootKinds={['item', 'item']} hideUndiscovered={hide} />);
+    const prefabs = () => screen.getAllByTestId('valheim-planner-row').map((r) => r.getAttribute('data-prefab'));
+    it('filter off → the undiscovered node carries the chip', () => {
+        tree(false);
+        expect(prefabs()).toEqual(['SwordBronze', 'Wood']);
+        expect(screen.getAllByTestId('valheim-undiscovered-chip')).toHaveLength(1);
+    });
+    it('filter on → the undiscovered node is hidden', () => {
+        tree(true);
+        expect(prefabs()).toEqual(['Wood']);
     });
 });
