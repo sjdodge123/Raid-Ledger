@@ -23,7 +23,7 @@ import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { API_BASE, apiPost, getAdminToken } from "./api-helpers";
 import { isDesktop } from "./helpers";
-import { at } from "./defined";
+import { findTexel } from "./valheim-map-bits";
 
 const FIXTURE = "/admin/test/valheim/map-fixture";
 const SHARED = "Show cartography table";
@@ -106,6 +106,9 @@ async function closeLayers(page: Page, wide: boolean): Promise<void> {
   await expect(sheet).toBeHidden();
 }
 
+/** Bound on every direct API call and page wait in the ROK-1949 case. */
+const IO_TIMEOUT_MS = 15_000;
+
 const MAP_API = (c: number, m: number): string =>
   `${API_BASE}/plugins/valheim/armory/characters/${c}/maps/${m}`;
 
@@ -119,33 +122,24 @@ async function fetchFogBits(
     `${MAP_API(f.characterId, f.mapId)}/fog?layer=${layer}`,
     {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(IO_TIMEOUT_MS),
     },
   );
   expect(res.status, `fog layer ${layer} must be readable`).toBe(200);
   return gunzipSync(Buffer.from(await res.arrayBuffer()));
 }
 
-const bitSet = (bits: Uint8Array, i: number): boolean =>
-  ((at(bits, i >> 3) >> (i & 7)) & 1) === 1;
-
-/** First texel (px, py) matching `want` in the union of both layers. */
-function findTexel(
-  n: number,
-  a: Uint8Array,
-  b: Uint8Array,
-  want: boolean,
-): { px: number; py: number } | null {
-  for (let i = 0; i < n * n; i++) {
-    if ((bitSet(a, i) || bitSet(b, i)) === want)
-      return { px: i % n, py: Math.floor(i / n) };
-  }
-  return null;
-}
-
-/** RGBA of one PNG pixel, decoded in the page (createImageBitmap + canvas). */
-function pngPixel(page: Page, b64: string, x: number, y: number) {
-  return page.evaluate(
-    async ([data, px, py]) => {
+/**
+ * RGBA of each `[x, y]` PNG pixel, decoded once in the page (createImageBitmap
+ * + canvas) — the multi-MB base64 crosses the CDP bridge one time only.
+ */
+async function pngPixels(
+  page: Page,
+  b64: string,
+  points: readonly (readonly [number, number])[],
+): Promise<number[][]> {
+  const decode = page.evaluate(
+    async ([data, pts]) => {
       const bytes = Uint8Array.from(atob(data as string), (c) =>
         c.charCodeAt(0),
       );
@@ -156,12 +150,22 @@ function pngPixel(page: Page, b64: string, x: number, y: number) {
       const ctx = cv.getContext("2d", { willReadFrequently: true });
       if (!ctx) throw new Error("no 2d context");
       ctx.drawImage(bmp, 0, 0);
-      return Array.from(
-        ctx.getImageData(px as number, py as number, 1, 1).data,
-      );
+      return pts.map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
     },
-    [b64, x, y] as const,
+    [b64, points] as const,
   );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bound = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`PNG decode exceeded ${IO_TIMEOUT_MS} ms`)),
+      IO_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([decode, bound]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 test.describe("Valheim hub — Map tab (ROK-1837)", () => {
@@ -228,6 +232,7 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     ).not.toBeNull();
     const baseMap = page.waitForResponse(
       (r) => r.url().includes("/base-map") && r.status() === 200,
+      { timeout: IO_TIMEOUT_MS },
     );
     await page.goto(
       `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
@@ -242,8 +247,12 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     const token = await getAdminToken();
     const direct = await fetch(res.url(), {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(IO_TIMEOUT_MS),
     });
-    expect(direct.status, "base-map re-fetch must return the masked bytes").toBe(200);
+    expect(
+      direct.status,
+      "base-map re-fetch must return the masked bytes",
+    ).toBe(200);
     expect(
       direct.headers.get("etag") ?? "",
       "re-fetched base-map ETag must be the masked m1- format",
@@ -256,6 +265,9 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     expect(personal.length, "personal bitset is ⌈n²/8⌉ bytes").toBe(
       Math.ceil((n * n) / 8),
     );
+    expect(shared.length, "shared bitset is ⌈n²/8⌉ bytes").toBe(
+      Math.ceil((n * n) / 8),
+    );
     const dark = findTexel(n, personal, shared, false);
     const lit = findTexel(n, personal, shared, true);
     expect(dark, "fixture must leave some texel unexplored").not.toBeNull();
@@ -264,12 +276,16 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     // PNG row 0 = north, bitset py 0 = south.
     const { px: dx, py: dy } = dark ?? { px: 0, py: 0 };
     const { px: lx, py: ly } = lit ?? { px: 0, py: 0 };
+    const [darkPx, litPx] = await pngPixels(page, b64, [
+      [dx, n - 1 - dy],
+      [lx, n - 1 - ly],
+    ]);
     expect(
-      await pngPixel(page, b64, dx, n - 1 - dy),
+      darkPx,
       `base-map pixel (${dx},${n - 1 - dy}) is unexplored and must be rgba(0,0,0,0)`,
     ).toEqual([0, 0, 0, 0]);
     expect(
-      (await pngPixel(page, b64, lx, n - 1 - ly))[3],
+      litPx?.[3],
       `base-map pixel (${lx},${n - 1 - ly}) is explored and must keep its terrain (alpha 255)`,
     ).toBe(255);
 
@@ -285,6 +301,7 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
             .getContext("2d")
             ?.getImageData(x as number, y as number, 1, 1).data[3],
         [dx, n - 1 - dy],
+        { timeout: IO_TIMEOUT_MS },
       );
     expect(
       fogAlpha,

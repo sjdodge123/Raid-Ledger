@@ -135,4 +135,36 @@ describe('ValheimMapMaskCache', () => {
     await expect(first).resolves.toEqual(Buffer.from('0'));
     await expect(queued).resolves.toEqual(Buffer.from('1'));
   });
+
+  it('settles every get under load — rejects, throws and 503s leak no permit', async () => {
+    const cache = new ValheimMapMaskCache({
+      budgetBytes: 1000,
+      concurrency: 2,
+      maxWaiters: 4,
+    });
+    const produce = (i: number) => async (): Promise<Buffer> => {
+      await flush();
+      if (i % 3 === 0) throw new Error(`render ${i} failed`);
+      return Buffer.from(String(i));
+    };
+    const all = Array.from({ length: 10 }, (_, i) =>
+      cache.get(`k${i}`, produce(i)),
+    );
+    const settled = await Promise.allSettled(all);
+    const kinds = settled.map((r) =>
+      r.status === 'fulfilled'
+        ? 'ok'
+        : r.reason instanceof ServiceUnavailableException
+          ? 'busy'
+          : 'err',
+    );
+    expect(kinds.filter((k) => k === 'busy')).toHaveLength(4);
+    // Every permit came back: the next render starts immediately.
+    let ran = false;
+    await cache.get('after', () => {
+      ran = true;
+      return Promise.resolve(Buffer.from('a'));
+    });
+    expect(ran).toBe(true);
+  });
 });
