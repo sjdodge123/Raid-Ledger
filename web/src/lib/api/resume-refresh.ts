@@ -33,6 +33,21 @@ export function refetchUnauthorized(queryClient: QueryClient): Promise<void> {
     return queryClient.refetchQueries({ type: 'active', predicate: failedUnauthorized }, { cancelRefetch: false });
 }
 
+/**
+ * Refetch the 401'd queries after a refresh, one batch at a time. A batch's own
+ * refetches can refresh again (the 401 backstop in `fetchWithAuth`); those
+ * notifications are dropped, or two queries that still 401 would restart each
+ * other forever. A batch ends when its refetches settle, so this terminates.
+ */
+function batchedRefetch(queryClient: QueryClient): () => void {
+    let running = false;
+    return () => {
+        if (running) return;
+        running = true;
+        void refetchUnauthorized(queryClient).finally(() => { running = false; });
+    };
+}
+
 /** Install once per mounted app (App.tsx effect). Returns the uninstaller. */
 export function installResumeRefresh(queryClient: QueryClient): () => void {
     const onVisibility = (): void => {
@@ -41,7 +56,7 @@ export function installResumeRefresh(queryClient: QueryClient): () => void {
     const onPageShow = (event: PageTransitionEvent): void => {
         if (event.persisted) refreshIfStale();
     };
-    const unsubscribe = onRefreshSuccess(() => void refetchUnauthorized(queryClient));
+    const unsubscribe = onRefreshSuccess(batchedRefetch(queryClient));
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pageshow', onPageShow);
     window.addEventListener('online', refreshIfStale);

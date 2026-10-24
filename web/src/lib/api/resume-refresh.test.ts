@@ -73,6 +73,26 @@ async function observeUnauthorized(key: string): Promise<{ calls: () => number }
     return { calls: () => calls };
 }
 
+/**
+ * An ACTIVE query that 401s every time; each refetch runs its 401 backstop
+ * refresh (as `fetchWithAuth` does) after `lagMs`, so two of them stagger.
+ */
+async function observeStill401(key: string, lagMs: number): Promise<{ calls: () => number }> {
+    let calls = 0;
+    const queryFn = async (): Promise<string> => {
+        calls += 1;
+        if (calls > 1) {
+            await new Promise((resolve) => setTimeout(resolve, lagMs));
+            await ensureFreshToken();
+        }
+        throw withHttpStatus(new Error('Unauthorized'), 401);
+    };
+    const observer = new QueryObserver(client, { queryKey: [key], queryFn });
+    unsubscribers.push(observer.subscribe(() => {}));
+    await vi.waitFor(() => expect(observer.getCurrentResult().status).toBe('error'));
+    return { calls: () => calls };
+}
+
 beforeEach(() => {
     refreshCalls = 0;
     vi.mocked(ensureFreshToken).mockClear();
@@ -138,5 +158,17 @@ describe('installResumeRefresh (ROK-1947)', () => {
         fireVisible();
         expect(await lastRefresh(), 'the refresh produced no token').toBeNull();
         expect(active.calls(), 'no token, so the 401 query is not refetched').toBe(1);
+    });
+
+    it('two queries that still 401 do not restart each other through their own backstop refreshes', async () => {
+        const first = await observeStill401('first', 0);
+        const second = await observeStill401('second', 15);
+        await ensureFreshToken();
+        await vi.waitFor(() => expect(second.calls(), 'the refresh refetches both 401 queries').toBe(2));
+        // Unbounded, each backstop refresh restarted the other query every ~15ms.
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        expect(first.calls(), 'a refresh from the batch\'s own refetch must not restart a query again').toBe(2);
+        expect(second.calls(), 'one refetch per query per refresh batch').toBe(2);
+        await vi.waitFor(() => expect(client.isFetching()).toBe(0));
     });
 });
