@@ -40,7 +40,11 @@ import {
 const PLUGINS = [PELICAN_PLUGIN_ID, VALHEIM_PLUGIN_ID];
 /** AC1: the only discovery on the server. */
 const BENCH_CLUB = ['piece_workbench', 'Club'];
-/** Names nobody on a BENCH_CLUB server has found: never in any body. */
+/**
+ * Hidden-ONLY data on a BENCH_CLUB server (hidden stations, hidden recipes,
+ * the inputs of a hidden recipe): never in any body. Bronze itself is NOT
+ * here: a visible recipe may name it (operator ruling 2026-10-24).
+ */
 const HIDDEN = [
   'SwordBronze',
   'Recipe_Bronze',
@@ -103,7 +107,7 @@ const atBench = {
   station: 'piece_workbench',
   repairStation: 'piece_workbench',
 };
-/** The Bronze chain at the forge + Club and BronzeNails (needs Bronze) at the workbench. */
+/** The Bronze chain at the forge + Club, BronzeNails and Cultivator (need Bronze) at the workbench. */
 const recipes = () =>
   bronzeRecipes({
     recipes: [
@@ -120,6 +124,12 @@ const recipes = () =>
         'Recipe_BronzeNails',
         'BronzeNails',
         [recipeRes('Bronze', 1)],
+        atBench,
+      ),
+      recipeEntry(
+        'Recipe_Cultivator',
+        'Cultivator',
+        [recipeRes('Bronze', 5), recipeRes('Wood', 5)],
         atBench,
       ),
     ],
@@ -313,6 +323,87 @@ describe('Planner spoiler protection (ROK-1948)', () => {
       bronze: { via: { type: 'undiscovered' }, alternatives: 0, crafts: 0 },
       bronzeChildren: 0,
       shopping: [],
+      leaks: [],
+    });
+  });
+
+  it('a visible Cultivator names Bronze × 5; Bronze stays out of browse, /tree and the plan breakdown', async () => {
+    await addProfile('1000000000000001', {
+      recipes: [...BENCH_CLUB, 'Cultivator'],
+    });
+    const rawCat = await body(base(server), member);
+    const c = ValheimRecipeCatalogResponseSchema.parse(rawCat);
+    const cultivator = c.entries.find((e) => e.prefab === 'Cultivator');
+    const tree404 = await body(`${base(server)}/Bronze/tree`, member, 404);
+    const rawPlan = await body(
+      `${base(server)}/plan?targets=Cultivator:1:1`,
+      member,
+    );
+    const p = ValheimRecipePlanResponseSchema.parse(rawPlan);
+    const bronze = p.nodes.find((n) => n.prefab === 'Bronze');
+    expect({
+      browse: c.entries.map((e) => e.prefab).sort(),
+      stations: c.stations.map((s) => s.prefab),
+      cultivatorIngredients: cultivator?.craft?.resources.map((r) => [
+        r.prefab,
+        r.amount,
+      ]),
+      ingredientCategory: c.ingredients.Bronze?.category ?? '',
+      bronze: bronze && {
+        via: bronze.via,
+        alternatives: bronze.alternatives,
+        crafts: bronze.crafts,
+        viewerFlag: 'discovered' in bronze,
+      },
+      bronzeChildren: p.nodes.filter((n) => bronze && n.parentId === bronze.id)
+        .length,
+      planPrefabs: p.nodes.map((n) => n.prefab),
+      shopping: p.shoppingList.map((s) => s.prefab),
+      planItemCategory: p.items.Bronze?.category ?? '',
+      leaks: leaks([rawCat, rawPlan, tree404]),
+    }).toEqual({
+      browse: ['Club', 'Cultivator'],
+      stations: ['piece_workbench'],
+      cultivatorIngredients: [
+        ['Bronze', 5],
+        ['Wood', 5],
+      ],
+      ingredientCategory: '',
+      bronze: {
+        via: { type: 'undiscovered' },
+        alternatives: 0,
+        crafts: 0,
+        viewerFlag: false,
+      },
+      bronzeChildren: 0,
+      planPrefabs: ['Cultivator', 'Bronze', 'Wood'],
+      shopping: ['Wood'],
+      planItemCategory: '',
+      leaks: [],
+    });
+  });
+
+  it('a visible smelter names Coal as fuel but never breaks it down via the hidden kiln', async () => {
+    await addProfile('1000000000000001', {
+      recipes: [...BENCH_CLUB, 'smelter'],
+      items: ['CopperOre'],
+    });
+    const raw = await body(`${base(server)}/plan?targets=Copper:1:1`, member);
+    const p = ValheimRecipePlanResponseSchema.parse(raw);
+    const coal = p.nodes.find((n) => n.prefab === 'Coal');
+    const kilnOnly = ['charcoal_kiln', 'forge', 'Forge', 'Recipe_Bronze'];
+    expect({
+      planPrefabs: p.nodes.map((n) => n.prefab),
+      coalVia: coal?.via,
+      coalChildren: p.nodes.filter((n) => coal && n.parentId === coal.id)
+        .length,
+      shopping: p.shoppingList.map((s) => s.prefab),
+      leaks: kilnOnly.filter((k) => JSON.stringify(raw).includes(`"${k}"`)),
+    }).toEqual({
+      planPrefabs: ['Copper', 'CopperOre', 'Coal'],
+      coalVia: { type: 'fuel' },
+      coalChildren: 0,
+      shopping: ['CopperOre', 'Coal'],
       leaks: [],
     });
   });
