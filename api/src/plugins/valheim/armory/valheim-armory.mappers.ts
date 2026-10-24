@@ -18,6 +18,7 @@ import type {
   NewValheimProfile,
   ValheimItemCatalogEntryRow,
 } from '../../../drizzle/schema';
+import type { StoredValheimLinkMessage } from '../link/ingest/valheim-link-snapshot.helpers';
 
 /** Stored known_items / known_recipes cap (spec: ≤8192 each). */
 export const ARMORY_KNOWN_LIST_MAX = 8192;
@@ -39,7 +40,8 @@ export interface ArmorySnapshot {
 
 /** Re-validation result; `detail` carries issue paths/codes only. */
 export type ArmoryValidation =
-  { ok: true; message: ValheimLinkMessage } | { ok: false; detail: string };
+  | { ok: true; message: StoredValheimLinkMessage }
+  | { ok: false; detail: string };
 
 /** `invalid:<path>:<code>;…` — never the payload text (pins are free text). */
 function issueDetail(error: z.ZodError): string {
@@ -50,7 +52,10 @@ function issueDetail(error: z.ZodError): string {
 }
 
 /** Whether the row's key columns equal the payload identity. */
-function keyMatches(snap: ArmorySnapshot, msg: ValheimLinkMessage): boolean {
+function keyMatches(
+  snap: ArmorySnapshot,
+  msg: StoredValheimLinkMessage,
+): boolean {
   if (msg.kind === 'items' || msg.kind === 'recipes') {
     return snap.steamId === null && snap.playerId === null;
   }
@@ -81,6 +86,8 @@ export function validateSnapshotPayload(
   const msg = parsed.data;
   if (msg.kind !== snap.kind)
     return { ok: false, detail: 'invalid:kind_mismatch' };
+  if (msg.kind === 'portals')
+    return { ok: false, detail: 'invalid:kind_unsupported' };
   if (!keyMatches(snap, msg))
     return { ok: false, detail: 'invalid:key_mismatch' };
   return { ok: true, message: msg };

@@ -53,6 +53,7 @@ export class ValheimLinkIngestService {
     const auth = assertServerMatches(req, msg.serverId);
     assertNotFromFuture(msg.capturedAt, now);
     assertBitmapsValid(msg);
+    if (msg.kind === 'portals') return this.ignore(kind, auth, body);
     const row = valheimSnapshotRow(auth.pelicanServerId, msg);
     const refs = row.blobRefs ?? [];
     const missingBlobs = await this.checkBlobs(auth.pelicanServerId, refs);
@@ -70,6 +71,18 @@ export class ValheimLinkIngestService {
       `valheim-link ingest kind=${kind} server=${auth.pelicanServerId} bytes=${body.length} result=${status}`,
     );
     return { status, missingBlobs };
+  }
+
+  /** ROK-1944: a valid `portals` message is accepted, not stored (ROK-1946). */
+  private ignore(
+    kind: ValheimLinkMessageKind,
+    auth: { pelicanServerId: number },
+    body: Buffer,
+  ): ValheimLinkIngestResult {
+    this.logger.log(
+      `valheim-link ingest kind=${kind} server=${auth.pelicanServerId} bytes=${body.length} result=ignored`,
+    );
+    return { status: 'accepted', missingBlobs: [] };
   }
 
   /** 400 `blob_ref_mismatch` vs a stored blob; returns the unmet shas. */
