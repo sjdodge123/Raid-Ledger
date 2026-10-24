@@ -146,6 +146,21 @@ describe('HubGalleryDialog — viewer', () => {
         expect(await caption()).toMatch(who(4));
     });
 
+    it('removing the last picture of the selected kind falls the dialog filter back to All', async () => {
+        const items = [hubMediaItem(1, 'death'), hubMediaItem(2, 'screenshot')];
+        server.use(pagedHandler(items), http.delete('http://localhost:3000/hubs/:guildId/media/:id', ({ params }) => {
+            items.splice(items.findIndex((i) => String(i.id) === params.id), 1);
+            return new HttpResponse(null, { status: 204 });
+        }));
+        open({ filter: 'death', index: 0 }, { canRemove: true });
+        expect(await caption()).toMatch(who(1));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove for good' }));
+        await waitFor(() => expect(useHubGalleryStore.getState().filters[5]).toBe('all'));
+        expect(await caption()).toMatch(who(2));
+        expect(screen.queryByTestId('hub-gallery-chip-death')).toBeNull();
+    });
+
     it('Escape closes and returns focus to the tile that opened it', async () => {
         const trigger = open();
         await caption();

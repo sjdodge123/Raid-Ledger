@@ -11,7 +11,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState, type JSX } fr
 import { isOperatorOrAdmin, useAuth } from '../../../hooks/use-auth';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
-import { availableFilters, type HubMediaFilter } from '../../../lib/hub-media-query';
+import { availableFilters, clampHubMediaFilter, type HubMediaFilter } from '../../../lib/hub-media-query';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { Modal } from '../../ui/modal';
 import { HubGalleryChips } from './hub-gallery-chips';
@@ -68,6 +68,12 @@ function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) 
     return { index, setIndex };
 }
 
+/** A chip the refreshed `kinds` no longer justify (staff removed its last picture) falls back to All. */
+function useClampFilter(pages: HubGalleryPages, filter: HubMediaFilter, changeFilter: (f: HubMediaFilter) => void): void {
+    const clamped = pages.loading ? filter : clampHubMediaFilter(filter, pages.kinds);
+    useEffect(() => { if (clamped !== filter) changeFilter(clamped); }, [clamped, filter, changeFilter]);
+}
+
 function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
     const closeGallery = useHubGalleryStore((s) => s.closeGallery);
     return useCallback(() => {
@@ -118,6 +124,7 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     useArrowKeys(scope, mode === 'viewer' && item !== undefined, nav.prev, nav.next);
     const close = useCloseAndReturnFocus(request);
     const changeFilter = useCallback((f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); }, [setIndex, setCardFilter, guildId]);
+    useClampFilter(pages, filter, changeFilter);
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
             nav={nav} scope={scope} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
