@@ -91,6 +91,23 @@ describe('protected with nothing visible', () => {
     });
 });
 
+describe('protected with nothing visible, but saved targets remain', () => {
+    it('still lists them as hidden rows and Remove clears them from storage', async () => {
+        localStorage.setItem(KEY, JSON.stringify([target('SwordIron')]));
+        server.use(valheimRecipeCatalogHandler(recipeCatalogProtectedFixture({ entries: [], stations: [], ingredients: {} })));
+        const user = userEvent.setup();
+        renderTab();
+        expect(await screen.findByText(SPOILERS_EMPTY_COPY)).not.toBeNull();
+        const list = screen.queryByRole('list', { name: 'Planned items' });
+        expect(list, 'saved targets listed under the protected-empty copy').not.toBeNull();
+        if (list === null) return;
+        expect(within(list).getByTestId('valheim-planner-hidden-target')).toHaveTextContent(HIDDEN_TARGET_COPY);
+        await user.click(screen.getByRole('button', { name: 'Remove hidden item' }));
+        await waitFor(() => expect(JSON.parse(localStorage.getItem(KEY) ?? '[]'), 'storage after Remove').toEqual([]));
+        expect(planHits, 'a hidden-only list sends no plan request').toEqual([]);
+    });
+});
+
 describe('a stored target that is now hidden', () => {
     beforeEach(() => localStorage.setItem(KEY, JSON.stringify([target('SwordIron'), target('Club')])));
 

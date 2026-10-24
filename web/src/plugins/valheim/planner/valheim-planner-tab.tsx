@@ -53,6 +53,28 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
     );
 }
 
+function EmptyState({ copy }: { copy: string }): JSX.Element {
+    return (
+        <div className="py-12 text-center">
+            <p className="text-sm text-muted">{copy}</p>
+        </div>
+    );
+}
+
+/**
+ * ROK-1948: protected with nothing visible. Saved targets stay manageable —
+ * their generic hidden rows and Remove controls still render under the copy.
+ */
+function ProtectedEmpty({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
+    const s = usePlannerState(serverId, catalog);
+    return (
+        <div className="space-y-4">
+            <EmptyState copy={SPOILERS_EMPTY_COPY} />
+            {s.targets.length > 0 && <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} isHidden={s.isHidden} />}
+        </div>
+    );
+}
+
 /** The empty state's copy, or null when there is something to show (ROK-1948: protected-and-empty has its own). */
 function emptyCopy(c: ValheimRecipeCatalogResponse): string | null {
     if (c.capturedAt !== null && c.entries.length === 0 && c.spoilers === 'protected') return SPOILERS_EMPTY_COPY;
@@ -69,12 +91,8 @@ export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Eleme
             </p>
         );
     const empty = emptyCopy(q.data);
-    if (empty !== null)
-        return (
-            <div className="py-12 text-center">
-                <p className="text-sm text-muted">{empty}</p>
-            </div>
-        );
+    if (empty === SPOILERS_EMPTY_COPY) return <ProtectedEmpty key={serverId} serverId={serverId} catalog={q.data} />;
+    if (empty !== null) return <EmptyState copy={empty} />;
     // Keyed by server: moving between two cached hubs remounts the body, so
     // one server's list never shows (or saves) under another's.
     return <PlannerBody key={serverId} serverId={serverId} catalog={q.data} />;
