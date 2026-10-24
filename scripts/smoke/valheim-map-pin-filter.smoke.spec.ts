@@ -66,6 +66,26 @@ async function serverPinsQuery(
 const summary = (page: Page): Locator => page.getByTestId("map-pin-filter");
 const badge = (page: Page): Locator => page.getByTestId("filter-count-badge");
 
+type Box = { x: number; y: number; width: number; height: number };
+
+/** A visible element's box, failing loudly when it has none. */
+async function boxOf(locator: Locator, label: string): Promise<Box> {
+  await expect(locator, `${label} visible`).toBeVisible({ timeout: 15_000 });
+  const box = await locator.boundingBox();
+  if (!box) throw new Error(`${label} has no bounding box`);
+  return box;
+}
+
+/** True when the two boxes share any horizontal span (any column). */
+const columnsOverlap = (a: Box, b: Box): boolean =>
+  a.x < b.x + b.width && b.x < a.x + a.width;
+
+const intersects = (a: Box, b: Box): boolean =>
+  columnsOverlap(a, b) && a.y < b.y + b.height && b.y < a.y + a.height;
+
+const fmt = (b: Box): string =>
+  `x=${Math.round(b.x)}..${Math.round(b.x + b.width)} y=${Math.round(b.y)}..${Math.round(b.y + b.height)}`;
+
 test.describe("Valheim Map — pin filter (ROK-1943)", () => {
   test("member: type chip, Everyone, label search, hide crossed-out, reload, Clear filters", async ({
     page,
@@ -209,5 +229,49 @@ test.describe("Valheim Map — pin filter (ROK-1943)", () => {
     );
     await expect(panel.getByRole("radio", { name: "Everyone" })).toBeChecked();
     await closeFilters(page, wide);
+  });
+
+  // D12: the viewport-fixed Filters FAB (bottom-right) must never cover the
+  // map's zoom / Layers overlay. The frame is ~viewport tall, so a control
+  // in the FAB's column passes under it at SOME scroll position — assert the
+  // columns are disjoint (no scroll can overlap them) and, at first load, that
+  // the boxes do not intersect.
+  test("mobile: Filters FAB does not cover the map zoom / Layers controls on first load", async ({
+    page,
+  }, testInfo) => {
+    test.skip(isDesktop(testInfo), "The Filters FAB renders below 1024px only");
+    const f = await seedDeathsFixture(testInfo.parallelIndex);
+    const { top } = f.characters;
+    await signInContextAs(page.context(), f.users.member.id);
+    await page.goto(`/hubs/${f.guildId}?vc=${top.id}#map`);
+    await expect(mapApp(page)).toBeVisible({ timeout: 15_000 });
+
+    const fab = await boxOf(page.getByTestId("filter-fab"), "Filters FAB");
+    const controls: Array<[string, Box]> = [
+      [
+        "Map zoom group",
+        await boxOf(
+          page.getByRole("group", { name: "Map zoom" }),
+          "Map zoom group",
+        ),
+      ],
+      [
+        "Layers button",
+        await boxOf(
+          page.getByRole("button", { name: "Layers", exact: true }),
+          "Layers button",
+        ),
+      ],
+    ];
+    for (const [label, box] of controls) {
+      expect(
+        columnsOverlap(fab, box),
+        `FAB (${fmt(fab)}) shares a column with ${label} (${fmt(box)})`,
+      ).toBe(false);
+      expect(
+        intersects(fab, box),
+        `FAB (${fmt(fab)}) covers ${label} (${fmt(box)})`,
+      ).toBe(false);
+    }
   });
 });
