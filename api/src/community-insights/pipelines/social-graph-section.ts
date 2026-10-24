@@ -64,7 +64,7 @@ async function loadNodes(db: Db): Promise<SocialGraphNodeDto[]> {
     userId: r.userId,
     username: r.username,
     avatar: r.avatar,
-    intensityTier: r.archetype?.intensityTier ?? 'Casual',
+    intensityTier: r.archetype?.intensityTier ?? 'Newcomer',
     cliqueId: 0,
     degree: 0,
   }));

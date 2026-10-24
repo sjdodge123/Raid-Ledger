@@ -458,16 +458,16 @@ describe('Taste Profile (ROK-948)', () => {
       expect(res.body.coPlayPartners.length).toBeLessThanOrEqual(10);
     });
 
-    it('returns zeroed dimensions + composed Casual archetype for a user with no vector', async () => {
+    it('returns zeroed dimensions + composed Newcomer archetype for a user with no vector (ROK-1935)', async () => {
       const userId = await seedUser('d:prof2', 'prof2');
       const res = await testApp.request
         .get(`/users/${userId}/taste-profile`)
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.archetype.intensityTier).toBe('Casual');
+      expect(res.body.archetype.intensityTier).toBe('Newcomer');
       expect(res.body.archetype.vectorTitles).toEqual([]);
       expect(res.body.archetype.descriptions.tier).toBe(
-        TIER_DESCRIPTIONS.Casual,
+        TIER_DESCRIPTIONS.Newcomer,
       );
       expect(res.body.archetype.descriptions.titles).toEqual([]);
       for (const axis of Object.values(
