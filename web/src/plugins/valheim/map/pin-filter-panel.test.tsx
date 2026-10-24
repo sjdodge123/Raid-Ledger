@@ -63,6 +63,7 @@ function summaryState(over: Partial<PinFilterSummary> = {}): PinFilterSummary {
         onRetry: vi.fn(),
         onClear: vi.fn(),
         portalsError: false,
+        portalsPending: false,
         portalsOmitted: 0,
         onRetryPortals: vi.fn(),
         ...over,

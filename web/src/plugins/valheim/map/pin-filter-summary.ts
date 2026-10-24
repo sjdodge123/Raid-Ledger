@@ -23,6 +23,8 @@ export interface PinFilterSummary {
     onRetry: () => void;
     /** ROK-1946 D15: the scanned-portal layer's failure (a hub 404 is no layer, not an error). */
     portalsError: boolean;
+    /** The portal layer is on and its first read is still in flight — no empty state yet. */
+    portalsPending: boolean;
     /** Portals the mod left out of the scan; > 0 appends the "not uploaded" line. */
     portalsOmitted: number;
     onRetryPortals: () => void;

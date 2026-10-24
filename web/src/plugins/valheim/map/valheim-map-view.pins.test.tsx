@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
 import type { ValheimMapMeta, ValheimServerPin, ValheimServerPortal } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -232,6 +232,31 @@ describe('ValheimMapView scanned portals (ROK-1946)', () => {
         expect(screen.queryByRole('button', { name: /Ragnhild/ })).toBeNull();
         expect(summary()).not.toHaveTextContent('Loading pins…');
         expect(pinsSeen).toEqual([]);
+    });
+
+    it('cold cache, Scanned portals only, /portals still pending: no "No pins match" yet', async () => {
+        let hit = false;
+        server.use(http.get(PORTALS_URL, async () => { hit = true; await delay('infinite'); return HttpResponse.json({}); }));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        expect(await screen.findByRole('application')).toBeInTheDocument();
+        await waitFor(() => expect(hit).toBe(true));
+        expect(summary()).not.toHaveTextContent('No pins match these filters.');
+        expect(within(summary()).queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    });
+
+    it('Scanned portals only and /portals failed: the portal error chip, not "No pins match"', async () => {
+        server.use(portalsHandler([], { status: 500 }));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        expect(await screen.findByText('Portals could not be loaded')).toBeInTheDocument();
+        expect(summary()).not.toHaveTextContent('No pins match these filters.');
+        expect(within(summary()).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('Scanned portals only and the scan has none: the empty state shows', async () => {
+        server.use(portalsHandler([]));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        await waitFor(() => expect(summary()).toHaveTextContent('No pins match these filters.'));
+        expect(within(summary()).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
     });
 
     it('without a server (character page) there is no portal layer', async () => {

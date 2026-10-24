@@ -69,7 +69,7 @@ function usePanel(filter: PinFilter, characterId: number, serverId: number | und
 
 interface PortalLayer {
     pins: readonly ValheimMapPin[];
-    summary: Pick<PinFilterSummary, 'portalsError' | 'portalsOmitted' | 'onRetryPortals'>;
+    summary: Pick<PinFilterSummary, 'portalsError' | 'portalsPending' | 'portalsOmitted' | 'onRetryPortals'>;
 }
 
 /** ROK-1946: the scanned portals, filtered (D12); hub-only, and only while the chip can show them. */
@@ -80,7 +80,8 @@ function usePortalLayer(filter: PinFilter, serverId: number | undefined, worldUi
     return {
         pins: filterPortals(data?.portals ?? [], filter),
         summary: {
-            portalsError: on && portalLayerFailed(query), portalsOmitted: data?.omitted ?? 0,
+            portalsError: on && portalLayerFailed(query), portalsPending: on && query.isPending,
+            portalsOmitted: data?.omitted ?? 0,
             onRetryPortals: () => void query.refetch(),
         },
     };

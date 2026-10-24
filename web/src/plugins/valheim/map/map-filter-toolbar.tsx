@@ -30,7 +30,9 @@ function PortalSummary({ summary }: { summary: PinFilterSummary }): JSX.Element 
 /** The D15 summary line; empty (but mounted, a live region) when there is nothing to say. */
 export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary; onClear: () => void }): JSX.Element {
     const { status, activeCount, count, truncated } = summary;
-    const empty = activeCount > 0 && count === 0 && status !== 'loading' && status !== 'error';
+    // Either enabled layer still loading or failed → not "no match" (ROK-1946).
+    const layersSettled = status !== 'loading' && status !== 'error' && !summary.portalsPending && !summary.portalsError;
+    const empty = activeCount > 0 && count === 0 && layersSettled;
     return (
         <div role="status" data-testid="map-pin-filter" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted">
             {status === 'loading' && <span>{PIN_SUMMARY_TEXT.loading}</span>}
