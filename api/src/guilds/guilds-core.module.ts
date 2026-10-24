@@ -1,4 +1,5 @@
 import { Module, type OnModuleInit } from '@nestjs/common';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { SettingsModule } from '../settings/settings.module';
 import { HubWelcomeModule } from '../discord-bot/hub-welcome/hub-welcome.module';
@@ -20,6 +21,7 @@ import { HubNotificationMuteController } from './hub-notification-mute.controlle
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
 import { HubVisibleGuard } from './hub-visible.guard';
+import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
 import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
@@ -37,7 +39,12 @@ import {
  * `guilds/:id` (ROK-1831); `/plugins/wow/guilds/**` stay as WoW aliases.
  */
 @Module({
-  imports: [ChannelMirrorModule, SettingsModule, HubWelcomeModule],
+  imports: [
+    ActivityLogModule,
+    ChannelMirrorModule,
+    SettingsModule,
+    HubWelcomeModule,
+  ],
   // Order matters (ROK-1831): the literal `guilds/onboarding` and
   // `guilds/mine` must register before `guilds/:id`.
   controllers: [
@@ -60,6 +67,7 @@ import {
     HubOnboardingService,
     HubService,
     HubVisibleGuard,
+    HubWidgetPrefsService,
     HubEventTagger,
     HubPostRelayService,
     HubPostsService,

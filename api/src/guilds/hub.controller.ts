@@ -20,6 +20,7 @@ import {
   type GuildPage,
   type GuildProfile,
   type GuildRaidsDto,
+  type HubWidgetPrefsResponse,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import type { AuthenticatedRequest } from '../auth/types';
@@ -28,6 +29,7 @@ import { GuildEditorsService } from './guild-editors.service';
 import { GuildProfileService } from './guild-profile.service';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
 import { HubVisibleGuard } from './hub-visible.guard';
+import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubService } from './hub.service';
 
 const jwt = AuthGuard('jwt');
@@ -46,6 +48,7 @@ export class HubController {
     private readonly hubs: HubService,
     private readonly profiles: GuildProfileService,
     private readonly editors: GuildEditorsService,
+    private readonly widgetPrefs: HubWidgetPrefsService,
   ) {}
 
   @Get()
@@ -83,6 +86,20 @@ export class HubController {
     @Body() body: unknown,
   ): Promise<GuildProfile> {
     return this.profiles.update(req.user, id, body);
+  }
+
+  /**
+   * ROK-1918 — save the Overview layout (full prefs) or `{ reset: true }`.
+   * Leaders, officers and staff (GuildEditorGuard); members/visitors → 403.
+   */
+  @Patch('widget-prefs')
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  updateWidgetPrefs(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+  ): Promise<HubWidgetPrefsResponse> {
+    return this.widgetPrefs.update(req.user, id, body);
   }
 
   @Get('editors')

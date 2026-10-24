@@ -264,3 +264,5 @@ export * from './discord-game-role.schema.js';
 // Per-game notification mute — the game-page bell (ROK-1797).
 export * from './game-notification-mutes.schema.js';
 export * from './hub-notification-mutes.schema.js';
+// Hub Overview arrange mode — saved widget layout (ROK-1918).
+export * from './hub-widget-prefs.schema.js';

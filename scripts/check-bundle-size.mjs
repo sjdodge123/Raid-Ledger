@@ -254,7 +254,7 @@ export async function main(argv) {
     }
     console.error(`\nFAIL — ${result.failures.length} over budget: ${result.failures.map((r) => r.chunk).join(', ')}`);
     for (const hint of result.hints) console.error(`hint: ${hint}`);
-    console.error('Shrink the chunk, or raise its budget in scripts/bundle-budget.config.mjs and justify it in the PR.');
+    console.error('Shrink the chunk, or raise its budget in scripts/bundle-budget.config.mjs (set its baseline to the NEW measured size, so the budget is measured +15% — see that file\'s header) and justify it in the PR.');
     return 1;
   } catch (err) {
     console.error(`bundle size check: ${err instanceof BundleCheckError ? err.message : err.stack}`);

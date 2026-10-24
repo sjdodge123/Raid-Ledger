@@ -6,7 +6,8 @@
  * the same way calendar layers and identity providers sit beside slots — so any
  * plugin can add a widget to every hub of its game, whatever the kind. Core
  * renders the chrome (`WidgetCard` + Suspense + error boundary) in
- * `components/hub/hub-widget-cells.tsx`; v1 order is fixed by `order`.
+ * `components/hub/hub-widget-cells.tsx`; `order` is the default slot, which a
+ * hub's saved layout overrides (ROK-1918, `components/hub/layout/`).
  */
 import type { ComponentType, LazyExoticComponent } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
@@ -25,8 +26,16 @@ export type HubWidgetCtx = HubCtx & { gameSlug: string };
 export interface HubGameWidget {
     /** Unique per plugin; the card's DOM id is `hub-widget-<pluginSlug>-<id>`. */
     id: string;
-    /** Card heading — core draws the `WidgetCard` chrome. */
+    /** Card heading — core draws the `WidgetCard` chrome. Also the widget's name in arrange mode (ROK-1918). */
     title: string;
+    /** ROK-1918 — one line for the arrange list and the Add picker. */
+    description?: string;
+    /**
+     * ROK-1918 — `true` (default): shown until a hub hides it, and a default-on
+     * widget shipped after a hub saved its layout appears automatically (Q4).
+     * `false`: opt-in — renders nowhere until an editor adds it.
+     */
+    defaultOn?: boolean;
     /** Game slugs, matched against `page.guild.gameSlug`. */
     games: readonly string[];
     /** Hub kinds it may appear on. Omitted = every kind. */

@@ -5,35 +5,16 @@
  * event list and attendance; the hub module's `overviewWidgets` are merged in
  * by `order`, which is what keeps a game's widgets in their prototype slots.
  * ROK-1909: plugin game widgets (`registerHubWidget`) join the same sort.
+ * ROK-1918: cells come from `layout/hub-widget-catalog`, ordered and filtered
+ * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
  */
-import { Fragment, lazy, Suspense, type JSX, type ReactNode } from 'react';
-import type { CoreWidgetId, HubCtx, HubModule } from '../../plugins/hub-module';
-import { GuildAttendance } from './events/guild-attendance';
-import { GuildEvents } from './events/guild-events';
-import { GuildRaidSchedule } from './events/guild-raid-schedule';
+import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
+import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
-import { gameWidgetCells, type GameWidgetCell } from './hub-widget-cells';
 import { usePluginStore } from '../../stores/plugin-store';
 import { canInvite } from './community/community-invite-access';
-
-/**
- * ROK-1868 §3.4 — lazy so the post card, composer and post hooks (shared with
- * the lazy Posts tab) stay out of the `hub-page` chunk. The fallback holds the
- * card's two-column cell so the grid doesn't jump when it lands.
- */
-const LatestPostCard = lazy(() => import('./posts/latest-post-card').then((m) => ({ default: m.LatestPostCard })));
-
-function PostCellSkeleton(): JSX.Element {
-    return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel md:col-span-2" aria-busy="true" data-testid="guild-gm-post-loading" />;
-}
-
-
-/**
- * ROK-1788: lazy so the mirror (and its editor-only picker, a further lazy
- * chunk) stays out of the guild-page chunk. Fallback `null` matches the card's
- * own loading state, which renders nothing until the mirror query settles.
- */
-const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').then((m) => ({ default: m.GuildDiscordMirror })));
+import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-catalog';
+import { resolveHubLayout } from './layout/resolve-hub-layout';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -41,69 +22,37 @@ const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').t
  * they pushed the `hub-page` route chunk over its gzip budget (13.2 KB vs the
  * 12.6 KB cap the route carried before this story).
  */
-const HubSetupChecklist = lazy(() => import('./onboarding/setup-checklist').then((m) => ({ default: m.HubSetupChecklist })));
+const loadOverviewEditorTools = () => import('./overview-editor-tools');
+const HubSetupChecklist = lazy(() => loadOverviewEditorTools().then((m) => ({ default: m.HubSetupChecklist })));
+
+/** ROK-1918 L5: Arrange button + arrange mode, editor-only — same loader, so no second preload list (see `overview-editor-tools`). */
+const HubArrangeGate = lazy(() => loadOverviewEditorTools().then((m) => ({ default: m.HubArrangeGate })));
 
 const SPAN_2 = 'md:col-span-2';
-const OVERVIEW_ATTENDANCE_TOP = 5;
-/** "All events" always lands on the core Events tab now that one exists (ROK-1830 S3c). */
-const EVENTS_TAB = 'events';
 
-interface Cell {
-    key: CoreWidgetId | 'setup-checklist' | `module:${string}` | GameWidgetCell['key'];
-    order: number;
-    span: 1 | 2;
-    node: ReactNode;
-}
-
-/** The core band. Module widgets land between these orders — WoW uses 50/60. */
-function coreCells(ctx: HubCtx, onChangeChannel: (() => void) | null, mods: ModsState): Cell[] {
+/**
+ * Above everything on purpose: it is the one widget that tells an editor what
+ * is still missing, and it removes itself once nothing is. Not arrangeable
+ * (ROK-1918 §2.2 rule 5). A Fragment, not a span-2 <div>: the card renders null
+ * for a dismissed or finished editor, and a wrapper would leave an empty grid
+ * item (a dead `gap-4` row) above the first widget. The card carries its own
+ * `md:col-span-2` when it does render.
+ */
+function SetupChecklistCell({ ctx, mods }: { ctx: HubCtx; mods: ModsState }): JSX.Element | null {
     const { page, raids } = ctx;
+    if (!page.viewer.canEdit) return null;
     const data = raids.data;
-    // Above everything on purpose: it is the one widget that tells an editor
-    // what is still missing, and it removes itself once nothing is. A span-1
-    // Fragment cell, not a span-2 <div>: the card renders null for a
-    // dismissed or finished editor, and a wrapper would leave an empty grid
-    // item (a dead `gap-4` row) above the first widget. The card carries its
-    // own `md:col-span-2` when it does render.
-    const checklist: Cell[] = page.viewer.canEdit
-        ? [{
-            key: 'setup-checklist', order: 5, span: 1,
-            node: (
-                <Suspense fallback={null}>
-                    <HubSetupChecklist guildId={page.guild.id} canEdit guildName={page.guild.name} memberCount={page.guild.memberCount}
-                        nextRaid={data === undefined ? undefined : data.nextRaid}
-                        modsConfigured={mods.configured} hasModSources={mods.hasSources} kind={page.guild.kind} canInvite={canInvite(ctx)} />
-                </Suspense>
-            ),
-        }]
-        : [];
-    const cells: Cell[] = [
-        ...checklist,
-        { key: 'gm-post', order: 10, span: 1, node: <Suspense fallback={<PostCellSkeleton />}><LatestPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} canOpenPosts={page.viewer.role !== 'visitor'} /></Suspense> },
-        { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} kind={page.guild.kind} /></Suspense> },
-    ];
-    if (!data) return cells;
-    cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} kind={page.guild.kind} /> });
-    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} kind={page.guild.kind} /> });
-    cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} kind={page.guild.kind} /> });
-    return cells;
+    return (
+        <Suspense fallback={null}>
+            <HubSetupChecklist guildId={page.guild.id} canEdit guildName={page.guild.name} memberCount={page.guild.memberCount}
+                nextRaid={data === undefined ? undefined : data.nextRaid}
+                modsConfigured={mods.configured} hasModSources={mods.hasSources} kind={page.guild.kind} canInvite={canInvite(ctx)} />
+        </Suspense>
+    );
 }
 
-/** ROK-1831: drop the core widgets the hub module hides for this viewer. */
-function isCoreWidget(key: Cell['key']): key is CoreWidgetId {
-    return key !== 'setup-checklist' && !key.startsWith('module:') && !key.startsWith('plugin:');
-}
-
-function visibleCoreCells(cells: Cell[], ctx: HubCtx, mod: HubModule | undefined): Cell[] {
-    const visible = mod?.coreWidgetVisible;
-    if (!visible) return cells;
-    return cells.filter((c) => !isCoreWidget(c.key) || visible(c.key, ctx));
-}
-
-function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
-    return (mod?.overviewWidgets ?? [])
-        .filter((w) => (w.visible ? w.visible(ctx) : true))
-        .map((w) => ({ key: `module:${w.id}`, order: w.order, span: w.span ?? 1, node: <w.component {...ctx} /> }));
+function WidgetCell({ cell }: { cell: HubWidgetCell }): JSX.Element {
+    return cell.wrap ? <div className={SPAN_2}>{cell.node}</div> : <Fragment>{cell.node}</Fragment>;
 }
 
 /** Whether the hub kind has mod sources at all, and whether any reports content. */
@@ -121,15 +70,34 @@ interface HubOverviewProps {
 export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
-    // ROK-1909: plugin game widgets carry their own span class, so they enter as span-1 cells.
-    const pluginCells: Cell[] = gameWidgetCells(ctx, activeSlugs).map((c) => ({ ...c, span: 1 }));
-    const cells = [...visibleCoreCells(coreCells(ctx, openChannelPicker, mods), ctx, mod), ...moduleCells(ctx, mod), ...pluginCells]
-        .sort((a, b) => a.order - b.order);
-    return (
-        <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
-            {cells.map((c) => (c.span === 2
-                ? <div key={c.key} className={SPAN_2}>{c.node}</div>
-                : <Fragment key={c.key}>{c.node}</Fragment>))}
+    const catalog = buildHubWidgetCatalog(ctx, mod, { onChangeChannel: openChannelPicker, activeSlugs });
+    // ROK-1918: the hub's saved layout; `null`/absent = registry default (the pre-1918 Overview).
+    const prefs = ctx.page.widgetPrefs ?? null;
+    const layout = resolveHubLayout(catalog, prefs, ctx.page.viewer);
+    const { page } = ctx;
+    // Arrange mode belongs to ONE hub (0 = not arranging; ids are positive) and
+    // needs edit rights. A switch to another cached hub (same tree position) or a
+    // refetch that drops `canEdit` leaves it in the same commit — arrange mode
+    // unmounts, its draft goes with it, and the grid shows again. The gate clears
+    // the stale id (`hub-arrange-gate`), keeping the bytes out of `hub-page`.
+    const [arrangingFor, setArrangingFor] = useState(0);
+    const arranging = page.viewer.canEdit && arrangingFor === page.guild.id;
+    // One tree position for the grid (hidden, not unmounted, while arranging):
+    // the editor chunk loading and leaving arrange mode never remount a widget.
+    const grid = (
+        <div hidden={arranging} className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+            <SetupChecklistCell ctx={ctx} mods={mods} />
+            {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </div>
+    );
+    if (!page.viewer.canEdit) return grid;
+    return (
+        <>
+            <Suspense fallback={null}>
+                <HubArrangeGate guildId={page.guild.id} kind={page.guild.kind} layout={layout} prefs={prefs}
+                    raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={(on) => setArrangingFor(on ? page.guild.id : 0)} />
+            </Suspense>
+            {grid}
+        </>
     );
 }

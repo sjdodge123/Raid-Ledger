@@ -356,6 +356,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
 | `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
 | `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
+| `ArrangeRow` + `useRowDrag` + `arrange-draft.ts` (`moveRow`, `moveTo`, `toggleRow`, `moveAnnouncement`) | `components/hub/arrange/` | Letting someone reorder / hide / add the cells of a configurable widget grid — the §4.28 arrange list. Reuse these; do not build a second sortable list or add a drag library |
 | `NominatingComposite.tsx`, `VotingComposite.tsx`, `SchedulingComposite.tsx` | `components/lineups/cycle-4/` | Whole-phase page shells — extend these, don't build a fourth |
 | `VoteToggleButton.tsx`, `StarToggleButton.tsx`, `VotesUsedPill.tsx`, `VotingRow.tsx` | `components/lineups/cycle-4/` | Vote/star affordances and the "N of M votes used" pill |
 | `HeroNextStep.tsx`, `ConfirmationPill.tsx`, `UserLink.tsx`, `AnonymousDiscordName.tsx`, `ActivityTimeline.tsx` | `components/common/` | The single through-line "NEXT:" banner, confirmation pill, user mention, account-less Discord signup name + "via Discord" chip (not interactive itself — roster list rows wrap it in the ROK-381 guest-profile link from `lib/guest-profile-link.ts`, the same link slot cards build; never a member profile), activity feed |
@@ -1553,7 +1554,7 @@ renders its own card or heading.
   **Audience is a client-side display filter; members-only data endpoints MUST also enforce access
   server-side.**
 - **Layout.** Merged into the bento by `order` with the core cells (10/20/30/40/70) and the module's
-  `overviewWidgets`; v1 order is fixed (no leader hide/reorder yet). `span` 1/2/3 at ≥1024px; 3 clamps to 2
+  `overviewWidgets`, then re-ordered / hidden / added per hub by the leader's saved `widgetPrefs` (ROK-1918, §4.28). `span` 1/2/3 at ≥1024px; 3 clamps to 2
   at ≥768px; phone is one column. A hidden widget renders nothing, so it leaves no empty grid item.
 
 **DO** — use `registerHubWidget` for a game-specific glanceable card (≤ ~8 rows or one chart) with an
@@ -1582,3 +1583,55 @@ game tab whose id a core or module tab (or an earlier game tab) already uses is 
 A tab that needs a server block gates itself with `visible: ({ page }) => page.server !== undefined`. Pelican's `registerServerHubGameTab` is a deprecated alias. Valheim's
 Characters / Map / Materials / Planner use it. No visual change, so there is no `/dev/design-system` demo; the
 tab row is the §4 `TabRow`.
+
+### 4.28 Arrange list — reorder, hide and add the cells of a configurable grid (ROK-1918)
+
+While an editor arranges a hub Overview, the bento grid is **replaced** by an order-truthful single-column
+list (`web/src/components/hub/arrange/`). The grid is `md:grid-flow-dense`, so a wide card visually jumps over
+narrow ones and empty widgets render nothing — dragging on the live grid would not land where the pointer
+says. The list shows every widget, in saved order, including hidden and empty ones.
+
+- **Row** (`ArrangeRow`): position, title + description, chips (`StatusChip neutral` "Wide", `warning`
+  "Members only" / "Editors only", `neutral` "Hidden"), the owner muted (`text-xs text-muted` — "Core", or
+  the plugin's badge label without a trailing "Plugin", from `widget-owner.ts`), then Move up / Move down /
+  Hide as `Button ghost sm iconOnly` with `aria-label`s that name the widget.
+- **Reorder.** Move up / Move down are the primary path on every device (Tab + Enter/Space; disabled at the
+  ends; focus stays on the moved row's button, or moves to its other arrow when the pressed one is now
+  disabled, and a drag drop focuses the dropped row — `use-arrange-focus.ts`). **Native HTML5 drag** on the six-dot grip is progressive
+  enhancement at `DRAG_MQ` = `(min-width: 1024px) and (pointer: fine)` only — native DnD does not fire on touch
+  and tablets get the phone layout (§4.18). No drag library (operator Q6). The drop line is a 2px `bg-success`
+  bar centred in the 8px row gap: above the target when moving up, below it when moving down — the same
+  index `moveTo(rows, from, to)` lands on. The row being dragged takes `border-edge-strong bg-overlay`.
+- **Announce.** One polite `aria-live` region: "Events moved to position 3 of 8." (`moveAnnouncement`) for
+  arrows and drag alike; "X added at position 1." for Add.
+- **Hide** is a pressed-state toggle (`aria-pressed`, eye / eye-slash), **not** a `Switch`: the change is
+  staged until Save (§4.11). A hidden row stays in place at `opacity-60` with the "Hidden" chip, so re-showing
+  is one click and it keeps its slot.
+- **Add** opens a picker (`Modal max-w-lg` at ≥1024px, `BottomSheet` below — §4.4); an added widget lands at
+  the top, shown.
+- **Layout.** The list sits in `grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem]` with a `min-w-0` `<ol>`.
+  Keep the explicit `grid-cols-1`: an implicit `auto` track sizes to the longest untruncated title, so on a
+  phone every row outgrows the viewport and its Hide button is clipped off-screen (ROK-1918 e2e).
+- **Footer** (sticky, docked above the phone bottom bar with `bottom-[var(--bottom-nav-clearance)] md:bottom-0` — the ROK-1875 bottom-nav pattern note): `Reset to default` (`ghost`, confirms) · `Cancel` (`secondary`, dirty guard →
+  `DiscardChangesConfirm`) · `Save layout` (`primary`, disabled until dirty). Save writes the full order,
+  hidden rows included.
+- **Leaving with an unsaved draft** (`use-arrange-leave-guard.ts`). Cancel and an **in-hub tab switch** (any
+  same-page `<a href="#…">` — `TabRow`, its More menu, jump links) ask through the one
+  `DiscardChangesConfirm`; Discard exits and then applies the held hash. Reload / close / external links get
+  `beforeunload`. **Not guarded:** a route change to another page, and Back/Forward between tabs — the app
+  runs under `BrowserRouter`, which has no navigation blocker, and `popstate`/`hashchange` cannot be
+  cancelled. Arrange mode belongs to one hub (keyed by hub id; a switch to another hub leaves it) and ends
+  the moment the viewer loses edit rights.
+- **Chunks.** Arrange mode is editor-only and lazy. `hub-page` must **not** gain another `import()`: every call
+  site carries its own ~95-path `__vite__mapDeps` preload list (~0.5 KB gz) and the route has a gzip cap. Load
+  editor-only Overview code through the single `overview-editor-tools.ts` loader, and import arrange pieces
+  elsewhere (the `/dev/design-system` demo) **through that loader too** — importing `arrange-row` directly
+  from a second chunk makes Rollup split a shared chunk, which adds a path to `hub-page`'s preload list.
+
+**DO** — reuse `ArrangeRow` + `useRowDrag` + the `arrange-draft` helpers for any "order these cards" editor;
+keep arrows as the always-available path. Sibling: the hub Resources editors' `ItemControls`
+(`components/hub/content/list-editor-bits.tsx`) — the same arrow buttons and labels plus Remove, for a content list
+that is edited, not arranged (no hide, no drag). **DON'T** — make drag the only way to reorder, show the grip on
+touch, use a `Switch` for a staged hide, or drag on a dense grid. Rendered: `/dev/design-system#arrange-list`
+(`arrange-list-section.tsx`, demo lazy-loaded from `arrange-list-demo.tsx` — the real row, drag hook and
+helpers over sample rows; drag needs a mouse at ≥1024px); live at `/guilds/:id` → Overview → Arrange (editors).

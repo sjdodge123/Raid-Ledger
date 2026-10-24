@@ -12,14 +12,20 @@ import type { HubKindRegistry } from './hub-kind.registry';
 import { HubService } from './hub.service';
 import { findGuildKind } from './guild-core.queries';
 import { isHubMuted } from '../notifications/hub-notification-mute.helpers';
+import { readWidgetPrefs } from './hub-widget-prefs.service';
 
 jest.mock('./guild-core.queries', () => ({ findGuildKind: jest.fn() }));
 jest.mock('../notifications/hub-notification-mute.helpers', () => ({
   isHubMuted: jest.fn(),
 }));
+jest.mock('./hub-widget-prefs.service', () => ({
+  readWidgetPrefs: jest.fn(),
+}));
 
 const findKind = jest.mocked(findGuildKind);
 const muted = jest.mocked(isHubMuted);
+const prefs = jest.mocked(readWidgetPrefs);
+const SAVED = { order: ['raids'], hidden: ['roster'], added: [], config: {} };
 const actor = { id: 42, role: 'member' as const };
 
 function serviceFor(role: LadderRole, member = true): HubService {
@@ -41,6 +47,7 @@ function serviceFor(role: LadderRole, member = true): HubService {
 beforeEach(() => {
   findKind.mockResolvedValue('wow_guild');
   muted.mockResolvedValue(true);
+  prefs.mockResolvedValue(null);
 });
 
 describe('ROK-1832 HubService.page viewer.notificationsMuted', () => {
@@ -65,5 +72,22 @@ describe('ROK-1832 HubService.page viewer.notificationsMuted', () => {
     const page = await serviceFor('visitor').page(actor, 7);
     expect(page.viewer).not.toHaveProperty('notificationsMuted');
     expect(muted).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-1918 HubService.page widgetPrefs', () => {
+  it.each(['visitor', 'member', 'leader'] as const)(
+    'a %s gets the saved layout (layout, not data)',
+    async (role) => {
+      prefs.mockResolvedValue(SAVED);
+      const page = await serviceFor(role).page(actor, 7);
+      expect(page.widgetPrefs).toEqual(SAVED);
+      expect(prefs).toHaveBeenCalledWith(expect.anything(), 7);
+    },
+  );
+
+  it('a hub that never saved carries widgetPrefs: null', async () => {
+    const page = await serviceFor('member').page(actor, 7);
+    expect(page.widgetPrefs).toBeNull();
   });
 });
