@@ -220,5 +220,7 @@ export function recipePlanUndiscoveredFixture(targets: ValheimRecipePlanTarget[]
     const hidden: ValheimPlanNode = {
         id: plan.nodes.length, parentId: 0, prefab: 'Bronze', quantity: 2, alternatives: 0, crafts: 0, have: 0, short: 2, via: { type: 'undiscovered' },
     };
-    return { ...plan, spoilers: 'protected', nodes: [...plan.nodes, hidden] };
+    // Operator ruling 2026-10-24: a withheld ingredient is named (name + icon only), never broken down.
+    const items = { ...plan.items, Bronze: { name: 'Bronze', category: '', icon: null } };
+    return { ...plan, spoilers: 'protected', nodes: [...plan.nodes, hidden], items };
 }

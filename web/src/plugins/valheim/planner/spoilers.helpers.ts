@@ -2,7 +2,7 @@
  * ROK-1948 — Planner spoiler protection (spec §5): the copy and the pure
  * checks the tree, the shopping list and the crafting window use. The server
  * already sends only what someone on the server has discovered; the web never
- * names, counts or draws what it withheld.
+ * breaks down what it withheld (a withheld ingredient is only named).
  */
 import type { ValheimPlanNode, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 
@@ -13,10 +13,10 @@ export const SPOILERS_OFF_NO_DATA_COPY =
     "Spoiler protection is off — no character on this server has shared what they've discovered yet (RL Valheim Link 0.4.2+).";
 /** Muted fallback note: protection is off because a discovery list is over the read cap. */
 export const SPOILERS_OFF_TRUNCATED_COPY = "Spoiler protection is off — a character's discovery list is too long to read.";
-/** A plan node the server withheld (D7) — no name, icon or count. */
-export const UNDISCOVERED_NODE_COPY = 'Needs something nobody on the server has found yet.';
-/** Shopping-list footer when any plan node is withheld. */
-export const PLAN_UNDISCOVERED_COPY = 'Part of this plan needs something nobody on the server has found yet.';
+/** The note under a withheld plan node (D7): named like the game names it, never broken down. */
+export const UNDISCOVERED_NODE_COPY = 'Not yet discovered on this server';
+/** Shopping-list footer when any plan node is withheld (it is not broken down into the list). */
+export const PLAN_UNDISCOVERED_COPY = 'Part of this plan needs something not yet discovered on this server.';
 /** A stored target the protected catalogue no longer lists (W5). */
 export const HIDDEN_TARGET_COPY = 'Hidden item: nobody on the server has found it yet';
 /** Protected, with nothing visible to craft (§4.5 empty state). */

@@ -133,14 +133,24 @@ describe('a plan node the server withheld', () => {
         );
     });
 
-    it('shows the generic line with no name, icon, count or prefab', async () => {
+    it('names the withheld ingredient ("Bronze") with the not-yet-discovered note, and nothing under it', async () => {
         renderTab();
         await screen.findAllByTestId('valheim-planner-row');
-        expect(document.body).not.toHaveTextContent(/Bronze/);
-        expect(document.querySelector('[data-prefab="Bronze"]')).toBeNull();
-        const row = screen.queryByTestId('valheim-planner-row-undiscovered');
-        expect(row?.textContent).toBe(UNDISCOVERED_NODE_COPY);
-        expect(row?.querySelector('img, [role="meter"], [data-prefab]')).toBeNull();
+        const row = screen.getByTestId('valheim-planner-row-undiscovered');
+        expect(within(row).getByTestId('valheim-planner-row-name')).toHaveTextContent('Bronze');
+        expect(within(row).getByTestId('valheim-planner-row-undiscovered-note')).toHaveTextContent(UNDISCOVERED_NODE_COPY);
+        expect(row).toHaveAttribute('data-prefab', 'Bronze');
+        // No disclosure (no children), no have/need bar, no station / "+N ways" chips.
+        expect(within(row).queryByRole('button')).toBeNull();
+        expect(within(row).queryByRole('meter')).toBeNull();
+        expect(row).not.toHaveTextContent(/Forge|other way|Gathered/);
+    });
+
+    it('the withheld ingredient is not broken down in the shopping list', async () => {
+        renderTab();
+        await screen.findAllByTestId('valheim-planner-row');
+        const list = screen.getByTestId('valheim-planner-undiscovered-footer').parentElement;
+        expect(list).not.toHaveTextContent(/Copper|Tin/);
     });
 
     it('the shopping list carries the one-line footer', async () => {
