@@ -105,6 +105,15 @@
     border-color: rgba(161, 161, 170, 0.3);
 }
 
+.archetype-pill--tier-newcomer {
+    /* ROK-1935: no play sessions seen yet. Tokens only (repaints per scheme);
+       the dashed edge reads "not yet established", distinct from Casual. */
+    color: var(--color-muted);
+    background: color-mix(in oklab, var(--color-muted) 10%, transparent);
+    border-color: var(--color-edge-strong);
+    border-style: dashed;
+}
+
 /* Intensity badge -------------------------------------------------- */
 
 .intensity-badge {

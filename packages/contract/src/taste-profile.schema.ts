@@ -68,12 +68,17 @@ export type TasteProfilePoolAxis = (typeof TASTE_PROFILE_AXIS_POOL)[number];
  * Intensity tier enum (ROK-1083). Always present on every archetype —
  * derived from `intensityMetrics.intensity` via a threshold ladder.
  * Ordered from most to least intense.
+ *
+ * `Newcomer` (ROK-1935, additive) is not on the ladder: it marks a player
+ * with no Discord presence data at all, so their intensity is unknown
+ * rather than low. APPEND-ONLY — keep existing values and their order.
  */
 export const INTENSITY_TIERS = [
   'Hardcore',
   'Dedicated',
   'Regular',
   'Casual',
+  'Newcomer',
 ] as const;
 
 export type IntensityTier = (typeof INTENSITY_TIERS)[number];

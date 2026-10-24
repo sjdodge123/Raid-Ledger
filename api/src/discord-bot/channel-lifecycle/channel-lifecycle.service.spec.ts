@@ -559,7 +559,7 @@ describe('review fixes — create capacity, topic, gone hubs', () => {
       channelId: '',
       guildIds: [1],
     });
-    const url = 'https://rl.test/guilds/7';
+    const url = 'https://rl.test/hubs/7';
     jest
       .mocked(resolver.resolveGameHubLink)
       .mockResolvedValue({ url, label: 'Hub' });

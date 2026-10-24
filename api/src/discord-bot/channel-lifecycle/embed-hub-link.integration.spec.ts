@@ -1,6 +1,6 @@
 /**
  * ROK-1872 (ROK-1428 §2.8, §2.9, AC) — real DB: an event card posted through
- * EmbedPosterService carries the game's Hub link button (`/guilds/<id>`);
+ * EmbedPosterService carries the game's Hub link button (`/hubs/<id>`);
  * with no hub the card has no Hub button and is otherwise unchanged.
  *
  * Discord is mocked the way sibling integration specs do it: `jest.spyOn` on
@@ -149,7 +149,7 @@ describe('event card hub link (ROK-1872, integration)', () => {
     const hubId = await seedHub(gameId);
     await postCard(eventId, gameId);
     expect(postedButtons()).toContainEqual(
-      expect.objectContaining({ label: 'Hub', url: `${BASE}/guilds/${hubId}` }),
+      expect.objectContaining({ label: 'Hub', url: `${BASE}/hubs/${hubId}` }),
     );
   });
 
@@ -192,7 +192,7 @@ describe('community hubs on the card (ROK-1873, D15 / H8)', () => {
     expect(postedButtons()).toContainEqual(
       expect.objectContaining({
         label: 'Hub',
-        url: `${BASE}/guilds/${crewId}`,
+        url: `${BASE}/hubs/${crewId}`,
       }),
     );
   });

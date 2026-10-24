@@ -16,6 +16,7 @@ import {
   notifyPollVoters,
   type NotifyPollVotersDeps,
 } from './standalone-poll-voter.helpers';
+import type { PollHubPayload } from './poll-hub-payload.helpers';
 
 interface NotifyMock {
   notifyAutoSignup: jest.Mock;
@@ -71,6 +72,7 @@ function callNotifyVoters(
     others: { userId: number }[];
     benched?: number[];
     chosenTime: string;
+    hub?: PollHubPayload;
   },
 ): Promise<void> {
   return notifyPollVoters(
@@ -81,6 +83,7 @@ function callNotifyVoters(
     args.chosenTime,
     99,
     'Game Night',
+    args.hub,
   );
 }
 
@@ -173,6 +176,7 @@ describe('notifyPollVoters bench routing (ROK-1874)', () => {
       'Game Night',
       expect.stringContaining('May 4'),
       99,
+      {},
     );
   });
 
@@ -188,5 +192,25 @@ describe('notifyPollVoters bench routing (ROK-1874)', () => {
 
     expect(notifications.notifyAutoBenched).not.toHaveBeenCalled();
     expect(recipients(notifications.notifyAutoSignup)).toEqual([1, 2]);
+  });
+});
+
+describe('notifyPollVoters hub (ROK-1896)', () => {
+  it('passes the poll hub to the bench, auto-signup and outcome DMs', async () => {
+    const notifications = makeNotifications();
+    const deps = makeDeps(makeTzDb({}), notifications);
+    const hub = { hubId: 9, hubName: 'Tarnished Hub' };
+
+    await callNotifyVoters(deps, {
+      selected: [{ userId: 1 }, { userId: 2 }],
+      others: [{ userId: 3 }],
+      benched: [2],
+      chosenTime: '2026-05-04T01:00:00.000Z',
+      hub,
+    });
+
+    expect(notifications.notifyAutoSignup.mock.calls[0]?.[4]).toBe(hub);
+    expect(notifications.notifyAutoBenched.mock.calls[0]?.[4]).toBe(hub);
+    expect(notifications.notifyPollOutcome.mock.calls[0]?.[3]).toBe(hub);
   });
 });

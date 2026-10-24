@@ -7,8 +7,13 @@ import {
   type WeeklySnapshotInput,
 } from '../intensity-rollup.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
+import {
+  loadPresenceUserIds,
+  writeIntensityWithTitle,
+} from '../archetype-retitle.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 interface WeeklySnapshot {
   input: WeeklySnapshotInput;
@@ -109,6 +114,13 @@ async function communityDistributions(
   };
 }
 
+/**
+ * Weekly intensity rollup. ROK-1935: every active user with a taste-vector
+ * row is re-titled on every run — users with a snapshot get fresh metrics,
+ * the rest keep their stored metrics — so after a run no stored archetype
+ * disagrees with its stored intensity. Snapshot + metrics + archetype are
+ * written in one transaction per user.
+ */
 export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
   const weekStart = currentWeekStart();
   const fourWkStart = fourWeekStart(new Date());
@@ -124,43 +136,52 @@ export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
     allTimeHoursDistribution: [...dists.allTime.values()],
     maxUniqueGames: dists.maxUniqueGames,
   };
+  const presenceUserIds = await loadPresenceUserIds(db);
 
   for (const { id: userId } of users) {
     const snap = await buildWeeklySnapshot(db, userId, weekStart, dists);
-    if (!snap) continue;
-
-    const metrics = computeIntensityMetrics(snap.input, community);
-
-    await db
-      .insert(schema.playerIntensitySnapshots)
-      .values({
+    const metrics = snap
+      ? computeIntensityMetrics(snap.input, community)
+      : null;
+    await db.transaction(async (tx) => {
+      if (snap) await upsertSnapshot(tx, userId, weekStart, snap);
+      await writeIntensityWithTitle(
+        tx,
         userId,
-        weekStart: weekStart.toISOString().slice(0, 10),
-        totalHours: snap.input.totalHours.toFixed(2),
-        gameBreakdown: snap.gameBreakdown,
-        uniqueGames: snap.input.uniqueGames,
-        longestSessionHours: snap.input.longestSessionHours.toFixed(2),
-        longestSessionGameId: snap.longestGameId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.playerIntensitySnapshots.userId,
-          schema.playerIntensitySnapshots.weekStart,
-        ],
-        set: {
-          totalHours: snap.input.totalHours.toFixed(2),
-          gameBreakdown: snap.gameBreakdown,
-          uniqueGames: snap.input.uniqueGames,
-          longestSessionHours: snap.input.longestSessionHours.toFixed(2),
-          longestSessionGameId: snap.longestGameId,
-        },
-      });
-
-    await db
-      .update(schema.playerTasteVectors)
-      .set({ intensityMetrics: metrics })
-      .where(eq(schema.playerTasteVectors.userId, userId));
+        metrics,
+        presenceUserIds.has(userId),
+      );
+    });
   }
+}
+
+async function upsertSnapshot(
+  tx: Tx,
+  userId: number,
+  weekStart: Date,
+  snap: WeeklySnapshot,
+): Promise<void> {
+  const fields = {
+    totalHours: snap.input.totalHours.toFixed(2),
+    gameBreakdown: snap.gameBreakdown,
+    uniqueGames: snap.input.uniqueGames,
+    longestSessionHours: snap.input.longestSessionHours.toFixed(2),
+    longestSessionGameId: snap.longestGameId,
+  };
+  await tx
+    .insert(schema.playerIntensitySnapshots)
+    .values({
+      userId,
+      weekStart: weekStart.toISOString().slice(0, 10),
+      ...fields,
+    })
+    .onConflictDoUpdate({
+      target: [
+        schema.playerIntensitySnapshots.userId,
+        schema.playerIntensitySnapshots.weekStart,
+      ],
+      set: fields,
+    });
 }
 
 /** Monday-start, local date — matches `game_activity_rollups` convention. */

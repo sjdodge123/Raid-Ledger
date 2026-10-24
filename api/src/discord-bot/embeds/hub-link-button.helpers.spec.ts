@@ -13,14 +13,14 @@ describe('hubLinkButton', () => {
 
   it('builds a Link-style button carrying the label and absolute URL', () => {
     const button = hubLinkButton({
-      url: 'https://raid.example.com/guilds/7',
+      url: 'https://raid.example.com/hubs/7',
       label: HUB_LINK_LABEL,
     });
     expect(button?.toJSON()).toEqual({
       type: 2,
       style: ButtonStyle.Link,
       label: 'Hub',
-      url: 'https://raid.example.com/guilds/7',
+      url: 'https://raid.example.com/hubs/7',
     });
   });
 

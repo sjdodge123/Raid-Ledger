@@ -206,12 +206,14 @@ async function initApi(): Promise<{
 
   console.log('  Fetching demo users...');
   const usersRes = await api.get<{ data: { id: number; username: string }[] }>(
-    '/users?limit=10&page=1',
+    '/users?limit=50&page=1',
   ).catch(() => ({ data: [] }));
   // ROK-1933: never hand a fixture-seeded user (synthetic Discord id) to a role.
+  // ROK-1896: fetch the API max (50) so the filter still leaves the 10 demo
+  // users the roles and the ROK-943 roster expect.
   const allUsers = withoutFixtureUsers(
     Array.isArray(usersRes.data) ? usersRes.data : [],
-  );
+  ).slice(0, 10);
 
   return { api, testUserId, allUsers };
 }
