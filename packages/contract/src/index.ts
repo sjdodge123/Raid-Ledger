@@ -263,6 +263,8 @@ export * from './guild-discord.schema.js';
 export * from './hub-onboarding.schema.js';
 // Game-server community hub — join, Quick Play list, hide (ROK-1831).
 export * from './hub-server.schema.js';
+// Hub media store + Gallery widget — pictures with a source kind (ROK-1942).
+export * from './hub-media.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

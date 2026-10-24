@@ -75,6 +75,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-surface` | `bg-surface` | `#0f172a` | `#ffffff` | Cards, headers, sheets |
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
+| `--color-media-well` | `bg-media-well` | `#05070b` | `#05070b` (not remapped) | Photo / video stage (the §4.29 viewer) — near-black in EVERY scheme, declared once in `@theme` (ROK-1942) |
+| `--color-media-well-foreground` | `text-media-well-foreground` | `#cbd5e1` | `#cbd5e1` (not remapped) | Copy on the media well ("Loading picture…"), 12.9:1 |
 | `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
 | `--color-dim` | `text-dim` | `#8291a7` | `#5a697f` | Placeholders, disabled text, the quietest readable text (dark: 5.57 surface / 4.57 panel, 3.23 overlay accepted — TDB:2050, slate-500 `#64748b` was 3.75 / 3.07; light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
 | `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common). quest-log declares its own, `#685640` 6.33 surface / 5.56 panel (was `#8b7355` 4.05 / 3.55; operator ruling 2026-10-04, ROK-1472) |
@@ -1399,6 +1401,10 @@ them; do not fix them as scope creep.
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
     feel heavier on a white page. *Suggested:* one scrim constant.
 
+12. **Two image lightboxes** — `components/games/ScreenshotGallery.tsx:42-60` is a hand-built fixed overlay
+    (Escape only, no focus trap, §4.4 DON'T); the hub Gallery (§4.29, ROK-1942) is the `Modal` / `BottomSheet`
+    pair. *Suggested:* move the game-detail screenshots onto the §4.29 viewer.
+
 ---
 
 ## 7. Approved design references
@@ -1581,7 +1587,9 @@ ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked
 44px `Link` row (name + `tabular-nums` count over a §3.2 `GuildMeter` scaled to the top row) when it has a
 target and plain text when not, a "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
 since <date>", viewer timezone). Copy this shape for any future ranked-count widget; `useVisible` hides it when
-the list is empty or the members-only route answers 404.
+the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
+CORE (`components/hub/gallery/`, §4.29) — Valheim only registers it; `useVisible` hides it from members at 0
+pictures, editors keep it with the §4.5 hint.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
 (declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
@@ -1650,3 +1658,40 @@ that is edited, not arranged (no hide, no drag). **DON'T** — make drag the onl
 touch, use a `Switch` for a staged hide, or drag on a dense grid. Rendered: `/dev/design-system#arrange-list`
 (`arrange-list-section.tsx`, demo lazy-loaded from `arrange-list-demo.tsx` — the real row, drag hook and
 helpers over sample rows; drag needs a mouse at ≥1024px); live at `/guilds/:id` → Overview → Arrange (editors).
+
+### 4.29 Gallery grid + lightbox — one dialog, two modes (ROK-1942)
+
+A hub's pictures (`GET /hubs/:guildId/media`, members + staff) on the Overview **Gallery** card and in ONE
+dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
+(`pending-approval/_approved/ROK-1942-hub-gallery/`); operator ruling 2026-10-24 adds the chips.
+
+- **Tile** (`hub-gallery-tile.tsx`): a square `<button>` (`aspect-square`, ≥44px, `rounded-lg border-edge
+  bg-panel`), the thumbnail `object-cover`, a "Death" badge (`border-danger`) and, for editors, "Hidden"
+  (`opacity-50` image). Named for screen readers: "Death — Jasz, 2 h ago. Open picture". The card strip is
+  8 tiles ≥1024px (4 columns), 6 below (3 columns); the See-all grid is 3 / 4 columns.
+- **Chips** — All · Deaths · Screenshots (`hub-gallery-chips.tsx`, the §3.1 `FilterChip`, exclusive, shown only
+  when the hub has both kinds; Screenshots = `screenshot` + `image`). The same chips sit on the card, in the
+  grid and in the viewer, and are one filter per hub (`hub-gallery-store.ts`). They are an in-card / in-dialog
+  toggle, not a page's filter set, so the §4.1 funnel does not apply.
+- **One dialog, two modes** (`hub-gallery-dialog.tsx`): `Modal maxWidth="max-w-3xl"` ≥1024px,
+  `BottomSheet maxHeight="95vh"` below (§4.4). A card tile opens **viewer** mode at its index; "See all (N)"
+  opens **grid** mode; a grid tile switches to viewer and "Back to all" returns — never a second dialog.
+  Closing (Escape, ×, backdrop, swipe) refocuses the element that opened it.
+- **Viewer** (`hub-gallery-viewer.tsx`): "3 of 24" (`aria-live`), the full picture `object-contain` in a
+  `bg-media-well` well (`aspect-[4/3]`, `lg:aspect-video`; near-black in every scheme, "Loading picture…" in `text-media-well-foreground`), 44px `Button secondary iconOnly` Prev / Next
+  ("Previous picture" / "Next picture", `aria-disabled` at either end so focus stays put) over its edges, ←/→ keys (not while typing). Prev/Next walk the
+  **filtered** set and page in more through `nextCursor` at the loaded end. Caption: kind badge, author,
+  date + relative time, source, the optional decorator link.
+- **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar): grid → `Load more` (24 a page) while
+  `nextCursor`; viewer → `Back to all`, editors `Hide` (`warning-soft`) / `Unhide` (`success-soft`), staff
+  `Remove` (`destructive-soft`) that asks inline ("Remove for good", `destructive`) instead of stacking a
+  confirm.
+- **Images** are behind the bearer token: `useHubMediaImageUrl(path)` fetches → object URL (revoked); a
+  missing file leaves the tile's `bg-panel` / the viewer's "Loading picture…".
+
+**New pattern: square thumbnail grid tile + image viewer inside the Modal / BottomSheet pair** — the only
+other lightbox (`ScreenshotGallery`) is a hand-built overlay (§6.12). **DON'T** stack a viewer dialog over
+the grid, build a custom image overlay, or put the chips in a §4.1 funnel. **Light / Dark** — every surface is
+a token; the well is `bg-media-well` — a DARK stage in both families (operator ruling), the one token no scheme
+remaps (`media-well.guard.test.ts`). ←/→ only act on keys aimed inside the dialog. Rendered: `/dev/design-system#hub-widgets` → "Gallery card + lightbox" (`hub-gallery-demo.tsx`, the
+real grid + dialog over a seeded demo cache); live on a Valheim server hub's Overview (`/hubs/:id`).

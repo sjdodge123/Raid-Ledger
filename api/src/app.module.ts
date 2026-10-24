@@ -60,6 +60,7 @@ import { DiscoveryCategoriesModule } from './discovery-categories/discovery-cate
 import { CommunityInsightsModule } from './community-insights/community-insights.module';
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
+import { HubMediaModule } from './hub-media/hub-media.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
 import { API_ENV_FILE } from './sentry/telemetry-policy';
@@ -127,6 +128,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     CspReportModule,
     GamesLookupModule,
     CalendarSyncModule,
+    HubMediaModule,
   ],
   controllers: [AppController],
   providers: [

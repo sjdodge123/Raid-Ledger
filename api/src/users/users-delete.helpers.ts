@@ -268,6 +268,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // hub's history, but the community wipe (community-user-wipe.helpers)
   // revokes every open link the user made first, so none keeps working.
   schema.hubInvites,
+  // ROK-1942: `hub_media.hidden_by` is SET NULL moderation audit; a Gallery
+  // picture belongs to the hub (posted in its Discord channel), not to the
+  // editor who hid it.
+  schema.hubMedia,
 ];
 
 /**

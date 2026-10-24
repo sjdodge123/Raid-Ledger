@@ -84,3 +84,20 @@ describe('valheim register — Overview Deaths widget (ROK-1930)', () => {
         expect(reg?.widget.useVisible?.name).toBe('useDeathsWidgetVisible');
     });
 });
+
+describe('valheim register — Overview Gallery widget (ROK-1942 D10)', () => {
+    it('registers a lazy, members-only, default-on `gallery` card (span 2) right after Deaths', async () => {
+        const { getHubGameWidgetRegistrations } = await import('../hub-game-widgets');
+        const reg = getHubGameWidgetRegistrations().find((r) => r.pluginSlug === 'valheim' && r.widget.id === 'gallery');
+        expect(reg?.widget.title).toBe('Gallery');
+        expect(reg?.widget.description).toMatch(/pictures/);
+        expect(reg?.widget.audience).toBe('members');
+        expect(reg?.widget.kinds).toEqual(['game_server']);
+        expect(reg?.widget.games).toEqual(['valheim']);
+        expect(reg?.widget.order).toBe(47);
+        expect(reg?.widget.span).toBe(2);
+        expect(reg?.widget.defaultOn).toBe(true);
+        expect(reg?.widget.action?.name).toBe('HubGallerySeeAll');
+        expect(reg?.widget.useVisible?.name).toBe('useGalleryWidgetVisible');
+    });
+});
