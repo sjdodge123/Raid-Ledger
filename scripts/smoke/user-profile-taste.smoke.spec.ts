@@ -15,7 +15,13 @@
  */
 import { test, expect } from './base';
 
-const INTENSITY_TIER_NAMES = ['Hardcore', 'Dedicated', 'Regular', 'Casual'];
+const INTENSITY_TIER_NAMES = [
+    'Hardcore',
+    'Dedicated',
+    'Regular',
+    'Casual',
+    'Newcomer',
+];
 
 /**
  * Navigate to the Players page and follow a user link to reach another

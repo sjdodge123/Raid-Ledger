@@ -14,6 +14,8 @@ const TIER_COLORS: Record<string, string> = {
     Dedicated: '#fbbf24',
     Regular: '#22c55e',
     Casual: '#38bdf8',
+    /** ROK-1935: no play sessions seen yet — the quiet neutral token, so it repaints per scheme. */
+    Newcomer: 'var(--color-dim)',
 };
 
 const DEFAULT_VISIBLE = 10;
