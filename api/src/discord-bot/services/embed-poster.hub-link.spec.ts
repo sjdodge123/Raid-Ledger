@@ -105,7 +105,7 @@ describe('EmbedPosterService — hub link (ROK-1872)', () => {
     const { service, build } = await setup([{ id: 7 }, { id: 8 }]);
     expect(await service.postEmbed(42, EVENT, 5)).toBe(true);
     expect(contextOf(build).hubLink).toEqual({
-      url: `${BASE}/guilds/7`,
+      url: `${BASE}/hubs/7`,
       label: 'Hub',
     });
   });

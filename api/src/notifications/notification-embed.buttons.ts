@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildHubProposalButton } from './notification-embed.hub-proposal';
+import { buildPollHubButton } from './notification-embed.poll-hub';
 import {
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
@@ -301,20 +302,30 @@ export function buildInlineButtons(
     return [viewLineupButton(clientUrl, lineupId)];
   }
   if (type === 'community_lineup') {
-    const sub = payload?.subtype as string | undefined;
-    const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
-    if (!lineupId) return [];
-    const openPoll = buildOpenPollButton(payload, clientUrl);
-    if (openPoll) return [openPoll];
-    // Only add View Lineup inline when primary button goes elsewhere
-    const needsInline =
-      sub === 'lineup_match_member' ||
-      sub === 'lineup_event_created' ||
-      sub === 'lineup_scheduling_open';
-    if (!needsInline) return [];
-    return [viewLineupButton(clientUrl, lineupId)];
+    // ROK-1896 D7: the poll's Hub link sits after the inline links.
+    const inline = lineupInlineButtons(payload, clientUrl);
+    const hub = buildPollHubButton(payload, clientUrl);
+    return hub ? [...inline, hub] : inline;
   }
   return [];
+}
+
+/** Open Poll (lock DMs) or View Lineup (primary goes elsewhere), if any. */
+function lineupInlineButtons(
+  payload: Payload,
+  clientUrl: string,
+): ButtonBuilder[] {
+  const sub = payload?.subtype as string | undefined;
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  if (!lineupId) return [];
+  const openPoll = buildOpenPollButton(payload, clientUrl);
+  if (openPoll) return [openPoll];
+  // Only add View Lineup inline when primary button goes elsewhere
+  const needsInline =
+    sub === 'lineup_match_member' ||
+    sub === 'lineup_event_created' ||
+    sub === 'lineup_scheduling_open';
+  return needsInline ? [viewLineupButton(clientUrl, lineupId)] : [];
 }
 
 /**

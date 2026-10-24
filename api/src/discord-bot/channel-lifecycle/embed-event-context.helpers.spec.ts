@@ -15,7 +15,7 @@ jest.mock('./embed-hub-link.helpers', () => ({
 const resolve = jest.mocked(resolveEventHubLink);
 const db = {} as PostgresJsDatabase<typeof schema>;
 const logger = { warn: jest.fn() };
-const HUB = { url: 'https://x.test/guilds/7', label: 'Hub' as const };
+const HUB = { url: 'https://x.test/hubs/7', label: 'Hub' as const };
 const CTX = {
   communityName: 'G',
   clientUrl: 'https://x.test',

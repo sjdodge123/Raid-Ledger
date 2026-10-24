@@ -91,20 +91,25 @@ export interface EventBodyOptions {
 }
 
 /**
- * `Hub: **<name>**` — markdown-escaped (masked links, headings and lists too:
- * hub names are user-proposed, so `[Free](https://…)` must not render as a
- * link in the bot's card), and `@` broken with a zero-width space so a hub
- * named `@everyone` can never resolve as a mention.
+ * A hub name made safe for any Discord embed text — markdown-escaped (masked
+ * links, headings and lists too: hub names are user-proposed, so
+ * `[Free](https://…)` must not render as a link in the bot's card), and `@`
+ * broken with a zero-width space so a hub named `@everyone` can never resolve
+ * as a mention. ROK-1896: shared by the card line and the poll DM `Hub` field.
  */
-export function hubLine(name: string): string {
+export function escapeHubName(name: string): string {
   const escaped = escapeMarkdown(name, {
     maskedLink: true,
     heading: true,
     bulletedList: true,
     numberedList: true,
   });
-  const safe = escaped.replace(/@/g, '@\u200b');
-  return `Hub: **${safe}**`;
+  return escaped.replace(/@/g, '@\u200b');
+}
+
+/** `Hub: **<name>**`, with the name passed through {@link escapeHubName}. */
+export function hubLine(name: string): string {
+  return `Hub: **${escapeHubName(name)}**`;
 }
 
 /**

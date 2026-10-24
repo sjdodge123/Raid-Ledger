@@ -3578,3 +3578,10 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — fix/rok-1902-admission-budget (surfaced during the ROK-1902 review)
 
 - **med** `tools/mcp-rl-fleet/src/tools/__tests__/test-plan-v2.spec.ts` — 6 cases fail locally on origin/main c4c736f1f with `AssertionError: POST call must have been made: expected undefined to be truthy` (×2) and `expected null not to be null` (×4). Pre-existing: reproduced on the main checkout before this branch, which does not touch the file. `Suggested:` check whether the spec depends on an env var / dashboard token CI sets (`tools-test-shard` is green on main) and make the spec self-contained or skip with a named reason.
+
+### 2026-10-24 — feat/rok-1896-hub-poll-embeds + fix/rok-1947-hub-expired-session (surfaced during review)
+
+- **low** `api/src/notifications/notification-embed.buttons.ts:346`, `api/src/hubs/**/hub-posts.helpers.ts:87`, `hub-notification.service.ts:80`, `hub-proposal-notices.ts:48` — hub links still built as `/guilds/<id>`; ROK-1896 moved poll/event hub links to `/hubs/<id>`. They redirect, so nothing breaks. Pre-existing, outside ROK-1896's scope. Suggested: one sweep to a shared `hubUrl(id)` helper.
+- **low** `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — one hub lookup per poll even when every reminder is deduped. Suggested: resolve the hub only after dedupe finds a recipient.
+- **med** `web/src/components/hub/hub-page.tsx:266` — the ROK-1947 recovery latch keys only on `dataUpdatedAt`; a 403/404/5xx from another refetch path can sit behind a stale Sign in until reload. Suggested: also store/compare `errorUpdatedAt`.
+- **low** `web/src/lib/api/resume-refresh.ts:44-47` — a batch refetch that never settles keeps the batch guard set and drops later refresh notifications. Suggested: race the batch with a ~15 s timeout.

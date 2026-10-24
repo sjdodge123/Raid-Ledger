@@ -60,6 +60,7 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
+import { matchHubPayload } from './poll-hub-payload.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -196,10 +197,8 @@ export class StandalonePollService {
     creatorId?: number,
   ): Promise<void> {
     const slots = await findScheduleSlots(this.db, matchId);
-    const allVoters = await findScheduleVotes(
-      this.db,
-      slots.map((s) => s.id),
-    );
+    const slotIds = slots.map((s) => s.id);
+    const allVoters = await findScheduleVotes(this.db, slotIds);
     // ROK-1617: yes-votes only on both sides of the split — see
     // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
     const { selectedVoters, otherVoters } = splitYesVotersBySlot(
@@ -228,6 +227,7 @@ export class StandalonePollService {
       startTime,
       eventId,
       gameName ?? 'Game Night',
+      await matchHubPayload(this.db, matchId),
     );
   }
 
