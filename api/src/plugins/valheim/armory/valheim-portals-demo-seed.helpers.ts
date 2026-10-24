@@ -4,8 +4,10 @@
  * world with five portals: two "home", "swamp", an empty tag (→ "Unnamed
  * portal") and a stone "ashlands". Written directly — `source_snapshot_id`
  * is nullable, so no snapshot row is needed. Coordinates sit inside the demo
- * grid (2048 px × 12 m) and ≥450 m from every fixture pin
- * (`valheim-deaths-demo-seed.data.ts`) so their buttons never overlap.
+ * grid (2048 px × 12 m = ±12.3 km), on a ~5 km ring outside the explored
+ * centre: ≥4.7 km apart and ≥3.8 km from every fixture pin
+ * (`valheim-deaths-demo-seed.data.ts`, all within ±1.5 km), so at fit zoom
+ * (~20 px/km) discs and labels never overlap.
  */
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -28,11 +30,11 @@ const PORTALS: ReadonlyArray<{
   x: number;
   z: number;
 }> = [
-  { prefab: 'portal_wood', tag: 'home', x: -200, z: 300 },
-  { prefab: 'portal_wood', tag: 'home', x: 800, z: -300 },
-  { prefab: 'portal_wood', tag: 'swamp', x: -700, z: 500 },
-  { prefab: 'portal_wood', tag: '', x: 400, z: 1000 },
-  { prefab: 'portal_stone', tag: 'ashlands', x: -1100, z: -700 },
+  { prefab: 'portal_wood', tag: 'home', x: -4500, z: 3500 },
+  { prefab: 'portal_wood', tag: 'home', x: 5000, z: -1500 },
+  { prefab: 'portal_wood', tag: 'swamp', x: -5500, z: -2500 },
+  { prefab: 'portal_wood', tag: '', x: 1500, z: 5500 },
+  { prefab: 'portal_stone', tag: 'ashlands', x: 2500, z: -5500 },
 ];
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
