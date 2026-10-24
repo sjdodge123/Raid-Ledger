@@ -5,7 +5,7 @@
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
 import { useContext, useState } from 'react';
-import type { ValheimMapMeta } from '@raid-ledger/contract';
+import type { ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import {
     MapBytesError,
@@ -21,11 +21,15 @@ import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
+import { usePinFilter } from './use-pin-filter';
+import { PinFilterBar } from './pin-filter-bar';
 
 export interface ValheimMapViewProps {
     characterId: number;
     mapId: number;
     className?: string;
+    /** The hub's Pelican server — enables the ROK-1930 "Show all" death layer. */
+    serverId?: number | undefined;
 }
 
 const FRAME =
@@ -35,6 +39,7 @@ interface ReadyProps {
     characterId: number;
     mapId: number;
     meta: ValheimMapMeta;
+    serverId?: number | undefined;
 }
 
 /**
@@ -107,6 +112,8 @@ function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
 
 interface LayerProps {
     meta: ValheimMapMeta;
+    /** The pins after the ROK-1930 type filter. */
+    pins: readonly ValheimMapPin[];
     baseUrl: string | null;
     personal: Uint8Array | undefined;
     shared: Uint8Array | null;
@@ -144,7 +151,7 @@ function FogPending({ size }: { size: number }) {
  * that an opaque cover, so unexplored terrain never flashes (AC1).
  */
 function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
-    const { meta, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
+    const { meta, pins, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
     const size = meta.grid.textureSize;
     return (
         <div
@@ -163,7 +170,7 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
             )}
             <PinLayer
                 grid={meta.grid}
-                pins={meta.pins}
+                pins={pins}
                 scale={scale}
                 showShared={sharedOn}
                 labels={pinLabels}
@@ -186,9 +193,11 @@ function useMapReadyState(props: ReadyProps) {
     const [pinLabels, setPinLabels] = useState(false);
     const { base, personal, shared, sharedAvailable, sharedFailed } =
         useMapLayers(props, showShared);
+    const pinFilter = usePinFilter(props);
     const sharedOn = showShared && sharedAvailable && !sharedFailed;
     const layers: LayerProps = {
         meta: props.meta,
+        pins: pinFilter.pins,
         baseUrl: base.url,
         personal: personal.data,
         shared: shared.data ?? null,
@@ -205,9 +214,10 @@ function useMapReadyState(props: ReadyProps) {
         sharedAvailable,
         pinLabels,
         onPinLabels: setPinLabels,
+        ...pinFilter.controls,
     };
     const status = layerStatus(props.meta, base.error !== null, sharedFailed);
-    return { layers, controls, personal, status };
+    return { layers, controls, personal, status, bar: pinFilter.bar };
 }
 
 interface MapFrameProps {
@@ -267,7 +277,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, status } = useMapReadyState(props);
+    const { layers, controls, personal, status, bar } = useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError
@@ -278,6 +288,7 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
     }
     return (
         <>
+            {bar && <PinFilterBar {...bar} />}
             <MapFrame
                 className={props.className}
                 layers={layers}
@@ -306,6 +317,7 @@ export function ValheimMapView({
     characterId,
     mapId,
     className,
+    serverId,
 }: ValheimMapViewProps) {
     const meta = useValheimMapMeta(characterId, mapId);
     if (meta.isPending) return <MapLoading />;
@@ -323,6 +335,7 @@ export function ValheimMapView({
             mapId={mapId}
             meta={meta.data}
             className={className}
+            serverId={serverId}
         />
     );
 }

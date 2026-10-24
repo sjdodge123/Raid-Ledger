@@ -24,6 +24,7 @@ import {
     worldLabel,
 } from './map-selection';
 import { ValheimMapView } from './valheim-map-view';
+import { writeSelection } from './pin-filter';
 import { MapError } from './map-error';
 import { ChestFocusCard } from './chest-focus-card';
 import { ChestFocusContext, useChestFocus } from './use-chest-focus';
@@ -41,15 +42,16 @@ function Empty({ text }: { text: string }) {
     );
 }
 
-/** Write the selection to the query string, keeping the `#map` hash. */
+/** Write the selection to the query string, keeping the `#map` hash and the pin scope. */
 function useSelectionWriter() {
     const location = useLocation();
     const navigate = useNavigate();
-    return (characterId: number, mapId: number | null) => {
-        const params = new URLSearchParams(location.search);
-        params.set(CHARACTER_PARAM, String(characterId));
-        if (mapId === null) params.delete(MAP_PARAM);
-        else params.set(MAP_PARAM, String(mapId));
+    return (characterId: number, mapId: number | null, world: boolean) => {
+        const params = writeSelection(new URLSearchParams(location.search), {
+            characterId,
+            mapId,
+            world,
+        });
         navigate(
             { search: `?${params.toString()}`, hash: location.hash },
             { replace: true },
@@ -108,7 +110,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                 label="Character"
                 value={characterId}
                 options={characters}
-                onPick={(id) => write(id, null)}
+                onPick={(id) => write(id, null, false)}
             />
             {maps.length > 1 && mapId !== null && (
                 <Picker
@@ -116,7 +118,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                     label="World"
                     value={mapId}
                     options={worldOptions(maps)}
-                    onPick={(id) => write(characterId, id)}
+                    onPick={(id) => write(characterId, id, true)}
                 />
             )}
         </div>
@@ -125,16 +127,24 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
 
 /** The map, a detail-fetch error with Retry, or the no-map empty state. */
 function CharacterMapBody({
+    serverId,
     characterId,
     mapId,
     detail,
 }: {
+    serverId: number;
     characterId: number;
     mapId: number | null;
     detail: ReturnType<typeof useValheimCharacterMaps>;
 }) {
     if (mapId !== null)
-        return <ValheimMapView characterId={characterId} mapId={mapId} />;
+        return (
+            <ValheimMapView
+                serverId={serverId}
+                characterId={characterId}
+                mapId={mapId}
+            />
+        );
     if (detail.error)
         return (
             <MapError
@@ -148,15 +158,15 @@ function CharacterMapBody({
 }
 
 /** The selected character's world picker + map, once the character list is in. */
-function CharacterMap({
-    rows,
-    characterId,
-    param,
-}: {
+interface CharacterMapProps {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     characterId: number;
     param: string | null;
-}) {
+}
+
+function CharacterMap(props: CharacterMapProps) {
+    const { serverId, rows, characterId, param } = props;
     const detail = useValheimCharacterMaps(characterId);
     const maps = detail.data?.id === characterId ? detail.data.maps : [];
     const mapId = pickMapId(maps, param);
@@ -169,6 +179,7 @@ function CharacterMap({
                 mapId={mapId}
             />
             <CharacterMapBody
+                serverId={serverId}
                 characterId={characterId}
                 mapId={mapId}
                 detail={detail}
@@ -179,9 +190,11 @@ function CharacterMap({
 
 /** The character list is in: pick the selected character (query, own, first). */
 function ServerCharacters({
+    serverId,
     rows,
     params,
 }: {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     params: URLSearchParams;
 }) {
@@ -198,6 +211,7 @@ function ServerCharacters({
     }
     return (
         <CharacterMap
+            serverId={serverId}
             rows={rows}
             characterId={characterId}
             param={params.get(MAP_PARAM)}
@@ -233,7 +247,13 @@ function MapTabBody({ serverId }: ValheimMapTabProps) {
         return (
             <Empty text="Characters could not be loaded. Try again later." />
         );
-    return <ServerCharacters rows={characters.data} params={params} />;
+    return (
+        <ServerCharacters
+            serverId={serverId}
+            rows={characters.data}
+            params={params}
+        />
+    );
 }
 
 export default ValheimMapTab;

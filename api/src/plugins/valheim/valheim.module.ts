@@ -42,10 +42,15 @@ import { ValheimArmoryReadService } from './armory/read/valheim-armory-read.serv
 import { ValheimMaterialsController } from './armory/read/valheim-materials.controller';
 import { ValheimMaterialsRepository } from './armory/read/valheim-materials.repository';
 import { ValheimMaterialsService } from './armory/read/valheim-materials.service';
+import { ValheimDeathsController } from './armory/read/valheim-deaths.controller';
+import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
+import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
+import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
+import { ValheimDeathsModule } from './armory/valheim-deaths.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -65,6 +70,10 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     NotificationModule,
     SettingsModule,
     CronJobModule,
+    // ROK-1930: the death sink the Pelican presence supervisor injects.
+    ValheimDeathsModule,
+    // ROK-1930 L2: GuildAccessService for the Deaths widget's D6 check.
+    GuildsCoreModule,
     forwardRef(() => DiscordBotModule),
   ],
   controllers: [
@@ -74,6 +83,7 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     ValheimArmoryClaimsController,
     ValheimArmoryReadController,
     ValheimMaterialsController,
+    ValheimDeathsController,
     ValheimRecipesController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
@@ -112,6 +122,8 @@ import { CronJobModule } from '../../cron-jobs/cron-job.module';
     ValheimArmoryReadService,
     ValheimMaterialsRepository,
     ValheimMaterialsService,
+    ValheimDeathsService,
+    ValheimDeathPinsRepository,
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,

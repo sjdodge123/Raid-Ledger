@@ -9,15 +9,9 @@ import {
     Legend,
     ResponsiveContainer,
 } from 'recharts';
+import { chartAxisProps, chartLineTooltipProps, chartGridProps } from '../ui/chart-chrome';
 import { useAttendanceTrends } from '../../hooks/use-analytics';
 import type { AttendanceTrendsPeriod } from '@raid-ledger/contract';
-
-const TOOLTIP_STYLE = {
-    backgroundColor: '#1F2937',
-    border: '1px solid #374151',
-    borderRadius: '8px',
-    color: '#F3F4F6',
-};
 
 function formatDateTick(val: string) {
     const d = new Date(val + 'T00:00:00');
@@ -63,10 +57,10 @@ function TrendsLineChart({ dataPoints }: { dataPoints: { date: string; attended:
     return (
         <ResponsiveContainer width="100%" height={280}>
             <LineChart data={dataPoints}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="date" stroke="#9CA3AF" fontSize={12} tickFormatter={formatDateTick} />
-                <YAxis stroke="#9CA3AF" fontSize={12} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="date" {...chartAxisProps} fontSize={12} tickFormatter={formatDateTick} />
+                <YAxis {...chartAxisProps} fontSize={12} />
+                <Tooltip {...chartLineTooltipProps} />
                 <Legend />
                 <Line type="monotone" dataKey="attended" stroke="#34D399" strokeWidth={2} dot={false} name="Attended" />
                 <Line type="monotone" dataKey="noShow" stroke="#F87171" strokeWidth={2} dot={false} name="No-Show" />
