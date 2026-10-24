@@ -14,6 +14,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import {
   HUB_MEDIA_DOWNLOADER,
+  HubMediaDownloadError,
   type HubMediaDownloader,
 } from './hub-media-download';
 import { mediaFilePath } from './hub-media.paths';
