@@ -6,7 +6,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { expect, test } from "@playwright/test";
 import { bitSet, findTexel } from "./valheim-map-bits";
 
 const N = 2048;
@@ -18,8 +18,8 @@ function oneBit(i: number): Uint8Array {
   return bits;
 }
 
-describe("valheim-map-bits", () => {
-  it("finds the first set / unset texel in the union of two layers", () => {
+test.describe("valheim-map-bits", () => {
+  test("finds the first set / unset texel in the union of two layers", () => {
     const lit = N * 1000 + 7; // py 1000, px 7
     const empty = new Uint8Array(Math.ceil((N * N) / 8));
     expect(findTexel(N, empty, oneBit(lit), true)).toEqual({ px: 7, py: 1000 });
@@ -27,7 +27,7 @@ describe("valheim-map-bits", () => {
     expect(findTexel(N, empty, empty, true)).toBeNull();
   });
 
-  it("scans a full 2048² grid well inside a test timeout", () => {
+  test("scans a full 2048² grid well inside a test timeout", () => {
     const empty = new Uint8Array(Math.ceil((N * N) / 8));
     const last = N * N - 1;
     const t0 = performance.now();
@@ -37,11 +37,11 @@ describe("valheim-map-bits", () => {
     expect(ms, `full 2048² scan took ${ms.toFixed(0)} ms`).toBeLessThan(2_000);
   });
 
-  it("throws on an out-of-range bit instead of reading past the bitset", () => {
+  test("throws on an out-of-range bit instead of reading past the bitset", () => {
     expect(() => bitSet(new Uint8Array(1), 8)).toThrow("bit 8 is past 1 B");
   });
 
-  it("never imports @playwright/test (no expect() inside the scan loop)", () => {
+  test("never imports @playwright/test (no expect() inside the scan loop)", () => {
     const src = readFileSync(join(__dirname, "valheim-map-bits.ts"), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/.*$/gm, "");
