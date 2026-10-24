@@ -66,16 +66,34 @@ async function seedHub(ctx: TestContext): Promise<SeedResult> {
   return { gameId: body.gameId, hubIds: { crew: body.hubIds.crew } };
 }
 
-/** A hub poll picking the DM recipient; returns its match id. */
-async function createHubPoll(ctx: TestContext, seed: SeedResult): Promise<number> {
-  const poll = await ctx.api.post<{ id?: unknown }>("/scheduling-polls", {
+interface CreatedPoll {
+  id: number;
+  lineupId: number;
+}
+
+/** A hub poll picking the DM recipient; returns its match + lineup ids. */
+async function createHubPoll(ctx: TestContext, seed: SeedResult): Promise<CreatedPoll> {
+  const poll = await ctx.api.post<{ id?: unknown; lineupId?: unknown }>("/scheduling-polls", {
     gameId: seed.gameId,
     hubId: seed.hubIds.crew,
     memberUserIds: [ctx.dmRecipientUserId],
     durationHours: 2,
   });
-  if (typeof poll.id !== "number") fail(`create poll: no id in ${JSON.stringify(poll)}`);
-  return poll.id;
+  if (typeof poll.id !== "number" || typeof poll.lineupId !== "number") {
+    fail(`create poll: no id / lineupId in ${JSON.stringify(poll)}`);
+  }
+  return { id: poll.id, lineupId: poll.lineupId };
+}
+
+/**
+ * Never leave the open 2h poll behind: in a preserved env its reminders would
+ * DM the recipient later. Cancel it, then archive its lineup (best-effort).
+ */
+async function retirePoll(ctx: TestContext, poll: CreatedPoll): Promise<void> {
+  await ctx.api
+    .post(`/lineups/${poll.lineupId}/schedule/${poll.id}/cancel`, { reason: "smoke cleanup ROK-1896" })
+    .catch(() => null);
+  await ctx.api.patch(`/lineups/${poll.lineupId}/status`, { status: "archived" }).catch(() => null);
 }
 
 /** Poll the recipient's rows for this poll's DM notification. */
@@ -127,17 +145,21 @@ function assertRendered(res: RenderedDm, hubId: number): void {
 async function hubPollDmNamesHub(ctx: TestContext): Promise<void> {
   const seed = await seedHub(ctx);
   await ctx.api.post("/admin/test/enable-discord-notifications", { userId: ctx.dmRecipientUserId });
-  const matchId = await createHubPoll(ctx, seed);
-  await awaitProcessing(ctx.api);
-  const n = await waitForPollDm(ctx, matchId);
-  assertPayloadHub(n, seed.hubIds.crew);
-  const res = await ctx.api.post<RenderedDm>("/admin/test/render-dm-embed", {
-    type: TYPE,
-    title: n.title ?? "",
-    message: n.message ?? "",
-    payload: n.payload ?? {},
-  });
-  assertRendered(res, seed.hubIds.crew);
+  const poll = await createHubPoll(ctx, seed);
+  try {
+    await awaitProcessing(ctx.api);
+    const n = await waitForPollDm(ctx, poll.id);
+    assertPayloadHub(n, seed.hubIds.crew);
+    const res = await ctx.api.post<RenderedDm>("/admin/test/render-dm-embed", {
+      type: TYPE,
+      title: n.title ?? "",
+      message: n.message ?? "",
+      payload: n.payload ?? {},
+    });
+    assertRendered(res, seed.hubIds.crew);
+  } finally {
+    await retirePoll(ctx, poll);
+  }
 }
 
 export const hubPollEmbedTests: SmokeTest[] = [
