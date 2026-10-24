@@ -22,7 +22,7 @@ vi.mock('recharts', async (importOriginal) => {
         XAxis: () => null,
         YAxis: () => null,
         CartesianGrid: () => null,
-        Cell: () => null,
+        Cell: ({ fill }: { fill?: string }) => <i data-testid="bar-cell" data-fill={fill} />,
         Tooltip: (props: ComponentProps<typeof actual.DefaultTooltipContent>) => (
             <actual.DefaultTooltipContent
                 {...props}
@@ -39,6 +39,17 @@ const ARCHETYPES: CommunityRadarResponseDto['archetypes'] = [
 ];
 
 describe('ArchetypeDistribution', () => {
+    it('gives a Newcomer bar the dim token, not the unknown-tier fallback (ROK-1935)', () => {
+        render(
+            <ArchetypeDistribution
+                archetypes={[...ARCHETYPES, { intensityTier: 'Newcomer', vectorTitle: null, count: 1 }]}
+            />,
+        );
+        const fills = screen.getAllByTestId('bar-cell').map((c) => c.getAttribute('data-fill'));
+        expect(fills).toHaveLength(3);
+        expect(fills[2]).toBe('var(--color-dim)');
+    });
+
     it('renders empty state when no archetypes are provided', () => {
         render(<ArchetypeDistribution archetypes={[]} />);
         expect(screen.getByText(/no archetype distribution/i)).toBeInTheDocument();
