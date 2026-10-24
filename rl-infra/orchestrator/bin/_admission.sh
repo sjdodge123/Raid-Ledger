@@ -66,6 +66,21 @@ RL_ENV_RESERVE_MB="${RL_ENV_RESERVE_MB:-1024}"
 RL_MAX_HEAVY_CONCURRENT="${RL_MAX_HEAVY_CONCURRENT:-2}"
 RL_MAX_IMAGE_BUILDS="${RL_MAX_IMAGE_BUILDS:-1}"
 
+# ROK-1902 — the budget is capped by the guest's LIVE MemTotal. VM 200 runs
+# with `balloon: 8192` under `memory: 16384`, so Proxmox can shrink the guest
+# toward 8 GiB while a fixed 12288 MB budget keeps admitting as if 16 GiB were
+# there (a gate was OOM-killed 2026-10-22). Every admit re-reads MemTotal from
+# RL_MEMINFO_PATH and uses
+#   effective budget = min(RL_ADMISSION_BUDGET_MB, MemTotal_mb - RL_ADMISSION_RESERVE_MB)
+#   RL_ADMISSION_RESERVE_MB      2048  what the VM needs outside the ledger: the
+#                                      kernel + sshd/dockerd/containerd/mutagen and
+#                                      the compose sidecars (traefik, registry, loki,
+#                                      promtail, grafana, dashboard, socket-proxy,
+#                                      gc-sweeper — each tens to a few hundred MB)
+# Budget 0 stays "off"; an unreadable MemTotal falls back to the configured
+# budget (fail open, like the MemAvailable floor).
+RL_ADMISSION_RESERVE_MB="${RL_ADMISSION_RESERVE_MB:-2048}"
+
 # Create the state file if absent, then drop entries whose holder plainly
 # died (host reboot, SIGKILLed supervisor) so one leak can't wedge the gate
 # forever. Written via jq so byte-for-byte identity holds for the
@@ -207,7 +222,7 @@ admission::ledger_block_reason() {
     envmb="$(admission::env_reserved_mb)"
     jq -r --arg w "$weight" --arg kind "$kind" --argjson reserve "$reserve" --arg k "$key" \
         --argjson envmb "$envmb" --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
-        --argjson now "$(date +%s)" --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson now "$(date +%s)" --argjson budget "$(admission::effective_budget_mb)" \
         --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
         "$_ADMISSION_JQ_DEFS"'ledger_reason($w; $kind; $reserve; $envmb; $k; $now)' \
         "$RL_ADMISSION_FILE" 2>/dev/null || true
@@ -223,6 +238,28 @@ admission::mem_available_mb() {
          END {if (!found) exit 1}' "$RL_MEMINFO_PATH" 2>/dev/null || true
 }
 
+# Echo the guest's MemTotal in MB, or nothing when unreadable.
+admission::mem_total_mb() {
+    [[ -r "$RL_MEMINFO_PATH" ]] || return 0
+    awk '/^MemTotal:/ {printf "%d", $2 / 1024; found=1; exit}
+         END {if (!found) exit 1}' "$RL_MEMINFO_PATH" 2>/dev/null || true
+}
+
+# The budget the ledger actually enforces right now (see RL_ADMISSION_RESERVE_MB).
+# Never below 1 MB while the budget is on, so a tiny guest still means "on".
+admission::effective_budget_mb() {
+    local budget="$RL_ADMISSION_BUDGET_MB" total cap
+    [[ "$budget" =~ ^[0-9]+$ ]] || budget=0
+    (( budget > 0 )) || { echo 0; return 0; }
+    total="$(admission::mem_total_mb)"
+    if [[ "$total" =~ ^[0-9]+$ ]]; then
+        cap=$(( total - RL_ADMISSION_RESERVE_MB ))
+        (( cap < 1 )) && cap=1
+        (( cap < budget )) && budget=$cap
+    fi
+    echo "$budget"
+}
+
 admission::running_count() {
     jq -r '(.heavy_running // []) | length' "$RL_ADMISSION_FILE" 2>/dev/null || echo 0
 }
@@ -234,9 +271,11 @@ admission::waiting_count() {
 # One JSON object with the numbers `status` / `lease-status` surface.
 admission::snapshot() {
     admission::ensure_file
-    local avail
+    local avail total
     avail="$(admission::mem_available_mb)"
     [[ -n "$avail" ]] || avail="null"
+    total="$(admission::mem_total_mb)"
+    [[ -n "$total" ]] || total="null"
     # heavy_running / heavy_waiting keep their ROK-1470 meaning: every task
     # holding (or waiting for) an admission slot, whatever its weight. The
     # per-category split and the ledger totals live under `admission`.
@@ -245,6 +284,9 @@ admission::snapshot() {
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
         --argjson envmb "$(admission::env_reserved_mb)" \
         --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson effbudget "$(admission::effective_budget_mb)" \
+        --argjson memtotal "$total" \
+        --argjson resv "$RL_ADMISSION_RESERVE_MB" \
         --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" \
         --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
         --slurpfile state "$RL_ADMISSION_FILE" \
@@ -265,6 +307,9 @@ admission::snapshot() {
                 env_reserved_mb: $envmb,
                 committed_mb: ($r + $envmb),
                 budget_mb: $budget,
+                effective_budget_mb: $effbudget,
+                mem_total_mb: $memtotal,
+                reserve_mb: $resv,
                 max_heavy_concurrent: $maxheavy,
                 max_image_builds: $maxbuilds
             }
@@ -313,7 +358,7 @@ admission::_try_admit() {
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
         --argjson settle "$RL_HEAVY_TASK_SETTLE_SECONDS" \
         --argjson need "$need" --argjson reserve "$reserve" --argjson envmb "$envmb" \
-        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson budget "$(admission::effective_budget_mb)" \
         --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
         "$_ADMISSION_JQ_DEFS"'
          def recent: [ ents[]

@@ -174,8 +174,14 @@ export interface StatusResult {
     env_reserved_mb?: number;
     /** reserved_mb + env_reserved_mb; a task admits only while this + its reservation ≤ budget_mb. */
     committed_mb?: number;
-    /** RL_ADMISSION_BUDGET_MB (0 = budget off). */
+    /** RL_ADMISSION_BUDGET_MB as configured (0 = budget off). */
     budget_mb?: number;
+    /** ROK-1902: the budget actually enforced — min(budget_mb, mem_total_mb − reserve_mb). */
+    effective_budget_mb?: number;
+    /** Guest MemTotal right now (shrinks while the Proxmox balloon is inflated); null if unreadable. */
+    mem_total_mb?: number | null;
+    /** RL_ADMISSION_RESERVE_MB — headroom kept for the OS + compose sidecars. */
+    reserve_mb?: number;
     /** RL_MAX_HEAVY_CONCURRENT (0 = no cap). */
     max_heavy_concurrent?: number;
     /** RL_MAX_IMAGE_BUILDS (0 = no cap). */
