@@ -34,6 +34,25 @@ const PAGE: GuildPageDto = {
 };
 
 let refreshCalls = 0;
+/** Who made each refresh POST, and whether the stranded screen was up then. */
+type RefreshPost = { origin: 'recheck' | 'useAuth' | 'request' | 'other'; stranded: boolean };
+let posts: RefreshPost[] = [];
+
+/**
+ * Attribute a refresh POST from its async stack: the hub's session re-check
+ * (`checkSession`), useAuth's `/auth/me` check, or a request's own pre-request
+ * / 401-backstop refresh in `fetchWithAuth`.
+ */
+function recordPost(): void {
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 200;
+    const stack = new Error().stack ?? '';
+    Error.stackTraceLimit = limit;
+    const origin = stack.includes('use-session-recheck') ? 'recheck'
+        : stack.includes('fetchCurrentUser') ? 'useAuth'
+            : stack.includes('fetch-api') ? 'request' : 'other';
+    posts.push({ origin, stranded: document.querySelector('[data-testid="guild-session-expired"]') !== null });
+}
 /**
  * Refresh answers, indexed by POSTs made AFTER the hub GET first 401'd (the
  * request's own 401 backstop is index 0, the page's re-check index 1); POSTs
@@ -57,6 +76,7 @@ function serve(...statuses: number[]): void {
             if (postsAfterHub401 !== null) postsAfterHub401 += 1;
             const status = refreshStatuses[Math.min(index, refreshStatuses.length - 1)] ?? 503;
             refreshCalls += 1;
+            recordPost();
             if (status !== 200) return HttpResponse.json({ message: 'no' }, { status });
             sessionLive = true;
             return HttpResponse.json({ access_token: 'renewed-token' });
@@ -99,7 +119,7 @@ function recordTestIds(): { seen: Set<string>; stop: () => void } {
     return { seen, stop: () => observer.disconnect() };
 }
 
-beforeEach(() => { activateWowPlugin(); clearAccessToken(); refreshCalls = 0; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
+beforeEach(() => { activateWowPlugin(); clearAccessToken(); refreshCalls = 0; posts = []; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
 afterEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
 describe('GuildPage — expired session (ROK-1947)', () => {
@@ -151,6 +171,11 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
             return HttpResponse.json({ message: 'gone' }, { status: 500 });
         }));
         const queryClient = createTestQueryClient();
+        // The drop that strands the page is useAuth's REJECTED refresh, which
+        // settles `['auth','me']` to null (handleRefreshFailure) and keeps the
+        // marker. Seeding that state keeps useAuth's own check out of the count:
+        // left errored, the Sign in button's useAuth would refetch it on mount.
+        queryClient.setQueryData(['auth', 'me'], null);
         renderPage(queryClient);
         await waitFor(() => expect(hubRequested, 'the hub request must be in flight').toBe(true));
         const before = refreshCalls;
@@ -159,6 +184,7 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
         await waitFor(() => expect(screen.queryByTestId('guild-loading'), 'a stranded hub query must not sit on the skeleton').toBeNull());
         expect(screen.queryByTestId('guild-session-expired'), 'a stranded hub query means the session is over: offer Sign in').not.toBeNull();
         expect(refreshCalls, 'the drop already decided the session; the stranded page must not refresh again').toBe(before);
+        expect(posts.map((p) => p.origin), 'the stranded page never re-checks the session').not.toContain('recheck');
         release();
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -180,7 +206,14 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
         expect(await screen.findByTestId('login-screen'), 'the guard sends the signed-out viewer to the login screen').toBeInTheDocument();
         expect(sessionStorage.getItem('authRedirect'), 'the hub stays the post-sign-in destination').toBe('/hubs/7');
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-        expect(refreshCalls, 'only useAuth refreshes; the stranded hub page adds no POST').toBe(before + 1);
+        const after = posts.slice(before);
+        expect(after.filter((p) => p.origin === 'useAuth'), 'useAuth decides the session with exactly one refresh').toHaveLength(1);
+        expect(after.map((p) => p.origin), 'the hub page never re-checks a session useAuth already rejected').not.toContain('recheck');
+        // The viewer-keyed hub query refetches under 'anon' before the guard
+        // redirects (its own pre-request + 401-backstop POSTs); the stranded
+        // screen itself must add none.
+        expect(after.filter((p) => p.stranded), 'no refresh POST while the stranded Sign in screen is up').toEqual([]);
+        expect(after.map((p) => p.origin), 'every POST is useAuth or a request backstop').not.toContain('other');
     });
 
     it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
