@@ -6,7 +6,8 @@
  * name — ROK-1895) → the game's single visible community hub → the game's
  * single server hub → ≥ 2 hubs → the `/hubs?game=<id>` directory ("Hubs")
  * → none → null. An explicit tag always wins over the game-level rule. Only
- * kinds in {@link HUB_LINK_KINDS} count.
+ * kinds in {@link HUB_LINK_KINDS} count. ROK-1896: one hub's page is
+ * `/hubs/<id>` (canonical since ROK-1891; `/guilds/<id>` only redirects).
  */
 import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
@@ -146,7 +147,7 @@ export function pickHubLink(
   base: string,
 ): HubLink | null {
   const hubUrl = (id: number): HubLink => ({
-    url: `${base}/guilds/${id}`,
+    url: `${base}/hubs/${id}`,
     label: HUB_LINK_LABEL,
   });
   const taggedHub = hubs.find((h) => tagged !== null && h.id === tagged);

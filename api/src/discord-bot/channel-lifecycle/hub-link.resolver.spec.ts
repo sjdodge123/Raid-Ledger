@@ -44,7 +44,7 @@ describe('resolveGameHubLink (D15)', () => {
       taggedGuildId: 9,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/9`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/9`, label: 'Hub' });
     expect(whereSql(mock)).toContain('"guilds"."id" = $');
   });
 
@@ -59,7 +59,7 @@ describe('resolveGameHubLink (D15)', () => {
       clientUrl: BASE,
     });
     expect(tagged).toStrictEqual({
-      url: `${BASE}/guilds/9`,
+      url: `${BASE}/hubs/9`,
       label: 'Hub',
       hubName: 'Tagged Hub',
     });
@@ -70,7 +70,7 @@ describe('resolveGameHubLink (D15)', () => {
       gameId: 1,
       clientUrl: BASE,
     });
-    expect(derived).toStrictEqual({ url: `${BASE}/guilds/3`, label: 'Hub' });
+    expect(derived).toStrictEqual({ url: `${BASE}/hubs/3`, label: 'Hub' });
   });
 
   it('ROK-1895: a hidden tagged hub (filtered in SQL) falls back unnamed', async () => {
@@ -82,7 +82,7 @@ describe('resolveGameHubLink (D15)', () => {
       taggedGuildId: 9,
       clientUrl: BASE,
     });
-    expect(link).toStrictEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toStrictEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
   });
 
   it('ROK-1895 × H8: with ≥ 2 game hubs a tag still wins — that hub, named', async () => {
@@ -97,7 +97,7 @@ describe('resolveGameHubLink (D15)', () => {
       clientUrl: BASE,
     });
     expect(link).toStrictEqual({
-      url: `${BASE}/guilds/9`,
+      url: `${BASE}/hubs/9`,
       label: 'Hub',
       hubName: 'Tagged Server',
     });
@@ -121,7 +121,7 @@ describe('resolveGameHubLink (D15)', () => {
       gameId: 1,
       clientUrl: `${BASE}/`,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
   });
 
   it('H3: hidden hubs are filtered in SQL; a hidden tag falls back', async () => {
@@ -131,7 +131,7 @@ describe('resolveGameHubLink (D15)', () => {
       taggedGuildId: 9,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
     const sql = whereSql(mock);
     expect(sql).toContain('"guilds"."hidden_at" is null');
     expect(sql).toContain('"guilds"."kind" in');
@@ -145,7 +145,7 @@ describe('resolveGameHubLink (D15)', () => {
       taggedGuildId: 9,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
     expect(whereSql(mock)).toContain('"guilds"."status" = $');
   });
 
@@ -193,7 +193,7 @@ describe('resolveGameHubLink (D15)', () => {
       gameId: 4,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/9`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/9`, label: 'Hub' });
   });
 
   it('H5: no hub, no game or no CLIENT_URL resolves to null', async () => {
@@ -244,7 +244,7 @@ describe('resolveGameHubLinks (batch)', () => {
       { id: 6, gameId: 2, kind: 'game_server' },
     ]);
     const links = await resolveGameHubLinks(asDb(mock), [1, 2, 3, 1], BASE);
-    expect(links.get(1)).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(links.get(1)).toEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
     expect(links.get(2)).toEqual({
       url: `${BASE}/hubs?game=2`,
       label: 'Hubs',
@@ -298,7 +298,7 @@ describe('disabled hub kinds (Codex r17 P2)', () => {
       taggedGuildId: 9,
       clientUrl: BASE,
     });
-    expect(link).toEqual({ url: `${BASE}/guilds/5`, label: 'Hub' });
+    expect(link).toEqual({ url: `${BASE}/hubs/5`, label: 'Hub' });
     const q = firstWhere();
     expect(q.params).toContain('game_server');
     expect(q.params).not.toContain('wow_guild');

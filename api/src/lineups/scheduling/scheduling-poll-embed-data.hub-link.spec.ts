@@ -20,7 +20,7 @@ jest.mock('./scheduling-query.helpers', () => ({
 }));
 
 const BASE = 'https://raid.example.com';
-const HUB = { url: `${BASE}/guilds/7`, label: 'Hub' as const };
+const HUB = { url: `${BASE}/hubs/7`, label: 'Hub' as const };
 const safe = jest.mocked(resolveGameHubLinkSafe);
 const INPUT = { matchId: 3, lineupId: 9, gameId: 5, clientUrl: BASE };
 
