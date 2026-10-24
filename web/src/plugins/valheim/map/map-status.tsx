@@ -3,7 +3,6 @@
  * layer failed). Moved out of `valheim-map-view.tsx` (ROK-1859 D15, no
  * behaviour change).
  */
-import type { ValheimMapMeta } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 
 export interface MapStatusProps {
@@ -36,12 +35,4 @@ export function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
             )}
         </div>
     );
-}
-
-export function layerStatus(
-    meta: ValheimMapMeta,
-    failed: boolean,
-    sharedFailed: boolean,
-): MapStatusProps {
-    return { ready: meta.baseMap?.ready === true, failed, sharedFailed };
 }
