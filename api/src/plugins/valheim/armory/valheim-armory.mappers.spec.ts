@@ -69,10 +69,10 @@ describe('validateSnapshotPayload', () => {
     });
   });
 
-  it('refuses a portals payload: not importable until ROK-1946 (ROK-1944)', () => {
-    expect(validateSnapshotPayload(snapshotOf('portals-vanilla'))).toEqual({
-      ok: false,
-      detail: 'invalid:kind_unsupported',
+  it('accepts a portals payload: importable since ROK-1946', () => {
+    expect(validateSnapshotPayload(snapshotOf('portals-vanilla'))).toMatchObject({
+      ok: true,
+      message: { kind: 'portals' },
     });
   });
 

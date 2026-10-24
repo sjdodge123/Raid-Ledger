@@ -94,18 +94,24 @@ describe('ValheimLinkIngestService (ROK-1833)', () => {
     });
   });
 
-  it('accepts a valid portals message without storing it (ROK-1944)', async () => {
+  it('stores a valid portals message pending on its worldUid key (ROK-1946)', async () => {
     const { repo, service } = setup();
     for (const name of ['portals-vanilla', 'portals-modded']) {
       const msg = buf(loadValheimFixture(name));
       const res = await service.ingest(req, 'portals', msg, NOW);
       expect(res).toEqual({ status: 'accepted', missingBlobs: [] });
     }
-    expect(repo.upsertLatest).not.toHaveBeenCalled();
-    expect(repo.findBlobs).not.toHaveBeenCalled();
+    expect(repo.upsertLatest).toHaveBeenCalledTimes(2);
+    expect(repo.upsertLatest.mock.calls[0]?.[0]).toMatchObject({
+      pelicanServerId: 7,
+      kind: 'portals',
+      snapshotKey: '1234567890123',
+      worldUid: '1234567890123',
+      status: 'pending',
+    });
   });
 
-  it('still validates portals: 400 schema_invalid, 403 server_mismatch (ROK-1944)', async () => {
+  it('validates portals: 400 schema_invalid, 403 server_mismatch (ROK-1944)', async () => {
     const { repo, service } = setup();
     const msg = loadValheimFixture('portals-vanilla');
     const extra = buf({ ...msg, pairs: [] });
