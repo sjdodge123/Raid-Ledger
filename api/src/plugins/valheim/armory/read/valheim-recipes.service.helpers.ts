@@ -11,6 +11,11 @@ import {
   withNodeDiscovery,
   type KnownRecipes,
 } from './valheim-recipes.discovery';
+import type { ValheimRecipeSetRow } from '../../../../drizzle/schema';
+import {
+  maxQualityLookup,
+  reachablePrefabs,
+} from './valheim-recipes.catalog.helpers';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import type { RecipesReader } from './valheim-recipes.read.repository';
 import type { ResolveResult } from './valheim-recipes.resolve';
@@ -45,4 +50,23 @@ export function pickTree(
     truncated: res.truncated,
     discovery: k.status,
   };
+}
+
+/**
+ * ONE items-catalogue read (D6 choice) for everything reachable from
+ * `roots`: the targets' `maxQuality` and, after resolving, the nodes'
+ * names + icons.
+ */
+export async function catalogFor(
+  r: RecipesReader,
+  set: ValheimRecipeSetRow,
+  graph: RecipeGraph,
+  roots: string[],
+) {
+  const cat = await r.materials.findCatalog(
+    set.pelicanServerId,
+    set.gameVersion,
+    reachablePrefabs(graph, roots),
+  );
+  return { cat, maxQ: maxQualityLookup(graph, cat?.items ?? null) };
 }

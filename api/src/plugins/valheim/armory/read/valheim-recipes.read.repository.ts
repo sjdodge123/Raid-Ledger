@@ -84,6 +84,38 @@ export class RecipesReader {
     return rows.map((r) => r.known);
   }
 
+  /**
+   * ROK-1948 D5: the cache fingerprint of every profile on `serverId` — row
+   * count + newest `imported_at` (every re-import bumps it; a delete moves
+   * the count). No claim filter, no viewer term (D2).
+   */
+  async profileFingerprint(serverId: number): Promise<string> {
+    const [row] = await this.db
+      .select({
+        fp: sql<string>`count(*)::text || ':' || coalesce(extract(epoch from max(${p.importedAt}))::text, '0')`,
+      })
+      .from(p)
+      .where(eq(p.pelicanServerId, serverId));
+    return row?.fp ?? '0:0';
+  }
+
+  /**
+   * ROK-1948 D2: both known lists of EVERY profile on `serverId`, claimed or
+   * not — spoiler protection asks what anyone in that world has found, so
+   * there is deliberately no `claimedProfileSql` and no viewer parameter.
+   * The result is only ever reduced to one server-wide union, never
+   * attributed to a character or person.
+   */
+  async serverKnownLists(
+    serverId: number,
+  ): Promise<{ knownRecipes: string[]; knownItems: string[] }[]> {
+    return this.db
+      .select({ knownRecipes: p.knownRecipes, knownItems: p.knownItems })
+      .from(p)
+      .where(eq(p.pelicanServerId, serverId))
+      .orderBy(asc(p.id));
+  }
+
   /** The set's icon atlas; `ready` = its PNG blob is stored. */
   async recipeAtlas(
     set: schema.ValheimRecipeSetRow,

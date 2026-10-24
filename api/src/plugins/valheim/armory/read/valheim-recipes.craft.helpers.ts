@@ -95,6 +95,12 @@ function upgradeAt(
   };
 }
 
+/** True only on a pruned graph, for a station it no longer carries. */
+const hiddenStation = (graph: RecipeGraph, station: string | null) =>
+  graph.withheld !== undefined &&
+  station !== null &&
+  !graph.stations.has(station);
+
 /**
  * The UPGRADE tab: for q in 2..maxQuality, the D9 recipe valid at
  * `startStep = q` (upgrade-only included) and that one step's cost — what
@@ -108,6 +114,8 @@ export function upgradesOf(
   const out: ValheimRecipeUpgrade[] = [];
   for (let q = 2; q <= Math.min(maxQuality, QUALITY_MAX); q += 1) {
     const step = upgradeAt(graph, prefab, q);
+    // ROK-1948 R6: stop at the first step at a station nobody has found.
+    if (step && hiddenStation(graph, step.station)) break;
     if (step) out.push(step);
   }
   return out;
