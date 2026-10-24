@@ -374,4 +374,18 @@ describe('blob route refuses base maps (ROK-1949 D8)', () => {
     const icon = await get(`${blobs}/${ICON_SHA}`, w.owner);
     expect(icon.status).toBe(200);
   });
+
+  it('still 404s a rotated/orphaned base-map sha no map row references', async () => {
+    const blobs = `/plugins/valheim/armory/servers/${w.serverId}/blobs`;
+    await storeBlob(w.serverId, ICON_SHA, source);
+    await testApp.db
+      .update(M)
+      .set({ baseMapSha256: null })
+      .where(eq(M.pelicanServerId, w.serverId));
+    const orphan = await get(`${blobs}/${SHA}`, w.owner);
+    expect(orphan.status).toBe(404);
+    expect((orphan.body as Buffer).subarray(0, 8)).not.toEqual(PNG_SIG);
+    const icon = await get(`${blobs}/${ICON_SHA}`, w.owner);
+    expect(icon.status).toBe(200);
+  });
 });

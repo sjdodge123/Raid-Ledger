@@ -35,6 +35,7 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
+const snaps = schema.valheimLinkSnapshots;
 const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
 const skillDays = schema.valheimProfileSkillDays;
@@ -280,6 +281,9 @@ export class ValheimArmoryReadRepository {
   /**
    * A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6) —
    * never a base map of that server (ROK-1949 D8: those are served masked).
+   * A base map is any sha a map row references now OR any snapshot of the
+   * server ever declared with role `baseMap` (`blob_refs`, recorded at
+   * ingest), so a rotated or orphaned base map stays refused too.
    */
   async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
     const [row] = await this.db
@@ -301,9 +305,24 @@ export class ValheimArmoryReadRepository {
                 ),
               ),
           ),
+          notExists(this.baseMapRef(serverId, sha256)),
         ),
       )
       .limit(1);
     return row?.storagePath ?? null;
+  }
+
+  /** Snapshots of `serverId` that declared `sha256` as a base map. */
+  private baseMapRef(serverId: number, sha256: string) {
+    const probe = JSON.stringify([{ sha256, role: 'baseMap' }]);
+    return this.db
+      .select({ one: sql`1` })
+      .from(snaps)
+      .where(
+        and(
+          eq(snaps.pelicanServerId, serverId),
+          sql`${snaps.blobRefs} @> ${probe}::jsonb`,
+        ),
+      );
   }
 }
