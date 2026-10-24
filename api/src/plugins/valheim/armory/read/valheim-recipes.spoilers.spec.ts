@@ -1,6 +1,5 @@
 import type {
   ValheimPiece,
-  ValheimPlanNode,
   ValheimProcess,
   ValheimRecipe,
   ValheimRecipeCatalogEntry,
@@ -18,7 +17,6 @@ import {
   clampStationLevels,
   serverKnown,
   spoilerGraph,
-  undiscoveredLeaf,
   type ProfileKnownLists,
 } from './valheim-recipes.spoilers';
 
@@ -153,10 +151,8 @@ describe('serverKnown (D3/D4)', () => {
     expect(k.recipes.size).toBe(0);
   });
 
-  it('a known_items list at the cap → off-truncated', () => {
-    expect(serverKnown([profile(['Club'], capped())]).status).toBe(
-      'off-truncated',
-    );
+  it('a known_items list at the cap stays protected (D4 keys on known_recipes only)', () => {
+    expect(serverKnown([profile(['Club'], capped())]).status).toBe('protected');
   });
 
   it('one below the cap is still protected', () => {
@@ -443,57 +439,5 @@ describe('clampStationLevels (Q4)', () => {
       [entry(1, [4])],
     );
     expect(out[0]?.maxLevel).toBe(2);
-  });
-});
-
-describe('undiscoveredLeaf (D7)', () => {
-  const hiddenSource: ValheimPlanNode = {
-    id: 4,
-    parentId: 1,
-    prefab: 'Bronze',
-    quantity: 8,
-    via: {
-      type: 'recipe',
-      recipeId: 'Recipe_Bronze',
-      station: 'forge',
-      stationLevel: 2,
-      quality: 1,
-      upgradeOnly: false,
-      formula: 'vanilla',
-      anyOneOf: false,
-      upgraderStation: false,
-    },
-    alternatives: 3,
-    crafts: 8,
-    have: 2,
-    short: 6,
-    discovered: false,
-  };
-
-  it('keeps only the node itself and the amount the known recipe asks for', () => {
-    expect(undiscoveredLeaf(hiddenSource)).toEqual({
-      id: 4,
-      parentId: 1,
-      prefab: 'Bronze',
-      quantity: 8,
-      via: { type: 'undiscovered' },
-      alternatives: 0,
-      crafts: 0,
-      have: 2,
-      short: 6,
-    });
-  });
-
-  it('carries no name or count of what is missing', () => {
-    const body = JSON.stringify(undiscoveredLeaf(hiddenSource));
-    for (const leak of [
-      'forge',
-      'Recipe_',
-      'station',
-      '"discovered"',
-      '"alternatives":3',
-    ]) {
-      expect(body).not.toContain(leak);
-    }
   });
 });

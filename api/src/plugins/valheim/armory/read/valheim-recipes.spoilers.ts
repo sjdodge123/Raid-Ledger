@@ -6,11 +6,11 @@
  * prunes the shared recipe graph to what someone on the server has discovered
  * (§4 R1–R4), so every existing projection runs unchanged on it and cannot
  * name, count or pick a hidden source (D1). `withheld` lists the prefabs the
- * pruning removed, for the resolver's `undiscovered` leaf (D7).
+ * pruning removed: the resolver ends each in a NAMED `undiscovered` leaf with
+ * nothing under it (D7, operator ruling 2026-10-24).
  */
 import type {
   ValheimPiece,
-  ValheimPlanNode,
   ValheimProcess,
   ValheimRecipe,
   ValheimRecipeCatalogEntry,
@@ -50,13 +50,14 @@ function off(status: ValheimRecipeSpoilers): ServerKnown {
 }
 
 /**
- * D4: any list at the store cap → `off-truncated` (a cut list would over-hide);
+ * D4: any `known_recipes` list at the store cap → `off-truncated` (a cut
+ * list would over-hide; the spec keys D4 on recipes only, so a capped
+ * `known_items` list stays protected and only under-reveals materials);
  * no usable non-empty `known_recipes` anywhere → `off-no-data`; else
  * `protected` with the union of every usable list.
  */
 export function serverKnown(lists: readonly ProfileKnownLists[]): ServerKnown {
-  const atCap = (l: readonly string[]) => l.length >= ARMORY_KNOWN_LIST_MAX;
-  if (lists.some((p) => atCap(p.knownRecipes) || atCap(p.knownItems))) {
+  if (lists.some((p) => p.knownRecipes.length >= ARMORY_KNOWN_LIST_MAX)) {
     return off('off-truncated');
   }
   const recipes = new Set(lists.flatMap((p) => usablePrefabs(p.knownRecipes)));
@@ -247,28 +248,4 @@ export function clampStationLevels(
     ...s,
     maxLevel: Math.min(s.maxLevel, need.get(s.prefab) ?? 1),
   }));
-}
-
-/**
- * D7: the generic "needs something nobody on the server has found yet" leaf.
- * Built field by field so nothing of the hidden source (station, recipe id,
- * children count, alternatives, discovery flag) can ride along.
- */
-export function undiscoveredLeaf(
-  node: Pick<
-    ValheimPlanNode,
-    'id' | 'parentId' | 'prefab' | 'quantity' | 'have' | 'short'
-  >,
-): ValheimPlanNode {
-  return {
-    id: node.id,
-    parentId: node.parentId,
-    prefab: node.prefab,
-    quantity: node.quantity,
-    via: { type: 'undiscovered' },
-    alternatives: 0,
-    crafts: 0,
-    have: node.have,
-    short: node.short,
-  };
 }

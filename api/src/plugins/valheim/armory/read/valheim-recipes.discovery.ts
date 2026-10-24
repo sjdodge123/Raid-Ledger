@@ -131,8 +131,10 @@ export function withNodeDiscovery(
   graph: RecipeGraph,
   k: KnownRecipes,
 ): ValheimPlanNode[] {
-  return nodes.map((n) => ({
-    ...n,
-    discovered: nodeDiscovered(graph, n, k.known),
-  }));
+  // ROK-1948 D7: a withheld leaf carries no per-viewer flag.
+  return nodes.map((n) =>
+    n.via.type === 'undiscovered'
+      ? n
+      : { ...n, discovered: nodeDiscovered(graph, n, k.known) },
+  );
 }

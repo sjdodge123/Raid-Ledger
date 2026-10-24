@@ -55,6 +55,7 @@ import {
 import {
   catalogFor,
   knownFor,
+  nameAndIconOnly,
   nodeCatalog,
   pickTree,
 } from './valheim-recipes.service.helpers';
@@ -65,6 +66,15 @@ import {
   visibleRecipes,
   type VisibleRecipes,
 } from './valheim-recipes.spoilers.cache';
+
+/** D8: while protected, hidden targets are dropped (and not echoed). */
+function shownTargets(
+  vis: VisibleRecipes,
+  targets: ValheimRecipePlanTarget[],
+): ValheimRecipePlanTarget[] {
+  if (vis.spoilers !== 'protected') return targets;
+  return targets.filter((t) => hasTreeTarget(vis.graph, t.prefab, t.kind));
+}
 
 @Injectable()
 export class ValheimRecipesService {
@@ -109,10 +119,8 @@ export class ValheimRecipesService {
       catalogueReadPrefabs(graph),
     );
     const entries = catalogueEntries(graph, cat?.items ?? null);
-    const { items: ingredients, atlas } = projectCatalog(
-      ingredientPrefabs(entries),
-      cat,
-    );
+    const { items, atlas } = projectCatalog(ingredientPrefabs(entries), cat);
+    const ingredients = nameAndIconOnly(items, graph);
     return {
       gameVersion: set.gameVersion,
       capturedAt: toMinuteIso(set.capturedAt),
@@ -162,29 +170,40 @@ export class ValheimRecipesService {
     user: AuthenticatedUser,
   ): Promise<ValheimRecipeTreeResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
-    const body = await this.repo.read(async (r) => {
-      const set = await r.latestSet(serverId);
-      const vis = set ? await this.visible(r, set) : null;
-      // D8: a hidden prefab 404s exactly like one that does not exist.
-      if (!set || !vis || !hasTreeTarget(vis.graph, prefab, kind)) {
-        throw new NotFoundException(RECIPE_NOT_FOUND);
-      }
-      const { graph, spoilers } = vis;
-      const k = await knownFor(r, serverId, user);
-      const { cat, maxQ } = await catalogFor(r, set, graph, [prefab]);
-      const q = kind === 'piece' ? 1 : Math.min(quality, maxQ(prefab));
-      const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
-      const asked = kind ? { ...target, kind } : target;
-      const res = resolveTree(graph, asked, null, { maxQuality: maxQ });
-      return {
-        target: { prefab, quality: q },
-        ...pickTree(res, graph, k),
-        ...nodeCatalog(res, cat),
-        recipeAtlas: await r.recipeAtlas(set),
-        spoilers,
-      };
-    });
+    const body = await this.repo.read((r) =>
+      this.treeIn(r, serverId, { prefab, quality, kind }, user),
+    );
     return ValheimRecipeTreeResponseSchema.parse(body);
+  }
+
+  private async treeIn(
+    r: RecipesReader,
+    serverId: number,
+    ask: { prefab: string; quality: number; kind: RecipeKind | undefined },
+    user: AuthenticatedUser,
+  ) {
+    const { prefab, kind } = ask;
+    const set = await r.latestSet(serverId);
+    const vis = set ? await this.visible(r, set) : null;
+    // D8: a hidden prefab 404s exactly like one that does not exist.
+    if (!set || !vis || !hasTreeTarget(vis.graph, prefab, kind)) {
+      throw new NotFoundException(RECIPE_NOT_FOUND);
+    }
+    const { graph, spoilers } = vis;
+    const k = await knownFor(r, serverId, user);
+    const { cat, maxQ } = await catalogFor(r, set, graph, [prefab]);
+    const q = kind === 'piece' ? 1 : Math.min(ask.quality, maxQ(prefab));
+    const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
+    const res = resolveTree(graph, kind ? { ...target, kind } : target, null, {
+      maxQuality: maxQ,
+    });
+    return {
+      target: { prefab, quality: q },
+      ...pickTree(res, graph, k),
+      ...nodeCatalog(res, cat, graph),
+      recipeAtlas: await r.recipeAtlas(set),
+      spoilers,
+    };
   }
 
   /** `GET …/recipes/plan` — stock from the newest scan in the viewer's scope. */
@@ -217,16 +236,12 @@ export class ValheimRecipesService {
   ): Promise<ValheimRecipePlanResponse> {
     const { graph, spoilers } = await this.visible(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
-    // D8: while protected, hidden targets are dropped (and not echoed).
-    const shown =
-      spoilers === 'protected'
-        ? targets.filter((t) => hasTreeTarget(graph, t.prefab, t.kind))
-        : targets;
+    const shown = shownTargets({ graph, spoilers }, targets);
     const ids = shown.map((t) => t.prefab);
     const { cat, maxQ } = await catalogFor(r, set, graph, ids);
     const planned = clampTargets(shown, maxQ);
     const res = resolvePlan(graph, planned, stock, { maxQuality: maxQ });
-    const { items, itemAtlas } = nodeCatalog(res, cat);
+    const { items, itemAtlas } = nodeCatalog(res, cat, graph);
     return {
       targets: planned,
       ...pickTree(res, graph, k),

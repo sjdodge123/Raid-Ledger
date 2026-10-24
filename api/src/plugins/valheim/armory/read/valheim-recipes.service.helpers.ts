@@ -29,14 +29,35 @@ export async function knownFor(
   return toKnownSet(await r.knownRecipesFor(serverId, toMaterialsViewer(user)));
 }
 
+type CatalogItemMap = ReturnType<typeof projectCatalog>['items'];
+
+/**
+ * ROK-1948 (operator ruling 2026-10-24): a withheld prefab may be NAMED as an
+ * ingredient (name + icon, like the game) but carries nothing else.
+ */
+export function nameAndIconOnly(
+  items: CatalogItemMap,
+  graph: RecipeGraph,
+): CatalogItemMap {
+  const hidden = graph.withheld;
+  if (!hidden) return items;
+  return Object.fromEntries(
+    Object.entries(items).map(([prefab, e]) => [
+      prefab,
+      hidden.has(prefab) ? { name: e.name, category: '', icon: e.icon } : e,
+    ]),
+  );
+}
+
 /** Catalogue subset for every prefab the resolved nodes reference. */
 export function nodeCatalog(
   res: ResolveResult,
   cat: Parameters<typeof projectCatalog>[1],
+  graph: RecipeGraph,
 ) {
   const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
   const { items, atlas } = projectCatalog(prefabs, cat);
-  return { items, itemAtlas: atlas };
+  return { items: nameAndIconOnly(items, graph), itemAtlas: atlas };
 }
 
 /** The resolved nodes with `discovered` set, plus the response status. */
