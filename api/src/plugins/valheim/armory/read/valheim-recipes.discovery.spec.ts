@@ -285,6 +285,41 @@ describe('a prefab that is both a build piece and a crafted item', () => {
   });
 });
 
+describe('an item whose only recipes are disabled, beside a process', () => {
+  const smeltIron: ValheimProcess = {
+    ...smeltBronze,
+    inputs: [{ prefab: 'IronScrap', amount: 1 }],
+    output: { prefab: 'Iron', amount: 1 },
+  };
+  const disabled = buildRecipeGraph({
+    recipes: [{ ...recipe('Recipe_Iron', 'Iron'), enabled: false }],
+    pieces: [],
+    stations: [],
+    processors: [],
+    processes: [smeltIron],
+  });
+  const processNode = node('Iron', {
+    type: 'process',
+    processor: 'smelter',
+    processorType: 'smelter',
+    seconds: 30,
+    windPowered: false,
+    fuel: 'Coal',
+  });
+
+  it('is not recipe-gated: entry and node are both null', () => {
+    const known = set('Club');
+    expect(entryDiscovered(disabled, entry('Iron'), known)).toBeNull();
+    expect(nodeDiscovered(disabled, processNode, known)).toBeNull();
+  });
+
+  it('knowing the disabled recipe id changes nothing', () => {
+    const known = set('Recipe_Iron');
+    expect(entryDiscovered(disabled, entry('Iron'), known)).toBeNull();
+    expect(nodeDiscovered(disabled, processNode, known)).toBeNull();
+  });
+});
+
 describe('withEntryDiscovery / withNodeDiscovery', () => {
   it('stamps every entry, leaving the rest of the row intact', () => {
     const k = toKnownSet([['Recipe_Club']]);

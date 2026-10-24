@@ -52,18 +52,25 @@ export function toKnownSet(lists: readonly string[][]): KnownRecipes {
   return { status: 'known', known: new Set(usable.flat()) };
 }
 
-/** D2: the result prefab OR any recipe id producing it is in the list. */
+/** Recipes that gate an item; a disabled one cannot be learned or crafted. */
+function gatingRecipes(graph: RecipeGraph, prefab: string) {
+  return (graph.recipesByResult.get(prefab) ?? []).filter((r) => r.enabled);
+}
+
+/** D2: the result prefab OR any enabled recipe id producing it is listed. */
 function itemKnown(
   graph: RecipeGraph,
   prefab: string,
   known: ReadonlySet<string>,
 ): boolean {
   if (known.has(prefab)) return true;
-  const recipes = graph.recipesByResult.get(prefab) ?? [];
-  return recipes.some((r) => known.has(r.id));
+  return gatingRecipes(graph, prefab).some((r) => known.has(r.id));
 }
 
-/** Items with no recipe (process-only, gathered) are not gated → null. */
+/**
+ * Items with no enabled recipe (process-only — even beside disabled recipes —
+ * and gathered) are not gated → null.
+ */
 export function entryDiscovered(
   graph: RecipeGraph,
   entry: Pick<ValheimRecipeCatalogEntry, 'kind' | 'prefab'>,
@@ -71,8 +78,7 @@ export function entryDiscovered(
 ): boolean | null {
   if (known === null) return null;
   if (entry.kind === 'piece') return known.has(entry.prefab);
-  const recipes = graph.recipesByResult.get(entry.prefab) ?? [];
-  if (recipes.length === 0) return null;
+  if (gatingRecipes(graph, entry.prefab).length === 0) return null;
   return itemKnown(graph, entry.prefab, known);
 }
 
