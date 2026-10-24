@@ -50,11 +50,16 @@ import {
   ValheimRecipesReadRepository,
   type RecipesReader,
 } from './valheim-recipes.read.repository';
+import { resolvePlan, resolveTree } from './valheim-recipes.resolve';
 import {
-  resolvePlan,
-  resolveTree,
-  type ResolveResult,
-} from './valheim-recipes.resolve';
+  withEntryDiscovery,
+  type KnownRecipes,
+} from './valheim-recipes.discovery';
+import {
+  knownFor,
+  nodeCatalog,
+  pickTree,
+} from './valheim-recipes.service.helpers';
 
 @Injectable()
 export class ValheimRecipesService {
@@ -73,8 +78,10 @@ export class ValheimRecipesService {
   ): Promise<ValheimRecipeCatalogResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
     const body = await this.repo.read(async (r) => {
+      const k = await knownFor(r, serverId, user);
       const set = await r.latestSet(serverId);
-      return set ? this.catalogueIn(r, set) : emptyCatalogue();
+      if (!set) return { ...emptyCatalogue(), discovery: k.status };
+      return this.catalogueIn(r, set, k);
     });
     return ValheimRecipeCatalogResponseSchema.parse(body);
   }
@@ -83,6 +90,7 @@ export class ValheimRecipesService {
   private async catalogueIn(
     r: RecipesReader,
     set: ValheimRecipeSetRow,
+    k: KnownRecipes,
   ): Promise<ValheimRecipeCatalogResponse> {
     const graph = await this.graph(r, set);
     const cat = await r.materials.findCatalog(
@@ -99,7 +107,8 @@ export class ValheimRecipesService {
       gameVersion: set.gameVersion,
       capturedAt: toMinuteIso(set.capturedAt),
       catalogFallback: cat !== null && !cat.exact,
-      entries,
+      entries: withEntryDiscovery(entries, graph, k),
+      discovery: k.status,
       stations: catalogueStations(graph),
       ingredients,
       itemAtlas: atlas,
@@ -148,6 +157,7 @@ export class ValheimRecipesService {
       if (!set || !graph || !hasTreeTarget(graph, prefab, kind)) {
         throw new NotFoundException(RECIPE_NOT_FOUND);
       }
+      const k = await knownFor(r, serverId, user);
       const { cat, maxQ } = await this.catalogFor(r, set, graph, [prefab]);
       const q = kind === 'piece' ? 1 : Math.min(quality, maxQ(prefab));
       const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
@@ -155,7 +165,7 @@ export class ValheimRecipesService {
       const res = resolveTree(graph, asked, null, { maxQuality: maxQ });
       return {
         target: { prefab, quality: q },
-        ...pickTree(res),
+        ...pickTree(res, graph, k),
         ...nodeCatalog(res, cat),
         recipeAtlas: await r.recipeAtlas(set),
       };
@@ -173,8 +183,10 @@ export class ValheimRecipesService {
     await assertServerHubVisible(this.hubs, serverId, user);
     const scope = stockScope(user, opts);
     const body = await this.repo.read(async (r) => {
+      const k = await knownFor(r, serverId, user);
       const set = await r.latestSet(serverId);
-      return set ? this.planIn(r, set, targets, scope) : emptyPlan(targets);
+      if (!set) return { ...emptyPlan(targets), discovery: k.status };
+      return this.planIn(r, set, targets, scope, k);
     });
     return ValheimRecipePlanResponseSchema.parse(body);
   }
@@ -184,6 +196,7 @@ export class ValheimRecipesService {
     set: ValheimRecipeSetRow,
     targets: ValheimRecipePlanTarget[],
     scope: SQL,
+    k: KnownRecipes,
   ): Promise<ValheimRecipePlanResponse> {
     const graph = await this.graph(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
@@ -194,7 +207,7 @@ export class ValheimRecipesService {
     const { items, itemAtlas } = nodeCatalog(res, cat);
     return {
       targets: planned,
-      ...pickTree(res),
+      ...pickTree(res, graph, k),
       stock: scan ? 'scan' : 'none',
       capturedAt: scan ? toMinuteIso(scan.capturedAt) : null,
       shoppingList: res.shoppingList,
@@ -235,18 +248,4 @@ export class ValheimRecipesService {
     );
     return { cat, maxQ: maxQualityLookup(graph, cat?.items ?? null) };
   }
-}
-
-/** Catalogue subset for every prefab the resolved nodes reference. */
-function nodeCatalog(
-  res: ResolveResult,
-  cat: Parameters<typeof projectCatalog>[1],
-) {
-  const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
-  const { items, atlas } = projectCatalog(prefabs, cat);
-  return { items, itemAtlas: atlas };
-}
-
-function pickTree(res: ResolveResult) {
-  return { nodes: res.nodes, truncated: res.truncated };
 }
