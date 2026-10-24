@@ -7,6 +7,8 @@ import {
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { defined } from '../common/testing/narrow';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 function describeUsersService() {
   let service: UsersService;
@@ -146,6 +148,20 @@ function describeUsersService() {
 
       expect(result).toBe(false);
       expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['%', '\\%'],
+      ['a_b', 'a\\_b'],
+      ['trail\\', 'trail\\\\'],
+    ])('treats %p as a literal ILIKE pattern', async (input, escaped) => {
+      mockDb.where.mockResolvedValue([{ count: 0 }]);
+
+      await service.checkDisplayNameAvailability(input, 5);
+
+      const cond: unknown = mockDb.where.mock.calls[0]?.[0];
+      const { params } = new PgDialect().sqlToQuery(cond as SQL);
+      expect(params).toContain(escaped);
     });
   });
 
