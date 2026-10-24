@@ -10,6 +10,9 @@
  *   Copper / Tin        ← smelter: CopperOre / TinOre, fuel Coal ×2 per bar
  *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood
  *   CookedMeat          ← piece_cookingstation (fuel-less `cooking`): RawMeat
+ *   Cultivator (workbench) ← Bronze 5 + Wood 5 (ROK-1948: a Workbench recipe
+ *                        needing Bronze, so the `early` spoilers preset shows
+ *                        the generic "nobody on the server has found it" line)
  *
  * The processors get no `pieces[]` entry, so the web falls back to its own
  * processor labels (ROK-1934 D3/D9).
@@ -158,6 +161,10 @@ export const RECIPES_DEMO_MESSAGE: ValheimRecipesMessage = {
       res('Wood', 2),
       res('LeatherScraps', 3),
     ]),
+    recipe('Recipe_Cultivator', 'Cultivator', 'piece_workbench', [
+      res('Bronze', 5),
+      res('Wood', 5),
+    ]),
   ],
   processors: [
     { ...SMELTER, prefab: 'charcoal_kiln', fuel: null, fuelPerProduct: null },
@@ -204,6 +211,8 @@ export const RECIPES_DEMO_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
   /** ROK-1934: cooked food, reachable through the Planner's search only. */
   RawMeat: item('Raw meat', 2),
   CookedMeat: item('Cooked meat', 3, 1, 'Consumable'),
+  /** ROK-1948: the Workbench recipe that needs Bronze. */
+  Cultivator: item('Cultivator', 2, 1, 'Tool'),
 };
 
 /** The one chest the planner fixture adds to the containers scan. */

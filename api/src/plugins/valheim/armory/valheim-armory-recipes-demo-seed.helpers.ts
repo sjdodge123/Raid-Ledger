@@ -158,18 +158,28 @@ export async function mergeRecipesDemoCatalog(
 }
 
 /**
- * ROK-1862 — what the owner's claimed character (`c1`) has learned: every
- * result and piece the demo set lists EXCEPT Bronze sword (contract form:
- * result prefabs), so the Planner shows Club known and Bronze sword "Not
- * discovered yet". The unclaimed member stays the "no character" case.
+ * Every prefab the demo set lists: recipe results, pieces, stations and
+ * processors (contract form). ROK-1948: the unclaimed scout knows all of it,
+ * so under server-wide spoiler protection nothing is hidden by default.
  */
-export const RECIPES_DEMO_UNDISCOVERED = 'SwordBronze';
-export const RECIPES_DEMO_OWNER_KNOWN: readonly string[] = [
+export const RECIPES_DEMO_ALL_KNOWN: readonly string[] = [
   ...new Set([
     ...RECIPES.recipes.map((r) => r.result),
     ...RECIPES.pieces.map((p) => p.prefab),
+    ...RECIPES.stations.map((s) => s.prefab),
+    ...RECIPES.processors.map((p) => p.prefab),
   ]),
-].filter((p) => p !== RECIPES_DEMO_UNDISCOVERED);
+];
+
+/**
+ * ROK-1862 — what the owner's claimed character (`c1`) has learned: every
+ * prefab the demo set lists EXCEPT Bronze sword (contract form: result
+ * prefabs), so the Planner shows Club known and Bronze sword "Not discovered
+ * yet". The unclaimed member stays the "no character" case.
+ */
+export const RECIPES_DEMO_UNDISCOVERED = 'SwordBronze';
+export const RECIPES_DEMO_OWNER_KNOWN: readonly string[] =
+  RECIPES_DEMO_ALL_KNOWN.filter((p) => p !== RECIPES_DEMO_UNDISCOVERED);
 
 /** Write the owner's known list onto every profile it claims on the server. */
 export async function setRecipesDemoOwnerKnowledge(
@@ -180,7 +190,10 @@ export async function setRecipesDemoOwnerKnowledge(
   const P = schema.valheimProfiles;
   const rows = await db
     .update(P)
-    .set({ knownRecipes: [...RECIPES_DEMO_OWNER_KNOWN] })
+    .set({
+      knownRecipes: [...RECIPES_DEMO_OWNER_KNOWN],
+      importedAt: sql`now()`,
+    })
     .where(and(eq(P.pelicanServerId, serverId), eq(P.claimedBy, ownerUserId)))
     .returning({ id: P.id });
   if (rows.length === 0) throw new Error('recipes fixture: no owner profile');

@@ -192,6 +192,7 @@ describe('buildVisibleGraph — AC1 (Workbench + Club only)', () => {
       'Coal',
       'CookedMeat',
       'Copper',
+      'Cultivator',
       'Iron',
       'SwordBronze',
       'SwordIron',
