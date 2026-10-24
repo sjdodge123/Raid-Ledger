@@ -295,7 +295,9 @@ describe('ReliabilityLeaderboard — Late column (ROK-1938)', () => {
 
     it('shows the late footnote with data', async () => {
         renderWithProviders(<ReliabilityLeaderboard />);
-        await waitFor(() => expect(screen.getByText(FOOTNOTE)).toBeInTheDocument());
+        const footnote = await screen.findByText(FOOTNOTE);
+        expect(footnote).toBeInTheDocument();
+        expect(footnote.closest('.overflow-x-auto')).toBeNull();
     });
 
     it('omits the late footnote in the empty state', async () => {

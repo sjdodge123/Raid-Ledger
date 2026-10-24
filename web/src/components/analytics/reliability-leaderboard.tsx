@@ -65,13 +65,15 @@ export function ReliabilityLeaderboard() {
 
 function LeaderboardTable({ users, sortField, sortDir, handleSort }: { users: UserReliabilityDto[]; sortField: SortField; sortDir: SortDir; handleSort: (f: SortField) => void }) {
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-                <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
-                <tbody>{users.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
-            </table>
+        <>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
+                    <tbody>{users.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
+                </table>
+            </div>
             <p className="text-xs text-muted mt-3">{LATE_FOOTNOTE}</p>
-        </div>
+        </>
     );
 }
 
