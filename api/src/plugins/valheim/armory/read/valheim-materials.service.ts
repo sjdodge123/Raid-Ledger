@@ -152,15 +152,7 @@ export class ValheimMaterialsService {
     holding: string | null,
   ): Promise<ValheimContainerListResponse> {
     const scan = await r.latestScan(serverId);
-    if (!scan) {
-      return {
-        worldUid: null,
-        capturedAt: null,
-        containers: [],
-        items: {},
-        atlas: null,
-      };
-    }
+    if (!scan) return emptyContainerList();
     // Numbering reads the whole scope, never `holding`-filtered (D5).
     const [rows, inputs] = await Promise.all([
       r.listContainers(scan.id, scope, holding),
@@ -227,6 +219,16 @@ export class ValheimMaterialsService {
   private assertHub(serverId: number, user: AuthenticatedUser): Promise<void> {
     return assertServerHubVisible(this.hubs, serverId, user);
   }
+}
+
+function emptyContainerList(): ValheimContainerListResponse {
+  return {
+    worldUid: null,
+    capturedAt: null,
+    containers: [],
+    items: {},
+    atlas: null,
+  };
 }
 
 function scanHeader(scan: ValheimContainerScan) {
