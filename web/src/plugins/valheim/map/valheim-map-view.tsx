@@ -22,13 +22,13 @@ import { MapLegend, MapSnapshotFooter } from './map-legend';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
 import { usePinFilter } from './use-pin-filter';
-import { PinFilterBar } from './pin-filter-bar';
+import { MapPinFilters } from './map-filter-toolbar';
 
 export interface ValheimMapViewProps {
     characterId: number;
     mapId: number;
     className?: string;
-    /** The hub's Pelican server — enables the ROK-1930 "Show all" death layer. */
+    /** The hub's Pelican server — enables the ROK-1943 players pin layer. */
     serverId?: number | undefined;
 }
 
@@ -214,10 +214,9 @@ function useMapReadyState(props: ReadyProps) {
         sharedAvailable,
         pinLabels,
         onPinLabels: setPinLabels,
-        ...pinFilter.controls,
     };
     const status = layerStatus(props.meta, base.error !== null, sharedFailed);
-    return { layers, controls, personal, status, bar: pinFilter.bar };
+    return { layers, controls, personal, status, pinFilter };
 }
 
 interface MapFrameProps {
@@ -277,7 +276,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, status, bar } = useMapReadyState(props);
+    const { layers, controls, personal, status, pinFilter } = useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError
@@ -288,7 +287,7 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
     }
     return (
         <>
-            {bar && <PinFilterBar {...bar} />}
+            <MapPinFilters filter={pinFilter} serverId={props.serverId} />
             <MapFrame
                 className={props.className}
                 layers={layers}

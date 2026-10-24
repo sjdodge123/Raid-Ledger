@@ -10,10 +10,10 @@ import { useValheimServerPins } from '../hooks/use-valheim-server-pins';
 import {
     activeFilterCount, clearPinFilters, filterPins, parsePinFilter, toggleType, writePinFilter, type PinFilter,
 } from './pin-filter';
-import { legacyBar, layerStatus, type PinFilterBarState, type PinFilterSummary } from './pin-filter-summary';
+import { layerStatus, type PinFilterSummary } from './pin-filter-summary';
 import { rawTypesFor, type PinTypeGroupId } from './pin-type-groups';
 
-export type { PinFilterBarState, PinFilterSummary, PinLayerStatus } from './pin-filter-summary';
+export type { PinFilterSummary, PinLayerStatus } from './pin-filter-summary';
 
 export interface PinFilterArgs {
     characterId: number;
@@ -38,10 +38,6 @@ export interface PinFilterView {
     pins: readonly ValheimMapPin[];
     panel: PinFilterPanelState;
     summary: PinFilterSummary;
-    /** @deprecated ROK-1930 switch — removed when lane C2 swaps in the panel. */
-    controls: { deathsOnly: boolean; onDeathsOnly: (on: boolean) => void };
-    /** @deprecated ROK-1930 bar — replaced by `summary` in lane C2. */
-    bar: PinFilterBarState | null;
 }
 
 function effectiveFilter(params: URLSearchParams, serverId: number | undefined): PinFilter {
@@ -82,6 +78,5 @@ export function usePinFilter({ characterId, serverId, meta }: PinFilterArgs): Pi
         truncated: layerOn && server.data?.truncated === true,
         onRetry: () => void server.refetch(), onClear: panel.onClearAll,
     };
-    const onDeathsOnly = (on: boolean): void => panel.onChange({ types: on ? new Set(['death']) : null });
-    return { pins, panel, summary, controls: legacyBar.controls(filter, onDeathsOnly), bar: legacyBar.bar(summary, filter) };
+    return { pins, panel, summary };
 }
