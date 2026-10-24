@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ValheimMapMaskCache } from './valheim-map-mask.cache';
 
 function deferred(): {
@@ -115,5 +116,23 @@ describe('ValheimMapMaskCache', () => {
     gates.slice(1).forEach((g) => g.resolve(Buffer.from('y')));
     await Promise.all(all);
     expect(peak).toBe(2);
+  });
+
+  it('rejects with 503 once the waiter queue is full', async () => {
+    const cache = new ValheimMapMaskCache({
+      budgetBytes: 1000,
+      concurrency: 1,
+      maxWaiters: 1,
+    });
+    const gate = deferred();
+    const first = cache.get('k0', () => gate.promise);
+    const queued = cache.get('k1', () => Promise.resolve(Buffer.from('1')));
+    await flush();
+    await expect(
+      cache.get('k2', () => Promise.resolve(Buffer.from('2'))),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    gate.resolve(Buffer.from('0'));
+    await expect(first).resolves.toEqual(Buffer.from('0'));
+    await expect(queued).resolves.toEqual(Buffer.from('1'));
   });
 });

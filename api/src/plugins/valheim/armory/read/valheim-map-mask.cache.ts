@@ -3,13 +3,20 @@
  * fingerprint (never the viewer id), byte-budgeted (default 64 MiB, env
  * `VALHEIM_MAP_MASK_CACHE_MB`), with in-flight dedup and a cap of 2
  * concurrent renders. A rejected render is never cached; an entry bigger
- * than ¼ of the budget is returned but not stored.
+ * than ¼ of the budget is returned but not stored. At most 16 renders
+ * queue behind the cap; past that a get rejects with 503 (retry later).
  */
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 export interface MaskCacheOptions {
   budgetBytes: number;
   concurrency: number;
+  maxWaiters: number;
 }
 
 export const MASK_CACHE_OPTIONS = Symbol('MASK_CACHE_OPTIONS');
@@ -17,6 +24,7 @@ export const MASK_CACHE_OPTIONS = Symbol('MASK_CACHE_OPTIONS');
 const MIB = 1024 * 1024;
 const DEFAULT_BUDGET_MB = 64;
 const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_MAX_WAITERS = 16;
 
 function budgetFromEnv(): number {
   const mb = Number(process.env.VALHEIM_MAP_MASK_CACHE_MB);
@@ -27,6 +35,7 @@ function budgetFromEnv(): number {
 export class ValheimMapMaskCache {
   private readonly budget: number;
   private readonly concurrency: number;
+  private readonly maxWaiters: number;
   private readonly entries = new Map<string, Buffer>();
   private readonly inFlight = new Map<string, Promise<Buffer>>();
   private readonly waiters: (() => void)[] = [];
@@ -38,6 +47,7 @@ export class ValheimMapMaskCache {
   ) {
     this.budget = opts?.budgetBytes ?? budgetFromEnv();
     this.concurrency = Math.max(1, opts?.concurrency ?? DEFAULT_CONCURRENCY);
+    this.maxWaiters = Math.max(0, opts?.maxWaiters ?? DEFAULT_MAX_WAITERS);
   }
 
   /** Cached bytes for `key`, else `produce()` once (deduped, capped). */
@@ -78,6 +88,9 @@ export class ValheimMapMaskCache {
 
   private async runCapped(produce: () => Promise<Buffer>): Promise<Buffer> {
     while (this.running >= this.concurrency) {
+      if (this.waiters.length >= this.maxWaiters) {
+        throw new ServiceUnavailableException('base_map_render_busy');
+      }
       await new Promise<void>((resolve) => this.waiters.push(resolve));
     }
     this.running += 1;
