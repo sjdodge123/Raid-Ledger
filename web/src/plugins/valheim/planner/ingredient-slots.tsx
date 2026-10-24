@@ -82,13 +82,14 @@ function Slot({ line, names, state }: { line: SlotLine; names: PlannerNames; sta
 }
 
 function StarSlot({ stationLabel, level }: { stationLabel: string; level: number }): JSX.Element {
+    // A processor (level 0) has no level to show (ROK-1934).
     return (
-        <li aria-label={`${stationLabel}, level ${level}`} data-testid="valheim-craft-star-slot" className={`${SLOT} border-edge-subtle`}>
+        <li aria-label={level === 0 ? stationLabel : `${stationLabel}, level ${level}`} data-testid="valheim-craft-star-slot" className={`${SLOT} border-edge-subtle`}>
             <span aria-hidden="true" className="flex h-10 items-center text-2xl text-success">
                 ★
             </span>
             <span className="font-medium text-foreground">{stationLabel}</span>
-            <span className="text-muted">lvl {level}</span>
+            {level > 0 && <span className="text-muted">lvl {level}</span>}
         </li>
     );
 }

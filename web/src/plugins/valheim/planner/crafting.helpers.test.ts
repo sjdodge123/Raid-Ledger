@@ -4,7 +4,9 @@ import type { ValheimRecipeCatalogEntry, ValheimRecipeCost } from '@raid-ledger/
 import { recipeCatalogFixture } from '../../../test/mocks/valheim-recipes-handlers';
 import {
     BY_HAND_KEY,
+    PROCESS_KEY_PREFIX,
     affordability,
+    processRows,
     rankCache,
     rowDescription,
     searchRows,
@@ -104,6 +106,49 @@ describe('stationGroups', () => {
         ]);
         expect(searchRows(groups, 'SWORDIRON').map((r) => r.entry.prefab)).toEqual(['SwordIron']);
         expect(searchRows(groups, '  ')).toEqual([]);
+    });
+});
+
+describe('processRows (ROK-1934)', () => {
+    const bar = (prefab: string, name: string, station: string, over: Partial<ValheimRecipeCatalogEntry> = {}) =>
+        entry(prefab, name, station, {
+            category: 'Material', craft: { ...cost([[`${prefab}Ore`, 1]]), station, stationLevel: 0, via: 'process', amount: 1 }, ...over,
+        });
+    const entries = [
+        entry('SwordIron', 'Iron sword', 'forge'),
+        bar('Iron', 'Iron', 'smelter'),
+        bar('Coal', 'Coal', 'charcoal_kiln', { category: 'Fuel' }),
+        entry('Bronze', 'Bronze', 'forge', { category: 'Material' }),
+        entry('Stone', 'Stone', null, { craft: null }),
+        { ...bar('piece_odd', 'Odd piece', 'smelter'), kind: 'piece' as const },
+    ];
+    const label: Record<string, string> = { smelter: 'Smelter', charcoal_kiln: 'Charcoal kiln' };
+    const stationName = (p: string): string => label[p] ?? p;
+    const both = { kind: 'both', category: null } as const;
+
+    it('one row per process-only entry, keyed process:<processor> and labelled by stationName', () => {
+        const rows = processRows(entries, both, stationName);
+        expect(rows.map((r) => [r.entry.prefab, r.stationKey, r.stationLabel, r.cost.resources[0]?.prefab])).toEqual([
+            ['Iron', `${PROCESS_KEY_PREFIX}smelter`, 'Smelter', 'IronOre'],
+            ['Coal', `${PROCESS_KEY_PREFIX}charcoal_kiln`, 'Charcoal kiln', 'CoalOre'],
+            ['piece_odd', `${PROCESS_KEY_PREFIX}smelter`, 'Smelter', 'piece_oddOre'],
+        ]);
+    });
+    it('skips station recipes and gathered items; Kind and Category narrow it', () => {
+        expect(processRows(entries, filters, stationName).map((r) => r.entry.prefab), 'Kind = item drops the piece').toEqual(['Iron', 'Coal']);
+        expect(processRows(entries, { kind: 'piece', category: null }, stationName).map((r) => r.entry.prefab)).toEqual(['piece_odd']);
+        expect(processRows(entries, { kind: 'both', category: 'Fuel' }, stationName).map((r) => r.entry.prefab)).toEqual(['Coal']);
+        expect(processRows([entries[0], entries[3], entries[4]].filter((e) => e !== undefined), both, stationName)).toEqual([]);
+    });
+    it('searchRows adds the extra rows to the match; without them Iron stays out', () => {
+        const groups = stationGroups(entries, stations, 'craft', filters);
+        const extra = processRows(entries, filters, stationName);
+        expect(searchRows(groups, 'iron', extra).map((r) => [r.entry.prefab, r.stationLabel])).toEqual([
+            ['SwordIron', 'Forge'], ['Iron', 'Smelter'],
+        ]);
+        expect(searchRows(groups, 'iron').map((r) => r.entry.prefab)).toEqual(['SwordIron']);
+        expect(searchRows(groups, ' ', extra)).toEqual([]);
+        expect(groups.some((g) => g.key.startsWith(PROCESS_KEY_PREFIX)), 'the switcher never gets a processor entry').toBe(false);
     });
 });
 

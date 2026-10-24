@@ -3,17 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { BY_HAND_KEY } from './crafting.helpers';
 import { CRAFT_ENTRIES, CRAFT_STATIONS, CRAFT_TOTALS } from './crafting.test-fixture';
-import { DEFAULT_PLANNER_FILTERS, type PlannerFilters } from './planner.helpers';
+import { DEFAULT_PLANNER_FILTERS, processorLabel, type PlannerFilters } from './planner.helpers';
 import { rowKey, useCraftingWindow } from './use-crafting-window';
 
 function setup(filters: PlannerFilters = DEFAULT_PLANNER_FILTERS) {
     const onFilters = vi.fn();
     const hook = renderHook((p: { filters: PlannerFilters }) =>
-        useCraftingWindow({ entries: CRAFT_ENTRIES, stations: CRAFT_STATIONS, filters: p.filters, onFilters, totals: CRAFT_TOTALS }),
+        useCraftingWindow({ entries: CRAFT_ENTRIES, stations: CRAFT_STATIONS, filters: p.filters, onFilters, totals: CRAFT_TOTALS, stationName }),
         { initialProps: { filters } },
     );
     return { ...hook, onFilters };
 }
+const stationName = (p: string): string => CRAFT_STATIONS.find((s) => s.prefab === p)?.name ?? processorLabel(p) ?? p;
 const names = (rows: { entry: { name: string } }[]): string[] => rows.map((r) => r.entry.name);
 
 describe('useCraftingWindow', () => {
@@ -95,5 +96,42 @@ describe('useCraftingWindow — modes and empty states', () => {
         rerender({ filters: { ...DEFAULT_PLANNER_FILTERS, kind: 'piece' } });
         act(() => result.current.setMode('upgrade'));
         expect(result.current.emptyReason).toBe('no-upgrades');
+    });
+});
+
+describe('useCraftingWindow — process-only items (ROK-1934)', () => {
+    it('"cooked" and "meat" find Cooked meat at the Cooking station', () => {
+        const { result } = setup();
+        for (const text of ['cooked', 'meat']) {
+            act(() => result.current.setSearch(text));
+            const row = result.current.rows.find((r) => r.entry.prefab === 'CookedMeat');
+            expect(row?.stationLabel, `"${text}" lists Cooked meat`).toBe('Cooking station');
+            expect(row?.stationKey).toBe('process:piece_cookingstation');
+        }
+    });
+
+    it('UPGRADE search never lists a process row', () => {
+        const { result } = setup();
+        act(() => result.current.setMode('upgrade'));
+        act(() => result.current.setSearch('cooked'));
+        expect(names(result.current.rows)).toEqual([]);
+    });
+
+    it('a process row picked from search stays selected once the search is cleared', () => {
+        const { result } = setup();
+        act(() => result.current.setSearch('copper'));
+        const copper = result.current.rows.find((r) => r.entry.prefab === 'Copper');
+        if (copper === undefined) throw new Error('no Copper row');
+        act(() => result.current.select(copper));
+        act(() => result.current.setSearch(''));
+        expect(result.current.selected?.entry.prefab).toBe('Copper');
+        expect(result.current.selected?.stationLabel).toBe('Smelter');
+    });
+
+    it('the switcher gains no processor station', () => {
+        const { result } = setup();
+        act(() => result.current.setSearch('copper'));
+        expect(result.current.groups.map((g) => g.key).filter((k) => k.startsWith('process:'))).toEqual([]);
+        expect(result.current.groups.map((g) => g.label)).toEqual(['Forge', 'Workbench', 'By hand']);
     });
 });

@@ -4,10 +4,13 @@
  * Filters are owned by the caller (they also drive the stock query) and come
  * in controlled. Rows are grouped by `stationGroups`, narrowed by
  * `searchRows` across every station of the mode, and ranked by `sortRows`.
+ * ROK-1934: CRAFT search also reaches process-only items (`processRows`,
+ * named by `stationName`); they never become a station in the switcher.
  */
 import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import type { ValheimRecipeCatalogEntry, ValheimRecipeStation } from '@raid-ledger/contract';
 import {
+    processRows,
     rankCache,
     searchRows,
     sortRows,
@@ -28,6 +31,8 @@ export interface CraftingWindowInput {
     onFilters: (next: PlannerFilters) => void;
     /** Stock totals; null while loading, on error, or with no scan (rows stay neutral). */
     totals: StockTotals | null;
+    /** A processor's display name for process-only rows; keep it stable (it feeds a memo). */
+    stationName: (prefab: string) => string;
 }
 
 /** Why the list is empty: nothing matches the search/filters, or nothing in this mode can be upgraded. */
@@ -65,25 +70,29 @@ export interface CraftingWindow {
 /** Stable identity of a row: an item and a piece may share a prefab. */
 export const rowKey = (row: CraftRow): string => `${row.entry.kind}:${row.entry.prefab}`;
 
+const NO_ROWS: readonly CraftRow[] = [];
+
 function useGroups(input: CraftingWindowInput, mode: CraftMode) {
-    const { entries, stations, filters } = input;
+    const { entries, stations, filters, stationName } = input;
     const { kind, category } = filters;
     const craft = useMemo(() => stationGroups(entries, stations, 'craft', { kind, category }), [entries, stations, kind, category]);
     const upgrade = useMemo(() => stationGroups(entries, stations, 'upgrade', { kind, category }), [entries, stations, kind, category]);
     const upgradeCount = useMemo(() => upgrade.reduce((n, g) => n + g.rows.length, 0), [upgrade]);
-    return { groups: mode === 'craft' ? craft : upgrade, upgradeCount };
+    // Process-only items have no upgrades, so they join CRAFT search only.
+    const processed = useMemo(() => processRows(entries, { kind, category }, stationName), [entries, kind, category, stationName]);
+    return { groups: mode === 'craft' ? craft : upgrade, extra: mode === 'craft' ? processed : NO_ROWS, upgradeCount };
 }
 
-function useSelection(rows: RankedRow[], groups: StationGroup[], totals: StockTotals | null, cache: RankCache) {
+function useSelection(rows: RankedRow[], groups: StationGroup[], extra: readonly CraftRow[], totals: StockTotals | null, cache: RankCache) {
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
     const selected = useMemo((): RankedRow | null => {
         if (selectedKey === null) return null;
         const listed = rows.find((r) => rowKey(r) === selectedKey);
         if (listed !== undefined) return listed;
         // Selected in another station (search cleared, station switched): keep it for the detail pane.
-        const other = groups.flatMap((g) => g.rows).find((r) => rowKey(r) === selectedKey);
+        const other = [...groups.flatMap((g) => g.rows), ...extra].find((r) => rowKey(r) === selectedKey);
         return other === undefined ? null : (sortRows([other], totals, cache)[0] ?? null);
-    }, [rows, groups, totals, cache, selectedKey]);
+    }, [rows, groups, extra, totals, cache, selectedKey]);
     return { selectedKey: selected === null ? null : selectedKey, selected, setSelectedKey };
 }
 
@@ -92,17 +101,17 @@ export function useCraftingWindow(input: CraftingWindowInput): CraftingWindow {
     const [mode, setModeState] = useState<CraftMode>('craft');
     const [chosen, setChosen] = useState<string | null>(null);
     const [search, setSearch] = useState('');
-    const { groups, upgradeCount } = useGroups(input, mode);
+    const { groups, extra, upgradeCount } = useGroups(input, mode);
     // The list follows a deferred copy so typing stays responsive over ~900 rows.
     const query = useDeferredValue(search);
     const searching = query.trim() !== '';
     const current = groups.find((g) => g.key === chosen) ?? groups[0] ?? null;
     const cache = useMemo(() => rankCache(input.totals), [input.totals]);
     const rows = useMemo(
-        () => sortRows(searching ? searchRows(groups, query) : (current?.rows ?? []), input.totals, cache),
-        [searching, groups, query, current, input.totals, cache],
+        () => sortRows(searching ? searchRows(groups, query, extra) : (current?.rows ?? []), input.totals, cache),
+        [searching, groups, extra, query, current, input.totals, cache],
     );
-    const sel = useSelection(rows, groups, input.totals, cache);
+    const sel = useSelection(rows, groups, extra, input.totals, cache);
     const { setSelectedKey } = sel;
     const { onFilters } = input;
     const setMode = useCallback((m: CraftMode) => (setModeState(m), setSelectedKey(null)), [setSelectedKey]);
