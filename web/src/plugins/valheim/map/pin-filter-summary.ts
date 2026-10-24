@@ -31,3 +31,12 @@ export function layerStatus(query: Pick<UseQueryResult, 'isPending' | 'isError' 
     if (query.isError) return httpStatusOf(query.error) === 404 ? 'forbidden' : 'error';
     return query.isPending ? 'loading' : 'ready';
 }
+
+/** D15 summary copy (the toolbar line). */
+export const PIN_SUMMARY_TEXT = {
+    loading: 'Loading pins…',
+    forbidden: "Other players' pins are visible to hub members.",
+    error: 'Pins could not be loaded',
+    empty: 'No pins match these filters.',
+    truncated: 'Showing the first 2,000 pins — narrow the filters.',
+} as const;

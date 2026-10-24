@@ -9,15 +9,8 @@ import { FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { Button } from '../../../components/ui/button';
 import { PinFilterPanel } from './pin-filter-panel';
+import { PIN_SUMMARY_TEXT } from './pin-filter-summary';
 import type { PinFilterSummary, PinFilterView } from './use-pin-filter';
-
-export const PIN_SUMMARY_TEXT = {
-    loading: 'Loading pins…',
-    forbidden: "Other players' pins are visible to hub members.",
-    error: 'Pins could not be loaded',
-    empty: 'No pins match these filters.',
-    truncated: 'Showing the first 2,000 pins — narrow the filters.',
-} as const;
 
 /** The D15 summary line; empty (but mounted, a live region) when there is nothing to say. */
 export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary; onClear: () => void }): JSX.Element {

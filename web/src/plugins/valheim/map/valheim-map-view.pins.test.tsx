@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
-import type { ValheimDeathPin, ValheimMapMeta } from '@raid-ledger/contract';
+import type { ValheimMapMeta, ValheimServerPin } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { valheimDeathPinsHandler } from '../../../test/mocks/valheim-deaths-handlers';
+import { valheimServerPinsHandler } from '../../../test/mocks/valheim-deaths-handlers';
 import { ValheimMapView } from './valheim-map-view';
 
 vi.mock('./fog-canvas', () => ({ FogCanvas: () => <div data-testid="fog" /> }));
@@ -20,8 +20,8 @@ const META: ValheimMapMeta = {
     pins: [pin('Bed', 'Home'), pin('Death', 'Grave')], hasSharedExplored: false, baseMap: null,
     capturedAt: '2026-10-19T12:00:00.000Z',
 };
-const deathPin = (characterName: string, characterId: number | null): ValheimDeathPin =>
-    ({ x: 10, z: 10, characterId, characterName, type: 'Death' });
+const serverPin = (type: string, label: string, characterName: string, characterId: number | null): ValheimServerPin =>
+    ({ x: 10, z: 10, type, label, checked: false, characterId, characterName });
 
 async function gzipped(): Promise<ArrayBuffer> {
     const stream = new ReadableStream<BufferSource>({
@@ -42,8 +42,9 @@ function view(url: string, serverId?: number) {
     );
 }
 
-const deathsSwitch = () => screen.getByRole('switch', { name: 'Death pins only' });
 const loc = () => screen.getByTestId('loc').textContent;
+const openFilters = async () => fireEvent.click(await screen.findByRole('button', { name: /^Filters/ }));
+const summary = () => screen.getByTestId('map-pin-filter');
 
 beforeEach(() => {
     server.use(
@@ -52,68 +53,99 @@ beforeEach(() => {
     );
 });
 
-describe('ValheimMapView pin-type filter (ROK-1930 L4)', () => {
-    it('a bar deep link shows only that character’s Death pins, with the switch on', async () => {
+describe('ValheimMapView pin filter panel (ROK-1943)', () => {
+    it('a Deaths bar deep link shows only that character’s Death pins, Death chip on', async () => {
         view('/hub?pins=death&vc=5#map', 3);
         expect(await screen.findByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Home (Bed)' })).toBeNull();
-        expect(deathsSwitch()).toHaveAttribute('aria-checked', 'true');
-        expect(screen.getByText("Showing this character's death pins")).toBeInTheDocument();
+        await openFilters();
+        expect(screen.getByTestId('map-pin-type-death')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('map-pin-type-bed')).toHaveAttribute('aria-pressed', 'false');
     });
 
-    it('switching it off drops pins (vc + hash kept) and restores every pin', async () => {
+    it('the Death chip off (last chip) drops pins, keeps vc + hash and restores every pin', async () => {
         view('/hub?pins=death&vc=5#map', 3);
-        fireEvent.click(await screen.findByRole('switch', { name: 'Death pins only' }));
+        await openFilters();
+        fireEvent.click(screen.getByTestId('map-pin-type-death'));
         await waitFor(() => expect(loc()).toBe('?vc=5#map'));
         expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
-        expect(deathsSwitch()).toHaveAttribute('aria-checked', 'false');
-        expect(screen.queryByTestId('map-pin-filter')).toBeNull();
     });
 
-    it('switching it on by hand writes ?pins=death for the shown character', async () => {
+    it('no "Death pins only" switch is left in the Layers control (D11)', async () => {
         view('/hub#map', 3);
-        fireEvent.click(await screen.findByRole('switch', { name: 'Death pins only' }));
-        await waitFor(() => expect(loc()).toBe('?pins=death&vc=5#map'));
-        expect(screen.queryByRole('button', { name: 'Home (Bed)' })).toBeNull();
-        expect(screen.getByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
+        await screen.findByRole('button', { name: 'Grave (Death)' });
+        expect(screen.queryByRole('switch', { name: 'Death pins only' })).toBeNull();
+        expect(screen.getByRole('switch', { name: 'Show cartography table' })).toBeInTheDocument();
     });
 
-    it('Show all draws every player’s Death pins for the selected world from the server route', async () => {
-        const worlds: (string | null)[] = [];
-        server.use(valheimDeathPinsHandler([deathPin('Ragnhild', 11), deathPin('Unknown character', null)]));
-        // Prepended after the fixture, so it sees the request first and falls through to it.
-        server.use(http.get('http://localhost:3000/plugins/valheim/armory/servers/3/deaths/pins', ({ request }) => {
-                worlds.push(new URL(request.url).searchParams.get('worldUid'));
-                return undefined;
-            }));
+});
+
+describe('ValheimMapView players pin layer (ROK-1943)', () => {
+    it('legacy ?pins=death draws every player’s Death pins from /servers/:id/pins, labelled "<label> · <character>"', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(valheimServerPinsHandler(
+            [serverPin('Death', '', 'Ragnhild', 11), serverPin('Death', '', 'Unknown character', null)], { seen },
+        ));
         view('/hub?pins=death#map', 3);
-        expect(await screen.findByRole('button', { name: 'Ragnhild (Death)' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Unknown character (Death)' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Death · Ragnhild (Death)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Death · Unknown character (Death)' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Home (Bed)' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Grave (Death)' })).toBeNull();
-        expect(worlds).toEqual([WORLD]);
-        expect(screen.getByText("Showing every player's death pins")).toBeInTheDocument();
+        expect(seen.map((q) => [q.get('worldUid'), q.get('players'), q.get('types')])).toEqual([[WORLD, null, 'Death']]);
     });
 
-    it.each([[200], [404]])('Show all with no pins (HTTP %i) shows the empty line, never an error', async (status) => {
-        server.use(valheimDeathPinsHandler([], status));
-        view('/hub?pins=death#map', 3);
-        expect(await screen.findByText(/No death pins on this map yet\./)).toBeInTheDocument();
-        expect(screen.queryByRole('alert')).toBeNull();
+    it('Whose pins = Everyone writes players=all and draws other players’ pins of every type', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(valheimServerPinsHandler([serverPin('Bed', 'Base', 'Ragnhild', 11)], { seen }));
+        view('/hub?vc=5#map', 3);
+        await openFilters();
+        fireEvent.click(screen.getByRole('radio', { name: 'Everyone' }));
+        await waitFor(() => expect(loc()).toContain('players=all'));
+        expect(await screen.findByRole('button', { name: 'Base · Ragnhild (Bed)' })).toBeInTheDocument();
+        expect(seen.map((q) => [q.get('players'), q.get('types')])).toEqual([[null, null]]);
+        expect(screen.getByText(/Cartography-table copies are left out/)).toBeInTheDocument();
+    });
+
+    it('a visitor (hub 404) gets the member hint, an empty layer and no error chip', async () => {
+        server.use(valheimServerPinsHandler([], { status: 404 }));
+        view('/hub?pins=death&players=all&vc=5#map', 3);
+        await waitFor(() => expect(summary()).toHaveTextContent("Other players' pins are visible to hub members."));
+        expect(screen.queryByText('Pins could not be loaded')).toBeNull();
         expect(screen.queryAllByRole('button', { name: /\(Death\)|\(Bed\)/ })).toEqual([]);
     });
 
-    it('"Show every pin" leaves the filter', async () => {
-        view('/hub?pins=death&vc=5#map', 3);
-        fireEvent.click(await screen.findByRole('button', { name: 'Show every pin' }));
+    it('filters that hide every pin say so, and "Clear filters" brings every pin back', async () => {
+        server.use(valheimServerPinsHandler([]));
+        view('/hub?pins=death&players=all&vc=5#map', 3);
+        await waitFor(() => expect(summary()).toHaveTextContent('No pins match these filters.'));
+        expect(screen.getByRole('application')).toBeInTheDocument();
+        fireEvent.click(within(summary()).getByRole('button', { name: 'Clear filters' }));
         await waitFor(() => expect(loc()).toBe('?vc=5#map'));
-        expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
     });
 
-    it('without a server (character page) pins=death falls back to the character’s own Death pins', async () => {
+    it('a failed layer shows the danger chip with Retry, which asks again', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(valheimServerPinsHandler([], { status: 500, seen }));
+        view('/hub?players=all&vc=5#map', 3);
+        expect(await screen.findByText('Pins could not be loaded')).toBeInTheDocument();
+        fireEvent.click(within(summary()).getByRole('button', { name: 'Retry' }));
+        await waitFor(() => expect(seen).toHaveLength(2));
+    });
+
+    it('a truncated layer appends the cap line', async () => {
+        server.use(valheimServerPinsHandler([serverPin('Bed', 'Base', 'Ragnhild', 11)], { truncated: true }));
+        view('/hub?players=all&vc=5#map', 3);
+        await waitFor(() => expect(summary()).toHaveTextContent('Showing the first 2,000 pins — narrow the filters.'));
+    });
+
+    it('without a server (character page) pins=death falls back to the character’s own Death pins, no Whose pins', async () => {
         view('/c?pins=death');
         expect(await screen.findByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Home (Bed)' })).toBeNull();
+        await openFilters();
+        expect(screen.queryByRole('radio', { name: 'Everyone' })).toBeNull();
+        expect(screen.getByRole('searchbox', { name: 'Search pin labels' })).toBeInTheDocument();
     });
 });
