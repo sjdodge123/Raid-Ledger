@@ -61,7 +61,7 @@ export async function runRefreshSnapshot(
   };
   const cfg = await loadConfig(deps.settings);
   const snapshotDate = todayUtcIso();
-  const results = await runAllSections(db, deps, snapshotDate, cfg.churn);
+  const results = await runAllSections(db, deps, snapshotDate, cfg);
   throwIfAllRejected(results);
   const sections = materializeSections(results, snapshotDate, cfg.churn, log);
   // Key insights compare week-over-week, so they see the radar with prior
@@ -83,15 +83,15 @@ async function runAllSections(
   db: Db,
   deps: RefreshSnapshotDeps,
   snapshotDate: string,
-  churn: ChurnSettings,
+  cfg: { churn: ChurnSettings; timezone: string | null },
 ): Promise<SectionResults> {
   const [radar, engagement, churnR, social, temporal] =
     await Promise.allSettled([
       buildRadarSection(db, snapshotDate),
       buildEngagementSection(db, snapshotDate),
-      buildChurnSection(db, snapshotDate, deps.churn, churn),
+      buildChurnSection(db, snapshotDate, deps.churn, cfg.churn),
       buildSocialGraphSection(db, snapshotDate, deps.clique),
-      buildTemporalSection(db, snapshotDate),
+      buildTemporalSection(db, snapshotDate, cfg.timezone),
     ]);
   return { radar, engagement, churn: churnR, social, temporal };
 }
@@ -273,12 +273,15 @@ async function loadConfig(settings: SettingsService): Promise<{
     recentWeeks: number;
   };
   retentionDays: number;
+  /** Raw community default timezone; validated by the temporal section. */
+  timezone: string | null;
 }> {
-  const [threshold, baseline, recent, retention] = await Promise.all([
+  const [threshold, baseline, recent, retention, timezone] = await Promise.all([
     settings.get(SETTING_KEYS.COMMUNITY_INSIGHTS_CHURN_THRESHOLD_PCT),
     settings.get(SETTING_KEYS.COMMUNITY_INSIGHTS_BASELINE_WEEKS),
     settings.get(SETTING_KEYS.COMMUNITY_INSIGHTS_RECENT_WEEKS),
     settings.get(SETTING_KEYS.COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS),
+    settings.get(SETTING_KEYS.DEFAULT_TIMEZONE),
   ]);
   return {
     churn: {
@@ -287,6 +290,7 @@ async function loadConfig(settings: SettingsService): Promise<{
       recentWeeks: parseNum(recent, DEFAULT_RECENT_WEEKS),
     },
     retentionDays: parseNum(retention, DEFAULT_RETENTION_DAYS),
+    timezone,
   };
 }
 
