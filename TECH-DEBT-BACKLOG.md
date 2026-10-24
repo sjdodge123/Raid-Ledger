@@ -3607,3 +3607,14 @@ same day (#1278, #1279, #1280).
 - **resolved (partial)** `api/src/lineups/lineups-voting.helpers.ts:67` (vote on a never-nominated game) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): the add branch now 400s via `isGameNominated`. Still open from that entry: inner-join entries in `countVotesPerGame` and an integration case.
 - **resolved (partial)** `api/src/users/users.service.ts:268` (display-name ilike uses raw input) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): input goes through `escapeLikePattern()`. Still open from that entry: uniqueness is advisory only (no DB constraint).
 - **resolved** `api/src/notifications/hub-notification.service.ts:81` (`hub-post:<id>` cooldown claimed with an empty recipient set) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
+
+### 2026-10-24 — rl-infra fleet (surfaced while freeing VM disk, Lead sessions ap/aq)
+
+- **high** — `rl-infra/docker-compose.yml:156` (`rl-registry`, volume `rl-infra_registry-data`): the fleet's local image registry is never garbage-collected. Every env build pushes a ~1.5 GB `rl-allinone:<slug>` tag and nothing deletes it; 424 tags built up to 134 GB and blocked image builds (≥20 GB free required). Operator cleared it by hand 2026-10-24 (manifest DELETE per tag + `registry garbage-collect --delete-untagged`). Suggested: `rl_env_destroy` deletes the env's tag, plus a nightly `registry garbage-collect` in gc-sweeper when no image build is admitted.
+- **med** — `rl_status.settings_bundle`: the VM settings bundle is 1244 h old, and `sync_settings` falls back on FAIL. Suggested: alert in `rl_status` when the bundle is older than 30 days, and re-sync it.
+
+### 2026-10-24 — feat/rok-1948-planner-spoilers (Opus delta review of the Codex P2 fixes, verdict SHIP)
+
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.ts:44`: the pruned-graph cache fingerprint md5s every profile's known lists on every Planner request (~0.4 MB at 50×300 entries, about as much as the read it guards). Suggested: `count(*)::text || ':' || md5(coalesce(string_agg(p.id::text || ':' || p.xmin::text, ',' order by p.id), ''))` (xmin changes on every committed write and needs no de-TOAST).
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.spec.ts:13`: the spec matches only the rendered SQL text. Suggested: an integration case that changes one profile's `known_items` with the same `imported_at` and asserts the fingerprint changes.
+- **minor** — `web/src/plugins/valheim/planner/valheim-planner-tab.tsx:69`: `ProtectedEmpty` mounts the full `usePlannerState` (an unneeded materials request), and it branches by comparing `empty === SPOILERS_EMPTY_COPY`. Suggested: `emptyCopy` returns a discriminant.
