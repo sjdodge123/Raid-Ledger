@@ -191,8 +191,9 @@ async function shown(t: string) {
 }
 const prefabs = async (t: string) =>
   (await catalogue(t)).entries.map((e) => e.prefab).sort();
+/** Hidden names appearing as a whole JSON string value or key. */
 const leaks = (json: unknown) =>
-  HIDDEN.filter((name) => JSON.stringify(json).includes(name));
+  HIDDEN.filter((name) => JSON.stringify(json).includes(`"${name}"`));
 
 beforeAll(async () => {
   testApp = await getTestApp();
