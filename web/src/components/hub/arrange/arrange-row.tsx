@@ -72,9 +72,11 @@ export interface ArrangeRowProps {
     onToggle: (id: string) => void;
     /** Desktop with a fine pointer only (spec §2.4); absent = no handle. */
     drag?: RowDragBinding;
+    /** A save is in flight: every control is disabled. */
+    locked?: boolean;
 }
 
-export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag }: ArrangeRowProps): JSX.Element {
+export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag, locked = false }: ArrangeRowProps): JSX.Element {
     const { entry, on } = row;
     const t = entry.title;
     return (
@@ -89,13 +91,13 @@ export function ArrangeRow({ row, index, count, owner, onMove, onToggle, drag }:
                 <RowChips entry={entry} on={on} owner={owner} />
             </div>
             <div className="flex shrink-0 gap-1">
-                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} up`} data-arrange-action="up" disabled={index === 0} onClick={() => onMove(index, -1)}>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} up`} data-arrange-action="up" disabled={locked || index === 0} onClick={() => onMove(index, -1)}>
                     <ArrowUpIcon className="h-4 w-4" aria-hidden="true" />
                 </Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} down`} data-arrange-action="down" disabled={index === count - 1} onClick={() => onMove(index, 1)}>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${t} down`} data-arrange-action="down" disabled={locked || index === count - 1} onClick={() => onMove(index, 1)}>
                     <ArrowDownIcon className="h-4 w-4" aria-hidden="true" />
                 </Button>
-                <Button variant="ghost" size="sm" iconOnly aria-label={`${on ? 'Hide' : 'Show'} ${t}`} aria-pressed={!on} onClick={() => onToggle(entry.id)}>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`${on ? 'Hide' : 'Show'} ${t}`} aria-pressed={!on} disabled={locked} onClick={() => onToggle(entry.id)}>
                     {on ? <EyeIcon className="h-4 w-4" aria-hidden="true" /> : <EyeSlashIcon className="h-4 w-4" aria-hidden="true" />}
                 </Button>
             </div>

@@ -41,14 +41,14 @@ const LAYOUT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]';
 
 const RESET_COPY = { title: 'Restore the default layout?', keepLabel: 'Cancel', discardLabel: 'Reset' };
 
-function ArrangeHeader({ onAdd, canDrag }: { onAdd: () => void; canDrag: boolean }): JSX.Element {
+function ArrangeHeader({ onAdd, canDrag, locked }: { onAdd: () => void; canDrag: boolean; locked: boolean }): JSX.Element {
     return (
         <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
                 <h3 className="text-base font-semibold text-foreground">Arrange the Overview</h3>
                 <p className="text-sm text-muted">{canDrag ? 'Drag a row or use the arrows.' : 'Use the arrows to move a card.'} Wide cards may move up to fill gaps. Hidden cards stay here, dimmed.</p>
             </div>
-            <Button variant="secondary" size="sm" onClick={onAdd} className="w-full lg:w-auto" data-testid="arrange-add">
+            <Button variant="secondary" size="sm" onClick={onAdd} disabled={locked} className="w-full lg:w-auto" data-testid="arrange-add">
                 <PlusIcon className="h-4 w-4" aria-hidden="true" />Add widget
             </Button>
         </div>
@@ -78,10 +78,10 @@ export default function HubArrangeMode({ guildId, kind, arranged, available, pre
     const options = available.filter((e) => !s.rows.some((r) => r.entry.id === e.id));
     return (
         <section data-testid="hub-arrange-mode" aria-label="Arrange the Overview">
-            <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} />
+            <ArrangeHeader onAdd={() => setPicking(true)} canDrag={canDrag} locked={s.saving} />
             <div className={LAYOUT} data-testid="arrange-layout">
-                <ol ref={bindList} className="flex min-w-0 flex-col gap-2" aria-label="Overview widgets, in order">
-                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} {...(canDrag ? { drag: bindDrag(i) } : {})} />)}
+                <ol ref={bindList} className="flex min-w-0 flex-col gap-2" aria-label="Overview widgets, in order" aria-busy={s.saving}>
+                    {s.rows.map((row, i) => <ArrangeRow key={row.entry.id} row={row} index={i} count={s.rows.length} owner={widgetOwner(row.entry.id, kind)} onMove={s.move} onToggle={s.toggle} locked={s.saving} {...(canDrag && !s.saving ? { drag: bindDrag(i) } : {})} />)}
                 </ol>
                 <ArrangePreview entries={s.rows.filter((r) => r.on).map((r) => r.entry)} />
             </div>

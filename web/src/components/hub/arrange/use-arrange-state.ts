@@ -77,9 +77,13 @@ function useSaveFlow({ guildId, prefs, onExit }: Omit<ArrangeStateInput, 'arrang
     return { save, reset, saving: mutation.isPending, error };
 }
 
+const noop = (): void => {};
+/** While a save is in flight its success exits arrange mode, so a later edit would be silently lost (Codex P2). */
+const LOCKED_EDITS = { move: noop, drop: noop, toggle: noop, add: noop };
+
 export function useArrangeState(input: ArrangeStateInput) {
     const draft = useDraftRows(input.arranged);
     const flow = useSaveFlow(input);
     useBeforeUnloadWhile(draft.dirty);
-    return { ...draft, ...flow, save: () => flow.save(draft.rows) };
+    return { ...draft, ...flow, ...(flow.saving ? LOCKED_EDITS : {}), save: () => flow.save(draft.rows) };
 }

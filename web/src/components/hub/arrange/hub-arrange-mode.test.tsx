@@ -312,3 +312,26 @@ describe('arrange mode — in-hub tab-switch guard (ROK-1918 Codex fix round)', 
         expect(screen.queryByTestId('hub-arrange-mode')).not.toBeInTheDocument();
     });
 });
+
+describe('arrange mode — save in flight (ROK-1918 Codex final)', () => {
+    it('locks every draft control while a save is in flight (Codex P2: later edits would be lost)', async () => {
+        const user = userEvent.setup();
+        serve(PAGE);
+        let release = (): void => {};
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.patch(`${BASE}/widget-prefs`, async ({ request }) => {
+            patched.push(await request.json());
+            await held;
+            return HttpResponse.json({ widgetPrefs: null });
+        }));
+        await openArrange(user);
+        await user.click(screen.getByRole('button', { name: 'Hide Uptime' }));
+        await user.click(screen.getByTestId('arrange-save'));
+        await waitFor(() => expect(patched).toHaveLength(1));
+        expect(screen.getByRole('button', { name: 'Show Uptime' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Arrivals up' })).toBeDisabled();
+        expect(screen.getByTestId('arrange-add')).toBeDisabled();
+        release();
+        await expectGridBack();
+    });
+});
