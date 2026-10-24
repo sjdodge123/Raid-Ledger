@@ -20,6 +20,7 @@ export function useProfessionsVisible({ page }: Pick<HubWidgetCtx, 'page'>): boo
 export const professionsWidget: HubGameWidget = {
     id: 'forever-professions',
     title: 'Guild professions',
+    description: 'Who has each profession and their best skill.',
     games: [WOW_FOREVER_GAME_SLUG],
     kinds: ['wow_guild'],
     order: 85,

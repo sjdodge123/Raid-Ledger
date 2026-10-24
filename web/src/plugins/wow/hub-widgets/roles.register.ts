@@ -22,6 +22,7 @@ export function registerRolesWidget(plugin: PluginHandle): void {
     plugin.registerHubWidget({
         id: 'forever-roles',
         title: 'Role breakdown',
+        description: 'Tanks, healers and DPS ready for dungeons and raids.',
         games: [WOW_FOREVER_GAME_SLUG],
         kinds: ['wow_guild'],
         order: 47,

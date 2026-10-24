@@ -21,10 +21,12 @@ export function registerClassLevelWidgets(handle: PluginHandle): void {
     const base = { games: [WOW_FOREVER_GAME_SLUG], kinds: ['wow_guild'] as const, audience: 'everyone' as const, useVisible: useHasRoster };
     handle.registerHubWidget({
         ...base, id: 'forever-class-breakdown', title: 'Class breakdown', order: 45, span: 1,
+        description: 'How many members play each class.',
         component: lazy(() => import('./class-breakdown-widget')),
     });
     handle.registerHubWidget({
         ...base, id: 'forever-level-progression', title: 'Level progression', order: 46, span: 2,
+        description: 'Where the roster’s levels sit and who is at cap.',
         component: lazy(() => import('./level-progression-widget')),
     });
 }

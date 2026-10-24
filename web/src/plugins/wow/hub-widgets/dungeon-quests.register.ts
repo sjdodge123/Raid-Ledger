@@ -22,6 +22,7 @@ export function registerDungeonQuestsWidget(plugin: PluginHandle): void {
     plugin.registerHubWidget({
         id: 'dungeon-quests',
         title: 'Dungeon quests',
+        description: 'Who has the quests for upcoming dungeon runs.',
         games: [WOW_FOREVER_GAME_SLUG],
         kinds: ['wow_guild'],
         order: 55,
