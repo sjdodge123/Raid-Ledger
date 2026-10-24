@@ -64,8 +64,9 @@ describe('protected with nothing visible', () => {
     it('shows the protected empty state, not the no-recipes copy', async () => {
         server.use(valheimRecipeCatalogHandler(recipeCatalogProtectedFixture({ entries: [], stations: [], ingredients: {} })));
         renderTab();
-        expect(await screen.findByText(SPOILERS_EMPTY_COPY)).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText('Loading recipes…')).toBeNull());
         expect(screen.queryByText(PLANNER_NO_SET_COPY)).toBeNull();
+        expect(screen.queryByText(SPOILERS_EMPTY_COPY)).not.toBeNull();
     });
 });
 
@@ -113,16 +114,18 @@ describe('a plan node the server withheld', () => {
 
     it('shows the generic line with no name, icon, count or prefab', async () => {
         renderTab();
-        const row = await screen.findByTestId('valheim-planner-row-undiscovered');
-        expect(row).toHaveTextContent(UNDISCOVERED_NODE_COPY);
-        expect(row.querySelector('img, [role="meter"], [data-prefab]')).toBeNull();
+        await screen.findAllByTestId('valheim-planner-row');
         expect(document.body).not.toHaveTextContent(/Bronze/);
         expect(document.querySelector('[data-prefab="Bronze"]')).toBeNull();
+        const row = screen.queryByTestId('valheim-planner-row-undiscovered');
+        expect(row?.textContent).toBe(UNDISCOVERED_NODE_COPY);
+        expect(row?.querySelector('img, [role="meter"], [data-prefab]')).toBeNull();
     });
 
     it('the shopping list carries the one-line footer', async () => {
         renderTab();
-        expect(await screen.findByTestId('valheim-planner-undiscovered-footer')).toHaveTextContent(PLAN_UNDISCOVERED_COPY);
+        await screen.findAllByTestId('valheim-planner-row');
+        expect(screen.queryByTestId('valheim-planner-undiscovered-footer')?.textContent).toBe(PLAN_UNDISCOVERED_COPY);
     });
 
     it('no footer when every node is visible', async () => {
