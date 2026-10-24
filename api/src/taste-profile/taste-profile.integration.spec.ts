@@ -437,7 +437,7 @@ describe('Taste Profile (ROK-948)', () => {
           }),
           archetype: expect.objectContaining({
             intensityTier: expect.stringMatching(
-              /^(Hardcore|Dedicated|Regular|Casual)$/,
+              /^(Hardcore|Dedicated|Regular|Casual|Newcomer)$/,
             ),
             vectorTitles: expect.any(Array),
             descriptions: expect.objectContaining({
