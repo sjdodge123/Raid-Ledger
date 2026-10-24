@@ -1,57 +1,120 @@
 /**
- * ROK-1947: a hub GET whose 401 survives the transparent refresh (no session
- * marker, or an indeterminate refresh — a phone tab resumed with an expired
- * in-memory token) must offer a sign-in, not the generic "couldn't load" box,
- * while the cached `/auth/me` user keeps the AuthGuard open.
+ * ROK-1947: a hub GET whose 401 survives the transparent refresh re-checks the
+ * session before saying anything. Only a REJECTED refresh (or no session
+ * marker at all) offers "Sign in", which ends the session, keeps this hub as
+ * the post-sign-in destination and goes to `/`. An indeterminate refresh (a
+ * phone waking into a 503) keeps the viewer signed in and offers "Try again";
+ * a refresh that lands refetches the hub and shows it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
+import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
-import { AUTH_METHOD_KEY } from '../../lib/api/auth-storage-keys';
+import { AUTH_METHOD_KEY, USER_CACHE_KEY } from '../../lib/api/auth-storage-keys';
 import { GuildPage } from './hub-page';
 
 const API = 'http://localhost:3000';
-const COPY = 'Your session expired. Sign in again to see this hub.';
-let refreshCalls = 0;
+const EXPIRED = 'Your session expired. Sign in again to see this hub.';
+const UNREACHABLE = "We couldn't reach the server. Try again.";
+const PAGE: GuildPageDto = {
+    guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 0, lastSnapshotAt: null },
+    importedBy: null,
+    viewer: { role: 'member', canEdit: false, canManageEditors: false },
+    ranks: [],
+    roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
+};
 
-function serveExpiredSession(refreshStatus: number): void {
+let refreshCalls = 0;
+/**
+ * Refresh answers, indexed by POSTs made AFTER the hub GET first 401'd (the
+ * request's own 401 backstop is index 0, the page's re-check index 1); POSTs
+ * before that answer index 0, and the last entry repeats. A 200 also lets the
+ * hub GET succeed.
+ */
+let refreshStatuses: number[] = [];
+let postsAfterHub401: number | null = null;
+let sessionLive = false;
+
+function serve(...statuses: number[]): void {
+    refreshStatuses = statuses;
     server.use(
-        http.get(`${API}/guilds/7`, () => HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })),
+        http.get(`${API}/guilds/7`, () => {
+            if (sessionLive) return HttpResponse.json(PAGE);
+            postsAfterHub401 ??= 0;
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }),
         http.post(`${API}/auth/refresh`, () => {
+            const index = postsAfterHub401 ?? 0;
+            if (postsAfterHub401 !== null) postsAfterHub401 += 1;
+            const status = refreshStatuses[Math.min(index, refreshStatuses.length - 1)] ?? 503;
             refreshCalls += 1;
-            return HttpResponse.json({ message: 'unavailable' }, { status: refreshStatus });
+            if (status !== 200) return HttpResponse.json({ message: 'no' }, { status });
+            sessionLive = true;
+            return HttpResponse.json({ access_token: 'renewed-token' });
         }),
     );
 }
 
 function renderPage() {
-    return renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
+    return renderWithProviders(
+        <Routes>
+            <Route path="/hubs/:id" element={<GuildPage />} />
+            <Route path="/" element={<p data-testid="login-screen">login</p>} />
+        </Routes>,
+        { initialEntries: ['/hubs/7'] },
+    );
 }
 
-beforeEach(() => { activateWowPlugin(); refreshCalls = 0; localStorage.clear(); sessionStorage.clear(); });
+beforeEach(() => { activateWowPlugin(); refreshCalls = 0; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
 afterEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
 describe('GuildPage — expired session (ROK-1947)', () => {
     it('a 401 with no session marker shows the sign-in prompt, not the generic error', async () => {
-        serveExpiredSession(503);
+        serve(503);
         renderPage();
         const prompt = await screen.findByTestId('guild-session-expired');
-        expect(prompt, 'a 401 must explain the session expired').toHaveTextContent(COPY);
+        expect(prompt, 'a 401 must explain the session expired').toHaveTextContent(EXPIRED);
         expect(screen.queryByTestId('guild-error'), 'the generic retry box must not show for a 401').toBeNull();
     });
 
-    it('a 401 that survives an indeterminate refresh (503) offers Sign in and saves the hub as the destination', async () => {
+    it('a REJECTED re-check offers Sign in: ends the session, saves the hub and goes to /', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        serveExpiredSession(503);
+        localStorage.setItem(USER_CACHE_KEY, JSON.stringify({ id: 1 }));
+        serve(401);
         renderPage();
-        await screen.findByTestId('guild-session-expired');
-        expect(refreshCalls, 'the transparent refresh must have been tried first').toBeGreaterThan(0);
+        expect(await screen.findByTestId('guild-session-expired')).toHaveTextContent(EXPIRED);
+        expect(refreshCalls, 'the refresh must have been tried first').toBeGreaterThan(0);
         await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
         expect(sessionStorage.getItem('authRedirect'), 'sign-in must return the viewer to this hub').toBe('/hubs/7');
+        expect(localStorage.getItem(USER_CACHE_KEY), 'sign-in clears the cached user').toBeNull();
+        expect(await screen.findByTestId('login-screen'), 'sign-in goes to the login screen').toBeInTheDocument();
+    });
+
+    it('an INDETERMINATE re-check keeps the viewer signed in and offers Try again, which recovers the hub', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        serve(503);
+        renderPage();
+        expect(await screen.findByTestId('guild-session-unreachable')).toHaveTextContent(UNREACHABLE);
+        expect(screen.queryByTestId('guild-session-expired'), 'a blip is not an expired session').toBeNull();
+        expect(localStorage.getItem(AUTH_METHOD_KEY), 'a blip must not sign the viewer out').toBe('discord');
+        refreshStatuses = [200];
+        postsAfterHub401 = 0;
+        await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByTestId('guild-hero'), 'Try again re-runs the check and shows the hub').toBeInTheDocument();
+    });
+
+    it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        // The request's own 401 backstop refresh blips (503); the re-check's refresh lands.
+        serve(503, 200);
+        renderPage();
+        expect(await screen.findByTestId('guild-hero'), 'a refresh that lands must show the hub').toBeInTheDocument();
+        expect(screen.queryByTestId('guild-session-expired')).toBeNull();
+        expect(localStorage.getItem(AUTH_METHOD_KEY), 'the viewer stays signed in').toBe('discord');
     });
 });

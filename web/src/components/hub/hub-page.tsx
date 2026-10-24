@@ -8,7 +8,7 @@
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
  * A 403 (not a member) is a friendly empty state; a 401 that survived the
- * refresh offers a sign-in (ROK-1947).
+ * refresh re-checks the session — sign in only once it is rejected (ROK-1947).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
@@ -37,6 +37,7 @@ import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
+import { useSessionRecheck } from './use-session-recheck';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -58,9 +59,22 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
 }
 
-/** ROK-1947: a 401 that outlived the transparent refresh — the session is over, so offer a sign-in, not a retry. */
-function SessionExpired(): JSX.Element {
+/**
+ * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
+ * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
+ */
+function SessionExpired({ onRecovered }: { onRecovered: () => unknown }): JSX.Element {
     const signIn = useSignInAgain();
+    const { state, retry } = useSessionRecheck(onRecovered);
+    if (state === 'checking') return <LoadingState />;
+    if (state === 'indeterminate') {
+        return (
+            <Notice testId="guild-session-unreachable">
+                <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
+                <Button variant="secondary" onClick={retry}>Try again</Button>
+            </Notice>
+        );
+    }
     return (
         <Notice testId="guild-session-expired">
             <p className="mb-4 text-sm text-muted">Your session expired. Sign in again to see this hub.</p>
@@ -69,9 +83,9 @@ function SessionExpired(): JSX.Element {
     );
 }
 
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): JSX.Element {
+function ErrorState({ error, onRetry }: { error: Error; onRetry: () => unknown }): JSX.Element {
     const status = httpStatusOf(error);
-    if (status === 401) return <SessionExpired />;
+    if (status === 401) return <SessionExpired onRecovered={onRetry} />;
     if (status === 403) {
         return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
     }
@@ -81,7 +95,7 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): 
     return (
         <Notice testId="guild-error">
             <p className="mb-4 text-sm text-muted">We couldn&apos;t load this guild. Try again in a moment.</p>
-            <Button variant="secondary" onClick={onRetry}>Try again</Button>
+            <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
 }
@@ -250,7 +264,7 @@ export function GuildPage(): JSX.Element {
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
-    if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+    if (query.error) return <ErrorState error={query.error} onRetry={() => query.refetch({ cancelRefetch: false })} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
