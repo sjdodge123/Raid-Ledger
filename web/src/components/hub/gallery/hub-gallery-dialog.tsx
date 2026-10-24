@@ -62,6 +62,31 @@ function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
     }, [request.returnFocus, closeGallery]);
 }
 
+interface GalleryBodyProps {
+    mode: 'grid' | 'viewer';
+    filter: HubMediaFilter;
+    onFilter: (f: HubMediaFilter) => void;
+    pages: HubGalleryPages;
+    index: number;
+    nav: ReturnType<typeof useViewerNav>;
+    onOpen: (index: number) => void;
+}
+
+function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen }: GalleryBodyProps): JSX.Element {
+    const item = pages.items[index];
+    return (
+        <div className="flex flex-col gap-3">
+            <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />
+            {pages.loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
+            {!pages.loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
+            {mode === 'grid' && pages.items.length > 0 && <HubGalleryGrid items={pages.items} total={pages.total} onOpen={onOpen} />}
+            {mode === 'viewer' && item !== undefined && (
+                <HubGalleryViewer item={item} position={index + 1} total={pages.total} onPrev={nav.prev} onNext={nav.next} />
+            )}
+        </div>
+    );
+}
+
 export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDialogProps): JSX.Element {
     const { guildId } = request;
     const desktop = useMediaQuery(DESKTOP_MQ);
@@ -77,17 +102,8 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     const close = useCloseAndReturnFocus(request);
     const changeFilter = (f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); };
     const body = (
-        <div className="flex flex-col gap-3">
-            <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={changeFilter} />
-            {pages.loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
-            {!pages.loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
-            {mode === 'grid' && pages.items.length > 0 && (
-                <HubGalleryGrid items={pages.items} total={pages.total} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
-            )}
-            {mode === 'viewer' && item !== undefined && (
-                <HubGalleryViewer item={item} position={index + 1} total={pages.total} onPrev={nav.prev} onNext={nav.next} />
-            )}
-        </div>
+        <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
+            nav={nav} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
     );
     const footer = (
         <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' ? item : undefined} pages={pages}
