@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { VALHEIM_LINK_PORTALS_MAX } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
 
@@ -75,7 +76,10 @@ export async function findPortalScan(
   return row ?? null;
 }
 
-/** A scan's portals, ordered x then z (stable across re-imports; ids are not). */
+/**
+ * A scan's portals, ordered x then z (stable across re-imports; ids are not).
+ * Capped at the contract max the ingest schema already enforces.
+ */
 export function listScanPortals(
   exec: Exec,
   scanId: number,
@@ -84,7 +88,8 @@ export function listScanPortals(
     .select()
     .from(portals)
     .where(eq(portals.scanId, scanId))
-    .orderBy(asc(portals.x), asc(portals.z), asc(portals.id));
+    .orderBy(asc(portals.x), asc(portals.z), asc(portals.id))
+    .limit(VALHEIM_LINK_PORTALS_MAX);
 }
 
 /** The server's newest portals scan on any world; null before the first. */
