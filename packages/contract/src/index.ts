@@ -225,6 +225,7 @@ export * from './valheim-link-items.schema.js';
 export * from './valheim-link-containers.schema.js';
 export * from './valheim-link-recipes-processing.schema.js';
 export * from './valheim-link-recipes.schema.js';
+export * from './valheim-link-portals.schema.js';
 export * from './valheim-link-message.schema.js';
 export * from './valheim-link-admin.schema.js';
 export * from './valheim-armory.schema.js';

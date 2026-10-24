@@ -94,6 +94,29 @@ describe('ValheimLinkIngestService (ROK-1833)', () => {
     });
   });
 
+  it('accepts a valid portals message without storing it (ROK-1944)', async () => {
+    const { repo, service } = setup();
+    for (const name of ['portals-vanilla', 'portals-modded']) {
+      const msg = buf(loadValheimFixture(name));
+      const res = await service.ingest(req, 'portals', msg, NOW);
+      expect(res).toEqual({ status: 'accepted', missingBlobs: [] });
+    }
+    expect(repo.upsertLatest).not.toHaveBeenCalled();
+    expect(repo.findBlobs).not.toHaveBeenCalled();
+  });
+
+  it('still validates portals: 400 schema_invalid, 403 server_mismatch (ROK-1944)', async () => {
+    const { repo, service } = setup();
+    const msg = loadValheimFixture('portals-vanilla');
+    const extra = buf({ ...msg, pairs: [] });
+    const bad = await rejection(service.ingest(req, 'portals', extra, NOW));
+    expect(bad).toMatchObject({ status: 400, body: code('schema_invalid') });
+    const other = buf({ ...msg, serverId: 'srv_other' });
+    const wrong = await rejection(service.ingest(req, 'portals', other, NOW));
+    expect(wrong).toMatchObject({ status: 403 });
+    expect(repo.upsertLatest).not.toHaveBeenCalled();
+  });
+
   it('403 server_mismatch when the body serverId is not the token’s', async () => {
     const { repo, service } = setup();
     const msg = {

@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ValheimLinkMessage } from '@raid-ledger/contract';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
+import type { StoredValheimLinkMessage } from '../link/ingest/valheim-link-snapshot.helpers';
 import { importRecipes } from './valheim-armory-recipes.import';
 import {
   toCatalogValues,
@@ -123,7 +124,7 @@ export class ValheimArmoryImportService {
   private apply(
     tx: ValheimLinkTx,
     snap: ArmorySnapshot,
-    msg: ValheimLinkMessage,
+    msg: StoredValheimLinkMessage,
     defaultTz: string | null,
   ): Promise<Applied> {
     if (msg.kind === 'character') {
