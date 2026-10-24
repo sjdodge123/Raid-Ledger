@@ -89,7 +89,7 @@ function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
     return (
         <div
             role="status"
-            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-1"
+            className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col items-end gap-1 lg:left-2 lg:right-auto lg:items-start"
         >
             {(!ready || failed) && (
                 <StatusChip
@@ -258,7 +258,11 @@ function FrameViewport({ layers, onCommands }: FrameViewportProps) {
     );
 }
 
-/** Viewport + status chip + overlay controls in the sized frame (D10). */
+/**
+ * Viewport + status chip + overlay controls in the sized frame (D10). Below
+ * 1024px the controls sit top-LEFT and the status chips top-right, so the
+ * viewport-fixed Filters FAB (bottom-right) never covers them (ROK-1943 D12).
+ */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     const chest = useContext(ChestFocusContext);
@@ -268,7 +272,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
             <FrameViewport layers={layers} onCommands={setCommands} />
             <MapStatus {...status} />
             <MapLegend />
-            <div className="absolute right-2 top-2 z-10">
+            <div className="absolute left-2 top-2 z-10 lg:left-auto lg:right-2">
                 <MapControls commands={commands} {...controls} />
             </div>
         </div>

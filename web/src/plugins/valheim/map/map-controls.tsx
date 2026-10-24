@@ -144,7 +144,7 @@ function LayersPanel({
 export function MapControls({ commands, ...layers }: MapControlsProps) {
     const wide = useMediaQuery('(min-width: 1024px)');
     return (
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-start gap-2 lg:items-end">
             <ZoomButtons commands={commands} />
             <LayersPanel wide={wide} layers={layers} />
         </div>
