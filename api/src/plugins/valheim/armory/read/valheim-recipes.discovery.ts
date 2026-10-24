@@ -18,13 +18,20 @@ export interface KnownRecipes {
   known: Set<string> | null;
 }
 
-/** Pre-0.4.2 mods stored sanitised `$item_*`/`$piece_*` name tokens, not prefabs. */
-const LEGACY_TOKEN = /^_(item|piece)_/;
+/**
+ * Pre-0.4.2 mods stored sanitised `$…` name tokens (`_item_*`, `_piece_*`,
+ * `_ship_*`, `_tool_*`, …), not prefabs. Real prefab ids never start with `_`.
+ */
+const LEGACY_TOKEN = /^_/;
 
-/** A list's prefab-shaped entries; null when it holds only legacy tokens. */
+/**
+ * A list's prefab-shaped entries; null when nothing usable is left — a list of
+ * only legacy tokens, or an empty list (every character knows some recipes, so
+ * an empty one means the mod sent nothing we can trust).
+ */
 function usableEntries(list: readonly string[]): string[] | null {
   const prefabs = list.filter((e) => !LEGACY_TOKEN.test(e));
-  return list.length > 0 && prefabs.length === 0 ? null : prefabs;
+  return prefabs.length === 0 ? null : prefabs;
 }
 
 /**

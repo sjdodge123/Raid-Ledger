@@ -139,6 +139,17 @@ describe('toKnownSet (D3, Q1)', () => {
     expect([...(k.known ?? [])]).toEqual(['SwordBronze']);
   });
 
+  it('other legacy token families (ships, cart) also count as tokens → outdated', () => {
+    expect(toKnownSet([['_item_club', '_ship_raft', '_tool_cart']])).toEqual({
+      status: 'outdated',
+      known: null,
+    });
+  });
+
+  it('an empty known list is unusable → outdated', () => {
+    expect(toKnownSet([[]])).toEqual({ status: 'outdated', known: null });
+  });
+
   it('one outdated + one current character → known from the current list', () => {
     const k = toKnownSet([['_item_club'], ['Recipe_Club']]);
     expect(k.status).toBe('known');
