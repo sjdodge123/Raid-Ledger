@@ -172,6 +172,15 @@ export const RECIPES_DEMO_ALL_KNOWN: readonly string[] = [
 ];
 
 /**
+ * Every item the demo set's processes consume (ores, scrap, Wood, raw meat).
+ * ROK-1948 R4 shows a processor's output only when its input is a known item
+ * or a discovered recipe uses the output — Cooked meat needs Raw meat here.
+ */
+export const RECIPES_DEMO_ALL_KNOWN_ITEMS: readonly string[] = [
+  ...new Set(RECIPES.processes.flatMap((p) => p.inputs.map((i) => i.prefab))),
+];
+
+/**
  * ROK-1862 — what the owner's claimed character (`c1`) has learned: every
  * prefab the demo set lists EXCEPT Bronze sword (contract form: result
  * prefabs), so the Planner shows Club known and Bronze sword "Not discovered

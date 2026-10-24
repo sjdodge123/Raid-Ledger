@@ -11,7 +11,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../../../drizzle/schema';
 import { upsertArmoryProfile } from './valheim-armory-demo-seed.helpers';
-import { RECIPES_DEMO_ALL_KNOWN } from './valheim-armory-recipes-demo-seed.helpers';
+import {
+  RECIPES_DEMO_ALL_KNOWN,
+  RECIPES_DEMO_ALL_KNOWN_ITEMS,
+} from './valheim-armory-recipes-demo-seed.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -32,7 +35,7 @@ export const RECIPES_DEMO_EARLY_KNOWN: readonly string[] = [
   'Cultivator',
 ];
 
-/** Upsert the unclaimed scout and give it every demo prefab. */
+/** Upsert the unclaimed scout: every demo prefab + every process input. */
 export async function seedRecipesDemoScout(
   db: Db,
   serverId: number,
@@ -48,7 +51,11 @@ export async function seedRecipesDemoScout(
   const P = schema.valheimProfiles;
   await db
     .update(P)
-    .set({ knownRecipes: [...RECIPES_DEMO_ALL_KNOWN], importedAt: sql`now()` })
+    .set({
+      knownRecipes: [...RECIPES_DEMO_ALL_KNOWN],
+      knownItems: [...RECIPES_DEMO_ALL_KNOWN_ITEMS],
+      importedAt: sql`now()`,
+    })
     .where(eq(P.id, id));
   return id;
 }
