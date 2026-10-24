@@ -111,6 +111,15 @@ describe('PinFilterPanel — search, crossed-out, clear', () => {
         expect(panel.onChange).toHaveBeenCalledWith({ hideCrossed: true });
     });
 
+    it('Hide crossed-out pins shows the click at once, before the URL write lands', () => {
+        // The router commits the URL write in a transition, so the filter prop is
+        // still false right after the click (here: onChange never re-renders).
+        renderFilters(panelState());
+        const box = screen.getByRole('checkbox', { name: 'Hide crossed-out pins' });
+        fireEvent.click(box);
+        expect(box, 'checked while the URL write is still pending').toBeChecked();
+    });
+
     it('Clear all (shown while filters are active) calls the hook’s clear', () => {
         const panel = panelState({ query: 'base' }, { activeCount: 2 });
         renderFilters(panel);

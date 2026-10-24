@@ -32,6 +32,12 @@ describe('parsePinFilter (ROK-1943 S13 / D9)', () => {
         expect(parsePinFilter(qs('players=x,0')).players).toBe('character');
     });
 
+    it('caps a player id list at the server limit (100) so an over-long URL cannot 400', () => {
+        const ids = Array.from({ length: 150 }, (_, i) => i + 1);
+        const players = parsePinFilter(qs(`players=1,${ids.join(',')}`)).players;
+        expect(players, 'first 100 distinct ids').toEqual(ids.slice(0, 100));
+    });
+
     it('trims and caps the search; reads crossed=hide only', () => {
         expect(parsePinFilter(qs('q=%20Base%20')).query).toBe('Base');
         expect(parsePinFilter(qs(`q=${'a'.repeat(80)}`)).query).toHaveLength(64);
