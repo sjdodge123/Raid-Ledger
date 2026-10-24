@@ -60,10 +60,14 @@ export function useChestLayer(filter: PinFilter, serverId: number | undefined, w
         bases,
         ctx,
         summary: {
-            chestsError: on0 && portalLayerFailed(query),
-            chestsPending: on && query.isPending,
+            // The base names come from /materials: its read gates the layer too.
+            chestsError: on0 && (portalLayerFailed(query) || portalLayerFailed(totals)),
+            chestsPending: on && (query.isPending || totals.isPending),
             chestsOtherWorld: on && otherWorld,
-            onRetryChests: () => void query.refetch(),
+            onRetryChests: () => {
+                if (query.isError) void query.refetch();
+                if (totals.isError) void totals.refetch();
+            },
         },
     };
 }
