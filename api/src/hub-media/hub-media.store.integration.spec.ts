@@ -221,6 +221,8 @@ describe('HubMediaService.ingest refusals (ROK-1942)', () => {
         height: 1,
         bytes: 1,
       }),
-    ).rejects.toThrow(/hub_media_kind_check/);
+    ).rejects.toMatchObject({
+      cause: { constraint_name: 'hub_media_kind_check' },
+    });
   });
 });
