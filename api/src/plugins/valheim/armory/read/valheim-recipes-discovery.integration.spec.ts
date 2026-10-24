@@ -295,6 +295,23 @@ describe('recipe discovery (ROK-1862 §4)', () => {
     }).toEqual({ match: 'known', mismatched: UNKNOWN('no-character') });
   });
 
+  it('privacy: a playerId under two Steam ids on the server counts for no one', async () => {
+    const other = await makeUser('other');
+    await claimProfile('1000000000000006', { by: ownerId, known: KNOWN });
+    await claimProfile('1000000000000006', {
+      by: other,
+      known: KNOWN,
+      steamId: 'S_IMPOSTOR',
+    });
+    expect({
+      owner: await allRoutes(owner),
+      other: await allRoutes(await sign(other)),
+    }).toEqual({
+      owner: UNKNOWN('no-character'),
+      other: UNKNOWN('no-character'),
+    });
+  });
+
   it('an impersonated session reads no character (no-character)', async () => {
     await claimProfile('1000000000000001', { by: ownerId, known: KNOWN });
     const imp = await sign(ownerId, testApp.seed.adminUser.id);
@@ -308,5 +325,30 @@ describe('recipe discovery (ROK-1862 §4)', () => {
     );
     await claimProfile('1000000000000001', { by: ownerId, known });
     expect(await allRoutes(owner)).toEqual(UNKNOWN('truncated'));
+  });
+
+  it('a pre-0.4.2 token-only list is outdated: every flag null', async () => {
+    await claimProfile('1000000000000001', {
+      by: ownerId,
+      known: ['_item_sword_bronze', '_piece_chest'],
+    });
+    expect(await allRoutes(owner)).toEqual(UNKNOWN('outdated'));
+  });
+
+  it('a mixed list is read from its prefab entries only', async () => {
+    await claimProfile('1000000000000001', {
+      by: ownerId,
+      known: ['_item_sword_bronze', 'Bronze'],
+    });
+    const { discovery, flags } = await entryFlags(owner);
+    expect({
+      discovery,
+      SwordBronze: flags.SwordBronze,
+      Bronze: flags.Bronze,
+    }).toEqual({
+      discovery: 'known',
+      SwordBronze: false,
+      Bronze: true,
+    });
   });
 });
