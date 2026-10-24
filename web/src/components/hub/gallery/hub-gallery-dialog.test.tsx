@@ -56,6 +56,7 @@ function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: bool
     return trigger;
 }
 
+const dialog = (): HTMLElement => screen.getByRole('dialog');
 const caption = async (): Promise<string> => (await screen.findByTestId('hub-gallery-caption')).textContent ?? '';
 const who = (n: number): RegExp => new RegExp(`Player${n}(?!\\d)`);
 const counter = (): string => screen.getByTestId('hub-gallery-viewer').querySelector('[aria-live]')?.textContent ?? '';
@@ -68,24 +69,54 @@ describe('HubGalleryDialog — viewer', () => {
         open({ index: 2 });
         expect(await caption()).toMatch(who(3));
         expect(counter()).toBe('3 of 30');
-        fireEvent.keyDown(document, { key: 'ArrowRight' });
+        fireEvent.keyDown(dialog(), { key: 'ArrowRight' });
         expect(await caption()).toMatch(who(4));
-        fireEvent.keyDown(document, { key: 'ArrowLeft' });
-        fireEvent.keyDown(document, { key: 'ArrowLeft' });
+        fireEvent.keyDown(dialog(), { key: 'ArrowLeft' });
+        fireEvent.keyDown(dialog(), { key: 'ArrowLeft' });
         expect(await caption()).toMatch(who(2));
         fireEvent.click(screen.getByRole('button', { name: 'Next picture' }));
         expect(await caption()).toMatch(who(3));
         fireEvent.click(screen.getByRole('button', { name: 'Previous picture' }));
         fireEvent.click(screen.getByRole('button', { name: 'Previous picture' }));
         expect(counter()).toBe('1 of 30');
-        expect(screen.getByRole('button', { name: 'Previous picture' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Previous picture' })).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('a ←/→ aimed at the page behind the dialog does nothing', async () => {
+        open({ index: 2 });
+        expect(await caption()).toMatch(who(3));
+        fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+        fireEvent.keyDown(document, { key: 'ArrowRight' });
+        expect(counter()).toBe('3 of 30');
+    });
+
+    it('reaching an end keeps focus on the (aria-disabled, still focusable) Prev button', async () => {
+        open({ index: 1 });
+        expect(await caption()).toMatch(who(2));
+        const prev = screen.getByRole('button', { name: 'Previous picture' });
+        prev.focus();
+        fireEvent.click(prev);
+        expect(counter()).toBe('1 of 30');
+        expect(prev).not.toBeDisabled();
+        expect(prev).toHaveAttribute('aria-disabled', 'true');
+        expect(document.activeElement).toBe(prev);
+        fireEvent.click(prev);
+        expect(counter()).toBe('1 of 30');
+    });
+
+    it('the picture sits on the media-well token (dark in every scheme), never the page backdrop', async () => {
+        open({ index: 0 });
+        expect(await caption()).toMatch(who(1));
+        const stage = screen.getByTestId('hub-gallery-stage');
+        expect(stage).toHaveClass('bg-media-well');
+        expect(stage).not.toHaveClass('bg-backdrop');
     });
 
     it('Prev / Next walk only the filtered set (Deaths), paging past the loaded end', async () => {
         open({ filter: 'death', index: 0 });
         expect(await caption()).toMatch(who(1));
         expect(counter()).toBe('1 of 10');
-        fireEvent.keyDown(document, { key: 'ArrowRight' });
+        fireEvent.keyDown(dialog(), { key: 'ArrowRight' });
         expect(await caption()).toMatch(who(4));
         expect(await caption()).toMatch(/^Death/);
     });

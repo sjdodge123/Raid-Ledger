@@ -75,6 +75,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-surface` | `bg-surface` | `#0f172a` | `#ffffff` | Cards, headers, sheets |
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
+| `--color-media-well` | `bg-media-well` | `#05070b` | `#05070b` (not remapped) | Photo / video stage (the §4.29 viewer) — near-black in EVERY scheme, declared once in `@theme` (ROK-1942) |
+| `--color-media-well-foreground` | `text-media-well-foreground` | `#cbd5e1` | `#cbd5e1` (not remapped) | Copy on the media well ("Loading picture…"), 12.9:1 |
 | `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
 | `--color-dim` | `text-dim` | `#8291a7` | `#5a697f` | Placeholders, disabled text, the quietest readable text (dark: 5.57 surface / 4.57 panel, 3.23 overlay accepted — TDB:2050, slate-500 `#64748b` was 3.75 / 3.07; light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
 | `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common). quest-log declares its own, `#685640` 6.33 surface / 5.56 panel (was `#8b7355` 4.05 / 3.55; operator ruling 2026-10-04, ROK-1472) |
@@ -1674,8 +1676,8 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
   opens **grid** mode; a grid tile switches to viewer and "Back to all" returns — never a second dialog.
   Closing (Escape, ×, backdrop, swipe) refocuses the element that opened it.
 - **Viewer** (`hub-gallery-viewer.tsx`): "3 of 24" (`aria-live`), the full picture `object-contain` in a
-  `bg-backdrop` well (`aspect-[4/3]`, `lg:aspect-video`), 44px `Button secondary iconOnly` Prev / Next
-  ("Previous picture" / "Next picture") over its edges, ←/→ keys (not while typing). Prev/Next walk the
+  `bg-media-well` well (`aspect-[4/3]`, `lg:aspect-video`; near-black in every scheme, "Loading picture…" in `text-media-well-foreground`), 44px `Button secondary iconOnly` Prev / Next
+  ("Previous picture" / "Next picture", `aria-disabled` at either end so focus stays put) over its edges, ←/→ keys (not while typing). Prev/Next walk the
   **filtered** set and page in more through `nextCursor` at the loaded end. Caption: kind badge, author,
   date + relative time, source, the optional decorator link.
 - **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar): grid → `Load more` (24 a page) while
@@ -1688,6 +1690,6 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
 **New pattern: square thumbnail grid tile + image viewer inside the Modal / BottomSheet pair** — the only
 other lightbox (`ScreenshotGallery`) is a hand-built overlay (§6.12). **DON'T** stack a viewer dialog over
 the grid, build a custom image overlay, or put the chips in a §4.1 funnel. **Light / Dark** — every surface is
-a token; the well is `bg-backdrop` (the page's own darkest surface — light in the light family, not a forced
-black). Rendered: `/dev/design-system#hub-widgets` → "Gallery card + lightbox" (`hub-gallery-demo.tsx`, the
+a token; the well is `bg-media-well` — a DARK stage in both families (operator ruling), the one token no scheme
+remaps (`media-well.guard.test.ts`). ←/→ only act on keys aimed inside the dialog. Rendered: `/dev/design-system#hub-widgets` → "Gallery card + lightbox" (`hub-gallery-demo.tsx`, the
 real grid + dialog over a seeded demo cache); live on a Valheim server hub's Overview (`/hubs/:id`).

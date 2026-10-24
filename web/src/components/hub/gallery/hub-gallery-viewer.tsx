@@ -1,6 +1,6 @@
 /**
  * ROK-1942 — the Gallery dialog's viewer mode (approved mockup frames 3 / 4):
- * the full picture in a `bg-backdrop` well with 44px Prev / Next buttons over
+ * the full picture in a `bg-media-well` well (near-black in every scheme) with 44px Prev / Next buttons over
  * its edges, "3 of 24", and a caption line — kind badge, who, when, source,
  * the optional source link. The dialog owns the ←/→ keys and the footer.
  */
@@ -43,10 +43,12 @@ function Caption({ item }: { item: HubMediaItem }): JSX.Element {
 
 function NavButton({ side, onClick }: { side: 'prev' | 'next'; onClick: (() => void) | null }): JSX.Element {
     const label = side === 'prev' ? 'Previous picture' : 'Next picture';
+    // `aria-disabled`, not `disabled`: a native-disabled button at either end drops focus to the page.
+    const off = onClick === null;
     return (
-        <Button variant="secondary" iconOnly aria-label={label} disabled={onClick === null} onClick={() => onClick?.()}
+        <Button variant="secondary" iconOnly aria-label={label} aria-disabled={off || undefined} onClick={() => onClick?.()}
             data-testid={`hub-gallery-${side}`}
-            className={`absolute top-1/2 -translate-y-1/2 ${side === 'prev' ? 'left-2' : 'right-2'}`}>
+            className={`absolute top-1/2 -translate-y-1/2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${side === 'prev' ? 'left-2' : 'right-2'}`}>
             <span aria-hidden="true">{side === 'prev' ? '‹' : '›'}</span>
         </Button>
     );
@@ -63,9 +65,10 @@ export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubG
     return (
         <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer">
             <p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>
-            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-backdrop lg:aspect-video">
+            <div data-testid="hub-gallery-stage"
+                className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video">
                 {url === null
-                    ? <span className="text-sm text-muted">Loading picture…</span>
+                    ? <span className="text-sm text-media-well-foreground">Loading picture…</span>
                     : <img src={url} alt={`${HUB_MEDIA_KIND_LABEL[item.kind]} picture${item.authorName === null ? '' : ` by ${item.authorName}`}`}
                         className="max-h-full max-w-full object-contain" />}
                 <NavButton side="prev" onClick={onPrev} />

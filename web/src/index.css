@@ -38,6 +38,11 @@
     --color-panel: #1e293b;
     /* slate-800 */
     --color-overlay: #334155;
+    /* ROK-1942: the photo / video stage (Gallery viewer). Near-black in EVERY scheme by design —
+       declared once here and never remapped by a scheme block, so light themes inherit it. */
+    --color-media-well: #05070b;
+    /* Readable copy ON the media well ("Loading picture…"): 12.9:1 on --color-media-well. */
+    --color-media-well-foreground: #cbd5e1;
     /* slate-700 */
 
     /* Neutral scale — dual-purpose (text & bg) */
