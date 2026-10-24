@@ -56,11 +56,20 @@ async function lateCountOf(token: string, userId: number): Promise<number> {
     return (await fetchLeaderboard(token)).find((u) => u.userId === userId)?.lateCount ?? 0;
 }
 
+/** Any game id — the Per-Game Breakdown (Late % series) only counts events with a game. */
+async function pickGameId(token: string): Promise<number> {
+    const games = (await apiGet(token, '/games?limit=1')) as { data?: Array<{ id: number }> } | null;
+    const gameId = games?.data?.[0]?.id;
+    if (typeof gameId !== 'number') throw new Error(`GET /games returned no game: ${JSON.stringify(games)}`);
+    return gameId;
+}
+
 /** Future event (signups refuse past events) — moved into the past after signup. */
 async function createSeedEvent(token: string, testInfo: TestInfo): Promise<number> {
     const start = new Date(Date.now() + 2 * 86_400_000);
     const event = (await apiPost(token, '/events', {
         title: `smoke-rok1938-late-${testInfo.project.name}-${Date.now()}`,
+        gameId: await pickGameId(token),
         startTime: start.toISOString(),
         endTime: new Date(start.getTime() + 2 * HOUR_MS).toISOString(),
         maxAttendees: 10,
