@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/button';
 import { ItemIcon } from '../character/item-icon';
 import { resolveItem } from '../character/item-icon.helpers';
 import { rowDescription, type CraftRow, type RankedRow } from './crafting.helpers';
+import { DiscoveryChip } from './discovery-chip';
 import type { PlannerNames } from './use-planner-names';
 
 export interface RecipeRowProps {
@@ -54,6 +55,7 @@ function Suffixes({ row, showStation }: { row: CraftRow; showStation: boolean })
     const level = row.cost.stationLevel;
     return (
         <>
+            {row.entry.discovered === false && <DiscoveryChip />}
             {showStation && <span className="shrink-0 text-xs text-muted">{row.stationLabel}</span>}
             {amount > 1 && <span className="shrink-0 font-mono text-xs text-muted">×{amount}</span>}
             {level > 1 && (
@@ -79,6 +81,7 @@ function RecipeRowImpl({ row, index, selected, tabStop, showStation, names, onSe
             data-testid="valheim-craft-row"
             data-prefab={row.entry.prefab}
             data-afford={row.afford.state}
+            data-discovered={row.entry.discovered === undefined || row.entry.discovered === null ? undefined : String(row.entry.discovered)}
             className={rowClass(selected, short)}
             onFocus={() => onFocusIndex(index)}
             onClick={() => onSelect(row)}

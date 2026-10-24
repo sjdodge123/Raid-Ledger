@@ -69,6 +69,7 @@ export function RecipeTree({
     /** Target kinds in request order — root i is target i. */
     rootKinds: readonly (PlannerKind | undefined)[];
 }): JSX.Element {
+    // ROK-1862: never pruned — undiscovered nodes keep their chip so the tree matches the shopping list.
     const roots = useMemo(() => foldNodes(nodes), [nodes]);
     const kindOf = useMemo(() => rootKindOf(nodes, rootKinds), [nodes, rootKinds]);
     const { collapsed, onToggle } = useCollapsed();

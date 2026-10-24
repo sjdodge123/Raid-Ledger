@@ -101,7 +101,11 @@ function stepOf(e: ValheimRecipeCatalogEntry, mode: CraftMode): ValheimRecipeCos
     return e.craft !== null && e.craft.via !== 'process' ? e.craft : null;
 }
 
-function passes(e: ValheimRecipeCatalogEntry, f: Pick<PlannerFilters, 'kind' | 'category'>): boolean {
+/** Kind/Category, plus (ROK-1862) the already-gated undiscovered filter: only `discovered === false` drops, never null. */
+export type RowFilters = Pick<PlannerFilters, 'kind' | 'category'> & { hideUndiscovered?: boolean };
+
+function passes(e: ValheimRecipeCatalogEntry, f: RowFilters): boolean {
+    if (f.hideUndiscovered === true && e.discovered === false) return false;
     return (f.kind === 'both' || e.kind === f.kind) && (f.category === null || e.category === f.category);
 }
 
@@ -115,7 +119,7 @@ export function stationGroups(
     entries: readonly ValheimRecipeCatalogEntry[],
     stations: readonly ValheimRecipeStation[],
     mode: CraftMode,
-    filters: Pick<PlannerFilters, 'kind' | 'category'>,
+    filters: RowFilters,
 ): StationGroup[] {
     const byPrefab = new Map(stations.map((s) => [s.prefab, s]));
     const groups = new Map<string, StationGroup>();
@@ -142,7 +146,7 @@ export function stationGroups(
  */
 export function processRows(
     entries: readonly ValheimRecipeCatalogEntry[],
-    filters: Pick<PlannerFilters, 'kind' | 'category'>,
+    filters: RowFilters,
     stationName: (prefab: string) => string,
 ): CraftRow[] {
     const rows: CraftRow[] = [];

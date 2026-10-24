@@ -198,3 +198,19 @@ describe('prototype-named prefabs (Codex P2)', () => {
         ]);
     });
 });
+
+describe('hideUndiscovered (ROK-1862)', () => {
+    const list = [
+        entry('SwordBronze', 'Bronze sword', 'forge', { discovered: false }),
+        entry('AxeBronze', 'Bronze axe', 'forge', { discovered: true }),
+        entry('Club', 'Club', null, { discovered: null }),
+    ];
+    const listed = (hide: boolean): string[] =>
+        stationGroups(list, stations, 'craft', { ...filters, hideUndiscovered: hide }).flatMap((g) => g.rows.map((r) => r.entry.prefab));
+    it('drops only discovered:false rows when on; true and null always stay', () => {
+        expect(listed(true)).toEqual(['AxeBronze', 'Club']);
+    });
+    it('keeps every row when off', () => {
+        expect(listed(false)).toEqual(['SwordBronze', 'AxeBronze', 'Club']);
+    });
+});

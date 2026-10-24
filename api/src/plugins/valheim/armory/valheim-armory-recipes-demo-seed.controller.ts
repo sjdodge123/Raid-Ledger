@@ -28,6 +28,7 @@ import {
   importRecipesDemoSet,
   importRecipesDemoStock,
   mergeRecipesDemoCatalog,
+  setRecipesDemoOwnerKnowledge,
 } from './valheim-armory-recipes-demo-seed.helpers';
 
 /** What the seed returns (DEMO_MODE only — not a contract type). */
@@ -44,7 +45,8 @@ export interface RecipesFixtureResponse extends ContainersFixtureResponse {
  * merged scan), then: merges the Bronze-chain names into the catalogue,
  * re-imports the scan with one more public chest (40 Copper, no Tin) and
  * imports the vanilla + Bronze recipe set — every write through the real
- * importers. Body `{ worker? }` as the containers seed. Idempotent: a re-run
+ * importers. ROK-1862: the owner's claimed character knows every recipe but
+ * Bronze sword (the member stays unclaimed — no known list). Body `{ worker? }` as the containers seed. Idempotent: a re-run
  * resets the scan, rewrites the set and returns the same ids.
  */
 @Controller('admin/test/valheim')
@@ -76,6 +78,11 @@ export class ValheimArmoryRecipesDemoSeedController {
     await mergeRecipesDemoCatalog(this.db, base.serverId);
     await importRecipesDemoStock(this.db, base.serverId);
     await importRecipesDemoSet(this.db, base.serverId);
+    await setRecipesDemoOwnerKnowledge(
+      this.db,
+      base.serverId,
+      base.ownerUserId,
+    );
     return {
       ...base,
       guildId: base.hubId,

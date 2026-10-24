@@ -161,3 +161,37 @@ describe('POST /admin/test/valheim/recipes-fixture (ROK-1854 L5)', () => {
     expect((await post(adminToken)).status).toBe(403);
   });
 });
+
+describe('recipes-fixture discovery (ROK-1862)', () => {
+  it('ROK-1862: the owner knows every recipe but Bronze sword; the member has no character', async () => {
+    const f = await seed();
+    const read = async (userId: number) => {
+      const res = await testApp.request
+        .get(recipesUrl(f.serverId))
+        .set(bearer(await sign(userId)));
+      expect(res.status).toBe(200);
+      const cat = ValheimRecipeCatalogResponseSchema.parse(res.body);
+      const flag = (p: string) =>
+        cat.entries.find((e) => e.prefab === p && e.kind === 'item')
+          ?.discovered;
+      return {
+        discovery: cat.discovery,
+        SwordBronze: flag('SwordBronze'),
+        Club: flag('Club'),
+        Bronze: flag('Bronze'),
+      };
+    };
+    expect(await read(f.ownerUserId)).toEqual({
+      discovery: 'known',
+      SwordBronze: false,
+      Club: true,
+      Bronze: true,
+    });
+    expect(await read(f.memberUserId)).toEqual({
+      discovery: 'no-character',
+      SwordBronze: null,
+      Club: null,
+      Bronze: null,
+    });
+  });
+});
