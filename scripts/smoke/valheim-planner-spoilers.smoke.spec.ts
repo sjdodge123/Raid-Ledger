@@ -32,9 +32,9 @@ import {
 const PROTECTED = "Showing only what someone on this server has discovered.";
 const OFF_NO_DATA =
   "Spoiler protection is off — no character on this server has shared what they've discovered yet (RL Valheim Link 0.4.2+).";
-const UNDISCOVERED = "Needs something nobody on the server has found yet.";
+const UNDISCOVERED = "Not yet discovered on this server";
 const PLAN_FOOTER =
-  "Part of this plan needs something nobody on the server has found yet.";
+  "Part of this plan needs something not yet discovered on this server.";
 const HIDDEN_TARGET = "Hidden item: nobody on the server has found it yet";
 const CHIP = "Not discovered yet";
 
@@ -91,7 +91,7 @@ test.describe("Valheim hub — Planner spoiler protection (ROK-1948)", () => {
     }
   });
 
-  test("early: planning Cultivator shows the generic undiscovered line, never Bronze's name", async ({
+  test("early: planning Cultivator names Bronze as a not-yet-discovered leaf, never its recipe", async ({
     page,
     browser,
   }, testInfo) => {
@@ -112,17 +112,22 @@ test.describe("Valheim hub — Planner spoiler protection (ROK-1948)", () => {
           '[data-testid="valheim-planner-row"][data-prefab="Cultivator"]',
         ),
       ).toBeVisible();
+      // Operator ruling 2026-10-24: the withheld ingredient is NAMED like the
+      // game names it, marked not yet discovered, and never broken down.
+      const bronze = tree.getByTestId("valheim-planner-row-undiscovered");
+      await expect(bronze).toHaveAttribute("data-prefab", "Bronze");
+      await expect(bronze.getByTestId("valheim-planner-row-name")).toHaveText(
+        "Bronze",
+      );
+      await expect(bronze).toContainText(UNDISCOVERED);
       await expect(
-        tree.getByTestId("valheim-planner-row-undiscovered"),
-      ).toContainText(UNDISCOVERED);
+        bronze.getByRole("button"),
+        "no disclosure: nothing under the withheld ingredient",
+      ).toHaveCount(0);
       await expect(
         tree,
-        "the tree never names the withheld ingredient",
-      ).not.toContainText(/Bronze/i);
-      await expect(
-        tree.locator('[data-prefab="Bronze"]'),
-        "no withheld prefab in the DOM",
-      ).toHaveCount(0);
+        "the withheld ingredient's recipe is never shown",
+      ).not.toContainText(/Copper|Tin|Forge/);
       await expect(p.getByText(PLAN_FOOTER)).toBeVisible();
     } finally {
       await member.context.close();
