@@ -50,6 +50,7 @@ describe('collectMaskLayers (ROK-1949 D1)', () => {
     serverId: 1,
     worldUid: 'w',
     textureSize: 64,
+    pixelSizeMetres: 12,
     sha256: 'a'.repeat(64),
     shared: bm('M-shared'),
     capturedAt: at,

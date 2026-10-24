@@ -149,12 +149,7 @@ export class ValheimArmoryMapBytesService {
     sha256: string,
     viewerId: number,
   ): Promise<{ fp: string; bitmaps: ValheimBitmapLike[] }> {
-    const own = await this.masks.findViewerWorldBitmaps(
-      viewerId,
-      map.serverId,
-      map.worldUid,
-      map.textureSize,
-    );
+    const own = await this.masks.findViewerWorldBitmaps(viewerId, map);
     const { refs, bitmaps } = collectMaskLayers(map, own);
     const fp = maskFingerprint({
       baseSha: sha256,

@@ -19,6 +19,8 @@ export interface MaskMapRow {
   serverId: number;
   worldUid: string;
   textureSize: number;
+  /** Union only bitmaps of identical geometry (texture size + metres/px). */
+  pixelSizeMetres: number;
   sha256: string | null;
   shared: ValheimBitmapLike | null;
   capturedAt: Date;
@@ -44,6 +46,7 @@ export class ValheimMapMaskRepository {
         serverId: m.pelicanServerId,
         worldUid: m.worldUid,
         textureSize: m.textureSize,
+        pixelSizeMetres: m.pixelSizeMetres,
         sha256: m.baseMapSha256,
         shared: m.sharedExplored,
         capturedAt: m.capturedAt,
@@ -54,12 +57,16 @@ export class ValheimMapMaskRepository {
     return row ?? null;
   }
 
-  /** Bitmaps of every map on `(server, world, n)` whose profile `userId` claimed. */
+  /**
+   * Bitmaps of every map on M's `(server, world)` with M's exact geometry
+   * (texture size AND metres/pixel) whose profile `userId` claimed.
+   */
   findViewerWorldBitmaps(
     userId: number,
-    serverId: number,
-    worldUid: string,
-    textureSize: number,
+    map: Pick<
+      MaskMapRow,
+      'serverId' | 'worldUid' | 'textureSize' | 'pixelSizeMetres'
+    >,
   ): Promise<ViewerWorldBitmaps[]> {
     return this.db
       .select({
@@ -73,9 +80,10 @@ export class ValheimMapMaskRepository {
       .where(
         and(
           eq(p.claimedBy, userId),
-          eq(m.pelicanServerId, serverId),
-          eq(m.worldUid, worldUid),
-          eq(m.textureSize, textureSize),
+          eq(m.pelicanServerId, map.serverId),
+          eq(m.worldUid, map.worldUid),
+          eq(m.textureSize, map.textureSize),
+          eq(m.pixelSizeMetres, map.pixelSizeMetres),
         ),
       );
   }
