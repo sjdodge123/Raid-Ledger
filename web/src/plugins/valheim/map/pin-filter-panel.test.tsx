@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { startTransition, type JSX } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { valheimCharacterUnclaimed, valheimCharactersHandler } from '../../../test/mocks/valheim-armory-handlers';
-import { DEFAULT_PIN_FILTER, type PinFilter } from './pin-filter';
+import {
+    DEFAULT_PIN_FILTER, activeFilterCount, clearPinFilters, parsePinFilter, writePinFilter, type PinFilter,
+} from './pin-filter';
 import { MapPinFilters, PinSummaryLine } from './map-filter-toolbar';
 import type { PinFilterPanelState, PinFilterSummary } from './use-pin-filter';
 
@@ -158,5 +162,49 @@ describe('PinSummaryLine (D15)', () => {
     it('no active filters and no pins says nothing extra', () => {
         renderWithProviders(<PinSummaryLine summary={summaryState({ count: 0 })} onClear={vi.fn()} />);
         expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    });
+});
+
+/**
+ * The filter wired to the URL the way `usePinFilter` is, with every write
+ * committed in `startTransition` as BrowserRouter (react-router 7) does.
+ */
+function RoutedFilters(): JSX.Element {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const params = (): URLSearchParams => new URLSearchParams(location.search);
+    const write = (next: URLSearchParams): void => {
+        const search = next.toString();
+        startTransition(() => { void navigate({ search: search ? `?${search}` : '' }, { replace: true }); });
+    };
+    const filter = parsePinFilter(params());
+    const panel: PinFilterPanelState = {
+        filter, playersAvailable: true, activeCount: activeFilterCount(filter),
+        onChange: (patch) => write(writePinFilter(params(), patch, 7)), onToggleType: vi.fn(),
+        onClearAll: () => write(clearPinFilters(params(), 7)),
+    };
+    return (
+        <>
+            <span data-testid="url">{location.search}</span>
+            <MapPinFilters filter={{ panel, summary: summaryState({ activeCount: panel.activeCount }) }} serverId={3} />
+        </>
+    );
+}
+
+describe('MapPinFilters — Clear under a transition-committed URL', () => {
+    it('Clear empties the search box and returns Whose pins to this character once the URL commits', async () => {
+        renderWithProviders(<RoutedFilters />);
+        fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        const search = screen.getByRole('searchbox', { name: 'Search pin labels' });
+        fireEvent.change(search, { target: { value: 'base' } });
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toContain('base'));
+        fireEvent.click(screen.getByRole('radio', { name: 'Choose players' }));
+        fireEvent.click(within(await screen.findByTestId('map-pin-filter-player-list')).getByRole('checkbox', { name: 'Ragnhild' }));
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toContain('11'));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+        await waitFor(() => expect(screen.getByTestId('url').textContent).not.toContain('base'));
+        expect(screen.getByRole('searchbox', { name: 'Search pin labels' }), 'search text after Clear').toHaveValue('');
+        expect(screen.getByRole('radio', { name: 'This character' }), 'Whose pins after Clear').toBeChecked();
+        expect(screen.queryByTestId('map-pin-filter-player-list'), 'player list hidden after Clear').toBeNull();
     });
 });
