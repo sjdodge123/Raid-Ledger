@@ -37,8 +37,11 @@ export interface ServerKnown {
   items: ReadonlySet<string>;
 }
 
-/** A spoiler-pruned graph: always carries `withheld`. */
-export type VisibleGraph = RecipeGraph & { withheld: ReadonlySet<string> };
+/** A spoiler-pruned graph: always carries `withheld` and `hiddenPiecesAt`. */
+export type VisibleGraph = RecipeGraph & {
+  withheld: ReadonlySet<string>;
+  hiddenPiecesAt: ReadonlySet<string>;
+};
 
 /** D3: prefab entries of a list; empty and token-only lists give none. */
 function usablePrefabs(list: readonly string[]): string[] {
@@ -183,6 +186,18 @@ function keptProcesses(
   return filterBuckets(full.processesByOutput, (x) => kept.has(x));
 }
 
+/** Q4: stations where at least one piece built there was hidden (A4: extensions). */
+function stationsWithHiddenPieces(
+  full: RecipeGraph,
+  shown: ReadonlyMap<string, ValheimPiece>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const [prefab, p] of full.pieces) {
+    if (p.station !== null && !shown.has(prefab)) out.add(p.station);
+  }
+  return out;
+}
+
 /** Every prefab some recipe, process or piece of the graph makes. */
 function sourcedPrefabs(graph: RecipeGraph): Set<string> {
   return new Set([
@@ -216,7 +231,8 @@ export function buildVisibleGraph(
   const withheld = new Set(
     [...sourcedPrefabs(full)].filter((p) => !shown.has(p)).sort(),
   );
-  return { ...visible, withheld };
+  const hiddenPiecesAt = stationsWithHiddenPieces(full, pieces);
+  return { ...visible, withheld, hiddenPiecesAt };
 }
 
 /** D4: the graph a response is built from — the full one while protection is off. */
@@ -230,11 +246,16 @@ export function spoilerGraph(
 /**
  * Q4 (ruled): a station's `maxLevel` would reveal how many upgrades exist, so
  * clamp it to the highest level a shown craft or upgrade step needs there
- * (min 1, never above the real value). Apply only while `protected`.
+ * (min 1, never above the real value). Apply only while `protected`, and only
+ * at stations in `hiddenAt` (a piece built there is hidden — A4's extensions);
+ * where every such piece is visible the real value reveals nothing (spec §6
+ * L3: an all-knowing server keeps ROK-1899's `max 5`). No `hiddenAt` → clamp
+ * every station.
  */
 export function clampStationLevels(
   stations: readonly ValheimRecipeStation[],
   entries: readonly ValheimRecipeCatalogEntry[],
+  hiddenAt?: ReadonlySet<string>,
 ): ValheimRecipeStation[] {
   const need = new Map<string, number>();
   const note = (s: string | null, level: number) => {
@@ -244,8 +265,9 @@ export function clampStationLevels(
     if (e.craft) note(e.craft.station, e.craft.stationLevel);
     for (const u of e.upgrades) note(u.station, u.stationLevel);
   }
-  return stations.map((s) => ({
-    ...s,
-    maxLevel: Math.min(s.maxLevel, need.get(s.prefab) ?? 1),
-  }));
+  return stations.map((s) =>
+    hiddenAt === undefined || hiddenAt.has(s.prefab)
+      ? { ...s, maxLevel: Math.min(s.maxLevel, need.get(s.prefab) ?? 1) }
+      : s,
+  );
 }

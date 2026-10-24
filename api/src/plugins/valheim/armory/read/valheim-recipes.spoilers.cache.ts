@@ -91,7 +91,11 @@ export async function visibleRecipes(
   });
 }
 
-/** Catalogue stations; while protected the `★ max N` badge is clamped (Q4). */
+/**
+ * Catalogue stations; while protected the `★ max N` badge is clamped (Q4) at
+ * stations where a piece built there is hidden. A graph without
+ * `hiddenPiecesAt` clamps every station (fail closed).
+ */
 export function shownStations(
   graph: RecipeGraph,
   entries: readonly ValheimRecipeCatalogEntry[],
@@ -99,5 +103,5 @@ export function shownStations(
 ): ValheimRecipeStation[] {
   const stations = catalogueStations(graph);
   if (spoilers !== 'protected') return stations;
-  return clampStationLevels(stations, entries);
+  return clampStationLevels(stations, entries, graph.hiddenPiecesAt);
 }
