@@ -18,7 +18,15 @@ import {
 } from '../../../test/mocks/valheim-recipes-handlers';
 import { PLANNER_NO_SET_COPY } from './planner.helpers';
 import { plannerStorageKey } from './planner-storage';
-import { HIDDEN_TARGET_COPY, PLAN_UNDISCOVERED_COPY, SPOILERS_EMPTY_COPY, SPOILERS_PROTECTED_COPY, UNDISCOVERED_NODE_COPY } from './spoilers.helpers';
+import {
+    HIDDEN_TARGET_COPY,
+    PLAN_UNDISCOVERED_COPY,
+    SPOILERS_EMPTY_COPY,
+    SPOILERS_OFF_NO_DATA_COPY,
+    SPOILERS_OFF_TRUNCATED_COPY,
+    SPOILERS_PROTECTED_COPY,
+    UNDISCOVERED_NODE_COPY,
+} from './spoilers.helpers';
 import { ValheimPlannerTab } from './valheim-planner-tab';
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -50,13 +58,26 @@ afterEach(() => vi.restoreAllMocks());
 describe('status line', () => {
     it('protected → the muted "Showing only what someone…" line under the search row', async () => {
         renderTab();
-        expect(await screen.findByTestId('valheim-planner-spoilers')).toHaveTextContent(SPOILERS_PROTECTED_COPY);
+        const line = await screen.findByTestId('valheim-planner-spoilers');
+        expect(line.textContent, 'protected line').toBe(SPOILERS_PROTECTED_COPY);
+        expect(line.className).toContain('text-muted');
     });
-    it.each(['off-no-data', 'off-truncated', undefined] as const)('%s → no spoiler line at all', async (spoilers) => {
-        server.use(valheimRecipeCatalogHandler(recipeCatalogFixture(spoilers === undefined ? {} : { spoilers })));
+    it.each([
+        ['off-no-data', SPOILERS_OFF_NO_DATA_COPY],
+        ['off-truncated', SPOILERS_OFF_TRUNCATED_COPY],
+    ] as const)('%s → the full catalogue with its own muted "protection is off" note', async (spoilers, copy) => {
+        server.use(valheimRecipeCatalogHandler(recipeCatalogFixture({ spoilers })));
+        renderTab();
+        const line = await screen.findByTestId('valheim-planner-spoilers');
+        expect(line.textContent, `${spoilers} note`).toBe(copy);
+        expect(line.className).toContain('text-muted');
+        expect(screen.queryByText(SPOILERS_PROTECTED_COPY), 'no protected line when off').toBeNull();
+    });
+    it('no status from the server (older API) → no spoiler line at all', async () => {
+        server.use(valheimRecipeCatalogHandler(recipeCatalogFixture({})));
         renderTab();
         await screen.findByRole('searchbox', { name: 'Search an item or piece' });
-        expect(screen.queryByText(SPOILERS_PROTECTED_COPY)).toBeNull();
+        expect(screen.queryByTestId('valheim-planner-spoilers')).toBeNull();
     });
 });
 
