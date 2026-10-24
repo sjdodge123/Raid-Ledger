@@ -342,3 +342,42 @@ describe('no terminal card invites a vote (ROK-1607)', () => {
     expect(desc.trimEnd().endsWith(`[Vote now ↗](${POLL_URL})`)).toBe(true);
   });
 });
+
+/** ROK-1896: a hub-tied poll names its hub on line 1 in every state. */
+describe('hub-tied poll — hub name line (ROK-1896)', () => {
+  const HUB_URL = 'http://localhost:5173/hubs/42';
+  const TIED = { url: HUB_URL, label: 'Hub' as const, hubName: 'Raiders' };
+  const STATES = ['open', 'locked_in', 'cancelled', 'closed'] as const;
+  const hubLinkCount = (text: string): number =>
+    text.split('[Hub ↗](').length - 1;
+
+  it.each(STATES)('%s: line 1 names the hub, then a blank line', (status) => {
+    const out = lines({ status, deadline: DEADLINE, hubLink: TIED });
+    expect(out.slice(0, 2)).toEqual(['Hub: **Raiders**', '']);
+  });
+
+  it.each(STATES)('%s: exactly one Hub ↗ link, to /hubs/<id>', (status) => {
+    const text = description({ status, hubLink: TIED });
+    expect(hubLinkCount(text)).toBe(1);
+    expect(text).toContain(`[Hub ↗](${HUB_URL})`);
+  });
+
+  it('a game-derived hub (no hubName) is linked but not named', () => {
+    const text = description({ hubLink: { url: HUB_URL, label: 'Hub' } });
+    expect(text).not.toContain('Hub: **');
+    expect(hubLinkCount(text)).toBe(1);
+  });
+
+  it('a poll with no hub has no name line and no Hub link', () => {
+    const text = description();
+    expect(text).not.toContain('Hub: **');
+    expect(hubLinkCount(text)).toBe(0);
+  });
+
+  it('escapes a masked link and defangs @everyone in the hub name', () => {
+    const hubName = '[Free](https://e.test) @everyone';
+    const first = lines({ hubLink: { ...TIED, hubName } })[0];
+    expect(first).toBe('Hub: **\\[Free](https://e.test) @\u200beveryone**');
+    expect(first).not.toMatch(/(?<!\\)\[Free\]\(/);
+  });
+});

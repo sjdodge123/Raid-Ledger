@@ -33,6 +33,7 @@ import {
   type DeathsFixture,
 } from './valheim-deaths-demo-seed.helpers';
 import { ensureDeathsHub } from './valheim-deaths-demo-seed.server';
+import { seedDeathsPortals } from './valheim-portals-demo-seed.helpers';
 
 const RequestSchema = z
   .object({
@@ -61,8 +62,9 @@ function parseWorker(body: unknown): number {
  * a non-death pin and a shared pin; `second`: 1 Death pin + a non-death pin),
  * `valheim_player_deaths` rows (5 SteamID-attributed for `top`, 3 NULL-SteamID
  * for `second` → resolved by name, 1 for a name-only player with no profile),
- * a hub member and a non-member visitor. Re-running a worker resets the
- * characters, maps and deaths; the server, hub and users keep their ids.
+ * a hub member and a non-member visitor, plus (ROK-1946) one portals scan of
+ * 5 portals on the world. Re-running a worker resets the
+ * characters, maps, deaths and portals; the server, hub and users keep their ids.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
@@ -87,12 +89,14 @@ export class ValheimDeathsDemoSeedController {
     );
     await resetDeathsServer(this.db, serverId);
     const baseMapSha256 = await storeDemoBaseMap(this.db, serverId);
+    const now = new Date();
     const cast = await seedDeathsCast(this.db, {
       serverId,
       worker,
       baseMapSha256,
-      now: new Date(),
+      now,
     });
+    const portals = await seedDeathsPortals(this.db, serverId, now);
     const users = await ensureDeathsUsers(this.db, worker, guildId);
     return {
       serverId,
@@ -100,6 +104,7 @@ export class ValheimDeathsDemoSeedController {
       worldUid: DEATHS_FIXTURE_WORLD_UID,
       users,
       ...cast,
+      portals,
     };
   }
 

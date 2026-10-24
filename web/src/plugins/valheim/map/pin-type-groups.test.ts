@@ -8,20 +8,21 @@ import {
 } from './pin-type-groups';
 
 describe('pin type groups (ROK-1943 D7/D8, Q2 = a)', () => {
-    it('lists all 11 chips in the ruled fixed order', () => {
+    it('lists all 12 chips in the ruled fixed order, Scanned portals right after Portal', () => {
         expect(PIN_TYPE_GROUP_IDS).toEqual([
-            'death', 'bed', 'portal', 'boss', 'home', 'fire',
+            'death', 'bed', 'portal', 'scanned-portal', 'boss', 'home', 'fire',
             'workshop', 'mine', 'shout', 'hildir', 'other',
         ]);
         expect(PIN_TYPE_GROUPS.map((g) => g.label)).toEqual([
-            'Death', 'Bed', 'Portal', 'Boss', 'Home', 'Fire',
+            'Death', 'Bed', 'Portal', 'Scanned portals', 'Boss', 'Home', 'Fire',
             'Workshop', 'Mine', 'Shout', "Hildir's chest", 'Other',
         ]);
     });
 
-    it('every entry is a map-source chip with an icon and a tone token', () => {
+    it('every entry has an icon and a tone token; only Scanned portals is the portal-scan source', () => {
+        expect(PIN_TYPE_GROUPS.filter((g) => g.source !== 'map').map((g) => [g.id, g.source]))
+            .toEqual([['scanned-portal', 'portal-scan']]);
         for (const g of PIN_TYPE_GROUPS) {
-            expect(g.source).toBe('map');
             expect(g.Icon).toBeTruthy();
             expect(g.toneClass).toMatch(/^text-/);
         }
@@ -53,8 +54,17 @@ describe('pin type groups (ROK-1943 D7/D8, Q2 = a)', () => {
         expect(rawTypesFor(null)).toBeUndefined();
     });
 
+    it('ROK-1946 D11/D13: no raw type maps to Scanned portals and it sends no raw types', () => {
+        expect(groupOf('Icon4')).toBe('portal');
+        for (const raw of ['Icon4', 'rl:scanned-portal', 'Bed', '17']) expect(groupOf(raw)).not.toBe('scanned-portal');
+        expect(PIN_TYPE_GROUPS.find((g) => g.id === 'scanned-portal')?.match('Icon4')).toBe(false);
+        expect(rawTypesFor(['scanned-portal'])).toEqual([]);
+        expect(rawTypesFor(['scanned-portal', 'death'])).toEqual(['Death']);
+    });
+
     it('isPinTypeGroupId narrows only the known ids', () => {
         expect(isPinTypeGroupId('portal')).toBe(true);
+        expect(isPinTypeGroupId('scanned-portal')).toBe(true);
         expect(isPinTypeGroupId('nope')).toBe(false);
         expect(isPinTypeGroupId('toString')).toBe(false);
     });

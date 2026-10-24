@@ -155,3 +155,20 @@ describe('PinLayer Escape dismisses hover/focus labels (ROK-1837 Codex r6)', () 
         expect(labelClasses(home)).toEqual(expect.arrayContaining(HOVER_FOCUS));
     });
 });
+
+describe('PinLayer scanned portals (ROK-1946 D9/D10)', () => {
+    it('a scanned portal is "<tag> (Scanned portal)" on a border-success ring; a player Portal is not', () => {
+        render(
+            <PinLayer
+                grid={GRID}
+                pins={[pin({ type: 'rl:scanned-portal', label: 'home' }), pin({ type: 'Icon4', label: 'gate' })]}
+                scale={1}
+                showShared={false}
+            />,
+        );
+        const disc = (name: string) => screen.getByRole('button', { name }).querySelector('svg')?.parentElement?.className.split(' ');
+        expect(disc('home (Scanned portal)')).toEqual(expect.arrayContaining(['border-2', 'border-success']));
+        expect(disc('gate (Portal)')).not.toContain('border-success');
+        expect(disc('gate (Portal)')).toContain('border-edge-strong');
+    });
+});

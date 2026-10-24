@@ -303,8 +303,8 @@ disappears — there are no deltas. Prefabs are an open set: vanilla
 | `omitted` | int | portals the mod dropped above 4 096 |
 
 Message-level rule (§6): (`prefab`, `x`, `y`, `z`) is unique across `portals`.
-Until the ingest story (ROK-1946) lands, the server validates a `portals`
-message and answers 202 `accepted` **without storing it**.
+The server stores it (ROK-1946); the latest scan replaces the world's
+portals, and an older or equal `capturedAt` is skipped as stale.
 
 ## 6. Strict keys and refinements
 

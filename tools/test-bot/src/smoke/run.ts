@@ -69,6 +69,7 @@ import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
 import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
 import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { hubNotificationsDmTests } from "./tests/hub-notifications-dm.test.js";
+import { hubPollEmbedTests } from "./tests/hub-poll-embed.test.js";
 import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 import { valheimClaimDmTests } from "./tests/valheim-claim-dm.test.js";
@@ -232,6 +233,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...channelLifecycleTests,
     ...embedHubLinkTests,
     ...hubNotificationsDmTests,
+    ...hubPollEmbedTests,
     ...hubPostRelayTests,
     ...hubProposalNotificationsTests,
     ...valheimClaimDmTests,

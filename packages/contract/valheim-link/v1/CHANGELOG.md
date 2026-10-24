@@ -3,6 +3,13 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-24 (additive, doc only) — `portals` stored
+
+- **Additive, no wire change.** The server now stores `portals` (ROK-1946):
+  the latest scan replaces the world's portals; older or equal `capturedAt`
+  is skipped as stale. §5c's "accepted without storing" sentence updated.
+  `schema.json` and fixtures unchanged.
+
 ## v1 — 2026-10-23 (additive) — `portals`
 
 - **Additive.** New message `kind: "portals"` (ROK-1944): every portal in the

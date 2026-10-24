@@ -58,7 +58,7 @@ function keyMatches(
   if (msg.kind === 'items' || msg.kind === 'recipes') {
     return snap.steamId === null && snap.playerId === null;
   }
-  if (msg.kind === 'containers') {
+  if (msg.kind === 'containers' || msg.kind === 'portals') {
     return (
       snap.steamId === null &&
       snap.playerId === null &&
@@ -85,8 +85,6 @@ export function validateSnapshotPayload(
   const msg = parsed.data;
   if (msg.kind !== snap.kind)
     return { ok: false, detail: 'invalid:kind_mismatch' };
-  if (msg.kind === 'portals')
-    return { ok: false, detail: 'invalid:kind_unsupported' };
   if (!keyMatches(snap, msg))
     return { ok: false, detail: 'invalid:key_mismatch' };
   return { ok: true, message: msg };

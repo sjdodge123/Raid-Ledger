@@ -179,13 +179,13 @@ describe('hub-tagged event card re-sync (ROK-1895, integration)', () => {
     const taggedHubId = await seedHub(gameId, 'Server Beta 1895');
     await postCard(eventId, gameId);
     const posted: unknown[] = sendEmbed.mock.calls[0] ?? [];
-    expect(hubUrls(posted[2])).toEqual([`${BASE}/guilds/${gameHubId}`]);
+    expect(hubUrls(posted[2])).toEqual([`${BASE}/hubs/${gameHubId}`]);
     expect(descriptionOf(posted[1])).not.toContain('Hub: ');
 
     await tag(eventId, taggedHubId);
     await waitFor(() => {
       const { embed, row } = lastEdit();
-      expect(hubUrls(row)).toEqual([`${BASE}/guilds/${taggedHubId}`]);
+      expect(hubUrls(row)).toEqual([`${BASE}/hubs/${taggedHubId}`]);
       expect(descriptionOf(embed)).toContain('Hub: **Server Beta 1895**');
       return Promise.resolve();
     });
@@ -194,7 +194,7 @@ describe('hub-tagged event card re-sync (ROK-1895, integration)', () => {
     await tag(eventId, null);
     await waitFor(() => {
       const { embed, row } = lastEdit();
-      expect(hubUrls(row)).toEqual([`${BASE}/guilds/${gameHubId}`]);
+      expect(hubUrls(row)).toEqual([`${BASE}/hubs/${gameHubId}`]);
       expect(descriptionOf(embed)).not.toContain('Hub: ');
       return Promise.resolve();
     });

@@ -153,11 +153,6 @@ describe('Valheim Link message ingest (ROK-1833)', () => {
         'accepted',
       );
       const rows = await snapshots(id);
-      if (msg['kind'] === 'portals') {
-        // ROK-1944: validated and accepted, stored only once ROK-1946 lands.
-        expect(rows).toHaveLength(0);
-        return;
-      }
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ kind: msg['kind'], status: 'pending' });
     },
@@ -185,6 +180,34 @@ describe('Valheim Link message ingest (ROK-1833)', () => {
     expect(after[0]?.capturedAt.toISOString()).toBe(
       new Date(String(newest.capturedAt)).toISOString(),
     );
+  });
+
+  it('D5: a malformed portal entry is 400 and the previous portals snapshot stays (ROK-1946)', async () => {
+    const id = await valheimServer(1);
+    const token = await issueToken(id);
+    const good = message('portals-vanilla', id, recent(10));
+    expect((await post('portals', token, json(good))).status).toBe(202);
+    const [before] = await snapshots(id);
+    const portals = good['portals'] as Array<Record<string, unknown>>;
+    const [first, ...rest] = portals;
+    for (const bad of [
+      { ...first, pairedWith: 'home' },
+      { ...first, tag: 'x'.repeat(65) },
+    ]) {
+      const msg = { ...good, capturedAt: recent(2), portals: [bad, ...rest] };
+      const res = await post('portals', token, json(msg));
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'schema_invalid' });
+    }
+    const after = await snapshots(id);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({
+      id: before?.id,
+      kind: 'portals',
+      status: 'pending',
+      capturedAt: before?.capturedAt,
+      payload: before?.payload,
+    });
   });
 
   it('ingests a gzip-encoded fixture', async () => {

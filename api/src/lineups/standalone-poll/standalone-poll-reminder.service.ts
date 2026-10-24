@@ -20,6 +20,10 @@ import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DEDUP_TTL } from '../lineup-notification.constants';
+import {
+  lineupHubPayload,
+  type PollHubPayload,
+} from './poll-hub-payload.helpers';
 
 interface ActiveStandalonePoll {
   lineupId: number;
@@ -75,8 +79,10 @@ export class StandalonePollReminderService {
     const window = this.classifyWindow(poll.phaseDeadline);
     if (!window) return;
     const nonVoters = await this.findNonVoters(poll.matchId);
+    if (nonVoters.length === 0) return;
+    const hub = await lineupHubPayload(this.db, poll.lineupId);
     for (const v of nonVoters) {
-      await this.sendReminder(poll, v.userId, window);
+      await this.sendReminder(poll, v.userId, window, hub);
     }
   }
 
@@ -92,6 +98,7 @@ export class StandalonePollReminderService {
     poll: ActiveStandalonePoll,
     userId: number,
     window: '24h' | '1h',
+    hub: PollHubPayload,
   ): Promise<void> {
     const key = `standalone-poll-reminder:${poll.matchId}:${userId}:${window}`;
     if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
@@ -107,6 +114,7 @@ export class StandalonePollReminderService {
         lineupId: poll.lineupId,
         matchId: poll.matchId,
         window,
+        ...hub,
       },
     });
   }

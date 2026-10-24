@@ -115,7 +115,8 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
 
   /**
    * Queue the reads the initial-post path makes, in order: the match row,
-   * the lineup's visibility, the postable re-read, then the game row.
+   * the lineup's visibility, the postable re-read, the game row, then the
+   * lineup's hub tie (ROK-1896).
    */
   function queueRows(
     match: Record<string, unknown> = matchRow(),
@@ -132,7 +133,9 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     mockDb.limit
       .mockResolvedValueOnce([match])
       .mockResolvedValueOnce(visibility === null ? [] : [{ visibility }])
-      .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
+      .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }])
+      // ROK-1896: the lineup's hub tie (untagged → game-derived hub).
+      .mockResolvedValueOnce([{ guildId: null }]);
     mockDb.returning
       .mockResolvedValueOnce(opts.claim ?? [{ id: MATCH_ID }])
       .mockResolvedValueOnce(opts.store ?? [{ id: MATCH_ID }]);
@@ -302,7 +305,8 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
         matchRow({ embedMessageId: 'msg-77', embedChannelId: LINEUP_CHANNEL }),
       ])
       .mockResolvedValueOnce([{ status: 'scheduling', phaseDeadline: null }])
-      .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
+      .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }])
+      .mockResolvedValueOnce([{ guildId: null }]);
     const editEmbed = (
       service as unknown as { clientService: { editEmbed: jest.Mock } }
     ).clientService.editEmbed;

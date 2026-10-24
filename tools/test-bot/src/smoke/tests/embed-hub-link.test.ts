@@ -1,7 +1,7 @@
 /**
  * ROK-1428 (L10, ROK-1872 / spec §2.8 D15–D16) — the event card's 5th Link
  * button "Hub": a game with a visible server hub gets a Link button labelled
- * "Hub" whose URL ends `/guilds/<hubId>`; a game with no hub gets none, and
+ * "Hub" whose URL ends `/hubs/<hubId>`; a game with no hub gets none, and
  * its card carries exactly one component fewer.
  *
  * Both games are seeded fresh per run (`smoke-hub <run>` / `smoke-nohub <run>`)
@@ -74,8 +74,8 @@ function expectHubButton(card: SimpleMessage, hubId: number): void {
   if (!button || extra.length > 0) {
     throw new SmokeAssertionError(`expected one "Hub" button, got ${JSON.stringify(card.components)}`);
   }
-  if (button.customId !== null || !(button.url ?? "").endsWith(`/guilds/${String(hubId)}`)) {
-    throw new SmokeAssertionError(`"Hub" must be a Link to /guilds/${String(hubId)}, got ${JSON.stringify(button)}`);
+  if (button.customId !== null || !(button.url ?? "").endsWith(`/hubs/${String(hubId)}`)) {
+    throw new SmokeAssertionError(`"Hub" must be a Link to /hubs/${String(hubId)}, got ${JSON.stringify(button)}`);
   }
 }
 

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
-import type { ValheimMapMeta, ValheimServerPin } from '@raid-ledger/contract';
+import type { ValheimMapMeta, ValheimServerPin, ValheimServerPortal } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { valheimServerPinsHandler } from '../../../test/mocks/valheim-deaths-handlers';
@@ -20,6 +20,16 @@ const META: ValheimMapMeta = {
     pins: [pin('Bed', 'Home'), pin('Death', 'Grave')], hasSharedExplored: false, baseMap: null,
     capturedAt: '2026-10-19T12:00:00.000Z',
 };
+const PORTALS_URL = 'http://localhost:3000/plugins/valheim/armory/servers/:serverId/portals';
+const portal = (tag: string, x: number): ValheimServerPortal => ({ prefab: 'portal_wood', x, y: null, z: 0, tag });
+const PORTALS = [portal('swamp', 30), portal('', 60)];
+function portalsHandler(portals: ValheimServerPortal[], opts: { status?: number; seen?: URLSearchParams[]; omitted?: number } = {}) {
+    return http.get(PORTALS_URL, ({ request }) => {
+        opts.seen?.push(new URL(request.url).searchParams);
+        if (opts.status !== undefined) return HttpResponse.json({ message: 'no' }, { status: opts.status });
+        return HttpResponse.json({ worldUid: WORLD, scannedAt: '2026-10-23T10:00:00.000Z', omitted: opts.omitted ?? 0, portals });
+    });
+}
 const serverPin = (type: string, label: string, characterName: string, characterId: number | null): ValheimServerPin =>
     ({ x: 10, z: 10, type, label, checked: false, characterId, characterName });
 
@@ -50,6 +60,7 @@ beforeEach(() => {
     server.use(
         http.get(MAP_URL, () => HttpResponse.json(META)),
         http.get(`${MAP_URL}/fog`, async () => new HttpResponse(await gzipped())),
+        portalsHandler([]),
     );
 });
 
@@ -165,5 +176,95 @@ describe('ValheimMapView players pin layer (ROK-1943)', () => {
         await openFilters();
         expect(screen.queryByRole('radio', { name: 'Everyone' })).toBeNull();
         expect(screen.getByRole('searchbox', { name: 'Search pin labels' })).toBeInTheDocument();
+    });
+});
+
+describe('ValheimMapView scanned portals (ROK-1946)', () => {
+    it('draws the server\u2019s portals in "This character" scope beside the character\u2019s own pins', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(portalsHandler(PORTALS, { seen }));
+        view('/hub?vc=5#map', 3);
+        expect(await screen.findByRole('button', { name: 'swamp (Scanned portal)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Unnamed portal (Scanned portal)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(seen.map((q) => q.get('worldUid'))).toEqual([WORLD]);
+    });
+
+    it('another chip alone hides them', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(portalsHandler(PORTALS, { seen }));
+        view('/hub?pins=bed&vc=5#map', 3);
+        expect(await screen.findByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /\(Scanned portal\)/ })).toBeNull();
+        expect(seen).toEqual([]);
+    });
+
+    it('a label search narrows them', async () => {
+        server.use(portalsHandler(PORTALS));
+        view('/hub?q=swa&vc=5#map', 3);
+        expect(await screen.findByRole('button', { name: 'swamp (Scanned portal)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Unnamed portal (Scanned portal)' })).toBeNull();
+    });
+
+    it('a hub 404 draws no portals and no error, and the map still renders', async () => {
+        server.use(portalsHandler([], { status: 404 }));
+        view('/hub?vc=5#map', 3);
+        expect(await screen.findByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(screen.getByRole('application')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /\(Scanned portal\)/ })).toBeNull();
+        expect(screen.queryByText('Portals could not be loaded')).toBeNull();
+    });
+
+    it('a failed portal read shows its danger chip; omitted portals are counted', async () => {
+        server.use(portalsHandler([], { status: 500 }));
+        view('/hub?vc=5#map', 3);
+        expect(await screen.findByText('Portals could not be loaded')).toBeInTheDocument();
+        server.use(portalsHandler(PORTALS, { omitted: 2 }));
+        fireEvent.click(within(summary()).getByRole('button', { name: 'Retry' }));
+        await waitFor(() => expect(summary()).toHaveTextContent('Some portals were not uploaded (2).'));
+    });
+
+    it('D13: Scanned portals only in Everyone scope sends no /pins request', async () => {
+        const pinsSeen: URLSearchParams[] = [];
+        server.use(valheimServerPinsHandler([serverPin('Bed', 'Base', 'Ragnhild', 11)], { seen: pinsSeen }), portalsHandler(PORTALS));
+        view('/hub?pins=scanned-portal&players=all&vc=5#map', 3);
+        expect(await screen.findByRole('button', { name: 'swamp (Scanned portal)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Ragnhild/ })).toBeNull();
+        expect(summary()).not.toHaveTextContent('Loading pins…');
+        expect(pinsSeen).toEqual([]);
+    });
+
+    it('cold cache, Scanned portals only, /portals still pending: no "No pins match" yet', async () => {
+        let hit = false;
+        server.use(http.get(PORTALS_URL, async () => { hit = true; await delay('infinite'); return HttpResponse.json({}); }));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        expect(await screen.findByRole('application')).toBeInTheDocument();
+        await waitFor(() => expect(hit).toBe(true));
+        expect(summary()).not.toHaveTextContent('No pins match these filters.');
+        expect(within(summary()).queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    });
+
+    it('Scanned portals only and /portals failed: the portal error chip, not "No pins match"', async () => {
+        server.use(portalsHandler([], { status: 500 }));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        expect(await screen.findByText('Portals could not be loaded')).toBeInTheDocument();
+        expect(summary()).not.toHaveTextContent('No pins match these filters.');
+        expect(within(summary()).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('Scanned portals only and the scan has none: the empty state shows', async () => {
+        server.use(portalsHandler([]));
+        view('/hub?pins=scanned-portal&vc=5#map', 3);
+        await waitFor(() => expect(summary()).toHaveTextContent('No pins match these filters.'));
+        expect(within(summary()).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument();
+    });
+
+    it('without a server (character page) there is no portal layer', async () => {
+        const seen: URLSearchParams[] = [];
+        server.use(portalsHandler(PORTALS, { seen }));
+        view('/c#map');
+        expect(await screen.findByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /\(Scanned portal\)/ })).toBeNull();
+        expect(seen).toEqual([]);
     });
 });

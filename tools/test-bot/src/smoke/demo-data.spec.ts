@@ -75,5 +75,19 @@ test('withoutFixtureUsers drops claim-drive fixture users (ROK-1933)', () => {
   assert.equal(pickOperatorUser(withoutFixtureUsers(users), [])?.username, 'DragonSlayer99');
 });
 
+test('withoutFixtureUsers drops community-hub seed users (ROK-1896)', () => {
+  const users = [
+    { id: 201, username: 'community-leader' },
+    { id: 202, username: 'community-member-3' },
+    { id: 203, username: 'demo-member' },
+    { id: 204, username: 'CommunityChampion' },
+    { id: 205, username: 'demo-membership' },
+  ];
+  assert.deepEqual(
+    withoutFixtureUsers(users).map((u) => u.id),
+    [204, 205],
+  );
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -21,6 +21,7 @@ import {
   maskedLink,
 } from './discord-embed-event-chrome.helpers';
 import { formatEpoch } from '../../notifications/format-helpers';
+import { hubLine } from './discord-embed-event-body.helpers';
 import type { EmbedContext } from './discord-embed.factory';
 import type {
   SchedulingPollEmbedData,
@@ -267,18 +268,33 @@ function terminalDescription(data: SchedulingPollEmbedData): string[] {
   return lines;
 }
 
-/** Description, switched on the poll status (ROK-1549 S1-AC3/AC4, S3-AC3). */
-function buildDescription(data: SchedulingPollEmbedData): string {
+/**
+ * ROK-1896: a poll explicitly tied to a hub names it on line 1, then a blank
+ * line — in every state. The resolver sets `hubName` only for that tie; a
+ * game-derived hub stays link-only (mirrors the ROK-1895 event rule).
+ */
+function withHubName(lines: string[], data: SchedulingPollEmbedData): string[] {
+  const name = data.hubLink?.hubName;
+  return name ? [hubLine(name), '', ...lines] : lines;
+}
+
+/** Body lines, switched on the poll status (ROK-1549 S1-AC3/AC4, S3-AC3). */
+function statusLines(data: SchedulingPollEmbedData): string[] {
   const status = data.status ?? 'open';
-  if (status === 'open') return openDescription(data).join('\n');
+  if (status === 'open') return openDescription(data);
   if (status === 'locked_in') {
     // ROK-1607: the time is settled — a locked-in card must never invite a
     // vote. Only `open` says "Vote now".
     const lines = votingHead(data.slots);
     lines.push('', pollLinks(`View poll ${ARROW}`, data));
-    return lines.join('\n');
+    return lines;
   }
-  return terminalDescription(data).join('\n');
+  return terminalDescription(data);
+}
+
+/** The description: optional hub name line, then the status body. */
+function buildDescription(data: SchedulingPollEmbedData): string {
+  return withHubName(statusLines(data), data).join('\n');
 }
 
 /**

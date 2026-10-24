@@ -7,7 +7,7 @@
  */
 import { ButtonBuilder, ButtonStyle } from 'discord.js';
 
-/** Label when the link targets one hub page (`/guilds/<id>`). */
+/** Label when the link targets one hub page (`/hubs/<id>`). */
 export const HUB_LINK_LABEL = 'Hub';
 /** Label when the game has several hubs and the link targets `/hubs?game=<id>`. */
 export const HUBS_LINK_LABEL = 'Hubs';
