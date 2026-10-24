@@ -162,7 +162,7 @@ describe('GameBreakdownChart — Late % series (ROK-1938)', () => {
     });
 
     it('treats a missing avgLateRate as 0', async () => {
-        const legacy = mockGameData.games.map(({ avgLateRate: _omit, ...g }) => g);
+        const legacy = mockGameData.games.map((g) => Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'avgLateRate')));
         server.use(
             http.get(`${API_BASE}/analytics/attendance/games`, () => HttpResponse.json({ games: legacy })),
         );

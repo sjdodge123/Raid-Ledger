@@ -265,7 +265,7 @@ describe('ReliabilityLeaderboard — Late column (ROK-1938)', () => {
     });
 
     it('renders 0 when the server omits lateCount', async () => {
-        const { lateCount: _omit, ...legacy } = mockUsers[0] ?? { lateCount: 0 };
+        const legacy = Object.fromEntries(Object.entries(mockUsers[0] ?? {}).filter(([k]) => k !== 'lateCount'));
         server.use(
             http.get(`${API_BASE}/analytics/attendance/users`, () =>
                 HttpResponse.json({ users: [legacy], totalUsers: 1 }),

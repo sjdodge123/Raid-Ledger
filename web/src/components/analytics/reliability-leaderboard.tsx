@@ -57,14 +57,20 @@ export function ReliabilityLeaderboard() {
             ) : sorted.length === 0 ? (
                 <p className="text-muted text-center py-8">No attendance data recorded yet.</p>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
-                        <tbody>{sorted.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
-                    </table>
-                    <p className="text-xs text-muted mt-3">{LATE_FOOTNOTE}</p>
-                </div>
+                <LeaderboardTable users={sorted} sortField={sortField} sortDir={sortDir} handleSort={handleSort} />
             )}
+        </div>
+    );
+}
+
+function LeaderboardTable({ users, sortField, sortDir, handleSort }: { users: UserReliabilityDto[]; sortField: SortField; sortDir: SortDir; handleSort: (f: SortField) => void }) {
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
+                <tbody>{users.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
+            </table>
+            <p className="text-xs text-muted mt-3">{LATE_FOOTNOTE}</p>
         </div>
     );
 }
