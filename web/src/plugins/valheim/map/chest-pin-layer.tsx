@@ -7,7 +7,7 @@
  * its React parent, so a key or pointer press in the dialog would otherwise
  * reach the viewport's pan/zoom handlers.
  */
-import type { JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import type { ValheimContainerSummary, ValheimMapGrid } from '@raid-ledger/contract';
 import { ChestDetail } from '../materials/chest-detail';
 import { PinLayer } from './pin-layer';
@@ -37,13 +37,21 @@ interface ChestPinDetailProps {
     onClose: () => void;
 }
 
-/** The opened chest; the layer reads carts and ships too, so the detail does. */
+/**
+ * The opened chest; the layer reads carts and ships too, so the detail does.
+ * It closes once the layer no longer lists the chest (Chests chip off, filtered
+ * out, gone from the scan): its base names and icons come from the layer.
+ */
 export function ChestPinDetail({ layer, chest, onClose }: ChestPinDetailProps): JSX.Element | null {
+    const gone = chest !== null && !layer.chests.some((c) => c.key === chest.key);
+    useEffect(() => {
+        if (gone) onClose();
+    }, [gone, onClose]);
     return (
         <ChestDetail
             serverId={layer.ctx.serverId}
             includeVehicles
-            chest={chest}
+            chest={gone ? null : chest}
             bases={layer.bases}
             ctx={layer.ctx}
             onClose={onClose}

@@ -86,6 +86,15 @@ describe('ValheimMapView Chests layer (ROK-1859 D12–D14)', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
+    it('turning the Chests chip off while a chest dialog is open closes the dialog', async () => {
+        view('/hub?pins=death,chest&vc=5#map', 3);
+        fireEvent.click(await screen.findByRole('button', { name: HOME_CHEST }));
+        expect(await screen.findByRole('dialog', { name: 'Wood chest 2 · Base near x 3, z 53' })).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('map-pin-type-chest'));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(screen.queryByRole('button', { name: /\(Chest\)$/ })).toBeNull();
+    });
+
     it('D13: chests of another world draw no pins and say so', async () => {
         server.use(valheimContainersHandler({ ...containersWithBases(), worldUid: 'world-2' }));
         view('/hub?vc=5#map', 3);
