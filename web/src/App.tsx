@@ -34,8 +34,6 @@ if (_magicLinkToken) void startMagicLinkRedeem(_magicLinkToken);
 // (StartupGate waits for it), and follow logout/identity changes in other tabs.
 void startBootSession();
 installCrossTabAuth(queryClient);
-// ROK-1947: a resumed tab (or a bfcache restore) re-mints an expired in-memory token up front.
-installResumeRefresh(queryClient);
 
 // Seed auth cache from the cached user for instant return visits (a prior sign-in) — but not while
 // a magic link may be swapping in a different user.
@@ -72,6 +70,11 @@ function useAppBootstrap() {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  // ROK-1947: a resumed tab (bfcache restore, back online) re-mints an expired in-memory
+  // token, and any successful refresh refetches 401'd queries. An effect with cleanup, so
+  // HMR / StrictMode never stack the listeners.
+  useEffect(() => installResumeRefresh(queryClient), []);
 
   useEffect(() => {
     if (getAuthMethod() || isMagicLinkRedeemPending()) {
