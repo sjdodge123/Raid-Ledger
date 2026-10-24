@@ -6,7 +6,7 @@
  * A tile opens the L4 dialog in viewer mode via `hub-gallery-store.ts`.
  * Default export so the registration can `React.lazy` it.
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import type { HubMediaItem } from '@raid-ledger/contract';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -21,6 +21,8 @@ import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { HubGalleryChips } from './hub-gallery-chips';
 import { useHubGalleryFilter, useHubGalleryStore } from './hub-gallery-store';
 import { HubGalleryTile } from './hub-gallery-tile';
+
+const HubGalleryDialogHost = lazy(() => import('./hub-gallery-dialog'));
 
 export const GALLERY_EDITOR_EMPTY_HINT =
     "No pictures yet. Death screenshots from your server's Discord appear here once an admin links the screenshot channel.";
@@ -43,6 +45,7 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
     const chosen = useHubGalleryFilter(guildId);
     const setFilter = useHubGalleryStore((s) => s.setFilter);
     const openGallery = useHubGalleryStore((s) => s.openGallery);
+    const request = useHubGalleryStore((s) => s.request);
     const desktop = useMediaQuery(DESKTOP_MQ);
     const all = useQuery(hubMediaStripQuery(guildId, 'all'));
     const filters = availableFilters(all.data?.kinds ?? []);
@@ -60,6 +63,9 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
             <GalleryStrip items={(shown.data?.items ?? []).slice(0, limit)}
                 onOpen={(index, el) => openGallery({ guildId, mode: 'viewer', filter, index, returnFocus: el })} />
             <p className="text-xs text-muted">From the screenshot channel · newest first</p>
+            {request?.guildId === guildId && (
+                <Suspense fallback={null}><HubGalleryDialogHost request={request} canEdit={page.viewer.canEdit} /></Suspense>
+            )}
         </div>
     );
 }
