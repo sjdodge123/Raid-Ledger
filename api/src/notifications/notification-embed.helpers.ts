@@ -15,6 +15,7 @@ import {
 } from './notification-embed.subscribed-game';
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
+import { addPollHubField } from './notification-embed.poll-hub';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -280,6 +281,7 @@ export function addTypeSpecificFields(
   if (!def) return;
   for (const [key, name] of def.fields) addFieldIf(embed, payload, key, name);
   if (def.voice) addVoiceChannelField(embed, payload);
+  if (type === 'community_lineup') addPollHubField(embed, payload);
 }
 
 /** Handle roster_reassigned with conditional newRole field. */
