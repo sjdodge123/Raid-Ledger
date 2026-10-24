@@ -2,15 +2,18 @@
  * ROK-1943 — the Map view's pin filter wiring: reads the four URL filters
  * (D9/D10), writes them in the `useSelectionWriter` style (`replace: true`,
  * hash kept), and fetches the cross-player layer in a players scope. Without a
- * `serverId` (character page) the scope is always this character.
+ * `serverId` (character page) the scope is always this character and there is
+ * no portal layer (ROK-1946).
  */
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
 import { useValheimServerPins } from '../hooks/use-valheim-server-pins';
+import { useValheimServerPortals } from '../hooks/use-valheim-server-portals';
 import {
     activeFilterCount, clearPinFilters, filterPins, parsePinFilter, toggleType, writePinFilter, type PinFilter,
 } from './pin-filter';
-import { layerStatus, type PinFilterSummary } from './pin-filter-summary';
+import { layerStatus, portalLayerFailed, type PinFilterSummary } from './pin-filter-summary';
+import { filterPortals } from './portal-pins';
 import { rawTypesFor, type PinTypeGroupId } from './pin-type-groups';
 
 export type { PinFilterSummary, PinLayerStatus } from './pin-filter-summary';
@@ -64,19 +67,40 @@ function usePanel(filter: PinFilter, characterId: number, serverId: number | und
     };
 }
 
+interface PortalLayer {
+    pins: readonly ValheimMapPin[];
+    summary: Pick<PinFilterSummary, 'portalsError' | 'portalsOmitted' | 'onRetryPortals'>;
+}
+
+/** ROK-1946: the scanned portals, filtered (D12); hub-only, and only while the chip can show them. */
+function usePortalLayer(filter: PinFilter, serverId: number | undefined, worldUid: string): PortalLayer {
+    const on = serverId !== undefined && (filter.types === null || filter.types.has('scanned-portal'));
+    const query = useValheimServerPortals({ serverId: serverId ?? 0, worldUid }, on);
+    const data = on ? query.data : undefined;
+    return {
+        pins: filterPortals(data?.portals ?? [], filter),
+        summary: {
+            portalsError: on && portalLayerFailed(query), portalsOmitted: data?.omitted ?? 0,
+            onRetryPortals: () => void query.refetch(),
+        },
+    };
+}
+
 /** The Map view's pin filter: the pins to draw, the panel state and the summary line. */
 export function usePinFilter({ characterId, serverId, meta }: PinFilterArgs): PinFilterView {
     const filter = effectiveFilter(new URLSearchParams(useLocation().search), serverId);
     const panel = usePanel(filter, characterId, serverId);
     const players = filter.players === 'character' ? 'all' : filter.players;
-    const layerOn = filter.players !== 'character';
     const types = rawTypesFor(filter.types);
+    // D13: no map chip picked (e.g. Scanned portals only) → no pins request.
+    const layerOn = filter.players !== 'character' && types?.length !== 0;
     const server = useValheimServerPins({ serverId: serverId ?? 0, worldUid: meta.worldUid, players, types }, layerOn);
-    const pins = filterPins(meta.pins, filter, server.data?.pins);
+    const portals = usePortalLayer(filter, serverId, meta.worldUid);
+    const pins = [...filterPins(meta.pins, filter, layerOn ? server.data?.pins : []), ...portals.pins];
     const summary: PinFilterSummary = {
         activeCount: panel.activeCount, count: pins.length, status: layerStatus(server, layerOn),
         truncated: layerOn && server.data?.truncated === true,
-        onRetry: () => void server.refetch(), onClear: panel.onClearAll,
+        onRetry: () => void server.refetch(), onClear: panel.onClearAll, ...portals.summary,
     };
     return { pins, panel, summary };
 }

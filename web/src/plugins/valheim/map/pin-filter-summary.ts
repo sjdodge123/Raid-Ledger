@@ -21,6 +21,11 @@ export interface PinFilterSummary {
     /** The layer hit `VALHEIM_SERVER_PINS_CAP` — "Showing the first 2,000 pins…". */
     truncated: boolean;
     onRetry: () => void;
+    /** ROK-1946 D15: the scanned-portal layer's failure (a hub 404 is no layer, not an error). */
+    portalsError: boolean;
+    /** Portals the mod left out of the scan; > 0 appends the "not uploaded" line. */
+    portalsOmitted: number;
+    onRetryPortals: () => void;
     /** "Clear filters" in the empty state — same as Clear all. */
     onClear: () => void;
 }
@@ -39,4 +44,15 @@ export const PIN_SUMMARY_TEXT = {
     error: 'Pins could not be loaded',
     empty: 'No pins match these filters.',
     truncated: 'Showing the first 2,000 pins — narrow the filters.',
+    portalsError: 'Portals could not be loaded',
 } as const;
+
+/** D15: the omitted-portals line. */
+export function portalsOmittedText(omitted: number): string {
+    return `Some portals were not uploaded (${omitted}).`;
+}
+
+/** True when the portal layer failed for a reason other than the hub 404. */
+export function portalLayerFailed(query: Pick<UseQueryResult, 'isError' | 'error'>): boolean {
+    return query.isError && httpStatusOf(query.error) !== 404;
+}
