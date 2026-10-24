@@ -3621,3 +3621,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — feat/rok-1948-planner-spoilers (surfaced during ROK-1948 review fix round)
 
 - **low** — `api/src/plugins/valheim/armory/read/valheim-recipes.service.ts` (`recipeAtlas` on catalogue/tree/plan) + the stored items atlas: spoiler protection prunes every JSON field, but the recipe/items atlas PNGs are served whole, so a member can still see hidden items' and stations' ICONS by opening the atlas image (no names, recipes or counts). Pre-existing design of the shared atlas; not in ROK-1948's scope. Suggested: serve a per-visible-set atlas (or per-icon crops) while `spoilers === 'protected'`, cached on the same pruned-graph key.
+
+### 2026-10-24 — PR #1798 feat/rok-1942-hub-gallery (surfaced in GitHub CI discord-smoke; branch touches no Discord paths)
+
+- **med (CI flake; pre-existing)** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts` "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count" — run 40140524373 job 121011249490: `AC7: no PLAYING NOW post with a voice link … last rendered "<no post for this game>"` after 95.3s; 47/48 passed. The ROK-1942 diff has 0 files under discord-bot/notifications/lfg/voice/test-bot. Likely the now-spawn voice channel/positional-pick fragility already noted under 2026-09-07 rok-1494. Suggested: make the now-group spawn pick its voice channel by id, not index, and loop the spec 50× with the targeted-smoke recipe to measure the rate.
