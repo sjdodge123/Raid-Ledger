@@ -30,7 +30,8 @@ import {
   type TasteProfileDimensionsDto,
   type VectorTitle,
 } from '@raid-ledger/contract';
-import { deriveArchetype } from './archetype.helpers';
+import { deriveArchetype, deriveTier } from './archetype.helpers';
+import { TIER_DESCRIPTIONS } from './archetype-copy';
 
 function makeDimensions(
   overrides: Partial<TasteProfileDimensionsDto> = {},
@@ -57,6 +58,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
   describe('AC regression — high intensity is never Casual', () => {
     it('returns Hardcore for intensity 95 / focus 77 / breadth 20 / consistency 0 (old AC-1 regression)', () => {
       const result: ArchetypeDto = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({
           intensity: 95,
           focus: 77,
@@ -72,6 +74,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('returns Casual for intensity 34 with all other signals zero (AC 2)', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 34 }),
         dimensions: makeDimensions(),
       });
@@ -81,6 +84,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('returns Hardcore with empty vectorTitles for high-intensity / low axis player (AC 3)', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({
           intensity: 90,
           focus: 10,
@@ -105,6 +109,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
       [85, 'Hardcore'],
     ])('intensity=%i → %s', (intensity, expectedTier) => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity }),
         dimensions: makeDimensions(),
       });
@@ -116,6 +121,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
   describe('top-axis floor (AC 5)', () => {
     it('emits no vectorTitles when the top score is 29', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 29 }),
       });
@@ -125,6 +131,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('emits a single vectorTitle when the top score is exactly 30', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 30 }),
       });
@@ -137,6 +144,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
   describe('close-window (AC 6)', () => {
     it('emits both titles when diff ≤ 10 and both ≥ 30 (higher score first)', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 80, mmo: 72 }),
       });
@@ -146,6 +154,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('emits a single title when diff > 10', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 80, mmo: 69 }),
       });
@@ -157,6 +166,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
   describe('cap at 2 (AC 8)', () => {
     it('never emits more than two titles even when 3+ scores are within the window', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 80, mmo: 78, rpg: 76 }),
       });
@@ -171,6 +181,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
     it('resolves equal scores by TASTE_PROFILE_AXIS_POOL order (pvp before mmo)', () => {
       // pvp is index 1, mmo is index 3 in TASTE_PROFILE_AXIS_POOL — pvp wins slot 0
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 70, mmo: 70 }),
       });
@@ -181,6 +192,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
     it('resolves equal scores at the cap boundary (3-way tie → pvp + mmo, rpg dropped)', () => {
       // pool order: pvp(1) < mmo(3) < rpg(9) — first two win, third dropped by cap
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 70, mmo: 70, rpg: 70 }),
       });
@@ -193,6 +205,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
     it('Hero uses max(rpg, fantasy) and beats lone single-axis competitors', () => {
       // Hero score = max(50, 40) = 50, beats any other axis (all 0)
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ rpg: 50, fantasy: 40 }),
       });
@@ -202,6 +215,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('Architect uses max(crafting, automation, sandbox)', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({
           crafting: 45,
@@ -217,6 +231,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
   describe('descriptions shape', () => {
     it('returns a non-empty tier description and one description per vector title', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 90 }),
         dimensions: makeDimensions({ pvp: 80, mmo: 72 }),
       });
@@ -234,6 +249,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('returns empty titles description array when vectorTitles is empty', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 90 }),
         dimensions: makeDimensions(),
       });
@@ -249,6 +265,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
     it('only returns tiers enumerated in INTENSITY_TIERS', () => {
       for (const intensity of [0, 34, 35, 59, 60, 84, 85, 100]) {
         const result = deriveArchetype({
+          hasPresenceData: true,
           intensityMetrics: makeMetrics({ intensity }),
           dimensions: makeDimensions(),
         });
@@ -259,6 +276,7 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
 
     it('only returns titles enumerated in VECTOR_TITLES', () => {
       const result = deriveArchetype({
+        hasPresenceData: true,
         intensityMetrics: makeMetrics({ intensity: 50 }),
         dimensions: makeDimensions({ pvp: 80, mmo: 72 }),
       });
@@ -267,5 +285,31 @@ describe('deriveArchetype (ROK-1083 composed shape)', () => {
         expect(VECTOR_TITLES).toContain(title);
       }
     });
+  });
+});
+
+describe('Newcomer tier — no presence data (ROK-1935)', () => {
+  it('deriveTier returns Newcomer when the player has no presence data, whatever the intensity', () => {
+    expect(deriveTier(0, false)).toBe('Newcomer');
+    expect(deriveTier(95, false)).toBe('Newcomer');
+  });
+
+  it('deriveTier keeps the threshold ladder when presence data exists', () => {
+    expect(deriveTier(0, true)).toBe('Casual');
+    expect(deriveTier(34, true)).toBe('Casual');
+    expect(deriveTier(35, true)).toBe('Regular');
+  });
+
+  it('deriveArchetype titles a no-presence player Newcomer with the Newcomer copy', () => {
+    const result = deriveArchetype({
+      hasPresenceData: false,
+      intensityMetrics: makeMetrics(),
+      dimensions: makeDimensions({ rpg: 80 }),
+    });
+
+    expect(result.intensityTier).toBe('Newcomer');
+    expect(result.intensityTier).not.toBe('Casual');
+    expect(result.vectorTitles).toEqual(['Hero']);
+    expect(result.descriptions.tier).toBe(TIER_DESCRIPTIONS.Newcomer);
   });
 });
