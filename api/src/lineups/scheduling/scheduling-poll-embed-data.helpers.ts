@@ -97,13 +97,46 @@ export async function loadLockedInTime(
   return event?.startTime ? new Date(event.startTime).toISOString() : null;
 }
 
-/** ROK-1872: the poll game's hub link, best-effort (logs + null on failure). */
-function loadPollHubLink(
+/**
+ * ROK-1896: the hub a poll is explicitly tied to (`community_lineups.guild_id`).
+ *
+ * @param db - Drizzle handle.
+ * @param lineupId - The match's parent lineup.
+ * @returns The tied hub id, or null when untagged or the lineup is gone.
+ */
+export async function loadLineupHubId(
+  db: Db,
+  lineupId: number,
+): Promise<number | null> {
+  const [lineup] = await db
+    .select({ guildId: schema.communityLineups.guildId })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  return lineup?.guildId ?? null;
+}
+
+/**
+ * ROK-1872: the poll's hub link, best-effort (logs + null on failure).
+ * ROK-1896: the lineup's explicit hub tie wins over the game-derived hub
+ * (and carries the hub's name); a hidden / archived tie falls back to it.
+ */
+async function loadPollHubLink(
   db: Db,
   input: EmbedDataInput,
 ): Promise<HubLink | null> {
   const { gameId, clientUrl } = input;
-  return resolveGameHubLinkSafe(db, { gameId, clientUrl }, logger);
+  const taggedGuildId = await loadLineupHubId(db, input.lineupId).catch(
+    (err: unknown) => {
+      logger.warn(`Hub tie lookup failed for lineup ${input.lineupId}: ${String(err)}`);
+      return null;
+    },
+  );
+  return resolveGameHubLinkSafe(
+    db,
+    { gameId, taggedGuildId, clientUrl },
+    logger,
+  );
 }
 
 /**
