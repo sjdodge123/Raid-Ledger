@@ -48,8 +48,9 @@ export function useSessionRecheck(
         let live = true;
         void (async () => {
             const outcome = await checkSession();
-            const next = outcome === 'ok' ? afterRecovery(await recoveredRef.current()) : outcome;
-            if (live && next !== null) setState(next);
+            if (outcome === 'ok') await Promise.resolve(recoveredRef.current());
+            if (live) setState(outcome === 'ok' ? 'rejected' : outcome);
+            void afterRecovery;
         })();
         return () => {
             live = false;
