@@ -191,10 +191,12 @@ describe('ValheimMapView scanned portals (ROK-1946)', () => {
     });
 
     it('another chip alone hides them', async () => {
-        server.use(portalsHandler(PORTALS));
+        const seen: URLSearchParams[] = [];
+        server.use(portalsHandler(PORTALS, { seen }));
         view('/hub?pins=bed&vc=5#map', 3);
         expect(await screen.findByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /\(Scanned portal\)/ })).toBeNull();
+        expect(seen).toEqual([]);
     });
 
     it('a label search narrows them', async () => {
