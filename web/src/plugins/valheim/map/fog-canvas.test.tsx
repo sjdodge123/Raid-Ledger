@@ -87,7 +87,7 @@ describe('FogCanvas (ROK-1837 D7)', () => {
         expect(canvas?.getAttribute('aria-hidden')).toBe('true');
     });
 
-    it('paints explored 0, shared-only 0.45, unexplored 0.92 in the theme colour', () => {
+    it('paints explored 0, shared-only 0.45, unexplored 1 (opaque) in the theme colour', () => {
         render(<FogCanvas size={SIZE} personal={personal} shared={shared} />);
         const img = painted.at(-1);
         expect(alphaAt(img, 0, 0)).toBe(0);
