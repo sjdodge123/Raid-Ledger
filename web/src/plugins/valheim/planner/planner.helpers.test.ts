@@ -17,6 +17,7 @@ import {
     shoppingListText,
     stockAgeLabel,
     viaChips,
+    hidesUndiscovered,
 } from './planner.helpers';
 
 const station = (p: string) => (p === 'forge' ? 'Forge' : p);
@@ -129,5 +130,21 @@ describe('planner filters', () => {
         expect(activePlannerFilters(DEFAULT_PLANNER_FILTERS)).toBe(0);
         expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'both' })).toBe(1);
         expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'piece', category: 'Weapon', includePersonal: true, includeVehicles: false })).toBe(4);
+    });
+});
+
+describe('undiscovered filter (ROK-1862)', () => {
+    it('counts "Hide undiscovered" in the funnel badge; off by default', () => {
+        expect(DEFAULT_PLANNER_FILTERS.hideUndiscovered).toBe(false);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, hideUndiscovered: true })).toBe(1);
+    });
+    it('applies only when the server could read the known list', () => {
+        const on = { hideUndiscovered: true };
+        expect(hidesUndiscovered(on, 'known')).toBe(true);
+        expect(hidesUndiscovered(on, 'no-character')).toBe(false);
+        expect(hidesUndiscovered(on, 'truncated')).toBe(false);
+        expect(hidesUndiscovered(on, 'outdated')).toBe(false);
+        expect(hidesUndiscovered(on, undefined)).toBe(false);
+        expect(hidesUndiscovered({ hideUndiscovered: false }, 'known')).toBe(false);
     });
 });

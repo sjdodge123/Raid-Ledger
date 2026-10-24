@@ -5,7 +5,8 @@
  * from the same committed state (spec §2.5).
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ValheimMapBaseMap } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
@@ -20,10 +21,17 @@ import {
   MATERIALS_READ_TX,
   MaterialsReader,
 } from './valheim-materials.repository';
+import {
+  claimedProfileSql,
+  type MaterialsViewer,
+} from './valheim-materials.privacy';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
 const blobs = schema.valheimLinkBlobs;
+/** Aliases `claimedProfileSql` expects (`p` profile, `u` its claimer). */
+const p = alias(schema.valheimProfiles, 'p');
+const u = alias(schema.users, 'u');
 
 @Injectable()
 export class ValheimRecipesReadRepository {
@@ -55,6 +63,25 @@ export class RecipesReader {
   /** The set's five child tables (for the in-memory graph, D5). */
   loadRows(setId: number): Promise<RecipeSetRows> {
     return loadRecipeSetRows(this.db, setId);
+  }
+
+  /**
+   * ROK-1862 D4: `known_recipes` of every profile on `serverId` the viewer
+   * validly claims (same rule as personal chests), one array per profile.
+   * `[]` = no character; an impersonated session reads nothing.
+   */
+  async knownRecipesFor(
+    serverId: number,
+    viewer: Pick<MaterialsViewer, 'id' | 'impersonated'>,
+  ): Promise<string[][]> {
+    if (viewer.impersonated) return [];
+    const rows = await this.db
+      .select({ known: p.knownRecipes })
+      .from(p)
+      .innerJoin(u, eq(u.id, p.claimedBy))
+      .where(and(eq(p.pelicanServerId, serverId), claimedProfileSql(viewer.id)))
+      .orderBy(asc(p.id));
+    return rows.map((r) => r.known);
   }
 
   /** The set's icon atlas; `ready` = its PNG blob is stored. */

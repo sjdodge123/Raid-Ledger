@@ -8,7 +8,7 @@
  * named by `stationName`); they never become a station in the switcher.
  */
 import { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import type { ValheimRecipeCatalogEntry, ValheimRecipeStation } from '@raid-ledger/contract';
+import type { ValheimRecipeCatalogEntry, ValheimRecipeDiscovery, ValheimRecipeStation } from '@raid-ledger/contract';
 import {
     processRows,
     rankCache,
@@ -22,7 +22,7 @@ import {
     type StationGroup,
     type StockTotals,
 } from './crafting.helpers';
-import { DEFAULT_PLANNER_FILTERS, type PlannerFilters } from './planner.helpers';
+import { DEFAULT_PLANNER_FILTERS, hidesUndiscovered, type PlannerFilters } from './planner.helpers';
 
 export interface CraftingWindowInput {
     entries: readonly ValheimRecipeCatalogEntry[];
@@ -33,6 +33,8 @@ export interface CraftingWindowInput {
     totals: StockTotals | null;
     /** A processor's display name for process-only rows; keep it stable (it feeds a memo). */
     stationName: (prefab: string) => string;
+    /** ROK-1862 — the catalogue's discovery status; "Hide undiscovered" applies only when `known`. */
+    discovery?: ValheimRecipeDiscovery | undefined;
 }
 
 /** Why the list is empty: nothing matches the search/filters, or nothing in this mode can be upgraded. */
@@ -75,11 +77,13 @@ const NO_ROWS: readonly CraftRow[] = [];
 function useGroups(input: CraftingWindowInput, mode: CraftMode) {
     const { entries, stations, filters, stationName } = input;
     const { kind, category } = filters;
-    const craft = useMemo(() => stationGroups(entries, stations, 'craft', { kind, category }), [entries, stations, kind, category]);
-    const upgrade = useMemo(() => stationGroups(entries, stations, 'upgrade', { kind, category }), [entries, stations, kind, category]);
+    const hideUndiscovered = hidesUndiscovered(filters, input.discovery);
+    const f = useMemo(() => ({ kind, category, hideUndiscovered }), [kind, category, hideUndiscovered]);
+    const craft = useMemo(() => stationGroups(entries, stations, 'craft', f), [entries, stations, f]);
+    const upgrade = useMemo(() => stationGroups(entries, stations, 'upgrade', f), [entries, stations, f]);
     const upgradeCount = useMemo(() => upgrade.reduce((n, g) => n + g.rows.length, 0), [upgrade]);
     // Process-only items have no upgrades, so they join CRAFT search only.
-    const processed = useMemo(() => processRows(entries, { kind, category }, stationName), [entries, kind, category, stationName]);
+    const processed = useMemo(() => processRows(entries, f, stationName), [entries, f, stationName]);
     return { groups: mode === 'craft' ? craft : upgrade, extra: mode === 'craft' ? processed : NO_ROWS, upgradeCount };
 }
 

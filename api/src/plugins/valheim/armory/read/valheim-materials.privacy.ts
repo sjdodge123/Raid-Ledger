@@ -58,20 +58,33 @@ export function ownPersonalSql(viewer: MaterialsViewer): SQL {
   return claimedPrivateSql(viewer.id);
 }
 
-/** Private chests whose creator is a character `viewerId` validly claims. */
-function claimedPrivateSql(viewerId: number): SQL {
-  return sql`(${c.privacy} = 'private' AND EXISTS (
-    SELECT 1 FROM valheim_profiles p JOIN users u ON u.id = p.claimed_by
-    WHERE p.pelican_server_id = ${c.pelicanServerId}
-      AND p.player_id = ${c.creatorPlayerId}
-      AND p.claimed_by = ${viewerId}
+/**
+ * ROK-1862 D4 — the ONE "character `viewerId` validly claims" rule, shared by
+ * personal chests and recipe discovery so they cannot drift. Callers alias
+ * `valheim_profiles p JOIN users u ON u.id = p.claimed_by` and scope
+ * `p.pelican_server_id` themselves: claimed by the viewer, auto/admin claim
+ * or a manual one whose Steam id is the viewer's own, and the playerId never
+ * appears under two Steam ids on that server. Parenthesised so it is safe
+ * inside an `or(...)` too.
+ */
+export function claimedProfileSql(viewerId: number): SQL {
+  return sql`(p.claimed_by = ${viewerId}
       AND (p.claim_source IN ('auto', 'admin')
            OR (p.claim_source = 'manual' AND u.steam_id = p.steam_id))
       AND NOT EXISTS (
         SELECT 1 FROM valheim_profiles q
         WHERE q.pelican_server_id = p.pelican_server_id
           AND q.player_id = p.player_id
-          AND q.steam_id <> p.steam_id)))`;
+          AND q.steam_id <> p.steam_id))`;
+}
+
+/** Private chests whose creator is a character `viewerId` validly claims. */
+function claimedPrivateSql(viewerId: number): SQL {
+  return sql`(${c.privacy} = 'private' AND EXISTS (
+    SELECT 1 FROM valheim_profiles p JOIN users u ON u.id = p.claimed_by
+    WHERE p.pelican_server_id = ${c.pelicanServerId}
+      AND p.player_id = ${c.creatorPlayerId}
+      AND ${claimedProfileSql(viewerId)}))`;
 }
 
 /** Shared ∪ personal-visible — the list and detail routes. */
