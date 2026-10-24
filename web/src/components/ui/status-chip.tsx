@@ -14,19 +14,28 @@ const TONE_CLS: Record<StatusChipTone, string> = {
     neutral: 'bg-panel border-edge text-muted',
 };
 
+export type StatusChipSize = 'sm' | 'md';
+
+/** `sm` (default) is the dense table/row chip; `md` is for touch-sized rows (the phone hubs sheet). */
+const SIZE_CLS: Record<StatusChipSize, string> = {
+    sm: 'px-2 py-0.5 text-xs',
+    md: 'px-2.5 py-1 text-sm',
+};
+
 export interface StatusChipProps {
     tone: StatusChipTone;
     /** Required: the chip's colour must never be its only signal. */
     title: string;
     children: ReactNode;
     className?: string;
+    size?: StatusChipSize;
 }
 
-export function StatusChip({ tone, title, children, className }: StatusChipProps) {
+export function StatusChip({ tone, title, children, className, size = 'sm' }: StatusChipProps) {
     const extra = className ? ` ${className}` : '';
     return (
         <span data-tone={tone} title={title}
-            className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-mono ${TONE_CLS[tone]}${extra}`}>
+            className={`inline-flex items-center whitespace-nowrap rounded-full border ${SIZE_CLS[size]} font-mono ${TONE_CLS[tone]}${extra}`}>
             {children}
         </span>
     );

@@ -24,17 +24,12 @@ import {
 import type { AuthenticatedExpressRequest } from '../../../../auth/types';
 import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { armoryIdPipe } from '../valheim-armory-id.pipe';
-import {
-  NoStoreByDefault,
-  openBlob,
-  sizeOf,
-} from './valheim-armory-blob.controller';
+import { NoStoreByDefault } from './valheim-armory-blob.controller';
 import { ValheimArmoryMapBytesService } from './valheim-armory-map-bytes.service';
 
 /**
- * The base-map URL is keyed by map id and a re-import can change its PNG
- * (`upsertMap` keeps the id), so it revalidates via the sha ETag (D3).
- * The sha-keyed ROK-1836 blob route is the `immutable` one.
+ * The base-map URL is keyed by map id, and its bytes are masked per viewer
+ * (ROK-1949), so it revalidates via the mask ETag and varies by viewer.
  */
 const BASE_MAP_CACHE = 'private, no-cache';
 /** Fog changes with every snapshot: revalidate via the ETag (D4). */
@@ -47,6 +42,7 @@ function baseMapHeaders(etag: string): Record<string, string> {
     'Content-Type': 'image/png',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': BASE_MAP_CACHE,
+    Vary: 'Authorization',
     ETag: etag,
   };
 }
@@ -76,7 +72,7 @@ export class FogLayerPipe implements PipeTransform<
 export class ValheimArmoryMapBytesController {
   constructor(private readonly bytes: ValheimArmoryMapBytesService) {}
 
-  /** GET — the base-map PNG; 404 `base_map_not_ready` until stored. */
+  /** GET — the viewer-masked base-map PNG; 404 `base_map_not_ready` otherwise. */
   @Get(`${MAP}/base-map`)
   async baseMap(
     @Param('id', armoryIdPipe) id: number,
@@ -84,24 +80,19 @@ export class ValheimArmoryMapBytesController {
     @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile | undefined> {
-    const { sha256, absPath } = await this.bytes.baseMap(id, mapId, req.user);
-    const etag = `"${sha256}"`;
+    const masked = await this.bytes.baseMap(id, mapId, req.user);
     // `req.fresh` compares against the response ETag, so set it to ask —
-    // a 304 carries no body, so it may keep the validator (file unopened).
-    res.set('ETag', etag);
+    // a 304 is answered from the inputs' fingerprint, nothing is rendered.
+    res.set('ETag', masked.etag);
     if (req.fresh) {
-      res.set(baseMapHeaders(etag));
+      res.set(baseMapHeaders(masked.etag));
       return undefined;
     }
-    // Until the bytes are in hand a failure must stay no-store, no ETag.
+    // Until the masked bytes are in hand a failure stays no-store, no ETag.
     res.removeHeader('ETag');
-    const file = await openBlob(absPath, 'base_map_not_ready');
-    const size = await sizeOf(file);
-    res.set(baseMapHeaders(etag));
-    return new StreamableFile(file.createReadStream(), {
-      type: 'image/png',
-      length: size,
-    });
+    const png = await masked.bytes();
+    res.set(baseMapHeaders(masked.etag));
+    return new StreamableFile(png, { type: 'image/png', length: png.length });
   }
 
   /** GET — one fog layer's stored gzip bytes; 404 `no_<layer>_layer`. */

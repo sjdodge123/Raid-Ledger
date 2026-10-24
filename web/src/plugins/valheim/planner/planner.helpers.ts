@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia, type ValheimRecipeDiscovery } from '@raid-ledger/contract';
+import { isUndiscoveredNode } from './spoilers.helpers';
 
 export type PlannerKind = 'item' | 'piece';
 
@@ -175,11 +176,12 @@ function recipeChips(
     return chips;
 }
 
-/** The row's via-chips, plus "+N other ways" when alternatives exist. */
+/** The row's via-chips, plus "+N other ways" when alternatives exist; none for a withheld node (ROK-1948). */
 export function viaChips(
     node: ValheimPlanNode,
     stationName: (prefab: string) => string,
 ): string[] {
+    if (isUndiscoveredNode(node)) return [];
     const { via } = node;
     const chips =
         via.type === 'recipe'

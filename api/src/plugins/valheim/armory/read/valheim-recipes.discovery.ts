@@ -29,7 +29,7 @@ const LEGACY_TOKEN = /^_/;
  * legacy token. An empty list is usable: a brand-new character can know no
  * recipes yet (old mods sent tokens, never an empty list).
  */
-function usableEntries(list: readonly string[]): string[] | null {
+export function usableEntries(list: readonly string[]): string[] | null {
   const prefabs = list.filter((e) => !LEGACY_TOKEN.test(e));
   return list.length > 0 && prefabs.length === 0 ? null : prefabs;
 }
@@ -131,8 +131,10 @@ export function withNodeDiscovery(
   graph: RecipeGraph,
   k: KnownRecipes,
 ): ValheimPlanNode[] {
-  return nodes.map((n) => ({
-    ...n,
-    discovered: nodeDiscovered(graph, n, k.known),
-  }));
+  // ROK-1948 D7: a withheld leaf carries no per-viewer flag.
+  return nodes.map((n) =>
+    n.via.type === 'undiscovered'
+      ? n
+      : { ...n, discovered: nodeDiscovered(graph, n, k.known) },
+  );
 }
