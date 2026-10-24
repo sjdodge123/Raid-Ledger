@@ -60,6 +60,7 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
+import { matchHubPayload } from './poll-hub-payload.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -228,6 +229,7 @@ export class StandalonePollService {
       startTime,
       eventId,
       gameName ?? 'Game Night',
+      await matchHubPayload(this.db, matchId),
     );
   }
 

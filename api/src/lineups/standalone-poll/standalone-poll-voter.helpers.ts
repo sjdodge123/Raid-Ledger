@@ -11,6 +11,7 @@ import type { StandalonePollNotificationService } from './standalone-poll-notifi
 import { resolveUserTimezones } from '../../notifications/timezone.helpers';
 import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
 import { yesVotesOnly } from '../scheduling/scheduling-stance.helpers';
+import type { PollHubPayload } from './poll-hub-payload.helpers';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -158,6 +159,7 @@ export interface NotifyPollVotersDeps {
  * guild default → 'UTC' — so a 9 PM EDT slot never renders as next-day UTC.
  * A selected voter whose signup landed on the bench (`benched`, ROK-1874)
  * gets the "On the bench" DM instead of "Auto-signed up" — never both.
+ * `hub` (ROK-1896) is the poll's visible hub, resolved once by the caller.
  */
 export async function notifyPollVoters(
   deps: NotifyPollVotersDeps,
@@ -167,6 +169,7 @@ export async function notifyPollVoters(
   chosenTime: string,
   eventId: number,
   gameName: string,
+  hub: PollHubPayload = {},
 ): Promise<void> {
   const guildDefault =
     (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
@@ -181,12 +184,12 @@ export async function notifyPollVoters(
   for (const uid of selectedIds) {
     const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
     const sent = benched.includes(uid)
-      ? deps.notifications.notifyAutoBenched(uid, gameName, at, eventId)
-      : deps.notifications.notifyAutoSignup(uid, gameName, at, eventId);
+      ? deps.notifications.notifyAutoBenched(uid, gameName, at, eventId, hub)
+      : deps.notifications.notifyAutoSignup(uid, gameName, at, eventId, hub);
     sent.catch(noop);
   }
   for (const uid of otherIds) {
     const at = formatPollTime(chosenTime, tz.get(uid) ?? guildDefault);
-    deps.notifications.notifyPollOutcome(uid, at, eventId).catch(noop);
+    deps.notifications.notifyPollOutcome(uid, at, eventId, hub).catch(noop);
   }
 }

@@ -18,16 +18,11 @@ import {
   type RosterSplit,
 } from './standalone-poll-notification.queries';
 import { NotificationService } from '../../notifications/notification.service';
-
-/** Notification payload for standalone scheduling polls. */
-interface PollNotifPayload {
-  subtype: string;
-  lineupId: number;
-  matchId: number;
-  gameName: string;
-  creatorName: string;
-  gameCoverUrl?: string;
-}
+import {
+  pollBasePayload,
+  type PollHubPayload,
+  type PollNotifPayload,
+} from './poll-hub-payload.helpers';
 
 @Injectable()
 export class StandalonePollNotificationService {
@@ -67,13 +62,13 @@ export class StandalonePollNotificationService {
       ).filter((id) => !excluded.has(id));
       if (allRecipientIds.length === 0) return;
       const creatorName = await findCreatorName(this.db, creatorId);
-      const basePayload = this.buildBasePayload(
+      const basePayload = await pollBasePayload(this.db, {
         lineupId,
         matchId,
         gameName,
         creatorName,
         gameCoverUrl,
-      );
+      });
       await this.splitAndDispatch(
         allRecipientIds,
         gameName,
@@ -109,13 +104,13 @@ export class StandalonePollNotificationService {
       const split = await splitRoster(this.db, recipients, linkedEventId);
       if (split.roster.length === 0) return [];
       const creatorName = await findCreatorName(this.db, ids.creatorId);
-      const payload = this.buildBasePayload(
-        ids.lineupId,
-        ids.matchId,
-        game.name,
+      const payload = await pollBasePayload(this.db, {
+        lineupId: ids.lineupId,
+        matchId: ids.matchId,
+        gameName: game.name,
         creatorName,
-        game.coverUrl,
-      );
+        gameCoverUrl: game.coverUrl,
+      });
       await this.dispatchRosterSplit(split, game.name, payload, creatorName);
       return split.roster;
     } catch (error) {
@@ -140,13 +135,13 @@ export class StandalonePollNotificationService {
       const recipients = recipientIds.filter((id) => id !== ids.creatorId);
       if (recipients.length === 0) return;
       const creatorName = await findCreatorName(this.db, ids.creatorId);
-      const payload = this.buildBasePayload(
-        ids.lineupId,
-        ids.matchId,
+      const payload = await pollBasePayload(this.db, {
+        lineupId: ids.lineupId,
+        matchId: ids.matchId,
         gameName,
         creatorName,
         gameCoverUrl,
-      );
+      });
       await this.dispatchGeneric(recipients, gameName, payload, creatorName);
     } catch (error) {
       this.logger.error(
@@ -155,18 +150,22 @@ export class StandalonePollNotificationService {
     }
   }
 
-  /** DM a voter that a different timeslot was chosen (ROK-1031). */
+  /**
+   * DM a voter that a different timeslot was chosen (ROK-1031). `hub` (ROK-1896)
+   * is the poll's visible hub, spread into the payload (also for the two below).
+   */
   async notifyPollOutcome(
     userId: number,
     chosenTime: string,
     eventId: number,
+    hub: PollHubPayload = {},
   ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'Scheduling poll result',
       message: `The poll chose **${chosenTime}**. You voted for a different time so you weren't auto-signed up — check the event if you'd still like to join!`,
-      payload: { subtype: 'lineup_event_created', eventId },
+      payload: { subtype: 'lineup_event_created', eventId, ...hub },
     });
   }
 
@@ -176,13 +175,14 @@ export class StandalonePollNotificationService {
     gameName: string,
     eventTime: string,
     eventId: number,
+    hub: PollHubPayload = {},
   ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'Auto-signed up',
       message: `You voted for **${eventTime}** — you've been automatically signed up for **${gameName}**!`,
-      payload: { subtype: 'lineup_event_created', eventId },
+      payload: { subtype: 'lineup_event_created', eventId, ...hub },
     });
   }
 
@@ -195,32 +195,15 @@ export class StandalonePollNotificationService {
     gameName: string,
     eventTime: string,
     eventId: number,
+    hub: PollHubPayload = {},
   ): Promise<void> {
     await this.notificationService.create({
       userId,
       type: 'community_lineup',
       title: 'On the bench',
       message: `You voted for **${eventTime}** — you've been signed up for **${gameName}**, but the roster was full, so you're on the bench for now.`,
-      payload: { subtype: 'lineup_event_created', eventId },
+      payload: { subtype: 'lineup_event_created', eventId, ...hub },
     });
-  }
-
-  /** Build base notification payload. */
-  private buildBasePayload(
-    lineupId: number,
-    matchId: number,
-    gameName: string,
-    creatorName: string,
-    gameCoverUrl?: string | null,
-  ): PollNotifPayload {
-    return {
-      subtype: 'standalone_scheduling_poll',
-      lineupId,
-      matchId,
-      gameName,
-      creatorName,
-      ...(gameCoverUrl ? { gameCoverUrl } : {}),
-    };
   }
 
   /** Split recipients and dispatch appropriate notifications. */
