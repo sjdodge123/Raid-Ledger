@@ -86,7 +86,7 @@ export class GuildsController {
     return this.pages.byCharacter(req.user, characterId);
   }
 
-  /** ROK-1832: same viewer mute flag as core `guilds/:id` (alias parity). */
+  /** ROK-1832/1918: same core extras as `guilds/:id` (alias parity). */
   @Get(':id')
   @UseGuards(jwt, HubVisibleGuard)
   async page(
@@ -94,7 +94,7 @@ export class GuildsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildPage> {
     const page = await this.pages.page(req.user, id);
-    return this.hubs.withViewerMute(req.user, id, page);
+    return this.hubs.withCoreExtras(req.user, id, page);
   }
 
   /** ROK-1787 — Raids tab + Overview widgets (members + staff). */

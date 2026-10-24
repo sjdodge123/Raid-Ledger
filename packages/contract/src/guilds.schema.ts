@@ -5,6 +5,7 @@ import {
   HubAutoMembershipModeSchema,
   HubJoinSourceSchema,
 } from "./hub-invite.schema.js";
+import { HubWidgetPrefsSchema } from "./hub-widget-prefs.schema.js";
 
 /**
  * ROK-1785 (S1 of ROK-1781): guild page `/guilds/:id` — read shapes and the
@@ -242,6 +243,8 @@ export const GuildPageSchema = z
     server: GuildPageServerSchema.optional(),
     /** ROK-1870 — present for `game_community` hubs only. */
     community: GuildPageCommunitySchema.optional(),
+    /** ROK-1918 — saved Overview layout; `null`/absent = registry default. */
+    widgetPrefs: HubWidgetPrefsSchema.nullable().optional(),
   })
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;

@@ -22,6 +22,7 @@ import { MapViewportSection } from './map-viewport-section';
 import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
 import { HubWidgetsSection } from './hub-widgets-section';
+import { ArrangeListSection } from './arrange-list-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -101,6 +102,7 @@ function Sections(): JSX.Element {
             <MapViewportSection />
             <SkillTrendSection />
             <HubWidgetsSection />
+            <ArrangeListSection />
         </>
     );
 }

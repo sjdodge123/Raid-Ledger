@@ -23,6 +23,7 @@ import { GuildAccessService, type GuildActor } from './guild-access.service';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
+import { readWidgetPrefs } from './hub-widget-prefs.service';
 import {
   HUB_NOT_FOUND,
   dropHiddenFor,
@@ -44,10 +45,25 @@ export class HubService {
     private readonly access: GuildAccessService,
   ) {}
 
-  /** The hub page, built by the guild kind's adapter, plus the viewer's mute flag. */
+  /** The hub page, built by the guild kind's adapter, plus the core extras. */
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
     const page = await (await this.adapterFor(guildId)).page(actor, guildId);
-    return this.withViewerMute(actor, guildId, page);
+    return this.withCoreExtras(actor, guildId, page);
+  }
+
+  /**
+   * Core-owned keys every hub page carries, whatever the kind: the saved
+   * Overview layout (ROK-1918, sent to every viewer — it is layout, not
+   * data) and the viewer's mute flag. Public so the `plugins/wow/guilds/:id`
+   * alias returns the same body as core.
+   */
+  async withCoreExtras(
+    actor: GuildActor,
+    guildId: number,
+    page: GuildPage,
+  ): Promise<GuildPage> {
+    const widgetPrefs = await readWidgetPrefs(this.db, guildId);
+    return this.withViewerMute(actor, guildId, { ...page, widgetPrefs });
   }
 
   /**

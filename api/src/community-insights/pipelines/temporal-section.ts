@@ -1,43 +1,104 @@
+import { Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  CommunityTemporalResponseDto,
-  PeakHourEntryDto,
-  TemporalHeatmapCellDto,
+import {
+  isValidIanaTimezone,
+  type CommunityTemporalResponseDto,
+  type PeakHourEntryDto,
+  type TemporalHeatmapCellDto,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { NOW_UTC } from '../../drizzle/timestamp-utils';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 const PEAK_HOURS_PER_WEEKDAY = 3;
 const WINDOW_DAYS = 30;
+const FALLBACK_TIMEZONE = 'UTC';
+const logger = new Logger('TemporalSection');
+
+/**
+ * Community default timezone → the zone the heatmap buckets in (ROK-1936).
+ * Accepts only `UTC` or an IANA `Area/Location` name, after Intl
+ * canonicalisation. Anything else — missing, blank, unknown, a bare
+ * offset string like `+05:00` (Postgres reads that as
+ * POSIX, sign flipped) — falls back to UTC so a bad setting can never break
+ * or silently skew the nightly refresh.
+ */
+export function resolveHeatmapTimezone(raw: string | null | undefined): string {
+  const tz = raw?.trim() ?? '';
+  if (!isValidIanaTimezone(tz)) return FALLBACK_TIMEZONE;
+  const canonical = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+  }).resolvedOptions().timeZone;
+  const accepted = canonical === FALLBACK_TIMEZONE || canonical.includes('/');
+  return accepted ? canonical : FALLBACK_TIMEZONE;
+}
 
 /**
  * Temporal payload: 7×24 heatmap of voice-join counts over the last 30
- * days plus top-N peak hours per weekday. Uses Postgres `isodow` so
- * Monday=1…Sunday=7.
+ * days plus top-N peak hours per weekday, bucketed in the community
+ * default timezone (`rawTimezone`, UTC when unset/invalid). Uses Postgres
+ * `isodow` so Monday=1…Sunday=7.
  */
 export async function buildTemporalSection(
   db: Db,
   snapshotDate: string,
+  rawTimezone?: string | null,
 ): Promise<CommunityTemporalResponseDto> {
-  const heatmap = await loadHeatmap(db);
+  const resolved = resolveHeatmapTimezone(rawTimezone);
+  const { heatmap, timezone } = await loadHeatmapWithFallback(db, resolved);
   const peakHours = computePeakHours(heatmap);
-  return { snapshotDate, heatmap, peakHours };
+  return { snapshotDate, heatmap, peakHours, timezone };
 }
 
-async function loadHeatmap(db: Db): Promise<TemporalHeatmapCellDto[]> {
+/**
+ * Runs the heatmap query in `timezone`; if Postgres rejects the zone (an
+ * ICU/tzdata skew — Intl knows it, the DB image does not) retries ONCE in
+ * UTC rather than dropping the section. Safe to catch-and-retry: the query
+ * runs on the pool via `db.execute`, not inside a transaction. A failure of
+ * the UTC query itself propagates.
+ */
+async function loadHeatmapWithFallback(
+  db: Db,
+  timezone: string,
+): Promise<{ heatmap: TemporalHeatmapCellDto[]; timezone: string }> {
+  try {
+    return { heatmap: await loadHeatmap(db, timezone), timezone };
+  } catch (err: unknown) {
+    if (timezone === FALLBACK_TIMEZONE) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `Heatmap query failed for timezone "${timezone}" (${reason}); retrying in UTC`,
+    );
+    const heatmap = await loadHeatmap(db, FALLBACK_TIMEZONE);
+    return { heatmap, timezone: FALLBACK_TIMEZONE };
+  }
+}
+
+/**
+ * `first_join_at` is zone-less and holds the UTC wall clock: tag it as UTC,
+ * then convert to the community zone before extracting weekday + hour.
+ * The window compares against NOW_UTC (same zone-less frame as the column).
+ */
+async function loadHeatmap(
+  db: Db,
+  timezone: string,
+): Promise<TemporalHeatmapCellDto[]> {
   const rows = await db.execute<{
     weekday: number;
     hour: number;
     activity: number;
   }>(sql`
     SELECT
-      EXTRACT(ISODOW FROM first_join_at)::int AS weekday,
-      EXTRACT(HOUR FROM first_join_at)::int AS hour,
+      EXTRACT(ISODOW FROM local_at)::int AS weekday,
+      EXTRACT(HOUR FROM local_at)::int AS hour,
       COUNT(*)::int AS activity
-    FROM event_voice_sessions
-    WHERE first_join_at >= now() - interval '${sql.raw(String(WINDOW_DAYS))} days'
+    FROM (
+      SELECT (first_join_at AT TIME ZONE 'UTC') AT TIME ZONE ${timezone}::text AS local_at
+      FROM event_voice_sessions
+      WHERE first_join_at >= ${NOW_UTC} - (${WINDOW_DAYS}::int * interval '1 day')
+    ) AS joins
     GROUP BY 1, 2
   `);
   const byCell = new Map<string, number>();

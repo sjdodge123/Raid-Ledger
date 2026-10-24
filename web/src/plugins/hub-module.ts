@@ -44,7 +44,13 @@ export type CoreWidgetId = 'gm-post' | 'discord' | 'schedule' | 'events' | 'atte
 
 export interface HubWidget {
     id: string;
-    /** Merged with the core Overview widgets and sorted — core ids sit on 10/20/30/40/70. */
+    /** ROK-1918 — the widget's name in arrange mode. Omitted = the humanised id. */
+    title?: string;
+    /** ROK-1918 — one line for the arrange list and the Add picker. */
+    description?: string;
+    /** ROK-1918 — `false` = opt-in (hidden until an editor adds it). Default `true`. */
+    defaultOn?: boolean;
+    /** Default slot among the core Overview widgets (10/20/30/40/70); a hub's saved layout overrides it. */
     order: number;
     span?: 1 | 2;
     component: ComponentType<HubCtx>;

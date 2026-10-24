@@ -9,13 +9,15 @@
  */
 import type { ReactNode } from 'react';
 import type { HubCtx } from '../../plugins/hub-module';
-import { gatedHubGameWidgets, type HubWidgetCtx } from '../../plugins/hub-game-widgets';
+import { gatedHubGameWidgets, type HubGameWidget, type HubWidgetCtx } from '../../plugins/hub-game-widgets';
 import { GameWidgetCard, ProbedGameWidget, WidgetBoundary } from './hub-game-widget-card';
 
 /** One Overview cell — the node carries its own column span, so a hidden widget leaves no empty grid item. */
 export interface GameWidgetCell {
     key: `plugin:${string}`;
     order: number;
+    /** ROK-1918 — the registration, so the layout catalog can read title / span / audience / defaultOn. */
+    widget: HubGameWidget;
     node: ReactNode;
 }
 
@@ -35,6 +37,7 @@ export function gameWidgetCells(ctx: HubCtx, activeSlugs: ReadonlySet<string>): 
         return {
             key: `plugin:${reg.pluginSlug}:${reg.widget.id}`,
             order: reg.widget.order,
+            widget: reg.widget,
             // Keyed by hub: `GuildPage` is not, so without this hub B would inherit hub A's failed boundary.
             node: <WidgetBoundary key={ctx.page.guild.id} fallback={null}>{card}</WidgetBoundary>,
         };
