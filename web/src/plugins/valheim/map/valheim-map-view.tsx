@@ -6,7 +6,6 @@
  */
 import { useContext, useState } from 'react';
 import type { ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
-import { StatusChip } from '../../../components/ui/status-chip';
 import {
     MapBytesError,
     useFogLayer,
@@ -19,6 +18,7 @@ import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
 import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
+import { MapStatus, layerStatus, type MapStatusProps } from './map-status';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
 import { usePinFilter } from './use-pin-filter';
@@ -76,38 +76,6 @@ function useMapLayers(
         sharedAvailable: meta.hasSharedExplored && !noShared,
         sharedFailed,
     };
-}
-
-interface MapStatusProps {
-    ready: boolean;
-    failed: boolean;
-    sharedFailed: boolean;
-}
-
-function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
-    if (ready && !failed && !sharedFailed) return null;
-    return (
-        <div
-            role="status"
-            className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col items-end gap-1 lg:left-2 lg:right-auto lg:items-start"
-        >
-            {(!ready || failed) && (
-                <StatusChip
-                    tone={failed ? 'danger' : 'warning'}
-                    title="Base map"
-                >
-                    {failed
-                        ? 'Base map failed to load'
-                        : 'Base map not uploaded yet'}
-                </StatusChip>
-            )}
-            {sharedFailed && (
-                <StatusChip tone="danger" title="Cartography table">
-                    Cartography layer could not be loaded
-                </StatusChip>
-            )}
-        </div>
-    );
 }
 
 interface LayerProps {
@@ -177,14 +145,6 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
             />
         </div>
     );
-}
-
-function layerStatus(
-    meta: ValheimMapMeta,
-    failed: boolean,
-    sharedFailed: boolean,
-): MapStatusProps {
-    return { ready: meta.baseMap?.ready === true, failed, sharedFailed };
 }
 
 /** Switch state + fetched layers for a loaded meta. */
