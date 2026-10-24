@@ -7,7 +7,8 @@
  * it, or a module section reports content of its own (ROK-1830 — core asks
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
- * A 403 (not a member) is a friendly empty state.
+ * A 403 (not a member) is a friendly empty state; a 401 that survived the
+ * refresh offers a sign-in (ROK-1947).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
@@ -35,6 +36,7 @@ import { hubCopy, hubSectionsLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
+import { useSignInAgain } from './use-sign-in-again';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -56,8 +58,20 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
 }
 
+/** ROK-1947: a 401 that outlived the transparent refresh — the session is over, so offer a sign-in, not a retry. */
+function SessionExpired(): JSX.Element {
+    const signIn = useSignInAgain();
+    return (
+        <Notice testId="guild-session-expired">
+            <p className="mb-4 text-sm text-muted">Your session expired. Sign in again to see this hub.</p>
+            <Button onClick={signIn}>Sign in</Button>
+        </Notice>
+    );
+}
+
 function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): JSX.Element {
     const status = httpStatusOf(error);
+    if (status === 401) return <SessionExpired />;
     if (status === 403) {
         return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
     }

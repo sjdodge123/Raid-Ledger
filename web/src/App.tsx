@@ -12,6 +12,7 @@ import { getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { getAuthMethod } from './lib/api/silent-reauth';
 import { startBootSession, awaitBootSession } from './lib/api/boot-session';
 import { installCrossTabAuth } from './lib/api/cross-tab-auth';
+import { installResumeRefresh } from './lib/api/resume-refresh';
 import { Layout } from './components/layout';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
@@ -33,6 +34,8 @@ if (_magicLinkToken) void startMagicLinkRedeem(_magicLinkToken);
 // (StartupGate waits for it), and follow logout/identity changes in other tabs.
 void startBootSession();
 installCrossTabAuth(queryClient);
+// ROK-1947: a resumed tab (or a bfcache restore) re-mints an expired in-memory token up front.
+installResumeRefresh(queryClient);
 
 // Seed auth cache from the cached user for instant return visits (a prior sign-in) — but not while
 // a magic link may be swapping in a different user.
