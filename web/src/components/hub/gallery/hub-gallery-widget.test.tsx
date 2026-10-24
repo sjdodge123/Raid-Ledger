@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import type { JSX, ReactNode } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { GuildPage, HubMediaItem } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
@@ -13,6 +13,7 @@ import { HubGallerySeeAll } from './hub-gallery-see-all';
 import { useHubGalleryStore } from './hub-gallery-store';
 import { hubGalleryTileLabel } from './hub-gallery-labels';
 import { useGalleryWidgetVisible } from './use-hub-gallery-visible';
+import { hubMediaStripQuery } from '../../../lib/hub-media-query';
 
 function ctx(canEdit = false): HubWidgetCtx {
     const page = {
@@ -98,11 +99,15 @@ describe('HubGalleryWidget — kind chips', () => {
 describe('HubGalleryWidget — empty hub (D12)', () => {
     it('a member gets no card: the body renders nothing and the probe is false', async () => {
         server.use(hubMediaListHandler([]));
-        const { result } = probe(false);
-        const { container } = renderWithProviders(<Card />);
-        await waitFor(() => expect(result.current).toBe(false));
-        expect(container.textContent).toBe('');
-        expect(screen.queryByTestId('hub-gallery-empty')).toBeNull();
+        // Settled shares the card's query client, so it reports once the empty response has landed.
+        function Settled(): JSX.Element | null {
+            const { isSuccess } = useQuery(hubMediaStripQuery(5, 'all'));
+            const visible = useGalleryWidgetVisible(ctx(false));
+            return isSuccess ? <span data-testid="settled" data-visible={String(visible)} /> : null;
+        }
+        renderWithProviders(<><Settled /><div data-testid="card"><Card /></div></>);
+        expect((await screen.findByTestId('settled')).dataset.visible).toBe('false');
+        expect(screen.getByTestId('card').textContent).toBe('');
     });
 
     it('an editor keeps the card with the one-line hint and no See all', async () => {
