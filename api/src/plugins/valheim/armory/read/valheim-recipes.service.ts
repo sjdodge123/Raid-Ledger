@@ -217,8 +217,11 @@ export class ValheimRecipesService {
   ): Promise<ValheimRecipePlanResponse> {
     const { graph, spoilers } = await this.visible(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
-    // D8: hidden targets are dropped before resolving (and not echoed).
-    const shown = targets.filter((t) => hasTreeTarget(graph, t.prefab, t.kind));
+    // D8: while protected, hidden targets are dropped (and not echoed).
+    const shown =
+      spoilers === 'protected'
+        ? targets.filter((t) => hasTreeTarget(graph, t.prefab, t.kind))
+        : targets;
     const ids = shown.map((t) => t.prefab);
     const { cat, maxQ } = await catalogFor(r, set, graph, ids);
     const planned = clampTargets(shown, maxQ);
