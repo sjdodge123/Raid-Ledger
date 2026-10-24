@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { useUserReliability } from '../../hooks/use-analytics';
 import type { UserReliabilityDto } from '@raid-ledger/contract';
 
-type SortField = 'attendanceRate' | 'totalEvents' | 'noShow' | 'username';
+type SortField = 'attendanceRate' | 'totalEvents' | 'lateCount' | 'noShow' | 'username';
 type SortDir = 'asc' | 'desc';
+
+/** ROK-1938 copy C1 — omits the grace minutes until the setting is visible (ROK-1940). */
+const LATE_FOOTNOTE =
+    "Attendance % includes late arrivals. Late counts players who joined the event's voice channel after the start and stayed for at least a fifth of it.";
 
 function sortUsers(users: UserReliabilityDto[], sortField: SortField, sortDir: SortDir) {
     return [...users].sort((a, b) => {
-        const av = a[sortField];
-        const bv = b[sortField];
+        const av = a[sortField] ?? 0;
+        const bv = b[sortField] ?? 0;
         if (typeof av === 'string' && typeof bv === 'string') {
             return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
         }
@@ -23,6 +27,7 @@ function LeaderboardHeaders({ sortField, sortDir, handleSort }: { sortField: Sor
             <SortableHeader field="username" label="Player" active={sortField} dir={sortDir} onClick={handleSort} />
             <SortableHeader field="totalEvents" label="Events" active={sortField} dir={sortDir} onClick={handleSort} />
             <SortableHeader field="attendanceRate" label="Attendance %" active={sortField} dir={sortDir} onClick={handleSort} />
+            <SortableHeader field="lateCount" label="Late" active={sortField} dir={sortDir} onClick={handleSort} />
             <SortableHeader field="noShow" label="No-Shows" active={sortField} dir={sortDir} onClick={handleSort} />
         </tr>
     );
@@ -52,14 +57,23 @@ export function ReliabilityLeaderboard() {
             ) : sorted.length === 0 ? (
                 <p className="text-muted text-center py-8">No attendance data recorded yet.</p>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
-                        <tbody>{sorted.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
-                    </table>
-                </div>
+                <LeaderboardTable users={sorted} sortField={sortField} sortDir={sortDir} handleSort={handleSort} />
             )}
         </div>
+    );
+}
+
+function LeaderboardTable({ users, sortField, sortDir, handleSort }: { users: UserReliabilityDto[]; sortField: SortField; sortDir: SortDir; handleSort: (f: SortField) => void }) {
+    return (
+        <>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead><LeaderboardHeaders sortField={sortField} sortDir={sortDir} handleSort={handleSort} /></thead>
+                    <tbody>{users.map((user, idx) => (<UserRow key={user.userId} user={user} rank={idx + 1} />))}</tbody>
+                </table>
+            </div>
+            <p className="text-xs text-muted mt-3">{LATE_FOOTNOTE}</p>
+        </>
     );
 }
 
@@ -109,6 +123,7 @@ function UserRow({ user, rank }: { user: UserReliabilityDto; rank: number }) {
             <td className={`py-2 pr-4 font-semibold ${rateColor}`}>
                 {ratePercent}%
             </td>
+            <td className="py-2 pr-4 text-muted">{user.lateCount ?? 0}</td>
             <td className="py-2 pr-4 text-muted">{user.noShow}</td>
         </tr>
     );

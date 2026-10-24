@@ -174,6 +174,7 @@ async function testReliabilityMapsRows() {
         attended: '8',
         no_show: '1',
         excused: '1',
+        late: '2',
       },
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
@@ -187,6 +188,7 @@ async function testReliabilityMapsRows() {
     attended: 8,
     noShow: 1,
     excused: 1,
+    lateCount: 2,
   });
   expect(result.totalUsers).toBe(1);
 }
@@ -277,6 +279,7 @@ async function testGameMapsRows() {
       total_signups: '100',
       attended: '80',
       no_show: '15',
+      late: '10',
     },
   ]);
   const result = await service.getGameAttendance();
@@ -287,6 +290,7 @@ async function testGameMapsRows() {
     coverUrl: 'https://example.com/wow.jpg',
     totalEvents: 12,
     totalSignups: 100,
+    avgLateRate: 0.1,
   });
 }
 

@@ -9,13 +9,20 @@ import {
     ResponsiveContainer,
 } from 'recharts';
 import { chartAxisProps, chartBarTooltipProps, chartGridProps } from '../ui/chart-chrome';
+import type { GameAttendanceDto } from '@raid-ledger/contract';
 import { useGameAttendance } from '../../hooks/use-analytics';
 
-function formatGameData(games: { gameName: string; avgAttendanceRate: number; avgNoShowRate: number; totalEvents: number }[]) {
+/** ROK-1938 copy C2. */
+const LATE_RATE_FOOTNOTE = 'Late % is part of Attendance %. Events without a voice channel never show as late.';
+
+type GameRowInput = Pick<GameAttendanceDto, 'gameName' | 'avgAttendanceRate' | 'avgNoShowRate' | 'avgLateRate' | 'totalEvents'>;
+
+function formatGameData(games: GameRowInput[]) {
     return games.map((g) => ({
         name: g.gameName.length > 18 ? g.gameName.slice(0, 16) + '...' : g.gameName,
         fullName: g.gameName,
         attendance: Math.round(g.avgAttendanceRate * 100),
+        late: Math.round((g.avgLateRate ?? 0) * 100),
         noShow: Math.round(g.avgNoShowRate * 100),
         events: g.totalEvents,
     }));
@@ -30,8 +37,10 @@ function GameBarChart({ data }: { data: ReturnType<typeof formatGameData> }) {
                 <YAxis {...chartAxisProps} fontSize={12} tickFormatter={(val: number) => `${val}%`} />
                 <Tooltip {...chartBarTooltipProps} formatter={((value: number | undefined, name: string | undefined) => [`${value ?? 0}%`, name ?? '']) as never} />
                 <Legend />
-                <Bar dataKey="attendance" fill="#34D399" name="Attendance %" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="noShow" fill="#F87171" name="No-Show %" radius={[4, 4, 0, 0]} />
+                {/* Outcome series → semantic tokens, never a hex (design-system.md §2.2, ROK-1938). */}
+                <Bar dataKey="attendance" fill="var(--color-success)" name="Attendance %" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="late" fill="var(--color-warning)" name="Late %" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="noShow" fill="var(--color-danger)" name="No-Show %" radius={[4, 4, 0, 0]} />
             </BarChart>
         </ResponsiveContainer>
     );
@@ -52,7 +61,10 @@ export function GameBreakdownChart() {
             ) : !data || data.games.length === 0 ? (
                 <div className="h-64 flex items-center justify-center"><p className="text-muted">No per-game attendance data yet.</p></div>
             ) : (
-                <GameBarChart data={formatGameData(data.games)} />
+                <>
+                    <GameBarChart data={formatGameData(data.games)} />
+                    <p className="text-xs text-muted mt-3">{LATE_RATE_FOOTNOTE}</p>
+                </>
             )}
         </div>
     );
