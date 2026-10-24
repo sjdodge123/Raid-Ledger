@@ -25,6 +25,7 @@ import { CraftModeSwitch } from './craft-mode-switch';
 import type { CraftRow } from './crafting.helpers';
 import { activePlannerFilters, CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import { PlannerFilterControls } from './planner-filters';
+import { spoilersStatusCopy } from './spoilers.helpers';
 import { RecipeList } from './recipe-list';
 import { StationSwitcher } from './station-switcher';
 import { rowKey, useCraftingWindow, type CraftingWindow as WindowModel } from './use-crafting-window';
@@ -103,6 +104,12 @@ const listLabel = (vm: WindowModel): string => {
     return `${vm.selectedGroup?.label ?? 'Station'} ${vm.mode === 'craft' ? 'recipes' : 'upgrades'}`;
 };
 
+/** ROK-1948 §5: the muted spoiler-protection status, or the fallback note when protection is off. */
+function SpoilersLine({ status }: { status: CraftingWindowProps['catalog']['spoilers'] }): JSX.Element | null {
+    const copy = spoilersStatusCopy(status);
+    return copy === null ? null : <p className="text-xs text-muted" data-testid="valheim-planner-spoilers">{copy}</p>;
+}
+
 type KeyHandler = (e: KeyboardEvent<HTMLElement>) => void;
 
 interface ListColumnProps { vm: WindowModel; props: CraftingWindowProps; stock: StockQuery; onSelect: (row: CraftRow) => void; onEscape: KeyHandler; listRef: RefObject<HTMLDivElement | null> }
@@ -111,6 +118,7 @@ function ListColumn({ vm, props, stock, onSelect, onEscape, listRef }: ListColum
     return (
         <div className="space-y-2">
             <SearchRow vm={vm} props={props} />
+            <SpoilersLine status={props.catalog.spoilers} />
             {vm.searching && <p role="status" className="text-xs text-muted">Matches from every station</p>}
             {/* Escape bubbling up from a row clears the selection (the rows are the focusable controls). */}
             <div ref={listRef} onKeyDown={onEscape}>

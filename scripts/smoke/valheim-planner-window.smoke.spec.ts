@@ -7,6 +7,8 @@
  * the Forge. The public chests hold plenty of Wood and 40 Copper but no Tin,
  * so Club is affordable and every Bronze row is short ("need 1 more Tin").
  *
+ * ROK-1948 adds Cultivator (Bronze 5 + Wood 5, quality 1) at the Workbench.
+ *
  * Covers: the station switcher, search narrowing across stations, affordable
  * rows first and short rows greyed, the selection's slots with have/need,
  * "Add to list" landing in the shopping list, an UPGRADE step adding a
@@ -71,11 +73,13 @@ test.describe("Valheim hub — Planner crafting window (ROK-1899)", () => {
       const switcher = stationSwitcher(p);
 
       await chooseRadio(switcher, "Workbench");
+      // ROK-1948: the seed adds Cultivator (Bronze 5 + Wood 5) at the
+      // Workbench; it is short (no Bronze in stock), so it ranks after Club.
       await expect
         .poll(() => rowPrefabs(recipeList(p, "Workbench recipes")), {
-          message: "the Workbench lists only Club",
+          message: "the Workbench lists Club, then the short Cultivator",
         })
-        .toEqual(["Club"]);
+        .toEqual(["Club", "Cultivator"]);
       await expect(craftWindow(p)).toContainText("max 5");
 
       await chooseRadio(switcher, "Forge");

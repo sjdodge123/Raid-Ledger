@@ -17,19 +17,16 @@ import {
 } from '@raid-ledger/contract';
 import { amountAt, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type { RecipeGraph } from './valheim-recipes.graph';
+import {
+  shownRecipes,
+  stationAt,
+  stationLevelAt,
+} from './valheim-recipes.station-steps';
 
 export type ShoppingLine = ValheimRecipePlanResponse['shoppingList'][number];
 export type FuelEstimate = ValheimRecipePlanResponse['fuelEstimates'][number];
 
-/** §1.2 `stationLevel(R, q)`. */
-export function stationLevelAt(recipe: ValheimRecipe, q: number): number {
-  return Math.max(1, recipe.minStationLevel) + (q - 1);
-}
-
-/** §1.2 `station(R, q)`. */
-export function stationAt(recipe: ValheimRecipe, q: number): string | null {
-  return recipe.station ?? (q > 1 ? recipe.repairStation : null);
-}
+export { stationAt, stationLevelAt } from './valheim-recipes.station-steps';
 
 /** `kind` omitted → `piece` when no recipe or process makes the prefab but a piece builds it, else `item`. */
 export type ResolveTarget = ValheimRecipePlanTarget;
@@ -157,27 +154,32 @@ export function sourceRank(s: PlanSource): number {
   return s.recipe.upgradeOnly ? 1 : 0;
 }
 
+/** ROK-1948 R6: recipes at a hidden per-quality station are dropped BEFORE D9 ranks. */
 function candidates(
   graph: RecipeGraph,
   prefab: string,
   startStep: number,
   quality: number,
-): PlanSource[] {
-  const out: PlanSource[] = (graph.recipesByResult.get(prefab) ?? [])
-    .filter((r) => r.enabled && (!r.upgradeOnly || startStep >= 2))
-    .map((recipe) => ({ type: 'recipe', recipe }));
-  if (quality > 1) return out;
+): { list: PlanSource[]; hidden: boolean } {
+  const valid = (graph.recipesByResult.get(prefab) ?? []).filter(
+    (r) => r.enabled && (!r.upgradeOnly || startStep >= 2),
+  );
+  const { shown, hidden } = shownRecipes(graph, valid, startStep, quality);
+  const list = shown.map((recipe): PlanSource => ({ type: 'recipe', recipe }));
+  if (quality > 1) return { list, hidden };
   for (const process of graph.processesByOutput.get(prefab) ?? []) {
     const processor = graph.processors.get(process.processor);
     if (processor && AUTO_PROCESSORS.has(processor.type))
-      out.push({ type: 'process', process, processor });
+      list.push({ type: 'process', process, processor });
   }
-  return out;
+  return { list, hidden };
 }
 
 export interface SourcePick {
   source: PlanSource | null;
   alternatives: number;
+  /** ROK-1948 R6: a recipe was dropped because a step's station is hidden. */
+  hidden: boolean;
 }
 
 /** First source by D9 rank; ties keep the graph's `id` / processor-prefab order. */
@@ -187,13 +189,14 @@ export function pickSource(
   startStep: number,
   quality: number,
 ): SourcePick {
-  const list = candidates(graph, prefab, startStep, quality);
+  const { list, hidden } = candidates(graph, prefab, startStep, quality);
   const ranked = list
     .map((source, i) => ({ source, i }))
     .sort((a, b) => sourceRank(a.source) - sourceRank(b.source) || a.i - b.i);
   return {
     source: ranked[0]?.source ?? null,
     alternatives: Math.max(0, list.length - 1),
+    hidden,
   };
 }
 

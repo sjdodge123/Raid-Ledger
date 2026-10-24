@@ -348,6 +348,7 @@ describe('catalogue (R1/R2/R9)', () => {
       itemAtlas: null,
       recipeAtlas: null,
       discovery: 'no-character',
+      spoilers: 'off-no-data',
     });
     const t = await get(`${base(server)}/Bronze/tree`, tokens.member);
     expect({ status: t.status, body: t.body as unknown }).toMatchObject({

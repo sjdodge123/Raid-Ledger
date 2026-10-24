@@ -3602,3 +3602,7 @@ same day (#1278, #1279, #1280).
 - **resolved (partial)** `api/src/lineups/lineups-voting.helpers.ts:67` (vote on a never-nominated game) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): the add branch now 400s via `isGameNominated`. Still open from that entry: inner-join entries in `countVotesPerGame` and an integration case.
 - **resolved (partial)** `api/src/users/users.service.ts:268` (display-name ilike uses raw input) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): input goes through `escapeLikePattern()`. Still open from that entry: uniqueness is advisory only (no DB constraint).
 - **resolved** `api/src/notifications/hub-notification.service.ts:81` (`hub-post:<id>` cooldown claimed with an empty recipient set) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
+
+### 2026-10-24 — feat/rok-1948-planner-spoilers (surfaced during ROK-1948 review fix round)
+
+- **low** — `api/src/plugins/valheim/armory/read/valheim-recipes.service.ts` (`recipeAtlas` on catalogue/tree/plan) + the stored items atlas: spoiler protection prunes every JSON field, but the recipe/items atlas PNGs are served whole, so a member can still see hidden items' and stations' ICONS by opening the atlas image (no names, recipes or counts). Pre-existing design of the shared atlas; not in ROK-1948's scope. Suggested: serve a per-visible-set atlas (or per-icon crops) while `spoilers === 'protected'`, cached on the same pruned-graph key.
