@@ -19,6 +19,7 @@ import type { Response } from 'express';
 import type { Observable } from 'rxjs';
 import type { HubMediaVariant } from '@raid-ledger/contract';
 import type { AuthenticatedExpressRequest } from '../auth/types';
+import { RateLimit } from '../throttler/rate-limit.decorator';
 import {
   HUB_MEDIA_NOT_FOUND,
   HubMediaReadService,
@@ -65,6 +66,7 @@ export class HubMediaBytesController {
   constructor(private readonly media: HubMediaReadService) {}
 
   @Get(':id/:variant')
+  @RateLimit('media')
   @UseInterceptors(HubMediaNoStore)
   async bytes(
     @Param('guildId', HubMediaIdPipe) guildId: number,
