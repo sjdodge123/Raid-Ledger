@@ -72,13 +72,31 @@ describe('ValheimMapView pin filter panel (ROK-1943)', () => {
         expect(screen.getByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
     });
 
+    it('a chip on from every type writes pins=<group> and draws only that type', async () => {
+        view('/hub?vc=5#map', 3);
+        await openFilters();
+        fireEvent.click(screen.getByTestId('map-pin-type-bed'));
+        await waitFor(() => expect(loc()).toBe('?vc=5&pins=bed#map'));
+        expect(screen.getByTestId('map-pin-type-bed')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Home (Bed)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Grave (Death)' })).toBeNull();
+    });
+
+    it('a label search writes q and narrows the pins to matching labels', async () => {
+        view('/hub?vc=5#map', 3);
+        await openFilters();
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search pin labels' }), { target: { value: 'grav' } });
+        await waitFor(() => expect(loc()).toBe('?vc=5&q=grav#map'));
+        expect(screen.getByRole('button', { name: 'Grave (Death)' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Home (Bed)' })).toBeNull();
+    });
+
     it('no "Death pins only" switch is left in the Layers control (D11)', async () => {
         view('/hub#map', 3);
         await screen.findByRole('button', { name: 'Grave (Death)' });
         expect(screen.queryByRole('switch', { name: 'Death pins only' })).toBeNull();
         expect(screen.getByRole('switch', { name: 'Show cartography table' })).toBeInTheDocument();
     });
-
 });
 
 describe('ValheimMapView players pin layer (ROK-1943)', () => {

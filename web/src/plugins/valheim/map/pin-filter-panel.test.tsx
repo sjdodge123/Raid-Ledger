@@ -132,13 +132,18 @@ describe('MapPinFilters — phone path (D16)', () => {
 });
 
 describe('PinSummaryLine (D15)', () => {
-    it.each([
-        ['loading', 'Loading pins…'],
-        ['forbidden', "Other players' pins are visible to hub members."],
-    ] as const)('status %s reads "%s"', (status, text) => {
-        renderWithProviders(<PinSummaryLine summary={summaryState({ status, activeCount: 1, count: 0 })} onClear={vi.fn()} />);
-        expect(screen.getByRole('status')).toHaveTextContent(text);
+    it('loading reads "Loading pins…" and offers no Clear filters while the layer is in flight', () => {
+        renderWithProviders(<PinSummaryLine summary={summaryState({ status: 'loading', activeCount: 1, count: 0 })} onClear={vi.fn()} />);
+        expect(screen.getByRole('status')).toHaveTextContent('Loading pins…');
         expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    });
+
+    it('a visitor (forbidden) gets the member hint, and with filters active still the Clear filters way out', () => {
+        const onClear = vi.fn();
+        renderWithProviders(<PinSummaryLine summary={summaryState({ status: 'forbidden', activeCount: 1, count: 0 })} onClear={onClear} />);
+        expect(screen.getByRole('status')).toHaveTextContent("Other players' pins are visible to hub members.");
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+        expect(onClear).toHaveBeenCalledTimes(1);
     });
 
     it('no active filters and no pins says nothing extra', () => {
