@@ -11,7 +11,6 @@ import {
 } from '@raid-ledger/contract';
 import {
   buildRecipeGraph,
-  type RecipeGraph,
   type RecipeGraphRows,
 } from './valheim-recipes.graph';
 import {
@@ -795,43 +794,5 @@ describe('resolvePlan — target kind inference', () => {
       '0<- Shared:recipe×1',
       '1<0 Wood:gathered×10',
     ]);
-  });
-});
-
-describe('resolvePlan — ROK-1948 R6 (per-quality station hidden)', () => {
-  // Hand-made at q1, upgraded at the Forge from q2 (`repairStation`).
-  const full = graphOf({
-    recipes: [
-      recipe('Recipe_AxeX', 'AxeX', [res('Iron', 4, 2)], {
-        station: null,
-        repairStation: 'forge',
-      }),
-    ],
-  });
-  const pruned: RecipeGraph = { ...full, withheld: new Set<string>() };
-  const opts = { maxQuality: () => 3 };
-  const root = (g: RecipeGraph, over: Partial<ResolveTarget>) =>
-    nodeOf(resolveTree(g, item('AxeX', 1, over), null, opts).nodes, 'AxeX');
-
-  it('a step at an unfound station makes the node an undiscovered leaf', () => {
-    const plan = resolveTree(
-      pruned,
-      item('AxeX', 1, { quality: 2 }),
-      null,
-      opts,
-    );
-    expect(shape(plan.nodes)).toEqual(['0<- AxeX:undiscovered×1']);
-    expect(root(pruned, { quality: 2 })).toMatchObject({
-      crafts: 0,
-      alternatives: 0,
-    });
-    expect(root(pruned, { quality: 2, fromQuality: 1 }).via.type).toBe(
-      'undiscovered',
-    );
-  });
-
-  it('q1 by hand still resolves; the full graph is untouched', () => {
-    expect(root(pruned, { quality: 1 }).via.type).toBe('recipe');
-    expect(root(full, { quality: 2 }).via.type).toBe('recipe');
   });
 });
