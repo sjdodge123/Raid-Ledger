@@ -20,6 +20,9 @@
 #   L7  a holder SIGKILLed while others wait is pruned on the waiter's next poll
 #   L8  a ledger wait uses RL_LEDGER_ADMISSION_TIMEOUT_SECONDS, not the floor's
 #   L9  that longer limit is sticky through a later floor-only poll
+#   L10 ROK-1902: a ballooned-down MemTotal lowers the effective budget
+#       (min(budget, MemTotal - RL_ADMISSION_RESERVE_MB)) and refuses a heavy
+#       that no longer fits; at the full 16 GiB the same heavy admits
 #
 # Pure bash + jq, no docker: /proc/meminfo is faked via RL_MEMINFO_PATH.
 
@@ -54,7 +57,16 @@ MEM
     export RL_ADMISSION_BUDGET_MB="${2:-12288}"
     export RL_MAX_HEAVY_CONCURRENT="${3:-2}"
     export RL_MAX_IMAGE_BUILDS="${4:-1}"
+    export RL_ADMISSION_RESERVE_MB=2048
     export RL_DISK_GATE=0
+}
+
+# set_mem_total <MB> — rewrite the fixture's MemTotal, keeping MemAvailable.
+set_mem_total() {
+    local avail_kb
+    avail_kb=$(awk '/^MemAvailable:/ {print $2}' "$RL_MEMINFO_PATH")
+    printf 'MemTotal:       %d kB\nMemAvailable:   %d kB\n' $(( $1 * 1024 )) "$avail_kb" > "$RL_MEMINFO_PATH.tmp"
+    mv "$RL_MEMINFO_PATH.tmp" "$RL_MEMINFO_PATH"
 }
 
 # Seed the ledger with live holders (pid = this shell, so prune_dead keeps them).
@@ -292,6 +304,71 @@ test_ledger_limit_sticky_through_floor_poll() {
     assert_contains "$(cat "$RL_TASKS_DIR/lllli111.log")" "available=1000MB" "a floor-failing poll was actually observed"
 }
 
+# L10 — ROK-1902: the budget follows the guest's live MemTotal.
+test_effective_budget_follows_mem_total() {
+    CURRENT_TEST_NAME="L10: a shrunken MemTotal lowers the effective budget and refuses a heavy that no longer fits"
+    ledger_env 7000 12288
+    seed_running '[{key:"m1",weight:"medium",kind:"task",reserve_mb:3072}]'
+    # Normal case: 16384 - 2048 = 14336 > 12288, so the configured budget rules
+    # and 3072 + 5632 = 8704 fits.
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)/\(.admission.reserve_mb)"')" \
+        "12288/12288/16384/2048" "full guest: effective budget = configured budget"
+    start_task "llllj111" heavy rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllj111 15)" "succeeded" "full guest: 3072 + 5632 <= 12288 admits"
+    # Balloon down to 8 GiB: effective = 8192 - 2048 = 6144 < 8704.
+    set_mem_total 8192
+    out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "12288/6144/8192" "ballooned guest: effective budget = MemTotal - reserve"
+    start_task "llllj222" heavy rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllj222 15)" "failed" "ballooned guest: 3072 + 5632 > 6144 must queue"
+    assert_eq "$(jq -r '.failure_reason' "$RL_TASKS_DIR/llllj222.json")" "admission_timeout" "queued heavy times out as admission_timeout"
+    assert_contains "$(cat "$RL_TASKS_DIR/llllj222.log")" "blocked_by=budget 3072MB tasks + 0MB envs + 5632MB > 6144MB" \
+        "wait line names the effective budget"
+}
+
+# L11 — ROK-1902 review: a non-numeric reserve / budget falls back to the default.
+test_non_numeric_knobs_fall_back() {
+    CURRENT_TEST_NAME="L11: non-numeric RL_ADMISSION_RESERVE_MB / RL_ADMISSION_BUDGET_MB fall back to the defaults"
+    ledger_env 7000 12288
+    export RL_ADMISSION_RESERVE_MB=2g
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)/\(.admission.reserve_mb)"')" \
+        "12288/12288/2048" "reserve=2g: snapshot intact, reserve falls back to 2048 (not a 1 MB budget)"
+    seed_running '[{key:"m1",weight:"medium",kind:"task",reserve_mb:3072}]'
+    start_task "llllk111" heavy rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllk111 15)" "succeeded" "reserve=2g: 3072 + 5632 <= 12288 still admits"
+    export RL_ADMISSION_RESERVE_MB=2048 RL_ADMISSION_BUDGET_MB=12g
+    out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)"')" \
+        "12288/12288" "budget=12g: snapshot intact, budget falls back to 12288"
+}
+
+# L12 — ROK-1902 review: an unreadable MemTotal fails open to the configured budget.
+test_unreadable_mem_total_falls_back() {
+    CURRENT_TEST_NAME="L12: missing meminfo or no MemTotal line -> configured budget"
+    ledger_env 7000 10000
+    printf 'MemAvailable:   %d kB\n' $(( 7000 * 1024 )) > "$RL_MEMINFO_PATH"
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "10000/null" "no MemTotal line: effective budget = configured budget"
+    export RL_MEMINFO_PATH="$RL_STATE_DIR/no-such-meminfo"
+    out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "10000/null" "missing meminfo: effective budget = configured budget"
+}
+
+# L13 — ROK-1902 review: MemTotal below the reserve clamps the cap to 1 MB (still "on").
+test_cap_clamped_to_one() {
+    CURRENT_TEST_NAME="L13: MemTotal <= reserve clamps the effective budget to 1 MB, never 0/negative"
+    ledger_env 7000 12288
+    set_mem_total 1024
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "1/1024" "1024 - 2048 < 1: effective budget clamps to 1"
+}
+
 run_test "l1-lifetime-reservation" test_reservation_held_for_task_lifetime
 run_test "l2-heavy-cap" test_heavy_cap_queues_third_heavy
 run_test "l3-image-build-cap" test_image_build_cap_and_kind
@@ -302,5 +379,9 @@ run_test "l6b-fifo-empty-ledger" test_fifo_holds_on_empty_ledger
 run_test "l7-dead-holder-mid-wait" test_dead_holder_reclaimed_during_wait
 run_test "l8-ledger-timeout" test_ledger_wait_uses_ledger_timeout
 run_test "l9-sticky-ledger-limit" test_ledger_limit_sticky_through_floor_poll
+run_test "l10-effective-budget-memtotal" test_effective_budget_follows_mem_total
+run_test "l11-non-numeric-knobs" test_non_numeric_knobs_fall_back
+run_test "l12-unreadable-memtotal" test_unreadable_mem_total_falls_back
+run_test "l13-cap-clamp" test_cap_clamped_to_one
 
 print_test_summary
