@@ -13,6 +13,7 @@ import { useValheimRecipeCatalog } from '../hooks/use-valheim-recipes';
 import { CraftingWindow } from './crafting-window';
 import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
+import { SPOILERS_EMPTY_COPY } from './spoilers.helpers';
 import { ShoppingList } from './shopping-list';
 import { usePlannerState, type PlannerState } from './use-planner-state';
 
@@ -47,9 +48,15 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
             <HeaderLine catalog={catalog} capturedAt={s.plan.data?.stock === 'scan' ? s.plan.data.capturedAt : null} />
             <CraftingWindow serverId={serverId} catalog={catalog} filters={s.filters} onFilters={s.setFilters} hasPersonal={s.hasPersonal}
                 names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} />} />
-            <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} />
+            <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} isHidden={s.isHidden} />
         </div>
     );
+}
+
+/** The empty state's copy, or null when there is something to show (ROK-1948: protected-and-empty has its own). */
+function emptyCopy(c: ValheimRecipeCatalogResponse): string | null {
+    if (c.capturedAt !== null && c.entries.length === 0 && c.spoilers === 'protected') return SPOILERS_EMPTY_COPY;
+    return c.capturedAt === null || c.entries.length === 0 ? PLANNER_NO_SET_COPY : null;
 }
 
 export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Element {
@@ -61,10 +68,11 @@ export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Eleme
                 Couldn’t load recipes. Try again in a moment.
             </p>
         );
-    if (q.data.capturedAt === null || q.data.entries.length === 0)
+    const empty = emptyCopy(q.data);
+    if (empty !== null)
         return (
             <div className="py-12 text-center">
-                <p className="text-sm text-muted">{PLANNER_NO_SET_COPY}</p>
+                <p className="text-sm text-muted">{empty}</p>
             </div>
         );
     // Keyed by server: moving between two cached hubs remounts the body, so

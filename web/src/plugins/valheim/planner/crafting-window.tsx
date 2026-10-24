@@ -25,6 +25,7 @@ import { CraftModeSwitch } from './craft-mode-switch';
 import type { CraftRow } from './crafting.helpers';
 import { activePlannerFilters, CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import { PlannerFilterControls } from './planner-filters';
+import { SPOILERS_PROTECTED_COPY } from './spoilers.helpers';
 import { RecipeList } from './recipe-list';
 import { StationSwitcher } from './station-switcher';
 import { rowKey, useCraftingWindow, type CraftingWindow as WindowModel } from './use-crafting-window';
@@ -111,6 +112,9 @@ function ListColumn({ vm, props, stock, onSelect, onEscape, listRef }: ListColum
     return (
         <div className="space-y-2">
             <SearchRow vm={vm} props={props} />
+            {props.catalog.spoilers === 'protected' && (
+                <p className="text-xs text-muted" data-testid="valheim-planner-spoilers">{SPOILERS_PROTECTED_COPY}</p>
+            )}
             {vm.searching && <p role="status" className="text-xs text-muted">Matches from every station</p>}
             {/* Escape bubbling up from a row clears the selection (the rows are the focusable controls). */}
             <div ref={listRef} onKeyDown={onEscape}>

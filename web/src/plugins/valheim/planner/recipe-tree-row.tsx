@@ -12,6 +12,7 @@ import { resolveItem } from '../character/item-icon.helpers';
 import { DiscoveryChip } from './discovery-chip';
 import { HaveNeedBar } from './have-need-bar';
 import { formatAmount, viaChips, type PlannerKind } from './planner.helpers';
+import { isUndiscoveredNode, UNDISCOVERED_NODE_COPY } from './spoilers.helpers';
 import type { PlannerNames } from './use-planner-names';
 
 interface RowProps {
@@ -63,7 +64,18 @@ function ViaChips({ node, names }: { node: ValheimPlanNode; names: PlannerNames 
     );
 }
 
+/** ROK-1948 D7 — a node the server withheld: the generic line only (no name, icon, count, bar or chips; no prefab in the DOM). */
+function UndiscoveredRow(): JSX.Element {
+    return (
+        <div className="flex items-start gap-2 py-1.5" data-testid="valheim-planner-row-undiscovered">
+            <span className="w-11 shrink-0" aria-hidden="true" />
+            <p className="min-w-0 flex-1 text-sm text-muted">{UNDISCOVERED_NODE_COPY}</p>
+        </div>
+    );
+}
+
 export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onToggle }: RowProps): JSX.Element {
+    if (isUndiscoveredNode(node)) return <UndiscoveredRow />;
     const name = names.nameOf(node.prefab, kind);
     const ctx = names.ctxFor(node.prefab, kind);
     const resolved = { ...resolveItem(node.prefab, ctx.items, ctx.atlas), label: name };
