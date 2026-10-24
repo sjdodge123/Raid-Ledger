@@ -22,13 +22,13 @@ import { MapLegend, MapSnapshotFooter } from './map-legend';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
 import { usePinFilter } from './use-pin-filter';
-import { PinFilterBar } from './pin-filter-bar';
+import { MapPinFilters } from './map-filter-toolbar';
 
 export interface ValheimMapViewProps {
     characterId: number;
     mapId: number;
     className?: string;
-    /** The hub's Pelican server — enables the ROK-1930 "Show all" death layer. */
+    /** The hub's Pelican server — enables the ROK-1943 players pin layer. */
     serverId?: number | undefined;
 }
 
@@ -89,7 +89,7 @@ function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
     return (
         <div
             role="status"
-            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-1"
+            className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col items-end gap-1 lg:left-2 lg:right-auto lg:items-start"
         >
             {(!ready || failed) && (
                 <StatusChip
@@ -214,10 +214,9 @@ function useMapReadyState(props: ReadyProps) {
         sharedAvailable,
         pinLabels,
         onPinLabels: setPinLabels,
-        ...pinFilter.controls,
     };
     const status = layerStatus(props.meta, base.error !== null, sharedFailed);
-    return { layers, controls, personal, status, bar: pinFilter.bar };
+    return { layers, controls, personal, status, pinFilter };
 }
 
 interface MapFrameProps {
@@ -259,7 +258,11 @@ function FrameViewport({ layers, onCommands }: FrameViewportProps) {
     );
 }
 
-/** Viewport + status chip + overlay controls in the sized frame (D10). */
+/**
+ * Viewport + status chip + overlay controls in the sized frame (D10). Below
+ * 1024px the controls sit top-LEFT and the status chips top-right, so the
+ * viewport-fixed Filters FAB (bottom-right) never covers them (ROK-1943 D12).
+ */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
     const chest = useContext(ChestFocusContext);
@@ -269,7 +272,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
             <FrameViewport layers={layers} onCommands={setCommands} />
             <MapStatus {...status} />
             <MapLegend />
-            <div className="absolute right-2 top-2 z-10">
+            <div className="absolute left-2 top-2 z-10 lg:left-auto lg:right-2">
                 <MapControls commands={commands} {...controls} />
             </div>
         </div>
@@ -277,7 +280,7 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, status, bar } = useMapReadyState(props);
+    const { layers, controls, personal, status, pinFilter } = useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError
@@ -288,7 +291,7 @@ function MapReady(props: ReadyProps & { className?: string | undefined }) {
     }
     return (
         <>
-            {bar && <PinFilterBar {...bar} />}
+            <MapPinFilters filter={pinFilter} serverId={props.serverId} />
             <MapFrame
                 className={props.className}
                 layers={layers}

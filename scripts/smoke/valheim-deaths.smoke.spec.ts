@@ -11,86 +11,33 @@
  * `parallelIndex`, so projects never share a server.
  *
  * Deep links (D13): a bar opens `?pins=death&vc=<characterId>#map`; the card's
- * "Show all" opens `?pins=death#map` (every player's Death pins on the world,
- * each named after its character). Phones (<1024px) reach the switches through
- * the "Layers" BottomSheet. Waits are response- or expect-driven only.
+ * "Show all" opens `?pins=death&players=all#map` (every player's Death pins on
+ * the world, each named "<label> · <character>" — ROK-1943 D14). ROK-1943
+ * retired the Layers "Death pins only" switch: the Map pin filter (Filters
+ * funnel ≥1024px, Filters FAB + sheet below) now owns the type filter, and the
+ * cross-player layer is `GET …/servers/:id/pins`. Waits are response- or
+ * expect-driven only.
  */
-import type { Locator, Page, Response } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { test, expect } from "./base";
-import { API_BASE, apiPost, getAdminToken } from "./api-helpers";
+import { API_BASE } from "./api-helpers";
 import { signInContextAs } from "./browser-session";
 import { isDesktop } from "./helpers";
-
-const FIXTURE = "/admin/test/valheim/deaths-fixture";
-const DEATHS_ONLY = "Death pins only";
-
-interface FixtureCharacter {
-  id: number;
-  name: string;
-  mapId: number;
-  deaths: number;
-  deathPinLabels: string[];
-}
-
-interface Fixture {
-  serverId: number;
-  guildId: number;
-  worldUid: string;
-  users: { member: { id: number }; visitor: { id: number } };
-  characters: { top: FixtureCharacter; second: FixtureCharacter };
-  unlinked: { name: string; deaths: number };
-}
-
-/** Install-or-activate through the admin plugin API (valheim-map-tab pattern). */
-async function ensurePluginActive(
-  token: string,
-  pluginId: string,
-): Promise<void> {
-  const init = {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  };
-  const install = await fetch(
-    `${API_BASE}/admin/plugins/${pluginId}/install`,
-    init,
-  );
-  if (install.ok) return;
-  const activate = await fetch(
-    `${API_BASE}/admin/plugins/${pluginId}/activate`,
-    init,
-  );
-  if (!activate.ok)
-    throw new Error(
-      `failed to enable ${pluginId}: install ${install.status}, activate ${activate.status}`,
-    );
-}
-
-async function seed(worker: number): Promise<Fixture> {
-  const token = await getAdminToken();
-  await ensurePluginActive(token, "pelican");
-  await ensurePluginActive(token, "valheim");
-  const body = (await apiPost(token, FIXTURE, { worker })) as Partial<Fixture>;
-  expect(
-    body.guildId,
-    `deaths fixture seed failed: ${JSON.stringify(body)}`,
-  ).toEqual(expect.any(Number));
-  return body as Fixture;
-}
-
-/** Resolves with the first response whose path ends with `suffix` (register BEFORE the action). */
-function responseTo(page: Page, suffix: string): Promise<Response> {
-  return page.waitForResponse(
-    (r) => new URL(r.url()).pathname.endsWith(suffix),
-    { timeout: 15_000 },
-  );
-}
+import {
+  type Fixture,
+  closeFilters,
+  mapApp,
+  openFilters,
+  pinNames,
+  pins,
+  playerPinName,
+  responseTo,
+  seedDeathsFixture as seed,
+  serverPinsPath,
+} from "./valheim-pin-filter-helpers";
 
 const deathsList = (page: Page) =>
   page.getByRole("list", { name: "Deaths by player" });
-const mapApp = (page: Page) =>
-  page.getByRole("application", { name: "Valheim map" });
-/** Pins are the only buttons inside the map application. */
-const pins = (map: Locator) => map.getByRole("button");
 const deathWord = (n: number) => `${n} ${n === 1 ? "death" : "deaths"}`;
 
 /** Full load of the hub Overview, settled on the Deaths read. */
@@ -99,30 +46,6 @@ async function openOverview(page: Page, f: Fixture): Promise<void> {
   await page.goto(`/hubs/${f.guildId}`);
   const res = await deaths;
   expect(res.status(), `deaths read answered ${res.status()}`).toBe(200);
-}
-
-/** The switches: inline ≥1024px, the Layers sheet below it. Returns their scope. */
-async function openLayers(page: Page, wide: boolean): Promise<Locator> {
-  if (wide) return page.locator("body");
-  await page.getByRole("button", { name: "Layers", exact: true }).click();
-  const sheet = page.getByRole("dialog", { name: "Layers" });
-  await expect(sheet).toBeVisible();
-  return sheet;
-}
-
-async function closeLayers(page: Page, wide: boolean): Promise<void> {
-  if (wide) return;
-  const sheet = page.getByRole("dialog", { name: "Layers" });
-  await sheet.getByRole("button", { name: "Close" }).click();
-  await expect(sheet).toBeHidden();
-}
-
-/** The pins' accessible names, sorted (order on the map is not meaningful). */
-async function pinNames(map: Locator): Promise<string[]> {
-  const names = await pins(map).evaluateAll((els) =>
-    els.map((e) => e.getAttribute("aria-label") ?? e.textContent ?? ""),
-  );
-  return names.map((n) => n.trim()).sort();
 }
 
 test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
@@ -158,9 +81,6 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     await expect(page).toHaveURL(/#map$/);
     const map = mapApp(page);
     await expect(map).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText("Showing this character's death pins"),
-    ).toBeVisible();
     await expect(pins(map)).toHaveCount(top.deathPinLabels.length);
     for (const label of top.deathPinLabels) {
       await expect(
@@ -168,13 +88,16 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
       ).toHaveCount(1);
     }
 
-    const scope = await openLayers(page, wide);
-    const deathsOnly = scope.getByRole("switch", { name: DEATHS_ONLY });
-    await expect(deathsOnly).toHaveAttribute("aria-checked", "true");
-    await deathsOnly.click();
-    await expect(deathsOnly).toHaveAttribute("aria-checked", "false");
-    await closeLayers(page, wide);
-    await expect(page).not.toHaveURL(/[?&]pins=death/);
+    // The bar's `pins=death` is the Death chip in the Map pin filter; Clear all
+    // (ROK-1943) is the panel's way back to every pin — the retired switch's job.
+    const panel = await openFilters(page, wide);
+    const death = panel.getByTestId("map-pin-type-death");
+    await expect(death).toHaveAttribute("aria-pressed", "true");
+    await panel.getByRole("button", { name: "Clear all", exact: true }).click();
+    await expect(death).toHaveAttribute("aria-pressed", "false");
+    await closeFilters(page, wide);
+    await expect(page).not.toHaveURL(/[?&]pins=/);
+    await expect(page).toHaveURL(new RegExp(`[?&]vc=${top.id}(&|#|$)`));
     // Every personal pin is back (2 Death + Camp); the shared one waits on its own layer.
     await expect(pins(map)).toHaveCount(top.deathPinLabels.length + 1);
     await expect(map.getByRole("button", { name: /^Camp \(/ })).toHaveCount(1);
@@ -189,23 +112,29 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     await openOverview(page, f);
     await expect(deathsList(page)).toBeVisible();
 
-    const layer = responseTo(page, `/servers/${f.serverId}/deaths/pins`);
+    const layer = responseTo(page, serverPinsPath(f.serverId));
     await page.getByTestId("valheim-deaths-show-all").click();
     const res = await layer;
-    expect(res.status(), `death-pins read answered ${res.status()}`).toBe(200);
+    expect(res.status(), `server-pins read answered ${res.status()}`).toBe(200);
+    // Everyone (no `players`), Death chip → the raw `types=Death` (D4).
+    const query = new URL(res.url()).searchParams;
+    expect(query.get("types"), "Show all asks for Death pins only").toBe(
+      "Death",
+    );
+    expect(query.has("players"), "Show all asks for every player").toBe(false);
     await expect(page).toHaveURL(/[?&]pins=death(&|#|$)/);
+    await expect(page).toHaveURL(/[?&]players=all(&|#|$)/);
     await expect(page).not.toHaveURL(/[?&]vc=/);
     const map = mapApp(page);
     await expect(map).toBeVisible({ timeout: 15_000 });
-    await expect(
-      page.getByText("Showing every player's death pins"),
-    ).toBeVisible();
     const total = top.deathPinLabels.length + second.deathPinLabels.length;
     await expect(pins(map)).toHaveCount(total);
     expect(await pinNames(map)).toEqual(
       [
-        ...top.deathPinLabels.map(() => `${top.name} (Death)`),
-        ...second.deathPinLabels.map(() => `${second.name} (Death)`),
+        ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
+        ...second.deathPinLabels.map((l) =>
+          playerPinName(l, second.name, "Death"),
+        ),
       ].sort(),
     );
   });
@@ -240,10 +169,12 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     expect(typeof jwt, "visitor boot refresh returned an access_token").toBe(
       "string",
     );
-    const direct = await page.context().request.get(
-      `${API_BASE}/plugins/valheim/armory/servers/${f.serverId}/deaths`,
-      { headers: { Authorization: `Bearer ${String(jwt)}` } },
-    );
+    const direct = await page
+      .context()
+      .request.get(
+        `${API_BASE}/plugins/valheim/armory/servers/${f.serverId}/deaths`,
+        { headers: { Authorization: `Bearer ${String(jwt)}` } },
+      );
     expect(direct.status(), "visitor deaths read (D6)").toBe(404);
   });
 });

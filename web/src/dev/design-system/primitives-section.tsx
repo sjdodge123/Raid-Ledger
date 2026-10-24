@@ -15,16 +15,14 @@ import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { NewBadge } from '../../components/ui/new-badge';
 import { RoleBadge } from '../../components/ui/role-badge';
 import { StatusChip } from '../../components/ui/status-chip';
+import { FilterChip } from '../../components/ui/filter-chip';
+import { FILTER_CHIP_BASE } from '../../components/ui/filter-chip-classes';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
 
-/** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
-const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
-const CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
-const CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';
 /** Removable selection chip per §4.3 — the class string of event-create-content-browser.tsx::SelectedChips (ROK-1654). */
 const REMOVABLE_CHIP = 'inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success';
 const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
@@ -71,18 +69,27 @@ function RemovableChipDemo(): JSX.Element {
     );
 }
 
+/** The real `FilterChip` (§4.3, components/ui/filter-chip.tsx — promoted by ROK-1943), live toggles. */
+function FilterChipDemo(): JSX.Element {
+    const [four, setFour] = useState(false);
+    const [three, setThree] = useState(true);
+    return (
+        <StateFrame label="Filter chip — off / on" note="FilterChip: aria-pressed on a <button type='button'>; 44px target; ON label text-amber-400. Click to toggle.">
+            <FilterChip label="4 players" pressed={four} onPressedChange={setFour} />
+            <FilterChip label="3 players" pressed={three} onPressedChange={setThree} />
+        </StateFrame>
+    );
+}
+
 function ChipStates(): JSX.Element {
     return (
         <>
-            <StateFrame label="Filter chip — off / on" note="aria-pressed on a <button type='button'>; 44px target.">
-                <button type="button" aria-pressed={false} className={`${CHIP_BASE} ${CHIP_OFF}`}>4 players</button>
-                <button type="button" aria-pressed className={`${CHIP_BASE} ${CHIP_ON}`}>3 players</button>
-            </StateFrame>
+            <FilterChipDemo />
             <StateFrame label="Filter chip — disabled">
-                <button type="button" disabled className={`${CHIP_BASE} ${CHIP_OFF} opacity-50 cursor-not-allowed`}>2 own</button>
+                <FilterChip label="2 own" pressed={false} onPressedChange={() => undefined} disabled />
             </StateFrame>
             <StateFrame label="Filter chip — hover" note="Hover the live chips above; hover is a token swap, not a shadow.">
-                <span className={`${CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
+                <span className={`${FILTER_CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
             </StateFrame>
             <RemovableChipDemo />
         </>
