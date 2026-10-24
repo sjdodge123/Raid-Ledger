@@ -11,7 +11,7 @@ import { RoleIcon } from '../../../components/shared/RoleIcon';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { ROLE_META } from '../hub/wow-guild.helpers';
 import { useRosterInsights } from './use-roster-insights';
-import { FactFreshnessFooter } from './fact-freshness-footer';
+import { FreshnessFooter } from './freshness-footer';
 import { BAND_ROLES, roleLinkLabel, type BandRole, type RoleBandKey, type RoleBands } from './roles.helpers';
 
 const BAND_TITLE: Record<RoleBandKey, string> = { dungeon: 'Dungeon-ready', raid: 'Raid-ready' };
@@ -54,7 +54,7 @@ export default function RolesWidget({ page }: HubWidgetCtx): JSX.Element | null 
         <div className="flex flex-col gap-3">
             <Band band="dungeon" roles={data.roles} />
             <Band band="raid" roles={data.roles} />
-            <FactFreshnessFooter freshness={data.freshness.roster} testId="forever-roles-freshness" />
+            {data.freshness.roster !== null && <FreshnessFooter freshness={data.freshness.roster} testId="forever-roles-freshness" />}
         </div>
     );
 }
