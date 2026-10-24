@@ -79,7 +79,7 @@ export class ValheimLinkIngestService {
     auth: { pelicanServerId: number },
     body: Buffer,
   ): ValheimLinkIngestResult {
-    this.logger.log(
+    this.logger.debug(
       `valheim-link ingest kind=${kind} server=${auth.pelicanServerId} bytes=${body.length} result=ignored`,
     );
     return { status: 'accepted', missingBlobs: [] };

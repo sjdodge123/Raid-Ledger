@@ -299,7 +299,7 @@ disappears — there are no deltas. Prefabs are an open set: vanilla
 | `portals[].prefab` | prefab id | `portal_wood`, `portal_stone`, or a modded portal prefab |
 | `portals[].x` / `z` | number, \|v\| ≤ 32 768 | metres |
 | `portals[].y` | number \| `null` | height; `null` when the scan has none |
-| `portals[].tag` | string, ≤ `VALHEIM_LINK_PORTAL_TAG_MAX_CHARS` (64) | the pairing tag as typed in game; may be empty; free text |
+| `portals[].tag` | string, ≤ `VALHEIM_LINK_PORTAL_TAG_MAX_CHARS` (64) | the pairing tag as typed in game; may be empty; free text. The mod MUST truncate longer tags (modded portals are not bound by vanilla's 10 chars) before upload — one over-long tag rejects the whole snapshot |
 | `omitted` | int | portals the mod dropped above 4 096 |
 
 Message-level rule (§6): (`prefab`, `x`, `y`, `z`) is unique across `portals`.
