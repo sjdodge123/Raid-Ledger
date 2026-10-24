@@ -79,7 +79,30 @@ type ReliabilityRow = Record<string, unknown> & {
   attended: string;
   no_show: string;
   excused: string;
+  late: string;
 };
+
+/**
+ * ROK-1938: at most one `late` voice row per signup. LATERAL + LIMIT 1 so a
+ * signup matched by both discord id and user id never multiplies COUNT(*).
+ * Literal aliases only — no column interpolation (correlated refs bind wrong).
+ * The outer attended check lets non-attended signups skip the index lookup;
+ * LATE_COUNT still filters on it, so results are unchanged.
+ */
+const LATE_VOICE_JOIN = sql`
+  LEFT JOIN LATERAL (
+    SELECT 1 AS hit
+    FROM event_voice_sessions v
+    WHERE es.attendance_status = 'attended'
+      AND v.event_id = es.event_id
+      AND v.classification = 'late'
+      AND (v.discord_user_id = es.discord_user_id OR v.user_id = es.user_id)
+    LIMIT 1
+  ) lv ON TRUE
+`;
+
+/** Late ⊂ attended: an organiser's manual no_show/excused mark beats the voice label. */
+const LATE_COUNT = sql`COUNT(*) FILTER (WHERE es.attendance_status = 'attended' AND lv.hit IS NOT NULL)`;
 
 export async function queryUserReliability(
   db: PostgresJsDatabase<typeof schema>,
@@ -102,10 +125,12 @@ async function queryReliabilityRows(
       COUNT(*) AS total_events,
       COUNT(*) FILTER (WHERE es.attendance_status = 'attended') AS attended,
       COUNT(*) FILTER (WHERE es.attendance_status = 'no_show') AS no_show,
-      COUNT(*) FILTER (WHERE es.attendance_status = 'excused') AS excused
+      COUNT(*) FILTER (WHERE es.attendance_status = 'excused') AS excused,
+      ${LATE_COUNT} AS late
     FROM event_signups es
     JOIN users u ON es.user_id = u.id
     JOIN events e ON es.event_id = e.id
+    ${LATE_VOICE_JOIN}
     WHERE es.attendance_status IS NOT NULL
       AND e.cancelled_at IS NULL AND upper(e.duration) <= NOW()
     GROUP BY u.id, u.username, u.avatar
@@ -142,6 +167,7 @@ export function mapReliabilityUsers(rows: ReliabilityRow[]) {
       attended,
       noShow: Number(r.no_show),
       excused: Number(r.excused),
+      lateCount: Number(r.late),
       attendanceRate:
         total > 0 ? Math.round((attended / total) * 100) / 100 : 0,
     };
@@ -156,26 +182,18 @@ export async function queryGameAttendance(
 }
 
 async function queryGameAttendanceRows(db: PostgresJsDatabase<typeof schema>) {
-  return db.execute<
-    Record<string, unknown> & {
-      game_id: string;
-      game_name: string;
-      cover_url: string | null;
-      total_events: string;
-      total_signups: string;
-      attended: string;
-      no_show: string;
-    }
-  >(sql`
+  return db.execute<Record<string, unknown> & GameRow>(sql`
     SELECT
       g.id AS game_id, g.name AS game_name, g.cover_url,
       COUNT(DISTINCT e.id) AS total_events,
       COUNT(*) AS total_signups,
       COUNT(*) FILTER (WHERE es.attendance_status = 'attended') AS attended,
-      COUNT(*) FILTER (WHERE es.attendance_status = 'no_show') AS no_show
+      COUNT(*) FILTER (WHERE es.attendance_status = 'no_show') AS no_show,
+      ${LATE_COUNT} AS late
     FROM events e
     JOIN games g ON e.game_id = g.id
     JOIN event_signups es ON es.event_id = e.id
+    ${LATE_VOICE_JOIN}
     WHERE upper(e.duration) <= NOW()
       AND e.cancelled_at IS NULL AND es.attendance_status IS NOT NULL
     GROUP BY g.id, g.name, g.cover_url
@@ -191,6 +209,7 @@ type GameRow = {
   total_signups: string;
   attended: string;
   no_show: string;
+  late: string;
 };
 
 function mapGameRows(rows: GameRow[]) {
@@ -203,6 +222,7 @@ function mapGameRows(rows: GameRow[]) {
       totalEvents: Number(r.total_events),
       avgAttendanceRate: safeRate(Number(r.attended), totalSignups),
       avgNoShowRate: safeRate(Number(r.no_show), totalSignups),
+      avgLateRate: safeRate(Number(r.late), totalSignups),
       totalSignups,
     };
   });

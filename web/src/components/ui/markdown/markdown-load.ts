@@ -26,7 +26,7 @@ import { escapeLiteralBrackets } from './markdown-inline-parse';
  * is already literal, `prepareEditorMarkdown` escapes every `~` of a run that is not `~~`), thematic
  * break, bullet marker, HTML block (not an `<scheme:…>` autolink), link reference definition.
  */
-const BLOCK_START = /^(?:#{1,6}(?=[ \t]|$)|>|`{3,}(?=[^`]*$)|([-*_])(?:[ \t]*\1){2,}[ \t]*$|[-+*](?=[ \t]|$)|<(?![A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>)(?=[A-Za-z/!?])|\[(?=[^\]]*\]:))/;
+const BLOCK_START = /^(?:#{1,6}(?=[ \t]|$)|>|`{3,}(?=[^`]*$)|([-*_])(?:[ \t]*\1){2,}[ \t]*$|[-+*](?=[ \t]|$)|<(?![A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>)(?=[A-Za-z/!?])|\[(?=[^[\]]*\]:))/;
 /** An ordered-list marker (`1.` / `1)`); the escape goes before its delimiter. */
 const ORDERED_START = /^(\d{1,9})([.)])(?=[ \t]|$)/;
 

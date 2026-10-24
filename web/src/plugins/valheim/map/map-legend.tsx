@@ -2,7 +2,7 @@
  * ROK-1837 — the map's fog legend (bottom-left overlay) and the snapshot
  * footer under it, per the approved prototype (`.maplegend`, `.foot`). The
  * swatches are the fog's own tones: `--color-backdrop` at the alphas
- * `fog-bitmap.ts` paints (0 / 0.45 / 0.92) — token utilities only.
+ * `fog-bitmap.ts` paints (0 / 0.45 / 1) — token utilities only.
  */
 import { format, formatDistanceToNow } from 'date-fns';
 

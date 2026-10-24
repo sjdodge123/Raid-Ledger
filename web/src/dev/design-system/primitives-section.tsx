@@ -102,6 +102,7 @@ function StatusChipStates(): JSX.Element {
         <StateFrame label="Status chip — read-only tones" note="StatusChip (§4.21): title required; event page adds 'checked N min ago'.">
             <StatusChip tone="success" title="Valheim Main: Online">Server online</StatusChip>
             <StatusChip tone="warning" title="Valheim Main: Starting">Server starting</StatusChip>
+            <StatusChip tone="neutral" size="md" title="Server hub">Server · md</StatusChip>
             <StatusChip tone="danger" title="Alpha: Online, Beta: Offline">1 of 2 servers offline</StatusChip>
             <StatusChip tone="neutral" title="Valheim Main: Unknown">Server status unknown</StatusChip>
         </StateFrame>

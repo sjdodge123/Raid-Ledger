@@ -4,6 +4,10 @@
  * (`GuildRows`, each with its kind chip), then "Browse all hubs →". Picking
  * either closes the sheet. Lazy-loaded by `bottom-hubs-button.tsx` so the
  * sheet stays out of the initial bundle.
+ *
+ * Operator 2026-10-24: larger and easier to read — the `lg` rows (64px, 40px
+ * icon, `text-base`), a taller cap, and a floor of half the visible viewport
+ * (`--sheet-vh`) so two or three hubs don't leave a short stub.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -17,11 +21,11 @@ interface Props { isOpen: boolean; onClose: () => void; hubs: MyGuild[] }
 /** "Your hubs" BottomSheet: one row per hub, then Browse all hubs. */
 export default function BottomHubsSheet({ isOpen, onClose, hubs }: Props): JSX.Element {
     return (
-        <BottomSheet isOpen={isOpen} onClose={onClose} title="Your hubs" maxHeight="70vh">
-            <div className="-mx-4 -my-4" data-testid="bottom-hubs-sheet">
-                <GuildRows guilds={hubs} onNavigate={onClose} />
+        <BottomSheet isOpen={isOpen} onClose={onClose} title="Your hubs" maxHeight="88vh">
+            <div className="-mx-4 -my-4 min-h-[calc(var(--sheet-vh,1dvh)_*_50)]" data-testid="bottom-hubs-sheet">
+                <GuildRows guilds={hubs} onNavigate={onClose} size="lg" />
                 <Link to={HUBS_PATH} onClick={onClose} data-testid="bottom-hubs-browse-all"
-                    className="flex min-h-[44px] items-center gap-1 border-t border-edge px-4 py-2 text-sm font-medium text-secondary transition-colors hover:bg-overlay hover:text-foreground">
+                    className="flex min-h-[64px] w-full items-center gap-1 border-t border-edge px-5 py-3 text-base font-medium text-secondary transition-colors hover:bg-overlay hover:text-foreground">
                     Browse all hubs <span aria-hidden="true">→</span>
                 </Link>
             </div>

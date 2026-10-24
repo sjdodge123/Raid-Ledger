@@ -7,6 +7,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import sharp from 'sharp';
 import { eq, sql } from 'drizzle-orm';
 import type { Response } from 'superagent';
 import { ValheimLinkMessageSchema } from '@raid-ledger/contract';
@@ -33,6 +34,7 @@ let testApp: TestApp;
 let gameId: number;
 let blobDir: string;
 let token: string;
+let realPng: Buffer; // a decodable 2048² base map (the fixtures' texture size)
 const ORIGINAL_BLOB_DIR = process.env.VALHEIM_LINK_BLOB_DIR;
 const tempDirs: string[] = [];
 
@@ -129,6 +131,11 @@ beforeAll(async () => {
   blobDir = await mkdtemp(join(tmpdir(), 'vh-map-bytes-'));
   tempDirs.push(blobDir);
   process.env.VALHEIM_LINK_BLOB_DIR = blobDir;
+  realPng = await sharp({
+    create: { width: 2048, height: 2048, channels: 3, background: '#3a5f2b' },
+  })
+    .png()
+    .toBuffer();
   testApp = await getTestApp();
 });
 
@@ -163,40 +170,44 @@ afterEach(async () => {
 });
 
 describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
-  it('streams the stored PNG, revalidate-only, with the sha ETag', async () => {
+  // ROK-1949: the bytes are now masked per viewer — never the stored file
+  // (strictly stronger than the old "== stored file" assertion about leaks).
+  it('serves a masked PNG of the stored dimensions, revalidate-only, with the m1 ETag', async () => {
     const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
-    const png = fakePng(2048, 2048);
-    await storeBlob(serverId, blobRelativePath(serverId, SHA), png);
+    await storeBlob(serverId, blobRelativePath(serverId, SHA), realPng);
     const res = await getBytes(`${mapUrl(id, mapId)}/base-map`);
     expect(res.status).toBe(200);
-    expect(Buffer.compare(res.body as Buffer, png)).toBe(0);
+    const body = res.body as Buffer;
+    expect(Buffer.compare(body, realPng)).not.toBe(0);
+    const meta = await sharp(body).metadata();
+    expect({ w: meta.width, h: meta.height }).toEqual({ w: 2048, h: 2048 });
     expect(res.headers['content-type']).toBe('image/png');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
-    // The URL is keyed by map id and a re-import can change its PNG, so
-    // the browser must revalidate (the sha-keyed blob route is immutable).
     expect(res.headers['cache-control']).toBe('private, no-cache');
-    expect(res.headers.etag).toBe(`"${SHA}"`);
+    expect(res.headers.vary).toContain('Authorization');
+    expect(res.headers.etag).toMatch(/^"m1-[0-9a-f]{40}"$/);
   });
 
-  it('answers 304 with no body on a matching If-None-Match', async () => {
+  it('answers 304 with no body on a matching If-None-Match; the old sha ETag gets 200', async () => {
     const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
-    await storeBlob(serverId, blobRelativePath(serverId, SHA), fakePng(8, 8));
+    await storeBlob(serverId, blobRelativePath(serverId, SHA), realPng);
     const url = `${mapUrl(id, mapId)}/base-map`;
-    const hit = await getBytes(url, { 'If-None-Match': `"${SHA}"` });
+    const etag = String((await getBytes(url)).headers.etag);
+    const hit = await getBytes(url, { 'If-None-Match': etag });
     expect(hit.status).toBe(304);
     expect((hit.body as Buffer).length).toBe(0);
-    const miss = await getBytes(url, {
-      'If-None-Match': `"${'f'.repeat(64)}"`,
-    });
-    expect(miss.status).toBe(200);
+    const old = await getBytes(url, { 'If-None-Match': `"${SHA}"` });
+    expect(old.status).toBe(200);
   });
 
   it('answers a matching If-None-Match with 304 before opening the file', async () => {
     const { serverId, id, mapId } = await seed(1, 'map-shared-layer');
-    await storeBlob(serverId, blobRelativePath(serverId, SHA)); // row, no file
-    const res = await getBytes(`${mapUrl(id, mapId)}/base-map`, {
-      'If-None-Match': `"${SHA}"`,
-    });
+    const rel = blobRelativePath(serverId, SHA);
+    await storeBlob(serverId, rel, realPng);
+    const url = `${mapUrl(id, mapId)}/base-map`;
+    const etag = String((await getBytes(url)).headers.etag);
+    await rm(join(blobDir, rel));
+    const res = await getBytes(url, { 'If-None-Match': etag });
     expect(res.status).toBe(304);
   });
 
@@ -209,7 +220,7 @@ describe('GET …/maps/:mapId/base-map (ROK-1837 D3)', () => {
     expect(res.headers['cache-control']).toBe('no-store');
     // Express may add a weak ETag for the JSON error body itself; what must
     // never appear is the PNG's validator, or a cache could 304 the error.
-    expect(res.headers.etag).not.toBe(`"${SHA}"`);
+    expect(String(res.headers.etag)).not.toMatch(/^"m1-/);
   });
 
   it('404s base_map_not_ready (no-store) before the blob is stored', async () => {
@@ -250,11 +261,7 @@ describe('GET …/maps/:mapId/base-map — scoping (ROK-1837 D3)', () => {
   it("404s a map that is not the character's", async () => {
     const a = await seed(1, 'map-shared-layer');
     const b = await seed(2, 'map-shared-layer');
-    await storeBlob(
-      b.serverId,
-      blobRelativePath(b.serverId, SHA),
-      fakePng(8, 8),
-    );
+    await storeBlob(b.serverId, blobRelativePath(b.serverId, SHA), realPng);
     expect((await getBytes(`${mapUrl(b.id, b.mapId)}/base-map`)).status).toBe(
       200,
     ); // b's own map serves, so the 404s below are the ownership check

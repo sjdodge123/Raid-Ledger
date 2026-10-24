@@ -59,7 +59,7 @@ function useMapLayers(
         textureSize: meta.grid.textureSize,
         capturedAt: meta.capturedAt,
     };
-    const base = useMapBaseImage(characterId, mapId, meta.baseMap);
+    const base = useMapBaseImage(characterId, mapId, meta);
     const personal = useFogLayer({ ...fog, layer: 'personal' });
     const shared = useFogLayer({
         ...fog,
@@ -260,7 +260,8 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, status, pinFilter } = useMapReadyState(props);
+    const { layers, controls, personal, status, pinFilter } =
+        useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError

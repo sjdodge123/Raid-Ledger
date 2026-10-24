@@ -81,6 +81,7 @@ async function raceBehindBlocker(
 async function seedVotingLineup(
   db: Db,
   userId: number,
+  gameA: number,
 ): Promise<{ lineupId: number; gameB: number }> {
   const [other] = nonEmpty(
     await db
@@ -102,6 +103,14 @@ async function seedVotingLineup(
       .returning(),
     'lineup',
   );
+  // toggleVote refuses a vote on a game the lineup never nominated.
+  await db.insert(schema.communityLineupEntries).values(
+    [gameA, other.id].map((gameId) => ({
+      lineupId: lineup.id,
+      gameId,
+      nominatedBy: userId,
+    })),
+  );
   return { lineupId: lineup.id, gameB: other.id };
 }
 
@@ -119,7 +128,7 @@ function describeToggleVoteRace() {
   beforeEach(async () => {
     userId = testApp.seed.adminUser.id;
     gameA = testApp.seed.game.id;
-    ({ lineupId, gameB } = await seedVotingLineup(testApp.db, userId));
+    ({ lineupId, gameB } = await seedVotingLineup(testApp.db, userId, gameA));
   });
 
   afterEach(async () => {
