@@ -291,9 +291,23 @@ in the same flock window as the admit:
   `RL_MEDIUM_TASK_RESERVE_MB` (3072), image build `RL_IMAGE_BUILD_RESERVE_MB`
   (3072), and every live env in `env-registry.json` `RL_ENV_RESERVE_MB` (1024).
   A task admits only while running reservations + env charge + its own
-  reservation fit in `RL_ADMISSION_BUDGET_MB` (12288; `0` = off). The first
+  reservation fit in the **effective budget** (below). The first
   task on an empty ledger always passes the budget (the floor still applies),
   so a mis-set budget delays work but never wedges the fleet.
+- **Effective budget (ROK-1902):** `min(RL_ADMISSION_BUDGET_MB, MemTotal_mb −
+  RL_ADMISSION_RESERVE_MB)`, with `MemTotal` re-read from `/proc/meminfo` on
+  every admit. `RL_ADMISSION_BUDGET_MB` defaults to 12288 (`0` = off) and
+  `RL_ADMISSION_RESERVE_MB` to 2048. Why: VM 200 is `memory: 16384` with
+  `balloon: 8192`, so Proxmox can shrink the guest toward 8 GiB, and a fixed
+  12288 MB budget then admits more than exists (a gate was OOM-killed
+  2026-10-22). At 16 GiB the effective budget is 12288 (unchanged); at 8 GiB it
+  is 6144, and work that no longer fits waits with `blocked_by=budget …`. The
+  2048 MB reserve covers what runs outside the ledger: the kernel, sshd /
+  dockerd / containerd / mutagen, and the compose sidecars (traefik, registry,
+  loki, promtail, grafana, dashboard, docker-socket-proxy, gc-sweeper; tens to a
+  few hundred MB each). An unreadable `MemTotal` falls back to the configured
+  budget. Turning ballooning off on the host (Option A, under "Memory hardening"
+  below) keeps the guest at 16 GiB, so this cap never bites.
 - **Hard caps:** at most `RL_MAX_HEAVY_CONCURRENT` (2) heavy tasks and at most
   `RL_MAX_IMAGE_BUILDS` (1) image builds run at once (`0` = no cap). An image
   build (tool `rl_env_build_image_from_runner`) is its own category: it uses
@@ -311,7 +325,8 @@ in the same flock window as the admit:
 - `rl status` / `rl lease-status` keep `heavy_running` / `heavy_waiting` (all
   tasks holding / waiting for an admission slot, any weight) and add, under
   `admission`: `categories` (`heavy`, `medium`, `image_build`), `reserved_mb`,
-  `env_reserved_mb`, `committed_mb`, `budget_mb`, `max_heavy_concurrent`,
+  `env_reserved_mb`, `committed_mb`, `budget_mb` (configured),
+  `effective_budget_mb` (enforced), `mem_total_mb`, `reserve_mb`, `max_heavy_concurrent`,
   `max_image_builds`. Running entries carry `weight`, `kind`, `reserve_mb`,
   `pid`, `host`.
 - Env spins are not themselves parked (the spin is synchronous inside a claim);
@@ -431,6 +446,25 @@ drop-ins keep the control plane off the reclaim and kill lists.
    ./orchestrator/bin/slots-resize 4
    sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=4/' .env   # last: slot 4 now exists to claim and queue on
    ```
+
+5. **Option A (ROK-1902): turn VM 200's balloon off**, so the guest always has
+   its full 16 GiB and the ledger's effective budget stays at 12288. On the
+   Proxmox host (proxmox32), check host headroom first, then apply:
+
+   ```bash
+   free -m            # host: "available" must cover 16384 MB for VM 200 plus everything else
+   qm config 200      # expect memory: 16384 and balloon: 8192 today
+   # pelican-panel's allocation: its VM/CT config on the same host (qm config <id> / pct config <id>),
+   # plus the memory limits of its game servers — they must fit beside a fixed 16 GiB VM 200
+   qm set 200 --balloon 0
+   qm config 200 | grep -E '^(memory|balloon)'   # expect memory: 16384, balloon: 0
+   ```
+
+   `--balloon 0` takes effect at once on a running VM (the balloon deflates); no
+   reboot. Confirm from the laptop with `rl_status`: `admission.mem_total_mb`
+   near 16 000 and `effective_budget_mb` = `budget_mb`. If host headroom is too
+   tight for a fixed 16 GiB, keep the balloon: the effective budget (above)
+   already shrinks with the guest.
 
 ## Task tracking (ROK-1331 M1)
 
@@ -1367,6 +1401,7 @@ RL_TARGET=remote RL_PROXMOX_HOST=192.168.0.132 ./rl-infra/cli/rl test-plan wait 
 - `RL_LEDGER_ADMISSION_TIMEOUT_SECONDS` (default 5400) — admission wait budget while blocked on a ledger cap, the budget or FIFO.
 - `RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS` (default 1800) / `RL_HEAVY_TASK_POLL_SECONDS` (default 10) / `RL_HEAVY_TASK_SETTLE_SECONDS` (default 90) / `RL_HEAVY_TASK_MAX_HOLD_SECONDS` (default 14400) — admission budget, poll interval, freshly-admitted reserve window, and the age at which a leaked `heavy_running` entry is pruned.
 - `RL_ADMISSION_BUDGET_MB` (default 12288; `0` = off) / `RL_HEAVY_TASK_RESERVE_MB` (5632) / `RL_MEDIUM_TASK_RESERVE_MB` (3072) / `RL_IMAGE_BUILD_RESERVE_MB` (3072) / `RL_ENV_RESERVE_MB` (1024 per live env) / `RL_MAX_HEAVY_CONCURRENT` (2; `0` = no cap) / `RL_MAX_IMAGE_BUILDS` (1; `0` = no cap) — the admission ledger (2026-10-22). Set in `/srv/rl-infra/.env` on the VM. See "Dynamic memory + heavy-task admission".
+- `RL_ADMISSION_RESERVE_MB` (default 2048) — MB kept back from the guest's live `MemTotal` for the OS and compose sidecars; the ledger enforces `min(RL_ADMISSION_BUDGET_MB, MemTotal_mb − this)` (ROK-1902).
 - `RL_MEMINFO_PATH` (default `/proc/meminfo`) / `RL_ADMISSION_FILE` (default `$RL_STATE_DIR/admission.json`) — override points; the orchestrator shell tests use them to drive the gate off fixtures.
 - `RL_ADMIN_PASSWORD` (optional, on the rl-infra VM). When set in `/srv/rl-infra/.env`, every env's admin@local user is seeded with this stable password, deterministically across calls and slugs. Without it, env-spin generates a random `rl-<hex>` password per call. **A3-B P4: no MCP tool hands you that value by default** — the terminal `rl_task_status` / `rl_task_wait` of an `rl_env_spin` or `rl_env_deploy` `local-…` task (and `rl_task_inspect`) return `admin_password_available` instead (the `rl_env_spin` dispatch reply carries neither; an `include_credentials: true` spin call gets a `credentials_hint` naming the route below), and the value comes back only from an explicit `rl_task_status({task_id, include_credentials: true})` on the spin's or the deploy chain's `local-…` task id (both task JSONs are stored 0600 on the laptop; the async `rl_env_spin` dispatch reply never carries the password, so re-calling it with `include_credentials` no longer returns it). The operator's own `rl env spin` stdout still prints it — that is a human terminal, not an agent context. **ROK-1534: the credential also rides in the task `cmd`** — `rl_validate_ci({against_env_slug})` threads it to the runner as an `ADMIN_PASSWORD='…'` env prefix, which the task record stores verbatim. Every task-shaped return boundary (`rl_task_status`, `rl_task_wait`, `rl_task_inspect`, `rl_task_list`) now masks `*PASSWORD`/`*TOKEN`/`*SECRET` assignment values in `cmd`/`args_summary` and secret-named `env` keys to `***`, UNCONDITIONALLY — `include_credentials: true` opts into the `admin_password` FIELD, never into a command line. Still uncovered: `log_tail` (unredacted by design) and the VM-side `ps` / stored task JSON, which would need the password routed via stdin instead of an env prefix. `rl_validate_ci({ args: ["--only-e2e"], against_env_slug })` re-asserts admin@local to a known password (RL_ADMIN_PASSWORD when set, else a fresh `rl-ci-<hex>`) via the rl-docker-proxy and threads it as `ADMIN_PASSWORD` into the runner so Playwright's global-setup authenticates against the env regardless of whether RL_ADMIN_PASSWORD is set (ROK-1368).
 - `RL_OPERATOR_DISCORD_ID` (optional, on the rl-infra VM). Your own Discord user id (snowflake — digits only; enable Developer Mode → right-click yourself → Copy User ID). When set in `/srv/rl-infra/.env`, env-spin passes it to bootstrap-admin as `FLEET_ADMIN_DISCORD_ID` on both the fresh and the idempotent path, and bootstrap-admin upserts that one id as an `admin` row. You then sign in to any fleet env with Discord OAuth and land as an admin instead of an ordinary member — no mid-test switch to admin@local just to reach an admin surface. Discord login preserves `role` (it updates only username/avatar), so the promotion survives every subsequent login. **This is fleet-only and cannot fire in production:** bootstrap-admin refuses unless `FLEET_ADMIN_DISCORD_ID` is set *and* `DEMO_MODE === 'true'`, and the production allinone entrypoint sets neither. **ROK-1537:** with it set, that Discord id is admin from its first login (env-spin also passes it to the app container as `FLEET_ADMIN_DISCORD_ID`, which switches the first-login promotion below off). A value that is not a Discord snowflake (digits only) is ignored with one stderr warning and treated as unset, so first-login promotion stays on and `operator_admin` reports `first-login`. Unset it and the **first real Discord login** on each fresh env is promoted instead (see `FLEET_FIRST_DISCORD_LOGIN_ADMIN`). `rl_env_spin` / `rl_env_deploy` report which case applies as `operator_admin: 'configured' | 'first-login' | 'none'`, and `rl_fleet_health` lists `operator_discord_id_unset` under `config_warnings` while it is unset. Pinned by `rl-infra/orchestrator/test/env-spin-fleet-operator.test.sh` and `api/src/scripts/bootstrap-admin-fleet-operator.spec.ts`.
