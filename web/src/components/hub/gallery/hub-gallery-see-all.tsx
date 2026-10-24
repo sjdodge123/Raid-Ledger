@@ -7,7 +7,7 @@ import type { JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hubMediaStripQuery } from '../../../lib/hub-media-query';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
-import { FOCUS_RING } from '../../ui/form-classes';
+import { Button } from '../../ui/button';
 import { useHubGalleryStore } from './hub-gallery-store';
 import { useHubGalleryCardFilter } from './use-hub-gallery-card-filter';
 
@@ -18,10 +18,10 @@ export function HubGallerySeeAll({ page }: HubWidgetCtx): JSX.Element | null {
     const { data } = useQuery(hubMediaStripQuery(guildId, filter));
     if (data === undefined || data.total === 0) return null;
     return (
-        <button type="button" data-testid="hub-gallery-see-all"
+        <Button variant="bare" data-testid="hub-gallery-see-all"
             onClick={(e) => openGallery({ guildId, mode: 'grid', filter, index: 0, returnFocus: e.currentTarget })}
-            className={`inline-flex min-h-[44px] items-center rounded-sm text-sm font-medium text-success hover:underline ${FOCUS_RING}`}>
+            className="min-h-[44px] rounded-sm text-sm font-medium text-success hover:underline">
             See all ({data.total})
-        </button>
+        </Button>
     );
 }
