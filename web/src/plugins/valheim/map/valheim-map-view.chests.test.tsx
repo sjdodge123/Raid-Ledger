@@ -7,6 +7,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import {
     BASE_A, basesFixture, chestShared, containersWithBases, materialsFixture, personalWithBases,
     valheimContainerHandler, valheimContainersHandler, valheimMaterialsHandler, VALHEIM_CONTAINERS_URL,
+    VALHEIM_MATERIALS_URL,
 } from '../../../test/mocks/valheim-materials-handlers';
 import { ValheimMapView } from './valheim-map-view';
 
@@ -84,6 +85,19 @@ describe('ValheimMapView Chests layer (ROK-1859 D12–D14)', () => {
         expect(await within(dialog).findByRole('list', { name: 'Chest contents' })).toBeInTheDocument();
         fireEvent.click(within(dialog).getByRole('button', { name: /close/i }));
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it.each([
+        ['a 404 on /containers', VALHEIM_CONTAINERS_URL, 404],
+        ['a 403 on /materials', VALHEIM_MATERIALS_URL, 403],
+    ])('access revoked (%s on refetch): the cached chest pins go and the open chest closes', async (_, url, status) => {
+        const { queryClient } = view('/hub?vc=5#map', 3);
+        fireEvent.click(await screen.findByRole('button', { name: HOME_CHEST }));
+        expect(await screen.findByRole('dialog', { name: 'Wood chest 2 · Base near x 3, z 53' })).toBeInTheDocument();
+        server.use(http.get(url, () => HttpResponse.json({ message: 'gone' }, { status })));
+        await queryClient.refetchQueries();
+        await waitFor(() => expect(screen.queryAllByRole('button', { name: /\(Chest\)$/ })).toEqual([]));
+        expect(screen.queryByRole('dialog')).toBeNull();
     });
 
     it('turning the Chests chip off while a chest dialog is open closes the dialog', async () => {
