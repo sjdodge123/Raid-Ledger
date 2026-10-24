@@ -100,6 +100,12 @@ describe('buildFogPixels (D7)', () => {
         expect(Array.from(px.slice(0, 3))).toEqual([2, 6, 23]);
     });
 
+    it('paints unexplored pixels fully opaque so no terrain shows through (ROK-1949)', () => {
+        const px = buildFogPixels(size, personal, shared, rgb);
+        expect(alphaAt(px, size, 0, 0)).toBe(255);
+        expect(alphaAt(px, size, 5, 5)).toBe(255);
+    });
+
     it('paints shared-only pixels at the lighter shared alpha while the layer is on', () => {
         const px = buildFogPixels(size, personal, shared, rgb);
         expect(alphaAt(px, size, 1, 15)).toBe(

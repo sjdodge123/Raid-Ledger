@@ -5,15 +5,15 @@
  */
 import type { JSX } from 'react';
 import type { GuildKind } from '@raid-ledger/contract';
-import { StatusChip } from '../../ui/status-chip';
+import { StatusChip, type StatusChipSize } from '../../ui/status-chip';
 import { HUB_KIND_LABEL } from './hub-kind-label';
 
 /** "Server" / "Community" / "Guild" pill; the title spells out "<Kind> hub". */
-export function HubKindChip({ kind }: { kind: GuildKind }): JSX.Element {
+export function HubKindChip({ kind, size = 'sm' }: { kind: GuildKind; size?: StatusChipSize }): JSX.Element {
     const label = HUB_KIND_LABEL[kind];
     return (
         <span data-testid="hub-kind-chip" className="inline-flex shrink-0">
-            <StatusChip tone="neutral" title={`${label} hub`}>{label}</StatusChip>
+            <StatusChip tone="neutral" size={size} title={`${label} hub`}>{label}</StatusChip>
         </span>
     );
 }

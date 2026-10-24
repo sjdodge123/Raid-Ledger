@@ -18,6 +18,8 @@ import { ValheimLinkTokensService } from './link/valheim-link-tokens.service';
 import { ValheimArmoryBlobController } from './armory/read/valheim-armory-blob.controller';
 import { ValheimArmoryMapBytesController } from './armory/read/valheim-armory-map-bytes.controller';
 import { ValheimArmoryMapBytesService } from './armory/read/valheim-armory-map-bytes.service';
+import { ValheimMapMaskCache } from './armory/read/valheim-map-mask.cache';
+import { ValheimMapMaskRepository } from './armory/read/valheim-map-mask.repository';
 import { ValheimLinkDemoSeedModule } from './link/valheim-link-demo-seed.module';
 import { ValheimArmoryImportCron } from './armory/valheim-armory-import.cron';
 import { ValheimArmoryImportService } from './armory/valheim-armory-import.service';
@@ -138,6 +140,9 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,
+    // ROK-1949 per-viewer base-map mask.
+    ValheimMapMaskRepository,
+    ValheimMapMaskCache,
     {
       provide: VALHEIM_PROFILE_UPSERTED_HOOK,
       useExisting: ValheimIdentityService,

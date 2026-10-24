@@ -57,7 +57,7 @@ function useMapLayers(
         textureSize: meta.grid.textureSize,
         capturedAt: meta.capturedAt,
     };
-    const base = useMapBaseImage(characterId, mapId, meta.baseMap);
+    const base = useMapBaseImage(characterId, mapId, meta);
     const personal = useFogLayer({ ...fog, layer: 'personal' });
     const shared = useFogLayer({
         ...fog,
@@ -151,7 +151,8 @@ function FogPending({ size }: { size: number }) {
  * that an opaque cover, so unexplored terrain never flashes (AC1).
  */
 function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
-    const { meta, pins, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
+    const { meta, pins, baseUrl, personal, shared, sharedOn, pinLabels } =
+        layers;
     const size = meta.grid.textureSize;
     return (
         <div
@@ -280,7 +281,8 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
 }
 
 function MapReady(props: ReadyProps & { className?: string | undefined }) {
-    const { layers, controls, personal, status, pinFilter } = useMapReadyState(props);
+    const { layers, controls, personal, status, pinFilter } =
+        useMapReadyState(props);
     if (personal.error) {
         return (
             <MapError
