@@ -186,6 +186,7 @@ function RoutedFilters(): JSX.Element {
     return (
         <>
             <span data-testid="url">{location.search}</span>
+            <button type="button" onClick={() => write(writePinFilter(params(), { query: 'iron' }, 7))}>External iron</button>
             <MapPinFilters filter={{ panel, summary: summaryState({ activeCount: panel.activeCount }) }} serverId={3} />
         </>
     );
@@ -206,5 +207,29 @@ describe('MapPinFilters — Clear under a transition-committed URL', () => {
         expect(screen.getByRole('searchbox', { name: 'Search pin labels' }), 'search text after Clear').toHaveValue('');
         expect(screen.getByRole('radio', { name: 'This character' }), 'Whose pins after Clear').toBeChecked();
         expect(screen.queryByTestId('map-pin-filter-player-list'), 'player list hidden after Clear').toBeNull();
+    });
+});
+
+describe('MapPinFilters — label search follows the URL', () => {
+    it('an external URL change (Back/Forward, a link) replaces the search box text', async () => {
+        renderWithProviders(<RoutedFilters />);
+        fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search pin labels' }), { target: { value: 'copper' } });
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toContain('copper'));
+        fireEvent.click(screen.getByRole('button', { name: 'External iron' }));
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toContain('iron'));
+        expect(screen.getByRole('searchbox', { name: 'Search pin labels' }), 'search text after an external q change').toHaveValue('iron');
+    });
+
+    it("the URL commit of the box's own debounced write does not reset text typed after it", async () => {
+        renderWithProviders(<RoutedFilters />);
+        fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        const search = screen.getByRole('searchbox', { name: 'Search pin labels' });
+        fireEvent.change(search, { target: { value: 'cop' } });
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toMatch(/cop(&|$)/));
+        fireEvent.change(search, { target: { value: 'copper' } });
+        expect(screen.getByRole('searchbox', { name: 'Search pin labels' }), 'draft right after typing past the commit').toHaveValue('copper');
+        await waitFor(() => expect(screen.getByTestId('url').textContent).toContain('copper'));
+        expect(screen.getByRole('searchbox', { name: 'Search pin labels' }), 'draft after its own write commits').toHaveValue('copper');
     });
 });
