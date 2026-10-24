@@ -6,7 +6,13 @@
  * hub answers non-staff `Guild not found` first (ROK-1856, L-5).
  */
 import * as path from 'node:path';
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ValheimMapFogLayer } from '@raid-ledger/contract';
@@ -85,7 +91,8 @@ export function collectMaskLayers(
   for (const c of own) {
     add(c.mapId, 'personal', c.capturedAt);
     out.bitmaps.push(c.explored);
-    if (c.shared) {
+    // M's own row: its shared layer is M.shared, already added above.
+    if (c.shared && c.mapId !== map.id) {
       add(c.mapId, 'shared', c.capturedAt);
       out.bitmaps.push(c.shared);
     }
@@ -126,18 +133,7 @@ export class ValheimArmoryMapBytesService {
     if (sha256 === null) throw notReady();
     const absPath = await this.basePath(map.serverId, sha256);
     const n = map.textureSize;
-    const own = await this.masks.findViewerWorldBitmaps(
-      actor.id,
-      map.serverId,
-      map.worldUid,
-      n,
-    );
-    const { refs, bitmaps } = collectMaskLayers(map, own);
-    const fp = maskFingerprint({
-      baseSha: sha256,
-      textureSize: n,
-      bitmaps: refs,
-    });
+    const { fp, bitmaps } = await this.maskFor(map, sha256, actor.id);
     return {
       etag: maskEtag(fp),
       bytes: () =>
@@ -145,6 +141,27 @@ export class ValheimArmoryMapBytesService {
           renderMaskedBaseMap(absPath, n, unionBitsets(bitmaps, n)),
         ),
     };
+  }
+
+  /** The viewer's mask layers for `map` and their fingerprint (D1, D2). */
+  private async maskFor(
+    map: MaskMapRow,
+    sha256: string,
+    viewerId: number,
+  ): Promise<{ fp: string; bitmaps: ValheimBitmapLike[] }> {
+    const own = await this.masks.findViewerWorldBitmaps(
+      viewerId,
+      map.serverId,
+      map.worldUid,
+      map.textureSize,
+    );
+    const { refs, bitmaps } = collectMaskLayers(map, own);
+    const fp = maskFingerprint({
+      baseSha: sha256,
+      textureSize: map.textureSize,
+      bitmaps: refs,
+    });
+    return { fp, bitmaps };
   }
 
   /** The base map's file inside the blob root, or `base_map_not_ready`. */
@@ -164,6 +181,7 @@ export class ValheimArmoryMapBytesService {
     try {
       return await this.cache.get(fp, produce);
     } catch (err: unknown) {
+      if (err instanceof ServiceUnavailableException) throw err;
       const kind = err instanceof Error ? err.name : 'unknown';
       this.logger.warn(`base map mask failed for map ${mapId} (${kind})`);
       throw notReady();
