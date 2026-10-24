@@ -22,7 +22,7 @@ describe('deathsMapHref', () => {
 
 describe('deathsShowAllHref', () => {
     it('is the server-wide death layer, with no character', () => {
-        expect(deathsShowAllHref()).toBe('?pins=death#map');
+        expect(deathsShowAllHref()).toBe('?pins=death&players=all#map');
     });
 });
 
