@@ -3578,3 +3578,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — fix/rok-1902-admission-budget (surfaced during the ROK-1902 review)
 
 - **med** `tools/mcp-rl-fleet/src/tools/__tests__/test-plan-v2.spec.ts` — 6 cases fail locally on origin/main c4c736f1f with `AssertionError: POST call must have been made: expected undefined to be truthy` (×2) and `expected null not to be null` (×4). Pre-existing: reproduced on the main checkout before this branch, which does not touch the file. `Suggested:` check whether the spec depends on an env var / dashboard token CI sets (`tools-test-shard` is green on main) and make the spec self-contained or skip with a named reason.
+
+### 2026-10-24 — feat/rok-1862-planner-undiscovered (surfaced during fleet env deploys)
+
+- **high** rl-infra gc-sweeper disk ladder — the `builder_prune` rung fails every run with `ERROR: driver not running` (exit 1), so only `image_prune` (until=48h) and `volume_prune` run and reclaim ~0 B. The VM sits at 92–94 % (16–21 GB free) and each `rl_env_deploy` image build needs `RL_BUILD_MIN_FREE_GB` = 20 GB, so builds park on `waiting_disk` and fail `disk_pressure` (task 1eb1c23bd66e, exit 76) — one build ~5 GB takes free space back under the floor. Pre-existing: unrelated to this branch; seen on ROK-1896, 1946 and 1862 deploys. Suggested: restart or recreate the buildx builder the sweeper prunes (or prune the default builder), and lower the per-build footprint / add a registry tag GC for merged branches' `rl-allinone:<slug>` images.
