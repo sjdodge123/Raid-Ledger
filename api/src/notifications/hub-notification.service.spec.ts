@@ -130,6 +130,19 @@ describe('HubNotificationService.notifyLeaderPost cooldown give-back (D7)', () =
     expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
   });
 
+  it('claims no cooldown when nobody is left to notify', async () => {
+    const { svc, notifications, dedup } = setup();
+    q.filterGroupRecipients.mockResolvedValue([]);
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
+    expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(notifications.create).not.toHaveBeenCalled();
+  });
+
   it('gives the cooldown back when every send fails', async () => {
     const { svc, notifications, dedup } = setup();
     notifications.create.mockRejectedValue(new Error('boom'));
