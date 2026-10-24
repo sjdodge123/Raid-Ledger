@@ -6,6 +6,7 @@
 import type { ValheimPlanNode } from '@raid-ledger/contract';
 import { RECIPES_DEMO_MESSAGE as DEMO } from '../valheim-armory-recipes-demo-fixture';
 import { buildRecipeGraph, type RecipeGraph } from './valheim-recipes.graph';
+import { upgradesOf } from './valheim-recipes.craft.helpers';
 import { resolveTree, type ResolveTarget } from './valheim-recipes.resolve';
 
 // Hand-made at q1, upgraded at the Forge from q2 (`repairStation`).
@@ -69,6 +70,47 @@ describe('resolveTree — ROK-1948 R6 (per-quality station hidden)', () => {
     expect(plan(full, { quality: 2 }).map((n) => n.prefab)).toEqual([
       'AxeX',
       'Iron',
+    ]);
+  });
+});
+
+describe('ROK-1948 R6 — a hidden station filters candidates BEFORE D9 ranks', () => {
+  const [forgeAxe] = full.recipesByResult.get('AxeX') ?? [];
+  const [workbench] = DEMO.stations;
+  if (!forgeAxe || !workbench)
+    throw new Error('fixture is missing a recipe or station');
+  // Two crafting recipes: the first-ranked one repairs at the (hidden) forge,
+  // the second at the workbench, which someone HAS found.
+  const benchAxe = {
+    ...forgeAxe,
+    id: 'Recipe_AxeX_Bench',
+    repairStation: workbench.prefab,
+  };
+  const twoRoutes: RecipeGraph = {
+    ...full,
+    recipesByResult: new Map([['AxeX', [forgeAxe, benchAxe]]]),
+    stations: new Map([[workbench.prefab, workbench]]),
+    withheld: new Set<string>(),
+  };
+
+  it('/plan takes the visible second recipe instead of an undiscovered leaf', () => {
+    expect(root(twoRoutes, { quality: 2 }).via).toMatchObject({
+      type: 'recipe',
+      recipeId: 'Recipe_AxeX_Bench',
+      station: workbench.prefab,
+    });
+    expect(root(twoRoutes, { quality: 2, fromQuality: 1 }).via).toMatchObject({
+      type: 'recipe',
+      recipeId: 'Recipe_AxeX_Bench',
+    });
+  });
+
+  it('the UPGRADE tab keeps every step the workbench route serves', () => {
+    expect(
+      upgradesOf(twoRoutes, 'AxeX', 3).map((u) => [u.quality, u.station]),
+    ).toEqual([
+      [2, workbench.prefab],
+      [3, workbench.prefab],
     ]);
   });
 });

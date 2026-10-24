@@ -74,14 +74,17 @@ export function craftOf(
   };
 }
 
-/** One upgrade step `q − 1 → q`, or null when no recipe is valid at step `q`. */
+/**
+ * One upgrade step `q − 1 → q`; null when no recipe is valid at step `q`,
+ * `'hidden'` when the only valid ones need a station nobody has found.
+ */
 function upgradeAt(
   graph: RecipeGraph,
   prefab: string,
   q: number,
-): ValheimRecipeUpgrade | null {
-  const source = pickSource(graph, prefab, q, q).source;
-  if (source?.type !== 'recipe') return null;
+): ValheimRecipeUpgrade | 'hidden' | null {
+  const { source, hidden } = pickSource(graph, prefab, q, q);
+  if (source?.type !== 'recipe') return hidden ? 'hidden' : null;
   const r = source.recipe;
   const station = stationAt(r, q);
   return {
@@ -94,12 +97,6 @@ function upgradeAt(
       station !== null && (graph.stations.get(station)?.upgrader ?? false),
   };
 }
-
-/** True only on a pruned graph, for a station it no longer carries. */
-const hiddenStation = (graph: RecipeGraph, station: string | null) =>
-  graph.withheld !== undefined &&
-  station !== null &&
-  !graph.stations.has(station);
 
 /**
  * The UPGRADE tab: for q in 2..maxQuality, the D9 recipe valid at
@@ -114,8 +111,8 @@ export function upgradesOf(
   const out: ValheimRecipeUpgrade[] = [];
   for (let q = 2; q <= Math.min(maxQuality, QUALITY_MAX); q += 1) {
     const step = upgradeAt(graph, prefab, q);
-    // ROK-1948 R6: stop at the first step at a station nobody has found.
-    if (step && hiddenStation(graph, step.station)) break;
+    // ROK-1948 R6: stop at the first step whose every route needs a station nobody has found.
+    if (step === 'hidden') break;
     if (step) out.push(step);
   }
   return out;

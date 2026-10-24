@@ -20,7 +20,6 @@ import {
   recipeVia,
   type ProcessSource,
   recipeSteps,
-  stationAt,
   child,
   type InputLine,
   type Need,
@@ -100,8 +99,8 @@ function expandItem(ctx: Ctx, raw: Need): void {
   }
   const pick = pickSource(ctx.graph, need.prefab, need.startStep, need.quality);
   const alternatives = need.alternatives ?? pick.alternatives;
-  if (!pick.source && ctx.graph.withheld?.has(need.prefab)) {
-    // ROK-1948 D7: its only sources are hidden — generic leaf, no count.
+  if (!pick.source && (pick.hidden || ctx.graph.withheld?.has(need.prefab))) {
+    // ROK-1948 D7/R6: its only sources are hidden — generic leaf, no count.
     ctx.b.push({ ...leaf, via: { type: 'undiscovered' }, alternatives: 0 });
   } else if (!pick.source) {
     ctx.b.push({ ...leaf, via: { type: 'gathered' }, alternatives });
@@ -111,25 +110,6 @@ function expandItem(ctx: Ctx, raw: Need): void {
   } else {
     expandProcess(ctx, { need, taken, alternatives, expand }, pick.source);
   }
-}
-
-/**
- * ROK-1948 R6: on a spoiler-pruned graph, a step whose per-quality station
- * nobody has found makes the node undiscovered. The full graph (no
- * `withheld`) is never affected.
- */
-function hidesStep(
-  graph: RecipeGraph,
-  recipe: ValheimRecipe,
-  from: number,
-  to: number,
-): boolean {
-  if (!graph.withheld) return false;
-  for (let q = Math.max(from, 1); q <= to; q += 1) {
-    const s = stationAt(recipe, q);
-    if (s !== null && !graph.stations.has(s)) return true;
-  }
-  return false;
 }
 
 /** One placed node's walk state. */
@@ -143,11 +123,6 @@ interface Step {
 
 function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
   const { need, taken, alternatives } = step;
-  if (hidesStep(ctx.graph, recipe, need.startStep, need.quality)) {
-    const leaf = { ...nodeBase(need, taken), crafts: 0 };
-    ctx.b.push({ ...leaf, via: { type: 'undiscovered' }, alternatives: 0 });
-    return;
-  }
   const steps = recipeSteps(
     recipe,
     need.startStep,
