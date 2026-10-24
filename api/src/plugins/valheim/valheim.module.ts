@@ -45,6 +45,9 @@ import { ValheimMaterialsService } from './armory/read/valheim-materials.service
 import { ValheimDeathsController } from './armory/read/valheim-deaths.controller';
 import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
 import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
+import { ValheimServerPinsController } from './armory/read/valheim-server-pins.controller';
+import { ValheimServerPinsService } from './armory/read/valheim-server-pins.service';
+import { ValheimServerPinsRepository } from './armory/read/valheim-server-pins.repository';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
@@ -84,6 +87,7 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimArmoryReadController,
     ValheimMaterialsController,
     ValheimDeathsController,
+    ValheimServerPinsController,
     ValheimRecipesController,
     ValheimArmoryBlobController,
     ValheimArmoryMapBytesController,
@@ -124,6 +128,9 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimMaterialsService,
     ValheimDeathsService,
     ValheimDeathPinsRepository,
+    // ROK-1943 Map tab cross-player pin layer.
+    ValheimServerPinsService,
+    ValheimServerPinsRepository,
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,
