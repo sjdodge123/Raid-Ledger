@@ -27,7 +27,10 @@ import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { memberToken } from '../../../pelican/testing/pelican-integration.helpers';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { blobRelativePath } from '../../link/blobs/valheim-link-blob.store';
-import { fakePng } from '../../link/blobs/valheim-link-blob.testing';
+import {
+  fakePng,
+  referenceBlobAsAsset,
+} from '../../link/blobs/valheim-link-blob.testing';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
@@ -123,6 +126,7 @@ const basePng = sharp({
 async function storePng(serverId: number): Promise<void> {
   await storeOne(serverId, SHA, await basePng);
   await storeOne(serverId, ICON_SHA, fakePng(8, 8));
+  await referenceBlobAsAsset(testApp.db, serverId, ICON_SHA);
 }
 
 async function storeOne(serverId: number, sha: string, png: Buffer) {

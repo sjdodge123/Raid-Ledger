@@ -10,8 +10,10 @@ import {
   count,
   desc,
   eq,
+  exists,
   isNull,
   notExists,
+  or,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -35,7 +37,7 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
-const snaps = schema.valheimLinkSnapshots;
+const recipeSets = schema.valheimRecipeSets;
 const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
 const skillDays = schema.valheimProfileSkillDays;
@@ -281,9 +283,9 @@ export class ValheimArmoryReadRepository {
   /**
    * A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6) —
    * never a base map of that server (ROK-1949 D8: those are served masked).
-   * A base map is any sha a map row references now OR any snapshot of the
-   * server ever declared with role `baseMap` (`blob_refs`, recorded at
-   * ingest), so a rotated or orphaned base map stays refused too.
+   * Allowlist: only a sha the server currently references as an item or
+   * recipe atlas, or as an item file icon, is served — a rotated, orphaned
+   * or re-imported base map is never one of those.
    */
   async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
     const [row] = await this.db
@@ -305,24 +307,34 @@ export class ValheimArmoryReadRepository {
                 ),
               ),
           ),
-          notExists(this.baseMapRef(serverId, sha256)),
+          this.referencedAsAsset(serverId, sha256),
         ),
       )
       .limit(1);
     return row?.storagePath ?? null;
   }
 
-  /** Snapshots of `serverId` that declared `sha256` as a base map. */
-  private baseMapRef(serverId: number, sha256: string) {
-    const probe = JSON.stringify([{ sha256, role: 'baseMap' }]);
-    return this.db
+  /** `sha256` is a current item/recipe atlas or item file icon of `serverId`. */
+  private referencedAsAsset(serverId: number, sha256: string): SQL {
+    const fileIcon = sql`exists (select 1 from jsonb_each(${cat.items}) e where e.value->'icon'->>'kind' = 'file' and e.value->'icon'->>'sha256' = ${sha256})`;
+    const items = this.db
       .select({ one: sql`1` })
-      .from(snaps)
+      .from(cat)
       .where(
         and(
-          eq(snaps.pelicanServerId, serverId),
-          sql`${snaps.blobRefs} @> ${probe}::jsonb`,
+          eq(cat.pelicanServerId, serverId),
+          or(eq(cat.atlasSha256, sha256), fileIcon),
         ),
       );
+    const recipes = this.db
+      .select({ one: sql`1` })
+      .from(recipeSets)
+      .where(
+        and(
+          eq(recipeSets.pelicanServerId, serverId),
+          eq(recipeSets.atlasSha256, sha256),
+        ),
+      );
+    return or(exists(items), exists(recipes)) ?? sql`false`;
   }
 }

@@ -27,6 +27,7 @@ import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { memberToken } from '../../../pelican/testing/pelican-integration.helpers';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { blobRelativePath } from '../../link/blobs/valheim-link-blob.store';
+import { referenceBlobAsAsset } from '../../link/blobs/valheim-link-blob.testing';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
@@ -365,27 +366,54 @@ describe('base-map mask — fail closed (ROK-1949 D5)', () => {
 });
 
 describe('blob route refuses base maps (ROK-1949 D8)', () => {
-  it('404s the base-map sha while an icon blob on the same server still serves', async () => {
-    const blobs = `/plugins/valheim/armory/servers/${w.serverId}/blobs`;
+  const blobsUrl = () => `/plugins/valheim/armory/servers/${w.serverId}/blobs`;
+  const FILE_ICON_SHA = 'd'.repeat(64);
+
+  it('404s the base-map sha while a referenced atlas and file icon serve', async () => {
     await storeBlob(w.serverId, ICON_SHA, source);
-    const base = await get(`${blobs}/${SHA}`, w.owner);
+    await storeBlob(w.serverId, FILE_ICON_SHA, source);
+    await referenceBlobAsAsset(testApp.db, w.serverId, ICON_SHA, 'atlas');
+    await referenceBlobAsAsset(
+      testApp.db,
+      w.serverId,
+      FILE_ICON_SHA,
+      'fileIcon',
+    );
+    const base = await get(`${blobsUrl()}/${SHA}`, w.owner);
     expect(base.status).toBe(404);
     expect((base.body as Buffer).subarray(0, 8)).not.toEqual(PNG_SIG);
-    const icon = await get(`${blobs}/${ICON_SHA}`, w.owner);
-    expect(icon.status).toBe(200);
+    expect((await get(`${blobsUrl()}/${ICON_SHA}`, w.owner)).status).toBe(200);
+    expect((await get(`${blobsUrl()}/${FILE_ICON_SHA}`, w.owner)).status).toBe(
+      200,
+    );
   });
 
-  it('still 404s a rotated/orphaned base-map sha no map row references', async () => {
-    const blobs = `/plugins/valheim/armory/servers/${w.serverId}/blobs`;
+  it("404s a re-imported map's old base sha, an orphaned one, and an unreferenced blob", async () => {
     await storeBlob(w.serverId, ICON_SHA, source);
-    await testApp.db
-      .update(M)
-      .set({ baseMapSha256: null })
-      .where(eq(M.pelicanServerId, w.serverId));
-    const orphan = await get(`${blobs}/${SHA}`, w.owner);
+    const setBase = (sha: string | null) =>
+      testApp.db
+        .update(M)
+        .set({ baseMapSha256: sha })
+        .where(eq(M.pelicanServerId, w.serverId));
+    await setBase('e'.repeat(64));
+    expect((await get(`${blobsUrl()}/${SHA}`, w.owner)).status).toBe(404);
+    await setBase(null);
+    const orphan = await get(`${blobsUrl()}/${SHA}`, w.owner);
     expect(orphan.status).toBe(404);
     expect((orphan.body as Buffer).subarray(0, 8)).not.toEqual(PNG_SIG);
-    const icon = await get(`${blobs}/${ICON_SHA}`, w.owner);
-    expect(icon.status).toBe(200);
+    expect((await get(`${blobsUrl()}/${ICON_SHA}`, w.owner)).status).toBe(404);
+  });
+});
+
+describe('mask geometry (ROK-1949)', () => {
+  it("a same-world map with a different pixelSizeMetres never unmasks B's area", async () => {
+    await testApp.db
+      .update(M)
+      .set({ pixelSizeMetres: 99 })
+      .where(eq(M.steamId, '76561190000000002'));
+    const bob = await get(w.url, w.bob);
+    expect(bob.status).toBe(200);
+    expect(await rgbaAt(bob.body as Buffer, AT.se)).toEqual(CLEAR);
+    expect(await rgbaAt(bob.body as Buffer, AT.ne)).toEqual(sourceAt(AT.ne));
   });
 });
