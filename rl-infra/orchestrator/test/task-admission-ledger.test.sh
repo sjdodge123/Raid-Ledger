@@ -328,6 +328,47 @@ test_effective_budget_follows_mem_total() {
         "wait line names the effective budget"
 }
 
+# L11 — ROK-1902 review: a non-numeric reserve / budget falls back to the default.
+test_non_numeric_knobs_fall_back() {
+    CURRENT_TEST_NAME="L11: non-numeric RL_ADMISSION_RESERVE_MB / RL_ADMISSION_BUDGET_MB fall back to the defaults"
+    ledger_env 7000 12288
+    export RL_ADMISSION_RESERVE_MB=2g
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)/\(.admission.reserve_mb)"')" \
+        "12288/12288/2048" "reserve=2g: snapshot intact, reserve falls back to 2048 (not a 1 MB budget)"
+    seed_running '[{key:"m1",weight:"medium",kind:"task",reserve_mb:3072}]'
+    start_task "llllk111" heavy rl_validate_ci /bin/sh -c "exit 0"
+    assert_eq "$(wait_terminal llllk111 15)" "succeeded" "reserve=2g: 3072 + 5632 <= 12288 still admits"
+    export RL_ADMISSION_RESERVE_MB=2048 RL_ADMISSION_BUDGET_MB=12g
+    out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.budget_mb)/\(.admission.effective_budget_mb)"')" \
+        "12288/12288" "budget=12g: snapshot intact, budget falls back to 12288"
+}
+
+# L12 — ROK-1902 review: an unreadable MemTotal fails open to the configured budget.
+test_unreadable_mem_total_falls_back() {
+    CURRENT_TEST_NAME="L12: missing meminfo or no MemTotal line -> configured budget"
+    ledger_env 7000 10000
+    printf 'MemAvailable:   %d kB\n' $(( 7000 * 1024 )) > "$RL_MEMINFO_PATH"
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "10000/null" "no MemTotal line: effective budget = configured budget"
+    export RL_MEMINFO_PATH="$RL_STATE_DIR/no-such-meminfo"
+    out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "10000/null" "missing meminfo: effective budget = configured budget"
+}
+
+# L13 — ROK-1902 review: MemTotal below the reserve clamps the cap to 1 MB (still "on").
+test_cap_clamped_to_one() {
+    CURRENT_TEST_NAME="L13: MemTotal <= reserve clamps the effective budget to 1 MB, never 0/negative"
+    ledger_env 7000 12288
+    set_mem_total 1024
+    local out; out=$(bash "$BIN_DIR/lease-status" 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '"\(.admission.effective_budget_mb)/\(.admission.mem_total_mb)"')" \
+        "1/1024" "1024 - 2048 < 1: effective budget clamps to 1"
+}
+
 run_test "l1-lifetime-reservation" test_reservation_held_for_task_lifetime
 run_test "l2-heavy-cap" test_heavy_cap_queues_third_heavy
 run_test "l3-image-build-cap" test_image_build_cap_and_kind
@@ -339,5 +380,8 @@ run_test "l7-dead-holder-mid-wait" test_dead_holder_reclaimed_during_wait
 run_test "l8-ledger-timeout" test_ledger_wait_uses_ledger_timeout
 run_test "l9-sticky-ledger-limit" test_ledger_limit_sticky_through_floor_poll
 run_test "l10-effective-budget-memtotal" test_effective_budget_follows_mem_total
+run_test "l11-non-numeric-knobs" test_non_numeric_knobs_fall_back
+run_test "l12-unreadable-memtotal" test_unreadable_mem_total_falls_back
+run_test "l13-cap-clamp" test_cap_clamped_to_one
 
 print_test_summary

@@ -245,15 +245,25 @@ admission::mem_total_mb() {
          END {if (!found) exit 1}' "$RL_MEMINFO_PATH" 2>/dev/null || true
 }
 
+# The configured budget / reserve as plain integers. A non-numeric value (a
+# mis-set `2g`) falls back to the default instead of breaking the arithmetic
+# (which would clamp the budget to 1 MB and fail closed) or the snapshot JSON.
+admission::configured_budget_mb() {
+    if [[ "$RL_ADMISSION_BUDGET_MB" =~ ^[0-9]+$ ]]; then echo "$RL_ADMISSION_BUDGET_MB"; else echo 12288; fi
+}
+admission::reserve_mb() {
+    if [[ "$RL_ADMISSION_RESERVE_MB" =~ ^[0-9]+$ ]]; then echo "$RL_ADMISSION_RESERVE_MB"; else echo 2048; fi
+}
+
 # The budget the ledger actually enforces right now (see RL_ADMISSION_RESERVE_MB).
 # Never below 1 MB while the budget is on, so a tiny guest still means "on".
 admission::effective_budget_mb() {
-    local budget="$RL_ADMISSION_BUDGET_MB" total cap
-    [[ "$budget" =~ ^[0-9]+$ ]] || budget=0
+    local budget total cap
+    budget="$(admission::configured_budget_mb)"
     (( budget > 0 )) || { echo 0; return 0; }
     total="$(admission::mem_total_mb)"
     if [[ "$total" =~ ^[0-9]+$ ]]; then
-        cap=$(( total - RL_ADMISSION_RESERVE_MB ))
+        cap=$(( total - $(admission::reserve_mb) ))
         (( cap < 1 )) && cap=1
         (( cap < budget )) && budget=$cap
     fi
@@ -283,10 +293,10 @@ admission::snapshot() {
         --argjson avail "$avail" \
         --argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" \
         --argjson envmb "$(admission::env_reserved_mb)" \
-        --argjson budget "$RL_ADMISSION_BUDGET_MB" \
+        --argjson budget "$(admission::configured_budget_mb)" \
         --argjson effbudget "$(admission::effective_budget_mb)" \
         --argjson memtotal "$total" \
-        --argjson resv "$RL_ADMISSION_RESERVE_MB" \
+        --argjson resv "$(admission::reserve_mb)" \
         --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" \
         --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS" \
         --slurpfile state "$RL_ADMISSION_FILE" \
