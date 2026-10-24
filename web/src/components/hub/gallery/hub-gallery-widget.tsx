@@ -12,14 +12,14 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import {
-    availableFilters,
     HUB_GALLERY_STRIP_LIMIT,
     HUB_GALLERY_STRIP_LIMIT_PHONE,
     hubMediaStripQuery,
 } from '../../../lib/hub-media-query';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { HubGalleryChips } from './hub-gallery-chips';
-import { useHubGalleryFilter, useHubGalleryStore } from './hub-gallery-store';
+import { useHubGalleryStore } from './hub-gallery-store';
+import { useHubGalleryCardFilter } from './use-hub-gallery-card-filter';
 import { HubGalleryTile } from './hub-gallery-tile';
 
 const HubGalleryDialogHost = lazy(() => import('./hub-gallery-dialog'));
@@ -42,14 +42,11 @@ function GalleryStrip({ items, onOpen }: {
 
 export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const guildId = page.guild.id;
-    const chosen = useHubGalleryFilter(guildId);
     const setFilter = useHubGalleryStore((s) => s.setFilter);
     const openGallery = useHubGalleryStore((s) => s.openGallery);
     const request = useHubGalleryStore((s) => s.request);
     const desktop = useMediaQuery(DESKTOP_MQ);
-    const all = useQuery(hubMediaStripQuery(guildId, 'all'));
-    const filters = availableFilters(all.data?.kinds ?? []);
-    const filter = filters.includes(chosen) ? chosen : 'all';
+    const { all, filters, filter } = useHubGalleryCardFilter(guildId);
     const shown = useQuery({ ...hubMediaStripQuery(guildId, filter), placeholderData: keepPreviousData });
     if (all.data === undefined) return null;
     if (all.data.total === 0) {

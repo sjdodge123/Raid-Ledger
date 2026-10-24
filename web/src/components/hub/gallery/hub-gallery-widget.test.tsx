@@ -140,3 +140,14 @@ describe('HubGalleryWidget — dialog seam (L4)', () => {
         expect(req?.returnFocus).toBe(third);
     });
 });
+
+describe('HubGallerySeeAll — shares the card\'s clamped filter', () => {
+    it('a remembered Deaths chip on a hub with no deaths counts All, like the card', async () => {
+        const shots = Array.from({ length: 5 }, (_, i) => hubMediaItem(i + 1, 'screenshot'));
+        server.use(hubMediaListHandler(shots));
+        useHubGalleryStore.setState({ filters: { 5: 'death' }, request: null });
+        renderWithProviders(<Card />);
+        await waitFor(() => expect(tiles()).toHaveLength(5));
+        await waitFor(() => expect(screen.queryByTestId('hub-gallery-see-all')?.textContent).toBe('See all (5)'));
+    });
+});

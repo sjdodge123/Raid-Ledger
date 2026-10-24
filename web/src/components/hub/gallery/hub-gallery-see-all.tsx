@@ -8,11 +8,12 @@ import { useQuery } from '@tanstack/react-query';
 import { hubMediaStripQuery } from '../../../lib/hub-media-query';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { FOCUS_RING } from '../../ui/form-classes';
-import { useHubGalleryFilter, useHubGalleryStore } from './hub-gallery-store';
+import { useHubGalleryStore } from './hub-gallery-store';
+import { useHubGalleryCardFilter } from './use-hub-gallery-card-filter';
 
 export function HubGallerySeeAll({ page }: HubWidgetCtx): JSX.Element | null {
     const guildId = page.guild.id;
-    const filter = useHubGalleryFilter(guildId);
+    const { filter } = useHubGalleryCardFilter(guildId);
     const openGallery = useHubGalleryStore((s) => s.openGallery);
     const { data } = useQuery(hubMediaStripQuery(guildId, filter));
     if (data === undefined || data.total === 0) return null;

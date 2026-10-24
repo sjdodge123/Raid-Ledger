@@ -31,6 +31,11 @@ export function availableFilters(kinds: readonly HubMediaKind[]): HubMediaFilter
     return out;
 }
 
+/** The chosen chip, clamped to the chips this hub's `kinds` justify (else All) — card + See all share it. */
+export function clampHubMediaFilter(chosen: HubMediaFilter, kinds: readonly HubMediaKind[]): HubMediaFilter {
+    return availableFilters(kinds).includes(chosen) ? chosen : 'all';
+}
+
 /** `useQuery` options for one hub's Overview strip under one filter; idle until a guild id is known. */
 export function hubMediaStripQuery(guildId: number, filter: HubMediaFilter) {
     return {
