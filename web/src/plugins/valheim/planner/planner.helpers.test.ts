@@ -18,7 +18,6 @@ import {
     stockAgeLabel,
     viaChips,
     hidesUndiscovered,
-    pruneUndiscovered,
 } from './planner.helpers';
 
 const station = (p: string) => (p === 'forge' ? 'Forge' : p);
@@ -147,16 +146,5 @@ describe('undiscovered filter (ROK-1862)', () => {
         expect(hidesUndiscovered(on, 'outdated')).toBe(false);
         expect(hidesUndiscovered(on, undefined)).toBe(false);
         expect(hidesUndiscovered({ hideUndiscovered: false }, 'known')).toBe(false);
-    });
-    it('prunes discovered:false plan nodes with their subtree; null and true stay', () => {
-        const nodes = [
-            node({ id: 1, prefab: 'SwordBronze', discovered: false }),
-            node({ id: 2, parentId: 1, prefab: 'Bronze', discovered: true }),
-            node({ id: 3, prefab: 'AxeBronze', discovered: true }),
-            node({ id: 4, parentId: 3, prefab: 'Wood', discovered: null }),
-        ];
-        const kept = pruneUndiscovered(foldNodes(nodes));
-        expect(kept.map((r) => r.node.prefab)).toEqual(['AxeBronze']);
-        expect(kept[0]?.children.map((c) => c.node.prefab)).toEqual(['Wood']);
     });
 });

@@ -62,13 +62,6 @@ export const DISCOVERY_HINT: Record<Exclude<ValheimRecipeDiscovery, 'known'>, st
 export const hidesUndiscovered = (f: Pick<PlannerFilters, 'hideUndiscovered'>, discovery: ValheimRecipeDiscovery | undefined): boolean =>
     f.hideUndiscovered && discovery === 'known';
 
-/** ROK-1862 Q2 — drop undiscovered plan nodes (and the subtree under them) when the filter applies. */
-export function pruneUndiscovered(roots: readonly PlanTreeNode[]): PlanTreeNode[] {
-    return roots
-        .filter((t) => t.node.discovered !== false)
-        .map((t) => ({ node: t.node, children: pruneUndiscovered(t.children) }));
-}
-
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =
     'Recipes arrive when an admin with the mod joins the server.';

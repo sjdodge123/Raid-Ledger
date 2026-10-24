@@ -11,7 +11,7 @@ import { useNow } from '../../../hooks/use-now';
 import { MapError } from '../map/map-error';
 import { useValheimRecipeCatalog } from '../hooks/use-valheim-recipes';
 import { CraftingWindow } from './crafting-window';
-import { hidesUndiscovered, PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel } from './planner.helpers';
+import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
 import { ShoppingList } from './shopping-list';
 import { usePlannerState, type PlannerState } from './use-planner-state';
@@ -27,14 +27,13 @@ function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResp
 }
 
 /** The idle detail column: what the list needs, its error with a Retry, or the idle prompt. */
-function PlanPane({ plan, names, filters }: Pick<PlannerState, 'plan' | 'names' | 'filters'>): JSX.Element {
+function PlanPane({ plan, names }: Pick<PlannerState, 'plan' | 'names'>): JSX.Element {
     const rootKinds = useMemo(() => plan.data?.targets.map((t) => t.kind) ?? [], [plan.data]);
     if (plan.data !== undefined)
         return (
             <div className="space-y-2">
                 {plan.data.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds}
-                    hideUndiscovered={hidesUndiscovered(filters, plan.data.discovery)} />
+                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds} />
             </div>
         );
     if (plan.isError) return <MapError text="Couldn’t load your list’s plan." onRetry={() => void plan.refetch()} />;
@@ -47,7 +46,7 @@ function PlannerBody({ serverId, catalog }: { serverId: number; catalog: Valheim
         <div className="space-y-4">
             <HeaderLine catalog={catalog} capturedAt={s.plan.data?.stock === 'scan' ? s.plan.data.capturedAt : null} />
             <CraftingWindow serverId={serverId} catalog={catalog} filters={s.filters} onFilters={s.setFilters} hasPersonal={s.hasPersonal}
-                names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} filters={s.filters} />} />
+                names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} />} />
             <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} />
         </div>
     );

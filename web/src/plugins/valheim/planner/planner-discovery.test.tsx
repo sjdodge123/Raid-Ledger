@@ -96,16 +96,14 @@ describe('plan tree rows', () => {
         id, parentId: null, prefab, quantity: 1, via: { type: 'gathered' }, alternatives: 0, crafts: 0, have: null, short: null, discovered,
     });
     const nodes = [node(1, 'SwordBronze', false), node(2, 'Wood', null)];
-    const tree = (hide: boolean) =>
-        render(<RecipeTree nodes={nodes} truncated={false} names={names} label="What your list needs" rootKinds={['item', 'item']} hideUndiscovered={hide} />);
+    const tree = () =>
+        render(<RecipeTree nodes={nodes} truncated={false} names={names} label="What your list needs" rootKinds={['item', 'item']} />);
     const prefabs = () => screen.getAllByTestId('valheim-planner-row').map((r) => r.getAttribute('data-prefab'));
-    it('filter off → the undiscovered node carries the chip', () => {
-        tree(false);
+    it('the plan tree never prunes: the undiscovered node stays and carries the chip', () => {
+        tree();
         expect(prefabs()).toEqual(['SwordBronze', 'Wood']);
-        expect(screen.getAllByTestId('valheim-undiscovered-chip')).toHaveLength(1);
-    });
-    it('filter on → the undiscovered node is hidden', () => {
-        tree(true);
-        expect(prefabs()).toEqual(['Wood']);
+        const chips = screen.getAllByTestId('valheim-undiscovered-chip');
+        expect(chips).toHaveLength(1);
+        expect(chips[0]?.closest('[data-prefab]')).toHaveAttribute('data-prefab', 'SwordBronze');
     });
 });

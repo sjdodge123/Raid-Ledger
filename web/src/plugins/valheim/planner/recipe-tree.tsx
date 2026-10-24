@@ -5,7 +5,7 @@
  */
 import { useMemo, useState, type JSX } from 'react';
 import type { ValheimPlanNode } from '@raid-ledger/contract';
-import { foldNodes, pruneUndiscovered, type PlannerKind, type PlanTreeNode } from './planner.helpers';
+import { foldNodes, type PlannerKind, type PlanTreeNode } from './planner.helpers';
 import { RecipeTreeRow } from './recipe-tree-row';
 import { rootKindOf, type PlannerNames } from './use-planner-names';
 
@@ -61,7 +61,6 @@ export function RecipeTree({
     names,
     label,
     rootKinds,
-    hideUndiscovered = false,
 }: {
     nodes: readonly ValheimPlanNode[];
     truncated: boolean;
@@ -69,10 +68,9 @@ export function RecipeTree({
     label: string;
     /** Target kinds in request order — root i is target i. */
     rootKinds: readonly (PlannerKind | undefined)[];
-    /** ROK-1862 Q2 — already gated on `discovery === 'known'`: drop undiscovered nodes and their subtrees. */
-    hideUndiscovered?: boolean;
 }): JSX.Element {
-    const roots = useMemo(() => (hideUndiscovered ? pruneUndiscovered(foldNodes(nodes)) : foldNodes(nodes)), [nodes, hideUndiscovered]);
+    // ROK-1862: never pruned — undiscovered nodes keep their chip so the tree matches the shopping list.
+    const roots = useMemo(() => foldNodes(nodes), [nodes]);
     const kindOf = useMemo(() => rootKindOf(nodes, rootKinds), [nodes, rootKinds]);
     const { collapsed, onToggle } = useCollapsed();
     return (
