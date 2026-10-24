@@ -107,6 +107,6 @@ describe('useDeathsWidgetVisible', () => {
 describe('ValheimDeathsShowAll', () => {
     it('links to the server-wide death layer on the Map tab', () => {
         renderWithProviders(<ValheimDeathsShowAll />);
-        expect(screen.getByRole('link', { name: 'Show all' }).getAttribute('href')).toBe('/?pins=death#map');
+        expect(screen.getByRole('link', { name: 'Show all' }).getAttribute('href')).toBe('/?pins=death&players=all#map');
     });
 });

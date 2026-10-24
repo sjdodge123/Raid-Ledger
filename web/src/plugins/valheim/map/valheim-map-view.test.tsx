@@ -170,9 +170,11 @@ describe('ValheimMapView (ROK-1837 T6)', () => {
         serve(meta());
         view();
         await screen.findByTestId('fog');
-        expect(screen.getByText('Home')).toHaveAttribute('data-open', 'false');
+        // The pin label, not the type-filter chip of the same name (ROK-1943).
+        const label = () => screen.getByText('Home', { selector: '[data-open]' });
+        expect(label()).toHaveAttribute('data-open', 'false');
         fireEvent.click(screen.getByRole('switch', { name: 'Pin labels' }));
-        expect(screen.getByText('Home')).toHaveAttribute('data-open', 'true');
+        expect(label()).toHaveAttribute('data-open', 'true');
     });
 });
 

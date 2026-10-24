@@ -1,10 +1,10 @@
-/** ROK-1899 — the crafting window: greying, detail slots, search, UPGRADE add, no scan, stock error, phone sheet, keyboard. */
+/** ROK-1899 — the crafting window: greying, detail slots, search, UPGRADE add, no scan, stock error, phone sheet, keyboard; ROK-1934 process-only search. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState, type JSX } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
+import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../../../test/mocks/valheim-recipes-handlers';
 import { CRAFT_ENTRIES, CRAFT_STATIONS, CRAFT_TOTALS } from './crafting.test-fixture';
 import { CraftingWindow } from './crafting-window';
-import { CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, serializeTargets, type PlannerFilters, type PlannerTarget } from './planner.helpers';
+import { CRAFT_NO_SCAN_COPY, DEFAULT_PLANNER_FILTERS, processorLabel, serializeTargets, type PlannerFilters, type PlannerTarget } from './planner.helpers';
 import type { PlannerNames } from './use-planner-names';
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -26,11 +26,17 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     getAuthToken: vi.fn(() => 'test-token'),
 }));
 
-const catalog: ValheimRecipeCatalogResponse = { ...recipeCatalogFixture(), entries: CRAFT_ENTRIES, stations: CRAFT_STATIONS, ingredients: {} };
-const byPrefab = new Map(CRAFT_ENTRIES.map((e) => [e.prefab, e.name]));
+/** ROK-1934 — a process-only bar: nothing crafts Iron at a station, the smelter makes it from Scrap iron. */
+const IRON: ValheimRecipeCatalogEntry = {
+    prefab: 'Iron', kind: 'item', name: 'Iron', category: 'Material', icon: null, maxQuality: 1, sources: { recipes: 0, processes: 1 },
+    craft: { station: 'smelter', stationLevel: 0, anyOneOf: false, resources: [{ prefab: 'ScrapIron', amount: 1 }], via: 'process', amount: 1 }, upgrades: [],
+};
+const ENTRIES = [...CRAFT_ENTRIES, IRON];
+const catalog: ValheimRecipeCatalogResponse = { ...recipeCatalogFixture(), entries: ENTRIES, stations: CRAFT_STATIONS, ingredients: {} };
+const byPrefab = new Map([...ENTRIES.map((e): [string, string] => [e.prefab, e.name]), ['ScrapIron', 'Scrap iron']]);
 const names: PlannerNames = {
     nameOf: (p) => byPrefab.get(p) ?? p,
-    stationName: (p) => CRAFT_STATIONS.find((s) => s.prefab === p)?.name ?? p,
+    stationName: (p) => CRAFT_STATIONS.find((s) => s.prefab === p)?.name ?? processorLabel(p) ?? p,
     ctxFor: () => ({ serverId: 7, items: {}, atlas: null, atlasUrl: null }),
 };
 let added: PlannerTarget[];
@@ -278,5 +284,61 @@ describe('CraftingWindow', () => {
         await user.click(within(pane).getByRole('button', { name: 'Back to your list' }));
         expect(screen.queryByRole('region', { name: 'Recipe detail' })).toBeNull();
         expect(search(), 'focus falls back to the search box').toHaveFocus();
+    });
+});
+
+describe('CraftingWindow — process-only items (ROK-1934)', () => {
+    it('"iron" lists Iron with the Smelter suffix; its detail shows the inputs, the fuel note and Add to list', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        await user.type(search(), 'iron');
+        const list = await screen.findByRole('list', { name: 'Matches from every station' });
+        const iron = within(list).getByRole('button', { name: /^Iron/ });
+        expect(iron).toHaveTextContent('Smelter');
+        await user.click(iron);
+        const pane = screen.getByRole('region', { name: 'Recipe detail' });
+        expect(within(pane).getByRole('heading', { name: 'Iron' })).toBeInTheDocument();
+        expect(within(pane).getByTestId('valheim-craft-meta')).toHaveTextContent(/^Material · Smelter · max quality 1$/);
+        expect(within(pane).getByTestId('valheim-craft-star-slot')).toHaveAccessibleName('Smelter');
+        expect(within(pane).getByTestId('valheim-craft-star-slot')).not.toHaveTextContent('lvl');
+        expect(within(pane).getByRole('listitem', { name: 'Scrap iron: need 1, you have 0, 1 short' })).toHaveTextContent('you have 0 · 1 short');
+        expect(within(pane).getByTestId('valheim-craft-process-note')).toHaveTextContent('Processed at Smelter. Any fuel it burns is counted in your plan.');
+        await user.click(within(pane).getByRole('button', { name: 'Add to list' }));
+        expect(added).toEqual([{ prefab: 'Iron', kind: 'item', quality: 1, fromQuality: 0, amount: 1 }]);
+    });
+
+    it('below DESKTOP_MQ the Iron row opens the sheet and its Add to list adds Iron', async () => {
+        media.desktop = false;
+        const user = userEvent.setup();
+        renderWindow();
+        await user.type(search(), 'iron');
+        await user.click(within(await screen.findByRole('list', { name: 'Matches from every station' })).getByRole('button', { name: /^Iron/ }));
+        const sheet = await screen.findByRole('dialog');
+        expect(within(sheet).getByTestId('valheim-craft-star-slot')).toHaveAccessibleName('Smelter');
+        await user.click(within(sheet).getByRole('button', { name: 'Add to list' }));
+        expect(added).toEqual([{ prefab: 'Iron', kind: 'item', quality: 1, fromQuality: 0, amount: 1 }]);
+    });
+
+    it('"cooked" and "meat" find Cooked meat at the Cooking station', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        for (const text of ['cooked', 'meat']) {
+            await user.clear(search());
+            await user.type(search(), text);
+            const list = await screen.findByRole('list', { name: 'Matches from every station' });
+            expect(within(list).getByRole('button', { name: /^Cooked meat/ })).toHaveTextContent('Cooking station');
+        }
+    });
+
+    it('the station switcher gains no processor chip', async () => {
+        const user = userEvent.setup();
+        renderWindow();
+        const stations = screen.getByRole('radiogroup', { name: 'Crafting station' });
+        const before = within(stations).getAllByRole('radio').length;
+        await user.type(search(), 'iron');
+        await screen.findByRole('list', { name: 'Matches from every station' });
+        for (const name of ['Smelter', 'Cooking station', 'Charcoal kiln']) expect(within(stations).queryByRole('radio', { name })).toBeNull();
+        expect(within(stations).getAllByRole('radio')).toHaveLength(before);
+        expect(within(stations).getAllByRole('radio')).toHaveLength(3);
     });
 });

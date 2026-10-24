@@ -56,6 +56,28 @@ const LOCK_NAME = 'rl-refresh';
 
 let inFlight: Promise<RefreshOutcome> | null = null;
 
+/** ROK-1947: told after every refresh that installed a token (see `onRefreshSuccess`). */
+const successListeners = new Set<() => void>();
+
+/**
+ * ROK-1947: run `listener` after every refresh that installs a token — the
+ * resume refresh, the pre-request refresh in `fetchWithAuth`, or the 401
+ * backstop alike. It rides the single-flight request, so one refresh notifies
+ * once. Each listener runs in its own microtask, so a throwing listener never
+ * fails the refresh. Returns the unsubscribe.
+ */
+export function onRefreshSuccess(listener: () => void): () => void {
+  successListeners.add(listener);
+  return () => {
+    successListeners.delete(listener);
+  };
+}
+
+function notifySuccess(outcome: RefreshOutcome): RefreshOutcome {
+  if (outcome.kind === 'ok') successListeners.forEach((listener) => queueMicrotask(listener));
+  return outcome;
+}
+
 /** >0 while this tab holds `rl-refresh` for `installSessionExclusively` (ROK-1820). */
 let installDepth = 0;
 
@@ -146,7 +168,7 @@ function sharedRefresh(): Promise<RefreshOutcome> {
   // refresh) — answer indeterminate, which never clears the session.
   if (installDepth > 0) return Promise.resolve(INDETERMINATE);
   if (!inFlight) {
-    inFlight = doRefresh().finally(() => {
+    inFlight = doRefresh().then(notifySuccess).finally(() => {
       inFlight = null;
     });
   }

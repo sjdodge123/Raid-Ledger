@@ -118,7 +118,18 @@ const PROCESSOR_LABEL: Record<string, string> = {
     piece_spinningwheel: 'Spinning wheel',
     fermenter: 'Fermenter',
     incinerator: 'Obliterator',
+    // ROK-1934 — UNVERIFIED in-game ids past the cooking station (spec OQ4); exports name them via pieces[].
+    piece_cookingstation: 'Cooking station',
+    piece_cookingstation_iron: 'Iron cooking station',
+    piece_oven: 'Stone oven',
+    eitrrefinery: 'Eitr refinery',
 };
+
+/** A processor's display name when the export does not name it; null when unknown (own keys only). */
+export function processorLabel(prefab: string): string | null {
+    return Object.hasOwn(PROCESSOR_LABEL, prefab) ? (PROCESSOR_LABEL[prefab] ?? null) : null;
+}
+
 const PROCESSOR_TYPE_LABEL: Record<string, string> = {
     smelter: 'Smelter',
     fermenter: 'Fermenter',
@@ -128,7 +139,7 @@ const PROCESSOR_TYPE_LABEL: Record<string, string> = {
 
 function processChip(via: Extract<ValheimPlanVia, { type: 'process' }>): string {
     const name =
-        PROCESSOR_LABEL[via.processor] ??
+        processorLabel(via.processor) ??
         PROCESSOR_TYPE_LABEL[via.processorType] ??
         via.processor;
     return via.seconds === null ? name : `${name} · ${formatSeconds(via.seconds)}`;

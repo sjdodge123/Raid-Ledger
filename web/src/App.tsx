@@ -12,6 +12,7 @@ import { getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { getAuthMethod } from './lib/api/silent-reauth';
 import { startBootSession, awaitBootSession } from './lib/api/boot-session';
 import { installCrossTabAuth } from './lib/api/cross-tab-auth';
+import { installResumeRefresh } from './lib/api/resume-refresh';
 import { Layout } from './components/layout';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
@@ -69,6 +70,11 @@ function useAppBootstrap() {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  // ROK-1947: a resumed tab (bfcache restore, back online) re-mints an expired in-memory
+  // token, and any successful refresh refetches 401'd queries. An effect with cleanup, so
+  // HMR / StrictMode never stack the listeners.
+  useEffect(() => installResumeRefresh(queryClient), []);
 
   useEffect(() => {
     if (getAuthMethod() || isMagicLinkRedeemPending()) {

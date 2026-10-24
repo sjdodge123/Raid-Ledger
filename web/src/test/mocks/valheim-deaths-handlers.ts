@@ -3,7 +3,7 @@
  * handler list: specs `server.use()` them.
  */
 import { http, HttpResponse } from 'msw';
-import type { ValheimDeathPin, ValheimDeathPinsResponse, ValheimDeathPlayer, ValheimDeathsResponse } from '@raid-ledger/contract';
+import type { ValheimDeathPlayer, ValheimDeathsResponse, ValheimServerPin, ValheimServerPinsResponse } from '@raid-ledger/contract';
 
 export const VALHEIM_DEATHS_URL = 'http://localhost:3000/plugins/valheim/armory/servers/:serverId/deaths';
 
@@ -33,14 +33,23 @@ export function valheimDeathsHandler(body: ValheimDeathsResponse = valheimDeaths
         : HttpResponse.json({ statusCode: status, message: 'Hub not found' }, { status })));
 }
 
-export const VALHEIM_DEATH_PINS_URL = 'http://localhost:3000/plugins/valheim/armory/servers/:serverId/deaths/pins';
+export const VALHEIM_SERVER_PINS_URL = 'http://localhost:3000/plugins/valheim/armory/servers/:serverId/pins';
 
-/** Every player's Death pins on `worldUid` (400 without one, like the route); `status` ≠ 200 → the visitor 404. */
-export function valheimDeathPinsHandler(pins: ValheimDeathPin[], status = 200) {
-    return http.get(VALHEIM_DEATH_PINS_URL, ({ request }) => {
-        const worldUid = new URL(request.url).searchParams.get('worldUid');
+/**
+ * ROK-1943 — the cross-player pin layer on `worldUid` (400 without one, like
+ * the route); `status` ≠ 200 → the hub-not-found body. `seen` records each
+ * request's query so specs can assert `players` / `types`.
+ */
+export function valheimServerPinsHandler(
+    pins: ValheimServerPin[], opts: { status?: number; truncated?: boolean; seen?: URLSearchParams[] } = {},
+) {
+    const { status = 200, truncated = false, seen } = opts;
+    return http.get(VALHEIM_SERVER_PINS_URL, ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        seen?.push(query);
+        const worldUid = query.get('worldUid');
         if (status !== 200) return HttpResponse.json({ statusCode: status, message: 'Hub not found' }, { status });
         if (!worldUid) return HttpResponse.json({ statusCode: 400, message: 'worldUid required' }, { status: 400 });
-        return HttpResponse.json({ worldUid, pins } satisfies ValheimDeathPinsResponse);
+        return HttpResponse.json({ worldUid, pins, truncated } satisfies ValheimServerPinsResponse);
     });
 }

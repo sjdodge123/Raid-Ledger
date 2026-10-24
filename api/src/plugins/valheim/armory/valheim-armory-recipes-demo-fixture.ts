@@ -9,6 +9,10 @@
  *   Bronze (forge)      ← Copper 2 + Tin 1
  *   Copper / Tin        ← smelter: CopperOre / TinOre, fuel Coal ×2 per bar
  *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood
+ *   CookedMeat          ← piece_cookingstation (fuel-less `cooking`): RawMeat
+ *
+ * The processors get no `pieces[]` entry, so the web falls back to its own
+ * processor labels (ROK-1934 D3/D9).
  *
  * Plus the catalogue names those prefabs need, and one public chest holding
  * 40 Copper (and no Tin) so a plan shows Copper covered and Tin short.
@@ -81,6 +85,16 @@ const SMELTER: ValheimProcessor = {
   defaultResult: null,
 };
 
+/** As in `recipes-processing.json`: a fuel-less cooking processor (ROK-1934). */
+const COOKING_STATION: ValheimProcessor = {
+  ...SMELTER,
+  prefab: 'piece_cookingstation',
+  type: 'cooking',
+  fuel: null,
+  fuelPerProduct: null,
+  maxInput: 2,
+};
+
 /** `recipes-vanilla.json` verbatim (pinned by the integration spec). */
 export const RECIPES_VANILLA: ValheimRecipesMessage = {
   schemaVersion: 1,
@@ -148,12 +162,14 @@ export const RECIPES_DEMO_MESSAGE: ValheimRecipesMessage = {
   processors: [
     { ...SMELTER, prefab: 'charcoal_kiln', fuel: null, fuelPerProduct: null },
     SMELTER,
+    COOKING_STATION,
   ],
   processes: [
     smelt('charcoal_kiln', 'Wood', 'Coal', 15),
     ...RECIPES_VANILLA.processes,
     smelt('smelter', 'CopperOre', 'Copper', 30),
     smelt('smelter', 'TinOre', 'Tin', 30),
+    smelt('piece_cookingstation', 'RawMeat', 'CookedMeat', 25),
   ],
 };
 
@@ -185,6 +201,9 @@ export const RECIPES_DEMO_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
   LeatherScraps: item('Leather scraps', 2),
   Iron: item('Iron', 0),
   IronScrap: item('Scrap iron', 0),
+  /** ROK-1934: cooked food, reachable through the Planner's search only. */
+  RawMeat: item('Raw meat', 2),
+  CookedMeat: item('Cooked meat', 3, 1, 'Consumable'),
 };
 
 /** The one chest the planner fixture adds to the containers scan. */

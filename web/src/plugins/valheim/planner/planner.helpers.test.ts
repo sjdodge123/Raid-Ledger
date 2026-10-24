@@ -8,6 +8,7 @@ import {
     formatSeconds,
     havePct,
     parseStoredTargets,
+    processorLabel,
     serializeTargets,
     DEFAULT_PLANNER_FILTERS,
     activePlannerFilters,
@@ -91,6 +92,17 @@ describe('viaChips', () => {
         expect(viaChips(node({ via: proc }), station)).toEqual(['Fermenter · 40 min']);
         expect(viaChips(node({ via: { type: 'cycle' } }), station)).toEqual(['Loops back']);
         expect(viaChips(node({}), station)).toEqual(['Gathered']);
+    });
+});
+
+describe('processorLabel (ROK-1934)', () => {
+    it('names known processor prefabs; unknown → null so the caller can fall back', () => {
+        expect(processorLabel('smelter')).toBe('Smelter');
+        expect(processorLabel('charcoal_kiln')).toBe('Charcoal kiln');
+        expect(processorLabel('piece_cookingstation')).toBe('Cooking station');
+        expect(processorLabel('fermenter')).toBe('Fermenter');
+        expect(processorLabel('mystery_press')).toBeNull();
+        expect(processorLabel('constructor'), 'own keys only, never an inherited member').toBeNull();
     });
 });
 

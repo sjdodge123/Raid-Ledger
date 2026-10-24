@@ -53,6 +53,12 @@ const TITLE_CAP = 2;
 export interface ArchetypeDerivationInputs {
   intensityMetrics: IntensityMetricsDto;
   dimensions: TasteProfileDimensionsDto;
+  /**
+   * Whether the player has ANY Discord presence data (ROK-1935). See
+   * `loadPresenceUserIds` in `archetype-retitle.helpers.ts` for the
+   * exact definition. `false` → tier `Newcomer`.
+   */
+  hasPresenceData: boolean;
 }
 
 interface VectorTitleScore {
@@ -65,8 +71,15 @@ interface VectorTitleScore {
 /**
  * Map an intensity score (0-100) to its tier. Thresholds are inclusive
  * on the lower bound (35 -> Regular, 60 -> Dedicated, 85 -> Hardcore).
+ *
+ * ROK-1935: a player with no presence data has an unknown intensity, not
+ * a low one, so they are `Newcomer` rather than `Casual`.
  */
-export function deriveTier(intensity: number): IntensityTier {
+export function deriveTier(
+  intensity: number,
+  hasPresenceData: boolean,
+): IntensityTier {
+  if (!hasPresenceData) return 'Newcomer';
   if (intensity >= 85) return 'Hardcore';
   if (intensity >= 60) return 'Dedicated';
   if (intensity >= 35) return 'Regular';
@@ -142,7 +155,10 @@ export function buildDescriptions(
 export function deriveArchetype(
   inputs: ArchetypeDerivationInputs,
 ): ArchetypeDto {
-  const intensityTier = deriveTier(inputs.intensityMetrics.intensity);
+  const intensityTier = deriveTier(
+    inputs.intensityMetrics.intensity,
+    inputs.hasPresenceData,
+  );
   const scores = computeVectorTitleScores(inputs.dimensions);
   const vectorTitles = pickTopTitles(scores);
   const descriptions = buildDescriptions(intensityTier, vectorTitles);
