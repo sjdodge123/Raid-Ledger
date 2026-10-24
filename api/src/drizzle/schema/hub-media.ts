@@ -10,6 +10,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { HubMediaKind } from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
 
@@ -32,7 +33,7 @@ export const hubMedia = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: 'cascade' }),
     source: text('source').notNull(),
-    kind: text('kind').notNull(),
+    kind: text('kind').$type<HubMediaKind>().notNull(),
     provenanceKey: text('provenance_key').notNull(),
     discordChannelId: varchar('discord_channel_id', { length: 32 }),
     discordMessageId: varchar('discord_message_id', { length: 32 }),

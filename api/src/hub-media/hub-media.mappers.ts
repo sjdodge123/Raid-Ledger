@@ -1,4 +1,4 @@
-import type { HubMediaItem, HubMediaKind } from '@raid-ledger/contract';
+import type { HubMediaItem } from '@raid-ledger/contract';
 import type { HubMediaRow } from '../drizzle/schema';
 
 /** The bytes route for one rendition (fetched with the bearer token). */
@@ -17,7 +17,7 @@ export function toHubMediaItem(
 ): HubMediaItem {
   return {
     id: row.id,
-    kind: row.kind as HubMediaKind,
+    kind: row.kind,
     authorName: row.authorName,
     caption: row.caption,
     capturedAt: row.capturedAt.toISOString(),

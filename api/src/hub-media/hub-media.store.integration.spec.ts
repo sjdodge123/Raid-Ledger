@@ -3,7 +3,7 @@
  * dedupe (sequential + concurrent), the tombstone a re-run never re-adds,
  * the per-hub cap, refusals that leave nothing on disk, and the source kind.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -213,7 +213,8 @@ describe('HubMediaService.ingest refusals (ROK-1942)', () => {
       testApp.db.insert(schema.hubMedia).values({
         guildId,
         source: 'discord',
-        kind: 'video',
+        // Raw SQL: the column is typed HubMediaKind, the CHECK is what's under test.
+        kind: sql`'video'`,
         provenanceKey: 'k',
         capturedAt: new Date(),
         storageName: 'x',
