@@ -4,21 +4,22 @@
  * open type set (modded, numeric) lands in "Other". Q2 = (a): all 11 chips,
  * always, in this fixed order.
  *
- * ROK-1946 seam: a new layer (scanned portals) adds one entry with its own
- * `source` after Portal; nothing else here changes.
+ * ROK-1946 D11/D13: "Scanned portals" (12th chip, right after Portal) is its
+ * own source — it claims no raw map pin type and sends nothing to the server
+ * pins read.
  */
 import type { ComponentType, SVGProps } from 'react';
-import { MapPinIcon } from '@heroicons/react/24/solid';
+import { ArrowsRightLeftIcon, MapPinIcon } from '@heroicons/react/24/solid';
 import { pinStyleFor } from './pin-types';
 
 export const PIN_TYPE_GROUP_IDS = [
-    'death', 'bed', 'portal', 'boss', 'home', 'fire',
+    'death', 'bed', 'portal', 'scanned-portal', 'boss', 'home', 'fire',
     'workshop', 'mine', 'shout', 'hildir', 'other',
 ] as const;
 export type PinTypeGroupId = (typeof PIN_TYPE_GROUP_IDS)[number];
 
-/** Where a chip's pins come from — only the map's own pins today (D8). */
-export type PinSource = 'map';
+/** Where a chip's pins come from: the maps' own pins, or the server's portal scan (ROK-1946). */
+export type PinSource = 'map' | 'portal-scan';
 
 export interface PinTypeGroup {
     id: PinTypeGroupId;
@@ -32,7 +33,9 @@ export interface PinTypeGroup {
     source: PinSource;
 }
 
-const RAW_TYPES: Readonly<Record<Exclude<PinTypeGroupId, 'other'>, readonly string[]>> = {
+type MapGroupId = Exclude<PinTypeGroupId, 'other' | 'scanned-portal'>;
+
+const RAW_TYPES: Readonly<Record<MapGroupId, readonly string[]>> = {
     death: ['Death'], bed: ['Bed'], portal: ['Icon4'], boss: ['Boss'], home: ['Icon1'],
     fire: ['Icon0'], workshop: ['Icon2'], mine: ['Icon3'], shout: ['Shout'],
     hildir: ['Hildir1', 'Hildir2', 'Hildir3'],
@@ -40,7 +43,7 @@ const RAW_TYPES: Readonly<Record<Exclude<PinTypeGroupId, 'other'>, readonly stri
 
 const KNOWN_TYPES = new Set(Object.values(RAW_TYPES).flat());
 
-function knownGroup(id: Exclude<PinTypeGroupId, 'other'>): PinTypeGroup {
+function knownGroup(id: MapGroupId): PinTypeGroup {
     const rawTypes = RAW_TYPES[id];
     const style = pinStyleFor(rawTypes[0] ?? '');
     return {
@@ -54,29 +57,41 @@ const OTHER: PinTypeGroup = {
     rawTypes: [], match: (type) => !KNOWN_TYPES.has(type), source: 'map',
 };
 
-/** The chips, in the ruled order (Q2). */
-export const PIN_TYPE_GROUPS: readonly PinTypeGroup[] = PIN_TYPE_GROUP_IDS.map((id) =>
-    id === 'other' ? OTHER : knownGroup(id),
-);
+/** ROK-1946 D9/D11: the portal-scan layer — never claims a map pin. */
+const SCANNED_PORTALS: PinTypeGroup = {
+    id: 'scanned-portal', label: 'Scanned portals', Icon: ArrowsRightLeftIcon, toneClass: 'text-success',
+    rawTypes: [], match: () => false, source: 'portal-scan',
+};
 
-/** True for one of the 11 chip ids (URL tokens are untrusted). */
+function groupFor(id: PinTypeGroupId): PinTypeGroup {
+    if (id === 'other') return OTHER;
+    return id === 'scanned-portal' ? SCANNED_PORTALS : knownGroup(id);
+}
+
+/** The chips, in the ruled order (Q2). */
+export const PIN_TYPE_GROUPS: readonly PinTypeGroup[] = PIN_TYPE_GROUP_IDS.map(groupFor);
+
+const MAP_GROUPS = PIN_TYPE_GROUPS.filter((g) => g.source === 'map');
+
+/** True for one of the 12 chip ids (URL tokens are untrusted). */
 export function isPinTypeGroupId(value: string): value is PinTypeGroupId {
     return (PIN_TYPE_GROUP_IDS as readonly string[]).includes(value);
 }
 
 /** The chip a raw pin type belongs to; anything unknown is "other". */
 export function groupOf(type: string): PinTypeGroupId {
-    return PIN_TYPE_GROUPS.find((g) => g.id !== 'other' && g.match(type))?.id ?? 'other';
+    return MAP_GROUPS.find((g) => g.id !== 'other' && g.match(type))?.id ?? 'other';
 }
 
 /**
  * The raw types to send as the server layer's `types` (D4), in registry order.
  * `undefined` = send nothing (all types): no selection, or "Other" is picked —
- * an open set the server cannot name, so the web filters it instead.
+ * an open set the server cannot name, so the web filters it instead. Only map
+ * chips count (D13): `[]` = no map chip picked — the caller sends no request.
  */
 export function rawTypesFor(groupIds: Iterable<PinTypeGroupId> | null): string[] | undefined {
     if (groupIds === null) return undefined;
     const picked = new Set(groupIds);
     if (picked.has('other')) return undefined;
-    return PIN_TYPE_GROUPS.filter((g) => picked.has(g.id)).flatMap((g) => [...g.rawTypes]);
+    return MAP_GROUPS.filter((g) => picked.has(g.id)).flatMap((g) => [...g.rawTypes]);
 }

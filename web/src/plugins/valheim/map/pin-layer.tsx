@@ -27,13 +27,13 @@ const LABEL_CLASS =
     'pointer-events-none absolute bottom-[calc(100%-4px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-edge bg-surface px-1.5 py-0.5 text-xs font-medium text-foreground';
 
 function PinDisc({ pin }: { pin: ValheimMapPin }) {
-    const { Icon, toneClass } = pinStyleFor(pin.type);
+    const { Icon, toneClass, ring } = pinStyleFor(pin.type);
     const edge = pin.shared
-        ? 'border-dashed border-slot'
-        : 'border-edge-strong';
+        ? 'border border-dashed border-slot'
+        : 'border border-edge-strong';
     return (
         <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full border ${edge} ${PIN_DISC_CLASS}`}
+            className={`flex h-7 w-7 items-center justify-center rounded-full ${ring === true ? 'border-2 border-success' : edge} ${PIN_DISC_CLASS}`}
         >
             <Icon aria-hidden="true" className={`h-4 w-4 ${toneClass}`} />
         </span>

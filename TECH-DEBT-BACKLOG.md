@@ -3579,6 +3579,9 @@ same day (#1278, #1279, #1280).
 
 - **med** `tools/mcp-rl-fleet/src/tools/__tests__/test-plan-v2.spec.ts` — 6 cases fail locally on origin/main c4c736f1f with `AssertionError: POST call must have been made: expected undefined to be truthy` (×2) and `expected null not to be null` (×4). Pre-existing: reproduced on the main checkout before this branch, which does not touch the file. `Suggested:` check whether the spec depends on an env var / dashboard token CI sets (`tools-test-shard` is green on main) and make the spec self-contained or skip with a named reason.
 
+### 2026-10-24 — fix/rok-1935-archetype-retitle (surfaced during GitHub CI on PR #1785)
+
+- **med** `api/src/guilds/community/hub-auto-membership.integration.spec.ts:167` — `A2: auto — the signer is joined (source auto) and told once` flaked: `expect((await promptRow(hub, u.id))?.kind).toBe('auto-joined')` got `undefined`. `onSignup` (`hub-auto-membership.service.ts:92-96`) writes the member row, then the prompt row in a separate statement; the spec's `waitFor` (`:162-164`) only waits for `joinSource === 'auto'`, then reads the prompt with no wait. Pre-existing (ROK-1935's diff touches no guilds/community or signup code); main passed its last 7 runs. Suggested: wrap the prompt assertion in its own `waitFor`, as A1 does; prove with `scripts/spec-loop.sh` (50 runs) per the flake protocol.
 ### 2026-10-24 — feat/rok-1896-hub-poll-embeds + fix/rok-1947-hub-expired-session (surfaced during review)
 
 - **low** `api/src/notifications/notification-embed.buttons.ts:346`, `api/src/hubs/**/hub-posts.helpers.ts:87`, `hub-notification.service.ts:80`, `hub-proposal-notices.ts:48` — hub links still built as `/guilds/<id>`; ROK-1896 moved poll/event hub links to `/hubs/<id>`. They redirect, so nothing breaks. Pre-existing, outside ROK-1896's scope. Suggested: one sweep to a shared `hubUrl(id)` helper.

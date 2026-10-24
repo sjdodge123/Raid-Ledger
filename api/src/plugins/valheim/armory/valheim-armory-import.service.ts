@@ -11,6 +11,7 @@ import {
   type ArmorySnapshot,
 } from './valheim-armory.mappers';
 import { importContainers } from './valheim-armory-containers.import';
+import { importPortals } from './valheim-armory-portals.import';
 import {
   VALHEIM_PROFILE_UPSERTED_HOOK,
   type ValheimProfileUpsertedHook,
@@ -134,6 +135,7 @@ export class ValheimArmoryImportService {
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
     if (msg.kind === 'containers') return applyContainers(tx, snap, msg);
     if (msg.kind === 'recipes') return this.applyRecipes(tx, snap, msg);
+    if (msg.kind === 'portals') return applyPortals(tx, snap, msg);
     return unsupportedKind(msg);
   }
 
@@ -211,6 +213,15 @@ async function applyContainers(
   msg: Extract<ValheimLinkMessage, { kind: 'containers' }>,
 ): Promise<Applied> {
   return (await importContainers(tx, snap, msg)) ? IMPORTED : STALE;
+}
+
+/** ROK-1946: a world's portals, latest scan wins (D3); an empty scan still wins. */
+async function applyPortals(
+  tx: ValheimLinkTx,
+  snap: ArmorySnapshot,
+  msg: Extract<ValheimLinkMessage, { kind: 'portals' }>,
+): Promise<Applied> {
+  return (await importPortals(tx, snap, msg)) ? IMPORTED : STALE;
 }
 
 /** Exhaustiveness guard: a new `kind` in the contract is a compile error here. */

@@ -9,13 +9,30 @@ import { FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { Button } from '../../../components/ui/button';
 import { PinFilterPanel } from './pin-filter-panel';
-import { PIN_SUMMARY_TEXT } from './pin-filter-summary';
+import { PIN_SUMMARY_TEXT, portalsOmittedText } from './pin-filter-summary';
 import type { PinFilterSummary, PinFilterView } from './use-pin-filter';
+
+/** ROK-1946 D15: the portal layer's error chip + Retry and the omitted line. */
+function PortalSummary({ summary }: { summary: PinFilterSummary }): JSX.Element {
+    return (
+        <>
+            {summary.portalsError && (
+                <>
+                    <StatusChip tone="danger" title="Portals">{PIN_SUMMARY_TEXT.portalsError}</StatusChip>
+                    <Button variant="ghost" size="md" onClick={summary.onRetryPortals}>Retry</Button>
+                </>
+            )}
+            {summary.portalsOmitted > 0 && <span>{portalsOmittedText(summary.portalsOmitted)}</span>}
+        </>
+    );
+}
 
 /** The D15 summary line; empty (but mounted, a live region) when there is nothing to say. */
 export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary; onClear: () => void }): JSX.Element {
     const { status, activeCount, count, truncated } = summary;
-    const empty = activeCount > 0 && count === 0 && status !== 'loading' && status !== 'error';
+    // Either enabled layer still loading or failed → not "no match" (ROK-1946).
+    const layersSettled = status !== 'loading' && status !== 'error' && !summary.portalsPending && !summary.portalsError;
+    const empty = activeCount > 0 && count === 0 && layersSettled;
     return (
         <div role="status" data-testid="map-pin-filter" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted">
             {status === 'loading' && <span>{PIN_SUMMARY_TEXT.loading}</span>}
@@ -33,6 +50,7 @@ export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary
                 </>
             )}
             {truncated && <span>{PIN_SUMMARY_TEXT.truncated}</span>}
+            <PortalSummary summary={summary} />
         </div>
     );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ValheimMapPin, ValheimServerPin } from '@raid-ledger/contract';
 import { deathsMapHref, deathsShowAllHref } from '../hub/valheim-deaths.helpers';
+import { PIN_TYPE_GROUP_IDS } from './pin-type-groups';
 import {
     DEFAULT_PIN_FILTER, activeFilterCount, clearPinFilters, filterPins, parsePinFilter,
     serverPinAsMapPin, toggleType, writePinFilter, writeSelection, type PinFilter,
@@ -100,6 +101,21 @@ describe('toggleType', () => {
         expect(toggleType(one, 'portal')).toBeNull();
         const two = toggleType(one, 'death');
         expect(two === null ? null : [...two].sort()).toEqual(['death', 'portal']);
+    });
+});
+
+describe('Scanned portals chip in the URL (ROK-1946 D11)', () => {
+    it('?pins=scanned-portal round-trips', () => {
+        const filter = parsePinFilter(qs('pins=scanned-portal&vc=5'));
+        expect(types(filter)).toEqual(['scanned-portal']);
+        expect(writePinFilter(qs('vc=5'), { types: filter.types }, 5).get('pins')).toBe('scanned-portal');
+    });
+
+    it('all 12 chips selected serialises to no pins param (every type)', () => {
+        expect(PIN_TYPE_GROUP_IDS).toHaveLength(12);
+        expect(writePinFilter(qs('vc=5'), { types: new Set(PIN_TYPE_GROUP_IDS) }, 5).has('pins')).toBe(false);
+        const eleven = new Set(PIN_TYPE_GROUP_IDS.filter((id) => id !== 'scanned-portal'));
+        expect(writePinFilter(qs('vc=5'), { types: eleven }, 5).has('pins')).toBe(true);
     });
 });
 

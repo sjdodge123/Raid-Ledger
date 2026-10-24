@@ -28,6 +28,7 @@ import {
   deathPinLabels,
   type DeathsFixtureCharacterPlan,
 } from './valheim-deaths-demo-seed.data';
+import type { DeathsFixturePortals } from './valheim-portals-demo-seed.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -58,6 +59,8 @@ export interface DeathsFixture {
   characters: { top: DeathsFixtureCharacter; second: DeathsFixtureCharacter };
   /** The name-only player's bar (no character → not a link). */
   unlinked: { name: string; deaths: number };
+  /** ROK-1946: the world's scanned portals (one scan, 5 portals). */
+  portals: DeathsFixturePortals;
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');

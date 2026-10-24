@@ -31,6 +31,8 @@ export interface Fixture {
   users: { member: { id: number }; visitor: { id: number } };
   characters: { top: FixtureCharacter; second: FixtureCharacter };
   unlinked: { name: string; deaths: number };
+  /** ROK-1946: the world's scanned portals (raw tags, `""` = unnamed). */
+  portals: { count: number; tags: string[] };
 }
 
 /** Install-or-activate through the admin plugin API (valheim-map-tab pattern). */
@@ -84,8 +86,16 @@ export const serverPinsPath = (serverId: number): string =>
 
 export const mapApp = (page: Page): Locator =>
   page.getByRole("application", { name: "Valheim map" });
-/** Pins are the only buttons inside the map application. */
-export const pins = (map: Locator): Locator => map.getByRole("button");
+/**
+ * Player/character pins: every button inside the map application except the
+ * ROK-1946 scanned portals (server data, their own layer — `scannedPortals`).
+ */
+export const pins = (map: Locator): Locator =>
+  map.getByRole("button", { name: /^(?!.*\(Scanned portal\)$)/ });
+
+/** ROK-1946 scanned portals: `"<tag | Unnamed portal> (Scanned portal)"`. */
+export const scannedPortals = (map: Locator): Locator =>
+  map.getByRole("button", { name: /\(Scanned portal\)$/ });
 
 /** The pins' accessible names, sorted (order on the map is not meaningful). */
 export async function pinNames(map: Locator): Promise<string[]> {

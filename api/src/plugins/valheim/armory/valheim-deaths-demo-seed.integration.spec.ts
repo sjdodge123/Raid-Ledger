@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import {
   ValheimDeathPinsResponseSchema,
   ValheimDeathsResponseSchema,
+  ValheimServerPortalsResponseSchema,
 } from '@raid-ledger/contract';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -74,6 +75,23 @@ async function deathRowCount(serverId: number): Promise<number> {
     .from(D)
     .where(eq(D.pelicanServerId, serverId));
   return rows.length;
+}
+
+/** Every portal row and scan row the server holds (ROK-1946). */
+async function portalRowCounts(
+  serverId: number,
+): Promise<{ scans: number; portals: number }> {
+  const S = schema.valheimPortalScans;
+  const P = schema.valheimPortals;
+  const scans = await testApp.db
+    .select({ id: S.id })
+    .from(S)
+    .where(eq(S.pelicanServerId, serverId));
+  const portals = await testApp.db
+    .select({ id: P.id })
+    .from(P)
+    .where(eq(P.pelicanServerId, serverId));
+  return { scans: scans.length, portals: portals.length };
 }
 
 beforeAll(async () => {
@@ -165,5 +183,33 @@ describe('POST /admin/test/valheim/deaths-fixture (ROK-1930 L5)', () => {
       .set(bearer(adminToken))
       .send({});
     expect(off.status).toBe(403);
+  });
+});
+
+describe('deaths fixture scanned portals (ROK-1946)', () => {
+  it('seeds 5 scanned portals any signed-in viewer reads; a re-seed leaves exactly 5 (ROK-1946)', async () => {
+    const first = await seed({ worker: 5 });
+    expect(first.portals).toEqual({
+      count: 5,
+      tags: ['home', 'home', 'swamp', '', 'ashlands'],
+    });
+    const again = await seed({ worker: 5 });
+    expect(await portalRowCounts(again.serverId)).toEqual({
+      scans: 1,
+      portals: 5,
+    });
+    const res = await testApp.request
+      .get(`/plugins/valheim/armory/servers/${again.serverId}/portals`)
+      .set(bearer(await tokenFor(again.users.visitor)));
+    expect(res.status).toBe(200);
+    const body = ValheimServerPortalsResponseSchema.parse(res.body);
+    expect(body.worldUid).toBe(again.worldUid);
+    expect(body.portals.map((p) => p.tag).sort()).toEqual([
+      '',
+      'ashlands',
+      'home',
+      'home',
+      'swamp',
+    ]);
   });
 });

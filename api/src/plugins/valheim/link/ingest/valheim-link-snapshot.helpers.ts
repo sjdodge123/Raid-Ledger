@@ -8,14 +8,11 @@ import type {
 } from '../../../../drizzle/schema';
 
 /**
- * The kinds `valheim_link_snapshots` stores (its `kind` CHECK). `portals`
- * (ROK-1944) is validated and accepted but not stored until its ingest
- * story (ROK-1946) adds it to the table.
+ * The kinds `valheim_link_snapshots` stores (its `kind` CHECK) — every
+ * contract kind since ROK-1946 added `portals`. The name is kept for the
+ * importer's imports.
  */
-export type StoredValheimLinkMessage = Exclude<
-  ValheimLinkMessage,
-  { kind: 'portals' }
->;
+export type StoredValheimLinkMessage = ValheimLinkMessage;
 
 /**
  * CONTRACT §1 latest-wins key, minus the server (that is the
