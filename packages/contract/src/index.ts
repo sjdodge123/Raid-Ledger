@@ -235,6 +235,8 @@ export * from './valheim-recipes.schema.js';
 export * from './valheim-deaths.schema.js';
 // Map tab cross-player pin layer (ROK-1943).
 export * from './valheim-server-pins.schema.js';
+// Map tab scanned-portal layer read (ROK-1946).
+export * from './valheim-server-portals.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
