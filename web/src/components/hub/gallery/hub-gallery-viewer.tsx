@@ -45,12 +45,15 @@ function NavButton({ side, onClick }: { side: 'prev' | 'next'; onClick: (() => v
     const label = side === 'prev' ? 'Previous picture' : 'Next picture';
     // `aria-disabled`, not `disabled`: a native-disabled button at either end drops focus to the page.
     const off = onClick === null;
+    // The wrapper takes the absolute position: Button's base classes carry `relative`, which wins over an `absolute` className.
     return (
-        <Button variant="secondary" iconOnly aria-label={label} aria-disabled={off || undefined} onClick={() => onClick?.()}
-            data-testid={`hub-gallery-${side}`}
-            className={`absolute top-1/2 -translate-y-1/2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 ${side === 'prev' ? 'left-2' : 'right-2'}`}>
-            <span aria-hidden="true">{side === 'prev' ? '‹' : '›'}</span>
-        </Button>
+        <span data-testid={`hub-gallery-${side}-slot`} className={`absolute top-1/2 -translate-y-1/2 ${side === 'prev' ? 'left-2' : 'right-2'}`}>
+            <Button variant="secondary" iconOnly aria-label={label} aria-disabled={off || undefined} onClick={() => onClick?.()}
+                data-testid={`hub-gallery-${side}`}
+                className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                <span aria-hidden="true">{side === 'prev' ? '‹' : '›'}</span>
+            </Button>
+        </span>
     );
 }
 

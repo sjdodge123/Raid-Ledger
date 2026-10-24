@@ -59,6 +59,12 @@ async function openOverview(page: Page, f: Fixture): Promise<void> {
   await expect(card(page)).toBeVisible({ timeout: 15_000 });
 }
 
+async function boxOf(l: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  const b = await l.boundingBox();
+  if (b === null) throw new Error("element has no bounding box");
+  return b;
+}
+
 test.describe("Hub Gallery — card, lightbox, filter, See all (ROK-1942)", () => {
   test("member: tile → lightbox, ←/→ and Next walk the set, Escape returns focus to the tile", async ({ page }, testInfo) => {
     const { f, total } = await seed(testInfo);
@@ -80,6 +86,17 @@ test.describe("Hub Gallery — card, lightbox, filter, See all (ROK-1942)", () =
     await page.getByRole("button", { name: "Next picture" }).click();
     await expect(viewer(page).getByText(`2 of ${total}`, { exact: true })).toBeVisible();
     await expect(page.getByTestId("hub-gallery-caption")).toContainText(/Death|Screenshot|Picture/);
+    // Prev/Next sit on either side of the picture, vertically centred together, fully on-screen and apart.
+    const [prev, next, frame] = await Promise.all([
+      boxOf(page.getByRole("button", { name: "Previous picture" })),
+      boxOf(page.getByRole("button", { name: "Next picture" })),
+      boxOf(viewer(page)),
+    ]);
+    expect(prev.x + prev.width, "Prev ends before Next starts").toBeLessThan(next.x);
+    expect(Math.abs(prev.y - next.y), "Prev and Next share a row").toBeLessThan(2);
+    expect(next.x + next.width, "Next stays inside the viewer").toBeLessThanOrEqual(frame.x + frame.width + 1);
+    expect(prev.x, "Prev stays inside the viewer").toBeGreaterThanOrEqual(frame.x - 1);
+    expect(next.x + next.width, "Next stays on-screen").toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
     // A member never gets the editor / staff actions.
     await expect(dialog(page).getByRole("button", { name: "Hide" })).toHaveCount(0);
     await expect(dialog(page).getByRole("button", { name: "Remove" })).toHaveCount(0);
