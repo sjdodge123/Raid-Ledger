@@ -70,7 +70,9 @@ describe('validateSnapshotPayload', () => {
   });
 
   it('accepts a portals payload: importable since ROK-1946', () => {
-    expect(validateSnapshotPayload(snapshotOf('portals-vanilla'))).toMatchObject({
+    expect(
+      validateSnapshotPayload(snapshotOf('portals-vanilla')),
+    ).toMatchObject({
       ok: true,
       message: { kind: 'portals' },
     });

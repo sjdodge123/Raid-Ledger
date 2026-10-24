@@ -87,8 +87,7 @@ async function statusOf(id: number) {
 }
 
 const scans = () => testApp.db.select().from(H).orderBy(asc(H.worldUid));
-const portals = () =>
-  testApp.db.select().from(P).orderBy(asc(P.x), asc(P.z));
+const portals = () => testApp.db.select().from(P).orderBy(asc(P.x), asc(P.z));
 const tagsOf = (rows: Array<{ tag: string }>) => rows.map((r) => r.tag).sort();
 
 beforeAll(async () => {
@@ -105,7 +104,10 @@ describe('Valheim portals importer (integration, ROK-1946)', () => {
     const f = vanilla();
     const id = await push(f);
     expect((await drain()).imported).toBe(1);
-    expect(await statusOf(id)).toEqual({ status: 'imported', statusDetail: null });
+    expect(await statusOf(id)).toEqual({
+      status: 'imported',
+      statusDetail: null,
+    });
     const [scan] = nonEmpty(await scans(), 'scan');
     expect(scan).toMatchObject({
       pelicanServerId: server,
@@ -178,7 +180,12 @@ describe('Valheim portals importer (integration, ROK-1946)', () => {
     await push(f);
     await push({ ...f, worldUid: OTHER_WORLD, portals: f.portals.slice(0, 1) });
     expect((await drain()).imported).toBe(2);
-    await push({ ...f, worldUid: OTHER_WORLD, capturedAt: '2026-10-17T20:45:00Z', portals: [] });
+    await push({
+      ...f,
+      worldUid: OTHER_WORLD,
+      capturedAt: '2026-10-17T20:45:00Z',
+      portals: [],
+    });
     await drain();
     const [a, b] = await scans();
     expect(a).toMatchObject({ worldUid: WORLD, portalCount: f.portals.length });
