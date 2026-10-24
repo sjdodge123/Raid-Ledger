@@ -16,6 +16,8 @@ import {
   findByKey,
   insertIgnore,
   markRemoved,
+  withHubMediaCapLock,
+  type HubMediaInsert,
 } from './hub-media.repository';
 import type {
   HubMediaIngestInput,
@@ -66,6 +68,7 @@ export class HubMediaService {
     if (typeof fetched === 'string') return reject(fetched);
     const encoded = await encodeHubMedia(fetched);
     if (!encoded) return reject('not_image');
+    // Fast fail before writing files; `insertUnderCap` is the authoritative check.
     if (
       used + encoded.full.length + encoded.thumb.length >
       hubMediaCapBytes()
@@ -108,17 +111,34 @@ export class HubMediaService {
       encoded.full,
       encoded.thumb,
     );
-    let id: number | null;
+    let id: number | null | 'cap';
     try {
-      id = await insertIgnore(this.db, toRow(input, encoded, storageName));
+      id = await this.insertUnderCap(toRow(input, encoded, storageName));
     } catch (err) {
       await unlinkMediaFiles(input.guildId, storageName);
       throw err;
+    }
+    if (id === 'cap') {
+      await unlinkMediaFiles(input.guildId, storageName);
+      return this.capReached(input.guildId);
     }
     if (id !== null) return { status: 'stored', mediaId: id };
     await unlinkMediaFiles(input.guildId, storageName);
     const winner = await findByKey(this.db, input.guildId, input.provenanceKey);
     return { status: 'duplicate', mediaId: winner?.id ?? null };
+  }
+
+  /**
+   * The cap re-read and the insert under one per-hub lock (D6): `'cap'` when
+   * this picture no longer fits, `null` when the key lost its insert race.
+   * No catch inside — a failed statement poisons the transaction.
+   */
+  private insertUnderCap(row: HubMediaInsert): Promise<number | null | 'cap'> {
+    return withHubMediaCapLock(this.db, row.guildId, async (tx) => {
+      const used = await bytesUsed(tx, row.guildId);
+      if (used + row.bytes > hubMediaCapBytes()) return 'cap';
+      return insertIgnore(tx, row);
+    });
   }
 
   private capReached(guildId: number): HubMediaIngestResult {

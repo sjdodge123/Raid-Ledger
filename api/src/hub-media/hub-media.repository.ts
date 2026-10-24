@@ -41,6 +41,32 @@ export async function insertIgnore(
   return row?.id ?? null;
 }
 
+/**
+ * Advisory-lock class for the per-hub byte cap. The two-`int4` form's
+ * keyspace is disjoint from the one-`bigint` form; the games name lock uses
+ * class 1438, so the two never collide.
+ */
+export const HUB_MEDIA_CAP_LOCK_CLASS = 1942;
+
+/**
+ * Run `fn` in a transaction holding a per-hub advisory lock, so the cap read
+ * and the insert are one step: parallel ingests for one hub queue here
+ * instead of each reading the same `bytesUsed` and all inserting. Use the
+ * `tx` handed in — work on the outer `db` runs on another connection.
+ */
+export async function withHubMediaCapLock<T>(
+  db: Db,
+  guildId: number,
+  fn: (tx: Db) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${HUB_MEDIA_CAP_LOCK_CLASS}::int4, ${guildId}::int4)`,
+    );
+    return fn(tx);
+  });
+}
+
 /** Bytes the hub's live pictures occupy on disk (the D6 cap). */
 export async function bytesUsed(db: Db, guildId: number): Promise<number> {
   const [row] = await db

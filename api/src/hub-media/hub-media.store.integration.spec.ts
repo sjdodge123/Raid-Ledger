@@ -191,6 +191,22 @@ describe('HubMediaService.ingest refusals (ROK-1942)', () => {
     expect(await files()).toEqual([]);
   });
 
+  it('parallel ingests for one hub never overshoot its cap (per-hub lock)', async () => {
+    await service().ingest(input('seed'));
+    const [seed] = nonEmpty(await rows(), 'seed row');
+    const cap = seed.bytes * 2 + Math.floor(seed.bytes / 2);
+    process.env.HUB_MEDIA_MAX_BYTES_PER_HUB = String(cap);
+    const results = await Promise.all(
+      ['p1', 'p2', 'p3', 'p4'].map((k) => service().ingest(input(k))),
+    );
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual(['rejected', 'rejected', 'rejected', 'stored']);
+    const live = await rows();
+    expect(live.length).toBe(2);
+    expect(live.reduce((n, r) => n + r.bytes, 0)).toBeLessThanOrEqual(cap);
+    expect((await files()).length).toBe(4);
+  });
+
   it('refuses a non-Discord host, non-image bytes and an oversized download', async () => {
     const host = await service().ingest(
       input('h', { sourceUrl: 'https://evil.example/x.png' }),
