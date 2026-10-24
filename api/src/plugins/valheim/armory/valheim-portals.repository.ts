@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
@@ -85,4 +85,18 @@ export function listScanPortals(
     .from(portals)
     .where(eq(portals.scanId, scanId))
     .orderBy(asc(portals.x), asc(portals.z), asc(portals.id));
+}
+
+/** The server's newest portals scan on any world; null before the first. */
+export async function findLatestPortalScan(
+  exec: Exec,
+  pelicanServerId: number,
+): Promise<schema.ValheimPortalScan | null> {
+  const [row] = await exec
+    .select()
+    .from(scans)
+    .where(eq(scans.pelicanServerId, pelicanServerId))
+    .orderBy(desc(scans.capturedAt), desc(scans.id))
+    .limit(1);
+  return row ?? null;
 }
