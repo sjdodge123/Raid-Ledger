@@ -41,6 +41,11 @@ import {
   ValheimMaterialsRepository,
   type MaterialsReader,
 } from './valheim-materials.repository';
+import {
+  materialsBases,
+  placeOf,
+  toBaseView,
+} from './valheim-materials-bases.service-helpers';
 
 /** Identical body for "missing" and "personal chest you may not see". */
 export const CONTAINER_NOT_FOUND = 'Container not found';
@@ -78,21 +83,32 @@ export class ValheimMaterialsService {
     const veh = vehicleSql(includeVehicles);
     const shared = both(sharedSql, veh);
     const personal = both(personalVisibleSql(viewer), veh);
-    const [sTotals, sCounts, pTotals, pCounts] = await Promise.all([
-      r.totals(scan.id, shared),
-      r.counts(scan.id, shared),
-      r.totals(scan.id, personal),
-      r.counts(scan.id, personal),
-    ]);
+    // ROK-1859: bases + per-chest sums over everything this viewer may see.
+    const visible = both(visibleSql(viewer), veh);
+    const [sTotals, sCounts, pTotals, pCounts, inputs, sums] =
+      await Promise.all([
+        r.totals(scan.id, shared),
+        r.counts(scan.id, shared),
+        r.totals(scan.id, personal),
+        r.counts(scan.id, personal),
+        r.baseInputs(scan.id, visible),
+        r.stackSums(scan.id, visible),
+      ]);
     const prefabs = distinctPrefabs(sTotals, pTotals);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
     const hasPersonal = viewer.isAdmin || pCounts.chestCount > 0;
+    const order = {
+      shared: sTotals.map(toMaterialStack),
+      personal: pTotals.map(toMaterialStack),
+    };
+    const { bases, byBase } = materialsBases(toBaseView(inputs), sums, order);
     return {
       ...scanHeader(scan),
       gameVersion: scan.gameVersion,
       catalogFallback: catalog !== null && !catalog.exact,
+      bases,
       shared: {
-        totals: sTotals.map(toMaterialStack),
+        totals: order.shared,
         chestCount: sCounts.chestCount,
         warnings: {
           unreadable: sCounts.unreadable,
@@ -102,8 +118,9 @@ export class ValheimMaterialsService {
       },
       personal: hasPersonal
         ? {
-            totals: pTotals.map(toMaterialStack),
+            totals: order.personal,
             chestCount: pCounts.chestCount,
+            byBase,
             omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
           }
         : null,
@@ -144,12 +161,19 @@ export class ValheimMaterialsService {
         atlas: null,
       };
     }
-    const rows = await r.listContainers(scan.id, scope, holding);
+    // Numbering reads the whole scope, never `holding`-filtered (D5).
+    const [rows, inputs] = await Promise.all([
+      r.listContainers(scan.id, scope, holding),
+      r.baseInputs(scan.id, scope),
+    ]);
+    const view = toBaseView(inputs);
     const prefabs = distinctPrefabs(rows);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
     return {
       ...scanHeader(scan),
-      containers: rows.map(toContainerSummary),
+      containers: rows.map((row) =>
+        toContainerSummary(row, placeOf(view, row.key)),
+      ),
       ...projectCatalog(prefabs, catalog),
     };
   }
@@ -165,10 +189,14 @@ export class ValheimMaterialsService {
     const scope = this.scope(user, includeVehicles);
     const found = await this.repo.read(async (r) => {
       const scan = await r.latestScan(serverId);
-      return scan ? r.findContainer(scan.id, key, scope) : null;
+      const hit = scan ? await r.findContainer(scan.id, key, scope) : null;
+      if (!scan || !hit) return null;
+      const view = toBaseView(await r.baseInputs(scan.id, scope));
+      return { ...hit, place: placeOf(view, key) };
     });
     if (!found) throw new NotFoundException(CONTAINER_NOT_FOUND);
-    return { ...toContainerSummary(found.summary), stacks: found.stacks };
+    const summary = toContainerSummary(found.summary, found.place);
+    return { ...summary, stacks: found.stacks };
   }
 
   /**
