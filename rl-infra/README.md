@@ -305,8 +305,16 @@ in the same flock window as the admit:
   2048 MB reserve covers what runs outside the ledger: the kernel, sshd /
   dockerd / containerd / mutagen, and the compose sidecars (traefik, registry,
   loki, promtail, grafana, dashboard, docker-socket-proxy, gc-sweeper; tens to a
-  few hundred MB each). An unreadable `MemTotal` falls back to the configured
-  budget. Turning ballooning off on the host (Option A, under "Memory hardening"
+  few hundred MB each), plus the idle baseline of the 4 runner containers (the
+  node / mutagen agent in each, roughly 100–300 MB apiece), which no ledger
+  reservation counts. 2048 MB is an estimate: recheck it from `docker stats` on
+  an idle fleet. An unreadable `MemTotal` falls back to the configured budget,
+  and a non-numeric `RL_ADMISSION_BUDGET_MB` / `RL_ADMISSION_RESERVE_MB` falls
+  back to its default. **The cap only sees what the balloon does to
+  `MemTotal`:** if `rl_status` shows `admission.mem_total_mb` staying near
+  16 000 while `qm status 200 --verbose` on the host reports a smaller balloon
+  (e.g. the guest negotiated `deflate-on-oom`), the cap is a silent no-op; use
+  Option A. Turning ballooning off on the host (Option A, under "Memory hardening"
   below) keeps the guest at 16 GiB, so this cap never bites.
 - **Hard caps:** at most `RL_MAX_HEAVY_CONCURRENT` (2) heavy tasks and at most
   `RL_MAX_IMAGE_BUILDS` (1) image builds run at once (`0` = no cap). An image
@@ -460,8 +468,12 @@ drop-ins keep the control plane off the reclaim and kill lists.
    qm config 200 | grep -E '^(memory|balloon)'   # expect memory: 16384, balloon: 0
    ```
 
-   `--balloon 0` takes effect at once on a running VM (the balloon deflates); no
-   reboot. Confirm from the laptop with `rl_status`: `admission.mem_total_mb`
+   `--balloon 0` removes the balloon device, so Proxmox records it as a
+   **pending** change that applies at the next VM start (`qm pending 200` shows
+   it); plan a VM restart. To stop the shrinking on the running VM before that,
+   `qm set 200 --balloon 16384` (minimum = memory) asks the guest to deflate to
+   the full 16 GiB live. Either way, verify with `qm config 200` on the host and
+   `free -m` inside the guest. Confirm from the laptop with `rl_status`: `admission.mem_total_mb`
    near 16 000 and `effective_budget_mb` = `budget_mb`. If host headroom is too
    tight for a fixed 16 GiB, keep the balloon: the effective budget (above)
    already shrinks with the guest.
