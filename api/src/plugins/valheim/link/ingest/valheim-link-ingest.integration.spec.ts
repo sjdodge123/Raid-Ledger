@@ -153,6 +153,11 @@ describe('Valheim Link message ingest (ROK-1833)', () => {
         'accepted',
       );
       const rows = await snapshots(id);
+      if (msg['kind'] === 'portals') {
+        // ROK-1944: validated and accepted, stored only once ROK-1946 lands.
+        expect(rows).toHaveLength(0);
+        return;
+      }
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ kind: msg['kind'], status: 'pending' });
     },
