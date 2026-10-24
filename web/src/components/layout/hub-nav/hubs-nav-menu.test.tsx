@@ -104,6 +104,17 @@ describe('HubsNavItem — the menu (D7)', () => {
         expect(list).not.toContainElement(screen.getByTestId('nav-hubs-browse-all'));
     });
 
+    it('keeps the dense md rows (the phone sheet alone uses lg)', async () => {
+        serve(TWO);
+        const menu = await openMenu();
+        const rows = await within(menu).findAllByRole('menuitem', { name: /Valheim|BG3/ });
+        for (const row of rows) {
+            expect(row).toHaveAttribute('data-size', 'md');
+            expect(row.className.split(' ')).toEqual(expect.arrayContaining(['min-h-[44px]', 'text-sm']));
+        }
+        expect(within(menu).getAllByTestId('hub-kind-chip')[0]?.firstElementChild).toHaveClass('text-xs');
+    });
+
     it('a WoW guild row reads "Guild"', async () => {
         serve([hub(11, 'Iron Vanguard', 'wow_guild')]);
         await openMenu();
