@@ -20,13 +20,18 @@ const GAME = 900;
 
 let db: MockDb;
 
-/** First `.where()` chains into `.limit()`; later ones resolve the count. */
+/**
+ * `.where()` either chains into `.limit()` (existing vote, nomination check)
+ * or is awaited directly (the vote count), whatever order the helper reads in.
+ */
 function programWhere(countRows: unknown[] = [{ count: 0 }]): void {
-  let calls = 0;
-  db.where.mockImplementation(() =>
-    (calls += 1) === 1 ? db : Promise.resolve(countRows),
-  );
+  db.where.mockImplementation(() => ({
+    limit: db.limit,
+    then: (resolve: (rows: unknown[]) => unknown) => resolve(countRows),
+  }));
 }
+
+const NOMINATED = [{ id: 5 }];
 
 beforeEach(() => {
   db = createDrizzleMock();
@@ -35,7 +40,7 @@ beforeEach(() => {
 
 describe('toggleVote — voter lock (TDB:1064)', () => {
   it('takes the (lineup, voter) advisory lock shared with setStar', async () => {
-    db.limit.mockResolvedValueOnce([]);
+    db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce(NOMINATED);
 
     await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
@@ -47,7 +52,7 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
   });
 
   it('holds the lock before the vote is read or inserted', async () => {
-    db.limit.mockResolvedValueOnce([]);
+    db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce(NOMINATED);
 
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
@@ -75,5 +80,25 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
       action,
       beforeTheDelete: lockedAt < deleteAt,
     }).toEqual({ action: 'removed', beforeTheDelete: true });
+  });
+});
+
+describe('toggleVote — nomination guard', () => {
+  it('rejects a vote on a game never nominated in the lineup', async () => {
+    db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await expect(
+      toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3),
+    ).rejects.toThrow('Game is not nominated in this lineup');
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('still removes an existing vote without the nomination check', async () => {
+    db.limit.mockResolvedValueOnce([{ id: 77 }]).mockResolvedValueOnce([]);
+
+    const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
+
+    expect(action).toBe('removed');
+    expect(db.delete).toHaveBeenCalledTimes(1);
   });
 });
