@@ -5,23 +5,10 @@
  * or when the file is missing. Tokens only.
  */
 import type { JSX } from 'react';
-import type { HubMediaItem, HubMediaKind } from '@raid-ledger/contract';
+import type { HubMediaItem } from '@raid-ledger/contract';
 import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
-import { syncedAgo } from '../../../lib/synced-ago';
 import { FOCUS_RING } from '../../ui/form-classes';
-
-export const HUB_MEDIA_KIND_LABEL: Record<HubMediaKind, string> = {
-    death: 'Death',
-    screenshot: 'Screenshot',
-    image: 'Picture',
-};
-
-/** The tile's accessible name; `now` is injectable for specs. */
-export function hubGalleryTileLabel(item: HubMediaItem, now: number = Date.now()): string {
-    const who = item.authorName === null ? '' : ` — ${item.authorName}`;
-    const hidden = item.hidden ? ' (hidden)' : '';
-    return `${HUB_MEDIA_KIND_LABEL[item.kind]}${who}${hidden}, ${syncedAgo(item.capturedAt, now)}. Open picture`;
-}
+import { hubGalleryTileLabel } from './hub-gallery-labels';
 
 const BADGE = 'absolute rounded-full border bg-surface px-2 text-[11px] leading-5 text-foreground';
 
