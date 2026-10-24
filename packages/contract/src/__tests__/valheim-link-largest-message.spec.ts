@@ -10,6 +10,9 @@ import {
     VALHEIM_LINK_CONTAINERS_MAX,
     VALHEIM_LINK_CONTAINERS_MAX_BYTES,
     VALHEIM_LINK_PIECES_MAX,
+    VALHEIM_LINK_PORTAL_TAG_MAX_CHARS,
+    VALHEIM_LINK_PORTALS_MAX,
+    VALHEIM_LINK_PORTALS_MAX_BYTES,
     VALHEIM_LINK_PROCESSES_MAX,
     VALHEIM_LINK_PROCESSORS_MAX,
     VALHEIM_LINK_RECIPE_ENTRIES_MAX,
@@ -243,12 +246,27 @@ function largestContainers(): unknown {
     };
 }
 
+function largestPortals(): unknown {
+    // ROK-1944: every portal at the cap, the widest coords, a control-char tag.
+    const coord = -(VALHEIM_LINK_WORLD_COORD_MAX - 0.000000000004);
+    return {
+        ...header,
+        kind: 'portals',
+        worldUid: VALHEIM_LINK_INT64_MIN,
+        portals: Array.from({ length: VALHEIM_LINK_PORTALS_MAX }, (_, i) => ({
+            prefab: prefab(i), x: coord, y: coord, z: coord, tag: ctl(VALHEIM_LINK_PORTAL_TAG_MAX_CHARS),
+        })),
+        omitted: 1_000_000,
+    };
+}
+
 const KINDS = [
     ['character', largestCharacter, VALHEIM_LINK_CHARACTER_MAX_BYTES],
     ['map', largestMap, VALHEIM_LINK_MAP_MAX_BYTES],
     ['items', largestItems, VALHEIM_LINK_ITEMS_MAX_BYTES],
     ['containers', largestContainers, VALHEIM_LINK_CONTAINERS_MAX_BYTES],
     ['recipes', largestRecipes, VALHEIM_LINK_RECIPES_MAX_BYTES],
+    ['portals', largestPortals, VALHEIM_LINK_PORTALS_MAX_BYTES],
 ] as const;
 
 describe.each(KINDS)('largest schema-valid %s message (ROK-1855)', (kind, build, cap) => {

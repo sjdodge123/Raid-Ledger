@@ -8,14 +8,24 @@ import type {
 } from '../../../../drizzle/schema';
 
 /**
+ * The kinds `valheim_link_snapshots` stores (its `kind` CHECK). `portals`
+ * (ROK-1944) is validated and accepted but not stored until its ingest
+ * story (ROK-1946) adds it to the table.
+ */
+export type StoredValheimLinkMessage = Exclude<
+  ValheimLinkMessage,
+  { kind: 'portals' }
+>;
+
+/**
  * CONTRACT §1 latest-wins key, minus the server (that is the
  * `pelican_server_id` column of `valheim_link_snapshots_key_uq`):
  * character → steamId:playerId; map → steamId:playerId:worldUid;
- * items → gameVersion; containers → worldUid (ROK-1853).
+ * items / recipes → gameVersion; containers / portals → worldUid.
  */
 export function valheimSnapshotKey(msg: ValheimLinkMessage): string {
   if (msg.kind === 'items' || msg.kind === 'recipes') return msg.gameVersion;
-  if (msg.kind === 'containers') return msg.worldUid;
+  if (msg.kind === 'containers' || msg.kind === 'portals') return msg.worldUid;
   const { steamId, playerId, worldUid } = msg.character;
   return msg.kind === 'map'
     ? `${steamId}:${playerId}:${worldUid}`
@@ -59,9 +69,7 @@ export function valheimSnapshotRow(
   msg: ValheimLinkMessage,
 ): NewValheimLinkSnapshot {
   const who =
-    msg.kind === 'items' || msg.kind === 'containers' || msg.kind === 'recipes'
-      ? null
-      : msg.character;
+    msg.kind === 'character' || msg.kind === 'map' ? msg.character : null;
   return {
     pelicanServerId,
     kind: msg.kind,
@@ -69,7 +77,9 @@ export function valheimSnapshotRow(
     steamId: who?.steamId ?? null,
     playerId: who?.playerId ?? null,
     worldUid:
-      msg.kind === 'containers' ? msg.worldUid : (who?.worldUid ?? null),
+      msg.kind === 'containers' || msg.kind === 'portals'
+        ? msg.worldUid
+        : (who?.worldUid ?? null),
     gameVersion: msg.gameVersion,
     modVersion: msg.modVersion,
     capturedAt: new Date(msg.capturedAt),

@@ -30,6 +30,8 @@ export const VALHEIM_LINK_ITEMS_MAX_BYTES = 12_582_912;
 export const VALHEIM_LINK_CONTAINERS_MAX_BYTES = 10_485_760;
 /** Request-body cap for a `recipes` message; worst case ≈ 10.31 MB at the design caps (ROK-1854, largest-message spec). */
 export const VALHEIM_LINK_RECIPES_MAX_BYTES = 12_582_912;
+/** Request-body cap for a `portals` message; worst case ≈ 2.4 MB (ROK-1944, largest-message spec). */
+export const VALHEIM_LINK_PORTALS_MAX_BYTES = 4_194_304;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
 export const VALHEIM_LINK_BINARY_MAX_BYTES = 16_777_216;
 
@@ -61,6 +63,9 @@ export const VALHEIM_LINK_REQUIREMENTS_MAX = 16;
 export const VALHEIM_LINK_PROCESS_INPUTS_MAX = 8;
 export const VALHEIM_LINK_RECIPE_ENTRIES_MAX = 12_000;
 export const VALHEIM_LINK_STATION_LEVEL_MAX = 20;
+/** `portals` (ROK-1944): portals per message; characters per portal tag (vanilla allows 10; modded portals more). */
+export const VALHEIM_LINK_PORTALS_MAX = 4096;
+export const VALHEIM_LINK_PORTAL_TAG_MAX_CHARS = 64;
 
 // ---------- primitives ----------
 
