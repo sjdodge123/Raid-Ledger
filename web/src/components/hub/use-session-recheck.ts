@@ -12,9 +12,16 @@ async function checkSession(): Promise<'ok' | SessionCheck> {
     return (await refreshWithOutcome()).kind;
 }
 
-/** A refetch after an `ok` re-check: null = it landed (keep 'checking' until unmount). */
-function afterRecovery({ error }: { error: unknown }): SessionCheck | null {
-    if (!error) return null;
+/** The parts of the hub refetch's result the re-check reads. */
+export type RecoveryResult = { status: 'pending' | 'error' | 'success'; error: unknown };
+
+/**
+ * A refetch after an `ok` re-check: null = it landed (keep 'checking' until
+ * unmount). Only `success` landed — a refetch silently cancelled by a later
+ * drop resolves `pending` with no error, which must offer Try again, not spin.
+ */
+function afterRecovery({ status, error }: RecoveryResult): SessionCheck | null {
+    if (status === 'success') return null;
     return httpStatusOf(error) === 401 ? 'rejected' : 'indeterminate';
 }
 
@@ -29,7 +36,7 @@ function afterRecovery({ error }: { error: unknown }): SessionCheck | null {
  * swaps this screen out (no "session expired" frame on the success path).
  */
 export function useSessionRecheck(
-    onRecovered: () => Promise<{ error: unknown }>,
+    onRecovered: () => Promise<RecoveryResult>,
 ): { state: SessionCheck; retry: () => void } {
     const [attempt, setAttempt] = useState(0);
     const [state, setState] = useState<SessionCheck>('checking');

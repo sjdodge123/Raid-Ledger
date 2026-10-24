@@ -37,7 +37,7 @@ import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
-import { useSessionRecheck } from './use-session-recheck';
+import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -59,26 +59,29 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
 }
 
-/**
- * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
- * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
- */
-function SessionExpired({ onRecovered }: { onRecovered: () => Promise<{ error: unknown }> }): JSX.Element {
+/** ROK-1947: the session is over — Sign in ends it and returns here after. */
+function SignInPrompt(): JSX.Element {
     const signIn = useSignInAgain();
-    const { state, retry } = useSessionRecheck(onRecovered);
-    if (state === 'checking') return <LoadingState />;
-    if (state === 'indeterminate') {
-        return (
-            <Notice testId="guild-session-unreachable">
-                <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
-                <Button variant="secondary" onClick={retry}>Try again</Button>
-            </Notice>
-        );
-    }
     return (
         <Notice testId="guild-session-expired">
             <p className="mb-4 text-sm text-muted">Your session expired. Sign in again to see this hub.</p>
             <Button onClick={signIn}>Sign in</Button>
+        </Notice>
+    );
+}
+
+/**
+ * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
+ * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
+ */
+function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryResult> }): JSX.Element {
+    const { state, retry } = useSessionRecheck(onRecovered);
+    if (state === 'checking') return <LoadingState />;
+    if (state === 'rejected') return <SignInPrompt />;
+    return (
+        <Notice testId="guild-session-unreachable">
+            <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
+            <Button variant="secondary" onClick={retry}>Try again</Button>
         </Notice>
     );
 }
@@ -264,11 +267,13 @@ export function GuildPage(): JSX.Element {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
-    // A drop of the viewer's caches (useAuth's REJECTED refresh) resets the
-    // page query and leaves it idle with no token to refetch it — that is a
-    // session question too, never a skeleton forever (ROK-1947).
-    const stranded = query.status === 'pending' && query.fetchStatus === 'idle';
-    if (stranded || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={refetchPage} />;
+    // A drop of the viewer's caches resets the page query and leaves it idle
+    // with no token to refetch it. Only useAuth's REJECTED refresh does that,
+    // so the session is already decided: offer Sign in, never re-check it (a
+    // second refresh would race another tab's cookie rotation) and never a
+    // skeleton forever (ROK-1947). AuthGuard usually redirects first.
+    if (query.status === 'pending' && query.fetchStatus === 'idle') return <SignInPrompt />;
+    if (httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={refetchPage} />;
     if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;

@@ -17,6 +17,9 @@ import { createTestQueryClient, renderWithProviders } from '../../test/render-he
 import { dropViewerPrivateCaches } from '../../hooks/viewer-private-caches';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { AUTH_METHOD_KEY, USER_CACHE_KEY } from '../../lib/api/auth-storage-keys';
+import { clearAccessToken } from '../../lib/api/access-token-store';
+import { createMockUser } from '../../test/factories';
+import { AuthGuard } from '../auth/AuthGuard';
 import { GuildPage } from './hub-page';
 
 const API = 'http://localhost:3000';
@@ -71,6 +74,19 @@ function renderPage(queryClient = createTestQueryClient()) {
     );
 }
 
+/** The app's route shape: `/hubs/:id` sits under AuthGuard (app-routes.tsx). */
+function renderGuardedPage(queryClient: ReturnType<typeof createTestQueryClient>) {
+    return renderWithProviders(
+        <Routes>
+            <Route element={<AuthGuard />}>
+                <Route path="/hubs/:id" element={<GuildPage />} />
+            </Route>
+            <Route path="/" element={<p data-testid="login-screen">login</p>} />
+        </Routes>,
+        { initialEntries: ['/hubs/7'], queryClient },
+    );
+}
+
 /** Every `data-testid` the page ever inserted, so a one-frame flash is caught. */
 function recordTestIds(): { seen: Set<string>; stop: () => void } {
     const seen = new Set<string>();
@@ -83,7 +99,7 @@ function recordTestIds(): { seen: Set<string>; stop: () => void } {
     return { seen, stop: () => observer.disconnect() };
 }
 
-beforeEach(() => { activateWowPlugin(); refreshCalls = 0; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
+beforeEach(() => { activateWowPlugin(); clearAccessToken(); refreshCalls = 0; postsAfterHub401 = null; sessionLive = false; localStorage.clear(); sessionStorage.clear(); });
 afterEach(() => { localStorage.clear(); sessionStorage.clear(); });
 
 describe('GuildPage — expired session (ROK-1947)', () => {
@@ -121,16 +137,50 @@ describe('GuildPage — expired session (ROK-1947)', () => {
         expect(await screen.findByTestId('guild-hero'), 'Try again re-runs the check and shows the hub').toBeInTheDocument();
     });
 
-    it('a session drop that resets the hub query (a rejected useAuth refresh) still offers Sign in', async () => {
+});
+
+describe('GuildPage — session drops and recovery (ROK-1947)', () => {
+    it('a session drop that strands an in-flight hub query offers Sign in, with no refresh of its own', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         serve(503);
+        let hubRequested = false;
+        let release: () => void = () => undefined;
+        server.use(http.get(`${API}/guilds/7`, async () => {
+            hubRequested = true;
+            await new Promise<void>((resolve) => { release = resolve; });
+            return HttpResponse.json({ message: 'gone' }, { status: 500 });
+        }));
         const queryClient = createTestQueryClient();
         renderPage(queryClient);
-        expect(await screen.findByTestId('guild-session-expired')).toHaveTextContent(EXPIRED);
+        await waitFor(() => expect(hubRequested, 'the hub request must be in flight').toBe(true));
+        const before = refreshCalls;
         // What useAuth's handleRefreshFailure does: reset the observed page query, no token to refetch it.
         act(() => dropViewerPrivateCaches(queryClient));
-        await waitFor(() => {
-            expect(screen.queryByTestId('guild-session-expired'), 'a reset, idle hub query must offer Sign in, not an endless skeleton').not.toBeNull();
-        }, { timeout: 3000 });
+        await waitFor(() => expect(screen.queryByTestId('guild-loading'), 'a stranded hub query must not sit on the skeleton').toBeNull());
+        expect(screen.queryByTestId('guild-session-expired'), 'a stranded hub query means the session is over: offer Sign in').not.toBeNull();
+        expect(refreshCalls, 'the drop already decided the session; the stranded page must not refresh again').toBe(before);
+        release();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('under AuthGuard, a rejected useAuth refresh on the hub lands on the login screen with the hub saved', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'local');
+        serve(200);
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(['auth', 'me'], createMockUser({ onboardingCompletedAt: '2026-01-01T00:00:00.000Z' }));
+        renderGuardedPage(queryClient);
+        expect(await screen.findByTestId('guild-hero'), 'a live session shows the hub').toBeInTheDocument();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        // The token lapses and the refresh cookie is gone: useAuth's next check is REJECTED.
+        refreshStatuses = [401];
+        sessionLive = false;
+        clearAccessToken();
+        const before = refreshCalls;
+        await act(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }));
+        expect(await screen.findByTestId('login-screen'), 'the guard sends the signed-out viewer to the login screen').toBeInTheDocument();
+        expect(sessionStorage.getItem('authRedirect'), 'the hub stays the post-sign-in destination').toBe('/hubs/7');
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(refreshCalls, 'only useAuth refreshes; the stranded hub page adds no POST').toBe(before + 1);
     });
 
     it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
