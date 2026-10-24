@@ -252,6 +252,27 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     );
 }
 
+type RecoveryLatch = { guildId: number; dataUpdatedAt: number };
+
+/**
+ * ROK-1947: the recovery refetch clears an uncached query's error, so the
+ * re-check screen is held until it lands, or the next 401 would remount it
+ * and loop. The latch is keyed to the hub and to the data it started from:
+ * a later success that did not come through it (a resume refresh refetching
+ * the 401'd query) or another hub voids it, so a stale Sign in never stays up.
+ */
+function useRecoveryLatch(query: ReturnType<typeof useGuildPage>, guildId: number) {
+    const [latch, setLatch] = useState<RecoveryLatch | null>(null);
+    const recovering = latch !== null && latch.guildId === guildId && latch.dataUpdatedAt === query.dataUpdatedAt;
+    const recoverPage = async () => {
+        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt });
+        const result = await query.refetch({ cancelRefetch: false });
+        if (result.status === 'success') setLatch(null);
+        return result;
+    };
+    return { recovering, recoverPage };
+}
+
 export function GuildPage(): JSX.Element {
     const { id } = useParams<{ id: string }>();
     const guildId = Number(id);
@@ -263,19 +284,11 @@ export function GuildPage(): JSX.Element {
     // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
     const modulePending = useHubModulePending(query.data?.guild.kind);
     const moduleError = useHubModuleLoadError(query.data?.guild.kind);
-    const [recovering, setRecovering] = useState(false);
+    const { recovering, recoverPage } = useRecoveryLatch(query, guildId);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
-    // The recovery refetch clears an uncached query's error; hold the re-check
-    // screen until it lands, or the next 401 would remount it and loop (ROK-1947).
-    const recoverPage = async () => {
-        setRecovering(true);
-        const result = await refetchPage();
-        if (result.status === 'success') setRecovering(false);
-        return result;
-    };
     if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
     if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;

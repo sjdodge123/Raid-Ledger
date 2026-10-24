@@ -20,6 +20,7 @@ import { AUTH_METHOD_KEY, USER_CACHE_KEY } from '../../lib/api/auth-storage-keys
 import { clearAccessToken } from '../../lib/api/access-token-store';
 import { createMockUser } from '../../test/factories';
 import { AuthGuard } from '../auth/AuthGuard';
+import { refetchUnauthorized } from '../../lib/api/resume-refresh';
 import { GuildPage } from './hub-page';
 
 const API = 'http://localhost:3000';
@@ -250,5 +251,24 @@ describe('GuildPage — recovery that still 401s (ROK-1947)', () => {
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
         expect(rechecks(), 'Sign in is final: no further re-check once the refetch settled').toBe(1);
         expect(screen.getByTestId('guild-session-expired'), 'Sign in stays up').toBeInTheDocument();
+    });
+
+    it('a later refresh that refetches the 401 hub successfully replaces the stale Sign in with the hub', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        serve(200);
+        server.use(http.get(`${API}/guilds/7`, async () => {
+            await delay(20);
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }));
+        const queryClient = createTestQueryClient();
+        renderPage(queryClient);
+        const rechecks = () => posts.filter((p) => p.origin === 'recheck').length;
+        await waitFor(() => expect(rechecks() === 1 && queryClient.isFetching() === 0, 'the one re-check and its refetch settle').toBe(true));
+        expect(screen.getByTestId('guild-session-expired'), 'the still-401 recovery lands on Sign in').toHaveTextContent(EXPIRED);
+        // A resume refresh succeeds later and refetches the 401'd hub on its own (resume-refresh.ts).
+        server.use(http.get(`${API}/guilds/7`, () => HttpResponse.json(PAGE)));
+        await act(() => refetchUnauthorized(queryClient));
+        await waitFor(() => expect(screen.queryByTestId('guild-session-expired'), 'an independent recovery must clear the Sign in latch').toBeNull());
+        expect(await screen.findByTestId('guild-hero'), 'the recovered hub shows').toBeInTheDocument();
     });
 });
