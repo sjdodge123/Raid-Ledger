@@ -33,6 +33,16 @@ const blobs = schema.valheimLinkBlobs;
 const p = alias(schema.valheimProfiles, 'p');
 const u = alias(schema.users, 'u');
 
+/**
+ * ROK-1948 D5: the visible-graph cache fingerprint of a server's profiles —
+ * row count + an md5 of every profile's `known_recipes`/`known_items` in id
+ * order. It hashes the exact input the pruning reads, so ANY committed write
+ * that changes a known list changes it. A timestamp max cannot: `imported_at`
+ * is `now()` (transaction START), so an import that started earlier but
+ * committed later lands an older stamp and leaves count + max unchanged.
+ */
+export const PROFILE_FINGERPRINT = sql<string>`count(*)::text || ':' || md5(coalesce(string_agg(${p.id}::text || '=' || ${p.knownRecipes}::text || '|' || ${p.knownItems}::text, ',' order by ${p.id}), ''))`;
+
 @Injectable()
 export class ValheimRecipesReadRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
@@ -85,15 +95,12 @@ export class RecipesReader {
   }
 
   /**
-   * ROK-1948 D5: the cache fingerprint of every profile on `serverId` — row
-   * count + newest `imported_at` (every re-import bumps it; a delete moves
-   * the count). No claim filter, no viewer term (D2).
+   * ROK-1948 D5: `PROFILE_FINGERPRINT` over every profile on `serverId`.
+   * No claim filter, no viewer term (D2).
    */
   async profileFingerprint(serverId: number): Promise<string> {
     const [row] = await this.db
-      .select({
-        fp: sql<string>`count(*)::text || ':' || coalesce(extract(epoch from max(${p.importedAt}))::text, '0')`,
-      })
+      .select({ fp: PROFILE_FINGERPRINT })
       .from(p)
       .where(eq(p.pelicanServerId, serverId));
     return row?.fp ?? '0:0';
