@@ -118,7 +118,10 @@ describe('POST /admin/test/valheim/map-fixture (ROK-1837 T8)', () => {
     const { res, body } = await getBytes(`${mapUrl(f)}/base-map`, member);
     expect(res.status).toBe(200);
     const sha = sha256(body);
-    expect(res.headers.etag).toBe(`"${sha}"`);
+    // ROK-1949: the base map is masked to the viewer's exploration, so the ETag is
+    // the mask fingerprint, never the stored file's sha256.
+    expect(res.headers.etag).toMatch(/^"m1-[0-9a-f]{40}"$/);
+    expect(res.headers.etag).not.toBe(`"${sha}"`);
     expect(sha).not.toBe(MAP_FIXTURE_PLACEHOLDER_SHA256);
     expect([body.readUInt32BE(16), body.readUInt32BE(20)]).toEqual([
       2048, 2048,

@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
     ValheimMapMetaSchema,
-    type ValheimMapBaseMap,
     type ValheimMapFogLayer,
     type ValheimMapMeta,
 } from '@raid-ledger/contract';
@@ -94,11 +93,16 @@ function useObjectUrl(blob: Blob | undefined): string | null {
     return entry && entry.blob === blob ? entry.url : null;
 }
 
-/** The base map as an object URL; null until `baseMap.ready`. Revoked on change/unmount. */
+/**
+ * The base map as an object URL; null until `baseMap.ready`. Revoked on
+ * change/unmount. The image is masked to the viewer's exploration, so a new
+ * snapshot (`capturedAt`) refetches it — the server answers 304 when the
+ * mask did not change.
+ */
 export function useMapBaseImage(
     characterId: number,
     mapId: number,
-    baseMap: ValheimMapBaseMap | null,
+    { baseMap, capturedAt }: Pick<ValheimMapMeta, 'baseMap' | 'capturedAt'>,
 ): MapBaseImage {
     const ready = baseMap?.ready === true;
     const query = useQuery<Blob>({
@@ -106,6 +110,7 @@ export function useMapBaseImage(
             ...mapKey(characterId, mapId),
             'base-map',
             baseMap?.sha256 ?? null,
+            capturedAt,
         ],
         queryFn: async () =>
             (
@@ -115,7 +120,10 @@ export function useMapBaseImage(
             ).blob(),
         enabled: ready,
         retry: false,
-        staleTime: Infinity,
+        // The mask also follows the viewer's OTHER claimed characters and claim
+        // changes, which the meta does not signal: revalidate (ETag → 304) once
+        // a minute on remount/focus instead of never.
+        staleTime: 60_000,
     });
     const objectUrl = useObjectUrl(query.data);
     const url = ready ? objectUrl : null;

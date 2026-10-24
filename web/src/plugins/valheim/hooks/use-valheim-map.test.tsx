@@ -113,7 +113,7 @@ describe('useMapBaseImage', () => {
             ),
         );
         const { result, unmount } = renderHook(
-            () => useMapBaseImage(5, 9, meta.baseMap),
+            () => useMapBaseImage(5, 9, meta),
             { wrapper: wrapperFor() },
         );
         await waitFor(() => expect(result.current.url).toBe('blob:map-1'));
@@ -136,15 +136,42 @@ describe('useMapBaseImage', () => {
             height: SIZE,
             ready: false,
         };
-        const { result } = renderHook(() => useMapBaseImage(5, 9, notReady), {
-            wrapper: wrapperFor(),
-        });
+        const { result } = renderHook(
+            () => useMapBaseImage(5, 9, { ...meta, baseMap: notReady }),
+            {
+                wrapper: wrapperFor(),
+            },
+        );
         expect(result.current).toEqual({
             url: null,
             isLoading: false,
             error: null,
         });
         expect(hits).toBe(0);
+    });
+
+    it('refetches the masked base map when a new snapshot lands', async () => {
+        let hits = 0;
+        server.use(
+            http.get(`${MAP_URL}/base-map`, () => {
+                hits += 1;
+                return new HttpResponse(new Uint8Array([0x89, hits]), {
+                    headers: { 'Content-Type': 'image/png' },
+                });
+            }),
+        );
+        const { result, rerender } = renderHook(
+            ({ at }: { at: string }) =>
+                useMapBaseImage(5, 9, { ...meta, capturedAt: at }),
+            {
+                wrapper: wrapperFor(),
+                initialProps: { at: meta.capturedAt },
+            },
+        );
+        await waitFor(() => expect(result.current.url).not.toBeNull());
+        expect(hits).toBe(1);
+        rerender({ at: '2026-10-19T13:00:00.000Z' });
+        await waitFor(() => expect(hits).toBe(2));
     });
 });
 
