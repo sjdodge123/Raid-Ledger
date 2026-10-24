@@ -72,6 +72,7 @@ export class HubNotificationService {
     const guildName =
       (await findGuildName(this.db, input.guildId)) ?? 'your group';
     const ids = await this.resolveGroupRecipients(input.guildId, input.actorId);
+    if (ids.length === 0) return;
     const key = `hub-post:${input.guildId}`;
     if (await this.dedup.checkAndMarkSent(key, HUB_POST_COOLDOWN_SECONDS)) {
       return;
@@ -83,7 +84,7 @@ export class HubNotificationService {
         { guildId: input.guildId, guildName, url, postId: input.postId },
         headline,
       );
-      if (ids.length > 0 && delivered === 0) await this.dedup.releaseKey(key);
+      if (delivered === 0) await this.dedup.releaseKey(key);
     } catch (err: unknown) {
       await this.dedup.releaseKey(key);
       throw err;

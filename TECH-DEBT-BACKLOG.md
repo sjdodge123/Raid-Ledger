@@ -3595,3 +3595,10 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — feat/rok-1938-insights-late (surfaced during ROK-1938 web lane)
 
 - **low** `web/src/components/analytics/attendance-trends-chart.tsx:65-67` — outcome series still hardcode `stroke="#34D399"` / `"#F87171"` / `"#FBBF24"` (Attended / No-Show / Excused); they do not repaint across the 15 schemes. ROK-1938 tokenised the sibling Per-Game chart only (scope guard). Suggested: `var(--color-success)` / `var(--color-danger)` and a neutral (e.g. `var(--color-muted)`) for Excused, so amber means "late" everywhere (ROK-1938 OQ-5).
+
+### 2026-10-24 — fix-batch/2026-10-24-api-td (resolutions)
+
+- **resolved** `api/src/lineups/lineup-notification-deadline-extended.helpers.ts:75` (private lineups get the "Deadline extended" channel embed) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
+- **resolved (partial)** `api/src/lineups/lineups-voting.helpers.ts:67` (vote on a never-nominated game) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): the add branch now 400s via `isGameNominated`. Still open from that entry: inner-join entries in `countVotesPerGame` and an integration case.
+- **resolved (partial)** `api/src/users/users.service.ts:268` (display-name ilike uses raw input) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): input goes through `escapeLikePattern()`. Still open from that entry: uniqueness is advisory only (no DB constraint).
+- **resolved** `api/src/notifications/hub-notification.service.ts:81` (`hub-post:<id>` cooldown claimed with an empty recipient set) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
