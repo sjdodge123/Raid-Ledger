@@ -299,6 +299,28 @@ describe('upgradesOf (ROK-1899 §2.2)', () => {
     expect(upgradesOf(g, 'piece_chest', 1)).toEqual([]);
     expect(upgradesOf(g, 'Coal', 4)).toEqual([]);
   });
+  it('ROK-1948 R6: on a pruned graph, upgrades stop at a station nobody has found', () => {
+    const g = graph();
+    const without = (drop: string) =>
+      new Map([...g.stations].filter(([prefab]) => prefab !== drop));
+    const pruned = (drop: string): RecipeGraph => ({
+      ...g,
+      stations: without(drop),
+      withheld: new Set<string>(),
+    });
+    const qualities = (gr: RecipeGraph, prefab: string) =>
+      upgradesOf(gr, prefab, 3).map((u) => u.quality);
+    expect(qualities(g, 'AxeBlack')).toEqual([2, 3]);
+    // Hand-made at q1, repaired at blackforge_up from q2: no step is shown.
+    expect(qualities(pruned('blackforge_up'), 'AxeBlack')).toEqual([]);
+    expect(qualities(pruned('forge'), 'SwordIron')).toEqual([]);
+    // Another station going missing leaves this item's upgrades alone.
+    expect(qualities(pruned('forge'), 'AxeBlack')).toEqual([2, 3]);
+    // The FULL graph (no `withheld`) is never cut, even with a station absent.
+    expect(
+      qualities({ ...g, stations: without('blackforge_up') }, 'AxeBlack'),
+    ).toEqual([2, 3]);
+  });
 });
 
 describe('directInputs (ROK-1899 §2.2)', () => {

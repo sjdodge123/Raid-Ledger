@@ -16,6 +16,10 @@ describe('RATE_LIMIT_TIERS', () => {
   it('should define public tier as 60/min (ROK-1067)', () => {
     expect(RATE_LIMIT_TIERS.public).toEqual({ ttl: 60_000, limit: 60 });
   });
+
+  it('should define media tier as 600/min (ROK-1942)', () => {
+    expect(RATE_LIMIT_TIERS.media).toEqual({ ttl: 60_000, limit: 600 });
+  });
 });
 
 /** Re-evaluate the module under a given env — the tiers are read at import. */
@@ -41,9 +45,12 @@ function loadTiers(env: Record<string, string | undefined>) {
 describe('RATE_LIMIT_TIERS under DEMO_MODE (ROK-1633)', () => {
   const demo = { DEMO_MODE: 'true', THROTTLE_DISABLED: undefined };
 
-  it.each(['search', 'refresh'] as const)('lifts the %s tier', (tier) => {
-    expect(loadTiers(demo)[tier].limit).toBe(999_999);
-  });
+  it.each(['search', 'refresh', 'media'] as const)(
+    'lifts the %s tier',
+    (tier) => {
+      expect(loadTiers(demo)[tier].limit).toBe(999_999);
+    },
+  );
 
   it.each([
     ['auth', 10],

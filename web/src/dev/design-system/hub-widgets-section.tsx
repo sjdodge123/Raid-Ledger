@@ -8,6 +8,7 @@ import { Suspense, lazy, type JSX } from 'react';
 import { Section } from './design-system-bits';
 
 const HubWidgetsDemo = lazy(() => import('./hub-widgets-demo'));
+const HubGalleryDemo = lazy(() => import('./hub-gallery-demo'));
 
 /** §4.27 — a plugin's game-scoped Overview card in its three states. */
 export function HubWidgetsSection(): JSX.Element {
@@ -22,6 +23,12 @@ export function HubWidgetsSection(): JSX.Element {
                     <HubWidgetsDemo />
                 </Suspense>
             </div>
+            <h3 className="mt-6 text-sm font-semibold text-foreground">Gallery card + lightbox (§4.29, ROK-1942)</h3>
+            <p className="mt-1 flex items-center gap-2 text-xs text-muted"><span aria-hidden="true" className="inline-block h-4 w-8 rounded bg-media-well" /><code>bg-media-well</code> — the viewer's stage, near-black in every scheme (copy on it: <code>text-media-well-foreground</code>).</p>
+            <p className="text-xs text-muted">Square thumbnail tiles; a tile opens the ONE dialog (Modal ≥1024px, BottomSheet below) in viewer mode — ←/→, Prev/Next, chips, editor Hide.</p>
+            <Suspense fallback={<p className="text-xs text-muted">Loading gallery demo…</p>}>
+                <HubGalleryDemo />
+            </Suspense>
         </Section>
     );
 }

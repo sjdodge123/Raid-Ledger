@@ -17,6 +17,7 @@ import {
     type PlannerFilters,
     type PlannerTarget,
 } from './planner.helpers';
+import { isHiddenTarget } from './spoilers.helpers';
 import { usePlannerNames, type PlannerNames } from './use-planner-names';
 
 export interface PlannerState {
@@ -30,6 +31,8 @@ export interface PlannerState {
     onAdd: (target: PlannerTarget) => boolean;
     onRemove: (index: number) => void;
     atCap: boolean;
+    /** ROK-1948 W5 — kept in storage, left out of `/plan`, rendered generically. */
+    isHidden: (target: PlannerTarget) => boolean;
 }
 
 function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
@@ -46,7 +49,8 @@ export function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogR
     const [filters, setFilters] = useState<PlannerFilters>(DEFAULT_PLANNER_FILTERS);
     const [targets, setTargets] = usePlannerTargets(serverId);
     const hasPersonal = useValheimMaterials(serverId, filters.includeVehicles).data?.personal != null;
-    const plan = useValheimRecipePlan(serverId, serializeTargets(targets), filters.includePersonal && hasPersonal, filters.includeVehicles);
+    const isHidden = (t: PlannerTarget): boolean => isHiddenTarget(catalog, t);
+    const plan = useValheimRecipePlan(serverId, serializeTargets(targets.filter((t) => !isHidden(t))), filters.includePersonal && hasPersonal, filters.includeVehicles);
     const names = usePlannerNames(serverId, catalog, plan.data, undefined, 'plan');
     const onAdd = (target: PlannerTarget): boolean => {
         const next = addPlannerTarget(targets, target);
@@ -56,5 +60,5 @@ export function usePlannerState(serverId: number, catalog: ValheimRecipeCatalogR
     };
     const onRemove = (i: number): void => setTargets(targets.filter((_, j) => j !== i));
     const atCap = targets.length >= PLANNER_TARGETS_MAX;
-    return { filters, setFilters, targets, hasPersonal, plan, names, onAdd, onRemove, atCap };
+    return { filters, setFilters, targets, hasPersonal, plan, names, onAdd, onRemove, atCap, isHidden };
 }

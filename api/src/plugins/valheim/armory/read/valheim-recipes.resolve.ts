@@ -99,7 +99,10 @@ function expandItem(ctx: Ctx, raw: Need): void {
   }
   const pick = pickSource(ctx.graph, need.prefab, need.startStep, need.quality);
   const alternatives = need.alternatives ?? pick.alternatives;
-  if (!pick.source) {
+  if (!pick.source && (pick.hidden || ctx.graph.withheld?.has(need.prefab))) {
+    // ROK-1948 D7/R6: its only sources are hidden — generic leaf, no count.
+    ctx.b.push({ ...leaf, via: { type: 'undiscovered' }, alternatives: 0 });
+  } else if (!pick.source) {
     ctx.b.push({ ...leaf, via: { type: 'gathered' }, alternatives });
   } else if (pick.source.type === 'recipe') {
     const recipe = pick.source.recipe;
