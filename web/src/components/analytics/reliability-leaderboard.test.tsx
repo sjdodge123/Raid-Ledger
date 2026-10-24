@@ -234,13 +234,18 @@ function headerLabels() {
 }
 
 /** Late is the 5th cell: # · Player · Events · Attendance % · Late · No-Shows. */
+function must<T>(value: T | null | undefined, label: string): T {
+    if (value === null || value === undefined) throw new Error(`missing: ${label}`);
+    return value;
+}
+
 function lateCellFor(username: string) {
-    const row = screen.getAllByRole('row').find((r) => r.textContent?.includes(username));
-    return row?.querySelectorAll('td')[4]?.textContent;
+    const row = must(screen.getAllByRole('row').find((r) => r.textContent?.includes(username)), `row for ${username}`);
+    return must(row.querySelectorAll('td')[4], `Late cell for ${username}`).textContent;
 }
 
 function usernameOrder() {
-    return screen.getAllByRole('row').slice(1).map((r) => r.querySelectorAll('td')[1]?.textContent);
+    return screen.getAllByRole('row').slice(1).map((r, i) => must(r.querySelectorAll('td')[1], `Player cell in row ${i + 1}`).textContent);
 }
 
 describe('ReliabilityLeaderboard — Late column (ROK-1938)', () => {
