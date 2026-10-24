@@ -263,17 +263,20 @@ export function GuildPage(): JSX.Element {
     // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
     const modulePending = useHubModulePending(query.data?.guild.kind);
     const moduleError = useHubModuleLoadError(query.data?.guild.kind);
+    const [recovering, setRecovering] = useState(false);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
-    // A drop of the viewer's caches resets the page query and leaves it idle
-    // with no token to refetch it. Only useAuth's REJECTED refresh does that,
-    // so the session is already decided: offer Sign in, never re-check it (a
-    // second refresh would race another tab's cookie rotation) and never a
-    // skeleton forever (ROK-1947). AuthGuard usually redirects first.
-    if (query.status === 'pending' && query.fetchStatus === 'idle') return <SignInPrompt />;
-    if (httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={refetchPage} />;
+    // The recovery refetch clears an uncached query's error; hold the re-check
+    // screen until it lands, or the next 401 would remount it and loop (ROK-1947).
+    const recoverPage = async () => {
+        setRecovering(true);
+        const result = await refetchPage();
+        if (result.status === 'success') setRecovering(false);
+        return result;
+    };
+    if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
     if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;

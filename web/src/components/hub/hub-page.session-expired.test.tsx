@@ -135,7 +135,11 @@ describe('GuildPage — expired session (ROK-1947)', () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         localStorage.setItem(USER_CACHE_KEY, JSON.stringify({ id: 1 }));
         serve(401);
-        renderPage();
+        // Settled `/auth/me` keeps useAuth's own check (which would drop the
+        // caches and leave the page on its skeleton) out of this page-level test.
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(['auth', 'me'], null);
+        renderPage(queryClient);
         expect(await screen.findByTestId('guild-session-expired')).toHaveTextContent(EXPIRED);
         expect(refreshCalls, 'the refresh must have been tried first').toBeGreaterThan(0);
         await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
@@ -214,6 +218,20 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
         expect(after.map((p) => p.origin), 'every POST is useAuth or a request backstop').not.toContain('other');
     });
 
+    it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        // The request's own 401 backstop refresh blips (503); the re-check's refresh lands.
+        serve(503, 200);
+        const ids = recordTestIds();
+        renderPage();
+        expect(await screen.findByTestId('guild-hero'), 'a refresh that lands must show the hub').toBeInTheDocument();
+        ids.stop();
+        expect([...ids.seen], 'a recovered re-check must never flash "session expired"').not.toContain('guild-session-expired');
+        expect(localStorage.getItem(AUTH_METHOD_KEY), 'the viewer stays signed in').toBe('discord');
+    });
+});
+
+describe('GuildPage — recovery that still 401s (ROK-1947)', () => {
     it('a refresh that lands but a hub GET that still 401s settles on Sign in after ONE re-check, with no loop', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         serve(200);
@@ -232,17 +250,5 @@ describe('GuildPage — session drops and recovery (ROK-1947)', () => {
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
         expect(rechecks(), 'Sign in is final: no further re-check once the refetch settled').toBe(1);
         expect(screen.getByTestId('guild-session-expired'), 'Sign in stays up').toBeInTheDocument();
-    });
-
-    it('an OK re-check refetches the hub and shows it, with no prompt', async () => {
-        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        // The request's own 401 backstop refresh blips (503); the re-check's refresh lands.
-        serve(503, 200);
-        const ids = recordTestIds();
-        renderPage();
-        expect(await screen.findByTestId('guild-hero'), 'a refresh that lands must show the hub').toBeInTheDocument();
-        ids.stop();
-        expect([...ids.seen], 'a recovered re-check must never flash "session expired"').not.toContain('guild-session-expired');
-        expect(localStorage.getItem(AUTH_METHOD_KEY), 'the viewer stays signed in').toBe('discord');
     });
 });
