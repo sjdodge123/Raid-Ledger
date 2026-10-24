@@ -128,7 +128,9 @@ async function loadPollHubLink(
   const { gameId, clientUrl } = input;
   const taggedGuildId = await loadLineupHubId(db, input.lineupId).catch(
     (err: unknown) => {
-      logger.warn(`Hub tie lookup failed for lineup ${input.lineupId}: ${String(err)}`);
+      logger.warn(
+        `Hub tie lookup failed for lineup ${input.lineupId}: ${String(err)}`,
+      );
       return null;
     },
   );

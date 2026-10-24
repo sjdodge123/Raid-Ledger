@@ -273,10 +273,7 @@ function terminalDescription(data: SchedulingPollEmbedData): string[] {
  * line — in every state. The resolver sets `hubName` only for that tie; a
  * game-derived hub stays link-only (mirrors the ROK-1895 event rule).
  */
-function withHubName(
-  lines: string[],
-  data: SchedulingPollEmbedData,
-): string[] {
+function withHubName(lines: string[], data: SchedulingPollEmbedData): string[] {
   const name = data.hubLink?.hubName;
   return name ? [hubLine(name), '', ...lines] : lines;
 }
