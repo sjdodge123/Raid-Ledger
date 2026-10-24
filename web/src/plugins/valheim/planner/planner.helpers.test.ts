@@ -144,6 +144,7 @@ describe('undiscovered filter (ROK-1862)', () => {
         expect(hidesUndiscovered(on, 'known')).toBe(true);
         expect(hidesUndiscovered(on, 'no-character')).toBe(false);
         expect(hidesUndiscovered(on, 'truncated')).toBe(false);
+        expect(hidesUndiscovered(on, 'outdated')).toBe(false);
         expect(hidesUndiscovered(on, undefined)).toBe(false);
         expect(hidesUndiscovered({ hideUndiscovered: false }, 'known')).toBe(false);
     });

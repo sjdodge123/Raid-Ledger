@@ -55,6 +55,7 @@ export const DISCOVERY_FILTER_LABEL = 'Hide undiscovered';
 export const DISCOVERY_HINT: Record<Exclude<ValheimRecipeDiscovery, 'known'>, string> = {
     'no-character': 'Claim your character on this server to use this filter.',
     truncated: 'Your character knows too many recipes to check.',
+    outdated: 'Update the RL Valheim Link mod (0.4.2+) and log in once to use this filter.',
 };
 
 /** The filter only narrows when the server could read the viewer's known list. */

@@ -18,16 +18,31 @@ export interface KnownRecipes {
   known: Set<string> | null;
 }
 
+/** Pre-0.4.2 mods stored sanitised `$item_*`/`$piece_*` name tokens, not prefabs. */
+const LEGACY_TOKEN = /^_(item|piece)_/;
+
+/** A list's prefab-shaped entries; null when it holds only legacy tokens. */
+function usableEntries(list: readonly string[]): string[] | null {
+  const prefabs = list.filter((e) => !LEGACY_TOKEN.test(e));
+  return list.length > 0 && prefabs.length === 0 ? null : prefabs;
+}
+
 /**
  * D3 + Q1: no list → `no-character`; any list at the store cap → `truncated`
- * (a cut list is stored at exactly the cap); else the union of every list.
+ * (a cut list is stored at exactly the cap); token-only lists are ignored and
+ * token entries dropped from mixed ones — none usable left → `outdated`; else
+ * the union of every usable list.
  */
 export function toKnownSet(lists: readonly string[][]): KnownRecipes {
   if (lists.length === 0) return { status: 'no-character', known: null };
   if (lists.some((l) => l.length >= ARMORY_KNOWN_LIST_MAX)) {
     return { status: 'truncated', known: null };
   }
-  return { status: 'known', known: new Set(lists.flat()) };
+  const usable = lists
+    .map(usableEntries)
+    .filter((l): l is string[] => l !== null);
+  if (usable.length === 0) return { status: 'outdated', known: null };
+  return { status: 'known', known: new Set(usable.flat()) };
 }
 
 /** D2: the result prefab OR any recipe id producing it is in the list. */

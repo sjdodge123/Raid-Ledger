@@ -84,11 +84,16 @@ export type ValheimRecipeCatalogEntry = z.infer<
   typeof ValheimRecipeCatalogEntrySchema
 >;
 
-/** ROK-1862 D5: `known` = lists used; `no-character` = no valid claim; `truncated` = a list hit the cap. */
+/**
+ * ROK-1862 D5: `known` = lists used; `no-character` = no valid claim;
+ * `truncated` = a list hit the cap; `outdated` = every claimed list holds only
+ * pre-0.4.2 `_item_*`/`_piece_*` name tokens (mod too old to compare).
+ */
 export const ValheimRecipeDiscoverySchema = z.enum([
   "known",
   "no-character",
   "truncated",
+  "outdated",
 ]);
 export type ValheimRecipeDiscovery = z.infer<
   typeof ValheimRecipeDiscoverySchema

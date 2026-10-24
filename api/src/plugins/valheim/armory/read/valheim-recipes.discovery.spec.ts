@@ -126,6 +126,25 @@ describe('toKnownSet (D3, Q1)', () => {
     });
   });
 
+  it('a token-only (pre-0.4.2) list → outdated, no list', () => {
+    expect(toKnownSet([['_item_sword_bronze', '_piece_workbench']])).toEqual({
+      status: 'outdated',
+      known: null,
+    });
+  });
+
+  it('a mixed list keeps only its prefab entries', () => {
+    const k = toKnownSet([['_item_club', 'SwordBronze', '_piece_forge']]);
+    expect(k.status).toBe('known');
+    expect([...(k.known ?? [])]).toEqual(['SwordBronze']);
+  });
+
+  it('one outdated + one current character → known from the current list', () => {
+    const k = toKnownSet([['_item_club'], ['Recipe_Club']]);
+    expect(k.status).toBe('known');
+    expect([...(k.known ?? [])]).toEqual(['Recipe_Club']);
+  });
+
   it('one under the cap is still trusted', () => {
     const list = Array.from({ length: ARMORY_KNOWN_LIST_MAX - 1 }, () => 'X');
     expect(toKnownSet([list]).status).toBe('known');

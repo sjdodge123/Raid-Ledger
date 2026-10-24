@@ -49,11 +49,17 @@ beforeEach(() => {
 });
 
 describe('Hide undiscovered switch', () => {
-    it.each(['no-character', 'truncated'] as const)('%s → disabled with its hint', (discovery) => {
+    it.each(['no-character', 'truncated', 'outdated'] as const)('%s → disabled with its hint', (discovery) => {
         controls(discovery);
         const sw = screen.getByRole('switch', { name: 'Hide undiscovered' });
         expect(sw).toBeDisabled();
         expect(sw).toHaveAccessibleDescription(DISCOVERY_HINT[discovery]);
+    });
+    it('outdated (pre-0.4.2 mod) → disabled, tells the viewer to update the mod', () => {
+        controls('outdated');
+        const sw = screen.getByRole('switch', { name: 'Hide undiscovered' });
+        expect(sw).toBeDisabled();
+        expect(sw).toHaveAccessibleDescription('Update the RL Valheim Link mod (0.4.2+) and log in once to use this filter.');
     });
     it('known → enabled, no hint, toggling turns the filter on', async () => {
         const onChange = vi.fn();
