@@ -3567,3 +3567,8 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — feat/rok-1943-map-pin-filter (surfaced during review)
 - **[low]** `api/src/plugins/valheim/armory/read/valheim-deaths.controller.ts:47` — `GET …/deaths/pins` (the ROK-1930 Deaths map-pin read) has no web caller any more: the Map pin filter reads every player's Death pins through the server-pins layer instead (spec D5).
   Suggested: remove the endpoint after one release.
+
+### 2026-10-24 — feat/rok-1943-map-pin-filter (surfaced during the ROK-1943 delta review of the phone overlay mirror)
+
+- `low` `web/src/plugins/valheim/map/valheim-map-view.tsx:271` + `map-legend.tsx:15` — on a landscape phone (851×393) the map frame `h-[calc(100dvh-12rem)]` is ≈201px tall, so the bottom-left legend now runs under the top-left zoom/Layers column (mirrored below 1024px by ROK-1943 so the Filters FAB never covers it). The controls paint on top and stay clickable; only the legend is hidden. Pre-existing in spirit: the frame already had no height floor. `Suggested:` give `FRAME` a `min-h-[16rem]`, and update the legend JSDoc ("stays clear of the top-right controls" is true only at ≥1024px; the 4.5rem right-hand reserve has no purpose below lg).
+- `low` `web/src/plugins/valheim/map/valheim-map-view.tsx:92` — the `whitespace-nowrap` StatusChip "Cartography layer could not be loaded" is ≈290px wide, so on a 320–393px frame it reaches across into the zoom column (it did before, mirrored: chip left, controls right). It is pointer-events-none and the controls paint on top. `Suggested:` `max-w-[calc(100%-4.5rem)] whitespace-normal` on the status stack below lg.
