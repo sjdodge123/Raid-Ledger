@@ -32,16 +32,28 @@ async function fetchLeaderboard(token: string): Promise<ReliabilityUser[]> {
     return res?.users ?? [];
 }
 
+interface ListedUser { id: number; username: string; role?: string }
+
 /**
- * Three distinct users per project (sorted by id, taken from the 20 most
- * active), so desktop/mobile/tablet workers never seed the same player.
+ * Three distinct users per project from the player list (which always has the
+ * demo users, unlike the leaderboard, which is empty until attendance exists).
+ * Sorted by id, admins skipped, one disjoint window per project so the
+ * concurrent desktop/mobile/tablet workers never seed the same player.
  */
 async function pickUsers(token: string, testInfo: TestInfo): Promise<ReliabilityUser[]> {
-    const top = (await fetchLeaderboard(token)).slice(0, 20).sort((a, b) => a.userId - b.userId);
+    const res = (await apiGet(token, '/users?limit=50')) as { data?: ListedUser[] } | null;
+    const pool = (res?.data ?? [])
+        .filter((u) => u.role !== 'admin' && u.username !== 'admin')
+        .sort((a, b) => a.id - b.id);
+    const needed = Object.keys(PROJECT_SLOT).length * 3;
+    if (pool.length < needed) throw new Error(`need ${needed} non-admin users, /users returned ${pool.length}`);
     const slot = PROJECT_SLOT[testInfo.project.name] ?? 0;
-    const picked = top.slice(slot * 3, slot * 3 + 3);
-    if (picked.length < 3) throw new Error(`need 3 leaderboard users for slot ${slot}, got ${picked.length}`);
-    return picked;
+    return pool.slice(slot * 3, slot * 3 + 3).map((u) => ({ userId: u.id, username: u.username }));
+}
+
+/** The user's current leaderboard lateCount; 0 when they have no row yet. */
+async function lateCountOf(token: string, userId: number): Promise<number> {
+    return (await fetchLeaderboard(token)).find((u) => u.userId === userId)?.lateCount ?? 0;
 }
 
 /** Future event (signups refuse past events) — moved into the past after signup. */
@@ -87,7 +99,8 @@ async function injectSessions(token: string, eventId: number, late: number, full
 async function seedLateEvent(token: string, testInfo: TestInfo, seed: LateSeed): Promise<void> {
     const [late, full, noShow] = await pickUsers(token, testInfo);
     if (!late || !full || !noShow) throw new Error('pickUsers returned fewer than 3 users');
-    const baseline = late.lateCount ?? 0;
+    const baseline = await lateCountOf(token, late.userId);
+    const fullBaseline = await lateCountOf(token, full.userId);
     seed.eventId = await createSeedEvent(token, testInfo);
     const eventId = seed.eventId;
     await signUp(token, eventId, late.userId);
@@ -98,9 +111,16 @@ async function seedLateEvent(token: string, testInfo: TestInfo, seed: LateSeed):
     // Organiser's manual mark: a web signup has no Discord id, so classify never no-shows it.
     await apiPatch(token, `/events/${eventId}/attendance`, { signupId: noShowSignup, attendanceStatus: 'no_show' });
     seed.lateUser = await pollForCondition(async () => {
-        const row = (await fetchLeaderboard(token)).find((u) => u.userId === late.userId);
-        return row && (row.lateCount ?? 0) === baseline + 1 ? row : null;
-    }, { description: `lateCount ${baseline + 1} for user ${late.userId}`, timeoutMs: 20_000 });
+        const rows = await fetchLeaderboard(token);
+        const row = rows.find((u) => u.userId === late.userId);
+        const fullRow = rows.find((u) => u.userId === full.userId);
+        const lateOk = row !== undefined && (row.lateCount ?? 0) === baseline + 1;
+        const fullOk = fullRow !== undefined && (fullRow.lateCount ?? 0) === fullBaseline;
+        return lateOk && fullOk ? row : null;
+    }, {
+        description: `late user ${late.userId} lateCount ${baseline}→${baseline + 1}, full user ${full.userId} stays ${fullBaseline}`,
+        timeoutMs: 20_000,
+    });
 }
 
 // ---------------------------------------------------------------------------
