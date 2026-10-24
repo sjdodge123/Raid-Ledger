@@ -24,6 +24,20 @@ export const HUB_MEDIA_VARIANTS = ['full', 'thumb'] as const;
 export const HubMediaVariantSchema = z.enum(HUB_MEDIA_VARIANTS);
 export type HubMediaVariant = z.infer<typeof HubMediaVariantSchema>;
 
+/**
+ * A decorator link's `href` is rendered as an `<a href>`, so only a same-site
+ * path (`/…`, never protocol-relative `//…` or `/\\…`) or an absolute
+ * `https:` URL passes — never `javascript:`, `data:` or `http:`.
+ */
+export function isSafeHubMediaHref(href: string): boolean {
+    if (href.startsWith('/')) return !href.startsWith('//') && !href.startsWith('/\\');
+    try {
+        return new URL(href).protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
 export const HubMediaItemSchema = z
     .object({
         id: z.number().int().positive(),
@@ -41,7 +55,12 @@ export const HubMediaItemSchema = z
             label: z.string().max(100).nullable(),
         }),
         link: z
-            .object({ label: z.string().max(40), href: z.string().max(300) })
+            .object({
+                label: z.string().max(40),
+                href: z.string().max(300).refine(isSafeHubMediaHref, {
+                    message: 'A picture link is a same-site path or an https: URL',
+                }),
+            })
             .nullable(),
         /** Only ever true for editors — members never receive hidden rows. */
         hidden: z.boolean(),
