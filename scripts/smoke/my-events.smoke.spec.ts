@@ -58,9 +58,9 @@ async function lateCountOf(token: string, userId: number): Promise<number> {
 
 /** Any game id — the Per-Game Breakdown (Late % series) only counts events with a game. */
 async function pickGameId(token: string): Promise<number> {
-    const games = (await apiGet(token, '/games?limit=1')) as { data?: Array<{ id: number }> } | null;
+    const games = (await apiGet(token, '/admin/settings/games')) as { data?: Array<{ id: number }> } | null;
     const gameId = games?.data?.[0]?.id;
-    if (typeof gameId !== 'number') throw new Error(`GET /games returned no game: ${JSON.stringify(games)}`);
+    if (typeof gameId !== 'number') throw new Error(`GET /admin/settings/games returned no game: ${JSON.stringify(games)}`);
     return gameId;
 }
 
