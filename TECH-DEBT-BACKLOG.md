@@ -3567,6 +3567,14 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — feat/rok-1934-planner-process-items (surfaced during the ROK-1934 fleet test plan)
 
 - `nit` `web/src/plugins/valheim/planner/crafting-window.tsx` — at 375px the station suffix on a search-result row ("· Smelter", "· Forge") is clipped at the right edge of the "Matches from every station" list, and the floating Filters button overlaps the last row's suffix when the list is scrolled to the bottom. Pre-existing layout (cross-station rows had the same suffix before ROK-1934); the lane did not judge it a FAIL. `Suggested:` let the row label truncate before the suffix (`min-w-0` + `truncate` on the name, `shrink-0` on the suffix) and pad the list bottom by the FAB clearance (`--filter-fab-clearance`).
+### 2026-10-24 — feat/rok-1943-map-pin-filter (surfaced during review)
+- **[low]** `api/src/plugins/valheim/armory/read/valheim-deaths.controller.ts:47` — `GET …/deaths/pins` (the ROK-1930 Deaths map-pin read) has no web caller any more: the Map pin filter reads every player's Death pins through the server-pins layer instead (spec D5).
+  Suggested: remove the endpoint after one release.
+
+### 2026-10-24 — feat/rok-1943-map-pin-filter (surfaced during the ROK-1943 delta review of the phone overlay mirror)
+
+- `low` `web/src/plugins/valheim/map/valheim-map-view.tsx:271` + `map-legend.tsx:15` — on a landscape phone (851×393) the map frame `h-[calc(100dvh-12rem)]` is ≈201px tall, so the bottom-left legend now runs under the top-left zoom/Layers column (mirrored below 1024px by ROK-1943 so the Filters FAB never covers it). The controls paint on top and stay clickable; only the legend is hidden. Pre-existing in spirit: the frame already had no height floor. `Suggested:` give `FRAME` a `min-h-[16rem]`, and update the legend JSDoc ("stays clear of the top-right controls" is true only at ≥1024px; the 4.5rem right-hand reserve has no purpose below lg).
+- `low` `web/src/plugins/valheim/map/valheim-map-view.tsx:92` — the `whitespace-nowrap` StatusChip "Cartography layer could not be loaded" is ≈290px wide, so on a 320–393px frame it reaches across into the zoom column (it did before, mirrored: chip left, controls right). It is pointer-events-none and the controls paint on top. `Suggested:` `max-w-[calc(100%-4.5rem)] whitespace-normal` on the status stack below lg.
 ### 2026-10-24 — fix/rok-1902-admission-budget (surfaced during the ROK-1902 review)
 
 - **med** `tools/mcp-rl-fleet/src/tools/__tests__/test-plan-v2.spec.ts` — 6 cases fail locally on origin/main c4c736f1f with `AssertionError: POST call must have been made: expected undefined to be truthy` (×2) and `expected null not to be null` (×4). Pre-existing: reproduced on the main checkout before this branch, which does not touch the file. `Suggested:` check whether the spec depends on an env var / dashboard token CI sets (`tools-test-shard` is green on main) and make the spec self-contained or skip with a named reason.

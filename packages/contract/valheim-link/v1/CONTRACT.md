@@ -52,7 +52,7 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
 | Field | Type | Meaning |
 |---|---|---|
 | `schemaVersion` | `1` | Contract version. The mod emits **exactly one**. |
-| `kind` | `"character"` \| `"map"` \| `"items"` \| `"containers"` \| `"recipes"` | Discriminator (§3–§5b). |
+| `kind` | `"character"` \| `"map"` \| `"items"` \| `"containers"` \| `"recipes"` \| `"portals"` | Discriminator (§3–§5c). |
 | `serverId` | string `^[A-Za-z0-9_-]{1,64}$` | Raid Ledger's id for the game server, issued with the token. |
 | `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`), at most 3 fractional digits (≤ 24 chars) | When the mod read the data. Not later than server time + 5 min (§1). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,5}){1,3}$` (`0.220.5`) | `Version.GetVersionString()`. |
@@ -282,6 +282,30 @@ resources are alternatives; the `extraAmountOnlyOneIngredient` and
 alternative at `amount(r, q)` and does not apply the extras.
 
 
+## 5c. `kind: "portals"` — server-scanned portals (ROK-1944)
+
+Every portal in the world, found by the mod's **server-side** scan alongside
+`containers` (§5a, every ~10 minutes). Snapshot key (`serverId`, `worldUid`).
+Each message is a **full snapshot**: the latest `capturedAt` (the scan time)
+replaces the world's portals wholesale, so a destroyed portal simply
+disappears — there are no deltas. Prefabs are an open set: vanilla
+`portal_wood` and `portal_stone`, plus any modded portal the scan recognises
+(e.g. AdvancedPortals, XPortal).
+
+| Field | Type | Notes |
+|---|---|---|
+| `worldUid` | int64 string | the world scanned (as on `containers`) |
+| `portals[]` | ≤ `VALHEIM_LINK_PORTALS_MAX` (4 096) | may be empty |
+| `portals[].prefab` | prefab id | `portal_wood`, `portal_stone`, or a modded portal prefab |
+| `portals[].x` / `z` | number, \|v\| ≤ 32 768 | metres |
+| `portals[].y` | number \| `null` | height; `null` when the scan has none |
+| `portals[].tag` | string, ≤ `VALHEIM_LINK_PORTAL_TAG_MAX_CHARS` (64) | the pairing tag as typed in game; may be empty; free text. The mod MUST truncate longer tags (modded portals are not bound by vanilla's 10 chars) before upload — one over-long tag rejects the whole snapshot |
+| `omitted` | int | portals the mod dropped above 4 096 |
+
+Message-level rule (§6): (`prefab`, `x`, `y`, `z`) is unique across `portals`.
+Until the ingest story (ROK-1946) lands, the server validates a `portals`
+message and answers 202 `accepted` **without storing it**.
+
 ## 6. Strict keys and refinements
 
 Every object is **strict**: an unknown key rejects the whole message. These
@@ -301,6 +325,7 @@ rules are enforced by the Zod schema but **cannot be expressed in
   process; `station`, `repairStation` and piece `station` resolve to
   `stations[].prefab`, `processes[].processor` to `processors[].prefab`;
   Σ recipe + piece resources + process inputs ≤ `VALHEIM_LINK_RECIPE_ENTRIES_MAX`.
+- `portals`: (`prefab`, `x`, `y`, `z`) unique across `portals[]`.
 
 **Server-enforced (not in Zod, not in `schema.json`).** The contract package
 stays synchronous and browser-safe, so it never inflates. The ingest endpoint
@@ -337,6 +362,7 @@ all pass Zod.
 | `VALHEIM_LINK_ITEMS_MAX_BYTES` | 12 582 912 (12 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid (10 000 file icons, each with a `blob` ref) ≈ 11.05 MB |
 | `VALHEIM_LINK_CONTAINERS_MAX_BYTES` | 10 485 760 (10 MiB) | one `containers` body | 0.2–0.6 MB for ~500 chests. Largest schema-valid (4 096 containers, 50 000 entries) ≈ 8.52 MB (8 517 394 B) |
 | `VALHEIM_LINK_RECIPES_MAX_BYTES` | 12 582 912 (12 MiB) | one `recipes` body | ≈ 0.5 MB vanilla. Largest schema-valid (4 096 recipes, 4 096 pieces, 12 000 requirement entries, every icon an atlas rect) ≈ 10.33 MB |
+| `VALHEIM_LINK_PORTALS_MAX_BYTES` | 4 194 304 (4 MiB) | one `portals` body | a few KB for ~50 portals. Largest schema-valid (4 096 portals, 64-char control-character tags) ≈ 2.36 MB |
 | `VALHEIM_LINK_RECIPE_ENTRIES_MAX` | 12 000 | Σ recipe + piece resources + process inputs in one `recipes` body | ≈ 3 000 vanilla |
 | `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas, file icon) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
@@ -354,8 +380,8 @@ when one no longer fits its cap (ROK-1855) — add the new field to its builder.
 
 All values are synthetic: SteamID64s `765611980000000xx`, invented names
 (`Testviking`, `Fixtureheim`), no seeds, no real world names.
-Valid: `character-*` (2), `map-*` (2), `items-*` (2), `recipes-vanilla` and
-`recipes-processing`; invalid cases per kind live under `invalid/`.
+Valid: `character-*` (2), `map-*` (2), `items-*` (2), `containers-*` (2),
+`recipes-vanilla`, `recipes-processing`, `portals-vanilla` and `portals-modded`; invalid cases per kind live under `invalid/`.
 
 - `fixtures/<name>.json` — a message that **must parse**. Map bitmaps must
   inflate to exactly `⌈width·height/8⌉` bytes.
