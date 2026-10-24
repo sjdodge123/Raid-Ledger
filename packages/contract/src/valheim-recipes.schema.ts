@@ -76,10 +76,22 @@ export const ValheimRecipeCatalogEntrySchema = z
     craft: ValheimRecipeCraftSchema.nullable(),
     /** Qualities 2..maxQuality in order; empty for pieces and maxQuality 1. */
     upgrades: z.array(ValheimRecipeUpgradeSchema).max(9),
+    /** ROK-1862: the viewer's character knows it; null = not gated or unknown. */
+    discovered: z.boolean().nullable().optional(),
   })
   .strict();
 export type ValheimRecipeCatalogEntry = z.infer<
   typeof ValheimRecipeCatalogEntrySchema
+>;
+
+/** ROK-1862 D5: `known` = lists used; `no-character` = no valid claim; `truncated` = a list hit the cap. */
+export const ValheimRecipeDiscoverySchema = z.enum([
+  "known",
+  "no-character",
+  "truncated",
+]);
+export type ValheimRecipeDiscovery = z.infer<
+  typeof ValheimRecipeDiscoverySchema
 >;
 
 export const ValheimRecipeStationSchema = z
@@ -110,6 +122,7 @@ export const ValheimRecipeCatalogResponseSchema = z
     ingredients: z.record(z.string(), ValheimCatalogEntrySchema),
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
+    discovery: ValheimRecipeDiscoverySchema.optional(),
   })
   .strict();
 export type ValheimRecipeCatalogResponse = z.infer<
@@ -160,6 +173,8 @@ export const ValheimPlanNodeSchema = z
     /** Null in `/tree` and when no chest scan exists. */
     have: count.nullable(),
     short: count.nullable(),
+    /** ROK-1862: as on catalogue entries; null for process/gathered/fuel/cycle. */
+    discovered: z.boolean().nullable().optional(),
   })
   .strict();
 export type ValheimPlanNode = z.infer<typeof ValheimPlanNodeSchema>;
@@ -175,6 +190,7 @@ export const ValheimRecipeTreeResponseSchema = z
     items: z.record(z.string(), ValheimCatalogEntrySchema),
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
+    discovery: ValheimRecipeDiscoverySchema.optional(),
   })
   .strict();
 export type ValheimRecipeTreeResponse = z.infer<
@@ -238,6 +254,7 @@ export const ValheimRecipePlanResponseSchema = z
     items: z.record(z.string(), ValheimCatalogEntrySchema),
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
+    discovery: ValheimRecipeDiscoverySchema.optional(),
   })
   .strict();
 export type ValheimRecipePlanResponse = z.infer<
