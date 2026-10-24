@@ -206,3 +206,19 @@ export const valheimRecipeStockHandler = (hits: string[] = [], stock: Stock = ST
         hits.push(new URL(request.url).search);
         return HttpResponse.json(recipeStockFixture(stock));
     });
+
+/** ROK-1948 — a protected catalogue: the Forge and everything made there (Iron sword) withheld. */
+export function recipeCatalogProtectedFixture(over: Partial<ValheimRecipeCatalogResponse> = {}): ValheimRecipeCatalogResponse {
+    const full = recipeCatalogFixture();
+    const entries = full.entries.filter((e) => e.craft?.station !== 'forge');
+    return { ...full, entries, stations: full.stations.filter((s) => s.prefab !== 'forge'), ingredients: catalogIngredients(entries), spoilers: 'protected', ...over };
+}
+
+/** ROK-1948 D7 — the plan with one withheld ingredient (`Bronze`, unnamed in `items`) under the first root. */
+export function recipePlanUndiscoveredFixture(targets: ValheimRecipePlanTarget[]): ValheimRecipePlanResponse {
+    const plan = recipePlanFixture(targets);
+    const hidden: ValheimPlanNode = {
+        id: plan.nodes.length, parentId: 0, prefab: 'Bronze', quantity: 2, alternatives: 0, crafts: 0, have: 0, short: 2, via: { type: 'undiscovered' },
+    };
+    return { ...plan, spoilers: 'protected', nodes: [...plan.nodes, hidden] };
+}
