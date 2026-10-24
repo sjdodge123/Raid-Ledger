@@ -25,13 +25,13 @@ export interface KnownRecipes {
 const LEGACY_TOKEN = /^_/;
 
 /**
- * A list's prefab-shaped entries; null when nothing usable is left — a list of
- * only legacy tokens, or an empty list (every character knows some recipes, so
- * an empty one means the mod sent nothing we can trust).
+ * A list's prefab-shaped entries; null when it held entries but every one was a
+ * legacy token. An empty list is usable: a brand-new character can know no
+ * recipes yet (old mods sent tokens, never an empty list).
  */
 function usableEntries(list: readonly string[]): string[] | null {
   const prefabs = list.filter((e) => !LEGACY_TOKEN.test(e));
-  return prefabs.length === 0 ? null : prefabs;
+  return list.length > 0 && prefabs.length === 0 ? null : prefabs;
 }
 
 /**

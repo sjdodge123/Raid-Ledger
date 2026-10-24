@@ -159,8 +159,10 @@ describe('toKnownSet (D3, Q1)', () => {
     });
   });
 
-  it('an empty known list is unusable → outdated', () => {
-    expect(toKnownSet([[]])).toEqual({ status: 'outdated', known: null });
+  it('an empty known list is a new character → known, nothing discovered', () => {
+    const k = toKnownSet([[]]);
+    expect(k.status).toBe('known');
+    expect(k.known?.size).toBe(0);
   });
 
   it('one outdated + one current character → known from the current list', () => {
