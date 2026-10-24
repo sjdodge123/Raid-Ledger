@@ -485,6 +485,15 @@ describe('Taste Profile (ROK-948)', () => {
       const userId = await seedUser('d:hardcore-regression', 'hardcore');
       const game = await seedGame('Hardcore Seed', [12], [1], []);
       await seedInterest(userId, game, 'steam_library', 9000);
+      // ROK-1935: a player with no presence data is Newcomer, so give this
+      // one a presence rollup — intensity 95 only ever comes from presence.
+      await testApp.db.insert(schema.gameActivityRollups).values({
+        userId,
+        gameId: game,
+        period: 'day',
+        periodStart: new Date().toISOString().slice(0, 10),
+        totalSeconds: 36000,
+      });
 
       // Pre-seed the row with pinned intensityMetrics + archetype=null so
       // the pipeline exercises the post-migration rebuild path. Dimensions
