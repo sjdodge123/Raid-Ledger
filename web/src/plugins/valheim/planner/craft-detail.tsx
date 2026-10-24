@@ -55,7 +55,7 @@ export function CraftDetailBody(props: CraftDetailProps & { quality: number; amo
             <IngredientSlots cost={cost} totals={totals} stockState={props.stockState} names={names} stationLabel={station} />
             {processed && (
                 <p className="text-xs text-muted" data-testid="valheim-craft-process-note">
-                    Processed at {station}. Fuel it burns is counted in your plan.
+                    Processed at {station}. Any fuel it burns is counted in your plan.
                 </p>
             )}
             <CraftBreakdown serverId={props.serverId} catalog={props.catalog} entry={row.entry} mode={mode} quality={quality} amount={parseAmount(props.amount) ?? 1}

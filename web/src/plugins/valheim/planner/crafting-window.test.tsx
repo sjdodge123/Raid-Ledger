@@ -302,7 +302,7 @@ describe('CraftingWindow — process-only items (ROK-1934)', () => {
         expect(within(pane).getByTestId('valheim-craft-star-slot')).toHaveAccessibleName('Smelter');
         expect(within(pane).getByTestId('valheim-craft-star-slot')).not.toHaveTextContent('lvl');
         expect(within(pane).getByRole('listitem', { name: 'Scrap iron: need 1, you have 0, 1 short' })).toHaveTextContent('you have 0 · 1 short');
-        expect(within(pane).getByTestId('valheim-craft-process-note')).toHaveTextContent('Processed at Smelter. Fuel it burns is counted in your plan.');
+        expect(within(pane).getByTestId('valheim-craft-process-note')).toHaveTextContent('Processed at Smelter. Any fuel it burns is counted in your plan.');
         await user.click(within(pane).getByRole('button', { name: 'Add to list' }));
         expect(added).toEqual([{ prefab: 'Iron', kind: 'item', quality: 1, fromQuality: 0, amount: 1 }]);
     });
