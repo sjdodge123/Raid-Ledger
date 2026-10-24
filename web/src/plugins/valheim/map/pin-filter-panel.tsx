@@ -54,13 +54,30 @@ function TypeChips({ filter, onToggle, onAll }: {
     );
 }
 
+/**
+ * The draft text is local so typing never waits on the URL. A committed
+ * `query` this box did not send (Back/Forward, a link) replaces the draft; the
+ * commit of the box's own debounced write does not, so typing past it survives.
+ */
 function LabelSearch({ query, onChange }: { query: string; onChange: PinFilterPanelState['onChange'] }): JSX.Element {
     const [text, setText] = useState(query);
+    const [synced, setSynced] = useState(query);
+    const [lastSent, setLastSent] = useState(query);
+    if (synced !== query) {
+        setSynced(query);
+        if (query !== lastSent) {
+            setLastSent(query);
+            setText(query);
+        }
+    }
+    const send = (q: string): void => {
+        setLastSent(q);
+        onChange({ query: q });
+    };
     return (
         <Section title="Search labels">
             <SearchInput value={text} onChange={setText} label="Search pin labels" maxLength={PIN_QUERY_MAX}
-                placeholder="Pin label" onSearch={(q) => onChange({ query: q })}
-                onClear={() => onChange({ query: '' })} />
+                placeholder="Pin label" onSearch={send} onClear={() => send('')} />
         </Section>
     );
 }
