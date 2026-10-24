@@ -4,7 +4,7 @@
  * so the chip filter and the "open the dialog" request live here, per hub.
  *
  * L4 SEAM: `HubGalleryDialog` reads `request` (null = closed) and calls
- * `closeGallery()`; the card's tiles open it in `viewer` mode at a strip index,
+ * `closeGallery()`; the card's tiles open it in `viewer` mode on a picture id,
  * "See all (N)" in `grid` mode. `returnFocus` is the element to refocus on close.
  */
 import { create } from 'zustand';
@@ -14,8 +14,14 @@ export interface HubGalleryOpenRequest {
     guildId: number;
     mode: 'grid' | 'viewer';
     filter: HubMediaFilter;
-    /** Viewer mode: the picture's index in the filtered, newest-first list. */
+    /** Viewer mode fallback: the picture's index in the filtered, newest-first list. */
     index: number;
+    /**
+     * Viewer mode: the picture that was clicked. The dialog fetches its own list,
+     * so it resolves this id there (an index alone opens the wrong picture when
+     * the list moved between the strip's fetch and the dialog's).
+     */
+    mediaId?: number;
     returnFocus: HTMLElement | null;
 }
 

@@ -58,6 +58,16 @@ function useArrowKeys(scope: RefObject<HTMLElement | null>, active: boolean, pre
     }, [scope, active, prev, next]);
 }
 
+/** The viewer's index: the requested picture's id resolved in THIS list until the viewer moves, else the clamped index. */
+function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) {
+    const [anchorId, setAnchorId] = useState<number | null>(request.mediaId ?? null);
+    const [rawIndex, setRawIndex] = useState(request.index);
+    const anchored = anchorId === null ? -1 : pages.items.findIndex((i) => i.id === anchorId);
+    const index = anchored >= 0 ? anchored : Math.max(0, Math.min(rawIndex, pages.items.length - 1));
+    const setIndex = useCallback((i: number) => { setAnchorId(null); setRawIndex(i); }, []);
+    return { index, setIndex };
+}
+
 function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
     const closeGallery = useHubGalleryStore((s) => s.closeGallery);
     return useCallback(() => {
@@ -100,15 +110,14 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     const setCardFilter = useHubGalleryStore((s) => s.setFilter);
     const [mode, setMode] = useState(request.mode);
     const [filter, setFilter] = useState<HubMediaFilter>(request.filter);
-    const [rawIndex, setIndex] = useState(request.index);
     const pages = useHubGalleryPages(guildId, filter);
-    const index = Math.max(0, Math.min(rawIndex, pages.items.length - 1));
+    const { index, setIndex } = useViewerIndex(request, pages);
     const item = pages.items[index];
     const nav = useViewerNav(pages, index, setIndex);
     const scope = useRef<HTMLDivElement>(null);
     useArrowKeys(scope, mode === 'viewer' && item !== undefined, nav.prev, nav.next);
     const close = useCloseAndReturnFocus(request);
-    const changeFilter = (f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); };
+    const changeFilter = useCallback((f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); }, [setIndex, setCardFilter, guildId]);
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
             nav={nav} scope={scope} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />

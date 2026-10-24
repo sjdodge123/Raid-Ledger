@@ -138,6 +138,14 @@ describe('HubGalleryDialog — viewer', () => {
         expect(useHubGalleryStore.getState().filters[5]).toBe('death');
     });
 
+    it('opens the clicked picture by id even when the list moved since the strip fetched it', async () => {
+        server.use(pagedHandler([hubMediaItem(31, 'screenshot'), ...ITEMS]));
+        open({ index: 2, mediaId: 3 });
+        expect(await caption()).toMatch(who(3));
+        fireEvent.keyDown(dialog(), { key: 'ArrowRight' });
+        expect(await caption()).toMatch(who(4));
+    });
+
     it('Escape closes and returns focus to the tile that opened it', async () => {
         const trigger = open();
         await caption();

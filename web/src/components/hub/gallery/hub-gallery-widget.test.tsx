@@ -136,7 +136,7 @@ describe('HubGalleryWidget — dialog seam (L4)', () => {
         const third = tiles()[2];
         fireEvent.click(third as HTMLElement);
         const req = useHubGalleryStore.getState().request;
-        expect(req).toMatchObject({ guildId: 5, mode: 'viewer', filter: 'all', index: 2 });
+        expect(req).toMatchObject({ guildId: 5, mode: 'viewer', filter: 'all', index: 2, mediaId: MIXED[2]?.id });
         expect(req?.returnFocus).toBe(third);
     });
 });

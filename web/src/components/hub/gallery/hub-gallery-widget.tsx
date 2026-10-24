@@ -29,12 +29,12 @@ export const GALLERY_EDITOR_EMPTY_HINT =
 
 function GalleryStrip({ items, onOpen }: {
     items: readonly HubMediaItem[];
-    onOpen: (index: number, trigger: HTMLButtonElement) => void;
+    onOpen: (item: HubMediaItem, index: number, trigger: HTMLButtonElement) => void;
 }): JSX.Element {
     return (
         <ul className="grid grid-cols-3 gap-2 lg:grid-cols-4" aria-label="Recent pictures">
             {items.map((item, index) => (
-                <li key={item.id} className="min-w-0"><HubGalleryTile item={item} onOpen={(el) => onOpen(index, el)} /></li>
+                <li key={item.id} className="min-w-0"><HubGalleryTile item={item} onOpen={(el) => onOpen(item, index, el)} /></li>
             ))}
         </ul>
     );
@@ -58,7 +58,7 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
         <div className="flex flex-col gap-3">
             <HubGalleryChips filters={filters} value={filter} onChange={(f) => setFilter(guildId, f)} />
             <GalleryStrip items={(shown.data?.items ?? []).slice(0, limit)}
-                onOpen={(index, el) => openGallery({ guildId, mode: 'viewer', filter, index, returnFocus: el })} />
+                onOpen={(item, index, el) => openGallery({ guildId, mode: 'viewer', filter, index, mediaId: item.id, returnFocus: el })} />
             <p className="text-xs text-muted">From the screenshot channel · newest first</p>
             {request?.guildId === guildId && (
                 <Suspense fallback={null}><HubGalleryDialogHost request={request} canEdit={page.viewer.canEdit} /></Suspense>
