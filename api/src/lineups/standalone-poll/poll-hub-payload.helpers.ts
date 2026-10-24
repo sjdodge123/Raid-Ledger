@@ -9,7 +9,6 @@
  * fails over its hub.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -17,6 +16,7 @@ import {
   findVisiblePollHub,
   type PollHub,
 } from './standalone-poll-hub.helpers';
+import { loadLineupHubId } from '../scheduling/scheduling-poll-embed-data.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -48,26 +48,13 @@ function warnFailure(what: string, err: unknown): PollHubPayload {
   return {};
 }
 
-/** The lineup's tied hub id, or null when untagged / missing. */
-async function findLineupGuildId(
-  db: Db,
-  lineupId: number,
-): Promise<number | null> {
-  const [row] = await db
-    .select({ guildId: schema.communityLineups.guildId })
-    .from(schema.communityLineups)
-    .where(eq(schema.communityLineups.id, lineupId))
-    .limit(1);
-  return row?.guildId ?? null;
-}
-
 /** Hub keys for a poll's lineup (its visible tied hub). Never throws. */
 export async function lineupHubPayload(
   db: Db,
   lineupId: number,
 ): Promise<PollHubPayload> {
   try {
-    const guildId = await findLineupGuildId(db, lineupId);
+    const guildId = await loadLineupHubId(db, lineupId);
     if (guildId === null) return {};
     return toPayload(await findVisiblePollHub(db, guildId));
   } catch (err) {
