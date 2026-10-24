@@ -79,9 +79,7 @@ export class RecipesReader {
       .select({ known: p.knownRecipes })
       .from(p)
       .innerJoin(u, eq(u.id, p.claimedBy))
-      .where(
-        and(eq(p.pelicanServerId, serverId), claimedProfileSql(viewer.id)),
-      )
+      .where(and(eq(p.pelicanServerId, serverId), claimedProfileSql(viewer.id)))
       .orderBy(asc(p.id));
     return rows.map((r) => r.known);
   }
