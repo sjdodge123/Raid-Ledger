@@ -7,7 +7,10 @@
  * personal section and the chest list to one base; a stale key means All bases.
  */
 import { useMemo, useState, type JSX } from 'react';
-import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
+import type {
+    ValheimMaterialsBase,
+    ValheimMaterialsResponse,
+} from '@raid-ledger/contract';
 import { useNow } from '../../../hooks/use-now';
 import { useItemIconsFor } from '../character/use-item-icons';
 import {
@@ -41,19 +44,23 @@ const DEFAULT_SORT: MaterialSort = { key: 'total', dir: 'desc' };
 
 function ScanLine({
     data,
+    base,
 }: {
     data: ValheimMaterialsResponse;
+    /** ROK-1859: the selected base's chest count replaces the scan's. */
+    base: ValheimMaterialsBase | null;
 }): JSX.Element | null {
     // Ticks while the tab stays open: the shared QueryClient never refetches on focus (Codex r3).
     const now = useNow();
     if (data.capturedAt === null) return null;
+    const count = base?.chestCount ?? data.shared.chestCount;
     return (
         <p
             className="text-xs text-muted"
             data-testid="valheim-materials-scan-age"
         >
-            {scanAgeLabel(data.capturedAt, now)} · {data.shared.chestCount}{' '}
-            shared {data.shared.chestCount === 1 ? 'chest' : 'chests'}
+            {scanAgeLabel(data.capturedAt, now)} · {count} shared{' '}
+            {count === 1 ? 'chest' : 'chests'}
             {data.catalogFallback &&
                 ' · Item names come from the newest catalogue, not this server’s game version'}
         </p>
@@ -130,7 +137,7 @@ function MaterialsBody({
               selected);
     return (
         <div className="space-y-4">
-            <ScanLine data={data} />
+            <ScanLine data={data} base={base} />
             <MaterialsToolbar
                 filters={filters}
                 categories={categoriesOf([...all, ...mine])}

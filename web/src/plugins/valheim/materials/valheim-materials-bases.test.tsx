@@ -65,6 +65,15 @@ describe('ValheimMaterialsTab — Base filter (ROK-1859)', () => {
         ]);
     });
 
+    it('the header chest count follows the selected base', async () => {
+        server.use(valheimMaterialsHandler(withBases()));
+        window.history.replaceState(null, '', `/hub#materials?base=${BASE_C}`);
+        renderTab();
+        expect(
+            await screen.findByTestId('valheim-materials-scan-age'),
+        ).toHaveTextContent(/· 1 shared chest$/);
+    });
+
     it('names every chest by prefab, index and base', async () => {
         server.use(valheimMaterialsHandler(withBases()));
         renderTab();
