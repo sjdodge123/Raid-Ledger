@@ -1,5 +1,6 @@
 import type {
   ValheimPlanNode,
+  ValheimPiece,
   ValheimPlanVia,
   ValheimProcess,
   ValheimRecipe,
@@ -32,6 +33,18 @@ function recipe(
     anyOneOf: false,
     qualityResultAmountMultiplier: 1,
     formula: 'vanilla',
+    resources: [],
+  };
+}
+
+function piece(prefab: string): ValheimPiece {
+  return {
+    prefab,
+    name: prefab,
+    category: 'Furniture',
+    tool: 'Hammer',
+    station: null,
+    icon: null,
     resources: [],
   };
 }
@@ -240,6 +253,35 @@ describe('nodeDiscovered (D2)', () => {
     expect(
       nodeDiscovered(graph, node('Bronze', via), set('Bronze')),
     ).toBeNull();
+  });
+});
+
+describe('a prefab that is both a build piece and a crafted item', () => {
+  const both = buildRecipeGraph({
+    recipes: [recipe('Recipe_Bed', 'Bed')],
+    pieces: [piece('Bed')],
+    stations: [],
+    processors: [],
+    processes: [],
+  });
+  const pieceNode = node('Bed', recipeVia('Bed'));
+
+  it('the piece node and the piece entry both need the piece prefab', () => {
+    const known = set('Recipe_Bed');
+    expect(entryDiscovered(both, entry('Bed', 'piece'), known)).toBe(false);
+    expect(nodeDiscovered(both, pieceNode, known)).toBe(false);
+  });
+
+  it('the item node and the item entry both accept the recipe id', () => {
+    const known = set('Recipe_Bed');
+    const itemNode = node('Bed', recipeVia('Recipe_Bed'));
+    expect(entryDiscovered(both, entry('Bed'), known)).toBe(true);
+    expect(nodeDiscovered(both, itemNode, known)).toBe(true);
+  });
+
+  it('knowing the piece prefab discovers both', () => {
+    expect(entryDiscovered(both, entry('Bed', 'piece'), set('Bed'))).toBe(true);
+    expect(nodeDiscovered(both, pieceNode, set('Bed'))).toBe(true);
   });
 });
 

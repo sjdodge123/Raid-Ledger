@@ -76,13 +76,33 @@ export function entryDiscovered(
   return itemKnown(graph, entry.prefab, known);
 }
 
-/** Recipe nodes use the item rule (+ the node's own recipe id); others null. */
+/**
+ * A piece's build node carries `via.recipeId === piece.prefab` (`pieceVia`);
+ * an item recipe node carries one of the item's own recipe ids.
+ */
+function isPieceNode(
+  graph: RecipeGraph,
+  prefab: string,
+  recipeId: string,
+): boolean {
+  if (!graph.pieces.has(prefab)) return false;
+  const recipes = graph.recipesByResult.get(prefab) ?? [];
+  return !recipes.some((r) => r.id === recipeId);
+}
+
+/**
+ * Recipe nodes use the item rule (+ the node's own recipe id); piece nodes the
+ * piece rule (own prefab only), same as `entryDiscovered`; others null.
+ */
 export function nodeDiscovered(
   graph: RecipeGraph,
   node: Pick<ValheimPlanNode, 'prefab' | 'via'>,
   known: ReadonlySet<string> | null,
 ): boolean | null {
   if (known === null || node.via.type !== 'recipe') return null;
+  if (isPieceNode(graph, node.prefab, node.via.recipeId)) {
+    return known.has(node.prefab);
+  }
   if (known.has(node.via.recipeId)) return true;
   return itemKnown(graph, node.prefab, known);
 }
