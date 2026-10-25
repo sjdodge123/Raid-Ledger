@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   getGlobalAchievementPercentages,
   getPlayerAchievements,
@@ -43,8 +44,8 @@ function setup(userIds: number[], maxUserFetches = 5000) {
     hasUsableSchema: jest.fn().mockResolvedValue(true),
     markSchemaError: jest.fn().mockResolvedValue(undefined),
     saveSchema: jest.fn().mockResolvedValue(undefined),
-    saveUserOk: jest.fn().mockResolvedValue(undefined),
-    saveUserStatus: jest.fn().mockResolvedValue(undefined),
+    saveUserOk: jest.fn().mockResolvedValue(true),
+    saveUserStatus: jest.fn().mockResolvedValue(true),
   };
   const settings = { getSteamApiKey: jest.fn().mockResolvedValue('KEY') };
   const service = new SteamStatsRefreshService(
@@ -77,7 +78,7 @@ describe('SteamStatsRefreshService.refreshAll', () => {
     await service.refreshAll();
     expect(storage.saveUserOk).toHaveBeenCalledTimes(1);
     expect(storage.saveUserOk).toHaveBeenCalledWith(
-      2,
+      { userId: 2, steamId: 's2' },
       APP,
       UNLOCKED,
       expect.any(Date),
@@ -89,7 +90,7 @@ describe('SteamStatsRefreshService.refreshAll', () => {
     playerMock.mockResolvedValueOnce({ kind: 'private' });
     await service.refreshAll();
     expect(storage.saveUserStatus).toHaveBeenCalledWith(
-      1,
+      { userId: 1, steamId: 's1' },
       APP,
       'private',
       expect.any(Date),
@@ -107,11 +108,35 @@ describe('SteamStatsRefreshService.refreshAll', () => {
       expect.any(Date),
     );
     expect(storage.saveUserOk).toHaveBeenCalledWith(
-      1,
+      { userId: 1, steamId: 's1' },
       APP,
       UNLOCKED,
       expect.any(Date),
     );
+  });
+});
+
+describe('SteamStatsRefreshService — Steam account swapped mid-run', () => {
+  it('R7 — a skipped save (account changed) logs at debug and the run goes on', async () => {
+    const { service, storage } = setup([1, 2]);
+    storage.saveUserOk.mockResolvedValueOnce(false);
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    await service.refreshAll();
+    expect(storage.saveUserOk).toHaveBeenNthCalledWith(
+      1,
+      { userId: 1, steamId: 's1' },
+      APP,
+      UNLOCKED,
+      expect.any(Date),
+    );
+    expect(storage.saveUserOk).toHaveBeenCalledTimes(2);
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('user 1, app 1086940 skipped'),
+    );
+    expect(debug).toHaveBeenCalledTimes(1);
+    debug.mockRestore();
   });
 });
 
@@ -177,7 +202,7 @@ describe('SteamStatsRefreshService.refreshUser (D6 on-link)', () => {
     expect(targets.targetsFor).toHaveBeenCalledWith(APP, [10], 7);
     expect(schemaMock).not.toHaveBeenCalled();
     expect(storage.saveUserOk).toHaveBeenCalledWith(
-      7,
+      { userId: 7, steamId: 's7' },
       APP,
       UNLOCKED,
       expect.any(Date),
@@ -189,7 +214,7 @@ describe('SteamStatsRefreshService.refreshUser (D6 on-link)', () => {
     storage.hasUsableSchema.mockResolvedValue(true);
     await service.refreshUser(7);
     expect(storage.saveUserOk).toHaveBeenCalledWith(
-      7,
+      { userId: 7, steamId: 's7' },
       APP,
       UNLOCKED,
       expect.any(Date),

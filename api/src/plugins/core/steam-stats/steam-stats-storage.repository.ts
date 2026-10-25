@@ -109,6 +109,26 @@ async function upsertUnlocks(
     });
 }
 
+/** The user and the Steam account a fetch was made for. */
+export interface SteamStatsOwner {
+  userId: number;
+  steamId: string;
+}
+
+/**
+ * True when `users.steam_id` still equals the fetched id. `FOR SHARE` holds
+ * the row until commit, so an unlink/replace waits for this write and its
+ * post-commit purge lands after it (no catch-and-retry: a plain read).
+ */
+async function stillOwns(tx: Tx, owner: SteamStatsOwner): Promise<boolean> {
+  const [row] = await tx
+    .select({ steamId: schema.users.steamId })
+    .from(schema.users)
+    .where(eq(schema.users.id, owner.userId))
+    .for('share');
+  return row?.steamId === owner.steamId;
+}
+
 /**
  * ROK-1953 §4.2 writes. Every write is one upsert on the table's primary key
  * (inputs de-duplicated first), so none can violate a unique key; nothing
@@ -176,16 +196,19 @@ export class SteamStatsStorageRepository {
 
   /**
    * An `ok` fetch: replace the user's unlock set in one transaction. An
-   * existing `unlocked_at` is kept; a vanished unlock is deleted.
+   * existing `unlocked_at` is kept; a vanished unlock is deleted. False (no
+   * write) when the user's Steam account changed since the fetch.
    */
   async saveUserOk(
-    userId: number,
+    owner: SteamStatsOwner,
     appId: number,
     unlocked: readonly SteamUnlockedAchievement[],
     now: Date,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const { userId } = owner;
     const rows = uniqueBy(unlocked, (u) => u.apiName);
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
+      if (!(await stillOwns(tx, owner))) return false;
       const names = rows.map((r) => r.apiName);
       await tx
         .delete(userAch)
@@ -198,6 +221,7 @@ export class SteamStatsStorageRepository {
         );
       await upsertUnlocks(tx, userId, appId, rows);
       await this.writeStatus(tx, userId, appId, 'ok', rows.length, now);
+      return true;
     });
   }
 
@@ -213,14 +237,21 @@ export class SteamStatsStorageRepository {
     });
   }
 
-  /** A non-`ok` fetch: status only (count null), unlock rows untouched. */
+  /**
+   * A non-`ok` fetch: status only (count null), unlock rows untouched. False
+   * (no write) when the user's Steam account changed since the fetch.
+   */
   async saveUserStatus(
-    userId: number,
+    owner: SteamStatsOwner,
     appId: number,
     status: Exclude<SteamStatsStatus, 'ok'>,
     now: Date,
-  ): Promise<void> {
-    await this.writeStatus(this.db, userId, appId, status, null, now);
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      if (!(await stillOwns(tx, owner))) return false;
+      await this.writeStatus(tx, owner.userId, appId, status, null, now);
+      return true;
+    });
   }
 
   private async writeStatus(

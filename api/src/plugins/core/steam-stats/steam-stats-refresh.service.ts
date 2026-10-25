@@ -135,10 +135,14 @@ export class SteamStatsRefreshService {
       const r = await getPlayerAchievements(key, user.steamId, appId);
       if (r.kind === 'rate_limited') throw new SteamRateLimitedError(appId);
       const now = new Date();
-      if (r.kind === 'ok') {
-        await this.storage.saveUserOk(user.userId, appId, r.unlocked, now);
-      } else {
-        await this.storage.saveUserStatus(user.userId, appId, r.kind, now);
+      const written =
+        r.kind === 'ok'
+          ? await this.storage.saveUserOk(user, appId, r.unlocked, now)
+          : await this.storage.saveUserStatus(user, appId, r.kind, now);
+      if (!written) {
+        this.logger.debug(
+          `Steam stats for user ${user.userId}, app ${appId} skipped: Steam account changed since the fetch`,
+        );
       }
     } catch (err: unknown) {
       if (err instanceof SteamRateLimitedError) throw err;

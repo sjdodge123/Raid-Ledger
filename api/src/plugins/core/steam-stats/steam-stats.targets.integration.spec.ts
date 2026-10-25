@@ -122,13 +122,13 @@ describe('SteamStatsTargetsRepository (T1–T4)', () => {
     ];
     for (const u of [fresh, stale, never, unlinked]) await join(hub, u);
     await storage.saveUserStatus(
-      fresh,
+      { userId: fresh, steamId: '76561190000000004' },
       BG3,
       'private',
       new Date('2026-10-20T00:00:00Z'),
     );
     await storage.saveUserStatus(
-      stale,
+      { userId: stale, steamId: '76561190000000005' },
       BG3,
       'private',
       new Date('2026-10-01T00:00:00Z'),
@@ -153,8 +153,9 @@ describe('SteamStatsStorageRepository (S1–S3)', () => {
 
   it('S1 — an ok refresh keeps the stored unlocked_at and deletes vanished unlocks', async () => {
     const user = await makeUser('s1', '76561190000000007');
+    const owner = { userId: user, steamId: '76561190000000007' };
     await storage.saveUserOk(
-      user,
+      owner,
       BG3,
       [
         { apiName: 'A', unlockedAt: t0 },
@@ -163,7 +164,7 @@ describe('SteamStatsStorageRepository (S1–S3)', () => {
       t0,
     );
     await storage.saveUserOk(
-      user,
+      owner,
       BG3,
       [{ apiName: 'A', unlockedAt: new Date() }],
       new Date(),
@@ -182,7 +183,7 @@ describe('SteamStatsStorageRepository (S1–S3)', () => {
   it('S2 — duplicate api names in one fetch do not violate the primary key', async () => {
     const user = await makeUser('s2', '76561190000000008');
     await storage.saveUserOk(
-      user,
+      { userId: user, steamId: '76561190000000008' },
       BG3,
       [
         { apiName: 'A', unlockedAt: null },
@@ -191,6 +192,30 @@ describe('SteamStatsStorageRepository (S1–S3)', () => {
       t0,
     );
     expect((await rows(user)).map((r) => r.apiName)).toEqual(['A']);
+  });
+
+  it('S4 — the Steam account changed between fetch and save: nothing written for the old id', async () => {
+    const user = await makeUser('s4', '76561190000000009');
+    const stale = { userId: user, steamId: '76561190000000009' };
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: '76561190000000010' })
+      .where(eq(schema.users.id, user));
+    expect(
+      await storage.saveUserOk(
+        stale,
+        BG3,
+        [{ apiName: 'A', unlockedAt: t0 }],
+        t0,
+      ),
+    ).toBe(false);
+    expect(await storage.saveUserStatus(stale, BG3, 'private', t0)).toBe(false);
+    expect(await rows(user)).toEqual([]);
+    const stats = await testApp.db
+      .select()
+      .from(schema.steamUserAppStats)
+      .where(eq(schema.steamUserAppStats.userId, user));
+    expect(stats).toEqual([]);
   });
 
   it('S3 — a schema refresh deletes achievements Steam no longer lists; a failure keeps them', async () => {
