@@ -73,12 +73,18 @@ function tree(gameVersion: string | undefined, quality: number, from = 0) {
 }
 
 describe('per-quality cost rule (ROK-1894)', () => {
-  it('1.0.x, q4 from scratch: ×2 per level from q3, one upgrade item per step', () => {
+  it('1.0.x, q4 from scratch: ×2 per level from q3, one upgrade item per upgrade step', () => {
     expect(quantities(tree('1.0.20', 4))).toEqual({
       Bronze: 5 + 3 + 6 + 12,
       DeerHide: 2,
-      Upgrader1Armor: 4,
+      Upgrader1Armor: 3,
     });
+  });
+
+  it('1.0.x, a fresh q1 craft takes no upgrade item (operator in-game check 2026-10-25)', () => {
+    expect(quantities(tree('1.0.20', 1))).toEqual({ Bronze: 5, DeerHide: 2 });
+    expect(amountAt(res('Upgrader1Armor', 1, 0, true), 1, 'v1')).toBe(0);
+    expect(amountAt(res('Upgrader1Armor', 1, 0, true), 1, 'v0')).toBe(1);
   });
 
   it('1.0.x, upgrading q3 → q4 charges only the q4 step', () => {
