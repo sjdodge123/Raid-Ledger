@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { CompanionLinkPollErrorCode } from '@raid-ledger/contract';
 
@@ -54,5 +55,24 @@ export function tooManyPending(): ConflictException {
   return new ConflictException({
     code: 'too_many_pending',
     message: 'Too many devices are waiting to be linked from this network.',
+  });
+}
+
+/** 404 on the Devices API: another user's id, or already revoked. */
+export function deviceNotFound(): NotFoundException {
+  return new NotFoundException({
+    code: 'not_found',
+    message: 'Device not found',
+  });
+}
+
+/**
+ * The device guard's ONE 401 (envelope §4): missing, malformed, unknown or
+ * revoked token, or a deactivated owner — no oracle between them.
+ */
+export function deviceUnauthorized(): UnauthorizedException {
+  return new UnauthorizedException({
+    code: 'unauthorized',
+    message: 'Invalid device token',
   });
 }

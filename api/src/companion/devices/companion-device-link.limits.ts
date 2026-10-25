@@ -37,6 +37,9 @@ export const codeFailsPerUserLimit = (): number | null =>
 /** Failed user-code lookups per minute per IP. */
 export const codeFailsPerIpLimit = (): number | null =>
   envLimit('COMPANION_LINK_RATE_CODE_FAILS_PER_IP', 30);
+/** Failed device-token auths per minute per IP (the guard, pre-auth). */
+export const guardFailsPerIpLimit = (): number | null =>
+  envLimit('COMPANION_DEVICE_RATE_AUTH_PER_MIN', 30);
 
 /** The companion limiter: its own DI token and key map (not Valheim's). */
 @Injectable()
