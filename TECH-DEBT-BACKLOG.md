@@ -3634,3 +3634,4 @@ same day (#1278, #1279, #1280).
 ### 2026-10-25 — fix-batch/2026-10-25-td
 
 - **resolved** 2026-10-17 fix/security-p2-batch `api/src/discord-bot/commands/invite.command.ts` — `/invite` now refuses a deactivated or banned caller with `LFG_BLOCKED_REPLY`, mirroring `/lfg` (this branch).
+- **resolved** 2026-10-23 feat/rok-1943 (Codex r5 P3) `api/src/guilds/community/community-directory.cursor.ts` + `community-directory.queries.ts` — `/hubs` cursor row id and member-count key are bounded to int4, so a crafted cursor 400s instead of 500ing (this branch).
