@@ -129,6 +129,21 @@ describe('companion device guard + Devices API', () => {
     expect(res.body).toEqual(UNAUTHORIZED);
   });
 
+  it.each([
+    ['T-API-18b a banned owner', { bannedAt: new Date() }],
+    ['T-API-18c an owner in a kick cooldown', { kickedAt: new Date() }],
+  ])("%s's device token → the same 401", async (_label, lockout) => {
+    const user = await makeUser(testApp, 'cd-lockout');
+    const dev = await linkDevice(testApp, user.token);
+    await testApp.db
+      .update(schema.users)
+      .set(lockout)
+      .where(eq(schema.users.id, user.id));
+    const res = await self(dev.token);
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(UNAUTHORIZED);
+  });
+
   it('T-API-19 first call stamps last-used; a second within 60 s does not move it', async () => {
     const user = await makeUser(testApp, 'cd-touch');
     const dev = await linkDevice(testApp, user.token);

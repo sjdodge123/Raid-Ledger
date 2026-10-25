@@ -1,4 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { isBannedOrKickCoolingDown } from '../../auth/auth-status.helpers';
 import { tokenHashesEqual } from '../../common/tokens/prefixed-token.helpers';
 import {
   reserveOrThrow,
@@ -30,7 +31,8 @@ function bearerOf(req: CompanionDeviceRequest): string | null {
 /**
  * ROK-1955 §5.3 — the scope gate for companion device routes. Accepts ONLY
  * an `rlcd_` bearer: malformed (incl. a session JWT or an `rlvl_` token) →
- * 401 with no DB read; unknown, revoked or a deactivated owner → the SAME
+ * 401 with no DB read; unknown, revoked, or an owner who is deactivated,
+ * banned or in a kick cooldown (as `JwtStrategy` refuses sessions) → the SAME
  * 401 `{ code: 'unauthorized' }` (no oracle). Attaches
  * `req.companionDevice` and NEVER `req.user`, so a device is never a
  * session (S-6). Pre-auth per-IP failure budget (30/min,
@@ -84,6 +86,7 @@ export class CompanionDeviceGuard implements CanActivate {
     const row = await this.repo.findByHash(hash);
     if (!row || !tokenHashesEqual(row.tokenHash, hash)) return null;
     if (row.revokedAt || row.deactivatedAt) return null;
+    if (isBannedOrKickCoolingDown(row)) return null;
     return {
       deviceId: row.deviceId,
       tokenHash: row.tokenHash,

@@ -44,7 +44,12 @@ const liveRow = {
   tokenHash: HASH,
   revokedAt: null,
   deactivatedAt: null,
+  bannedAt: null,
+  kickedAt: null,
 };
+
+/** Seven days ago — past the 24 h kick cooldown. */
+const LONG_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
 async function bodyOf(p: Promise<unknown>): Promise<unknown> {
   try {
@@ -76,6 +81,8 @@ describe('CompanionDeviceGuard', () => {
     ['unknown token', null],
     ['revoked device', { ...liveRow, revokedAt: new Date() }],
     ['deactivated owner', { ...liveRow, deactivatedAt: new Date() }],
+    ['banned owner', { ...liveRow, bannedAt: new Date() }],
+    ['owner in a kick cooldown', { ...liveRow, kickedAt: new Date() }],
     ['hash mismatch', { ...liveRow, tokenHash: 'f'.repeat(64) }],
   ])('%s → the same 401, no touch', async (_l, row) => {
     const { repo, guard } = setup(row);
@@ -96,6 +103,13 @@ describe('CompanionDeviceGuard', () => {
     });
     expect(req.user).toBeUndefined();
     expect(repo.touchLastUsed).toHaveBeenCalledWith(7, '203.0.113.x');
+  });
+
+  it('an owner whose kick cooldown has expired is accepted (as for sessions)', async () => {
+    const { guard } = setup({ ...liveRow, kickedAt: LONG_AGO });
+    await expect(
+      guard.canActivate(ctxFor(`Bearer ${TOKEN}`).ctx),
+    ).resolves.toBe(true);
   });
 
   it('the 31st failure from one IP in a minute is 429 before any lookup', async () => {

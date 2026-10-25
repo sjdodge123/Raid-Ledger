@@ -27,13 +27,15 @@ export interface DeviceAuthRow {
   tokenHash: string;
   revokedAt: Date | null;
   deactivatedAt: Date | null;
+  bannedAt: Date | null;
+  kickedAt: Date | null;
 }
 
 @Injectable()
 export class CompanionDevicesRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
-  /** The device for a token hash, joined to its owner's deactivation. */
+  /** The device for a token hash, joined to its owner's lockout columns. */
   async findByHash(tokenHash: string): Promise<DeviceAuthRow | null> {
     const [row] = await this.db
       .select({
@@ -42,6 +44,8 @@ export class CompanionDevicesRepository {
         tokenHash: devices.tokenHash,
         revokedAt: devices.revokedAt,
         deactivatedAt: users.deactivatedAt,
+        bannedAt: users.bannedAt,
+        kickedAt: users.kickedAt,
       })
       .from(devices)
       .innerJoin(users, eq(users.id, devices.userId))
