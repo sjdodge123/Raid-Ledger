@@ -19,12 +19,12 @@
 export const REDACTED = '[redacted]';
 
 const SECRET_KEY =
-  /token|secret|credential|authorization|code_verifier|password|cookie|api[-_]?key/i;
+  /token|secret|credential|authorization|code_verifier|password|cookie|api[-_]?key|device_?code|user_?code/i;
 const REQUEST_ONLY_KEYS = new Set(['code', 'state']);
 const QUERY_SECRET =
   /([?&#]|^)((?:code|state|[a-z_]*token|code_verifier|client_secret|password)=)[^&#\s"']*/gi;
 const JSON_SECRET =
-  /("(?:[a-z_]*token|code_verifier|client_secret|password|secret)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
+  /("(?:[a-z_]*token|code_verifier|client_secret|password|secret|device_?code|user_?code)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
 // ROK-1750: a private poll's share token rides the PATH, not the query.
 // ROK-1599: so does the ICS subscribe-link token (`/cal/u/<token>.ics`).
 const PATH_SECRET =
@@ -32,6 +32,11 @@ const PATH_SECRET =
 // ROK-1833: a Valheim Link ingest token anywhere in a string (header dump,
 // pasted into free text, an issue-response body).
 const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
+// ROK-1955: a companion device token, and the device-link user code that
+// rides the preview PATH (`poll` / `decision` are route names, kept).
+const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
+const COMPANION_LINK_PATH =
+  /(\/companion\/v1\/devices\/link\/)(?!(?:poll|decision)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
 // every Calendar v3 call; `primary` names no one and stays for triage.
 const CALENDAR_PATH =
@@ -61,6 +66,8 @@ export function scrubString(value: string): string {
     .replace(CALENDAR_PATH, `$1${REDACTED}`)
     .replace(CALDAV_PATH, `$1${REDACTED}`)
     .replace(VALHEIM_LINK_TOKEN, REDACTED)
+    .replace(COMPANION_DEVICE_TOKEN, REDACTED)
+    .replace(COMPANION_LINK_PATH, `$1${REDACTED}`)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }
 
