@@ -11,7 +11,8 @@ import type {
   HubMediaPostText,
   HubMediaStoredContext,
 } from '../../../hub-media/hub-media-classifier.registry';
-import { VALHEIM_GAME_SLUG } from '../valheim.constants';
+import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../valheim.constants';
 import { ValheimDeathLinkRepository } from './valheim-death-link.repository';
 import {
   captureSecondOfHour,
@@ -23,30 +24,37 @@ type Db = PostgresJsDatabase<typeof schema>;
 const { valheimPlayerDeaths } = schema;
 const CAPTION_MAX = 200;
 
+type ValheimServerHub = HubMediaHubRef & { pelicanServerId: number };
+
 /** A Valheim server hub: deaths can only be keyed to its Pelican server. */
-const isValheimServer = (
-  hub: HubMediaHubRef,
-): hub is HubMediaHubRef & { pelicanServerId: number } =>
+const isValheimServer = (hub: HubMediaHubRef): hub is ValheimServerHub =>
   hub.gameSlug === VALHEIM_GAME_SLUG && hub.pelicanServerId !== null;
 
 /**
  * ROK-1941 — the screenshot mod's posts on a Valheim server hub: `death` /
  * `screenshot` by wording (D5), the first death picture correlated to a
  * console death (L1 SQL A), and a deleted post's inferred death removed (D11).
+ * ROK-1969: every step is a no-op while the Valheim plugin is inactive.
  */
 @Injectable()
 export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly links: ValheimDeathLinkRepository,
+    private readonly plugins: PluginRegistryService,
   ) {}
 
-  /** Null for a non-Valheim hub or a post the mod did not write. */
+  /** A Valheim server hub while the Valheim plugin is active (ROK-1969). */
+  private owns(hub: HubMediaHubRef): hub is ValheimServerHub {
+    return isValheimServer(hub) && this.plugins.isActive(VALHEIM_PLUGIN_ID);
+  }
+
+  /** Null for a non-Valheim hub, an inactive plugin, or a post the mod did not write. */
   classify(
     post: HubMediaPostText,
     hub: HubMediaHubRef,
   ): HubMediaPostClassification | null {
-    if (!isValheimServer(hub)) return null;
+    if (!this.owns(hub)) return null;
     const text = postText(post.content, post.embeds);
     const c = classifyPost(text);
     if (c.kind === 'image') return null;
@@ -61,7 +69,7 @@ export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
   async afterStore(ctx: HubMediaStoredContext): Promise<HubMediaCorrelation> {
     const { hub, classification: c } = ctx;
     if (c.kind !== 'death' || ctx.index !== 0) return null;
-    if (!isValheimServer(hub) || !c.authorName) return null;
+    if (!this.owns(hub) || !c.authorName) return null;
     const res = await this.links.linkOrInferDeath({
       pelicanServerId: hub.pelicanServerId,
       characterName: c.authorName,
@@ -79,7 +87,7 @@ export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
     hub: HubMediaHubRef,
     mediaIds: readonly number[],
   ): Promise<void> {
-    if (!isValheimServer(hub) || mediaIds.length === 0) return;
+    if (!this.owns(hub) || mediaIds.length === 0) return;
     await this.db
       .delete(valheimPlayerDeaths)
       .where(

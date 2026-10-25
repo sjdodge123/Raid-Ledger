@@ -4,6 +4,7 @@ import { ValheimScreenshotClassifier } from './valheim-screenshot.classifier';
 import { Test } from '@nestjs/testing';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { HubMediaHubRef } from '../../../hub-media/hub-media-classifier.registry';
+import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 
 const HUB: HubMediaHubRef = {
   guildId: 1,
@@ -18,25 +19,34 @@ const text = (content: string) => ({
   embeds: [],
 });
 
+const links = { linkOrInferDeath: jest.fn() };
+const plugins = { isActive: jest.fn() };
+const db = { delete: jest.fn() };
+
+async function build(): Promise<ValheimScreenshotClassifier> {
+  jest.clearAllMocks();
+  plugins.isActive.mockReturnValue(true);
+  links.linkOrInferDeath.mockResolvedValue({
+    outcome: 'inferred',
+    deathId: 5,
+    deltaSec: null,
+  });
+  const mod = await Test.createTestingModule({
+    providers: [
+      ValheimScreenshotClassifier,
+      { provide: DrizzleAsyncProvider, useValue: db },
+      { provide: ValheimDeathLinkRepository, useValue: links },
+      { provide: PluginRegistryService, useValue: plugins },
+    ],
+  }).compile();
+  return mod.get(ValheimScreenshotClassifier);
+}
+
 describe('ValheimScreenshotClassifier', () => {
   let classifier: ValheimScreenshotClassifier;
-  const links = { linkOrInferDeath: jest.fn() };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
-    links.linkOrInferDeath.mockResolvedValue({
-      outcome: 'inferred',
-      deathId: 5,
-      deltaSec: null,
-    });
-    const mod = await Test.createTestingModule({
-      providers: [
-        ValheimScreenshotClassifier,
-        { provide: DrizzleAsyncProvider, useValue: {} },
-        { provide: ValheimDeathLinkRepository, useValue: links },
-      ],
-    }).compile();
-    classifier = mod.get(ValheimScreenshotClassifier);
+    classifier = await build();
   });
 
   it('claims death and screenshot posts on a Valheim server hub', () => {
@@ -88,5 +98,31 @@ describe('ValheimScreenshotClassifier', () => {
         },
       ],
     ]);
+  });
+});
+
+describe('ValheimScreenshotClassifier with the Valheim plugin off (ROK-1969)', () => {
+  it('claims nothing, links nothing and deletes nothing', async () => {
+    const classifier = await build();
+    plugins.isActive.mockReturnValue(false);
+    const death = text('Bjorn met their demise!');
+    const ctx = {
+      hub: HUB,
+      post: death,
+      classification: {
+        kind: 'death' as const,
+        authorName: 'Bjorn',
+        caption: null,
+      },
+      mediaId: 42,
+      index: 0,
+      filename: null,
+    };
+    expect(classifier.classify(death, HUB)).toBeNull();
+    expect(await classifier.afterStore(ctx)).toBeNull();
+    await classifier.afterRemove(HUB, [42]);
+    expect(links.linkOrInferDeath).not.toHaveBeenCalled();
+    expect(db.delete).not.toHaveBeenCalled();
+    expect(plugins.isActive).toHaveBeenCalledWith('valheim');
   });
 });
