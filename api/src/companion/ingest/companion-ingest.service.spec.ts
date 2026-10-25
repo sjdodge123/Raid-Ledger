@@ -117,6 +117,7 @@ function setup(over: SetupOver = {}) {
     ),
     holdDevice: jest.fn(() => Promise.resolve(over.held ?? true)),
     advance: jest.fn(() => Promise.resolve(over.advanced ?? true)),
+    lockUserBlobs: jest.fn(() => Promise.resolve()),
     storedBlobs: jest.fn(() => Promise.resolve(over.stored ?? [])),
     recordBlobRefs: jest.fn(() => Promise.resolve()),
   };
@@ -259,5 +260,23 @@ describe('CompanionIngestService — blob refs (steps 11b / 11d)', () => {
       service.ingest(DEVICE, 'test-save', body(), NOW),
     ).resolves.toEqual({ status: 'stale' });
     expect(repo.recordBlobRefs).not.toHaveBeenCalled();
+  });
+});
+
+describe('CompanionIngestService — shared blob lock (ROK-1956 R1)', () => {
+  it('takes the user blob lock after the device hold and before reading blobs', async () => {
+    const { service, repo } = setup({ refs: [REF] });
+    await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(repo.lockUserBlobs).toHaveBeenCalledWith(TX, 7);
+    const order = (f: jest.Mock): number =>
+      f.mock.invocationCallOrder[0] ?? Number.NaN;
+    expect(order(repo.lockUserBlobs)).toBeGreaterThan(order(repo.holdDevice));
+    expect(order(repo.lockUserBlobs)).toBeLessThan(order(repo.storedBlobs));
+  });
+
+  it('a message without refs takes no blob lock', async () => {
+    const { service, repo } = setup();
+    await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(repo.lockUserBlobs).not.toHaveBeenCalled();
   });
 });

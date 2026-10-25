@@ -11,6 +11,7 @@ import {
   holdActiveDevice,
   type CompanionDeviceTx,
 } from '../devices/companion-device-lock';
+import { lockCompanionUserBlobs } from '../blobs/companion-blob-lock';
 import type { CompanionBlobRefRow } from '../blobs/companion-blob-refs.helpers';
 import {
   storedBlobsIn,
@@ -79,6 +80,11 @@ export class CompanionIngestLatestRepository {
     shas: readonly string[],
   ): Promise<CompanionBlobRefRow[]> {
     return storedBlobsIn(tx, userId, shas);
+  }
+
+  /** The shared per-user blob lock (before 11b reads, until the tx ends). */
+  lockUserBlobs(tx: CompanionDeviceTx, userId: number): Promise<void> {
+    return lockCompanionUserBlobs(tx, userId);
   }
 
   /** Step 11d: upsert `companion_blob_refs` (rows unique by sha). */

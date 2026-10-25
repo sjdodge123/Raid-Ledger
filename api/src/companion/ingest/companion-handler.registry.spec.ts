@@ -150,3 +150,30 @@ describe('CompanionHandlerRegistry (ROK-1956 §5)', () => {
     expect(registry.resolve('bg3-save', 1, 'device')).not.toBeNull();
   });
 });
+
+describe('CompanionHandlerRegistry.acceptsSessionBlobs (ROK-1956 R1)', () => {
+  const refs = (): readonly never[] => [];
+
+  it('false with no session opt-in (default device-only sources)', () => {
+    const { registry } = setup();
+    registry.register(OWNER, handler({ blobRefs: refs }));
+    expect(registry.acceptsSessionBlobs()).toBe(false);
+  });
+
+  it('true only while a session-opted handler with blobRefs has an active owner', () => {
+    const { registry, active } = setup();
+    registry.register(
+      OWNER,
+      handler({ sources: ['device', 'session'], blobRefs: refs }),
+    );
+    expect(registry.acceptsSessionBlobs()).toBe(true);
+    active.delete(OWNER);
+    expect(registry.acceptsSessionBlobs()).toBe(false);
+  });
+
+  it('false when the session-opted handler declares no blobRefs', () => {
+    const { registry } = setup();
+    registry.register(OWNER, handler({ sources: ['session'] }));
+    expect(registry.acceptsSessionBlobs()).toBe(false);
+  });
+});

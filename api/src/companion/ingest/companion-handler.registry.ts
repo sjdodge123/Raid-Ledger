@@ -169,6 +169,21 @@ export class CompanionHandlerRegistry {
     return sourcesOf(reg.handler).includes(via) ? reg.handler : null;
   }
 
+  /**
+   * Whether a SESSION may upload blobs now: at least one registered handler
+   * whose owner is active opts into `session` AND declares `blobRefs` (a
+   * blob is only reachable through a ref). Mirrors the messages route's
+   * per-handler opt-in; read per call (plugins toggle at runtime).
+   */
+  acceptsSessionBlobs(): boolean {
+    return this.registrations.some(
+      ({ ownerPluginId, handler }) =>
+        handler.blobRefs !== undefined &&
+        sourcesOf(handler).includes('session') &&
+        this.plugins.isActive(ownerPluginId),
+    );
+  }
+
   /** Every registration in order, with its owner's activity now (for `/config`). */
   list(): readonly CompanionHandlerListing[] {
     return this.registrations.map(({ ownerPluginId, handler }) => ({

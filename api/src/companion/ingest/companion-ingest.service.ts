@@ -103,6 +103,9 @@ export class CompanionIngestService {
   ): Promise<CompanionBlobRefRow[]> {
     const refs = uniqueBlobRefs(msg.handler.blobRefs?.(msg.message) ?? []);
     if (refs.length === 0) return refs;
+    // The shared per-user blob lock (after the 11a device hold): the cleanup
+    // cannot reap these blobs and an upload cannot commit other dims meanwhile.
+    await this.repo.lockUserBlobs(tx, userId);
     const shas = refs.map((r) => r.sha256);
     assertRefsMatchStored(refs, await this.repo.storedBlobs(tx, userId, shas));
     return refs;
