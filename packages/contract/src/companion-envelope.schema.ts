@@ -65,5 +65,11 @@ export const CompanionIngestErrorCodeSchema = z.enum([
     'captured_at_in_future',
     'unauthorized',
     'rate_limited',
+    // ROK-1956 (additive; append only, never reorder):
+    'unsupported_media',
+    'hash_mismatch',
+    'invalid_blob',
+    'blob_ref_mismatch',
+    'blob_quota_exceeded',
 ]);
 export type CompanionIngestErrorCode = z.infer<typeof CompanionIngestErrorCodeSchema>;

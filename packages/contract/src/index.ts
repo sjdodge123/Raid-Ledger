@@ -241,6 +241,7 @@ export * from './valheim-server-portals.schema.js';
 // Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
 export * from './companion-common.schema.js';
 export * from './companion-envelope.schema.js';
+export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
