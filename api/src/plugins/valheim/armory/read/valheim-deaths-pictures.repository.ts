@@ -58,7 +58,9 @@ export class ValheimDeathsPicturesRepository {
         mediaId: media.id,
         guildId: media.guildId,
         capturedAt: media.capturedAt,
-        rn: sql<number>`row_number() over (${bucket} order by ${desc(media.capturedAt)}, ${desc(media.id)})`.as('rn'),
+        rn: sql<number>`row_number() over (${bucket} order by ${desc(media.capturedAt)}, ${desc(media.id)})`.as(
+          'rn',
+        ),
         total: sql<string>`count(*) over (${bucket})`.as('total'),
       })
       .from(deaths)

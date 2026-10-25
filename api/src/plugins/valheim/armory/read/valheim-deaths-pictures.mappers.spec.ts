@@ -48,11 +48,17 @@ describe('toDeathsResponse — death pictures (ROK-1941 D13)', () => {
       group({ steamId: null, deaths: 2 }),
     ];
     const pictures = [
-      bucket({ steamId: A, count: 3, pictures: [pic(11, 9), pic(12, 5), pic(13, 2)] }),
+      bucket({
+        steamId: A,
+        count: 3,
+        pictures: [pic(11, 9), pic(12, 5), pic(13, 2)],
+      }),
       bucket({ steamId: null, count: 2, pictures: [pic(21, 7), pic(22, 1)] }),
     ];
-    const [bar] = toDeathsResponse({ groups, profiles: [prof] }, pictures)
-      .players;
+    const [bar] = toDeathsResponse(
+      { groups, profiles: [prof] },
+      pictures,
+    ).players;
     expect({
       ids: bar?.pictures?.map((p) => p.mediaId),
       count: bar?.pictureCount,
@@ -65,9 +71,7 @@ describe('toDeathsResponse — death pictures (ROK-1941 D13)', () => {
   });
 
   it('breaks a capturedAt tie by the newer media id', () => {
-    const pictures = [
-      bucket({ count: 2, pictures: [pic(5, 3), pic(8, 3)] }),
-    ];
+    const pictures = [bucket({ count: 2, pictures: [pic(5, 3), pic(8, 3)] })];
     const [bar] = toDeathsResponse(
       { groups: [group({})], profiles: [] },
       pictures,
@@ -92,8 +96,10 @@ describe('toDeathsResponse — death pictures (ROK-1941 D13)', () => {
   });
 
   it('keeps the counts-only call (no pictures argument) unchanged', () => {
-    const [bar] = toDeathsResponse({ groups: [group({})], profiles: [] })
-      .players;
+    const [bar] = toDeathsResponse({
+      groups: [group({})],
+      profiles: [],
+    }).players;
     expect(Object.keys(bar ?? {}).sort()).toEqual([
       'characterId',
       'deaths',

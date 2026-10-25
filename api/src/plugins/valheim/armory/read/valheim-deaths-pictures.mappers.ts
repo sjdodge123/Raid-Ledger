@@ -30,7 +30,9 @@ export interface BarPictures {
   pictureCount: number;
 }
 
-type BucketKey = (b: Pick<DeathPictureBucket, 'steamId' | 'characterName'>) => string;
+type BucketKey = (
+  b: Pick<DeathPictureBucket, 'steamId' | 'characterName'>,
+) => string;
 
 const newestFirst = (a: DeathPictureRow, b: DeathPictureRow): number =>
   b.capturedAt.getTime() - a.capturedAt.getTime() || b.mediaId - a.mediaId;
