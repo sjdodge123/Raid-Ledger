@@ -25,6 +25,7 @@ import {
 } from './main.helpers';
 import type { LogLevelEnv } from './main.helpers';
 import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
+import { installCompanionBodyBypass } from './companion/ingest/companion-body-bypass';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -69,6 +70,8 @@ async function bootstrap() {
   // ROK-1313: 8 MB JSON for POST /feedback (screenshots) — before the 2 MB one.
   // ROK-1833: Valheim Link routes read their own body under the kind's cap.
   installValheimLinkBodyBypass(app);
+  // ROK-1956: companion ingest/blob routes read their own body (256 KiB cap).
+  installCompanionBodyBypass(app);
   installFeedbackBodyParser(app);
   app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet(buildHelmetOptions()));
