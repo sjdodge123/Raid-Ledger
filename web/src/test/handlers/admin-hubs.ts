@@ -61,6 +61,15 @@ function renamedTo(body: unknown): string | null {
     return typeof body.name === 'string' ? body.name : null;
 }
 
+/** ROK-1950 — `PATCH /guilds/:id/name`: the active row takes the new name, so a refetch shows it. */
+function renameHandler(store: AdminHubsStore): HttpHandler {
+    return http.patch(`${API}/guilds/:id/name`, async ({ request, params }) => {
+        const name = renamedTo(await record(store, request));
+        store.active = store.active.map((h) => (String(h.id) === params.id && name !== null ? { ...h, name } : h));
+        return HttpResponse.json({ id: Number(params.id) });
+    });
+}
+
 /** Handlers backed by `store`; mutations record their body and update the store. */
 export function adminHubsHandlers(store: AdminHubsStore): HttpHandler[] {
     return [
@@ -87,12 +96,7 @@ export function adminHubsHandlers(store: AdminHubsStore): HttpHandler[] {
             await record(store, request);
             return HttpResponse.json({ ok: true });
         }),
-        // ROK-1950 — rename: the active row takes the new name, so a refetch shows it.
-        http.patch(`${API}/guilds/:id/name`, async ({ request, params }) => {
-            const name = renamedTo(await record(store, request));
-            store.active = store.active.map((h) => (String(h.id) === params.id && name !== null ? { ...h, name } : h));
-            return HttpResponse.json({ id: Number(params.id) });
-        }),
+        renameHandler(store),
     ];
 }
 
