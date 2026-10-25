@@ -246,6 +246,7 @@ export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
 export * from './companion-registry.js';
 export * from './companion-bg3-display.js';
+export * from './companion-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
