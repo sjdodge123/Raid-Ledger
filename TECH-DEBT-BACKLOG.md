@@ -3633,4 +3633,4 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-25 — fix/hub-copy-and-proposal-smoke
 
-- **resolved** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — polled the API before asserting (this branch). The spec already polled `GET /notifications` for `hub_proposal_reviewed` before the UI check, so the write was not the race: on phones `/calendar` smooth-scrolls to today after mount and the bell's close-on-scroll-down shut the dropdown (cf. the `/calendar` self-scroll entry below it). The bell is now opened on `/players`, after the API poll.
+- **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
