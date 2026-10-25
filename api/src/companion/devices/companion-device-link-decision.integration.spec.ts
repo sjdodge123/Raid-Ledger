@@ -108,7 +108,9 @@ describe('companion device link — start / preview / decision', () => {
     expect(unknown.body).toEqual(expired.body);
   });
 
-  it('T-API-14 decision needs a JWT (401) and an active account (403)', async () => {
+  // A deactivated user's access JWT is refused by jwt.strategy with 401 USER_DEACTIVATED (ROK-1753),
+  // before NotDeactivatedGuard's 403 path can run — so a deactivated account gets that 401 here.
+  it('T-API-14 decision needs a JWT (401) and an active account (401 USER_DEACTIVATED)', async () => {
     const link = await startLink(testApp);
     const anon = await testApp.request
       .post(`${LINK}/decision`)
@@ -116,7 +118,8 @@ describe('companion device link — start / preview / decision', () => {
     expect(anon.status).toBe(401);
     const gone = await makeUser(testApp, 'cd-deactivated', true);
     const res = await decide(testApp, gone.token, link.userCode);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
     expect((await linkRow(testApp, link.deviceCode)).status).toBe('pending');
   });
 
