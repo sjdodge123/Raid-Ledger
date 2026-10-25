@@ -5,19 +5,25 @@ import {
   STEAM_ACCOUNT_UNLINKED,
   type SteamAccountLinkEvent,
 } from '../../../../steam/steam.constants';
+import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { ValheimIdentityService } from './valheim-identity.service';
 
 /**
  * ROK-1835 A2/A3: a Raid-Ledger-verified Steam link attaches that SteamID's
  * unclaimed characters (`auto`); an unlink detaches only `auto` claims. A
  * failure is logged (user id only — never the SteamID) and swallowed so the
- * Steam link/unlink itself never fails because of the armory.
+ * Steam link/unlink itself never fails because of the armory. Skipped while
+ * the Valheim plugin is inactive (ROK-1969: a plugin behaviour is off with it).
  */
 @Injectable()
 export class ValheimSteamLinkListener {
   private readonly logger = new Logger(ValheimSteamLinkListener.name);
 
-  constructor(private readonly identity: ValheimIdentityService) {}
+  constructor(
+    private readonly identity: ValheimIdentityService,
+    private readonly registry: PluginRegistryService,
+  ) {}
 
   /** A2 — attach on link. */
   @OnEvent(STEAM_ACCOUNT_LINKED)
@@ -40,6 +46,7 @@ export class ValheimSteamLinkListener {
     userId: number,
     fn: () => Promise<void>,
   ): Promise<void> {
+    if (!this.registry.isActive(VALHEIM_PLUGIN_ID)) return;
     try {
       await fn();
     } catch (err: unknown) {

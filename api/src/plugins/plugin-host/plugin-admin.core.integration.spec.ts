@@ -45,6 +45,11 @@ describe('Core plugin admin routes (ROK-1969, integration)', () => {
       .where(eq(schema.plugins.slug, 'core'));
   }
 
+  it('A2: every live hub adapter owner has a registered manifest', () => {
+    const plugins = testApp.app.get(PluginRegistryService);
+    expect(() => plugins.assertHubOwnersKnown()).not.toThrow();
+  });
+
   it('I1: deactivating Core is a 400 and the row stays active', async () => {
     const res = await testApp.request
       .post('/admin/plugins/core/deactivate')

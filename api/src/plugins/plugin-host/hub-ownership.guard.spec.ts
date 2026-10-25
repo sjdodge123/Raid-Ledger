@@ -35,6 +35,9 @@ import {
 } from '../valheim/valheim.constants';
 import { PELICAN_PLUGIN_ID } from '../pelican/pelican.constants';
 import { WOW_COMMON_MANIFEST } from '../wow-common/manifest';
+import { CORE_MANIFEST } from '../core/core.manifest';
+import { VALHEIM_MANIFEST } from '../valheim/valheim.manifest';
+import { PELICAN_MANIFEST } from '../pelican/pelican.manifest';
 import { PluginRegistryService } from './plugin-registry.service';
 
 const SRC = path.resolve(__dirname, '../..');
@@ -207,7 +210,40 @@ describe('ROK-1969 A3 — mutation probes (each must go red)', () => {
   });
 });
 
+describe('ROK-1969 A2 — every live owner is a real plugin manifest', () => {
+  const manifestIds = [
+    CORE_MANIFEST.id,
+    VALHEIM_MANIFEST.id,
+    PELICAN_MANIFEST.id,
+    WOW_COMMON_MANIFEST.id,
+  ];
+
+  it('every HUB_PLUGIN_MANIFESTS key is an api manifest id', () => {
+    expect(Object.keys(HUB_PLUGIN_MANIFESTS).sort()).toEqual(
+      [...manifestIds].sort(),
+    );
+  });
+
+  it('a mistyped owner fails the scan (undeclared) — not just a boot log', () => {
+    const typo: ScanSource = {
+      file: 'plugins/valheim/typo.ts',
+      text: "this.r.registerAdapter(EXTENSION_POINTS.HUB_KIND, 'game_server', a, { ownerPluginId: 'pelicn' });",
+    };
+    const keys = scanHubRegistrations([typo], CTX).keys;
+    expect(keys).toEqual(['pelicn/hub-kind/game_server']);
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toContain(
+      'pelicn/hub-kind/game_server is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    );
+  });
+});
+
 describe('ROK-1969 A4 — Core is built in', () => {
+  it('isActive follows manifest.builtIn, the same predicate the list uses', () => {
+    const r = registry();
+    r.registerManifest({ ...VALHEIM_MANIFEST, id: 'other', builtIn: true });
+    expect(r.isActive('other')).toBe(true);
+  });
+
   it('isActive("core") is true with an empty plugins table', () => {
     expect(registry().isActive(CORE_PLUGIN_ID)).toBe(true);
   });

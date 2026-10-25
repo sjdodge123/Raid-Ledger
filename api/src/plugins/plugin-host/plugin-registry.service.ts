@@ -303,7 +303,10 @@ export class PluginRegistryService
   }
 
   isActive(slug: string): boolean {
-    return isAlwaysActive(slug) || this.activeSlugs.has(slug);
+    if (isAlwaysActive(slug) || this.manifests.get(slug)?.builtIn === true) {
+      return true;
+    }
+    return this.activeSlugs.has(slug);
   }
   getActiveSlugsSync(): ReadonlySet<string> {
     return this.activeSlugs;

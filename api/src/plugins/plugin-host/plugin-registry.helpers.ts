@@ -27,8 +27,8 @@ export function buildPluginInfo(
     integrations,
     status: pluginStatus(manifest, record),
     installedAt: record?.installedAt?.toISOString() ?? null,
-    // ROK-1969 §3.5: per-requirement checks are not wired yet — none reported.
-    setupStatus: [],
+    // ROK-1969 §3.5: per-requirement checks are not wired yet, so
+    // `setupStatus` stays absent (= not checked, per PluginInfoSchema).
   };
 }
 
