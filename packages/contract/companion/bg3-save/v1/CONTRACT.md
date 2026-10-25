@@ -42,7 +42,7 @@ change. Every field is required; nullable fields send `null`, never omit.
 
 | Field | Type | Source | Notes |
 |---|---|---|---|
-| `saveName` | display-safe string, 1–128 UTF-16 units (`COMPANION_DISPLAY_TEXT_RE`: no C0/C1 controls or line breaks, no lone surrogates, no U+2028/2029, no bidi embeddings/overrides/isolates U+202A–202E / U+2066–2069, not whitespace-only) | `"Save Name"` | User-authored free text; shown in the local preview before the first upload (spec Q2). A name the schema rejects makes the whole payload invalid — collectors MUST skip and report that save. |
+| `saveName` | display-safe string, 1–128 UTF-16 units (`COMPANION_DISPLAY_TEXT_RE`: no C0/C1 controls or line breaks, no lone surrogates, no U+2028/2029, no bidi embeddings/overrides/isolates U+202A–202E / U+2066–2069, not whitespace-only) | `"Save Name"` | User-authored free text; shown in the local preview before the first upload (spec Q2). A name the schema rejects makes the whole payload invalid — collectors MUST skip and report that save. The `schema.json` pattern uses `\p{…}` classes: validators MUST compile it in Unicode mode (JS `u`/`v` flag, Rust `regex`); a non-Unicode engine rejects every name. Fixture `unicode-save-name` is the check. |
 | `savedAt` | ISO-8601 UTC `Z`, ≤ 24 chars | collector: `.lsv` file mtime | MUST NOT be after the envelope's `capturedAt`. |
 | `campaignKey` | lowercase hex, `^[0-9a-f]{64}$` | collector (§3.3) | SHA-256 of the save-folder name (or GameID). **Never the raw name.** |
 | `campaignKeySource` | `"save-folder"` \| `"game-id"` | collector | What `campaignKey` was hashed from (§3.3). |

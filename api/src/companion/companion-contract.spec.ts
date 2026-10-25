@@ -112,6 +112,7 @@ describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
       'act1-solo-no-thumbnail',
       'act2-party-4p-summon',
       'ruleset-null',
+      'unicode-save-name',
     ]);
   });
 
@@ -245,7 +246,12 @@ describe('Companion fixtures stay anonymised (C5)', () => {
       const positions = raw['Active Party'].Characters.map((c) => c.Position);
       expect(positions.length).toBeGreaterThan(0);
       expect(positions).toEqual(positions.map(() => [0, 0, 0]));
-      expect(raw['Save Name']).toMatch(/^QuickSave_\d+$/);
+      // The one non-ASCII case is a fixed generic phrase (no person's name).
+      if (name === 'unicode-save-name') {
+        expect(raw['Save Name']).toBe('Sauvegarde rapide — 第二章 🐉');
+      } else {
+        expect(raw['Save Name']).toMatch(/^QuickSave_\d+$/);
+      }
     },
   );
 

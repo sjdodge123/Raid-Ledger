@@ -38,6 +38,8 @@ const CASES = {
     'act2-party-4p-summon': { savedAt: '2026-10-24T12:00:00Z', capturedAt: '2026-10-24T12:00:05Z', campaignKey: '0123456789abcdef'.repeat(4), campaignKeySource: 'save-folder', thumbnail },
     'act1-solo-no-thumbnail': { savedAt: '2026-10-20T08:30:00Z', capturedAt: '2026-10-20T08:30:02Z', campaignKey: 'fedcba9876543210'.repeat(4), campaignKeySource: 'game-id', thumbnail: null },
     'ruleset-null': { savedAt: '2026-10-22T19:15:00Z', capturedAt: '2026-10-22T19:15:01Z', campaignKey: 'a1b2c3d4e5f60718'.repeat(4), campaignKeySource: 'save-folder', thumbnail },
+    /** Non-ASCII save name: proves collectors use a Unicode-mode regex for COMPANION_DISPLAY_TEXT_RE (delta review MINOR). */
+    'unicode-save-name': { savedAt: '2026-10-23T21:00:00Z', capturedAt: '2026-10-23T21:00:01Z', campaignKey: '0f1e2d3c4b5a6978'.repeat(4), campaignKeySource: 'save-folder', thumbnail: null },
 };
 
 const messages = {};
