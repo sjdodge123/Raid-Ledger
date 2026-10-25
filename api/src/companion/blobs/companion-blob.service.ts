@@ -44,6 +44,7 @@ import {
   type CompanionBlobRead,
 } from './companion-blob.reader';
 import { blobRefMismatch, refsAgree } from './companion-blob-refs.helpers';
+import { CompanionBlobReservations } from './companion-blob-reservations';
 import { CompanionBlobsRepository } from './companion-blobs.repository';
 
 /** A request the blob service reads (raw body stream, guards already ran). */
@@ -86,6 +87,7 @@ export class CompanionBlobService {
   constructor(
     private readonly repo: CompanionBlobsRepository,
     private readonly handlers: CompanionHandlerRegistry,
+    private readonly reservations: CompanionBlobReservations,
   ) {}
 
   /** Steps 1–14; `stored` (201) or `exists` (200). */
@@ -104,8 +106,21 @@ export class CompanionBlobService {
     }
     const max = COMPANION_WEBP_MAX_BYTES;
     assertBlobRequestHeaders(req, max, req[COMPANION_CONTENT_TYPE]);
-    await this.assertRoom(auth.userId, declaredLength(req));
-    return this.receive(auth, sha256, req);
+    const declared = declaredLength(req);
+    await this.assertUserRoom(auth.userId, declared);
+    // Worst case: the declared length (the stream is capped to it), or the
+    // contract max for a chunked body. Held until the row commits.
+    const cap = declared > 0 ? Math.min(declared, max) : max;
+    const hold = await this.reservations.reserve(
+      cap,
+      companionBlobTotalMaxBytes(),
+    );
+    if (hold === null) throw storageFull();
+    try {
+      return await this.receive(auth, sha256, req, cap);
+    } finally {
+      await this.reservations.release(hold);
+    }
   }
 
   /**
@@ -129,24 +144,28 @@ export class CompanionBlobService {
     return false;
   }
 
-  /** Step 5 fast-fails: the user's quota, then the global disk ceiling. */
-  private async assertRoom(userId: number, declared: number): Promise<void> {
+  /**
+   * Step 5 fast-fail on the user's quota (the insert re-checks it under the
+   * user's lock). The global ceiling is the reservation in `upload`.
+   */
+  private async assertUserRoom(
+    userId: number,
+    declared: number,
+  ): Promise<void> {
     const used = await this.repo.usage(userId);
     if (used + declared > companionBlobQuotaBytes()) throw quotaExceeded();
-    const total = await this.repo.totalUsage();
-    if (total + declared > companionBlobTotalMaxBytes()) throw storageFull();
   }
 
-  /** Steps 6–14: stream to a temp file, verify, store; temp always removed. */
+  /** Steps 6–14: stream (≤ the reserved bytes) to a temp file, verify, store; temp always removed. */
   private async receive(
     auth: CompanionIngestAuth,
     sha256: string,
     req: CompanionBlobUpload,
+    maxBytes: number,
   ): Promise<CompanionBlobAck> {
-    const max = COMPANION_WEBP_MAX_BYTES;
     const tmpPath = await companionBlobTempPath(auth.userId);
     try {
-      const got = await readCompanionBlobToFile(req, max, tmpPath);
+      const got = await readCompanionBlobToFile(req, maxBytes, tmpPath);
       await this.verify(auth.userId, sha256, got, tmpPath);
       const status = await this.store(auth, got, tmpPath);
       this.logger.log(

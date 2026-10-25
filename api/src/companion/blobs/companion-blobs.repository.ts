@@ -115,14 +115,6 @@ export class CompanionBlobsRepository {
     return usageIn(this.db, userId);
   }
 
-  /** Bytes stored across every user (the global disk cap's pre-check). */
-  async totalUsage(): Promise<number> {
-    const [row] = await this.db
-      .select({ bytes: sql<string>`coalesce(sum(${blobs.byteLength}), 0)` })
-      .from(blobs);
-    return Number(row?.bytes ?? 0);
-  }
-
   /** Every ref (any contract) to this user's sha (fast-fail pre-check). */
   findRefs(userId: number, sha256: string): Promise<CompanionBlobDims[]> {
     return findRefsIn(this.db, userId, sha256);

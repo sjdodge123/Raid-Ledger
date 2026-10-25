@@ -9,6 +9,7 @@ import { CompanionIngestModule } from '../ingest/companion-ingest.module';
 import { CompanionIngestRateLimitGuard } from '../ingest/companion-ingest-rate-limit.guard';
 import { CompanionBlobCleanupService } from './companion-blob-cleanup.service';
 import { CompanionBlobController } from './companion-blob.controller';
+import { CompanionBlobReservations } from './companion-blob-reservations';
 import { CompanionBlobService } from './companion-blob.service';
 import { CompanionBlobStore } from './companion-blob.store';
 import { CompanionBlobsRepository } from './companion-blobs.repository';
@@ -31,6 +32,7 @@ import { CompanionBlobsRepository } from './companion-blobs.repository';
     CompanionSessionJwtGuard,
     CompanionIngestRateLimitGuard,
     CompanionBlobsRepository,
+    CompanionBlobReservations,
     CompanionBlobService,
     CompanionBlobStore,
     CompanionBlobCleanupService,

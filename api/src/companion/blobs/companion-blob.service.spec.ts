@@ -4,6 +4,7 @@
  * later step, and the temp file is always discarded.
  */
 import { HttpException } from '@nestjs/common';
+import { COMPANION_WEBP_MAX_BYTES } from '@raid-ledger/contract';
 import type { CompanionHandlerRegistry } from '../ingest/companion-handler.registry';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
 import { companionError } from '../ingest/companion-ingest.errors';
@@ -11,6 +12,7 @@ import * as paths from './companion-blob.paths';
 import * as reader from './companion-blob.reader';
 import type { CompanionBlobUpload } from './companion-blob.service';
 import { CompanionBlobService } from './companion-blob.service';
+import type { CompanionBlobReservations } from './companion-blob-reservations';
 import type { CompanionBlobsRepository } from './companion-blobs.repository';
 
 jest.mock('./companion-blob.reader', () => ({
@@ -64,7 +66,7 @@ function setup(
     refs?: object[];
     insert?: string;
     fileExists?: boolean;
-    total?: number;
+    reserved?: boolean;
     sessionOk?: boolean;
     staleRemoved?: boolean;
   } = {},
@@ -82,7 +84,10 @@ function setup(
     insert: track('insert', over.insert ?? 'stored'),
     remove: track('remove', undefined),
     removeStale: track('removeStale', over.staleRemoved ?? true),
-    totalUsage: track('total', over.total ?? 0),
+  };
+  const holds = {
+    reserve: track('reserve', over.reserved === false ? null : 42),
+    release: track('release', undefined),
   };
   const registry = {
     acceptsSessionBlobs: jest.fn(() => over.sessionOk ?? false),
@@ -101,8 +106,9 @@ function setup(
   const service = new CompanionBlobService(
     repo as unknown as CompanionBlobsRepository,
     registry as unknown as CompanionHandlerRegistry,
+    holds as unknown as CompanionBlobReservations,
   );
-  return { service, repo, registry, calls };
+  return { service, repo, registry, holds, calls };
 }
 
 async function codeOf(p: Promise<unknown>): Promise<[number, unknown]> {
@@ -131,7 +137,7 @@ describe('CompanionBlobService.upload — happy path and idempotency', () => {
       'find',
       'headers',
       'usage',
-      'total',
+      'reserve',
       'temp',
       'read',
       'findRefs',
@@ -139,6 +145,7 @@ describe('CompanionBlobService.upload — happy path and idempotency', () => {
       'insert',
       'commit',
       'discard',
+      'release',
     ]);
     expect(m.commit).toHaveBeenCalledWith(TMP, 7, SHA);
   });
@@ -159,7 +166,7 @@ describe('CompanionBlobService.upload — happy path and idempotency', () => {
       sha256: SHA,
     });
     expect(calls).not.toContain('commit');
-    expect(calls.at(-1)).toBe('discard');
+    expect(calls.slice(-2)).toEqual(['discard', 'release']);
   });
 });
 
@@ -312,15 +319,44 @@ describe('CompanionBlobService.upload — review round 1', () => {
   it('the global disk cap refuses before streaming (413 blob_quota_exceeded)', async () => {
     process.env.COMPANION_BLOB_TOTAL_MAX_BYTES = '1000';
     try {
-      const { service, calls } = setup({ total: 950 });
+      const { service, holds, calls } = setup({ reserved: false });
       await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
         413,
         'blob_quota_exceeded',
       ]);
-      expect(calls).toEqual(['find', 'headers', 'usage', 'total']);
+      expect(calls).toEqual(['find', 'headers', 'usage', 'reserve']);
+      expect(holds.reserve).toHaveBeenCalledWith(100, 1000);
     } finally {
       delete process.env.COMPANION_BLOB_TOTAL_MAX_BYTES;
     }
+  });
+
+  it('reserves the declared length and caps the read to it', async () => {
+    const { service, holds } = setup();
+    await service.upload(DEVICE, SHA, REQ);
+    expect(holds.reserve).toHaveBeenCalledWith(100, expect.any(Number));
+    expect(m.read.mock.calls[0]?.[1]).toBe(100);
+  });
+
+  it('a chunked body (no Content-Length) reserves the contract max', async () => {
+    const { service, holds } = setup();
+    const chunked = { headers: {} } as unknown as CompanionBlobUpload;
+    await service.upload(DEVICE, SHA, chunked);
+    expect(holds.reserve).toHaveBeenCalledWith(
+      COMPANION_WEBP_MAX_BYTES,
+      expect.any(Number),
+    );
+    expect(m.read.mock.calls[0]?.[1]).toBe(COMPANION_WEBP_MAX_BYTES);
+  });
+
+  it('a failure after reserving releases the reservation', async () => {
+    const { service, holds, calls } = setup({ insert: 'ref_mismatch' });
+    await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+      409,
+      'blob_ref_mismatch',
+    ]);
+    expect(holds.release).toHaveBeenCalledWith(42);
+    expect(calls.at(-1)).toBe('release');
   });
 
   it('refs that disagree once re-read under the lock are 409 and never renamed', async () => {

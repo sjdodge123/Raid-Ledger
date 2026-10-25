@@ -53,21 +53,72 @@ export function assertBlobRequestHeaders(
   assertDeclaredLength(src, maxBytes, companionBodyErrors);
 }
 
-/** Steps 6–8: stream `src` into `tmpPath` (opened `wx`) while hashing. */
+/**
+ * Steps 6–8: stream `src` into `tmpPath` (opened `wx`) while hashing. The
+ * abort watch attaches BEFORE the first await, a request already gone is
+ * refused before the file is opened, and on any failure the write stream is
+ * closed and the temp file unlinked (Codex P2).
+ */
 export async function readCompanionBlobToFile(
   src: BoundedBodyStream,
   maxBytes: number,
   tmpPath: string,
 ): Promise<CompanionBlobRead> {
-  const handle = await open(tmpPath, 'wx');
-  const out = handle.createWriteStream();
+  const gone = watchAbort(src);
+  let out: WriteStream | null = null;
+  let done = false;
   try {
-    return await pump(src, out, new BlobSink(out, maxBytes));
-  } catch (err: unknown) {
-    out.destroy();
-    await rm(tmpPath, { force: true });
-    throw err;
+    if (requestGone(src)) throw uploadAborted();
+    out = (await open(tmpPath, 'wx')).createWriteStream();
+    const sink = new BlobSink(out, maxBytes);
+    const result = await Promise.race([pump(src, out, sink), gone.promise]);
+    done = true;
+    return result;
+  } finally {
+    gone.dispose();
+    if (!done) {
+      out?.destroy();
+      await rm(tmpPath, { force: true });
+    }
   }
+}
+
+const uploadAborted = (): Error =>
+  companionError('invalid_blob', 'Blob upload was aborted');
+
+/** Destroyed (client gone) or flagged aborted by `http`. */
+function requestGone(src: BoundedBodyStream): boolean {
+  const aborted = (src as { aborted?: unknown }).aborted === true;
+  return src.destroyed || aborted;
+}
+
+/**
+ * Rejects when the client goes away (`aborted`, `error`, or `close` before
+ * `end`). Its own no-op catch keeps an abort during `open` from being an
+ * unhandled rejection; `dispose` detaches every listener.
+ */
+function watchAbort(src: BoundedBodyStream): {
+  promise: Promise<never>;
+  dispose: () => void;
+} {
+  let onAbort: (() => void) | null = null;
+  const onClose = (): void => {
+    if (!src.readableEnded) onAbort?.();
+  };
+  const promise = new Promise<never>((_, reject) => {
+    onAbort = () => reject(uploadAborted());
+  });
+  promise.catch(() => undefined);
+  const abort = (): void => onAbort?.();
+  src.once('aborted', abort);
+  src.once('error', abort);
+  src.once('close', onClose);
+  const dispose = (): void => {
+    src.removeListener('aborted', abort);
+    src.removeListener('error', abort);
+    src.removeListener('close', onClose);
+  };
+  return { promise, dispose };
 }
 
 /**
