@@ -26,6 +26,15 @@ export const MAX_USER_FETCHES_PER_RUN = 5000;
 /** BullMQ retry backoff base after a 429 circuit-break (D5). */
 export const RATE_LIMIT_BACKOFF_MS = 10 * 60 * 1000;
 
+/**
+ * Retry policy for every refresh job, nightly and on-link (Codex P2): the
+ * queue has no defaults, so without it a 429 fails the job for good.
+ */
+export const STEAM_STATS_JOB_RETRY = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: RATE_LIMIT_BACKOFF_MS },
+} as const;
+
 /** Job payload: the nightly run, or one user right after linking Steam (D6). */
 export type SteamAppStatsJobData =
   { trigger: 'scheduled' } | { trigger: 'link'; userId: number };

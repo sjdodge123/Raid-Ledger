@@ -6,7 +6,7 @@ import { CronJobService } from '../../../cron-jobs/cron-job.service';
 import { QueueHealthService } from '../../../queue/queue-health.service';
 import { SettingsService } from '../../../settings/settings.service';
 import {
-  RATE_LIMIT_BACKOFF_MS,
+  STEAM_STATS_JOB_RETRY,
   STEAM_APP_STATS_QUEUE,
   type SteamAppStatsJobData,
 } from './steam-stats.constants';
@@ -70,8 +70,7 @@ export class SteamAppStatsProcessor extends WorkerHost implements OnModuleInit {
       if (!(await this.settings.isSteamConfigured())) return false;
       const data: SteamAppStatsJobData = { trigger: 'scheduled' };
       await this.queue.add('nightly', data, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: RATE_LIMIT_BACKOFF_MS },
+        ...STEAM_STATS_JOB_RETRY,
         removeOnComplete: true,
       });
       return true;
