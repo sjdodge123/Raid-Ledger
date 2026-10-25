@@ -6,7 +6,7 @@
  * path can never leave the root (no traversal).
  */
 import { randomBytes } from 'node:crypto';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -76,4 +76,23 @@ export async function discardCompanionBlobFile(
   filePath: string,
 ): Promise<void> {
   await rm(filePath, { force: true });
+}
+
+/**
+ * Whether the stored blob's file is on disk. A row can outlive its file (a
+ * crash between commit and rename, or a DB restore without `/data/uploads`).
+ */
+export async function companionBlobFileExists(
+  userId: number,
+  sha256: string,
+): Promise<boolean> {
+  const st = await stat(companionBlobAbsolutePath(userId, sha256)).catch(
+    (err: unknown) => {
+      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    },
+  );
+  return st?.isFile() ?? false;
 }

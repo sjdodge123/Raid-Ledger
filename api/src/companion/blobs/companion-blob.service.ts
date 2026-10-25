@@ -24,6 +24,7 @@ import {
   COMPANION_CONTENT_TYPE,
   type CompanionBypassedRequest,
 } from '../ingest/companion-body-bypass';
+import { CompanionHandlerRegistry } from '../ingest/companion-handler.registry';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
 import {
   companionError,
@@ -31,6 +32,7 @@ import {
 } from '../ingest/companion-ingest.errors';
 import {
   commitCompanionBlob,
+  companionBlobFileExists,
   companionBlobTempPath,
   discardCompanionBlobFile,
 } from './companion-blob.paths';
@@ -58,15 +60,32 @@ export function companionBlobQuotaBytes(): number {
     : DEFAULT_COMPANION_BLOB_QUOTA_BYTES;
 }
 
+/** Default global ceiling on stored companion blob bytes: 10 GiB. */
+export const DEFAULT_COMPANION_BLOB_TOTAL_MAX_BYTES = 10 * 1024 * 1024 * 1024;
+
+/** Global byte ceiling (`COMPANION_BLOB_TOTAL_MAX_BYTES`), read per call. */
+export function companionBlobTotalMaxBytes(): number {
+  const raw = process.env.COMPANION_BLOB_TOTAL_MAX_BYTES;
+  const n = raw === undefined ? NaN : Number.parseInt(raw, 10);
+  return Number.isSafeInteger(n) && n > 0
+    ? n
+    : DEFAULT_COMPANION_BLOB_TOTAL_MAX_BYTES;
+}
+
 const quotaExceeded = () =>
   companionError('blob_quota_exceeded', 'Blob storage quota is full');
+const storageFull = () =>
+  companionError('blob_quota_exceeded', 'Blob storage is full');
 
 /** Verifies and stores one companion blob upload. */
 @Injectable()
 export class CompanionBlobService {
   private readonly logger = new Logger(CompanionBlobService.name);
 
-  constructor(private readonly repo: CompanionBlobsRepository) {}
+  constructor(
+    private readonly repo: CompanionBlobsRepository,
+    private readonly handlers: CompanionHandlerRegistry,
+  ) {}
 
   /** Steps 1–14; `stored` (201) or `exists` (200). */
   async upload(
@@ -74,16 +93,54 @@ export class CompanionBlobService {
     rawSha: string,
     req: CompanionBlobUpload,
   ): Promise<CompanionBlobAck> {
+    // R1: a session may upload only while a handler opts into `session`.
+    if (auth.via === 'session' && !this.handlers.acceptsSessionBlobs()) {
+      throw companionUnauthorized();
+    }
     const sha256 = shaOf(rawSha);
-    if (await this.repo.find(auth.userId, sha256)) {
+    if (await this.alreadyStored(auth.userId, sha256)) {
       return { status: 'exists', sha256 };
     }
     const max = COMPANION_WEBP_MAX_BYTES;
     assertBlobRequestHeaders(req, max, req[COMPANION_CONTENT_TYPE]);
-    const used = await this.repo.usage(auth.userId);
-    if (used + declaredLength(req) > companionBlobQuotaBytes()) {
-      throw quotaExceeded();
-    }
+    await this.assertRoom(auth.userId, declaredLength(req));
+    return this.receive(auth, sha256, req);
+  }
+
+  /**
+   * Step 2: a row AND its file. A row whose file is gone (crash before the
+   * rename, a DB restore without the files) is dropped under the user's
+   * lock so this upload restores the file instead of answering `exists`
+   * forever.
+   */
+  private async alreadyStored(
+    userId: number,
+    sha256: string,
+  ): Promise<boolean> {
+    if (!(await this.repo.find(userId, sha256))) return false;
+    if (await companionBlobFileExists(userId, sha256)) return true;
+    this.logger.warn(
+      `companion blob user=${userId} row without file; re-accepting`,
+    );
+    await this.repo.removeStale(userId, sha256);
+    return false;
+  }
+
+  /** Step 5 fast-fails: the user's quota, then the global disk ceiling. */
+  private async assertRoom(userId: number, declared: number): Promise<void> {
+    const used = await this.repo.usage(userId);
+    if (used + declared > companionBlobQuotaBytes()) throw quotaExceeded();
+    const total = await this.repo.totalUsage();
+    if (total + declared > companionBlobTotalMaxBytes()) throw storageFull();
+  }
+
+  /** Steps 6–14: stream to a temp file, verify, store; temp always removed. */
+  private async receive(
+    auth: CompanionIngestAuth,
+    sha256: string,
+    req: CompanionBlobUpload,
+  ): Promise<CompanionBlobAck> {
+    const max = COMPANION_WEBP_MAX_BYTES;
     const tmpPath = await companionBlobTempPath(auth.userId);
     try {
       const got = await readCompanionBlobToFile(req, max, tmpPath);
@@ -126,6 +183,7 @@ export class CompanionBlobService {
     const result = await this.repo.insert(auth, got, companionBlobQuotaBytes());
     if (result === 'revoked') throw companionUnauthorized();
     if (result === 'quota_exceeded') throw quotaExceeded();
+    if (result === 'ref_mismatch') throw blobRefMismatch();
     if (result === 'stored') await this.place(auth.userId, got.sha256, tmpPath);
     return result;
   }

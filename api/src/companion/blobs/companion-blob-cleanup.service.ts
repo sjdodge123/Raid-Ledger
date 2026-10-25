@@ -6,6 +6,9 @@
  *      older than 24 h → unlink.
  * Deletes run in batches of {@link CLEANUP_BATCH} (bounded per run). Windows
  * are the Q6 defaults. Referenced blobs stay until a plugin releases refs.
+ * Review R1: every delete and unlink runs per user inside a transaction
+ * holding that user's blob lock (the same one the upload and the messages
+ * tx take), re-checking its predicate there.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
@@ -19,6 +22,13 @@ import {
   discardCompanionBlobFile,
   getCompanionBlobDir,
 } from './companion-blob.paths';
+import {
+  danglingRefUsers,
+  deleteDanglingRefsIn,
+  deleteUnreferencedBlobsIn,
+  storedShasIn,
+  unreferencedBlobUsers,
+} from './companion-blob-cleanup.queries';
 import { CompanionBlobsRepository } from './companion-blobs.repository';
 
 const JOB = 'CompanionBlobCleanupService_purgeOrphans';
@@ -59,26 +69,44 @@ export class CompanionBlobCleanupService {
   /** One pass of all three phases; `now` is injectable for specs. */
   async runOnce(now: number = Date.now()): Promise<CompanionBlobCleanupCounts> {
     const blobs = await this.purgeUnreferencedBlobs();
-    const refs = await batched(() =>
-      this.repo.deleteDanglingRefs(DANGLING_REF_DAYS, CLEANUP_BATCH),
-    );
+    const refs = await this.purgeDanglingRefs();
     const files = await this.sweepFiles(now - FILE_AGE_MS);
     return { blobs, refs, files };
   }
 
+  /** Phase 1: row then file, both inside the user's lock window. */
   private async purgeUnreferencedBlobs(): Promise<number> {
-    return batched(async () => {
-      const gone = await this.repo.deleteUnreferencedBlobs(
-        UNREFERENCED_HOURS,
-        CLEANUP_BATCH,
-      );
-      for (const b of gone) {
-        await discardCompanionBlobFile(
-          companionBlobAbsolutePath(b.userId, b.sha256),
-        );
-      }
-      return gone.length;
-    });
+    return batched(
+      (db) => unreferencedBlobUsers(db, UNREFERENCED_HOURS, CLEANUP_BATCH),
+      (userId) =>
+        this.repo.withUserLock(userId, async (tx) => {
+          const gone = await deleteUnreferencedBlobsIn(
+            tx,
+            userId,
+            UNREFERENCED_HOURS,
+            CLEANUP_BATCH,
+          );
+          for (const sha of gone) {
+            await discardCompanionBlobFile(
+              companionBlobAbsolutePath(userId, sha),
+            );
+          }
+          return gone.length;
+        }),
+      this.repo,
+    );
+  }
+
+  /** Phase 2: dangling refs, per user under the lock. */
+  private async purgeDanglingRefs(): Promise<number> {
+    return batched(
+      (db) => danglingRefUsers(db, DANGLING_REF_DAYS, CLEANUP_BATCH),
+      (userId) =>
+        this.repo.withUserLock(userId, (tx) =>
+          deleteDanglingRefsIn(tx, userId, DANGLING_REF_DAYS, CLEANUP_BATCH),
+        ),
+      this.repo,
+    );
   }
 
   /** Phase 3 over every numeric user folder under the root. */
@@ -106,22 +134,39 @@ export class CompanionBlobCleanupService {
     const shaOf = (n: string): string | undefined =>
       COMPANION_BLOB_FILE_RE.exec(n)?.[1];
     const shas = old.map(shaOf).filter((s): s is string => s !== undefined);
-    const stored = await this.repo.storedShas(userId, shas);
-    const orphans = shas.filter((s) => !stored.has(s)).map((s) => `${s}.webp`);
-    for (const name of [...temps, ...orphans]) {
-      await discardCompanionBlobFile(path.join(dir, name));
-    }
-    return temps.length + orphans.length;
+    if (temps.length === 0 && shas.length === 0) return 0;
+    return this.repo.withUserLock(userId, async (tx) => {
+      const stored = await storedShasIn(tx, userId, shas);
+      const orphans = shas
+        .filter((s) => !stored.has(s))
+        .map((s) => `${s}.webp`);
+      for (const name of [...temps, ...orphans]) {
+        await discardCompanionBlobFile(path.join(dir, name));
+      }
+      return temps.length + orphans.length;
+    });
   }
 }
 
-/** Repeat a batch delete until it returns a short batch (bounded). */
-async function batched(step: () => Promise<number>): Promise<number> {
+/**
+ * Find candidate users, run `perUser` for each (its own locked tx), and
+ * repeat while a batch came back full (bounded by {@link MAX_BATCHES}).
+ */
+async function batched(
+  candidates: (db: CompanionBlobsRepository['reader']) => Promise<number[]>,
+  perUser: (userId: number) => Promise<number>,
+  repo: CompanionBlobsRepository,
+): Promise<number> {
   let total = 0;
   for (let i = 0; i < MAX_BATCHES; i++) {
-    const n = await step();
-    total += n;
-    if (n < CLEANUP_BATCH) break;
+    const users = await candidates(repo.reader);
+    let full = users.length >= CLEANUP_BATCH;
+    for (const userId of users) {
+      const n = await perUser(userId);
+      total += n;
+      if (n >= CLEANUP_BATCH) full = true;
+    }
+    if (!full) break;
   }
   return total;
 }

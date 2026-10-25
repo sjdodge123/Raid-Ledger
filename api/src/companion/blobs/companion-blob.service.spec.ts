@@ -4,6 +4,7 @@
  * later step, and the temp file is always discarded.
  */
 import { HttpException } from '@nestjs/common';
+import type { CompanionHandlerRegistry } from '../ingest/companion-handler.registry';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
 import { companionError } from '../ingest/companion-ingest.errors';
 import * as paths from './companion-blob.paths';
@@ -21,6 +22,7 @@ jest.mock('./companion-blob.paths', () => ({
   companionBlobTempPath: jest.fn(),
   commitCompanionBlob: jest.fn(),
   discardCompanionBlobFile: jest.fn(),
+  companionBlobFileExists: jest.fn(),
 }));
 
 const SHA = 'a'.repeat(64);
@@ -31,6 +33,12 @@ const DEVICE: CompanionIngestAuth = {
   via: 'device',
   deviceId: 3,
   tokenHash: 'h',
+};
+const SESSION: CompanionIngestAuth = {
+  userId: 7,
+  via: 'session',
+  deviceId: null,
+  tokenHash: null,
 };
 const REQ = {
   headers: { 'content-length': '100' },
@@ -43,6 +51,7 @@ const m = {
   temp: jest.mocked(paths.companionBlobTempPath),
   commit: jest.mocked(paths.commitCompanionBlob),
   discard: jest.mocked(paths.discardCompanionBlobFile),
+  fileExists: jest.mocked(paths.companionBlobFileExists),
 };
 
 function setup(
@@ -51,6 +60,9 @@ function setup(
     used?: number;
     refs?: object[];
     insert?: string;
+    fileExists?: boolean;
+    total?: number;
+    sessionOk?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -65,7 +77,15 @@ function setup(
     findRefs: track('findRefs', over.refs ?? []),
     insert: track('insert', over.insert ?? 'stored'),
     remove: track('remove', undefined),
+    removeStale: track('removeStale', undefined),
+    totalUsage: track('total', over.total ?? 0),
   };
+  const registry = {
+    acceptsSessionBlobs: jest.fn(() => over.sessionOk ?? false),
+  };
+  m.fileExists.mockImplementation(
+    () => (calls.push('fileExists'), Promise.resolve(over.fileExists ?? true)),
+  );
   m.headers.mockImplementation(() => void calls.push('headers'));
   m.temp.mockImplementation(() => (calls.push('temp'), Promise.resolve(TMP)));
   m.read.mockImplementation(() => (calls.push('read'), Promise.resolve(GOT)));
@@ -76,8 +96,9 @@ function setup(
   );
   const service = new CompanionBlobService(
     repo as unknown as CompanionBlobsRepository,
+    registry as unknown as CompanionHandlerRegistry,
   );
-  return { service, repo, calls };
+  return { service, repo, registry, calls };
 }
 
 async function codeOf(p: Promise<unknown>): Promise<[number, unknown]> {
@@ -106,6 +127,7 @@ describe('CompanionBlobService.upload — happy path and idempotency', () => {
       'find',
       'headers',
       'usage',
+      'total',
       'temp',
       'read',
       'findRefs',
@@ -123,7 +145,7 @@ describe('CompanionBlobService.upload — happy path and idempotency', () => {
       status: 'exists',
       sha256: SHA,
     });
-    expect(calls).toEqual(['find']);
+    expect(calls).toEqual(['find', 'fileExists']);
   });
 
   it('a lost insert race answers exists and never renames', async () => {
@@ -232,5 +254,63 @@ describe('CompanionBlobService.upload — refusals stop later steps', () => {
     ]);
     expect(repo.remove).toHaveBeenCalledWith(7, SHA);
     expect(m.discard).toHaveBeenCalledWith(TMP);
+  });
+});
+
+describe('CompanionBlobService.upload — review round 1', () => {
+  it('a row whose file is gone: the stale row is removed under the lock and the upload is stored again', async () => {
+    const { service, repo, calls } = setup({ stored: true, fileExists: false });
+    await expect(service.upload(DEVICE, SHA, REQ)).resolves.toEqual({
+      status: 'stored',
+      sha256: SHA,
+    });
+    expect(repo.removeStale).toHaveBeenCalledWith(7, SHA);
+    expect(calls.slice(0, 4)).toEqual([
+      'find',
+      'fileExists',
+      'removeStale',
+      'headers',
+    ]);
+    expect(m.commit).toHaveBeenCalledWith(TMP, 7, SHA);
+  });
+
+  it('a session upload is 401 when no enabled handler opts into the session path', async () => {
+    const { service, calls } = setup();
+    await expect(codeOf(service.upload(SESSION, SHA, REQ))).resolves.toEqual([
+      401,
+      'unauthorized',
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  it('a session upload proceeds when a handler opts into the session path', async () => {
+    const { service } = setup({ sessionOk: true });
+    await expect(service.upload(SESSION, SHA, REQ)).resolves.toEqual({
+      status: 'stored',
+      sha256: SHA,
+    });
+  });
+
+  it('the global disk cap refuses before streaming (413 blob_quota_exceeded)', async () => {
+    process.env.COMPANION_BLOB_TOTAL_MAX_BYTES = '1000';
+    try {
+      const { service, calls } = setup({ total: 950 });
+      await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+        413,
+        'blob_quota_exceeded',
+      ]);
+      expect(calls).toEqual(['find', 'headers', 'usage', 'total']);
+    } finally {
+      delete process.env.COMPANION_BLOB_TOTAL_MAX_BYTES;
+    }
+  });
+
+  it('refs that disagree once re-read under the lock are 409 and never renamed', async () => {
+    const { service, calls } = setup({ insert: 'ref_mismatch' });
+    await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+      409,
+      'blob_ref_mismatch',
+    ]);
+    expect(calls).not.toContain('commit');
   });
 });

@@ -15,7 +15,9 @@ import {
   type CompanionDeviceTx,
 } from '../devices/companion-device-lock';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
+import { lockCompanionUserBlobs } from './companion-blob-lock';
 import { companionBlobRelativePath } from './companion-blob.paths';
+import { refsAgree } from './companion-blob-refs.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const { companionBlobs: blobs, companionBlobRefs: refs } = schema;
@@ -33,9 +35,12 @@ export interface CompanionBlobKey {
   sha256: string;
 }
 
-/** `stored` inserted · `exists` already there · `revoked` device died · `quota_exceeded`. */
+/** `stored` · `exists` · `revoked` device died · `quota_exceeded` · `ref_mismatch` (re-read under the lock). */
 export type CompanionBlobInsertResult =
-  'stored' | 'exists' | 'revoked' | 'quota_exceeded';
+  'stored' | 'exists' | 'revoked' | 'quota_exceeded' | 'ref_mismatch';
+
+/** The transaction handle the cleanup phases run in. */
+export type CompanionBlobTx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Stored blobs among `shas` for this user, inside the ingest tx (step 11b). */
 export function storedBlobsIn(
@@ -82,6 +87,11 @@ export async function upsertBlobRefsIn(
 export class CompanionBlobsRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
+  /** Lock-free raw-SQL reads (the cleanup's candidate queries). */
+  get reader(): Pick<Db, 'execute'> {
+    return this.db;
+  }
+
   /** The stored dims for (user, sha), or null. */
   async find(
     userId: number,
@@ -96,22 +106,44 @@ export class CompanionBlobsRepository {
     return usageIn(this.db, userId);
   }
 
-  /** Every ref (any contract) to this user's sha. */
+  /** Bytes stored across every user (the global disk cap's pre-check). */
+  async totalUsage(): Promise<number> {
+    const [row] = await this.db
+      .select({ bytes: sql<string>`coalesce(sum(${blobs.byteLength}), 0)` })
+      .from(blobs);
+    return Number(row?.bytes ?? 0);
+  }
+
+  /** Every ref (any contract) to this user's sha (fast-fail pre-check). */
   findRefs(userId: number, sha256: string): Promise<CompanionBlobDims[]> {
-    return this.db
-      .select({
-        byteLength: refs.byteLength,
-        width: refs.width,
-        height: refs.height,
-      })
-      .from(refs)
-      .where(and(eq(refs.userId, userId), eq(refs.sha256, sha256)));
+    return findRefsIn(this.db, userId, sha256);
+  }
+
+  /** Run `fn` in one transaction holding the user's blob lock. */
+  withUserLock<T>(
+    userId: number,
+    fn: (tx: CompanionBlobTx) => Promise<T>,
+  ): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await lockCompanionUserBlobs(tx, userId);
+      return fn(tx);
+    });
+  }
+
+  /** Drop a row whose file is gone (under the lock), so a re-upload restores it. */
+  async removeStale(userId: number, sha256: string): Promise<void> {
+    await this.withUserLock(userId, async (tx) => {
+      await tx
+        .delete(blobs)
+        .where(and(eq(blobs.userId, userId), eq(blobs.sha256, sha256)));
+    });
   }
 
   /**
    * Step 12 in one tx: hold the device (device path), take the user's blob
-   * advisory lock, then admit the row only if the ACTUAL bytes fit the quota
-   * (authoritative — concurrent uploads serialise on the lock).
+   * advisory lock, re-read the refs (a message may have committed one since
+   * the pre-check), then admit the row only if the ACTUAL bytes fit the
+   * quota (authoritative — concurrent uploads serialise on the lock).
    */
   insert(
     auth: CompanionIngestAuth,
@@ -120,10 +152,12 @@ export class CompanionBlobsRepository {
   ): Promise<CompanionBlobInsertResult> {
     return this.db.transaction(async (tx) => {
       if (!(await deviceHeld(tx, auth))) return 'revoked';
-      const key = `companion-blobs:${auth.userId}`;
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+      await lockCompanionUserBlobs(tx, auth.userId);
       const [stored] = await storedBlobsIn(tx, auth.userId, [row.sha256]);
       if (stored) return 'exists';
+      if (!refsAgree(await findRefsIn(tx, auth.userId, row.sha256), row)) {
+        return 'ref_mismatch';
+      }
       const used = await usageIn(tx, auth.userId);
       if (used + row.byteLength > quotaBytes) return 'quota_exceeded';
       const written = await tx
@@ -165,45 +199,6 @@ export class CompanionBlobsRepository {
       );
     return result.count;
   }
-
-  /** Cleanup 1: delete ≤`limit` unreferenced blob rows older than `hours`. */
-  async deleteUnreferencedBlobs(
-    hours: number,
-    limit: number,
-  ): Promise<CompanionBlobKey[]> {
-    const rows = await this.db.execute<{ userId: number; sha256: string }>(sql`
-      DELETE FROM companion_blobs AS b WHERE b.id IN (
-        SELECT c.id FROM companion_blobs AS c
-        WHERE c.created_at < now() - make_interval(hours => ${hours})
-          AND NOT EXISTS (SELECT 1 FROM companion_blob_refs AS r
-                          WHERE r.user_id = c.user_id AND r.sha256 = c.sha256)
-        ORDER BY c.id LIMIT ${limit})
-      RETURNING b.user_id AS "userId", b.sha256 AS "sha256"`);
-    return rows.map((r) => ({ userId: Number(r.userId), sha256: r.sha256 }));
-  }
-
-  /** Cleanup 2: delete ≤`limit` refs older than `days` whose upload never came. */
-  async deleteDanglingRefs(days: number, limit: number): Promise<number> {
-    const rows = await this.db.execute<{ one: number }>(sql`
-      DELETE FROM companion_blob_refs AS r
-      WHERE (r.user_id, r.sha256, r.contract) IN (
-        SELECT x.user_id, x.sha256, x.contract FROM companion_blob_refs AS x
-        WHERE x.referenced_at < now() - make_interval(days => ${days})
-          AND NOT EXISTS (SELECT 1 FROM companion_blobs AS b
-                          WHERE b.user_id = x.user_id AND b.sha256 = x.sha256)
-        LIMIT ${limit})
-      RETURNING 1 AS one`);
-    return rows.length;
-  }
-
-  /** Cleanup 3 input: which of `shas` still have a row for this user. */
-  async storedShas(
-    userId: number,
-    shas: readonly string[],
-  ): Promise<Set<string>> {
-    const rows = await storedBlobsIn(this.db, userId, shas);
-    return new Set(rows.map((r) => r.sha256));
-  }
 }
 
 async function deviceHeld(
@@ -225,4 +220,19 @@ async function usageIn(
     .from(blobs)
     .where(eq(blobs.userId, userId));
   return Number(row?.bytes ?? 0);
+}
+
+function findRefsIn(
+  db: Pick<Db, 'select'>,
+  userId: number,
+  sha256: string,
+): Promise<CompanionBlobDims[]> {
+  return db
+    .select({
+      byteLength: refs.byteLength,
+      width: refs.width,
+      height: refs.height,
+    })
+    .from(refs)
+    .where(and(eq(refs.userId, userId), eq(refs.sha256, sha256)));
 }
