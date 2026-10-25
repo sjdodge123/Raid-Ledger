@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "envelopeVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "contract": {
+      "type": "string",
+      "const": "bg3-save"
+    },
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "maxLength": 24,
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "collectorVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "saveName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!\\s*$)[^\\p{Cc}\\p{Cs}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+        },
+        "savedAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "campaignKey": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "campaignKeySource": {
+          "type": "string",
+          "enum": [
+            "save-folder",
+            "game-id"
+          ]
+        },
+        "gameVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,4}(\\.\\d{1,10}){1,3}$"
+        },
+        "platform": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,32}$"
+        },
+        "currentLevel": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,64}$"
+        },
+        "difficulty": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,64}$"
+        },
+        "ruleset": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_]{1,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "party": {
+          "minItems": 1,
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,64}$"
+              },
+              "race": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,64}$"
+              },
+              "level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "xpLevel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000000
+              },
+              "xpTotal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000000
+              },
+              "classes": {
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "main": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_]{1,64}$"
+                    },
+                    "sub": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_]{1,64}$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "main",
+                    "sub"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "isSummon": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "origin",
+              "race",
+              "level",
+              "xpLevel",
+              "xpTotal",
+              "classes",
+              "isSummon"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "thumbnail": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1048576
+                },
+                "contentType": {
+                  "type": "string",
+                  "const": "image/webp"
+                },
+                "width": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 4096
+                },
+                "height": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 4096
+                }
+              },
+              "required": [
+                "sha256",
+                "byteLength",
+                "contentType",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "saveName",
+        "savedAt",
+        "campaignKey",
+        "campaignKeySource",
+        "gameVersion",
+        "platform",
+        "currentLevel",
+        "difficulty",
+        "ruleset",
+        "party",
+        "thumbnail"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "envelopeVersion",
+    "contract",
+    "contractVersion",
+    "capturedAt",
+    "appVersion",
+    "collectorVersion",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raid.gamernight.net/contracts/companion/bg3-save/v1/schema.json",
+  "title": "RL Companion bg3-save message v1",
+  "description": "GENERATED from Bg3SaveMessageSchema (packages/contract/src/companion-bg3-save.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: a party member's xpLevel ≤ xpTotal; isSummon ⇒ classes is empty; !isSummon ⇒ at least one class; payload.savedAt ≤ capturedAt. The server alone checks the clock; see CONTRACT.md."
+}
