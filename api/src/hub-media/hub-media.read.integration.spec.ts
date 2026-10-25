@@ -181,6 +181,30 @@ describe('GET hubs/:guildId/media — privacy (D7)', () => {
     expect(anon.status).toBe(401);
     expect((await get(base(), 'operator')).status).toBe(200);
   });
+
+  it('gates the thumb bytes: signed out 401, visitor the hub 404, member 200 webp', async () => {
+    const id = await picture('a', 'death', 1);
+    const path = `${base()}/${id}/thumb`;
+    const anon = await testApp.request.get(path);
+    const visitor = await get(path, 'visitor');
+    const member = await get(path, 'member').buffer(true);
+    const body: unknown = member.body;
+    const magic = Buffer.isBuffer(body)
+      ? [
+          body.subarray(0, 4).toString('latin1'),
+          body.subarray(8, 12).toString('latin1'),
+        ]
+      : null;
+    expect({
+      anon: anon.status,
+      visitor: [visitor.status, visitor.body.message],
+      member: [member.status, member.headers['content-type'], magic],
+    }).toEqual({
+      anon: 401,
+      visitor: [404, HUB_NOT_FOUND],
+      member: [200, 'image/webp', ['RIFF', 'WEBP']],
+    });
+  });
 });
 
 describe('GET hubs/:guildId/media — feed order, cursor, kind filter', () => {
