@@ -3625,3 +3625,8 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — PR #1798 feat/rok-1942-hub-gallery (surfaced in GitHub CI discord-smoke; branch touches no Discord paths)
 
 - **med (CI flake; pre-existing)** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts` "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count" — run 40140524373 job 121011249490: `AC7: no PLAYING NOW post with a voice link … last rendered "<no post for this game>"` after 95.3s; 47/48 passed. The ROK-1942 diff has 0 files under discord-bot/notifications/lfg/voice/test-bot. Likely the now-spawn voice channel/positional-pick fragility already noted under 2026-09-07 rok-1494. Suggested: make the now-group spawn pick its voice channel by id, not index, and loop the spec 50× with the targeted-smoke recipe to measure the rate.
+
+### 2026-10-25 — feat/rok-1956-companion-ingest (surfaced during ROK-1956 review)
+
+- **med** `api/src/companion/blobs/companion-blob.paths.ts:24` (+ `api/src/hubs/**` hub media) — `/data/uploads` (hub media + companion blobs under `/data/uploads/companion/blobs`) is not in the NAS backup set, so a DB restore brings back `companion_blobs` / hub-media rows without their files. ROK-1956 R1 makes the companion upload self-heal (a row without its file is dropped and the next upload restores it), but nothing restores files a client no longer holds. Blocks ROK-1957 (C4) going live.
+  Suggested: add `/data/uploads` to the NAS backup job + the restore drill (`docs/runbooks/migrations-and-backups.md`).
