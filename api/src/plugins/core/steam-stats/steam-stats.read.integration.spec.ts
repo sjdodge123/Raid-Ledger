@@ -21,6 +21,8 @@ import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { announceSteamLinkChange } from '../../../steam/steam-link-events.helpers';
 
 const BG3 = 1086940;
 const NOT_ENABLED = 892970;
@@ -338,6 +340,48 @@ describe('GET /hubs/:guildId/steam-stats — members + feeds (I5, I6, I8, I9)', 
       3,
       '2026-10-24T04:30:00.000Z',
     ]);
+  });
+});
+
+describe('GET /hubs/:guildId/steam-stats — Steam account changes (Codex P2)', () => {
+  it("I11 — an unlinked viewer's kept unlock rows never unmask a hidden achievement", async () => {
+    await testApp.db.insert(schema.steamUserAchievements).values({
+      userId: d.id,
+      appId: BG3,
+      apiName: SECRET,
+      unlockedAt: new Date('2026-10-23T11:00:00Z'),
+    });
+    const body = available(await read(hub, d));
+    expect(body.rarestUnlock).toEqual({
+      userId: a.id,
+      unlockedAt: '2026-10-22T10:00:00.000Z',
+      achievement: { masked: true, globalPct: 2.5 },
+    });
+  });
+
+  it("I12 — replacing Steam account A with B drops A's cached stats + unlocks from every feed", async () => {
+    const next = '76561190000000999';
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: next })
+      .where(eq(schema.users.id, a.id));
+    const events = testApp.app.get(EventEmitter2);
+    await announceSteamLinkChange(events, a.id, '76561190000000101', next);
+    const body = available(await read(hub, b));
+    const aRow = body.members.find((m) => m.userId === a.id);
+    expect({
+      status: aRow?.status,
+      count: aRow?.unlockedCount,
+      feedUsers: body.recentUnlocks
+        .map((u) => u.userId)
+        .filter((id) => id === a.id),
+      rarest: body.rarestUnlock?.userId === a.id,
+    }).toEqual({
+      status: 'pending',
+      count: null,
+      feedUsers: [],
+      rarest: false,
+    });
   });
 });
 

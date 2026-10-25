@@ -25,7 +25,7 @@ export interface MemberInput {
   playtimeMinutes: number | null;
 }
 
-/** D6: unlink keeps the rows but the member reads as `unlinked`. */
+/** D6: `steam_id IS NULL` reads as `unlinked` (unlink also purges the rows — Codex P2). */
 export function memberStatus(
   steamId: string | null,
   stats: StoredMemberStats | undefined,

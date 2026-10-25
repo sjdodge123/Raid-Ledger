@@ -104,7 +104,7 @@ export class SteamStatsReadService {
     const members = rows.filter((r) => memberIds.has(r.userId));
     const viewer = rows.find((r) => r.userId === viewerId);
     const app = await this.repo.appState(appId);
-    const feeds = await this.feeds(viewerId, appId, members);
+    const feeds = await this.feeds(viewer, viewerId, appId, members);
     return {
       available: true,
       appId,
@@ -115,8 +115,12 @@ export class SteamStatsReadService {
     };
   }
 
-  /** Recent + rarest from linked members only, masked for the viewer. */
+  /**
+   * Recent + rarest from linked members only, masked for the viewer. An
+   * unlinked viewer's kept rows unmask nothing (Codex P2).
+   */
   private async feeds(
+    viewer: MemberRow | undefined,
     viewerId: number,
     appId: number,
     members: readonly MemberRow[],
@@ -124,7 +128,10 @@ export class SteamStatsReadService {
     const linked = members
       .filter((m) => m.steamId !== null)
       .map((m) => m.userId);
-    const unlocked = await this.repo.unlockedApiNames(viewerId, appId);
+    const unlocked =
+      viewer !== undefined && viewer.steamId !== null
+        ? await this.repo.unlockedApiNames(viewerId, appId)
+        : new Set<string>();
     const view = (u: UnlockRow): SteamHubUnlock => ({
       userId: u.userId,
       unlockedAt: u.unlockedAt.toISOString(),

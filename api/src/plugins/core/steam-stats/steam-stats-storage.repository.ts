@@ -201,6 +201,18 @@ export class SteamStatsStorageRepository {
     });
   }
 
+  /**
+   * The user's Steam account went away or was replaced (Codex P2): delete
+   * every cached stats + unlock row so nothing from the old account is
+   * served, counted or used to unmask. The next refresh rebuilds them.
+   */
+  async purgeUser(userId: number): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(userAch).where(eq(userAch.userId, userId));
+      await tx.delete(userStats).where(eq(userStats.userId, userId));
+    });
+  }
+
   /** A non-`ok` fetch: status only (count null), unlock rows untouched. */
   async saveUserStatus(
     userId: number,
