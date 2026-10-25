@@ -1,0 +1,22 @@
+{
+  "envelope-version-2": {
+    "path": "envelopeVersion",
+    "code": "invalid_value"
+  },
+  "contract-id-uppercase": {
+    "path": "contract",
+    "code": "invalid_format"
+  },
+  "missing-payload": {
+    "path": "payload",
+    "code": "invalid_type"
+  },
+  "unknown-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "app-version-not-semver": {
+    "path": "appVersion",
+    "code": "invalid_format"
+  }
+}
