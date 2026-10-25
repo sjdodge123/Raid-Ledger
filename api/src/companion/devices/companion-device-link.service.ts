@@ -12,6 +12,7 @@ import {
   CompanionLinkDecisionRequestSchema,
   CompanionLinkStartRequestSchema,
   CompanionLinkStartResponseSchema,
+  type CompanionDeviceInfo,
   type CompanionLinkDecisionRequest,
   type CompanionLinkPreview,
   type CompanionLinkStartResponse,
@@ -21,6 +22,7 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   hitOrThrow,
   reserveOrThrow,
+  type BudgetSpec,
   type HeaderSink,
 } from './companion-device-link-budget';
 import {
@@ -40,7 +42,10 @@ import {
   startPerIpLimit,
   TEN_MINUTES_MS,
 } from './companion-device-link.limits';
-import { CompanionDeviceLinksRepository } from './companion-device-links.repository';
+import {
+  CompanionDeviceLinksRepository,
+  type NewLink,
+} from './companion-device-links.repository';
 import {
   toLinkPreview,
   type CompanionDeviceLinkRow,
@@ -84,48 +89,54 @@ export class CompanionDeviceLinkService {
   ): Promise<CompanionLinkStartResponse> {
     const parsed = CompanionLinkStartRequestSchema.safeParse(body);
     if (!parsed.success) handleValidationError(parsed.error);
+    const network = await this.assertStartAllowed(ip, res);
+    const base = await this.settings.getTrustedClientUrl();
+    if (!base) {
+      throw new InternalServerErrorException('CLIENT_URL is not configured');
+    }
+    return this.insertWithFreshCodes(parsed.data.device, network, base);
+  }
+
+  /** Per-IP start budget + per-network pending cap; returns the network. */
+  private async assertStartAllowed(
+    ip: string | undefined,
+    res: HeaderSink,
+  ): Promise<string | null> {
     const key = `companion-link:start:${ip ?? 'unknown'}`;
-    hitOrThrow(
-      this.limiter,
-      res,
-      { key, limit: startPerIpLimit(), windowMs: MINUTE_MS },
-      'Too many link requests',
-    );
+    const spec = { key, limit: startPerIpLimit(), windowMs: MINUTE_MS };
+    hitOrThrow(this.limiter, res, spec, 'Too many link requests');
     const network = coarseIp(ip);
     const cap = pendingPerNetworkLimit();
-    if (
-      network !== null &&
-      cap !== null &&
-      (await this.repo.countPendingForNetwork(network)) >= cap
-    ) {
+    if (network === null || cap === null) return network;
+    if ((await this.repo.countPendingForNetwork(network)) >= cap) {
       throw tooManyPending();
     }
-    const base = await this.settings.getTrustedClientUrl();
-    if (!base)
-      throw new InternalServerErrorException('CLIENT_URL is not configured');
-    const { device } = parsed.data;
+    return network;
+  }
+
+  /** Insert with fresh codes; re-roll on the (unlikely) code collision. */
+  private async insertWithFreshCodes(
+    device: CompanionDeviceInfo,
+    network: string | null,
+    base: string,
+  ): Promise<CompanionLinkStartResponse> {
     for (let i = 0; i < CODE_ATTEMPTS; i += 1) {
       const deviceCode = deviceCodes.generate();
       const userCode = generateUserCode();
-      const row = await this.repo.insertPending({
-        deviceCodeHash: deviceCodes.hash(deviceCode),
-        userCodeHash: hashUserCode(userCode),
-        deviceName: device.name,
-        deviceOs: device.os,
-        deviceOsVersion: device.osVersion ?? null,
-        appVersion: device.appVersion,
-        requestedIpCoarse: network,
-      });
-      if (row)
-        return CompanionLinkStartResponseSchema.parse(
-          buildStartResponse(
-            base,
-            deviceCode,
-            formatUserCode(userCode),
-            LINK_TTL_SEC,
-            POLL_INTERVAL_SEC,
-          ),
-        );
+      const row = await this.repo.insertPending(
+        newLink(device, network, deviceCode, userCode),
+      );
+      if (!row) continue;
+      const shown = formatUserCode(userCode);
+      return CompanionLinkStartResponseSchema.parse(
+        buildStartResponse(
+          base,
+          deviceCode,
+          shown,
+          LINK_TTL_SEC,
+          POLL_INTERVAL_SEC,
+        ),
+      );
     }
     throw new InternalServerErrorException('Could not allocate a link code');
   }
@@ -190,18 +201,7 @@ export class CompanionDeviceLinkService {
     const settle = reserveOrThrow(
       this.limiter,
       res,
-      [
-        {
-          key: `companion-link:code:user:${caller.userId}`,
-          limit: codeFailsPerUserLimit(),
-          windowMs: TEN_MINUTES_MS,
-        },
-        {
-          key: `companion-link:code:ip:${caller.ip ?? 'unknown'}`,
-          limit: codeFailsPerIpLimit(),
-          windowMs: MINUTE_MS,
-        },
-      ],
+      codeBudgets(caller),
       'Too many code attempts — wait a few minutes and try again',
     );
     let failed = false;
@@ -214,6 +214,40 @@ export class CompanionDeviceLinkService {
       settle(failed);
     }
   }
+}
+
+/** The pending-link row for a start request (both codes hashed). */
+function newLink(
+  device: CompanionDeviceInfo,
+  network: string | null,
+  deviceCode: string,
+  userCode: string,
+): NewLink {
+  return {
+    deviceCodeHash: deviceCodes.hash(deviceCode),
+    userCodeHash: hashUserCode(userCode),
+    deviceName: device.name,
+    deviceOs: device.os,
+    deviceOsVersion: device.osVersion ?? null,
+    appVersion: device.appVersion,
+    requestedIpCoarse: network,
+  };
+}
+
+/** The per-user (10 / 10 min) and per-IP (30 / min) user-code budgets. */
+function codeBudgets(caller: CodeCaller): BudgetSpec[] {
+  return [
+    {
+      key: `companion-link:code:user:${caller.userId}`,
+      limit: codeFailsPerUserLimit(),
+      windowMs: TEN_MINUTES_MS,
+    },
+    {
+      key: `companion-link:code:ip:${caller.ip ?? 'unknown'}`,
+      limit: codeFailsPerIpLimit(),
+      windowMs: MINUTE_MS,
+    },
+  ];
 }
 
 /** An already-decided link: same user + same decision is idempotent, else 404. */

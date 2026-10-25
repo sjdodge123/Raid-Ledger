@@ -4,7 +4,7 @@
  * returns no row instead of throwing — nothing here catches and retries.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
