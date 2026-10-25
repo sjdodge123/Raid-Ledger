@@ -10,6 +10,7 @@ import type {
 import * as schema from '../../drizzle/schema';
 import {
   decodeCursor,
+  parseMembersKey,
   type DirectoryCursor,
 } from './community-directory.cursor';
 import { escapeLike, pageOf } from './community-directory.params';
@@ -64,8 +65,7 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
 /** Rows strictly after the cursor in the sort's order; 400 on a bad key. */
 function afterCursor(c: DirectoryCursor): SQL {
   if (c.s === 'members') {
-    const n = Number(c.v);
-    if (!Number.isInteger(n)) throw new BadRequestException('Invalid cursor');
+    const n = parseMembersKey(c.v);
     return sql`(${g.memberCount}, ${g.id}) < (${n}::int, ${c.id}::int)`;
   }
   if (c.s === 'name') {

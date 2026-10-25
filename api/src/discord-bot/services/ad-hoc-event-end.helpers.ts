@@ -48,7 +48,11 @@ export async function notifyCompleted(
   );
 }
 
-/** Start the grace period when all members leave. */
+/**
+ * Start the grace period when all members leave. The status flip runs first
+ * and is guarded to `live`: when it matches no row (already ended, or already
+ * in grace) nothing is enqueued or broadcast.
+ */
 export async function startGracePeriod(
   deps: Pick<
     AdHocHandlerDeps,
@@ -63,11 +67,11 @@ export async function startGracePeriod(
   const rawGrace =
     (binding?.config as { gracePeriod?: number } | null)?.gracePeriod ?? 5;
 
+  if (!(await setGracePeriodStatus(deps.db, eventId))) return;
   await deps.gracePeriodQueue.enqueue(
     eventId,
     Math.max(1, rawGrace) * 60 * 1000,
   );
-  await setGracePeriodStatus(deps.db, eventId);
   deps.gateway.emitStatusChange(eventId, 'grace_period');
 }
 

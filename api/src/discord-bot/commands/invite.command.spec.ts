@@ -1,5 +1,6 @@
 import { InviteCommand } from './invite.command';
 import { EmbedBuilder } from 'discord.js';
+import { LFG_BLOCKED_REPLY } from './lfg.command.helpers';
 
 const mockEmbed = new EmbedBuilder().setTitle('Test');
 const mockRow = { toJSON: jest.fn() };
@@ -233,6 +234,30 @@ describe('InviteCommand — anonymous invite', () => {
       expect.stringContaining('/i/abc12345'),
     );
     delete process.env.CLIENT_URL;
+  });
+});
+
+// TECH-DEBT 2026-10-17: `NotDeactivatedGuard` only guards HTTP, so /invite
+// must refuse a deactivated or banned caller itself, exactly like /lfg.
+// MUTATION: drop the `deactivatedAt || bannedAt` check in `resolveInvoker`
+// and both cases fail on the reply AND on the PUG write.
+describe('InviteCommand — blocked caller', () => {
+  it.each([
+    ['deactivated', { deactivatedAt: new Date(), bannedAt: null }],
+    ['banned', { deactivatedAt: null, bannedAt: new Date() }],
+  ])('refuses a %s caller with the /lfg blocked reply', async (_, flags) => {
+    const services = createMockServices();
+    services.db.limit = jest
+      .fn()
+      .mockResolvedValue([{ id: 1, role: 'admin', ...flags }]);
+    const command = buildCommand(services);
+    const mockEditReply = jest.fn().mockResolvedValue(undefined);
+    await command.handleInteraction(
+      makeNamedInviteInteraction(mockEditReply) as never,
+    );
+    expect(mockEditReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
+    expect(services.pugsService.create).not.toHaveBeenCalled();
+    expect(services.pugsService.createEventInviteLink).not.toHaveBeenCalled();
   });
 });
 
