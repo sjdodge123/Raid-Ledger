@@ -1,25 +1,11 @@
+import type {
+  HubMediaBackfillStatus,
+  HubMediaBackfillSummary,
+} from '@raid-ledger/contract';
 import type { IngestPostSummary } from './hub-media-post.ingest';
 
-/** D12 run counts (L4 moves the shape into the contract). */
-export interface HubMediaBackfillSummary {
-  scanned: number;
-  imagesStored: number;
-  duplicates: number;
-  deathsLinked: number;
-  deathsInferred: number;
-  unclassified: number;
-  failed: number;
-  oldestScannedAt: string | null;
-  finishedAt: string | null;
-}
-
-/** `GET guilds/:id/media-channel/backfill` — the hub's latest run. */
-export interface HubMediaBackfillStatus {
-  state: 'idle' | 'running' | 'done' | 'failed';
-  startedAt: string | null;
-  finishedAt: string | null;
-  summary: HubMediaBackfillSummary | null;
-}
+/** D12 shapes live in the contract (`hub-media-channel.schema.ts`). */
+export type { HubMediaBackfillStatus, HubMediaBackfillSummary };
 
 /** The backfill reaches back this far (D12: "the last 3 weeks"). */
 export const BACKFILL_WINDOW_MS = 21 * 24 * 60 * 60 * 1000;

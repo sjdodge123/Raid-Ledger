@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { HubMediaChannelState } from '@raid-ledger/contract';
 import { ChannelMirrorService } from '../discord-bot/channel-mirror/channel-mirror.service';
 import { HubMediaChannelResolver } from '../discord-bot/hub-media-channel/hub-media-channel.queries';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -21,14 +22,8 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 const { guildProfiles } = schema;
 
-/** The binding as the Leader settings row reads it (contract lands in L4). */
-export interface HubMediaChannelState {
-  channelId: string | null;
-  channelName: string | null;
-  /** OQ2: the mirror channel, offered while no media channel is set. */
-  suggestedChannelId: string | null;
-  setAt: string | null;
-}
+/** The binding as the Leader settings row reads it (contract shape). */
+export type { HubMediaChannelState };
 
 export const NOT_GAME_SERVER_MESSAGE =
   'Only game server hubs have a pictures channel';

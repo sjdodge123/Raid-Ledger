@@ -1,37 +1,18 @@
 /**
  * ROK-1941 D2 — the hub's Leader-set Discord "Pictures" channel and its
  * 21-day backfill (`guilds/:id/media-channel[/backfill]`). Every response is
- * parsed. The shapes are local until the contract gains
- * `hub-media-channel.schema.ts` (spec "Contract"); they mirror the API's
- * `HubMediaChannelState` and `HubMediaBackfillStatus` field for field.
+ * parsed against the strict contract schemas (`hub-media-channel.schema.ts`).
  */
-import { z } from 'zod';
+import {
+    HubMediaBackfillStatusSchema,
+    HubMediaChannelStateSchema,
+    type HubMediaBackfillStatus,
+    type HubMediaChannelState,
+} from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { errorBodyOf } from '../../../lib/api/api-error';
 
-export const HubMediaChannelStateSchema = z.object({
-    channelId: z.string().nullable(),
-    channelName: z.string().nullable(),
-    /** OQ2: the mirror channel, offered while no pictures channel is set. */
-    suggestedChannelId: z.string().nullable(),
-    setAt: z.string().nullable(),
-});
-export type HubMediaChannelState = z.infer<typeof HubMediaChannelStateSchema>;
-
-export const HubMediaBackfillSummarySchema = z.object({
-    scanned: z.number().int(), imagesStored: z.number().int(), duplicates: z.number().int(),
-    deathsLinked: z.number().int(), deathsInferred: z.number().int(), unclassified: z.number().int(),
-    failed: z.number().int(), oldestScannedAt: z.string().nullable(), finishedAt: z.string().nullable(),
-});
-export type HubMediaBackfillSummary = z.infer<typeof HubMediaBackfillSummarySchema>;
-
-export const HubMediaBackfillStatusSchema = z.object({
-    state: z.enum(['idle', 'running', 'done', 'failed']),
-    startedAt: z.string().nullable(),
-    finishedAt: z.string().nullable(),
-    summary: HubMediaBackfillSummarySchema.nullable(),
-});
-export type HubMediaBackfillStatus = z.infer<typeof HubMediaBackfillStatusSchema>;
+export type { HubMediaBackfillStatus, HubMediaBackfillSummary, HubMediaChannelState } from '@raid-ledger/contract';
 
 const base = (guildId: number): string => `/guilds/${guildId}/media-channel`;
 
