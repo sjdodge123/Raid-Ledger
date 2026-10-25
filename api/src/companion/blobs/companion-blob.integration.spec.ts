@@ -162,7 +162,9 @@ function put(path: string, body: Buffer, opts: PutOpts = {}) {
     .set('Content-Type', opts.contentType ?? 'image/webp');
   if (opts.token !== undefined) r = r.set(bearer(opts.token));
   if (opts.encoding !== undefined) r = r.set('Content-Encoding', opts.encoding);
-  return r.send(body);
+  // superagent would JSON-serialise a Buffer itself under application/json
+  // (`{"type":"Buffer","data":[…]}`); send the bytes as-is.
+  return r.serialize((bytes) => bytes).send(body);
 }
 
 const putBlob = (token: string, bytes: Buffer) =>
@@ -174,11 +176,15 @@ function postWithThumbnail(token: string, thumbnail: CompanionWebpRef | null) {
     ...ACT2,
     payload: { ...ACT2.payload, thumbnail },
   };
-  return testApp.request
-    .post(`${MESSAGES}/${BG3_SAVE_CONTRACT_ID}`)
-    .set('Content-Type', 'application/json')
-    .set(bearer(token))
-    .send(Buffer.from(JSON.stringify(msg)));
+  return (
+    testApp.request
+      .post(`${MESSAGES}/${BG3_SAVE_CONTRACT_ID}`)
+      .set('Content-Type', 'application/json')
+      .set(bearer(token))
+      // superagent would JSON-serialise the Buffer itself; send the bytes as-is.
+      .serialize((bytes) => bytes)
+      .send(Buffer.from(JSON.stringify(msg)))
+  );
 }
 
 function expectAck(res: Response, status: 'stored' | 'exists', hash: string) {

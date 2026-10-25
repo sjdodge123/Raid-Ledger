@@ -146,7 +146,9 @@ function post(contract: string, body: Buffer, opts: PostOpts = {}) {
     .set('Content-Type', opts.contentType ?? 'application/json');
   if (opts.token !== undefined) r = r.set(bearer(opts.token));
   if (opts.encoding !== undefined) r = r.set('Content-Encoding', opts.encoding);
-  return r.send(body);
+  // superagent would JSON-serialise a Buffer itself under application/json
+  // (`{"type":"Buffer","data":[…]}`); send the bytes as-is.
+  return r.serialize((bytes) => bytes).send(body);
 }
 
 const postBg3 = (token: string, msg: Bg3SaveMessage = ACT2) =>
