@@ -3628,5 +3628,5 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-25 — feat/rok-1956-companion-ingest (surfaced during ROK-1956 review)
 
-- **med** `api/src/companion/blobs/companion-blob.paths.ts:24` (+ `api/src/hubs/**` hub media) — `/data/uploads` (hub media + companion blobs under `/data/uploads/companion/blobs`) is not in the NAS backup set, so a DB restore brings back `companion_blobs` / hub-media rows without their files. ROK-1956 R1 makes the companion upload self-heal (a row without its file is dropped and the next upload restores it), but nothing restores files a client no longer holds. Blocks ROK-1957 (C4) going live.
+- **med** `api/src/companion/blobs/companion-blob.paths.ts:24` (+ `api/src/hub-media/hub-media.paths.ts`) — `/data/uploads` (hub media + companion blobs under `/data/uploads/companion/blobs`) is not in the NAS backup set, so a DB restore brings back `companion_blobs` / hub-media rows without their files. ROK-1956 R1 makes the companion upload self-heal (a row without its file is dropped and the next upload restores it), but nothing restores files a client no longer holds. Blocks ROK-1957 (C4) going live.
   Suggested: add `/data/uploads` to the NAS backup job + the restore drill (`docs/runbooks/migrations-and-backups.md`).
