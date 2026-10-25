@@ -17,15 +17,18 @@ export function costRuleFor(
 
 /**
  * §5b `amount(r, q)`. `v0`: `q ≤ 1 ? amount : (q − 1) · amountPerLevel`.
- * `v1`: an upgrade item (`upgraderResource`) costs `amount` at every step;
- * any other resource `amount` at q1, then `amountPerLevel · 2^(q − 2)`.
+ * `v1`: an upgrade item (`upgraderResource`) costs nothing on a fresh q1 craft
+ * (operator in-game check 2026-10-25: an Iron mace does not take an Iron
+ * battle idol, although the live `GetAmount(1)` reports 1) and `amount` at
+ * every upgrade step; any other resource `amount` at q1, then
+ * `amountPerLevel · 2^(q − 2)`.
  */
 export function amountAt(
   r: ValheimRecipeResource,
   q: number,
   rule: ValheimCostRule = 'v0',
 ): number {
-  if (q <= 1) return r.amount;
+  if (q <= 1) return rule === 'v1' && r.upgraderResource ? 0 : r.amount;
   if (rule === 'v0') return (q - 1) * r.amountPerLevel;
   if (r.upgraderResource) return r.amount;
   return r.amountPerLevel * 2 ** (q - 2);
