@@ -92,7 +92,10 @@ export class StandalonePollReminderService {
     }
   }
 
-  /** The poll's hub keys; a failed lookup gives `claimedKey` back, then rethrows. */
+  /**
+   * The poll's hub keys; a failed lookup gives `claimedKey` back, then
+   * rethrows the LOOKUP error — a failed release is logged, never masks it.
+   */
   private async resolveHub(
     lineupId: number,
     claimedKey: string,
@@ -100,8 +103,19 @@ export class StandalonePollReminderService {
     try {
       return await lineupHubPayload(this.db, lineupId);
     } catch (err: unknown) {
-      await this.dedupService.releaseKey(claimedKey);
+      await this.releaseClaim(claimedKey);
       throw err;
+    }
+  }
+
+  /** Give a dedup claim back; a failure is logged (the key then expires on its TTL). */
+  private async releaseClaim(key: string): Promise<void> {
+    try {
+      await this.dedupService.releaseKey(key);
+    } catch (releaseErr: unknown) {
+      const msg =
+        releaseErr instanceof Error ? releaseErr.message : String(releaseErr);
+      this.logger.warn(`Could not release reminder claim ${key}: ${msg}`);
     }
   }
 

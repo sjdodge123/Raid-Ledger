@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { NotificationService } from '../../notifications/notification.service';
@@ -74,5 +75,23 @@ describe('StandalonePollReminderService — hub lookup after dedupe', () => {
     await service.runReminders();
     expect(releaseKey).toHaveBeenCalledWith('standalone-poll-reminder:9:1:24h');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('a failed release is logged and the original lookup error still surfaces', async () => {
+    hubLookup.mockRejectedValue(new Error('db down'));
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const { service, create, releaseKey } = setup([]);
+    releaseKey.mockRejectedValue(new Error('redis gone'));
+    await service.runReminders();
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.some((l) => l.includes('redis gone'))).toBe(true);
+    expect(lines.some((l) => l.includes('db down'))).toBe(true);
+    expect(
+      lines.filter((l) => l.includes('Standalone reminder failed')),
+    ).toEqual([expect.stringContaining('db down')]);
+    expect(create).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
