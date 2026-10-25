@@ -32,7 +32,9 @@ describe('FixedWindowRateLimiter (ROK-1955, extracted from ROK-1833)', () => {
   it('keeps maxKeys as passed in', () => {
     expect(make(7).maxKeys).toBe(7);
   });
+});
 
+describe('FixedWindowRateLimiter — bounded storage and reservations', () => {
   it('distinct keys insert with a linear sweep cost', () => {
     const limiter = make();
     limiter.now = () => 1_000;

@@ -82,16 +82,14 @@ describe('tokenHashesEqual (ROK-1955)', () => {
   });
 
   it('compares with crypto.timingSafeEqual', () => {
-    jest.resetModules();
-    const timingSafeEqual = jest.fn(() => true);
-    jest.doMock('node:crypto', () => ({
-      ...jest.requireActual<typeof import('node:crypto')>('node:crypto'),
-      timingSafeEqual,
-    }));
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./prefixed-token.helpers') as typeof import('./prefixed-token.helpers');
-    expect(mod.tokenHashesEqual('abcd', 'abcd')).toBe(true);
-    expect(timingSafeEqual).toHaveBeenCalledTimes(1);
-    jest.dontMock('node:crypto');
+    const realCrypto =
+      jest.requireActual<typeof import('node:crypto')>('node:crypto');
+    const spy = jest.spyOn(realCrypto, 'timingSafeEqual');
+    try {
+      expect(tokenHashesEqual('abcd', 'abcd')).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
