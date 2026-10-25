@@ -36,7 +36,9 @@ function PluginCardActions({ plugin, isPending, onInstall, onActivate, onDeactiv
     plugin: PluginInfoDto; isPending: boolean;
     onInstall: (slug: string) => void; onActivate: (slug: string) => void;
     onDeactivate: (slug: string) => void; onUninstall: (slug: string) => void;
-}): JSX.Element {
+}): JSX.Element | null {
+    // ROK-1969: a built-in plugin (Core) is always on — no lifecycle actions.
+    if (plugin.builtIn) return null;
     return (
         <>
             {plugin.status === 'not_installed' && (

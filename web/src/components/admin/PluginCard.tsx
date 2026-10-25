@@ -96,6 +96,8 @@ function IntegrationHealth({ integrations }: { integrations: PluginInfoDto['inte
 }
 
 function PluginActions({ plugin, onInstall, onUninstall, onActivate, onDeactivate, isPending }: PluginCardProps) {
+    // ROK-1969: a built-in plugin (Core) is always on — no lifecycle actions.
+    if (plugin.builtIn) return null;
     return (
         <div className="flex gap-2 pt-1">
             {plugin.status === 'not_installed' && (
