@@ -73,6 +73,14 @@ function prop(node: unknown, key: string): unknown {
   return entry?.[1];
 }
 
+/** `additionalProperties` of an object node, or `'<absent>'` (an open object). */
+function additionalPropertiesOf(node: unknown): unknown {
+  if (typeof node !== 'object' || node === null) return '<not an object>';
+  return 'additionalProperties' in node
+    ? node.additionalProperties
+    : '<absent>';
+}
+
 /** The `{type:'object'}` branch of a nullable `anyOf`. */
 function objectBranch(node: unknown): unknown {
   const branches = z.array(z.unknown()).parse(prop(node, 'anyOf'));
@@ -111,14 +119,23 @@ describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
     expect(namesIn(ENV_FIX)).toEqual(['bg3-save', 'unknown-contract']);
   });
 
-  it.each(namesIn(BG3_FIX))('bg3-save %s parses as message and envelope', (name) => {
-    const body = readJson(BG3_FIX, `${name}.json`);
-    expect(Bg3SaveMessageSchema.safeParse(body).error?.issues).toBeUndefined();
-    expect(CompanionEnvelopeSchema.safeParse(body).error?.issues).toBeUndefined();
-  });
+  it.each(namesIn(BG3_FIX))(
+    'bg3-save %s parses as message and envelope',
+    (name) => {
+      const body = readJson(BG3_FIX, `${name}.json`);
+      expect(
+        Bg3SaveMessageSchema.safeParse(body).error?.issues,
+      ).toBeUndefined();
+      expect(
+        CompanionEnvelopeSchema.safeParse(body).error?.issues,
+      ).toBeUndefined();
+    },
+  );
 
   it.each(namesIn(ENV_FIX))('envelope %s parses as an envelope', (name) => {
-    const result = CompanionEnvelopeSchema.safeParse(readJson(ENV_FIX, `${name}.json`));
+    const result = CompanionEnvelopeSchema.safeParse(
+      readJson(ENV_FIX, `${name}.json`),
+    );
     expect(result.error?.issues).toBeUndefined();
   });
 
@@ -129,52 +146,65 @@ describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
   });
 
   it('envelope bg3-save.json resolves to the bg3-save v1 contract', () => {
-    const env = CompanionEnvelopeSchema.parse(readJson(ENV_FIX, 'bg3-save.json'));
+    const env = CompanionEnvelopeSchema.parse(
+      readJson(ENV_FIX, 'bg3-save.json'),
+    );
     const hit = lookupCompanionContract(env.contract, env.contractVersion);
     expect(hit.kind === 'ok' && hit.spec.schema).toBe(Bg3SaveMessageSchema);
   });
 
   it('unknown-contract.json is a registry miss, not a parse error', () => {
-    const env = CompanionEnvelopeSchema.parse(readJson(ENV_FIX, 'unknown-contract.json'));
-    expect(lookupCompanionContract(env.contract, env.contractVersion).kind).toBe(
-      'unknown_contract',
+    const env = CompanionEnvelopeSchema.parse(
+      readJson(ENV_FIX, 'unknown-contract.json'),
     );
+    expect(
+      lookupCompanionContract(env.contract, env.contractVersion).kind,
+    ).toBe('unknown_contract');
   });
 });
 
-describe.each(SchemaCases)('Companion v1 $label fixtures — invalid (C3)', ({ dir, schema }) => {
-  const expected = z
-    .record(z.string(), z.object({ path: z.string(), code: z.string() }).strict())
-    .parse(readJson(dir, 'EXPECTED.json'));
-  const names = namesIn(dir);
+describe.each(SchemaCases)(
+  'Companion v1 $label fixtures — invalid (C3)',
+  ({ dir, schema }) => {
+    const expected = z
+      .record(
+        z.string(),
+        z.object({ path: z.string(), code: z.string() }).strict(),
+      )
+      .parse(readJson(dir, 'EXPECTED.json'));
+    const names = namesIn(dir);
 
-  it('lists an expected issue for every invalid fixture', () => {
-    expect(Object.keys(expected).sort()).toEqual(names);
-  });
-
-  /** safeParse, with a throw reported as data so the assertion names it. */
-  const parseInvalid = (name: string) => {
-    try {
-      return { result: schema.safeParse(readJson(dir, `${name}.json`)), threw: null };
-    } catch (err) {
-      return { result: null, threw: String(err) };
-    }
-  };
-
-  it.each(names)('%s is rejected with its EXPECTED path + code', (name) => {
-    const { result, threw } = parseInvalid(name);
-    expect({ name, threw, success: result?.success }).toEqual({
-      name,
-      threw: null,
-      success: false,
+    it('lists an expected issue for every invalid fixture', () => {
+      expect(Object.keys(expected).sort()).toEqual(names);
     });
-    const issues = (result?.error?.issues ?? []).map((i) => ({
-      path: i.path.map(String).join('.'),
-      code: i.code,
-    }));
-    expect(issues).toContainEqual(expected[name]);
-  });
-});
+
+    /** safeParse, with a throw reported as data so the assertion names it. */
+    const parseInvalid = (name: string) => {
+      try {
+        return {
+          result: schema.safeParse(readJson(dir, `${name}.json`)),
+          threw: null,
+        };
+      } catch (err) {
+        return { result: null, threw: String(err) };
+      }
+    };
+
+    it.each(names)('%s is rejected with its EXPECTED path + code', (name) => {
+      const { result, threw } = parseInvalid(name);
+      expect({ name, threw, success: result?.success }).toEqual({
+        name,
+        threw: null,
+        success: false,
+      });
+      const issues = (result?.error?.issues ?? []).map((i) => ({
+        path: i.path.map(String).join('.'),
+        code: i.code,
+      }));
+      expect(issues).toContainEqual(expected[name]);
+    });
+  },
+);
 
 describe('bg3-save v1 raw SaveInfo round-trip (C4)', () => {
   it('ships a raw twin for every golden message', () => {
@@ -182,7 +212,9 @@ describe('bg3-save v1 raw SaveInfo round-trip (C4)', () => {
   });
 
   it.each(rawNames())('%s normalises to the golden payload', (name) => {
-    const raw = Bg3SaveInfoRawSchema.parse(readJson(SAVEINFO, `${name}${RAW_SUFFIX}`));
+    const raw = Bg3SaveInfoRawSchema.parse(
+      readJson(SAVEINFO, `${name}${RAW_SUFFIX}`),
+    );
     const { payload } = bg3Fixture(name);
     const meta = {
       savedAt: payload.savedAt,
@@ -198,19 +230,24 @@ describe('Companion fixtures stay anonymised (C5)', () => {
   const RawPrivacy = z
     .object({
       'Active Party': z
-        .object({ Characters: z.array(z.object({ Position: z.unknown() }).loose()) })
+        .object({
+          Characters: z.array(z.object({ Position: z.unknown() }).loose()),
+        })
         .loose(),
       'Save Name': z.string(),
     })
     .loose();
 
-  it.each(rawNames())('%s zeroes every Position and uses a generic save name', (name) => {
-    const raw = RawPrivacy.parse(readJson(SAVEINFO, `${name}${RAW_SUFFIX}`));
-    const positions = raw['Active Party'].Characters.map((c) => c.Position);
-    expect(positions.length).toBeGreaterThan(0);
-    expect(positions).toEqual(positions.map(() => [0, 0, 0]));
-    expect(raw['Save Name']).toMatch(/^QuickSave_\d+$/);
-  });
+  it.each(rawNames())(
+    '%s zeroes every Position and uses a generic save name',
+    (name) => {
+      const raw = RawPrivacy.parse(readJson(SAVEINFO, `${name}${RAW_SUFFIX}`));
+      const positions = raw['Active Party'].Characters.map((c) => c.Position);
+      expect(positions.length).toBeGreaterThan(0);
+      expect(positions).toEqual(positions.map(() => [0, 0, 0]));
+      expect(raw['Save Name']).toMatch(/^QuickSave_\d+$/);
+    },
+  );
 
   it('no fixture file holds a SteamID64, a drive path or a /Users/ path', () => {
     const jsonFiles = filesUnder(ROOT).filter((f) => f.endsWith('.json'));
@@ -238,7 +275,9 @@ describe('bg3-save v1 placeholder thumbnail (C6)', () => {
 
 describe('Companion v1 schema.json drift guards (C7)', () => {
   it('envelope schema.json matches a fresh generation', () => {
-    expect(read(ENV_V1, 'schema.json')).toBe(serializeCompanionEnvelopeJsonSchema());
+    expect(read(ENV_V1, 'schema.json')).toBe(
+      serializeCompanionEnvelopeJsonSchema(),
+    );
   });
 
   it('bg3-save schema.json matches a fresh generation', () => {
@@ -251,7 +290,9 @@ describe('bg3-save v1 schema.json stays closed (C8)', () => {
   const payload = prop(prop(root, 'properties'), 'payload');
   const member = prop(prop(prop(payload, 'properties'), 'party'), 'items');
   const klass = prop(prop(prop(member, 'properties'), 'classes'), 'items');
-  const thumbnail = objectBranch(prop(prop(payload, 'properties'), 'thumbnail'));
+  const thumbnail = objectBranch(
+    prop(prop(payload, 'properties'), 'thumbnail'),
+  );
 
   it.each([
     ['message', root],
@@ -260,7 +301,10 @@ describe('bg3-save v1 schema.json stays closed (C8)', () => {
     ['class', klass],
     ['thumbnail', thumbnail],
   ])('%s object has additionalProperties: false', (label, node) => {
-    expect({ label, additionalProperties: prop(node, 'additionalProperties') }).toEqual({
+    expect({
+      label,
+      additionalProperties: additionalPropertiesOf(node),
+    }).toEqual({
       label,
       additionalProperties: false,
     });
