@@ -122,8 +122,8 @@ describe('HubMediaPostIngest.ingestPost — tombstoned duplicates', () => {
   });
 });
 
-describe('HubMediaPostIngest.ingestPost — the app\'s own posts (D4)', () => {
-  it('stores nothing from the bot\'s own post (live + backfill share this)', async () => {
+describe("HubMediaPostIngest.ingestPost — the app's own posts (D4)", () => {
+  it("stores nothing from the bot's own post (live + backfill share this)", async () => {
     found.mockResolvedValue([]);
     media.ingest.mockResolvedValue({ status: 'stored', mediaId: 1 });
     const own = { ...post(['a']), authorId: OWN_BOT_ID };

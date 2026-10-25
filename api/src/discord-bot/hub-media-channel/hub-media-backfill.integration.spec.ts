@@ -225,8 +225,8 @@ describe('paging + the 21-day stop (D12)', () => {
   });
 });
 
-describe('the app\'s own posts (D4)', () => {
-  it('scans the bot\'s own post in the history but never stores it', async () => {
+describe("the app's own posts (D4)", () => {
+  it("scans the bot's own post in the history but never stores it", async () => {
     const OWN_BOT_ID = '600000000000000001';
     jest
       .spyOn(testApp.app.get(DiscordBotClientService), 'getClient')

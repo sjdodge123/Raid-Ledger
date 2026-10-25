@@ -45,7 +45,7 @@ export function ValheimDeathsPictures({ player, guildId }: { player: ValheimDeat
             {extra > 0 && (
                 <Button variant="bare" aria-label={morePicturesLabel(extra)} data-testid="valheim-death-thumbs-more"
                     onClick={(e) => openGallery({ guildId, mode: 'grid', filter: 'death', index: 0, returnFocus: e.currentTarget })}
-                    className={`${TARGET} text-[13px] font-medium text-secondary hover:text-foreground`}>
+                    className={`${TARGET} text-xs font-medium text-secondary hover:text-foreground`}>
                     <span className={TILE}>+{extra}</span>
                 </Button>
             )}
