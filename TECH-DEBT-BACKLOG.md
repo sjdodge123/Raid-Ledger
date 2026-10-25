@@ -3641,3 +3641,14 @@ same day (#1278, #1279, #1280).
 ### 2026-10-25 — fix/hub-copy-and-proposal-smoke
 
 - **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
+
+### 2026-10-25 — fix-batch/2026-10-25-hub-td (resolutions)
+
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/notifications/notification-embed.buttons.ts:346`, `hub-posts.helpers.ts:87`, `hub-notification.service.ts:81`, `hub-proposal-notices.ts:48` — API-built hub links go through one `hubPath(id)` helper (`api/src/guilds/hub-path.ts`) → `/hubs/<id>` (this branch).
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — the hub is resolved only once dedupe leaves a recipient (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/components/hub/hub-page.tsx:266` — the recovery latch is released by a newer non-401 error; a still-401 refetch keeps Sign in (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/lib/api/resume-refresh.ts:44-47` — the batch guard is released after 15 s if a refetch never settles (this branch).
+- **resolved** 2026-10-24 feat/rok-1938 `web/src/components/analytics/attendance-trends-chart.tsx:65-67` — lines use `--color-success` / `--color-danger` / `--color-warning` (this branch).
+- **resolved** 2026-10-24 feat/rok-1943 `web/src/plugins/valheim/map/valheim-map-view.tsx:92` (status chip under the zoom column) — the chip stack in `map-status.tsx` wraps short of the zoom column below 1024px (this branch). The landscape-phone legend overlap entry stays open.
+- **resolved** 2026-10-25 feat/rok-1950 `api/src/notifications/hub-proposal-notices.ts:29` — the proposed hub name AND the proposer's display name are escaped in the staff Discord DM; in-app text unchanged (this branch).
+- `nit` `api/src/notifications/notification-embed.hub-proposal.ts:19` — the DM escaping matches names as substrings, so a name like `_` also escapes those characters in the game name (renders identically in Discord). Suggested: escape the name fields where the description is composed instead of substring-replacing the finished text.

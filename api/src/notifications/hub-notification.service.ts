@@ -1,3 +1,4 @@
+import { hubPath } from '../guilds/hub-path';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -78,7 +79,7 @@ export class HubNotificationService {
       return;
     }
     try {
-      const url = `/guilds/${input.guildId}?post=${input.postId}#posts`;
+      const url = `${hubPath(input.guildId)}?post=${input.postId}#posts`;
       const delivered = await this.sendLeaderPost(
         ids,
         { guildId: input.guildId, guildName, url, postId: input.postId },

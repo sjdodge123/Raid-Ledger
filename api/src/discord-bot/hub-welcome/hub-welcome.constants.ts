@@ -1,3 +1,4 @@
+import { hubPath } from '../../guilds/hub-path';
 import { escapeHubName } from '../services/discord-embed-event-body.helpers';
 
 /**
@@ -35,6 +36,6 @@ export const HUB_WELCOME_VALHEIM_COPY = {
 
 /** Hub page path; the claim button deep-links its Characters tab. */
 export const HUB_WELCOME_PATHS = {
-  hub: (hubId: number): string => `/hubs/${hubId}`,
+  hub: hubPath,
   charactersHash: '#characters',
 } as const;

@@ -9,7 +9,9 @@ import { AttendanceTrendsChart } from './attendance-trends-chart';
 // Mock Recharts to avoid canvas/svg complexity in jsdom
 vi.mock('recharts', () => ({
     LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
-    Line: () => null,
+    Line: ({ dataKey, stroke, name }: { dataKey: string; stroke: string; name: string }) => (
+        <span data-testid={`series-${dataKey}`} data-stroke={stroke} data-name={name} />
+    ),
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
@@ -171,4 +173,17 @@ describe('AttendanceTrendsChart — part 2', () => {
         expect(screen.getByText('Loading chart data...')).toBeInTheDocument();
     });
 
+});
+
+describe('AttendanceTrendsChart — series colours', () => {
+    beforeEach(() => {
+        server.use(http.get(`${API_BASE}/analytics/attendance`, () => HttpResponse.json(mockTrendsData)));
+    });
+    it('strokes Attended / No-Show / Excused with the theme tokens the Per-Game chart uses, never a hex', async () => {
+        renderWithProviders(<AttendanceTrendsChart />);
+        await waitFor(() => screen.getByTestId('line-chart'));
+        const strokes = ['attended', 'noShow', 'excused'].map((key) => screen.getByTestId(`series-${key}`).getAttribute('data-stroke'));
+        expect(strokes, 'success / danger / warning tokens, matching GameBreakdownChart (ROK-1938)').toEqual(['var(--color-success)', 'var(--color-danger)', 'var(--color-warning)']);
+        expect(strokes.filter((s) => s?.startsWith('#')), 'a raw hex is wrong in 14 of 15 themes').toEqual([]);
+    });
 });
