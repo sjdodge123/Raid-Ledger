@@ -238,6 +238,10 @@ export * from './valheim-server-pins.schema.js';
 // Map tab scanned-portal layer read (ROK-1946).
 export * from './valheim-server-portals.schema.js';
 
+// Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
+export * from './companion-common.schema.js';
+export * from './companion-envelope.schema.js';
+
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
 export * from './hub-welcome.schema.js';
