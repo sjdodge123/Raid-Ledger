@@ -26,6 +26,8 @@ import {
   CompanionDeviceListResponseSchema,
   CompanionDeviceRenameRequestSchema,
   CompanionDeviceSelfSchema,
+  CompanionDeviceNameSchema,
+  CompanionLinkPreviewRequestSchema,
 } from "../companion-devices.schema.js";
 
 const TOKEN = `rlcd_${"A".repeat(42)}-`;
@@ -247,6 +249,56 @@ describe("Devices API", () => {
     expect(CompanionDeviceSelfSchema.parse(self)).toEqual(self);
     expect(
       CompanionDeviceSelfSchema.safeParse({ ...self, userId: 1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("device display text (phishing surface, ROK-1955 review)", () => {
+  const hostile: Array<[string, string]> = [
+    ["a C0 control", "My\u0007PC"],
+    ["a C1 control", "My\u0085PC"],
+    ["a newline", "Raid Ledger\n(official)"],
+    ["a line separator", "My\u2028PC"],
+    ["a lone surrogate", "My\uD800PC"],
+    ["a bidi override", "My\u202EPC"],
+    ["a bidi isolate", "My\u2066PC"],
+    ["whitespace only", "   "],
+  ];
+
+  it.each(hostile)("name rejects %s", (_label, value) => {
+    expect(CompanionDeviceNameSchema.safeParse(value).success).toBe(false);
+    expect(
+      CompanionDeviceInfoSchema.safeParse({ ...info, name: value }).success,
+    ).toBe(false);
+  });
+
+  it.each(hostile)("osVersion rejects %s", (_label, value) => {
+    const parsed = CompanionDeviceInfoSchema.safeParse({
+      ...info,
+      osVersion: value,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts ordinary names, accents and emoji", () => {
+    for (const name of ["Gaming PC", "Zoë's laptop", "Rig 🎮"]) {
+      expect(CompanionDeviceNameSchema.safeParse(name).success).toBe(true);
+    }
+    const ok = { ...info, osVersion: "Windows 11 23H2" };
+    expect(CompanionDeviceInfoSchema.safeParse(ok).success).toBe(true);
+  });
+});
+
+describe("CompanionLinkPreviewRequestSchema (code in the body, not the path)", () => {
+  it("parses a typed code and rejects extra keys or a missing code", () => {
+    expect(
+      CompanionLinkPreviewRequestSchema.safeParse({ userCode: "bcdf-ghjk" })
+        .success,
+    ).toBe(true);
+    expect(CompanionLinkPreviewRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      CompanionLinkPreviewRequestSchema.safeParse({ userCode: "BCDFGHJK", x: 1 })
+        .success,
     ).toBe(false);
   });
 });

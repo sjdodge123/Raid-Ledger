@@ -49,8 +49,26 @@ const DisplayUserCodeSchema = z
   .string()
   .regex(COMPANION_USER_CODE_DISPLAY_PATTERN);
 
-/** Device display name — user-editable, trimmed, 1..64. */
-export const CompanionDeviceNameSchema = z.string().trim().min(1).max(64);
+/**
+ * Text shown to a human on the approve page / Devices list (the S-3 phishing
+ * surface): rejects C0/C1 controls (incl. line breaks), U+2028/2029, lone
+ * surrogates, bidi overrides/isolates and whitespace-only. React escapes it,
+ * so this is about spoofing, not XSS.
+ *
+ * DUPLICATE of ROK-1954's `COMPANION_DISPLAY_TEXT_RE`
+ * (`companion-common.schema.ts`, PR #1802, not on main yet) — once that
+ * lands, import it from there and delete this copy.
+ */
+export const COMPANION_DEVICE_DISPLAY_TEXT_RE =
+  /^(?!\s*$)[^\p{Cc}\p{Cs}\u2028\u2029\u202A-\u202E\u2066-\u2069]+$/u;
+
+/** Device display name — user-editable, trimmed, 1..64, display-safe. */
+export const CompanionDeviceNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(COMPANION_DEVICE_DISPLAY_TEXT_RE);
 
 export const CompanionDeviceOsSchema = z.enum([
   "windows",
@@ -65,7 +83,11 @@ export const CompanionDeviceInfoSchema = z
   .object({
     name: CompanionDeviceNameSchema,
     os: CompanionDeviceOsSchema,
-    osVersion: z.string().max(32).optional(),
+    osVersion: z
+      .string()
+      .max(32)
+      .regex(COMPANION_DEVICE_DISPLAY_TEXT_RE)
+      .optional(),
     appVersion: z.string().max(32).regex(APP_VERSION_PATTERN),
   })
   .strict();
@@ -175,6 +197,18 @@ export const CompanionLinkPreviewSchema = z
   })
   .strict();
 export type CompanionLinkPreview = z.infer<typeof CompanionLinkPreviewSchema>;
+
+/**
+ * `POST /companion/v1/devices/link/preview` body. The code rides the body,
+ * not the path, so it never lands in nginx / Cloudflare access logs. Raw
+ * typed input: the service normalises it and answers one 404 for a bad code.
+ */
+export const CompanionLinkPreviewRequestSchema = z
+  .object({ userCode: z.string().max(32) })
+  .strict();
+export type CompanionLinkPreviewRequest = z.infer<
+  typeof CompanionLinkPreviewRequestSchema
+>;
 
 /** Approve / deny; `name` lets the approver rename before approving. */
 export const CompanionLinkDecisionRequestSchema = z
