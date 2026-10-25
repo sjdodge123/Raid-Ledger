@@ -51,13 +51,13 @@ describe('hub notification types — buttons', () => {
   it('deep-links "View group" to the post when the payload carries a postId', () => {
     const btn = primaryJson('hub_leader_post', { guildId: 7, postId: 42 });
     expect(btn?.label).toBe('View group');
-    expect(btn?.url).toBe(`${CLIENT}/guilds/7?post=42#posts`);
+    expect(btn?.url).toBe(`${CLIENT}/hubs/7?post=42#posts`);
   });
 
   it('falls back to the hub for a pre-ROK-1868 leader post (no postId)', () => {
     const btn = primaryJson('hub_leader_post', { guildId: 7 });
     expect(btn?.label).toBe('View group');
-    expect(btn?.url).toBe(`${CLIENT}/guilds/7`);
+    expect(btn?.url).toBe(`${CLIENT}/hubs/7`);
   });
 
   it('gives a leader post no button without a guildId', () => {

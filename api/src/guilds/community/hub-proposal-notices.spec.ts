@@ -21,7 +21,7 @@ describe('hub proposal notices', () => {
     expect(n.payload).toMatchObject({
       outcome: 'approved',
       guildId: 7,
-      url: '/guilds/7',
+      url: '/hubs/7',
     });
   });
 

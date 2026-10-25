@@ -224,7 +224,7 @@ describe('relay (§2.5 embed + setRelay)', () => {
     expect(row.components).toEqual([
       expect.objectContaining({
         label: 'Read more',
-        url: 'https://raid.example/guilds/7?post=42#posts',
+        url: 'https://raid.example/hubs/7?post=42#posts',
       }),
     ]);
     expect(setRelay).toHaveBeenCalledWith({}, 42, {

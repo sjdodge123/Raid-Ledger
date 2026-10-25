@@ -1,4 +1,5 @@
 import type { CreateNotificationInput } from '../../notifications/notification.types';
+import { hubPath } from '../hub-path';
 
 /**
  * ROK-1870 L2b — the `hub_proposal_submitted` / `hub_proposal_reviewed`
@@ -45,7 +46,7 @@ export function approvedNotice(
       ...facts,
       outcome: 'approved',
       guildId: facts.proposalId,
-      url: `/guilds/${facts.proposalId}`,
+      url: hubPath(facts.proposalId),
     },
   };
 }
