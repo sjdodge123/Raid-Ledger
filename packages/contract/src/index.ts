@@ -241,6 +241,7 @@ export * from './valheim-server-portals.schema.js';
 // Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
 export * from './companion-common.schema.js';
 export * from './companion-envelope.schema.js';
+export * from './companion-bg3-save.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
