@@ -80,7 +80,7 @@ export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
         ? captureSecondOfHour(ctx.filename)
         : null,
     });
-    return res.outcome;
+    return res.outcome === 'gone' ? null : res.outcome;
   }
 
   /**

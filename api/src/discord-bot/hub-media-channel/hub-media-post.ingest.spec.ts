@@ -102,6 +102,37 @@ describe('HubMediaPostIngest.onEdit (D11)', () => {
   });
 });
 
+// Codex P2: the move of the message's death to the new first picture is one
+// statement under the death name lock (SQL A's sibling branch), so it runs
+// AFTER the dropped picture is a tombstone (a stale backfill can no longer
+// link to it) and BEFORE the classifiers' cleanup of the dropped ids.
+describe('HubMediaPostIngest.onEdit — first-picture transfer order', () => {
+  it('tombstones the dropped first picture, re-links the new first, then cleans up', async () => {
+    const order: string[] = [];
+    found.mockResolvedValue([row(1, 'a'), row(2, 'b')]);
+    media.ingest.mockResolvedValue({ status: 'duplicate', mediaId: 2 });
+    media.removeByProvenance.mockImplementation(
+      async (_g: number, k: string) => {
+        order.push(`tombstone ${k === key('a') ? 'a' : k}`);
+        return true;
+      },
+    );
+    classifier.afterStore.mockImplementation(
+      async (ctx: { mediaId: number }) => {
+        order.push(`relink ${ctx.mediaId}`);
+        return 'already';
+      },
+    );
+    registry.afterRemove.mockImplementation(
+      async (_h: unknown, ids: number[]) => {
+        order.push(`cleanup ${ids.join(',')}`);
+      },
+    );
+    await makeIngest().onEdit(post(['b']), HUB);
+    expect(order).toEqual(['tombstone a', 'relink 2', 'cleanup 1']);
+  });
+});
+
 describe('HubMediaPostIngest.ingestPost — tombstoned duplicates', () => {
   it('never links a death to a removed picture', async () => {
     found.mockResolvedValue([]); // id 7 exists only as a tombstone

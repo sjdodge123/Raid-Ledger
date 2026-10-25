@@ -42,6 +42,12 @@ const emptySummary = (): IngestPostSummary => ({
   unclassified: false,
 });
 
+/** A stored picture of a message, as `findMessageMedia` reads it. */
+interface MediaRow {
+  id: number;
+  provenanceKey: string;
+}
+
 /** One post's ingest inputs, shared by each of its images. */
 interface PostJob {
   post: PostLike;
@@ -111,6 +117,12 @@ export class HubMediaPostIngest {
    * stored kind — never re-classified — and tombstone images now gone,
    * telling the classifiers exactly as a delete does. If the first picture
    * (the one a death links to, D6) was dropped, the new first one re-links.
+   *
+   * Codex P2 (edit vs backfill): the dropped rows are tombstoned FIRST, so a
+   * stale backfill can no longer link to them; then the new first picture's
+   * SQL A moves the message's death over in one statement under the death
+   * name lock (the same lock a backfill's correlation takes); only then do
+   * the classifiers clean up whatever is still linked to the dropped ids.
    */
   async onEdit(post: PostLike, hub: HubMediaHubRef): Promise<void> {
     const existing = await findMessageMedia(this.db, hub.guildId, post.id);
@@ -132,13 +144,15 @@ export class HubMediaPostIngest {
     const ids = await this.reingest(job, images);
     const current = new Set(images.map((i) => this.key(post, i)));
     const dropped = existing.filter((row) => !current.has(row.provenanceKey));
-    await this.remove(hub, dropped);
-    if (!dropped.includes(first) || images[0] === undefined) return;
-    await this.relinkFirst(
-      { ...job, classified: { ...fresh, classification } },
-      images[0],
-      ids[0] ?? null,
-    );
+    await this.tombstone(hub, dropped);
+    if (dropped.includes(first) && images[0] !== undefined) {
+      await this.relinkFirst(
+        { ...job, classified: { ...fresh, classification } },
+        images[0],
+        ids[0] ?? null,
+      );
+    }
+    await this.notifyRemoved(hub, dropped);
   }
 
   /** An edit's images, in order; each one's media id (null if rejected). */
@@ -178,14 +192,26 @@ export class HubMediaPostIngest {
   }
 
   /** Tombstone these rows, then the classifiers' D11 rule (deaths). */
-  private async remove(
+  private async remove(hub: HubMediaHubRef, rows: readonly MediaRow[]) {
+    await this.tombstone(hub, rows);
+    await this.notifyRemoved(hub, rows);
+  }
+
+  private async tombstone(
     hub: HubMediaHubRef,
-    rows: readonly { id: number; provenanceKey: string }[],
+    rows: readonly MediaRow[],
   ): Promise<void> {
-    if (rows.length === 0) return;
     for (const row of rows) {
       await this.media.removeByProvenance(hub.guildId, row.provenanceKey);
     }
+  }
+
+  /** The classifiers' D11 rule for pictures that are now tombstones. */
+  private async notifyRemoved(
+    hub: HubMediaHubRef,
+    rows: readonly MediaRow[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
     await this.classifiers.afterRemove(
       hub,
       rows.map((r) => r.id),
