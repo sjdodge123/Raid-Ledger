@@ -1,0 +1,36 @@
+{
+  "envelopeVersion": 1,
+  "contract": "bg3-save",
+  "contractVersion": 1,
+  "capturedAt": "2026-10-20T08:30:02Z",
+  "appVersion": "0.1.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "saveName": "QuickSave_2",
+    "savedAt": "2026-10-20T08:30:00Z",
+    "campaignKey": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "campaignKeySource": "game-id",
+    "gameVersion": "4.1.1.7631656",
+    "platform": "Steam",
+    "currentLevel": "WLD_Main_A",
+    "difficulty": "DifficultyHard",
+    "ruleset": "RulesetLarian",
+    "party": [
+      {
+        "origin": "Generic",
+        "race": "Human",
+        "level": 2,
+        "xpLevel": 120,
+        "xpTotal": 420,
+        "classes": [
+          {
+            "main": "Cleric",
+            "sub": null
+          }
+        ],
+        "isSummon": false
+      }
+    ],
+    "thumbnail": null
+  }
+}
