@@ -34,7 +34,8 @@ const isValheimServer = (hub: HubMediaHubRef): hub is ValheimServerHub =>
  * ROK-1941 — the screenshot mod's posts on a Valheim server hub: `death` /
  * `screenshot` by wording (D5), the first death picture correlated to a
  * console death (L1 SQL A), and a deleted post's inferred death removed (D11).
- * ROK-1969: every step is a no-op while the Valheim plugin is inactive.
+ * ROK-1969: classifying and linking are no-ops while the Valheim plugin is
+ * inactive; removal cleanup is not (see `afterRemove`).
  */
 @Injectable()
 export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
@@ -82,12 +83,17 @@ export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
     return res.outcome;
   }
 
-  /** D11: the post was an inferred death's only evidence; log/mod rows stay. */
+  /**
+   * D11: the post was an inferred death's only evidence; log/mod rows stay.
+   * Runs even while the plugin is off: it only deletes `discord` rows already
+   * linked to these pictures (cleanup, not classification), so a post deleted
+   * during an inactive window cannot leave an evidence-less death behind.
+   */
   async afterRemove(
     hub: HubMediaHubRef,
     mediaIds: readonly number[],
   ): Promise<void> {
-    if (!this.owns(hub) || mediaIds.length === 0) return;
+    if (!isValheimServer(hub) || mediaIds.length === 0) return;
     await this.db
       .delete(valheimPlayerDeaths)
       .where(

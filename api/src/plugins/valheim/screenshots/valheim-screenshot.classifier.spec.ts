@@ -102,7 +102,7 @@ describe('ValheimScreenshotClassifier', () => {
 });
 
 describe('ValheimScreenshotClassifier with the Valheim plugin off (ROK-1969)', () => {
-  it('claims nothing, links nothing and deletes nothing', async () => {
+  it('claims nothing and links nothing', async () => {
     const classifier = await build();
     plugins.isActive.mockReturnValue(false);
     const death = text('Bjorn met their demise!');
@@ -120,9 +120,23 @@ describe('ValheimScreenshotClassifier with the Valheim plugin off (ROK-1969)', (
     };
     expect(classifier.classify(death, HUB)).toBeNull();
     expect(await classifier.afterStore(ctx)).toBeNull();
-    await classifier.afterRemove(HUB, [42]);
     expect(links.linkOrInferDeath).not.toHaveBeenCalled();
-    expect(db.delete).not.toHaveBeenCalled();
     expect(plugins.isActive).toHaveBeenCalledWith('valheim');
+  });
+
+  it('still deletes the inferred death of a removed picture (cleanup, not classifying)', async () => {
+    const classifier = await build();
+    plugins.isActive.mockReturnValue(false);
+    const where = jest.fn().mockResolvedValue(undefined);
+    db.delete.mockReturnValue({ where });
+    await classifier.afterRemove(HUB, [42]);
+    expect(db.delete).toHaveBeenCalledTimes(1);
+    expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes nothing for a hub that is not a Valheim server', async () => {
+    const classifier = await build();
+    await classifier.afterRemove({ ...HUB, gameSlug: 'other' }, [42]);
+    expect(db.delete).not.toHaveBeenCalled();
   });
 });
