@@ -6,7 +6,7 @@
  * gets "Reset to server name". Shape copied from the community `BlurbSection`.
  */
 import { useState, type JSX } from 'react';
-import { HUB_NAME_MAX, HUB_NAME_MIN, type GuildPage } from '@raid-ledger/contract';
+import { HUB_NAME_MAX, HubNameSchema, type GuildPage } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { Button } from '../../ui/button';
 import { Field } from '../../ui/field';
@@ -26,7 +26,7 @@ function HubNameForm({ page }: { page: GuildPage }): JSX.Element {
     const rename = useHubRename(guild.id);
     const [draft, setDraft] = useState(guild.name);
     const next = draft.trim();
-    const canSave = next !== guild.name && next.length >= HUB_NAME_MIN;
+    const canSave = next !== guild.name && HubNameSchema.safeParse(next).success;
     const canReset = guild.kind === 'game_server' && guild.nameOverridden === true;
     return (
         <SettingsSection title="Hub name" testId="hub-name-section">

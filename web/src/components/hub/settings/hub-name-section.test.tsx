@@ -80,6 +80,16 @@ describe('HubNameSection (ROK-1950)', () => {
         expect(toasts.success).toHaveBeenCalledWith('Hub renamed');
     });
 
+    it('keeps Save disabled for a name the server schema rejects (no letter or digit)', async () => {
+        const user = userEvent.setup();
+        renderSection(COMMUNITY);
+        const input = screen.getByLabelText('Hub name');
+        await user.clear(input);
+        await user.type(input, '!!!');
+        expect(screen.getByRole('button', { name: 'Save name' }), 'punctuation only must not be saveable').toBeDisabled();
+        expect(calls).toEqual([]);
+    });
+
     it('a server hub with a Raid Ledger name offers "Reset to server name", which sends { name: null }', async () => {
         const user = userEvent.setup();
         renderSection(serverPage(true));
