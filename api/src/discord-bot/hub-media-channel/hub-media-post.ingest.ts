@@ -109,7 +109,8 @@ export class HubMediaPostIngest {
   /**
    * D11 edit: re-ingest the current images (idempotent) with the post's
    * stored kind — never re-classified — and tombstone images now gone,
-   * telling the classifiers exactly as a delete does.
+   * telling the classifiers exactly as a delete does. If the first picture
+   * (the one a death links to, D6) was dropped, the new first one re-links.
    */
   async onEdit(post: PostLike, hub: HubMediaHubRef): Promise<void> {
     const existing = await findMessageMedia(this.db, hub.guildId, post.id);
@@ -118,24 +119,47 @@ export class HubMediaPostIngest {
       await this.ingestPost(post, hub);
       return;
     }
+    const fresh = this.classifiers.classify(post, hub);
     const kept = { kind: isKind(first.kind) ? first.kind : 'image' };
-    const classified: HubMediaClassified = {
-      classification: {
-        ...this.classifiers.classify(post, hub).classification,
-        ...kept,
-      },
-      classifier: null,
-    };
+    const classification = { ...fresh.classification, ...kept };
     const images = postImages(post);
-    const job: PostJob = { post, hub, classified, live: new Set() };
+    const job: PostJob = {
+      post,
+      hub,
+      classified: { classification, classifier: null },
+      live: new Set(),
+    };
+    const ids: (number | null)[] = [];
     for (const [index, image] of images.entries()) {
-      await this.ingestImage(job, image, index, emptySummary());
+      ids.push(await this.ingestImage(job, image, index, emptySummary()));
     }
     const current = new Set(images.map((i) => this.key(post, i)));
-    await this.remove(
-      hub,
-      existing.filter((row) => !current.has(row.provenanceKey)),
+    const dropped = existing.filter((row) => !current.has(row.provenanceKey));
+    await this.remove(hub, dropped);
+    if (!dropped.includes(first) || images[0] === undefined) return;
+    await this.relinkFirst(
+      { ...job, classified: { ...fresh, classification } },
+      images[0],
+      ids[0] ?? null,
     );
+  }
+
+  /** D11 + D6: the edit's new first picture takes over the death link. */
+  private async relinkFirst(
+    job: PostJob,
+    image: PostImage,
+    mediaId: number | null,
+  ): Promise<void> {
+    const { classifier, classification } = job.classified;
+    if (classifier === null || mediaId === null) return;
+    await classifier.afterStore({
+      hub: job.hub,
+      post: job.post,
+      classification,
+      mediaId,
+      index: 0,
+      filename: image.filename,
+    });
   }
 
   /** D11 delete: tombstone every stored picture, then tell the classifiers. */
@@ -185,7 +209,7 @@ export class HubMediaPostIngest {
     image: PostImage,
     index: number,
     summary: IngestPostSummary,
-  ): Promise<void> {
+  ): Promise<number | null> {
     const { post, hub, classified } = job;
     summary.images += 1;
     const res = await this.media.ingest(
@@ -194,11 +218,13 @@ export class HubMediaPostIngest {
     if (res.status === 'rejected') {
       summary.failed += 1;
       this.logger.warn(`media post ${post.id} image ${index}: ${res.reason}`);
-      return;
+      return null;
     }
     summary[res.status === 'stored' ? 'stored' : 'duplicates'] += 1;
-    if (res.mediaId === null || classified.classifier === null) return;
-    if (res.status === 'duplicate' && !job.live.has(res.mediaId)) return;
+    if (res.mediaId === null || classified.classifier === null) {
+      return res.mediaId;
+    }
+    if (res.status === 'duplicate' && !job.live.has(res.mediaId)) return null;
     const outcome = await classified.classifier.afterStore({
       hub,
       post,
@@ -209,6 +235,7 @@ export class HubMediaPostIngest {
     });
     if (outcome === 'linked') summary.deathsLinked += 1;
     if (outcome === 'inferred') summary.deathsInferred += 1;
+    return res.mediaId;
   }
 
   private toInput(

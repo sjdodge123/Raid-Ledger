@@ -86,6 +86,19 @@ describe('HubMediaPostIngest.onEdit (D11)', () => {
     await makeIngest().onEdit(post(['a']), HUB);
     expect(media.removeByProvenance).not.toHaveBeenCalled();
     expect(registry.afterRemove).not.toHaveBeenCalled();
+    expect(classifier.afterStore).not.toHaveBeenCalled();
+  });
+
+  it('re-links the new first picture when the edit swapped the first one', async () => {
+    found.mockResolvedValue([row(1, 'a'), row(2, 'b')]);
+    media.ingest
+      .mockResolvedValueOnce({ status: 'stored', mediaId: 3 })
+      .mockResolvedValueOnce({ status: 'duplicate', mediaId: 2 });
+    await makeIngest().onEdit(post(['c', 'b']), HUB);
+    expect(registry.afterRemove.mock.calls).toEqual([[HUB, [1]]]);
+    expect(classifier.afterStore.mock.calls).toEqual([
+      [expect.objectContaining({ mediaId: 3, index: 0, filename: 'c.png' })],
+    ]);
   });
 });
 

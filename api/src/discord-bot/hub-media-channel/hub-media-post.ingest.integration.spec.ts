@@ -307,7 +307,7 @@ describe('edits and deletes (D11)', () => {
 });
 
 describe('removed pictures never carry a death (D11)', () => {
-  it('an edit that drops the linked first picture removes its inferred discord death', async () => {
+  it('an edit that drops the linked first picture moves its inferred death to the new first picture', async () => {
     const post = gatewayPost({ files: ['a.png', 'b.png'] });
     await listener().onCreate(post);
     const [first] = nonEmpty(await mediaRows(), 'media');
@@ -317,11 +317,12 @@ describe('removed pictures never carry a death (D11)', () => {
     const rest = [...post.attachments.values()].slice(1);
     const edited = { ...post, attachments: { values: () => rest } };
     await ingest().onEdit(toPostLike(edited), await hubRef());
-    expect((await mediaRows()).map((m) => m.removedAt === null)).toEqual([
-      false,
-      true,
+    const after = await mediaRows();
+    expect(after.map((m) => m.removedAt === null)).toEqual([false, true]);
+    const [, second] = after;
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['discord', second?.id],
     ]);
-    expect(await deathRows()).toEqual([]);
   });
 
   it('a re-delivered post whose picture is a tombstone links no death to it', async () => {
