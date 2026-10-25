@@ -28,11 +28,16 @@ app may rely on.
   `contract`.
 - `Authorization: Bearer rlcd_…` — a per-user, ingest-only device token (C2).
   It is never logged.
-- The body MAY be sent with `Content-Encoding: gzip`. The size cap is the
-  registry entry's `maxBytes` and applies to the **decoded** JSON. The server
-  inflates with that cap as its output limit and rejects a larger body
-  (`payload_too_large`) **before** any JSON parse, so a gzip body can never
-  expand past it.
+- The body MAY be sent with `Content-Encoding: gzip`. Size caps apply to the
+  **decoded** JSON, in two steps, because the per-contract cap is keyed by
+  `contractVersion`, which is only known once the body is parsed:
+  1. **Before any JSON parse**, the reader inflates with the global ceiling
+     `COMPANION_MESSAGE_MAX_BYTES` (262 144) as its output limit and rejects
+     anything larger (`payload_too_large`), so a gzip body can never expand
+     past it. Every registry `maxBytes` is ≤ this ceiling (registry spec R5).
+  2. **After the envelope parses and the registry lookup succeeds** (§3), the
+     decoded byte length must be ≤ that entry's `maxBytes`
+     (`payload_too_large`) before the contract schema runs.
 - Blobs (images) are never inside the JSON. A payload references a blob by
   `{ sha256, byteLength, contentType, width, height }` and the app uploads the
   bytes separately (`PUT /companion/v1/blobs/:sha256`, C3). The message and its
@@ -69,8 +74,12 @@ The envelope is strict: any other top-level key rejects the message
    | `{ kind: 'retired', current }` | The version is listed with status `retired`. | `retired_contract_version` |
 
    `current` is the highest version with status `current`, else the highest
-   listed version; the app SHOULD tell the user to update to it.
-3. The server parses the **whole body** (envelope included) with `spec.schema`,
+   listed version; the app SHOULD tell the user to update to it. (Edge case:
+   if every version is `retired`, `current` names the highest retired one; the
+   app MUST then treat the contract as unsupported, not offer an update.)
+3. The decoded body length is checked against `spec.maxBytes` (§1, step 2).
+   A larger body is `payload_too_large`.
+4. The server parses the **whole body** (envelope included) with `spec.schema`,
    the contract's full-message schema, which narrows `contract` and
    `contractVersion` to literals and makes `payload` strict. A failure is
    `invalid_payload`.
@@ -79,11 +88,14 @@ The envelope is strict: any other top-level key rejects the message
 
 A success body is `{ "status": "accepted" | "stale" }` (`CompanionIngestAckSchema`,
 strict). `stale` means the message is older than the snapshot already stored
-for the same key; it is not an error and the app MUST NOT retry it.
+for the same key; it is not an error and the app MUST NOT retry it. The ack
+`status` set is server→client, so a new value is **breaking** (envelope v2).
 
 An error carries one `code` (`CompanionIngestErrorCodeSchema`). **The code
-strings are wire** — the app pins them, and a new code is additive. The HTTP
-status is the endpoint's call (C3); the suggested mapping is below.
+strings are wire** — the app pins them. A new code is additive **only because**
+the app MUST treat an unknown `code` as a generic terminal 4xx (surface it, do
+not retry). The HTTP status is the endpoint's call (C3); the suggested mapping
+is below.
 
 | Code | Cause | Suggested HTTP |
 |---|---|---|
@@ -92,7 +104,7 @@ status is the endpoint's call (C3); the suggested mapping is below.
 | `unknown_contract_version` | Known contract, version not listed | 404 |
 | `retired_contract_version` | Version listed as `retired` | 409 |
 | `invalid_payload` | The contract's message schema fails (extra key, type, range, refinement) | 400 |
-| `payload_too_large` | Decoded body larger than the entry's `maxBytes` (enforced by the reader, not Zod) | 413 |
+| `payload_too_large` | Decoded body larger than `COMPANION_MESSAGE_MAX_BYTES` (before parse) or the entry's `maxBytes` (after lookup); enforced by the reader, not Zod | 413 |
 | `captured_at_in_future` | `capturedAt` more than 5 min past the server clock (§5) | 400 |
 | `unauthorized` | Missing, unknown or revoked device token | 401 |
 | `rate_limited` | Per-token rate limit hit | 429 |
@@ -135,9 +147,11 @@ node packages/contract/scripts/gen-companion-schemas.mjs
 - The envelope version is `envelopeVersion`; each contract versions
   independently through `contractVersion`.
 - **Stays v1 (additive):** a new **optional** envelope field the server can
-  ignore (server ships first), or a new error code.
+  ignore (server ships first), or a new error code (the app treats an
+  unknown code as a generic terminal 4xx, §4).
 - **Requires v2 (breaking):** renaming or removing a field, making an optional
-  field required, changing a type or format, or changing the transport. v2
+  field required, changing a type or format, a new ack `status` value, or
+  changing the transport. v2
   lives in `companion/envelope/v2/` with its own schema, fixtures and
   changelog; `v1/` is frozen from then on.
 - **Transition:** the server accepts the current **and** the previous envelope

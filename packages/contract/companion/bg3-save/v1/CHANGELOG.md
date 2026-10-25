@@ -18,7 +18,10 @@ entry.
 - Reference normaliser `normaliseBg3SaveInfo` and the loose raw
   `Bg3SaveInfoRawSchema`; `Position` and `Subregion` are dropped and never
   sent.
-- `campaignKey` is a SHA-256 of the save-folder name, never the raw name. It
+- `saveName` is display-safe text (no controls, lone surrogates, line breaks,
+  bidi overrides or whitespace-only; `COMPANION_DISPLAY_TEXT_RE`).
+- `campaignKey` is an unsalted SHA-256 of the save-folder name — pseudonymous,
+  not anonymous — never the raw name. It
   fragments campaigns across saves; grouping by `meta.lsf` GameID is
   ROK-1967 (`campaignKeySource: "game-id"`).
 - Fixtures: anonymised `SaveInfo.json` from the operator's save plus synthetic

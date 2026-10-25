@@ -15,5 +15,7 @@ Newest first. Every entry states **additive** or **breaking** (see
   (`invalid_envelope`, `unknown_contract`, `unknown_contract_version`,
   `retired_contract_version`, `invalid_payload`, `payload_too_large`,
   `captured_at_in_future`, `unauthorized`, `rate_limited`).
+- Global pre-parse body ceiling `COMPANION_MESSAGE_MAX_BYTES` (262 144), then
+  the registry entry's `maxBytes` after the envelope parses.
 - `envelopeVersion` is an addition to the spike's six-key envelope (spec Q5).
 - First registry entry: `bg3-save` v1 (`../../bg3-save/v1/`).

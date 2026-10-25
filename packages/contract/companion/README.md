@@ -50,8 +50,11 @@ fixture and fails CI when a `schema.json` drifts from its Zod source.
    any app or collector may emit it. A client that emits a field the deployed
    server does not know is rejected.
 3. **Additive vs breaking.** *Additive* (stays `vN`): a new optional field the
-   server can ignore, a new value in a closed enum, a new ingest error code, a
-   new registry contract, or relaxing a refinement. *Breaking* (new `vN+1/`
+   server can ignore, a new value in a closed **client→server** enum, a new
+   ingest error code (the app MUST treat an unknown code as a generic terminal
+   4xx), a new registry contract, or relaxing a refinement. A new value in a
+   **server→client** enum the app pins (for example the ack `status`) is
+   breaking. *Breaking* (new `vN+1/`
    folder): renaming or removing a field, making an optional field required,
    changing a type, unit, range or enum spelling, tightening a refinement, or
    changing the transport. During a breaking transition the server accepts the

@@ -25,7 +25,8 @@ this file is the bug.
 
 Everything in the envelope contract ([`../../envelope/v1/CONTRACT.md`](../../envelope/v1/CONTRACT.md))
 applies: `POST /companion/v1/messages/bg3-save`, device bearer token, gzip
-allowed, decoded-body cap enforced before parse, two-stage parse, ack and
+allowed, a global decoded-body ceiling before parse and this entry's
+`maxBytes` after the envelope parses, two-stage parse, ack and
 error codes, 5-minute clock rule. Registry entry: `maxBytes: 65_536`,
 `blobSlots: ['thumbnail']`, `status: 'current'`.
 
@@ -41,7 +42,7 @@ change. Every field is required; nullable fields send `null`, never omit.
 
 | Field | Type | Source | Notes |
 |---|---|---|---|
-| `saveName` | string, 1–128 chars | `"Save Name"` | Shown in the local preview before the first upload (spec Q2). |
+| `saveName` | display-safe string, 1–128 UTF-16 units (`COMPANION_DISPLAY_TEXT_RE`: no C0/C1 controls or line breaks, no lone surrogates, no U+2028/2029, no bidi embeddings/overrides/isolates U+202A–202E / U+2066–2069, not whitespace-only) | `"Save Name"` | User-authored free text; shown in the local preview before the first upload (spec Q2). A name the schema rejects makes the whole payload invalid — collectors MUST skip and report that save. |
 | `savedAt` | ISO-8601 UTC `Z`, ≤ 24 chars | collector: `.lsv` file mtime | MUST NOT be after the envelope's `capturedAt`. |
 | `campaignKey` | lowercase hex, `^[0-9a-f]{64}$` | collector (§3.3) | SHA-256 of the save-folder name (or GameID). **Never the raw name.** |
 | `campaignKeySource` | `"save-folder"` \| `"game-id"` | collector | What `campaignKey` was hashed from (§3.3). |
@@ -110,6 +111,7 @@ input, as pinned by the golden pairs in §8.
 | `Classes[j].Main` / `.Sub` | `classes[j].main` / `.sub` | `Sub` that is `""` or absent ⇒ `null` |
 | `Classes` absent | `classes: []`, `isSummon: true` | summon rule (verified on one summon; unverified for wildshapes and hirelings) |
 | `Classes` present | `isSummon: false` | |
+| `Classes` present but empty (`[]`) | `classes: []`, `isSummon: false` | **invalid** (refinement 3, §5). Collectors MUST skip that save and report it locally; a later reading of `[]` as a summon is a breaking change. |
 | `Position`, `Subregion`, any other key | — | **dropped**, never sent |
 
 Output key order (for byte-stable fixtures): `saveName, savedAt, campaignKey,
@@ -119,6 +121,9 @@ isSummon`. Key order is not significant to the schema.
 
 ### 3.3 Campaign key
 
+- `campaignKey` is a **pseudonymous** grouping key, not an anonymiser: it
+  is a plain, unsalted SHA-256, so a low-entropy folder name can be recovered
+  by hashing candidate names.
 - `campaignKey` MUST be the lowercase hex SHA-256 of the save-folder name
   (`campaignKeySource: "save-folder"`) or, once ROK-1967 reads `meta.lsf`, of
   the save's GameID (`campaignKeySource: "game-id"`). The collector MUST hash
@@ -142,7 +147,10 @@ Only the fields in §2 plus the thumbnail blob leave the machine. The collector
 MUST NEVER send: the raw `.lsv`, `Globals.lsf`, `StorySave.bin`, `meta.lsf`
 contents other than a hashed GameID, `Position` (world coordinates), file
 paths, the raw save-folder name, the OS username or a hardware id. The sample
-`SaveInfo.json` holds no names or account ids. Upload is opt-in per game, with
+`SaveInfo.json` holds no names or account ids. Two sent fields still carry
+user-linked data: `saveName` is **user-authored free text** that may contain
+personal text (shown in the local preview before upload), and `campaignKey` is
+**pseudonymous, not anonymous** (an unsalted hash of the folder name, §3.3). Upload is opt-in per game, with
 a local preview before the first upload and on every contract bump (spike §5).
 
 ## 5. Strict keys and refinements
@@ -169,8 +177,10 @@ are enforced by the Zod schema but **cannot be expressed in `schema.json`**
 | `BG3_SAVE_NAME_MAX_CHARS` | 128 | `saveName` |
 
 The body cap is ≥ the largest schema-valid message (every array full, every
-string at max length; ≈ 33 KB, ids are ASCII so no 6-byte JSON escapes), so the
-array and string caps bind first.
+string at max length; ≈ 33 KB: engine ids are ASCII, and `saveName` adds
+< 1 KB in the worst case), so the array and string caps bind first. The reader
+checks this cap after the envelope parses; the global pre-parse ceiling is
+`COMPANION_MESSAGE_MAX_BYTES` (envelope `CONTRACT.md` §1).
 `src/__tests__/companion-bg3-save-largest-message.spec.ts` builds that message
 and fails CI if it stops fitting — recompute the cap when an array or string
 cap grows.

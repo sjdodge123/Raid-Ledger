@@ -20,7 +20,7 @@ export type CompanionContractStatus = 'current' | 'accepted' | 'retired';
 export interface CompanionContractVersionSpec {
     /** Full-message schema (envelope shape with literals + strict payload). */
     readonly schema: z.ZodType;
-    /** Decoded JSON body cap, enforced by the reader before Zod. */
+    /** Decoded JSON body cap, checked by the reader after the envelope parses (the pre-parse ceiling is `COMPANION_MESSAGE_MAX_BYTES`). */
     readonly maxBytes: number;
     readonly blobSlots: readonly CompanionBlobSlot[];
     readonly status: CompanionContractStatus;
@@ -53,7 +53,7 @@ function ownEntry<T>(table: Readonly<Record<string | number, T>>, key: string): 
     return Object.entries(table).find(([k]) => k === key)?.[1];
 }
 
-/** Highest `current` version, else the highest version of any status. */
+/** Highest `current` version, else the highest version of any status (all-retired → the highest retired one). */
 function currentVersion(versions: Readonly<Record<number, CompanionContractVersionSpec>>): number {
     const entries = Object.entries(versions).map(([k, spec]) => ({ version: Number(k), spec }));
     const current = entries.filter((e) => e.spec.status === 'current');
