@@ -58,6 +58,7 @@ import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { ValheimDeathsModule } from './armory/valheim-deaths.module';
+import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -79,6 +80,8 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     CronJobModule,
     // ROK-1930: the death sink the Pelican presence supervisor injects.
     ValheimDeathsModule,
+    // ROK-1941: the screenshot mod's classifier on the hub media port.
+    ValheimScreenshotsModule,
     // ROK-1930 L2: GuildAccessService for the Deaths widget's D6 check.
     GuildsCoreModule,
     forwardRef(() => DiscordBotModule),
