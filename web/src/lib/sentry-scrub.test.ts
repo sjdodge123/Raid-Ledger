@@ -82,5 +82,6 @@ describe('ROK-1955: scrubTokenFromUrl — companion device secrets', () => {
     it('keeps the poll and decision paths readable', () => {
         expect(scrubTokenFromUrl('/companion/v1/devices/link/poll')).toBe('/companion/v1/devices/link/poll');
         expect(scrubTokenFromUrl('/companion/v1/devices/link/decision')).toBe('/companion/v1/devices/link/decision');
+        expect(scrubTokenFromUrl('/companion/v1/devices/link/preview')).toBe('/companion/v1/devices/link/preview');
     });
 });

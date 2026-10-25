@@ -1,10 +1,9 @@
 import {
   Body,
   Controller,
-  Get,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
-  Param,
   Post,
   Req,
   Res,
@@ -62,26 +61,36 @@ export class CompanionDeviceLinkController {
     return this.polls.poll(body, req.ip, noStore(res));
   }
 
+  /**
+   * Approve / deny. An impersonation session is refused (403): approving
+   * would mint a credential for the target that outlives the impersonation.
+   */
   @Post('decision')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
-  decide(
+  async decide(
     @Body() body: unknown,
     @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<CompanionLinkDecisionResult> {
+    noStore(res);
+    if (req.user.impersonatedBy) {
+      throw new ForbiddenException('Cannot link a device while impersonating');
+    }
     const caller = { userId: req.user.id, ip: req.ip };
-    return this.links.decide(caller, body, noStore(res));
+    return this.links.decide(caller, body, res);
   }
 
-  @Get(':userCode')
-  @UseGuards(AuthGuard('jwt'))
+  /** Preview a pending link. The code is in the body, never the URL path. */
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   preview(
-    @Param('userCode') userCode: string,
+    @Body() body: unknown,
     @Req() req: AuthenticatedExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<CompanionLinkPreview> {
     const caller = { userId: req.user.id, ip: req.ip };
-    return this.links.preview(caller, userCode, noStore(res));
+    return this.links.preview(caller, body, noStore(res));
   }
 }

@@ -33,10 +33,10 @@ const PATH_SECRET =
 // pasted into free text, an issue-response body).
 const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
 // ROK-1955: a companion device token, and the device-link user code that
-// rides the preview PATH (`poll` / `decision` are route names, kept).
+// rides the preview PATH (`poll` / `decision` / `preview` are route names, kept).
 const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
 const COMPANION_LINK_PATH =
-  /(\/companion\/v1\/devices\/link\/)(?!(?:poll|decision)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
+  /(\/companion\/v1\/devices\/link\/)(?!(?:poll|decision|preview)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
 // every Calendar v3 call; `primary` names no one and stays for triage.
 const CALENDAR_PATH =

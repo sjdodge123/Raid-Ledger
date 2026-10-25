@@ -54,7 +54,7 @@ const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
  * and stay readable. (`/link?code=` is a URL param — `sentry-scrub-secrets`.)
  */
 const COMPANION_LINK_PATH =
-    /(\/(?:api\/)?companion\/v1\/devices\/link\/)(?!(?:poll|decision)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
+    /(\/(?:api\/)?companion\/v1\/devices\/link\/)(?!(?:poll|decision|preview)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
 
 const FILTERED = '[Filtered]';
 

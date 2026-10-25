@@ -74,7 +74,7 @@ export const decide = (
     .send({ userCode, decision });
 
 export const preview = (testApp: TestApp, token: string, userCode: string) =>
-  testApp.request.get(`${LINK}/${userCode}`).set(bearer(token));
+  testApp.request.post(`${LINK}/preview`).set(bearer(token)).send({ userCode });
 
 /** The link row for a device code (looked up by its hash). */
 export async function linkRow(testApp: TestApp, deviceCode: string) {

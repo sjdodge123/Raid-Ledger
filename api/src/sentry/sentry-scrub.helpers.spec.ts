@@ -287,6 +287,9 @@ describe('ROK-1955 companion device secrets', () => {
     expect(scrubString('POST /companion/v1/devices/link/poll')).toBe(
       'POST /companion/v1/devices/link/poll',
     );
+    expect(scrubString('POST /companion/v1/devices/link/preview')).toBe(
+      'POST /companion/v1/devices/link/preview',
+    );
     expect(scrubString('POST /companion/v1/devices/link/decision')).toBe(
       'POST /companion/v1/devices/link/decision',
     );

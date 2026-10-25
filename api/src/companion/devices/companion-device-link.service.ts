@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   CompanionLinkDecisionRequestSchema,
+  CompanionLinkPreviewRequestSchema,
   CompanionLinkStartRequestSchema,
   CompanionLinkStartResponseSchema,
   type CompanionDeviceInfo,
@@ -141,12 +142,15 @@ export class CompanionDeviceLinkService {
     throw new InternalServerErrorException('Could not allocate a link code');
   }
 
-  /** Preview a pending link (JWT). No state change. */
+  /** Preview a pending link (JWT). No state change. 400 on a bad body. */
   async preview(
     caller: CodeCaller,
-    rawCode: string,
+    body: unknown,
     res: HeaderSink,
   ): Promise<CompanionLinkPreview> {
+    const parsed = CompanionLinkPreviewRequestSchema.safeParse(body);
+    if (!parsed.success) handleValidationError(parsed.error);
+    const rawCode = parsed.data.userCode;
     return this.withCodeBudget(caller, res, async () => {
       const code = parseUserCode(rawCode);
       if (code === null) throw codeNotFound();
