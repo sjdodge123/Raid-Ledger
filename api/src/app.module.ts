@@ -63,6 +63,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 import { HubMediaModule } from './hub-media/hub-media.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
+import { CompanionModule } from './companion/companion.module';
 import { API_ENV_FILE } from './sentry/telemetry-policy';
 
 @Module({
@@ -129,6 +130,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     GamesLookupModule,
     CalendarSyncModule,
     HubMediaModule,
+    CompanionModule,
   ],
   controllers: [AppController],
   providers: [
