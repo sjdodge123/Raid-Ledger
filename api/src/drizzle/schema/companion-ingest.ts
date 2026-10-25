@@ -114,3 +114,25 @@ export const companionBlobRefs = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.sha256, t.contract] })],
 );
+
+/**
+ * ROK-1956 Codex P1: bytes held for in-flight companion blob uploads. The
+ * global disk cap counts `sum(companion_blobs.byte_length)` plus every live
+ * row here, read and written under ONE global advisory lock, so concurrent
+ * and chunked uploads cannot overshoot it. A row lives for one upload
+ * (released in a `finally`); rows a crash leaks expire by `created_at`.
+ */
+export const companionBlobReservations = pgTable(
+  'companion_blob_reservations',
+  {
+    id: serial('id').primaryKey(),
+    bytes: integer('bytes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('companion_blob_reservations_created_at_idx').on(t.createdAt),
+    check('companion_blob_reservations_bytes_chk', sql`${t.bytes} > 0`),
+  ],
+);
