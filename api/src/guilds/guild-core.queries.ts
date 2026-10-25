@@ -95,6 +95,10 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
     faction: row.faction,
     memberCount: row.memberCount,
     lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,
+    // ROK-1950 D8: only server hubs have a source name to override.
+    ...(row.kind === 'game_server'
+      ? { nameOverridden: row.nameOverridden }
+      : {}),
   };
 }
 
