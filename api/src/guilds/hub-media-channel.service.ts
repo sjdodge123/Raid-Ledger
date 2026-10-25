@@ -32,8 +32,7 @@ export interface HubMediaChannelState {
 
 export const NOT_GAME_SERVER_MESSAGE =
   'Only game server hubs have a pictures channel';
-export const CHANNEL_TAKEN_MESSAGE =
-  'That channel already feeds another hub';
+export const CHANNEL_TAKEN_MESSAGE = 'That channel already feeds another hub';
 
 /** ROK-1941 D1/D2 — a hub's Leader-set Discord media channel. */
 @Injectable()

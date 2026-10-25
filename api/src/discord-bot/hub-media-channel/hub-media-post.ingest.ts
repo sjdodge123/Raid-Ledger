@@ -12,7 +12,11 @@ import {
 import { HubMediaService } from '../../hub-media/hub-media.service';
 import { discordProvenanceKey } from '../../hub-media/hub-media.types';
 import { findMessageMedia } from './hub-media-channel.queries';
-import { postImages, type PostImage, type PostLike } from './hub-media-post.images';
+import {
+  postImages,
+  type PostImage,
+  type PostLike,
+} from './hub-media-post.images';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -86,7 +90,10 @@ export class HubMediaPostIngest {
     }
     const kept = { kind: isKind(first.kind) ? first.kind : 'image' };
     const classified: HubMediaClassified = {
-      classification: { ...this.classifiers.classify(post, hub).classification, ...kept },
+      classification: {
+        ...this.classifiers.classify(post, hub).classification,
+        ...kept,
+      },
       classifier: null,
     };
     const images = postImages(post);

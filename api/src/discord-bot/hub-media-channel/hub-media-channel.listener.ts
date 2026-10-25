@@ -49,9 +49,12 @@ export class HubMediaChannelListener {
       gatewayBinding(Events.MessageCreate, (m: Message) => {
         this.run('messageCreate', this.onCreate(m));
       }),
-      gatewayBinding(Events.MessageUpdate, (_old: AnyMessage, m: AnyMessage) => {
-        this.run('messageUpdate', this.onUpdate(m));
-      }),
+      gatewayBinding(
+        Events.MessageUpdate,
+        (_old: AnyMessage, m: AnyMessage) => {
+          this.run('messageUpdate', this.onUpdate(m));
+        },
+      ),
       gatewayBinding(Events.MessageDelete, (m: AnyMessage) => {
         this.run('messageDelete', this.onDelete(m));
       }),
