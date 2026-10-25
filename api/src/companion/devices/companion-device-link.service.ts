@@ -90,7 +90,7 @@ export class CompanionDeviceLinkService {
   ): Promise<CompanionLinkStartResponse> {
     const parsed = CompanionLinkStartRequestSchema.safeParse(body);
     if (!parsed.success) handleValidationError(parsed.error);
-    const network = await this.assertStartAllowed(ip, res);
+    const network = this.assertStartAllowed(ip, res);
     const base = await this.settings.getTrustedClientUrl();
     if (!base) {
       throw new InternalServerErrorException('CLIENT_URL is not configured');
@@ -98,21 +98,15 @@ export class CompanionDeviceLinkService {
     return this.insertWithFreshCodes(parsed.data.device, network, base);
   }
 
-  /** Per-IP start budget + per-network pending cap; returns the network. */
-  private async assertStartAllowed(
+  /** Per-IP start budget; returns the coarse network (null if unknown). */
+  private assertStartAllowed(
     ip: string | undefined,
     res: HeaderSink,
-  ): Promise<string | null> {
+  ): string | null {
     const key = `companion-link:start:${ip ?? 'unknown'}`;
     const spec = { key, limit: startPerIpLimit(), windowMs: MINUTE_MS };
     hitOrThrow(this.limiter, res, spec, 'Too many link requests');
-    const network = coarseIp(ip);
-    const cap = pendingPerNetworkLimit();
-    if (network === null || cap === null) return network;
-    if ((await this.repo.countPendingForNetwork(network)) >= cap) {
-      throw tooManyPending();
-    }
-    return network;
+    return coarseIp(ip);
   }
 
   /** Insert with fresh codes; re-roll on the (unlikely) code collision. */
@@ -124,10 +118,12 @@ export class CompanionDeviceLinkService {
     for (let i = 0; i < CODE_ATTEMPTS; i += 1) {
       const deviceCode = deviceCodes.generate();
       const userCode = generateUserCode();
-      const row = await this.repo.insertPending(
+      const result = await this.repo.insertPendingCapped(
         newLink(device, network, deviceCode, userCode),
+        pendingPerNetworkLimit(),
       );
-      if (!row) continue;
+      if (result.kind === 'capped') throw tooManyPending();
+      if (result.kind === 'collision') continue;
       const shown = formatUserCode(userCode);
       return CompanionLinkStartResponseSchema.parse(
         buildStartResponse(

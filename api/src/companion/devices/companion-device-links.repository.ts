@@ -26,6 +26,14 @@ const devices = schema.companionDevices;
 
 /** Advisory-lock class serialising one user's device inserts (cap check). */
 const DEVICE_CAP_LOCK_CLASS = 1955;
+/** Advisory-lock class serialising one network's pending-cap check + insert. */
+const PENDING_CAP_LOCK_CLASS = 19552;
+
+/** Outcome of a capped pending insert. */
+export type InsertPendingResult =
+  | { kind: 'inserted'; row: CompanionDeviceLinkRow }
+  | { kind: 'collision' }
+  | { kind: 'capped' };
 
 /** What `start` writes (both codes already hashed). */
 export interface NewLink {
@@ -55,34 +63,31 @@ const live = sql`${links.expiresAt} > now()`;
 export class CompanionDeviceLinksRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
-  /** Live pending links requested from one coarse network. */
-  async countPendingForNetwork(network: string): Promise<number> {
-    const [row] = await this.db
-      .select({ n: count() })
-      .from(links)
-      .where(
-        and(
-          eq(links.status, 'pending'),
-          eq(links.requestedIpCoarse, network),
-          live,
-        ),
+  /**
+   * Insert a pending link unless its network already has `cap` live pending
+   * links. ONE tx holding `pg_advisory_xact_lock` on the network across the
+   * count + insert, so a concurrent burst cannot overshoot. A null network
+   * (no / unparseable IP) is ONE shared bucket, not uncapped. The insert is
+   * `ON CONFLICT DO NOTHING` (cannot violate), so nothing is caught/retried.
+   */
+  async insertPendingCapped(
+    link: NewLink,
+    cap: number | null,
+  ): Promise<InsertPendingResult> {
+    return this.db.transaction(async (tx) => {
+      const bucket = link.requestedIpCoarse ?? 'unknown';
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(${PENDING_CAP_LOCK_CLASS}::int4, hashtext(${bucket}))`,
       );
-    return row?.n ?? 0;
-  }
-
-  /** Insert a pending link; null on a code collision (caller re-rolls). */
-  async insertPending(link: NewLink): Promise<CompanionDeviceLinkRow | null> {
-    const [row] = await this.db
-      .insert(links)
-      .values({
-        ...link,
-        status: 'pending',
-        intervalSec: POLL_INTERVAL_SEC,
-        expiresAt: sql`now() + make_interval(secs => ${LINK_TTL_SEC})`,
-      })
-      .onConflictDoNothing()
-      .returning();
-    return row ?? null;
+      if (
+        cap !== null &&
+        (await countPending(tx, link.requestedIpCoarse)) >= cap
+      ) {
+        return { kind: 'capped' };
+      }
+      const row = await insertPendingRow(tx, link);
+      return row ? { kind: 'inserted', row } : { kind: 'collision' };
+    });
   }
 
   async findByDeviceCodeHash(
@@ -229,4 +234,35 @@ async function insertDevice(
     .returning();
   if (!device) throw new Error('companion device insert returned no row');
   return device;
+}
+
+/** Live pending links from one coarse network (null = the shared bucket). */
+async function countPending(tx: Tx, network: string | null): Promise<number> {
+  const byNetwork =
+    network === null
+      ? isNull(links.requestedIpCoarse)
+      : eq(links.requestedIpCoarse, network);
+  const [row] = await tx
+    .select({ n: count() })
+    .from(links)
+    .where(and(eq(links.status, 'pending'), byNetwork, live));
+  return row?.n ?? 0;
+}
+
+/** Insert a pending link; null on a code collision (caller re-rolls). */
+async function insertPendingRow(
+  tx: Tx,
+  link: NewLink,
+): Promise<CompanionDeviceLinkRow | null> {
+  const [row] = await tx
+    .insert(links)
+    .values({
+      ...link,
+      status: 'pending',
+      intervalSec: POLL_INTERVAL_SEC,
+      expiresAt: sql`now() + make_interval(secs => ${LINK_TTL_SEC})`,
+    })
+    .onConflictDoNothing()
+    .returning();
+  return row ?? null;
 }

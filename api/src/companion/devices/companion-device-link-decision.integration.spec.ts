@@ -47,6 +47,18 @@ describe('companion device link — start / preview / decision', () => {
     expect((await linkRow(testApp, link.deviceCode)).status).toBe('pending');
   });
 
+  it('a concurrent burst from one network never exceeds the pending cap', async () => {
+    await withEnv({ COMPANION_LINK_MAX_PENDING_PER_IP: '3' }, async () => {
+      const burst = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          testApp.request.post(LINK).send({ device: DEVICE }),
+        ),
+      );
+      const statuses = burst.map((r) => r.status).sort();
+      expect(statuses).toEqual([200, 200, 200, 409, 409, 409, 409, 409]);
+    });
+  });
+
   it('a fourth pending link from one network is 409 too_many_pending', async () => {
     await withEnv({ COMPANION_LINK_MAX_PENDING_PER_IP: '3' }, async () => {
       for (let i = 0; i < 3; i += 1) await startLink(testApp);
