@@ -10,6 +10,9 @@ import {
   USER_DELAY_MS,
   type SteamStatsRunLimits,
 } from './steam-stats.constants';
+import { SteamStatsController } from './steam-stats.controller';
+import { SteamStatsReadRepository } from './steam-stats-read.repository';
+import { SteamStatsReadService } from './steam-stats-read.service';
 import { SteamStatsLinkListener } from './steam-stats-link.listener';
 import { SteamStatsRefreshService } from './steam-stats-refresh.service';
 import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
@@ -23,7 +26,7 @@ const LIMITS: SteamStatsRunLimits = {
 
 /**
  * ROK-1953 D4 — Core's shared Steam achievements + playtime cards: storage,
- * the nightly/on-link refresh. Imported by `CorePluginModule`; lives under
+ * the nightly/on-link refresh and the members-only read route. Imported by `CorePluginModule`; lives under
  * `plugins/core/` so the ROK-1969 ownership guard sees the cron as Core's.
  */
 @Module({
@@ -33,6 +36,7 @@ const LIMITS: SteamStatsRunLimits = {
     CronJobModule,
     BullModule.registerQueue({ name: STEAM_APP_STATS_QUEUE }),
   ],
+  controllers: [SteamStatsController],
   providers: [
     { provide: STEAM_STATS_RUN_LIMITS, useValue: LIMITS },
     SteamStatsTargetsRepository,
@@ -40,6 +44,8 @@ const LIMITS: SteamStatsRunLimits = {
     SteamStatsRefreshService,
     SteamAppStatsProcessor,
     SteamStatsLinkListener,
+    SteamStatsReadRepository,
+    SteamStatsReadService,
   ],
   exports: [SteamStatsStorageRepository],
 })
