@@ -306,6 +306,38 @@ describe('edits and deletes (D11)', () => {
   });
 });
 
+describe('removed pictures never carry a death (D11)', () => {
+  it('an edit that drops the linked first picture removes its inferred discord death', async () => {
+    const post = gatewayPost({ files: ['a.png', 'b.png'] });
+    await listener().onCreate(post);
+    const [first] = nonEmpty(await mediaRows(), 'media');
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['discord', first.id],
+    ]);
+    const rest = [...post.attachments.values()].slice(1);
+    const edited = { ...post, attachments: { values: () => rest } };
+    await ingest().onEdit(toPostLike(edited), await hubRef());
+    expect((await mediaRows()).map((m) => m.removedAt === null)).toEqual([
+      false,
+      true,
+    ]);
+    expect(await deathRows()).toEqual([]);
+  });
+
+  it('a re-delivered post whose picture is a tombstone links no death to it', async () => {
+    const post = gatewayPost();
+    await listener().onCreate(post);
+    await ingest().onDelete(post.id, await hubRef());
+    const summary = await ingest().ingestPost(toPostLike(post), await hubRef());
+    expect(summary).toMatchObject({
+      duplicates: 1,
+      deathsLinked: 0,
+      deathsInferred: 0,
+    });
+    expect(await deathRows()).toEqual([]);
+  });
+});
+
 describe('unbound channel', () => {
   it('ignores a post in a channel no hub feeds from', async () => {
     await listener().onCreate(gatewayPost({ channel: snowflake() }));
@@ -392,6 +424,11 @@ describe('guilds/:id/media-channel routes (D2)', () => {
     expect(await resolver().resolve(channelId)).not.toBeNull();
   });
 
+  // Decision (ROK-1941 L2c): the spec table said "visitor 404", but these
+  // routes carry the same guards as the sibling Discord binding routes
+  // (`guild-discord.controller.ts` GET channels / PUT + DELETE channel:
+  // jwt + HubVisibleGuard + GuildLeaderGuard). A visitor gets that existing
+  // behaviour — 403 on a visible hub, 404 only once the hub is hidden.
   it('refuses a visitor (403) and hides a hidden hub from them (404)', async () => {
     const t = (await user('visitor')).token;
     const visible = await testApp.request.get(route()).set(auth(t));

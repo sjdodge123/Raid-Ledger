@@ -41,6 +41,15 @@ const emptySummary = (): IngestPostSummary => ({
   unclassified: false,
 });
 
+/** One post's ingest inputs, shared by each of its images. */
+interface PostJob {
+  post: PostLike;
+  hub: HubMediaHubRef;
+  classified: HubMediaClassified;
+  /** Live media ids of the message before this run (tombstones excluded). */
+  live: ReadonlySet<number>;
+}
+
 const KINDS: readonly string[] = ['death', 'screenshot', 'image'];
 const isKind = (v: string): v is HubMediaKind => KINDS.includes(v);
 
@@ -71,15 +80,18 @@ export class HubMediaPostIngest {
       summary.unclassified = true;
       this.logger.log(`unclassified media post ${post.id}`);
     }
+    const live = await this.liveIds(hub, post.id);
+    const job: PostJob = { post, hub, classified, live };
     for (const [index, image] of images.entries()) {
-      await this.ingestImage(post, hub, image, index, classified, summary);
+      await this.ingestImage(job, image, index, summary);
     }
     return summary;
   }
 
   /**
    * D11 edit: re-ingest the current images (idempotent) with the post's
-   * stored kind — never re-classified — and tombstone images now gone.
+   * stored kind — never re-classified — and tombstone images now gone,
+   * telling the classifiers exactly as a delete does.
    */
   async onEdit(post: PostLike, hub: HubMediaHubRef): Promise<void> {
     const existing = await findMessageMedia(this.db, hub.guildId, post.id);
@@ -97,27 +109,49 @@ export class HubMediaPostIngest {
       classifier: null,
     };
     const images = postImages(post);
-    const summary = emptySummary();
+    const job: PostJob = { post, hub, classified, live: new Set() };
     for (const [index, image] of images.entries()) {
-      await this.ingestImage(post, hub, image, index, classified, summary);
+      await this.ingestImage(job, image, index, emptySummary());
     }
     const current = new Set(images.map((i) => this.key(post, i)));
-    for (const row of existing) {
-      if (current.has(row.provenanceKey)) continue;
-      await this.media.removeByProvenance(hub.guildId, row.provenanceKey);
-    }
+    await this.remove(
+      hub,
+      existing.filter((row) => !current.has(row.provenanceKey)),
+    );
   }
 
   /** D11 delete: tombstone every stored picture, then tell the classifiers. */
   async onDelete(messageId: string, hub: HubMediaHubRef): Promise<void> {
     const existing = await findMessageMedia(this.db, hub.guildId, messageId);
-    for (const row of existing) {
+    await this.remove(hub, existing);
+  }
+
+  /** Tombstone these rows, then the classifiers' D11 rule (deaths). */
+  private async remove(
+    hub: HubMediaHubRef,
+    rows: readonly { id: number; provenanceKey: string }[],
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    for (const row of rows) {
       await this.media.removeByProvenance(hub.guildId, row.provenanceKey);
     }
     await this.classifiers.afterRemove(
       hub,
-      existing.map((r) => r.id),
+      rows.map((r) => r.id),
     );
+  }
+
+  /**
+   * The message's live (not tombstoned) media ids. `HubMediaService.ingest`
+   * answers a tombstone as `duplicate` with its id and never re-adds it, so a
+   * duplicate outside this set is a removed picture nothing may link to.
+   */
+  private async liveIds(
+    hub: HubMediaHubRef,
+    messageId: string,
+  ): Promise<ReadonlySet<number>> {
+    const rows = await findMessageMedia(this.db, hub.guildId, messageId);
+    return new Set(rows.map((r) => r.id));
   }
 
   private key(post: PostLike, image: PostImage): string {
@@ -129,13 +163,12 @@ export class HubMediaPostIngest {
   }
 
   private async ingestImage(
-    post: PostLike,
-    hub: HubMediaHubRef,
+    job: PostJob,
     image: PostImage,
     index: number,
-    classified: HubMediaClassified,
     summary: IngestPostSummary,
   ): Promise<void> {
+    const { post, hub, classified } = job;
     summary.images += 1;
     const res = await this.media.ingest(
       this.toInput(post, hub, image, classified.classification),
@@ -147,6 +180,7 @@ export class HubMediaPostIngest {
     }
     summary[res.status === 'stored' ? 'stored' : 'duplicates'] += 1;
     if (res.mediaId === null || classified.classifier === null) return;
+    if (res.status === 'duplicate' && !job.live.has(res.mediaId)) return;
     const outcome = await classified.classifier.afterStore({
       hub,
       post,
