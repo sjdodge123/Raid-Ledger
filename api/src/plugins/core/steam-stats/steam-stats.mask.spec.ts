@@ -52,9 +52,11 @@ describe('maskAchievement (M1–M4)', () => {
   });
 
   it('clamps a stored % outside 0–100 and drops an unparsable one', () => {
-    expect(maskAchievement({ ...visible, globalPct: '100.400' }, new Set()))
-      .toMatchObject({ globalPct: 100 });
-    expect(maskAchievement({ ...hidden, globalPct: 'NaN' }, new Set()))
-      .toEqual({ masked: true, globalPct: null });
+    expect(
+      maskAchievement({ ...visible, globalPct: '100.400' }, new Set()),
+    ).toMatchObject({ globalPct: 100 });
+    expect(maskAchievement({ ...hidden, globalPct: 'NaN' }, new Set())).toEqual(
+      { masked: true, globalPct: null },
+    );
   });
 });

@@ -18,7 +18,10 @@ import {
   isHiddenFrom,
 } from '../../../guilds/hub-hidden.helpers';
 import { HubKindRegistry } from '../../../guilds/hub-kind.registry';
-import { STEAM_STATS_APP_IDS, STEAM_STATS_HUB_KINDS } from './steam-stats.constants';
+import {
+  STEAM_STATS_APP_IDS,
+  STEAM_STATS_HUB_KINDS,
+} from './steam-stats.constants';
 import { maskAchievement } from './steam-stats.mask';
 import {
   memberStatus,
@@ -118,7 +121,9 @@ export class SteamStatsReadService {
     appId: number,
     members: readonly MemberRow[],
   ): Promise<Pick<Available, 'recentUnlocks' | 'rarestUnlock'>> {
-    const linked = members.filter((m) => m.steamId !== null).map((m) => m.userId);
+    const linked = members
+      .filter((m) => m.steamId !== null)
+      .map((m) => m.userId);
     const unlocked = await this.repo.unlockedApiNames(viewerId, appId);
     const view = (u: UnlockRow): SteamHubUnlock => ({
       userId: u.userId,

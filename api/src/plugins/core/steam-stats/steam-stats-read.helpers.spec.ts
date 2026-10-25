@@ -27,8 +27,13 @@ describe('memberStatus (D6)', () => {
     expect(memberStatus('765', undefined)).toBe('pending');
   });
   it('the stored status otherwise', () => {
-    expect(memberStatus('765', { status: 'private', unlockedCount: null, fetchedAt: at }))
-      .toBe('private');
+    expect(
+      memberStatus('765', {
+        status: 'private',
+        unlockedCount: null,
+        fetchedAt: at,
+      }),
+    ).toBe('private');
   });
 });
 
@@ -53,8 +58,9 @@ describe('toMemberStats', () => {
   });
   it('unlinked → no count, no playtime, no fetchedAt', () => {
     const s = toMemberStats({ ...base, steamId: null });
-    expect([s.status, s.unlockedCount, s.playtimeMinutes, s.fetchedAt])
-      .toEqual(['unlinked', null, null, null]);
+    expect([s.status, s.unlockedCount, s.playtimeMinutes, s.fetchedAt]).toEqual(
+      ['unlinked', null, null, null],
+    );
   });
 });
 
@@ -72,7 +78,11 @@ describe('sortMembers (I9)', () => {
       mk(5, 'Abe', null),
     ]);
     expect(out.map((m) => m.displayName)).toEqual([
-      'Cal', 'Ann', 'Bea', 'Abe', 'Zed',
+      'Cal',
+      'Ann',
+      'Bea',
+      'Abe',
+      'Zed',
     ]);
   });
 });

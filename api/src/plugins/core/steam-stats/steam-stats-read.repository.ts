@@ -54,6 +54,21 @@ const UNLOCK_COLUMNS = {
   globalPct: ach.globalPct,
 };
 
+const u = schema.users;
+const s = schema.steamUserAppStats;
+const gi = schema.gameInterests;
+const MEMBER_COLUMNS = {
+  userId: u.id,
+  username: u.username,
+  displayName: u.displayName,
+  customAvatarUrl: u.customAvatarUrl,
+  steamId: u.steamId,
+  status: s.status,
+  unlockedCount: s.unlockedCount,
+  fetchedAt: s.fetchedAt,
+  playtimeMinutes: gi.playtimeForever,
+};
+
 type RawUnlock = {
   userId: number;
   unlockedAt: Date | null;
@@ -68,7 +83,11 @@ export class SteamStatsReadRepository {
   async hubTarget(guildId: number): Promise<HubSteamTarget | undefined> {
     const g = schema.guilds;
     const [row] = await this.db
-      .select({ kind: g.kind, gameId: g.gameId, appId: schema.games.steamAppId })
+      .select({
+        kind: g.kind,
+        gameId: g.gameId,
+        appId: schema.games.steamAppId,
+      })
       .from(g)
       .leftJoin(schema.games, eq(schema.games.id, g.gameId))
       .where(eq(g.id, guildId))
@@ -98,21 +117,8 @@ export class SteamStatsReadRepository {
     gameId: number,
   ): Promise<MemberRow[]> {
     if (userIds.length === 0) return [];
-    const u = schema.users;
-    const s = schema.steamUserAppStats;
-    const gi = schema.gameInterests;
     const rows = await this.db
-      .select({
-        userId: u.id,
-        username: u.username,
-        displayName: u.displayName,
-        customAvatarUrl: u.customAvatarUrl,
-        steamId: u.steamId,
-        status: s.status,
-        unlockedCount: s.unlockedCount,
-        fetchedAt: s.fetchedAt,
-        playtimeMinutes: gi.playtimeForever,
-      })
+      .select(MEMBER_COLUMNS)
       .from(u)
       .leftJoin(s, and(eq(s.userId, u.id), eq(s.appId, appId)))
       .leftJoin(
