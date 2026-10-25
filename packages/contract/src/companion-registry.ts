@@ -29,16 +29,16 @@ export interface CompanionContractVersionSpec {
 /** `contract id → version → spec`. */
 export type CompanionContractTable = Readonly<Record<string, Readonly<Record<number, CompanionContractVersionSpec>>>>;
 
+const BG3_SAVE_V1: CompanionContractVersionSpec = {
+    schema: Bg3SaveMessageSchema,
+    maxBytes: COMPANION_BG3_SAVE_MAX_BYTES,
+    blobSlots: Object.freeze<CompanionBlobSlot[]>(['thumbnail']),
+    status: 'current',
+};
+
 /** The shipped registry: `bg3-save` v1 only. */
 export const COMPANION_CONTRACTS: CompanionContractTable = Object.freeze({
-    [BG3_SAVE_CONTRACT_ID]: Object.freeze({
-        [BG3_SAVE_CONTRACT_VERSION]: Object.freeze({
-            schema: Bg3SaveMessageSchema,
-            maxBytes: COMPANION_BG3_SAVE_MAX_BYTES,
-            blobSlots: ['thumbnail'],
-            status: 'current',
-        }),
-    }),
+    [BG3_SAVE_CONTRACT_ID]: Object.freeze({ [BG3_SAVE_CONTRACT_VERSION]: Object.freeze(BG3_SAVE_V1) }),
 });
 
 /** Result of `lookupCompanionContract`; C3 maps each non-`ok` kind to an ingest error code. */

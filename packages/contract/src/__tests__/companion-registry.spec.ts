@@ -11,6 +11,14 @@ const synthetic: CompanionContractTable = {
         2: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'accepted' },
         3: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'current' },
     },
+    'staged-world': {
+        1: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'current' },
+        2: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'accepted' },
+    },
+    'sunset-world': {
+        1: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'retired' },
+        2: { schema: Bg3SaveMessageSchema, maxBytes: 10, blobSlots: [], status: 'retired' },
+    },
 };
 
 describe('lookupCompanionContract (ROK-1954)', () => {
@@ -45,5 +53,9 @@ describe('lookupCompanionContract (ROK-1954)', () => {
         expect(lookupCompanionContract('demo-world', 2, synthetic).kind).toBe('ok');
         expect(lookupCompanionContract('demo-world', 3, synthetic).kind).toBe('ok');
         expect(lookupCompanionContract('demo-world', 4, synthetic)).toEqual({ kind: 'unknown_contract_version', current: 3 });
+    });
+    it('R4: current names the version marked current, not the highest one', () => {
+        expect(lookupCompanionContract('staged-world', 9, synthetic)).toEqual({ kind: 'unknown_contract_version', current: 1 });
+        expect(lookupCompanionContract('sunset-world', 1, synthetic)).toEqual({ kind: 'retired', current: 2 });
     });
 });
