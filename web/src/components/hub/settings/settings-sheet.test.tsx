@@ -5,6 +5,7 @@
  * showing half a form, and the hub-visibility switch is an admin-only
  * PATCH /guilds/:id/hidden (ROK-1831).
  */
+import type { JSX } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -169,5 +170,39 @@ describe('HubSettingsSheet — member grant effectiveness (ROK-1794 review)', ()
         expect(chip.getAttribute('data-active'), `data-active for ${JSON.stringify(grant.effective)}`).toBe(active);
         if (text) expect(chip).toHaveTextContent(text);
         else expect(chip.textContent, 'an active or unknown grant shows no inactive chip').not.toContain('Inactive');
+    });
+});
+
+// ROK-1950 — "Hub name" sits in the Leader rows: a community Officer opens the
+// sheet (blurb, Banned list) but never gets the rename control.
+describe('HubSettingsSheet — hub rename (ROK-1950)', () => {
+    const COMMUNITY_PAGE: GuildPageDto = {
+        ...PAGE,
+        guild: { ...PAGE.guild, kind: 'game_community', name: 'Tav Party', realmName: null, faction: null },
+    };
+    const DescriptionStub = (): JSX.Element => <p>Description</p>;
+    const COMMUNITY_MODULE: HubModule = {
+        kind: 'game_community', tabs: [], overviewWidgets: [], memberColumns: [], heroPills: [],
+        memberRows: () => [], settingsSections: DescriptionStub,
+    };
+    const renderAs = (viewer: GuildPageDto['viewer']): void => {
+        renderWithProviders(
+            <HubSettingsSheet ctx={{ page: { ...COMMUNITY_PAGE, viewer }, raids: IDLE_RAIDS }} module={COMMUNITY_MODULE}
+                onClose={() => undefined} onChangeChannel={() => undefined} />,
+        );
+    };
+
+    it('the Leader gets "Hub name" first in the sheet', async () => {
+        serve({ state: 'unset' }, []);
+        renderAs({ role: 'leader', canEdit: true, canManageEditors: true });
+        const sheet = await screen.findByTestId('guild-settings-sheet');
+        expect(sheet.firstElementChild).toHaveAttribute('data-testid', 'hub-name-section');
+    });
+
+    it('a community Officer sees no "Hub name" but still gets the module sections', async () => {
+        serve({ state: 'unset' }, []);
+        renderAs({ role: 'officer', canEdit: true, canManageEditors: false });
+        expect(await screen.findByText('Description')).toBeInTheDocument();
+        expect(screen.queryByTestId('hub-name-section'), 'officers must not get the rename control').toBeNull();
     });
 });

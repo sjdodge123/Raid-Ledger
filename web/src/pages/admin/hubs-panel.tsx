@@ -1,6 +1,6 @@
 /**
  * ROK-1870 — Admin → Hubs (`/admin/settings/general/hubs`). Tabs: Pending (N)
- * proposals to approve or reject, Active hubs (transfer leader, archive) and
+ * proposals to approve or reject, Active hubs (rename, transfer leader, archive) and
  * Archived hubs (restore). "Create hub" makes an active hub directly.
  */
 import { useState, type JSX, type ReactNode } from 'react';
@@ -13,6 +13,7 @@ import { useAdminHubList, useAdminHubProposals, useSetHubStatus, type AdminHubEn
 import { ActiveHubRow, ArchivedHubRow, PendingHubRow } from './hubs-panel-rows';
 import { ApproveHubDialog, RejectHubDialog, TransferLeaderDialog } from './hubs-panel-dialogs';
 import { CreateHubDialog } from './hubs-create-dialog';
+import { RenameHubDialog } from './hubs-rename-dialog';
 
 const TAB_IDS: readonly AdminHubTab[] = ['pending', 'active', 'archived'];
 
@@ -46,10 +47,11 @@ function HubList({ status }: { status: 'active' | 'archived' }): JSX.Element {
     const q = useAdminHubList(status);
     const setStatus = useSetHubStatus();
     const [transferring, setTransferring] = useState<AdminHubEntry | null>(null);
+    const [renaming, setRenaming] = useState<AdminHubEntry | null>(null);
     const items = q.data?.items ?? [];
     const busy = (h: AdminHubEntry): boolean => setStatus.isPending && setStatus.variables?.hubId === h.id;
     const row = (h: AdminHubEntry): JSX.Element => status === 'active'
-        ? <ActiveHubRow key={h.id} hub={h} busy={busy(h)} onTransfer={setTransferring}
+        ? <ActiveHubRow key={h.id} hub={h} busy={busy(h)} onRename={setRenaming} onTransfer={setTransferring}
             onArchive={() => setStatus.mutate({ hubId: h.id, status: 'archived' })} />
         : <ArchivedHubRow key={h.id} hub={h} busy={busy(h)} onRestore={() => setStatus.mutate({ hubId: h.id, status: 'active' })} />;
     return (
@@ -60,6 +62,7 @@ function HubList({ status }: { status: 'active' | 'archived' }): JSX.Element {
                 {items.map(row)}
             </ListState>
             {transferring ? <TransferLeaderDialog hub={transferring} onClose={() => setTransferring(null)} /> : null}
+            {renaming ? <RenameHubDialog hub={renaming} onClose={() => setRenaming(null)} /> : null}
         </>
     );
 }

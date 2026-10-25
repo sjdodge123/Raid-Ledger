@@ -3625,3 +3625,8 @@ same day (#1278, #1279, #1280).
 ### 2026-10-24 — PR #1798 feat/rok-1942-hub-gallery (surfaced in GitHub CI discord-smoke; branch touches no Discord paths)
 
 - **med (CI flake; pre-existing)** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts` "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count" — run 40140524373 job 121011249490: `AC7: no PLAYING NOW post with a voice link … last rendered "<no post for this game>"` after 95.3s; 47/48 passed. The ROK-1942 diff has 0 files under discord-bot/notifications/lfg/voice/test-bot. Likely the now-spawn voice channel/positional-pick fragility already noted under 2026-09-07 rok-1494. Suggested: make the now-group spawn pick its voice channel by id, not index, and loop the spec 50× with the targeted-smoke recipe to measure the rate.
+
+### 2026-10-25 — feat/rok-1950-hub-rename (surfaced during ROK-1950 review)
+
+- **low** `api/src/guilds/**` `hubNameKey` — ROK-1950 now NFC-normalises hub name keys, but keys stored before it were not normalised, so a hub saved in decomposed form can get a visually identical twin. Very unlikely in practice. Suggested: a one-off SQL backfill of `name_key` to NFC after a duplicate check (self-contained migration), or accept the gap.
+- **low** `api/src/notifications/hub-proposal-notices.ts:29` — the PROPOSED hub name is sent to staff unescaped, so a markdown link in a proposal renders clickable in the staff DM. Pre-existing (not touched by ROK-1950, which escaped the tagged-event and welcome embeds). Suggested: wrap it in `escapeHubName` like the other embeds.
