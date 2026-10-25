@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CompanionBlobsModule } from './blobs/companion-blobs.module';
+import { CompanionConfigModule } from './config/companion-config.module';
 import { CompanionDevicesModule } from './devices/companion-devices.module';
 import { CompanionIngestModule } from './ingest/companion-ingest.module';
 
@@ -9,6 +10,7 @@ import { CompanionIngestModule } from './ingest/companion-ingest.module';
     CompanionDevicesModule,
     CompanionIngestModule,
     CompanionBlobsModule,
+    CompanionConfigModule,
   ],
 })
 export class CompanionModule {}
