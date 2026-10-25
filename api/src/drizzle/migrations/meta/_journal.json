@@ -1793,6 +1793,13 @@
       "when": 1792853930019,
       "tag": "0256_hub_media",
       "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1792908289367,
+      "tag": "0257_valheim_death_screenshots",
+      "breakpoints": true
     }
   ]
 }
