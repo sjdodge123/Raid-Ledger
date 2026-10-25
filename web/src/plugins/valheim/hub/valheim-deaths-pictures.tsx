@@ -10,21 +10,11 @@ import type { ValheimDeathPicture, ValheimDeathPlayer } from '@raid-ledger/contr
 import { useHubGalleryStore } from '../../../components/hub/gallery/hub-gallery-store';
 import { Button } from '../../../components/ui/button';
 import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
-import { syncedAgo } from '../../../lib/synced-ago';
+import { deathThumbLabel, morePicturesLabel } from './valheim-deaths.helpers';
 
 /** 44px target, 2px inset so the 40px picture tile reads as the control (mockup A). */
 const TARGET = 'group h-11 w-11 shrink-0 rounded-lg p-0.5';
 const TILE = 'flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-edge bg-panel transition-colors group-hover:border-edge-strong';
-
-/** A thumb's accessible name, the Gallery tile's wording ("Death — Jasz, 1 day ago. Open picture"). */
-export function deathThumbLabel(name: string, picture: ValheimDeathPicture, now: number = Date.now()): string {
-    return `Death — ${name}, ${syncedAgo(picture.capturedAt, now)}. Open picture`;
-}
-
-/** "+N"'s accessible name. */
-export function morePicturesLabel(extra: number): string {
-    return `${extra} more death ${extra === 1 ? 'picture' : 'pictures'}. Open the gallery`;
-}
 
 function DeathThumb({ name, picture, onOpen }: {
     name: string; picture: ValheimDeathPicture; onOpen: (el: HTMLButtonElement) => void;

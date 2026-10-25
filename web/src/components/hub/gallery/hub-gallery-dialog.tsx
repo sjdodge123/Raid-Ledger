@@ -59,7 +59,7 @@ function useArrowKeys(scope: RefObject<HTMLElement | null>, active: boolean, pre
 }
 
 /** ROK-1941: how far the viewer pages in looking for a requested id before it falls back to the index. */
-export const HUB_GALLERY_SEEK_MAX_PAGES = 10;
+const HUB_GALLERY_SEEK_MAX_PAGES = 10;
 
 /**
  * ROK-1941: a requested id that is not loaded yet (a Deaths thumb whose picture
