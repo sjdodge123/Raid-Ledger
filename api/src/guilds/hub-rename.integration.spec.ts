@@ -7,7 +7,9 @@
  * Mutations (for the Lead): drop the service leader re-check AND the route
  * guard → the officer case goes red; drop `hasNameClash` → "taken name" stays
  * 409 via `conflictOnUnique`; drop that too → 409 expected, 500 received;
- * drop the `sourceName` call → the reset case goes red (409 instead of 200).
+ * drop the `sourceName` call → the reset case goes red (409 instead of 200);
+ * move the audit out of the rename transaction → case 17 goes red (the name
+ * reads 'Atomic New', not 'Atomic Old').
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -22,6 +24,7 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { PELICAN_PLUGIN_ID } from '../plugins/pelican/pelican.constants';
 import { fakeServer } from '../plugins/pelican/testing/pelican-fixtures';
 import { SettingsService } from '../settings/settings.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { insertCommunityHub } from './community/community-proposals.queries';
 import { RENAME_ERRORS } from './hub-rename.helpers';
 
@@ -416,5 +419,29 @@ describe('PATCH /guilds/:id/name — WoW and unknown ids', () => {
     expect((await rename(999999, admin, { name: 'Ghost Name' })).status).toBe(
       404,
     );
+  });
+});
+
+describe('PATCH /guilds/:id/name — atomic audit (ROK-1950 review)', () => {
+  it('17: a failing audit insert rolls the rename back; a retry renames + audits', async () => {
+    const id = await mkCommunity('Atomic Old');
+    const spy = jest
+      .spyOn(testApp.app.get(ActivityLogService), 'log')
+      .mockRejectedValueOnce(new Error('audit insert failed'));
+    try {
+      expect((await rename(id, admin, { name: 'Atomic New' })).status).toBe(
+        500,
+      );
+      expect(await hubRow(id)).toMatchObject({
+        name: 'Atomic Old',
+        nameKey: 'atomic old',
+      });
+      expect(await auditRows(id)).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+    await rename(id, admin, { name: 'Atomic New' }).expect(200);
+    expect((await hubRow(id)).name).toBe('Atomic New');
+    expect(await auditRows(id)).toHaveLength(1);
   });
 });

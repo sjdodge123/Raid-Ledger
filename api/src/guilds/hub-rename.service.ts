@@ -32,6 +32,7 @@ import {
 } from './hub-rename.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Applied = Extract<RenamePlan, { ok: true }>;
 
 /** A failed plan → the NestJS exception it names. */
@@ -73,10 +74,7 @@ export class HubRenameService {
     await this.assertLeader(actor, guildId);
     const plan = planRename(row, parsed.data.name, await this.sourceOf(row));
     if (!plan.ok) throw planError(plan.status, plan.message);
-    if (isRenameChange(row, plan.set)) {
-      await this.write(row, plan.set);
-      await this.audit(actor, row, plan);
-    }
+    if (isRenameChange(row, plan.set)) await this.commit(actor, row, plan);
     return this.summary(actor, guildId);
   }
 
@@ -95,40 +93,68 @@ export class HubRenameService {
   }
 
   /**
+   * ROK-1950 review: the UPDATE and its `hub_renamed` audit row commit in ONE
+   * transaction, so a failed audit rolls the rename back (and a retry logs).
+   * A racing community insert's unique violation is mapped to 409 OUTSIDE
+   * the transaction — never caught and retried inside it.
+   */
+  private async commit(
+    actor: GuildActor,
+    row: schema.GuildSelect,
+    plan: Applied,
+  ): Promise<void> {
+    const run = (): Promise<void> =>
+      this.db.transaction(async (tx) => {
+        await this.write(tx, row, plan.set);
+        await this.audit(tx, actor, row, plan);
+      });
+    if (row.kind !== 'game_community') return run();
+    await conflictOnUnique(run, RENAME_ERRORS.nameTaken);
+  }
+
+  /**
    * ONE UPDATE, scoped to the row's kind and `active` status. A community
    * name is pre-checked under the index's own rules (same game, same key,
-   * not archived); a racing insert still maps to 409, never a retry.
+   * not archived) so the statement normally cannot violate.
    */
-  private async write(row: schema.GuildSelect, set: RenameSet): Promise<void> {
+  private async write(
+    tx: Tx,
+    row: schema.GuildSelect,
+    set: RenameSet,
+  ): Promise<void> {
     const g = schema.guilds;
-    const update = (): Promise<{ id: number }[]> =>
-      this.db
-        .update(g)
-        .set({ ...set, updatedAt: new Date() })
-        .where(
-          and(eq(g.id, row.id), eq(g.kind, row.kind), eq(g.status, 'active')),
-        )
-        .returning({ id: g.id });
-    if (row.kind !== 'game_community') {
-      if ((await update()).length === 0)
-        throw new NotFoundException(HUB_NOT_FOUND);
-      return;
-    }
-    if (await hasNameClash(this.db, row.gameId, set.name, row.id)) {
+    if (
+      row.kind === 'game_community' &&
+      (await hasNameClash(tx, row.gameId, set.name, row.id))
+    ) {
       throw new ConflictException(RENAME_ERRORS.nameTaken);
     }
-    const done = await conflictOnUnique(update, RENAME_ERRORS.nameTaken);
+    const done = await tx
+      .update(g)
+      .set({ ...set, updatedAt: new Date() })
+      .where(
+        and(eq(g.id, row.id), eq(g.kind, row.kind), eq(g.status, 'active')),
+      )
+      .returning({ id: g.id });
     if (done.length === 0) throw new NotFoundException(HUB_NOT_FOUND);
   }
 
   private async audit(
+    tx: Tx,
     actor: GuildActor,
     row: schema.GuildSelect,
     plan: Applied,
   ): Promise<void> {
     const { from, to, reset } = plan;
     const metadata = { from, to, kind: row.kind, reset };
-    await this.activity.log('hub', row.id, 'hub_renamed', actor.id, metadata);
+    await this.activity.log(
+      'hub',
+      row.id,
+      'hub_renamed',
+      actor.id,
+      metadata,
+      tx,
+    );
   }
 
   private async summary(actor: GuildActor, id: number): Promise<GuildSummary> {
