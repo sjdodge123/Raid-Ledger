@@ -23,6 +23,9 @@ jest.mock('./companion-blob.paths', () => ({
   commitCompanionBlob: jest.fn(),
   discardCompanionBlobFile: jest.fn(),
   companionBlobFileExists: jest.fn(),
+  fsErrorCode: jest.requireActual<typeof import('./companion-blob.paths')>(
+    './companion-blob.paths',
+  ).fsErrorCode,
 }));
 
 const SHA = 'a'.repeat(64);
@@ -63,6 +66,7 @@ function setup(
     fileExists?: boolean;
     total?: number;
     sessionOk?: boolean;
+    staleRemoved?: boolean;
   } = {},
 ) {
   const calls: string[] = [];
@@ -77,7 +81,7 @@ function setup(
     findRefs: track('findRefs', over.refs ?? []),
     insert: track('insert', over.insert ?? 'stored'),
     remove: track('remove', undefined),
-    removeStale: track('removeStale', undefined),
+    removeStale: track('removeStale', over.staleRemoved ?? true),
     totalUsage: track('total', over.total ?? 0),
   };
   const registry = {
@@ -272,6 +276,20 @@ describe('CompanionBlobService.upload — review round 1', () => {
       'headers',
     ]);
     expect(m.commit).toHaveBeenCalledWith(TMP, 7, SHA);
+  });
+
+  it('a row without its file that removeStale keeps (young / file back) → 200 exists; nothing read or stored', async () => {
+    const { service, repo, calls } = setup({
+      stored: true,
+      fileExists: false,
+      staleRemoved: false,
+    });
+    await expect(service.upload(DEVICE, SHA, REQ)).resolves.toEqual({
+      status: 'exists',
+      sha256: SHA,
+    });
+    expect(calls).toEqual(['find', 'fileExists', 'removeStale']);
+    expect(repo.insert).not.toHaveBeenCalled();
   });
 
   it('a session upload is 401 when no enabled handler opts into the session path', async () => {

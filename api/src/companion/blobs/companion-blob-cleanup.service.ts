@@ -20,6 +20,7 @@ import {
   COMPANION_BLOB_TEMP_RE,
   companionBlobAbsolutePath,
   discardCompanionBlobFile,
+  fsErrorCode,
   getCompanionBlobDir,
 } from './companion-blob.paths';
 import {
@@ -173,9 +174,7 @@ async function batched(
 
 async function listDir(dir: string): Promise<string[]> {
   return readdir(dir).catch((err: unknown) => {
-    if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-      return [];
-    }
+    if (fsErrorCode(err) === 'ENOENT') return [];
     throw err;
   });
 }

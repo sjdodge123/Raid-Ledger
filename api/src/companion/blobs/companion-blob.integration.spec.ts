@@ -531,14 +531,22 @@ describe('I-19 per-user scope', () => {
 describe('R1 a row whose file is gone (crash / DB restore)', () => {
   it('re-PUT → 201 stored again: the stale row is replaced and the file restored', async () => {
     const u = await member('cb-stale');
-    const bytes = await webp(16, 8);
-    const hash = sha(bytes);
-    expectAck(await putBlob(u.token, bytes), 'stored', hash);
+    // Older than the 5-minute in-flight window, so it reads as stale.
+    const { bytes, hash } = await storedBlob(u.token, u.id, 40, 6 * 60_000);
     rmSync(blobFile(u.id, hash));
     expectAck(await putBlob(u.token, bytes), 'stored', hash);
     expect(readFileSync(blobFile(u.id, hash)).equals(bytes)).toBe(true);
     expect(await blobRows()).toEqual([[u.id, hash]]);
     expect(entries(u.id)).toEqual([`${hash}.webp`]);
+  });
+
+  it('a row younger than 5 minutes is kept (an in-flight upload may still rename) → 200 exists', async () => {
+    const u = await member('cb-young');
+    const { bytes, hash } = await storedBlob(u.token, u.id, 40, 60_000);
+    rmSync(blobFile(u.id, hash));
+    expectAck(await putBlob(u.token, bytes), 'exists', hash);
+    expect(await blobRows()).toEqual([[u.id, hash]]);
+    expect(entries(u.id)).toEqual([]);
   });
 });
 

@@ -6,7 +6,7 @@
  * correlated `NOT EXISTS` binds to the right table.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -16,11 +16,20 @@ import {
 } from '../devices/companion-device-lock';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
 import { lockCompanionUserBlobs } from './companion-blob-lock';
-import { companionBlobRelativePath } from './companion-blob.paths';
+import {
+  companionBlobFileExists,
+  companionBlobRelativePath,
+} from './companion-blob.paths';
 import { refsAgree } from './companion-blob-refs.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const { companionBlobs: blobs, companionBlobRefs: refs } = schema;
+
+/**
+ * A row without its file is only treated as stale once it is this old;
+ * younger, it may be an upload still between its commit and its rename.
+ */
+export const COMPANION_BLOB_STALE_ROW_MIN_AGE = '5 minutes';
 
 /** The three facts a ref and a stored blob must agree on. */
 export interface CompanionBlobDims {
@@ -130,12 +139,30 @@ export class CompanionBlobsRepository {
     });
   }
 
-  /** Drop a row whose file is gone (under the lock), so a re-upload restores it. */
-  async removeStale(userId: number, sha256: string): Promise<void> {
-    await this.withUserLock(userId, async (tx) => {
-      await tx
+  /**
+   * Drop a row whose file is gone so a re-upload restores it. Under the lock
+   * the file is checked AGAIN and only a row older than
+   * `COMPANION_BLOB_STALE_ROW_MIN_AGE` goes: a younger one may be a
+   * concurrent same-sha upload between its commit and its rename. True when
+   * the row was deleted.
+   */
+  removeStale(userId: number, sha256: string): Promise<boolean> {
+    return this.withUserLock(userId, async (tx) => {
+      if (await companionBlobFileExists(userId, sha256)) return false;
+      const gone = await tx
         .delete(blobs)
-        .where(and(eq(blobs.userId, userId), eq(blobs.sha256, sha256)));
+        .where(
+          and(
+            eq(blobs.userId, userId),
+            eq(blobs.sha256, sha256),
+            lt(
+              blobs.createdAt,
+              sql`now() - ${COMPANION_BLOB_STALE_ROW_MIN_AGE}::interval`,
+            ),
+          ),
+        )
+        .returning({ id: blobs.id });
+      return gone.length > 0;
     });
   }
 
@@ -174,11 +201,13 @@ export class CompanionBlobsRepository {
     });
   }
 
-  /** Compensating delete when the post-commit rename failed. */
+  /** Compensating delete when the post-commit rename failed (under the lock). */
   async remove(userId: number, sha256: string): Promise<void> {
-    await this.db
-      .delete(blobs)
-      .where(and(eq(blobs.userId, userId), eq(blobs.sha256, sha256)));
+    await this.withUserLock(userId, async (tx) => {
+      await tx
+        .delete(blobs)
+        .where(and(eq(blobs.userId, userId), eq(blobs.sha256, sha256)));
+    });
   }
 
   /** Plugin API: drop this contract's refs to `shas` (cleanup may then reap). */

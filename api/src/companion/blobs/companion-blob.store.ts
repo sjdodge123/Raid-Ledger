@@ -9,7 +9,7 @@ import type { ReadStream } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { COMPANION_BLOB_CONTENT_TYPE } from '../../drizzle/schema/companion-ingest';
 import { CompanionSha256Schema } from '@raid-ledger/contract';
-import { companionBlobAbsolutePath } from './companion-blob.paths';
+import { companionBlobAbsolutePath, fsErrorCode } from './companion-blob.paths';
 import {
   CompanionBlobsRepository,
   type CompanionBlobDims,
@@ -43,9 +43,7 @@ export class CompanionBlobStore {
       companionBlobAbsolutePath(userId, sha256),
       'r',
     ).catch((err: unknown) => {
-      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        return null;
-      }
+      if (fsErrorCode(err) === 'ENOENT') return null;
       throw err;
     });
     if (!handle) return null;

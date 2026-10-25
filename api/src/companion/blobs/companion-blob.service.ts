@@ -35,6 +35,7 @@ import {
   companionBlobFileExists,
   companionBlobTempPath,
   discardCompanionBlobFile,
+  fsErrorCode,
 } from './companion-blob.paths';
 import {
   assertBlobRequestHeaders,
@@ -111,7 +112,8 @@ export class CompanionBlobService {
    * Step 2: a row AND its file. A row whose file is gone (crash before the
    * rename, a DB restore without the files) is dropped under the user's
    * lock so this upload restores the file instead of answering `exists`
-   * forever.
+   * forever — unless it is young enough to be a concurrent upload between
+   * its commit and its rename (`removeStale` keeps it; answer `exists`).
    */
   private async alreadyStored(
     userId: number,
@@ -119,10 +121,11 @@ export class CompanionBlobService {
   ): Promise<boolean> {
     if (!(await this.repo.find(userId, sha256))) return false;
     if (await companionBlobFileExists(userId, sha256)) return true;
+    // Kept (fresh row of an in-flight upload, or the file came back): exists.
+    if (!(await this.repo.removeStale(userId, sha256))) return true;
     this.logger.warn(
       `companion blob user=${userId} row without file; re-accepting`,
     );
-    await this.repo.removeStale(userId, sha256);
     return false;
   }
 
@@ -199,9 +202,8 @@ export class CompanionBlobService {
     } catch (err: unknown) {
       await this.repo.remove(userId, sha256);
       await discardCompanionBlobFile(tmpPath);
-      const reason = err instanceof Error && 'code' in err ? err.code : '-';
       this.logger.error(
-        `companion blob user=${userId} rename failed code=${String(reason)}`,
+        `companion blob user=${userId} rename failed code=${fsErrorCode(err) ?? '-'}`,
       );
       throw new InternalServerErrorException('Blob could not be stored');
     }

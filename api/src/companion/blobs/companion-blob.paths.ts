@@ -88,11 +88,21 @@ export async function companionBlobFileExists(
 ): Promise<boolean> {
   const st = await stat(companionBlobAbsolutePath(userId, sha256)).catch(
     (err: unknown) => {
-      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        return null;
-      }
+      if (fsErrorCode(err) === 'ENOENT') return null;
       throw err;
     },
   );
   return st?.isFile() ?? false;
+}
+
+/**
+ * The `code` of a Node fs error, or undefined. Duck-typed on purpose: an fs
+ * error raised inside Jest's VM sandbox is not `instanceof` the sandbox's
+ * `Error`, so an `instanceof Error` guard rethrows a plain ENOENT as a 500.
+ */
+export function fsErrorCode(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null || !('code' in err)) {
+    return undefined;
+  }
+  return typeof err.code === 'string' ? err.code : undefined;
 }
