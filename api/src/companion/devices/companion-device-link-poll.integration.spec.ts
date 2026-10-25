@@ -1,6 +1,6 @@
 /**
  * ROK-1955 L3 — the RFC 8628 poll against a real DB (T-API-1…9, 13).
- * T-API-1's `GET /companion/v1/device` leg is L4's (device guard).
+ * T-API-1's `GET /companion/v1/device` leg added by L4 (device guard).
  */
 import { createHash } from 'node:crypto';
 import {
@@ -51,6 +51,15 @@ describe('companion device link — poll', () => {
     expect(body.token).toMatch(COMPANION_DEVICE_TOKEN_PATTERN);
     expect(body.device.name).toBe('Test-PC');
     expect(body.device.state).toBe('active');
+    const self = await testApp.request
+      .get('/companion/v1/device')
+      .set('Authorization', `Bearer ${body.token}`);
+    expect(self.status).toBe(200);
+    expect(self.body).toEqual({
+      deviceId: body.device.id,
+      name: 'Test-PC',
+      createdAt: body.device.createdAt,
+    });
   });
 
   it('T-API-2 the token and both codes are hashed at rest', async () => {

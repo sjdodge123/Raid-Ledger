@@ -1,6 +1,7 @@
 /** ROK-1955: shared fixtures for the device-link integration specs. */
 import { eq } from 'drizzle-orm';
 import {
+  CompanionLinkPollSuccessSchema,
   CompanionLinkStartResponseSchema,
   type CompanionLinkStartResponse,
 } from '@raid-ledger/contract';
@@ -151,4 +152,21 @@ export async function withEnv<T>(
       else process.env[k] = v;
     }
   }
+}
+
+/** Link a device for a signed-in user end to end; returns its `rlcd_` token. */
+export async function linkDevice(
+  testApp: TestApp,
+  userToken: string,
+): Promise<{ token: string; deviceId: number }> {
+  const link = await startLink(testApp);
+  const decided = await decide(testApp, userToken, link.userCode);
+  if (decided.status !== 200) {
+    throw new Error(`linkDevice: decision HTTP ${decided.status}`);
+  }
+  const res = await poll(testApp, link.deviceCode);
+  if (res.status !== 200)
+    throw new Error(`linkDevice: poll HTTP ${res.status}`);
+  const body = CompanionLinkPollSuccessSchema.parse(res.body);
+  return { token: body.token, deviceId: body.device.id };
 }
