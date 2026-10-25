@@ -272,3 +272,24 @@ describe('GuildPage — recovery that still 401s (ROK-1947)', () => {
         expect(await screen.findByTestId('guild-hero'), 'the recovered hub shows').toBeInTheDocument();
     });
 });
+
+describe('GuildPage — a newer error releases the recovery latch (ROK-1947)', () => {
+    it('a later refetch that answers 403 replaces the stale Sign in with the not-a-member notice', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        serve(200);
+        server.use(http.get(`${API}/guilds/7`, async () => {
+            await delay(20);
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }));
+        const queryClient = createTestQueryClient();
+        renderPage(queryClient);
+        const rechecks = () => posts.filter((p) => p.origin === 'recheck').length;
+        await waitFor(() => expect(rechecks() === 1 && queryClient.isFetching() === 0, 'the one re-check and its refetch settle').toBe(true));
+        expect(screen.getByTestId('guild-session-expired'), 'the still-401 recovery lands on Sign in').toHaveTextContent(EXPIRED);
+        // Another refetch path (a resume refresh) refetches the hub, which now answers 403.
+        server.use(http.get(`${API}/guilds/7`, () => HttpResponse.json({ message: 'Forbidden' }, { status: 403 })));
+        await act(() => refetchUnauthorized(queryClient));
+        await waitFor(() => expect(screen.queryByTestId('guild-session-expired'), 'a newer 403 must release the Sign in latch').toBeNull());
+        expect(screen.getByTestId('guild-not-member'), 'the 403 shows the not-a-member notice').toBeInTheDocument();
+    });
+});

@@ -260,20 +260,23 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     );
 }
 
-type RecoveryLatch = { guildId: number; dataUpdatedAt: number };
+type RecoveryLatch = { guildId: number; dataUpdatedAt: number; errorUpdatedAt: number };
 
 /**
  * ROK-1947: the recovery refetch clears an uncached query's error, so the
  * re-check screen is held until it lands, or the next 401 would remount it
- * and loop. The latch is keyed to the hub and to the data it started from:
- * a later success that did not come through it (a resume refresh refetching
- * the 401'd query) or another hub voids it, so a stale Sign in never stays up.
+ * and loop. The latch is keyed to the hub and to the data AND error it started
+ * from: a later success or error that did not come through it (a resume
+ * refresh refetching the 401'd query, a 403/404/5xx from another refetch) or
+ * another hub voids it, so a stale Sign in never stays up. An in-flight
+ * refetch clears `error` but not `errorUpdatedAt`, so the hold survives it.
  */
 function useRecoveryLatch(query: ReturnType<typeof useGuildPage>, guildId: number) {
     const [latch, setLatch] = useState<RecoveryLatch | null>(null);
-    const recovering = latch !== null && latch.guildId === guildId && latch.dataUpdatedAt === query.dataUpdatedAt;
+    const recovering = latch !== null && latch.guildId === guildId
+        && latch.dataUpdatedAt === query.dataUpdatedAt && latch.errorUpdatedAt === query.errorUpdatedAt;
     const recoverPage = async () => {
-        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt });
+        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt, errorUpdatedAt: query.errorUpdatedAt });
         const result = await query.refetch({ cancelRefetch: false });
         if (result.status === 'success') setLatch(null);
         return result;
