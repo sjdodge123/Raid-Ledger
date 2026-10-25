@@ -298,7 +298,8 @@ export function GuildPage(): JSX.Element {
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
     if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
-    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
+    // Cached data (a refetch error) still knows the kind; with none it falls back to WoW copy.
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} kind={query.data?.guild.kind} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
