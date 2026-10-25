@@ -65,3 +65,35 @@ describe('hub proposal notice — Discord DM escaping', () => {
     ).toEqual(text);
   });
 });
+
+describe('hub proposal notice — proposer name in the Discord DM', () => {
+  it('a masked-link proposer display name does not reach the staff DM as a link', async () => {
+    const n = submittedNotice(3, { ...facts, hubName: 'BG3 Crew' }, EVIL);
+    expect(n.message.startsWith(EVIL)).toBe(true);
+    const { embed } = await serviceWithClientUrl().buildNotificationEmbed(
+      {
+        notificationId: 'n-2',
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        ...(n.payload ? { payload: n.payload } : {}),
+      },
+      'Raid Ledger',
+    );
+    const { description } = embed.toJSON();
+    expect(description).not.toMatch(UNESCAPED_LINK);
+    expect(description).toContain(escapeHubName(EVIL));
+    expect(description).toContain('"BG3 Crew"');
+  });
+
+  it('escapes the hub name and the proposer name in one pass', () => {
+    const out = hubProposalDiscordText({
+      type: 'hub_proposal_submitted',
+      title: 'T',
+      message: `${EVIL} proposed "${EVIL}" for BG3.`,
+      payload: { hubName: EVIL, proposerName: EVIL },
+    });
+    const safe = escapeHubName(EVIL);
+    expect(out.message).toBe(`${safe} proposed "${safe}" for BG3.`);
+  });
+});

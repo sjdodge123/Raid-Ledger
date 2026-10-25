@@ -28,7 +28,8 @@ export function submittedNotice(
     type: 'hub_proposal_submitted',
     title: `New hub proposal: ${facts.hubName}`,
     message: `${proposerName} proposed "${facts.hubName}" for ${facts.gameName}.`,
-    payload: { ...facts, url: HUB_PROPOSALS_ADMIN_URL },
+    // `proposerName` lets the Discord DM escape it (notification-embed.hub-proposal).
+    payload: { ...facts, proposerName, url: HUB_PROPOSALS_ADMIN_URL },
   };
 }
 

@@ -12,7 +12,11 @@ describe('hub proposal notices', () => {
     const n = submittedNotice(3, facts, 'alice');
     expect(n).toMatchObject({ userId: 3, type: 'hub_proposal_submitted' });
     expect(n.message).toContain('alice');
-    expect(n.payload).toEqual({ ...facts, url: HUB_PROPOSALS_ADMIN_URL });
+    expect(n.payload).toEqual({
+      ...facts,
+      proposerName: 'alice',
+      url: HUB_PROPOSALS_ADMIN_URL,
+    });
   });
 
   it('approved links the proposer to the hub page', () => {

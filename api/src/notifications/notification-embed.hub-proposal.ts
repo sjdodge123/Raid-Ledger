@@ -8,13 +8,28 @@ export interface NotificationDmText {
   message: string;
 }
 
+/** The user-supplied names a `hub_proposal_*` payload carries. */
+const PROPOSAL_NAME_KEYS = ['hubName', 'proposerName'] as const;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Escape every occurrence of `names` in ONE pass (longest first), so an escaped name is never re-matched. */
+function escapeNames(text: string, names: readonly string[]): string {
+  const sorted = [...names].sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(sorted.map(escapeRegExp).join('|'), 'g');
+  return text.replace(pattern, (match) => escapeHubName(match));
+}
+
 /**
  * The Discord rendering of a `hub_proposal_*` notice's title/message: the
- * proposer-supplied hub name (`payload.hubName`) is passed through
- * {@link escapeHubName} so a name like `[x](https://evil.example)` never
- * renders as a masked link (or a mention) in a staff DM. Escaping happens
- * here, at the Discord boundary, so the stored in-app text stays verbatim.
- * Other types, or a payload without a hub name, pass through unchanged.
+ * user-supplied hub name (`payload.hubName`) and proposer display name
+ * (`payload.proposerName`) are passed through {@link escapeHubName} so a name
+ * like `[x](https://evil.example)` never renders as a masked link (or a
+ * mention) in a staff DM. Escaping happens here, at the Discord boundary, so
+ * the stored in-app text stays verbatim. Other types, or a payload without
+ * either name, pass through unchanged.
  */
 export function hubProposalDiscordText(input: {
   type: NotificationType;
@@ -23,17 +38,16 @@ export function hubProposalDiscordText(input: {
   payload?: Record<string, unknown>;
 }): NotificationDmText {
   const { title, message } = input;
-  const hubName = input.payload?.hubName;
   const isProposal =
     input.type === 'hub_proposal_submitted' ||
     input.type === 'hub_proposal_reviewed';
-  if (!isProposal || typeof hubName !== 'string' || hubName === '') {
-    return { title, message };
-  }
-  const safe = escapeHubName(hubName);
+  const names = PROPOSAL_NAME_KEYS.map((k) => input.payload?.[k]).filter(
+    (v): v is string => typeof v === 'string' && v !== '',
+  );
+  if (!isProposal || names.length === 0) return { title, message };
   return {
-    title: title.split(hubName).join(safe),
-    message: message.split(hubName).join(safe),
+    title: escapeNames(title, names),
+    message: escapeNames(message, names),
   };
 }
 
