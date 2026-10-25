@@ -108,13 +108,15 @@ describe('declared setup (§3.5)', () => {
 });
 
 describe('PluginInfo setup status (§3.5, L2)', () => {
-  it('defaults setupStatus to an empty list for an older payload', () => {
+  it('leaves setupStatus absent for an older payload (= not checked)', () => {
     const legacy = {
       slug: 'valheim', name: 'Valheim', version: '1.0.0', description: 'x',
       author: { name: 'Raid Ledger' }, capabilities: [], integrations: [],
       status: 'active', installedAt: null,
     };
-    expect(PluginInfoSchema.parse(legacy).setupStatus).toEqual([]);
+    expect(PluginInfoSchema.parse(legacy).setupStatus).toBeUndefined();
+    const status = [{ id: 'link-token', state: 'unmet' }];
+    expect(PluginInfoSchema.parse({ ...legacy, setupStatus: status }).setupStatus).toEqual(status);
   });
 
   it('accepts met / unmet / unknown and nothing else', () => {

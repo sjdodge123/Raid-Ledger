@@ -47,8 +47,11 @@ export const PluginInfoSchema = z.object({
   builtIn: z.boolean().default(false),
   /** ROK-1969: the widgets, tabs and behaviours this plugin adds to hubs. */
   hub: PluginHubManifestSchema.default(emptyPluginHubManifest),
-  /** ROK-1969 §3.5: met/unmet per `hub.setup` requirement, in the same order. */
-  setupStatus: z.array(PluginSetupStatusSchema).default([]),
+  /**
+   * ROK-1969 §3.5: met/unmet per `hub.setup` requirement, in the same order.
+   * Absent = not checked (render every requirement as `unknown`).
+   */
+  setupStatus: z.array(PluginSetupStatusSchema).optional(),
 });
 
 export type PluginInfoDto = z.infer<typeof PluginInfoSchema>;
