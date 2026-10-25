@@ -19,6 +19,7 @@ import {
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
+import { SettingsService } from '../../../settings/settings.service';
 import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
 
 const BG3 = 1086940;
@@ -370,26 +371,56 @@ describe('GET /hubs/:guildId/steam-stats — availability (I7)', () => {
 
 describe('POST /admin/test/steam-app-stats/seed (DEMO_MODE)', () => {
   const ORIGINAL = process.env.DEMO_MODE;
-  afterEach(() => {
+  const settings = () => testApp.app.get(SettingsService);
+  const seedAs = (token: string) =>
+    testApp.request
+      .post('/admin/test/steam-app-stats/seed')
+      .set(auth(token))
+      .send({});
+  /** DemoModeGuard needs BOTH the env flag and the DB setting (the R1 403). */
+  beforeEach(async () => {
+    process.env.DEMO_MODE = 'true';
+    settings().invalidateCache(true);
+    await settings().setDemoMode(true);
+  });
+  afterEach(async () => {
+    await settings().setDemoMode(false);
     if (ORIGINAL === undefined) delete process.env.DEMO_MODE;
     else process.env.DEMO_MODE = ORIGINAL;
   });
 
-  it('seeds A–D on a BG3 hub: B sees the hidden unlock masked, A sees it named', async () => {
-    process.env.DEMO_MODE = 'true';
-    const bg3 = await makeHub(
-      await makeGame('baldurs-gate-3', null),
-      'Seed Crew',
-    );
+  it('seeds A–D on its own hub + disabled game: B sees the hidden unlock masked, A sees it named', async () => {
+    // The shared beforeEach game holds BG3's (unique) app id; free it.
+    await testApp.db
+      .update(schema.games)
+      .set({ steamAppId: null })
+      .where(eq(schema.games.id, gameId));
+    const shared = await makeGame('baldurs-gate-3', null);
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
-    const seed = () =>
-      testApp.request
-        .post('/admin/test/steam-app-stats/seed')
-        .set(auth(admin))
-        .send({ guildId: bg3 });
-    const res = await seed();
+    const res = await seedAs(admin);
     expect(res.status).toBe(200);
-    expect((await seed()).status).toBe(200); // idempotent re-seed
+    const again = await seedAs(admin); // idempotent re-seed, same hub + game
+    expect([again.status, again.body.guildId, again.body.gameId]).toEqual([
+      200,
+      res.body.guildId,
+      res.body.gameId,
+    ]);
+    const bg3 = res.body.guildId as number;
+    const games = await testApp.db
+      .select({
+        id: schema.games.id,
+        appId: schema.games.steamAppId,
+        enabled: schema.games.enabled,
+      })
+      .from(schema.games);
+    const byId = new Map(games.map((g) => [g.id, g]));
+    // Its own game: disabled (never in /games/configured), holding the app id;
+    // the shared BG3 row is untouched (review MAJOR 2).
+    expect(byId.get(res.body.gameId as number)).toMatchObject({
+      appId: BG3,
+      enabled: false,
+    });
+    expect(byId.get(shared)?.appId).toBeNull();
     const users = res.body.users as Record<
       'a' | 'b' | 'c' | 'd',
       { userId: number; username: string }
@@ -418,14 +449,19 @@ describe('POST /admin/test/steam-app-stats/seed (DEMO_MODE)', () => {
     });
   });
 
-  it('refuses a hub whose game is not BG3 (400)', async () => {
-    process.env.DEMO_MODE = 'true';
+  it("refuses (409) when a real game already holds BG3's app id, and creates nothing", async () => {
     const admin = await loginAsAdmin(testApp.request, testApp.seed);
-    const other = await makeHub(await makeGame('valheim-x', null), 'Vikings');
-    const res = await testApp.request
-      .post('/admin/test/steam-app-stats/seed')
-      .set(auth(admin))
-      .send({ guildId: other });
-    expect(res.status).toBe(400);
+    const before = await testApp.db.select().from(schema.guilds);
+    const res = await seedAs(admin);
+    expect(res.status).toBe(409);
+    expect((await testApp.db.select().from(schema.guilds)).length).toBe(
+      before.length,
+    );
+  });
+
+  it('403s without the DB DEMO_MODE setting', async () => {
+    await settings().setDemoMode(false);
+    const admin = await loginAsAdmin(testApp.request, testApp.seed);
+    expect((await seedAs(admin)).status).toBe(403);
   });
 });

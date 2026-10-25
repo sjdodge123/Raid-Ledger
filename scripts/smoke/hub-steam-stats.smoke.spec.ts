@@ -1,10 +1,11 @@
 /**
  * ROK-1953 — the shared Core Steam cards (Achievement race + Playtime) on a
- * BG3 community hub, desktop AND mobile.
+ * BG3-app-id community hub, desktop AND mobile.
  *
- * Seed (DEMO_MODE, as admin): `POST /admin/test/community-hubs/seed {}` (BG3
- * when the game exists) → "Seed Crew" `<H>`, then
- * `POST /admin/test/steam-app-stats/seed { guildId: <H> }` → roles A..D =
+ * Seed (DEMO_MODE, as admin): `POST /admin/test/steam-app-stats/seed {}` →
+ * its OWN hub "Steam Stats Crew" `<H>` on its OWN disabled game holding BG3's
+ * app id (review R1: never in `/games/configured`, so no other hub spec's
+ * game picker can land on it, and no shared game row is mutated) → roles A..D =
  * `community-member-1..4`: A `ok` 5/6 incl. both hidden achievements, B `ok`
  * 3/6, C `private`, D unlinked. Every test here is READ-ONLY, so the projects
  * share ONE seed: it runs under a cross-worker file lock and is reused while
@@ -98,12 +99,13 @@ async function readCachedSeed(): Promise<SteamSeed | null> {
 }
 
 async function seedFresh(admin: string): Promise<SteamSeed> {
-    const hubs = (await apiPost(admin, '/admin/test/community-hubs/seed', {})) as { hubIds?: { crew?: number } } | null;
-    const hubId = must(hubs?.hubIds?.crew, `community-hubs seed crew id: ${JSON.stringify(hubs)}`);
-    const steam = (await apiPost(admin, '/admin/test/steam-app-stats/seed', { guildId: hubId })) as Partial<SteamSeed> | null;
-    if (!steam || typeof steam.gameId !== 'number' || !steam.users) {
+    const steam = (await apiPost(admin, '/admin/test/steam-app-stats/seed', {})) as
+        | (Partial<SteamSeed> & { guildId?: number })
+        | null;
+    if (!steam || typeof steam.guildId !== 'number' || typeof steam.gameId !== 'number' || !steam.users) {
         throw new Error(`[hub-steam-stats] steam seed: ${JSON.stringify(steam)}`);
     }
+    const hubId = steam.guildId;
     const seed: SteamSeed = { hubId, gameId: steam.gameId, users: steam.users };
     await pollForCondition(() => seedIsLive(admin, seed).then((ok) => (ok ? true : null)), {
         timeoutMs: 30_000,

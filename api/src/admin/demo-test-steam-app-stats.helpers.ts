@@ -1,23 +1,20 @@
 /**
- * ROK-1953 §4.5 — the DEMO_MODE Steam stats fixture for a BG3 community hub.
+ * ROK-1953 §4.5 — the DEMO_MODE Steam stats fixture on the seed's own hub
+ * (`demo-test-steam-app-stats-game.helpers.ts`).
  * No Steam calls: an app row + 6 invented achievements (2 hidden, one hidden
  * below 5 %), four crew members A–D (A: `ok`, both hidden unlocked; B: `ok`,
  * no hidden; C: `private`; D: unlinked with a kept row + unlock that the feeds
  * must drop) and `steam_library` playtime. Re-running resets the four users.
  */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { STEAM_STATS_APP_IDS } from '../plugins/core/steam-stats/steam-stats.constants';
+import {
+  clearSteamIdReturningPrevious,
+  setSteamIdReturningPrevious,
+} from '../users/users-steam-link.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-
-export const BG3_APP_ID = 1086940;
-const BG3_SLUGS: ReadonlySet<string> = new Set([
-  'baldurs-gate-3',
-  'baldurs-gate-iii',
-]);
 
 /** The four seeded roles → the community-hubs seed users they reuse. */
 export const STEAM_SEED_ROLES = {
@@ -116,56 +113,6 @@ export function fakeSteamId(userId: number): string {
   return `7656119${String(userId).padStart(10, '0')}`;
 }
 
-async function findSeedHub(db: Db, guildId: number) {
-  const [hub] = await db
-    .select({
-      kind: schema.guilds.kind,
-      gameId: schema.guilds.gameId,
-      slug: schema.games.slug,
-      appId: schema.games.steamAppId,
-    })
-    .from(schema.guilds)
-    .leftJoin(schema.games, eq(schema.games.id, schema.guilds.gameId))
-    .where(eq(schema.guilds.id, guildId))
-    .limit(1);
-  return hub;
-}
-
-function enabledOr400(appId: number): number {
-  if (!STEAM_STATS_APP_IDS.has(appId)) {
-    throw new BadRequestException('seed a BG3 hub');
-  }
-  return appId;
-}
-
-/**
- * The hub's game app id, setting BG3's (`manual`) when the game is a BG3
- * slug with no id yet. 400 for anything that is not an enabled BG3 hub.
- */
-export async function resolveSeedApp(
-  db: Db,
-  guildId: number,
-): Promise<{ gameId: number; appId: number }> {
-  const hub = await findSeedHub(db, guildId);
-  if (!hub) throw new NotFoundException('Guild not found');
-  if (
-    hub.kind !== 'game_community' ||
-    hub.gameId === null ||
-    hub.slug === null ||
-    !BG3_SLUGS.has(hub.slug)
-  ) {
-    throw new BadRequestException('seed a BG3 community hub');
-  }
-  if (hub.appId !== null) {
-    return { gameId: hub.gameId, appId: enabledOr400(hub.appId) };
-  }
-  await db
-    .update(schema.games)
-    .set({ steamAppId: BG3_APP_ID, steamAppIdSource: 'manual' })
-    .where(eq(schema.games.id, hub.gameId));
-  return { gameId: hub.gameId, appId: BG3_APP_ID };
-}
-
 /** The app row + its achievements (replaced wholesale). */
 export async function seedAppSchema(db: Db, appId: number): Promise<void> {
   const app = {
@@ -195,10 +142,9 @@ export async function seedMemberStats(
   const { appId, gameId, userId } = ids;
   const plan = SEED_PLAN[role];
   await clearUser(db, userId, appId, gameId);
-  await db
-    .update(schema.users)
-    .set({ steamId: role === 'd' ? null : fakeSteamId(userId) })
-    .where(eq(schema.users.id, userId));
+  // The sanctioned users.steam_id writers (ROK-1835 R5 guard).
+  if (role === 'd') await clearSteamIdReturningPrevious(db, userId);
+  else await setSteamIdReturningPrevious(db, userId, fakeSteamId(userId));
   const count = plan.status === 'ok' ? Object.keys(plan.unlocks).length : null;
   await db
     .insert(schema.steamUserAppStats)
