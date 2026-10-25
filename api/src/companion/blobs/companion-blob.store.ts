@@ -5,7 +5,7 @@
  * bytes are never served. Member visibility is the plugin's guard.
  */
 import { Injectable } from '@nestjs/common';
-import { createReadStream, type ReadStream } from 'node:fs';
+import type { ReadStream } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { COMPANION_BLOB_CONTENT_TYPE } from '../../drizzle/schema/companion-ingest';
 import { CompanionSha256Schema } from '@raid-ledger/contract';
@@ -49,7 +49,7 @@ export class CompanionBlobStore {
       throw err;
     });
     if (!handle) return null;
-    const stream = createReadStream('', { fd: handle.fd, autoClose: true });
+    const stream = handle.createReadStream({ autoClose: true });
     return {
       ...dims,
       sha256,
