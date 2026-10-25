@@ -3,7 +3,7 @@
  * (D9/D10), writes them in the `useSelectionWriter` style (`replace: true`,
  * hash kept), and fetches the cross-player layer in a players scope. Without a
  * `serverId` (character page) the scope is always this character and there is
- * no portal layer (ROK-1946).
+ * no portal layer (ROK-1946) and no Chests layer (ROK-1859).
  */
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
@@ -14,6 +14,7 @@ import {
 } from './pin-filter';
 import { layerStatus, portalLayerFailed, type PinFilterSummary } from './pin-filter-summary';
 import { filterPortals } from './portal-pins';
+import { useChestLayer, type ChestLayer } from './use-chest-layer';
 import { rawTypesFor, type PinTypeGroupId } from './pin-type-groups';
 
 export type { PinFilterSummary, PinLayerStatus } from './pin-filter-summary';
@@ -39,6 +40,8 @@ export interface PinFilterPanelState {
 
 export interface PinFilterView {
     pins: readonly ValheimMapPin[];
+    /** ROK-1859: the Chests layer, drawn by its own `ChestPinLayer` (pins open the chest). */
+    chests: ChestLayer;
     panel: PinFilterPanelState;
     summary: PinFilterSummary;
 }
@@ -97,11 +100,12 @@ export function usePinFilter({ characterId, serverId, meta }: PinFilterArgs): Pi
     const layerOn = filter.players !== 'character' && types?.length !== 0;
     const server = useValheimServerPins({ serverId: serverId ?? 0, worldUid: meta.worldUid, players, types }, layerOn);
     const portals = usePortalLayer(filter, serverId, meta.worldUid);
+    const chests = useChestLayer(filter, serverId, meta.worldUid);
     const pins = [...filterPins(meta.pins, filter, layerOn ? server.data?.pins : []), ...portals.pins];
     const summary: PinFilterSummary = {
-        activeCount: panel.activeCount, count: pins.length, status: layerStatus(server, layerOn),
+        activeCount: panel.activeCount, count: pins.length + chests.pins.length, status: layerStatus(server, layerOn),
         truncated: layerOn && server.data?.truncated === true,
-        onRetry: () => void server.refetch(), onClear: panel.onClearAll, ...portals.summary,
+        onRetry: () => void server.refetch(), onClear: panel.onClearAll, ...portals.summary, ...chests.summary,
     };
-    return { pins, panel, summary };
+    return { pins, chests, panel, summary };
 }

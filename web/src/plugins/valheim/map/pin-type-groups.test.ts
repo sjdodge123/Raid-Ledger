@@ -8,20 +8,20 @@ import {
 } from './pin-type-groups';
 
 describe('pin type groups (ROK-1943 D7/D8, Q2 = a)', () => {
-    it('lists all 12 chips in the ruled fixed order, Scanned portals right after Portal', () => {
+    it('lists all 13 chips in the ruled fixed order, Scanned portals right after Portal, Chests after it (ROK-1859)', () => {
         expect(PIN_TYPE_GROUP_IDS).toEqual([
-            'death', 'bed', 'portal', 'scanned-portal', 'boss', 'home', 'fire',
+            'death', 'bed', 'portal', 'scanned-portal', 'chest', 'boss', 'home', 'fire',
             'workshop', 'mine', 'shout', 'hildir', 'other',
         ]);
         expect(PIN_TYPE_GROUPS.map((g) => g.label)).toEqual([
-            'Death', 'Bed', 'Portal', 'Scanned portals', 'Boss', 'Home', 'Fire',
+            'Death', 'Bed', 'Portal', 'Scanned portals', 'Chests', 'Boss', 'Home', 'Fire',
             'Workshop', 'Mine', 'Shout', "Hildir's chest", 'Other',
         ]);
     });
 
-    it('every entry has an icon and a tone token; only Scanned portals is the portal-scan source', () => {
+    it('every entry has an icon and a tone token; only Scanned portals and Chests are scan sources', () => {
         expect(PIN_TYPE_GROUPS.filter((g) => g.source !== 'map').map((g) => [g.id, g.source]))
-            .toEqual([['scanned-portal', 'portal-scan']]);
+            .toEqual([['scanned-portal', 'portal-scan'], ['chest', 'container-scan']]);
         for (const g of PIN_TYPE_GROUPS) {
             expect(g.Icon).toBeTruthy();
             expect(g.toneClass).toMatch(/^text-/);

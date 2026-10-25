@@ -126,3 +126,38 @@ export const CONTAINERS_DEMO_MESSAGE: ValheimContainersMessage = {
   omittedShared: 1,
   omittedPrivate: 1,
 };
+
+/**
+ * ROK-1859 D11 — opt-in (`secondBase: true`) second base ~700 m from the
+ * first: two shared stationary chests 10 m apart holding Stone and Resin (no
+ * Wood, so the default seed's Wood counts hold either way).
+ */
+export const DEMO_SECOND_BASE: ValheimContainer[] = [
+  {
+    ...base,
+    prefab: 'piece_chest_wood',
+    x: 600,
+    z: -360,
+    usedSlots: 1,
+    items: [s('Stone', 80)],
+  },
+  {
+    ...base,
+    prefab: 'piece_chest_wood',
+    x: 610,
+    z: -360,
+    usedSlots: 2,
+    items: [s('Stone', 40), s('Resin', 12)],
+  },
+];
+
+/** The demo scan, optionally with the second base. */
+export function containersDemoMessage(
+  secondBase: boolean,
+): ValheimContainersMessage {
+  if (!secondBase) return CONTAINERS_DEMO_MESSAGE;
+  return {
+    ...CONTAINERS_DEMO_MESSAGE,
+    containers: [...CONTAINERS_DEMO_MESSAGE.containers, ...DEMO_SECOND_BASE],
+  };
+}

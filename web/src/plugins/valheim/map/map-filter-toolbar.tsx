@@ -27,12 +27,31 @@ function PortalSummary({ summary }: { summary: PinFilterSummary }): JSX.Element 
     );
 }
 
+/** ROK-1859: the Chests layer's error chip + Retry and the other-world line (D13). */
+function ChestSummary({ summary }: { summary: PinFilterSummary }): JSX.Element {
+    return (
+        <>
+            {summary.chestsError && (
+                <>
+                    <StatusChip tone="danger" title="Chests">{PIN_SUMMARY_TEXT.chestsError}</StatusChip>
+                    <Button variant="ghost" size="md" onClick={summary.onRetryChests}>Retry</Button>
+                </>
+            )}
+            {summary.chestsOtherWorld && <span>{PIN_SUMMARY_TEXT.chestsOtherWorld}</span>}
+        </>
+    );
+}
+
+/** Any enabled layer still loading or failed → not "no match" (ROK-1946, ROK-1859). */
+function layersSettled(summary: PinFilterSummary): boolean {
+    const { status, portalsPending, portalsError, chestsPending, chestsError } = summary;
+    return status !== 'loading' && status !== 'error' && !portalsPending && !portalsError && !chestsPending && !chestsError;
+}
+
 /** The D15 summary line; empty (but mounted, a live region) when there is nothing to say. */
 export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary; onClear: () => void }): JSX.Element {
     const { status, activeCount, count, truncated } = summary;
-    // Either enabled layer still loading or failed → not "no match" (ROK-1946).
-    const layersSettled = status !== 'loading' && status !== 'error' && !summary.portalsPending && !summary.portalsError;
-    const empty = activeCount > 0 && count === 0 && layersSettled;
+    const empty = activeCount > 0 && count === 0 && layersSettled(summary);
     return (
         <div role="status" data-testid="map-pin-filter" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted">
             {status === 'loading' && <span>{PIN_SUMMARY_TEXT.loading}</span>}
@@ -51,6 +70,7 @@ export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary
             )}
             {truncated && <span>{PIN_SUMMARY_TEXT.truncated}</span>}
             <PortalSummary summary={summary} />
+            <ChestSummary summary={summary} />
         </div>
     );
 }

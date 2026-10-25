@@ -88,10 +88,11 @@ export const mapApp = (page: Page): Locator =>
   page.getByRole("application", { name: "Valheim map" });
 /**
  * Player/character pins: every button inside the map application except the
- * ROK-1946 scanned portals (server data, their own layer — `scannedPortals`).
+ * ROK-1946 scanned portals and the ROK-1859 chests (server data, their own
+ * layers — `scannedPortals`; chests are `"<name> (Chest)"`).
  */
 export const pins = (map: Locator): Locator =>
-  map.getByRole("button", { name: /^(?!.*\(Scanned portal\)$)/ });
+  map.getByRole("button", { name: /^(?!.*\((Scanned portal|Chest)\)$)/ });
 
 /** ROK-1946 scanned portals: `"<tag | Unnamed portal> (Scanned portal)"`. */
 export const scannedPortals = (map: Locator): Locator =>
