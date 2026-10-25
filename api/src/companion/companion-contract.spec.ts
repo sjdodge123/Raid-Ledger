@@ -7,8 +7,8 @@
  *   issue path + code listed in `fixtures/invalid/EXPECTED.json`;
  * - C4 each anonymised raw `saveinfo/<case>.saveinfo.json` normalises to the
  *   golden `<case>.json` payload;
- * - C5 the raw fixtures stay anonymised; C6 the placeholder WebP matches the
- *   golden thumbnail ref;
+ * - C5 the fixtures and docs stay anonymised; C6 the placeholder WebP matches
+ *   the golden thumbnail ref and is a flat single-colour image;
  * - C7 each committed `schema.json` equals a fresh generation (fix drift with
  *   `npm run build -w packages/contract && node
  *   packages/contract/scripts/gen-companion-schemas.mjs`); C8 the bg3 schema
@@ -249,11 +249,16 @@ describe('Companion fixtures stay anonymised (C5)', () => {
     },
   );
 
-  it('no fixture file holds a SteamID64, a drive path or a /Users/ path', () => {
-    const jsonFiles = filesUnder(ROOT).filter((f) => f.endsWith('.json'));
-    expect(jsonFiles.length).toBeGreaterThan(20);
-    const leaks = jsonFiles.filter((f) =>
-      /7656119\d{10}|[A-Z]:\\|\/Users\//.test(readFileSync(f, 'utf8')),
+  it('no fixture or doc holds a SteamID64, a GUID, a drive path or a /Users/ path', () => {
+    const textFiles = filesUnder(ROOT).filter((f) => !f.endsWith('.webp'));
+    expect(textFiles.filter((f) => f.endsWith('.md')).length).toBeGreaterThan(
+      3,
+    );
+    expect(textFiles.length).toBeGreaterThan(20);
+    const leaks = textFiles.filter((f) =>
+      /7656119\d{10}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-|[A-Z]:\\|\/Users\//i.test(
+        readFileSync(f, 'utf8'),
+      ),
     );
     expect(leaks).toEqual([]);
   });
@@ -270,6 +275,17 @@ describe('bg3-save v1 placeholder thumbnail (C6)', () => {
       width: meta.width,
       height: meta.height,
     }).toEqual(bg3Fixture('act2-party-4p-summon').payload.thumbnail);
+  });
+
+  it('is a flat single-colour image, so a real screenshot cannot pass (ruling 5)', async () => {
+    const bytes = readFileSync(join(BG3_FIX, 'placeholder-thumbnail.webp'));
+    const { channels } = await sharp(bytes).stats();
+    expect(channels.length).toBeGreaterThanOrEqual(3);
+    const spread = channels.map((c, i) => ({
+      channel: i,
+      range: c.max - c.min,
+    }));
+    expect(spread.filter((c) => c.range > 1)).toEqual([]);
   });
 });
 
