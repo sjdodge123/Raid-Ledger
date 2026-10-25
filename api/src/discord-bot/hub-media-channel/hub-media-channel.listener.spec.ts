@@ -115,6 +115,29 @@ describe('HubMediaChannelListener', () => {
     expect(peak).toBe(2);
   });
 
+  it('never drops an edit when the queue is full (edits are essential)', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => (release = r));
+    ingest.onEdit.mockImplementation(async () => {
+      await held;
+    });
+    const burst = ['1', '2', '3', '4'].map((id) =>
+      listener.onUpdate(post({ id }) as never).then(
+        () => 'edited',
+        () => 'dropped',
+      ),
+    );
+    await new Promise<void>((r) => setImmediate(r));
+    release();
+    expect(await Promise.all(burst)).toEqual([
+      'edited',
+      'edited',
+      'edited',
+      'edited',
+    ]);
+    expect(ingest.onEdit).toHaveBeenCalledTimes(4);
+  });
+
   it('treats a bulk delete as one delete per message', async () => {
     const msgs = new Map([
       ['1', { ...post({ id: '1' }), partial: true }],

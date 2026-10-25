@@ -79,4 +79,13 @@ describe('HubMediaIngestPool', () => {
       }),
     ).toEqual({ limit: 3, queueMax: 50 });
   });
+
+  it('clamps env overrides to the MAX_* bounds', () => {
+    expect(
+      readIngestPoolLimits({
+        HUB_MEDIA_INGEST_CONCURRENCY: '64',
+        HUB_MEDIA_INGEST_QUEUE_MAX: '100000',
+      }),
+    ).toEqual({ limit: 8, queueMax: 500 });
+  });
 });

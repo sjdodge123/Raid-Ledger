@@ -4,12 +4,12 @@
  * start goes through it, so a burst of large pictures in a bound channel
  * cannot hold more than `limit` image buffers at once.
  *
- * - `droppable` work (live gateway creates / edits) waits in a queue capped
- *   at `queueMax`; beyond that it is refused with a logged warning — a
- *   dropped picture comes back with the next "Import last 3 weeks".
- * - `essential` work (deletes, backfill posts) always queues: deletes must
- *   never be lost, and a backfill submits one post at a time per hub, so it
- *   cannot grow the queue unboundedly.
+ * - `droppable` work (live gateway creates) waits in a queue capped at
+ *   `queueMax`; beyond that it is refused with a logged warning — a dropped
+ *   picture comes back with the next "Import last 3 weeks".
+ * - `essential` work (edits, deletes, backfill posts) always queues: an edit
+ *   or delete that removes a picture is never replayed by backfill, so it must
+ *   not be lost; a backfill submits one post at a time per hub.
  *
  * FIFO, so a delete queued behind a create of the same message starts after it.
  */
@@ -17,6 +17,9 @@ import { Logger } from '@nestjs/common';
 
 export const DEFAULT_INGEST_CONCURRENCY = 2;
 export const DEFAULT_INGEST_QUEUE_MAX = 50;
+/** Upper bounds an env override cannot exceed (image buffers are large). */
+export const MAX_INGEST_CONCURRENCY = 8;
+export const MAX_INGEST_QUEUE_MAX = 500;
 
 export interface IngestPoolLimits {
   /** Max tasks in flight at once (`HUB_MEDIA_INGEST_CONCURRENCY`). */
@@ -39,18 +42,18 @@ const positiveInt = (raw: string | undefined, fallback: number): number => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 
-/** The pool's limits from the environment (positive ints, else defaults). */
+/** The pool's limits from the environment (positive ints, else defaults; clamped to the MAX_* bounds). */
 export function readIngestPoolLimits(
   env: Record<string, string | undefined> = process.env,
 ): IngestPoolLimits {
   return {
-    limit: positiveInt(
-      env.HUB_MEDIA_INGEST_CONCURRENCY,
-      DEFAULT_INGEST_CONCURRENCY,
+    limit: Math.min(
+      positiveInt(env.HUB_MEDIA_INGEST_CONCURRENCY, DEFAULT_INGEST_CONCURRENCY),
+      MAX_INGEST_CONCURRENCY,
     ),
-    queueMax: positiveInt(
-      env.HUB_MEDIA_INGEST_QUEUE_MAX,
-      DEFAULT_INGEST_QUEUE_MAX,
+    queueMax: Math.min(
+      positiveInt(env.HUB_MEDIA_INGEST_QUEUE_MAX, DEFAULT_INGEST_QUEUE_MAX),
+      MAX_INGEST_QUEUE_MAX,
     ),
   };
 }

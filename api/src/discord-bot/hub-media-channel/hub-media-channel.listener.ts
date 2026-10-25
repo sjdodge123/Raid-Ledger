@@ -98,7 +98,12 @@ export class HubMediaChannelListener {
     const full = message.partial ? await message.fetch() : message;
     if (this.isOwn(full)) return;
     const post = toPostLike(full);
-    await this.pool.run(`edit ${post.id}`, () => this.ingest.onEdit(post, hub));
+    // Essential: backfill never replays a removal, so a dropped edit would be lost.
+    await this.pool.run(
+      `edit ${post.id}`,
+      () => this.ingest.onEdit(post, hub),
+      'essential',
+    );
   }
 
   /** A delete — only its ids are read; never dropped by the pool. */
