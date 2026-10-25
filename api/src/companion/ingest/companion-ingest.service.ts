@@ -1,7 +1,8 @@
 /**
  * ROK-1956 §4.1 — the messages pipeline after the body is read: the pure
  * steps (3–10), then step 11 in one transaction (device revalidation →
- * latest-wins compare-and-set → handler). A stale message commits nothing
+ * stored-blob ref check → latest-wins compare-and-set → ref upsert →
+ * handler). A stale message commits nothing
  * and never reaches the handler (Q3). Logs ids, contract, version and the
  * result only — never the body or payload values.
  */
@@ -11,6 +12,11 @@ import {
   type CompanionContractTable,
   type CompanionIngestAck,
 } from '@raid-ledger/contract';
+import {
+  assertRefsMatchStored,
+  uniqueBlobRefs,
+  type CompanionBlobRefRow,
+} from '../blobs/companion-blob-refs.helpers';
 import type { CompanionDeviceTx } from '../devices/companion-device-lock';
 import {
   COMPANION_CONTRACT_TABLE,
@@ -75,18 +81,31 @@ export class CompanionIngestService {
     receivedAt: Date,
   ): Promise<AckStatus> {
     await this.assertDeviceHeld(tx, auth);
-    // L5: step 11b (stored blob vs ref → 409 blob_ref_mismatch) goes here.
+    const refs = await this.checkBlobRefs(tx, auth.userId, msg);
     if (marker) {
       const row = { userId: auth.userId, contract: msg.contract, ...marker };
       if (!(await this.repo.advance(tx, row))) return 'stale';
     }
-    // L5: step 11d (upsert companion_blob_refs) goes here.
+    await this.repo.recordBlobRefs(tx, auth.userId, msg.contract, refs);
     const { userId, via, deviceId } = auth;
     await msg.handler.handle(
       { tx, userId, via, deviceId, receivedAt },
       msg.message,
     );
     return 'accepted';
+  }
+
+  /** Step 11b: the message's refs must agree with any blob already stored. */
+  private async checkBlobRefs(
+    tx: CompanionDeviceTx,
+    userId: number,
+    msg: ValidatedCompanionMessage,
+  ): Promise<CompanionBlobRefRow[]> {
+    const refs = uniqueBlobRefs(msg.handler.blobRefs?.(msg.message) ?? []);
+    if (refs.length === 0) return refs;
+    const shas = refs.map((r) => r.sha256);
+    assertRefsMatchStored(refs, await this.repo.storedBlobs(tx, userId, shas));
+    return refs;
   }
 
   /** Step 11a: the device path's token must still be live at commit. */

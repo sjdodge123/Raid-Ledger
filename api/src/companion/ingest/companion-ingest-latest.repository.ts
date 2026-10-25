@@ -11,6 +11,11 @@ import {
   holdActiveDevice,
   type CompanionDeviceTx,
 } from '../devices/companion-device-lock';
+import type { CompanionBlobRefRow } from '../blobs/companion-blob-refs.helpers';
+import {
+  storedBlobsIn,
+  upsertBlobRefsIn,
+} from '../blobs/companion-blobs.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const latest = schema.companionIngestLatest;
@@ -65,5 +70,24 @@ export class CompanionIngestLatestRepository {
       })
       .returning({ userId: latest.userId });
     return written.length > 0;
+  }
+
+  /** Step 11b input: this user's stored blobs among `shas`. */
+  storedBlobs(
+    tx: CompanionDeviceTx,
+    userId: number,
+    shas: readonly string[],
+  ): Promise<CompanionBlobRefRow[]> {
+    return storedBlobsIn(tx, userId, shas);
+  }
+
+  /** Step 11d: upsert `companion_blob_refs` (rows unique by sha). */
+  recordBlobRefs(
+    tx: CompanionDeviceTx,
+    userId: number,
+    contract: string,
+    rows: readonly CompanionBlobRefRow[],
+  ): Promise<void> {
+    return upsertBlobRefsIn(tx, userId, contract, rows);
   }
 }

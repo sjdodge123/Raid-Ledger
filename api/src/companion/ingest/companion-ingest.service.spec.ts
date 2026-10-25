@@ -5,7 +5,10 @@
  */
 import { HttpException } from '@nestjs/common';
 import { z } from 'zod';
-import type { CompanionContractTable } from '@raid-ledger/contract';
+import type {
+  CompanionContractTable,
+  CompanionWebpRef,
+} from '@raid-ledger/contract';
 import type { CompanionDeviceTx } from '../devices/companion-device-lock';
 import {
   CompanionHandlerRegistry,
@@ -67,7 +70,28 @@ function body(): Buffer {
   );
 }
 
-function setup(over: { held?: boolean; advanced?: boolean } = {}) {
+const SHA = 'c'.repeat(64);
+const REF: CompanionWebpRef = {
+  sha256: SHA,
+  byteLength: 100,
+  contentType: 'image/webp',
+  width: 64,
+  height: 32,
+};
+
+interface SetupOver {
+  held?: boolean;
+  advanced?: boolean;
+  refs?: CompanionWebpRef[];
+  stored?: Array<{
+    sha256: string;
+    byteLength: number;
+    width: number;
+    height: number;
+  }>;
+}
+
+function setup(over: SetupOver = {}) {
   const handle = jest.fn<Promise<void>, [unknown, unknown]>(() =>
     Promise.resolve(),
   );
@@ -80,6 +104,7 @@ function setup(over: { held?: boolean; advanced?: boolean } = {}) {
       at: new Date(m.payload.savedAt),
     }),
     handle,
+    ...(over.refs ? { blobRefs: () => over.refs ?? [] } : {}),
   };
   const registry = new CompanionHandlerRegistry(
     { isActive: () => true },
@@ -92,6 +117,8 @@ function setup(over: { held?: boolean; advanced?: boolean } = {}) {
     ),
     holdDevice: jest.fn(() => Promise.resolve(over.held ?? true)),
     advance: jest.fn(() => Promise.resolve(over.advanced ?? true)),
+    storedBlobs: jest.fn(() => Promise.resolve(over.stored ?? [])),
+    recordBlobRefs: jest.fn(() => Promise.resolve()),
   };
   const service = new CompanionIngestService(
     registry,
@@ -175,5 +202,62 @@ describe('CompanionIngestService', () => {
       service.ingest(DEVICE, 'test-save', bad, NOW),
     ).rejects.toBeInstanceOf(HttpException);
     expect(repo.transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('CompanionIngestService — blob refs (steps 11b / 11d)', () => {
+  it('records the refs after the latest-wins advance, in the tx', async () => {
+    const { service, repo } = setup({ refs: [REF] });
+    await expect(
+      service.ingest(DEVICE, 'test-save', body(), NOW),
+    ).resolves.toEqual({ status: 'accepted' });
+    expect(repo.storedBlobs).toHaveBeenCalledWith(TX, 7, [SHA]);
+    expect(repo.recordBlobRefs).toHaveBeenCalledWith(TX, 7, 'test-save', [
+      { sha256: SHA, byteLength: 100, width: 64, height: 32 },
+    ]);
+    const advancedAt = repo.advance.mock.invocationCallOrder[0] ?? Infinity;
+    const recordedAt = repo.recordBlobRefs.mock.invocationCallOrder[0] ?? -1;
+    expect(recordedAt).toBeGreaterThan(advancedAt);
+  });
+
+  it('a ref disagreeing with a stored blob is 409 before the advance', async () => {
+    const { service, repo, handle } = setup({
+      refs: [REF],
+      stored: [{ sha256: SHA, byteLength: 100, width: 65, height: 32 }],
+    });
+    const err = await service
+      .ingest(DEVICE, 'test-save', body(), NOW)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect((err as HttpException).getStatus()).toBe(409);
+    expect((err as HttpException).getResponse()).toMatchObject({
+      code: 'blob_ref_mismatch',
+    });
+    expect(repo.advance).not.toHaveBeenCalled();
+    expect(repo.recordBlobRefs).not.toHaveBeenCalled();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('two refs to one sha that disagree are 409; agreeing duplicates record once', async () => {
+    const bad = setup({ refs: [REF, { ...REF, height: 33 }] });
+    const err = await bad.service
+      .ingest(DEVICE, 'test-save', body(), NOW)
+      .catch((e: unknown) => e);
+    expect((err as HttpException).getResponse()).toMatchObject({
+      code: 'blob_ref_mismatch',
+    });
+    const dup = setup({ refs: [REF, { ...REF }] });
+    await dup.service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(dup.repo.recordBlobRefs).toHaveBeenCalledWith(TX, 7, 'test-save', [
+      { sha256: SHA, byteLength: 100, width: 64, height: 32 },
+    ]);
+  });
+
+  it('a stale message records no refs', async () => {
+    const { service, repo } = setup({ refs: [REF], advanced: false });
+    await expect(
+      service.ingest(DEVICE, 'test-save', body(), NOW),
+    ).resolves.toEqual({ status: 'stale' });
+    expect(repo.recordBlobRefs).not.toHaveBeenCalled();
   });
 });

@@ -40,10 +40,8 @@ import {
   readCompanionBlobToFile,
   type CompanionBlobRead,
 } from './companion-blob.reader';
-import {
-  CompanionBlobsRepository,
-  type CompanionBlobDims,
-} from './companion-blobs.repository';
+import { blobRefMismatch, refsAgree } from './companion-blob-refs.helpers';
+import { CompanionBlobsRepository } from './companion-blobs.repository';
 
 /** A request the blob service reads (raw body stream, guards already ran). */
 export type CompanionBlobUpload = BoundedBodyStream & CompanionBypassedRequest;
@@ -58,19 +56,6 @@ export function companionBlobQuotaBytes(): number {
   return Number.isSafeInteger(n) && n > 0
     ? n
     : DEFAULT_COMPANION_BLOB_QUOTA_BYTES;
-}
-
-/** Every ref must agree with the bytes received (D-15, either order). */
-export function refsAgree(
-  refs: readonly CompanionBlobDims[],
-  got: CompanionBlobDims,
-): boolean {
-  return refs.every(
-    (r) =>
-      r.byteLength === got.byteLength &&
-      r.width === got.width &&
-      r.height === got.height,
-  );
 }
 
 const quotaExceeded = () =>
@@ -127,10 +112,7 @@ export class CompanionBlobService {
       );
     }
     if (!refsAgree(await this.repo.findRefs(userId, sha256), got)) {
-      throw companionError(
-        'blob_ref_mismatch',
-        'Blob differs from a message ref',
-      );
+      throw blobRefMismatch();
     }
     await assertSharpAgrees(tmpPath, got);
   }
