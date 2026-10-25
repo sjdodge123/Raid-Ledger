@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubMediaChannelState } from '@raid-ledger/contract';
 import { ChannelMirrorService } from '../discord-bot/channel-mirror/channel-mirror.service';
@@ -71,17 +71,8 @@ export class HubMediaChannelService {
     await this.assertGameServer(guildId);
     const list = this.mirror.listReadableTextChannels();
     const channel = pickReadableChannel(list, input.channelId);
-    await this.assertNotTaken(guildId, channel.id);
     const previous = await this.currentChannelId(guildId);
-    const set = {
-      mediaChannelId: channel.id,
-      mediaChannelSetBy: actor.id,
-      mediaChannelSetAt: new Date(),
-    };
-    await this.db
-      .insert(guildProfiles)
-      .values({ guildId, ...set })
-      .onConflictDoUpdate({ target: guildProfiles.guildId, set });
+    await this.bindExclusive(guildId, channel.id, actor.id);
     this.resolver.invalidate(previous);
     this.resolver.invalidate(channel.id);
     return this.get(guildId);
@@ -111,9 +102,39 @@ export class HubMediaChannelService {
     return row?.id ?? null;
   }
 
+  /**
+   * D1: pre-check + upsert under a per-channel advisory lock, so two Leaders
+   * binding one channel at once serialise — the second sees the first's row
+   * and gets a 409; the upsert can then never hit the partial unique index.
+   */
+  private async bindExclusive(
+    guildId: number,
+    channelId: string,
+    actorId: number,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const lockKey = `hub_media_channel:${channelId}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      await this.assertNotTaken(tx, guildId, channelId);
+      const set = {
+        mediaChannelId: channelId,
+        mediaChannelSetBy: actorId,
+        mediaChannelSetAt: new Date(),
+      };
+      await tx
+        .insert(guildProfiles)
+        .values({ guildId, ...set })
+        .onConflictDoUpdate({ target: guildProfiles.guildId, set });
+    });
+  }
+
   /** D1 partial unique, pre-checked so a clash is a 409, not a 500. */
-  private async assertNotTaken(guildId: number, channelId: string) {
-    const [taken] = await this.db
+  private async assertNotTaken(
+    db: Pick<Db, 'select'>,
+    guildId: number,
+    channelId: string,
+  ): Promise<void> {
+    const [taken] = await db
       .select({ guildId: guildProfiles.guildId })
       .from(guildProfiles)
       .where(

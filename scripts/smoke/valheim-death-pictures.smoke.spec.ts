@@ -5,7 +5,7 @@
  * Seed: the ROK-1930 `POST /admin/test/valheim/deaths-fixture { worker }` gives
  * THIS worker its server hub (member + non-member visitor); then
  * `POST /admin/test/valheim/death-pictures { worker, count }` (DEMO_MODE,
- * ROK-1941 — NOT YET BUILT, see HANDOVER-1941-L5.md) links `count` fresh death
+ * ROK-1941) links `count` fresh death
  * pictures (authorName = the character's name) to the `top` character's
  * deaths and answers `{ mediaIds }` newest first. The Deaths read is polled until the bar carries them before the
  * browser opens. Waits are response- or expect-driven only.
@@ -96,6 +96,11 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
     const dialog = page.getByRole("dialog", { name: "Gallery" });
     // Chips draw only when the hub has 2+ kinds, so the Deaths filter is proven by the caption (and the unit spec).
     await expect(dialog.getByTestId("hub-gallery-viewer")).toBeVisible();
+    // Opened AT the clicked (newest) picture, not index 0 of some other list.
+    await expect(dialog.getByTestId("hub-gallery-viewer")).toHaveAttribute(
+      "data-media-id",
+      String(newest),
+    );
     await expect(dialog.getByTestId("hub-gallery-caption")).toContainText(
       "Death",
     );

@@ -129,10 +129,7 @@ export class HubMediaPostIngest {
       classified: { classification, classifier: null },
       live: new Set(),
     };
-    const ids: (number | null)[] = [];
-    for (const [index, image] of images.entries()) {
-      ids.push(await this.ingestImage(job, image, index, emptySummary()));
-    }
+    const ids = await this.reingest(job, images);
     const current = new Set(images.map((i) => this.key(post, i)));
     const dropped = existing.filter((row) => !current.has(row.provenanceKey));
     await this.remove(hub, dropped);
@@ -142,6 +139,18 @@ export class HubMediaPostIngest {
       images[0],
       ids[0] ?? null,
     );
+  }
+
+  /** An edit's images, in order; each one's media id (null if rejected). */
+  private async reingest(
+    job: PostJob,
+    images: readonly PostImage[],
+  ): Promise<(number | null)[]> {
+    const ids: (number | null)[] = [];
+    for (const [index, image] of images.entries()) {
+      ids.push(await this.ingestImage(job, image, index, emptySummary()));
+    }
+    return ids;
   }
 
   /** D11 + D6: the edit's new first picture takes over the death link. */
@@ -221,21 +230,33 @@ export class HubMediaPostIngest {
       return null;
     }
     summary[res.status === 'stored' ? 'stored' : 'duplicates'] += 1;
-    if (res.mediaId === null || classified.classifier === null) {
-      return res.mediaId;
-    }
-    if (res.status === 'duplicate' && !job.live.has(res.mediaId)) return null;
-    const outcome = await classified.classifier.afterStore({
-      hub,
-      post,
-      classification: classified.classification,
-      mediaId: res.mediaId,
+    const { mediaId } = res;
+    if (mediaId === null || classified.classifier === null) return mediaId;
+    if (res.status === 'duplicate' && !job.live.has(mediaId)) return null;
+    await this.link(job, image, index, mediaId, summary);
+    return mediaId;
+  }
+
+  /** The owning classifier's D6 link for one stored picture, counted. */
+  private async link(
+    job: PostJob,
+    image: PostImage,
+    index: number,
+    mediaId: number,
+    summary: IngestPostSummary,
+  ): Promise<void> {
+    const { classifier, classification } = job.classified;
+    if (classifier === null) return;
+    const outcome = await classifier.afterStore({
+      hub: job.hub,
+      post: job.post,
+      classification,
+      mediaId,
       index,
       filename: image.filename,
     });
     if (outcome === 'linked') summary.deathsLinked += 1;
     if (outcome === 'inferred') summary.deathsInferred += 1;
-    return res.mediaId;
   }
 
   private toInput(
