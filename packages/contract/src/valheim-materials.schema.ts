@@ -32,11 +32,41 @@ export const ValheimMaterialsSharedSchema = z.object({
     warnings: ValheimMaterialsWarningsSchema,
 }).strict();
 
+/**
+ * ROK-1859 — a base = a single-link cluster (64 m on the x/z plane) of SHARED,
+ * STATIONARY chests; identical for every viewer. Carts, ships and personal
+ * chests attach to the nearest base but never form or merge one.
+ */
+export const ValheimMaterialsBaseSchema = z.object({
+    /** Smallest member key — opaque, never a row id. */
+    key: z.string().length(22),
+    /** Rounded centroid of the stationary members (world metres). */
+    x: ValheimWorldCoordSchema,
+    z: ValheimWorldCoordSchema,
+    /** Stationary shared chests in the cluster. */
+    chestCount: z.number().int().min(1),
+    /** Attached carts/ships under the current includeVehicles (0 when off). */
+    vehicleCount: z.number().int().min(0),
+    totals: z.array(ValheimMaterialStackSchema),
+}).strict();
+export type ValheimMaterialsBase = z.infer<typeof ValheimMaterialsBaseSchema>;
+
+/** ROK-1859 — the viewer's personal totals split by the base they sit near. */
+export const ValheimMaterialsPersonalBaseSchema = z.object({
+    /** null = not near any base. */
+    base: z.string().length(22).nullable(),
+    chestCount: z.number().int().min(1),
+    totals: z.array(ValheimMaterialStackSchema),
+}).strict();
+export type ValheimMaterialsPersonalBase = z.infer<typeof ValheimMaterialsPersonalBaseSchema>;
+
 export const ValheimMaterialsPersonalSchema = z.object({
     totals: z.array(ValheimMaterialStackSchema),
     chestCount: z.number().int().min(0),
     /** Admins only; null for everyone else. */
     omittedPrivate: z.number().int().min(0).nullable(),
+    /** ROK-1859 (additive). */
+    byBase: z.array(ValheimMaterialsPersonalBaseSchema).optional(),
 }).strict();
 
 export const ValheimMaterialsResponseSchema = z.object({
@@ -50,6 +80,8 @@ export const ValheimMaterialsResponseSchema = z.object({
     shared: ValheimMaterialsSharedSchema,
     /** null = the viewer may see no personal chests. */
     personal: ValheimMaterialsPersonalSchema.nullable(),
+    /** ROK-1859 (additive) — sorted chestCount desc, key asc. */
+    bases: z.array(ValheimMaterialsBaseSchema).optional(),
     items: z.record(z.string(), ValheimCatalogEntrySchema),
     atlas: ValheimMapBaseMapSchema.nullable(),
 }).strict();
@@ -72,6 +104,13 @@ export const ValheimContainerSummarySchema = z.object({
     unreadable: z.boolean(),
     omittedEntries: z.number().int().min(0),
     stackCount: z.number().int().min(0),
+    /** ROK-1859 (additive) — the base this chest belongs/attaches to; null = none. */
+    base: z.string().length(22).nullable().optional(),
+    /**
+     * ROK-1859 (additive) — 1-based among chests of the same prefab in the
+     * same base, ordered x, z, y, key; shared and personal numbered apart.
+     */
+    index: z.number().int().min(1).optional(),
 }).strict();
 export type ValheimContainerSummary = z.infer<typeof ValheimContainerSummarySchema>;
 

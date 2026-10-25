@@ -4,6 +4,7 @@ import type {
     ValheimContainerDetail,
     ValheimContainerSummary,
     ValheimItemStack,
+    ValheimMaterialsBase,
 } from '@raid-ledger/contract';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
 import { Modal } from '../../../components/ui/modal';
@@ -12,16 +13,15 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { ItemTile } from '../character/item-tile';
 import type { ItemIconContext } from '../character/use-item-icons';
 import { useValheimContainer } from '../hooks/use-valheim-materials';
-import {
-    CHEST_NOT_FOUND_COPY,
-    chestLabel,
-    formatCoords,
-} from './materials.helpers';
+import { chestDisplayName } from './materials-bases.helpers';
+import { CHEST_NOT_FOUND_COPY, formatCoords } from './materials.helpers';
 
 interface ChestDetailProps {
     serverId: number;
     includeVehicles: boolean;
     chest: ValheimContainerSummary | null;
+    /** ROK-1859: titles the chest with its base (omit → `[]`). */
+    bases?: readonly ValheimMaterialsBase[];
     ctx: ItemIconContext;
     onClose: () => void;
 }
@@ -73,7 +73,7 @@ function ChestBody({
     includeVehicles,
     chest,
     ctx,
-}: Omit<ChestDetailProps, 'onClose'>): JSX.Element {
+}: Omit<ChestDetailProps, 'onClose' | 'bases'>): JSX.Element {
     const q = useValheimContainer(
         serverId,
         includeVehicles,
@@ -120,11 +120,11 @@ function ChestState({
 
 export function ChestDetail(props: ChestDetailProps): JSX.Element | null {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    const { chest, onClose, ctx } = props;
+    const { chest, onClose, ctx, bases = [] } = props;
     // Unmounted with no selection: a closed BottomSheet only slides off-screen,
     // so its Close button and body would stay focusable (Codex r3).
     if (chest === null) return null;
-    const title = chestLabel(chest, ctx);
+    const title = chestDisplayName(chest, bases, ctx);
     const body = <ChestBody {...props} />;
     return isDesktop ? (
         <Modal isOpen onClose={onClose} title={title} maxWidth="max-w-lg">

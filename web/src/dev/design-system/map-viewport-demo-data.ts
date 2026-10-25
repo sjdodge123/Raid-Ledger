@@ -3,7 +3,8 @@
  * design-system §4.25). Nothing here touches the API: a 256² PNG (four flat
  * quadrants + a centre cross, the seed fixture's shape at 1/8 scale) inlined
  * as a data URL, a personal + shared fog bitset built from two circles, and
- * two pins (one personal, one cartography-table).
+ * three pins (one personal, one cartography-table, one scanned chest — the
+ * ROK-1859 `rl:chest` warning-ring variant).
  */
 import type { ValheimMapGrid, ValheimMapPin } from '@raid-ledger/contract';
 
@@ -48,5 +49,13 @@ export const DEMO_PINS: ValheimMapPin[] = [
         z: -3200,
         checked: false,
         shared: true,
+    },
+    {
+        type: 'rl:chest',
+        label: 'Wood chest 1 · Base near x 20, z 10',
+        x: 1280,
+        z: 640,
+        checked: false,
+        shared: false,
     },
 ];

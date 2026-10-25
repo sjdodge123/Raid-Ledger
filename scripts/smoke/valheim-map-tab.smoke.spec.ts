@@ -24,6 +24,8 @@ import { test, expect } from "./base";
 import { API_BASE, apiPost, getAdminToken } from "./api-helpers";
 import { isDesktop } from "./helpers";
 import { findTexel } from "./valheim-map-bits";
+// Character + shared pins only: the Scanned-portal and Chest layers (ROK-1946, ROK-1859) are other specs' subject.
+import { pins } from "./valheim-pin-filter-helpers";
 
 const FIXTURE = "/admin/test/valheim/map-fixture";
 const SHARED = "Show cartography table";
@@ -84,10 +86,6 @@ async function seedMap(worker: number): Promise<MapFixture> {
   };
 }
 
-/** Pins are the only buttons inside the map application. */
-function pins(map: Locator): Locator {
-  return map.getByRole("button");
-}
 
 /** Open the switches: inline ≥1024px, the Layers sheet below it. Returns their scope. */
 async function openLayers(page: Page, wide: boolean): Promise<Locator> {

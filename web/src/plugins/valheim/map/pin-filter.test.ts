@@ -111,8 +111,8 @@ describe('Scanned portals chip in the URL (ROK-1946 D11)', () => {
         expect(writePinFilter(qs('vc=5'), { types: filter.types }, 5).get('pins')).toBe('scanned-portal');
     });
 
-    it('all 12 chips selected serialises to no pins param (every type)', () => {
-        expect(PIN_TYPE_GROUP_IDS).toHaveLength(12);
+    it('all 13 chips selected serialises to no pins param (every type)', () => {
+        expect(PIN_TYPE_GROUP_IDS).toHaveLength(13);
         expect(writePinFilter(qs('vc=5'), { types: new Set(PIN_TYPE_GROUP_IDS) }, 5).has('pins')).toBe(false);
         const eleven = new Set(PIN_TYPE_GROUP_IDS.filter((id) => id !== 'scanned-portal'));
         expect(writePinFilter(qs('vc=5'), { types: eleven }, 5).has('pins')).toBe(true);
