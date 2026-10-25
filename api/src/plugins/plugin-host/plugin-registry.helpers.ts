@@ -22,7 +22,33 @@ export function buildPluginInfo(
   record: PluginRow | undefined,
   integrations: PluginIntegrationInfoDto[],
 ): PluginInfoDto {
-  const status = !record ? 'not_installed' : record.active ? 'active' : 'inactive';
+  return {
+    ...manifestFields(manifest),
+    integrations,
+    status: pluginStatus(manifest, record),
+    installedAt: record?.installedAt?.toISOString() ?? null,
+    // ROK-1969 §3.5: per-requirement checks are not wired yet — none reported.
+    setupStatus: [],
+  };
+}
+
+/** A built-in plugin is always active (ROK-1969 D3), with or without a row. */
+function pluginStatus(
+  manifest: PluginManifest,
+  record: PluginRow | undefined,
+): PluginInfoDto['status'] {
+  if (manifest.builtIn === true) return 'active';
+  if (!record) return 'not_installed';
+  return record.active ? 'active' : 'inactive';
+}
+
+/** The manifest-derived half of a `PluginInfoDto`. */
+function manifestFields(
+  manifest: PluginManifest,
+): Omit<
+  PluginInfoDto,
+  'integrations' | 'status' | 'installedAt' | 'setupStatus'
+> {
   return {
     slug: manifest.id,
     name: manifest.name,
@@ -31,13 +57,8 @@ export function buildPluginInfo(
     author: manifest.author,
     gameSlugs: manifest.gameSlugs ?? [],
     capabilities: manifest.capabilities,
-    integrations,
-    status,
-    installedAt: record?.installedAt?.toISOString() ?? null,
     builtIn: manifest.builtIn ?? false,
     hub: manifest.hub ?? emptyPluginHubManifest(),
-    // ROK-1969 §3.5: per-requirement checks are not wired yet — none reported.
-    setupStatus: [],
   };
 }
 

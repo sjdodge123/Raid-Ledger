@@ -107,9 +107,14 @@ describe('ROK-1969 A1 — an unowned hub adapter is refused', () => {
 describe('ROK-1969 A2 — the owner must have a manifest', () => {
   it('reports an owner plugin with no registered manifest', () => {
     const r = registry();
-    r.registerAdapter(EXTENSION_POINTS.HUB_KIND, 'x', {}, {
-      ownerPluginId: 'nope',
-    });
+    r.registerAdapter(
+      EXTENSION_POINTS.HUB_KIND,
+      'x',
+      {},
+      {
+        ownerPluginId: 'nope',
+      },
+    );
     expect(() => r.assertHubOwnersKnown()).toThrow(
       'Owner plugin "nope" has no registered manifest',
     );
@@ -117,9 +122,14 @@ describe('ROK-1969 A2 — the owner must have a manifest', () => {
 
   it('accepts Core as an owner before its manifest is registered', () => {
     const r = registry();
-    r.registerAdapter(EXTENSION_POINTS.HUB_KIND, 'x', {}, {
-      ownerPluginId: CORE_PLUGIN_ID,
-    });
+    r.registerAdapter(
+      EXTENSION_POINTS.HUB_KIND,
+      'x',
+      {},
+      {
+        ownerPluginId: CORE_PLUGIN_ID,
+      },
+    );
     expect(() => r.assertHubOwnersKnown()).not.toThrow();
   });
 });
