@@ -8,6 +8,7 @@ import {
   toMemberStats,
   type MemberInput,
 } from './steam-stats-read.helpers';
+import { enabledAppId } from './steam-stats-read.service';
 
 const at = new Date('2026-10-20T04:30:00.000Z');
 const base: MemberInput = {
@@ -84,5 +85,22 @@ describe('sortMembers (I9)', () => {
       'Abe',
       'Zed',
     ]);
+  });
+});
+
+describe('enabledAppId (D1/D9 — I7 at unit level)', () => {
+  const t = { kind: 'game_community' as const, gameId: 7, appId: 1086940 };
+  it('an enabled game kind + listed app id → the app id', () => {
+    expect(enabledAppId(t)).toBe(1086940);
+    expect(enabledAppId({ ...t, kind: 'game_server' })).toBe(1086940);
+  });
+  it('a WoW hub, a missing hub, no game, no app id or an unlisted id → null', () => {
+    expect([
+      enabledAppId({ ...t, kind: 'wow_guild' }),
+      enabledAppId(undefined),
+      enabledAppId({ ...t, gameId: null }),
+      enabledAppId({ ...t, appId: null }),
+      enabledAppId({ ...t, appId: 892970 }),
+    ]).toEqual([null, null, null, null, null]);
   });
 });
