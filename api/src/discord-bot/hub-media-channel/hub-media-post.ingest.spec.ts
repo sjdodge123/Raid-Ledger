@@ -111,23 +111,18 @@ describe('HubMediaPostIngest.onEdit — first-picture transfer order', () => {
     const order: string[] = [];
     found.mockResolvedValue([row(1, 'a'), row(2, 'b')]);
     media.ingest.mockResolvedValue({ status: 'duplicate', mediaId: 2 });
-    media.removeByProvenance.mockImplementation(
-      async (_g: number, k: string) => {
-        order.push(`tombstone ${k === key('a') ? 'a' : k}`);
-        return true;
-      },
-    );
-    classifier.afterStore.mockImplementation(
-      async (ctx: { mediaId: number }) => {
-        order.push(`relink ${ctx.mediaId}`);
-        return 'already';
-      },
-    );
-    registry.afterRemove.mockImplementation(
-      async (_h: unknown, ids: number[]) => {
-        order.push(`cleanup ${ids.join(',')}`);
-      },
-    );
+    media.removeByProvenance.mockImplementation((_g: number, k: string) => {
+      order.push(`tombstone ${k === key('a') ? 'a' : k}`);
+      return Promise.resolve(true);
+    });
+    classifier.afterStore.mockImplementation((ctx: { mediaId: number }) => {
+      order.push(`relink ${ctx.mediaId}`);
+      return Promise.resolve('already');
+    });
+    registry.afterRemove.mockImplementation((_h: unknown, ids: number[]) => {
+      order.push(`cleanup ${ids.join(',')}`);
+      return Promise.resolve();
+    });
     await makeIngest().onEdit(post(['b']), HUB);
     expect(order).toEqual(['tombstone a', 'relink 2', 'cleanup 1']);
   });

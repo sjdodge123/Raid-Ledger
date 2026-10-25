@@ -47,9 +47,9 @@ describe('HubMediaIngestPool', () => {
     const [a, b, c] = [gate(counter), gate(counter), gate(counter)];
     const runA = pool.run('a', a.work);
     const runB = pool.run('b', b.work);
-    await expect(pool.run('dropped', async () => 1)).rejects.toBeInstanceOf(
-      HubMediaIngestQueueFullError,
-    );
+    await expect(
+      pool.run('dropped', () => Promise.resolve(1)),
+    ).rejects.toBeInstanceOf(HubMediaIngestQueueFullError);
     const runC = pool.run('c', c.work, 'essential');
     for (const g of [a, b, c]) {
       await flush();
@@ -64,7 +64,9 @@ describe('HubMediaIngestPool', () => {
     await expect(
       pool.run('boom', () => Promise.reject(new Error('boom'))),
     ).rejects.toThrow('boom');
-    await expect(pool.run('next', async () => 'ok')).resolves.toBe('ok');
+    await expect(pool.run('next', () => Promise.resolve('ok'))).resolves.toBe(
+      'ok',
+    );
     expect(pool.inFlight()).toBe(0);
   });
 

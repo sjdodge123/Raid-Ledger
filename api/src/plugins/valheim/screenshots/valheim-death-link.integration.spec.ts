@@ -3,7 +3,7 @@
  * either order, replay-safe and race-safe — SQL A (`linkOrInferDeath`) and
  * SQL B (`recordLogDeath`) against a real database under the D9 lock.
  */
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -221,6 +221,36 @@ describe('log death → death post (integration)', () => {
     const res = await links().linkOrInferDeath(post(await media()));
     expect(res.outcome).toBe('inferred');
     expect(await rows()).toHaveLength(2);
+  });
+});
+
+describe("a message's pictures share one death (Codex P2)", () => {
+  it('moves a death linked to a sibling picture of the same message, never infers a second', async () => {
+    await logs().recordLogDeath(serverId, logDeath(-30));
+    const [a, b] = [await media(), await media()];
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ discordMessageId: '42' })
+      .where(inArray(schema.hubMedia.id, [a, b]));
+    expect((await links().linkOrInferDeath(post(a))).outcome).toBe('linked');
+    const moved = await links().linkOrInferDeath(post(b));
+    expect(moved.outcome).toBe('already');
+    expect((await rows()).map((r) => [r.source, r.hubMediaId])).toEqual([
+      ['log', b],
+    ]);
+  });
+
+  it('a tombstoned picture links and infers nothing', async () => {
+    await logs().recordLogDeath(serverId, logDeath(-30));
+    const m = await media();
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ removedAt: new Date() })
+      .where(eq(schema.hubMedia.id, m));
+    expect((await links().linkOrInferDeath(post(m))).outcome).toBe('gone');
+    expect((await rows()).map((r) => [r.source, r.hubMediaId])).toEqual([
+      ['log', null],
+    ]);
   });
 });
 

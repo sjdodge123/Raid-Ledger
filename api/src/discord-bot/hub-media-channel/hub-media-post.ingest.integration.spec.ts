@@ -381,6 +381,46 @@ describe('the first picture re-links; a tombstone links nothing (D11 + D6)', () 
   });
 });
 
+// Codex P2: an edit dropping the first picture vs a backfill ingesting the
+// edited message (its remaining picture is now index 0). SQL A moves the
+// message's death between its own pictures under the death name lock, so
+// neither order infers a second death.
+describe('edit vs backfill of the same message (Codex P2)', () => {
+  async function postWithLinkedFirst() {
+    await logDeath(-30);
+    const post = gatewayPost({ files: ['a.png', 'b.png'] });
+    await listener().onCreate(post);
+    const rest = [...post.attachments.values()].slice(1);
+    const edited = toPostLike({ ...post, attachments: { values: () => rest } });
+    return edited;
+  }
+
+  it('a backfill ingest landing before the edit cleanup still counts one death', async () => {
+    const edited = await postWithLinkedFirst();
+    await ingest().ingestPost(edited, await hubRef());
+    await ingest().onEdit(edited, await hubRef());
+    const [, second] = await mediaRows();
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['log', second?.id],
+    ]);
+  });
+
+  it('a concurrent edit-removal and backfill ingest leave exactly one death, on the remaining picture', async () => {
+    const edited = await postWithLinkedFirst();
+    const hub = await hubRef();
+    await Promise.all([
+      ingest().onEdit(edited, hub),
+      ingest().ingestPost(edited, hub),
+    ]);
+    const after = await mediaRows();
+    expect(after.map((m) => m.removedAt === null)).toEqual([false, true]);
+    const [, second] = after;
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['log', second?.id],
+    ]);
+  });
+});
+
 describe('unbound channel', () => {
   it('ignores a post in a channel no hub feeds from', async () => {
     await listener().onCreate(gatewayPost({ channel: snowflake() }));
