@@ -1,24 +1,24 @@
 /**
  * ROK-1969 §5.3 (W1–W6) — every hub widget and tab belongs to a plugin, and the
  * declarations in `HUB_PLUGIN_MANIFESTS` (what the install sheet lists) match
- * what the plugins really register, in both directions. Imports every plugin's
- * `register.ts` the way `App.tsx` does. Adding a hub widget or tab? Declare it
+ * what the plugins really register, in both directions. Discovers every plugin's
+ * `register.ts` by glob and checks the set equals what `App.tsx` imports. Adding a hub widget or tab? Declare it
  * under its plugin in `packages/contract/src/plugin-hub-manifests.ts` first.
  */
 import { describe, it, expect } from 'vitest';
 import { lazy } from 'react';
 import { HUB_PLUGIN_MANIFESTS, normaliseHubWidgetPrefs, type PluginHubManifest } from '@raid-ledger/contract';
 import {
-    collectHubRegistrations, outOfScopeRegistrations, undeclaredRegistrations, unregisteredDeclarations,
+    collectHubRegistrations, outOfScopeRegistrations, registerImportDrift, undeclaredRegistrations, unregisteredDeclarations,
     type HubRegistration, type Manifests,
 } from '../test/hub-plugin-ownership';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { getHubGameWidgetRegistrations, type HubGameWidget } from './hub-game-widgets';
-import './core/register';
-import './wow/register';
-import './discord/register';
-import './ai/register';
-import './pelican/register';
-import './valheim/register';
+
+/** Every plugin folder's `register.ts`, discovered — a new plugin is checked automatically (review M2). */
+const PLUGIN_REGISTERS = import.meta.glob('./*/register.ts', { eager: true });
+const APP_SOURCE = readFileSync(resolve(__dirname, '../App.tsx'), 'utf8');
 
 const live = collectHubRegistrations();
 const keys = (regs: readonly HubRegistration[]): string[] => regs.map((r) => `${r.owner}/${r.kind}/${r.id}`);
@@ -29,6 +29,19 @@ function withManifest(slug: keyof typeof HUB_PLUGIN_MANIFESTS, edit: (m: PluginH
 }
 
 describe('hub plugin ownership — the scan is not vacuous', () => {
+    it('discovers every plugin folder App.tsx registers, and no other', () => {
+        expect(Object.keys(PLUGIN_REGISTERS).length).toBeGreaterThanOrEqual(6);
+        expect(registerImportDrift(Object.keys(PLUGIN_REGISTERS), APP_SOURCE)).toEqual([]);
+    });
+
+    it('names a plugin folder App.tsx does not import, and an App import with no folder', () => {
+        const app = "import './plugins/core/register';\nimport './plugins/gone/register';\n";
+        expect(registerImportDrift(['./core/register.ts', './bg3/register.ts'], app)).toEqual([
+            'plugins/bg3/register.ts exists but App.tsx does not import it',
+            'App.tsx imports plugins/gone/register but no ./gone/register.ts was discovered',
+        ]);
+    });
+
     it('sees the core band, core tabs, plugin widgets, module widgets and game tabs', () => {
         expect(keys(live)).toEqual(expect.arrayContaining([
             'core/widget/gm-post', 'core/tab/overview', 'core/widget/gallery', 'valheim/widget/deaths',

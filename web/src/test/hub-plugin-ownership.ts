@@ -94,3 +94,20 @@ export function outOfScopeRegistrations(regs: readonly HubRegistration[], manife
             .map((g) => `${key} targets game "${g}", not in HUB_PLUGIN_MANIFESTS.${r.owner}.gameSlugs`);
     });
 }
+
+const GLOB_KEY = /^\.\/([^/]+)\/register\.ts$/;
+const APP_IMPORT = /^import '\.\/plugins\/([^/']+)\/register';$/gm;
+
+/**
+ * ROK-1969 review M2 — the plugin folders the guard discovered (the keys of
+ * `import.meta.glob('./*\/register.ts')`) against the `import './plugins/<x>/register'`
+ * lines in `App.tsx`. `[]` = the guard checks exactly the plugins the app boots.
+ */
+export function registerImportDrift(discovered: readonly string[], appSource: string): string[] {
+    const found = new Set(discovered.flatMap((k) => GLOB_KEY.exec(k)?.slice(1, 2) ?? []));
+    const app = new Set([...appSource.matchAll(APP_IMPORT)].flatMap((m) => m.slice(1, 2)));
+    return [
+        ...[...found].filter((f) => !app.has(f)).map((f) => `plugins/${f}/register.ts exists but App.tsx does not import it`),
+        ...[...app].filter((f) => !found.has(f)).map((f) => `App.tsx imports plugins/${f}/register but no ./${f}/register.ts was discovered`),
+    ];
+}
