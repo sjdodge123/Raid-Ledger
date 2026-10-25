@@ -42,6 +42,20 @@ const SHARE_TOKEN_PATH = /(\/(?:api\/)?(?:scheduling-polls\/share|p\/poll)\/)[A-
  */
 const FEED_TOKEN_PATH = /(\/(?:api\/)?cal\/u\/)[A-Za-z0-9_-]{16,}/g;
 
+/**
+ * ROK-1955: a companion device token (`rlcd_` + 43 base64url chars) is a
+ * long-lived ingest bearer — filtered wherever it appears, not only in URLs.
+ */
+const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
+
+/**
+ * ROK-1955: the device-link preview `/companion/v1/devices/link/<userCode>`
+ * carries the user code in the PATH; `poll` and `decision` are route names
+ * and stay readable. (`/link?code=` is a URL param — `sentry-scrub-secrets`.)
+ */
+const COMPANION_LINK_PATH =
+    /(\/(?:api\/)?companion\/v1\/devices\/link\/)(?!(?:poll|decision)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
+
 const FILTERED = '[Filtered]';
 
 /** Breadcrumb `data` keys that carry a URL (navigation, fetch, xhr). */
@@ -51,7 +65,9 @@ export function scrubTokenFromUrl(url: string): string {
     return url
         .replace(TOKEN_PARAM, `$1${FILTERED}`)
         .replace(SHARE_TOKEN_PATH, `$1${FILTERED}`)
-        .replace(FEED_TOKEN_PATH, `$1${FILTERED}`);
+        .replace(FEED_TOKEN_PATH, `$1${FILTERED}`)
+        .replace(COMPANION_DEVICE_TOKEN, FILTERED)
+        .replace(COMPANION_LINK_PATH, `$1${FILTERED}`);
 }
 
 interface ScrubbableCrumb {

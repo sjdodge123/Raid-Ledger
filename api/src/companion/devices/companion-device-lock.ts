@@ -14,9 +14,7 @@ import type { CompanionDeviceAuth } from './companion-device-request';
 
 type Db = PostgresJsDatabase<typeof schema>;
 /** A drizzle transaction handle on the app schema. */
-export type CompanionDeviceTx = Parameters<
-  Parameters<Db['transaction']>[0]
->[0];
+export type CompanionDeviceTx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Share-lock the authenticated device row; false once it is revoked. */
 export async function holdActiveDevice(
