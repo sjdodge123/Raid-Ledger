@@ -9,6 +9,7 @@ import type {
     ValheimContainerDetail,
     ValheimContainerListResponse,
     ValheimContainerSummary,
+    ValheimMaterialsBase,
     ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
 
@@ -108,6 +109,69 @@ export const chestSharedDetail: ValheimContainerDetail = {
     stacks: [
         { prefab: 'Wood', quality: 1, stack: 50 },
         { prefab: 'SwordIron', quality: 2, stack: 1 },
+    ],
+};
+
+/** ROK-1859: two bases — A (home, the shared chest) and C (far, Stone). */
+export const BASE_A = 'A'.repeat(22);
+export const BASE_C = 'C'.repeat(22);
+export const basesFixture: ValheimMaterialsBase[] = [
+    {
+        key: BASE_A,
+        x: 3,
+        z: 53,
+        chestCount: 5,
+        vehicleCount: 0,
+        totals: [
+            { prefab: 'Wood', quality: 1, total: 1200, chests: 1 },
+            { prefab: 'SwordIron', quality: 2, total: 3, chests: 1 },
+        ],
+    },
+    {
+        key: BASE_C,
+        x: 610,
+        z: -420,
+        chestCount: 1,
+        vehicleCount: 0,
+        totals: [{ prefab: 'Stone', quality: 1, total: 40, chests: 1 }],
+    },
+];
+export const chestFar: ValheimContainerSummary = {
+    ...chestShared,
+    key: BASE_C,
+    x: 604,
+    z: -418,
+    base: BASE_C,
+    index: 1,
+};
+/** The chest list with `base` + `index` on every row (the cart is unbased). */
+export const containersWithBases = (): ValheimContainerListResponse =>
+    containersFixture([
+        { ...chestShared, base: BASE_A, index: 2 },
+        { ...chestCart, base: null, index: 1 },
+        chestFar,
+    ]);
+/** The viewer's personal chests split by base: one at A, one away from bases. */
+export const personalWithBases: NonNullable<
+    ValheimMaterialsResponse['personal']
+> = {
+    totals: [
+        { prefab: 'Coins', quality: 1, total: 99, chests: 1 },
+        { prefab: 'Wood', quality: 1, total: 5, chests: 1 },
+    ],
+    chestCount: 2,
+    omittedPrivate: null,
+    byBase: [
+        {
+            base: BASE_A,
+            chestCount: 1,
+            totals: [{ prefab: 'Coins', quality: 1, total: 99, chests: 1 }],
+        },
+        {
+            base: null,
+            chestCount: 1,
+            totals: [{ prefab: 'Wood', quality: 1, total: 5, chests: 1 }],
+        },
     ],
 };
 

@@ -5,8 +5,7 @@
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
 import { useContext, useState } from 'react';
-import type { ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
-import { StatusChip } from '../../../components/ui/status-chip';
+import type { ValheimContainerSummary, ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
 import {
     MapBytesError,
     useFogLayer,
@@ -19,10 +18,13 @@ import { PinLayer } from './pin-layer';
 import { MapControls, type MapLayerState } from './map-controls';
 import { MapError } from './map-error';
 import { MapLegend, MapSnapshotFooter } from './map-legend';
+import { MapStatus, type MapStatusProps } from './map-status';
 import { ChestFocusContext, useCentreOnChest } from './use-chest-focus';
 import { ChestFocusMarker } from './chest-focus-marker';
 import { usePinFilter } from './use-pin-filter';
 import { MapPinFilters } from './map-filter-toolbar';
+import { ChestPinDetail, ChestPinLayer } from './chest-pin-layer';
+import type { ChestLayer } from './use-chest-layer';
 
 export interface ValheimMapViewProps {
     characterId: number;
@@ -78,42 +80,12 @@ function useMapLayers(
     };
 }
 
-interface MapStatusProps {
-    ready: boolean;
-    failed: boolean;
-    sharedFailed: boolean;
-}
-
-function MapStatus({ ready, failed, sharedFailed }: MapStatusProps) {
-    if (ready && !failed && !sharedFailed) return null;
-    return (
-        <div
-            role="status"
-            className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col items-end gap-1 lg:left-2 lg:right-auto lg:items-start"
-        >
-            {(!ready || failed) && (
-                <StatusChip
-                    tone={failed ? 'danger' : 'warning'}
-                    title="Base map"
-                >
-                    {failed
-                        ? 'Base map failed to load'
-                        : 'Base map not uploaded yet'}
-                </StatusChip>
-            )}
-            {sharedFailed && (
-                <StatusChip tone="danger" title="Cartography table">
-                    Cartography layer could not be loaded
-                </StatusChip>
-            )}
-        </div>
-    );
-}
-
 interface LayerProps {
     meta: ValheimMapMeta;
     /** The pins after the ROK-1930 type filter. */
     pins: readonly ValheimMapPin[];
+    /** ROK-1859: the Chests layer (its pins open the chest). */
+    chests: ChestLayer;
     baseUrl: string | null;
     personal: Uint8Array | undefined;
     shared: Uint8Array | null;
@@ -150,9 +122,10 @@ function FogPending({ size }: { size: number }) {
  * base image renders only once the personal fog can paint over it — before
  * that an opaque cover, so unexplored terrain never flashes (AC1).
  */
-function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
-    const { meta, pins, baseUrl, personal, shared, sharedOn, pinLabels } =
-        layers;
+type OpenChest = (chest: ValheimContainerSummary) => void;
+
+function MapLayers({ layers, scale, onOpenChest }: { layers: LayerProps; scale: number; onOpenChest: OpenChest }) {
+    const { meta, pins, chests, baseUrl, personal, shared, sharedOn, pinLabels } = layers;
     const size = meta.grid.textureSize;
     return (
         <div
@@ -176,6 +149,7 @@ function MapLayers({ layers, scale }: { layers: LayerProps; scale: number }) {
                 showShared={sharedOn}
                 labels={pinLabels}
             />
+            <ChestPinLayer grid={meta.grid} layer={chests} scale={scale} labels={pinLabels} onOpen={onOpenChest} />
         </div>
     );
 }
@@ -199,6 +173,7 @@ function useMapReadyState(props: ReadyProps) {
     const layers: LayerProps = {
         meta: props.meta,
         pins: pinFilter.pins,
+        chests: pinFilter.chests,
         baseUrl: base.url,
         personal: personal.data,
         shared: shared.data ?? null,
@@ -231,9 +206,10 @@ interface MapFrameProps {
 interface FrameViewportProps {
     layers: LayerProps;
     onCommands: (c: MapViewportCommands) => void;
+    onOpenChest: OpenChest;
 }
 
-function FrameViewport({ layers, onCommands }: FrameViewportProps) {
+function FrameViewport({ layers, onCommands, onOpenChest }: FrameViewportProps) {
     const chest = useContext(ChestFocusContext);
     const grid = layers.meta.grid;
     return (
@@ -245,7 +221,7 @@ function FrameViewport({ layers, onCommands }: FrameViewportProps) {
         >
             {(vp) => (
                 <>
-                    <MapLayers layers={layers} scale={vp.scale} />
+                    <MapLayers layers={layers} scale={vp.scale} onOpenChest={onOpenChest} />
                     {chest && (
                         <ChestFocusMarker
                             grid={grid}
@@ -266,11 +242,14 @@ function FrameViewport({ layers, onCommands }: FrameViewportProps) {
  */
 function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     const [commands, setCommands] = useState<MapViewportCommands | null>(null);
+    const [openChest, setOpenChest] = useState<ValheimContainerSummary | null>(null);
     const chest = useContext(ChestFocusContext);
     useCentreOnChest(commands, layers.meta.grid, chest);
     return (
         <div className={className ? `${FRAME} ${className}` : FRAME}>
-            <FrameViewport layers={layers} onCommands={setCommands} />
+            <FrameViewport layers={layers} onCommands={setCommands} onOpenChest={setOpenChest} />
+            {/* D14: outside the viewport, so dialog events never pan or zoom the map. */}
+            <ChestPinDetail layer={layers.chests} chest={openChest} onClose={() => setOpenChest(null)} />
             <MapStatus {...status} />
             <MapLegend />
             <div className="absolute left-2 top-2 z-10 lg:left-auto lg:right-2">

@@ -58,18 +58,23 @@ const RequestSchema = z
       .int()
       .min(0)
       .max(VALHEIM_LINK_FIXTURE_SLOTS - 1),
+    /** ROK-1859 D11: add a second base ~700 m away (default off). */
+    secondBase: z.boolean(),
   })
   .partial()
   .strict();
 
-function parseWorker(body: unknown): number {
+function parseBody(body: unknown): { worker: number; secondBase: boolean } {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1} }`,
+      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, secondBase?: boolean }`,
     );
   }
-  return parsed.data.worker ?? 0;
+  return {
+    worker: parsed.data.worker ?? 0,
+    secondBase: parsed.data.secondBase ?? false,
+  };
 }
 
 /**
@@ -78,6 +83,7 @@ function parseWorker(body: unknown): number {
  * when absent), the merged `containers-basic` + `containers-private` scan
  * through the real importer, an owner user who claims (`admin`) the `c1`
  * identity that built the private chest, and a member who claims nothing.
+ * `secondBase: true` (ROK-1859) adds a second base of two chests.
  * Idempotent: a re-run resets the scan and claim, and returns the same ids.
  */
 @Controller('admin/test/valheim/armory')
@@ -97,7 +103,7 @@ export class ValheimArmoryContainersDemoSeedController {
     @Body() body: unknown,
     @Request() req: AuthenticatedRequest,
   ): Promise<ContainersFixtureResponse> {
-    const worker = parseWorker(body);
+    const { worker, secondBase } = parseBody(body);
     const valheimGameId = await findValheimGameId(this.db);
     if (valheimGameId === null) {
       throw new NotFoundException('No Valheim game — seed games first');
@@ -110,7 +116,7 @@ export class ValheimArmoryContainersDemoSeedController {
       new Date(),
     );
     await ensureArmoryCatalog(this.db, serverId);
-    await importDemoContainers(this.db, serverId);
+    await importDemoContainers(this.db, serverId, secondBase);
     const ownerUserId = await this.seedOwner(serverId, worker);
     const hubId = await ensureFixtureHubId(this.db, serverId, valheimGameId);
     return {

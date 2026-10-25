@@ -156,13 +156,15 @@ describe('materials mappers', () => {
       id: 99,
       creatorPlayerId: '1000000000000001',
     } as MaterialsContainerRow & { id: number; creatorPlayerId: string };
-    const out = toContainerSummary(row);
+    const place = { base: null, index: 2 };
+    const out = toContainerSummary(row, place);
     expect(out.privacy).toBe('shared');
+    expect({ base: out.base, index: out.index }).toEqual(place);
     expect(Object.keys(out)).not.toContain('id');
     expect(Object.keys(out)).not.toContain('creatorPlayerId');
-    expect(toContainerSummary({ ...row, privacy: 'private' }).privacy).toBe(
-      'personal',
-    );
+    expect(
+      toContainerSummary({ ...row, privacy: 'private' }, place).privacy,
+    ).toBe('personal');
   });
 
   it('empty state: nulls and empty arrays, personal null', () => {
@@ -170,5 +172,6 @@ describe('materials mappers', () => {
     expect(e.worldUid).toBeNull();
     expect(e.personal).toBeNull();
     expect(e.shared.totals).toEqual([]);
+    expect(e.bases).toEqual([]);
   });
 });

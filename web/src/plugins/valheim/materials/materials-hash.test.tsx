@@ -10,7 +10,11 @@ import {
     valheimContainersHandler,
     valheimMaterialsHandler,
 } from '../../../test/mocks/valheim-materials-handlers';
-import { materialsHash, materialsItemFromHash } from './materials-hash';
+import {
+    materialsBaseFromHash,
+    materialsHash,
+    materialsItemFromHash,
+} from './materials-hash';
 import { ValheimMaterialsTab } from './valheim-materials-tab';
 
 vi.mock('../../../hooks/use-media-query', () => ({
@@ -52,6 +56,36 @@ describe('materialsItemFromHash / materialsHash', () => {
         expect(materialsItemFromHash(materialsHash('TrophyDeer'))).toBe(
             'TrophyDeer',
         );
+    });
+});
+
+describe('materialsBaseFromHash / materialsHash with a base (ROK-1859)', () => {
+    const KEY = 'Ab_-0123456789abcdefgh';
+
+    it('reads a 22-char base key beside the item; malformed or absent → null', () => {
+        expect(materialsBaseFromHash(`#materials?item=Wood&base=${KEY}`)).toBe(KEY);
+        expect(materialsItemFromHash(`#materials?item=Wood&base=${KEY}`)).toBe('Wood');
+        expect(materialsBaseFromHash('#materials?base=short')).toBeNull();
+        expect(materialsBaseFromHash(`#map?base=${KEY}`)).toBeNull();
+        expect(materialsBaseFromHash('#materials?item=Wood')).toBeNull();
+    });
+
+    it('serializes item and base together, either alone, or neither', () => {
+        expect(materialsHash('Wood', KEY)).toBe(`#materials?item=Wood&base=${KEY}`);
+        expect(materialsHash(null, KEY)).toBe(`#materials?base=${KEY}`);
+        expect(materialsHash(null, null)).toBe('#materials');
+    });
+
+    it('a row click keeps the base already in the hash', async () => {
+        window.history.replaceState(null, '', `/hub#materials?base=${KEY}`);
+        renderWithProviders(<ValheimMaterialsTab serverId={7} />);
+        const list = await screen.findByRole('list', {
+            name: 'Shared chest totals',
+        });
+        await userEvent.click(
+            within(list).getByRole('button', { name: /Wood/ }),
+        );
+        expect(window.location.hash).toBe(`#materials?item=Wood&base=${KEY}`);
     });
 });
 

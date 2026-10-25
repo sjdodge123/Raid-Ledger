@@ -91,8 +91,8 @@ export function MapViewportSection(): JSX.Element {
             blurb="§4.25 — a pannable/zoomable layered image: base map, fog canvas (backdrop token) and counter-scaled pins share one transform. touch-action is scoped to the map; every control is 44px."
         >
             <StateFrame
-                label="Valheim map — static 256² sample, 1 personal + 1 cartography-table pin"
-                note="Toggle 'Show cartography table' to widen the explored area and reveal the second pin."
+                label="Valheim map — static 256² sample, 1 personal + 1 cartography-table pin + 1 scanned chest (warning ring)"
+                note="Toggle 'Show cartography table' to widen the explored area and reveal the second pin. The chest pin (rl:chest, ROK-1859) is server data: ArchiveBox icon on a 2px border-warning ring, apart from the success-ring portal pin."
             >
                 <MapDemo />
             </StateFrame>
