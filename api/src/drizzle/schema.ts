@@ -96,3 +96,4 @@ export * from './schema/valheim-portals';
 export * from './schema/valheim-recipes';
 export * from './schema/valheim-deaths';
 export * from './schema/discord-game-roles';
+export * from './schema/steam-app-stats';
