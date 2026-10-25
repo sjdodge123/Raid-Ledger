@@ -49,6 +49,7 @@ import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
 import { ValheimServerPortalsController } from './armory/read/valheim-server-portals.controller';
 import { ValheimServerPortalsService } from './armory/read/valheim-server-portals.service';
 import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
+import { ValheimDeathsPicturesRepository } from './armory/read/valheim-deaths-pictures.repository';
 import { ValheimServerPinsController } from './armory/read/valheim-server-pins.controller';
 import { ValheimServerPinsService } from './armory/read/valheim-server-pins.service';
 import { ValheimServerPinsRepository } from './armory/read/valheim-server-pins.repository';
@@ -137,6 +138,8 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
     ValheimDeathsService,
     ValheimServerPortalsService,
     ValheimDeathPinsRepository,
+    // ROK-1941 D13 death pictures on the Deaths bars.
+    ValheimDeathsPicturesRepository,
     // ROK-1943 Map tab cross-player pin layer.
     ValheimServerPinsService,
     ValheimServerPinsRepository,

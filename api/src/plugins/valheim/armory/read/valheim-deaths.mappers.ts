@@ -15,6 +15,11 @@ import type {
   DeathGroupRow,
   DeathProfileRow,
 } from '../valheim-deaths.repository';
+import {
+  foldPictures,
+  type BarPictures,
+  type DeathPictureBucket,
+} from './valheim-deaths-pictures.mappers';
 
 /** The contract's cap on bars (the widget shows fewer). */
 export const MAX_DEATH_PLAYERS = 200;
@@ -26,6 +31,8 @@ const displayName = (raw: string): string =>
   (raw.trim() === '' ? UNKNOWN_CHARACTER : raw).slice(0, NAME_MAX);
 
 interface Bar {
+  /** D7 merge key: the SteamID, else `name:<character name>`. */
+  mergeKey: string;
   steamId: string | null;
   name: string;
   deaths: number;
@@ -58,15 +65,24 @@ export function latestCharacterId(
   return best?.id ?? null;
 }
 
+/** D7: the bar a `(steam_id, character_name)` bucket folds into. */
+export function barMergeKey(
+  group: Pick<DeathGroupRow, 'steamId' | 'characterName'>,
+  profiles: DeathProfileRow[],
+): string {
+  return resolveSteamId(group, profiles) ?? `name:${group.characterName}`;
+}
+
 function mergeBars(counts: DeathCounts): Bar[] {
   const bars = new Map<string, Bar>();
   for (const g of counts.groups) {
     if (g.lastDeathAt === null || g.deaths < 1) continue;
     const steamId = resolveSteamId(g, counts.profiles);
-    const key = steamId ?? `name:${g.characterName}`;
+    const key = barMergeKey(g, counts.profiles);
     const prev = bars.get(key);
     if (!prev) {
       bars.set(key, {
+        mergeKey: key,
         steamId,
         name: g.characterName,
         deaths: g.deaths,
@@ -138,20 +154,31 @@ function withKeys(bars: Bar[], profiles: DeathProfileRow[]): KeyedBar[] {
   return keyed;
 }
 
-/** The `GET …/servers/:serverId/deaths` body. */
-export function toDeathsResponse(counts: DeathCounts): ValheimDeathsResponse {
-  const players: ValheimDeathPlayer[] = withKeys(
-    mergeBars(counts),
-    counts.profiles,
-  )
+const toPlayer = (
+  b: KeyedBar,
+  pics: BarPictures | undefined,
+): ValheimDeathPlayer => ({
+  key: b.key,
+  name: b.name,
+  deaths: b.deaths,
+  lastDeathAt: b.last.toISOString(),
+  characterId: b.characterId,
+  ...(pics ?? {}),
+});
+
+/**
+ * The `GET …/servers/:serverId/deaths` body. ROK-1941 D13: `pictures`
+ * (visible death pictures per bucket) fold through the same D7 merge key;
+ * a bar with none carries neither `pictures` nor `pictureCount`.
+ */
+export function toDeathsResponse(
+  counts: DeathCounts,
+  pictures: DeathPictureBucket[] = [],
+): ValheimDeathsResponse {
+  const byBar = foldPictures(pictures, (b) => barMergeKey(b, counts.profiles));
+  const players = withKeys(mergeBars(counts), counts.profiles)
     .sort(compareBars)
     .slice(0, MAX_DEATH_PLAYERS)
-    .map((b) => ({
-      key: b.key,
-      name: b.name,
-      deaths: b.deaths,
-      lastDeathAt: b.last.toISOString(),
-      characterId: b.characterId,
-    }));
+    .map((b) => toPlayer(b, byBar.get(b.mergeKey)));
   return { players, since: earliest(counts.groups) };
 }
