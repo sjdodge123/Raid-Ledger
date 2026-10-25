@@ -19,6 +19,8 @@ function must<T>(value: T | undefined, label: string): T {
   return value;
 }
 
+const noSetup = { requirements: [] };
+
 const widgetIds = (slug: string): string[] =>
   must(hubManifestFor(slug), slug).widgets.map((w) => w.id);
 const tabIds = (slug: string): string[] =>
@@ -66,7 +68,10 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
   });
 
   it('rejects a duplicate widget id within one list', () => {
-    const dup = { widgets: [{ id: 'a', title: 'A' }, { id: 'a', title: 'B' }] };
+    const dup = {
+      widgets: [{ id: 'a', title: 'A' }, { id: 'a', title: 'B' }],
+      setup: { requirements: [] },
+    };
     const result = PluginHubManifestSchema.safeParse(dup);
     expect(result.error?.issues.map((i) => i.message)).toEqual([
       'Duplicate widgets id "a"',
@@ -78,7 +83,7 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
       { id: 'valheim', kind: 'log-parser', label: 'A' },
       { id: 'valheim', kind: 'scheduled-job', label: 'B' },
     ];
-    expect(PluginHubManifestSchema.safeParse({ behaviours }).success).toBe(true);
+    expect(PluginHubManifestSchema.safeParse({ behaviours, setup: noSetup }).success).toBe(true);
   });
 
   it('returns undefined for an unknown or inherited slug', () => {
@@ -92,6 +97,7 @@ describe('hubManifestProblems (C2)', () => {
     widgets: [{ id: 'sneaky', title: 'Sneaky', layoutKey: 'bare' }],
     tabs: [],
     behaviours: [],
+    setup: noSetup,
   };
 
   it('names the slug when a non-core plugin declares a bare widget', () => {
@@ -105,6 +111,7 @@ describe('hubManifestProblems (C2)', () => {
       widgets: [{ id: 'Bad Id', title: 'x', layoutKey: 'plugin' }],
       tabs: [],
       behaviours: [],
+      setup: noSetup,
     };
     expect(hubManifestProblems({ valheim: broken })).toEqual([
       'valheim: widgets.0.id Invalid id',

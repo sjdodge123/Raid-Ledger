@@ -22,7 +22,9 @@ describe('PluginInfoSchema hub fields (C4)', () => {
   it('defaults builtIn to false and hub to empty lists', () => {
     const parsed = PluginInfoSchema.parse(legacy);
     expect(parsed.builtIn).toBe(false);
-    expect(parsed.hub).toEqual({ widgets: [], tabs: [], behaviours: [] });
+    expect(parsed.hub).toEqual({
+      widgets: [], tabs: [], behaviours: [], setup: { requirements: [] },
+    });
   });
 
   it('round-trips a built-in plugin with its hub declaration', () => {
@@ -33,7 +35,10 @@ describe('PluginInfoSchema hub fields (C4)', () => {
   });
 
   it('fills layoutKey when an api sends a widget without it', () => {
-    const hub = { widgets: [{ id: 'deaths', title: 'Deaths' }] };
+    const hub = {
+      widgets: [{ id: 'deaths', title: 'Deaths' }],
+      setup: { requirements: [] },
+    };
     const parsed = PluginInfoSchema.parse({ ...legacy, hub });
     expect(parsed.hub.widgets[0]?.layoutKey).toBe('plugin');
   });

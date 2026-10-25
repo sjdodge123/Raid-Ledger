@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PluginSetupSchema } from './plugin-setup.schema.js';
 
 /**
  * ROK-1969 — what a plugin adds to hubs. Every hub widget, tab and hub
@@ -94,6 +95,8 @@ export const PluginHubManifestSchema = z
     behaviours: z.array(PluginHubBehaviourDeclSchema).default([]),
     /** Games a game plugin's widgets may target (web guard: `games` ⊆ this). */
     gameSlugs: z.array(z.string().min(1)).optional(),
+    /** REQUIRED (§3.5): what an admin must set up; `{ requirements: [] }` = nothing. */
+    setup: PluginSetupSchema,
   })
   .strict()
   .superRefine((m, ctx) => {
@@ -106,7 +109,7 @@ export type PluginHubManifest = z.infer<typeof PluginHubManifestSchema>;
 /** Wire (input) shape — lists and `layoutKey` may be omitted. */
 export type PluginHubManifestInput = z.input<typeof PluginHubManifestSchema>;
 
-/** A fresh declaration for a plugin that adds nothing to hubs. */
+/** A fresh declaration for a plugin that adds nothing to hubs and needs no setup. */
 export function emptyPluginHubManifest(): PluginHubManifest {
-  return { widgets: [], tabs: [], behaviours: [] };
+  return { widgets: [], tabs: [], behaviours: [], setup: { requirements: [] } };
 }

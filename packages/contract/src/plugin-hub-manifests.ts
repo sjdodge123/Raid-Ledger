@@ -6,13 +6,20 @@
  * declaration, nothing declared that no code registers.
  *
  * Adding a hub widget, tab or behaviour? Declare it here under its owning
- * plugin first — shared ones go under `core`.
+ * plugin first — shared ones go under `core`. Every plugin also declares its
+ * `setup` (§3.5, `plugin-setup-requirements.ts`).
  */
 import {
   CORE_PLUGIN_ID,
   PluginHubManifestSchema,
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
+import {
+  BLIZZARD_SETUP,
+  CORE_SETUP,
+  PELICAN_SETUP,
+  VALHEIM_SETUP,
+} from './plugin-setup-requirements.js';
 
 const core = {
   widgets: [
@@ -34,6 +41,7 @@ const core = {
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
   ],
+  setup: CORE_SETUP,
 } satisfies PluginHubManifest;
 
 const valheim = {
@@ -53,6 +61,7 @@ const valheim = {
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
   ],
   gameSlugs: ['valheim'],
+  setup: VALHEIM_SETUP,
 } satisfies PluginHubManifest;
 
 const pelican = {
@@ -65,6 +74,7 @@ const pelican = {
     { id: 'game_server', kind: 'hub-kind', label: 'Game-server hubs' },
     { id: 'pelican', kind: 'scheduled-job', label: 'Syncs servers and polls their status' },
   ],
+  setup: PELICAN_SETUP,
 } satisfies PluginHubManifest;
 
 const blizzard = {
@@ -81,6 +91,7 @@ const blizzard = {
     { id: 'wow_guild', kind: 'hub-kind', label: 'World of Warcraft guild hubs' },
     { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
   ],
+  setup: BLIZZARD_SETUP,
 } satisfies PluginHubManifest;
 
 /** Every plugin's hub declaration, keyed by plugin slug. */
