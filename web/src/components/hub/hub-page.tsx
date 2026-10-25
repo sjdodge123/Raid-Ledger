@@ -261,20 +261,31 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
 }
 
 type RecoveryLatch = { guildId: number; dataUpdatedAt: number; errorUpdatedAt: number };
+type GuildPageQuery = ReturnType<typeof useGuildPage>;
+
+/**
+ * Whether the query moved past the latch: another hub, a success, or a newer
+ * error that is NOT a 401 (a 403/404/5xx). A still-401 refetch — the
+ * recovery's own, or a resume refresh's — and an in-flight refetch (which
+ * clears an uncached query's `error`) keep the hold, so Sign in is final.
+ */
+function latchReleased(latch: RecoveryLatch, query: GuildPageQuery, guildId: number): boolean {
+    if (latch.guildId !== guildId || latch.dataUpdatedAt !== query.dataUpdatedAt) return true;
+    return query.error != null && query.errorUpdatedAt !== latch.errorUpdatedAt && httpStatusOf(query.error) !== 401;
+}
 
 /**
  * ROK-1947: the recovery refetch clears an uncached query's error, so the
  * re-check screen is held until it lands, or the next 401 would remount it
- * and loop. The latch is keyed to the hub and to the data AND error it started
- * from: a later success or error that did not come through it (a resume
- * refresh refetching the 401'd query, a 403/404/5xx from another refetch) or
- * another hub voids it, so a stale Sign in never stays up. An in-flight
- * refetch clears `error` but not `errorUpdatedAt`, so the hold survives it.
+ * and loop. Once released (see {@link latchReleased}) the latch is dropped, so
+ * a later in-flight refetch cannot revive a stale Sign in.
  */
-function useRecoveryLatch(query: ReturnType<typeof useGuildPage>, guildId: number) {
+function useRecoveryLatch(query: GuildPageQuery, guildId: number) {
     const [latch, setLatch] = useState<RecoveryLatch | null>(null);
-    const recovering = latch !== null && latch.guildId === guildId
-        && latch.dataUpdatedAt === query.dataUpdatedAt && latch.errorUpdatedAt === query.errorUpdatedAt;
+    const released = latch !== null && latchReleased(latch, query, guildId);
+    // Dropped during render (React's adjust-state-on-change pattern): the next pass has no latch.
+    if (released) setLatch(null);
+    const recovering = latch !== null && !released;
     const recoverPage = async () => {
         setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt, errorUpdatedAt: query.errorUpdatedAt });
         const result = await query.refetch({ cancelRefetch: false });
