@@ -242,6 +242,10 @@ export * from './valheim-server-portals.schema.js';
 export * from './companion-common.schema.js';
 export * from './companion-envelope.schema.js';
 export * from './companion-bg3-save.schema.js';
+export * from './companion-bg3-save-raw.schema.js';
+export * from './companion-bg3-save-normalise.js';
+export * from './companion-registry.js';
+export * from './companion-bg3-display.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
