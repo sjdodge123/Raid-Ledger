@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  PluginHubManifestSchema,
+  emptyPluginHubManifest,
+} from './plugin-hub-manifest.schema.js';
 
 export const PluginBadgeSchema = z.object({
   icon: z.string(),
@@ -38,6 +42,10 @@ export const PluginInfoSchema = z.object({
   integrations: z.array(PluginIntegrationInfoSchema),
   status: z.enum(['not_installed', 'active', 'inactive']),
   installedAt: z.string().datetime().nullable(),
+  /** ROK-1969: built in and always on (Core) — no Deactivate/Uninstall. */
+  builtIn: z.boolean().default(false),
+  /** ROK-1969: the widgets, tabs and behaviours this plugin adds to hubs. */
+  hub: PluginHubManifestSchema.default(emptyPluginHubManifest),
 });
 
 export type PluginInfoDto = z.infer<typeof PluginInfoSchema>;

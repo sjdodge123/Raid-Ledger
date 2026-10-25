@@ -71,6 +71,9 @@ export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
+// Plugin-owned hub widgets/tabs/behaviours + the Core plugin (ROK-1969).
+export * from './plugin-hub-manifest.schema.js';
+export * from './plugin-hub-manifests.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 export * from './pelican-servers.schema.js';
