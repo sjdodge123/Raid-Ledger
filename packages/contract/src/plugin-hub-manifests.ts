@@ -57,7 +57,7 @@ const valheim = {
   ],
   behaviours: [
     { id: 'valheim', kind: 'log-parser', label: 'Reads joins, leaves and deaths from the server log' },
-    { id: 'armory-import', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
+    { id: 'valheim', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
   ],
   gameSlugs: ['valheim'],
