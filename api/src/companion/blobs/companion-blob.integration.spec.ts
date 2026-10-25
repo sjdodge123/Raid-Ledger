@@ -528,6 +528,35 @@ describe('I-19 per-user scope', () => {
   });
 });
 
+describe('R1 a row whose file is gone (crash / DB restore)', () => {
+  it('re-PUT → 201 stored again: the stale row is replaced and the file restored', async () => {
+    const u = await member('cb-stale');
+    const bytes = await webp(16, 8);
+    const hash = sha(bytes);
+    expectAck(await putBlob(u.token, bytes), 'stored', hash);
+    rmSync(blobFile(u.id, hash));
+    expectAck(await putBlob(u.token, bytes), 'stored', hash);
+    expect(readFileSync(blobFile(u.id, hash)).equals(bytes)).toBe(true);
+    expect(await blobRows()).toEqual([[u.id, hash]]);
+    expect(entries(u.id)).toEqual([`${hash}.webp`]);
+  });
+});
+
+describe('R1 session uploads need a handler opt-in', () => {
+  it('device-only handlers → a session PUT is 401; opting the handler into session → 201', async () => {
+    const u = await member('cb-session');
+    const bytes = await webp(16, 8);
+    expectError(await putBlob(u.session, bytes), 401, 'unauthorized');
+    expect(await blobRows()).toEqual([]);
+    handler.sources = ['device', 'session'];
+    try {
+      expectAck(await putBlob(u.session, bytes), 'stored', sha(bytes));
+    } finally {
+      delete handler.sources;
+    }
+  });
+});
+
 describe('I-20 the per-user quota → 413 blob_quota_exceeded', () => {
   it('declared length: the second blob past the quota is refused; the other user is unaffected', async () => {
     const m = await member('cb-quota');
