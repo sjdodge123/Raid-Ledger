@@ -109,7 +109,10 @@ describe('CompanionDeviceGuard', () => {
     const { res, ctx } = ctxFor(`Bearer ${TOKEN}`);
     const body = await bodyOf(guard.canActivate(ctx));
     expect(body).toMatchObject({ code: 'rate_limited' });
-    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Retry-After',
+      expect.any(String),
+    );
     expect(repo.findByHash).not.toHaveBeenCalled();
   });
 

@@ -1,10 +1,9 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { tokenHashesEqual } from '../../common/tokens/prefixed-token.helpers';
-import { reserveOrThrow, type HeaderSink } from './companion-device-link-budget';
+import {
+  reserveOrThrow,
+  type HeaderSink,
+} from './companion-device-link-budget';
 import { deviceUnauthorized } from './companion-device-link.errors';
 import {
   CompanionDeviceRateLimiter,
@@ -85,6 +84,10 @@ export class CompanionDeviceGuard implements CanActivate {
     const row = await this.repo.findByHash(hash);
     if (!row || !tokenHashesEqual(row.tokenHash, hash)) return null;
     if (row.revokedAt || row.deactivatedAt) return null;
-    return { deviceId: row.deviceId, tokenHash: row.tokenHash, userId: row.userId };
+    return {
+      deviceId: row.deviceId,
+      tokenHash: row.tokenHash,
+      userId: row.userId,
+    };
   }
 }

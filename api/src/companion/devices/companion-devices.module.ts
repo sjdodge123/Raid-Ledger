@@ -7,21 +7,33 @@ import { CompanionDeviceLinkController } from './companion-device-link.controlle
 import { CompanionDeviceRateLimiter } from './companion-device-link.limits';
 import { CompanionDeviceLinkService } from './companion-device-link.service';
 import { CompanionDeviceLinksRepository } from './companion-device-links.repository';
+import { CompanionDeviceGuard } from './companion-device.guard';
+import { CompanionDevicesController } from './companion-devices.controller';
+import { CompanionDevicesRepository } from './companion-devices.repository';
+import { CompanionDevicesService } from './companion-devices.service';
 
 /**
- * ROK-1955: companion device tokens — the RFC 8628 link flow (L3). The
- * device guard and the Devices API (L4) register here too.
+ * ROK-1955: companion device tokens — the RFC 8628 link flow (L3), the
+ * `rlcd_` device guard and the Devices API (L4).
  */
 @Module({
   imports: [SettingsModule, CronJobModule],
-  controllers: [CompanionDeviceLinkController],
+  controllers: [CompanionDeviceLinkController, CompanionDevicesController],
   providers: [
     CompanionDeviceLinksRepository,
     CompanionDeviceLinkService,
     CompanionDeviceLinkPollService,
     CompanionDeviceRateLimiter,
     CompanionDeviceLinkCleanupService,
+    CompanionDevicesRepository,
+    CompanionDevicesService,
+    CompanionDeviceGuard,
   ],
-  exports: [CompanionDeviceRateLimiter],
+  // C3's ingest routes reuse the guard (and its repository + limiter).
+  exports: [
+    CompanionDeviceRateLimiter,
+    CompanionDevicesRepository,
+    CompanionDeviceGuard,
+  ],
 })
 export class CompanionDevicesModule {}
