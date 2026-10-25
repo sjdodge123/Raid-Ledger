@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -84,24 +84,29 @@ export class ValheimScreenshotClassifier implements HubMediaPostClassifier {
   }
 
   /**
-   * D11: the post was an inferred death's only evidence; log/mod rows stay.
-   * Runs even while the plugin is off: it only deletes `discord` rows already
-   * linked to these pictures (cleanup, not classification), so a post deleted
-   * during an inactive window cannot leave an evidence-less death behind.
+   * D11: the post was an inferred death's only evidence, so its `discord`
+   * row goes; a log/mod row stays but drops the removed picture's link, so
+   * an edit's new first picture re-links that death instead of SQL A (which
+   * skips linked rows) inferring a second one. Runs even while the plugin is
+   * off: it only touches rows already linked to these pictures (cleanup, not
+   * classification), so a post deleted during an inactive window cannot
+   * leave an evidence-less death behind.
    */
   async afterRemove(
     hub: HubMediaHubRef,
     mediaIds: readonly number[],
   ): Promise<void> {
     if (!isValheimServer(hub) || mediaIds.length === 0) return;
+    const linked = and(
+      eq(valheimPlayerDeaths.pelicanServerId, hub.pelicanServerId),
+      inArray(valheimPlayerDeaths.hubMediaId, [...mediaIds]),
+    );
     await this.db
       .delete(valheimPlayerDeaths)
-      .where(
-        and(
-          eq(valheimPlayerDeaths.pelicanServerId, hub.pelicanServerId),
-          inArray(valheimPlayerDeaths.hubMediaId, [...mediaIds]),
-          eq(valheimPlayerDeaths.source, 'discord'),
-        ),
-      );
+      .where(and(linked, eq(valheimPlayerDeaths.source, 'discord')));
+    await this.db
+      .update(valheimPlayerDeaths)
+      .set({ hubMediaId: null })
+      .where(and(linked, ne(valheimPlayerDeaths.source, 'discord')));
   }
 }

@@ -291,17 +291,20 @@ describe('edits and deletes (D11)', () => {
     expect(await deathRows()).toEqual([]);
   });
 
-  it('a delete keeps a console death and its hub_media_id as is', async () => {
+  it('a delete keeps a console death and releases its link to the tombstone', async () => {
     await logDeath(-30);
     const post = gatewayPost();
     await listener().onCreate(post);
     const [m] = nonEmpty(await mediaRows(), 'media');
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['log', m.id],
+    ]);
     await ingest().onDelete(post.id, await hubRef());
     expect((await mediaRows()).map((r) => r.removedAt === null)).toEqual([
       false,
     ]);
     expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
-      ['log', m.id],
+      ['log', null],
     ]);
   });
 });
@@ -320,6 +323,45 @@ describe('removed pictures never carry a death (D11)', () => {
     const after = await mediaRows();
     expect(after.map((m) => m.removedAt === null)).toEqual([false, true]);
     const [, second] = after;
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['discord', second?.id],
+    ]);
+  });
+});
+
+describe('the first picture re-links; a tombstone links nothing (D11 + D6)', () => {
+  it('an edit that drops the first picture of a console death re-links it, never infers a second', async () => {
+    await logDeath(-30);
+    const post = gatewayPost({ files: ['a.png', 'b.png'] });
+    await listener().onCreate(post);
+    const [first] = nonEmpty(await mediaRows(), 'media');
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['log', first.id],
+    ]);
+    const rest = [...post.attachments.values()].slice(1);
+    const edited = { ...post, attachments: { values: () => rest } };
+    await ingest().onEdit(toPostLike(edited), await hubRef());
+    const [, second] = await mediaRows();
+    expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
+      ['log', second?.id],
+    ]);
+  });
+
+  // The first picture is the lowest id, not whatever row the heap returns
+  // first: touching row `a` moves its tuple behind `b`, which an unordered
+  // read then hands back first (and the edit skipped the re-link).
+  it('an edit finds the first picture by id order after its tuple moved', async () => {
+    const post = gatewayPost({ files: ['a.png', 'b.png'] });
+    await listener().onCreate(post);
+    const [first] = nonEmpty(await mediaRows(), 'media');
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ caption: 'moved' })
+      .where(eq(schema.hubMedia.id, first.id));
+    const rest = [...post.attachments.values()].slice(1);
+    const edited = { ...post, attachments: { values: () => rest } };
+    await ingest().onEdit(toPostLike(edited), await hubRef());
+    const [, second] = await mediaRows();
     expect((await deathRows()).map((d) => [d.source, d.hubMediaId])).toEqual([
       ['discord', second?.id],
     ]);
@@ -380,6 +422,31 @@ function readable(id: string): void {
       connected: true,
       channels: [{ id, name: 'screenshots', visibility: 'public' }],
     });
+}
+
+/** A second game_server hub (another Pelican server) for the bind race. */
+async function secondHubId(): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.slug, VALHEIM_GAME_SLUG)),
+    'game',
+  );
+  const s = fakeServer(1942);
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.pelicanServers)
+      .values({
+        panelUuid: s.uuid,
+        identifier: s.identifier,
+        name: s.name,
+        gameId: g.id,
+      })
+      .returning({ id: schema.pelicanServers.id }),
+    'server 2',
+  );
+  return ensureFixtureHubId(testApp.db, row.id, g.id);
 }
 
 describe('guilds/:id/media-channel routes (D2)', () => {
@@ -443,5 +510,30 @@ describe('guilds/:id/media-channel routes (D2)', () => {
       404,
       HUB_NOT_FOUND,
     ]);
+  });
+});
+
+describe('guilds/:id/media-channel concurrent bind (D1)', () => {
+  const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+  // D1 under the advisory lock: the loser sees the winner's row (409), and
+  // the upsert never reaches the partial unique index (a 500).
+  it('two hubs binding one channel at once: one 200, one 409, one row bound', async () => {
+    const op = (await user('op', 'operator')).token;
+    const other = await secondHubId();
+    const next = snowflake();
+    readable(next);
+    const put = (id: number) =>
+      testApp.request
+        .put(`/guilds/${id}/media-channel`)
+        .set(auth(op))
+        .send({ channelId: next });
+    const res = await Promise.all([put(hubId), put(other)]);
+    expect(res.map((r) => r.status).sort()).toEqual([200, 409]);
+    const bound = await testApp.db
+      .select({ guildId: schema.guildProfiles.guildId })
+      .from(schema.guildProfiles)
+      .where(eq(schema.guildProfiles.mediaChannelId, next));
+    expect(bound).toHaveLength(1);
   });
 });

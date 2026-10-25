@@ -21,7 +21,7 @@ const text = (content: string) => ({
 
 const links = { linkOrInferDeath: jest.fn() };
 const plugins = { isActive: jest.fn() };
-const db = { delete: jest.fn() };
+const db = { delete: jest.fn(), update: jest.fn() };
 
 async function build(): Promise<ValheimScreenshotClassifier> {
   jest.clearAllMocks();
@@ -129,14 +129,27 @@ describe('ValheimScreenshotClassifier with the Valheim plugin off (ROK-1969)', (
     plugins.isActive.mockReturnValue(false);
     const where = jest.fn().mockResolvedValue(undefined);
     db.delete.mockReturnValue({ where });
+    db.update.mockReturnValue({ set: () => ({ where }) });
     await classifier.afterRemove(HUB, [42]);
     expect(db.delete).toHaveBeenCalledTimes(1);
-    expect(where).toHaveBeenCalledTimes(1);
+    expect(where).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases a log/mod death linked to a removed picture so it can re-link', async () => {
+    const classifier = await build();
+    const where = jest.fn().mockResolvedValue(undefined);
+    const set = jest.fn().mockReturnValue({ where });
+    db.delete.mockReturnValue({ where });
+    db.update.mockReturnValue({ set });
+    await classifier.afterRemove(HUB, [42]);
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith({ hubMediaId: null });
   });
 
   it('deletes nothing for a hub that is not a Valheim server', async () => {
     const classifier = await build();
     await classifier.afterRemove({ ...HUB, gameSlug: 'other' }, [42]);
     expect(db.delete).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
   });
 });

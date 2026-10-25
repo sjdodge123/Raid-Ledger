@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -28,7 +28,12 @@ export async function findHubForMediaChannel(
   return row ?? null;
 }
 
-/** A message's live stored pictures (D11 edit/delete). */
+/**
+ * A message's live stored pictures (D11 edit/delete), in attachment order.
+ * `hub_media` has no attachment-index column; a post's pictures are
+ * ingested one by one in attachment order, so the `id` (bigserial) records
+ * it and `[0]` is the first picture — the one a death links to (D6).
+ */
 export function findMessageMedia(
   db: Db,
   guildId: number,
@@ -47,7 +52,8 @@ export function findMessageMedia(
         eq(hubMedia.discordMessageId, messageId),
         isNull(hubMedia.removedAt),
       ),
-    );
+    )
+    .orderBy(asc(hubMedia.id));
 }
 
 /** channel → hub with a 60 s cache; PUT/DELETE of the binding invalidate it. */
