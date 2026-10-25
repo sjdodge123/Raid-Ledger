@@ -10,6 +10,7 @@ import {
 } from './hub-rename.helpers';
 import { HUB_NOT_FOUND } from './hub-hidden.helpers';
 import { PROPOSAL_ERRORS } from './community/community-proposals.service';
+import { hubNameKey } from './community/community-proposals.queries';
 
 const community: RenameRow = {
   kind: 'game_community',
@@ -159,5 +160,12 @@ describe('isRenameChange', () => {
       nameOverridden: false,
     };
     expect(isRenameChange(renamed, set)).toBe(true);
+  });
+});
+
+describe('hubNameKey — one key per visual name (ROK-1950 review)', () => {
+  it('NFC-normalises so a decomposed name clashes with its composed twin', () => {
+    expect(hubNameKey(' Cafe\u0301 Club ')).toBe(hubNameKey('Caf\u00e9 club'));
+    expect(hubNameKey('Cafe\u0301 Club')).toBe('caf\u00e9 club');
   });
 });

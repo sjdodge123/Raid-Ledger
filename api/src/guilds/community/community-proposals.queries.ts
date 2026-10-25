@@ -23,9 +23,9 @@ export interface NewCommunityHub {
   reviewedBy: number | null;
 }
 
-/** D11 key: case-insensitive, trimmed. */
+/** D11 key: case-insensitive, trimmed, NFC (ROK-1950 review: one key per visual name). */
 export function hubNameKey(name: string): string {
-  return name.trim().toLowerCase();
+  return name.trim().normalize('NFC').toLowerCase();
 }
 
 /** The game's name, or null when the game does not exist. */
