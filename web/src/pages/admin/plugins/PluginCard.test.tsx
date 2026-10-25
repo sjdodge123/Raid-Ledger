@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
-import type { PluginInfoDto } from '@raid-ledger/contract';
+import { emptyPluginHubManifest, type PluginInfoDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { PluginCard } from './PluginCard';
 
@@ -10,6 +10,8 @@ const basePlugin: PluginInfoDto = {
     version: '1.2.0',
     description: 'Adds WoW character import and realm data',
     author: { name: 'Author' },
+    builtIn: false,
+    hub: emptyPluginHubManifest(),
     gameSlugs: ['world-of-warcraft'],
     capabilities: ['character-sync'],
     integrations: [],
