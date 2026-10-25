@@ -12,7 +12,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
@@ -32,7 +32,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { hubCopy, hubSectionsLabel } from './hub-copy';
+import { hubCopy, hubSectionsLabel, loadFailedLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
@@ -86,17 +86,25 @@ function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryRe
     );
 }
 
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => unknown }): JSX.Element {
+interface ErrorStateProps {
+    error: Error;
+    onRetry: () => unknown;
+    /** The hub kind when known (a module load failure); a page 403/5xx has none and reads as a WoW guild. */
+    kind?: GuildKind | undefined;
+}
+
+/** The hub page's failure notices — not-a-member (403), not-found (404), or a retryable load failure. */
+export function ErrorState({ error, onRetry, kind }: ErrorStateProps): JSX.Element {
     const status = httpStatusOf(error);
     if (status === 403) {
-        return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
+        return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
     }
     if (status === 404) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     return (
         <Notice testId="guild-error">
-            <p className="mb-4 text-sm text-muted">We couldn&apos;t load this guild. Try again in a moment.</p>
+            <p className="mb-4 text-sm text-muted">{loadFailedLabel(kind)}</p>
             <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
@@ -290,8 +298,9 @@ export function GuildPage(): JSX.Element {
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
     if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
-    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
-    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
+    // Cached data (a refetch error) still knows the kind; with none it falls back to WoW copy.
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} />;
+    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} kind={query.data?.guild.kind} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

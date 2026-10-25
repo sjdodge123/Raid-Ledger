@@ -3638,3 +3638,6 @@ same day (#1278, #1279, #1280).
 - **resolved** 2026-10-22 Lead session ag `api/src/discord-bot/services/ad-hoc-event-end.helpers.ts` + `ad-hoc-event.helpers.ts` — `setGracePeriodStatus` returns whether the `live`-guarded update flipped a row, and `startGracePeriod` bails before enqueue/emit when it did not (this branch).
 - **resolved** 2026-10-14 feat/rok-1775-pelican-month-schedule `web/src/pages/calendar-page.tsx:33-35` — `/calendar?view=week|day` on desktop now opens in that view (seeded from a valid `?view` param) (this branch).
 - **resolved** 2026-10-15 feat/rok-1767-game-role `web/src/pages/profile/identity-sections.tsx:165` — the Auto-heart `role="switch"` is named by its card heading via `aria-labelledby` (this branch).
+### 2026-10-25 — fix/hub-copy-and-proposal-smoke
+
+- **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
