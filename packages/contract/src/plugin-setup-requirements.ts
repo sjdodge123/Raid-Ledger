@@ -76,7 +76,7 @@ export const PELICAN_SETUP = {
       kind: 'admin_setting',
       title: 'Connect your Pelican panel',
       instructions:
-        '1. In the Pelican panel, create a client API key (Account → API Keys; it starts with `pacc_`) on a user that can see your game servers, and set its Allowed IPs to the Raid Ledger server's address.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then choose Test Connection. The key is write-only and never shown again.',
+        '1. In the Pelican panel, create a client API key (Account → API Keys; it starts with `pacc_`) on a user that can see your game servers, and set its Allowed IPs to the address of the Raid Ledger server.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then choose Test Connection. The key is write-only and never shown again.',
       required: true,
       check: 'pelican.panel_configured',
     },
