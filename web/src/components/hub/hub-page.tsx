@@ -134,7 +134,7 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
             </Suspense>
         );
     }
-    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
+    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} kind={page.guild.kind} />;
     const tab = hubModuleTabs(mod).find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
     return <HubOverview ctx={ctx} module={mod} mods={mods} />;

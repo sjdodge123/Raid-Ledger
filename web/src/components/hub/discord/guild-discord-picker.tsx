@@ -15,6 +15,7 @@ import { Select } from '../../ui/select';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
+import { privateAckLabel } from '../hub-copy';
 import { canSaveChoice, channelOptionLabel, managedChannelHint, pickerHint, visibleChannels } from './guild-discord.helpers';
 import { useClearGuildDiscordChannel, useGuildDiscordChannels, useSetGuildDiscordChannel } from './use-guild-discord';
 
@@ -25,8 +26,6 @@ interface PickerProps {
     /** ROK-1891: the hub kind, for the hint's fallback wording when the server name is unknown. */
     kind?: GuildKind;
 }
-
-const ACK_LABEL = 'Every member who can open this guild page will see this channel’s messages.';
 
 function usePickerForm({ guildId, currentId, onClose }: PickerProps) {
     const channels = useGuildDiscordChannels(guildId, true);
@@ -92,7 +91,7 @@ function PickerBody({ form, managedFor, kind }: { form: PickerForm; managedFor: 
             <Checkbox label="Show private channels" checked={form.showPrivate} data-testid="guild-discord-show-private"
                 onChange={(e) => form.setShowPrivate(e.target.checked)} />
             {form.choice?.visibility === 'private' && (
-                <Checkbox label={ACK_LABEL} checked={form.ack} data-testid="guild-discord-private-ack"
+                <Checkbox label={privateAckLabel(kind)} checked={form.ack} data-testid="guild-discord-private-ack"
                     onChange={(e) => form.setAck(e.target.checked)} />
             )}
         </div>
