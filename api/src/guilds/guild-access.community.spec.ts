@@ -53,8 +53,8 @@ function build(adapter: HubKindAdapter): void {
   const typedDb = asDb as PostgresJsDatabase<typeof schema>;
   const plugins = new PluginRegistryService(typedDb, new EventEmitter2());
   plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
-      ownerPluginId: CORE_PLUGIN_ID,
-    });
+    ownerPluginId: CORE_PLUGIN_ID,
+  });
   service = new GuildAccessService(
     typedDb,
     new HubKindRegistry(plugins, typedDb),

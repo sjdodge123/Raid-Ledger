@@ -25,6 +25,8 @@ const KNOWN_SELF_GUARDED: string[] = [
   'active-event-cache.service.ts',
   // SteamSyncProcessor: only enqueues a BullMQ job (retries handled by BullMQ)
   'steam-sync.processor.ts',
+  // hub-registration-scan.ts (ROK-1969): a test-only source scanner that matches `@Cron(` text; it declares no handlers
+  'hub-registration-scan.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */

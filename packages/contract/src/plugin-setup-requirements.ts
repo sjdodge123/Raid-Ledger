@@ -42,7 +42,7 @@ export const VALHEIM_SETUP = {
       kind: 'server_secret',
       title: 'The server\'s mod token',
       instructions:
-        `1. In Admin → Integrations → Pelican Panel, choose Issue token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
+        `1. In Admin → Integrations → Pelican Panel, choose Generate token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
       required: true,
       appliesTo: ['game_server'],
       check: 'valheim.link_token_active',
@@ -76,7 +76,7 @@ export const PELICAN_SETUP = {
       kind: 'admin_setting',
       title: 'Connect your Pelican panel',
       instructions:
-        '1. In the Pelican panel, create a Client API key (Account → API Credentials) on a user that can see your game servers.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then Test connection. The key is write-only and never shown again.',
+        '1. In the Pelican panel, create a client API key (Account → API Keys; it starts with `pacc_`) on a user that can see your game servers, and set its Allowed IPs to the Raid Ledger server's address.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then choose Test Connection. The key is write-only and never shown again.',
       required: true,
       check: 'pelican.panel_configured',
     },

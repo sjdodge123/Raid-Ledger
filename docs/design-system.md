@@ -1588,7 +1588,7 @@ ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked
 target and plain text when not, a "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
 since <date>", viewer timezone). Copy this shape for any future ranked-count widget; `useVisible` hides it when
 the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
-CORE (`components/hub/gallery/`, §4.29) — Valheim only registers it; `useVisible` hides it from members at 0
+CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` hides it from members at 0
 pictures, editors keep it with the §4.5 hint.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
