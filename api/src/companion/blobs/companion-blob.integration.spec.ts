@@ -476,7 +476,9 @@ describe('I-19 auth failures → 401 unauthorized', () => {
     expect(await blobRows()).toEqual([]);
     expect(entries(m.id)).toEqual([]);
   });
+});
 
+describe('I-19 session auth', () => {
   it('an impersonation session → 401', async () => {
     const target = await makeUser(testApp, 'cb-imp-target');
     const [admin] = nonEmpty(
