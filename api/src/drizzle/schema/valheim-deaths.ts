@@ -51,10 +51,10 @@ export const valheimPlayerDeaths = pgTable(
       t.pelicanServerId,
       t.steamId,
     ),
-    // ROK-1941 (D8): also backs the hub_media FK's ON DELETE SET NULL.
-    uniqueIndex('valheim_player_deaths_media_uq')
-      .on(t.hubMediaId)
-      .where(sql`${t.hubMediaId} IS NOT NULL`),
+    // ROK-1941 (D8): one death per picture. Deliberately NOT partial —
+    // NULLs never collide in a unique index, and a non-partial index also
+    // backs the hub_media FK's ON DELETE SET NULL (fk-index-coverage.spec).
+    uniqueIndex('valheim_player_deaths_media_uq').on(t.hubMediaId),
     // ROK-1941: both death↔post correlation lookups (case-insensitive name).
     index('valheim_player_deaths_server_name_time_idx').on(
       t.pelicanServerId,

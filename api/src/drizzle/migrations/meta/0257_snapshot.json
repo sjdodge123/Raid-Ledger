@@ -1,5 +1,5 @@
 {
-  "id": "d197f862-9342-4970-a66c-95ac24427204",
+  "id": "4f4255a2-ccc6-4838-b34a-6f0c126ed757",
   "prevId": "db733e58-1a46-44fe-87ea-d984d2094f9c",
   "version": "7",
   "dialect": "postgresql",
@@ -17252,7 +17252,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"valheim_player_deaths\".\"hub_media_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
