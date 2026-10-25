@@ -122,7 +122,13 @@ Zod has no clock, so this check is the endpoint's (C3), not the schema's.
   joined with `.`, `""` = root).
 
 All values are synthetic. The api spec `api/src/companion/companion-contract.spec.ts`
-checks every fixture and the `schema.json` drift guard.
+checks every fixture and the `schema.json` drift guard. Regenerate, from the
+repo root:
+
+```
+npm run build -w packages/contract && node packages/contract/scripts/gen-companion-fixtures.mjs
+node packages/contract/scripts/gen-companion-schemas.mjs
+```
 
 ## 7. Versioning
 
