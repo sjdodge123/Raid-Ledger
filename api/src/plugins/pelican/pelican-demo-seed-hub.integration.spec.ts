@@ -157,6 +157,33 @@ describe('POST /admin/test/pelican/server-hub (ROK-1831)', () => {
     );
   });
 
+  it('a re-run puts a renamed hub back on the server name (ROK-1950)', async () => {
+    const hub = await seed();
+    await testApp.db
+      .update(schema.guilds)
+      .set({
+        name: 'Renamed Hub',
+        nameKey: 'renamed hub',
+        nameOverridden: true,
+      })
+      .where(eq(schema.guilds.id, hub.guildId));
+
+    await seed();
+    const [guild] = await testApp.db
+      .select({
+        name: schema.guilds.name,
+        nameKey: schema.guilds.nameKey,
+        nameOverridden: schema.guilds.nameOverridden,
+      })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, hub.guildId));
+    expect(guild).toEqual({
+      name: 'Demo Valheim Hub 2',
+      nameKey: 'demo valheim hub 2',
+      nameOverridden: false,
+    });
+  });
+
   it('survives a seed-servers reset and keeps slots apart', async () => {
     const a = await seed(2);
     const b = await seed(3);
