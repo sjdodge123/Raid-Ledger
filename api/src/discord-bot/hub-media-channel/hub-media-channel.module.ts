@@ -12,8 +12,10 @@ import { HubMediaChannelService } from '../../guilds/hub-media-channel.service';
 import { HubMediaModule } from '../../hub-media/hub-media.module';
 import { ChannelMirrorModule } from '../channel-mirror/channel-mirror.module';
 import { DiscordBotModule } from '../discord-bot.module';
+import { HubMediaBackfillService } from './hub-media-backfill.service';
 import { HubMediaChannelListener } from './hub-media-channel.listener';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
+import { HubMediaHistorySource } from './hub-media-history.discord';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 
 @Module({
@@ -30,6 +32,8 @@ import { HubMediaPostIngest } from './hub-media-post.ingest';
     HubMediaChannelService,
     HubMediaPostIngest,
     HubMediaChannelListener,
+    HubMediaHistorySource,
+    HubMediaBackfillService,
   ],
   exports: [HubMediaPostIngest, HubMediaChannelResolver],
 })
