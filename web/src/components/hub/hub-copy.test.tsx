@@ -8,7 +8,9 @@ import { http, HttpResponse } from 'msw';
 import type { GuildScheduleNightDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
-import { HUB_COPY, hubCopy, hubSectionsLabel } from './hub-copy';
+import type { GuildKind } from '@raid-ledger/contract';
+import { HUB_COPY, hubCopy, hubSectionsLabel, privateAckLabel } from './hub-copy';
+import { GuildRules } from './content/guild-rules';
 import { LatestPostCard } from './posts/latest-post-card';
 import { GuildDiscordMirror } from './discord/guild-discord-mirror';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
@@ -116,5 +118,30 @@ describe('hubSectionsLabel (ROK-1891)', () => {
         expect(hubSectionsLabel('game_server')).toBe('Server page sections');
         expect(hubSectionsLabel('game_community')).toBe('Hub page sections');
         expect(hubSectionsLabel(undefined)).toBe('Guild page sections');
+    });
+});
+
+describe('rules card + private-channel acknowledgement copy', () => {
+    const RULES: Readonly<Record<GuildKind, string>> = {
+        wow_guild: 'Guild rules & loot rules',
+        game_server: 'Server rules',
+        game_community: 'Hub rules',
+    };
+
+    it.each(Object.entries(RULES) as [GuildKind, string][])('titles the rules card on a %s hub "%s"', (kind, title) => {
+        expect(hubCopy(kind).rulesTitle).toBe(title);
+        renderWithProviders(<GuildRules guildId={7} rules={[]} canEdit={false} kind={kind} />);
+        expect(screen.getByRole('region', { name: title })).toBeInTheDocument();
+    });
+
+    it('keeps the WoW title when the kind is absent', () => {
+        renderWithProviders(<GuildRules guildId={7} rules={[]} canEdit={false} />);
+        expect(screen.getByRole('region', { name: 'Guild rules & loot rules' })).toBeInTheDocument();
+    });
+
+    it('names the hub kind in the private-channel acknowledgement', () => {
+        expect(privateAckLabel('wow_guild')).toBe('Every member who can open this guild page will see this channel’s messages.');
+        expect(privateAckLabel('game_server')).toBe('Every member who can open this server page will see this channel’s messages.');
+        expect(privateAckLabel('game_community')).toBe('Every member who can open this hub page will see this channel’s messages.');
     });
 });

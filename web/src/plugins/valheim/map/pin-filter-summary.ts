@@ -28,6 +28,13 @@ export interface PinFilterSummary {
     /** Portals the mod left out of the scan; > 0 appends the "not uploaded" line. */
     portalsOmitted: number;
     onRetryPortals: () => void;
+    /** ROK-1859: the Chests layer failed (a hub 404 is no layer, not an error). */
+    chestsError: boolean;
+    /** The Chests layer is on and its first read is still in flight. */
+    chestsPending: boolean;
+    /** D13: the chest scan is of another world — no chest pins on this map. */
+    chestsOtherWorld: boolean;
+    onRetryChests: () => void;
     /** "Clear filters" in the empty state — same as Clear all. */
     onClear: () => void;
 }
@@ -47,6 +54,8 @@ export const PIN_SUMMARY_TEXT = {
     empty: 'No pins match these filters.',
     truncated: 'Showing the first 2,000 pins — narrow the filters.',
     portalsError: 'Portals could not be loaded',
+    chestsError: 'Chests could not be loaded',
+    chestsOtherWorld: 'Chests are from another world',
 } as const;
 
 /** D15: the omitted-portals line. */

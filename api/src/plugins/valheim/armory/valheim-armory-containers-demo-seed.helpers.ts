@@ -15,6 +15,7 @@ import {
   CONTAINERS_DEMO_MESSAGE as MSG,
   DEMO_PRIVATE_CHEST,
   DEMO_SHARED_CHEST,
+  containersDemoMessage,
 } from './valheim-armory-containers-demo-fixture';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -63,7 +64,10 @@ export async function upsertContainersFixtureUser(
   return row.id;
 }
 
-function snapshotValues(serverId: number): schema.NewValheimLinkSnapshot {
+function snapshotValues(
+  serverId: number,
+  msg: typeof MSG,
+): schema.NewValheimLinkSnapshot {
   return {
     pelicanServerId: serverId,
     kind: MSG.kind,
@@ -74,7 +78,7 @@ function snapshotValues(serverId: number): schema.NewValheimLinkSnapshot {
     gameVersion: MSG.gameVersion,
     modVersion: MSG.modVersion,
     capturedAt: new Date(MSG.capturedAt),
-    payload: MSG,
+    payload: msg,
     status: 'imported',
     statusDetail: null,
   };
@@ -83,12 +87,15 @@ function snapshotValues(serverId: number): schema.NewValheimLinkSnapshot {
 /**
  * Reset the fixture world's scan on `serverId` and re-import it through the
  * importer, on one transaction. The stored snapshot is upserted in place
- * (`imported`, so the drain never re-applies it).
+ * (`imported`, so the drain never re-applies it). `secondBase` (ROK-1859
+ * D11) adds two chests ~700 m away — a second base.
  */
 export async function importDemoContainers(
   db: Db,
   serverId: number,
+  secondBase = false,
 ): Promise<void> {
+  const msg = containersDemoMessage(secondBase);
   const S = schema.valheimLinkSnapshots;
   const scans = schema.valheimContainerScans;
   await db.transaction(async (tx) => {
@@ -100,7 +107,7 @@ export async function importDemoContainers(
           eq(scans.worldUid, MSG.worldUid),
         ),
       );
-    const values = snapshotValues(serverId);
+    const values = snapshotValues(serverId, msg);
     const [snap] = await tx
       .insert(S)
       .values(values)
@@ -118,9 +125,9 @@ export async function importDemoContainers(
       playerId: null,
       worldUid: MSG.worldUid,
       receivedAt: snap.receivedAt.toISOString(),
-      payload: MSG,
+      payload: msg,
     };
-    const ok = await importContainers(tx, stored, MSG);
+    const ok = await importContainers(tx, stored, msg);
     if (!ok) throw new Error('containers fixture: import skipped as stale');
   });
 }

@@ -39,6 +39,8 @@ export interface HubCopy {
     eventsBlurb: string;
     /** ROK-1891 — the Discord mirror blurb's phrase when the bot's server name is unknown. */
     discordFallback: string;
+    /** The Resources tab's rules card title (a community hub has no guild or loot rules). */
+    rulesTitle: string;
 }
 
 /** ROK-1891 — the schedule card on hubs that are not WoW guilds (operator ruling). */
@@ -74,6 +76,7 @@ const WOW_COPY: HubCopy = {
     eventsTitle: 'Guild events',
     eventsBlurb: 'Raids and runs scheduled for this guild.',
     discordFallback: 'the community Discord',
+    rulesTitle: 'Guild rules & loot rules',
 };
 
 const SERVER_COPY: HubCopy = {
@@ -98,6 +101,7 @@ const SERVER_COPY: HubCopy = {
     eventsTitle: 'Server events',
     eventsBlurb: 'Sessions and events scheduled for this server.',
     discordFallback: "the server's Discord",
+    rulesTitle: 'Server rules',
 };
 
 /** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
@@ -123,6 +127,7 @@ const COMMUNITY_COPY: HubCopy = {
     eventsTitle: 'Hub events',
     eventsBlurb: 'Sessions and events scheduled for this hub.',
     discordFallback: 'the community Discord',
+    rulesTitle: 'Hub rules',
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {
@@ -140,4 +145,9 @@ export function hubCopy(kind: GuildKind | undefined): HubCopy {
 export function hubSectionsLabel(kind: GuildKind | undefined): string {
     const noun = hubCopy(kind).noun;
     return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} page sections`;
+}
+
+/** The Discord picker's private-channel acknowledgement, naming the hub kind ("this guild/server/hub page"). */
+export function privateAckLabel(kind: GuildKind | undefined): string {
+    return `Every member who can open this ${hubCopy(kind).noun} page will see this channel’s messages.`;
 }
