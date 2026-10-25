@@ -91,8 +91,8 @@ describe('gatedHubGameWidgets', () => {
     });
 
     it('a widget that omits `games` matches every game, but never a page with no gameSlug (ROK-1969 §5.2)', () => {
-        const { games: _omit, ...rest } = widget({ id: 'any' });
-        registerPlugin('wow', { icon: '/x.png', color: 'blue', label: 'WoW' }).registerHubWidget(rest);
+        const everyGame: HubGameWidget = { id: 'any', title: 'Any', order: 45, audience: 'everyone', component: LazyEmpty };
+        registerPlugin('wow', { icon: '/x.png', color: 'blue', label: 'WoW' }).registerHubWidget(everyGame);
         expect(ids(page({ gameSlug: 'minecraft' }))).toEqual(['any']);
         expect(ids(page())).toEqual([]);
     });
