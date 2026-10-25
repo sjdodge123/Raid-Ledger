@@ -85,6 +85,18 @@ describe('gatedHubGameWidgets', () => {
         expect(ids(page({ gameSlug: 'forever', kind: 'game_server' }))).toEqual(['w']);
     });
 
+    it('shows a core widget with no active set at all — core is always on (ROK-1969 D3)', () => {
+        registerPlugin('core', { icon: 'x', color: 'c', label: 'Core' }).registerHubWidget(widget({ id: 'shared' }));
+        expect(ids(page({ gameSlug: 'forever' }), new Set())).toEqual(['shared']);
+    });
+
+    it('a widget that omits `games` matches every game, but never a page with no gameSlug (ROK-1969 §5.2)', () => {
+        const { games: _omit, ...rest } = widget({ id: 'any' });
+        registerPlugin('wow', { icon: '/x.png', color: 'blue', label: 'WoW' }).registerHubWidget(rest);
+        expect(ids(page({ gameSlug: 'minecraft' }))).toEqual(['any']);
+        expect(ids(page())).toEqual([]);
+    });
+
     it('sorts by order', () => {
         registerPlugin('wow', { icon: '/x.png', color: 'blue', label: 'WoW' }).registerHubWidget(widget({ id: 'early', order: 5 }));
         expect(ids(page({ gameSlug: 'forever' }))).toEqual(['early', 'w']);

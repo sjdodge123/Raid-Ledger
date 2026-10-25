@@ -35,6 +35,12 @@ export interface HubCatalogOptions {
     activeSlugs: ReadonlySet<string>;
 }
 
+/**
+ * ROK-1969 — the core band's bare ids, declared under `core` in
+ * `HUB_PLUGIN_MANIFESTS`; the ownership guard checks both lists match.
+ */
+export const CORE_BAND_IDS: readonly CoreWidgetId[] = ['gm-post', 'discord', 'schedule', 'events', 'attendance'];
+
 type CoreSpec = { id: CoreWidgetId; order: number; span: 1 | 2; title: string; description: string; node: ReactNode };
 
 function core(spec: CoreSpec): HubWidgetCell {
