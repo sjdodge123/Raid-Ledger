@@ -43,7 +43,7 @@ change. Every field is required; nullable fields send `null`, never omit.
 |---|---|---|---|
 | `saveName` | string, 1–128 chars | `"Save Name"` | Shown in the local preview before the first upload (spec Q2). |
 | `savedAt` | ISO-8601 UTC `Z`, ≤ 24 chars | collector: `.lsv` file mtime | MUST NOT be after the envelope's `capturedAt`. |
-| `campaignKey` | lowercase hex, `^[0-9a-f]{16,64}$` | collector (§3.3) | SHA-256 of the save-folder name (or GameID). **Never the raw name.** |
+| `campaignKey` | lowercase hex, `^[0-9a-f]{64}$` | collector (§3.3) | SHA-256 of the save-folder name (or GameID). **Never the raw name.** |
 | `campaignKeySource` | `"save-folder"` \| `"game-id"` | collector | What `campaignKey` was hashed from (§3.3). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,10}){1,3}$` | `"Game Version"` | e.g. `4.1.1.7631656`. |
 | `platform` | `^[A-Za-z0-9_]{1,32}$` | `"Platform"` | `Steam` is verified; other values are open. |
@@ -125,8 +125,8 @@ isSummon`. Key order is not significant to the schema.
   the UTF-8 bytes of the folder's own name (no path) and MUST send all 64 hex
   characters. **The raw folder name is never sent**: its format is unverified
   and may embed the character name.
-- The schema accepts 16–64 hex characters (`^[0-9a-f]{16,64}$`); a full
-  SHA-256 is always 64. The invalid fixture `campaign-key-raw-folder` proves a
+- The schema accepts exactly 64 lowercase hex characters (`^[0-9a-f]{64}$`,
+  a full SHA-256; a later GameID key is hashed the same way). The invalid fixture `campaign-key-raw-folder` proves a
   raw name is rejected.
 - **The folder name fragments campaigns across saves** (Codex review). A
   `save-folder` key is NOT a reliable campaign identity: one playthrough can

@@ -55,7 +55,7 @@ export const Bg3SavePayloadSchema = z.object({
     saveName: z.string().min(1).max(BG3_SAVE_NAME_MAX_CHARS),
     savedAt: CompanionTimestampSchema,
     /** Lowercase hex SHA-256 of the save-folder name (or GameID) — never the raw name. */
-    campaignKey: z.string().regex(/^[0-9a-f]{16,64}$/),
+    campaignKey: z.string().regex(/^[0-9a-f]{64}$/),
     campaignKeySource: z.enum(['save-folder', 'game-id']),
     gameVersion: z.string().regex(/^\d{1,4}(\.\d{1,10}){1,3}$/),
     platform: z.string().regex(/^[A-Za-z0-9_]{1,32}$/),

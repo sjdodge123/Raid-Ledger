@@ -94,11 +94,12 @@ describe('Bg3SaveMessageSchema (ROK-1954)', () => {
         expect(ok(withPayload({ gameVersion: '4.1' }))).toBe(true);
         expect(issue(withPayload({ gameVersion: 'v4' }), 'payload.gameVersion', 'invalid_format')).toBe(true);
     });
-    it('B8: campaignKey is 16–64 lowercase hex, never a raw folder name', () => {
-        expect(ok(withPayload({ campaignKey: '0123456789abcdef' }))).toBe(true);
-        expect(issue(withPayload({ campaignKey: '0123456789abcde' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
+    it('B8: campaignKey is a full SHA-256 (64 lowercase hex), never a raw folder name', () => {
+        expect(ok(withPayload({ campaignKey: 'a'.repeat(64) }))).toBe(true);
+        expect(issue(withPayload({ campaignKey: '0123456789abcdef' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
+        expect(issue(withPayload({ campaignKey: 'a'.repeat(63) }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKey: 'a'.repeat(65) }), 'payload.campaignKey', 'invalid_format')).toBe(true);
-        expect(issue(withPayload({ campaignKey: 'ABCDEF0123456789' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
+        expect(issue(withPayload({ campaignKey: 'A'.repeat(64) }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKey: 'Tav-123__QuickSave' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKeySource: 'folder' }), 'payload.campaignKeySource', 'invalid_value')).toBe(true);
     });
