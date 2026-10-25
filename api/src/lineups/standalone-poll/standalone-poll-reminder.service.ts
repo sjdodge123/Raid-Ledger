@@ -74,15 +74,34 @@ export class StandalonePollReminderService {
     }
   }
 
-  /** Process one poll: classify window, fan out DMs to non-voters. */
+  /**
+   * Process one poll: classify window, fan out DMs to non-voters. The hub is
+   * looked up lazily — only once dedupe leaves at least one recipient, and at
+   * most once per poll — so an all-deduped run costs no hub query.
+   */
   private async processPoll(poll: ActiveStandalonePoll): Promise<void> {
     const window = this.classifyWindow(poll.phaseDeadline);
     if (!window) return;
     const nonVoters = await this.findNonVoters(poll.matchId);
-    if (nonVoters.length === 0) return;
-    const hub = await lineupHubPayload(this.db, poll.lineupId);
+    let hub: PollHubPayload | undefined;
     for (const v of nonVoters) {
+      const key = `standalone-poll-reminder:${poll.matchId}:${v.userId}:${window}`;
+      if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) continue;
+      hub ??= await this.resolveHub(poll.lineupId, key);
       await this.sendReminder(poll, v.userId, window, hub);
+    }
+  }
+
+  /** The poll's hub keys; a failed lookup gives `claimedKey` back, then rethrows. */
+  private async resolveHub(
+    lineupId: number,
+    claimedKey: string,
+  ): Promise<PollHubPayload> {
+    try {
+      return await lineupHubPayload(this.db, lineupId);
+    } catch (err: unknown) {
+      await this.dedupService.releaseKey(claimedKey);
+      throw err;
     }
   }
 
@@ -93,16 +112,13 @@ export class StandalonePollReminderService {
     return hoursLeft <= 1 ? '1h' : '24h';
   }
 
-  /** Send one reminder DM if dedup hasn't already marked it sent. */
+  /** Send one reminder DM (the caller has already claimed its dedup key). */
   private async sendReminder(
     poll: ActiveStandalonePoll,
     userId: number,
     window: '24h' | '1h',
     hub: PollHubPayload,
   ): Promise<void> {
-    const key = `standalone-poll-reminder:${poll.matchId}:${userId}:${window}`;
-    if (await this.dedupService.checkAndMarkSent(key, DEDUP_TTL)) return;
-
     const { title, message } = this.buildCopy(window);
     await this.notificationService.create({
       userId,
