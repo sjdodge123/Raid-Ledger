@@ -102,6 +102,29 @@ describe('server hub page helpers — server block', () => {
     });
     expect(page.server).toBeUndefined();
   });
+
+  it('carries the Pelican server name on the server block (ROK-1950 reset target)', () => {
+    const page = buildServerHubPage({
+      guild: { ...guild, name: 'Our Viking Home', nameOverridden: true },
+      role: 'visitor',
+      viewerId: 9,
+      members: [],
+      onlineSteamIds: new Set(),
+      claimedSteamIds: null,
+      server: {
+        pelicanServerId: 4,
+        gameSlug: 'valheim',
+        gameIconUrl: null,
+        state: 'running',
+        serverName: 'Valheim Main',
+      },
+    });
+    expect(page.server?.serverName).toBe('Valheim Main');
+    expect(page.guild).toMatchObject({
+      name: 'Our Viking Home',
+      nameOverridden: true,
+    });
+  });
 });
 
 describe('server hub page helpers — recent arrivals (ROK-1831)', () => {
