@@ -397,6 +397,7 @@ Suggested order: **S1** ∥ **C1 → C2/C3 → C4 → D2 → W0 → C5**, then *
    *Rec:* any hub member may run the collector. The uploader binds a campaign to a hub on the web. The **host's** saves are canonical when several members upload. Dedupe by campaign key + save time.
 7. **Character names and campaign key live only in LSF, not `SaveInfo.json`. Build a small `meta.lsf` reader (D4), or use manual claims plus the save-folder name?**
    *Rec:* claims + folder name for v1. Do D4 only if grouping saves into campaigns proves unreliable.
+   *Review note (Codex, 2026-10-25):* BG3 writes a new folder per save, so the folder name alone would split one playthrough into many campaigns. Group by the `meta.lsf` GameID (ROK-1967) when available, else by a manual "this save belongs to campaign X" assignment on the web; the folder name is only a dedupe hint. `bg3-save/v1` (ROK-1954) keeps the campaign key client-supplied and optional.
 8. **`Globals.lsf` (gold, approval, gear, quests), ever?**
    *Rec:* not in v1. Later, server-side LSLib on an opt-in raw upload, accepting breakage on patches.
 9. **Visibility and spoilers:**
