@@ -3630,3 +3630,7 @@ same day (#1278, #1279, #1280).
 
 - **low** `api/src/guilds/**` `hubNameKey` — ROK-1950 now NFC-normalises hub name keys, but keys stored before it were not normalised, so a hub saved in decomposed form can get a visually identical twin. Very unlikely in practice. Suggested: a one-off SQL backfill of `name_key` to NFC after a duplicate check (self-contained migration), or accept the gap.
 - **low** `api/src/notifications/hub-proposal-notices.ts:29` — the PROPOSED hub name is sent to staff unescaped, so a markdown link in a proposal renders clickable in the staff DM. Pre-existing (not touched by ROK-1950, which escaped the tagged-event and welcome embeds). Suggested: wrap it in `escapeHubName` like the other embeds.
+
+### 2026-10-25 — fix-batch/2026-10-25-td
+
+- **resolved** 2026-10-17 fix/security-p2-batch `api/src/discord-bot/commands/invite.command.ts` — `/invite` now refuses a deactivated or banned caller with `LFG_BLOCKED_REPLY`, mirroring `/lfg` (this branch).
