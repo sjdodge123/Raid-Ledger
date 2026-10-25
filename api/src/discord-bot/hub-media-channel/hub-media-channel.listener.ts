@@ -20,10 +20,9 @@ import {
   DiscordListenerBinding,
   gatewayBinding,
 } from '../listeners/discord-listener-binding';
-import { isOwnBotMessage } from '../thread-mirror/thread-mirror.helpers';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
-import { toPostLike } from './hub-media-post.mapper';
+import { toPostLike, type GatewayPost } from './hub-media-post.mapper';
 
 type AnyMessage = Message | PartialMessage;
 
@@ -74,7 +73,7 @@ export class HubMediaChannelListener {
   }
 
   /** A new post in a bound channel. */
-  async onCreate(message: Message): Promise<void> {
+  async onCreate(message: GatewayPost): Promise<void> {
     if (this.isOwn(message)) return;
     const hub = await this.hubFor(message);
     if (!hub) return;
@@ -104,14 +103,15 @@ export class HubMediaChannelListener {
     for (const message of messages.values()) await this.onDelete(message);
   }
 
-  private hubFor(message: AnyMessage) {
+  private hubFor(message: { guildId: string | null; channelId: string }) {
     if (!message.guildId) return Promise.resolve(null);
     return this.resolver.resolve(message.channelId);
   }
 
-  private isOwn(message: Message): boolean {
+  /** D4 — `isOwnBotMessage`'s rule: the app's own id, never `author.bot`. */
+  private isOwn(message: GatewayPost): boolean {
     const ownId = this.clientService.getClient()?.user?.id ?? null;
-    return isOwnBotMessage({ author: message.author }, ownId);
+    return ownId !== null && message.author.id === ownId;
   }
 
   /** Never let a gateway handler reject. */
