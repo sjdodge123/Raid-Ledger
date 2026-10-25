@@ -27,7 +27,8 @@ function unknownContract(): Error {
 
 /** Step 1 (no body read): a malformed `:contract` → 404 `unknown_contract`. */
 export function assertContractParam(raw: string): string {
-  if (!CompanionContractIdSchema.safeParse(raw).success) throw unknownContract();
+  if (!CompanionContractIdSchema.safeParse(raw).success)
+    throw unknownContract();
   return raw;
 }
 
@@ -106,7 +107,10 @@ export function parseMessage(
 export function assertNotFromFuture(capturedAt: string, now: Date): void {
   const at = Date.parse(capturedAt);
   if (!(at - now.getTime() <= COMPANION_CAPTURED_AT_MAX_FUTURE_MS)) {
-    throw companionError('captured_at_in_future', 'capturedAt is in the future');
+    throw companionError(
+      'captured_at_in_future',
+      'capturedAt is in the future',
+    );
   }
 }
 
@@ -162,7 +166,10 @@ export function latestMarkerOf(
 ): CompanionLatestMarker | null {
   const marker = handler.latestWins?.(message) ?? null;
   if (marker === null) return null;
-  if (marker.key.length === 0 || marker.key.length > COMPANION_LATEST_KEY_MAX_CHARS) {
+  if (
+    marker.key.length === 0 ||
+    marker.key.length > COMPANION_LATEST_KEY_MAX_CHARS
+  ) {
     throw new Error(`companion ${handler.contract}: latest-wins key length`);
   }
   if (Number.isNaN(marker.at.getTime())) {

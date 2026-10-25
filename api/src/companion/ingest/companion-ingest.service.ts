@@ -82,7 +82,10 @@ export class CompanionIngestService {
     }
     // L5: step 11d (upsert companion_blob_refs) goes here.
     const { userId, via, deviceId } = auth;
-    await msg.handler.handle({ tx, userId, via, deviceId, receivedAt }, msg.message);
+    await msg.handler.handle(
+      { tx, userId, via, deviceId, receivedAt },
+      msg.message,
+    );
     return 'accepted';
   }
 

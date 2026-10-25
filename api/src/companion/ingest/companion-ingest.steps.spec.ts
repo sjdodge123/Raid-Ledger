@@ -58,7 +58,9 @@ const handler: CompanionContractHandler = {
   handle: () => Promise.resolve(),
 };
 
-function deps(over: Partial<CompanionValidateDeps> = {}): CompanionValidateDeps {
+function deps(
+  over: Partial<CompanionValidateDeps> = {},
+): CompanionValidateDeps {
   return { table: TABLE, resolve: () => handler, now: NOW, ...over };
 }
 
@@ -90,8 +92,10 @@ function failure(fn: () => unknown): { status: number; body: unknown } {
   throw new Error('expected the step to throw');
 }
 
-const run = (b: Buffer, d = deps(), param = 'test-msg') => () =>
-  validateCompanionMessage(param, b, d);
+const run =
+  (b: Buffer, d = deps(), param = 'test-msg') =>
+  () =>
+    validateCompanionMessage(param, b, d);
 
 describe('companion ingest steps — U-6 order + mapping', () => {
   it('accepts a valid message and returns the parsed message', () => {
@@ -117,14 +121,26 @@ describe('companion ingest steps — U-6 order + mapping', () => {
 
   it('a path/body contract mismatch is invalid_envelope', () => {
     const f = failure(run(body(), deps(), 'test-other'));
-    expect(f).toMatchObject({ status: 400, body: { code: 'invalid_envelope' } });
+    expect(f).toMatchObject({
+      status: 400,
+      body: { code: 'invalid_envelope' },
+    });
   });
 
   it('maps the lookup kinds to the §9 codes + currentVersion', () => {
-    const unknown = failure(run(body({ contract: 'nope-x' }), deps(), 'nope-x'));
-    expect(unknown).toMatchObject({ status: 404, body: { code: 'unknown_contract' } });
+    const unknown = failure(
+      run(body({ contract: 'nope-x' }), deps(), 'nope-x'),
+    );
+    expect(unknown).toMatchObject({
+      status: 404,
+      body: { code: 'unknown_contract' },
+    });
     const r = (v: number) =>
-      run(body({ contract: 'test-retired', contractVersion: v }), deps(), 'test-retired');
+      run(
+        body({ contract: 'test-retired', contractVersion: v }),
+        deps(),
+        'test-retired',
+      );
     expect(failure(r(3))).toMatchObject({
       status: 404,
       body: { code: 'unknown_contract_version', currentVersion: 2 },
@@ -146,7 +162,9 @@ describe('companion ingest steps — U-6 order + mapping', () => {
       code: 'retired_contract_version',
     });
   });
+});
 
+describe('companion ingest steps — U-6 cap, payload, param', () => {
   it('the per-contract cap applies after lookup and before the payload schema', () => {
     const b = body({ contract: 'test-small', payload: { n: 'x' } });
     expect(failure(run(b, deps(), 'test-small'))).toMatchObject({
@@ -159,13 +177,19 @@ describe('companion ingest steps — U-6 order + mapping', () => {
     const f = failure(run(body({ payload: { n: 'secret-value' } })));
     expect(f).toMatchObject({
       status: 400,
-      body: { code: 'invalid_payload', issues: [{ path: 'payload.n', code: 'invalid_type' }] },
+      body: {
+        code: 'invalid_payload',
+        issues: [{ path: 'payload.n', code: 'invalid_type' }],
+      },
     });
     expect(JSON.stringify(f.body)).not.toContain('secret-value');
   });
 
   it('payload errors report before the clock rule (D-10)', () => {
-    const b = body({ payload: { n: 'x' }, capturedAt: '2027-01-01T00:00:00.000Z' });
+    const b = body({
+      payload: { n: 'x' },
+      capturedAt: '2027-01-01T00:00:00.000Z',
+    });
     expect(failure(run(b)).body).toMatchObject({ code: 'invalid_payload' });
   });
 
@@ -196,7 +220,9 @@ describe('companion ingest steps — U-7 clock rule', () => {
 
   it('the pipeline applies the injected clock', () => {
     const b = body({ capturedAt: at(300_001) });
-    expect(failure(run(b)).body).toMatchObject({ code: 'captured_at_in_future' });
+    expect(failure(run(b)).body).toMatchObject({
+      code: 'captured_at_in_future',
+    });
   });
 });
 
@@ -208,7 +234,10 @@ describe('latestMarkerOf', () => {
 
   it('is null without latestWins and passes a valid marker through', () => {
     expect(latestMarkerOf(handler, {})).toBeNull();
-    expect(latestMarkerOf(withMarker('k', NOW), {})).toEqual({ key: 'k', at: NOW });
+    expect(latestMarkerOf(withMarker('k', NOW), {})).toEqual({
+      key: 'k',
+      at: NOW,
+    });
   });
 
   it('a key over 128 chars, an empty key or an invalid date is a 500-class Error', () => {

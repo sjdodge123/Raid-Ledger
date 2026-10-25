@@ -68,18 +68,28 @@ function body(): Buffer {
 }
 
 function setup(over: { held?: boolean; advanced?: boolean } = {}) {
-  const handle = jest.fn<Promise<void>, [unknown, unknown]>(() => Promise.resolve());
+  const handle = jest.fn<Promise<void>, [unknown, unknown]>(() =>
+    Promise.resolve(),
+  );
   const testHandler: CompanionContractHandler<SaveMsg> = {
     contract: 'test-save',
     versions: [1],
     sources: ['device', 'session'],
-    latestWins: (m) => ({ key: m.payload.key, at: new Date(m.payload.savedAt) }),
+    latestWins: (m) => ({
+      key: m.payload.key,
+      at: new Date(m.payload.savedAt),
+    }),
     handle,
   };
-  const registry = new CompanionHandlerRegistry({ isActive: () => true }, TABLE);
+  const registry = new CompanionHandlerRegistry(
+    { isActive: () => true },
+    TABLE,
+  );
   registry.register('test-plugin', testHandler);
   const repo = {
-    transaction: jest.fn((fn: (tx: CompanionDeviceTx) => Promise<unknown>) => fn(TX)),
+    transaction: jest.fn((fn: (tx: CompanionDeviceTx) => Promise<unknown>) =>
+      fn(TX),
+    ),
     holdDevice: jest.fn(() => Promise.resolve(over.held ?? true)),
     advance: jest.fn(() => Promise.resolve(over.advanced ?? true)),
   };
@@ -94,10 +104,15 @@ function setup(over: { held?: boolean; advanced?: boolean } = {}) {
 describe('CompanionIngestService', () => {
   it('a newer save advances the marker and runs the handler in the tx', async () => {
     const { service, repo, handle } = setup();
-    await expect(service.ingest(DEVICE, 'test-save', body(), NOW)).resolves.toEqual({
+    await expect(
+      service.ingest(DEVICE, 'test-save', body(), NOW),
+    ).resolves.toEqual({
       status: 'accepted',
     });
-    expect(repo.holdDevice).toHaveBeenCalledWith(TX, { deviceId: 3, tokenHash: 'h' });
+    expect(repo.holdDevice).toHaveBeenCalledWith(TX, {
+      deviceId: 3,
+      tokenHash: 'h',
+    });
     expect(repo.advance).toHaveBeenCalledWith(TX, {
       userId: 7,
       contract: 'test-save',
@@ -106,13 +121,17 @@ describe('CompanionIngestService', () => {
     });
     expect(handle).toHaveBeenCalledWith(
       { tx: TX, userId: 7, via: 'device', deviceId: 3, receivedAt: NOW },
-      expect.objectContaining({ payload: { key: 'camp-1', savedAt: SAVED_AT } }),
+      expect.objectContaining({
+        payload: { key: 'camp-1', savedAt: SAVED_AT },
+      }),
     );
   });
 
   it('a not-newer save is stale and never reaches the handler', async () => {
     const { service, handle } = setup({ advanced: false });
-    await expect(service.ingest(DEVICE, 'test-save', body(), NOW)).resolves.toEqual({
+    await expect(
+      service.ingest(DEVICE, 'test-save', body(), NOW),
+    ).resolves.toEqual({
       status: 'stale',
     });
     expect(handle).not.toHaveBeenCalled();
@@ -120,7 +139,9 @@ describe('CompanionIngestService', () => {
 
   it('a device revoked before commit is 401 and nothing is written', async () => {
     const { service, repo, handle } = setup({ held: false });
-    const err = await service.ingest(DEVICE, 'test-save', body(), NOW).catch((e: unknown) => e);
+    const err = await service
+      .ingest(DEVICE, 'test-save', body(), NOW)
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(HttpException);
     expect(err instanceof HttpException && err.getResponse()).toMatchObject({
       code: 'unauthorized',
@@ -142,15 +163,17 @@ describe('CompanionIngestService', () => {
   it('a handler throw propagates out of the transaction (rollback, 500)', async () => {
     const { service, handle } = setup();
     handle.mockRejectedValueOnce(new Error('boom'));
-    await expect(service.ingest(DEVICE, 'test-save', body(), NOW)).rejects.toThrow('boom');
+    await expect(
+      service.ingest(DEVICE, 'test-save', body(), NOW),
+    ).rejects.toThrow('boom');
   });
 
   it('validation failures never open a transaction', async () => {
     const { service, repo } = setup();
     const bad = Buffer.from('{}');
-    await expect(service.ingest(DEVICE, 'test-save', bad, NOW)).rejects.toBeInstanceOf(
-      HttpException,
-    );
+    await expect(
+      service.ingest(DEVICE, 'test-save', bad, NOW),
+    ).rejects.toBeInstanceOf(HttpException);
     expect(repo.transaction).not.toHaveBeenCalled();
   });
 });
