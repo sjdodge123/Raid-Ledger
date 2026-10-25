@@ -8,12 +8,16 @@ import {
   max,
   min,
   or,
-  sql,
   type SQL,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import {
+  deathPostWindowSec,
+  withDeathNameLock,
+} from '../screenshots/valheim-death-name-lock';
+import { mergeOrInsertLogDeath } from './valheim-deaths-merge.sql';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const {
@@ -83,47 +87,31 @@ export class ValheimDeathsRepository {
   }
 
   /**
-   * Store a log death once per `(server, character, loggedAt)` (D4/D5).
-   * A repeat whose SteamID is now known attributes the stored row when it
-   * had none; an attributed row is never re-attributed. Returns true when
-   * a new row was inserted.
+   * Store a log death once per `(server, character, loggedAt)` (D4/D5),
+   * merging into a death inferred from a Discord death post when one sits
+   * in the window (ROK-1941 SQL B, under the D9 lock). A repeat whose
+   * SteamID is now known attributes the stored row when it had none; an
+   * attributed row is never re-attributed. True only for a new row.
    */
   async recordLogDeath(
     pelicanServerId: number,
     death: LogDeathInput,
   ): Promise<boolean> {
-    const inserted = await this.db
-      .insert(deaths)
-      .values({ pelicanServerId, source: 'log', ...death })
-      .onConflictDoNothing({
-        target: [deaths.pelicanServerId, deaths.characterName, deaths.loggedAt],
-        where: sql`source = 'log'`,
-      })
-      .returning({ id: deaths.id });
-    if (inserted.length > 0) return true;
-    if (death.steamId !== null)
-      await this.attribute(pelicanServerId, death, death.steamId);
-    return false;
+    const windowSec = deathPostWindowSec();
+    return withDeathNameLock(
+      this.db,
+      pelicanServerId,
+      death.characterName,
+      async (tx) => {
+        if (await mergeOrInsertLogDeath(tx, pelicanServerId, death, windowSec))
+          return true;
+        if (death.steamId !== null)
+          await attribute(tx, pelicanServerId, death, death.steamId);
+        return false;
+      },
+    );
   }
 
-  private async attribute(
-    pelicanServerId: number,
-    death: LogDeathInput,
-    steamId: string,
-  ): Promise<void> {
-    await this.db
-      .update(deaths)
-      .set({ steamId })
-      .where(
-        and(
-          eq(deaths.pelicanServerId, pelicanServerId),
-          eq(deaths.characterName, death.characterName),
-          eq(deaths.loggedAt, death.loggedAt),
-          eq(deaths.source, 'log'),
-          isNull(deaths.steamId),
-        ),
-      );
-  }
   /**
    * L2 (D7/D9): every stored death on the server bucketed by
    * `(steam_id, character_name)`, plus the server's profiles that can
@@ -185,4 +173,25 @@ export class ValheimDeathsRepository {
         .where(and(onServer, inArray(profiles.name, names))),
     );
   }
+}
+
+/** Fill the SteamID on a stored, unattributed log row (replay case). */
+async function attribute(
+  tx: Db,
+  pelicanServerId: number,
+  death: LogDeathInput,
+  steamId: string,
+): Promise<void> {
+  await tx
+    .update(deaths)
+    .set({ steamId })
+    .where(
+      and(
+        eq(deaths.pelicanServerId, pelicanServerId),
+        eq(deaths.characterName, death.characterName),
+        eq(deaths.loggedAt, death.loggedAt),
+        eq(deaths.source, 'log'),
+        isNull(deaths.steamId),
+      ),
+    );
 }
