@@ -24,6 +24,7 @@ import {
 } from './steam-stats.constants';
 import { maskAchievement } from './steam-stats.mask';
 import {
+  appTotals,
   memberStatus,
   sortMembers,
   toMemberStats,
@@ -107,11 +108,10 @@ export class SteamStatsReadService {
     return {
       available: true,
       appId,
-      totalAchievements: app?.schemaStatus === 'ok' ? app.achievementCount : 0,
+      ...appTotals(app),
       viewer: { status: memberStatus(viewer?.steamId ?? null, viewer?.stats) },
       members: sortMembers(members.map(toWireMember)),
       ...feeds,
-      refreshedAt: app?.schemaFetchedAt?.toISOString() ?? null,
     };
   }
 

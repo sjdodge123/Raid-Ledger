@@ -118,23 +118,30 @@ async function upsertUnlocks(
 export class SteamStatsStorageRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
-  /** The stored schema status of an app, or null if never fetched. */
-  async schemaStatus(appId: number): Promise<string | null> {
+  /**
+   * True when a good schema is stored (`achievement_count > 0`), even if the
+   * latest fetch failed (`error`) — user unlocks refresh against it.
+   */
+  async hasUsableSchema(appId: number): Promise<boolean> {
     const [row] = await this.db
-      .select({ s: apps.schemaStatus })
+      .select({ n: apps.achievementCount })
       .from(apps)
       .where(eq(apps.appId, appId));
-    return row?.s ?? null;
+    return (row?.n ?? 0) > 0;
   }
 
-  /** Schema fetch failed: mark `error`, keep the old achievement rows. */
-  async markSchemaError(appId: number, now: Date): Promise<void> {
+  /**
+   * Schema fetch failed: record `error` only. The count, the achievement
+   * rows and `schema_fetched_at` (the last SUCCESSFUL fetch) stay as they
+   * were; the nightly run fetches the schema again every time.
+   */
+  async markSchemaError(appId: number): Promise<void> {
     await this.db
       .insert(apps)
-      .values({ appId, schemaStatus: 'error', schemaFetchedAt: now })
+      .values({ appId, schemaStatus: 'error', schemaFetchedAt: null })
       .onConflictDoUpdate({
         target: apps.appId,
-        set: { schemaStatus: 'error', schemaFetchedAt: now },
+        set: { schemaStatus: 'error' },
       });
   }
 

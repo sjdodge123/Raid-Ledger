@@ -208,10 +208,16 @@ describe('SteamStatsStorageRepository (S1–S3)', () => {
       t0,
     );
     await storage.saveSchema(BG3, [ach('X')], null, t0);
-    await storage.markSchemaError(BG3, new Date());
+    await storage.markSchemaError(BG3);
     const list = await testApp.db.select().from(schema.steamAppAchievements);
     expect(list.map((r) => [r.apiName, r.globalPct])).toEqual([['X', '1.500']]);
     const [app] = await testApp.db.select().from(schema.steamAppStatsApps);
-    expect(app).toMatchObject({ schemaStatus: 'error', achievementCount: 1 });
+    // Review MAJOR 1: the last SUCCESSFUL fetch time and count survive.
+    expect(app).toMatchObject({
+      schemaStatus: 'error',
+      achievementCount: 1,
+      schemaFetchedAt: t0,
+    });
+    expect(await storage.hasUsableSchema(BG3)).toBe(true);
   });
 });

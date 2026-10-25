@@ -1,5 +1,5 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
-import type { OnModuleInit } from '@nestjs/common';
+import { Logger, type OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Job, Queue } from 'bullmq';
 import { CronJobService } from '../../../cron-jobs/cron-job.service';
@@ -15,6 +15,7 @@ import {
   type SteamStatsRunSummary,
 } from './steam-stats-refresh.service';
 
+/** Also written as a literal in `@Cron` below — the cron guard scans for it. */
 const JOB_NAME = 'SteamAppStatsProcessor_scheduledRefresh';
 
 /**
@@ -26,6 +27,8 @@ const JOB_NAME = 'SteamAppStatsProcessor_scheduledRefresh';
  */
 @Processor(STEAM_APP_STATS_QUEUE)
 export class SteamAppStatsProcessor extends WorkerHost implements OnModuleInit {
+  private readonly logger = new Logger(SteamAppStatsProcessor.name);
+
   constructor(
     private readonly refresh: SteamStatsRefreshService,
     private readonly settings: SettingsService,
@@ -40,12 +43,24 @@ export class SteamAppStatsProcessor extends WorkerHost implements OnModuleInit {
     this.queueHealth.register(this.queue);
   }
 
-  /** Runs one queued refresh. */
+  /**
+   * Runs one queued refresh. A failure is logged (error name only — never a
+   * message that could carry the key or a SteamID) and rethrown so BullMQ
+   * retries it with the job's backoff.
+   */
   async process(job: Job<SteamAppStatsJobData>): Promise<SteamStatsRunSummary> {
     const data = job.data;
-    return data.trigger === 'link'
-      ? this.refresh.refreshUser(data.userId)
-      : this.refresh.refreshAll();
+    try {
+      return data.trigger === 'link'
+        ? await this.refresh.refreshUser(data.userId)
+        : await this.refresh.refreshAll();
+    } catch (err: unknown) {
+      const reason = err instanceof Error ? err.name : 'unknown';
+      this.logger.warn(
+        `Steam stats ${data.trigger} job ${job.id ?? '?'} failed (${reason}); BullMQ retries`,
+      );
+      throw err;
+    }
   }
 
   /** Enqueues the nightly run; no Steam key = idle tick, no execution row. */

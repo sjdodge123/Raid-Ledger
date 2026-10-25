@@ -63,3 +63,26 @@ export function sortMembers(
     return a.displayName.localeCompare(b.displayName);
   });
 }
+
+/** The stored app row fields the read route reports. */
+export interface StoredAppState {
+  achievementCount: number;
+  schemaStatus: 'ok' | 'no_stats' | 'error';
+  schemaFetchedAt: Date | null;
+}
+
+/**
+ * `totalAchievements` + `refreshedAt` for the wire (review MAJOR 1). A failed
+ * schema fetch (`error`) keeps the last good count, and `schema_fetched_at`
+ * only moves on a successful fetch, so the footnote shows the last good run.
+ * `no_stats` always stores 0.
+ */
+export function appTotals(app: StoredAppState | undefined): {
+  totalAchievements: number;
+  refreshedAt: string | null;
+} {
+  return {
+    totalAchievements: app?.achievementCount ?? 0,
+    refreshedAt: app?.schemaFetchedAt?.toISOString() ?? null,
+  };
+}

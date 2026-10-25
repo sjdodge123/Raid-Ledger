@@ -66,7 +66,7 @@ export class SteamStatsRefreshService {
     return run;
   }
 
-  /** D6: one user right after linking Steam, for apps whose schema is stored `ok`. */
+  /** D6: one user right after linking Steam, for apps with a stored good schema (status `ok`, or `error` after one). */
   async refreshUser(userId: number): Promise<SteamStatsRunSummary> {
     const run: SteamStatsRunSummary = {
       apps: 0,
@@ -76,7 +76,7 @@ export class SteamStatsRefreshService {
     const key = await this.settings.getSteamApiKey();
     if (!key) return run;
     for (const [appId, guildIds] of await this.targets.liveHubsByApp()) {
-      if ((await this.storage.schemaStatus(appId)) !== 'ok') continue;
+      if (!(await this.storage.hasUsableSchema(appId))) continue;
       run.apps++;
       const users = await this.targets.targetsFor(appId, guildIds, userId);
       if (!(await this.refreshUsers(key, appId, users, run))) break;
@@ -92,7 +92,7 @@ export class SteamStatsRefreshService {
       this.logger.warn(
         `Steam schema fetch failed for app ${appId} (HTTP ${schema.status})`,
       );
-      await this.storage.markSchemaError(appId, new Date());
+      await this.storage.markSchemaError(appId);
       return false;
     }
     if (schema.missingHidden > 0) {

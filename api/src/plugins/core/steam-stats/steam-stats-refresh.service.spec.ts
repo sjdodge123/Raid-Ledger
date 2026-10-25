@@ -40,7 +40,7 @@ function setup(userIds: number[], maxUserFetches = 5000) {
       ),
   };
   const storage = {
-    schemaStatus: jest.fn().mockResolvedValue('ok'),
+    hasUsableSchema: jest.fn().mockResolvedValue(true),
     markSchemaError: jest.fn().mockResolvedValue(undefined),
     saveSchema: jest.fn().mockResolvedValue(undefined),
     saveUserOk: jest.fn().mockResolvedValue(undefined),
@@ -120,7 +120,7 @@ describe('SteamStatsRefreshService.refreshAll — schema + limits', () => {
     const { service, storage, targets } = setup([1]);
     schemaMock.mockResolvedValueOnce({ kind: 'error', status: 502 });
     await service.refreshAll();
-    expect(storage.markSchemaError).toHaveBeenCalledWith(APP, expect.any(Date));
+    expect(storage.markSchemaError).toHaveBeenCalledWith(APP);
     expect(targets.targetsFor).not.toHaveBeenCalled();
     expect(playerMock).not.toHaveBeenCalled();
   });
@@ -184,9 +184,21 @@ describe('SteamStatsRefreshService.refreshUser (D6 on-link)', () => {
     );
   });
 
-  it('skips an app whose stored schema is not ok', async () => {
+  it('refreshes against the last good schema after a failed schema fetch (review MAJOR 1)', async () => {
     const { service, storage } = setup([7]);
-    storage.schemaStatus.mockResolvedValue(null);
+    storage.hasUsableSchema.mockResolvedValue(true);
+    await service.refreshUser(7);
+    expect(storage.saveUserOk).toHaveBeenCalledWith(
+      7,
+      APP,
+      UNLOCKED,
+      expect.any(Date),
+    );
+  });
+
+  it('skips an app with no stored achievements (never fetched / no_stats)', async () => {
+    const { service, storage } = setup([7]);
+    storage.hasUsableSchema.mockResolvedValue(false);
     await service.refreshUser(7);
     expect(playerMock).not.toHaveBeenCalled();
   });

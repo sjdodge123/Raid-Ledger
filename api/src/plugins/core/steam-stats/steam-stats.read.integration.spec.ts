@@ -19,6 +19,7 @@ import {
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
+import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
 
 const BG3 = 1086940;
 const NOT_ENABLED = 892970;
@@ -336,6 +337,17 @@ describe('GET /hubs/:guildId/steam-stats — members + feeds (I5, I6, I8, I9)', 
       3,
       '2026-10-24T04:30:00.000Z',
     ]);
+  });
+});
+
+describe('GET /hubs/:guildId/steam-stats — a failed schema fetch (review MAJOR 1)', () => {
+  it('I10 — keeps the stored count and the last good refresh time', async () => {
+    await testApp.app.get(SteamStatsStorageRepository).markSchemaError(BG3);
+    const res = available(await read(hub, b));
+    expect({
+      total: res.totalAchievements,
+      refreshedAt: res.refreshedAt,
+    }).toEqual({ total: 3, refreshedAt: '2026-10-24T04:30:00.000Z' });
   });
 });
 

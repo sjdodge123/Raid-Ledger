@@ -3,6 +3,7 @@
  * (I9 at unit level: unlockedCount desc, nulls last, then display name).
  */
 import {
+  appTotals,
   memberStatus,
   sortMembers,
   toMemberStats,
@@ -102,5 +103,31 @@ describe('enabledAppId (D1/D9 — I7 at unit level)', () => {
       enabledAppId({ ...t, appId: null }),
       enabledAppId({ ...t, appId: 892970 }),
     ]).toEqual([null, null, null, null, null]);
+  });
+});
+
+describe('appTotals (review MAJOR 1)', () => {
+  it('keeps the last good count and time after a failed schema fetch', () => {
+    expect(
+      appTotals({
+        achievementCount: 6,
+        schemaStatus: 'error',
+        schemaFetchedAt: at,
+      }),
+    ).toEqual({ totalAchievements: 6, refreshedAt: at.toISOString() });
+  });
+
+  it('reports 0 and no time before the first run / for no_stats', () => {
+    expect(appTotals(undefined)).toEqual({
+      totalAchievements: 0,
+      refreshedAt: null,
+    });
+    expect(
+      appTotals({
+        achievementCount: 0,
+        schemaStatus: 'no_stats',
+        schemaFetchedAt: at,
+      }).totalAchievements,
+    ).toBe(0);
   });
 });
