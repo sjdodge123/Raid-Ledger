@@ -243,6 +243,8 @@ export * from './guilds.schema.js';
 export * from './hub-welcome.schema.js';
 export * from './valheim-claim-status.schema.js';
 export * from './community-hubs.schema.js';
+// Hub rename — PATCH /guilds/:id/name (ROK-1950).
+export * from './hub-rename.schema.js';
 export * from './hub-invite.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
