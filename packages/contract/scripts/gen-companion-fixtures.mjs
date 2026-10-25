@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import {
     Bg3SaveInfoRawSchema,
     Bg3SaveMessageSchema,
+    COMPANION_WEBP_MAX_BYTES,
     CompanionEnvelopeSchema,
     normaliseBg3SaveInfo,
 } from '../dist/index.js';
@@ -59,12 +60,13 @@ const BG3_INVALID = [
     ['summon-with-classes', (m) => { m.payload.party[1].classes = [{ main: 'Barbarian', sub: null }]; }, 'payload.party.1', 'custom'],
     ['xp-level-gt-total', (m) => { m.payload.party[0].xpLevel = m.payload.party[0].xpTotal + 1; }, 'payload.party.0', 'custom'],
     ['thumbnail-png', (m) => { m.payload.thumbnail.contentType = 'image/png'; }, 'payload.thumbnail.contentType', 'invalid_value'],
-    ['thumbnail-too-large', (m) => { m.payload.thumbnail.byteLength = 1_048_577; }, 'payload.thumbnail.byteLength', 'too_big'],
+    ['thumbnail-too-large', (m) => { m.payload.thumbnail.byteLength = COMPANION_WEBP_MAX_BYTES + 1; }, 'payload.thumbnail.byteLength', 'too_big'],
     ['contract-version-2', (m) => { m.contractVersion = 2; }, 'contractVersion', 'invalid_value'],
     ['game-version-text', (m) => { m.payload.gameVersion = 'Patch 7 Hotfix'; }, 'payload.gameVersion', 'invalid_format'],
     ['captured-at-offset', (m) => { m.capturedAt = '2026-10-24T14:00:05+02:00'; }, 'capturedAt', 'invalid_format'],
     ['saved-after-captured', (m) => { m.payload.savedAt = '2026-10-24T12:00:06Z'; }, 'payload.savedAt', 'custom'],
     ['party-empty', (m) => { m.payload.party = []; }, 'payload.party', 'too_small'],
+    ['save-name-control-char', (m) => { m.payload.saveName = 'QuickSave_1\u0000'; }, 'payload.saveName', 'invalid_format'],
     ['campaign-key-raw-folder', (m) => { m.payload.campaignKey = 'Tav-123__QuickSave'; }, 'payload.campaignKey', 'invalid_format'],
 ];
 

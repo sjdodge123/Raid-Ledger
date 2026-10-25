@@ -103,6 +103,23 @@ describe('Bg3SaveMessageSchema (ROK-1954)', () => {
         expect(issue(withPayload({ campaignKey: 'Tav-123__QuickSave' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKeySource: 'folder' }), 'payload.campaignKeySource', 'invalid_value')).toBe(true);
     });
+    it('B10: saveName is display-safe text (no controls, lone surrogates, line breaks, bidi overrides, blank)', () => {
+        for (const name of ['QuickSave_1', 'Tav\u2019s save', 'Ünïcødé 🐉 save', 'a'.repeat(128), ' padded ']) {
+            expect(ok(withPayload({ saveName: name }))).toBe(true);
+        }
+        const hostile = [
+            'a\u0000b', 'tab\there', 'del\u007f', 'c1\u0085x', 'lone \ud800', 'trail \udfff',
+            'two\nlines', 'cr\rx', 'ls\u2028x', 'ps\u2029x',
+            'evil\u202egpj.exe', 'lre\u202ax', 'iso\u2066x', 'pdi\u2069x',
+            '   ', '\u00a0\u3000',
+        ];
+        for (const name of hostile) {
+            expect({ name, rejected: issue(withPayload({ saveName: name }), 'payload.saveName', 'invalid_format') })
+                .toEqual({ name, rejected: true });
+        }
+        expect(issue(withPayload({ saveName: 'a'.repeat(129) }), 'payload.saveName', 'too_big')).toBe(true);
+        expect(issue(withPayload({ saveName: '' }), 'payload.saveName', 'too_small')).toBe(true);
+    });
     it('B9: ruleset may be null', () => {
         expect(ok(withPayload({ ruleset: null }))).toBe(true);
         expect(issue(withPayload({ ruleset: 'Ruleset Larian' }), 'payload.ruleset', 'invalid_format')).toBe(true);

@@ -36,7 +36,8 @@
         "saveName": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 128,
+          "pattern": "^(?!\\s*$)[^\\p{Cc}\\p{Cs}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
         },
         "savedAt": {
           "type": "string",

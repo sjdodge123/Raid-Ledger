@@ -24,9 +24,17 @@ export const COMPANION_TIMESTAMP_MAX_CHARS = 24;
 export const COMPANION_CAPTURED_AT_MAX_FUTURE_MS = 300_000;
 
 /**
- * Decoded JSON body cap for a `bg3-save` v1 message. It is >= the LARGEST
- * schema-valid message (every array full, every string at max length; BG3
- * ids are ASCII so no 6-byte escapes arise), so the array caps bind first.
+ * Global decoded-body ceiling, applied by the reader BEFORE any JSON parse
+ * (the per-contract cap needs `contractVersion`, which is in the body). Every
+ * registry `maxBytes` must be <= this (registry spec R5).
+ */
+export const COMPANION_MESSAGE_MAX_BYTES = 262_144;
+
+/**
+ * Decoded JSON body cap for a `bg3-save` v1 message, checked after the
+ * envelope parses. It is >= the LARGEST schema-valid message (every array
+ * full, every string at max length; engine ids are ASCII and `saveName`
+ * adds < 1 KB in the worst case), so the array caps bind first.
  */
 export const COMPANION_BG3_SAVE_MAX_BYTES = 65_536;
 
@@ -66,3 +74,15 @@ export const CompanionWebpRefSchema = z.object({
     height: z.number().int().positive().max(COMPANION_IMAGE_EDGE_MAX),
 }).strict();
 export type CompanionWebpRef = z.infer<typeof CompanionWebpRefSchema>;
+
+/**
+ * Display-safe free text: no C0/C1 controls (so no NUL or line breaks), no
+ * lone surrogates (Postgres rejects both), no U+2028/2029, no bidi
+ * embeddings/overrides/isolates, and not whitespace-only.
+ */
+export const COMPANION_DISPLAY_TEXT_RE = /^(?!\s*$)[^\p{Cc}\p{Cs}\u2028\u2029\u202A-\u202E\u2066-\u2069]+$/u;
+
+/** Free text a user authored and other hub members will see, 1..`maxChars` UTF-16 units. */
+export function companionDisplayTextSchema(maxChars: number): z.ZodString {
+    return z.string().min(1).max(maxChars).regex(COMPANION_DISPLAY_TEXT_RE);
+}

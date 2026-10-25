@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CompanionTimestampSchema, CompanionWebpRefSchema } from './companion-common.schema.js';
+import { CompanionTimestampSchema, CompanionWebpRefSchema, companionDisplayTextSchema } from './companion-common.schema.js';
 import { companionEnvelopeShape } from './companion-envelope.schema.js';
 
 // ============================================================
@@ -52,9 +52,10 @@ export type Bg3PartyMember = z.infer<typeof Bg3PartyMemberSchema>;
 
 /** The normalised save (spec "Bg3SavePayloadSchema"). */
 export const Bg3SavePayloadSchema = z.object({
-    saveName: z.string().min(1).max(BG3_SAVE_NAME_MAX_CHARS),
+    /** User-authored; display-safe text only (`COMPANION_DISPLAY_TEXT_RE`). */
+    saveName: companionDisplayTextSchema(BG3_SAVE_NAME_MAX_CHARS),
     savedAt: CompanionTimestampSchema,
-    /** Lowercase hex SHA-256 of the save-folder name (or GameID) — never the raw name. */
+    /** Unsalted lowercase hex SHA-256 of the save-folder name (or GameID): a PSEUDONYMOUS grouping key, not an anonymiser. */
     campaignKey: z.string().regex(/^[0-9a-f]{64}$/),
     campaignKeySource: z.enum(['save-folder', 'game-id']),
     gameVersion: z.string().regex(/^\d{1,4}(\.\d{1,10}){1,3}$/),

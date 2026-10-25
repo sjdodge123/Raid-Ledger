@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPANION_BG3_SAVE_MAX_BYTES } from '../companion-common.schema.js';
+import { COMPANION_BG3_SAVE_MAX_BYTES, COMPANION_MESSAGE_MAX_BYTES } from '../companion-common.schema.js';
 import { Bg3SaveMessageSchema } from '../companion-bg3-save.schema.js';
 import { COMPANION_CONTRACTS, lookupCompanionContract } from '../companion-registry.js';
 import type { CompanionContractTable } from '../companion-registry.js';
@@ -57,5 +57,11 @@ describe('lookupCompanionContract (ROK-1954)', () => {
     it('R4: current names the version marked current, not the highest one', () => {
         expect(lookupCompanionContract('staged-world', 9, synthetic)).toEqual({ kind: 'unknown_contract_version', current: 1 });
         expect(lookupCompanionContract('sunset-world', 1, synthetic)).toEqual({ kind: 'retired', current: 2 });
+    });
+    it('R5: every registry maxBytes fits the global pre-parse ceiling', () => {
+        const caps = Object.values(COMPANION_CONTRACTS).flatMap((versions) => Object.values(versions).map((v) => v.maxBytes));
+        expect(caps.length).toBeGreaterThan(0);
+        expect(caps.filter((c) => c > COMPANION_MESSAGE_MAX_BYTES)).toEqual([]);
+        expect(COMPANION_MESSAGE_MAX_BYTES).toBe(262_144);
     });
 });

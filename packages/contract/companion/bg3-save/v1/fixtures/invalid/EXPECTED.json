@@ -47,6 +47,10 @@
     "path": "payload.party",
     "code": "too_small"
   },
+  "save-name-control-char": {
+    "path": "payload.saveName",
+    "code": "invalid_format"
+  },
   "campaign-key-raw-folder": {
     "path": "payload.campaignKey",
     "code": "invalid_format"
