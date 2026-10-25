@@ -6,6 +6,10 @@ import { Test } from '@nestjs/testing';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { HubMediaChannelListener } from './hub-media-channel.listener';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
+import {
+  HubMediaIngestPool,
+  HubMediaIngestQueueFullError,
+} from './hub-media-ingest.pool';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 import type { GatewayPost } from './hub-media-post.mapper';
 
@@ -44,6 +48,10 @@ describe('HubMediaChannelListener', () => {
         { provide: DiscordBotClientService, useValue: client },
         { provide: HubMediaChannelResolver, useValue: resolver },
         { provide: HubMediaPostIngest, useValue: ingest },
+        {
+          provide: HubMediaIngestPool,
+          useValue: new HubMediaIngestPool({ limit: 2, queueMax: 1 }),
+        },
       ],
     }).compile();
     listener = mod.get(HubMediaChannelListener);
@@ -75,6 +83,36 @@ describe('HubMediaChannelListener', () => {
     await listener.onUpdate({ ...post(), partial: true, fetch } as never);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(ingest.onEdit).not.toHaveBeenCalled();
+  });
+
+  it('a burst of creates never has more than the pool limit ingesting at once', async () => {
+    let now = 0;
+    let peak = 0;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => (release = r));
+    ingest.ingestPost.mockImplementation(async () => {
+      now += 1;
+      peak = Math.max(peak, now);
+      await held;
+      now -= 1;
+    });
+    const burst = ['1', '2', '3', '4'].map((id) =>
+      listener.onCreate(post({ id })).then(
+        () => 'ingested',
+        (err: unknown) =>
+          err instanceof HubMediaIngestQueueFullError ? 'dropped' : 'thrown',
+      ),
+    );
+    await new Promise<void>((r) => setImmediate(r));
+    release();
+    // limit 2 in flight + 1 queued; the 4th is dropped (bounded queue).
+    expect(await Promise.all(burst)).toEqual([
+      'ingested',
+      'ingested',
+      'ingested',
+      'dropped',
+    ]);
+    expect(peak).toBe(2);
   });
 
   it('treats a bulk delete as one delete per message', async () => {

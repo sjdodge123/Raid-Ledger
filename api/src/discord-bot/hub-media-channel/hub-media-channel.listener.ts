@@ -5,6 +5,9 @@
  *
  * D4: only the app's own messages are skipped — never `author.bot` or a
  * webhook, because the screenshot mod posts through a webhook.
+ *
+ * Ingest work runs through the shared `HubMediaIngestPool` only once the
+ * channel resolves to a hub, so unrelated guild traffic never takes a slot.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -21,6 +24,10 @@ import {
   gatewayBinding,
 } from '../listeners/discord-listener-binding';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
+import {
+  HubMediaIngestPool,
+  HubMediaIngestQueueFullError,
+} from './hub-media-ingest.pool';
 import { HubMediaPostIngest, isOwnAuthor } from './hub-media-post.ingest';
 import { toPostLike, type GatewayPost } from './hub-media-post.mapper';
 
@@ -39,6 +46,7 @@ export class HubMediaChannelListener {
     private readonly clientService: DiscordBotClientService,
     private readonly resolver: HubMediaChannelResolver,
     private readonly ingest: HubMediaPostIngest,
+    private readonly pool: HubMediaIngestPool,
   ) {}
 
   /** Bind create / update / delete / bulk-delete to the live client. */
@@ -77,7 +85,10 @@ export class HubMediaChannelListener {
     if (this.isOwn(message)) return;
     const hub = await this.hubFor(message);
     if (!hub) return;
-    await this.ingest.ingestPost(toPostLike(message), hub);
+    const post = toPostLike(message);
+    await this.pool.run(`create ${post.id}`, () =>
+      this.ingest.ingestPost(post, hub),
+    );
   }
 
   /** An edit; an uncached partial is fetched before the own-bot check. */
@@ -86,14 +97,20 @@ export class HubMediaChannelListener {
     if (!hub) return;
     const full = message.partial ? await message.fetch() : message;
     if (this.isOwn(full)) return;
-    await this.ingest.onEdit(toPostLike(full), hub);
+    const post = toPostLike(full);
+    await this.pool.run(`edit ${post.id}`, () => this.ingest.onEdit(post, hub));
   }
 
-  /** A delete — the message is gone, so only its ids are read. */
+  /** A delete — only its ids are read; never dropped by the pool. */
   async onDelete(message: AnyMessage): Promise<void> {
     const hub = await this.hubFor(message);
     if (!hub) return;
-    await this.ingest.onDelete(message.id, hub);
+    const { id } = message;
+    await this.pool.run(
+      `delete ${id}`,
+      () => this.ingest.onDelete(id, hub),
+      'essential',
+    );
   }
 
   /** A bulk delete is N deletes. */
@@ -116,6 +133,7 @@ export class HubMediaChannelListener {
   /** Never let a gateway handler reject. */
   private run(label: string, work: Promise<void>): void {
     work.catch((err: unknown) => {
+      if (err instanceof HubMediaIngestQueueFullError) return; // pool warned
       this.logger.error(`Error handling ${label}:`, err);
     });
   }

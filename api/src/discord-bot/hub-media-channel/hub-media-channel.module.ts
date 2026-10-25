@@ -16,6 +16,10 @@ import { HubMediaBackfillService } from './hub-media-backfill.service';
 import { HubMediaChannelListener } from './hub-media-channel.listener';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
 import { HubMediaHistorySource } from './hub-media-history.discord';
+import {
+  HubMediaIngestPool,
+  readIngestPoolLimits,
+} from './hub-media-ingest.pool';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 
 @Module({
@@ -31,6 +35,11 @@ import { HubMediaPostIngest } from './hub-media-post.ingest';
     HubMediaChannelResolver,
     HubMediaChannelService,
     HubMediaPostIngest,
+    // One pool per process: live + backfill share its cap (Codex P2).
+    {
+      provide: HubMediaIngestPool,
+      useFactory: () => new HubMediaIngestPool(readIngestPoolLimits()),
+    },
     HubMediaChannelListener,
     HubMediaHistorySource,
     HubMediaBackfillService,

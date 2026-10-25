@@ -22,6 +22,7 @@ import {
   HubMediaHistorySource,
   type HistoryPort,
 } from './hub-media-history.discord';
+import { HubMediaIngestPool } from './hub-media-ingest.pool';
 import type { PostLike } from './hub-media-post.images';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 
@@ -55,6 +56,7 @@ export class HubMediaBackfillService {
     private readonly resolver: HubMediaChannelResolver,
     private readonly history: HubMediaHistorySource,
     private readonly ingest: HubMediaPostIngest,
+    private readonly pool: HubMediaIngestPool,
   ) {}
 
   /** The hub's running or last run; `idle` when none since boot. */
@@ -162,7 +164,12 @@ export class HubMediaBackfillService {
     summary.scanned += 1;
     summary.oldestScannedAt = post.createdAt.toISOString();
     try {
-      addPostSummary(summary, await this.ingest.ingestPost(post, hub));
+      const one = await this.pool.run(
+        `backfill ${post.id}`,
+        () => this.ingest.ingestPost(post, hub),
+        'essential', // one post at a time per hub; shares the live cap
+      );
+      addPostSummary(summary, one);
     } catch (err) {
       summary.failed += 1;
       const reason = err instanceof Error ? err.message : String(err);
