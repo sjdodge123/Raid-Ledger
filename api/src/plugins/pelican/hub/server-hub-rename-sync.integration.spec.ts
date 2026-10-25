@@ -196,7 +196,10 @@ describe('clearing the override and the kind check (ROK-1950)', () => {
       source: 'community',
       nameOverridden: true,
     });
-    await expect(insert).rejects.toThrow(/guilds_name_override_kind_check/);
+    // drizzle wraps the postgres error; the constraint name lives on `cause` (same as hub-media.store spec).
+    await expect(insert).rejects.toMatchObject({
+      cause: { constraint_name: 'guilds_name_override_kind_check' },
+    });
   });
 });
 
