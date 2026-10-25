@@ -19,7 +19,7 @@ export const VALHEIM_SETUP = {
       kind: 'pelican_egg',
       title: 'A Valheim server on Pelican, mapped to Valheim',
       instructions:
-        '1. Run the server on your Pelican panel from a Valheim egg that loads BepInEx.\n2. Install and connect the Pelican plugin.\n3. In Admin → Pelican servers, map the server to the game Valheim and bind it to a game-server hub.',
+        '1. Run the server on your Pelican panel from a Valheim egg that loads BepInEx.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map the server to the game Valheim and bind it to a game-server hub.',
       required: true,
       appliesTo: ['game_server'],
       check: 'valheim.server_bound',
@@ -42,7 +42,7 @@ export const VALHEIM_SETUP = {
       kind: 'server_secret',
       title: 'The server\'s mod token',
       instructions:
-        `1. In Admin → Pelican servers, choose Issue token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
+        `1. In Admin → Integrations → Pelican Panel, choose Issue token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
       required: true,
       appliesTo: ['game_server'],
       check: 'valheim.link_token_active',
@@ -76,7 +76,7 @@ export const PELICAN_SETUP = {
       kind: 'admin_setting',
       title: 'Connect your Pelican panel',
       instructions:
-        '1. In the Pelican panel, create a Client API key (Account → API Credentials) on a user that can see your game servers.\n2. In Admin → Plugins → Pelican, enter the panel URL and the key, then Test connection. The key is write-only and never shown again.',
+        '1. In the Pelican panel, create a Client API key (Account → API Credentials) on a user that can see your game servers.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then Test connection. The key is write-only and never shown again.',
       required: true,
       check: 'pelican.panel_configured',
     },
@@ -85,7 +85,7 @@ export const PELICAN_SETUP = {
       kind: 'admin_setting',
       title: 'Bind a server to a hub',
       instructions:
-        'After the first sync, open Admin → Pelican servers and bind each server to a game-server hub. Unbound servers stay off every hub.',
+        'After the first sync, open Admin → Integrations → Pelican Panel and bind each server to a game-server hub. Unbound servers stay off every hub.',
       required: true,
       appliesTo: ['game_server'],
       check: 'pelican.server_bound',
@@ -100,7 +100,7 @@ export const BLIZZARD_SETUP = {
       kind: 'admin_setting',
       title: 'Battle.net API client',
       instructions:
-        '1. Create a client at the Blizzard developer portal.\n2. Enter its client ID and secret in Admin → Integrations → Blizzard. Character sync and raid data refresh use it.',
+        '1. Create a client at the Blizzard developer portal.\n2. Enter its client ID and secret in Admin → Integrations → Blizzard API. Character sync and raid data refresh use it.',
       required: true,
       links: [{ label: 'Blizzard developer portal', url: 'https://develop.battle.net/access/clients' }],
       check: 'blizzard.api_credentials',
