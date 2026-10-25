@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
-import { hubSteamStatsHandler, steamMember, steamStatsResponse } from '../../../test/mocks/hub-steam-stats-handlers';
+import { hubSteamStatsHandler, maskedUnlock, namedUnlock, steamMember, steamStatsResponse } from '../../../test/mocks/hub-steam-stats-handlers';
 import SteamAchievementsWidget from './steam-achievements-widget';
 import { STEAM_NOBODY_LINKED_COPY, STEAM_PRIVATE_COPY } from './steam-stats-viewer-callout';
 import { useSteamAchievementsVisible, useSteamPlaytimeVisible } from './use-steam-stats-visible';
@@ -57,6 +57,20 @@ describe('SteamAchievementsWidget — data', () => {
         await renderCard();
         const rare = screen.getAllByTestId('steam-unlock-row').map((r) => r.textContent?.includes('Rare'));
         expect(rare).toEqual([true, false, false]);
+    });
+});
+
+describe('SteamAchievementsWidget — recent-unlock keys (Codex P2)', () => {
+    it('two unlocks by one member in the same second render without a duplicate-key warning', async () => {
+        const at = '2026-10-24T20:00:00.000Z';
+        const recentUnlocks = [maskedUnlock(1, 2.7, at), maskedUnlock(1, 18.6, at), namedUnlock(1, 'Act One', 70, at)];
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        server.use(hubSteamStatsHandler(steamStatsResponse({ recentUnlocks })));
+        await renderCard();
+        const dupes = errors.mock.calls.map((c) => c.map(String).join(' ')).filter((m) => m.includes('same key'));
+        errors.mockRestore();
+        expect(dupes).toEqual([]);
+        expect(screen.getAllByTestId('steam-unlock-row')).toHaveLength(3);
     });
 });
 

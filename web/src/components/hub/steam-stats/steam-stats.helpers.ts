@@ -4,7 +4,7 @@
  * A masked achievement never carries a name (server-side, D8), so every label
  * here falls back to "Hidden achievement".
  */
-import type { SteamAchievementView, SteamHubMemberStats } from '@raid-ledger/contract';
+import type { SteamAchievementView, SteamHubMemberStats, SteamHubUnlock } from '@raid-ledger/contract';
 
 /** The masked-row copy (design-system §4.27 "masked hidden-achievement row"). */
 export const HIDDEN_ACHIEVEMENT = 'Hidden achievement';
@@ -84,4 +84,23 @@ export function missingLine(members: readonly SteamHubMemberStats[], withPrivate
 /** Nobody on the hub has linked Steam (or the hub has no members) — the §4.5 empty sentence. */
 export function nobodyLinked(members: readonly SteamHubMemberStats[]): boolean {
     return members.every((m) => m.status === 'unlinked');
+}
+
+/**
+ * Stable, unique React keys for a recent-unlock list (Codex P2). Steam can
+ * award one player several achievements in the same second, so
+ * `userId + unlockedAt` collides. A named unlock adds its api name; a masked
+ * one carries none on the wire (D8), so it adds its ordinal among that
+ * player's masked unlocks in that second — the server's order
+ * (`unlocked_at` desc, user, api name) keeps that ordinal stable.
+ */
+export function unlockKeys(unlocks: readonly SteamHubUnlock[]): string[] {
+    const maskedSeen = new Map<string, number>();
+    return unlocks.map((u) => {
+        const base = `${u.userId}-${u.unlockedAt}`;
+        if (!u.achievement.masked) return `${base}-${u.achievement.apiName}`;
+        const n = maskedSeen.get(base) ?? 0;
+        maskedSeen.set(base, n + 1);
+        return `${base}-masked-${n}`;
+    });
 }

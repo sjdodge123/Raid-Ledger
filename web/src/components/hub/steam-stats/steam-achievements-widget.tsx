@@ -11,7 +11,7 @@ import type { SteamHubMemberStats, SteamHubUnlock } from '@raid-ledger/contract'
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { syncedAgo } from '../../../lib/synced-ago';
 import { useHubSteamStats } from './use-hub-steam-stats';
-import { achievementName, missingLine, nobodyLinked, pctLabel, raceRows } from './steam-stats.helpers';
+import { achievementName, missingLine, nobodyLinked, pctLabel, raceRows, unlockKeys } from './steam-stats.helpers';
 import { SteamMemberRows, SteamStatsSkeleton, SteamUnlockRow } from './steam-stats-rows';
 import { SteamStatsNobodyLinked, SteamStatsViewerCallout } from './steam-stats-viewer-callout';
 
@@ -23,12 +23,14 @@ type MemberLookup = (userId: number) => SteamHubMemberStats | undefined;
 
 function RecentUnlocks({ unlocks, memberOf }: { unlocks: readonly SteamHubUnlock[]; memberOf: MemberLookup }): JSX.Element | null {
     if (unlocks.length === 0) return null;
+    const shown = unlocks.slice(0, STEAM_RECENT_UNLOCKS_SHOWN);
+    const keys = unlockKeys(shown);
     return (
         <section aria-label="Recent unlocks">
             <h4 className="mb-1 mt-3 text-xs font-semibold uppercase text-muted">Recent unlocks</h4>
             <ul className="flex flex-col">
-                {unlocks.slice(0, STEAM_RECENT_UNLOCKS_SHOWN).map((u) => (
-                    <SteamUnlockRow key={`${u.userId}-${u.unlockedAt}`} unlock={u} member={memberOf(u.userId)} />
+                {shown.map((u, i) => (
+                    <SteamUnlockRow key={keys[i] ?? `${u.userId}-${u.unlockedAt}-${i}`} unlock={u} member={memberOf(u.userId)} />
                 ))}
             </ul>
         </section>

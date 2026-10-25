@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { maskedUnlock, namedUnlock, steamMember } from '../../../test/mocks/hub-steam-stats-handlers';
 import {
-    achievementA11y, achievementName, hoursLabel, isRare, missingLine, nobodyLinked, pctLabel, playtimeRows, raceRows,
+    achievementA11y, achievementName, hoursLabel, isRare, missingLine, nobodyLinked, pctLabel, playtimeRows, raceRows, unlockKeys,
 } from './steam-stats.helpers';
 
 describe('steam-stats helpers (W9)', () => {
@@ -65,5 +65,13 @@ describe('steam-stats helpers (W9)', () => {
     it('nobodyLinked is true only when every member is unlinked', () => {
         expect(nobodyLinked([steamMember(1, { status: 'unlinked' })])).toBe(true);
         expect(nobodyLinked([steamMember(1, { status: 'unlinked' }), steamMember(2, { status: 'private' })])).toBe(false);
+    });
+});
+
+describe('unlockKeys (Codex P2)', () => {
+    it('is unique for same-second unlocks by one player, masked or named', () => {
+        const at = '2026-10-24T20:00:00.000Z';
+        const keys = unlockKeys([maskedUnlock(1, 2.7, at), namedUnlock(1, 'Act One', 70, at), maskedUnlock(1, 18.6, at), maskedUnlock(2, 5, at)]);
+        expect(keys).toEqual([`1-${at}-masked-0`, `1-${at}-ACT_ONE`, `1-${at}-masked-1`, `2-${at}-masked-0`]);
     });
 });
