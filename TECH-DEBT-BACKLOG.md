@@ -3591,6 +3591,11 @@ same day (#1278, #1279, #1280).
 - **low** `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — one hub lookup per poll even when every reminder is deduped. Suggested: resolve the hub only after dedupe finds a recipient.
 - **med** `web/src/components/hub/hub-page.tsx:266` — the ROK-1947 recovery latch keys only on `dataUpdatedAt`; a 403/404/5xx from another refetch path can sit behind a stale Sign in until reload. Suggested: also store/compare `errorUpdatedAt`.
 - **low** `web/src/lib/api/resume-refresh.ts:44-47` — a batch refetch that never settles keeps the batch guard set and drops later refresh notifications. Suggested: race the batch with a ~15 s timeout.
+### 2026-10-24 — feat/rok-1859-chest-bases (surfaced during review, deferred)
+
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials-bases.queries.ts:60` — `selectStackSums` returns one row per chest per item to Node (fine at prod's ~111 chests, but ~10^5–10^6 rows per Materials read at the 50k-container cap) and redoes the work of `totals()`. Suggested: sum per base in SQL after the base assignment.
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials.service.ts:184` — the chest detail route reads the whole scope's base inputs to number one chest (O(scan) per detail open). Suggested: cache the base view per transaction, or store the base/index with the scan.
+- **low** `web/src/plugins/valheim/map/use-chest-layer.ts:134` — the Map's Chests layer (on by default) pulls the full `/materials` read only for base display names. Suggested: add `bases` (key, x, z) to the `/containers` list response (additive contract change) and drop the `/materials` call.
 
 ### 2026-10-24 — feat/rok-1938-insights-late (surfaced during ROK-1938 web lane)
 
@@ -3603,6 +3608,20 @@ same day (#1278, #1279, #1280).
 - **resolved (partial)** `api/src/users/users.service.ts:268` (display-name ilike uses raw input) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): input goes through `escapeLikePattern()`. Still open from that entry: uniqueness is advisory only (no DB constraint).
 - **resolved** `api/src/notifications/hub-notification.service.ts:81` (`hub-post:<id>` cooldown claimed with an empty recipient set) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
 
+### 2026-10-24 — rl-infra fleet (surfaced while freeing VM disk, Lead sessions ap/aq)
+
+- **high** — `rl-infra/docker-compose.yml:156` (`rl-registry`, volume `rl-infra_registry-data`): the fleet's local image registry is never garbage-collected. Every env build pushes a ~1.5 GB `rl-allinone:<slug>` tag and nothing deletes it; 424 tags built up to 134 GB and blocked image builds (≥20 GB free required). Operator cleared it by hand 2026-10-24 (manifest DELETE per tag + `registry garbage-collect --delete-untagged`). Suggested: `rl_env_destroy` deletes the env's tag, plus a nightly `registry garbage-collect` in gc-sweeper when no image build is admitted.
+- **med** — `rl_status.settings_bundle`: the VM settings bundle is 1244 h old, and `sync_settings` falls back on FAIL. Suggested: alert in `rl_status` when the bundle is older than 30 days, and re-sync it.
+
+### 2026-10-24 — feat/rok-1948-planner-spoilers (Opus delta review of the Codex P2 fixes, verdict SHIP)
+
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.ts:44`: the pruned-graph cache fingerprint md5s every profile's known lists on every Planner request (~0.4 MB at 50×300 entries, about as much as the read it guards). Suggested: `count(*)::text || ':' || md5(coalesce(string_agg(p.id::text || ':' || p.xmin::text, ',' order by p.id), ''))` (xmin changes on every committed write and needs no de-TOAST).
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.spec.ts:13`: the spec matches only the rendered SQL text. Suggested: an integration case that changes one profile's `known_items` with the same `imported_at` and asserts the fingerprint changes.
+- **minor** — `web/src/plugins/valheim/planner/valheim-planner-tab.tsx:69`: `ProtectedEmpty` mounts the full `usePlannerState` (an unneeded materials request), and it branches by comparing `empty === SPOILERS_EMPTY_COPY`. Suggested: `emptyCopy` returns a discriminant.
 ### 2026-10-24 — feat/rok-1948-planner-spoilers (surfaced during ROK-1948 review fix round)
 
 - **low** — `api/src/plugins/valheim/armory/read/valheim-recipes.service.ts` (`recipeAtlas` on catalogue/tree/plan) + the stored items atlas: spoiler protection prunes every JSON field, but the recipe/items atlas PNGs are served whole, so a member can still see hidden items' and stations' ICONS by opening the atlas image (no names, recipes or counts). Pre-existing design of the shared atlas; not in ROK-1948's scope. Suggested: serve a per-visible-set atlas (or per-icon crops) while `spoilers === 'protected'`, cached on the same pruned-graph key.
+
+### 2026-10-24 — PR #1798 feat/rok-1942-hub-gallery (surfaced in GitHub CI discord-smoke; branch touches no Discord paths)
+
+- **med (CI flake; pre-existing)** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts` "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count" — run 40140524373 job 121011249490: `AC7: no PLAYING NOW post with a voice link … last rendered "<no post for this game>"` after 95.3s; 47/48 passed. The ROK-1942 diff has 0 files under discord-bot/notifications/lfg/voice/test-bot. Likely the now-spawn voice channel/positional-pick fragility already noted under 2026-09-07 rok-1494. Suggested: make the now-group spawn pick its voice channel by id, not index, and loop the spec 50× with the targeted-smoke recipe to measure the rate.

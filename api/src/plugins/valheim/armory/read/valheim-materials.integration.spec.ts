@@ -288,13 +288,18 @@ describe('materials visibility (R1/R2/R4/R5/R6/R12)', () => {
   it('R2 owner (auto claim): personal = own private chests only', async () => {
     const r = await materials(tokens.owner);
     expect(totalsOf(r.shared)).toEqual(SHARED_TOTALS);
+    const totals = [
+      { prefab: 'Gold', quality: 1, total: 3, chests: 1 },
+      { prefab: 'Wood', quality: 1, total: 100, chests: 1 },
+    ];
+    // ROK-1859: one base (every shared chest is within 64 m); both private
+    // chests attach to it.
+    expect(r.bases).toHaveLength(1);
     expect(r.personal).toEqual({
-      totals: [
-        { prefab: 'Gold', quality: 1, total: 3, chests: 1 },
-        { prefab: 'Wood', quality: 1, total: 100, chests: 1 },
-      ],
+      totals,
       chestCount: 2,
       omittedPrivate: null,
+      byBase: [{ base: r.bases?.[0]?.key, chestCount: 2, totals }],
     });
   });
 

@@ -3,9 +3,14 @@
  * viewer's personal chests, the warning banner, and the chest list with a
  * drill-down. Selecting a totals row narrows the chest list to the chests
  * holding that item (kept in the hash — ROK-1889); a new search clears the selection. Empty state while the server has sent no scan (`worldUid` null).
+ * ROK-1859: the Base filter (also in the hash) narrows shared totals, the
+ * personal section and the chest list to one base; a stale key means All bases.
  */
 import { useMemo, useState, type JSX } from 'react';
-import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
+import type {
+    ValheimMaterialsBase,
+    ValheimMaterialsResponse,
+} from '@raid-ledger/contract';
 import { useNow } from '../../../hooks/use-now';
 import { useItemIconsFor } from '../character/use-item-icons';
 import {
@@ -13,7 +18,12 @@ import {
     useValheimMaterials,
 } from '../hooks/use-valheim-materials';
 import { ChestsSection } from './chests-section';
-import { useMaterialsItem } from './materials-hash';
+import {
+    activeBase,
+    personalFor,
+    sharedTotalsFor,
+} from './materials-bases.helpers';
+import { useMaterialsBase, useMaterialsItem } from './materials-hash';
 import {
     categoriesOf,
     DEFAULT_MATERIALS_FILTERS,
@@ -34,19 +44,23 @@ const DEFAULT_SORT: MaterialSort = { key: 'total', dir: 'desc' };
 
 function ScanLine({
     data,
+    base,
 }: {
     data: ValheimMaterialsResponse;
+    /** ROK-1859: the selected base's chest count replaces the scan's. */
+    base: ValheimMaterialsBase | null;
 }): JSX.Element | null {
     // Ticks while the tab stays open: the shared QueryClient never refetches on focus (Codex r3).
     const now = useNow();
     if (data.capturedAt === null) return null;
+    const count = base?.chestCount ?? data.shared.chestCount;
     return (
         <p
             className="text-xs text-muted"
             data-testid="valheim-materials-scan-age"
         >
-            {scanAgeLabel(data.capturedAt, now)} · {data.shared.chestCount}{' '}
-            shared {data.shared.chestCount === 1 ? 'chest' : 'chests'}
+            {scanAgeLabel(data.capturedAt, now)} · {count} shared{' '}
+            {count === 1 ? 'chest' : 'chests'}
             {data.catalogFallback &&
                 ' · Item names come from the newest catalogue, not this server’s game version'}
         </p>
@@ -88,6 +102,9 @@ function MaterialsBody({
     const [sort, setSort] = useState<MaterialSort>(DEFAULT_SORT);
     // ROK-1889: the open item is in the hash, so Back from a Map link restores it.
     const [selected, setSelected] = useMaterialsItem();
+    const [baseKey, setBase] = useMaterialsBase();
+    const base = activeBase(data, baseKey);
+    const bases = data.bases ?? [];
     const chests = useValheimContainers(
         serverId,
         filters.includeVehicles,
@@ -104,9 +121,11 @@ function MaterialsBody({
         [chests.data?.items, data.items],
     );
     const ctx = useItemIconsFor({ serverId, items, atlas: data.atlas });
-    const all = groupTotals(data.shared.totals, ctx.items, ctx.atlas);
+    const all = groupTotals(sharedTotalsFor(data, base), ctx.items, ctx.atlas);
+    const personal =
+        data.personal === null ? null : personalFor(data.personal, base);
     // The category also filters the personal section, so offer its categories too.
-    const mine = groupTotals(data.personal?.totals ?? [], ctx.items, ctx.atlas);
+    const mine = groupTotals(personal?.totals ?? [], ctx.items, ctx.atlas);
     const rows = sortRows(
         filterRows(all, filters.search, filters.category),
         sort,
@@ -118,11 +137,14 @@ function MaterialsBody({
               selected);
     return (
         <div className="space-y-4">
-            <ScanLine data={data} />
+            <ScanLine data={data} base={base} />
             <MaterialsToolbar
                 filters={filters}
                 categories={categoriesOf([...all, ...mine])}
                 onChange={onFilters}
+                bases={bases}
+                base={base?.key ?? null}
+                onBase={setBase}
             />
             <WarningBanner data={data} />
             <MaterialsTotalsTable
@@ -134,9 +156,9 @@ function MaterialsBody({
                 selected={selected}
                 onSelect={onSelect}
             />
-            {data.personal !== null && (
+            {personal !== null && (
                 <PersonalChestsSection
-                    personal={data.personal}
+                    personal={personal}
                     filters={filters}
                     sort={sort}
                     onSort={setSort}
@@ -149,6 +171,8 @@ function MaterialsBody({
                 serverId={serverId}
                 includeVehicles={filters.includeVehicles}
                 chests={chests}
+                bases={bases}
+                base={base}
                 holdingLabel={holdingLabel}
                 holding={selected}
                 onClear={() => setSelected(null)}

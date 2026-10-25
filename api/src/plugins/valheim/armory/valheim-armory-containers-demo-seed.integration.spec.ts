@@ -167,8 +167,27 @@ describe('POST /admin/test/valheim/armory/seed-containers (ROK-1853 L5)', () => 
     expect(rows).toHaveLength(7);
   });
 
+  it('secondBase adds a second base holding Stone + Resin only (ROK-1859 D11)', async () => {
+    const plain = await seed();
+    const one = await materials(plain.serverId, await sign(plain.memberUserId));
+    expect(one.bases?.map((b) => b.chestCount)).toEqual([5]);
+    const f = await seed({ secondBase: true });
+    expect(f.serverId).toBe(plain.serverId);
+    const two = await materials(f.serverId, await sign(f.memberUserId));
+    expect(two.bases?.map((b) => b.chestCount)).toEqual([5, 2]);
+    expect(two.bases?.[1]?.totals.map((s) => `${s.prefab}=${s.total}`)).toEqual(
+      ['Resin=12', 'Stone=120'],
+    );
+    expect(woodTotal(two.shared.totals)).toBe(156);
+  });
+
   it('400s on a bad body', async () => {
-    for (const body of [{ worker: 99 }, { worker: 'a' }, { extra: 1 }]) {
+    for (const body of [
+      { worker: 99 },
+      { worker: 'a' },
+      { extra: 1 },
+      { secondBase: 'yes' },
+    ]) {
       const res = await testApp.request
         .post(ROUTE)
         .set(bearer(adminToken))
