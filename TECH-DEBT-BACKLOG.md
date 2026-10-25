@@ -3630,3 +3630,7 @@ same day (#1278, #1279, #1280).
 
 - **low** `api/src/guilds/**` `hubNameKey` — ROK-1950 now NFC-normalises hub name keys, but keys stored before it were not normalised, so a hub saved in decomposed form can get a visually identical twin. Very unlikely in practice. Suggested: a one-off SQL backfill of `name_key` to NFC after a duplicate check (self-contained migration), or accept the gap.
 - **low** `api/src/notifications/hub-proposal-notices.ts:29` — the PROPOSED hub name is sent to staff unescaped, so a markdown link in a proposal renders clickable in the staff DM. Pre-existing (not touched by ROK-1950, which escaped the tagged-event and welcome embeds). Suggested: wrap it in `escapeHubName` like the other embeds.
+
+### 2026-10-25 — fix/hub-copy-and-proposal-smoke
+
+- **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
