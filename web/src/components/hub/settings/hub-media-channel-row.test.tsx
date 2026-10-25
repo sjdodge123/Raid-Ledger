@@ -73,7 +73,7 @@ describe('Pictures section — who sees it', () => {
 
     it('is absent for a hub that is not a game server', async () => {
         serve(mediaChannelState());
-        renderSheet({ ...PAGE, guild: { ...PAGE.guild, kind: 'guild', gameSlug: 'wow' } });
+        renderSheet({ ...PAGE, guild: { ...PAGE.guild, kind: 'wow_guild', gameSlug: 'wow' } });
         await screen.findByTestId('guild-settings-discord');
         expect(screen.queryByTestId('guild-settings-pictures')).toBeNull();
     });

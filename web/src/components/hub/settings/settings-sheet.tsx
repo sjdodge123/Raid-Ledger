@@ -23,6 +23,7 @@ import { HubEditorsSection } from './settings-editors';
 import { SettingsSection } from './settings-rows';
 import { HideHubRow } from './hide-hub-row';
 import { HubWelcomeRepost } from './hub-welcome-repost';
+import { HubMediaChannelSection } from './hub-media-channel-row';
 import { isWelcomeHub } from './hub-welcome.helpers';
 import { hubCopy } from '../hub-copy';
 
@@ -84,6 +85,7 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsS
     return (
         <>
             <DiscordSection guildId={ctx.page.guild.id} welcomeHub={isWelcomeHub(ctx.page.guild)} onChangeChannel={onChangeChannel} />
+            {ctx.page.guild.kind === 'game_server' && <HubMediaChannelSection guildId={ctx.page.guild.id} />}
             {!isCommunity && <>
             <SettingsSection title="Page editors" blurb={`Who can edit this ${hubCopy(ctx.page.guild.kind).noun}’s page.`} testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
