@@ -83,7 +83,10 @@ export class CompanionBlobsRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
   /** The stored dims for (user, sha), or null. */
-  async find(userId: number, sha256: string): Promise<CompanionBlobDims | null> {
+  async find(
+    userId: number,
+    sha256: string,
+  ): Promise<CompanionBlobDims | null> {
     const [row] = await storedBlobsIn(this.db, userId, [sha256]);
     return row ?? null;
   }
@@ -194,7 +197,10 @@ export class CompanionBlobsRepository {
   }
 
   /** Cleanup 3 input: which of `shas` still have a row for this user. */
-  async storedShas(userId: number, shas: readonly string[]): Promise<Set<string>> {
+  async storedShas(
+    userId: number,
+    shas: readonly string[],
+  ): Promise<Set<string>> {
     const rows = await storedBlobsIn(this.db, userId, shas);
     return new Set(rows.map((r) => r.sha256));
   }

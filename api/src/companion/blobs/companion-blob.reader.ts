@@ -121,7 +121,12 @@ class BlobSink {
     const header = this.header ?? headerOrThrow(Buffer.concat(this.head));
     if (!riffLengthMatches(header.riffSize, this.size)) throw invalidBlob();
     const { width, height } = header;
-    return { sha256: this.hash.digest('hex'), byteLength: this.size, width, height };
+    return {
+      sha256: this.hash.digest('hex'),
+      byteLength: this.size,
+      width,
+      height,
+    };
   }
 }
 

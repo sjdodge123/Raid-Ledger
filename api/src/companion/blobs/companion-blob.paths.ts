@@ -72,6 +72,8 @@ export async function commitCompanionBlob(
 }
 
 /** Remove a file (no error when already gone). */
-export async function discardCompanionBlobFile(filePath: string): Promise<void> {
+export async function discardCompanionBlobFile(
+  filePath: string,
+): Promise<void> {
   await rm(filePath, { force: true });
 }
