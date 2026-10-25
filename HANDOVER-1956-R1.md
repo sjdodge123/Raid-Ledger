@@ -10,7 +10,7 @@ Branch `feat/rok-1956-companion-ingest`. Nothing is red on the laptop. Commits: 
 5. NIT skipped on purpose — device budget first means a runaway device spends only its own budget; charging the user budget first would let it drain the budget its sibling devices share.
 
 ## Evidence (laptop)
-`npx jest src/companion` 232 pass; `tsc --noEmit -p api/tsconfig.json` clean; eslint 0 errors. Red first: 6 service-spec cases, ingest lock-order case (`Expected: {}, 7` not called). Cleanup spec mutation (unlink after release) fails: `"release:7:A=true:B=true"`.
+`npx jest src/companion` 228 pass; `tsc --noEmit -p api/tsconfig.json` clean; eslint 0 errors. Red first: 6 service-spec cases, ingest lock-order case (`Expected: {}, 7` not called). Cleanup spec mutation (unlink after release) fails: `"release:7:A=true:B=true"`.
 
 ## Specs to run on the fleet
 - `api/src/companion/blobs/companion-blob.integration.spec.ts` (new: "R1 a row whose file is gone", "R1 session uploads need a handler opt-in"; I-21 re-proves the per-user cleanup SQL — `make_interval` typing, DISTINCT candidate queries still unverified on Postgres)
