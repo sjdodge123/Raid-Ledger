@@ -11,7 +11,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { CORE_PLUGIN_ID, HUB_PLUGIN_MANIFESTS } from '@raid-ledger/contract';
+import {
+  CORE_PLUGIN_ID,
+  HUB_PLUGIN_MANIFESTS,
+  type PluginHubManifest,
+} from '@raid-ledger/contract';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 import { stripComments } from '../../common/testing/strip-comments';
 import type * as schema from '../../drizzle/schema';
@@ -134,13 +138,14 @@ describe('ROK-1969 A3 — declared ↔ registered (source scan)', () => {
 
   it('every declared hub-kind / log-parser / event-tagger has a registration', () => {
     const missing: string[] = [];
-    for (const [slug, hub] of Object.entries(HUB_PLUGIN_MANIFESTS)) {
+    const all: [string, PluginHubManifest][] =
+      Object.entries(HUB_PLUGIN_MANIFESTS);
+    const behaviours = all.flatMap(([, h]) => h.behaviours);
+    for (const [slug, hub] of all) {
       for (const b of hub.behaviours) {
         const point = KIND_TO_POINT[b.kind];
         if (point === undefined) continue;
-        const declared = Object.values(HUB_PLUGIN_MANIFESTS)
-          .flatMap((h) => h.behaviours)
-          .filter((x) => x.kind === b.kind).length;
+        const declared = behaviours.filter((x) => x.kind === b.kind).length;
         const registered = sites.filter((s) => s.point === point).length;
         const named = SOURCES.some((s) => s.text.includes(`'${b.id}'`));
         if (registered < declared || !named) missing.push(`${slug}:${b.id}`);

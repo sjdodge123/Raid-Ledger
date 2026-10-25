@@ -281,6 +281,8 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       EXTENSION_POINTS.CRON_REGISTRAR,
       WOW_COMMON_MANIFEST.id,
       this.cronRegistrar,
+      // ROK-1969 D5: every job is Blizzard-scoped — suspends with the plugin.
+      { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
     this.registerHubKind();
   }

@@ -4,6 +4,7 @@
  * community Leader manages the Discord channel (`canManageDiscord`) while a
  * WoW GM stays refused (ROK-1830 D5-A).
  */
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildKind, LadderRole } from '@raid-ledger/contract';
@@ -51,7 +52,9 @@ function build(adapter: HubKindAdapter): void {
   const asDb: unknown = db;
   const typedDb = asDb as PostgresJsDatabase<typeof schema>;
   const plugins = new PluginRegistryService(typedDb, new EventEmitter2());
-  plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
+  plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
+      ownerPluginId: CORE_PLUGIN_ID,
+    });
   service = new GuildAccessService(
     typedDb,
     new HubKindRegistry(plugins, typedDb),

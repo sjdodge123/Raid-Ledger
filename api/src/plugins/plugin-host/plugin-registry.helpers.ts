@@ -8,7 +8,38 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { plugins, appSettings } from '../../drizzle/schema';
 import type { PluginManifest } from './plugin-manifest.interface';
-import type { PluginIntegrationInfoDto } from '@raid-ledger/contract';
+import {
+  emptyPluginHubManifest,
+  type PluginInfoDto,
+  type PluginIntegrationInfoDto,
+} from '@raid-ledger/contract';
+
+type PluginRow = typeof plugins.$inferSelect;
+
+/** One `GET /admin/plugins` entry from a manifest and its DB row (if any). */
+export function buildPluginInfo(
+  manifest: PluginManifest,
+  record: PluginRow | undefined,
+  integrations: PluginIntegrationInfoDto[],
+): PluginInfoDto {
+  const status = !record ? 'not_installed' : record.active ? 'active' : 'inactive';
+  return {
+    slug: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    author: manifest.author,
+    gameSlugs: manifest.gameSlugs ?? [],
+    capabilities: manifest.capabilities,
+    integrations,
+    status,
+    installedAt: record?.installedAt?.toISOString() ?? null,
+    builtIn: manifest.builtIn ?? false,
+    hub: manifest.hub ?? emptyPluginHubManifest(),
+    // ROK-1969 §3.5: per-requirement checks are not wired yet — none reported.
+    setupStatus: [],
+  };
+}
 
 /** Resolve integration info for a plugin manifest, batch-fetching credential keys. */
 export async function resolveIntegrationInfo(

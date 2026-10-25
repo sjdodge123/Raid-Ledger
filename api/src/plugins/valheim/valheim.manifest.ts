@@ -1,6 +1,7 @@
+import { HUB_PLUGIN_MANIFESTS } from '@raid-ledger/contract';
 import type { PluginManifest } from '../plugin-host/plugin-manifest.interface';
 import { PELICAN_PLUGIN_ID } from '../pelican/pelican.constants';
-import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from './valheim.constants';
+import { VALHEIM_PLUGIN_ID } from './valheim.constants';
 
 /**
  * Valheim game plugin (ROK-1799 V0 / ROK-1800). Registered only — never
@@ -15,8 +16,10 @@ export const VALHEIM_MANIFEST: PluginManifest = {
   description:
     'Valheim server presence — reads who is on a Pelican-hosted Valheim server for Quick Play.',
   author: { name: 'Raid Ledger' },
-  gameSlugs: [VALHEIM_GAME_SLUG],
+  // ROK-1969: the hub declaration owns the game list (moved, not duplicated).
+  gameSlugs: HUB_PLUGIN_MANIFESTS.valheim.gameSlugs,
   capabilities: ['game-log-parser', 'cron-registrar'],
   settingKeys: [],
   dependencies: [PELICAN_PLUGIN_ID],
+  hub: HUB_PLUGIN_MANIFESTS.valheim,
 };

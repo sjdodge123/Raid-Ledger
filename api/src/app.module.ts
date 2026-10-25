@@ -26,6 +26,7 @@ import { GuildsCoreModule } from './guilds/guilds-core.module';
 import { CommunityProposalsModule } from './guilds/community/community-proposals.module';
 import { CommunityHubsModule } from './guilds/community/community-hubs.module';
 import { DiscordModule } from './plugins/discord';
+import { CorePluginModule } from './plugins/core';
 import { PelicanModule } from './plugins/pelican';
 import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
 import { ValheimModule } from './plugins/valheim';
@@ -94,6 +95,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     CommunityProposalsModule,
     CommunityHubsModule,
     WowCommonModule,
+    CorePluginModule,
     DiscordModule,
     RelayModule,
     FeedbackModule,

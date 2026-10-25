@@ -1,3 +1,5 @@
+import type { PluginHubManifest } from '@raid-ledger/contract';
+
 /** Describes an external API integration a plugin manages (e.g., Blizzard API). */
 export interface PluginIntegration {
   key: string;
@@ -23,6 +25,10 @@ export interface PluginManifest {
   settingKeys?: string[];
   integrations?: PluginIntegration[];
   dependencies?: string[];
+  /** ROK-1969 D3: built in — cannot be deactivated or uninstalled (Core). */
+  builtIn?: boolean;
+  /** ROK-1969 D1: the hub widgets/tabs/behaviours this plugin adds. */
+  hub?: PluginHubManifest;
 }
 
 export const PLUGIN_EVENTS = {

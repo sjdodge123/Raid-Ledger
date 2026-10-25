@@ -355,3 +355,17 @@ export const EXTENSION_POINTS = {
   GAME_LOG_PARSER: 'game-log-parser',
   HUB_KIND: 'hub-kind',
 } as const;
+
+/**
+ * ROK-1969 D5 — the points that exist for a hub kind or a game. Registering
+ * an adapter on one needs `ownerPluginId` (type overload + runtime check).
+ */
+export const HUB_EXTENSION_POINTS = [
+  EXTENSION_POINTS.HUB_KIND,
+  EXTENSION_POINTS.EVENT_GUILD_TAGGER,
+  EXTENSION_POINTS.GAME_LOG_PARSER,
+  EXTENSION_POINTS.CRON_REGISTRAR,
+] as const;
+
+/** One of {@link HUB_EXTENSION_POINTS}. */
+export type HubExtensionPoint = (typeof HUB_EXTENSION_POINTS)[number];
