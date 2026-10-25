@@ -13,8 +13,10 @@ import { ValheimIdentityService } from './valheim-identity.service';
  * ROK-1835 A2/A3: a Raid-Ledger-verified Steam link attaches that SteamID's
  * unclaimed characters (`auto`); an unlink detaches only `auto` claims. A
  * failure is logged (user id only — never the SteamID) and swallowed so the
- * Steam link/unlink itself never fails because of the armory. Skipped while
- * the Valheim plugin is inactive (ROK-1969: a plugin behaviour is off with it).
+ * Steam link/unlink itself never fails because of the armory. The attach is
+ * new work and is skipped while the Valheim plugin is inactive (ROK-1969); the
+ * detach always runs — removing data a user withdrew never depends on a
+ * plugin toggle.
  */
 @Injectable()
 export class ValheimSteamLinkListener {
@@ -25,15 +27,16 @@ export class ValheimSteamLinkListener {
     private readonly registry: PluginRegistryService,
   ) {}
 
-  /** A2 — attach on link. */
+  /** A2 — attach on link (only while the Valheim plugin is active). */
   @OnEvent(STEAM_ACCOUNT_LINKED)
   async handleLinked(e: SteamAccountLinkEvent): Promise<void> {
+    if (!this.registry.isActive(VALHEIM_PLUGIN_ID)) return;
     await this.safely('attach', e.userId, () =>
       this.identity.attachForUser(e.userId, e.steamId64),
     );
   }
 
-  /** A3 — detach `auto` claims on unlink. */
+  /** A3 — detach `auto` claims on unlink, regardless of plugin state. */
   @OnEvent(STEAM_ACCOUNT_UNLINKED)
   async handleUnlinked(e: SteamAccountLinkEvent): Promise<void> {
     await this.safely('detach', e.userId, () =>
@@ -46,7 +49,6 @@ export class ValheimSteamLinkListener {
     userId: number,
     fn: () => Promise<void>,
   ): Promise<void> {
-    if (!this.registry.isActive(VALHEIM_PLUGIN_ID)) return;
     try {
       await fn();
     } catch (err: unknown) {

@@ -1,4 +1,4 @@
-/** ROK-1969 review MINOR 4 — the Steam-link attach/detach is a Valheim behaviour: off with the plugin. */
+/** ROK-1969 — the Steam-link attach is a Valheim behaviour (off with the plugin); the unlink detach always runs. */
 import type { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import type { ValheimIdentityService } from './valheim-identity.service';
 import { ValheimSteamLinkListener } from './valheim-steam-link.listener';
@@ -32,11 +32,16 @@ describe('ValheimSteamLinkListener', () => {
     expect(detach).toHaveBeenCalledWith(7, event.steamId64);
   });
 
-  it('does nothing while Valheim is inactive', async () => {
-    const { listener, attach, detach } = build(false);
+  it('does not auto-claim on link while Valheim is inactive', async () => {
+    const { listener, attach } = build(false);
     await listener.handleLinked(event);
-    await listener.handleUnlinked(event);
     expect(attach).not.toHaveBeenCalled();
-    expect(detach).not.toHaveBeenCalled();
+  });
+
+  // ROK-1969 Codex P2: removing data a user withdrew never depends on a plugin toggle.
+  it('still detaches auto claims on unlink while Valheim is inactive', async () => {
+    const { listener, detach } = build(false);
+    await listener.handleUnlinked(event);
+    expect(detach).toHaveBeenCalledWith(7, event.steamId64);
   });
 });
