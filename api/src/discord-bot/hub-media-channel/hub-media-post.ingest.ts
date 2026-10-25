@@ -10,6 +10,7 @@ import {
   type HubMediaPostClassification,
 } from '../../hub-media/hub-media-classifier.registry';
 import { HubMediaService } from '../../hub-media/hub-media.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
 import { discordProvenanceKey } from '../../hub-media/hub-media.types';
 import { findMessageMedia } from './hub-media-channel.queries';
 import {
@@ -50,6 +51,18 @@ interface PostJob {
   live: ReadonlySet<number>;
 }
 
+/**
+ * D4 — the one own-post rule (`isOwnBotMessage`'s): the app's own user id,
+ * never `author.bot` or a webhook (the screenshot mod posts via a webhook).
+ */
+export function isOwnAuthor(
+  clientService: DiscordBotClientService,
+  authorId: string | null,
+): boolean {
+  const ownId = clientService.getClient()?.user?.id ?? null;
+  return ownId !== null && authorId === ownId;
+}
+
 const KINDS: readonly string[] = ['death', 'screenshot', 'image'];
 const isKind = (v: string): v is HubMediaKind => KINDS.includes(v);
 
@@ -65,14 +78,19 @@ export class HubMediaPostIngest {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly media: HubMediaService,
     private readonly classifiers: HubMediaPostClassifierRegistry,
+    private readonly clientService: DiscordBotClientService,
   ) {}
 
-  /** Store every image of a new post; the first of a death post links (D6). */
+  /**
+   * Store every image of a new post; the first of a death post links (D6).
+   * The app's own posts are skipped here, so live and backfill share D4.
+   */
   async ingestPost(
     post: PostLike,
     hub: HubMediaHubRef,
   ): Promise<IngestPostSummary> {
     const summary = emptySummary();
+    if (isOwnAuthor(this.clientService, post.authorId)) return summary;
     const images = postImages(post);
     if (images.length === 0) return summary;
     const classified = this.classifiers.classify(post, hub);

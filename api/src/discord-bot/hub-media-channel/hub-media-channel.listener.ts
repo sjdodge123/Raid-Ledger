@@ -21,7 +21,7 @@ import {
   gatewayBinding,
 } from '../listeners/discord-listener-binding';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
-import { HubMediaPostIngest } from './hub-media-post.ingest';
+import { HubMediaPostIngest, isOwnAuthor } from './hub-media-post.ingest';
 import { toPostLike, type GatewayPost } from './hub-media-post.mapper';
 
 type AnyMessage = Message | PartialMessage;
@@ -108,10 +108,9 @@ export class HubMediaChannelListener {
     return this.resolver.resolve(message.channelId);
   }
 
-  /** D4 — `isOwnBotMessage`'s rule: the app's own id, never `author.bot`. */
+  /** D4 early-out (edits never reach `ingestPost`); the rule is `isOwnAuthor`. */
   private isOwn(message: GatewayPost): boolean {
-    const ownId = this.clientService.getClient()?.user?.id ?? null;
-    return ownId !== null && message.author.id === ownId;
+    return isOwnAuthor(this.clientService, message.author.id);
   }
 
   /** Never let a gateway handler reject. */

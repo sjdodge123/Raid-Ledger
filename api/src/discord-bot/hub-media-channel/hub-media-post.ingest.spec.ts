@@ -22,6 +22,8 @@ const classifier = {
   afterRemove: jest.fn(),
 };
 const registry = { classify: jest.fn(), afterRemove: jest.fn() };
+const OWN_BOT_ID = 'own-bot';
+const clientService = { getClient: jest.fn() };
 const CLASSIFICATION = { kind: 'death', authorName: 'Bjorn', caption: null };
 
 function post(attachmentIds: string[]): PostLike {
@@ -50,7 +52,12 @@ const row = (id: number, attachmentId: string) => ({
 });
 
 function makeIngest(): HubMediaPostIngest {
-  return new HubMediaPostIngest({} as never, media as never, registry as never);
+  return new HubMediaPostIngest(
+    {} as never,
+    media as never,
+    registry as never,
+    clientService as never,
+  );
 }
 
 beforeEach(() => {
@@ -61,6 +68,7 @@ beforeEach(() => {
   });
   media.removeByProvenance.mockResolvedValue(true);
   classifier.afterStore.mockResolvedValue('linked');
+  clientService.getClient.mockReturnValue({ user: { id: OWN_BOT_ID } });
 });
 
 describe('HubMediaPostIngest.onEdit (D11)', () => {
@@ -98,5 +106,24 @@ describe('HubMediaPostIngest.ingestPost — tombstoned duplicates', () => {
       [expect.objectContaining({ mediaId: 7, index: 0 })],
     ]);
     expect(summary).toMatchObject({ duplicates: 1, deathsLinked: 1 });
+  });
+});
+
+describe('HubMediaPostIngest.ingestPost — the app\'s own posts (D4)', () => {
+  it('stores nothing from the bot\'s own post (live + backfill share this)', async () => {
+    found.mockResolvedValue([]);
+    media.ingest.mockResolvedValue({ status: 'stored', mediaId: 1 });
+    const own = { ...post(['a']), authorId: OWN_BOT_ID };
+    const summary = await makeIngest().ingestPost(own, HUB);
+    expect(media.ingest).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ images: 0, stored: 0 });
+  });
+
+  it('still stores a webhook post while the bot is offline', async () => {
+    clientService.getClient.mockReturnValue(null);
+    found.mockResolvedValue([]);
+    media.ingest.mockResolvedValue({ status: 'stored', mediaId: 1 });
+    const summary = await makeIngest().ingestPost(post(['a']), HUB);
+    expect(summary).toMatchObject({ images: 1, stored: 1 });
   });
 });

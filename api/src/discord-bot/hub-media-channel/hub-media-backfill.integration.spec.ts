@@ -28,6 +28,7 @@ import {
   VALHEIM_GAME_SLUG,
   VALHEIM_PLUGIN_ID,
 } from '../../plugins/valheim/valheim.constants';
+import { DiscordBotClientService } from '../discord-bot-client.service';
 import { HubMediaBackfillService } from './hub-media-backfill.service';
 import type { HubMediaBackfillSummary } from './hub-media-backfill.types';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
@@ -221,6 +222,21 @@ describe('paging + the 21-day stop (D12)', () => {
     const summary = await runOnce();
     expect(befores).toEqual([undefined, page[1]?.id]);
     expect(summary.scanned).toBe(2);
+  });
+});
+
+describe('the app\'s own posts (D4)', () => {
+  it('scans the bot\'s own post in the history but never stores it', async () => {
+    const OWN_BOT_ID = '600000000000000001';
+    jest
+      .spyOn(testApp.app.get(DiscordBotClientService), 'getClient')
+      .mockReturnValue({ user: { id: OWN_BOT_ID } } as never);
+    const own = { ...post(1), authorId: OWN_BOT_ID };
+    const webhook = post(2);
+    stubPort([[own, webhook]]);
+    const summary = await runOnce();
+    expect(await mediaKeys()).toEqual([key(webhook)]);
+    expect(summary).toMatchObject({ scanned: 2, imagesStored: 1 });
   });
 });
 
