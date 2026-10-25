@@ -139,6 +139,7 @@ export * from './event-analytics.schema.js';
 
 // Steam Integration (ROK-417)
 export * from './steam.schema.js';
+export * from './steam-app-stats.schema.js';
 
 // ITAD Integration (ROK-772)
 export * from './itad.schema.js';
