@@ -3,7 +3,9 @@
  * where it goes on the server (`pelican` hints), its links, and for a
  * `server_secret` a placeholder-only config block (the value is issued in Raid
  * Ledger and never shown here) with "Issue token…" linking to the existing
- * Pelican server row. "Apply on Pelican" is shown disabled — coming later.
+ * Pelican server row — only when the row carries a `pelican` hint, so a
+ * non-Pelican secret never points admins at the Pelican page. "Apply on
+ * Pelican" is shown disabled — coming later.
  */
 import { useId, type JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -54,10 +56,17 @@ function SecretTemplate({ pelican }: { pelican: PluginSetupPelican | undefined }
                 <span aria-hidden="true">🔒</span>
                 <span>The value is issued in Raid Ledger and never shown here.</span>
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-                <Link to={PELICAN_SERVER_ROWS_URL} className={buttonClass({ variant: 'secondary', size: 'sm' })}>Issue token…</Link>
-                <span className="text-xs text-dim">Opens the server’s row in Integrations › Pelican Panel.</span>
-            </div>
+            {pelican && <IssueTokenLink />}
+        </div>
+    );
+}
+
+/** "Issue token…" → the Pelican server rows, where a server's token is issued today. */
+function IssueTokenLink(): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <Link to={PELICAN_SERVER_ROWS_URL} className={buttonClass({ variant: 'secondary', size: 'sm' })}>Issue token…</Link>
+            <span className="text-xs text-dim">Opens the server’s row in Integrations › Pelican Panel.</span>
         </div>
     );
 }
