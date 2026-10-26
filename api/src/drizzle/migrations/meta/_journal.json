@@ -1805,7 +1805,14 @@
       "idx": 258,
       "version": "7",
       "when": 1792915373990,
-      "tag": "0258_companion_devices",
+      "tag": "0258_valheim_death_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1792915473990,
+      "tag": "0259_companion_devices",
       "breakpoints": true
     }
   ]
