@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CompanionUserCodeSchema, normaliseCompanionUserCode } from '@raid-ledger/contract';
 import { useCompanionLinkDecision, useCompanionLinkPreview } from '../../hooks/use-companion-link';
-import { readPrefilledCode } from './companion-link-code';
+import { takeCapturedLinkCode } from '../../lib/companion-link-code-capture';
+import { formatUserCodeInput, readPrefilledCode } from './companion-link-code';
 import type { LinkDecision } from './link-review-card';
 
 const INVALID_CODE = "That code isn't valid — check the 8 letters on your computer.";
@@ -23,13 +24,15 @@ export function useNow(intervalMs: number): number {
 
 /**
  * Read the deep-linked code once, then drop it from the address bar (and
- * so from history). A pre-filled code is previewed straight away — preview
+ * so from history). A direct page load already had it captured and stripped
+ * before Sentry initialised (`lib/companion-link-code-capture`); the router
+ * location covers an in-app navigation to `/link#code=…`. A pre-filled code is previewed straight away — preview
  * has no side effect; approving still needs the explicit click.
  */
 function usePrefill(onCode: (code: string) => void): string {
     const location = useLocation();
     const navigate = useNavigate();
-    const [initial] = useState(() => readPrefilledCode(location.hash, location.search) ?? '');
+    const [initial] = useState(() => readPrefilledCode(location.hash, location.search) ?? capturedCode());
     const done = useRef(false);
     useEffect(() => {
         if (done.current || initial === '') return;
@@ -38,6 +41,12 @@ function usePrefill(onCode: (code: string) => void): string {
         onCode(initial);
     }, [initial, location.pathname, navigate, onCode]);
     return initial;
+}
+
+/** The code captured at page load, in display form ('' when none). */
+function capturedCode(): string {
+    const raw = takeCapturedLinkCode();
+    return raw === null ? '' : formatUserCodeInput(raw);
 }
 
 /** Everything the page renders from. */

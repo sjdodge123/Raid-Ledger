@@ -1,5 +1,5 @@
 /** ROK-1955 T-WEB-1…4 — the `/link` device approval page. */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -9,6 +9,9 @@ import type { CompanionLinkPreview } from '@raid-ledger/contract';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render-helpers';
 import { CompanionLinkPage } from './companion-link-page';
+
+const capture = vi.hoisted(() => ({ take: vi.fn((): string | null => null) }));
+vi.mock('../lib/companion-link-code-capture', () => ({ takeCapturedLinkCode: capture.take }));
 
 const API = 'http://localhost:3000';
 const PREVIEW = `${API}/companion/v1/devices/link/preview`;
@@ -98,6 +101,15 @@ describe('CompanionLinkPage — entry and review', () => {
         const rec = mockApi();
         renderAt('/link?code=BCDFGHJK');
         expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(rec.decisions).toHaveLength(0);
+    });
+
+    it('Codex P2: a code captured (and stripped) at page load still prefills the review', async () => {
+        const rec = mockApi();
+        capture.take.mockReturnValueOnce('bcdfghjk');
+        renderAt('/link');
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(rec.previews).toEqual([{ userCode: 'BCDFGHJK' }]);
         expect(rec.decisions).toHaveLength(0);
     });
 
