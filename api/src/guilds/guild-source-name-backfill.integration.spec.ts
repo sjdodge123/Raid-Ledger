@@ -1,10 +1,10 @@
 /**
- * ROK-2015 I5 — the 0259 data backfill against a real database. The test DB
- * is already migrated, so the spec seeds rows that look pre-0259 (WoW with
+ * ROK-2015 I5 — the 0260 data backfill against a real database. The test DB
+ * is already migrated, so the spec seeds rows that look pre-0260 (WoW with
  * `source_name` NULL) and re-runs the migration's own SQL text, split on
  * drizzle's statement breakpoint. Fleet-only.
  *
- * Mutation (for the Lead): drop `AND "kind" = 'wow_guild'` from the 0259
+ * Mutation (for the Lead): drop `AND "kind" = 'wow_guild'` from the 0260
  * UPDATE → the community row reads 'Community Hub' instead of null.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -20,13 +20,13 @@ const MIGRATIONS = join(__dirname, '../drizzle/migrations');
 const g = schema.guilds;
 let testApp: TestApp;
 
-/** The statements of the single `0259_*.sql` migration file. */
+/** The statements of the single `0260_*.sql` migration file. */
 function backfillStatements(): string[] {
   const files = readdirSync(MIGRATIONS).filter(
-    (f) => f.startsWith('0259_') && f.endsWith('.sql'),
+    (f) => f.startsWith('0260_') && f.endsWith('.sql'),
   );
   expect(files).toHaveLength(1);
-  const [file] = nonEmpty(files, '0259 migration');
+  const [file] = nonEmpty(files, '0260 migration');
   return readFileSync(join(MIGRATIONS, file), 'utf8')
     .split('--> statement-breakpoint')
     .map((s) => s.trim())
@@ -73,7 +73,7 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
-describe('ROK-2015 I5 — 0259 backfills source_name for WoW guilds only', () => {
+describe('ROK-2015 I5 — 0260 backfills source_name for WoW guilds only', () => {
   it('sets source_name = name on WoW rows without one; idempotent', async () => {
     const legacy = await mkWow('Night Shift', null);
     const kept = await mkWow('Iron Vanguard', 'Iron Vanguard Old');
