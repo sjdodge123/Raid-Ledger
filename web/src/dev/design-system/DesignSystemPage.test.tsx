@@ -3,7 +3,7 @@
  * section. A section silently disappearing is how a reference page rots into
  * a lie, so each heading is asserted by name.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -43,6 +43,15 @@ function demoMode(enabled: boolean): void {
     mockUseSystemStatus.mockReturnValue({ data: { demoMode: enabled }, isLoading: false });
 }
 
+/**
+ * Load the two lazy sample chunks (ROK-1893 P4) before any test waits on them. On a
+ * loaded CI coverage shard their cold import took >5s and was billed to whichever
+ * heading case first awaited the boundary (PR #1820); here it gets the hook's budget.
+ */
+beforeAll(async () => {
+    await Promise.all([import('./calendar-layer-section'), import('./calendar-hub-section')]);
+}, 30_000);
+
 describe('DesignSystemPage', () => {
     beforeEach(() => {
         mockUseSystemStatus.mockReset();
@@ -72,9 +81,8 @@ describe('DesignSystemPage', () => {
     ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        // findByRole: the calendar layer + hub samples are lazy chunks (ROK-1893 P4),
-        // each under its own <Suspense> so both imports start on the first render
-        // (a shared boundary chained them — PR #1820). 5s covers a loaded CI shard.
+        // findByRole: the calendar layer + hub samples are lazy (preloaded above); the
+        // lazy wrapper still resolves a tick after the first render.
         expect(
             await screen.findByRole('heading', { name: heading, level: 2 }, { timeout: 5000 }),
         ).toBeInTheDocument();
