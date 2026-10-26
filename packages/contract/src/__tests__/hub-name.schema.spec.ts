@@ -57,6 +57,7 @@ describe('HubNameSchema — joiners between letters or emoji (ROK-2016)', () => 
     ['VS16 emoji joined by ZWJ', 'Pride \u{1F3F3}\uFE0F\u200D\u{1F308}'],
     ['Persian name with ZWNJ', '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645'],
     ['ZWJ between two Latin letters', 'Iron\u200DWolves'],
+    ['a VS16 emoji with no joiner', 'Love \u2764\uFE0F Club'],
   ];
   it.each(ACCEPTED)('accepts %s', (_label, name) => {
     expect(HubNameSchema.safeParse(name).success).toBe(true);
@@ -77,6 +78,12 @@ describe('HubNameSchema — joiners between letters or emoji (ROK-2016)', () => 
     ['U+200B between letters', 'Iron\u200BWolves'],
     ['U+2060 between letters', 'Iron\u2060Wolves'],
     ['a lone ZWNJ in the middle of a run of spaces', 'Iron \u200C Wolves'],
+    ['U+034F CGJ between letters', 'Iron\u034FWolves'],
+    ['a ZWJ whose left neighbour is U+034F CGJ', 'a\u034F\u200Db'],
+    ['VS1 U+FE00 between letters', 'Iron\uFE00Wolves'],
+    ['a ZWJ whose left neighbour is VS1', 'ab\uFE00\u200Dcd'],
+    ['VS15 U+FE0E between letters', 'Iron\uFE0EWolves'],
+    ['U+115F filler (an ignorable letter) as a joiner neighbour', 'ab\u200D\u115Fcd'],
   ];
   it.each(REFUSED)('refuses %s with the invisible-character message', (_label, name) => {
     const r = HubNameSchema.safeParse(name);

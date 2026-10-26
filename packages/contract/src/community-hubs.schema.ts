@@ -24,21 +24,38 @@ const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * ROK-1950 review (spoofing): invisible format characters (`\p{Cf}` — zero-width
  * U+200B–200D, U+2060, U+FEFF, bidi controls U+202A–202E / U+2066–2069, soft
  * hyphen) plus the blank fillers Unicode files as letters or symbols (Hangul
- * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800).
+ * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800). ROK-2016 review: also
+ * every `\p{Default_Ignorable_Code_Point}` (U+034F CGJ, VS1–VS15 U+FE00–FE0E,
+ * …) except VS16 U+FE0F, which emoji need; those marks pass `\p{M}` otherwise.
  */
-const INVISIBLE_CHARS = /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/u;
+const INVISIBLE_CHARS =
+  /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]|(?!\uFE0F)\p{Default_Ignorable_Code_Point}/u;
+
+/**
+ * A visible letter or mark: an ignorable mark (CGJ, a variation selector, a
+ * Hangul filler) is not a letter a joiner may sit next to. The lookahead runs
+ * before the class in both directions, so it also holds inside a lookbehind.
+ */
+const VISIBLE_LETTER = String.raw`(?!\p{Default_Ignorable_Code_Point})[\p{L}\p{M}]`;
+/** An emoji, optionally carrying VS16 or a skin-tone modifier (U+1F3FB–1F3FF). */
+const EMOJI_LEFT = String.raw`\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?`;
 
 /**
  * ROK-2016 (operator ruling 2026-10-26): a U+200C ZWNJ / U+200D ZWJ that sits
- * BETWEEN two letters, marks or emoji (Persian/Indic script, 👨‍👩‍👧, 👩🏽‍💻) is
- * real text, not a spoof. The emoji side may carry a skin-tone modifier
- * (U+1F3FB–1F3FF) before the joiner; VS16 (U+FE0F) is a mark (`\p{M}`).
- * Leading, trailing, doubled or space/digit-adjacent joiners do not match.
+ * BETWEEN two visible letters, marks or emoji (Persian/Indic script, 👨‍👩‍👧,
+ * 👩🏽‍💻, 🏳️‍🌈) is real text, not a spoof. Leading, trailing, doubled, space-,
+ * digit- or ignorable-adjacent joiners do not match.
  */
-const JOINER_BETWEEN_LETTERS =
-  /(?<=[\p{L}\p{M}]|\p{Extended_Pictographic}[\u{1F3FB}-\u{1F3FF}]?)[\u200C\u200D](?=[\p{L}\p{M}\p{Extended_Pictographic}])/gu;
+const JOINER_BETWEEN_LETTERS = new RegExp(
+  String.raw`(?<=${VISIBLE_LETTER}|${EMOJI_LEFT})[\u200C\u200D]` +
+    String.raw`(?=${VISIBLE_LETTER}|\p{Extended_Pictographic})`,
+  'gu',
+);
 
-/** True when the name holds an invisible character other than an allowed in-word joiner. */
+/**
+ * True when the name holds an invisible character other than an allowed
+ * in-word joiner.
+ */
 function hasInvisibleChars(name: string): boolean {
   return INVISIBLE_CHARS.test(name.replace(JOINER_BETWEEN_LETTERS, ''));
 }
@@ -47,7 +64,8 @@ function hasInvisibleChars(name: string): boolean {
  * The INPUT rule for a hub name (create, approve, admin create, rename):
  * trimmed, NFC-normalised (so the length and clash checks see one form),
  * 3–64 chars, no control or invisible characters (ZWJ/ZWNJ only between
- * letters or emoji — ROK-2016), at least one letter or digit. Read/response schemas keep `z.string()` so stored names still parse.
+ * letters or emoji — ROK-2016), at least one letter or digit.
+ * Read/response schemas keep `z.string()` so stored names still parse.
  */
 export const HubNameSchema = z
   .string()
