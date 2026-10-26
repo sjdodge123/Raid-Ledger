@@ -27,6 +27,32 @@ describe('companion-link-code-capture', () => {
         expect(mod.takeCapturedLinkCode()).toBe('BCDFGHJK');
     });
 
+    it('accepts a trailing slash on /link/', async () => {
+        const mod = await loadAt('/link/#code=BCDF-GHJK');
+        expect(window.location.href).not.toContain('BCDF');
+        expect(mod.takeCapturedLinkCode()).toBe('BCDF-GHJK');
+    });
+
+    it('peek does not consume the captured code', async () => {
+        const mod = await loadAt('/link#code=BCDF-GHJK');
+        expect(mod.peekCapturedLinkCode()).toBe('BCDF-GHJK');
+        expect(mod.takeCapturedLinkCode()).toBe('BCDF-GHJK');
+        expect(mod.peekCapturedLinkCode()).toBeNull();
+    });
+
+    it('withCapturedLinkCode puts the code back in the /link fragment only', async () => {
+        const mod = await loadAt('/link?x=1#code=BCDF-GHJK');
+        expect(mod.withCapturedLinkCode('/link?x=1')).toBe('/link?x=1#code=BCDF-GHJK');
+        expect(mod.withCapturedLinkCode('/link/')).toBe('/link/#code=BCDF-GHJK');
+        expect(mod.withCapturedLinkCode('/events')).toBe('/events');
+        expect(mod.peekCapturedLinkCode()).toBe('BCDF-GHJK');
+    });
+
+    it('withCapturedLinkCode leaves /link alone when nothing was captured', async () => {
+        const mod = await loadAt('/link');
+        expect(mod.withCapturedLinkCode('/link')).toBe('/link');
+    });
+
     it('leaves other pages alone', async () => {
         const mod = await loadAt('/auth/callback?code=oauth123');
         expect(window.location.search).toBe('?code=oauth123');

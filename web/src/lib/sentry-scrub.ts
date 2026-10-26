@@ -28,6 +28,9 @@ export const SECRET_VALUE = String.raw`[^&#\s"'(){},]+`;
  * companion device-link user code, `/link#code=…` (or a legacy `?code=`).
  * That code approves a device for the signed-in user, so it is a secret in
  * every URL Sentry sees: events, breadcrumbs and Replay recording events.
+ * Redacting `code=` on EVERY URL (not only `/link`) is deliberate: it also
+ * covers OAuth `?code=` callbacks, and a false positive costs only a
+ * `[Filtered]` in a breadcrumb.
  */
 const TOKEN_PARAM = new RegExp(String.raw`([#?&](?:token|code)=)` + SECRET_VALUE, 'g');
 

@@ -9,6 +9,7 @@ import type { CompanionLinkPreview } from '@raid-ledger/contract';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render-helpers';
 import { CompanionLinkPage } from './companion-link-page';
+import { consumeAuthRedirect, saveAuthRedirect } from '../lib/auth-redirect';
 
 const capture = vi.hoisted(() => ({ take: vi.fn((): string | null => null) }));
 vi.mock('../lib/companion-link-code-capture', () => ({ takeCapturedLinkCode: capture.take }));
@@ -248,5 +249,18 @@ describe('CompanionLinkPage — restart after a dead code (ROK-1955 review)', ()
         await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
         await screen.findByText(/You have 10 linked devices/);
         expect(screen.queryByRole('button', { name: 'Enter a new code' })).not.toBeInTheDocument();
+    });
+});
+
+describe('CompanionLinkPage — after sign-in (ROK-1955 review)', () => {
+    it('review fix: the post-sign-in return path AuthGuard saved (/link#code=…) prefills the review', async () => {
+        const rec = mockApi();
+        saveAuthRedirect('/link#code=BCDF-GHJK');
+        const back = consumeAuthRedirect();
+        expect(back).toBe('/link#code=BCDF-GHJK');
+        renderAt(back ?? '/link');
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(rec.previews).toEqual([{ userCode: 'BCDFGHJK' }]);
+        expect(rec.decisions).toHaveLength(0);
     });
 });
