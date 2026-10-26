@@ -212,4 +212,28 @@ describe('hubNameKey — one key per visual name (ROK-1950 review)', () => {
     expect(hubNameKey(' Cafe\u0301 Club ')).toBe(hubNameKey('Caf\u00e9 club'));
     expect(hubNameKey('Cafe\u0301 Club')).toBe('caf\u00e9 club');
   });
+
+  it('strips ZWJ/ZWNJ so a name differing only by a joiner clashes (ROK-2016)', () => {
+    expect(hubNameKey('Iron\u200DWolves')).toBe(hubNameKey('IronWolves'));
+    expect(hubNameKey('\u0645\u06cc\u200c\u062e')).toBe('\u0645\u06cc\u062e');
+    expect(hubNameKey('Fam \u{1F468}\u200D\u{1F469}')).toBe(
+      'fam \u{1F468}\u{1F469}',
+    );
+  });
+
+  it('strips joiners BEFORE NFC so a joiner between e and U+0301 still composes (ROK-2016 review)', () => {
+    expect(hubNameKey('Cafe\u200D\u0301 Club')).toBe('caf\u00e9 club');
+    expect(hubNameKey('Cafe\u200D\u0301 Club')).toBe(
+      hubNameKey('Caf\u00e9 Club'),
+    );
+  });
+
+  it('strips VS16 so an emoji name with and without U+FE0F clashes (ROK-2016 review)', () => {
+    expect(hubNameKey('\u2764\uFE0F Club')).toBe(hubNameKey('\u2764 Club'));
+    expect(hubNameKey('\u2764\uFE0F Club')).toBe('\u2764 club');
+  });
+
+  it('trims after stripping so a joiner-padded name keys like the bare one', () => {
+    expect(hubNameKey('\u200D Iron Wolves')).toBe('iron wolves');
+  });
 });
