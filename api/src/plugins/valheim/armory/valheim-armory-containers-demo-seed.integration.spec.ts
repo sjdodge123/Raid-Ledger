@@ -106,7 +106,7 @@ describe('containers demo fixture copy', () => {
 describe('POST /admin/test/valheim/armory/seed-containers (ROK-1853 L5)', () => {
   it('seeds the hub, both fixtures and a per-viewer personal section', async () => {
     const f = await seed();
-    expect(f.guildPageUrl).toBe(`/guilds/${f.hubId}#materials`);
+    expect(f.guildPageUrl).toBe(`/hubs/${f.hubId}#materials`);
     expect(f.adminUserId).toBe(testApp.seed.adminUser.id);
     expect(new Set([f.memberUserId, f.ownerUserId, f.adminUserId]).size).toBe(
       3,

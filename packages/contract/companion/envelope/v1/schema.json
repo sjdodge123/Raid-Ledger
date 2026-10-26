@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "envelopeVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "contract": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,39}$"
+    },
+    "contractVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 999
+    },
+    "capturedAt": {
+      "type": "string",
+      "maxLength": 24,
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "collectorVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "payload": {}
+  },
+  "required": [
+    "envelopeVersion",
+    "contract",
+    "contractVersion",
+    "capturedAt",
+    "appVersion",
+    "collectorVersion",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raid.gamernight.net/contracts/companion/envelope/v1/schema.json",
+  "title": "RL Companion envelope v1",
+  "description": "GENERATED from CompanionEnvelopeSchema (packages/contract/src/companion-envelope.schema.ts) — do not edit by hand. `payload` is opaque here: the server picks the contract message schema from `contract` + `contractVersion` and parses the whole body with it. The server alone rejects a `capturedAt` more than 5 minutes in the future; see CONTRACT.md."
+}

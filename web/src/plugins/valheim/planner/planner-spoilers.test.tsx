@@ -16,6 +16,7 @@ import {
     valheimRecipePlanHandler,
     valheimRecipeStockHandler,
 } from '../../../test/mocks/valheim-recipes-handlers';
+import { valheimMaterialsKeys } from '../hooks/use-valheim-materials';
 import { PLANNER_NO_SET_COPY } from './planner.helpers';
 import { plannerStorageKey } from './planner-storage';
 import {
@@ -88,6 +89,21 @@ describe('protected with nothing visible', () => {
         await waitFor(() => expect(screen.queryByText('Loading recipes…')).toBeNull());
         expect(screen.queryByText(PLANNER_NO_SET_COPY)).toBeNull();
         expect(screen.queryByText(SPOILERS_EMPTY_COPY)).not.toBeNull();
+    });
+
+    it('does not mount the materials query (nothing it shows needs it)', async () => {
+        localStorage.setItem(KEY, JSON.stringify([target('SwordIron')]));
+        const materialsHits: string[] = [];
+        server.use(
+            valheimRecipeCatalogHandler(recipeCatalogProtectedFixture({ entries: [], stations: [], ingredients: {} })),
+            valheimMaterialsHandler(materialsFixture(), materialsHits),
+        );
+        const { queryClient } = renderTab();
+        expect(await screen.findByText(SPOILERS_EMPTY_COPY)).not.toBeNull();
+        await screen.findByRole('list', { name: 'Planned items' });
+        // A mounted useQuery registers its key in the cache on render, so this is deterministic.
+        expect(queryClient.getQueryCache().findAll({ queryKey: valheimMaterialsKeys.all }), 'materials query mounted').toEqual([]);
+        expect(materialsHits, 'materials requests').toEqual([]);
     });
 });
 

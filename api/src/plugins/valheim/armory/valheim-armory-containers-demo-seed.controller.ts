@@ -1,3 +1,4 @@
+import { hubPath } from '../../../guilds/hub-path';
 import {
   BadRequestException,
   Body,
@@ -122,7 +123,7 @@ export class ValheimArmoryContainersDemoSeedController {
     return {
       serverId,
       hubId,
-      guildPageUrl: `/guilds/${hubId}#materials`,
+      guildPageUrl: `${hubPath(hubId)}#materials`,
       memberUserId: await upsertContainersFixtureUser(
         this.db,
         'member',

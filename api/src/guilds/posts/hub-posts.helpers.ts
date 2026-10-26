@@ -2,6 +2,7 @@
  * ROK-1868 L2 — pure hub-post helpers: the opaque keyset cursor, the post
  * deep link and the row → `HubPost` mapping. No DB, no Nest services.
  */
+import { hubPath } from '../hub-path';
 import { BadRequestException } from '@nestjs/common';
 import type {
   HubPost,
@@ -77,14 +78,14 @@ export function decodeCursor(cursor: string): HubPostCursor {
   return { createdAt: iso, id };
 }
 
-/** `${clientUrl}/guilds/<id>?post=<postId>#posts` — the Posts-tab deep link. */
+/** `${clientUrl}/hubs/<id>?post=<postId>#posts` — the Posts-tab deep link. */
 export function postDeepLink(
   clientUrl: string,
   guildId: number,
   postId: number,
 ): string {
   const base = clientUrl.replace(/\/+$/, '');
-  return `${base}/guilds/${guildId}?post=${postId}#posts`;
+  return `${base}${hubPath(guildId)}?post=${postId}#posts`;
 }
 
 /** Custom upload, else an absolute avatar, else the Discord CDN url. */

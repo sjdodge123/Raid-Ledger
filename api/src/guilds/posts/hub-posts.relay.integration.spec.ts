@@ -112,7 +112,7 @@ describe('P9 — relay sent', () => {
     const withoutLinks = description.replace(/\[[^\]]*\]\([^)]*\)/g, '');
     expect(withoutLinks).not.toMatch(/\[|\]\(/);
     expect(buttonUrls).toEqual([
-      `${CLIENT_URL}/guilds/${g}?post=${row?.id}#posts`,
+      `${CLIENT_URL}/hubs/${g}?post=${row?.id}#posts`,
     ]);
     expect((await profileRow(ctx, g))?.postRelayDefault).toBe(true);
   });
@@ -219,7 +219,7 @@ describe('P16 — cooldown vs relay', () => {
     const [notice] = await leaderRows(ctx, ctx.userIds.plain, g);
     const firstId = (first.body.post as { id: number }).id;
     expect(notice?.payload).toMatchObject({
-      url: `/guilds/${g}?post=${firstId}#posts`,
+      url: `/hubs/${g}?post=${firstId}#posts`,
     });
     expect(discord.sendEmbed).toHaveBeenCalledTimes(2);
   });

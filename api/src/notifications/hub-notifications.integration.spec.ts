@@ -273,7 +273,7 @@ describe('AC1 — leader post', () => {
       payload: {
         guildId: g.id,
         guildName: g.name,
-        url: `/guilds/${g.id}?post=${postId}#posts`,
+        url: `/hubs/${g.id}?post=${postId}#posts`,
         postId,
       },
     });

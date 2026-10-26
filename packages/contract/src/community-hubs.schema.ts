@@ -20,14 +20,28 @@ export const HUB_REJECT_REASON_MAX = 500;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+/**
+ * ROK-1950 review (spoofing): invisible format characters (`\p{Cf}` — zero-width
+ * U+200B–200D, U+2060, U+FEFF, bidi controls U+202A–202E / U+2066–2069, soft
+ * hyphen) plus the blank fillers Unicode files as letters or symbols (Hangul
+ * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800).
+ */
+const INVISIBLE_CHARS = /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/u;
 
-/** 3–64 chars, no control characters, at least one letter or digit. */
+/**
+ * The INPUT rule for a hub name (create, approve, admin create, rename):
+ * trimmed, NFC-normalised (so the length and clash checks see one form),
+ * 3–64 chars, no control or invisible characters, at least one letter or
+ * digit. Read/response schemas keep `z.string()` so stored names still parse.
+ */
 export const HubNameSchema = z
   .string()
   .trim()
+  .normalize('NFC')
   .min(HUB_NAME_MIN)
   .max(HUB_NAME_MAX)
   .refine((v) => !CONTROL_CHARS.test(v), { message: 'Hub name cannot contain control characters' })
+  .refine((v) => !INVISIBLE_CHARS.test(v), { message: 'Hub name cannot contain invisible characters' })
   .refine((v) => HAS_LETTER_OR_DIGIT.test(v), { message: 'Hub name needs at least one letter or digit' });
 
 const BlurbSchema = z.string().trim().min(1).max(HUB_BLURB_MAX);
@@ -77,7 +91,7 @@ export const AdminCreateHubSchema = z
   .strict();
 export type AdminCreateHubDto = z.infer<typeof AdminCreateHubSchema>;
 
-/** `PATCH /hubs/:id` — leader/officer edits the blurb (name changes stay admin-only via approve/create). */
+/** `PATCH /hubs/:id` — leader/officer edits the blurb (renames go through `PATCH /guilds/:id/name`, ROK-1950). */
 export const HubBlurbUpdateSchema = z.object({ blurb: BlurbSchema.nullable() }).strict();
 export type HubBlurbUpdateDto = z.infer<typeof HubBlurbUpdateSchema>;
 

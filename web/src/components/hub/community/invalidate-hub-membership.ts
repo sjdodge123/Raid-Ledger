@@ -18,6 +18,21 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
     ]);
 }
 
+/**
+ * ROK-1950 (D9) — a rename changes the hub's name everywhere it shows: the
+ * membership surfaces above, Admin → Hubs, and the calendar / event hub chips
+ * (event lists join `guilds.name` at read time, all under `['events', …]`).
+ * `'admin-hubs'` is `ADMIN_HUBS_KEY` (`pages/admin/use-admin-hubs.ts`), inlined
+ * because that module imports this one.
+ */
+export async function invalidateHubName(qc: QueryClient, hubId: number): Promise<void> {
+    await Promise.all([
+        invalidateHubMembership(qc, hubId),
+        qc.invalidateQueries({ queryKey: ['admin-hubs'] }),
+        qc.invalidateQueries({ queryKey: ['events'] }),
+    ]);
+}
+
 /** Every hub page AND `/guilds/mine` live under this prefix (see `guildPageKey`). */
 const HUB_PAGES_PREFIX = ['plugins', 'wow', 'guilds'] as const;
 

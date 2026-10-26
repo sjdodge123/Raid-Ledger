@@ -41,6 +41,8 @@ export interface HubCopy {
     discordFallback: string;
     /** The Resources tab's rules card title (a community hub has no guild or loot rules). */
     rulesTitle: string;
+    /** The hub page's 403 notice for a viewer who is not a member. */
+    notMember: string;
 }
 
 /** ROK-1891 — the schedule card on hubs that are not WoW guilds (operator ruling). */
@@ -77,6 +79,7 @@ const WOW_COPY: HubCopy = {
     eventsBlurb: 'Raids and runs scheduled for this guild.',
     discordFallback: 'the community Discord',
     rulesTitle: 'Guild rules & loot rules',
+    notMember: "You're not a member of this guild. Link a character in the guild to see its page.",
 };
 
 const SERVER_COPY: HubCopy = {
@@ -102,6 +105,7 @@ const SERVER_COPY: HubCopy = {
     eventsBlurb: 'Sessions and events scheduled for this server.',
     discordFallback: "the server's Discord",
     rulesTitle: 'Server rules',
+    notMember: "You're not a member of this server.",
 };
 
 /** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
@@ -128,6 +132,7 @@ const COMMUNITY_COPY: HubCopy = {
     eventsBlurb: 'Sessions and events scheduled for this hub.',
     discordFallback: 'the community Discord',
     rulesTitle: 'Hub rules',
+    notMember: "You're not a member of this hub.",
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {
@@ -150,4 +155,14 @@ export function hubSectionsLabel(kind: GuildKind | undefined): string {
 /** The Discord picker's private-channel acknowledgement, naming the hub kind ("this guild/server/hub page"). */
 export function privateAckLabel(kind: GuildKind | undefined): string {
     return `Every member who can open this ${hubCopy(kind).noun} page will see this channel’s messages.`;
+}
+
+/** The hub page's load-failure notice, naming the hub kind ("this guild/server/hub"). */
+export function loadFailedLabel(kind: GuildKind | undefined): string {
+    return `We couldn't load this ${hubCopy(kind).noun}. Try again in a moment.`;
+}
+
+/** The Discord mirror's Private tag tooltip, naming the hub kind ("this guild/server/hub page"). */
+export function privateTagTitle(kind: GuildKind | undefined): string {
+    return `Private Discord channel — everyone who can open this ${hubCopy(kind).noun} page sees it here`;
 }

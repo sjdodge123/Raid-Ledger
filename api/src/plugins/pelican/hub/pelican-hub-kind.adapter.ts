@@ -23,6 +23,7 @@ import {
   serverHubMemberUserIds,
 } from './server-hub-membership.queries';
 import { ServerHubMembershipService } from './server-hub-membership.service';
+import { loadServerHubSourceName } from './server-hub-name.queries';
 import { buildServerHubPage } from './server-hub-page.helpers';
 import {
   claimedOnlineSteamIds,
@@ -73,6 +74,11 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
   /** No `guild_members` rows, so member-id editor grants are never offered. */
   isLiveMember(): Promise<boolean> {
     return Promise.resolve(false);
+  }
+
+  /** ROK-1950 D5: the linked Pelican server's name; null once unlinked. */
+  sourceName(guildId: number): Promise<string | null> {
+    return loadServerHubSourceName(this.db, guildId);
   }
 
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {

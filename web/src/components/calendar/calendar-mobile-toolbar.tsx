@@ -1,6 +1,11 @@
 import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
 
-export type CalendarViewMode = 'schedule' | 'month' | 'day';
+/**
+ * The page-level calendar view. `week` is desktop-only (the toolbar's Week
+ * button / a `?view=week` deep link); the phone segmented control offers the
+ * other three.
+ */
+export type CalendarViewMode = 'schedule' | 'month' | 'week' | 'day';
 
 interface CalendarMobileToolbarProps {
     activeView: CalendarViewMode;

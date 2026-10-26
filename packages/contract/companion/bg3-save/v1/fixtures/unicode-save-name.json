@@ -1,0 +1,50 @@
+{
+  "envelopeVersion": 1,
+  "contract": "bg3-save",
+  "contractVersion": 1,
+  "capturedAt": "2026-10-23T21:00:01Z",
+  "appVersion": "0.1.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "saveName": "Sauvegarde rapide — 第二章 🐉",
+    "savedAt": "2026-10-23T21:00:00Z",
+    "campaignKey": "0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a6978",
+    "campaignKeySource": "save-folder",
+    "gameVersion": "4.1.1.7631656",
+    "platform": "Steam",
+    "currentLevel": "WLD_Main_A",
+    "difficulty": "DifficultyHard",
+    "ruleset": null,
+    "party": [
+      {
+        "origin": "Generic",
+        "race": "Dwarf_Gold",
+        "level": 3,
+        "xpLevel": 300,
+        "xpTotal": 2950,
+        "classes": [
+          {
+            "main": "Fighter",
+            "sub": null
+          }
+        ],
+        "isSummon": false
+      },
+      {
+        "origin": "Generic",
+        "race": "HalfElf_High",
+        "level": 3,
+        "xpLevel": 300,
+        "xpTotal": 2950,
+        "classes": [
+          {
+            "main": "Warlock",
+            "sub": "Fiend"
+          }
+        ],
+        "isSummon": false
+      }
+    ],
+    "thumbnail": null
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "Active Party": {
+    "Characters": [
+      {
+        "Classes": [
+          {
+            "Main": "Fighter"
+          }
+        ],
+        "Experience Points (Current level)": 300,
+        "Experience Points (Total)": 2950,
+        "Level": 3,
+        "Origin": "Generic",
+        "Position": [
+          0,
+          0,
+          0
+        ],
+        "Race": "Dwarf_Gold",
+        "Subregion": ""
+      },
+      {
+        "Classes": [
+          {
+            "Main": "Warlock",
+            "Sub": "Fiend"
+          }
+        ],
+        "Experience Points (Current level)": 300,
+        "Experience Points (Total)": 2950,
+        "Level": 3,
+        "Origin": "Generic",
+        "Position": [
+          0,
+          0,
+          0
+        ],
+        "Race": "HalfElf_High",
+        "Subregion": ""
+      }
+    ]
+  },
+  "Current Level": "WLD_Main_A",
+  "Difficulty": [
+    "DifficultyHard"
+  ],
+  "Game Version": "4.1.1.7631656",
+  "Platform": "Steam",
+  "Save Name": "Sauvegarde rapide — 第二章 🐉"
+}
