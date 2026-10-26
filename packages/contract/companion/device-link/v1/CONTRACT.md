@@ -70,6 +70,7 @@ Request `$defs/start-request`: `{ device: { name, os, osVersion?, appVersion } }
 Errors: `400 { message: 'Validation failed', errors: string[] }` for a bad
 body; `429 { code: 'rate_limited', message }` + `Retry-After` (10 starts/min per
 IP); `409 { code: 'too_many_pending', message }` (5 waiting links per network).
+These numbers are defaults (env-configurable), not part of the format.
 
 ### 3.2 `POST /companion/v1/devices/link/poll` — poll (public)
 
@@ -97,7 +98,7 @@ The poll can also answer outside that shape: `409 { code: 'device_limit',
 message }` when the approver already has **10** live devices (stop, tell the
 user to remove one from their Devices list), and `429 { code: 'rate_limited',
 message }` + `Retry-After` after 30 failed (`invalid_grant`) polls per minute
-from one IP. Successful and pending polls do not count against that budget.
+from one IP (a default, env-configurable). Successful and pending polls do not count against that budget.
 
 ### 3.3 `GET /companion/v1/device` — token self-check (device token)
 
@@ -108,8 +109,8 @@ confirm the stored token still works and to show the device name.
 Every refusal is the same `401 { code: 'unauthorized', message }`: missing or
 malformed header, a non-`rlcd_` token, an unknown or revoked token, or an
 owner who is deactivated, banned or in a kick cooldown. There is no way to tell
-them apart. 30 failed auths per minute per IP → `429 { code: 'rate_limited' }`
-+ `Retry-After`.
+them apart. 30 failed auths per minute per IP (a default, env-configurable) →
+`429 { code: 'rate_limited', message }` + `Retry-After`.
 
 ## 4. Timing rules
 

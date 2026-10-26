@@ -86,5 +86,7 @@ fixture and fails CI when a `schema.json` drifts from its Zod source.
    a `CHANGELOG.md` entry, and its PR body says **additive** or **breaking**.
 2. The Companion app and `rl-collectors` request a change through a Raid
    Ledger story; they never change a format on their own.
-3. A new contract gets its own `companion/<id>/v1/` folder, a registry entry in
-   `src/companion-registry.ts` and a row in the index above.
+3. A new contract gets its own `companion/<id>/v1/` folder and a row in the
+   index above. A **collector** contract also gets a registry entry in
+   `src/companion-registry.ts`; device-link has none, by ruling (it is an API
+   contract, not a collector payload).
