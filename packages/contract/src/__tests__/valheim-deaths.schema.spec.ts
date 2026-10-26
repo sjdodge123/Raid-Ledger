@@ -35,6 +35,26 @@ describe("ValheimDeathPlayerSchema", () => {
     });
 });
 
+describe("ValheimDeathPlayerSchema pictures (ROK-1941 D13)", () => {
+    const pic = (mediaId: number) => ({
+        mediaId,
+        thumbPath: `/hubs/1/media/${mediaId}/thumb`,
+        capturedAt: "2026-10-20T18:00:00.000Z",
+    });
+    it("parses up to 3 pictures with a pictureCount", () => {
+        const withPics = { ...player, pictures: [pic(1), pic(2), pic(3)], pictureCount: 5 };
+        expect(ValheimDeathPlayerSchema.parse(withPics)).toEqual(withPics);
+    });
+    it("rejects 4 pictures, a negative count, a bad mediaId and extra picture keys", () => {
+        const bad = (o: object) => ValheimDeathPlayerSchema.safeParse({ ...player, ...o }).success;
+        expect(bad({ pictures: [pic(1), pic(2), pic(3), pic(4)] })).toBe(false);
+        expect(bad({ pictureCount: -1 })).toBe(false);
+        expect(bad({ pictures: [pic(0)] })).toBe(false);
+        expect(bad({ pictures: [{ ...pic(1), fullPath: "/x" }] })).toBe(false);
+        expect(bad({ pictures: [{ ...pic(1), capturedAt: "yesterday" }] })).toBe(false);
+    });
+});
+
 describe("ValheimDeathsResponseSchema", () => {
     it("parses a list with since, and an empty list with since null", () => {
         const r = { players: [player], since: "2026-10-01T00:00:00.000Z" };

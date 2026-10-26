@@ -250,6 +250,7 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildEditors,
   // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
   // are SET NULL audit columns; the guild's content outlives its editor.
+  // ROK-1941: `media_channel_set_by` is the same kind of SET NULL audit.
   schema.guildProfiles,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).

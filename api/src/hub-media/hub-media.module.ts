@@ -8,6 +8,7 @@ import {
 import { HubMediaBytesController } from './hub-media-bytes.controller';
 import { HubMediaDemoSeedController } from './hub-media-demo-seed.controller';
 import { HubMediaController } from './hub-media.controller';
+import { HubMediaPostClassifierRegistry } from './hub-media-classifier.registry';
 import { HubMediaDecoratorRegistry } from './hub-media.decorators';
 import { HubMediaReadService } from './hub-media-read.service';
 import { HubMediaService } from './hub-media.service';
@@ -30,8 +31,13 @@ import { HubMediaService } from './hub-media.service';
     HubMediaService,
     HubMediaReadService,
     HubMediaDecoratorRegistry,
+    HubMediaPostClassifierRegistry,
     { provide: HUB_MEDIA_DOWNLOADER, useValue: fetchHubMediaDownloader },
   ],
-  exports: [HubMediaService, HubMediaDecoratorRegistry],
+  exports: [
+    HubMediaService,
+    HubMediaDecoratorRegistry,
+    HubMediaPostClassifierRegistry,
+  ],
 })
 export class HubMediaModule {}

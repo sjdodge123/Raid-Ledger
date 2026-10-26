@@ -49,6 +49,7 @@ import { ValheimDeathsService } from './armory/read/valheim-deaths.service';
 import { ValheimServerPortalsController } from './armory/read/valheim-server-portals.controller';
 import { ValheimServerPortalsService } from './armory/read/valheim-server-portals.service';
 import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
+import { ValheimDeathsPicturesRepository } from './armory/read/valheim-deaths-pictures.repository';
 import { ValheimServerPinsController } from './armory/read/valheim-server-pins.controller';
 import { ValheimServerPinsService } from './armory/read/valheim-server-pins.service';
 import { ValheimServerPinsRepository } from './armory/read/valheim-server-pins.repository';
@@ -58,6 +59,7 @@ import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read
 import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { ValheimDeathsModule } from './armory/valheim-deaths.module';
+import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.module';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -79,6 +81,8 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     CronJobModule,
     // ROK-1930: the death sink the Pelican presence supervisor injects.
     ValheimDeathsModule,
+    // ROK-1941: the screenshot mod's classifier on the hub media port.
+    ValheimScreenshotsModule,
     // ROK-1930 L2: GuildAccessService for the Deaths widget's D6 check.
     GuildsCoreModule,
     forwardRef(() => DiscordBotModule),
@@ -134,6 +138,8 @@ import { ValheimDeathsModule } from './armory/valheim-deaths.module';
     ValheimDeathsService,
     ValheimServerPortalsService,
     ValheimDeathPinsRepository,
+    // ROK-1941 D13 death pictures on the Deaths bars.
+    ValheimDeathsPicturesRepository,
     // ROK-1943 Map tab cross-player pin layer.
     ValheimServerPinsService,
     ValheimServerPinsRepository,
