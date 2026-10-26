@@ -51,12 +51,9 @@ export function reserveOrThrow(
   for (const spec of specs) {
     const { limit } = spec;
     if (limit === null) continue;
-    if (!limiter.reserve(spec.key, limit, spec.windowMs)) {
+    if (!limiter.reserve(spec.key, limit)) {
       settle(false);
-      res.setHeader(
-        'Retry-After',
-        String(limiter.retryAfter(spec.key, spec.windowMs)),
-      );
+      res.setHeader('Retry-After', String(limiter.retryAfter(spec.key)));
       throw rateLimited(message);
     }
     held.push({ ...spec, limit });
