@@ -23,9 +23,16 @@ export interface NewCommunityHub {
   reviewedBy: number | null;
 }
 
-/** D11 key: case-insensitive, trimmed, NFC (ROK-1950 review: one key per visual name). */
+/** U+200C ZWNJ / U+200D ZWJ — allowed inside hub names since ROK-2016. */
+const JOINERS = /[\u200C\u200D]/g;
+
+/**
+ * D11 key: case-insensitive, trimmed, NFC, joiners stripped (ROK-1950 review /
+ * ROK-2016: one key per visual name, so a name differing only by a ZWJ/ZWNJ
+ * is "name taken").
+ */
 export function hubNameKey(name: string): string {
-  return name.trim().normalize('NFC').toLowerCase();
+  return name.trim().normalize('NFC').replace(JOINERS, '').toLowerCase();
 }
 
 /** The game's name, or null when the game does not exist. */

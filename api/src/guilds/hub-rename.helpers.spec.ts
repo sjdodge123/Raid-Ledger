@@ -168,4 +168,12 @@ describe('hubNameKey — one key per visual name (ROK-1950 review)', () => {
     expect(hubNameKey(' Cafe\u0301 Club ')).toBe(hubNameKey('Caf\u00e9 club'));
     expect(hubNameKey('Cafe\u0301 Club')).toBe('caf\u00e9 club');
   });
+
+  it('strips ZWJ/ZWNJ so a name differing only by a joiner clashes (ROK-2016)', () => {
+    expect(hubNameKey('Iron\u200DWolves')).toBe(hubNameKey('IronWolves'));
+    expect(hubNameKey('\u0645\u06cc\u200c\u062e')).toBe('\u0645\u06cc\u062e');
+    expect(hubNameKey('Fam \u{1F468}\u200D\u{1F469}')).toBe(
+      'fam \u{1F468}\u{1F469}',
+    );
+  });
 });
