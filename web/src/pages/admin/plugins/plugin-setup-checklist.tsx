@@ -49,6 +49,13 @@ export function PluginSetupChecklist({ plugin }: { plugin: PluginInfoDto }): JSX
     );
 }
 
+/**
+ * The row's chip group. Below `sm` it takes a full line under the title, indented
+ * past the ▸ (approved mockup, phone 343px) — beside the title it squeezed a
+ * long title to one word per line and an optional row's title to ~5px.
+ */
+const ROW_CHIPS = 'flex w-full flex-wrap justify-start gap-1.5 pl-5 sm:w-auto sm:justify-end sm:pl-0';
+
 /** One requirement: title, live detail, Optional / hub-kind / state chips; expands to its steps. */
 function PluginSetupRow({ req, status }: { req: PluginSetupRequirement; status: PluginSetupStatus | undefined }): JSX.Element {
     const chip = setupRowState(req, status);
@@ -56,13 +63,13 @@ function PluginSetupRow({ req, status }: { req: PluginSetupRequirement; status: 
     return (
         <li data-testid={`setup-row-${req.id}`} className="border-t border-edge-subtle">
             <details open={open || undefined} className="group/row">
-                <summary className="flex min-h-[44px] cursor-pointer list-none items-start gap-2 py-2 select-none">
+                <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-start gap-2 py-2 select-none">
                     <span aria-hidden="true" className="mt-0.5 text-dim transition-transform group-open/row:rotate-90">▸</span>
-                    <span className="min-w-0 flex-1">
+                    <span data-testid="setup-row-title" className="min-w-0 flex-1">
                         <span className="block text-sm font-medium text-foreground">{req.title}</span>
                         {status?.detail && <span className="block text-xs text-muted">{status.detail}</span>}
                     </span>
-                    <span className="flex flex-wrap justify-end gap-1.5">
+                    <span data-testid="setup-row-chips" className={ROW_CHIPS}>
                         {!req.required && <StatusChip tone="neutral" title="Optional — the plugin works without it">Optional</StatusChip>}
                         {(req.appliesTo ?? []).map((k) => <HubKindChip key={k} kind={k} />)}
                         <StatusChip tone={chip.tone} title={`Setup step: ${chip.label}`}>{chip.label}</StatusChip>

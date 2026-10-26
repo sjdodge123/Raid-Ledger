@@ -140,3 +140,15 @@ describe('admin plugins PluginCard — setup checklist', () => {
         expect(row.querySelector('details')).toHaveAttribute('open');
     });
 });
+
+/** ROK-1969 verify step 7 — at 375px the chips must drop below the title, not squeeze it. */
+describe('admin plugins PluginCard — setup row on a phone', () => {
+    it('lets the row wrap: the title flexes from zero and the chip group takes its own line below sm', () => {
+        renderPlugin(valheimPluginInfo(VALHEIM_TWO_LEFT));
+        const row = screen.getByTestId('setup-row-link-token');
+        const summary = row.querySelector('summary');
+        expect(summary).toHaveClass('flex-wrap');
+        expect(within(row).getByTestId('setup-row-title')).toHaveClass('min-w-0', 'flex-1');
+        expect(within(row).getByTestId('setup-row-chips')).toHaveClass('w-full', 'justify-start', 'sm:w-auto', 'sm:justify-end');
+    });
+});
