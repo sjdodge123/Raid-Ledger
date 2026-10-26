@@ -85,10 +85,16 @@ export const GuildSummarySchema = z
      */
     gameSlug: z.string().max(100).optional(),
     /**
-     * ROK-1950 — `game_server` hubs only: the hub carries a Raid Ledger name,
-     * so the Pelican sync leaves it alone. Optional so older fixtures parse.
+     * ROK-1950 / ROK-2015 — `game_server` and `wow_guild` hubs: the hub
+     * carries a Raid Ledger name, so the Pelican sync / LedgerLink import
+     * leaves it alone. Optional so older fixtures parse.
      */
     nameOverridden: z.boolean().optional(),
+    /**
+     * ROK-2015 — `wow_guild` only: the in-game name the last LedgerLink import
+     * reported (what Reset goes back to). Optional so older fixtures parse.
+     */
+    inGameName: z.string().max(64).nullable().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
