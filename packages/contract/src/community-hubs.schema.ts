@@ -24,15 +24,58 @@ const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * ROK-1950 review (spoofing): invisible format characters (`\p{Cf}` — zero-width
  * U+200B–200D, U+2060, U+FEFF, bidi controls U+202A–202E / U+2066–2069, soft
  * hyphen) plus the blank fillers Unicode files as letters or symbols (Hangul
- * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800).
+ * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800). ROK-2016 review: also
+ * every `\p{Default_Ignorable_Code_Point}` (U+034F CGJ, VS1–VS16 U+FE00–FE0F,
+ * …); those marks pass `\p{M}` otherwise. VS16 is let through only by
+ * {@link EMOJI_VS16} below.
  */
-const INVISIBLE_CHARS = /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/u;
+const INVISIBLE_CHARS =
+  /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]|\p{Default_Ignorable_Code_Point}/u;
+
+/**
+ * ROK-2016 review (spoof): a VS16 U+FE0F that emoji need — right after an
+ * emoji base, or after a keycap base (`#`, `*`, a digit) that U+20E3 follows.
+ * Removed only for the invisible test (never from the stored value); any other
+ * VS16 (after a letter, leading, doubled) stays and is refused.
+ */
+const EMOJI_VS16 = /(?<=\p{Extended_Pictographic})\uFE0F|(?<=[#*0-9])\uFE0F(?=\u20E3)/gu;
+
+/**
+ * A visible letter or mark: an ignorable mark (CGJ, a variation selector, a
+ * Hangul filler) is not a letter a joiner may sit next to. The lookahead runs
+ * before the class in both directions, so it also holds inside a lookbehind.
+ */
+const VISIBLE_LETTER = String.raw`(?!\p{Default_Ignorable_Code_Point})[\p{L}\p{M}]`;
+/** An emoji, optionally carrying VS16 or a skin-tone modifier (U+1F3FB–1F3FF). */
+const EMOJI_LEFT = String.raw`\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?`;
+
+/**
+ * ROK-2016 (operator ruling 2026-10-26): a U+200C ZWNJ / U+200D ZWJ that sits
+ * BETWEEN two visible letters, marks or emoji (Persian/Indic script, 👨‍👩‍👧,
+ * 👩🏽‍💻, 🏳️‍🌈) is real text, not a spoof. Leading, trailing, doubled, space-,
+ * digit- or ignorable-adjacent joiners do not match.
+ */
+const JOINER_BETWEEN_LETTERS = new RegExp(
+  String.raw`(?<=${VISIBLE_LETTER}|${EMOJI_LEFT})[\u200C\u200D]` +
+    String.raw`(?=${VISIBLE_LETTER}|\p{Extended_Pictographic})`,
+  'gu',
+);
+
+/**
+ * True when the name holds an invisible character other than an allowed
+ * in-word joiner.
+ */
+function hasInvisibleChars(name: string): boolean {
+  const stripped = name.replace(JOINER_BETWEEN_LETTERS, '').replace(EMOJI_VS16, '');
+  return INVISIBLE_CHARS.test(stripped);
+}
 
 /**
  * The INPUT rule for a hub name (create, approve, admin create, rename):
  * trimmed, NFC-normalised (so the length and clash checks see one form),
- * 3–64 chars, no control or invisible characters, at least one letter or
- * digit. Read/response schemas keep `z.string()` so stored names still parse.
+ * 3–64 chars, no control or invisible characters (ZWJ/ZWNJ only between
+ * letters or emoji — ROK-2016), at least one letter or digit.
+ * Read/response schemas keep `z.string()` so stored names still parse.
  */
 export const HubNameSchema = z
   .string()
@@ -41,7 +84,7 @@ export const HubNameSchema = z
   .min(HUB_NAME_MIN)
   .max(HUB_NAME_MAX)
   .refine((v) => !CONTROL_CHARS.test(v), { message: 'Hub name cannot contain control characters' })
-  .refine((v) => !INVISIBLE_CHARS.test(v), { message: 'Hub name cannot contain invisible characters' })
+  .refine((v) => !hasInvisibleChars(v), { message: 'Hub name cannot contain invisible characters' })
   .refine((v) => HAS_LETTER_OR_DIGIT.test(v), { message: 'Hub name needs at least one letter or digit' });
 
 const BlurbSchema = z.string().trim().min(1).max(HUB_BLURB_MAX);

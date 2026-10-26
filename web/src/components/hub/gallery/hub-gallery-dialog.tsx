@@ -19,7 +19,7 @@ import { HubGalleryFooter } from './hub-gallery-footer';
 import { HubGalleryGrid } from './hub-gallery-grid';
 import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
 import { HubGalleryViewer } from './hub-gallery-viewer';
-import { type HubGalleryPages, useHubGalleryPages } from './use-hub-gallery-pages';
+import { HUB_GALLERY_PAGE_SIZE, type HubGalleryPages, useHubGalleryPages } from './use-hub-gallery-pages';
 
 export interface HubGalleryDialogProps {
     request: HubGalleryOpenRequest;
@@ -58,14 +58,36 @@ function useArrowKeys(scope: RefObject<HTMLElement | null>, active: boolean, pre
     }, [scope, active, prev, next]);
 }
 
+/** ROK-1941: how far the viewer pages in looking for a requested id before it falls back to the index. */
+const HUB_GALLERY_SEEK_MAX_PAGES = 10;
+
+/**
+ * ROK-1941: a requested id that is not loaded yet (a Deaths thumb whose picture
+ * sits past the first page) pages in — once per loaded length — until it is
+ * found, the list ends, or the page cap is hit. True while still looking.
+ */
+function useSeekAnchor(pages: HubGalleryPages, anchorId: number | null, found: boolean): boolean {
+    const asked = useRef(-1);
+    const pageCap = HUB_GALLERY_SEEK_MAX_PAGES * HUB_GALLERY_PAGE_SIZE;
+    const seeking = anchorId !== null && !found && (pages.loading || (pages.hasMore && pages.items.length < pageCap));
+    const { loading, loadingMore, loadMore, items } = pages;
+    useEffect(() => {
+        if (!seeking || loading || loadingMore || asked.current === items.length) return;
+        asked.current = items.length;
+        void loadMore();
+    }, [seeking, loading, loadingMore, loadMore, items.length]);
+    return seeking;
+}
+
 /** The viewer's index: the requested picture's id resolved in THIS list until the viewer moves, else the clamped index. */
 function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) {
     const [anchorId, setAnchorId] = useState<number | null>(request.mediaId ?? null);
     const [rawIndex, setRawIndex] = useState(request.index);
     const anchored = anchorId === null ? -1 : pages.items.findIndex((i) => i.id === anchorId);
+    const seeking = useSeekAnchor(pages, anchorId, anchored >= 0);
     const index = anchored >= 0 ? anchored : Math.max(0, Math.min(rawIndex, pages.items.length - 1));
     const setIndex = useCallback((i: number) => { setAnchorId(null); setRawIndex(i); }, []);
-    return { index, setIndex };
+    return { index, setIndex, seeking };
 }
 
 /** A chip the refreshed `kinds` no longer justify (staff removed its last picture) falls back to All. */
@@ -93,16 +115,19 @@ interface GalleryBodyProps {
     nav: ReturnType<typeof useViewerNav>;
     onOpen: (index: number) => void;
     scope: RefObject<HTMLDivElement | null>;
+    /** Paging in for a requested picture: show "Loading", never a different picture first. */
+    seeking: boolean;
 }
 
-function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope }: GalleryBodyProps): JSX.Element {
-    const item = pages.items[index];
+function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope, seeking }: GalleryBodyProps): JSX.Element {
+    const item = seeking ? undefined : pages.items[index];
+    const loading = pages.loading || seeking;
     return (
         <div ref={scope} className="flex flex-col gap-3">
             <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />
-            {pages.loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
-            {!pages.loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
-            {mode === 'grid' && pages.items.length > 0 && <HubGalleryGrid items={pages.items} total={pages.total} onOpen={onOpen} />}
+            {loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
+            {!loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
+            {mode === 'grid' && !seeking && pages.items.length > 0 && <HubGalleryGrid items={pages.items} total={pages.total} onOpen={onOpen} />}
             {mode === 'viewer' && item !== undefined && (
                 <HubGalleryViewer item={item} position={index + 1} total={pages.total} onPrev={nav.prev} onNext={nav.next} />
             )}
@@ -117,20 +142,20 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     const [mode, setMode] = useState(request.mode);
     const [filter, setFilter] = useState<HubMediaFilter>(request.filter);
     const pages = useHubGalleryPages(guildId, filter);
-    const { index, setIndex } = useViewerIndex(request, pages);
+    const { index, setIndex, seeking } = useViewerIndex(request, pages);
     const item = pages.items[index];
     const nav = useViewerNav(pages, index, setIndex);
     const scope = useRef<HTMLDivElement>(null);
-    useArrowKeys(scope, mode === 'viewer' && item !== undefined, nav.prev, nav.next);
+    useArrowKeys(scope, mode === 'viewer' && item !== undefined && !seeking, nav.prev, nav.next);
     const close = useCloseAndReturnFocus(request);
     const changeFilter = useCallback((f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); }, [setIndex, setCardFilter, guildId]);
     useClampFilter(pages, filter, changeFilter);
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
-            nav={nav} scope={scope} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
+            nav={nav} scope={scope} seeking={seeking} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
     );
     const footer = (
-        <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' ? item : undefined} pages={pages}
+        <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' && !seeking ? item : undefined} pages={pages}
             canEdit={canEdit} canRemove={canRemove} onBack={() => setMode('grid')} />
     );
     const shownFooter = mode === 'viewer' || pages.hasMore ? footer : undefined;
