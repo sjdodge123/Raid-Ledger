@@ -29,10 +29,25 @@ const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 const INVISIBLE_CHARS = /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/u;
 
 /**
+ * ROK-2016 (operator ruling 2026-10-26): a U+200C ZWNJ / U+200D ZWJ that sits
+ * BETWEEN two letters, marks or emoji (Persian/Indic script, 👨‍👩‍👧, 👩🏽‍💻) is
+ * real text, not a spoof. The emoji side may carry a skin-tone modifier
+ * (U+1F3FB–1F3FF) before the joiner; VS16 (U+FE0F) is a mark (`\p{M}`).
+ * Leading, trailing, doubled or space/digit-adjacent joiners do not match.
+ */
+const JOINER_BETWEEN_LETTERS =
+  /(?<=[\p{L}\p{M}]|\p{Extended_Pictographic}[\u{1F3FB}-\u{1F3FF}]?)[\u200C\u200D](?=[\p{L}\p{M}\p{Extended_Pictographic}])/gu;
+
+/** True when the name holds an invisible character other than an allowed in-word joiner. */
+function hasInvisibleChars(name: string): boolean {
+  return INVISIBLE_CHARS.test(name.replace(JOINER_BETWEEN_LETTERS, ''));
+}
+
+/**
  * The INPUT rule for a hub name (create, approve, admin create, rename):
  * trimmed, NFC-normalised (so the length and clash checks see one form),
- * 3–64 chars, no control or invisible characters, at least one letter or
- * digit. Read/response schemas keep `z.string()` so stored names still parse.
+ * 3–64 chars, no control or invisible characters (ZWJ/ZWNJ only between
+ * letters or emoji — ROK-2016), at least one letter or digit. Read/response schemas keep `z.string()` so stored names still parse.
  */
 export const HubNameSchema = z
   .string()
@@ -41,7 +56,7 @@ export const HubNameSchema = z
   .min(HUB_NAME_MIN)
   .max(HUB_NAME_MAX)
   .refine((v) => !CONTROL_CHARS.test(v), { message: 'Hub name cannot contain control characters' })
-  .refine((v) => !INVISIBLE_CHARS.test(v), { message: 'Hub name cannot contain invisible characters' })
+  .refine((v) => !hasInvisibleChars(v), { message: 'Hub name cannot contain invisible characters' })
   .refine((v) => HAS_LETTER_OR_DIGIT.test(v), { message: 'Hub name needs at least one letter or digit' });
 
 const BlurbSchema = z.string().trim().min(1).max(HUB_BLURB_MAX);

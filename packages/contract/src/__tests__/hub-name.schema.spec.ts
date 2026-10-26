@@ -16,8 +16,6 @@ const INVISIBLES: [string, string][] = [
   ['U+FFA0 HALFWIDTH HANGUL FILLER', 'ﾠ'],
   ['U+2800 BRAILLE BLANK', '⠀'],
   ['U+200B ZERO WIDTH SPACE', '​'],
-  ['U+200C ZWNJ', '‌'],
-  ['U+200D ZWJ', '‍'],
   ['U+2060 WORD JOINER', '⁠'],
   ['U+FEFF BOM', '﻿'],
   ['U+202E RLO', '‮'],
@@ -44,6 +42,48 @@ describe('HubNameSchema — invisible characters', () => {
     for (const n of ['Iron Wolves', 'Les Écorchés', '火狐 Guild', 'Wolves 🐺']) {
       expect(HubNameSchema.safeParse(n).success).toBe(true);
     }
+  });
+});
+
+/**
+ * ROK-2016 (operator ruling 2026-10-26): U+200D ZWJ and U+200C ZWNJ are
+ * allowed only BETWEEN two letters/marks/emoji (emoji sequences, Persian and
+ * Indic script). Any other placement, and every other `\p{Cf}`, is refused.
+ */
+describe('HubNameSchema — joiners between letters or emoji (ROK-2016)', () => {
+  const ACCEPTED: [string, string][] = [
+    ['family emoji (ZWJ sequence)', 'Fam \u{1F468}\u200D\u{1F469}\u200D\u{1F467}'],
+    ['skin-tone emoji joined by ZWJ', 'Devs \u{1F469}\u{1F3FD}\u200D\u{1F4BB}'],
+    ['VS16 emoji joined by ZWJ', 'Pride \u{1F3F3}\uFE0F\u200D\u{1F308}'],
+    ['Persian name with ZWNJ', '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645'],
+    ['ZWJ between two Latin letters', 'Iron\u200DWolves'],
+  ];
+  it.each(ACCEPTED)('accepts %s', (_label, name) => {
+    expect(HubNameSchema.safeParse(name).success).toBe(true);
+  });
+
+  it('keeps the joiner in the parsed name', () => {
+    expect(HubNameSchema.parse('Iron\u200CWolves')).toBe('Iron\u200CWolves');
+  });
+
+  const REFUSED: [string, string][] = [
+    ['a leading ZWJ', '\u200DIron Wolves'],
+    ['a trailing ZWJ', 'Iron Wolves\u200D'],
+    ['a doubled ZWJ', 'Iron\u200D\u200DWolves'],
+    ['a ZWJ before a space', 'Iron\u200D Wolves'],
+    ['a ZWJ after a space', 'Iron \u200DWolves'],
+    ['a ZWNJ between digits', 'Clan 12\u200C34'],
+    ['a ZWJ after an emoji but before a digit', 'Wolves \u{1F43A}\u200D1'],
+    ['U+200B between letters', 'Iron\u200BWolves'],
+    ['U+2060 between letters', 'Iron\u2060Wolves'],
+    ['a lone ZWNJ in the middle of a run of spaces', 'Iron \u200C Wolves'],
+  ];
+  it.each(REFUSED)('refuses %s with the invisible-character message', (_label, name) => {
+    const r = HubNameSchema.safeParse(name);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.map((i) => i.message)).toContain(
+      'Hub name cannot contain invisible characters',
+    );
   });
 });
 
