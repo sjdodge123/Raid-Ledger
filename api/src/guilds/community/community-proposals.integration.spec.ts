@@ -303,6 +303,21 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
   });
 });
 
+describe('POST /hubs/proposals — legacy stored keys (ROK-2016 review)', () => {
+  it('P3c a legacy key with a ZWJ before U+0301 clashes with the composed name (stored keys NFC, ROK-2016 review)', async () => {
+    // Pre-ROK-2016 key 'cafe\u200d\u0301 club': only NFC after the joiner strip composes it.
+    await seedHub(gameG(), 'Cafe\u200D\u0301 Club', 'active');
+    const proposer = await seedUser('p3c-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'Caf\u00e9 Club',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+});
+
 describe('proposal ownership + admin guard', () => {
   it('P6 a non-proposer DELETE is 404; a non-admin approve is 403', async () => {
     const proposer = await seedUser('p6-proposer');

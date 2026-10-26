@@ -25,11 +25,20 @@ const HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * U+200B–200D, U+2060, U+FEFF, bidi controls U+202A–202E / U+2066–2069, soft
  * hyphen) plus the blank fillers Unicode files as letters or symbols (Hangul
  * U+115F, U+1160, U+3164, U+FFA0; braille blank U+2800). ROK-2016 review: also
- * every `\p{Default_Ignorable_Code_Point}` (U+034F CGJ, VS1–VS15 U+FE00–FE0E,
- * …) except VS16 U+FE0F, which emoji need; those marks pass `\p{M}` otherwise.
+ * every `\p{Default_Ignorable_Code_Point}` (U+034F CGJ, VS1–VS16 U+FE00–FE0F,
+ * …); those marks pass `\p{M}` otherwise. VS16 is let through only by
+ * {@link EMOJI_VS16} below.
  */
 const INVISIBLE_CHARS =
-  /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]|(?!\uFE0F)\p{Default_Ignorable_Code_Point}/u;
+  /[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]|\p{Default_Ignorable_Code_Point}/u;
+
+/**
+ * ROK-2016 review (spoof): a VS16 U+FE0F that emoji need — right after an
+ * emoji base, or after a keycap base (`#`, `*`, a digit) that U+20E3 follows.
+ * Removed only for the invisible test (never from the stored value); any other
+ * VS16 (after a letter, leading, doubled) stays and is refused.
+ */
+const EMOJI_VS16 = /(?<=\p{Extended_Pictographic})\uFE0F|(?<=[#*0-9])\uFE0F(?=\u20E3)/gu;
 
 /**
  * A visible letter or mark: an ignorable mark (CGJ, a variation selector, a
@@ -57,7 +66,8 @@ const JOINER_BETWEEN_LETTERS = new RegExp(
  * in-word joiner.
  */
 function hasInvisibleChars(name: string): boolean {
-  return INVISIBLE_CHARS.test(name.replace(JOINER_BETWEEN_LETTERS, ''));
+  const stripped = name.replace(JOINER_BETWEEN_LETTERS, '').replace(EMOJI_VS16, '');
+  return INVISIBLE_CHARS.test(stripped);
 }
 
 /**

@@ -94,6 +94,38 @@ describe('HubNameSchema — joiners between letters or emoji (ROK-2016)', () => 
   });
 });
 
+/**
+ * ROK-2016 review (spoof): VS16 U+FE0F is allowed only right after an emoji
+ * base or a keycap base (`#`, `*`, a digit) that is followed by U+20E3.
+ * Anywhere else it is an invisible mark that makes a lookalike duplicate.
+ */
+describe('HubNameSchema — VS16 only after an emoji or keycap base (ROK-2016 review)', () => {
+  const ACCEPTED: [string, string][] = [
+    ['a trailing VS16 emoji', 'Hearts \u2764\uFE0F'],
+    ['a VS16 emoji then text', '\u2764\uFE0F Club'],
+    ['a keycap emoji', '#\uFE0F\u20E3 Squad'],
+    ['a digit keycap emoji', 'Team 1\uFE0F\u20E3'],
+  ];
+  it.each(ACCEPTED)('accepts %s', (_label, name) => {
+    expect(HubNameSchema.safeParse(name).success).toBe(true);
+  });
+
+  const REFUSED: [string, string][] = [
+    ['VS16 between two letters', 'Iron\uFE0FWolves'],
+    ['a leading VS16', '\uFE0FIron Wolves'],
+    ['a name of only VS16', '\uFE0F\uFE0F\uFE0F'],
+    ['a doubled VS16 after an emoji', 'Wolves \u2764\uFE0F\uFE0F'],
+    ['a digit followed by VS16 with no keycap mark', 'Clan 1\uFE0F'],
+  ];
+  it.each(REFUSED)('refuses %s with the invisible-character message', (_label, name) => {
+    const r = HubNameSchema.safeParse(name);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.map((i) => i.message)).toContain(
+      'Hub name cannot contain invisible characters',
+    );
+  });
+});
+
 describe('HubNameSchema — NFC normalisation', () => {
   it('returns the NFC form of a decomposed name', () => {
     const decomposed = 'Café Club';

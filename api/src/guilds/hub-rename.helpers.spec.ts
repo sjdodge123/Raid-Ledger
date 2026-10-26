@@ -184,6 +184,11 @@ describe('hubNameKey — one key per visual name (ROK-1950 review)', () => {
     );
   });
 
+  it('strips VS16 so an emoji name with and without U+FE0F clashes (ROK-2016 review)', () => {
+    expect(hubNameKey('\u2764\uFE0F Club')).toBe(hubNameKey('\u2764 Club'));
+    expect(hubNameKey('\u2764\uFE0F Club')).toBe('\u2764 club');
+  });
+
   it('trims after stripping so a joiner-padded name keys like the bare one', () => {
     expect(hubNameKey('\u200D Iron Wolves')).toBe('iron wolves');
   });
