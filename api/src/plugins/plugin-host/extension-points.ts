@@ -319,6 +319,12 @@ export interface HubKindAdapter {
     groupId: number,
     grants: HubEditorGrant[],
   ): Promise<Map<number, HubEditorStatus>>;
+  /**
+   * ROK-1950 D5: the group's external source name — what a rename reset goes
+   * back to (a server hub's Pelican server name, ≤64 chars). Optional; an
+   * omitted hook or `null` means "no source", so the kind cannot reset.
+   */
+  sourceName?(groupId: number): Promise<string | null>;
 }
 
 /** ROK-1794: one `guild_editors` row as `HubKindAdapter.editorStatus` reads it. */

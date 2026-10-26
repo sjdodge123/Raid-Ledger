@@ -14,6 +14,7 @@ import {
 } from './notification-embed.event-rows';
 import { VOICE_ACCESS_LOST_SUBTYPE } from './voice-access-lost.helpers';
 import { postDeepLink } from '../guilds/posts/hub-posts.helpers';
+import { hubPath } from '../guilds/hub-path';
 import {
   buildValheimClaimRow,
   buildValheimOpenHubButton,
@@ -343,7 +344,7 @@ function buildGroupButton(
   const url =
     typeof postId === 'number'
       ? postDeepLink(clientUrl, guildId, postId)
-      : `${clientUrl}/guilds/${guildId}`;
+      : `${clientUrl}${hubPath(guildId)}`;
   return new ButtonBuilder()
     .setLabel('View group')
     .setStyle(ButtonStyle.Link)

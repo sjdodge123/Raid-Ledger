@@ -84,6 +84,11 @@ export const GuildSummarySchema = z
      * from Classic). Optional so older fixtures parse.
      */
     gameSlug: z.string().max(100).optional(),
+    /**
+     * ROK-1950 — `game_server` hubs only: the hub carries a Raid Ledger name,
+     * so the Pelican sync leaves it alone. Optional so older fixtures parse.
+     */
+    nameOverridden: z.boolean().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
@@ -205,6 +210,8 @@ export const GuildPageServerSchema = z
      * Ledger user yet (the claim nudge). Absent ⇒ unknown; 0 ⇒ all linked.
      */
     unlinkedOnlineCount: z.number().int().nonnegative().optional(),
+    /** ROK-1950 — the Pelican server's own name (what a rename reset goes back to). */
+    serverName: z.string().max(64).optional(),
   })
   .strict();
 export type GuildPageServer = z.infer<typeof GuildPageServerSchema>;

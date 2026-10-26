@@ -437,7 +437,7 @@ describe('POST /admin/hubs/proposals/:id/approve|reject', () => {
         proposalId: id,
         hubName: 'P7 Final Crew',
         guildId: id,
-        url: `/guilds/${id}`,
+        url: `/hubs/${id}`,
       }),
     );
   });

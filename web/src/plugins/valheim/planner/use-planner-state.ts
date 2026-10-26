@@ -35,7 +35,8 @@ export interface PlannerState {
     isHidden: (target: PlannerTarget) => boolean;
 }
 
-function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
+/** The stored shopping list for `serverId` (D12) and a setter that persists it. */
+export function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
     const [targets, setTargets] = useState(() => loadPlannerTargets(serverId));
     const update = (next: PlannerTarget[]): void => {
         setTargets(next);

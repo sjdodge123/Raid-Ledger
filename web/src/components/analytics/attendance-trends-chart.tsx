@@ -62,9 +62,9 @@ function TrendsLineChart({ dataPoints }: { dataPoints: { date: string; attended:
                 <YAxis {...chartAxisProps} fontSize={12} />
                 <Tooltip {...chartLineTooltipProps} />
                 <Legend />
-                <Line type="monotone" dataKey="attended" stroke="#34D399" strokeWidth={2} dot={false} name="Attended" />
-                <Line type="monotone" dataKey="noShow" stroke="#F87171" strokeWidth={2} dot={false} name="No-Show" />
-                <Line type="monotone" dataKey="excused" stroke="#FBBF24" strokeWidth={2} dot={false} name="Excused" />
+                <Line type="monotone" dataKey="attended" stroke="var(--color-success)" strokeWidth={2} dot={false} name="Attended" />
+                <Line type="monotone" dataKey="noShow" stroke="var(--color-danger)" strokeWidth={2} dot={false} name="No-Show" />
+                <Line type="monotone" dataKey="excused" stroke="var(--color-warning)" strokeWidth={2} dot={false} name="Excused" />
             </LineChart>
         </ResponsiveContainer>
     );

@@ -13,7 +13,8 @@ import type { GuildEditor, GuildMemberRow, GuildPage as GuildPageDto } from '@ra
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
-import { GuildPage } from './hub-page';
+import { ErrorState, GuildPage } from './hub-page';
+import { withHttpStatus } from '../../lib/api/api-error';
 
 const BASE = 'http://localhost:3000/guilds/7';
 const LINKED_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
@@ -119,6 +120,21 @@ describe('GuildPage (ROK-1785)', () => {
         expect(screen.queryByTestId('guild-error'), 'a 403 must not render the generic error state').toBeNull();
         expect(screen.getByTestId('guild-not-member')).toHaveTextContent("You're not a member of this guild.");
         expect(screen.queryByTestId('guild-hero')).toBeNull();
+    });
+});
+
+describe('GuildPage — kind-aware error notices', () => {
+    it.each([
+        ['wow_guild', "You're not a member of this guild. Link a character in the guild to see its page.", "We couldn't load this guild. Try again in a moment."],
+        ['game_server', "You're not a member of this server.", "We couldn't load this server. Try again in a moment."],
+        ['game_community', "You're not a member of this hub.", "We couldn't load this hub. Try again in a moment."],
+    ] as const)('the %s error notices name the hub kind', (kind, notMember, loadFailed) => {
+        const forbidden = withHttpStatus(new Error('Not a member'), 403);
+        const { unmount } = renderWithProviders(<ErrorState error={forbidden} onRetry={() => undefined} kind={kind} />);
+        expect(screen.getByTestId('guild-not-member')).toHaveTextContent(notMember);
+        unmount();
+        renderWithProviders(<ErrorState error={new Error('boom')} onRetry={() => undefined} kind={kind} />);
+        expect(screen.getByTestId('guild-error')).toHaveTextContent(loadFailed);
     });
 
 });

@@ -111,7 +111,7 @@ function assertButtons(res: RenderedDm, guildId: number, postId: number): void {
     fail(`expected the last button "${ADJUST_LABEL}" → settings row, got ${JSON.stringify(primary)}`);
   }
   const view = rows.flat().find((b) => b.label === VIEW_GROUP_LABEL);
-  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  const deepLink = `/hubs/${guildId}?post=${postId}#posts`;
   if (!view?.url?.endsWith(deepLink)) {
     fail(`expected a "${VIEW_GROUP_LABEL}" link to ${deepLink}, got ${JSON.stringify(view?.url)} in rows ${JSON.stringify(labels)}`);
   }
@@ -161,7 +161,7 @@ async function leaderPostNotifiesMembers(ctx: TestContext): Promise<void> {
   if (!n.message?.startsWith("Smoke leader post ")) {
     fail(`expected the markdown-stripped headline "Smoke leader post …", got "${n.message}"`);
   }
-  const deepLink = `/guilds/${guildId}?post=${postId}#posts`;
+  const deepLink = `/hubs/${guildId}?post=${postId}#posts`;
   if (n.payload?.url !== deepLink) {
     fail(`expected payload.url "${deepLink}", got ${JSON.stringify(n.payload?.url)}`);
   }

@@ -50,6 +50,7 @@ export async function loadServerBlock(
   const g = schema.games;
   const [row] = await db
     .select({
+      serverName: s.name,
       currentState: s.currentState,
       isSuspended: s.isSuspended,
       statusCheckedAt: s.statusCheckedAt,
@@ -66,6 +67,7 @@ export async function loadServerBlock(
     gameSlug: row.gameSlug,
     gameIconUrl: row.gameIconUrl,
     state: toGameServerState(row, now),
+    serverName: row.serverName.slice(0, 64),
   };
 }
 

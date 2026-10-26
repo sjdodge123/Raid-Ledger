@@ -476,8 +476,14 @@ test.describe('community hubs — admin', () => {
             return rows.find((n) => n.type === 'hub_proposal_reviewed' && n.payload?.guildId === seed.proposalId) ?? null;
         }, { timeoutMs: 30_000, description: `hub_proposal_reviewed for hub ${seed.proposalId} reaches the proposer` });
 
-        await page.goto('/calendar');
-        await page.getByRole('button', { name: 'Notifications' }).first().click();
+        // The API already has the notice (polled above), so a fresh page load's bell
+        // query sees it. Open the bell on `/players`, NOT `/calendar`: on phones the
+        // Schedule view smooth-scrolls to today just after mount, and the bell's
+        // close-on-scroll-down shut the dropdown under the assertion (the [mobile] flake).
+        await page.goto('/players');
+        const bell = page.getByRole('button', { name: 'Notifications' }).first();
+        await expect(bell, 'the header bell renders').toBeVisible({ timeout: 15_000 });
+        await bell.click();
         await expect(page.getByText(`Your hub "${hubName}" is live`).first(), 'the bell lists the approval').toBeVisible({
             timeout: 15_000,
         });

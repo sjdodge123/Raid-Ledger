@@ -471,4 +471,35 @@ describe('Planner spoiler protection (ROK-1948)', () => {
       after: ['Bronze', 'Club', 'SwordBronze'],
     });
   });
+
+  it('D5: one known_items change at the same imported_at moves the fingerprint; a no-op read does not', async () => {
+    const stamp = new Date('2026-10-20T12:00:00Z');
+    await addProfile('1000000000000001', {
+      recipes: BENCH_CLUB,
+      importedAt: stamp,
+    });
+    await addProfile('1000000000000003', {
+      recipes: BENCH_CLUB,
+      importedAt: stamp,
+    });
+    const fingerprint = () =>
+      new RecipesReader(testApp.db).profileFingerprint(server);
+    const first = await fingerprint();
+    await prefabs(admin);
+    const afterRead = await fingerprint();
+    await testApp.db
+      .update(schema.valheimProfiles)
+      .set({ knownItems: ['Wood'], importedAt: stamp })
+      .where(eq(schema.valheimProfiles.playerId, '1000000000000003'));
+    const afterWrite = await fingerprint();
+    expect({
+      count: first.split(':')[0],
+      noOpReadKeepsIt: afterRead === first,
+      writeMovesIt: afterWrite !== first,
+    }).toEqual({
+      count: '3',
+      noOpReadKeepsIt: true,
+      writeMovesIt: true,
+    });
+  });
 });
