@@ -54,6 +54,7 @@ const SHOWN_NAME = sql<string>`lower(btrim(normalize(regexp_replace(${g.name}, $
  * The `name` sort key: a renamed WoW guild sorts by its shown name; every
  * other row keeps its raw `name_key` (non-WoW order is byte-identical).
  */
+// ELSE arm: every non-renamed row keeps the raw `name_key` sort, byte-identical to before ROK-2015.
 const SORT_NAME = sql<string>`CASE WHEN ${WOW_RENAMED} THEN ${SHOWN_NAME} ELSE ${g.nameKey} END`;
 
 const ORDER: Record<HubDirectoryQuery['sort'], SQL[]> = {
