@@ -36,6 +36,12 @@ vi.mock('./use-calendar-sync', async (importOriginal) => ({
 vi.mock('./use-onboarding', () => ({
     useOnboarding: () => ({ changePassword: { mutate: vi.fn(), isPending: false } }),
 }));
+// ROK-1955: the integrations panel now renders the Companion devices card.
+vi.mock('./use-companion-devices', () => ({
+    useCompanionDevices: () => ({ data: [], isPending: false, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+    useRenameCompanionDevice: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+    useRevokeCompanionDevice: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
 vi.mock('./use-steam-link', () => ({
     useSteamLink: () => ({
         linkSteam: vi.fn(), isLinkPending: false, steamStatus: { data: undefined },
