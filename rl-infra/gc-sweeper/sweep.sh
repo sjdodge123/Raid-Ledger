@@ -909,10 +909,14 @@ fi
 # ladder just ran. Our rl-net address for the registry, never .env's host one.
 REGISTRY_GC_LIB="${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_registry_gc.sh"
 if [[ -r "$REGISTRY_GC_LIB" ]]; then
-    RL_REGISTRY_URL="${RL_SWEEPER_REGISTRY_URL:-http://rl-registry:5000}"
-    RL_ENVS_FILE="$ENVS"
-    RL_ADMISSION_FILE="${STATE_DIR}/admission.json"
-    RL_REGISTRY_GC_STATE_FILE="${STATE_DIR}/registry-gc.json"
+    # Read by the sourced _registry_gc.sh, not by this file.
+    # shellcheck disable=SC2034
+    {
+        RL_REGISTRY_URL="${RL_SWEEPER_REGISTRY_URL:-http://rl-registry:5000}"
+        RL_ENVS_FILE="$ENVS"
+        RL_ADMISSION_FILE="${STATE_DIR}/admission.json"
+        RL_REGISTRY_GC_STATE_FILE="${STATE_DIR}/registry-gc.json"
+    }
     # shellcheck disable=SC1090
     source "$REGISTRY_GC_LIB"
     _rgc_mode=""

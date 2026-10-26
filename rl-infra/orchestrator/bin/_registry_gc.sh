@@ -93,17 +93,20 @@ registry_gc::_tags_of() {
 }
 
 # Tags that must survive: `latest`, any tag a container (running or stopped)
-# was created from, and any tag an env-registry row points at — except the
-# row of slug <$1> (env-destroy excludes the env being destroyed). JSON array.
-# Returns 1 (no output) when `docker ps` or the env registry cannot be read:
-# a partial protected set would let the sweep delete a live env's image.
+# was created from, any tag present as a local image on this daemon (built and
+# pushed, but not yet attached to a container or env row), and any tag an
+# env-registry row points at — except the row of slug <$1> (env-destroy
+# excludes the env being destroyed). JSON array. Returns 1 (no output) when
+# `docker ps`, `docker images` or the env registry cannot be read: a partial
+# protected set would let the sweep delete a live env's image.
 registry_gc::protected_tags() {
-    local exclude="${1:-}" ps envs
+    local exclude="${1:-}" ps local_imgs envs
     ps=$(docker ps -a --format '{{.Image}}' 2>/dev/null) || return 1
+    local_imgs=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null) || return 1
     envs=$(jq -er --arg s "$exclude" \
         'if type == "array" then [.[] | select(.slug != $s) | .image // empty] | join("\n") else error("not an array") end' \
         "${RL_ENVS_FILE:-/nonexistent}" 2>/dev/null) || return 1
-    { echo latest; printf '%s\n%s\n' "$ps" "$envs" | registry_gc::_tags_of; } \
+    { echo latest; printf '%s\n%s\n%s\n' "$ps" "$local_imgs" "$envs" | registry_gc::_tags_of; } \
         | sed '/^$/d' | sort -u | jq -Rnc '[inputs]'
 }
 
@@ -130,14 +133,20 @@ registry_gc::build_admitted() {
 
 # `registry garbage-collect` inside the registry container, bounded by
 # RL_REGISTRY_GC_TIMEOUT_SECONDS (coreutils `timeout`, present in the
-# sweeper's debian image). A timeout kills the `docker exec` client only; the
-# in-container process can outlive it, which the 6h interval absorbs.
+# sweeper's debian image). A timeout kills the `docker exec` client only, so
+# on exit 124 the in-container process is pkill'd too (best-effort, logged to
+# stderr): left running, its sweep phase would race the next build's pushes.
 # Echoes ran|timed_out|failed|dry_run.
 registry_gc::collect() {
     [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && { echo dry_run; return 0; }
     local rc=0
     timeout -k 10 "$RL_REGISTRY_GC_TIMEOUT_SECONDS" docker exec "$RL_REGISTRY_CONTAINER" \
         registry garbage-collect --delete-untagged /etc/docker/registry/config.yml >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" == 124 ]]; then
+        echo "registry_gc: garbage-collect timed out after ${RL_REGISTRY_GC_TIMEOUT_SECONDS}s — killing it in $RL_REGISTRY_CONTAINER" >&2
+        docker exec "$RL_REGISTRY_CONTAINER" pkill -f garbage-collect >/dev/null 2>&1 \
+            || echo "registry_gc: pkill garbage-collect in $RL_REGISTRY_CONTAINER failed" >&2
+    fi
     case "$rc" in 0) echo ran ;; 124) echo timed_out ;; *) echo failed ;; esac
 }
 
@@ -191,7 +200,7 @@ registry_gc::sweep() {
     fi
     if registry_gc::build_admitted; then echo '{"skipped":"build_admitted"}'; return 0; fi
     if ! prot=$(registry_gc::protected_tags); then
-        echo "registry_gc: docker ps or $RL_ENVS_FILE unreadable — sweep aborted" >&2
+        echo "registry_gc: docker ps, docker images or $RL_ENVS_FILE unreadable — sweep aborted" >&2
         echo '{"error":"protected_tags_unreadable"}'; return 1
     fi
     local inv avoid tag deleted='[]' gc

@@ -22,6 +22,9 @@
 #   R-k  a dry run writes the state file, so the interval gate holds
 #   R-l  env-destroy honours RL_REGISTRY_GC_DRY_RUN ("would delete")
 #   R-m  garbage-collect runs under `timeout`
+#   R-n  a locally built tag (docker images, no container/row yet) is protected;
+#        an unreadable `docker images` aborts the sweep
+#   R-o  a timed-out garbage-collect is pkill'd inside rl-registry
 
 set -uo pipefail
 CURRENT_TEST_FILE="registry-gc.test.sh"
@@ -57,10 +60,17 @@ docker() {
     echo "docker $*" >> "$CALL_LOG"
     # shellcheck disable=SC2086  # PS_IMAGES is a space-separated list on purpose
     if [[ "$1" == ps ]]; then [[ -n "${DOCKER_PS_FAIL:-}" ]] && return 1; printf '%s\n' ${PS_IMAGES:-}; fi
+    # shellcheck disable=SC2086  # LOCAL_IMAGES is a space-separated list on purpose
+    if [[ "$1" == images ]]; then [[ -n "${DOCKER_IMAGES_FAIL:-}" ]] && return 1; printf '%s\n' ${LOCAL_IMAGES:-}; fi
     return 0
 }
 # timeout stub: log the wrapper, then run the (stubbed) command — `-k N SECS cmd…`.
-timeout() { echo "timeout $*" >> "$CALL_LOG"; shift 3; "$@"; }
+# TIMEOUT_RC set = simulate the bound expiring (coreutils exits 124).
+timeout() {
+    echo "timeout $*" >> "$CALL_LOG"; shift 3
+    [[ -n "${TIMEOUT_RC:-}" ]] && return "$TIMEOUT_RC"
+    "$@"
+}
 
 _setup_gc() {
     test_setup
@@ -70,6 +80,7 @@ _setup_gc() {
     export RL_REGISTRY_URL="http://reg.test:5000" RL_REGISTRY_KEEP_N=2 RL_REGISTRY_RETENTION_HOURS=48
     echo '[]' > "$RL_ENVS_FILE"; echo '{"heavy_running":[]}' > "$RL_ADMISSION_FILE"
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
+    LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -243,6 +254,35 @@ test_collect_has_timeout() {
     test_teardown
 }
 
+test_local_images_protected() {
+    CURRENT_TEST_NAME="R-n: locally built tags are protected; docker images failure aborts"
+    _setup_gc
+    TAGS="a b fresh old"; AGES="a=1 b=2 fresh=300 old=200"
+    LOCAL_IMAGES="registry.rl.lan:5000/rl-allinone:fresh <none>:<none> postgres:16"
+    local out rc
+    out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.deleted | join(",")' <<<"$out")" "old" "a built+pushed tag with no env yet survives"
+    : > "$CALL_LOG"; DOCKER_IMAGES_FAIL=1
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_neq "$rc" "0" "docker images failure must fail the sweep"
+    assert_eq "$(jq -r '.error' <<<"$out")" "protected_tags_unreadable" "result names the failure"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "nothing deleted on a partial protected set"
+    test_teardown
+}
+
+test_collect_timeout_kills_gc() {
+    CURRENT_TEST_NAME="R-o: a timed-out garbage-collect is killed inside rl-registry"
+    _setup_gc
+    local out; out=$(registry_gc::collect 2>/dev/null)
+    assert_eq "$(grep -c 'pkill' "$CALL_LOG")" "0" "no pkill when GC finishes"
+    TIMEOUT_RC=124
+    out=$(registry_gc::collect 2>/dev/null)
+    assert_eq "$out" "timed_out" "result reports the timeout"
+    assert_contains "$(cat "$CALL_LOG")" "docker exec rl-registry pkill -f garbage-collect" \
+        "the in-container GC must not keep running against new pushes"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
@@ -256,4 +296,6 @@ run_test "r-j-protection-abort" test_sweep_aborts_on_unreadable_protection
 run_test "r-k-dry-run-state" test_dry_run_writes_state
 run_test "r-l-destroy-dry-run" test_env_destroy_dry_run
 run_test "r-m-collect-timeout" test_collect_has_timeout
+run_test "r-n-local-images" test_local_images_protected
+run_test "r-o-timeout-pkill" test_collect_timeout_kills_gc
 print_test_summary
