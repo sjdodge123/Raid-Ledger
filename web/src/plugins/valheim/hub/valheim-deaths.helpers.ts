@@ -3,7 +3,8 @@
  * (D13: no SteamID anywhere — a bar opens `?pins=death&vc=<characterId>#map`),
  * the meter scale and the row cap (Q5: top 8).
  */
-import type { ValheimDeathPlayer } from '@raid-ledger/contract';
+import type { ValheimDeathPicture, ValheimDeathPlayer } from '@raid-ledger/contract';
+import { syncedAgo } from '../../../lib/synced-ago';
 import { CHARACTER_PARAM } from '../map/map-selection';
 import { DEATHS_SHOW_ALL_HREF, DEATH_PINS, PINS_PARAM } from '../map/pin-filter-params';
 
@@ -46,4 +47,14 @@ export function countedSinceLine(since: string | null, timeZone: string): string
         day: 'numeric', month: 'short', year: 'numeric', timeZone,
     });
     return `Counted since ${date}`;
+}
+
+/** A thumb's accessible name, the Gallery tile's wording ("Death — Jasz, 1 day ago. Open picture"). */
+export function deathThumbLabel(name: string, picture: ValheimDeathPicture, now: number = Date.now()): string {
+    return `Death — ${name}, ${syncedAgo(picture.capturedAt, now)}. Open picture`;
+}
+
+/** "+N"'s accessible name. */
+export function morePicturesLabel(extra: number): string {
+    return `${extra} more death ${extra === 1 ? 'picture' : 'pictures'}. Open the gallery`;
 }
