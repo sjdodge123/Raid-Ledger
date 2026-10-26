@@ -215,9 +215,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const p of PLUGINS) {
-    if (registry().isActive(p)) await registry().deactivate(p);
-  }
+  // Pelican only: deactivate('blizzard') drops the Forever identity provider
+  // and only activate() restores it, but after the truncate beforeEach's
+  // ensureInstalled re-inserts the row already active (activate() no-ops), so
+  // every later character create 400s "Region and ruleset do not apply".
+  if (registry().isActive(PELICAN_PLUGIN_ID))
+    await registry().deactivate(PELICAN_PLUGIN_ID);
   process.env.THROTTLE_DISABLED = 'true';
   testApp.seed = await truncateAllTables(testApp.db);
 });

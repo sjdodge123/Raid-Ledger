@@ -217,10 +217,15 @@ describe('ROK-2015 — WoW guild rename vs LedgerLink import', () => {
 
   it('I4: a stale snapshot writes nothing to an overridden guild', async () => {
     const { token, charId } = await seedGuild();
-    await overrideName({ lastSnapshotAt: new Date(FIXTURE_NOW_MS) });
+    // Age the stored snapshot through a real newer import: bumping only
+    // guilds.last_snapshot_at would drop every member (the importer too) out
+    // of `inLatestSnapshot`, and the ROK-1794 guard answers 422 NOT_IN_GUILD.
+    expect((await apply(token, charId, snapshot(60))).status).toBe(200);
+    await overrideName({});
     const before = await realmlessRow();
+    expect(before.lastSnapshotAt?.getTime()).toBe(FIXTURE_NOW_MS);
     const res = await apply(token, charId, fixture('guild-1-page'));
-    expect(res.status).toBe(200);
+    expect([res.status, res.body.status]).toEqual([200, 'stale']);
     expect(await realmlessRow()).toEqual(before);
   });
 });
