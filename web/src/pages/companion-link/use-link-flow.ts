@@ -58,6 +58,5 @@ export function useLinkFlow() {
         const userCode = normaliseCompanionUserCode(preview.data?.userCode ?? code);
         decision.mutate({ userCode, decision: choice, ...(name === undefined ? {} : { name }) });
     };
-    const restart = (): void => { preview.reset(); decision.reset(); setCode(''); };
-    return { preview, decision, code, localError, changeCode, submit: () => submitCode(code), decide, restart };
+    return { preview, decision, code, localError, changeCode, submit: () => submitCode(code), decide };
 }

@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { JSX } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { CompanionLinkPreview } from '@raid-ledger/contract';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render-helpers';
@@ -45,8 +47,14 @@ function failWith(url: string, status: number, code: string): void {
     server.use(http.post(url, () => HttpResponse.json({ code, message: 'x' }, { status })));
 }
 
+/** Renders the router's current URL so a test can see the fragment go. */
+function LocationProbe(): JSX.Element {
+    const { pathname, search, hash } = useLocation();
+    return <output data-testid="location">{`${pathname}${search}${hash}`}</output>;
+}
+
 function renderAt(entry: string): void {
-    renderWithProviders(<CompanionLinkPage />, { initialEntries: [entry] });
+    renderWithProviders(<><CompanionLinkPage /><LocationProbe /></>, { initialEntries: [entry] });
 }
 
 afterEach(() => { server.resetHandlers(); });
@@ -100,11 +108,49 @@ describe('CompanionLinkPage — entry and review', () => {
         expect(screen.getByText(/Network 198\.51\.100\.x — a different network from yours/)).toBeInTheDocument();
     });
 
-    it('expired code: an expiresAt in the past shows the expired state and no Approve', async () => {
-        mockApi(preview({ expiresAt: new Date(Date.now() - 1000).toISOString() }));
+});
+
+describe('CompanionLinkPage — URL, expiry and focus (ROK-1955 web review)', () => {
+    it('a #code= fragment is stripped from the URL once read (replace navigation)', async () => {
+        mockApi();
+        renderAt('/link#code=BCDF-GHJK');
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(screen.getByTestId('location')).toHaveTextContent(/^\/link$/);
+    });
+
+    it('a ?code= query is stripped from the URL once read', async () => {
+        mockApi();
+        renderAt('/link?code=BCDFGHJK');
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(screen.getByTestId('location')).toHaveTextContent(/^\/link$/);
+    });
+
+    it('a client clock past expiresAt keeps Approve with a soft hint; the server decides', async () => {
+        const rec = mockApi(preview({ expiresAt: new Date(Date.now() - 1000).toISOString() }));
         renderAt('/link#code=BCDFGHJK');
-        expect(await screen.findByText(/That code has expired\. Start again on your computer\./)).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+        expect(await screen.findByText(/This code may have expired\./)).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        expect(await screen.findByText(/Return to your computer/)).toBeInTheDocument();
+        expect(rec.decisions).toEqual([{ userCode: 'BCDFGHJK', decision: 'approve' }]);
+    });
+
+    it('a code inside its lifetime shows no expiry hint', async () => {
+        mockApi();
+        renderAt('/link#code=BCDFGHJK');
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(screen.queryByText(/may have expired/)).not.toBeInTheDocument();
+    });
+
+    it('focus moves to the new step heading on Continue and on Approve', async () => {
+        mockApi();
+        renderAt('/link');
+        await userEvent.type(screen.getByLabelText('Code shown on your computer'), 'bcdfghjk');
+        await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        const review = await screen.findByRole('heading', { name: 'Link this computer to your account?' });
+        await waitFor(() => expect(review).toHaveFocus());
+        await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await screen.findByText(/Return to your computer/);
+        await waitFor(() => expect(screen.getByRole('heading', { name: 'Link a computer' })).toHaveFocus());
     });
 
 });

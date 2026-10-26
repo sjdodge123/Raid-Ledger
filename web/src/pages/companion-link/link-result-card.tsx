@@ -9,7 +9,7 @@ import { MANAGE_DEVICES_HREF } from './link-copy';
 export function LinkResultCard({ status }: { status: 'approved' | 'denied' }): JSX.Element {
     if (status === 'denied') {
         return (
-            <LinkCard>
+            <LinkCard title="Link a computer">
                 <p role="status" className="rounded-lg border border-edge bg-overlay/30 p-3 text-sm text-secondary">
                     Denied — that computer will not be linked.
                 </p>
@@ -17,7 +17,7 @@ export function LinkResultCard({ status }: { status: 'approved' | 'denied' }): J
         );
     }
     return (
-        <LinkCard>
+        <LinkCard title="Link a computer">
             <p role="status" className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
                 <strong>Approved.</strong> Return to your computer — it finishes linking in a few seconds.
             </p>

@@ -24,6 +24,15 @@ interface LinkReviewCardProps {
 
 const NAME_ERROR = 'Use 1–64 characters, no line breaks.';
 
+/**
+ * Shown when this device's clock is past `expiresAt`. A soft hint only: the
+ * clock may be wrong, so Approve stays and the server's 404 is the answer.
+ */
+function MaybeExpiredHint({ preview, nowMs }: { preview: CompanionLinkPreview; nowMs: number }): JSX.Element | null {
+    if (Date.parse(preview.expiresAt) > nowMs) return null;
+    return <p className="mt-3 text-sm text-warning">This code may have expired. If Approve fails, start again on your computer.</p>;
+}
+
 /** The review card. Nothing is sent until Approve / Deny is clicked. */
 export function LinkReviewCard(props: LinkReviewCardProps): JSX.Element {
     const original = props.preview.device.name;
@@ -41,6 +50,7 @@ export function LinkReviewCard(props: LinkReviewCardProps): JSX.Element {
                 <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoComplete="off" />
             </Field>
             <LinkReviewDetails preview={props.preview} nowMs={props.nowMs} />
+            <MaybeExpiredHint preview={props.preview} nowMs={props.nowMs} />
             <LinkWarningBanner differentNetwork={!props.preview.sameNetworkAsYou} />
             <p className="mt-3 text-xs text-muted">
                 It can upload game data from the Companion app to your account. It cannot sign in as you, see your

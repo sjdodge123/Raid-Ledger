@@ -10,6 +10,7 @@ import type { CompanionDevice } from '@raid-ledger/contract';
 import { Button } from '../../components/ui/button';
 import { Modal } from '../../components/ui/modal';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
+import { useHashScrollIntoView } from '../../hooks/use-hash-scroll-into-view';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useCompanionDevices, useRevokeCompanionDevice } from '../../hooks/use-companion-devices';
@@ -72,11 +73,15 @@ function EmptyDevices(): JSX.Element {
     );
 }
 
+/** The card's anchor: `/link`'s "Manage devices" lands here. */
+const SECTION_ID = 'companion-devices';
+
 const DESCRIPTION = 'Computers running the Raid Ledger Companion that can upload game data for you.';
 
 /** The list body for each query state; the empty state replaces the description (mockup §5). */
 function DevicesBody({ onRemove }: { onRemove: (d: CompanionDevice) => void }): JSX.Element | null {
     const devices = useCompanionDevices();
+    useHashScrollIntoView(SECTION_ID, devices.data !== undefined || devices.isError);
     if (devices.isError) return <LoadError onRetry={() => { void devices.refetch(); }} retrying={devices.isFetching} />;
     if (devices.data === undefined) return null;
     if (devices.data.length === 0) return <EmptyDevices />;
@@ -94,7 +99,7 @@ function DevicesBody({ onRemove }: { onRemove: (d: CompanionDevice) => void }): 
 export function CompanionDevicesSection(): JSX.Element {
     const [removing, setRemoving] = useState<CompanionDevice | null>(null);
     return (
-        <section id="companion-devices" aria-labelledby="companion-devices-heading"
+        <section id={SECTION_ID} aria-labelledby="companion-devices-heading"
             className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-20">
             <h2 id="companion-devices-heading" className="text-xl font-semibold text-foreground mb-3">Companion devices</h2>
             <DevicesBody onRemove={setRemoving} />

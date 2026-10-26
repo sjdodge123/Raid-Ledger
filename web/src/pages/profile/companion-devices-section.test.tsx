@@ -1,5 +1,5 @@
 /** ROK-1955 T-WEB-5 — the Companion devices card on My Integrations. */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -54,6 +54,8 @@ function mockDevices(initial: CompanionDevice[]): Recorded {
 
 const rowOf = (id: number): HTMLElement => screen.getByTestId(`companion-device-${id}`);
 
+const scrollSpy = vi.fn();
+beforeEach(() => { scrollSpy.mockReset(); Element.prototype.scrollIntoView = scrollSpy; });
 afterEach(() => { server.resetHandlers(); });
 
 describe('CompanionDevicesSection (ROK-1955 T-WEB-5)', () => {
@@ -137,5 +139,44 @@ describe('CompanionDevicesSection actions (ROK-1955 T-WEB-5)', () => {
         await user.click(screen.getByRole('button', { name: 'Retry' }));
         expect(await screen.findByTestId('companion-device-1')).toBeInTheDocument();
         expect(screen.queryByText("Couldn't load your devices.")).toBeNull();
+    });
+});
+
+describe('CompanionDevicesSection focus and anchor (ROK-1955 web review)', () => {
+    it('#companion-devices scrolls the card into view once the list has loaded', async () => {
+        mockDevices([device()]);
+        const { container } = renderWithProviders(<CompanionDevicesSection />, {
+            initialEntries: ['/profile/integrations#companion-devices'],
+        });
+        await screen.findByTestId('companion-device-1');
+        await waitFor(() => expect(scrollSpy).toHaveBeenCalledTimes(1));
+        expect(scrollSpy.mock.contexts[0]).toBe(container.querySelector('#companion-devices'));
+    });
+
+    it('without the hash nothing scrolls', async () => {
+        mockDevices([device()]);
+        renderWithProviders(<CompanionDevicesSection />, { initialEntries: ['/profile/integrations'] });
+        await screen.findByTestId('companion-device-1');
+        expect(scrollSpy).not.toHaveBeenCalled();
+    });
+
+    it('rename focuses the input, and Cancel returns focus to Rename', async () => {
+        mockDevices([device()]);
+        const user = userEvent.setup();
+        renderWithProviders(<CompanionDevicesSection />);
+        await user.click(await screen.findByRole('button', { name: 'Rename' }));
+        expect(within(rowOf(1)).getByRole('textbox', { name: 'Device name' })).toHaveFocus();
+        await user.click(within(rowOf(1)).getByRole('button', { name: 'Cancel' }));
+        expect(within(rowOf(1)).getByRole('button', { name: 'Rename' })).toHaveFocus();
+    });
+
+    it('a saved rename returns focus to Rename', async () => {
+        mockDevices([device()]);
+        const user = userEvent.setup();
+        renderWithProviders(<CompanionDevicesSection />);
+        await user.click(await screen.findByRole('button', { name: 'Rename' }));
+        await user.type(within(rowOf(1)).getByRole('textbox', { name: 'Device name' }), '-2');
+        await user.click(within(rowOf(1)).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(within(rowOf(1)).getByRole('button', { name: 'Rename' })).toHaveFocus());
     });
 });

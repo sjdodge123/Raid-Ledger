@@ -3,7 +3,8 @@
  * seen / linked lines, and Rename (inline) / Remove for an active device.
  * A revoked row is dimmed and has no actions (the approved mockup's "Removed").
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import type { FormEvent, JSX } from 'react';
 import { CompanionDeviceNameSchema } from '@raid-ledger/contract';
 import type { CompanionDevice, CompanionDeviceOs } from '@raid-ledger/contract';
@@ -34,6 +35,8 @@ function RenameForm({ device, onDone }: { device: CompanionDevice; onDone: () =>
     const [name, setName] = useState(device.name);
     const [error, setError] = useState<string | undefined>(undefined);
     const rename = useRenameCompanionDevice();
+    const input = useRef<HTMLInputElement>(null);
+    useEffect(() => { input.current?.focus(); }, []);
     const submit = (e: FormEvent): void => {
         e.preventDefault();
         const parsed = CompanionDeviceNameSchema.safeParse(name);
@@ -46,7 +49,7 @@ function RenameForm({ device, onDone }: { device: CompanionDevice; onDone: () =>
     return (
         <form onSubmit={submit} className="basis-full flex flex-wrap items-start gap-2 mt-2">
             <Field label="Device name" hideLabel error={error} className="flex-1 min-w-[12rem]">
-                <Input value={name} maxLength={64} autoComplete="off" onChange={(e) => setName(e.target.value)} />
+                <Input ref={input} value={name} maxLength={64} autoComplete="off" onChange={(e) => setName(e.target.value)} />
             </Field>
             <Button type="submit" size="sm" loading={rename.isPending} loadingLabel="Saving…">Save</Button>
             <Button type="button" variant="secondary" size="sm" onClick={onDone} disabled={rename.isPending}>Cancel</Button>
@@ -76,10 +79,22 @@ function DeviceDetails({ device }: { device: CompanionDevice }): JSX.Element {
     );
 }
 
+/** A ref for the Rename button that takes focus back when the inline form closes. */
+function useReturnFocusOnClose(open: boolean): RefObject<HTMLButtonElement | null> {
+    const trigger = useRef<HTMLButtonElement>(null);
+    const wasOpen = useRef(open);
+    useEffect(() => {
+        if (wasOpen.current && !open) trigger.current?.focus();
+        wasOpen.current = open;
+    }, [open]);
+    return trigger;
+}
+
 /** One device row; rename expands inline under the details. */
 export function CompanionDeviceRow({ device, onRemove }: RowProps): JSX.Element {
     const [renaming, setRenaming] = useState(false);
     const active = device.state === 'active';
+    const renameTrigger = useReturnFocusOnClose(renaming);
     return (
         <li data-testid={`companion-device-${device.id}`} className="flex flex-wrap items-start gap-3 py-3">
             <span aria-hidden="true"
@@ -89,7 +104,7 @@ export function CompanionDeviceRow({ device, onRemove }: RowProps): JSX.Element 
             <DeviceDetails device={device} />
             {active && !renaming && (
                 <div className="flex gap-2 ml-auto">
-                    <Button variant="ghost" size="sm" onClick={() => setRenaming(true)}>Rename</Button>
+                    <Button ref={renameTrigger} variant="ghost" size="sm" onClick={() => setRenaming(true)}>Rename</Button>
                     <Button variant="destructive-soft" size="sm" onClick={() => onRemove(device)}>Remove</Button>
                 </div>
             )}
