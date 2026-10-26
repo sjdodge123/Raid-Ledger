@@ -19,8 +19,8 @@ function codeParam(raw: string): string | null {
 
 /**
  * The code a deep link carries. The fragment (`/link#code=…`) is preferred —
- * it never reaches access logs or a Referer. `?code=` is still read because
- * the API's RFC 8628 `verificationUriComplete` uses it.
+ * it never reaches access logs or a Referer, and the API's RFC 8628
+ * `verificationUriComplete` uses it. A legacy `?code=` link is still read.
  */
 export function readPrefilledCode(hash: string, search: string): string | null {
     return codeParam(hash) ?? codeParam(search);

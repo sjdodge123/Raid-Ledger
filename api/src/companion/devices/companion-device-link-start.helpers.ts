@@ -5,7 +5,9 @@ export const COMPANION_LINK_PATH = '/link';
 
 /**
  * The RFC 8628 §3.2 start response. `verificationUriComplete` pre-fills the
- * code on the approval page; it never approves by itself (D-10).
+ * code on the approval page; it never approves by itself (D-10). The code
+ * rides in the fragment (`/link#code=…`), which browsers never send to the
+ * server — so it stays out of access logs and Referer headers (Codex P2).
  */
 export function buildStartResponse(
   webBase: string,
@@ -16,7 +18,7 @@ export function buildStartResponse(
 ): CompanionLinkStartResponse {
   const verificationUri = new URL(COMPANION_LINK_PATH, webBase);
   const complete = new URL(COMPANION_LINK_PATH, webBase);
-  complete.searchParams.set('code', userCode);
+  complete.hash = new URLSearchParams({ code: userCode }).toString();
   return {
     deviceCode,
     userCode,

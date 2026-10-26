@@ -21,7 +21,7 @@ describe('readPrefilledCode', () => {
     it('reads the fragment form first', () => {
         expect(readPrefilledCode('#code=bcdf-ghjk', '?code=ZZZZZZZZ')).toBe('BCDF-GHJK');
     });
-    it('falls back to ?code= (the RFC 8628 verificationUriComplete the API emits)', () => {
+    it('falls back to a legacy ?code= link', () => {
         expect(readPrefilledCode('', '?code=BCDFGHJK')).toBe('BCDF-GHJK');
     });
     it('returns null when neither carries a code', () => {
