@@ -917,7 +917,12 @@ if [[ -r "$REGISTRY_GC_LIB" ]]; then
     source "$REGISTRY_GC_LIB"
     _rgc_mode=""
     [[ "$(jq -r '.pruned // false' <<<"${DISK_RESULT:-null}" 2>/dev/null)" == "true" ]] && _rgc_mode=force
-    REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>/dev/null || echo '{}')
+    # Non-zero = aborted: docker ps or the env registry was unreadable, so the
+    # protected set was unknown and nothing was deleted. Logged + audited.
+    if ! REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>/dev/null); then
+        log "registry: GC aborted — $(jq -r '.error // "unknown"' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
+    fi
+    [[ -n "$REGISTRY_GC_RESULT" ]] || REGISTRY_GC_RESULT='{}'
     if [[ "$(jq -r '.skipped // empty' <<<"$REGISTRY_GC_RESULT" 2>/dev/null)" != "interval" ]]; then
         audit registry_gc "$REGISTRY_GC_RESULT"
         log "registry: $(jq -rc '"tags=" + ((.tags_seen // "?")|tostring) + " deleted=" + ((.deleted // [])|length|tostring) + " gc=" + (.gc // "?")' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"

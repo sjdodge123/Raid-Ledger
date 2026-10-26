@@ -188,7 +188,9 @@ bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
 # its env-registry row (which records the image) still exists. Skips `latest`
 # and a tag another env still uses; blobs are freed by the gc-sweeper's
 # registry_gc::sweep. Best-effort: an unreachable registry never fails a destroy.
-registry_gc::delete_env_tag "$SLUG" 2>/dev/null || true
+# Its log line (deleted / would delete under RL_REGISTRY_GC_DRY_RUN) goes to
+# stderr; stdout stays the JSON result.
+registry_gc::delete_env_tag "$SLUG" || true
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 

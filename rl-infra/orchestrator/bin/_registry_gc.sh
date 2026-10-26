@@ -30,7 +30,9 @@
 #   RL_REGISTRY_KEEP_N            5    always keep the newest N tags
 #   RL_REGISTRY_GC_INTERVAL_HOURS 6    sweeper cadence (forced under disk pressure)
 #   RL_REGISTRY_GC_STATE_FILE     $STATE_DIR/registry-gc.json
-#   RL_REGISTRY_GC_DRY_RUN        0    1 = report, delete nothing
+#   RL_REGISTRY_GC_DRY_RUN        0    1 = report, delete nothing (sweeper AND
+#                                      env-destroy — both read /srv/rl-infra/.env)
+#   RL_REGISTRY_GC_TIMEOUT_SECONDS 1800 bound on `registry garbage-collect`
 
 RL_REGISTRY_URL="${RL_REGISTRY_URL:-http://127.0.0.1:5000}"
 RL_REGISTRY_REPO="${RL_REGISTRY_REPO:-rl-allinone}"
@@ -40,6 +42,7 @@ RL_REGISTRY_KEEP_N="${RL_REGISTRY_KEEP_N:-5}"
 RL_REGISTRY_GC_INTERVAL_HOURS="${RL_REGISTRY_GC_INTERVAL_HOURS:-6}"
 RL_REGISTRY_GC_STATE_FILE="${RL_REGISTRY_GC_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/registry-gc.json}"
 RL_REGISTRY_GC_DRY_RUN="${RL_REGISTRY_GC_DRY_RUN:-0}"
+RL_REGISTRY_GC_TIMEOUT_SECONDS="${RL_REGISTRY_GC_TIMEOUT_SECONDS:-1800}"
 
 _REGISTRY_ACCEPT="Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
 
@@ -81,15 +84,27 @@ registry_gc::delete_tag() {
     curl -fsS --max-time 10 -X DELETE "$(registry_gc::_api)/manifests/${digest}" >/dev/null 2>&1
 }
 
+# rl-allinone image refs (stdin, one per line, any registry prefix or none:
+# `rl-allinone:x`, `127.0.0.1:5000/rl-allinone:x`, `registry.rl.lan:5000/
+# rl-allinone:x`) → bare tags. Other repos and digest refs drop out, so two
+# spellings of the same tag compare equal.
+registry_gc::_tags_of() {
+    sed -n "s#^\(.*/\)\{0,1\}${RL_REGISTRY_REPO}:\([^@/]*\)\$#\2#p"
+}
+
 # Tags that must survive: `latest`, any tag a container (running or stopped)
-# was created from, and any tag an env-registry row points at. JSON array.
+# was created from, and any tag an env-registry row points at — except the
+# row of slug <$1> (env-destroy excludes the env being destroyed). JSON array.
+# Returns 1 (no output) when `docker ps` or the env registry cannot be read:
+# a partial protected set would let the sweep delete a live env's image.
 registry_gc::protected_tags() {
-    local repo="$RL_REGISTRY_REPO"
-    {
-        echo latest
-        docker ps -a --format '{{.Image}}' 2>/dev/null
-        jq -r '.[]?.image // empty' "${RL_ENVS_FILE:-/dev/null}" 2>/dev/null
-    } | sed -n "s#^\(.*/\)\{0,1\}${repo}:##p; s#^latest\$#latest#p" | sort -u | jq -Rnc '[inputs | select(length > 0)]'
+    local exclude="${1:-}" ps envs
+    ps=$(docker ps -a --format '{{.Image}}' 2>/dev/null) || return 1
+    envs=$(jq -er --arg s "$exclude" \
+        'if type == "array" then [.[] | select(.slug != $s) | .image // empty] | join("\n") else error("not an array") end' \
+        "${RL_ENVS_FILE:-/nonexistent}" 2>/dev/null) || return 1
+    { echo latest; printf '%s\n%s\n' "$ps" "$envs" | registry_gc::_tags_of; } \
+        | sed '/^$/d' | sort -u | jq -Rnc '[inputs]'
 }
 
 # Pure selection. <tags_json> = [{tag, created}] (created epoch or null),
@@ -113,11 +128,17 @@ registry_gc::build_admitted() {
     return 1
 }
 
-# `registry garbage-collect` inside the registry container. Echoes ran|failed.
+# `registry garbage-collect` inside the registry container, bounded by
+# RL_REGISTRY_GC_TIMEOUT_SECONDS (coreutils `timeout`, present in the
+# sweeper's debian image). A timeout kills the `docker exec` client only; the
+# in-container process can outlive it, which the 6h interval absorbs.
+# Echoes ran|timed_out|failed|dry_run.
 registry_gc::collect() {
     [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && { echo dry_run; return 0; }
-    if docker exec "$RL_REGISTRY_CONTAINER" registry garbage-collect --delete-untagged \
-        /etc/docker/registry/config.yml >/dev/null 2>&1; then echo ran; else echo failed; fi
+    local rc=0
+    timeout -k 10 "$RL_REGISTRY_GC_TIMEOUT_SECONDS" docker exec "$RL_REGISTRY_CONTAINER" \
+        registry garbage-collect --delete-untagged /etc/docker/registry/config.yml >/dev/null 2>&1 || rc=$?
+    case "$rc" in 0) echo ran ;; 124) echo timed_out ;; *) echo failed ;; esac
 }
 
 # Digests of the protected tags (newline list) — a doomed tag sharing one is
@@ -135,44 +156,73 @@ registry_gc::_inventory() {
     done | jq -sc .
 }
 
+registry_gc::_dry() { if [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]]; then echo true; else echo false; fi; }
+
+# Last run epoch from the state file; 0 when absent or recorded in the other
+# mode, so switching dry-run off does not wait out a dry run's interval.
+registry_gc::_last_run() {
+    jq -r --argjson dry "$(registry_gc::_dry)" \
+        'if (.dry_run // false) == $dry then .last_run_epoch // 0 else 0 end' \
+        "$RL_REGISTRY_GC_STATE_FILE" 2>/dev/null || echo 0
+}
+
+# Write + echo the run summary <now> <inventory> <deleted> <gc>. Dry runs are
+# recorded too (dry_run:true, `deleted` = would-delete) so the interval holds.
+registry_gc::_record() {
+    local result
+    result=$(jq -nc --argjson n "$(jq 'length' <<<"$2")" --argjson d "$3" --arg gc "$4" \
+        --argjson now "$1" --argjson dry "$(registry_gc::_dry)" \
+        '{tags_seen:$n, deleted:$d, gc:$gc, dry_run:$dry, last_run_epoch:$now, last_run_at:($now|todate)}')
+    printf '%s\n' "$result" > "$RL_REGISTRY_GC_STATE_FILE" 2>/dev/null || true
+    echo "$result"
+}
+
 # The gc-sweeper entry. Interval-gated by RL_REGISTRY_GC_STATE_FILE unless
-# $1 == force (the sweeper forces it under disk pressure). Deletes doomed
-# tags, then garbage-collects when no image build is admitted. Echoes a JSON
-# summary and always returns 0 — registry GC is never fatal to a sweep.
+# $1 == force (the sweeper forces it under disk pressure). Skips everything
+# while an image build is admitted (a build is the only pusher, and a fresh
+# cached-build tag has an old config.created and maybe no env row yet). Deletes
+# doomed tags, then garbage-collects if still no build is admitted. Echoes a
+# JSON summary. Returns 1 ({"error":…}) when the protected set is unreadable.
 registry_gc::sweep() {
-    local now last
-    now=$(registry_gc::_now)
-    last=$(jq -r '.last_run_epoch // 0' "$RL_REGISTRY_GC_STATE_FILE" 2>/dev/null || echo 0)
+    local now last prot
+    now=$(registry_gc::_now); last=$(registry_gc::_last_run)
     if [[ "${1:-}" != "force" ]] && (( now - ${last:-0} < RL_REGISTRY_GC_INTERVAL_HOURS * 3600 )); then
         echo '{"skipped":"interval"}'; return 0
     fi
-    local inv prot avoid tag deleted='[]' gc
-    inv=$(registry_gc::_inventory); prot=$(registry_gc::protected_tags)
-    avoid=$(registry_gc::_protected_digests "$prot")
+    if registry_gc::build_admitted; then echo '{"skipped":"build_admitted"}'; return 0; fi
+    if ! prot=$(registry_gc::protected_tags); then
+        echo "registry_gc: docker ps or $RL_ENVS_FILE unreadable — sweep aborted" >&2
+        echo '{"error":"protected_tags_unreadable"}'; return 1
+    fi
+    local inv avoid tag deleted='[]' gc
+    inv=$(registry_gc::_inventory); avoid=$(registry_gc::_protected_digests "$prot")
     for tag in $(registry_gc::select_doomed "$inv" "$prot"); do
         registry_gc::delete_tag "$tag" "$avoid" && deleted=$(jq -c --arg t "$tag" '. + [$t]' <<<"$deleted")
     done
     if registry_gc::build_admitted; then gc="skipped_build_admitted"; else gc=$(registry_gc::collect); fi
-    local result
-    result=$(jq -nc --argjson n "$(jq 'length' <<<"$inv")" --argjson d "$deleted" --arg gc "$gc" \
-        --argjson now "$now" --argjson dry "$([[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && echo true || echo false)" \
-        '{tags_seen:$n, deleted:$d, gc:$gc, dry_run:$dry, last_run_epoch:$now, last_run_at:($now|todate)}')
-    [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] || printf '%s\n' "$result" > "$RL_REGISTRY_GC_STATE_FILE" 2>/dev/null || true
-    echo "$result"
-    return 0
+    registry_gc::_record "$now" "$inv" "$deleted" "$gc"
 }
 
 # env-destroy hook: delete the destroyed env's own `rl-allinone:<tag>` — the
-# image recorded in its env-registry row — unless it is `latest` or another
-# env still points at it. Call BEFORE the row is removed. Best-effort.
+# image recorded in its env-registry row — unless it is `latest`, another env
+# or container still uses it (any registry prefix), or its digest equals a
+# protected tag's (a DELETE by digest drops every tag sharing it). Call BEFORE
+# the row is removed. Honours RL_REGISTRY_GC_DRY_RUN. Logs to stderr only
+# (env-destroy's stdout is its JSON result). Best-effort: always returns 0.
 registry_gc::delete_env_tag() {
-    local slug="$1" image tag
-    image=$(jq -r --arg s "$slug" '[.[]? | select(.slug == $s)][0].image // empty' "$RL_ENVS_FILE" 2>/dev/null)
-    [[ "$image" == *"${RL_REGISTRY_REPO}:"* ]] || return 0
-    tag="${image##*"${RL_REGISTRY_REPO}:"}"
+    local slug="$1" tag prot
+    tag=$(jq -r --arg s "$slug" '[.[]? | select(.slug == $s)][0].image // empty' "$RL_ENVS_FILE" 2>/dev/null \
+        | registry_gc::_tags_of)
     [[ -z "$tag" || "$tag" == "latest" ]] && return 0
-    jq -e --arg s "$slug" --arg i "$image" 'any(.[]?; .slug != $s and .image == $i)' "$RL_ENVS_FILE" >/dev/null 2>&1 \
-        && return 0
-    registry_gc::delete_tag "$tag" "$(registry_gc::digest latest)" || true
+    if ! prot=$(registry_gc::protected_tags "$slug"); then
+        echo "registry: protected tags unreadable — keeping ${RL_REGISTRY_REPO}:$tag" >&2; return 0
+    fi
+    jq -e --arg t "$tag" 'index($t)' <<<"$prot" >/dev/null && return 0
+    registry_gc::delete_tag "$tag" "$(registry_gc::_protected_digests "$prot")" || return 0
+    if [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]]; then
+        echo "registry: would delete ${RL_REGISTRY_REPO}:$tag (RL_REGISTRY_GC_DRY_RUN=1)" >&2
+    else
+        echo "registry: deleted ${RL_REGISTRY_REPO}:$tag" >&2
+    fi
     return 0
 }
