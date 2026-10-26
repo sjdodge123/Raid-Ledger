@@ -17,6 +17,7 @@ export const NOOP_LIVENESS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Valid categories for cron jobs. Must match the `category` column values.
  */
+import { MAINTENANCE_JOB_METADATA } from './cron-job.constants.maintenance';
 import { PLUGIN_JOB_METADATA } from './cron-job.constants.plugins';
 
 export type CronCategory =
@@ -67,32 +68,10 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Posts deferred Discord embeds for future series events approaching their lead-time window every 15 minutes',
     category: 'Notifications',
   },
-  SessionCleanupService_cleanupExpiredSessions: {
-    description: 'Deletes expired sessions daily at 3 AM',
-    category: 'Maintenance',
-  },
-  LfgExpiryService_expireIntents: {
-    description: 'Marks past-expiry LFG intents as expired every hour at :15',
-    category: 'Maintenance',
-  },
-  NotificationService_cleanupExpiredNotifications: {
-    description: 'Deletes expired notifications daily at 4 AM',
-    category: 'Maintenance',
-  },
-  GameActivityService_sweepStaleSessions: {
-    description:
-      'Closes game activity sessions older than 24h every 15 minutes',
-    category: 'Maintenance',
-  },
   GameActivityService_dailyRollup: {
     description:
       'Aggregates closed game sessions into daily/weekly/monthly rollups at 5 AM',
     category: 'Data Sync',
-  },
-  BackupService_dailyBackup: {
-    description:
-      'Creates a pg_dump backup and rotates backups older than 30 days',
-    category: 'Maintenance',
   },
   ScheduledEventService_startScheduledEvents: {
     description:
@@ -177,20 +156,6 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Creates missing Discord scheduled events for future events every 15 minutes',
     category: 'Events',
   },
-  IntentTokenCleanupService_cleanupExpiredTokens: {
-    description:
-      'Purges consumed intent tokens older than 15 minutes every 5 minutes',
-    category: 'Maintenance',
-  },
-  RefreshTokenCleanupService_cleanupExpiredTokens: {
-    description: 'Deletes expired and revoked refresh-token rows daily at 3 AM',
-    category: 'Maintenance',
-  },
-  CompanionDeviceLinkCleanupService_purgeExpiredLinks: {
-    description:
-      'Deletes Companion device-link codes that expired over 24 hours ago, daily at 4:20 AM',
-    category: 'Maintenance',
-  },
   SchedulingThresholdService_checkThresholds: {
     description:
       'Notifies poll organizers when unique voter count reaches the minimum vote threshold every 5 minutes',
@@ -224,11 +189,6 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     description:
       'Rebuilds the community insights snapshot (radar, engagement, churn, social graph, temporal, key insights) daily at 06:30 UTC',
     category: 'Data Sync',
-  },
-  TieExpiryService_expireTieHolds: {
-    description:
-      'Archives community lineups whose tie hold ran out its week, undecided, daily at 05:40 UTC',
-    category: 'Maintenance',
   },
   LineupReminderService_checkTiebreakerReminders: {
     description:
@@ -280,16 +240,6 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Force-finalizes orphaned Quick Play (ad-hoc) events whose end time passed >30 min ago every 5 minutes',
     category: 'Events',
   },
-  GuildReconciliationService_reconcileGuildMembers: {
-    description:
-      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC',
-    category: 'Maintenance',
-  },
-  GameRoleReconcileService_reconcile: {
-    description:
-      "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
-    category: 'Maintenance',
-  },
   ChannelLifecycleScheduler_reconcile: {
     description:
       'Reconciles game text channels daily at 04:15 — creates a channel for a game whose activity crossed the create threshold, archives quiet auto-managed channels into the Archived category, brings them back on new activity, links hubs to their managed channel (the nudge queue runs the same reconcile for one game within ~60 s of new activity)',
@@ -325,5 +275,6 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',
     category: 'Monitoring',
   },
+  ...MAINTENANCE_JOB_METADATA,
   ...PLUGIN_JOB_METADATA,
 };
