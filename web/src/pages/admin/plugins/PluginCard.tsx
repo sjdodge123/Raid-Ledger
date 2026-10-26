@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useNewBadge } from '../../../hooks/use-new-badge';
 import { getPluginBadge } from '../../../plugins/plugin-registry';
 import { AdminPluginSection } from '../../../components/admin/AdminPluginSection';
+import { PluginLifecycleActions } from '../../../components/admin/plugin-lifecycle-actions';
 import { NewBadge } from '../../../components/ui/new-badge';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 import { safeHttpUrl } from '../../../lib/safe-http-url';
@@ -25,7 +26,7 @@ export function PluginCard({
 }: PluginCardProps): JSX.Element {
     const { isNew, markSeen } = useNewBadge(`plugin-seen:${plugin.slug}`);
     const pluginBadge = getPluginBadge(plugin.slug);
-    const actionButtons = <PluginCardActions plugin={plugin} isPending={isPending} onInstall={onInstall} onActivate={onActivate} onDeactivate={onDeactivate} onUninstall={onUninstall} />;
+    const actionButtons = <PluginLifecycleActions plugin={plugin} isPending={isPending} onInstall={onInstall} onActivate={onActivate} onDeactivate={onDeactivate} onUninstall={onUninstall} />;
 
     return (
         <AdminPluginSection title={plugin.name} version={plugin.version} description={plugin.description}
@@ -45,35 +46,6 @@ function PluginCardBadges({ plugin, isNew }: { plugin: PluginInfoDto; isNew: boo
             {plugin.builtIn && <StatusChip tone="success" title="Built in — always on">Always on</StatusChip>}
             {reqs.length > 0 && <SetupSummaryChip summary={summarizeSetup(reqs, plugin.setupStatus ?? [])} />}
             <NewBadge visible={isNew} />
-        </>
-    );
-}
-
-function PluginCardActions({ plugin, isPending, onInstall, onActivate, onDeactivate, onUninstall }: {
-    plugin: PluginInfoDto; isPending: boolean;
-    onInstall: (slug: string) => void; onActivate: (slug: string) => void;
-    onDeactivate: (slug: string) => void; onUninstall: (slug: string) => void;
-}): JSX.Element | null {
-    // ROK-1969: a built-in plugin (Core) is always on — no lifecycle actions.
-    if (plugin.builtIn) return null;
-    return (
-        <>
-            {plugin.status === 'not_installed' && (
-                <button onClick={() => onInstall(plugin.slug)} disabled={isPending}
-                    className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Install</button>
-            )}
-            {plugin.status === 'active' && (
-                <button onClick={() => onDeactivate(plugin.slug)} disabled={isPending}
-                    className="px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Deactivate</button>
-            )}
-            {plugin.status === 'inactive' && (
-                <>
-                    <button onClick={() => onActivate(plugin.slug)} disabled={isPending}
-                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Activate</button>
-                    <button onClick={() => onUninstall(plugin.slug)} disabled={isPending}
-                        className="px-3 py-1.5 text-sm bg-danger/10 hover:bg-danger/15 text-danger font-medium rounded-lg transition-colors border border-danger/50">Uninstall</button>
-                </>
-            )}
         </>
     );
 }
