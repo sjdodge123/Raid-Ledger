@@ -61,7 +61,11 @@ test.describe('Admin plugins panel', () => {
         const core = page.getByTestId('plugin-card-core');
         await expect(core.getByText('Always on', { exact: true })).toBeVisible({ timeout: 15_000 });
         await expect(core.getByRole('button', { name: /^(Install|Activate|Deactivate|Uninstall)$/ })).toHaveCount(0);
-        await expect(core.getByRole('list', { name: 'Widgets' }).getByText('Gallery', { exact: true })).toBeVisible();
+        // Each item is "<name> <description>" (Core widgets carry descriptions), so an
+        // exact getByText('Gallery') never matches in Playwright — match the item's start.
+        await expect(
+            core.getByRole('list', { name: 'Widgets' }).getByRole('listitem').filter({ hasText: /^Gallery\b/ }),
+        ).toBeVisible();
         const valheim = page.getByTestId('plugin-card-valheim');
         await expect(valheim.getByRole('list', { name: 'Tabs' }).getByText('Map', { exact: true })).toBeVisible();
         await expect(valheim.getByTestId('plugin-setup')).toBeVisible();
