@@ -16,6 +16,7 @@ import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { assertHubMemberOrStaff } from './valheim-hub-member.helpers';
 import { toDeathsResponse } from './valheim-deaths.mappers';
 import { ValheimDeathPinsRepository } from './valheim-deaths-pins.repository';
+import { ValheimDeathsPicturesRepository } from './valheim-deaths-pictures.repository';
 import { toDeathPinsResponse } from './valheim-deaths-pins.mappers';
 
 @Injectable()
@@ -25,15 +26,20 @@ export class ValheimDeathsService {
     private readonly access: GuildAccessService,
     private readonly repo: ValheimDeathsRepository,
     private readonly pins: ValheimDeathPinsRepository,
+    private readonly pictures: ValheimDeathsPicturesRepository,
   ) {}
 
-  /** `GET …/servers/:serverId/deaths`. */
+  /** `GET …/servers/:serverId/deaths` (ROK-1941: + visible death pictures). */
   async deaths(
     serverId: number,
     user: AuthenticatedUser,
   ): Promise<ValheimDeathsResponse> {
     await this.assertMemberOrStaff(serverId, user);
-    return toDeathsResponse(await this.repo.countByPlayer(serverId));
+    const [counts, pictures] = await Promise.all([
+      this.repo.countByPlayer(serverId),
+      this.pictures.bucketsFor(serverId),
+    ]);
+    return toDeathsResponse(counts, pictures);
   }
 
   /** `GET …/servers/:serverId/deaths/pins?worldUid=` (L4a, same D6 check). */

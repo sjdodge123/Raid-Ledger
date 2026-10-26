@@ -1695,3 +1695,19 @@ the grid, build a custom image overlay, or put the chips in a §4.1 funnel. **Li
 a token; the well is `bg-media-well` — a DARK stage in both families (operator ruling), the one token no scheme
 remaps (`media-well.guard.test.ts`). ←/→ only act on keys aimed inside the dialog. Rendered: `/dev/design-system#hub-widgets` → "Gallery card + lightbox" (`hub-gallery-demo.tsx`, the
 real grid + dialog over a seeded demo cache); live on a Valheim server hub's Overview (`/hubs/:id`).
+
+- **Mounted once by the Overview (ROK-1941 D14)** — `hub-gallery-dialog-mount.tsx` in `hub-overview.tsx`, not
+  inside the Gallery card, so any widget opens it through `useHubGalleryStore().openGallery(…)` even when the
+  card is hidden. A viewer request carries `mediaId`; a picture past the loaded pages is paged in (≤10 pages)
+  while the dialog shows "Loading pictures…" — never a different picture first — then falls back to `index`.
+
+**New pattern: thumbnail strip in a meter row (ROK-1941, operator Q1 = A)** — `ValheimDeathsPictures`
+(`plugins/valheim/hub/valheim-deaths-pictures.tsx`). Nothing else in the inventory puts image thumbs in a
+list row. A second line under a `GuildMeter` row, a SIBLING of the row's `<Link>` (never nested): up to three
+`Button variant="bare"` 44px targets (`p-0.5`), each a 40px `rounded-md border-edge bg-panel` tile with the
+`object-cover` thumb (`group-hover:border-edge-strong`, `brightness-110`), then "+N" in the same tile
+(`text-secondary` → `text-foreground` on hover). `role="group"` named "<name>'s death pictures"; a thumb is
+named like a Gallery tile ("Death — Jasz, 1 day ago. Open picture"), "+N" "N more death pictures. Open the
+gallery". A thumb opens the §4.29 viewer at that `mediaId` with the Deaths chip; "+N" the grid on Deaths. A row
+with no pictures renders exactly as before. **DON'T** put the thumbs inside the row link or build a separate
+viewer. **Light / Dark** — tokens only (`border-edge`, `bg-panel`, `text-secondary`), checked in both families.

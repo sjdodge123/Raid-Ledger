@@ -277,6 +277,7 @@ export * from './hub-onboarding.schema.js';
 export * from './hub-server.schema.js';
 // Hub media store + Gallery widget — pictures with a source kind (ROK-1942).
 export * from './hub-media.schema.js';
+export * from './hub-media-channel.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';
