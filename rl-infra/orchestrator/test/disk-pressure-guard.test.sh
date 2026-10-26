@@ -414,6 +414,26 @@ test_failed_rung_is_logged_and_ladder_continues() {
     test_teardown
 }
 
+# A-n: the sweeper's real log() prints to STDOUT. A failed rung's log line must
+# not land in the rung JSON that guard/_walk return on stdout (Codex P2).
+test_failed_rung_log_does_not_corrupt_stdout_json() {
+    CURRENT_TEST_NAME="A-n: a stdout-printing log() leaves guard's JSON parseable"
+    _setup_ladder 95 95 95 95
+    local out
+    out=$(
+        log() { echo "[sweep] $*"; }
+        docker() {
+            echo "docker $*" >> "$DOCKER_LOG"
+            [[ "$*" == builder* ]] && { echo "ERROR: driver not running" >&2; return 1; }
+            echo "Total reclaimed space: 1GB"
+        }
+        disk_pressure::guard 2>/dev/null
+    )
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")' 2>/dev/null)" "builder_prune,image_prune,volume_prune" \
+        "guard stdout must stay pure JSON when log() prints to stdout"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -427,5 +447,6 @@ run_test "a-j-unreadable-df" test_unreadable_df_is_unknown_not_full
 run_test "a-k-status-tolerates-state-file" test_status_tolerates_missing_or_garbage_state_file
 run_test "a-l-builder-legacy-route" test_builder_rung_uses_the_proxy_allowed_route
 run_test "a-m-failed-rung-logged" test_failed_rung_is_logged_and_ladder_continues
+run_test "a-n-log-stays-off-stdout" test_failed_rung_log_does_not_corrupt_stdout_json
 
 print_test_summary

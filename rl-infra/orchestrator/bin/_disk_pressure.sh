@@ -127,12 +127,14 @@ disk_pressure::_audit() {
 
 # A failed rung goes to the sweeper's log() when we were sourced by it (the
 # sweeper calls guard with stderr discarded), stderr elsewhere (the build
-# admission gate's task log). Never fatal.
+# admission gate's task log). Never fatal. The sweeper's log() prints to
+# STDOUT, and _walk returns the rung JSON on stdout, so its output is sent to
+# stderr here — otherwise a failed rung's log line corrupts the captured JSON.
 disk_pressure::_log_failure() {
     local rung="$1" outcome="$2" msg
     msg="disk ladder: ${rung} failed (exit $(jq -r '.exit_code' <<<"$outcome")): $(jq -r '.stderr' <<<"$outcome")"
     if declare -F log >/dev/null 2>&1; then
-        log "$msg"
+        log "$msg" >&2
     else
         echo "[disk-pressure] $msg" >&2
     fi
