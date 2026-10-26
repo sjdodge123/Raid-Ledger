@@ -30,9 +30,14 @@ const RESET_LABEL: Partial<Record<GuildPage['guild']['kind'], string>> = {
     wow_guild: 'Reset to in-game name',
 };
 
+/** ROK-2015: the reset toast names what the hub went back to. */
+const RESET_TOAST: Partial<Record<GuildPage['guild']['kind'], string>> = {
+    wow_guild: 'Name reset to the in-game name',
+};
+
 function HubNameForm({ page }: { page: GuildPage }): JSX.Element {
     const { guild } = page;
-    const rename = useHubRename(guild.id);
+    const rename = useHubRename(guild.id, RESET_TOAST[guild.kind]);
     const [draft, setDraft] = useState(guild.name);
     const next = draft.trim();
     const canSave = next !== guild.name && HubNameSchema.safeParse(next).success;

@@ -148,6 +148,7 @@ describe('HubNameSection — WoW guild (ROK-2015)', () => {
         expect(screen.queryByRole('button', { name: 'Reset to server name' }), 'WoW must not use the server copy').toBeNull();
         await user.click(screen.getByRole('button', { name: 'Reset to in-game name' }));
         await waitFor(() => expect(calls).toEqual([{ hubId: 7, body: { name: null } }]));
+        expect(toasts.success).toHaveBeenCalledWith('Name reset to the in-game name');
     });
 
     it('W3: a WoW guild that follows its in-game name has no Reset button', () => {
