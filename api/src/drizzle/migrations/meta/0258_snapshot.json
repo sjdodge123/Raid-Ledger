@@ -1,5 +1,5 @@
 {
-  "id": "f622d11f-bb50-4151-97e9-f17b470d14f8",
+  "id": "4f4255a2-ccc6-4838-b34a-6f0c126ed757",
   "prevId": "9ac2ffe3-8fb1-4a15-8812-1987f4c691af",
   "version": "7",
   "dialect": "postgresql",
@@ -11181,12 +11181,6 @@
           "notNull": true,
           "default": false
         },
-        "source_name": {
-          "name": "source_name",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "realm_slug": {
           "name": "realm_slug",
           "type": "varchar(100)",
@@ -12027,6 +12021,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "media_channel_id": {
+          "name": "media_channel_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_channel_set_by": {
+          "name": "media_channel_set_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "media_channel_set_at": {
+          "name": "media_channel_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12072,6 +12084,37 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "guild_profiles_media_channel_uq": {
+          "name": "guild_profiles_media_channel_uq",
+          "columns": [
+            {
+              "expression": "media_channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"guild_profiles\".\"media_channel_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guild_profiles_media_channel_set_by": {
+          "name": "idx_guild_profiles_media_channel_set_by",
+          "columns": [
+            {
+              "expression": "media_channel_set_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12107,6 +12150,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "discord_channel_set_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "guild_profiles_media_channel_set_by_users_id_fk": {
+          "name": "guild_profiles_media_channel_set_by_users_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "media_channel_set_by"
           ],
           "columnsTo": [
             "id"
@@ -17132,6 +17188,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "hub_media_id": {
+          "name": "hub_media_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -17189,6 +17251,48 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "valheim_player_deaths_media_uq": {
+          "name": "valheim_player_deaths_media_uq",
+          "columns": [
+            {
+              "expression": "hub_media_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "valheim_player_deaths_server_name_time_idx": {
+          "name": "valheim_player_deaths_server_name_time_idx",
+          "columns": [
+            {
+              "expression": "pelican_server_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"character_name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -17204,6 +17308,19 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "valheim_player_deaths_hub_media_id_hub_media_id_fk": {
+          "name": "valheim_player_deaths_hub_media_id_hub_media_id_fk",
+          "tableFrom": "valheim_player_deaths",
+          "tableTo": "hub_media",
+          "columnsFrom": [
+            "hub_media_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -17212,7 +17329,7 @@
       "checkConstraints": {
         "valheim_player_deaths_source_check": {
           "name": "valheim_player_deaths_source_check",
-          "value": "\"valheim_player_deaths\".\"source\" IN ('log', 'mod')"
+          "value": "\"valheim_player_deaths\".\"source\" IN ('log', 'mod', 'discord')"
         },
         "valheim_player_deaths_log_ts_check": {
           "name": "valheim_player_deaths_log_ts_check",
