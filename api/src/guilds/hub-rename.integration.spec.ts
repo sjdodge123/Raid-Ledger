@@ -405,14 +405,16 @@ describe('PATCH /guilds/:id/name — server hubs', () => {
 });
 
 describe('PATCH /guilds/:id/name — WoW and unknown ids', () => {
-  it('15: a WoW guild is refused with 409 (D3, OQ-1)', async () => {
+  it('15: an admin renames a WoW guild; name_key stays the import key (ROK-2015 D1)', async () => {
     await registry().ensureInstalled('blizzard');
     await registry().activate('blizzard');
     const id = await mkWowGuild();
-    const res = await rename(id, admin, { name: 'New Wow Name' });
-    expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ message: RENAME_ERRORS.wowRefused });
-    expect((await hubRow(id)).name).toBe('Rename Wow Guild');
+    await rename(id, admin, { name: 'New Wow Name' }).expect(200);
+    expect(await hubRow(id)).toMatchObject({
+      name: 'New Wow Name',
+      nameKey: 'rename wow guild',
+      nameOverridden: true,
+    });
   });
 
   it('16: an unknown id is 404 for an admin', async () => {
