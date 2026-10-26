@@ -214,3 +214,27 @@ describe('CompanionLinkPage — decisions and errors', () => {
         expect(await screen.findByText("That code isn't valid or has expired. Start again on your computer.")).toBeInTheDocument();
     });
 });
+
+describe('CompanionLinkPage — restart after a dead code (ROK-1955 review)', () => {
+    it('a 404 on Approve offers "Enter a new code", which returns to an empty, focused entry step', async () => {
+        const rec = mockApi();
+        failWith(DECISION, 404, 'code_not_found');
+        renderAt('/link#code=BCDFGHJK');
+        await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Enter a new code' }));
+        const heading = await screen.findByRole('heading', { name: 'Link a computer' });
+        await waitFor(() => expect(heading).toHaveFocus());
+        expect(screen.getByLabelText('Code shown on your computer')).toHaveValue('');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(rec.previews).toHaveLength(1);
+    });
+
+    it('a decision error other than 404 does not offer "Enter a new code"', async () => {
+        mockApi();
+        failWith(DECISION, 409, 'device_limit');
+        renderAt('/link#code=BCDFGHJK');
+        await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+        await screen.findByText(/You have 10 linked devices/);
+        expect(screen.queryByRole('button', { name: 'Enter a new code' })).not.toBeInTheDocument();
+    });
+});

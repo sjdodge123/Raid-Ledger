@@ -39,11 +39,16 @@ export function systemLine(device: CompanionLinkPreview['device']): string {
     return `${os} · Companion ${device.appVersion}`;
 }
 
-/** "2 min ago · expires in 8 min". */
+/** The expiry half of the timing line; past `expiresAt` it matches the review card's soft hint. */
+function expiryPhrase(expiresAt: string, nowMs: number): string {
+    if (Date.parse(expiresAt) <= nowMs) return 'may have expired';
+    const left = relativeMinutes(expiresAt, nowMs);
+    return left < 1 ? 'expires in under a minute' : `expires in ${left} min`;
+}
+
+/** "2 min ago · expires in 8 min" (or "… · may have expired" once past `expiresAt`). */
 export function timingLine(preview: CompanionLinkPreview, nowMs: number): string {
     const ago = -relativeMinutes(preview.requestedAt, nowMs);
-    const left = relativeMinutes(preview.expiresAt, nowMs);
     const requested = ago < 1 ? 'Just now' : `${ago} min ago`;
-    const expires = left < 1 ? 'expires in under a minute' : `expires in ${left} min`;
-    return `${requested} · ${expires}`;
+    return `${requested} · ${expiryPhrase(preview.expiresAt, nowMs)}`;
 }

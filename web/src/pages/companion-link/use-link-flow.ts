@@ -54,9 +54,10 @@ export function useLinkFlow() {
     }, [previewCode]);
     const [code, setCode] = useState(usePrefill(submitCode));
     const changeCode = (next: string): void => { setCode(next); setLocalError(undefined); preview.reset(); };
+    const restart = (): void => { setCode(''); setLocalError(undefined); decision.reset(); preview.reset(); };
     const decide = (choice: LinkDecision, name?: string): void => {
         const userCode = normaliseCompanionUserCode(preview.data?.userCode ?? code);
         decision.mutate({ userCode, decision: choice, ...(name === undefined ? {} : { name }) });
     };
-    return { preview, decision, code, localError, changeCode, submit: () => submitCode(code), decide };
+    return { preview, decision, code, localError, changeCode, submit: () => submitCode(code), decide, restart };
 }

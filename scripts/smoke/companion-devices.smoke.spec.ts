@@ -46,20 +46,31 @@ function retryAfterMs(res: Response): number {
 
 interface StartAttempt { status: number; body: unknown }
 
+/** One public link-start request, as the Companion app sends it. */
+function postLinkStart(name: string): Promise<Response> {
+    return fetch(`${API_BASE}${LINK}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device: { name, os: 'windows', osVersion: '11', appVersion: '0.1.0' } }),
+    });
+}
+
 /** Start a link as the Companion app would: public, no auth. A 429 is retried after its Retry-After. */
 async function startLink(name: string): Promise<CompanionLinkStartResponse> {
     let notBefore = 0;
+    let last429: string | null = null;
     const attempt = await pollForCondition<StartAttempt>(async () => {
         if (Date.now() < notBefore) return null;
-        const res = await fetch(`${API_BASE}${LINK}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ device: { name, os: 'windows', osVersion: '11', appVersion: '0.1.0' } }),
-        });
+        const res = await postLinkStart(name);
         if (res.status !== 429) return { status: res.status, body: await res.json() };
+        last429 = res.headers.get('Retry-After') ?? '(missing)';
         notBefore = Date.now() + retryAfterMs(res);
         return null;
-    }, { timeoutMs: START_RETRY_BUDGET_MS, intervalMs: 1000, description: 'companion link start (waits out a 429)' });
+    }, { timeoutMs: START_RETRY_BUDGET_MS, intervalMs: 1000, description: 'companion link start (waits out a 429)' }).catch((err: unknown) => {
+        if (last429 === null) throw err;
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`POST ${LINK} still rate-limited: 429 with Retry-After=${last429}s (budget ${START_RETRY_BUDGET_MS / 1000}s). ${reason}`);
+    });
     expect(attempt.status, `POST ${LINK} → ${JSON.stringify(attempt.body)}`).toBe(200);
     return CompanionLinkStartResponseSchema.parse(attempt.body);
 }

@@ -28,6 +28,7 @@ function LinkStep(): JSX.Element {
                 pending={decision.isPending ? decision.variables.decision : null}
                 errorKind={decision.error ? companionLinkErrorKind(decision.error) : null}
                 onDecide={flow.decide}
+                onRestart={flow.restart}
             />
         );
     }
