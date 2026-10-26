@@ -275,3 +275,4 @@ export * from './hub-notification-mutes.schema.js';
 export * from './hub-widget-prefs.schema.js';
 // Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
 export * from './companion-devices.schema.js';
+export * from './companion-device-link-json-schema.js';
