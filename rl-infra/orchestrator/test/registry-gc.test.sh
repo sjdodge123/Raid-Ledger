@@ -13,6 +13,7 @@
 #   R-d  sweep skips garbage-collect while an image build is admitted
 #   R-e  sweep is interval-gated (state file) unless forced
 #   R-f  env-destroy deletes the env's own tag, never one another env uses
+#   R-g  sweep.sh wires the sweep under the compose mount
 
 set -uo pipefail
 CURRENT_TEST_FILE="registry-gc.test.sh"
@@ -129,10 +130,22 @@ test_env_destroy_deletes_own_tag() {
     test_teardown
 }
 
+test_sweeper_wires_registry_gc() {
+    CURRENT_TEST_NAME="R-g: sweep.sh sources the lib from the compose mount and runs the sweep"
+    test_setup
+    local stripped; stripped=$(grep -v '^[[:space:]]*#' "$TEST_DIR/../../gc-sweeper/sweep.sh")
+    assert_contains "$stripped" '/orchestrator-lib}/_registry_gc.sh' "lib resolves under /orchestrator-lib"
+    assert_contains "$stripped" 'registry_gc::sweep' "sweeper calls registry_gc::sweep"
+    assert_contains "$stripped" 'http://rl-registry:5000' "sweeper talks to the registry over rl-net"
+    bash -n "$TEST_DIR/../../gc-sweeper/sweep.sh"; assert_eq "$?" "0" "sweep.sh parses"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
 run_test "r-d-build-admitted" test_sweep_skips_gc_during_build
 run_test "r-e-interval" test_sweep_interval_gate
 run_test "r-f-env-destroy" test_env_destroy_deletes_own_tag
+run_test "r-g-sweeper-wiring" test_sweeper_wires_registry_gc
 print_test_summary
