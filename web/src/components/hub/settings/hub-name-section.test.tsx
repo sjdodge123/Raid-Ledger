@@ -1,7 +1,8 @@
 /**
  * ROK-1950 — "Hub name" in the hub settings sheet: community and server hubs
  * rename through `PATCH /guilds/:id/name`; an overridden server hub can reset
- * to the Pelican server's name (`{ name: null }`); a WoW guild gets no control.
+ * to the Pelican server's name (`{ name: null }`). ROK-2015: a WoW guild renames
+ * too, and an overridden one resets to its in-game name.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
@@ -34,9 +35,16 @@ function serverPage(nameOverridden: boolean): GuildPageDto {
     };
 }
 
+const WOW_GUILD = { ...BASE_GUILD, id: 7, kind: 'wow_guild', realmName: 'Doomhowl', faction: 'Horde' } as const;
+
 const WOW: GuildPageDto = {
     ...COMMUNITY,
-    guild: { ...BASE_GUILD, id: 7, kind: 'wow_guild', name: 'Iron Vanguard', realmName: 'Doomhowl', faction: 'Horde' },
+    guild: { ...WOW_GUILD, name: 'Iron Vanguard', nameOverridden: false, inGameName: 'Iron Vanguard' },
+};
+
+const WOW_RENAMED: GuildPageDto = {
+    ...COMMUNITY,
+    guild: { ...WOW_GUILD, name: 'The Iron Lads', nameOverridden: true, inGameName: 'Iron Vanguard' },
 };
 
 const IDLE_RAIDS: HubCtx['raids'] = {
@@ -105,12 +113,6 @@ describe('HubNameSection (ROK-1950)', () => {
         expect(screen.queryByRole('button', { name: 'Reset to server name' }), 'Reset shows only while overridden').toBeNull();
     });
 
-    it('a WoW guild gets no rename control (its name comes from the game)', () => {
-        renderSection(WOW);
-        expect(screen.queryByTestId('hub-name-section'), 'WoW guilds must not render the section').toBeNull();
-        expect(screen.queryByLabelText('Hub name')).toBeNull();
-    });
-
     it('a 409 surfaces the server message in an error toast', async () => {
         const user = userEvent.setup();
         server.use(hubRenameError(409, 'A hub with that name already exists for this game'));
@@ -129,5 +131,36 @@ describe('HubNameSection (ROK-1950)', () => {
         await user.type(screen.getByLabelText('Hub name'), ' EU');
         await user.click(screen.getByRole('button', { name: 'Save name' }));
         await waitFor(() => expect(toasts.error).toHaveBeenCalledWith('Only the hub’s Leader or staff can rename it.'));
+    });
+});
+
+describe('HubNameSection — WoW guild (ROK-2015)', () => {
+    it('W1: a WoW guild renders the Hub name section (ROK-2015)', () => {
+        renderSection(WOW);
+        expect(screen.queryByTestId('hub-name-section'), 'WoW guilds now render the section').not.toBeNull();
+        expect(screen.getByLabelText('Hub name')).toHaveValue('Iron Vanguard');
+    });
+
+    it('W2: a renamed WoW guild names its in-game name and "Reset to in-game name" sends { name: null }', async () => {
+        const user = userEvent.setup();
+        renderSection(WOW_RENAMED);
+        expect(screen.getByText(/In game this guild is called “Iron Vanguard”\. LedgerLink imports keep the name you set here\./)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Reset to server name' }), 'WoW must not use the server copy').toBeNull();
+        await user.click(screen.getByRole('button', { name: 'Reset to in-game name' }));
+        await waitFor(() => expect(calls).toEqual([{ hubId: 7, body: { name: null } }]));
+    });
+
+    it('W3: a WoW guild that follows its in-game name has no Reset button', () => {
+        renderSection(WOW);
+        expect(screen.queryByTestId('hub-name-section'), 'the section renders for a WoW guild').not.toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reset to in-game name' }), 'Reset shows only while overridden').toBeNull();
+        expect(screen.queryByTestId('hub-name-reset')).toBeNull();
+    });
+
+    it('W4: a WoW guild without an in-game name on record shows the base hint only', () => {
+        renderSection({ ...WOW_RENAMED, guild: { ...WOW_GUILD, name: 'The Iron Lads', nameOverridden: true } });
+        expect(screen.getByText('Shown on the hub, in the directory and on Discord.')).toBeInTheDocument();
+        expect(screen.queryByText(/In game this guild is called/), 'no in-game hint without a name').toBeNull();
+        expect(screen.queryByText(/undefined|null/)).toBeNull();
     });
 });
