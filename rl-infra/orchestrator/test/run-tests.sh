@@ -134,6 +134,8 @@ else
         # ROK-1568 — host disk-pressure ladder (sweeper step 3b) + the build
         # admission gate that parks an image build instead of dying at ENOSPC.
         "$TEST_DIR/disk-pressure-guard.test.sh"
+        # 2026-10-26 — registry GC (gc-sweeper tag sweep + env-destroy tag delete).
+        "$TEST_DIR/registry-gc.test.sh"
     )
 fi
 
