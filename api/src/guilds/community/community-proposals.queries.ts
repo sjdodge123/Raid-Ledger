@@ -27,12 +27,24 @@ export interface NewCommunityHub {
 const JOINERS = /[\u200C\u200D]/g;
 
 /**
- * D11 key: case-insensitive, trimmed, NFC, joiners stripped (ROK-1950 review /
+ * D11 key: joiners stripped, trimmed, NFC, case-insensitive (ROK-1950 review /
  * ROK-2016: one key per visual name, so a name differing only by a ZWJ/ZWNJ
- * is "name taken").
+ * is "name taken"). Joiners go FIRST: a ZWJ between `e` and U+0301 would
+ * otherwise block NFC composition and leave a decomposed key.
  */
 export function hubNameKey(name: string): string {
-  return name.trim().normalize('NFC').replace(JOINERS, '').toLowerCase();
+  return name.replace(JOINERS, '').trim().normalize('NFC').toLowerCase();
+}
+
+/**
+ * A stored `name_key` with ZWJ/ZWNJ stripped in SQL (ROK-2016 review). Keys
+ * written before ROK-2016 may still hold joiners, and there is no backfill (a
+ * collision on the unique index would fail the deploy), so every comparison
+ * against a stored key normalises it here. Takes the column object so the
+ * table qualifier survives.
+ */
+export function storedNameKey(column: typeof g.nameKey): SQL<string> {
+  return sql<string>`regexp_replace(${column}, ${'[\u200C\u200D]'}, '', 'g')`;
 }
 
 /** The game's name, or null when the game does not exist. */
@@ -57,7 +69,7 @@ export async function hasNameClash(
   const conds: (SQL | undefined)[] = [
     eq(g.kind, COMMUNITY),
     eq(g.gameId, gameId),
-    eq(g.nameKey, hubNameKey(name)),
+    eq(storedNameKey(g.nameKey), hubNameKey(name)),
     ne(g.status, 'archived'),
   ];
   if (exceptId !== null) conds.push(ne(g.id, exceptId));

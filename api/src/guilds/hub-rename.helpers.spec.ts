@@ -176,4 +176,15 @@ describe('hubNameKey — one key per visual name (ROK-1950 review)', () => {
       'fam \u{1F468}\u{1F469}',
     );
   });
+
+  it('strips joiners BEFORE NFC so a joiner between e and U+0301 still composes (ROK-2016 review)', () => {
+    expect(hubNameKey('Cafe\u200D\u0301 Club')).toBe('caf\u00e9 club');
+    expect(hubNameKey('Cafe\u200D\u0301 Club')).toBe(
+      hubNameKey('Caf\u00e9 Club'),
+    );
+  });
+
+  it('trims after stripping so a joiner-padded name keys like the bare one', () => {
+    expect(hubNameKey('\u200D Iron Wolves')).toBe('iron wolves');
+  });
 });

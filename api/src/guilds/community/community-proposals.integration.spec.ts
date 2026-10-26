@@ -252,6 +252,19 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
     expect(other.body.gameId).toBe(gameH);
   });
 
+  it('P3b a legacy stored key that still holds a ZWJ clashes with the joiner-free name (ROK-2016 review)', async () => {
+    // seedHub keys with trim+lowercase only, so this is the pre-ROK-2016 key 'iron\u200dwolves'.
+    await seedHub(gameG(), 'Iron\u200DWolves', 'active');
+    const proposer = await seedUser('p3b-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'IronWolves',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+
   it('P4 an archived "BG3 Crew" on G frees the name: 201', async () => {
     await seedHub(gameG(), 'BG3 Crew', 'archived');
     const proposer = await seedUser('p4-proposer');
