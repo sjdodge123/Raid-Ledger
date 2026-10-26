@@ -3,10 +3,12 @@
  * registers it): the All · Deaths · Screenshots chips, a strip of 8 square
  * thumbnails ≥1024px (6 below), newest first, and a footnote. Members never
  * reach an empty card (`useGalleryWidgetVisible`); editors get the §4.5 hint.
- * A tile opens the L4 dialog in viewer mode via `hub-gallery-store.ts`.
+ * A tile opens the L4 dialog in viewer mode via `hub-gallery-store.ts`; the
+ * dialog itself is mounted by the hub Overview (ROK-1941 D14,
+ * `hub-gallery-dialog-mount.tsx`).
  * Default export so the registration can `React.lazy` it.
  */
-import { lazy, Suspense, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { HubMediaItem } from '@raid-ledger/contract';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -21,8 +23,6 @@ import { HubGalleryChips } from './hub-gallery-chips';
 import { useHubGalleryStore } from './hub-gallery-store';
 import { useHubGalleryCardFilter } from './use-hub-gallery-card-filter';
 import { HubGalleryTile } from './hub-gallery-tile';
-
-const HubGalleryDialogHost = lazy(() => import('./hub-gallery-dialog'));
 
 export const GALLERY_EDITOR_EMPTY_HINT =
     "No pictures yet. Death screenshots from your server's Discord appear here once an admin links the screenshot channel.";
@@ -44,7 +44,6 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
     const guildId = page.guild.id;
     const setFilter = useHubGalleryStore((s) => s.setFilter);
     const openGallery = useHubGalleryStore((s) => s.openGallery);
-    const request = useHubGalleryStore((s) => s.request);
     const desktop = useMediaQuery(DESKTOP_MQ);
     const { all, filters, filter } = useHubGalleryCardFilter(guildId);
     const shown = useQuery({ ...hubMediaStripQuery(guildId, filter), placeholderData: keepPreviousData });
@@ -60,9 +59,6 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
             <GalleryStrip items={(shown.data?.items ?? []).slice(0, limit)}
                 onOpen={(item, index, el) => openGallery({ guildId, mode: 'viewer', filter, index, mediaId: item.id, returnFocus: el })} />
             <p className="text-xs text-muted">From the screenshot channel · newest first</p>
-            {request?.guildId === guildId && (
-                <Suspense fallback={null}><HubGalleryDialogHost request={request} canEdit={page.viewer.canEdit} /></Suspense>
-            )}
         </div>
     );
 }

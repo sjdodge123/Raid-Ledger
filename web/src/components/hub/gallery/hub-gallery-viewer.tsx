@@ -66,7 +66,8 @@ export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubG
         if (el !== null && !el.contains(document.activeElement)) el.focus();
     }, []);
     return (
-        <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer">
+        <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer"
+            data-media-id={item.id}>
             <p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>
             <div data-testid="hub-gallery-stage"
                 className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video">

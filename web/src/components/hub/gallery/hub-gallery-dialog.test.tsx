@@ -146,6 +146,20 @@ describe('HubGalleryDialog — viewer', () => {
         expect(await caption()).toMatch(who(4));
     });
 
+    it('opens a picture beyond the first loaded page: pages in until its id is loaded, never showing another one first', async () => {
+        open({ index: 0, mediaId: 28 });
+        expect(await caption()).toMatch(who(28));
+        expect(counter()).toBe('28 of 30');
+    });
+
+    it('an id in no page falls back to the requested index once every page is loaded', async () => {
+        const calls: string[] = [];
+        server.use(pagedHandler(ITEMS, calls));
+        open({ index: 2, mediaId: 999 });
+        expect(await caption()).toMatch(who(3));
+        expect(calls).toHaveLength(2);
+    });
+
     it('removing the last picture of the selected kind falls the dialog filter back to All', async () => {
         const items = [hubMediaItem(1, 'death'), hubMediaItem(2, 'screenshot')];
         server.use(pagedHandler(items), http.delete('http://localhost:3000/hubs/:guildId/media/:id', ({ params }) => {
