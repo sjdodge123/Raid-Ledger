@@ -25,13 +25,14 @@ whose `contract` + `contractVersion` select an entry in the registry
 |---|---|---|---|---|
 | *(envelope — not a registry entry)* | `envelopeVersion: 1` | current | [`envelope/v1/`](./envelope/v1/CONTRACT.md) | `src/companion-common.schema.ts`, `src/companion-envelope.schema.ts` |
 | `bg3-save` | `1` | `current` | [`bg3-save/v1/`](./bg3-save/v1/CONTRACT.md) | `src/companion-bg3-save.schema.ts` (+ `-raw.schema.ts`, `-normalise.ts`) |
+| *(device-link — HTTP link/poll bodies, not a registry entry)* | `1` | current | [`device-link/v1/`](./device-link/v1/CONTRACT.md) | `src/companion-devices.schema.ts` |
 
 Each `vN/` folder holds `CONTRACT.md` (normative prose), `schema.json`
 (generated JSON Schema, draft 2020-12), `CHANGELOG.md` and `fixtures/` (valid
 cases, plus `fixtures/invalid/` with an `EXPECTED.json` mapping each case to the
 Zod issue `{ path, code }` it must raise).
 
-Regenerate both `schema.json` files, from the repo root:
+Regenerate every `schema.json` file, from the repo root:
 
 ```
 npm run build -w packages/contract && node packages/contract/scripts/gen-companion-schemas.mjs

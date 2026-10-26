@@ -9,10 +9,10 @@ ROK-1955.
 | What | Where |
 |---|---|
 | Zod source of truth | `packages/contract/src/companion-devices.schema.ts` |
-| JSON Schema (generated, one `$defs` entry per body) | [`schema.json`](./schema.json) — `node packages/contract/scripts/gen-companion-device-link-schema.mjs` after a contract build |
+| JSON Schema (generated, one `$defs` entry per body) | [`schema.json`](./schema.json) — `node packages/contract/scripts/gen-companion-schemas.mjs` after a contract build (builder: `src/companion-json-schema.ts`) |
 | Golden fixtures | [`fixtures/`](./fixtures) (valid) and [`fixtures/invalid/`](./fixtures/invalid) + `EXPECTED.json` |
 | Changelog | [`CHANGELOG.md`](./CHANGELOG.md) |
-| Drift guard + fixture conformance (contract vitest) | `packages/contract/src/__tests__/companion-device-link-contract.spec.ts` |
+| Drift guard + fixture conformance (api jest) | `api/src/companion/companion-contract.spec.ts` (D1–D3, C7) |
 | Server behaviour | `api/src/companion/devices/` |
 
 If this prose and the Zod source ever disagree, **the Zod source wins** and this
