@@ -1607,6 +1607,29 @@ A tab that needs a server block gates itself with `visible: ({ page }) => page.s
 Characters / Map / Materials / Planner use it. No visual change, so there is no `/dev/design-system` demo; the
 tab row is the §4 `TabRow`.
 
+**Plugin card — Adds to hubs + Setup checklist (ROK-1969).** Each card on Admin › Plugins
+(`web/src/pages/admin/plugins/PluginCard.tsx`, `data-testid="plugin-card-<slug>"`) renders what the plugin's
+manifest (`PluginInfoDto.hub`) declares, never hand-written copy. **Adds to hubs**
+(`plugin-hub-contributions.tsx`): an `h4` "Adds to hubs" over up to three `<ul aria-label>` lists — Widgets
+(title + `text-xs text-muted` description), Tabs (planned tabs omitted), Hub behaviours — `text-sm text-secondary`
+rows under the card's `text-xs font-medium text-dim uppercase tracking-wider` section label; a plugin that adds
+nothing renders nothing. A built-in plugin (Core) gets a `StatusChip tone="success"` "Always on" instead of the
+status pill, no lifecycle buttons and a `text-xs text-dim` "Built in — cannot be deactivated or uninstalled." line;
+the panel sorts it first under a one-line `bg-panel border-edge` note (`plugins-hub-note.tsx`). **Setup**
+(`plugin-setup-checklist.tsx`, pure rules in `setup-summary.ts`): a native `<details>` (the `ScrollCollapsible`
+idiom) under Adds to hubs that opens itself while a required step is unmet and is closed once Ready; its summary
+carries "Setup", "N of M required done · K optional" and the summary `StatusChip` — "N steps left" (`warning`,
+counts **required unmet only**), "Check setup" (`neutral`, only unknown-with-check required rows remain), "Ready"
+(`success`), or "No setup needed" (`success`, empty list — a plain line, not a disclosure). The same chip sits in
+the card header when the plugin declares setup. Each row is a nested `<details>` (open when required + unmet):
+title + the api's `detail`, chips Optional / `HubKindChip` per `appliesTo` / state (Done `success`, To do
+`warning`, unmet-optional, "Manual step" (no check) and "Not checked" all `neutral` — **unknown is never a warning
+colour**); the body is `MarkdownBlock` instructions, "Where it goes on the server" (`pelican.eggHint`, `files`,
+`variable` in `code`), links, and on rows with `pelican` hints a disabled `Button variant="secondary"` "Apply on
+Pelican" with a `text-xs text-dim` coming-later line (ROK-1975). A `server_secret` row adds a placeholder-only
+`pre`, "The value is issued in Raid Ledger and never shown here", and an "Issue token…" `buttonClass` link to
+Integrations › Pelican Panel. Unmet steps never disable Install/Activate.
+
 ### 4.28 Arrange list — reorder, hide and add the cells of a configurable grid (ROK-1918)
 
 While an editor arranges a hub Overview, the bento grid is **replaced** by an order-truthful single-column

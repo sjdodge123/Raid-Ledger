@@ -30,7 +30,7 @@ export function PluginCard({
     return (
         <AdminPluginSection title={plugin.name} version={plugin.version} description={plugin.description}
             status={plugin.builtIn ? undefined : plugin.status} badge={<PluginCardBadges plugin={plugin} isNew={isNew} />}
-            pluginBadge={pluginBadge}
+            pluginBadge={pluginBadge} testId={`plugin-card-${plugin.slug}`}
             onMouseEnter={markSeen} actions={actionButtons}>
             <PluginCardDetails plugin={plugin} />
         </AdminPluginSection>
