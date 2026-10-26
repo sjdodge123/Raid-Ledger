@@ -5,12 +5,13 @@
  * it never lands in an access log) and has no side effect; the decision is
  * only ever sent from an explicit Approve / Deny click.
  */
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { CompanionLinkPreviewSchema } from '@raid-ledger/contract';
 import type { CompanionLinkDecisionRequest, CompanionLinkPreview } from '@raid-ledger/contract';
 import { fetchApi } from '../lib/api/fetch-api';
 import { errorBodyOf, httpStatusOf } from '../lib/api/api-error';
+import { COMPANION_DEVICES_KEY } from './use-companion-devices';
 
 const LINK_BASE = '/companion/v1/devices/link';
 
@@ -45,7 +46,14 @@ export function useCompanionLinkPreview(): UseMutationResult<CompanionLinkPrevie
     return useMutation({ mutationFn: previewCompanionLink, retry: false });
 }
 
-/** Mutation: the explicit approve / deny decision. */
+/** Mutation: the explicit approve / deny decision; an approve refreshes the Devices list. */
 export function useCompanionLinkDecision(): UseMutationResult<CompanionLinkDecisionResult, Error, CompanionLinkDecisionRequest> {
-    return useMutation({ mutationFn: decideCompanionLink, retry: false });
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: decideCompanionLink,
+        retry: false,
+        onSuccess: (result) => {
+            if (result.status === 'approved') void qc.invalidateQueries({ queryKey: COMPANION_DEVICES_KEY });
+        },
+    });
 }

@@ -34,9 +34,13 @@ export function revokeCompanionDevice(id: number): Promise<void> {
     return fetchApi<void>(`${DEVICES_PATH}/${id}`, { method: 'DELETE' });
 }
 
-/** The device list. */
+/**
+ * The device list. Refetched on every mount (Codex P2): a device is issued
+ * only when the app polls after an approve, so a cached copy — even one the
+ * approve invalidated — can predate it.
+ */
 export function useCompanionDevices(): UseQueryResult<CompanionDevice[], Error> {
-    return useQuery({ queryKey: COMPANION_DEVICES_KEY, queryFn: fetchCompanionDevices });
+    return useQuery({ queryKey: COMPANION_DEVICES_KEY, queryFn: fetchCompanionDevices, refetchOnMount: 'always' });
 }
 
 /** Rename a device; refreshes the list on success. */
