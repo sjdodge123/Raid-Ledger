@@ -186,6 +186,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     description: 'Deletes expired and revoked refresh-token rows daily at 3 AM',
     category: 'Maintenance',
   },
+  CompanionDeviceLinkCleanupService_purgeExpiredLinks: {
+    description:
+      'Deletes Companion device-link codes that expired over 24 hours ago, daily at 4:20 AM',
+    category: 'Maintenance',
+  },
   SchedulingThresholdService_checkThresholds: {
     description:
       'Notifies poll organizers when unique voter count reaches the minimum vote threshold every 5 minutes',
