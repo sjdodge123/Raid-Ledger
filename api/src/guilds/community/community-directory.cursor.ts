@@ -4,11 +4,14 @@ import type { HubDirectoryQuery } from '@raid-ledger/contract';
 
 /** ROK-1870 L3 — the opaque base64url keyset cursor of `GET /hubs`. */
 
+/** Keys are bound as `::int` (int4); a larger value would 500 in Postgres. */
+const INT4_MAX = 2147483647;
+
 const CursorSchema = z
   .object({
     s: z.enum(['members', 'name', 'newest']),
     v: z.string(),
-    id: z.number().int().positive(),
+    id: z.number().int().positive().max(INT4_MAX),
   })
   .strict();
 /** A decoded cursor: the sort it belongs to, its key value and row id. */
@@ -36,4 +39,16 @@ export function decodeCursor(
     throw new BadRequestException('Invalid cursor');
   }
   return parsed.data;
+}
+
+/**
+ * The `members` sort key as an int4 member count; 400 on anything else, since
+ * it is bound as `::int` and an out-of-range value would 500 in Postgres.
+ */
+export function parseMembersKey(v: string): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > INT4_MAX) {
+    throw new BadRequestException('Invalid cursor');
+  }
+  return n;
 }

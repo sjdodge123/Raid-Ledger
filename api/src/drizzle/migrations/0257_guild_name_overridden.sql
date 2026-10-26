@@ -1,0 +1,2 @@
+ALTER TABLE "guilds" ADD COLUMN "name_overridden" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "guilds" ADD CONSTRAINT "guilds_name_override_kind_check" CHECK ("guilds"."name_overridden" = false OR "guilds"."kind" <> 'game_community');

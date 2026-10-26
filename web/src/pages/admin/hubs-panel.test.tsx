@@ -115,3 +115,52 @@ describe('HubsPanel — create hub', () => {
         expect(within(dialog).getByRole('button', { name: 'Create' })).toBeDisabled();
     });
 });
+
+describe('HubsPanel — rename an active hub (ROK-1950)', () => {
+    it('Rename opens a dialog prefilled with the current name', async () => {
+        const user = userEvent.setup();
+        renderPanel('#active');
+        await user.click(within(await row('Tav Party')).getByRole('button', { name: 'Rename' }));
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByLabelText(/Hub name/)).toHaveValue('Tav Party');
+    });
+
+    it('Save sends PATCH /guilds/:id/name, closes the dialog and the refetched row shows the new name', async () => {
+        const user = userEvent.setup();
+        renderPanel('#active');
+        await user.click(within(await row('Tav Party')).getByRole('button', { name: 'Rename' }));
+        const dialog = await screen.findByRole('dialog');
+        const name = within(dialog).getByLabelText(/Hub name/);
+        await user.clear(name);
+        await user.type(name, '  Tav Party EU ');
+        await user.click(within(dialog).getByRole('button', { name: 'Save name' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(store.requests).toContainEqual({ method: 'PATCH', path: '/guilds/100/name', body: { name: 'Tav Party EU' } });
+        expect(await screen.findByText('Tav Party EU'), 'the admin-hubs list must refetch after a rename').toBeInTheDocument();
+    });
+
+    it('keeps Save disabled for an unchanged or too-short name', async () => {
+        const user = userEvent.setup();
+        renderPanel('#active');
+        await user.click(within(await row('Tav Party')).getByRole('button', { name: 'Rename' }));
+        const dialog = await screen.findByRole('dialog');
+        const save = within(dialog).getByRole('button', { name: 'Save name' });
+        expect(save, 'an unchanged name must not be saveable').toBeDisabled();
+        const name = within(dialog).getByLabelText(/Hub name/);
+        await user.clear(name);
+        await user.type(name, 'ab');
+        expect(save, 'a name under the minimum must not be saveable').toBeDisabled();
+    });
+
+    it('shows a 409 inline and keeps the dialog open', async () => {
+        const user = userEvent.setup();
+        server.use(conflict('patch', '/guilds/:id/name', 'A hub with that name already exists for this game'));
+        renderPanel('#active');
+        await user.click(within(await row('Tav Party')).getByRole('button', { name: 'Rename' }));
+        const dialog = await screen.findByRole('dialog');
+        await user.type(within(dialog).getByLabelText(/Hub name/), ' 2');
+        await user.click(within(dialog).getByRole('button', { name: 'Save name' }));
+        expect(await within(dialog).findByText('A hub with that name already exists for this game')).toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+});

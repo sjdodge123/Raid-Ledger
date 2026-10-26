@@ -30,18 +30,23 @@ type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
 const blobs = schema.valheimLinkBlobs;
 /** Aliases `claimedProfileSql` expects (`p` profile, `u` its claimer). */
-const p = alias(schema.valheimProfiles, 'p');
+const P_ALIAS = 'p';
+const p = alias(schema.valheimProfiles, P_ALIAS);
 const u = alias(schema.users, 'u');
 
 /**
  * ROK-1948 D5: the visible-graph cache fingerprint of a server's profiles —
- * row count + an md5 of every profile's `known_recipes`/`known_items` in id
- * order. It hashes the exact input the pruning reads, so ANY committed write
- * that changes a known list changes it. A timestamp max cannot: `imported_at`
- * is `now()` (transaction START), so an import that started earlier but
- * committed later lands an older stamp and leaves count + max unchanged.
+ * row count + an md5 of every profile's `id:xmin` in id order. `xmin` is the
+ * row version Postgres stamps on every committed INSERT/UPDATE (freezing
+ * keeps it), so ANY committed write to a known list changes it — without
+ * reading the lists themselves (~0.4 MB at 50 × 300 entries, as much as the
+ * read the cache guards). A write that leaves the lists alone (a claim) also
+ * moves it: one spare rebuild, never a stale graph. A timestamp max cannot
+ * stand in: `imported_at` is `now()` (transaction START), so an import that
+ * started earlier but committed later lands an older stamp. `xmin` is a
+ * system column drizzle doesn't model, so it is qualified by the alias.
  */
-export const PROFILE_FINGERPRINT = sql<string>`count(*)::text || ':' || md5(coalesce(string_agg(${p.id}::text || '=' || ${p.knownRecipes}::text || '|' || ${p.knownItems}::text, ',' order by ${p.id}), ''))`;
+export const PROFILE_FINGERPRINT = sql<string>`count(*)::text || ':' || md5(coalesce(string_agg(${p.id}::text || ':' || ${sql.identifier(P_ALIAS)}.xmin::text, ',' order by ${p.id}), ''))`;
 
 @Injectable()
 export class ValheimRecipesReadRepository {

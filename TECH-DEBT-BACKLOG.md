@@ -3629,3 +3629,33 @@ same day (#1278, #1279, #1280).
 ### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (surfaced during ROK-1969 L4 install sheet)
 
 - **low** — `web/src/pages/admin/plugins/PluginCard.tsx` (`PluginCardActions` Install/Activate/Deactivate buttons, the "Supported Games" `TagList`, the `IntegrationsList` "Not Configured" chip) and `web/src/components/admin/AdminPluginSection.tsx` (`STATUS_STYLES.not_installed`): hard-coded colours — `bg-emerald-600`/`bg-amber-600` button fills, `bg-blue-500/10 text-blue-400 border-blue-500/20`, `bg-gray-500/20 text-gray-400`. Pre-existing (ROK-281 card); they do not remap across the 15 themes. L4 left them unchanged to keep the diff on the approved additions. Suggested: swap the buttons for `Button variant="primary" | "warning-soft" | "destructive-soft"`, the game tags and "Not Configured"/"Not Installed" pills for `StatusChip tone="neutral"`.
+### 2026-10-25 — feat/rok-1950-hub-rename (surfaced during ROK-1950 review)
+
+- **low** `api/src/guilds/**` `hubNameKey` — ROK-1950 now NFC-normalises hub name keys, but keys stored before it were not normalised, so a hub saved in decomposed form can get a visually identical twin. Very unlikely in practice. Suggested: a one-off SQL backfill of `name_key` to NFC after a duplicate check (self-contained migration), or accept the gap.
+- **low** `api/src/notifications/hub-proposal-notices.ts:29` — the PROPOSED hub name is sent to staff unescaped, so a markdown link in a proposal renders clickable in the staff DM. Pre-existing (not touched by ROK-1950, which escaped the tagged-event and welcome embeds). Suggested: wrap it in `escapeHubName` like the other embeds.
+
+### 2026-10-25 — fix-batch/2026-10-25-td
+
+- **resolved** 2026-10-17 fix/security-p2-batch `api/src/discord-bot/commands/invite.command.ts` — `/invite` now refuses a deactivated or banned caller with `LFG_BLOCKED_REPLY`, mirroring `/lfg` (this branch).
+- **resolved** 2026-10-23 feat/rok-1943 (Codex r5 P3) `api/src/guilds/community/community-directory.cursor.ts` + `community-directory.queries.ts` — `/hubs` cursor row id and member-count key are bounded to int4, so a crafted cursor 400s instead of 500ing (this branch).
+- **resolved** 2026-10-22 Lead session ag `api/src/discord-bot/services/ad-hoc-event-end.helpers.ts` + `ad-hoc-event.helpers.ts` — `setGracePeriodStatus` returns whether the `live`-guarded update flipped a row, and `startGracePeriod` bails before enqueue/emit when it did not (this branch).
+- **resolved** 2026-10-14 feat/rok-1775-pelican-month-schedule `web/src/pages/calendar-page.tsx:33-35` — `/calendar?view=week|day` on desktop now opens in that view (seeded from a valid `?view` param) (this branch).
+- **resolved** 2026-10-15 feat/rok-1767-game-role `web/src/pages/profile/identity-sections.tsx:165` — the Auto-heart `role="switch"` is named by its card heading via `aria-labelledby` (this branch).
+### 2026-10-25 — fix/hub-copy-and-proposal-smoke
+
+- **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
+
+### 2026-10-25 — fix-batch/2026-10-25-hub-td (resolutions)
+
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/notifications/notification-embed.buttons.ts:346`, `hub-posts.helpers.ts:87`, `hub-notification.service.ts:81`, `hub-proposal-notices.ts:48` — API-built hub links go through one `hubPath(id)` helper (`api/src/guilds/hub-path.ts`) → `/hubs/<id>` (this branch).
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — the hub is resolved only once dedupe leaves a recipient (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/components/hub/hub-page.tsx:266` — the recovery latch is released by a newer non-401 error; a still-401 refetch keeps Sign in (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/lib/api/resume-refresh.ts:44-47` — the batch guard is released after 15 s if a refetch never settles (this branch).
+- **resolved** 2026-10-24 feat/rok-1938 `web/src/components/analytics/attendance-trends-chart.tsx:65-67` — lines use `--color-success` / `--color-danger` / `--color-warning` (this branch).
+- **resolved** 2026-10-24 feat/rok-1943 `web/src/plugins/valheim/map/valheim-map-view.tsx:92` (status chip under the zoom column) — the chip stack in `map-status.tsx` wraps short of the zoom column below 1024px (this branch). The landscape-phone legend overlap entry stays open.
+- **resolved** 2026-10-25 feat/rok-1950 `api/src/notifications/hub-proposal-notices.ts:29` — the proposed hub name AND the proposer's display name are escaped in the staff Discord DM; in-app text unchanged (this branch).
+- `nit` `api/src/notifications/notification-embed.hub-proposal.ts:19` — the DM escaping matches names as substrings, so a name like `_` also escapes those characters in the game name (renders identically in Discord). Suggested: escape the name fields where the description is composed instead of substring-replacing the finished text.
+
+### 2026-10-25 — Lead session as (flake reproduction, no fix shipped)
+
+- **med (unreproduced)** 2026-10-24 fix/rok-1935 `api/src/guilds/community/hub-auto-membership.integration.spec.ts:167` ("A2: auto — the signer is joined (source auto) and told once", prompt row `undefined`) — `./scripts/spec-loop.sh hub-auto-membership.integration 50 false` on fleet slot 3 at bd9e900df: **50/50 PASS** (task 29134f678894, ~22 s/run, Redis sidecar). Does not reproduce in isolation → per the flake rule no fix was designed. Likely load/order-dependent in the sharded CI run (member row and prompt row are written by separate statements in `hub-auto-membership.service.ts:92-96`; the spec's `waitFor` at :162-164 waits only on `joinSource`). Suggested: if it recurs in CI, loop the whole shard (not the file) or make the `waitFor` predicate include the prompt row.

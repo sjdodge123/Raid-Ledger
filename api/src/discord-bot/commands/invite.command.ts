@@ -19,6 +19,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
 import type { SlashCommandHandler } from './register-commands';
+import { LFG_BLOCKED_REPLY } from './lfg.command.helpers';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
 @Injectable()
@@ -113,12 +114,22 @@ export class InviteCommand
     }
   }
 
-  /** Look up invoking user's RL account. Returns null if unlinked. */
+  /**
+   * Look up invoking user's RL account. Returns null (after replying) when the
+   * account is unlinked, deactivated or banned — `NotDeactivatedGuard` only
+   * guards HTTP routes, so the slash-command path refuses blocked callers
+   * itself, with the same copy `/lfg` uses.
+   */
   private async resolveInvoker(
     interaction: ChatInputCommandInteraction,
   ): Promise<{ id: number; role: string } | null> {
     const [invoker] = await this.db
-      .select({ id: schema.users.id, role: schema.users.role })
+      .select({
+        id: schema.users.id,
+        role: schema.users.role,
+        deactivatedAt: schema.users.deactivatedAt,
+        bannedAt: schema.users.bannedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.discordId, interaction.user.id))
       .limit(1);
@@ -128,7 +139,11 @@ export class InviteCommand
       );
       return null;
     }
-    return invoker;
+    if (invoker.deactivatedAt || invoker.bannedAt) {
+      await interaction.editReply(LFG_BLOCKED_REPLY);
+      return null;
+    }
+    return { id: invoker.id, role: invoker.role };
   }
 
   /**

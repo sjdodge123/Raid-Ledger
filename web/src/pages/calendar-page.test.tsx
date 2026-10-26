@@ -27,7 +27,7 @@ vi.mock('../hooks/use-media-query', () => ({ useMediaQuery: () => mockIsDesktop 
 vi.mock('../components/calendar', () => ({
     // ROK-1662: the page hands the Filters funnel + inline panel to CalendarView's toolbar slots.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    CalendarView: (props: any) => <div data-testid="calendar-view">{props.toolbarAction}{props.belowToolbar}</div>,
+    CalendarView: (props: any) => <div data-testid="calendar-view" data-view={props.calendarView}>{props.toolbarAction}{props.belowToolbar}</div>,
     MiniCalendar: () => <div data-testid="mini-calendar" />,
 }));
 
@@ -375,4 +375,43 @@ describe('CalendarPage — filter panel (desktop)', () => {
     panelTestsGroup1();
     panelTestsGroup2();
     panelTestsGroup3();
+});
+
+describe('CalendarPage — ?view deep link seeds the view (TECH-DEBT 2026-10)', () => {
+    const originalWidth = window.innerWidth;
+    beforeEach(() => { resetStore(); });
+    afterEach(() => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth }); });
+
+    function setWidth(px: number): void {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: px });
+    }
+    function viewFor(url: string): string | null {
+        renderPage(CalendarPage, [url]);
+        return screen.getByTestId('calendar-view').getAttribute('data-view');
+    }
+
+    it('desktop /calendar?view=week opens Week, not Month', () => {
+        setWidth(1280);
+        expect(viewFor('/calendar?view=week')).toBe('week');
+    });
+
+    it('desktop /calendar?view=day opens Day', () => {
+        setWidth(1280);
+        expect(viewFor('/calendar?view=day')).toBe('day');
+    });
+
+    it('desktop ignores an invalid ?view and keeps the Month default', () => {
+        setWidth(1280);
+        expect(viewFor('/calendar?view=bogus')).toBe('month');
+    });
+
+    it('desktop with no ?view keeps the Month default', () => {
+        setWidth(1280);
+        expect(viewFor('/calendar')).toBe('month');
+    });
+
+    it('phone keeps the Schedule default even with ?view=week', () => {
+        setWidth(375);
+        expect(viewFor('/calendar?view=week')).toBe('schedule');
+    });
 });
