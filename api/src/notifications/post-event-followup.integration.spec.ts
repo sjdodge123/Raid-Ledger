@@ -126,6 +126,20 @@ async function mkSignup(
     .values({ eventId, userId, status });
 }
 
+/** Put a user's signup on the event roster in `role` (e.g. 'dps' or 'bench'). */
+async function mkRoster(
+  testApp: TestApp,
+  eventId: number,
+  userId: number,
+  role: string,
+) {
+  await testApp.db.execute(sql`
+    INSERT INTO roster_assignments (event_id, signup_id, role, position)
+    SELECT event_id, id, ${role}, 1 FROM event_signups
+    WHERE event_id = ${eventId} AND user_id = ${userId}
+  `);
+}
+
 async function mkAnonSignup(
   testApp: TestApp,
   eventId: number,
@@ -307,6 +321,27 @@ describe('Post-event follow-up helpers (integration)', () => {
       );
       expect([...result].sort((x, y) => x - y)).toEqual(
         [roached.id, departed.id].sort((x, y) => x - y),
+      );
+    });
+
+    it('ROK-2019: a signup benched on the roster is excluded; rostered and unassigned signups stay', async () => {
+      const creator = await mkUser(testApp);
+      const rostered = await mkUser(testApp);
+      const benched = await mkUser(testApp);
+      const unassigned = await mkUser(testApp);
+      const ev = await mkEvent(testApp, creator.id);
+      await mkSignup(testApp, ev.id, rostered.id);
+      await mkSignup(testApp, ev.id, benched.id);
+      await mkSignup(testApp, ev.id, unassigned.id);
+      await mkRoster(testApp, ev.id, rostered.id, 'dps');
+      await mkRoster(testApp, ev.id, benched.id, 'bench');
+      const result = await resolvePostEventFollowupRecipients(
+        testApp.db,
+        ev.id,
+        creator.id,
+      );
+      expect([...result].sort((x, y) => x - y)).toEqual(
+        [rostered.id, unassigned.id].sort((x, y) => x - y),
       );
     });
   });
