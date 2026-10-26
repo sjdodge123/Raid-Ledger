@@ -23,9 +23,33 @@ export interface NewCommunityHub {
   reviewedBy: number | null;
 }
 
-/** D11 key: case-insensitive, trimmed, NFC (ROK-1950 review: one key per visual name). */
+/**
+ * U+200C ZWNJ / U+200D ZWJ (allowed inside hub names since ROK-2016) and VS16
+ * U+FE0F (emoji presentation): invisible, so never part of a name key.
+ */
+const KEY_STRIPPED = /\u200C|\u200D|\uFE0F/g;
+
+/**
+ * D11 key: joiners and VS16 stripped, trimmed, NFC, case-insensitive
+ * (ROK-1950 review / ROK-2016: one key per visual name, so a name differing
+ * only by a ZWJ/ZWNJ/VS16 is "name taken"). Joiners go FIRST: a ZWJ between `e` and U+0301 would
+ * otherwise block NFC composition and leave a decomposed key.
+ */
 export function hubNameKey(name: string): string {
-  return name.trim().normalize('NFC').toLowerCase();
+  return name.replace(KEY_STRIPPED, '').trim().normalize('NFC').toLowerCase();
+}
+
+/**
+ * A stored `name_key` with ZWJ/ZWNJ/VS16 stripped and re-NFC'd in SQL
+ * (ROK-2016 review), mirroring {@link hubNameKey}. Keys written before
+ * ROK-2016 may still hold them (a legacy `cafe‍́` key only composes once the
+ * joiner is gone), and there is no backfill (a collision on the unique index
+ * would fail the deploy), so every comparison against a stored key normalises
+ * it here. `normalize(text, NFC)` needs Postgres ≥13 + a UTF8 DB (pg16 here).
+ * Takes the column object so the table qualifier survives.
+ */
+export function storedNameKey(column: typeof g.nameKey): SQL<string> {
+  return sql<string>`normalize(regexp_replace(${column}, ${'[\u200C\u200D\uFE0F]'}, '', 'g'), NFC)`;
 }
 
 /** The game's name, or null when the game does not exist. */
@@ -50,7 +74,7 @@ export async function hasNameClash(
   const conds: (SQL | undefined)[] = [
     eq(g.kind, COMMUNITY),
     eq(g.gameId, gameId),
-    eq(g.nameKey, hubNameKey(name)),
+    eq(storedNameKey(g.nameKey), hubNameKey(name)),
     ne(g.status, 'archived'),
   ];
   if (exceptId !== null) conds.push(ne(g.id, exceptId));
