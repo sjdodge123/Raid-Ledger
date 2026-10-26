@@ -73,7 +73,11 @@ describe('DesignSystemPage', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
         // findByRole: the calendar layer + hub samples are lazy chunks (ROK-1893 P4).
-        expect(await screen.findByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+        // The first lazy case pays the cold chunk import (~1s alone on the fleet,
+        // more on a loaded CI shard), so the default 1s wait flaked (PR #1820).
+        expect(
+            await screen.findByRole('heading', { name: heading, level: 2 }, { timeout: 5000 }),
+        ).toBeInTheDocument();
     });
 
 });
