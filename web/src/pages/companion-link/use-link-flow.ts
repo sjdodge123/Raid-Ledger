@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CompanionUserCodeSchema, normaliseCompanionUserCode } from '@raid-ledger/contract';
 import { useCompanionLinkDecision, useCompanionLinkPreview } from '../../hooks/use-companion-link';
-import { takeCapturedLinkCode } from '../../lib/companion-link-code-capture';
+import { peekCapturedLinkCode, takeCapturedLinkCode } from '../../lib/companion-link-code-capture';
 import { formatUserCodeInput, readPrefilledCode } from './companion-link-code';
 import type { LinkDecision } from './link-review-card';
 
@@ -37,15 +37,20 @@ function usePrefill(onCode: (code: string) => void): string {
     useEffect(() => {
         if (done.current || initial === '') return;
         done.current = true;
+        takeCapturedLinkCode();
         navigate({ pathname: location.pathname }, { replace: true });
         onCode(initial);
     }, [initial, location.pathname, navigate, onCode]);
     return initial;
 }
 
-/** The code captured at page load, in display form ('' when none). */
+/**
+ * The code captured at page load, in display form ('' when none). Only PEEKS:
+ * a render React discards (a suspending sibling) runs this initializer again,
+ * so a consuming read here lost the code; the commit effect consumes it.
+ */
 function capturedCode(): string {
-    const raw = takeCapturedLinkCode();
+    const raw = peekCapturedLinkCode();
     return raw === null ? '' : formatUserCodeInput(raw);
 }
 

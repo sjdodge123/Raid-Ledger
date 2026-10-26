@@ -1,8 +1,9 @@
 /** ROK-1955 T-WEB-1…4 — the `/link` device approval page. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { Suspense, use } from 'react';
 import type { JSX } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { CompanionLinkPreview } from '@raid-ledger/contract';
@@ -11,8 +12,13 @@ import { renderWithProviders } from '../test/render-helpers';
 import { CompanionLinkPage } from './companion-link-page';
 import { consumeAuthRedirect, saveAuthRedirect } from '../lib/auth-redirect';
 
-const capture = vi.hoisted(() => ({ take: vi.fn((): string | null => null) }));
-vi.mock('../lib/companion-link-code-capture', () => ({ takeCapturedLinkCode: capture.take }));
+/** The module-load capture, modelled faithfully: `take` hands the code out once, `peek` does not consume it. */
+const capture = vi.hoisted(() => {
+    const state: { code: string | null } = { code: null };
+    const take = (): string | null => { const code = state.code; state.code = null; return code; };
+    return { state, take: vi.fn(take), peek: vi.fn((): string | null => state.code) };
+});
+vi.mock('../lib/companion-link-code-capture', () => ({ takeCapturedLinkCode: capture.take, peekCapturedLinkCode: capture.peek }));
 
 const API = 'http://localhost:3000';
 const PREVIEW = `${API}/companion/v1/devices/link/preview`;
@@ -61,7 +67,7 @@ function renderAt(entry: string): void {
     renderWithProviders(<><CompanionLinkPage /><LocationProbe /></>, { initialEntries: [entry] });
 }
 
-afterEach(() => { server.resetHandlers(); });
+afterEach(() => { server.resetHandlers(); capture.state.code = null; });
 
 describe('CompanionLinkPage — entry and review', () => {
     it('T-WEB-1: entry form formats the code and Continue posts it to preview', async () => {
@@ -107,11 +113,29 @@ describe('CompanionLinkPage — entry and review', () => {
 
     it('Codex P2: a code captured (and stripped) at page load still prefills the review', async () => {
         const rec = mockApi();
-        capture.take.mockReturnValueOnce('bcdfghjk');
+        capture.state.code = 'bcdfghjk';
         renderAt('/link');
         expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
         expect(rec.previews).toEqual([{ userCode: 'BCDFGHJK' }]);
         expect(rec.decisions).toHaveLength(0);
+    });
+
+    it('ROK-1955 e2e: a render React discards (a sibling suspends) does not eat the captured code', async () => {
+        const rec = mockApi();
+        capture.state.code = 'bcdfghjk';
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        function SuspendOnce(): null { use(gate); return null; }
+        await act(async () => {
+            renderWithProviders(
+                <Suspense fallback={null}><CompanionLinkPage /><SuspendOnce /></Suspense>,
+                { initialEntries: ['/link'] },
+            );
+        });
+        await act(async () => { release(); await gate; });
+        expect(await screen.findByText('Link this computer to your account?')).toBeInTheDocument();
+        expect(rec.previews).toEqual([{ userCode: 'BCDFGHJK' }]);
+        expect(capture.state.code, 'the code is consumed once the prefill commits').toBeNull();
     });
 
     it('T-WEB-3: a different-network preview shows the warning banner', async () => {
