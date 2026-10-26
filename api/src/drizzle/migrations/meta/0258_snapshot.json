@@ -11174,6 +11174,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "name_overridden": {
+          "name": "name_overridden",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "realm_slug": {
           "name": "realm_slug",
           "type": "varchar(100)",
@@ -11534,6 +11541,10 @@
         "guilds_auto_membership_kind_check": {
           "name": "guilds_auto_membership_kind_check",
           "value": "\"guilds\".\"kind\" = 'game_community' OR \"guilds\".\"auto_membership\" = 'off'"
+        },
+        "guilds_name_override_kind_check": {
+          "name": "guilds_name_override_kind_check",
+          "value": "\"guilds\".\"name_overridden\" = false OR \"guilds\".\"kind\" <> 'game_community'"
         }
       },
       "isRLSEnabled": false
