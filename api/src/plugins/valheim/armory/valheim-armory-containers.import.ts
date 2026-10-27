@@ -1,8 +1,4 @@
-import { createHash } from 'node:crypto';
-import type {
-  ValheimContainer,
-  ValheimContainersMessage,
-} from '@raid-ledger/contract';
+import type { ValheimContainersMessage } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
 import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
 import type { ArmorySnapshot } from './valheim-armory.mappers';
@@ -13,24 +9,10 @@ import {
   upsertContainerScan,
   type InsertedContainer,
 } from './valheim-containers.repository';
+import { containerPublicKey } from './valheim-container-key';
+import { recordContainerDay } from './valheim-container-days.repository';
 
-/**
- * ROK-1853 D7: the opaque per-chest key the browser sees — base64url of the
- * first 16 bytes of sha256(`worldUid|prefab|x|y|z|creatorPlayerId`). Stable
- * across 10-minute re-imports (row ids are not), reveals neither row order
- * nor the creator, and distinct for two creators' chests at one spot.
- */
-export function containerPublicKey(
-  worldUid: string,
-  c: Pick<ValheimContainer, 'prefab' | 'x' | 'y' | 'z' | 'creatorPlayerId'>,
-): string {
-  const identity = `${worldUid}|${c.prefab}|${c.x}|${c.y}|${c.z}|${c.creatorPlayerId}`;
-  return createHash('sha256')
-    .update(identity)
-    .digest()
-    .subarray(0, 16)
-    .toString('base64url');
-}
+export { containerPublicKey } from './valheim-container-key';
 
 /** The scan header row (D2): counts are the stored totals for this scan. */
 export function toScanValues(
@@ -102,12 +84,15 @@ export function toStackRows(
  * D3: latest-wins replace of a world's containers, on the importer's one
  * transaction. Returns false when the stored scan is as new or newer
  * (`skipped_stale`, nothing written). Owners are never resolved here —
- * visibility is computed at read time.
+ * visibility is computed at read time. ROK-2014 D7: a fresh scan also
+ * records its play day's end-of-day totals on the same tx; `defaultTz` is
+ * the community timezone (server tz first, UTC last).
  */
 export async function importContainers(
   tx: ValheimLinkTx,
   snap: ArmorySnapshot,
   msg: ValheimContainersMessage,
+  defaultTz: string | null = null,
 ): Promise<boolean> {
   const scanId = await upsertContainerScan(tx, toScanValues(snap, msg));
   if (scanId === null) return false;
@@ -115,5 +100,6 @@ export async function importContainers(
   const rows = toContainerRows(msg, scanId, snap.pelicanServerId);
   const inserted = await insertContainers(tx, rows);
   await insertContainerStacks(tx, toStackRows(msg, inserted));
+  await recordContainerDay(tx, snap, msg, defaultTz);
   return true;
 }

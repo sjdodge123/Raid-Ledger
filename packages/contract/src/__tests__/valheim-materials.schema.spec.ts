@@ -8,6 +8,7 @@ import {
     ValheimMaterialsBaseSchema,
     ValheimMaterialsPersonalSchema,
     ValheimMaterialsResponseSchema,
+    ValheimMaterialsTrendSchema,
 } from "../valheim-materials.schema.js";
 
 const KEY = "A".repeat(22);
@@ -82,5 +83,37 @@ describe("ValheimContainerSummarySchema base + index", () => {
     it("rejects index 0 and an unknown key", () => {
         expect(ValheimContainerSummarySchema.safeParse({ ...chest, index: 0 }).success).toBe(false);
         expect(ValheimContainerSummarySchema.safeParse({ ...chest, id: 9 }).success).toBe(false);
+    });
+});
+
+describe("ValheimMaterialsTrendSchema (ROK-2014)", () => {
+    const day = (date: string, gains: Record<string, number> = { Wood: 20, Stone: -10 }) => ({ date, gains });
+    const trend = { days: [day("2026-10-17"), day("2026-10-16", {}), day("2026-10-14")] };
+
+    it("parses up to 3 days with integer gains, empty gains allowed", () => {
+        expect(ValheimMaterialsTrendSchema.parse(trend)).toEqual(trend);
+        expect(ValheimMaterialsTrendSchema.parse({ days: [] })).toEqual({ days: [] });
+    });
+
+    it("rejects 4 days, a non-integer gain, a bad date and an unknown key", () => {
+        const four = { days: [...trend.days, day("2026-10-11")] };
+        expect(ValheimMaterialsTrendSchema.safeParse(four).success).toBe(false);
+        const frac = { days: [day("2026-10-17", { Wood: 1.5 })] };
+        expect(ValheimMaterialsTrendSchema.safeParse(frac).success).toBe(false);
+        expect(ValheimMaterialsTrendSchema.safeParse({ days: [day("17/10/2026")] }).success).toBe(false);
+        expect(ValheimMaterialsTrendSchema.safeParse({ days: [{ ...day("2026-10-17"), x: 1 }] }).success).toBe(false);
+    });
+
+    it("rides optionally on shared, personal, bases[] and personal.byBase[]", () => {
+        const withTrend = {
+            ...response,
+            shared: { ...response.shared, trend },
+            personal: { ...personal, trend, byBase: [{ base: KEY, chestCount: 1, totals: [stack], trend }] },
+            bases: [{ ...base, trend }],
+        };
+        expect(ValheimMaterialsResponseSchema.parse(withTrend)).toEqual(withTrend);
+        expect(ValheimMaterialsResponseSchema.parse(response)).toEqual(response);
+        const bad = { ...response, shared: { ...response.shared, trend: { days: [day("x")] } } };
+        expect(ValheimMaterialsResponseSchema.safeParse(bad).success).toBe(false);
     });
 });

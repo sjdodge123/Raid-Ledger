@@ -7,6 +7,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
+import type { ValheimLinkTx } from '../link/valheim-link-token-lock';
 import {
   containerPublicKey,
   importContainers,
@@ -17,6 +18,10 @@ import {
   DEMO_SHARED_CHEST,
   containersDemoMessage,
 } from './valheim-armory-containers-demo-fixture';
+import {
+  seedDemoContainerDays,
+  type DemoContainerTrendDays,
+} from './valheim-armory-container-days-demo.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 export type ContainersFixtureRole = 'owner' | 'member';
@@ -88,46 +93,62 @@ function snapshotValues(
  * Reset the fixture world's scan on `serverId` and re-import it through the
  * importer, on one transaction. The stored snapshot is upserted in place
  * (`imported`, so the drain never re-applies it). `secondBase` (ROK-1859
- * D11) adds two chests ~700 m away — a second base.
+ * D11) adds two chests ~700 m away — a second base. The world's play-day
+ * history is reset too; `trendDays: 3` (ROK-2014) then writes three earlier
+ * days of it.
  */
 export async function importDemoContainers(
   db: Db,
   serverId: number,
   secondBase = false,
+  trendDays: DemoContainerTrendDays = 0,
 ): Promise<void> {
   const msg = containersDemoMessage(secondBase);
-  const S = schema.valheimLinkSnapshots;
-  const scans = schema.valheimContainerScans;
   await db.transaction(async (tx) => {
-    await tx
-      .delete(scans)
-      .where(
-        and(
-          eq(scans.pelicanServerId, serverId),
-          eq(scans.worldUid, MSG.worldUid),
-        ),
-      );
-    const values = snapshotValues(serverId, msg);
-    const [snap] = await tx
-      .insert(S)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [S.pelicanServerId, S.kind, S.snapshotKey],
-        set: { ...values, receivedAt: new Date() },
-      })
-      .returning({ id: S.id, receivedAt: S.receivedAt });
-    if (!snap) throw new Error('containers fixture: no snapshot row');
-    const stored = {
-      id: snap.id,
-      pelicanServerId: serverId,
-      kind: MSG.kind,
-      steamId: null,
-      playerId: null,
-      worldUid: MSG.worldUid,
-      receivedAt: snap.receivedAt.toISOString(),
-      payload: msg,
-    };
+    await resetFixtureWorld(tx, serverId);
+    const stored = await upsertFixtureSnapshot(tx, serverId, msg);
     const ok = await importContainers(tx, stored, msg);
     if (!ok) throw new Error('containers fixture: import skipped as stale');
+    await seedDemoContainerDays(tx, serverId, msg, trendDays);
   });
+}
+
+/** The fixture's stored snapshot row, upserted in place as `imported`. */
+async function upsertFixtureSnapshot(
+  tx: ValheimLinkTx,
+  serverId: number,
+  msg: typeof MSG,
+) {
+  const S = schema.valheimLinkSnapshots;
+  const values = snapshotValues(serverId, msg);
+  const [snap] = await tx
+    .insert(S)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [S.pelicanServerId, S.kind, S.snapshotKey],
+      set: { ...values, receivedAt: new Date() },
+    })
+    .returning({ id: S.id, receivedAt: S.receivedAt });
+  if (!snap) throw new Error('containers fixture: no snapshot row');
+  return {
+    id: snap.id,
+    pelicanServerId: serverId,
+    kind: MSG.kind,
+    steamId: null,
+    playerId: null,
+    worldUid: MSG.worldUid,
+    receivedAt: snap.receivedAt.toISOString(),
+    payload: msg,
+  };
+}
+
+/** Drop the fixture world's scan and play-day history (rows cascade). */
+async function resetFixtureWorld(tx: ValheimLinkTx, serverId: number) {
+  for (const t of [schema.valheimContainerScans, schema.valheimContainerDays]) {
+    await tx
+      .delete(t)
+      .where(
+        and(eq(t.pelicanServerId, serverId), eq(t.worldUid, MSG.worldUid)),
+      );
+  }
 }

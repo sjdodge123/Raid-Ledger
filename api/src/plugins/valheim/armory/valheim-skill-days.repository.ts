@@ -25,6 +25,21 @@ export interface ValheimCharacterKey {
 }
 
 /**
+ * The game server's own IANA timezone, or null when none is stored. Shared
+ * by the skill and container play-day recorders (ROK-2014).
+ */
+export async function selectServerTimezone(
+  exec: Exec,
+  pelicanServerId: number,
+): Promise<string | null> {
+  const [row] = await exec
+    .select({ tz: servers.timezone })
+    .from(servers)
+    .where(eq(servers.id, pelicanServerId));
+  return row?.tz ?? null;
+}
+
+/**
  * ROK-1882: per-play-day skill history. Every write runs on the importer's
  * transaction — no catch-and-retry (a failed statement poisons the tx).
  */
@@ -49,15 +64,11 @@ export class ValheimSkillDaysRepository {
   }
 
   /** The game server's own IANA timezone, or null when none is stored. */
-  async findServerTimezone(
+  findServerTimezone(
     tx: ValheimLinkTx,
     pelicanServerId: number,
   ): Promise<string | null> {
-    const [row] = await tx
-      .select({ tz: servers.timezone })
-      .from(servers)
-      .where(eq(servers.id, pelicanServerId));
-    return row?.tz ?? null;
+    return selectServerTimezone(tx, pelicanServerId);
   }
 
   /**
