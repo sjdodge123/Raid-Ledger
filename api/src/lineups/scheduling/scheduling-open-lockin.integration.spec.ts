@@ -99,6 +99,7 @@ describe('ROK-2024 open lock-in (integration)', () => {
   /** Lineup-derived match on `scheduling`; admin is the organiser. */
   async function seedLineupMatch(
     lineupStatus: 'archived' | 'decided',
+    visibility: 'public' | 'private' = 'public',
   ): Promise<{ lineupId: number; matchId: number }> {
     const [lineup] = nonEmpty(
       await testApp.db
@@ -107,7 +108,7 @@ describe('ROK-2024 open lock-in (integration)', () => {
           title: 'Open lock-in',
           createdBy: testApp.seed.adminUser.id,
           status: lineupStatus,
-          visibility: 'public',
+          visibility,
           publicSlug: generatePublicSlug(),
         })
         .returning(),
@@ -195,6 +196,12 @@ describe('ROK-2024 open lock-in (integration)', () => {
     await testApp.db
       .insert(schema.communityLineupMatchMembers)
       .values({ matchId, userId, source: 'voted' as const });
+  }
+
+  async function invite(lineupId: number, userId: number): Promise<void> {
+    await testApp.db
+      .insert(schema.communityLineupInvitees)
+      .values({ lineupId, userId, invitedBy: testApp.seed.adminUser.id });
   }
 
   /** `community_lineup` DM rows of one user: title + payload subtype. */
@@ -387,5 +394,39 @@ describe('ROK-2024 open lock-in (integration)', () => {
 
     await waitForEventCreatedDm(yesVoter, eventId);
     await waitForEventCreatedDm(bystander, eventId);
+  });
+
+  it('(g) open PRIVATE lineup lock-in: invitee yes-voters get only the poll DM, other invitees get EVENT CREATED, non-invitees nothing', async () => {
+    callThrough();
+    const poll = await seedLineupMatch('decided', 'private');
+    const yesVoter = await createUser('priv-yes');
+    const invitee = await createUser('priv-invitee');
+    const outsider = await createUser('priv-outsider');
+    await invite(poll.lineupId, yesVoter);
+    await invite(poll.lineupId, invitee);
+    // The outsider is in the match group (the public route would DM them)
+    // but not on the invitee list, so the private route must skip them.
+    for (const uid of [yesVoter, invitee, outsider]) {
+      await addMember(poll.matchId, uid);
+    }
+    await addSlot(poll.matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [yesVoter, 'yes'],
+    ]);
+    const eventId = await createEvent(poll.matchId);
+    expect(await complete(poll.matchId, eventId)).toBe(200);
+
+    await waitForEventCreatedDm(invitee, eventId);
+    expect((await dmsOf(invitee)).map((d) => d.title)).toEqual([
+      eventCreatedTitle(),
+    ]);
+    for (const uid of [yesVoter, testApp.seed.adminUser.id]) {
+      const dms = await dmsAfterWindow(uid);
+      expect({ uid, titles: dms.map((d) => d.title) }).toEqual({
+        uid,
+        titles: ['Auto-signed up'],
+      });
+    }
+    expect((await dmsOf(outsider)).map((d) => d.title)).toEqual([]);
   });
 });
