@@ -21,7 +21,10 @@ import { deleteMatchMemberWithVotes } from './scheduling-members-remove.helpers'
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-function executedSql(db: MockDb, call: number): { sql: string; params: unknown[] } {
+function executedSql(
+  db: MockDb,
+  call: number,
+): { sql: string; params: unknown[] } {
   const arg = db.execute.mock.calls[call]?.[0] as SQL | undefined;
   if (!arg) throw new Error(`execute call ${call} missing`);
   return new PgDialect().sqlToQuery(arg);
@@ -53,7 +56,10 @@ describe('roster lock (ROK-2020)', () => {
     ).resolves.toEqual({ removedVotes: 1, removedMembers: 1 });
 
     expect(db.transaction).toHaveBeenCalledTimes(1);
-    expect(executedSql(db, 0).params).toEqual([MATCH_MEMBER_LOCK_CLASS, '20:7']);
+    expect(executedSql(db, 0).params).toEqual([
+      MATCH_MEMBER_LOCK_CLASS,
+      '20:7',
+    ]);
     const lockOrder = db.execute.mock.invocationCallOrder[0] ?? Infinity;
     const firstDelete = db.delete.mock.invocationCallOrder[0] ?? -1;
     expect(lockOrder).toBeLessThan(firstDelete);

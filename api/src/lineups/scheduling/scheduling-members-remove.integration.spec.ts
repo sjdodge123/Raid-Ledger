@@ -273,6 +273,19 @@ function describeRemoveMember() {
     expect(await memberRows(poll.matchId, creator.id)).toHaveLength(1);
   });
 
+  it('400s an operator removing the creator, keeping their row', async () => {
+    const { creator, poll } = await seedWithVoter('staff-creator');
+    const op = await createUser('staff-creator-op', 'operator');
+
+    const res = await removeMember(op.token, poll, creator.id);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      "The poll creator can't be removed — cancel the poll instead",
+    );
+    expect(await memberRows(poll.matchId, creator.id)).toHaveLength(1);
+  });
+
   it('404s a user who is not a participant of this poll', async () => {
     const { creator, poll } = await seedWithVoter('nonpart');
     const outsider = await createUser('nonpart-outsider');
@@ -282,13 +295,14 @@ function describeRemoveMember() {
     expect(res.status).toBe(404);
   });
 
-  it('404s a match that belongs to a different lineup', async () => {
-    const { creator, voter, poll } = await seedWithVoter('xlineup');
-    const other = await seedPoll(creator.id);
+  it("404s another user's lineup id against this poll's match (IDOR), voter intact", async () => {
+    const { voter, poll } = await seedWithVoter('xlineup');
+    const otherOwner = await createUser('xlineup-other-owner');
+    const otherLineup = await seedPoll(otherOwner.id);
 
     const res = await removeMember(
-      creator.token,
-      { lineupId: other.lineupId, matchId: poll.matchId },
+      otherOwner.token,
+      { lineupId: otherLineup.lineupId, matchId: poll.matchId },
       voter.id,
     );
 
@@ -310,6 +324,28 @@ function describeRemoveMember() {
     expect(res.status).toBe(400);
     await expectVoterIntact(poll, voter.id);
   });
+
+  it.each([
+    ['archived parent lineup', { status: 'archived' as const }],
+    ['passed phase deadline', { phaseDeadline: new Date('2000-01-01') }],
+  ])(
+    '400s an expired poll (%s) while the match is still scheduling, voter intact',
+    async (_label, lifecycle) => {
+      const { creator, voter, poll } = await seedWithVoter(
+        `expired-${_label.split(' ')[0]}`,
+      );
+      await testApp.db
+        .update(schema.communityLineups)
+        .set(lifecycle)
+        .where(eq(schema.communityLineups.id, poll.lineupId));
+
+      const res = await removeMember(creator.token, poll, voter.id);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('This poll no longer accepts changes');
+      await expectVoterIntact(poll, voter.id);
+    },
+  );
 
   it('404s when the lineup opted out of the scheduling phase', async () => {
     const { creator, voter, poll } = await seedWithVoter('optout');

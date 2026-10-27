@@ -244,11 +244,7 @@ export class SchedulingMembersService {
     if (!match) throw new NotFoundException('Match not found');
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    return {
-      status: match.status,
-      visibility: match.visibility,
-      linkedEventId: match.linkedEventId ?? null,
-    };
+    return match;
   }
 
   /** Insert `source: 'added'` rows, skipping existing members; returns the count. */
