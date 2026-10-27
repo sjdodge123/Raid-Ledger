@@ -40,6 +40,7 @@ const core = {
   behaviours: [
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
+    { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
   ],
   setup: CORE_SETUP,
 } satisfies PluginHubManifest;

@@ -155,6 +155,7 @@ describe('ROK-1969 A3 — declared ↔ registered, exact (source scan)', () => {
         'valheim/scheduled-job/ValheimClaimSuggestCron_scan',
         'pelican/hub-kind/game_server',
         'blizzard/hub-kind/wow_guild',
+        'core/ingest-source/hub-media.upload',
       ]),
     );
   });
@@ -270,5 +271,28 @@ describe('ROK-1969 §4.4 — hub media decorators carry an owner', () => {
     expect(decorators.linkFor(row as HubMediaRow)).toBeNull();
     decorators.register(CORE_PLUGIN_ID, () => link);
     expect(decorators.linkFor(row as HubMediaRow)).toEqual(link);
+  });
+});
+
+describe('ROK-1965 D17 — ingest sources are scanned (each must go red)', () => {
+  it('fails when the upload source registration is gone', () => {
+    const noUpload = SOURCES.filter(
+      (s) => s.file !== 'hub-media/hub-media.module.ts',
+    );
+    const keys = scanHubRegistrations(noUpload, CTX).keys;
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'core/ingest-source/hub-media.upload is declared but nothing registers it',
+    ]);
+  });
+
+  it('fails on an ingest source nobody declared', () => {
+    const extra: ScanSource = {
+      file: 'plugins/valheim/x.ts',
+      text: "registerHubIngestSource(VALHEIM_PLUGIN_ID, 'valheim.stray');",
+    };
+    const keys = scanHubRegistrations([...SOURCES, extra], CTX).keys;
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'valheim/ingest-source/valheim.stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    ]);
   });
 });
