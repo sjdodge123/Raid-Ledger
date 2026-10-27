@@ -10,6 +10,7 @@ import {
   suspendedMessage,
   kickCooldownMessage,
   isKickExpired,
+  isBannedOrKickCoolingDown,
 } from './auth-status.helpers';
 import {
   setCachedAuthUser,
@@ -153,5 +154,23 @@ describe('assertKickCooldownOrClear', () => {
     expect(set).toHaveBeenCalledWith({ kickedAt: null, kickReason: null });
     // invalidateAuthUser(9) ran after the UPDATE.
     expect(getCachedAuthUser(9)).toBeNull();
+  });
+});
+
+describe('isBannedOrKickCoolingDown (ROK-1955)', () => {
+  it('is true for a ban, true inside the cooldown, false once it expires', () => {
+    const expired = new Date(Date.now() - KICK_COOLDOWN_MS - 1);
+    expect(
+      isBannedOrKickCoolingDown({ bannedAt: new Date(), kickedAt: null }),
+    ).toBe(true);
+    expect(
+      isBannedOrKickCoolingDown({ bannedAt: null, kickedAt: new Date() }),
+    ).toBe(true);
+    expect(
+      isBannedOrKickCoolingDown({ bannedAt: null, kickedAt: expired }),
+    ).toBe(false);
+    expect(isBannedOrKickCoolingDown({ bannedAt: null, kickedAt: null })).toBe(
+      false,
+    );
   });
 });

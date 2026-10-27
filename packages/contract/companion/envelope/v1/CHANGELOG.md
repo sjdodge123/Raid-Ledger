@@ -3,6 +3,18 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-25 (additive) — ingest API (ROK-1956)
+
+- **Additive.** Five error codes appended (`unsupported_media`,
+  `hash_mismatch`, `invalid_blob`, `blob_ref_mismatch`, `blob_quota_exceeded`);
+  the app already treats an unknown code as a generic terminal 4xx.
+- New server→client shapes in `companion-ingest-api.schema.ts`:
+  `CompanionIngestErrorSchema` (error body with optional `currentVersion` and
+  value-free `issues`), `CompanionBlobAckSchema` (`stored` | `exists`) and
+  `CompanionConfigSchema` (`GET /companion/v1/config`; the app MUST ignore
+  unknown keys). CONTRACT §4, §4.1, §4.2.
+- The message envelope and `schema.json` are unchanged.
+
 ## v1 — 2026-10-25 (additive) — initial contract
 
 - **Additive.** New folder `packages/contract/companion/envelope/v1/` (ROK-1954).

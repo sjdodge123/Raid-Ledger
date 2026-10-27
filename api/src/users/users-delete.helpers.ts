@@ -187,6 +187,22 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
+  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
+  // ban+wipe must revoke them. Links the user decided go first: their
+  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
+  {
+    table: schema.companionDeviceLinks,
+    column: schema.companionDeviceLinks.decidedBy,
+  },
+  { table: schema.companionDevices, column: schema.companionDevices.userId },
+  // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
+  // the user's own uploaded data. Refs carry no FK to blobs; order is free.
+  {
+    table: schema.companionIngestLatest,
+    column: schema.companionIngestLatest.userId,
+  },
+  { table: schema.companionBlobRefs, column: schema.companionBlobRefs.userId },
+  { table: schema.companionBlobs, column: schema.companionBlobs.userId },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,

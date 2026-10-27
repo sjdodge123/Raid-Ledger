@@ -246,6 +246,7 @@ export * from './valheim-server-portals.schema.js';
 // Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
 export * from './companion-common.schema.js';
 export * from './companion-envelope.schema.js';
+export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
@@ -291,3 +292,5 @@ export * from './game-notification-mutes.schema.js';
 export * from './hub-notification-mutes.schema.js';
 // Hub Overview arrange mode — saved widget layout (ROK-1918).
 export * from './hub-widget-prefs.schema.js';
+// Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
+export * from './companion-devices.schema.js';

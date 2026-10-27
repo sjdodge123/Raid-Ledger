@@ -306,6 +306,7 @@ describe('guild rows', () => {
   it('guild columns come from the snapshot', () => {
     expect(guildSet(guildWithExporter())).toMatchObject({
       name: 'Night Shift',
+      sourceName: 'Night Shift',
       memberCount: 40,
       lastSnapshotAt: at(EXPORTED_AT),
     });
