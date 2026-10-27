@@ -1725,7 +1725,9 @@ other lightbox (`ScreenshotGallery`) is a hand-built overlay (§6.12). **DON'T**
 the grid, build a custom image overlay, or put the chips in a §4.1 funnel. **Light / Dark** — every surface is
 a token; the well is `bg-media-well` — a DARK stage in both families (operator ruling), the one token no scheme
 remaps (`media-well.guard.test.ts`). ←/→ only act on keys aimed inside the dialog. Rendered: `/dev/design-system#hub-widgets` → "Gallery card + lightbox" (`hub-gallery-demo.tsx`, the
-real grid + dialog over a seeded demo cache); live on a Valheim server hub's Overview (`/hubs/:id`).
+real grid + dialog over a seeded demo cache — two items are member uploads with the "Uploaded" caption, "Open as a
+member" shows only the uploader's Remove, and a states row renders Add picture / "Add", "Uploading… 40%" via
+`HubGalleryAddPictureView` and the empty member card `HubGalleryEmpty`); live on a Valheim server hub's Overview (`/hubs/:id`).
 
 - **Mounted once by the Overview (ROK-1941 D14)** — `hub-gallery-dialog-mount.tsx` in `hub-overview.tsx`, not
   inside the Gallery card, so any widget opens it through `useHubGalleryStore().openGallery(…)` even when the
