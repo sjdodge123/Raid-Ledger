@@ -89,6 +89,7 @@ export * from './schema/calendar-feeds';
 export * from './schema/pelican-servers';
 export * from './schema/pelican-schedules';
 export * from './schema/valheim-link';
+export * from './schema/companion-devices';
 export * from './schema/valheim-armory';
 export * from './schema/valheim-skill-days';
 export * from './schema/valheim-containers';

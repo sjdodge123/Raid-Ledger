@@ -266,3 +266,39 @@ describe('instrument.ts wiring', () => {
     expect(scrubString(`a ${token} b`)).toBe(`a ${REDACTED} b`);
   });
 });
+
+describe('ROK-1955 companion device secrets', () => {
+  const token = `rlcd_${'a'.repeat(43)}`;
+
+  it('scrubs an rlcd_ token anywhere in a string', () => {
+    expect(scrubString(`Authorization: Bearer ${token}`)).not.toContain(token);
+  });
+
+  it('scrubs deviceCode / userCode JSON values', () => {
+    const out = scrubString('{"deviceCode":"abc123","userCode":"BCDF-GHJK"}');
+    expect(out).not.toContain('abc123');
+    expect(out).not.toContain('BCDF-GHJK');
+  });
+
+  it('scrubs the user code from the preview path but keeps poll/decision', () => {
+    expect(scrubString('GET /companion/v1/devices/link/BCDF-GHJK')).toBe(
+      'GET /companion/v1/devices/link/[redacted]',
+    );
+    expect(scrubString('POST /companion/v1/devices/link/poll')).toBe(
+      'POST /companion/v1/devices/link/poll',
+    );
+    expect(scrubString('POST /companion/v1/devices/link/preview')).toBe(
+      'POST /companion/v1/devices/link/preview',
+    );
+    expect(scrubString('POST /companion/v1/devices/link/decision')).toBe(
+      'POST /companion/v1/devices/link/decision',
+    );
+  });
+
+  it('treats device_code / user_code keys as secret keys', () => {
+    const event = scrubSecrets({
+      extra: { deviceCode: 'abc', user_code: 'BCDFGHJK' },
+    });
+    expect(event.extra).toEqual({ deviceCode: REDACTED, user_code: REDACTED });
+  });
+});

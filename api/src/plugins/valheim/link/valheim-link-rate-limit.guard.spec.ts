@@ -68,8 +68,8 @@ describe('ValheimLinkRateLimiter — bounded storage (ROK-1833)', () => {
     for (let i = 0; i < 1_000; i += 1) limiter.hit(`k${i}`, 1, 60_000);
     expect(limiter.size).toBe(100);
     expect(limiter.sweepSteps).toBeLessThanOrEqual(2 * 1_000);
-    expect(limiter.isExhausted('k0', 1, 60_000)).toBe(false);
-    expect(limiter.isExhausted('k999', 1, 60_000)).toBe(true);
+    expect(limiter.isExhausted('k0', 1)).toBe(false);
+    expect(limiter.isExhausted('k999', 1)).toBe(true);
   });
 
   it('expired windows are dropped from the front on the next insert', () => {
@@ -84,13 +84,13 @@ describe('ValheimLinkRateLimiter — bounded storage (ROK-1833)', () => {
 
   it('reserve counts in-flight attempts; a failed settle becomes a hit', () => {
     const limiter = new ValheimLinkRateLimiter();
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(false);
     limiter.settle('ip', false, 2, 60_000);
     limiter.settle('ip', true, 2, 60_000);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(false);
   });
 });
 
