@@ -1,0 +1,8 @@
+{
+  "deviceCode": "FIXTUREdeviceCode_Anonymised-0123456789abcd",
+  "userCode": "WDJA-MJHT",
+  "verificationUri": "https://raid.example.com/link",
+  "verificationUriComplete": "https://raid.example.com/link#code=WDJB-MJHT",
+  "expiresIn": 600,
+  "interval": 5
+}

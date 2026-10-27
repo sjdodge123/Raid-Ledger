@@ -37,6 +37,7 @@ import {
   DesignSystemPage,
   SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
+  CompanionLinkPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -163,6 +164,8 @@ export function AppRoutes() {
         <Route path="/hubs/:id" element={<GuildPage />} />
         <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
         <Route path="/players" element={<PlayersPage />} />
+        {/* ROK-1955: Companion device approval; `#code=` may pre-fill it. */}
+        <Route path="/link" element={<CompanionLinkPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/event-metrics" element={<Navigate to="/insights/events" replace />} />
         <Route path="/insights" element={<InsightsHubPage />}>

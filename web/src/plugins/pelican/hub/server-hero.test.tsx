@@ -35,7 +35,7 @@ function ctx(counts: Pick<GuildPageServer, 'onlineCount' | 'unlinkedOnlineCount'
 }
 
 beforeAll(() => {
-    registerServerHubGameTab('valheim', { id: 'characters', label: 'Characters', order: 15, component: () => null });
+    registerServerHubGameTab('valheim', { id: 'characters', label: 'Characters', order: 15, component: () => null }, 'valheim');
     usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
 });
 

@@ -149,3 +149,41 @@ export const HubWidgetPrefsResponseSchema = z
 export type HubWidgetPrefsResponse = z.infer<
   typeof HubWidgetPrefsResponseSchema
 >;
+
+/**
+ * ROK-1969 D6 — renamed widget ids, old → new. The resolver ignores an id it
+ * does not know, so a rename without an alias would drop that hub's saved
+ * order/hidden/added state for the widget. A `Map` for the same reason as
+ * `CONFIG_SCHEMAS`. **Never remove an entry:** a row not saved since the
+ * rename still carries the old id.
+ */
+export const LEGACY_HUB_WIDGET_IDS: ReadonlyMap<string, string> = new Map([
+  ["plugin:valheim:gallery", "plugin:core:gallery"],
+]);
+
+const currentId = (id: string): string => LEGACY_HUB_WIDGET_IDS.get(id) ?? id;
+
+/** Maps every id through the alias and keeps the first of any duplicates. */
+function normaliseIds(ids: readonly string[]): string[] {
+  return [...new Set(ids.map(currentId))];
+}
+
+/**
+ * Rewrites legacy widget ids in a saved layout (`order`, `hidden`, `added`
+ * and `config` keys) to their current ids, de-duplicating so the first
+ * position wins. Pure — the input is not mutated. The web resolver applies
+ * it on read and the api applies it before it stores a layout.
+ */
+export function normaliseHubWidgetPrefs(prefs: HubWidgetPrefs): HubWidgetPrefs {
+  const config = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(prefs.config)) {
+    const id = currentId(key);
+    if (!config.has(id)) config.set(id, value);
+  }
+  return {
+    order: normaliseIds(prefs.order),
+    hidden: normaliseIds(prefs.hidden),
+    added: normaliseIds(prefs.added),
+    config: Object.fromEntries(config),
+  };
+}

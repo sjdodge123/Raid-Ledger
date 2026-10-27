@@ -144,3 +144,29 @@ describe('resolveHubLayout — audience (AC4)', () => {
         expect(ids(resolveHubLayout([membersOnly, editorsOnly], p, editor).visible)).toEqual(['plugin:wow:todo', 'plugin:wow:roster']);
     });
 });
+
+describe('resolveHubLayout — legacy widget ids (ROK-1969 D6, W11)', () => {
+    const GALLERY = entry('plugin:core:gallery', 47, { span: 2 });
+    const catalog = [...CORE, GALLERY];
+
+    it('keeps a Gallery saved under its old Valheim id in its saved slot', () => {
+        const saved = prefs({ order: ['plugin:valheim:gallery', 'attendance', 'events', 'schedule', 'discord', 'gm-post'] });
+        expect(ids(resolveHubLayout(catalog, saved, member).visible))
+            .toEqual(['plugin:core:gallery', 'attendance', 'events', 'schedule', 'discord', 'gm-post']);
+    });
+
+    it('keeps a Gallery the hub hid under its old id hidden', () => {
+        const r = resolveHubLayout(catalog, prefs({ hidden: ['plugin:valheim:gallery'] }), member);
+        expect(ids(r.visible)).not.toContain('plugin:core:gallery');
+        expect(ids(r.hidden)).toEqual(['plugin:core:gallery']);
+    });
+
+    it('collapses the old and new ids to one Gallery at the first saved position', () => {
+        const saved = prefs({ order: ['discord', 'plugin:valheim:gallery', 'gm-post', 'plugin:core:gallery'] });
+        const visible = ids(resolveHubLayout(catalog, saved, member).visible);
+        expect(visible.filter((id) => id === 'plugin:core:gallery')).toHaveLength(1);
+        const savedIds = new Set(['discord', 'plugin:core:gallery', 'gm-post']);
+        // Unsaved default-on widgets slot in by rule 3; the saved ones keep the first-seen order.
+        expect(visible.filter((id) => savedIds.has(id))).toEqual(['discord', 'plugin:core:gallery', 'gm-post']);
+    });
+});

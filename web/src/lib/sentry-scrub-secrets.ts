@@ -92,6 +92,14 @@ const SECRET_KEY_COMPOUND =
     String.raw`[A-Za-z0-9_-]*(?:api|secret|private|access|signing|encryption|client|auth)[_-]?key`;
 
 /**
+ * ROK-1955: the companion device-link codes. `deviceCode` is the app's poll
+ * secret and `userCode` approves a device, so as keys they are credentials
+ * (unlike a bare `code`, rule 3). The anchors in the matchers keep
+ * `deviceCodeLength` out.
+ */
+const COMPANION_LINK_CODE_KEY = String.raw`(?:device|user)[_-]?code`;
+
+/**
  * THE one definition of a secret key. `isSecretKey` (object keys) and the
  * `key=value` matcher below are both built from it, so they cannot drift.
  *
@@ -103,7 +111,7 @@ const SECRET_KEY_COMPOUND =
  * nothing is ever skipped.
  */
 const SECRET_KEY_SOURCE =
-    `(?:${SECRET_NOUN_SUFFIX}|${SECRET_KEY_COMPOUND}|${SECRET_KEY_EXACT.join('|')})`;
+    `(?:${SECRET_NOUN_SUFFIX}|${SECRET_KEY_COMPOUND}|${COMPANION_LINK_CODE_KEY}|${SECRET_KEY_EXACT.join('|')})`;
 
 const SECRET_KEY_WHOLE = new RegExp(`^${SECRET_KEY_SOURCE}$`, 'i');
 

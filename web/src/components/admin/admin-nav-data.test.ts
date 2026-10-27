@@ -10,7 +10,7 @@ import {
     buildDiscordNavItems,
     buildNavSections,
 } from './admin-nav-data';
-import type { PluginInfoDto } from '@raid-ledger/contract';
+import { emptyPluginHubManifest, type PluginInfoDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
 
 const allOfflineStatuses = {
@@ -100,6 +100,8 @@ function makePlugin(overrides: Partial<PluginInfoDto> & { slug: string; name: st
         version: '1.0.0',
         description: 'Test plugin',
         author: { name: 'Test Author' },
+        builtIn: false,
+        hub: emptyPluginHubManifest(),
         gameSlugs: [],
         capabilities: [],
         integrations: [],

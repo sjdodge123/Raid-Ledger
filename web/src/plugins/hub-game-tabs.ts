@@ -9,9 +9,9 @@
  * only ever error). Core merges them in `components/hub/hub-tabs.ts`.
  */
 import type { HubTab } from './hub-module';
-import { usePluginStore } from '../stores/plugin-store';
+import { isSlugActive, usePluginStore } from '../stores/plugin-store';
 
-interface HubGameTabRegistration {
+export interface HubGameTabRegistration {
     pluginSlug: string;
     gameSlugs: readonly string[];
     tab: HubTab;
@@ -23,6 +23,11 @@ const tabRegistry = new Map<string, HubGameTabRegistration>();
 /** @internal Called by `PluginHandle.registerHubGameTab` and the Pelican alias. */
 export function addHubGameTab(pluginSlug: string, gameSlugs: readonly string[], tab: HubTab): void {
     tabRegistry.set(`${pluginSlug}:${tab.id}`, { pluginSlug, gameSlugs, tab });
+}
+
+/** Every game-tab registration with its owner, ungated — the ownership guard reads it (ROK-1969). */
+export function getHubGameTabRegistrations(): readonly HubGameTabRegistration[] {
+    return [...tabRegistry.values()];
 }
 
 /** @internal Called by `clearRegistry`. */
@@ -42,7 +47,7 @@ export function hubGameTabs(): HubTab[] {
             const gameSlug = ctx.page.guild.gameSlug;
             return gameSlug !== undefined
                 && gameSlugs.includes(gameSlug)
-                && usePluginStore.getState().activeSlugs.has(pluginSlug)
+                && isSlugActive(usePluginStore.getState().activeSlugs, pluginSlug)
                 && (tab.visible?.(ctx) ?? true);
         },
     }));

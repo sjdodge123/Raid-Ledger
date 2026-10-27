@@ -322,6 +322,24 @@ describe('round trip, reset, upsert', () => {
     }
   });
 
+  it('ROK-1969 I4: a legacy Gallery id is stored as plugin:core:gallery', async () => {
+    const guildId = await mkWowHub();
+    const legacy = 'plugin:valheim:gallery';
+    const res = await patch(guildId, admin.token, {
+      order: [legacy, 'core:gm-post'],
+      hidden: [legacy],
+      added: [],
+    });
+    const want = {
+      order: ['plugin:core:gallery', 'core:gm-post'],
+      hidden: ['plugin:core:gallery'],
+      added: [],
+      config: {},
+    };
+    expect(res.body).toEqual({ widgetPrefs: want });
+    expect((await page(`/guilds/${guildId}`)).body.widgetPrefs).toEqual(want);
+  });
+
   it('omitted config is stored and returned as {}', async () => {
     const guildId = await mkWowHub();
     const body = { order: ['core:gm-post'], hidden: [], added: [] };

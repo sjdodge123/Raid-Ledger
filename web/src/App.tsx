@@ -42,6 +42,8 @@ if (_cachedUser && getAuthMethod() && !_magicLinkToken) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
 
+// ROK-1969 — the built-in Core plugin registers first, before every game plugin.
+import './plugins/core/register';
 import './plugins/wow/register';
 import './plugins/discord/register';
 import './plugins/ai/register';

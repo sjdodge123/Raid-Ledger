@@ -71,6 +71,10 @@ export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
+// Plugin-owned hub widgets/tabs/behaviours + the Core plugin (ROK-1969).
+export * from './plugin-hub-manifest.schema.js';
+export * from './plugin-hub-manifests.js';
+export * from './plugin-setup.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 export * from './pelican-servers.schema.js';
@@ -286,3 +290,5 @@ export * from './game-notification-mutes.schema.js';
 export * from './hub-notification-mutes.schema.js';
 // Hub Overview arrange mode — saved widget layout (ROK-1918).
 export * from './hub-widget-prefs.schema.js';
+// Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
+export * from './companion-devices.schema.js';

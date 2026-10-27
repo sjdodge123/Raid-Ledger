@@ -82,6 +82,10 @@ export const CharacterDetailPage = lazyWithRetry(() =>
 export const ValheimCharacterPage = lazyWithRetry(() =>
     import('./plugins/valheim/pages/valheim-character-page').then((m) => ({ default: m.ValheimCharacterPage })),
 );
+/** ROK-1955: `/link` — approve a Raid Ledger Companion computer. */
+export const CompanionLinkPage = lazyWithRetry(() =>
+    import('./pages/companion-link-page').then((m) => ({ default: m.CompanionLinkPage })),
+);
 /** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
 export const GuildPage = lazyWithRetry(() =>
     import('./components/hub/hub-page').then((m) => ({ default: m.GuildPage })),
