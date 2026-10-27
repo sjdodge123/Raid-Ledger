@@ -10,7 +10,8 @@ import { API_BASE_URL } from '../../lib/config';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { ImpersonateSection } from './more-drawer-impersonate';
-import { LazyAdminSubmenuContent, LazyGameTimeDrawer, LazyProfileSubmenuContent, prefetchMoreDrawerContent } from './more-drawer-lazy';
+import { LazyAdminSubmenuContent, LazyGameTimeDrawer, LazyProfileSubmenuContent } from './more-drawer-lazy';
+import { prefetchMoreDrawerContent } from './more-drawer-chunks';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
 
