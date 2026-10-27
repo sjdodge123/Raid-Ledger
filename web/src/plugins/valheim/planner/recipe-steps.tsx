@@ -41,6 +41,12 @@ function StationBuild({ station, lines, names }: { station: string; lines: Build
     );
 }
 
+/** The step's cost line; an any-one-of step's resources are alternatives, titled like IngredientSlots ("Any one of"). */
+function stepCost(step: ValheimPlanStep, names: PlannerNames): string {
+    const line = costLine(step.resources, itemName(names));
+    return step.anyOneOf ? `Any one of: ${line}` : line;
+}
+
 function StepItem({ step, build, names }: { step: ValheimPlanStep; build: BuildLines | null; names: PlannerNames }): JSX.Element {
     const { label, chip } = stepLabel(step, names.stationName);
     const at = step.station === null ? '' : names.stationName(step.station);
@@ -54,7 +60,7 @@ function StepItem({ step, build, names }: { step: ValheimPlanStep; build: BuildL
                     </StatusChip>
                 )}
             </div>
-            {step.resources.length > 0 && <p className="text-xs text-muted">{costLine(step.resources, itemName(names))}</p>}
+            {step.resources.length > 0 && <p className="text-xs text-muted">{stepCost(step, names)}</p>}
             {build !== null && step.station !== null && <StationBuild station={step.station} lines={build} names={names} />}
         </li>
     );

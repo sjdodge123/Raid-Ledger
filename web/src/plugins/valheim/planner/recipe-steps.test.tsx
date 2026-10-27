@@ -74,6 +74,15 @@ describe('RecipeSteps', () => {
         expect(within(cost).getByText('Not added to your list.')).toBeInTheDocument();
     });
 
+    it('labels an any-one-of step as alternatives, not an additive cost', async () => {
+        const either: ValheimPlanStep = { ...step(2, 'forge', false, [['Bronze', 3], ['DeerHide', 2]]), anyOneOf: true };
+        const steps = [step(1, 'forge', false, [['Bronze', 5]]), either, step(3, 'forge', false, [['Bronze', 3], ['Stone', 1]])];
+        render(<RecipeSteps steps={steps} builds={undefined} names={names} />);
+        await userEvent.click(disclosure());
+        expect(screen.getByText('Any one of: Bronze 3 · Deer hide 2')).toBeInTheDocument();
+        expect(screen.getByText('Bronze 3 · Stone 1')).toBeInTheDocument();
+    });
+
     it('shows no build disclosure when the response has no build for the station', () => {
         render(<RecipeSteps steps={UPGRADER} builds={undefined} names={names} />);
         expect(screen.queryByRole('button', { name: /^Build / })).not.toBeInTheDocument();
