@@ -11,6 +11,7 @@ import type {
   ValheimMaterialStack,
   ValheimMaterialsBase,
   ValheimMaterialsPersonalBase,
+  ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
 import {
   assignBases,
@@ -29,6 +30,16 @@ import type {
   StackSumRow,
 } from './valheim-materials-bases.queries';
 import { toCount } from './valheim-materials.mappers';
+import type { TrendInputs } from './valheim-materials-trend.queries';
+import {
+  baseDayTotals,
+  indexBaseSums,
+  indexItemSums,
+  shownOf,
+  toTrend,
+  trendField,
+  type BaseAnchor,
+} from './valheim-materials-trend.mappers';
 
 /** Where a chest sits: its base (null = away from bases) and its number. */
 export interface ChestPlace {
@@ -120,5 +131,70 @@ export function materialsBases(
       ...b,
       totals: orderLike(order.personal, b.totals),
     })),
+  };
+}
+
+/**
+ * ROK-2014 — attach the trend to `shared`, `personal`, every `bases[]` and
+ * every `personal.byBase[]` (a byBase row near no base gets none). Fewer than
+ * two stored play days → the response is returned unchanged (AC3).
+ */
+export function withMaterialsTrend(
+  res: ValheimMaterialsResponse,
+  input: TrendInputs,
+): ValheimMaterialsResponse {
+  if (input.days.length < 2) return res;
+  const items = indexItemSums(input.items);
+  const baseIdx = indexBaseSums(input.bases);
+  const bases = res.bases ?? [];
+  const current = new Set(bases.map((b) => b.key));
+  const anchors = new Map(bases.map((b) => [b.key, b]));
+  const baseTrend = (
+    anchor: BaseAnchor,
+    seg: 'shared' | 'personal',
+    t: ValheimMaterialStack[],
+  ) =>
+    trendField(
+      toTrend(
+        input.days,
+        baseDayTotals(baseIdx, anchor, current, seg),
+        shownOf(t),
+      ),
+    );
+  const p = res.personal;
+  return {
+    ...res,
+    shared: {
+      ...res.shared,
+      ...trendField(
+        toTrend(input.days, items.shared, shownOf(res.shared.totals)),
+      ),
+    },
+    ...(res.bases
+      ? {
+          bases: bases.map((b) => ({
+            ...b,
+            ...baseTrend(b, 'shared', b.totals),
+          })),
+        }
+      : {}),
+    personal: p && {
+      ...p,
+      ...trendField(toTrend(input.days, items.personal, shownOf(p.totals))),
+      ...(p.byBase
+        ? {
+            byBase: p.byBase.map((row) => {
+              if (row.base === null) return row;
+              // NaN centroid: a base missing from bases[] matches by key only.
+              const anchor = anchors.get(row.base) ?? {
+                key: row.base,
+                x: NaN,
+                z: NaN,
+              };
+              return { ...row, ...baseTrend(anchor, 'personal', row.totals) };
+            }),
+          }
+        : {}),
+    },
   };
 }
