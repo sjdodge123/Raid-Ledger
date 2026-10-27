@@ -176,6 +176,12 @@ describe('ROK-2024 open lock-in (integration)', () => {
     return spy.mock.calls.length;
   }
 
+  /** EVENT CREATED DM title — the poll DMs share its `lineup_event_created`
+   *  subtype, so the title is what tells them apart. */
+  function eventCreatedTitle(): string {
+    return `${testApp.seed.game.name} is happening!`;
+  }
+
   /** Let the real announcement run (the default spy only records it). */
   function callThrough(): void {
     spy.mockRestore();
@@ -216,10 +222,7 @@ describe('ROK-2024 open lock-in (integration)', () => {
   async function waitForEventCreatedDm(userId: number, eventId: number) {
     await waitFor(async () => {
       expect(await dmsOf(userId)).toContainEqual(
-        expect.objectContaining({
-          subtype: 'lineup_event_created',
-          eventId,
-        }),
+        expect.objectContaining({ title: eventCreatedTitle(), eventId }),
       );
     }, 5000);
   }
@@ -352,8 +355,8 @@ describe('ROK-2024 open lock-in (integration)', () => {
     expect(await complete(poll.matchId, eventId)).toBe(200);
 
     await waitForEventCreatedDm(bystander, eventId);
-    expect((await dmsOf(bystander)).map((d) => d.subtype)).toEqual([
-      'lineup_event_created',
+    expect((await dmsOf(bystander)).map((d) => d.title)).toEqual([
+      eventCreatedTitle(),
     ]);
     for (const uid of [yesVoter, testApp.seed.adminUser.id]) {
       const dms = await dmsAfterWindow(uid);
@@ -361,7 +364,6 @@ describe('ROK-2024 open lock-in (integration)', () => {
         uid,
         titles: ['Auto-signed up'],
       });
-      expect(dms.map((d) => d.subtype)).not.toContain('lineup_event_created');
     }
   });
 
