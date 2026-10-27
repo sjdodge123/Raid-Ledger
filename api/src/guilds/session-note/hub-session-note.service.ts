@@ -166,7 +166,7 @@ export class HubSessionNoteService {
     if (lock === null) return null;
     const pin = await findPinnedEvent(tx, lock.clearAfterEventId);
     if (!isNoteExpired(pin, now)) return { updatedAt: lock.updatedAt, pin };
-    if (pin) await deleteExpiredNote(tx, guildId, pin.id);
+    if (pin) await deleteExpiredNote(tx, guildId, pin.id, now);
     return null;
   }
 
@@ -179,7 +179,7 @@ export class HubSessionNoteService {
     if (note === null) return null;
     const pin = await findPinnedEvent(this.db, note.clearAfterEventId);
     if (!isNoteExpired(pin, now)) return { note, pin };
-    if (pin) await deleteExpiredNote(this.db, guildId, pin.id);
+    if (pin) await deleteExpiredNote(this.db, guildId, pin.id, now);
     return null;
   }
 

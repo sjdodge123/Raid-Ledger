@@ -3,7 +3,7 @@
  * writes (no access logic). `updated_at` is the D8 concurrency token, so it is
  * read as the DB's own microsecond UTC text — a JS `Date` would round it.
  */
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { HubSessionNoteItemSelect } from '../../drizzle/schema/hub-session-notes';
@@ -135,16 +135,35 @@ export function findItems(
     .orderBy(asc(items.position), asc(items.id));
 }
 
-/** D6: delete only while still pinned to `eventId` (a re-pin survives). */
+/**
+ * D6: delete only while still pinned to `eventId` (a re-pin survives) AND that
+ * event is still uncancelled and ended — re-checked in the same statement, so
+ * an event cancelled or rescheduled after the caller read it deletes nothing.
+ */
 export async function deleteExpiredNote(
   db: DbOrTx,
   guildId: number,
   eventId: number,
+  now: Date,
 ): Promise<void> {
+  const stillEnded = db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        eq(events.id, eventId),
+        isNull(events.cancelledAt),
+        sql`upper(${events.duration}) <= ${now.toISOString()}::timestamp`,
+      ),
+    );
   await db
     .delete(notes)
     .where(
-      and(eq(notes.guildId, guildId), eq(notes.clearAfterEventId, eventId)),
+      and(
+        eq(notes.guildId, guildId),
+        eq(notes.clearAfterEventId, eventId),
+        exists(stillEnded),
+      ),
     );
 }
 

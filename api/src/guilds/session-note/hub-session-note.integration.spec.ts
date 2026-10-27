@@ -1,6 +1,6 @@
 /**
  * ROK-1968 §8.3 — the hub "Before next session" note against a real database
- * (T-I1–T-I14): per-kind read / save / tick rights, the members-only 404, the
+ * (T-I1–T-I15): per-kind read / save / tick rights, the members-only 404, the
  * D8 `baseUpdatedAt` 409, the clear-after pin (next tagged event, lazy expiry,
  * cancelled/deleted pin, keep-the-pin on re-save) and the item-cascade clear.
  * Users are created once; every test builds its own hub, so randomized order
@@ -15,6 +15,7 @@ import { signTestAccessToken } from '../../common/testing/sign-test-access-token
 import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { deleteExpiredNote } from './hub-session-note.queries';
 
 type Who = 'admin' | 'editor' | 'member' | 'outsider';
 type Method = 'get' | 'put' | 'patch' | 'delete';
@@ -454,6 +455,34 @@ describe('community hub — clear after next event', () => {
     expect(noteOf(res).clearAfter?.eventId).toBe(e);
     // The editor's toggle label now names F — the pin deliberately does not.
     expect((res.body as HubSessionNoteResponse).nextEvent?.eventId).toBe(f);
+  });
+
+  it('T-I15: the expiry DELETE re-checks the event, so a pin changed since the read survives', async () => {
+    const g = await communityHub();
+    const eventId = await insertEvent(g, 24);
+    await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    // A caller that read a stale "ended" snapshot: the event is still upcoming.
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toHaveLength(1);
+    // Ended but cancelled since the read: still kept (ruling 5).
+    const past = Date.now() - 3 * HOUR;
+    await testApp.db
+      .update(schema.events)
+      .set({
+        cancelledAt: new Date(),
+        duration: [new Date(past), new Date(past + HOUR)],
+      })
+      .where(eq(schema.events.id, eventId));
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toHaveLength(1);
+    // Control: ended and uncancelled — deleted, items cascade.
+    await testApp.db
+      .update(schema.events)
+      .set({ cancelledAt: null })
+      .where(eq(schema.events.id, eventId));
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toEqual([]);
+    expect(await itemRows(g)).toEqual([]);
   });
 });
 
