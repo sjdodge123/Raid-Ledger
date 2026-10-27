@@ -155,6 +155,13 @@ vi.mock('../hooks/use-steam-link', async (importOriginal) => {
     };
 });
 
+/** ROK-2022: the Calendar step flag, driven per test (its own logic is unit-tested beside it). */
+const calendarFlag = vi.hoisted(() => ({ current: { needsCalendarConnect: false, settled: true } }));
+vi.mock('./onboarding-wizard/use-calendar-step-flag', () => ({ useCalendarStepFlag: () => calendarFlag.current }));
+vi.mock('../components/onboarding/calendar-step', () => ({
+    CalendarStep: () => <div data-testid="calendar-step-stub">Calendar step</div>,
+}));
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 
@@ -465,5 +472,56 @@ describe('OnboardingWizardPage — Steam step settles first (tech-debt [12])', (
         refresh();
         fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
         expect(mockNavigate).toHaveBeenCalledWith('/calendar', { replace: true });
+    });
+});
+
+describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
+    const newUser = { id: 1, username: 'newuser', role: 'member', discordId: '12345', onboardingCompletedAt: null };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+        mockUseSystemStatus.mockReturnValue({ data: { discordConfigured: false } });
+        calendarFlag.current = { needsCalendarConnect: true, settled: true };
+    });
+
+    function crumbIndex(needle: string): number {
+        return screen.getAllByRole('button').map((b) => b.textContent ?? '').findIndex((t) => t.includes(needle));
+    }
+
+    it('puts a Calendar breadcrumb after Game Time and before Connection when the flag is on', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />);
+        expect(crumbIndex('Calendar'), 'Calendar must follow Game Time').toBeGreaterThan(crumbIndex('Game Time'));
+        expect(crumbIndex('Calendar'), 'Calendar must precede Connection').toBeLessThan(crumbIndex('Connection'));
+    });
+
+    it('has no Calendar step when the flag is off (switch off / already connected)', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: true };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />);
+        expect(crumbIndex('Calendar'), 'no Calendar breadcrumb').toBe(-1);
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    });
+
+    it('?resume=calendar opens ON the Calendar step (Games, Game Time, Calendar → step 3 of 5)', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&connected=google']);
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'the OAuth return must land on the Calendar step').toHaveTextContent('Step 3 of 5');
+        expect(screen.getByTestId('calendar-step-stub')).toBeInTheDocument();
+    });
+
+    it('?resume=calendar lets an onboarded user (a ?rerun=1 return) stay in the wizard', () => {
+        mockUseAuth.mockReturnValue({ user: { ...newUser, onboardingCompletedAt: '2026-02-01T00:00:00Z' } });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&error=denied']);
+        expect(screen.queryByText('Calendar Page'), 'stripping resume must not bounce to /calendar').toBeNull();
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'an onboarded return must still seek').toHaveTextContent('Step 3 of 5');
+    });
+
+    it('renders nothing while a resume waits for the overview (settled false)', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: false };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar']);
+        expect(screen.queryByRole('dialog'), 'the seek needs the final step list').toBeNull();
     });
 });
