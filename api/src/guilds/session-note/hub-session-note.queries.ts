@@ -32,6 +32,7 @@ export interface NoteRecord {
   body: string;
   updatedAt: string;
   clearAfterEventId: number | null;
+  clearAfterArmed: boolean;
   editor: HubPostPersonRow | null;
 }
 
@@ -46,6 +47,7 @@ export async function findNote(
       body: notes.body,
       updatedAt: updatedAtText,
       clearAfterEventId: notes.clearAfterEventId,
+      clearAfterArmed: notes.clearAfterArmed,
       editor: {
         userId: users.id,
         username: users.username,
@@ -167,6 +169,28 @@ export async function deleteExpiredNote(
     );
 }
 
+/**
+ * D5b: pin an armed note to `eventId`, only while it is still armed and
+ * unpinned (a concurrent save or pin wins). Leaves `updated_at` alone so the
+ * pin never causes an editor's 409.
+ */
+export async function pinArmedNote(
+  db: DbOrTx,
+  guildId: number,
+  eventId: number,
+): Promise<void> {
+  await db
+    .update(notes)
+    .set({ clearAfterEventId: eventId, clearAfterArmed: false })
+    .where(
+      and(
+        eq(notes.guildId, guildId),
+        eq(notes.clearAfterArmed, true),
+        isNull(notes.clearAfterEventId),
+      ),
+    );
+}
+
 /** Clear: the note and (cascade) its items. Idempotent. */
 export async function deleteNote(db: Db, guildId: number): Promise<void> {
   await db.delete(notes).where(eq(notes.guildId, guildId));
@@ -178,6 +202,7 @@ export interface NoteWrite {
   body: string;
   actorId: number;
   clearAfterEventId: number | null;
+  clearAfterArmed: boolean;
 }
 
 /** Create path: false when a concurrent create won the row (D8 → 409). */
@@ -192,6 +217,7 @@ export async function insertNote(
       body: write.body,
       updatedBy: write.actorId,
       clearAfterEventId: write.clearAfterEventId,
+      clearAfterArmed: write.clearAfterArmed,
     })
     .onConflictDoNothing({ target: notes.guildId })
     .returning({ guildId: notes.guildId });
@@ -207,6 +233,7 @@ export async function updateNote(tx: DbOrTx, write: NoteWrite): Promise<void> {
       updatedBy: write.actorId,
       updatedAt: sql`now()`,
       clearAfterEventId: write.clearAfterEventId,
+      clearAfterArmed: write.clearAfterArmed,
     })
     .where(eq(notes.guildId, write.guildId));
 }

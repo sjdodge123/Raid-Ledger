@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -17,11 +16,14 @@ import { GuildAccessService, type GuildActor } from '../guild-access.service';
 import { toPerson } from '../posts/hub-posts.helpers';
 import { parseOrThrow } from '../posts/hub-posts.service.helpers';
 import {
+  isArmedUnpinned,
   isNoteExpired,
   noteBody,
+  planClearAfter,
   planItemRewrite,
   toClearAfter,
   toNoteItem,
+  type ClearAfterPlan,
   type PinnedEventRow,
 } from './hub-session-note.helpers';
 import {
@@ -34,6 +36,7 @@ import {
   findPinnedEvent,
   insertNote,
   lockNote,
+  pinArmedNote,
   rewriteItems,
   tickItem,
   updateNote,
@@ -49,10 +52,6 @@ interface LockedNote {
 }
 
 type WriteOutcome = 'ok' | 'conflict';
-
-const NO_NEXT_EVENT = {
-  clearAfterNextEvent: ['No upcoming event to clear after'],
-};
 
 /**
  * ROK-1968 §5 — the hub's "Before next session" note (Core widget). Reads and
@@ -127,11 +126,13 @@ export class HubSessionNoteService {
     const now = new Date();
     const locked = await this.lockLive(tx, guildId, now);
     if ((locked?.updatedAt ?? null) !== input.baseUpdatedAt) return 'conflict';
+    const pin = await this.resolvePin(tx, guildId, input, locked, now);
     const write = {
       guildId,
       body: input.body,
       actorId,
-      clearAfterEventId: await this.resolvePin(tx, guildId, input, locked, now),
+      clearAfterEventId: pin.eventId,
+      clearAfterArmed: pin.armed,
     };
     if (locked !== null) await updateNote(tx, write);
     else if (!(await insertNote(tx, write))) return 'conflict';
@@ -140,20 +141,24 @@ export class HubSessionNoteService {
     return 'ok';
   }
 
-  /** Ruling 4a/4d: pin the next event, but keep a still-live existing pin. */
+  /**
+   * Ruling 4a/4d + D5b: keep a still-live existing pin, else pin the next
+   * event, else arm the note (no event yet — pinned on a later read).
+   */
   private async resolvePin(
     tx: DbOrTx,
     guildId: number,
     input: PutHubSessionNoteInput,
     locked: LockedNote | null,
     now: Date,
-  ): Promise<number | null> {
-    if (!input.clearAfterNextEvent) return null;
+  ): Promise<ClearAfterPlan> {
+    if (!input.clearAfterNextEvent) return planClearAfter(false, null, null);
     const kept = locked?.pin;
-    if (kept && kept.cancelledAt === null) return kept.id;
+    if (kept && kept.cancelledAt === null) {
+      return planClearAfter(true, kept.id, null);
+    }
     const next = await findNextHubEvent(tx, guildId, now);
-    if (next === null) throw new BadRequestException(NO_NEXT_EVENT);
-    return next.id;
+    return planClearAfter(true, null, next?.id ?? null);
   }
 
   /** `SELECT … FOR UPDATE`, then treat an expired note as absent (deleted). */
@@ -175,12 +180,24 @@ export class HubSessionNoteService {
     guildId: number,
     now: Date,
   ): Promise<{ note: NoteRecord; pin: PinnedEventRow | null } | null> {
-    const note = await findNote(this.db, guildId);
+    const note = await this.pinArmed(await findNote(this.db, guildId), now);
     if (note === null) return null;
     const pin = await findPinnedEvent(this.db, note.clearAfterEventId);
     if (!isNoteExpired(pin, now)) return { note, pin };
     if (pin) await deleteExpiredNote(this.db, guildId, pin.id, now);
     return null;
+  }
+
+  /** D5b: an armed note pins the hub's next event once one exists. */
+  private async pinArmed(
+    note: NoteRecord | null,
+    now: Date,
+  ): Promise<NoteRecord | null> {
+    if (note === null || !isArmedUnpinned(note)) return note;
+    const next = await findNextHubEvent(this.db, note.guildId, now);
+    if (next === null) return note;
+    await pinArmedNote(this.db, note.guildId, next.id);
+    return findNote(this.db, note.guildId);
   }
 
   private async respond(
@@ -210,6 +227,7 @@ export class HubSessionNoteService {
       updatedAt: live.note.updatedAt,
       updatedBy: live.note.editor === null ? null : toPerson(live.note.editor),
       clearAfter: toClearAfter(live.pin),
+      clearAfterPending: isArmedUnpinned(live.note),
     };
   }
 

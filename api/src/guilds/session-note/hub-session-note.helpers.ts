@@ -32,6 +32,35 @@ export function isNoteExpired(pin: PinnedEventRow | null, now: Date): boolean {
   return pin.duration[1].getTime() <= now.getTime();
 }
 
+/** What an editor save stores for the clear-after toggle (D5/D5b). */
+export interface ClearAfterPlan {
+  eventId: number | null;
+  armed: boolean;
+}
+
+/**
+ * D5b: toggle off ⇒ no pin, not armed. Toggle on ⇒ keep a live existing pin
+ * (ruling 4d), else pin the hub's next event, else ARM the note so the first
+ * eligible event scheduled later is pinned on a read.
+ */
+export function planClearAfter(
+  toggle: boolean,
+  keptPinId: number | null,
+  nextEventId: number | null,
+): ClearAfterPlan {
+  if (!toggle) return { eventId: null, armed: false };
+  const eventId = keptPinId ?? nextEventId;
+  return { eventId, armed: eventId === null };
+}
+
+/** D5b: armed and still waiting for an event to pin. */
+export function isArmedUnpinned(note: {
+  clearAfterArmed: boolean;
+  clearAfterEventId: number | null;
+}): boolean {
+  return note.clearAfterArmed && note.clearAfterEventId === null;
+}
+
 /** Ruling 5: a cancelled pin reads as "no auto-clear". */
 export function toClearAfter(
   pin: PinnedEventRow | null,
