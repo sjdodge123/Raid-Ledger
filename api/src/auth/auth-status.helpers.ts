@@ -82,6 +82,19 @@ export function isKickExpired(kickedAt: Date): boolean {
 }
 
 /**
+ * True when a user is banned or still inside a kick cooldown — the same two
+ * lockouts `JwtStrategy.assertAuthUserActive` refuses for sessions. Read-only
+ * (no kick auto-clear). Used by non-session credentials (ROK-1955 devices).
+ */
+export function isBannedOrKickCoolingDown(user: {
+  bannedAt: Date | null;
+  kickedAt: Date | null;
+}): boolean {
+  if (user.bannedAt) return true;
+  return user.kickedAt !== null && !isKickExpired(user.kickedAt);
+}
+
+/**
  * Throw a structured USER_SUSPENDED `ForbiddenException` when the user is
  * banned. Structured (code + message + reason) so the Discord-OAuth failure
  * path can recognise it and thread the reason into the login redirect; the

@@ -18,6 +18,8 @@ import './lib/magic-link-capture';
 // Session Replay builds its Meta (type 4) href from `window.location.href`
 // inside the SDK and never offers it to `beforeAddRecordingEvent`.
 import './lib/query-token-capture';
+// ROK-1955 Codex P2: and the companion `/link#code=` user code.
+import './lib/companion-link-code-capture';
 import * as Sentry from '@sentry/react';
 import { buildSentryOptions, replaySampleRates } from './lib/sentry-options';
 import { shouldInitTelemetry } from './lib/telemetry-gate';
