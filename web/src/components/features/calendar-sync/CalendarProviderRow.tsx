@@ -6,6 +6,7 @@
  * account is connected (Q15: several Google accounts per user).
  */
 import type { JSX } from 'react';
+import type { CalendarOAuthReturn } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { useStartGoogleConnect } from '../../../hooks/use-calendar-sync';
 import { CALENDARS_COPY as C } from './calendar-sync.copy';
@@ -24,9 +25,12 @@ export function ProviderTile({ label }: { label: string }): JSX.Element {
 /**
  * Google's K1 row; `available` is `overview.providers.google.available`.
  * `another`: an account is already connected, so the row offers a further one.
+ * `returnTarget`: where the OAuth callback lands — the wizard passes `'onboarding'` (ROK-2022).
  */
-export function CalendarProviderRow({ available, another = false }: { available: boolean; another?: boolean }): JSX.Element {
-    const start = useStartGoogleConnect();
+export function CalendarProviderRow({ available, another = false, returnTarget }: {
+    available: boolean; another?: boolean; returnTarget?: CalendarOAuthReturn;
+}): JSX.Element {
+    const start = useStartGoogleConnect(returnTarget);
     return (
         <div className={CALENDAR_ROW} data-testid="calendar-provider-google">
             <ProviderTile label={C.google.tile} />
