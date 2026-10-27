@@ -24,6 +24,8 @@ import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
   countMatchMembers,
   deleteMatchMemberWithVotes,
+  findSlotProposedTimes,
+  type RemovedMemberRows,
 } from './scheduling-members-remove.helpers';
 
 jest.mock('./scheduling-poll-embed.service', () => ({
@@ -35,6 +37,7 @@ jest.mock('./scheduling-query.helpers', () => ({
 jest.mock('./scheduling-members-remove.helpers', () => ({
   countMatchMembers: jest.fn(),
   deleteMatchMemberWithVotes: jest.fn(),
+  findSlotProposedTimes: jest.fn(),
 }));
 jest.mock('../lineups-invitees.helpers', () => ({ addInvitees: jest.fn() }));
 
@@ -47,6 +50,10 @@ const mockDelete = deleteMatchMemberWithVotes as jest.MockedFunction<
 const mockCount = countMatchMembers as jest.MockedFunction<
   typeof countMatchMembers
 >;
+const mockSlotTimes = findSlotProposedTimes as jest.MockedFunction<
+  typeof findSlotProposedTimes
+>;
+const FUTURE_SLOT = new Date('2099-04-01T19:00:00.000Z');
 
 const LINEUP_ID = 10;
 const MATCH_ID = 20;
@@ -59,10 +66,15 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
   let fireUpdateEmbed: jest.Mock;
   let service: SchedulingMembersService;
 
-  function setLineup(createdBy: number | null = CREATOR_ID): void {
+  function setLineup(
+    createdBy: number | null = CREATOR_ID,
+    lifecycle: { status?: string; phaseDeadline?: Date } = {},
+  ): void {
     mockFindLineupPollMeta.mockImplementation((() =>
       Promise.resolve(
-        createdBy === null ? [] : [{ id: LINEUP_ID, createdBy }],
+        createdBy === null
+          ? []
+          : [{ id: LINEUP_ID, createdBy, status: 'decided', ...lifecycle }],
       )) as unknown as typeof findLineupPollMeta);
   }
 
@@ -88,6 +100,7 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
     setMatch([openMatch]);
     mockDelete.mockResolvedValue({ removedVotes: 2, removedMembers: 1 });
     mockCount.mockResolvedValue(3);
+    mockSlotTimes.mockResolvedValue([FUTURE_SLOT]);
   });
 
   function remove(userId = TARGET_ID, caller = CREATOR) {
@@ -102,10 +115,24 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
     expect(mockDelete).toHaveBeenCalledWith(db, MATCH_ID, TARGET_ID);
     expect(fireUpdateEmbed).toHaveBeenCalledTimes(1);
     expect(fireUpdateEmbed).toHaveBeenCalledWith(MATCH_ID);
-    // After the transaction resolved — never before / inside it.
-    const deleteOrder = mockDelete.mock.invocationCallOrder[0] ?? Infinity;
-    const fireOrder = fireUpdateEmbed.mock.invocationCallOrder[0] ?? -1;
-    expect(fireOrder).toBeGreaterThan(deleteOrder);
+  });
+
+  it('fires the re-render only once the delete transaction has SETTLED', async () => {
+    let settle: (rows: RemovedMemberRows) => void = () => undefined;
+    mockDelete.mockReturnValue(
+      new Promise<RemovedMemberRows>((resolve) => {
+        settle = resolve;
+      }),
+    );
+    const pending = remove();
+    // Let every microtask before the delete's await run.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(fireUpdateEmbed).not.toHaveBeenCalled();
+
+    settle({ removedVotes: 2, removedMembers: 1 });
+    await expect(pending).resolves.toEqual({ removedVotes: 2, memberCount: 3 });
+    expect(fireUpdateEmbed).toHaveBeenCalledTimes(1);
   });
 
   it('lets an operator who is not the creator remove a participant', async () => {
@@ -139,6 +166,29 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
     await expect(remove()).rejects.toBeInstanceOf(BadRequestException);
     expect(mockDelete).not.toHaveBeenCalled();
     expect(fireUpdateEmbed).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an archived parent lineup', { status: 'archived' }],
+    ['a passed phase deadline', { phaseDeadline: new Date('2000-01-01') }],
+  ])(
+    '400s %s (poll expired) before deleting anything',
+    async (_label, lifecycle) => {
+      setLineup(CREATOR_ID, lifecycle);
+      await expect(remove()).rejects.toThrow(
+        'This poll no longer accepts changes',
+      );
+      expect(mockDelete).not.toHaveBeenCalled();
+      expect(fireUpdateEmbed).not.toHaveBeenCalled();
+    },
+  );
+
+  it('400s a poll whose every slot time has passed', async () => {
+    mockSlotTimes.mockResolvedValue([new Date('2000-01-01T00:00:00.000Z')]);
+    await expect(remove()).rejects.toThrow(
+      'This poll no longer accepts changes',
+    );
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it('404s a match outside this lineup and an unknown lineup', async () => {

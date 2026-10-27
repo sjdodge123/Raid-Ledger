@@ -58,3 +58,15 @@ export async function countMatchMembers(
     .where(eq(schema.communityLineupMatchMembers.matchId, matchId));
   return roster.length;
 }
+
+/** Every slot's proposed time, for the poll-open check (ROK-1607 rule). */
+export async function findSlotProposedTimes(
+  db: Db,
+  matchId: number,
+): Promise<Date[]> {
+  const rows = await db
+    .select({ proposedTime: schema.communityLineupScheduleSlots.proposedTime })
+    .from(schema.communityLineupScheduleSlots)
+    .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
+  return rows.map((r) => r.proposedTime);
+}

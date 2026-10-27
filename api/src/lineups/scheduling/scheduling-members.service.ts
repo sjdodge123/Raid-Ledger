@@ -38,6 +38,7 @@ import * as schema from '../../drizzle/schema';
 import { activeUsersFilter } from '../../users/users-active.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
+  assertPollOpen,
   assertSchedulable,
   assertSchedulingEnabled,
 } from './scheduling-guard.helpers';
@@ -46,12 +47,27 @@ import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import {
   countMatchMembers,
   deleteMatchMemberWithVotes,
+  findSlotProposedTimes,
 } from './scheduling-members-remove.helpers';
 
 /** Caller identity for poll-roster authorization. */
 export interface PollMemberCaller {
   id: number;
   role: string;
+}
+
+/** The lineup fields the roster guards read. */
+interface ManagedLineup {
+  createdBy: number;
+  status: string | null;
+  phaseDeadline: Date | null;
+}
+
+/** The match fields the roster guards read. */
+interface SchedulableMatch {
+  status: string;
+  visibility: string;
+  linkedEventId: number | null;
 }
 
 /** Outcome of an add-members call. */
@@ -130,9 +146,10 @@ export class SchedulingMembersService {
     userId: number,
     caller: PollMemberCaller,
   ): Promise<RemoveMatchMemberResult> {
-    const createdBy = await this.assertCallerMayManage(lineupId, caller);
-    await this.loadSchedulableMatch(lineupId, matchId);
-    if (userId === createdBy) {
+    const lineup = await this.assertCallerMayManage(lineupId, caller);
+    const match = await this.loadSchedulableMatch(lineupId, matchId);
+    await this.assertRosterOpen(match, lineup, matchId);
+    if (userId === lineup.createdBy) {
       throw new BadRequestException(
         "The poll creator can't be removed — cancel the poll instead",
       );
@@ -150,24 +167,47 @@ export class SchedulingMembersService {
   }
 
   /**
+   * Codex P2: a past-deadline or archived poll keeps its match on
+   * `scheduling`, so `assertSchedulable` alone let a stale modal erase votes
+   * on a poll the page renders read-only. Same predicate (and slot-time rule)
+   * as `/remind`; re-worded because a removal is not a vote. Runs before
+   * anything is deleted.
+   */
+  private async assertRosterOpen(
+    match: SchedulableMatch,
+    lineup: ManagedLineup,
+    matchId: number,
+  ): Promise<void> {
+    const slotTimes = await findSlotProposedTimes(this.db, matchId);
+    try {
+      assertPollOpen(match, lineup, slotTimes);
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) throw err;
+      throw new BadRequestException('This poll no longer accepts changes');
+    }
+  }
+
+  /**
    * Lineup creator OR admin/operator — mirrors `assertCallerMayRemind`.
-   * Returns the lineup's creator id (the remove path refuses to remove them).
+   * Returns the lineup's lifecycle row (creator id + status + deadline).
    */
   private async assertCallerMayManage(
     lineupId: number,
     caller: PollMemberCaller,
-  ): Promise<number> {
+  ): Promise<ManagedLineup> {
     const [lineup] = await findLineupPollMeta(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
-    if (caller.role === 'admin' || caller.role === 'operator') {
-      return lineup.createdBy;
-    }
-    if (lineup.createdBy !== caller.id) {
+    const isStaff = caller.role === 'admin' || caller.role === 'operator';
+    if (!isStaff && lineup.createdBy !== caller.id) {
       throw new ForbiddenException(
         'Only the poll creator or an operator can manage participants',
       );
     }
-    return lineup.createdBy;
+    return {
+      createdBy: lineup.createdBy,
+      status: lineup.status ?? null,
+      phaseDeadline: lineup.phaseDeadline ?? null,
+    };
   }
 
   /**
@@ -176,15 +216,16 @@ export class SchedulingMembersService {
    * scheduled/archived match and a lineup that opted out of the scheduling
    * phase; without these the endpoint could mutate rosters the UI renders as
    * read-only. Returns the parent lineup's visibility for the private-invitee
-   * mirror above.
+   * mirror above, plus the match lifecycle the remove path's open check reads.
    */
   private async loadSchedulableMatch(
     lineupId: number,
     matchId: number,
-  ): Promise<{ visibility: string }> {
+  ): Promise<SchedulableMatch> {
     const [match] = await this.db
       .select({
         status: schema.communityLineupMatches.status,
+        linkedEventId: schema.communityLineupMatches.linkedEventId,
         visibility: schema.communityLineups.visibility,
         includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
       })
@@ -203,7 +244,11 @@ export class SchedulingMembersService {
     if (!match) throw new NotFoundException('Match not found');
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    return { visibility: match.visibility };
+    return {
+      status: match.status,
+      visibility: match.visibility,
+      linkedEventId: match.linkedEventId ?? null,
+    };
   }
 
   /** Insert `source: 'added'` rows, skipping existing members; returns the count. */
