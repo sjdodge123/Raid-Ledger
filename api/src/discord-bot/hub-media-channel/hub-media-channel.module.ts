@@ -3,6 +3,8 @@
  * (`guilds/:id/media-channel`), the gateway listener and the shared
  * `HubMediaPostIngest` (live + L3 backfill). A module of its own, like
  * `ThreadMirrorModule`; nothing here is imported back by the bot.
+ * `HubMediaIngestPool` comes from `HubMediaModule` (ROK-1965 D9): one pool
+ * per process, shared with member uploads.
  */
 import { Module } from '@nestjs/common';
 import { DrizzleModule } from '../../drizzle/drizzle.module';
@@ -16,10 +18,6 @@ import { HubMediaBackfillService } from './hub-media-backfill.service';
 import { HubMediaChannelListener } from './hub-media-channel.listener';
 import { HubMediaChannelResolver } from './hub-media-channel.queries';
 import { HubMediaHistorySource } from './hub-media-history.discord';
-import {
-  HubMediaIngestPool,
-  readIngestPoolLimits,
-} from './hub-media-ingest.pool';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 
 @Module({
@@ -35,11 +33,6 @@ import { HubMediaPostIngest } from './hub-media-post.ingest';
     HubMediaChannelResolver,
     HubMediaChannelService,
     HubMediaPostIngest,
-    // One pool per process: live + backfill share its cap (Codex P2).
-    {
-      provide: HubMediaIngestPool,
-      useFactory: () => new HubMediaIngestPool(readIngestPoolLimits()),
-    },
     HubMediaChannelListener,
     HubMediaHistorySource,
     HubMediaBackfillService,

@@ -1,7 +1,7 @@
 /**
  * ROK-1942 — MSW fixtures for the hub Gallery list route. Not in the default
  * handler list: specs `server.use()` them. The list handler mirrors the API's
- * filter (`kind=screenshot` also matches `image`, L2) and its `kinds` (present
+ * filter (`kind=screenshot` also matches `image` and `upload`) and its `kinds` (present
  * kinds, ignoring the filter, in `HUB_MEDIA_KINDS` order).
  */
 import { http, HttpResponse } from 'msw';
@@ -22,13 +22,14 @@ export function hubMediaItem(id: number, kind: HubMediaKind, over: Partial<HubMe
         source: { type: 'discord', label: 'Discord' },
         link: null,
         hidden: false,
+        canRemove: false,
         ...over,
     };
 }
 
 function matchesKind(item: HubMediaItem, kind: string | null): boolean {
     if (kind === null) return true;
-    if (kind === 'screenshot') return item.kind === 'screenshot' || item.kind === 'image';
+    if (kind === 'screenshot') return item.kind === 'screenshot' || item.kind === 'image' || item.kind === 'upload';
     return item.kind === kind;
 }
 
@@ -52,3 +53,10 @@ export function hubMediaListHandler(items: HubMediaItem[], status = 200) {
 /** The bytes route — a tiny webp-typed body (jsdom has no createObjectURL, so tiles keep their fallback). */
 export const hubMediaFileHandler = http.get(HUB_MEDIA_FILE_URL, () =>
     new HttpResponse(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/webp' } }));
+
+/** ROK-1965 — `POST /hubs/:guildId/media`: `status` 201 / 200 return `item`; anything else the `{statusCode, code, message}` body. */
+export function hubMediaUploadHandler(item: HubMediaItem, status = 201, code?: string) {
+    return http.post(HUB_MEDIA_LIST_URL, () => (status === 200 || status === 201
+        ? HttpResponse.json(item, { status })
+        : HttpResponse.json({ statusCode: status, ...(code !== undefined ? { code } : {}), message: 'Upload rejected' }, { status })));
+}

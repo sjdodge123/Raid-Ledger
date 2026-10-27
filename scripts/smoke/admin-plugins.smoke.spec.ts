@@ -63,7 +63,7 @@ test.describe('Admin plugins panel', () => {
         await expect(core.getByRole('button', { name: /^(Install|Activate|Deactivate|Uninstall)$/ })).toHaveCount(0);
         // Each item is "<name> <description>" (Core widgets carry descriptions), so an
         // exact getByText('Gallery') never matches in Playwright — match the item's start
-        // (no \b: textContent is "GalleryRecent pictures…", the span adds no space).
+        // (no \b: textContent is "GalleryPictures from this hub…", the span adds no space).
         await expect(
             core.getByRole('list', { name: 'Widgets' }).getByRole('listitem').filter({ hasText: /^Gallery/ }),
         ).toBeVisible();

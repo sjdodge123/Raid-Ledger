@@ -38,6 +38,7 @@ export const HUB_POINT_KINDS: Readonly<Record<string, HubBehaviourKind>> = {
 export const SCANNED_KINDS: readonly HubBehaviourKind[] = [
   ...Object.values(HUB_POINT_KINDS),
   'media-decorator',
+  'ingest-source',
 ];
 
 /** A registration key whose declared id differs (the tagger's `*` key). */
@@ -251,6 +252,22 @@ function mediaDecorators(
     );
 }
 
+/** ROK-1965 D17 — every literal `registerHubIngestSource(owner, 'id')` call. */
+function ingestSources(all: readonly ScanSource[], ctx: ScanContext): Found[] {
+  const re = /registerHubIngestSource\(\s*([\w.']+)\s*,\s*'([\w.-]+)'\s*\)/g;
+  return all.flatMap((src) =>
+    [...src.text.matchAll(re)].map((m): Found => {
+      const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
+      if (owner === undefined) {
+        return {
+          problem: `${src.file}: ingest source owner "${m[1] ?? ''}" is unresolvable`,
+        };
+      }
+      return { key: `${owner}/ingest-source/${m[2] ?? ''}` };
+    }),
+  );
+}
+
 /** Every live hub registration in `sources`, as `owner/kind/id` keys. */
 export function scanHubRegistrations(
   sources: readonly ScanSource[],
@@ -260,6 +277,7 @@ export function scanHubRegistrations(
     ...adapterRegistrations(sources, ctx),
     ...bareCrons(sources, ctx),
     ...mediaDecorators(sources, ctx),
+    ...ingestSources(sources, ctx),
   ];
   return {
     keys: found.flatMap((f) => (f.key === undefined ? [] : [f.key])),

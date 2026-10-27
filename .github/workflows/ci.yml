@@ -215,7 +215,11 @@ jobs:
       # and ESLint's cache keys a file's result on that file + the config only:
       # a type change in an imported file would replay a stale "clean". So api
       # stays UNCACHED; it runs exactly as `npm run lint --workspaces` ran it.
+      # 2026-10-27: the typed program outgrew Node's default ~4 GB heap (PR
+      # #1837 died at 4013 MB, exit 134, twice); the runner has 16 GB.
       - name: Lint (api, type-aware, uncached)
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run lint -w @raid-ledger/api
 
       # 2026-10-22: the remaining workspaces + test-bot lint without type
