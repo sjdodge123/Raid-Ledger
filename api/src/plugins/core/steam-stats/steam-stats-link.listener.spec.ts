@@ -24,7 +24,8 @@ const REPLACEMENT = { userId: 42, steamId64: '76561190000000002' };
 /** The `jobId` of the n-th `queue.add` call. */
 function jobIdOf(queue: { add: jest.Mock }, n: number): string {
   const opts = queue.add.mock.calls[n]?.[2] as { jobId?: string } | undefined;
-  if (opts?.jobId === undefined) throw new Error(`queue.add call ${n} has no jobId`);
+  if (opts?.jobId === undefined)
+    throw new Error(`queue.add call ${n} has no jobId`);
   return opts.jobId;
 }
 
