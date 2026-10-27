@@ -11,6 +11,7 @@ import type {
   ValheimMaterialStack,
   ValheimMaterialsBase,
   ValheimMaterialsPersonalBase,
+  ValheimMaterialsResponse,
 } from '@raid-ledger/contract';
 import {
   assignBases,
@@ -29,6 +30,18 @@ import type {
   StackSumRow,
 } from './valheim-materials-bases.queries';
 import { toCount } from './valheim-materials.mappers';
+import type { TrendInputs } from './valheim-materials-trend.queries';
+import {
+  baseDayTotals,
+  indexBaseMatches,
+  indexBaseSums,
+  indexItemSums,
+  shownOf,
+  toTrend,
+  trendField,
+  type BaseAnchor,
+  type BaseMatches,
+} from './valheim-materials-trend.mappers';
 
 /** Where a chest sits: its base (null = away from bases) and its number. */
 export interface ChestPlace {
@@ -120,5 +133,94 @@ export function materialsBases(
       ...b,
       totals: orderLike(order.personal, b.totals),
     })),
+  };
+}
+
+/** One request's indexed trend inputs (built once, read per row set). */
+interface TrendCtx {
+  days: TrendInputs['days'];
+  items: ReturnType<typeof indexItemSums>;
+  /** One-to-one, shared by `bases[]` and `byBase[]` (OPEN-1). */
+  matches: BaseMatches;
+}
+
+type Seg = 'shared' | 'personal';
+
+const itemTrend = (ctx: TrendCtx, seg: Seg, t: ValheimMaterialStack[]) =>
+  trendField(toTrend(ctx.days, ctx.items[seg], shownOf(t)));
+
+function baseTrend(
+  ctx: TrendCtx,
+  key: string,
+  seg: Seg,
+  t: ValheimMaterialStack[],
+) {
+  const totals = baseDayTotals(ctx.matches, key, seg);
+  if (!totals) return {};
+  return trendField(toTrend(ctx.days, totals, shownOf(t)));
+}
+
+/** A byBase row near no base gets no trend. */
+function byBaseTrend(
+  ctx: TrendCtx,
+  row: ValheimMaterialsPersonalBase,
+): ValheimMaterialsPersonalBase {
+  if (row.base === null) return row;
+  return { ...row, ...baseTrend(ctx, row.base, 'personal', row.totals) };
+}
+
+/** Today's bases, plus any byBase key outside them (no centroid = key only). */
+function anchorsOf(res: ValheimMaterialsResponse): BaseAnchor[] {
+  const out = new Map<string, BaseAnchor>(
+    (res.bases ?? []).map((b) => [b.key, { key: b.key, x: b.x, z: b.z }]),
+  );
+  for (const r of res.personal?.byBase ?? []) {
+    if (r.base !== null && !out.has(r.base))
+      out.set(r.base, { key: r.base, x: Number.NaN, z: Number.NaN });
+  }
+  return [...out.values()];
+}
+
+function personalWithTrend(
+  ctx: TrendCtx,
+  p: ValheimMaterialsResponse['personal'],
+): ValheimMaterialsResponse['personal'] {
+  if (!p) return p;
+  return {
+    ...p,
+    ...itemTrend(ctx, 'personal', p.totals),
+    ...(p.byBase ? { byBase: p.byBase.map((r) => byBaseTrend(ctx, r)) } : {}),
+  };
+}
+
+/**
+ * ROK-2014 — attach the trend to `shared`, `personal`, every `bases[]` and
+ * every `personal.byBase[]`. Fewer than two stored play days → the response
+ * is returned unchanged (AC3).
+ */
+export function withMaterialsTrend(
+  res: ValheimMaterialsResponse,
+  input: TrendInputs,
+): ValheimMaterialsResponse {
+  if (input.days.length < 2) return res;
+  const bases = res.bases ?? [];
+  const ctx: TrendCtx = {
+    days: input.days,
+    items: indexItemSums(input.items),
+    matches: indexBaseMatches(indexBaseSums(input.bases), anchorsOf(res)),
+  };
+  const withBases = res.bases
+    ? {
+        bases: bases.map((b) => ({
+          ...b,
+          ...baseTrend(ctx, b.key, 'shared', b.totals),
+        })),
+      }
+    : {};
+  return {
+    ...res,
+    shared: { ...res.shared, ...itemTrend(ctx, 'shared', res.shared.totals) },
+    ...withBases,
+    personal: personalWithTrend(ctx, res.personal),
   };
 }

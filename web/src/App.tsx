@@ -21,6 +21,7 @@ import { ThemeParticles } from './components/ui/ThemeParticles';
 import { takeCapturedMagicLinkToken } from './lib/magic-link-capture';
 import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
+import { prefetchDeferredChunksOnIdle } from './idle-prefetch';
 
 // ROK-657/1366: the single-use magic-link token was already taken from the URL
 // fragment and stripped by lib/magic-link-capture — main.tsx's first import,
@@ -62,6 +63,15 @@ function ScrollToTop() {
     }
   }, [pathname, navigationType]);
 
+  return null;
+}
+
+/**
+ * ROK-1901: inside the route Suspense, so its effect runs only once the first
+ * route has committed (after StartupGate opened and the route chunk landed).
+ */
+function PrefetchAfterFirstRoute() {
+  useEffect(() => prefetchDeferredChunksOnIdle(), []);
   return null;
 }
 
@@ -108,6 +118,7 @@ function App() {
         <Layout>
           <Suspense fallback={<LoadingSpinner />}>
             <AppRoutes />
+            <PrefetchAfterFirstRoute />
           </Suspense>
         </Layout>
       </BrowserRouter>

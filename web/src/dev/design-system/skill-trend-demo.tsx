@@ -1,12 +1,13 @@
 /**
  * ROK-1882 — the Valheim skill trend chip for /dev/design-system (§3.2
- * "Character section slots"). The real `SkillList`: a 3-day gain, a 1-day
+ * "Valheim trend chip"; ROK-2014 adds the Materials sample beside it). The real `SkillList`: a 3-day gain, a 1-day
  * gain, a net loss (danger) and a row with no change (no chip, unchanged).
  * Tap a chip for the per-day line. Tokens only, so it flips with the family.
  */
 import type { JSX } from 'react';
 import { SkillList } from '../../plugins/valheim/character/skills-section';
 import { Section, StateFrame } from './design-system-bits';
+import { MaterialsTrendDemo } from './materials-trend-demo';
 
 const SKILLS = [
     { id: 'Spears', level: 52.4, accumulator: 20 },
@@ -33,8 +34,9 @@ export function SkillTrendDemo(): JSX.Element {
 /** Its own section (moved out of Map viewport — the chip is a separate pattern). */
 export function SkillTrendSection(): JSX.Element {
     return (
-        <Section id="skill-trend" title="Pattern — skill trend chip" blurb="§3.2 Character section slots — a delta chip + one dot per play day; dot colour is per day, the chip tone is the net.">
+        <Section id="skill-trend" title="Pattern — Valheim trend chip" blurb="§3.2 Valheim trend chip — a delta chip + one dot per play day; dot colour is per day, the chip tone is the net. Skills (0.1, sessions) and Materials item rows (whole items, days).">
             <SkillTrendDemo />
+            <MaterialsTrendDemo />
         </Section>
     );
 }
