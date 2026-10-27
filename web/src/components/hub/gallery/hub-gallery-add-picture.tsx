@@ -32,7 +32,7 @@ export function HubGalleryAddPicture({
             inputProps={{ 'data-testid': inputTestId }}>
             {uploading
                 ? <span data-testid="hub-gallery-upload-progress">Uploading… {progress}%</span>
-                : <><span aria-hidden="true">＋</span>{compact ? <>Add<span className="sr-only"> picture</span></> : 'Add picture'}</>}
+                : <><span aria-hidden="true">＋</span>{compact ? <><span aria-hidden="true">Add</span><span className="sr-only">Add picture</span></> : 'Add picture'}</>}
         </FilePicker>
     );
 }

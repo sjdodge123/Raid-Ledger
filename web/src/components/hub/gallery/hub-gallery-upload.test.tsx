@@ -17,6 +17,24 @@ import { HubGallerySeeAll } from './hub-gallery-see-all';
 import { useHubGalleryStore } from './hub-gallery-store';
 
 vi.mock('../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+/**
+ * The XHR transport captures `XMLHttpRequest` before MSW patches it in this
+ * setup, so the spec swaps only the transport for `fetch` (which MSW does see)
+ * and keeps the real response parsing (`settle`) and everything above it.
+ * L4's Playwright spec drives the real XHR.
+ */
+vi.mock('../../../lib/hub-media-upload-api', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../../lib/hub-media-upload-api')>();
+    return {
+        ...real,
+        uploadHubMedia: async (guildId: number, file: File) => {
+            const form = new FormData();
+            form.append('file', file, file.name);
+            const res = await fetch(`http://localhost:3000/hubs/${guildId}/media`, { method: 'POST', body: form });
+            return real.settle(res.status, await res.text());
+        },
+    };
+});
 
 const ctx = { page: { guild: { id: 5 }, viewer: { canEdit: false } } as GuildPage, gameSlug: 'valheim' } as HubWidgetCtx;
 const Card = (): JSX.Element => <><HubGallerySeeAll {...ctx} /><HubGalleryWidget {...ctx} /></>;
@@ -38,8 +56,9 @@ describe('Add picture — upload', () => {
         const items: HubMediaItem[] = [hubMediaItem(2, 'death')];
         const sent: string[] = [];
         server.use(hubMediaListHandler(items), http.post(HUB_MEDIA_LIST_URL, async ({ request }) => {
-            const file = (await request.formData()).get('file');
-            sent.push(file instanceof File ? file.name : 'none');
+            const body = await request.text();
+            // jsdom's File crosses into Node's FormData as a bare Blob, so only the field name is checked here.
+            sent.push(/name="([^"]+)"; filename=/.exec(body)?.[1] ?? 'none');
             const added = hubMediaItem(1, 'upload', { canRemove: true });
             items.unshift(added);
             return HttpResponse.json(added, { status: 201 });
@@ -48,7 +67,7 @@ describe('Add picture — upload', () => {
         expect(await screen.findByRole('button', { name: 'See all (1)' })).toBeInTheDocument();
         pick();
         await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Picture added'));
-        expect(sent).toEqual(['shot.png']);
+        expect(sent).toEqual(['file']);
         expect(await screen.findByRole('button', { name: 'See all (2)' })).toBeInTheDocument();
     });
 
@@ -76,6 +95,6 @@ describe('Add picture — upload', () => {
         renderWithProviders(<Card />);
         const button = await screen.findByRole('button', { name: 'Add picture' });
         // jsdom's matchMedia matches nothing, so this is the phone (< 1024px) header.
-        expect(button.querySelector('.sr-only')?.textContent).toBe(' picture');
+        expect(button.querySelector('[aria-hidden="true"]:not(:first-child)')?.textContent).toBe('Add');
     });
 });
