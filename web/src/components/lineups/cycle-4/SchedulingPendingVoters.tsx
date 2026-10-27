@@ -23,25 +23,34 @@ export function SchedulingPendingVoters(
 ): JSX.Element | null {
   const pending = pendingVoters(props.members);
   if (pending.length === 0) return null;
+  // With ≤3 outstanding the copy names everyone, so the avatar strip is
+  // decorative: hide it from assistive tech, or a screen reader announces each
+  // name (or a bare initial, "S") before the count and then again after it.
+  const namesInCopy = pending.length <= 3;
   return (
     <div
       data-testid="scheduling-pending-voters"
       className="flex items-center gap-2 rounded-lg border border-edge bg-panel/40 px-3 py-2"
     >
-      <MemberAvatarGroup
-        members={pending.map((m) => ({
-          userId: m.userId,
-          displayName: m.displayName,
-          avatar: m.avatar,
-          discordId: m.discordId,
-          customAvatarUrl: m.customAvatarUrl,
-        }))}
-        max={5}
-      />
-      <span className="text-xs text-secondary">
+      <div aria-hidden={namesInCopy ? true : undefined}>
+        <MemberAvatarGroup
+          members={pending.map((m) => ({
+            userId: m.userId,
+            displayName: m.displayName,
+            avatar: m.avatar,
+            discordId: m.discordId,
+            customAvatarUrl: m.customAvatarUrl,
+          }))}
+          max={5}
+        />
+      </div>
+      <span
+        data-testid="scheduling-pending-voters-summary"
+        className="text-xs text-secondary"
+      >
         <span className="font-medium text-foreground">{pending.length}</span>{' '}
         still to vote
-        {pending.length <= 3 && (
+        {namesInCopy && (
           <> · {pending.map((m) => m.displayName).join(', ')}</>
         )}
       </span>

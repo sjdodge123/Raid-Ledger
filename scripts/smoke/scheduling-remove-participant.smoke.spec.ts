@@ -166,9 +166,9 @@ test.describe("Scheduling poll remove participant (ROK-2020)", () => {
         /Participants\s*·\s*3/,
         { timeout: 15_000 },
       );
-      await expect(page.getByTestId("scheduling-pending-voters")).toContainText(
-        /\b1\s+still to vote/,
-      );
+      await expect(
+        page.getByTestId("scheduling-pending-voters-summary"),
+      ).toContainText(/^1\s+still to vote/);
 
       // Remove the member who VOTED: the roster shrinks and their YES goes with them.
       await openRemoveModal(page);
@@ -190,9 +190,9 @@ test.describe("Scheduling poll remove participant (ROK-2020)", () => {
         { timeout: 15_000 },
       );
       // The voter was never "still to vote", so that count holds at 1.
-      await expect(page.getByTestId("scheduling-pending-voters")).toContainText(
-        /\b1\s+still to vote/,
-      );
+      await expect(
+        page.getByTestId("scheduling-pending-voters-summary"),
+      ).toContainText(/^1\s+still to vote/);
 
       // The removed voter is gone from the pick list; the other member is still there.
       await openRemoveModal(page);
