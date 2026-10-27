@@ -33,6 +33,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -42,6 +43,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { WOW_COMMON_MANIFEST } from '../plugins/wow-common/manifest';
+import { RosterInsightsCache } from '../plugins/wow-common/guilds/roster-insights/roster-insights.cache';
 import { defined } from '../common/defined.helpers';
 import {
   SEED_GUILD_EDITOR_RANK,
@@ -119,6 +121,7 @@ export class DemoTestGuildController {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly plugins: PluginRegistryService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** Idempotent per guild name; see the file header for the cast. */
@@ -160,7 +163,7 @@ export class DemoTestGuildController {
       ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
       : null;
     const lockouts = input.withLockouts
-      ? await this.seedLockouts(users, ctx.now)
+      ? await this.seedLockouts(users, ctx)
       : null;
     return {
       ...(content ? { content } : {}),
@@ -168,10 +171,14 @@ export class DemoTestGuildController {
     };
   }
 
-  /** ROK-1914 — lockout snapshots on the three linked characters. */
-  private seedLockouts(
+  /**
+   * ROK-1914 — lockout snapshots on the three linked characters, then drop
+   * the guild's 5-minute roster-insights cache so a re-seed of the same guild
+   * name serves the fresh saves at once (WowCommonModule owns the cache).
+   */
+  private async seedLockouts(
     users: Record<SeedGuildRole, SeedGuildUser>,
-    now: Date,
+    ctx: RosterCtx,
   ): Promise<SeededGuildLockouts> {
     const owners = (['gm', 'officer', 'member'] as const).map((owner) => {
       const characterId = users[owner].characterId;
@@ -179,7 +186,11 @@ export class DemoTestGuildController {
         throw new Error(`seeded ${owner} has no character`);
       return { owner, characterId };
     });
-    return seedGuildLockouts(this.db, owners, now);
+    const seeded = await seedGuildLockouts(this.db, owners, ctx.now);
+    this.moduleRef
+      .get(RosterInsightsCache, { strict: false })
+      .invalidateGuild(ctx.guildId);
+    return seeded;
   }
 
   /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */

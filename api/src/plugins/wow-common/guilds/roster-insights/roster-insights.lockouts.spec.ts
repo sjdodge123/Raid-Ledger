@@ -156,7 +156,9 @@ describe('computeLockouts (ROK-1914)', () => {
     );
     expect(out[0]?.difficulty).toBeNull();
   });
+});
 
+describe('computeLockouts — repeated saves (ROK-1914)', () => {
   it('lists a character once when its snapshot repeats a save, keeping the higher kill count', () => {
     const out = computeLockouts(
       [

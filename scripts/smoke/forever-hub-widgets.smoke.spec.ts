@@ -57,6 +57,7 @@ interface Insights {
     roles: { dungeon: Record<string, number>; raid: Record<string, number> };
     professions?: { name: string; members: { name: string }[] }[];
     lockouts?: { name: string; members: { name: string; killed: number }[] }[];
+    lockoutReporters?: number;
     freshness: { characters: { addon: number } };
 }
 

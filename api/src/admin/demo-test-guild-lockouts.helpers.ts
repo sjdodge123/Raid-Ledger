@@ -11,14 +11,16 @@
  *
  * Reset times are relative to the seed's `now` (live: +3 days, expired:
  * -1 day), and the snapshot is upserted on `(character, section)`, so a
- * re-seed of the same guild name restores fresh lockouts. Gear and talents
+ * re-seed of the same guild name restores fresh lockouts (the controller then
+ * invalidates the guild's roster-insights cache). Gear and talents
  * are empty, so no ilvl or role-hint fact changes the other Forever widgets.
  */
 import { createHash } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  AddonCharSnapshotData,
-  AddonLockout,
+import {
+  ADDON_CHAR_SNAPSHOT_SCHEMA,
+  type AddonCharSnapshotData,
+  type AddonLockout,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
@@ -65,12 +67,8 @@ export function seedLockoutsFor(
   return [lockout(SEED_LOCKOUT_SOLO, live, 1, 1)];
 }
 
-async function upsertSnapshot(
-  db: Db,
-  characterId: string,
-  lockouts: AddonLockout[],
-  now: Date,
-): Promise<void> {
+/** The snapshot columns an upsert writes (and rewrites on conflict). */
+function snapshotRow(lockouts: AddonLockout[], now: Date) {
   const data: AddonCharSnapshotData = {
     gear: [],
     talents: { nodes: [] },
@@ -79,10 +77,24 @@ async function upsertSnapshot(
   const payloadSha256 = createHash('sha256')
     .update(JSON.stringify(data))
     .digest('hex');
-  const row = { data, capturedAt: now, importedAt: now, payloadSha256 };
+  return { data, capturedAt: now, importedAt: now, payloadSha256 };
+}
+
+async function upsertSnapshot(
+  db: Db,
+  characterId: string,
+  lockouts: AddonLockout[],
+  now: Date,
+): Promise<void> {
+  const row = snapshotRow(lockouts, now);
   await db
     .insert(schema.characterAddonSnapshots)
-    .values({ characterId, section: 'char', schema: 2, ...row })
+    .values({
+      characterId,
+      section: 'char',
+      schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
+      ...row,
+    })
     .onConflictDoUpdate({
       target: [
         schema.characterAddonSnapshots.characterId,
