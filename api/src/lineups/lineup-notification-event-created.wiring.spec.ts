@@ -90,8 +90,11 @@ function rosterDb(names: string[]) {
 }
 
 /** Run the orchestrator and return the card it would have posted. */
-async function postedCard(eventId: number | undefined) {
-  const { db, seen } = rosterDb(ROSTERED);
+async function postedCard(
+  eventId: number | undefined,
+  rostered: string[] = ROSTERED,
+) {
+  const { db, seen } = rosterDb(rostered);
   jest.mocked(findMatchMemberUsers).mockResolvedValue(GROUP);
   const { resolveEmbedCtx } = jest.requireMock<
     typeof import('./lineup-notification-dispatch.helpers')
@@ -135,5 +138,31 @@ describe('orchestrateEventCreated — card names the roster (ROK-1624 AC1/AC3)',
     expect(dmMembers?.map((m) => m.displayName)).toEqual(
       GROUP.map((m) => m.displayName),
     );
+  });
+});
+
+describe('orchestrateEventCreated — "N of M from the group" line (ROK-1863 AC4)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('posts the subtext line when the roster is short of the group', async () => {
+    const { players } = await postedCard(EVENT_ID);
+
+    expect(players?.value).toContain(
+      `\n-# ${ROSTERED.length} of ${GROUP.length} from the group signed up`,
+    );
+  });
+
+  it('posts no line when the whole group is rostered', async () => {
+    const everyone = GROUP.map((m) => m.displayName);
+    const { players } = await postedCard(EVENT_ID, everyone);
+
+    expect(players?.name).toContain(`Players (${GROUP.length})`);
+    expect(players?.value).not.toContain('from the group signed up');
+  });
+
+  it('posts no line without a linked event (names are the group)', async () => {
+    const { players } = await postedCard(undefined);
+
+    expect(players?.value).not.toContain('from the group signed up');
   });
 });

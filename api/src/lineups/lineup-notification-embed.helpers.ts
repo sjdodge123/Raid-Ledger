@@ -237,7 +237,21 @@ function eventCreatedLinks(ctx: EmbedContext, eventId?: number): string {
   return `[Open event ${ARROW}](${ctx.baseUrl}/events/${eventId}) · ${lineup}${hubSuffix(ctx)}`;
 }
 
-/** Event created from a scheduled match (AC-10). */
+/**
+ * ROK-1863: the muted line under the Players field. The ONE place the markup
+ * is chosen — Discord subtext (`-# `) today; if it renders as a literal `-#`
+ * inside an embed field, switch to italics (`*${text}*`) here.
+ */
+function groupSubtextLine(text: string): string {
+  return `-# ${text}`;
+}
+
+/**
+ * Event created from a scheduled match (AC-10).
+ *
+ * @param groupSubtext - ROK-1863 "N of M from the group signed up" copy,
+ *   printed under the Players field; omit for no line.
+ */
 export function buildEventCreatedEmbed(
   ctx: EmbedContext,
   gameName: string,
@@ -245,6 +259,7 @@ export function buildEventCreatedEmbed(
   eventDate: Date,
   eventId?: number,
   memberNames?: string[],
+  groupSubtext?: string,
 ): EmbedWithRow {
   const embed = createLineupEmbed(ctx, 'event_created', 'Event Created');
   embed.setDescription(
@@ -256,7 +271,9 @@ export function buildEventCreatedEmbed(
   if (memberNames?.length) {
     embed.addFields({
       name: `\u{1F465} Players (${memberNames.length})`,
-      value: formatRoster(memberNames),
+      value: groupSubtext
+        ? `${formatRoster(memberNames)}\n${groupSubtextLine(groupSubtext)}`
+        : formatRoster(memberNames),
     });
   }
   appendBreadcrumb(embed, ctx);

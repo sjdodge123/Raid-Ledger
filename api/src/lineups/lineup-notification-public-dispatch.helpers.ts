@@ -39,7 +39,10 @@ import {
 } from './lineup-notification-dm-batch.helpers';
 import { findMatchMemberUsers } from './lineup-notification-targets.helpers';
 import { loadDecisionReason } from './lineup-decision-reason.helpers';
-import { resolveEventRosterNames } from './lineup-notification-event-roster.helpers';
+import {
+  resolveEventRosterCard,
+  type EventRosterCard,
+} from './lineup-notification-event-roster.helpers';
 import {
   routeNominationMilestoneIfPrivate,
   routeMatchesFoundIfPrivate,
@@ -233,17 +236,16 @@ export async function orchestrateSchedulingOpen(
  * Build the event-created embed builder bound to a match, ctx, and the names
  * the card may print.
  *
- * ROK-1624: `rosterNames` is the event's roster, NOT the match group — see
- * `resolveEventRosterNames`. The caller keeps the group in scope as
- * `members`, so the still-unruled AC4 line ("5 of 12 from the group") is one
- * extra argument from here.
+ * ROK-1624: `card.names` is the event's roster, NOT the match group — see
+ * `resolveEventRosterCard`. ROK-1863: `card.groupSubtext` is the
+ * "N of M from the group signed up" line (null → no line).
  */
 function eventCreatedBuilder(
   match: MatchInfo,
   ctx: EmbedContext,
   eventDate: Date,
   eventId: number | undefined,
-  rosterNames: string[],
+  card: EventRosterCard,
 ): BuildFn {
   return () =>
     buildEventCreatedEmbed(
@@ -252,7 +254,8 @@ function eventCreatedBuilder(
       match.gameId,
       eventDate,
       eventId,
-      rosterNames,
+      card.names,
+      card.groupSubtext ?? undefined,
     );
 }
 
@@ -292,11 +295,12 @@ export async function orchestrateEventCreated(
   // group (`members`) still gets the DM fan-out below — everyone who was in
   // the match hears that a time was locked in — but announcing all of them as
   // players advertised 12 for an event 5 of them were on.
-  const rosterNames = await resolveEventRosterNames(deps.db, eventId, members);
+  // ROK-1863: plus the "N of M from the group" line when the roster is short.
+  const card = await resolveEventRosterCard(deps.db, eventId, members);
   await postEmbed(
     deps,
     `lineup-event:${match.id}`,
-    eventCreatedBuilder(match, ctx, eventDate, eventId, rosterNames),
+    eventCreatedBuilder(match, ctx, eventDate, eventId, card),
     ctx,
   );
   await fanOutEventCreatedDMs(
