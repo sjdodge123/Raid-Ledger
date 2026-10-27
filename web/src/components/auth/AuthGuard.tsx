@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { saveAuthRedirect } from '../../lib/auth-redirect';
+import { withCapturedLinkCode } from '../../lib/companion-link-code-capture';
 
 /**
  * Global auth guard (ROK-283).
@@ -39,7 +40,8 @@ export function AuthGuard() {
         // Only save redirect if the user was trying to reach a real page
         // (not the root which is the login page itself)
         if (intended !== '/') {
-            saveAuthRedirect(intended);
+            // ROK-1955: `/link` gets its captured device code back (fragment).
+            saveAuthRedirect(withCapturedLinkCode(intended));
         }
         return <Navigate to="/" replace />;
     }

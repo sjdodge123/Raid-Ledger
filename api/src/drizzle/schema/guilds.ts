@@ -3,6 +3,7 @@ import {
   serial,
   integer,
   bigint,
+  boolean,
   varchar,
   timestamp,
   index,
@@ -44,6 +45,11 @@ export const guilds = pgTable(
     name: varchar('name', { length: 64 }).notNull(),
     /** lower(name) — the realm-less identity key. */
     nameKey: varchar('name_key', { length: 64 }).notNull(),
+    /**
+     * ROK-1950: a Raid Ledger rename — syncs (Pelican `syncServerHub`) leave
+     * `name` alone while true. Never true on community hubs.
+     */
+    nameOverridden: boolean('name_overridden').default(false).notNull(),
     realmSlug: varchar('realm_slug', { length: 100 }),
     guildSlug: varchar('guild_slug', { length: 100 }),
     blizzardGuildId: bigint('blizzard_guild_id', { mode: 'number' }),
@@ -165,6 +171,10 @@ export const guilds = pgTable(
     check(
       'guilds_auto_membership_kind_check',
       sql`${table.kind} = 'game_community' OR ${table.autoMembership} = 'off'`,
+    ),
+    check(
+      'guilds_name_override_kind_check',
+      sql`${table.nameOverridden} = false OR ${table.kind} <> 'game_community'`,
     ),
   ],
 );

@@ -43,7 +43,7 @@ describe('companion device link — poll', () => {
   it('T-API-1 start → approve → poll issues an rlcd_ token once', async () => {
     const user = await makeUser(testApp, 'cd-happy');
     const link = await startLink(testApp);
-    expect(link.verificationUriComplete).toContain('/link?code=');
+    expect(link.verificationUriComplete).toContain('/link#code=');
     expect((await decide(testApp, user.token, link.userCode)).status).toBe(200);
     const res = await poll(testApp, link.deviceCode);
     expect(res.status).toBe(200);

@@ -46,7 +46,15 @@ it('setActiveSlugs handles empty array', () => {
 
         const state = usePluginStore.getState();
         expect(state.initialized).toBe(true);
-        expect(state.activeSlugs.size).toBe(0);
+        // ROK-1969 D3: the built-in Core plugin is always active.
+        expect([...state.activeSlugs]).toEqual(['core']);
+    });
+
+it('treats the built-in core plugin as active before and after hydration (ROK-1969 D3)', () => {
+        expect(usePluginStore.getState().isPluginActive('core')).toBe(true);
+        usePluginStore.getState().setActiveSlugs(['blizzard']);
+        expect(usePluginStore.getState().isPluginActive('core')).toBe(true);
+        expect(usePluginStore.getState().activeSlugs.has('core')).toBe(true);
     });
 
 }

@@ -15,6 +15,7 @@ import { DiscordLinkCta, SteamSection } from './identity-sections';
 import { useSteamRedirectFeedback } from './identity-hooks';
 import { useCalendarSyncEnabled } from '../../hooks/use-calendar-sync';
 import { CalendarsPage } from '../../components/features/calendar-sync/CalendarsPage';
+import { CompanionDevicesSection } from './companion-devices-section';
 
 /** Discord linked status display */
 function DiscordLinkedStatus({ user }: {
@@ -41,7 +42,7 @@ function CalendarsSection(): JSX.Element | null {
     return enabled ? <CalendarsPage /> : null;
 }
 
-/** Integrations panel with Discord and Steam sections, then Calendars. */
+/** Integrations panel with Discord and Steam, then Companion devices (ROK-1955, the /link "Manage devices" target), then Calendars. */
 export function IntegrationsPanel(): JSX.Element | null {
     useSteamRedirectFeedback();
     const { user } = useAuth();
@@ -70,6 +71,7 @@ export function IntegrationsPanel(): JSX.Element | null {
                         unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} syncWishlist={syncWishlist} />
                 )}
             </div>
+            <CompanionDevicesSection />
             <CalendarsSection />
         </div>
     );

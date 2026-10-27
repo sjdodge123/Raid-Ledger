@@ -1797,22 +1797,22 @@
     {
       "idx": 257,
       "version": "7",
-      "when": 1792911874318,
-      "tag": "0257_companion_devices",
+      "when": 1792915273990,
+      "tag": "0257_guild_name_overridden",
       "breakpoints": true
     },
     {
       "idx": 258,
       "version": "7",
-      "when": 1792916522091,
-      "tag": "0258_companion_ingest",
+      "when": 1792915373990,
+      "tag": "0258_valheim_death_screenshots",
       "breakpoints": true
     },
     {
       "idx": 259,
       "version": "7",
-      "when": 1792921266247,
-      "tag": "0259_companion_blob_reservations",
+      "when": 1792915473990,
+      "tag": "0259_companion_devices",
       "breakpoints": true
     }
   ]

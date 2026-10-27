@@ -55,6 +55,15 @@ function mapRow(r: ActivityRow): ActivityEntryDto {
   };
 }
 
+/**
+ * What `log` inserts through: the service's own pool by default, or a caller's
+ * transaction so the audit row commits (or rolls back) with its change.
+ */
+export type ActivityLogExecutor = Pick<
+  PostgresJsDatabase<typeof schema>,
+  'insert'
+>;
+
 @Injectable()
 export class ActivityLogService {
   constructor(
@@ -69,8 +78,9 @@ export class ActivityLogService {
     action: ActivityActionDto,
     actorId?: number | null,
     metadata?: Record<string, unknown> | null,
+    executor: ActivityLogExecutor = this.db,
   ): Promise<void> {
-    await this.db.insert(schema.activityLog).values({
+    await executor.insert(schema.activityLog).values({
       entityType,
       entityId,
       action,

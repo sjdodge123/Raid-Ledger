@@ -187,6 +187,14 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
+  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
+  // ban+wipe must revoke them. Links the user decided go first: their
+  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
+  {
+    table: schema.companionDeviceLinks,
+    column: schema.companionDeviceLinks.decidedBy,
+  },
+  { table: schema.companionDevices, column: schema.companionDevices.userId },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,
@@ -242,6 +250,7 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildEditors,
   // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
   // are SET NULL audit columns; the guild's content outlives its editor.
+  // ROK-1941: `media_channel_set_by` is the same kind of SET NULL audit.
   schema.guildProfiles,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).

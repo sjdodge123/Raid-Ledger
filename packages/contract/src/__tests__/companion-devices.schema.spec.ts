@@ -118,7 +118,7 @@ describe("CompanionDeviceInfoSchema / link start", () => {
       deviceCode: DEVICE_CODE,
       userCode: "BCDF-GHJK",
       verificationUri: "https://raid.example/link",
-      verificationUriComplete: "https://raid.example/link?code=BCDF-GHJK",
+      verificationUriComplete: "https://raid.example/link#code=BCDF-GHJK",
       expiresIn: 600,
       interval: 5,
     };

@@ -9,6 +9,7 @@ import { Section } from './design-system-bits';
 
 const HubWidgetsDemo = lazy(() => import('./hub-widgets-demo'));
 const HubGalleryDemo = lazy(() => import('./hub-gallery-demo'));
+const DeathsStripDemo = lazy(() => import('./deaths-strip-demo'));
 
 /** §4.27 — a plugin's game-scoped Overview card in its three states. */
 export function HubWidgetsSection(): JSX.Element {
@@ -28,6 +29,11 @@ export function HubWidgetsSection(): JSX.Element {
             <p className="text-xs text-muted">Square thumbnail tiles; a tile opens the ONE dialog (Modal ≥1024px, BottomSheet below) in viewer mode — ←/→, Prev/Next, chips, editor Hide.</p>
             <Suspense fallback={<p className="text-xs text-muted">Loading gallery demo…</p>}>
                 <HubGalleryDemo />
+            </Suspense>
+            <h3 className="mt-6 text-sm font-semibold text-foreground">Thumbnail strip in a meter row (ROK-1941)</h3>
+            <p className="text-xs text-muted">A second line under a meter row, a sibling of the row link: up to three 40px thumbs in 44px targets, then "+N". A thumb opens the Gallery viewer above on Deaths at that picture; "+N" its grid.</p>
+            <Suspense fallback={<p className="text-xs text-muted">Loading strip demo…</p>}>
+                <DeathsStripDemo />
             </Suspense>
         </Section>
     );

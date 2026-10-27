@@ -9,7 +9,7 @@ import type { GuildScheduleNightDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import type { GuildKind } from '@raid-ledger/contract';
-import { HUB_COPY, hubCopy, hubSectionsLabel, privateAckLabel } from './hub-copy';
+import { HUB_COPY, hubCopy, hubSectionsLabel, privateAckLabel, loadFailedLabel, privateTagTitle } from './hub-copy';
 import { GuildRules } from './content/guild-rules';
 import { LatestPostCard } from './posts/latest-post-card';
 import { GuildDiscordMirror } from './discord/guild-discord-mirror';
@@ -143,5 +143,35 @@ describe('rules card + private-channel acknowledgement copy', () => {
         expect(privateAckLabel('wow_guild')).toBe('Every member who can open this guild page will see this channel’s messages.');
         expect(privateAckLabel('game_server')).toBe('Every member who can open this server page will see this channel’s messages.');
         expect(privateAckLabel('game_community')).toBe('Every member who can open this hub page will see this channel’s messages.');
+    });
+
+    const NOTICES: Readonly<Record<GuildKind, [string, string, string]>> = {
+        wow_guild: [
+            "You're not a member of this guild. Link a character in the guild to see its page.",
+            "We couldn't load this guild. Try again in a moment.",
+            'Private Discord channel — everyone who can open this guild page sees it here',
+        ],
+        game_server: [
+            "You're not a member of this server.",
+            "We couldn't load this server. Try again in a moment.",
+            'Private Discord channel — everyone who can open this server page sees it here',
+        ],
+        game_community: [
+            "You're not a member of this hub.",
+            "We couldn't load this hub. Try again in a moment.",
+            'Private Discord channel — everyone who can open this hub page sees it here',
+        ],
+    };
+
+    it.each(Object.entries(NOTICES) as [GuildKind, [string, string, string]][])('names a %s hub in the page notices and the Private tag', (kind, [notMember, loadFailed, privateTag]) => {
+        expect(hubCopy(kind).notMember).toBe(notMember);
+        expect(loadFailedLabel(kind)).toBe(loadFailed);
+        expect(privateTagTitle(kind)).toBe(privateTag);
+    });
+
+    it('keeps the WoW notices when the kind is absent', () => {
+        expect(hubCopy(undefined).notMember).toBe(NOTICES.wow_guild[0]);
+        expect(loadFailedLabel(undefined)).toBe(NOTICES.wow_guild[1]);
+        expect(privateTagTitle(undefined)).toBe(NOTICES.wow_guild[2]);
     });
 });

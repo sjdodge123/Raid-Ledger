@@ -35,6 +35,17 @@ export interface HubCatalogOptions {
     activeSlugs: ReadonlySet<string>;
 }
 
+/** Mapped over `CoreWidgetId`, so a new core id that is not listed here fails to compile. */
+const CORE_BAND: { readonly [K in CoreWidgetId]: K } = {
+    'gm-post': 'gm-post', discord: 'discord', schedule: 'schedule', events: 'events', attendance: 'attendance',
+};
+
+/**
+ * ROK-1969 — the core band's bare ids, declared under `core` in
+ * `HUB_PLUGIN_MANIFESTS`; the ownership guard checks both lists match.
+ */
+export const CORE_BAND_IDS: readonly CoreWidgetId[] = Object.values(CORE_BAND);
+
 type CoreSpec = { id: CoreWidgetId; order: number; span: 1 | 2; title: string; description: string; node: ReactNode };
 
 function core(spec: CoreSpec): HubWidgetCell {

@@ -12,7 +12,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
@@ -32,7 +32,7 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { hubCopy, hubSectionsLabel } from './hub-copy';
+import { hubCopy, hubSectionsLabel, loadFailedLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
@@ -86,17 +86,25 @@ function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryRe
     );
 }
 
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => unknown }): JSX.Element {
+interface ErrorStateProps {
+    error: Error;
+    onRetry: () => unknown;
+    /** The hub kind when known (a module load failure); a page 403/5xx has none and reads as a WoW guild. */
+    kind?: GuildKind | undefined;
+}
+
+/** The hub page's failure notices — not-a-member (403), not-found (404), or a retryable load failure. */
+export function ErrorState({ error, onRetry, kind }: ErrorStateProps): JSX.Element {
     const status = httpStatusOf(error);
     if (status === 403) {
-        return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
+        return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
     }
     if (status === 404) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     return (
         <Notice testId="guild-error">
-            <p className="mb-4 text-sm text-muted">We couldn&apos;t load this guild. Try again in a moment.</p>
+            <p className="mb-4 text-sm text-muted">{loadFailedLabel(kind)}</p>
             <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
@@ -252,20 +260,34 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     );
 }
 
-type RecoveryLatch = { guildId: number; dataUpdatedAt: number };
+type RecoveryLatch = { guildId: number; dataUpdatedAt: number; errorUpdatedAt: number };
+type GuildPageQuery = ReturnType<typeof useGuildPage>;
+
+/**
+ * Whether the query moved past the latch: another hub, a success, or a newer
+ * error that is NOT a 401 (a 403/404/5xx). A still-401 refetch — the
+ * recovery's own, or a resume refresh's — and an in-flight refetch (which
+ * clears an uncached query's `error`) keep the hold, so Sign in is final.
+ */
+function latchReleased(latch: RecoveryLatch, query: GuildPageQuery, guildId: number): boolean {
+    if (latch.guildId !== guildId || latch.dataUpdatedAt !== query.dataUpdatedAt) return true;
+    return query.error != null && query.errorUpdatedAt !== latch.errorUpdatedAt && httpStatusOf(query.error) !== 401;
+}
 
 /**
  * ROK-1947: the recovery refetch clears an uncached query's error, so the
  * re-check screen is held until it lands, or the next 401 would remount it
- * and loop. The latch is keyed to the hub and to the data it started from:
- * a later success that did not come through it (a resume refresh refetching
- * the 401'd query) or another hub voids it, so a stale Sign in never stays up.
+ * and loop. Once released (see {@link latchReleased}) the latch is dropped, so
+ * a later in-flight refetch cannot revive a stale Sign in.
  */
-function useRecoveryLatch(query: ReturnType<typeof useGuildPage>, guildId: number) {
+function useRecoveryLatch(query: GuildPageQuery, guildId: number) {
     const [latch, setLatch] = useState<RecoveryLatch | null>(null);
-    const recovering = latch !== null && latch.guildId === guildId && latch.dataUpdatedAt === query.dataUpdatedAt;
+    const released = latch !== null && latchReleased(latch, query, guildId);
+    // Dropped during render (React's adjust-state-on-change pattern): the next pass has no latch.
+    if (released) setLatch(null);
+    const recovering = latch !== null && !released;
     const recoverPage = async () => {
-        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt });
+        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt, errorUpdatedAt: query.errorUpdatedAt });
         const result = await query.refetch({ cancelRefetch: false });
         if (result.status === 'success') setLatch(null);
         return result;
@@ -290,8 +312,9 @@ export function GuildPage(): JSX.Element {
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
     if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
-    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} />;
-    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
+    // Cached data (a refetch error) still knows the kind; with none it falls back to WoW copy.
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} />;
+    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} kind={query.data?.guild.kind} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

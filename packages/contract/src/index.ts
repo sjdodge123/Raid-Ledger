@@ -71,6 +71,10 @@ export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
+// Plugin-owned hub widgets/tabs/behaviours + the Core plugin (ROK-1969).
+export * from './plugin-hub-manifest.schema.js';
+export * from './plugin-hub-manifests.js';
+export * from './plugin-setup.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 export * from './pelican-servers.schema.js';
@@ -254,6 +258,8 @@ export * from './guilds.schema.js';
 export * from './hub-welcome.schema.js';
 export * from './valheim-claim-status.schema.js';
 export * from './community-hubs.schema.js';
+// Hub rename — PATCH /guilds/:id/name (ROK-1950).
+export * from './hub-rename.schema.js';
 export * from './hub-invite.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
@@ -276,6 +282,7 @@ export * from './hub-onboarding.schema.js';
 export * from './hub-server.schema.js';
 // Hub media store + Gallery widget — pictures with a source kind (ROK-1942).
 export * from './hub-media.schema.js';
+export * from './hub-media-channel.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

@@ -23,8 +23,16 @@
  */
 export const SECRET_VALUE = String.raw`[^&#\s"'(){},]+`;
 
-/** A `token=` param right after `#`, `?` or `&`. */
-const TOKEN_PARAM = new RegExp(String.raw`([#?&]token=)` + SECRET_VALUE, 'g');
+/**
+ * A `token=` param right after `#`, `?` or `&` — and (ROK-1955 Codex P2) the
+ * companion device-link user code, `/link#code=…` (or a legacy `?code=`).
+ * That code approves a device for the signed-in user, so it is a secret in
+ * every URL Sentry sees: events, breadcrumbs and Replay recording events.
+ * Redacting `code=` on EVERY URL (not only `/link`) is deliberate: it also
+ * covers OAuth `?code=` callbacks, and a false positive costs only a
+ * `[Filtered]` in a breadcrumb.
+ */
+const TOKEN_PARAM = new RegExp(String.raw`([#?&](?:token|code)=)` + SECRET_VALUE, 'g');
 
 /**
  * ROK-1750: a private poll's share token is a PATH segment — the page
@@ -51,7 +59,7 @@ const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
 /**
  * ROK-1955: the device-link preview `/companion/v1/devices/link/<userCode>`
  * carries the user code in the PATH; `poll` and `decision` are route names
- * and stay readable. (`/link?code=` is a URL param — `sentry-scrub-secrets`.)
+ * and stay readable. (`/link#code=` is a URL param — `TOKEN_PARAM` above.)
  */
 const COMPANION_LINK_PATH =
     /(\/(?:api\/)?companion\/v1\/devices\/link\/)(?!(?:poll|decision|preview)(?=[/?#\s"']|$))[^/?#\s"']+/gi;

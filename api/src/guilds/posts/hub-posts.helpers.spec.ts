@@ -102,13 +102,13 @@ describe('encodeCursor / decodeCursor', () => {
 describe('postDeepLink', () => {
   it('points at the post on the hub Posts tab', () => {
     expect(postDeepLink('https://raid.example', 7, 3)).toBe(
-      'https://raid.example/guilds/7?post=3#posts',
+      'https://raid.example/hubs/7?post=3#posts',
     );
   });
 
   it('drops a trailing slash on the client url', () => {
     expect(postDeepLink('https://raid.example/', 7, 3)).toBe(
-      'https://raid.example/guilds/7?post=3#posts',
+      'https://raid.example/hubs/7?post=3#posts',
     );
   });
 });

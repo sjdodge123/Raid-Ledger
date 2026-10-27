@@ -8,6 +8,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { http, HttpResponse } from 'msw';
 import type { CalendarsOverview } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { createTestQueryClient } from '../../test/render-helpers';
@@ -92,6 +93,19 @@ describe('IntegrationsPanel — inline Calendars section (ROK-1780)', () => {
         expect(screen.queryByText('Discord linked')).toBeNull();
         expect(screen.queryByTestId('calendars-page'), 'Calendars section must render without a linked Discord row')
             .not.toBeNull();
+    });
+
+    it('ROK-1955 T-WEB-6: Companion devices sits between the Integrations card and Calendars', async () => {
+        server.use(http.get('http://localhost:3000/companion/v1/devices', () => HttpResponse.json({ data: [] })));
+        renderPanel(calendarsOverviewVariants.connected);
+        await screen.findByTestId('calendars-page');
+        const integrations = screen.getByRole('heading', { level: 2, name: 'Integrations' });
+        const devices = screen.getByRole('heading', { level: 2, name: 'Companion devices' });
+        const calendarsHeading = screen.getByRole('heading', { level: 2, name: C.title });
+        expect(integrations.compareDocumentPosition(devices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(devices.compareDocumentPosition(calendarsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(must(integrations.parentElement, 'Integrations card')).not.toContainElement(devices);
+        expect(document.getElementById('companion-devices')).toContainElement(devices);
     });
 
     it('hides the Calendars section while the kill switch is off', async () => {

@@ -135,7 +135,7 @@ describe('pelicanHubModule (ROK-1831)', () => {
 
     it('a per-game tab shows only on hubs of its game', () => {
         usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
-        registerServerHubGameTab('valheim', { id: 'map', label: 'Map', order: 20, component: () => null });
+        registerServerHubGameTab('valheim', { id: 'map', label: 'Map', order: 20, component: () => null }, 'valheim');
         const tab = serverHubGameTabs().find((t) => t.id === 'map');
         expect(tab?.visible?.(ctx())).toBe(true);
         expect(tab?.visible?.(ctx(false, 'minecraft'))).toBe(false);
@@ -144,7 +144,7 @@ describe('pelicanHubModule (ROK-1831)', () => {
 
 describe('server hub game tabs — plugin activation gate (ROK-1836 r8)', () => {
     it('a per-game tab hides while its registering plugin is inactive (ROK-1836 r8)', () => {
-        registerServerHubGameTab('valheim', { id: 'gated', label: 'Gated', order: 30, component: () => null });
+        registerServerHubGameTab('valheim', { id: 'gated', label: 'Gated', order: 30, component: () => null }, 'valheim');
         const tab = serverHubGameTabs().find((t) => t.id === 'gated');
         usePluginStore.getState().setActiveSlugs(['pelican', 'valheim']);
         expect(tab?.visible?.(ctx())).toBe(true);

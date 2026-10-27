@@ -42,6 +42,7 @@ export const ActivityActionSchema = z.enum([
     'signup_reconfirmed',
     // Hub actions (ROK-1918) — Overview arrange mode saved or reset.
     'hub_widget_layout_updated',
+    'hub_renamed', // ROK-1950
 ]);
 
 export type ActivityActionDto = z.infer<typeof ActivityActionSchema>;

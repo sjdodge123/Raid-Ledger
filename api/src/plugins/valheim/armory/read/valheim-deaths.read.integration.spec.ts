@@ -3,7 +3,8 @@
  * against a real database: D6 access (member / staff → 200; visitor,
  * hidden hub, unknown server → the hub 404), D7 grouping + NULL-steam
  * resolution, D9 `characterId`, the sort and `since`; D13 no SteamID
- * anywhere in the body and a stable, unique `key` per bar.
+ * anywhere in the body and a stable, unique `key` per bar. ROK-1941 D13:
+ * the newest 3 visible death pictures + `pictureCount` per bar.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -299,5 +300,123 @@ describe('GET …/servers/:serverId/deaths — opaque keys (D13)', () => {
       `Ragnar|c${id}|1|${id}`,
     ]);
     expect(keysOf(second)).toEqual(keysOf(first));
+  });
+});
+
+/** ROK-1941: one hub media row on this hub (visible unless told otherwise). */
+async function media(
+  h: number,
+  state: { hiddenAt?: Date; removedAt?: Date } = {},
+): Promise<number> {
+  seq += 1;
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.hubMedia)
+      .values({
+        guildId: hubId,
+        source: 'discord',
+        kind: 'death',
+        provenanceKey: `discord:1:${seq}:1`,
+        capturedAt: hour(h),
+        storageName: `00000000-0000-4000-8000-${String(seq).padStart(12, '0')}`,
+        width: 640,
+        height: 480,
+        bytes: 1000,
+        ...state,
+      })
+      .returning({ id: schema.hubMedia.id }),
+    'media',
+  );
+  return row.id;
+}
+
+/** A death linked to a picture; `discord` = inferred from the post alone (D8). */
+async function pictureDeath(
+  name: string,
+  steamId: string | null,
+  h: number,
+  hubMediaId: number,
+  source: 'log' | 'discord' = 'log',
+) {
+  seq += 1;
+  await testApp.db.insert(schema.valheimPlayerDeaths).values({
+    pelicanServerId: server,
+    characterName: name,
+    steamId,
+    source,
+    loggedAt: `2026-10-20T${String(h).padStart(2, '0')}:00:${String(seq % 60).padStart(2, '0')}`,
+    occurredAt: hour(h),
+    hubMediaId,
+  });
+}
+
+const thumb = (id: number) => `/hubs/${hubId}/media/${id}/thumb`;
+const picsOf = (r: ValheimDeathsResponse) =>
+  r.players.map((p) => ({
+    name: p.name,
+    deaths: p.deaths,
+    pictureCount: p.pictureCount,
+    thumbs: p.pictures?.map((x) => x.thumbPath),
+  }));
+
+describe('GET …/servers/:serverId/deaths — death pictures (ROK-1941 D13)', () => {
+  it('gives a member the newest 3 visible pictures across merged buckets, counting the inferred death', async () => {
+    await profile(A, 'Ragnar', 0);
+    const m1 = await media(1);
+    const m2 = await media(2);
+    const m3 = await media(3);
+    const m4 = await media(5);
+    await pictureDeath('Ragnar', A, 1, m1);
+    await pictureDeath('Ragnar', A, 2, m2);
+    await pictureDeath('Ragnar', null, 3, m3, 'discord');
+    await pictureDeath('Ragnar', A, 5, m4);
+    await death('Ragnar', A, 6);
+    const r = await deathsOf(tokens.member);
+    expect(picsOf(r)).toEqual([
+      {
+        name: 'Ragnar',
+        deaths: 5,
+        pictureCount: 4,
+        thumbs: [thumb(m4), thumb(m3), thumb(m2)],
+      },
+    ]);
+    expect(r.players[0]?.pictures?.[0]).toEqual({
+      mediaId: m4,
+      thumbPath: thumb(m4),
+      capturedAt: hour(5).toISOString(),
+    });
+  });
+
+  it('counts an inferred discord-only death in deaths (AC5)', async () => {
+    const m = await media(4);
+    await pictureDeath('Bjorn', null, 4, m, 'discord');
+    expect(picsOf(await deathsOf(tokens.member))).toEqual([
+      { name: 'Bjorn', deaths: 1, pictureCount: 1, thumbs: [thumb(m)] },
+    ]);
+  });
+
+  it('excludes hidden and removed pictures from pictures and pictureCount for everyone', async () => {
+    const shown = await media(1);
+    await pictureDeath('Ragnar', A, 1, shown);
+    await pictureDeath('Ragnar', A, 2, await media(2, { hiddenAt: hour(9) }));
+    await pictureDeath('Ragnar', A, 3, await media(3, { removedAt: hour(9) }));
+    await pictureDeath('Cyra', C, 4, await media(4, { hiddenAt: hour(9) }));
+    for (const t of [tokens.member, tokens.operator]) {
+      expect(picsOf(await deathsOf(t))).toEqual([
+        { name: 'Ragnar', deaths: 3, pictureCount: 1, thumbs: [thumb(shown)] },
+        { name: 'Cyra', deaths: 1, pictureCount: undefined, thumbs: undefined },
+      ]);
+    }
+  });
+
+  it('answers a visitor with the hub 404 and no picture paths', async () => {
+    const m = await media(1);
+    await pictureDeath('Ragnar', A, 1, m);
+    const res = await get(server, tokens.visitor);
+    expect({
+      status: res.status,
+      message: res.body.message,
+      leaksThumb: res.text.includes(thumb(m)),
+    }).toEqual({ status: 404, message: HUB_NOT_FOUND, leaksThumb: false });
   });
 });

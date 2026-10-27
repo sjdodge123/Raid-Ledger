@@ -83,7 +83,7 @@ function linkButtons(msg: Message): LinkButton[] {
 }
 
 const deepLinkRe = (guildId: number, postId: number) =>
-  new RegExp(`/guilds/${guildId}\\?post=${postId}#posts$`);
+  new RegExp(`/hubs/${guildId}\\?post=${postId}#posts$`);
 
 /** Every recent channel message whose Read more button opens this post. */
 async function messagesForPost(channel: TextChannel, guildId: number, postId: number): Promise<Message[]> {
@@ -150,7 +150,7 @@ function assertEmbed(msg: Message, hubName: string, guildId: number, postId: num
   const buttons = linkButtons(msg);
   const only = buttons[0];
   if (buttons.length !== 1 || only?.label !== READ_MORE || !deepLinkRe(guildId, postId).test(only.url)) {
-    fail(`expected one "${READ_MORE}" link → /guilds/${guildId}?post=${postId}#posts, got ${JSON.stringify(buttons)}`);
+    fail(`expected one "${READ_MORE}" link → /hubs/${guildId}?post=${postId}#posts, got ${JSON.stringify(buttons)}`);
   }
 }
 

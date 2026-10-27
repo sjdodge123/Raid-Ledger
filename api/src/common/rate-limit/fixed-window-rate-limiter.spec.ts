@@ -15,7 +15,7 @@ describe('FixedWindowRateLimiter (ROK-1955, extracted from ROK-1833)', () => {
       allowed: false,
       retryAfterSec: 45,
     });
-    expect(limiter.retryAfter('k', 60_000)).toBe(45);
+    expect(limiter.retryAfter('k')).toBe(45);
     now += 45_000;
     expect(limiter.hit('k', 3, 60_000).allowed).toBe(true);
   });
@@ -26,7 +26,7 @@ describe('FixedWindowRateLimiter (ROK-1955, extracted from ROK-1833)', () => {
     expect(limiter.hit('a', 1, 60_000).allowed).toBe(true);
     expect(limiter.hit('a', 1, 60_000).allowed).toBe(false);
     expect(limiter.hit('b', 1, 60_000).allowed).toBe(true);
-    expect(limiter.retryAfter('zzz', 60_000)).toBe(1);
+    expect(limiter.retryAfter('zzz')).toBe(1);
   });
 
   it('keeps maxKeys as passed in', () => {
@@ -49,8 +49,8 @@ describe('FixedWindowRateLimiter — bounded storage and reservations', () => {
     for (let i = 0; i < 1_000; i += 1) limiter.hit(`k${i}`, 1, 60_000);
     expect(limiter.size).toBe(100);
     expect(limiter.sweepSteps).toBeLessThanOrEqual(2 * 1_000);
-    expect(limiter.isExhausted('k0', 1, 60_000)).toBe(false);
-    expect(limiter.isExhausted('k999', 1, 60_000)).toBe(true);
+    expect(limiter.isExhausted('k0', 1)).toBe(false);
+    expect(limiter.isExhausted('k999', 1)).toBe(true);
   });
 
   it('expired windows are dropped from the front on the next insert', () => {
@@ -65,12 +65,24 @@ describe('FixedWindowRateLimiter — bounded storage and reservations', () => {
 
   it('reserve counts in-flight attempts; a failed settle becomes a hit', () => {
     const limiter = make();
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(false);
     limiter.settle('ip', false, 2, 60_000);
     limiter.settle('ip', true, 2, 60_000);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(true);
-    expect(limiter.reserve('ip', 2, 60_000)).toBe(false);
+    expect(limiter.reserve('ip', 2)).toBe(true);
+    expect(limiter.reserve('ip', 2)).toBe(false);
+  });
+
+  it('a short-window insert never evicts a longer, still-live window (Codex P2)', () => {
+    let t = 0;
+    const limiter = make();
+    limiter.now = () => t;
+    for (let i = 0; i < 10; i += 1) limiter.hit('code:user1', 10, 600_000);
+    expect(limiter.isExhausted('code:user1', 10)).toBe(true);
+    t = 60_000;
+    limiter.hit('start:ip', 5, 60_000);
+    expect(limiter.isExhausted('code:user1', 10)).toBe(true);
+    expect(limiter.hit('code:user1', 10, 600_000).allowed).toBe(false);
   });
 });

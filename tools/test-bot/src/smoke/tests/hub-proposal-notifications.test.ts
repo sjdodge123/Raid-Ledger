@@ -2,7 +2,7 @@
  * ROK-1870 — hub proposal notices: a proposal notifies staff with
  * `hub_proposal_submitted` ("Review proposals" → the admin queue), approval
  * notifies the proposer with `hub_proposal_reviewed` ("View hub" →
- * /guilds/<id>), and a rejection carries the admin's reason with no button.
+ * /hubs/<id>), and a rejection carries the admin's reason with no button.
  *
  * The review path proposes as a NON-staff member — `seed-fixture-user` slot 9
  * with `guildMember: true`, i.e. "in the Discord" (A2). ROK-1892 sends a staff
@@ -158,7 +158,7 @@ async function proposeAndApprove(ctx: TestContext): Promise<void> {
       fail(`approved payload: ${JSON.stringify(reviewed.payload)}`);
     }
     if (reviewed.title !== `Your hub "${name}" is live`) fail(`approved title: "${reviewed.title}"`);
-    assertLink(await render(ctx, reviewed), "View hub", `/guilds/${id}`);
+    assertLink(await render(ctx, reviewed), "View hub", `/hubs/${id}`);
   } finally {
     await cleanup(ctx, member.api, approved ? id : null, approved ? [] : [id]);
   }

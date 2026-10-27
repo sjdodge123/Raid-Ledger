@@ -15,6 +15,21 @@ import {
 const Iso = z.iso.datetime({ offset: true });
 const Id = z.number().int().positive();
 
+/**
+ * ROK-1941 D13: one death picture on a Deaths bar — a visible (not hidden,
+ * not removed) hub media row linked to one of the bar's deaths.
+ */
+export const ValheimDeathPictureSchema = z
+    .object({
+        /** The `hub_media` id — opens the Gallery lightbox on this item. */
+        mediaId: Id,
+        /** The hub media bytes route for the thumb rendition (bearer-fetched). */
+        thumbPath: z.string(),
+        capturedAt: Iso,
+    })
+    .strict();
+export type ValheimDeathPicture = z.infer<typeof ValheimDeathPictureSchema>;
+
 /** One bar on the Deaths widget (ROK-1930). */
 export const ValheimDeathPlayerSchema = z
     .object({
@@ -30,6 +45,10 @@ export const ValheimDeathPlayerSchema = z
         lastDeathAt: Iso,
         /** The character whose map the bar opens; null → the bar is not a link. */
         characterId: Id.nullable(),
+        /** ROK-1941: up to 3 newest visible death pictures; absent when none. */
+        pictures: z.array(ValheimDeathPictureSchema).max(3).optional(),
+        /** ROK-1941: every visible death picture on the bar; absent when none. */
+        pictureCount: z.number().int().min(0).optional(),
     })
     .strict();
 export type ValheimDeathPlayer = z.infer<typeof ValheimDeathPlayerSchema>;
