@@ -2,7 +2,7 @@
  * ROK-2022: `?resume=calendar` — the Google OAuth callback re-opens the
  * first-run wizard on its Calendar step. The wizard keeps its position in
  * plain state, so a page load restarts at step 0; this seeks once the step
- * list has settled, then strips `resume` (the step strips `connected`/`error`).
+ * list has settled. The Calendar step strips `resume` with `connected`/`error`.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -23,8 +23,11 @@ export function useResumeCalendar(): boolean {
 
 /**
  * One-shot seek to the Calendar step once `settled` (the caller waits for the character steps
- * too, so the index is final). A missing step (switch off, overview error) strips `connected` /
- * `error` as well: no step is there to.
+ * too, so the index is final). Exactly ONE strip runs per return: `setSearchParams` derives from
+ * its render's snapshot and the router applies navigations in a transition, so a strip here plus
+ * the step's own strip raced, and the step's (snapshot still holding `resume`) put it back. So
+ * with the step present, the step strips all three (`calendar-step.tsx`); a missing
+ * step (switch off, overview error) is stripped here.
  */
 export function useStepResume(
     resume: boolean, settled: boolean, steps: StepDef[], setCurrentStep: (n: number) => void,
@@ -35,11 +38,10 @@ export function useStepResume(
         if (!resume || !settled || done.current) return;
         done.current = true;
         const index = steps.findIndex((s) => s.key === RESUME_CALENDAR);
-        if (index >= 0) setCurrentStep(index);
+        if (index >= 0) { setCurrentStep(index); return; }
         setParams((prev) => {
             const next = new URLSearchParams(prev);
-            next.delete(RESUME_PARAM);
-            if (index < 0) { next.delete('connected'); next.delete('error'); }
+            for (const key of [RESUME_PARAM, 'connected', 'error']) next.delete(key);
             return next;
         }, { replace: true });
     }, [resume, settled, steps, setCurrentStep, setParams]);

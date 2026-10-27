@@ -98,6 +98,11 @@ describe('CalendarStep (ROK-2022)', () => {
         await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/onboarding$/));
     });
 
+    it.each(['error=denied', 'connected=google'])('?resume=calendar&%s: the step strips resume with the outcome, in one go', async (outcome) => {
+        renderStep(calendarsOverviewVariants.available, `/onboarding?resume=calendar&${outcome}`);
+        await waitFor(() => expect(screen.getByTestId('location'), 'a reload must not re-seek the wizard').toHaveTextContent(/^\/onboarding$/));
+    });
+
     it('?connected=google (OAuth return): one success toast and the connected card', async () => {
         renderStep(calendarsOverviewVariants.connected, '/onboarding?connected=google');
         expect(await screen.findByTestId('calendar-connection-card')).toBeInTheDocument();

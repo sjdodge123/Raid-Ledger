@@ -67,9 +67,12 @@ function CalendarStepBody({ data, isError }: { data: CalendarsOverview | undefin
     return shown.length > 0 ? <ConnectedCards shown={shown} /> : <ProviderRows data={data} />;
 }
 
+/** The wizard's `?resume=calendar` (`use-step-resume.ts`): stripped with the outcome, in one navigation. */
+const CALENDAR_STEP_EXTRA_PARAMS: readonly string[] = ['resume'];
+
 export function CalendarStep(): JSX.Element {
     const { data, isError } = useCalendarsOverview();
-    const { errorCode, dismissError } = useCalendarOAuthFeedback();
+    const { errorCode, dismissError } = useCalendarOAuthFeedback(CALENDAR_STEP_EXTRA_PARAMS);
     return (
         // The wizard is a z-50 dialog: its calendar sheets go on the stacked layer (ROK-1738).
         <CalendarSheetsStacked.Provider value={true}>

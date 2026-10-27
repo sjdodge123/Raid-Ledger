@@ -162,9 +162,13 @@ vi.mock('./onboarding-wizard/use-calendar-step-flag', () => ({ useCalendarStepFl
 vi.mock('../components/onboarding/calendar-step', async () => {
     const { useState } = await import('react');
     const { useEscapeLayer } = await import('../hooks/use-escape-layer');
+    const { useCalendarOAuthFeedback } = await import('../components/features/calendar-sync/use-calendar-oauth-feedback');
+    const extraParams = ['resume'];
     function CalendarStep() {
         const [open, setOpen] = useState(false);
         useEscapeLayer(open, () => setOpen(false));
+        useCalendarOAuthFeedback(extraParams); // as the real step: strips resume + connected / error on mount
+
         return (
             <div data-testid="calendar-step-stub">
                 Calendar step
@@ -586,6 +590,13 @@ describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
         expect(mockNavigate, 'the same Escape must not skip onboarding').not.toHaveBeenCalled();
         fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
         expect(mockNavigate, 'with no dialog open, Escape still skips all').toHaveBeenCalledWith('/calendar', { replace: true });
+    });
+
+    it.each(['error=denied', 'connected=google'])('an OAuth return (%s) that lands ON the step strips resume AND the outcome', (outcome) => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, [`/onboarding?resume=calendar&${outcome}`]);
+        expect(screen.getByTestId('calendar-step-stub')).toBeInTheDocument();
+        expect(screen.getByTestId('location'), 'a reload must not re-seek or re-show the outcome').toHaveTextContent(/^\/onboarding$/);
     });
 
     it('a resume with no Calendar step (switch off) strips connected / error with resume', () => {
