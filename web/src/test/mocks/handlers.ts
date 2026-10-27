@@ -15,6 +15,7 @@ import { pelicanHandlers } from './pelican-handlers';
 import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
 import { hubPostsHandlers } from './hub-posts-handlers';
+import { hubSessionNoteHandlers } from './hub-session-note-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
 import { hubMediaChannelHandlers } from './hub-media-channel-handlers';
 import { channelLifecycleHandlers } from './channel-lifecycle-handlers';
@@ -36,6 +37,7 @@ export const handlers = [
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
     ...hubPostsHandlers,
+    ...hubSessionNoteHandlers,
     ...guildDiscordHandlers,
     ...hubMediaChannelHandlers,
     ...channelLifecycleHandlers,
