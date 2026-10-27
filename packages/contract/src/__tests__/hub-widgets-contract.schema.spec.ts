@@ -147,6 +147,53 @@ describe("WowRosterInsights", () => {
   });
 });
 
+describe("WowRosterInsights lockouts (ROK-1914)", () => {
+  const CHAR = "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c";
+  const lockout = {
+    instanceId: 409,
+    difficultyId: 9,
+    name: "Molten Core",
+    difficulty: "40 Player",
+    total: 10,
+    resetAt: "2026-10-28T15:00:00.000Z",
+    members: [
+      {
+        characterId: CHAR,
+        name: "Wren",
+        killed: 4,
+        resetAt: "2026-10-28T15:00:00.000Z",
+      },
+    ],
+  };
+  it("parses a member payload with lockouts and a visitor payload without", () => {
+    const member = { ...insights, lockouts: [lockout] };
+    expect(WowRosterInsightsSchema.safeParse(member).success).toBe(true);
+    expect(WowRosterInsightsSchema.safeParse(insights).success).toBe(true);
+    const unmapped = { ...lockout, difficulty: null };
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, lockouts: [unmapped] })
+        .success,
+    ).toBe(true);
+  });
+  it("rejects an unknown key inside a lockout member", () => {
+    const bad = {
+      ...lockout,
+      members: [{ ...lockout.members[0], guid: "Player-1-0001" }],
+    };
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, lockouts: [bad] })
+        .success,
+    ).toBe(false);
+  });
+  it("rejects a unix-seconds resetAt (the wire value must be mapped to ISO)", () => {
+    const bad = { ...lockout, resetAt: 1798470000 };
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, lockouts: [bad] })
+        .success,
+    ).toBe(false);
+  });
+});
+
 describe("EventQuestReadiness", () => {
   it("parses quests × signups with every state", () => {
     const r = EventQuestReadinessSchema.safeParse({
