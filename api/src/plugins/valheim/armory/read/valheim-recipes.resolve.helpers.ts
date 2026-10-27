@@ -18,6 +18,7 @@ import {
 import { amountAt, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import {
+  isUpgraderStation,
   shownRecipes,
   stationAt,
   stationLevelAt,
@@ -43,6 +44,8 @@ export interface ResolveResult {
   truncated: boolean;
   shoppingList: ShoppingLine[];
   fuelEstimates: FuelEstimate[];
+  /** ROK-1861 D5: upgrader station prefab → its piece cost (never netted). */
+  stationBuilds: Map<string, InputLine[]>;
 }
 
 export interface Need {
@@ -342,10 +345,7 @@ export function recipeVia(
     upgradeOnly: recipe.upgradeOnly,
     formula: recipe.formula,
     anyOneOf: recipe.anyOneOf,
-    upgraderStation:
-      station === null
-        ? false
-        : (graph.stations.get(station)?.upgrader ?? false),
+    upgraderStation: isUpgraderStation(graph, station),
   };
 }
 

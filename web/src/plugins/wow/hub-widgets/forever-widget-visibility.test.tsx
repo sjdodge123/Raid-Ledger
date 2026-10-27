@@ -2,7 +2,7 @@
  * ROK-1905 (Q2 rulings) — who sees the members-only Forever widgets on a guild
  * hub Overview: a visitor, a member, and staff (operator/admin) who are not in
  * the guild. Guild professions (ROK-1923) and Dungeon quests (ROK-1924) both
- * register `audience: 'everyone'` and gate in `useVisible`, so non-member staff
+ * and Who's saved (ROK-1914) register `audience: 'everyone'` and gate in `useVisible`, so non-member staff
  * see them as the API allows. Renders through `gameWidgetCells`, the real
  * Overview gating path.
  */
@@ -23,6 +23,7 @@ import { gameWidgetCells } from '../../../components/hub/hub-widget-cells';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { registerDungeonQuestsWidget } from './dungeon-quests.register';
 import { professionsWidget } from './professions.register';
+import { whosSavedWidget } from './whos-saved.register';
 import { useRosterInsights } from './use-roster-insights';
 
 const auth = vi.hoisted(() => ({ role: 'member' as string }));
@@ -77,6 +78,7 @@ beforeEach(() => {
     clearRegistry();
     const blizzard = registerPlugin('blizzard', { icon: '/x.png', color: 'blue', label: 'WoW' });
     blizzard.registerHubWidget(professionsWidget);
+    blizzard.registerHubWidget(whosSavedWidget);
     registerDungeonQuestsWidget(blizzard);
 });
 
@@ -85,18 +87,21 @@ describe('Forever members-only widgets — visibility by viewer', () => {
         await renderAs('member', 'visitor', VISITOR_FIXTURE);
         expect(screen.queryByRole('heading', { name: 'Guild professions' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Dungeon quests' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: "Who's saved" })).toBeNull();
     });
 
-    it('a guild member sees both', async () => {
+    it('a guild member sees both, and Who\'s saved', async () => {
         await renderAs('member', 'member', PROFESSIONS_FIXTURE);
         expect(await screen.findByRole('heading', { name: 'Guild professions' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'Dungeon quests' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: "Who's saved" })).toBeInTheDocument();
     });
 
-    it('an admin who is not in the guild sees both (the API lets staff in)', async () => {
+    it('an admin who is not in the guild sees both, and Who\'s saved (the API lets staff in)', async () => {
         await renderAs('admin', 'visitor', PROFESSIONS_FIXTURE);
         expect(await screen.findByRole('heading', { name: 'Guild professions' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { name: 'Dungeon quests' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: "Who's saved" })).toBeInTheDocument();
     });
 
     it('an operator who is not in the guild sees Dungeon quests', async () => {

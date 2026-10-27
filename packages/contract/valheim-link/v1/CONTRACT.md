@@ -260,10 +260,12 @@ the 1.0.x rule below. Station and station level are the same in both.
 amount(r, q), 0.221.x = q <= 1 ? r.amount : (q - 1) * r.amountPerLevel         // r = one resource
 amount(r, q), 1.0.x   = r.upgraderResource ? r.amount                            // upgrade item: every quality step
                       : q <= 1 ? r.amount : r.amountPerLevel * 2^(q - 2)         // ×1, ×2, ×4 for q = 2, 3, 4
+consumed(r, q), 0.221.x = amount(r, q)
+consumed(r, q), 1.0.x   = r.upgraderResource && q <= 1 ? 0 : amount(r, q)       // a fresh q1 craft takes no upgrade item
 stationLevel(R, q) = max(1, R.minStationLevel) + (q - 1)                       // R = the recipe
 station(R, q)      = R.station ?? (q > 1 ? R.repairStation : null)
-craft to quality Q from scratch  = Σ_{q=1..Q}  amount(r, q)  per resource, one step per q (station(R,q) at stationLevel(R,q))
-upgrade q0 → Q                   = Σ_{q=q0+1..Q} amount(r, q)
+craft to quality Q from scratch  = Σ_{q=1..Q}  consumed(r, q)  per resource, one step per q (station(R,q) at stationLevel(R,q))
+upgrade q0 → Q                   = Σ_{q=q0+1..Q} consumed(r, q)
 items produced per craft         = R.amount at q = 1; 1 per upgrade step
 smelter fuel                     = fuelPerProduct × outputs (when fuel ≠ null); cooking fuel = estimate only (burns per second lit)
 ```
@@ -272,8 +274,21 @@ For q ≤ 3 the two `amount` rules agree for ordinary resources. Vanilla 1.0.20
 has no quality above 4 and every upgrade item there is `amount 1,
 amountPerLevel 0`, so the 1.0.x rule beyond q4, or for other upgrade-item
 amounts, is extrapolated (`formula: "custom"` flags any recipe whose live
-values differ). Whether a fresh q1 craft consumes the upgrade item is
-**UNVERIFIED in game**: `GetAmount(1)` returns its amount, and the planner follows it.
+values differ). `amount(r, q)` mirrors the live `GetAmount(q)` (which reports
+an upgrade item's `amount` at q1 too), so the mod's `formula` check stays
+aligned with it. What the planner charges is `consumed(r, q)`: a fresh q1
+craft does **not** take the upgrade item (operator in-game check 2026-10-25 on
+1.0.20 — an Iron mace crafts without its Iron battle idol), so upgrade items
+are charged only on the q ≥ 2 steps.
+
+**Planner step view** (ROK-1861, Raid Ledger side; no wire change). A planned
+recipe spanning two or more quality steps lists each step `q` with
+`station(R, q)` at `stationLevel(R, q)` and its `consumed(r, q)` resources;
+the steps sum to the node's totals. A step whose station carries `upgrader`
+(1.0.20) is shown as an upgrade station, and that station's own `pieces[]`
+build cost is listed once, informational only — never netted against stock
+and never added to the shopping list. While spoiler protection is on, an
+upgrade station nobody on the server has discovered is never named.
 
 `maxQuality` comes from the `items` catalogue. `formula: "custom"` makes the
 web say "upgrade cost may differ in game". For `anyOneOf` recipes the

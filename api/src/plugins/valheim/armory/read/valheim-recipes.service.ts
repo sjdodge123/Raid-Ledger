@@ -53,6 +53,7 @@ import {
   type KnownRecipes,
 } from './valheim-recipes.discovery';
 import {
+  buildsOf,
   catalogFor,
   knownFor,
   nameAndIconOnly,
@@ -203,6 +204,7 @@ export class ValheimRecipesService {
       ...nodeCatalog(res, cat, graph),
       recipeAtlas: await r.recipeAtlas(set),
       spoilers,
+      ...buildsOf(res),
     };
   }
 
@@ -253,6 +255,7 @@ export class ValheimRecipesService {
       itemAtlas,
       recipeAtlas: await r.recipeAtlas(set),
       spoilers,
+      ...buildsOf(res),
     };
   }
 

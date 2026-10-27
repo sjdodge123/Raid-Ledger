@@ -13,6 +13,10 @@ import {
 } from './valheim-recipes.craft.helpers';
 import { buildRecipeGraph, type RecipeGraph } from './valheim-recipes.graph';
 import { recipeSteps } from './valheim-recipes.resolve.helpers';
+import {
+  UPGRADER_TEST_STATION,
+  upgraderRecipeRows,
+} from './valheim-recipes.upgrader.testing';
 
 const res = (
   prefab: string,
@@ -334,5 +338,30 @@ describe('directInputs (ROK-1899 §2.2)', () => {
         'Unknown',
       ]),
     ).toEqual(['Feathers', 'Flint', 'Iron', 'Stone', 'Wood']);
+  });
+});
+
+describe('ROK-1861 — 1.0.20 upgrade items in the CRAFT / UPGRADE tabs', () => {
+  const g = buildRecipeGraph(upgraderRecipeRows());
+
+  it('a fresh q1 craft omits the upgrade item', () => {
+    expect(craftOf(g, 'ArmorBronzeChest')?.resources).toEqual([
+      { prefab: 'Bronze', amount: 5 },
+      { prefab: 'DeerHide', amount: 2 },
+    ]);
+  });
+
+  it('every upgrade step charges it at the upgrade station', () => {
+    expect(
+      upgradesOf(g, 'ArmorBronzeChest', 3).map((u) => [
+        u.quality,
+        u.station,
+        u.upgraderStation,
+        u.resources.find((r) => r.prefab === 'Upgrader1Armor')?.amount,
+      ]),
+    ).toEqual([
+      [2, UPGRADER_TEST_STATION, true, 1],
+      [3, UPGRADER_TEST_STATION, true, 1],
+    ]);
   });
 });
