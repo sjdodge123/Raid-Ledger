@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http } from 'msw';
 import type {
     LineupParticipantsResponseDto,
     MatchDetailResponseDto,
@@ -15,6 +16,7 @@ import { createTestQueryClient, renderWithProviders } from '../../../../test/ren
 import { server } from '../../../../test/mocks/server';
 import {
     createMockPollParticipant,
+    PARTICIPANTS_URL,
     pollParticipantsHandler,
     removePollMemberHandler,
     type RemoveMemberOutcome,
@@ -150,10 +152,13 @@ describe('SchedulingRemoveMemberAction (ROK-2020)', () => {
         server.use(removePollMemberHandler(outcome, deleteCalls));
         const qc = renderAction();
         await pickBob();
+        // The settled refetch never answers, so only the snapshot restore can
+        // bring Bob back — a refetch cannot fake it.
+        server.use(http.get(PARTICIPANTS_URL, () => new Promise<never>(() => {})));
         await userEvent.click(screen.getByTestId('remove-poll-member-confirm'));
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
         expect(toast.success).not.toHaveBeenCalled();
-        expect(await screen.findByTestId('remove-poll-member-2')).toBeInTheDocument();
         await waitFor(() => expect(cachedIds(qc)).toEqual([10, 2, 3]));
+        expect(await screen.findByTestId('remove-poll-member-2')).toBeInTheDocument();
     });
 });
