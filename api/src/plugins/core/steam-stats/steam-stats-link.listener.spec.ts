@@ -19,6 +19,14 @@ function setup(configured: boolean) {
 }
 
 const EVENT = { userId: 42, steamId64: '76561190000000001' };
+const REPLACEMENT = { userId: 42, steamId64: '76561190000000002' };
+
+/** The `jobId` of the n-th `queue.add` call. */
+function jobIdOf(queue: { add: jest.Mock }, n: number): string {
+  const opts = queue.add.mock.calls[n]?.[2] as { jobId?: string } | undefined;
+  if (opts?.jobId === undefined) throw new Error(`queue.add call ${n} has no jobId`);
+  return opts.jobId;
+}
 
 describe('SteamStatsLinkListener (ROK-1953 D6)', () => {
   it('L1 — Steam configured: enqueues a link refresh with the deduped job id', async () => {
@@ -27,8 +35,25 @@ describe('SteamStatsLinkListener (ROK-1953 D6)', () => {
     expect(queue.add).toHaveBeenCalledWith(
       'link',
       { trigger: 'link', userId: 42 },
-      expect.objectContaining({ jobId: 'steam-stats-link-42' }),
+      expect.objectContaining({
+        jobId: expect.stringMatching(/^steam-stats-link-42-[0-9a-f]{12}$/),
+      }),
     );
+  });
+
+  it('L7 — a replacement account gets its own job id, so an active fetch for the old one cannot dedupe it away (Codex P2)', async () => {
+    const { listener, queue } = setup(true);
+    await listener.handleLinked(EVENT);
+    await listener.handleLinked(EVENT);
+    await listener.handleLinked(REPLACEMENT);
+    expect(jobIdOf(queue, 1)).toBe(jobIdOf(queue, 0));
+    expect(jobIdOf(queue, 2)).not.toBe(jobIdOf(queue, 0));
+  });
+
+  it('L8 — the job id never carries the raw SteamID', async () => {
+    const { listener, queue } = setup(true);
+    await listener.handleLinked(EVENT);
+    expect(jobIdOf(queue, 0)).not.toContain(EVENT.steamId64);
   });
 
   it('L2 — no Steam key: nothing enqueued', async () => {

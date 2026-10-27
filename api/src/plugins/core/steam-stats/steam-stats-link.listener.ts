@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -17,7 +18,10 @@ import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
 
 /**
  * ROK-1953 D6 — a fresh Steam link refreshes that user's stats now instead
- * of leaving a 24 h empty card. The job id collapses repeat links; it is
+ * of leaving a 24 h empty card. The job id (user + a hash of the SteamID)
+ * collapses repeat links of one account, yet a replacement account gets its
+ * own job — an active fetch for the old one would otherwise swallow it and
+ * drop its own result via `stillOwns` (Codex P2). It is
  * removed on completion so a later re-link enqueues again, and retries like
  * the nightly run so a 429 requeues. Unlink — also emitted FIRST when a
  * SteamID is replaced (`announceSteamLinkChange`) — purges the user's cached
@@ -42,7 +46,7 @@ export class SteamStatsLinkListener {
       if (!(await this.settings.isSteamConfigured())) return;
       const data: SteamAppStatsJobData = { trigger: 'link', userId: e.userId };
       await this.queue.add('link', data, {
-        jobId: `steam-stats-link-${e.userId}`,
+        jobId: linkJobId(e),
         ...STEAM_STATS_JOB_RETRY,
         removeOnComplete: true,
         removeOnFail: true,
@@ -66,4 +70,10 @@ export class SteamStatsLinkListener {
     const reason = err instanceof Error ? err.name : 'unknown';
     this.logger.warn(`Steam stats ${what} for user ${userId} (${reason})`);
   }
+}
+
+/** `steam-stats-link-<userId>-<12 hex of sha256(SteamID)>` — no raw SteamID in Redis. */
+function linkJobId(e: SteamAccountLinkEvent): string {
+  const tag = createHash('sha256').update(e.steamId64).digest('hex');
+  return `steam-stats-link-${e.userId}-${tag.slice(0, 12)}`;
 }
