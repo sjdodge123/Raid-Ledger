@@ -19,6 +19,7 @@ import {
 import type { RecipeGraph } from './valheim-recipes.graph';
 import type { RecipesReader } from './valheim-recipes.read.repository';
 import type { ResolveResult } from './valheim-recipes.resolve';
+import { isUpgraderStation } from './valheim-recipes.station-steps';
 
 /** D4: the viewer's merged `known_recipes` on `serverId` (one read). */
 export async function knownFor(
@@ -80,7 +81,8 @@ export function buildsOf(res: ResolveResult) {
  */
 export function catalogRoots(graph: RecipeGraph, roots: string[]): string[] {
   const builds = [...graph.stations.values()]
-    .filter((s) => s.upgrader && graph.pieces.has(s.prefab))
+    .filter((s) => isUpgraderStation(graph, s.prefab))
+    .filter((s) => graph.pieces.has(s.prefab))
     .map((s) => s.prefab);
   return [...roots, ...builds];
 }

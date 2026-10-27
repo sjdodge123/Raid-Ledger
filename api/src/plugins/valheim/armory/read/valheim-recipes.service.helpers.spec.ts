@@ -6,6 +6,7 @@ import {
   responsePrefabs,
 } from './valheim-recipes.service.helpers';
 import { buildVisibleGraph } from './valheim-recipes.spoilers';
+import * as stationSteps from './valheim-recipes.station-steps';
 import {
   UPGRADER_TEST_STATION,
   upgraderRecipeRows,
@@ -81,6 +82,18 @@ describe('catalogRoots', () => {
   it('adds nothing when the upgrader is not a piece', () => {
     const noPiece = buildRecipeGraph({ ...upgraderRecipeRows(), pieces: [] });
     expect(catalogRoots(noPiece, [CHEST])).toEqual([CHEST]);
+  });
+
+  it('asks isUpgraderStation, the single detection point', () => {
+    const spy = jest
+      .spyOn(stationSteps, 'isUpgraderStation')
+      .mockReturnValue(false);
+    try {
+      expect(catalogRoots(full, [CHEST])).toEqual([CHEST]);
+      expect(spy).toHaveBeenCalledWith(full, UPGRADER_TEST_STATION);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
