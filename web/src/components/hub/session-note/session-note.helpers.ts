@@ -6,14 +6,16 @@ import {
     HUB_POST_BODY_MAX, HUB_SESSION_NOTE_ITEM_TEXT_MAX,
     type HubSessionNote, type HubSessionNoteClearAfter, type PutHubSessionNoteInput,
 } from '@raid-ledger/contract';
+import { formatEventTime } from '../../../lib/event-utils';
+import { moveRow } from '../arrange/arrange-draft';
 import { syncedAgo } from '../../../lib/synced-ago';
 
-const WHEN = new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-
-/** "Session 14 · Thu 8:00 pm" — the pinned event a self-clearing note names. */
-export function formatClearAfter(event: HubSessionNoteClearAfter): string {
-    const when = WHEN.format(new Date(event.startTime)).replace(/\s?(AM|PM)$/, (_m, p: string) => ` ${p.toLowerCase()}`);
-    return `${event.title} · ${when}`;
+/**
+ * "Session 14 · Thu, Oct 29, 8:00 PM EDT" — the pinned event a self-clearing note names, in the
+ * viewer's timezone (`useTimezoneStore` `resolved`) via the shared event-time formatter.
+ */
+export function formatClearAfter(event: HubSessionNoteClearAfter, timeZone?: string): string {
+    return `${event.title} · ${formatEventTime(event.startTime, timeZone)}`;
 }
 
 /** "Edited by Mira · 2 h ago" (ruling 1: ticks do not bump it). Display-only — never feeds `baseUpdatedAt`. */
@@ -73,11 +75,9 @@ export const itemOps = {
     remove: (items: DraftItem[], at: number): DraftItem[] => items.filter((_row, i) => i !== at),
     text: (items: DraftItem[], at: number, text: string): DraftItem[] =>
         items.map((row, i) => (i === at ? { ...row, text } : row)),
+    /** The hub arrange list's `moveRow`; an out-of-range move returns `items` itself (no re-render). */
     move: (items: DraftItem[], at: number, by: -1 | 1): DraftItem[] => {
-        const row = items[at];
-        const to = at + by;
-        if (row === undefined || to < 0 || to >= items.length) return items;
-        const rest = items.filter((_r, i) => i !== at);
-        return [...rest.slice(0, to), row, ...rest.slice(to)];
+        const next = moveRow(items, at, by);
+        return next === items ? items : [...next];
     },
 };

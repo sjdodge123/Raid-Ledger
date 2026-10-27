@@ -18,6 +18,7 @@ import { useSessionNoteVisible } from './use-session-note-visible';
 import { ITEM_GONE_TOAST } from './use-hub-session-note';
 import { sessionNoteKey, sessionNoteQuery } from './hub-session-note-query';
 import { editedByLine, formatClearAfter } from './session-note.helpers';
+import { useTimezoneStore } from '../../../stores/timezone-store';
 
 const toastError = vi.hoisted(() => vi.fn());
 vi.mock('../../../lib/toast', () => ({ toast: { error: toastError, success: vi.fn() } }));
@@ -107,7 +108,7 @@ describe('HubSessionNoteWidget — states (T-W1, T-W2)', () => {
         server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote({ clearAfter }), { canEdit: true })));
         renderWithProviders(<Card />);
         expect(await screen.findByTestId('session-note-edit')).toBeTruthy();
-        expect(screen.getByTestId('session-note-clear-after').textContent).toBe(`Clears after ${formatClearAfter(clearAfter)}`);
+        expect(screen.getByTestId('session-note-clear-after').textContent).toBe(`Clears after ${formatClearAfter(clearAfter, useTimezoneStore.getState().resolved)}`);
     });
 
     it('disables the boxes for a viewer without canTick', async () => {
@@ -225,8 +226,9 @@ describe('session-note helpers', () => {
         expect(editedByLine(buildSessionNote({ updatedBy: null }), now)).toBe('Edited by A former member · 1 h ago');
     });
 
-    it('formatClearAfter is "<title> · <weekday> <time> am|pm"', () => {
-        const label = formatClearAfter({ eventId: 1, title: 'Session 14', startTime: '2026-10-29T20:00:00Z', endTime: '2026-10-29T23:00:00Z' });
-        expect(label).toMatch(/^Session 14 · [A-Z][a-z]{2} \d{1,2}:\d{2} (am|pm)$/);
+    it('formatClearAfter names the date and time in the given timezone', () => {
+        const event = { eventId: 1, title: 'Session 14', startTime: '2026-10-29T20:00:00Z', endTime: '2026-10-29T23:00:00Z' };
+        expect(formatClearAfter(event, 'UTC')).toBe('Session 14 · Thu, Oct 29, 8:00 PM UTC');
+        expect(formatClearAfter(event, 'America/New_York')).toBe('Session 14 · Thu, Oct 29, 4:00 PM EDT');
     });
 });

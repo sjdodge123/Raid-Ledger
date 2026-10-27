@@ -13,6 +13,7 @@ import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { SessionNoteChecklist } from './session-note-checklist';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { editedByLine, formatClearAfter } from './session-note.helpers';
+import { useTimezoneStore } from '../../../stores/timezone-store';
 import { useSessionNote, useTickSessionNoteItem } from './use-hub-session-note';
 
 const LazySessionNoteDialog = lazy(() => import('./session-note-dialog'));
@@ -30,12 +31,13 @@ function EditorHint({ guildId }: { guildId: number }): JSX.Element {
 }
 
 function NoteFooter({ note }: { note: HubSessionNote }): JSX.Element {
+    const timeZone = useTimezoneStore((s) => s.resolved);
     return (
         <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted">
             <span>{editedByLine(note)}</span>
             {note.clearAfter && (
                 <span data-testid="session-note-clear-after">
-                    Clears after <span className="font-semibold text-foreground">{formatClearAfter(note.clearAfter)}</span>
+                    Clears after <span className="font-semibold text-foreground">{formatClearAfter(note.clearAfter, timeZone)}</span>
                 </span>
             )}
         </div>

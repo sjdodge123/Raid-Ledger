@@ -14,6 +14,7 @@ import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { NO_NEXT_EVENT_COPY } from './session-note-form';
 import { formatClearAfter } from './session-note.helpers';
+import { useTimezoneStore } from '../../../stores/timezone-store';
 
 const media = vi.hoisted(() => ({ desktop: true }));
 vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: () => media.desktop }));
@@ -135,7 +136,7 @@ describe('SessionNoteDialog clear-after checkbox (T-W6)', () => {
         await renderDialog(editorResponse(buildSessionNote(), { nextEvent: EVENT }));
         const toggle = await screen.findByTestId('session-note-clear-after-checkbox');
         expect(toggle).toBeEnabled();
-        expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(`Clears after ${formatClearAfter(EVENT)}`);
+        expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(`Clears after ${formatClearAfter(EVENT, useTimezoneStore.getState().resolved)}`);
         fireEvent.click(toggle);
         fireEvent.click(screen.getByTestId('session-note-save'));
         await waitFor(() => expect(bodies[0]?.clearAfterNextEvent).toBe(true));

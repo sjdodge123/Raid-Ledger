@@ -8,6 +8,7 @@ import type { JSX } from 'react';
 import { HUB_POST_BODY_MAX, type HubSessionNoteClearAfter } from '@raid-ledger/contract';
 import { Field } from '../../ui/field';
 import { Checkbox } from '../../ui/checkbox';
+import { useTimezoneStore } from '../../../stores/timezone-store';
 import { LazyMarkdownEditor } from '../../ui/markdown/lazy-markdown-editor';
 import { SessionNoteItemsEditor } from './session-note-items-editor';
 import { formatClearAfter, type SessionNoteDraft } from './session-note.helpers';
@@ -23,11 +24,12 @@ interface ToggleProps {
 
 function ClearAfterToggle({ checked, target, onChange }: ToggleProps): JSX.Element {
     // A Checkbox, not a Switch: this only takes effect on Save (design-system Switch rule).
+    const timeZone = useTimezoneStore((s) => s.resolved);
     return (
         <Checkbox checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} label={CLEAR_AFTER_LABEL}
             disabled={target === null && !checked} data-testid="session-note-clear-after-checkbox"
             description={<span data-testid="session-note-clear-after-hint">
-                {target === null ? NO_NEXT_EVENT_COPY : `Clears after ${formatClearAfter(target)}`}
+                {target === null ? NO_NEXT_EVENT_COPY : `Clears after ${formatClearAfter(target, timeZone)}`}
             </span>} />
     );
 }
