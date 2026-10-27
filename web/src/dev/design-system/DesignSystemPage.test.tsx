@@ -76,7 +76,7 @@ describe('DesignSystemPage', () => {
         'Pattern — server-schedule layer (plugin calendar layers)',
         'Pattern — hub suffix on event game lines',
         'Forms — the form primitives',
-        'Pattern — skill trend chip',
+        'Pattern — Valheim trend chip',
         'Pattern — plugin hub widgets',
     ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);

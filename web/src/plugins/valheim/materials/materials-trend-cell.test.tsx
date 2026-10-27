@@ -112,6 +112,9 @@ describe('Materials trend chip (ROK-2014)', () => {
         expect(within(row).queryByRole('button', { name: /^\+45/ })).toBeNull();
     });
 
+});
+
+describe('Materials trend chip — no history, desktop column (ROK-2014)', () => {
     it('no trend, days: [] and an all-zero history render the same rows as before trends (AC3)', async () => {
         server.use(valheimMaterialsHandler(withTrend(null)));
         const plain = renderWithProviders(<ValheimMaterialsTab serverId={7} />);
