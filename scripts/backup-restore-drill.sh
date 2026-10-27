@@ -239,18 +239,19 @@ run_restore() {
   fi
 }
 
-# D4 journal check -- see the header. Runs BEFORE reconcile. Its findings ride
-# into the report via EXTRA_FINDINGS; a harness error (exit 2) is itself a
-# failed finding rather than a silent skip.
+# D4 journal check -- see the header. Runs BEFORE reconcile. Its findings are
+# APPENDED to EXTRA_FINDINGS (as the uploads check's are), so the order the
+# checks run in does not matter; a harness error (exit 2) is itself a failed
+# finding rather than a silent skip.
 run_journal_check() {
   echo -e "${YELLOW}D4: verifying the restored migration journal...${NC}"
   local out
   if out="$(node "$REPO_ROOT/scripts/restore-drill-journal.mjs" \
     --database-url "$DRILL_URL" --migrations-dir "$MIGRATIONS_DIR" \
     2>/tmp/rl-drill-journal.err)"; then
-    EXTRA_FINDINGS=",$(printf '%s' "$out" | sed 's/^\[//; s/\]$//')"
+    EXTRA_FINDINGS="${EXTRA_FINDINGS},$(printf '%s' "$out" | sed 's/^\[//; s/\]$//')"
   else
-    EXTRA_FINDINGS=",$(json_finding journal-hashes-present reconcile failed \
+    EXTRA_FINDINGS="${EXTRA_FINDINGS},$(json_finding journal-hashes-present reconcile failed \
       "journal check errored: $(tr '\n' ' ' < /tmp/rl-drill-journal.err)")"
   fi
 }
