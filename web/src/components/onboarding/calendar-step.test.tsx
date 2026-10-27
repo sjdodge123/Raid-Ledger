@@ -115,7 +115,11 @@ describe('CalendarStep (ROK-2022)', () => {
 
 describe('CalendarStep sheets stack above the wizard below 1024px (ROK-2022 Codex P1)', () => {
     /** The open sheet's fixed overlay layer, which carries the z-index (closed sheets are aria-hidden). */
-    const layer = () => screen.getByRole('dialog').parentElement as HTMLElement;
+    const layer = (): HTMLElement => {
+        const parent = screen.getByRole('dialog').parentElement;
+        if (!(parent instanceof HTMLElement)) throw new Error('the open sheet has no overlay layer');
+        return parent;
+    };
 
     it('Apple Connect opens its sheet on the stacked layer, above the z-50 wizard', async () => {
         renderStep(calendarsOverviewVariants.available);

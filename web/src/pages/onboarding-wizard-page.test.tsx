@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -515,6 +515,11 @@ describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
         calendarFlag.current = { needsCalendarConnect: true, settled: true };
     });
 
+    afterEach(() => {
+        vi.mocked(useGameRegistry).mockReturnValue({ games: [], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+        vi.mocked(useUserHeartedGames).mockReturnValue({ data: undefined, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
+    });
+
     function crumbIndex(needle: string): number {
         return screen.getAllByRole('button').map((b) => b.textContent ?? '').findIndex((t) => t.includes(needle));
     }
@@ -570,8 +575,6 @@ describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
         rerender(wizardTree(<OnboardingWizardPage />, url, client));
         expect(screen.getByText(/^Step \d+ of \d+$/), 'Games, WoW, Game Time, Calendar → step 4 of 6').toHaveTextContent('Step 4 of 6');
         expect(screen.getByTestId('calendar-step-stub'), 'the late character step must not push Calendar off').toBeInTheDocument();
-        registry.mockReturnValue({ games: [], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
-        hearted.mockReturnValue({ data: undefined, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
     });
 
     it('Escape in a dialog opened from the Calendar step closes only the dialog, never Skip All', () => {
