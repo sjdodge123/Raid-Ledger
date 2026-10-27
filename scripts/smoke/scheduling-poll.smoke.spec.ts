@@ -1908,6 +1908,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible();
         const rows = [
             sheet.getByTestId('add-poll-members-button'),
+            sheet.getByTestId('remove-poll-member-button'),
             sheet.getByRole('button', { name: /^remind voters$/i }),
             sheet.getByRole('button', { name: /^cancel poll$/i }),
         ];
@@ -1923,7 +1924,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         }
     });
 
-    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
+    test('desktop: the four actions live in the "Manage poll ⋯" dropdown (ROK-1585, ROK-2020)', async ({
         page,
     }) => {
         test.skip(
@@ -1952,10 +1953,12 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         const mBox = (await menu.boundingBox())!;
         expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
         expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        // ROK-2020 added "Remove Participant" as the second item — exactly four.
         await expect(menu.getByRole('menuitem')).toHaveText([
-            /add participants/i,
-            /remind voters/i,
-            /cancel poll/i,
+            /^add participants$/i,
+            /^remove participant$/i,
+            /^remind voters$/i,
+            /^cancel poll$/i,
         ]);
         await expect(menu.getByRole('separator')).toHaveCount(1);
 
