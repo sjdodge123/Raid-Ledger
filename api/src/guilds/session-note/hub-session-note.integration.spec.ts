@@ -191,6 +191,29 @@ async function insertEvent(
   return e.id;
 }
 
+/** A real lineup match, so an event can point `reschedulingPollId` at it. */
+async function insertLineupMatch(): Promise<number> {
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: `Session note poll ${seq}`,
+        createdBy: testApp.seed.adminUser.id,
+        publicSlug: `sn-poll-${seq}`,
+      })
+      .returning({ id: schema.communityLineups.id }),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({ lineupId: lineup.id, gameId: testApp.seed.game.id })
+      .returning({ id: schema.communityLineupMatches.id }),
+    'lineup match',
+  );
+  return match.id;
+}
+
 // ── requests ───────────────────────────────────────────────────────────────
 
 function call(method: Method, path: string, who: Who, body?: object) {
@@ -339,7 +362,8 @@ describe('community hub — clear after next event', () => {
     const other = await communityHub();
     await insertEvent(other, 1);
     await insertEvent(g, 2, { cancelledAt: new Date() });
-    await insertEvent(g, 3, { reschedulingPollId: 987_654 });
+    const pollId = await insertLineupMatch();
+    await insertEvent(g, 3, { reschedulingPollId: pollId });
     const later = await insertEvent(g, 48);
     const earlier = await insertEvent(g, 24);
     const note = await seedNote(g, 'editor', { clearAfterNextEvent: true });
