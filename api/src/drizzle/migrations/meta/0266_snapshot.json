@@ -1,5 +1,5 @@
 {
-  "id": "39f0937d-5414-40f3-9c64-3af51b367780",
+  "id": "5d7b833a-2077-420c-91cc-36270a5cb3a5",
   "prevId": "89c2d95b-c338-4ab5-a7a3-11558c5e71c0",
   "version": "7",
   "dialect": "postgresql",
@@ -12374,270 +12374,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.hub_session_note_items": {
-      "name": "hub_session_note_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "text": {
-          "name": "text",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "done": {
-          "name": "done",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "done_by": {
-          "name": "done_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "done_at": {
-          "name": "done_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idx_hub_session_note_items_guild_position": {
-          "name": "idx_hub_session_note_items_guild_position",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_session_note_items_done_by": {
-          "name": "idx_hub_session_note_items_done_by",
-          "columns": [
-            {
-              "expression": "done_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_session_note_items_guild_id_hub_session_notes_guild_id_fk": {
-          "name": "hub_session_note_items_guild_id_hub_session_notes_guild_id_fk",
-          "tableFrom": "hub_session_note_items",
-          "tableTo": "hub_session_notes",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "guild_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_session_note_items_done_by_users_id_fk": {
-          "name": "hub_session_note_items_done_by_users_id_fk",
-          "tableFrom": "hub_session_note_items",
-          "tableTo": "users",
-          "columnsFrom": [
-            "done_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_session_note_items_text_length": {
-          "name": "hub_session_note_items_text_length",
-          "value": "char_length(\"hub_session_note_items\".\"text\") BETWEEN 1 AND 200"
-        },
-        "hub_session_note_items_done_pair": {
-          "name": "hub_session_note_items_done_pair",
-          "value": "(\"hub_session_note_items\".\"done\" = false) = (\"hub_session_note_items\".\"done_at\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.hub_session_notes": {
-      "name": "hub_session_notes",
-      "schema": "",
-      "columns": {
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "clear_after_event_id": {
-          "name": "clear_after_event_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "clear_after_armed": {
-          "name": "clear_after_armed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_hub_session_notes_updated_by": {
-          "name": "idx_hub_session_notes_updated_by",
-          "columns": [
-            {
-              "expression": "updated_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_session_notes_clear_after_event": {
-          "name": "idx_hub_session_notes_clear_after_event",
-          "columns": [
-            {
-              "expression": "clear_after_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_session_notes_guild_id_guilds_id_fk": {
-          "name": "hub_session_notes_guild_id_guilds_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_session_notes_updated_by_users_id_fk": {
-          "name": "hub_session_notes_updated_by_users_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "hub_session_notes_clear_after_event_id_events_id_fk": {
-          "name": "hub_session_notes_clear_after_event_id_events_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "events",
-          "columnsFrom": [
-            "clear_after_event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_session_notes_body_length": {
-          "name": "hub_session_notes_body_length",
-          "value": "char_length(\"hub_session_notes\".\"body\") <= 4000"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.hub_media": {
       "name": "hub_media",
       "schema": "",
@@ -12750,6 +12486,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "uploaded_by": {
+          "name": "uploaded_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12856,6 +12598,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "hub_media_uploaded_by_idx": {
+          "name": "hub_media_uploaded_by_idx",
+          "columns": [
+            {
+              "expression": "uploaded_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12884,6 +12641,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "hub_media_uploaded_by_users_id_fk": {
+          "name": "hub_media_uploaded_by_users_id_fk",
+          "tableFrom": "hub_media",
+          "tableTo": "users",
+          "columnsFrom": [
+            "uploaded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12892,11 +12662,11 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord')"
+          "value": "\"hub_media\".\"source\" IN ('discord', 'upload')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
-          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image')"
+          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload')"
         }
       },
       "isRLSEnabled": false
