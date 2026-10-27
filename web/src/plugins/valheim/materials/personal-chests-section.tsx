@@ -1,4 +1,5 @@
-/** ROK-1853 — the viewer's personal chests; rendered only when `personal !== null` (ruling 2). */
+/** ROK-1853 — the viewer's personal chests; rendered only when `personal !== null` (ruling 2).
+ * ROK-2014: rows carry `personal.trend` — `personalFor` already swapped in the base's. */
 import type { JSX } from 'react';
 import type { ValheimMaterialsResponse } from '@raid-ledger/contract';
 import type { ItemIconContext } from '../character/use-item-icons';
@@ -65,6 +66,7 @@ export function PersonalChestsSection({
                 caption="Personal chest totals"
                 selected={selected}
                 onSelect={onSelect}
+                trend={personal.trend}
             />
         </section>
     );

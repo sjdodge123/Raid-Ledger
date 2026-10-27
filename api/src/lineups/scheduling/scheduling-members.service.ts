@@ -17,10 +17,15 @@
  * `loadMatchMembers(matchId)`, so a newly added member is reachable by
  * "Remind voters" until they vote.
  *
+ * ROK-2020 adds the inverse — `removeMember` — under the same permission
+ * rule. Both re-render the Discord poll card AFTER their write commits (via
+ * `SchedulingPollEmbedService.fireUpdateEmbed`), so the card's counts move.
+ *
  * Lives in its own service (like `SchedulingRemindService`) rather than on
  * `SchedulingService`, keeping both files clear of the STRICT max-lines cap.
  */
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -33,15 +38,36 @@ import * as schema from '../../drizzle/schema';
 import { activeUsersFilter } from '../../users/users-active.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
+  assertPollOpen,
   assertSchedulable,
   assertSchedulingEnabled,
 } from './scheduling-guard.helpers';
 import { addInvitees } from '../lineups-invitees.helpers';
+import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import {
+  countMatchMembers,
+  deleteMatchMemberWithVotes,
+  findSlotProposedTimes,
+} from './scheduling-members-remove.helpers';
 
 /** Caller identity for poll-roster authorization. */
 export interface PollMemberCaller {
   id: number;
   role: string;
+}
+
+/** The lineup fields the roster guards read. */
+interface ManagedLineup {
+  createdBy: number;
+  status: string | null;
+  phaseDeadline: Date | null;
+}
+
+/** The match fields the roster guards read. */
+interface SchedulableMatch {
+  status: string;
+  visibility: string;
+  linkedEventId: number | null;
 }
 
 /** Outcome of an add-members call. */
@@ -52,11 +78,20 @@ export interface AddMatchMembersResult {
   memberCount: number;
 }
 
+/** Outcome of a remove-member call (ROK-2020). */
+export interface RemoveMatchMemberResult {
+  /** That user's vote rows deleted from this poll's slots (yes and no). */
+  removedVotes: number;
+  /** Total roster size after the call — the poll's new denominator. */
+  memberCount: number;
+}
+
 @Injectable()
 export class SchedulingMembersService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly pollEmbed: SchedulingPollEmbedService,
   ) {}
 
   /**
@@ -70,8 +105,9 @@ export class SchedulingMembersService {
     userIds: number[],
     caller: PollMemberCaller,
   ): Promise<AddMatchMembersResult> {
-    await this.assertCallerMayManage(lineupId, caller);
-    const lineup = await this.loadSchedulableMatch(lineupId, matchId);
+    const lineup = await this.assertCallerMayManage(lineupId, caller);
+    const match = await this.loadSchedulableMatch(lineupId, matchId);
+    await this.assertRosterOpen(match, lineup, matchId);
     const unique = Array.from(new Set(userIds));
     await this.assertUsersExist(unique);
 
@@ -82,45 +118,97 @@ export class SchedulingMembersService {
     // yet still inflates the denominator, making the lock HARDER to reach —
     // the exact failure this story exists to remove. So mirror the roster
     // into the invitee list; `addInvitees` is itself idempotent.
-    if (lineup.visibility === 'private') {
+    if (match.visibility === 'private') {
       // ROK-1101 G2: the enrolling caller is the effective inviter.
       await addInvitees(this.db, lineupId, unique, caller.id);
     }
 
-    const inserted = await this.db
-      .insert(schema.communityLineupMatchMembers)
-      .values(
-        unique.map((userId) => ({ matchId, userId, source: 'added' as const })),
-      )
-      .onConflictDoNothing({
-        target: [
-          schema.communityLineupMatchMembers.matchId,
-          schema.communityLineupMatchMembers.userId,
-        ],
-      })
-      .returning({ id: schema.communityLineupMatchMembers.id });
+    const added = await this.insertAddedMembers(matchId, unique);
 
-    const roster = await this.db
-      .select({ id: schema.communityLineupMatchMembers.id })
-      .from(schema.communityLineupMatchMembers)
-      .where(eq(schema.communityLineupMatchMembers.matchId, matchId));
-
-    return { added: inserted.length, memberCount: roster.length };
+    // ROK-2020 (OPEN-4): after the insert has landed, so the card's
+    // "N of M" counts move on add too.
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    return {
+      added,
+      memberCount: await countMatchMembers(this.db, matchId),
+    };
   }
 
-  /** Lineup creator OR admin/operator — mirrors `assertCallerMayRemind`. */
+  /**
+   * Take one user off a match's scheduling poll (ROK-2020): their roster row
+   * and every stance they hold on this poll's slots go in one transaction.
+   * Not a ban — a removed user who votes again is re-enrolled by
+   * `ensureMatchMember`. The poll creator cannot be removed (cancel the poll
+   * instead). No DM is sent to the removed user.
+   */
+  async removeMember(
+    lineupId: number,
+    matchId: number,
+    userId: number,
+    caller: PollMemberCaller,
+  ): Promise<RemoveMatchMemberResult> {
+    const lineup = await this.assertCallerMayManage(lineupId, caller);
+    const match = await this.loadSchedulableMatch(lineupId, matchId);
+    await this.assertRosterOpen(match, lineup, matchId);
+    if (userId === lineup.createdBy) {
+      throw new BadRequestException(
+        "The poll creator can't be removed — cancel the poll instead",
+      );
+    }
+    const removed = await deleteMatchMemberWithVotes(this.db, matchId, userId);
+    if (removed.removedVotes === 0 && removed.removedMembers === 0) {
+      throw new NotFoundException('Not a participant of this poll');
+    }
+    // After the transaction has committed — never inside it.
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    return {
+      removedVotes: removed.removedVotes,
+      memberCount: await countMatchMembers(this.db, matchId),
+    };
+  }
+
+  /**
+   * Codex P2: a past-deadline or archived poll keeps its match on
+   * `scheduling`, so `assertSchedulable` alone let a stale modal erase votes
+   * on a poll the page renders read-only. Same predicate (and slot-time rule)
+   * as `/remind`; re-worded because a removal is not a vote. Runs before
+   * anything is deleted.
+   */
+  private async assertRosterOpen(
+    match: SchedulableMatch,
+    lineup: ManagedLineup,
+    matchId: number,
+  ): Promise<void> {
+    const slotTimes = await findSlotProposedTimes(this.db, matchId);
+    try {
+      assertPollOpen(match, lineup, slotTimes);
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) throw err;
+      throw new BadRequestException('This poll no longer accepts changes');
+    }
+  }
+
+  /**
+   * Lineup creator OR admin/operator — mirrors `assertCallerMayRemind`.
+   * Returns the lineup's lifecycle row (creator id + status + deadline).
+   */
   private async assertCallerMayManage(
     lineupId: number,
     caller: PollMemberCaller,
-  ): Promise<void> {
-    if (caller.role === 'admin' || caller.role === 'operator') return;
+  ): Promise<ManagedLineup> {
     const [lineup] = await findLineupPollMeta(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
-    if (lineup.createdBy !== caller.id) {
+    const isStaff = caller.role === 'admin' || caller.role === 'operator';
+    if (!isStaff && lineup.createdBy !== caller.id) {
       throw new ForbiddenException(
-        'Only the poll creator or an operator can add participants',
+        'Only the poll creator or an operator can manage participants',
       );
     }
+    return {
+      createdBy: lineup.createdBy,
+      status: lineup.status ?? null,
+      phaseDeadline: lineup.phaseDeadline ?? null,
+    };
   }
 
   /**
@@ -129,15 +217,16 @@ export class SchedulingMembersService {
    * scheduled/archived match and a lineup that opted out of the scheduling
    * phase; without these the endpoint could mutate rosters the UI renders as
    * read-only. Returns the parent lineup's visibility for the private-invitee
-   * mirror above.
+   * mirror above, plus the match lifecycle the remove path's open check reads.
    */
   private async loadSchedulableMatch(
     lineupId: number,
     matchId: number,
-  ): Promise<{ visibility: string }> {
+  ): Promise<SchedulableMatch> {
     const [match] = await this.db
       .select({
         status: schema.communityLineupMatches.status,
+        linkedEventId: schema.communityLineupMatches.linkedEventId,
         visibility: schema.communityLineups.visibility,
         includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
       })
@@ -156,7 +245,31 @@ export class SchedulingMembersService {
     if (!match) throw new NotFoundException('Match not found');
     assertSchedulingEnabled(match);
     assertSchedulable(match);
-    return { visibility: match.visibility };
+    return match;
+  }
+
+  /** Insert `source: 'added'` rows, skipping existing members; returns the count. */
+  private async insertAddedMembers(
+    matchId: number,
+    userIds: number[],
+  ): Promise<number> {
+    const inserted = await this.db
+      .insert(schema.communityLineupMatchMembers)
+      .values(
+        userIds.map((userId) => ({
+          matchId,
+          userId,
+          source: 'added' as const,
+        })),
+      )
+      .onConflictDoNothing({
+        target: [
+          schema.communityLineupMatchMembers.matchId,
+          schema.communityLineupMatchMembers.userId,
+        ],
+      })
+      .returning({ id: schema.communityLineupMatchMembers.id });
+    return inserted.length;
   }
 
   /** Unknown/deactivated ids surface as 404 rather than an FK 500. */

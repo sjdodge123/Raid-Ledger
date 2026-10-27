@@ -9,7 +9,9 @@
  *   stores the connection, then 302s to `/profile/integrations` with
  *   `?connected=<provider>` or `?error=<CalendarOAuthErrorCode>` — never a
  *   500 (an unexpected error lands on `?error=unavailable`). A grant whose
- *   upsert fails is revoked best-effort.
+ *   upsert fails is revoked best-effort. A state signed with `t=onboarding`
+ *   (start `?return=onboarding`, ROK-2022) lands on
+ *   `/onboarding?resume=calendar&…` instead — see `callbackLocation`.
  *
  * The logic lives in the services/providers helpers; this file only routes.
  * Never log a token, code or state.
@@ -65,6 +67,11 @@ import {
 import { MissingScopesError } from '../providers/google/google-oauth.helpers';
 import { buildRedirectUris } from '../services/calendar-sync-admin.helpers';
 import {
+  callbackLocation,
+  parseOAuthReturnQuery,
+  type CalendarCallbackResult,
+} from '../services/calendar-oauth-return.helpers';
+import {
   mintCalendarOAuthState,
   verifyCalendarOAuthState,
   type VerifiedCalendarOAuthState,
@@ -76,9 +83,6 @@ import {
   revokeUnstoredGrant,
   upsertCalendarConnection,
 } from '../services/calendar-connect.helpers';
-
-/** Where every callback lands (L3: no `returnTo`, so no open redirect). Calendars render on My Integrations (ROK-1780). */
-export const CALENDARS_PAGE_PATH = '/profile/integrations';
 
 /** Browser-binding cookie key per provider (L4). Microsoft: ROK-1597. */
 const LINK_KEYS: Partial<Record<CalendarOAuthProvider, LinkStateProvider>> = {
@@ -126,6 +130,7 @@ export class CalendarOAuthController {
   async start(
     @Param('provider') raw: string,
     @Query('intent') rawIntent: unknown,
+    @Query('return') rawReturn: unknown,
     @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<OAuthStartResponse> {
@@ -138,6 +143,7 @@ export class CalendarOAuthController {
       uid: req.user.id,
       provider: target.key,
       intent,
+      returnTarget: parseOAuthReturnQuery(rawReturn),
       bindToBrowser: () => bindLinkStateToBrowser(res, target.link),
     });
     const redirectUri = await this.redirectUri(target.key);
@@ -157,27 +163,34 @@ export class CalendarOAuthController {
     @Req() req: ExpressRequest,
     @Res() res: Response,
   ): Promise<void> {
-    const outcome = await this.complete(raw, query, req, res).catch(
-      (err: unknown) => this.failureCode(err),
+    const result = await this.complete(raw, query, req, res).catch(
+      (err: unknown): CalendarCallbackResult => ({
+        outcome: this.failureCode(err),
+      }),
     );
-    if (outcome !== 'connected') {
-      this.logger.warn(`calendar oauth callback failed (${outcome})`);
+    if (result.outcome !== 'connected') {
+      this.logger.warn(`calendar oauth callback failed (${result.outcome})`);
     }
-    const qs =
-      outcome === 'connected' ? `connected=${raw}` : `error=${outcome}`;
-    const base = (await getClientUrl(this.settings)).replace(/\/+$/, '');
-    res.redirect(`${base}${CALENDARS_PAGE_PATH}?${qs}`);
+    const base = await getClientUrl(this.settings);
+    res.redirect(callbackLocation(base, raw, result));
   }
 
+  /**
+   * Before the state verifies the return target is unknown, so those misses
+   * keep the default landing. After it, every outcome — a thrown connect
+   * failure included — carries the signed target (ROK-2022).
+   */
   private async complete(
     raw: string,
     query: Record<string, unknown>,
     req: ExpressRequest,
     res: Response,
-  ): Promise<'connected' | CalendarOAuthErrorCode> {
-    if (!(await getCalendarSyncEnabled(this.settings))) return 'disabled';
+  ): Promise<CalendarCallbackResult> {
+    if (!(await getCalendarSyncEnabled(this.settings))) {
+      return { outcome: 'disabled' };
+    }
     const target = this.resolve(raw);
-    if (!target) return 'unavailable';
+    if (!target) return { outcome: 'unavailable' };
     const verified = await verifyCalendarOAuthState(
       this.db,
       firstString(query.state) ?? '',
@@ -187,7 +200,20 @@ export class CalendarOAuthController {
           assertLinkStateBoundToBrowser(req, res, target.link, r),
       },
     );
-    if (!verified) return 'state';
+    if (!verified) return { outcome: 'state' };
+    const outcome = await this.finish(target, verified, query).catch(
+      (err: unknown) => this.failureCode(err),
+    );
+    const { returnTarget } = verified;
+    return returnTarget === undefined ? { outcome } : { outcome, returnTarget };
+  }
+
+  /** A verified state: the provider's answer → connect, or its error code. */
+  private async finish(
+    target: OAuthTarget,
+    verified: VerifiedCalendarOAuthState,
+    query: Record<string, unknown>,
+  ): Promise<'connected' | CalendarOAuthErrorCode> {
     const error = firstString(query.error);
     if (error) return error === 'access_denied' ? 'denied' : 'exchange';
     const code = firstString(query.code);

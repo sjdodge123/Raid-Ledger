@@ -9,12 +9,12 @@
  */
 import type { JSX, ReactNode } from 'react';
 import type { CalendarConnection, CalendarReadMode, CalendarsOverview } from '@raid-ledger/contract';
-import { Button } from '../../ui/button';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
 import { AppleProviderRow } from './AppleProviderRow';
 import { countOf, shippedConnections } from './calendar-providers';
 import { CalendarConnectionCard } from './CalendarConnectionCard';
+import { CalendarOAuthErrorBanner } from './CalendarOAuthErrorBanner';
 import { CalendarReadRules } from './CalendarReadRules';
 import { readableConnections } from './use-read-rules';
 import { SendEventsSettings } from './SendEventsSettings';
@@ -24,7 +24,7 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useCalendarOAuthFeedback } from './use-calendar-oauth-feedback';
 import { SubscribeLinkCard } from './SubscribeLinkCard';
 import { FEED_COPY as F } from './calendar-feed.copy';
-import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S, oauthErrorMessage } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
 function Section({ heading, children }: { heading: string; children: ReactNode }): JSX.Element {
     return (
@@ -32,18 +32,6 @@ function Section({ heading, children }: { heading: string; children: ReactNode }
             <h3 className="text-sm font-semibold text-foreground">{heading}</h3>
             {children}
         </section>
-    );
-}
-
-/** §4.7 status banner for `?error=<code>`; dismissible. */
-function OAuthErrorBanner({ code, onDismiss }: { code: string; onDismiss: () => void }): JSX.Element {
-    return (
-        <div role="alert" data-testid="calendar-oauth-error" data-error-code={code}
-            className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/10 p-3">
-            {/* Body is text-foreground, not §4.7's text-danger, for contrast on the tint; border + tint carry the tone. */}
-            <p className="flex-1 text-sm text-foreground">{oauthErrorMessage(code)}</p>
-            <Button variant="ghost" size="sm" onClick={onDismiss}>{C.dismiss}</Button>
-        </div>
     );
 }
 
@@ -160,7 +148,7 @@ export function CalendarsPage(): JSX.Element {
     const shown = shippedConnections(data.connections);
     return (
         <PageFrame lede={desktop ? C.ledeDesktop : C.lede}>
-            {errorCode && <OAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
+            {errorCode && <CalendarOAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
             <ConnectionsGrid data={data} />
             <ReadRules connections={shown} mode={data.readSettings.mode} desktopRow />
             <DesktopSendEvents connections={shown} />

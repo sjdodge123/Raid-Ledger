@@ -25,7 +25,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
-import { applyStance } from './scheduling-vote-write.helpers';
+import { writeSlotTap } from './scheduling-vote-write.helpers';
 import {
   insertScheduleSlot,
   insertScheduleVote,
@@ -36,10 +36,7 @@ import {
   loadSchedulePollInputs,
   assembleSchedulePollResponse,
 } from './scheduling-poll-page.helpers';
-import {
-  assertMayLockInSlot,
-  assertSlotStillVotable,
-} from './scheduling-lock-in.helpers';
+import { assertMayLockInSlot } from './scheduling-lock-in.helpers';
 import {
   loadMatchAvailability,
   loadOtherPolls,
@@ -51,6 +48,7 @@ import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
+import { lockMatchMember } from './scheduling-member-lock.helpers';
 import {
   findSlotOrThrow,
   createLockedInEvent,
@@ -68,7 +66,6 @@ import {
   normalizeReason,
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
-import { isAnswering } from './scheduling-stance.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 
 @Injectable()
@@ -189,6 +186,8 @@ export class SchedulingService {
   ): Promise<boolean> {
     try {
       await this.db.transaction(async (tx) => {
+        // ROK-2020: serialise with a concurrent participant removal.
+        await lockMatchMember(tx, matchId, userId);
         await insertScheduleVote(tx, slotId, userId, 'yes', source);
         await ensureMatchMember(tx, matchId, userId);
         // ROK-1544: the auto-vote is a real vote, so it stamps like one —
@@ -244,22 +243,11 @@ export class SchedulingService {
     // atomically. A partial write would recreate the voter-without-membership
     // state this fixes, and a stamp outside the tx could 500 a request whose
     // vote already committed (client rolls back a vote the server holds).
-    const action = await this.db.transaction(async (tx) => {
-      const resolved = await applyStance(tx, slotId, userId, stance, source);
-      // ROK-1607, extended to stances by ROK-1617: a time that has passed
-      // cannot be answered — but it can still be UN-answered, so a member who
-      // voted for Friday can untick it on Saturday. Throwing rolls the write
-      // back; the statement itself succeeded, so nothing is poisoned.
-      if (isAnswering(resolved)) {
-        assertSlotStillVotable(slot.proposedTime);
-        await ensureMatchMember(tx, matchId, userId);
-      }
-      // The tap IS the submit — reconcile the member's stamp with the votes
-      // they now hold (first answer stamps, last withdrawal clears). Last
-      // statement, so it sees this tx's own write.
-      await syncSchedulingSubmittedAt(tx, matchId, userId);
-      return resolved;
-    });
+    // ROK-2020: `writeSlotTap` takes the roster lock first, so a concurrent
+    // participant removal can't interleave with this vote + enrolment.
+    const action = await this.db.transaction((tx) =>
+      writeSlotTap(tx, slot, userId, stance, source),
+    );
     this.fireVoteSideEffects(matchId);
     GameActivityNudge.safeTouch(this.nudge, match.gameId);
     return { voted: action.stance === 'yes', stance: action.stance };

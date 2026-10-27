@@ -25,6 +25,7 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { CalendarDisconnectConfirm } from './CalendarDisconnectConfirm';
 import { CalendarPicker } from './CalendarPicker';
 import { readGranted } from './use-read-rules';
+import { useCalendarSheetsStacked } from './calendar-sheet-stack';
 import { CALENDARS_COPY as C, READ_COPY as R } from './calendar-sync.copy';
 
 /** `onSync` is absent when reading is off, not granted, or the connection is broken. */
@@ -81,6 +82,7 @@ function ManageDropdown({ onDisconnect, onSync }: ShellProps): JSX.Element {
 function ManageSheet({ connection, onDisconnect, onSync }: ShellProps): JSX.Element {
     const [open, setOpen] = useState(false);
     const [picking, setPicking] = useState(false);
+    const stacked = useCalendarSheetsStacked();
     const close = (): void => { setOpen(false); setPicking(false); };
     const pick = (action: () => void) => (): void => { close(); action(); };
     return (
@@ -89,7 +91,7 @@ function ManageSheet({ connection, onDisconnect, onSync }: ShellProps): JSX.Elem
                 onClick={() => setOpen(true)}>
                 {C.manage}
             </Button>
-            <BottomSheet isOpen={open} onClose={close} ariaLabel={C.manageTitle}>
+            <BottomSheet isOpen={open} onClose={close} ariaLabel={C.manageTitle} stacked={stacked}>
                 {picking ? (
                     <div data-testid="calendar-picker-sheet" className="flex flex-col gap-2 pb-2">
                         <SheetTitleRow title={R.pickerLabel} onClose={close} onBack={() => setPicking(false)} />

@@ -5,7 +5,7 @@
  * voted" folded into Layout B).
  */
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { SchedulingCatchUpLine } from '../SchedulingCatchUpLine';
@@ -112,6 +112,33 @@ describe('SchedulingPendingVoters (ROK-1545 AC5)', () => {
     const panel = screen.getByTestId('scheduling-pending-voters');
     expect(panel).toHaveTextContent(/still to vote/i);
     expect(panel).toHaveTextContent('2');
+  });
+
+  it('hides the avatar strip from assistive tech when the copy names everyone (ROK-2020)', () => {
+    renderWithProviders(
+      <SchedulingPendingVoters
+        members={[member(1, EARLY, EARLY), member(2, EARLY, null)]}
+      />,
+    );
+    const panel = screen.getByTestId('scheduling-pending-voters');
+    const strip = within(panel).getByTestId('member-avatar-group').parentElement;
+    expect(strip).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('scheduling-pending-voters-summary')).toHaveTextContent(
+      /^1 still to vote · User 2$/,
+    );
+  });
+
+  it('keeps the avatar strip announced when the copy cannot name everyone', () => {
+    renderWithProviders(
+      <SchedulingPendingVoters
+        members={[1, 2, 3, 4].map((id) => member(id, EARLY, null))}
+      />,
+    );
+    const strip = screen.getByTestId('member-avatar-group').parentElement;
+    expect(strip).not.toHaveAttribute('aria-hidden');
+    expect(screen.getByTestId('scheduling-pending-voters-summary')).toHaveTextContent(
+      /^4 still to vote$/,
+    );
   });
 
   it('renders nothing once everyone has voted', () => {
