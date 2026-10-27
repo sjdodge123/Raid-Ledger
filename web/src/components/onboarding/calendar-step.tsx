@@ -21,8 +21,8 @@ import { countOf, shippedConnections } from '../features/calendar-sync/calendar-
 import { readableConnections } from '../features/calendar-sync/use-read-rules';
 import { useCalendarOAuthFeedback } from '../features/calendar-sync/use-calendar-oauth-feedback';
 import { CALENDARS_COPY as C } from '../features/calendar-sync/calendar-sync.copy';
+import { CalendarSheetsStacked } from '../features/calendar-sync/calendar-sheet-stack';
 import { CALENDAR_STEP_COPY as S } from './calendar-step.copy';
-
 
 /** Header in the Steam step's shell, with token colours (design-system §2.1) instead of raw emerald. */
 function CalendarStepHeader(): JSX.Element {
@@ -71,11 +71,14 @@ export function CalendarStep(): JSX.Element {
     const { data, isError } = useCalendarsOverview();
     const { errorCode, dismissError } = useCalendarOAuthFeedback();
     return (
-        <div className="space-y-6" data-testid="calendar-step">
-            <CalendarStepHeader />
-            {errorCode && <CalendarOAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
-            <CalendarStepBody data={data} isError={isError} />
-            <p className="text-xs text-muted text-center">{S.manageLater}</p>
-        </div>
+        // The wizard is a z-50 dialog: its calendar sheets go on the stacked layer (ROK-1738).
+        <CalendarSheetsStacked.Provider value={true}>
+            <div className="space-y-6" data-testid="calendar-step">
+                <CalendarStepHeader />
+                {errorCode && <CalendarOAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
+                <CalendarStepBody data={data} isError={isError} />
+                <p className="text-xs text-muted text-center">{S.manageLater}</p>
+            </div>
+        </CalendarSheetsStacked.Provider>
     );
 }

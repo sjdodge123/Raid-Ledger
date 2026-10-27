@@ -20,6 +20,7 @@ import { setAccessToken, clearAccessToken } from '../../lib/api/access-token-sto
 import { CALENDARS_COPY as C, OAUTH_ERROR_COPY } from '../features/calendar-sync/calendar-sync.copy';
 import { CALENDAR_STEP_COPY as S } from './calendar-step.copy';
 import { CalendarStep } from './calendar-step';
+import { Z_INDEX } from '../../lib/z-index';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -109,5 +110,22 @@ describe('CalendarStep (ROK-2022)', () => {
         expect(await screen.findByText(C.unavailable)).toBeInTheDocument();
         expect(screen.queryByTestId('calendar-step-providers')).toBeNull();
         expect(screen.queryByTestId('calendar-connect-google')).toBeNull();
+    });
+});
+
+describe('CalendarStep sheets stack above the wizard below 1024px (ROK-2022 Codex P1)', () => {
+    /** The open sheet's fixed overlay layer, which carries the z-index (closed sheets are aria-hidden). */
+    const layer = () => screen.getByRole('dialog').parentElement as HTMLElement;
+
+    it('Apple Connect opens its sheet on the stacked layer, above the z-50 wizard', async () => {
+        renderStep(calendarsOverviewVariants.available);
+        fireEvent.click(await screen.findByTestId('calendar-connect-apple'));
+        expect(layer().style.zIndex, 'the Apple sheet must clear the wizard (MODAL_STACKED)').toBe(String(Z_INDEX.MODAL_STACKED));
+    });
+
+    it('the connected card opens its Manage sheet on the stacked layer', async () => {
+        renderStep(calendarsOverviewVariants.connected);
+        fireEvent.click(await screen.findByTestId('calendar-manage'));
+        expect(layer().style.zIndex, 'the Manage sheet must clear the wizard (MODAL_STACKED)').toBe(String(Z_INDEX.MODAL_STACKED));
     });
 });
