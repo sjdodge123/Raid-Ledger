@@ -71,6 +71,15 @@ describe('ProfessionsWidget', () => {
         expect(await screen.findByTestId('professions-footer')).toHaveTextContent('2 characters with professions');
     });
 
+    it('says "1 character" (singular) when one character has professions', async () => {
+        const one = { ...NO_PROFESSIONS_FIXTURE, professions: [
+            { name: 'Mining', members: [{ characterId: MOCK_CHAR_IDS.jaina, name: 'Mixer', skill: 150, maxSkill: 150, source: 'addon' as const }] },
+        ] };
+        server.use(rosterInsightsHandler({ all: one }));
+        renderWidget();
+        expect(await screen.findByTestId('professions-footer')).toHaveTextContent(/^1 character with professions$/);
+    });
+
     it('invites the viewer to set professions on their own Forever character when none are set', async () => {
         server.use(rosterInsightsHandler({ all: NO_PROFESSIONS_FIXTURE }),
             myCharactersHandler([foreverCharacter(MOCK_CHAR_IDS.mine, 3)]));
