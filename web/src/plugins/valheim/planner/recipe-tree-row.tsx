@@ -59,7 +59,9 @@ function ViaChips({ node, names }: { node: ValheimPlanNode; names: PlannerNames 
     return (
         <div className="flex flex-wrap gap-1">
             {viaChips(node, names.stationName).map((chip) => (
-                <StatusChip key={chip} tone="neutral" title={chip}>
+                // `whitespace-normal!`: StatusChip's own `whitespace-nowrap` sorts later in Tailwind 4's CSS, so a plain
+                // override is a no-op. Lets "Armor upgrader · Upgrade station · lvl 3" wrap at 375px, not clip "lvl 3".
+                <StatusChip key={chip} tone="neutral" title={chip} className="whitespace-normal!">
                     {chip}
                 </StatusChip>
             ))}

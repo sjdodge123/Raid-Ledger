@@ -55,7 +55,7 @@ function StepItem({ step, build, names }: { step: ValheimPlanStep; build: BuildL
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="text-sm text-foreground">{label}</span>
                 {chip !== null && (
-                    <StatusChip tone="neutral" title={`Upgraded at ${at}, level ${step.stationLevel}`}>
+                    <StatusChip tone="neutral" title={`Upgraded at ${at}, level ${step.stationLevel}`} className="whitespace-normal!">
                         {chip}
                     </StatusChip>
                 )}
