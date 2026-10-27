@@ -46,10 +46,24 @@ export type RestoreDrillStatusDto = z.infer<typeof RestoreDrillStatusSchema>;
  * the drill aborts before any database tier runs, and that finding must name
  * the step that actually failed rather than borrow A1's (which, on that path,
  * genuinely passed).
+ *
+ * `uploads` (ROK-2023 D13/D14, additive) is the companion uploads archive:
+ * `scripts/restore-drill-uploads.mjs` U1 archive integrity and U2 "every file
+ * the restored rows reference is in the archive".
  */
 export const DrillFindingSchema = z.strictObject({
   id: z.string(),
-  tier: z.enum(['A1', 'A2', 'A3', 'A4', 'A5', 'restore', 'reconcile', 'boot']),
+  tier: z.enum([
+    'A1',
+    'A2',
+    'A3',
+    'A4',
+    'A5',
+    'restore',
+    'reconcile',
+    'boot',
+    'uploads',
+  ]),
   status: z.enum(['passed', 'failed', 'informational']),
   detail: z.string(),
 });
