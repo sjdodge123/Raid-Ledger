@@ -11,6 +11,8 @@ import type { HubPostPersonRow } from '../posts/hub-posts.helpers';
 import type { ItemRewritePlan, PinnedEventRow } from './hub-session-note.helpers';
 
 export type Db = PostgresJsDatabase<typeof schema>;
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+export type DbOrTx = Db | Tx;
 
 const { hubSessionNotes: notes, hubSessionNoteItems: items, events, users } =
   schema;
@@ -54,7 +56,7 @@ export async function findNote(
 
 /** D8: lock the note row for an editor save; null when absent. */
 export async function lockNote(
-  tx: Db,
+  tx: DbOrTx,
   guildId: number,
 ): Promise<{ updatedAt: string; clearAfterEventId: number | null } | null> {
   const [row] = await tx
@@ -77,7 +79,7 @@ const pinColumns = {
 
 /** The pinned event (null when unpinned or the event is gone). */
 export async function findPinnedEvent(
-  db: Db,
+  db: DbOrTx,
   eventId: number | null,
 ): Promise<PinnedEventRow | null> {
   if (eventId === null) return null;
@@ -94,7 +96,7 @@ export async function findPinnedEvent(
  * mid-reschedule, not yet ended. A running event counts (ruling 4c).
  */
 export async function findNextHubEvent(
-  db: Db,
+  db: DbOrTx,
   guildId: number,
   now: Date,
 ): Promise<PinnedEventRow | null> {
@@ -128,7 +130,7 @@ export function findItems(
 
 /** D6: delete only while still pinned to `eventId` (a re-pin survives). */
 export async function deleteExpiredNote(
-  db: Db,
+  db: DbOrTx,
   guildId: number,
   eventId: number,
 ): Promise<void> {
@@ -153,7 +155,7 @@ export interface NoteWrite {
 }
 
 /** Create path: false when a concurrent create won the row (D8 → 409). */
-export async function insertNote(tx: Db, write: NoteWrite): Promise<boolean> {
+export async function insertNote(tx: DbOrTx, write: NoteWrite): Promise<boolean> {
   const rows = await tx
     .insert(notes)
     .values({
@@ -168,7 +170,7 @@ export async function insertNote(tx: Db, write: NoteWrite): Promise<boolean> {
 }
 
 /** Update path (row already locked by `lockNote`). */
-export async function updateNote(tx: Db, write: NoteWrite): Promise<void> {
+export async function updateNote(tx: DbOrTx, write: NoteWrite): Promise<void> {
   await tx
     .update(notes)
     .set({
@@ -181,7 +183,7 @@ export async function updateNote(tx: Db, write: NoteWrite): Promise<void> {
 }
 
 /** The ids of the hub's stored checklist rows. */
-export async function findItemIds(tx: Db, guildId: number): Promise<number[]> {
+export async function findItemIds(tx: DbOrTx, guildId: number): Promise<number[]> {
   const rows = await tx
     .select({ id: items.id })
     .from(items)
@@ -191,7 +193,7 @@ export async function findItemIds(tx: Db, guildId: number): Promise<number[]> {
 
 /** Apply a `planItemRewrite` result (kept rows keep `done`). */
 export async function rewriteItems(
-  tx: Db,
+  tx: DbOrTx,
   guildId: number,
   plan: ItemRewritePlan,
 ): Promise<void> {

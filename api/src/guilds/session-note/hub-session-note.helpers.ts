@@ -4,12 +4,15 @@
  * row → contract mapping.
  */
 import { BadRequestException } from '@nestjs/common';
-import type {
-  HubSessionNoteClearAfter,
-  HubSessionNoteItem,
-  PutHubSessionNoteItem,
+import {
+  findHubPostMarkdownViolation,
+  HUB_POST_MARKDOWN_MESSAGES,
+  type HubSessionNoteClearAfter,
+  type HubSessionNoteItem,
+  type PutHubSessionNoteItem,
 } from '@raid-ledger/contract';
 import type { HubSessionNoteItemSelect } from '../../drizzle/schema/hub-session-notes';
+import { normalizeHubPostBody } from '../posts/hub-post-markdown.helpers';
 
 /** The event a note is pinned to, as `events` stores it. */
 export interface PinnedEventRow {
@@ -89,4 +92,27 @@ export function planItemRewrite(
   });
   plan.deleteIds = existingIds.filter((id) => !seen.has(id));
   return plan;
+}
+
+const EMPTY_NOTE = { body: ['Add a note or at least one checklist item'] };
+
+/**
+ * D12 body pipeline: normalise (hub-post subset), re-run the markdown subset
+ * on the result (normalising can create forbidden syntax — see
+ * `hub-posts.service.helpers.ts::finalBody`), and re-check "body or items"
+ * because normalising can blank a body Zod accepted.
+ */
+export function noteBody(raw: string, itemCount: number): string {
+  const body = normalizeHubPostBody(raw);
+  if (body.trim() === '') {
+    if (itemCount === 0) throw new BadRequestException(EMPTY_NOTE);
+    return '';
+  }
+  const violation = findHubPostMarkdownViolation(body);
+  if (violation) {
+    throw new BadRequestException({
+      body: [HUB_POST_MARKDOWN_MESSAGES[violation]],
+    });
+  }
+  return body;
 }
