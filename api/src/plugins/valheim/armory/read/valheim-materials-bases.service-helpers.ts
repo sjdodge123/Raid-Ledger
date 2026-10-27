@@ -134,67 +134,86 @@ export function materialsBases(
   };
 }
 
+/** One request's indexed trend inputs (built once, read per row set). */
+interface TrendCtx {
+  days: TrendInputs['days'];
+  items: ReturnType<typeof indexItemSums>;
+  baseIdx: ReturnType<typeof indexBaseSums>;
+  current: Set<string>;
+  anchors: Map<string, BaseAnchor>;
+}
+
+type Seg = 'shared' | 'personal';
+
+const itemTrend = (ctx: TrendCtx, seg: Seg, t: ValheimMaterialStack[]) =>
+  trendField(toTrend(ctx.days, ctx.items[seg], shownOf(t)));
+
+function baseTrend(
+  ctx: TrendCtx,
+  anchor: BaseAnchor,
+  seg: Seg,
+  t: ValheimMaterialStack[],
+) {
+  const totals = baseDayTotals(ctx.baseIdx, anchor, ctx.current, seg);
+  return trendField(toTrend(ctx.days, totals, shownOf(t)));
+}
+
+/** A byBase row near no base gets no trend; a missing anchor = key only. */
+function byBaseTrend(
+  ctx: TrendCtx,
+  row: ValheimMaterialsPersonalBase,
+): ValheimMaterialsPersonalBase {
+  if (row.base === null) return row;
+  const anchor = ctx.anchors.get(row.base) ?? {
+    key: row.base,
+    x: Number.NaN,
+    z: Number.NaN,
+  };
+  return { ...row, ...baseTrend(ctx, anchor, 'personal', row.totals) };
+}
+
+function personalWithTrend(
+  ctx: TrendCtx,
+  p: ValheimMaterialsResponse['personal'],
+): ValheimMaterialsResponse['personal'] {
+  if (!p) return p;
+  return {
+    ...p,
+    ...itemTrend(ctx, 'personal', p.totals),
+    ...(p.byBase ? { byBase: p.byBase.map((r) => byBaseTrend(ctx, r)) } : {}),
+  };
+}
+
 /**
  * ROK-2014 — attach the trend to `shared`, `personal`, every `bases[]` and
- * every `personal.byBase[]` (a byBase row near no base gets none). Fewer than
- * two stored play days → the response is returned unchanged (AC3).
+ * every `personal.byBase[]`. Fewer than two stored play days → the response
+ * is returned unchanged (AC3).
  */
 export function withMaterialsTrend(
   res: ValheimMaterialsResponse,
   input: TrendInputs,
 ): ValheimMaterialsResponse {
   if (input.days.length < 2) return res;
-  const items = indexItemSums(input.items);
-  const baseIdx = indexBaseSums(input.bases);
   const bases = res.bases ?? [];
-  const current = new Set(bases.map((b) => b.key));
-  const anchors = new Map(bases.map((b) => [b.key, b]));
-  const baseTrend = (
-    anchor: BaseAnchor,
-    seg: 'shared' | 'personal',
-    t: ValheimMaterialStack[],
-  ) =>
-    trendField(
-      toTrend(
-        input.days,
-        baseDayTotals(baseIdx, anchor, current, seg),
-        shownOf(t),
-      ),
-    );
-  const p = res.personal;
+  const ctx: TrendCtx = {
+    days: input.days,
+    items: indexItemSums(input.items),
+    baseIdx: indexBaseSums(input.bases),
+    current: new Set(bases.map((b) => b.key)),
+    anchors: new Map(bases.map((b) => [b.key, b])),
+  };
+  const withBases = res.bases
+    ? {
+        bases: bases.map((b) => ({
+          ...b,
+          ...baseTrend(ctx, b, 'shared', b.totals),
+        })),
+      }
+    : {};
   return {
     ...res,
-    shared: {
-      ...res.shared,
-      ...trendField(
-        toTrend(input.days, items.shared, shownOf(res.shared.totals)),
-      ),
-    },
-    ...(res.bases
-      ? {
-          bases: bases.map((b) => ({
-            ...b,
-            ...baseTrend(b, 'shared', b.totals),
-          })),
-        }
-      : {}),
-    personal: p && {
-      ...p,
-      ...trendField(toTrend(input.days, items.personal, shownOf(p.totals))),
-      ...(p.byBase
-        ? {
-            byBase: p.byBase.map((row) => {
-              if (row.base === null) return row;
-              // NaN centroid: a base missing from bases[] matches by key only.
-              const anchor = anchors.get(row.base) ?? {
-                key: row.base,
-                x: NaN,
-                z: NaN,
-              };
-              return { ...row, ...baseTrend(anchor, 'personal', row.totals) };
-            }),
-          }
-        : {}),
-    },
+    shared: { ...res.shared, ...itemTrend(ctx, 'shared', res.shared.totals) },
+    ...withBases,
+    personal: personalWithTrend(ctx, res.personal),
   };
 }

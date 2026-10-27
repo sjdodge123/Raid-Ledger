@@ -61,7 +61,7 @@ function getOrSet<K, V>(map: Map<K, V>, key: K, make: () => V): V {
 export function indexItemSums(rows: readonly TrendItemSumRow[]): SegTotals {
   const out: SegTotals = { shared: new Map(), personal: new Map() };
   for (const r of rows) {
-    const day = getOrSet(out[segOf(r)], r.dayId, () => new Map());
+    const day = getOrSet(out[segOf(r)], r.dayId, (): Totals => new Map());
     add(day, r.prefab, toCount(r.total));
   }
   return out;
@@ -77,7 +77,10 @@ export function indexBaseSums(
     const base = getOrSet(day, r.baseKey, () => ({
       x: r.baseX,
       z: r.baseZ,
-      totals: { shared: new Map(), personal: new Map() },
+      totals: {
+        shared: new Map<string, number>(),
+        personal: new Map<string, number>(),
+      },
     }));
     add(base.totals[segOf(r)], r.prefab, toCount(r.total));
   }
@@ -105,7 +108,8 @@ export function toTrend(
 ): ValheimMaterialsTrend | undefined {
   const sorted = newestFirst(days);
   if (sorted.length < 2) return undefined;
-  const at = (d: TrendDayRow): Totals => totals.get(d.id) ?? new Map();
+  const at = (d: TrendDayRow): Totals =>
+    totals.get(d.id) ?? new Map<string, number>();
   const out: ValheimMaterialsTrend['days'] = [];
   sorted.slice(0, MATERIALS_TREND_DAYS).forEach((cur, i) => {
     const prev = sorted[i + 1];
