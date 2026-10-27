@@ -133,6 +133,19 @@ describe('HubSessionNoteWidget — ticking (T-W3)', () => {
         expect(cached?.note?.updatedAt).toBe(NOTE_UPDATED_AT);
     });
 
+    it('shows the tick in the same click, before the optimistic cache write lands (Playwright check())', async () => {
+        server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote())));
+        const release = gatedTick(200);
+        renderWithProviders(<Card />);
+        await screen.findByTestId('session-note-body');
+        fireEvent.click(item(1));
+        // No waitFor: the cache write sits behind onMutate's awaits and a setTimeout(0) notify, so a
+        // controlled box that only reads the cache snaps back to unchecked when the click returns.
+        expect(item(1).checked, 'the box is checked as soon as the click returns').toBe(true);
+        expect(item(2).checked, 'the other box is untouched').toBe(true);
+        release();
+    });
+
     it('rolls a tick back when the server fails (500), without the item-gone toast', async () => {
         server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote())));
         const release = gatedTick(500);
