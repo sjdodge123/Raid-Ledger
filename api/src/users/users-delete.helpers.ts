@@ -191,6 +191,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,
   },
+  // ROK-1953: cached Steam stats + unlocks are the user's own data (CASCADE).
+  { table: schema.steamUserAppStats, column: schema.steamUserAppStats.userId },
+  {
+    table: schema.steamUserAchievements,
+    column: schema.steamUserAchievements.userId,
+  },
 ];
 
 /**
