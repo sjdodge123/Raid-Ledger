@@ -21,7 +21,11 @@ export function useResumeCalendar(): boolean {
     return resume;
 }
 
-/** One-shot seek to the Calendar step after `settled`; a missing step (switch off) just strips the param. */
+/**
+ * One-shot seek to the Calendar step once `settled` (the caller waits for the character steps
+ * too, so the index is final). A missing step (switch off, overview error) strips `connected` /
+ * `error` as well: no step is there to.
+ */
 export function useStepResume(
     resume: boolean, settled: boolean, steps: StepDef[], setCurrentStep: (n: number) => void,
 ): void {
@@ -35,6 +39,7 @@ export function useStepResume(
         setParams((prev) => {
             const next = new URLSearchParams(prev);
             next.delete(RESUME_PARAM);
+            if (index < 0) { next.delete('connected'); next.delete('error'); }
             return next;
         }, { replace: true });
     }, [resume, settled, steps, setCurrentStep, setParams]);

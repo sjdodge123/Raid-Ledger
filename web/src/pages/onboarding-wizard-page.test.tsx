@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OnboardingWizardPage } from './onboarding-wizard-page';
 
@@ -158,12 +158,32 @@ vi.mock('../hooks/use-steam-link', async (importOriginal) => {
 /** ROK-2022: the Calendar step flag, driven per test (its own logic is unit-tested beside it). */
 const calendarFlag = vi.hoisted(() => ({ current: { needsCalendarConnect: false, settled: true } }));
 vi.mock('./onboarding-wizard/use-calendar-step-flag', () => ({ useCalendarStepFlag: () => calendarFlag.current }));
-vi.mock('../components/onboarding/calendar-step', () => ({
-    CalendarStep: () => <div data-testid="calendar-step-stub">Calendar step</div>,
+/** The stub opens a dialog on the real escape-layer stack, as the Apple connect sheet does (Codex P2). */
+vi.mock('../components/onboarding/calendar-step', async () => {
+    const { useState } = await import('react');
+    const { useEscapeLayer } = await import('../hooks/use-escape-layer');
+    function CalendarStep() {
+        const [open, setOpen] = useState(false);
+        useEscapeLayer(open, () => setOpen(false));
+        return (
+            <div data-testid="calendar-step-stub">
+                Calendar step
+                <button type="button" onClick={() => setOpen(true)}>Open stub dialog</button>
+                {open && <div data-testid="calendar-stub-dialog" />}
+            </div>
+        );
+    }
+    return { CalendarStep };
+});
+/** Hearted games, driven per test (ROK-2022: a resume must wait for them). */
+vi.mock('../hooks/use-user-profile', () => ({
+    useUserHeartedGames: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
+import { useGameRegistry } from '../hooks/use-game-registry';
+import { useUserHeartedGames } from '../hooks/use-user-profile';
 
 const mockUseSystemStatus = useSystemStatus as unknown as ReturnType<typeof vi.fn>;
 
@@ -178,17 +198,27 @@ function createQueryClient() {
     });
 }
 
-function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding']) {
-    return render(
-        <QueryClientProvider client={createQueryClient()}>
+function LocationProbe() {
+    const loc = useLocation();
+    return <span data-testid="location">{loc.pathname + loc.search}</span>;
+}
+
+function wizardTree(ui: React.ReactElement, initialEntries: string[], client = createQueryClient()) {
+    return (
+        <QueryClientProvider client={client}>
             <MemoryRouter initialEntries={initialEntries}>
                 <Routes>
                     <Route path="/onboarding" element={ui} />
                     <Route path="/calendar" element={<div>Calendar Page</div>} />
                 </Routes>
+                <LocationProbe />
             </MemoryRouter>
-        </QueryClientProvider>,
+        </QueryClientProvider>
     );
+}
+
+function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding']) {
+    return render(wizardTree(ui, initialEntries));
 }
 
 describe('OnboardingWizardPage — part 1', () => {
@@ -523,5 +553,42 @@ describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
         mockUseAuth.mockReturnValue({ user: newUser });
         renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar']);
         expect(screen.queryByRole('dialog'), 'the seek needs the final step list').toBeNull();
+    });
+
+    it('waits for the character-step queries: games that load after the overview still land on Calendar', () => {
+        const wow = { id: 9, name: 'World of Warcraft', shortName: 'WoW', hasRoles: true };
+        const registry = vi.mocked(useGameRegistry);
+        const hearted = vi.mocked(useUserHeartedGames);
+        registry.mockReturnValue({ games: [], isLoading: true } as unknown as ReturnType<typeof useGameRegistry>);
+        hearted.mockReturnValue({ data: undefined, isLoading: true } as unknown as ReturnType<typeof useUserHeartedGames>);
+        mockUseAuth.mockReturnValue({ user: newUser });
+        const client = createQueryClient();
+        const url = ['/onboarding?resume=calendar&connected=google'];
+        const { rerender } = render(wizardTree(<OnboardingWizardPage />, url, client));
+        registry.mockReturnValue({ games: [wow], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+        hearted.mockReturnValue({ data: { data: [{ name: 'World of Warcraft' }] }, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
+        rerender(wizardTree(<OnboardingWizardPage />, url, client));
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'Games, WoW, Game Time, Calendar → step 4 of 6').toHaveTextContent('Step 4 of 6');
+        expect(screen.getByTestId('calendar-step-stub'), 'the late character step must not push Calendar off').toBeInTheDocument();
+        registry.mockReturnValue({ games: [], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+        hearted.mockReturnValue({ data: undefined, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
+    });
+
+    it('Escape in a dialog opened from the Calendar step closes only the dialog, never Skip All', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar']);
+        fireEvent.click(screen.getByRole('button', { name: 'Open stub dialog' }));
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(screen.queryByTestId('calendar-stub-dialog'), 'Escape closes the top dialog').toBeNull();
+        expect(mockNavigate, 'the same Escape must not skip onboarding').not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(mockNavigate, 'with no dialog open, Escape still skips all').toHaveBeenCalledWith('/calendar', { replace: true });
+    });
+
+    it('a resume with no Calendar step (switch off) strips connected / error with resume', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: true };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&error=denied']);
+        expect(screen.getByTestId('location'), 'no step is there to strip the OAuth params').toHaveTextContent(/^\/onboarding$/);
     });
 });

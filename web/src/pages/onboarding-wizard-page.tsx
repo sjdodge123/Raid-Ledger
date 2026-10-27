@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useCompleteOnboardingFte } from '../hooks/use-onboarding-fte';
@@ -21,12 +21,16 @@ import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs
 import { useConditionalStepFlags, type ConditionalStepFlags } from './onboarding-wizard/use-conditional-step-flags';
 import { useResumeCalendar, useStepResume } from './onboarding-wizard/use-step-resume';
 import { consumePendingPollShare } from '../lib/poll-share-redirect';
+import { useEscapeLayer } from '../hooks/use-escape-layer';
 
-/** Resolves hearted games against the game registry to find qualifying games */
-function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
-    const { games: registryGames } = useGameRegistry();
-    const { data: heartedGamesData } = useUserHeartedGames(userId);
-    return useMemo(() => {
+/**
+ * Resolves hearted games against the game registry to find qualifying games.
+ * `settled`: both queries answered, so no character step can still appear (ROK-2022 resume).
+ */
+function useQualifyingGames(userId: number | undefined): { games: GameRegistryDto[]; settled: boolean } {
+    const { games: registryGames, isLoading: registryLoading } = useGameRegistry();
+    const { data: heartedGamesData, isLoading: heartedLoading } = useUserHeartedGames(userId);
+    const games = useMemo(() => {
         const hearted = heartedGamesData?.data ?? [];
         if (hearted.length === 0 || registryGames.length === 0) return [];
         const registryByName = new Map(registryGames.map((g) => [g.name.toLowerCase(), g]));
@@ -34,6 +38,7 @@ function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
             .map((h) => registryByName.get(h.name.toLowerCase()))
             .filter((g): g is GameRegistryDto => !!g && g.hasRoles);
     }, [heartedGamesData, registryGames]);
+    return { games, settled: !registryLoading && !heartedLoading };
 }
 
 type StepFlags = Omit<ConditionalStepFlags, 'settled'>;
@@ -67,18 +72,22 @@ function buildSteps(
     return s;
 }
 
-/** The settled flag + the ordered step list for this user (conditional steps + one per character). */
+/**
+ * The ordered step list for this user (conditional steps + one per character). `settled`: the
+ * conditional steps are final. `resumeReady`: so are the character steps before Calendar, which
+ * a `?resume=calendar` seek needs, or a late character step would push Calendar off the index.
+ */
 function useWizardSteps(
     user: { id: number; discordId: string } | null, extraCharCounts: Record<string, number>, resumeCalendar: boolean,
-): { steps: StepDef[]; settled: boolean } {
+): { steps: StepDef[]; settled: boolean; resumeReady: boolean } {
     const { needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect, settled } =
         useConditionalStepFlags(user, { resumeCalendar });
-    const qualifyingGames = useQualifyingGames(user?.id);
+    const { games: qualifyingGames, settled: gamesSettled } = useQualifyingGames(user?.id);
     const steps = useMemo(
         () => buildSteps({ needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect }, qualifyingGames, extraCharCounts),
         [needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect, qualifyingGames, extraCharCounts],
     );
-    return { steps, settled };
+    return { steps, settled, resumeReady: settled && gamesSettled };
 }
 
 /** Navigation: go next with validation, go back */
@@ -191,12 +200,13 @@ export function OnboardingWizardPage(): JSX.Element | null {
     const [currentStep, setCurrentStep] = useState(0);
     const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
     const stepValidatorRef = useRef<(() => boolean) | null>(null);
-    const { steps, settled } = useWizardSteps(user ?? null, extraCharCounts, resumeCalendar);
-    useStepResume(resumeCalendar, settled, steps, setCurrentStep);
+    const { steps, settled, resumeReady } = useWizardSteps(user ?? null, extraCharCounts, resumeCalendar);
+    const ready = resumeCalendar ? resumeReady : settled;
+    useStepResume(resumeCalendar, ready, steps, setCurrentStep);
     const { goNext, goSkip, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
     const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
     const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
-    useEscapeDismiss(handleSkipAll, settled);
+    useEscapeDismiss(handleSkipAll, ready);
 
     // TDB:982: once Complete / Skip All is in flight or done, its own navigate owns the redirect
     // (maybe an invite claim). The auth/me patch landing with it must not trip this one first.
@@ -204,7 +214,7 @@ export function OnboardingWizardPage(): JSX.Element | null {
     if (shouldRedirect) return <Navigate to="/calendar" replace />;
     // Tech-debt [12]: the step list must be final before step 1 shows —
     // design-system §4.6, `null` while a gate query resolves.
-    if (!settled) return null;
+    if (!ready) return null;
 
     return (
         <WizardShell currentStep={currentStep} steps={steps} isFinalStep={currentStep === steps.length - 1}
@@ -220,14 +230,11 @@ export function OnboardingWizardPage(): JSX.Element | null {
  * Dismiss wizard on Escape key — only once `enabled` (the step list has
  * settled). Hooks run before the `!settled` blank render, so without the
  * gate a stray Escape would skip onboarding before any step was shown.
+ * The wizard is an overlay layer (ROK-1738): a dialog opened from a step
+ * (Calendar's Apple connect) is the top layer, so its Escape closes only it.
  */
 function useEscapeDismiss(onDismiss: () => void, enabled: boolean): void {
-    useEffect(() => {
-        if (!enabled) return;
-        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss(); };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onDismiss, enabled]);
+    useEscapeLayer(enabled, onDismiss);
 }
 
 /** Full wizard dialog shell */
