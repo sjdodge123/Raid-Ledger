@@ -15,6 +15,7 @@ import App from './App.tsx';
 import { ErrorFallback } from './components/ErrorFallback';
 import { systemStatusQueryOptions } from './hooks/use-system-status';
 import { Sentry, bufferBoundaryError, captureReactError } from './sentry';
+import { prefetchEventRoutes } from './lazy-routes';
 // ROK-1366 / ROK-1754: third-party tooltips.js is injected only now — after
 // the fragment strip (main.tsx's first import) AND after App's graph above
 // ran native-fetch.ts, so it can never patch fetch/XHR before the capture.
@@ -49,4 +50,7 @@ export function mountApp(status: SystemStatusDto | null): void {
             </Sentry.ErrorBoundary>
         </StrictMode>,
     );
+
+    // ROK-1901: the event routes are lazy chunks now; warm them once idle.
+    prefetchEventRoutes();
 }

@@ -9,11 +9,8 @@ import { getAuthToken } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
-import { ProfileSubmenuContent, AdminSubmenuContent } from './more-drawer-submenus';
 import { ImpersonateSection } from './more-drawer-impersonate';
-import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
-import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckStep';
-import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
+import { LazyAdminSubmenuContent, LazyGameTimeDrawer, LazyProfileSubmenuContent, prefetchMoreDrawerContent } from './more-drawer-lazy';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { PluginSlot } from '../../plugins';
 
@@ -89,7 +86,7 @@ function UserProfileAccordion({ user, avatarUrl, avatarError, onAvatarError, exp
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
-            {expanded && <ProfileSubmenuContent pathname={pathname} onClose={onClose} onOpenGameTime={onOpenGameTime} />}
+            {expanded && <LazyProfileSubmenuContent pathname={pathname} onClose={onClose} onOpenGameTime={onOpenGameTime} />}
         </div>
     );
 }
@@ -108,7 +105,7 @@ function AdminAccordion({ expanded, onToggle, pathname, onClose }: {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
-            {expanded && <AdminSubmenuContent pathname={pathname} onClose={onClose} />}
+            {expanded && <LazyAdminSubmenuContent pathname={pathname} onClose={onClose} />}
         </div>
     );
 }
@@ -190,6 +187,8 @@ function useMoreDrawerState(isOpen: boolean, onClose: () => void) {
     const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
     useCloseOnRouteChange(location.pathname, onClose);
     useDrawerKeyboardAndScroll(isOpen, onClose);
+    // ROK-1901: the submenus + game-time editor are a lazy chunk; warm it on open.
+    useEffect(() => { if (isOpen) prefetchMoreDrawerContent(); }, [isOpen]);
     const { data: impersonateUsers } = useImpersonateUsers(user, isImpersonating);
     const accordion = useDrawerAccordionState(isOpen, location.pathname);
     const avatarUrl = user ? resolveAvatar(toAvatarUser(user)).url : null;
@@ -197,24 +196,6 @@ function useMoreDrawerState(isOpen: boolean, onClose: () => void) {
     const handleImpersonate = async (userId: number) => { onClose(); await impersonate(userId); };
     const handleExitImpersonation = async () => { onClose(); await exitImpersonation(); };
     return { location, user, isAuthenticated, isImpersonating, trapRef, impersonateUsers, accordion, avatarUrl, handleLogout, handleImpersonate, handleExitImpersonation };
-}
-
-/**
- * The game-time editor, hosted OUTSIDE the drawer panel (ROK-1584 §3).
- *
- * The panel itself is `invisible pointer-events-none` once closed, and the row
- * closes it on tap — so the sheet has to be a sibling, not a child, or it would
- * open into a hidden subtree. Same drawer the profile route mounts.
- */
-function GameTimeDrawer({ onClose }: { onClose: () => void }) {
-    return (
-        <GameTimeCheckSheet
-            isOpen
-            title="My game time"
-            onClose={onClose}
-            body={<PhoneWeekCheckStep variant="profile" hours={PROFILE_HOURS} />}
-        />
-    );
 }
 
 export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps) {
@@ -233,7 +214,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
                     <MoreDrawerBody s={s} onClose={onClose} onFeedbackClick={onFeedbackClick} onOpenGameTime={openGameTime} />
                 </div>
             </div>
-            {gameTimeOpen && <GameTimeDrawer onClose={() => setGameTimeOpen(false)} />}
+            {gameTimeOpen && <LazyGameTimeDrawer onClose={() => setGameTimeOpen(false)} />}
         </>
     );
 }

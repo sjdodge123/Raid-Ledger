@@ -51,6 +51,29 @@ export const InvitePage = lazyWithRetry(() =>
 export const CalendarPage = lazyWithRetry(() =>
     import('./pages/calendar-page').then((m) => ({ default: m.CalendarPage })),
 );
+/**
+ * ROK-1901: `/events` and `/events/:id` left the app-entry chunk (−45 KB gz).
+ * `prefetchEventRoutes()` warms both once the shell is idle, so following an
+ * event link rarely shows the route spinner.
+ */
+const loadEventsPage = () => import('./pages/events-page');
+const loadEventDetailPage = () => import('./pages/event-detail-page');
+export const EventsPage = lazyWithRetry(() =>
+    loadEventsPage().then((m) => ({ default: m.EventsPage })),
+);
+export const EventDetailPage = lazyWithRetry(() =>
+    loadEventDetailPage().then((m) => ({ default: m.EventDetailPage })),
+);
+
+/** Idle-prefetch the event route chunks; a failure is ignored (the route retries on navigation). */
+export function prefetchEventRoutes(): void {
+    const run = () => {
+        loadEventsPage().catch(() => undefined);
+        loadEventDetailPage().catch(() => undefined);
+    };
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 5000 });
+    else window.setTimeout(run, 2000);
+}
 export const CreateEventPage = lazyWithRetry(() =>
     import('./pages/create-event-page').then((m) => ({ default: m.CreateEventPage })),
 );
