@@ -10,7 +10,7 @@ import type {
 import {
   indexBaseSums,
   indexItemSums,
-  matchDayBase,
+  matchDayBases,
   toTrend,
 } from './valheim-materials-trend.mappers';
 import { withMaterialsTrend } from './valheim-materials-bases.service-helpers';
@@ -83,6 +83,17 @@ describe('toTrend (D10, D12, AC3)', () => {
     expect(keys).not.toContain('Coins');
   });
 
+  it('a `__proto__` prefab keeps its gain through serialisation (Codex P2)', () => {
+    const totals = indexItemSums([
+      item(3, '__proto__', 4),
+      item(4, '__proto__', 9),
+    ]).shared;
+    const t = toTrend(DAYS.slice(0, 2), totals, new Set(['__proto__']));
+    expect(JSON.parse(JSON.stringify(t))).toEqual({
+      days: [{ date: '2026-10-17', gains: JSON.parse('{"__proto__":5}') }],
+    });
+  });
+
   it('zero or one header day → undefined (no field)', () => {
     expect(toTrend([], shared, SHOWN)).toBeUndefined();
     expect(toTrend(DAYS.slice(0, 1), shared, SHOWN)).toBeUndefined();
@@ -115,36 +126,59 @@ const baseRow = (
   baseZ: 0,
 });
 
-describe('matchDayBase (OPEN-1)', () => {
+describe('matchDayBases (OPEN-1, one-to-one)', () => {
   const idx = indexBaseSums([
     baseRow(1, KEY_OLD, 10, 5),
     baseRow(1, KEY_FAR, 200, 9),
     baseRow(2, KEY_A, 0, 8),
   ]);
   const anchor = { key: KEY_A, x: 0, z: 0 };
-  const current = new Set([KEY_A]);
   const day = (id: number) => idx.get(id) ?? new Map();
+  const wood = (
+    m: Map<string, { totals: { shared: Map<string, number> } } | null>,
+  ) => m.get(KEY_A)?.totals.shared.get('Wood');
 
   it('same key wins', () => {
-    expect(
-      matchDayBase(day(2), anchor, current)?.totals.shared.get('Wood'),
-    ).toBe(8);
+    expect(wood(matchDayBases(day(2), [anchor]))).toBe(8);
   });
 
-  it('else the nearest base within 64 m whose key is not one of today', () => {
-    expect(
-      matchDayBase(day(1), anchor, current)?.totals.shared.get('Wood'),
-    ).toBe(5);
-    expect(
-      matchDayBase(day(1), anchor, new Set([KEY_A, KEY_OLD])),
-    ).toBeUndefined();
+  it('else the nearest unclaimed base within 64 m', () => {
+    expect(wood(matchDayBases(day(1), [anchor]))).toBe(5);
+    // KEY_OLD is still a base today → claimed by its own key, not a fallback.
+    const old = { key: KEY_OLD, x: 10, z: 0 };
+    expect(matchDayBases(day(1), [anchor, old]).get(KEY_A)).toBeUndefined();
   });
 
   it('beyond 64 m or without a centroid → no match', () => {
     const far = { key: KEY_A, x: 500, z: 0 };
-    expect(matchDayBase(day(1), far, current)).toBeUndefined();
+    expect(matchDayBases(day(1), [far]).size).toBe(0);
     const nan = { key: KEY_A, x: Number.NaN, z: Number.NaN };
-    expect(matchDayBase(day(1), nan, current)).toBeUndefined();
+    expect(matchDayBases(day(1), [nan]).size).toBe(0);
+  });
+
+  it('a base that split links to neither half: both ambiguous (null)', () => {
+    const halves = [
+      { key: KEY_A, x: 0, z: 0 },
+      { key: 'D'.repeat(22), x: 20, z: 0 },
+    ];
+    expect([...matchDayBases(day(1), halves)]).toEqual([
+      [KEY_A, null],
+      ['D'.repeat(22), null],
+    ]);
+  });
+
+  it('two drifted bases each keep their own nearest day base', () => {
+    const two = indexBaseSums([
+      baseRow(1, KEY_OLD, 0, 5),
+      baseRow(1, KEY_FAR, 200, 9),
+    ]);
+    const now = [
+      { key: KEY_A, x: 5, z: 0 },
+      { key: 'D'.repeat(22), x: 205, z: 0 },
+    ];
+    const m = matchDayBases(two.get(1) ?? new Map(), now);
+    expect(wood(m)).toBe(5);
+    expect(m.get('D'.repeat(22))?.totals.shared.get('Wood')).toBe(9);
   });
 });
 
@@ -235,5 +269,32 @@ describe('withMaterialsTrend', () => {
       { days: DAYS, items: ITEMS, bases },
     );
     expect(out.personal).toBeNull();
+  });
+});
+
+describe('withMaterialsTrend — base split', () => {
+  it('a base split into two halves reads no trend on either (Codex P2)', () => {
+    const res = response();
+    const half = (key: string, x: number) => ({
+      key,
+      x,
+      z: 0,
+      chestCount: 1,
+      vehicleCount: 0,
+      totals: [stack('Wood', 10)],
+    });
+    res.bases = [half(KEY_A, -20), half(KEY_FAR, 20)];
+    const split: TrendBaseSumRow[] = [
+      baseRow(3, KEY_OLD, 0, 20), // one base of 20 Wood yesterday
+      baseRow(4, KEY_A, -20, 10),
+      baseRow(4, KEY_FAR, 20, 10),
+    ];
+    const out = withMaterialsTrend(res, {
+      days: DAYS,
+      items: ITEMS,
+      bases: split,
+    });
+    // Old matcher: both halves claimed the 20 → two −10 trends.
+    expect(out.bases?.map((b) => b.trend ?? null)).toEqual([null, null]);
   });
 });

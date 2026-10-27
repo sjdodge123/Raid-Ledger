@@ -33,12 +33,14 @@ import { toCount } from './valheim-materials.mappers';
 import type { TrendInputs } from './valheim-materials-trend.queries';
 import {
   baseDayTotals,
+  indexBaseMatches,
   indexBaseSums,
   indexItemSums,
   shownOf,
   toTrend,
   trendField,
   type BaseAnchor,
+  type BaseMatches,
 } from './valheim-materials-trend.mappers';
 
 /** Where a chest sits: its base (null = away from bases) and its number. */
@@ -138,9 +140,8 @@ export function materialsBases(
 interface TrendCtx {
   days: TrendInputs['days'];
   items: ReturnType<typeof indexItemSums>;
-  baseIdx: ReturnType<typeof indexBaseSums>;
-  current: Set<string>;
-  anchors: Map<string, BaseAnchor>;
+  /** One-to-one, shared by `bases[]` and `byBase[]` (OPEN-1). */
+  matches: BaseMatches;
 }
 
 type Seg = 'shared' | 'personal';
@@ -150,26 +151,34 @@ const itemTrend = (ctx: TrendCtx, seg: Seg, t: ValheimMaterialStack[]) =>
 
 function baseTrend(
   ctx: TrendCtx,
-  anchor: BaseAnchor,
+  key: string,
   seg: Seg,
   t: ValheimMaterialStack[],
 ) {
-  const totals = baseDayTotals(ctx.baseIdx, anchor, ctx.current, seg);
+  const totals = baseDayTotals(ctx.matches, key, seg);
+  if (!totals) return {};
   return trendField(toTrend(ctx.days, totals, shownOf(t)));
 }
 
-/** A byBase row near no base gets no trend; a missing anchor = key only. */
+/** A byBase row near no base gets no trend. */
 function byBaseTrend(
   ctx: TrendCtx,
   row: ValheimMaterialsPersonalBase,
 ): ValheimMaterialsPersonalBase {
   if (row.base === null) return row;
-  const anchor = ctx.anchors.get(row.base) ?? {
-    key: row.base,
-    x: Number.NaN,
-    z: Number.NaN,
-  };
-  return { ...row, ...baseTrend(ctx, anchor, 'personal', row.totals) };
+  return { ...row, ...baseTrend(ctx, row.base, 'personal', row.totals) };
+}
+
+/** Today's bases, plus any byBase key outside them (no centroid = key only). */
+function anchorsOf(res: ValheimMaterialsResponse): BaseAnchor[] {
+  const out = new Map<string, BaseAnchor>(
+    (res.bases ?? []).map((b) => [b.key, { key: b.key, x: b.x, z: b.z }]),
+  );
+  for (const r of res.personal?.byBase ?? []) {
+    if (r.base !== null && !out.has(r.base))
+      out.set(r.base, { key: r.base, x: Number.NaN, z: Number.NaN });
+  }
+  return [...out.values()];
 }
 
 function personalWithTrend(
@@ -198,15 +207,13 @@ export function withMaterialsTrend(
   const ctx: TrendCtx = {
     days: input.days,
     items: indexItemSums(input.items),
-    baseIdx: indexBaseSums(input.bases),
-    current: new Set(bases.map((b) => b.key)),
-    anchors: new Map(bases.map((b) => [b.key, b])),
+    matches: indexBaseMatches(indexBaseSums(input.bases), anchorsOf(res)),
   };
   const withBases = res.bases
     ? {
         bases: bases.map((b) => ({
           ...b,
-          ...baseTrend(ctx, b, 'shared', b.totals),
+          ...baseTrend(ctx, b.key, 'shared', b.totals),
         })),
       }
     : {};

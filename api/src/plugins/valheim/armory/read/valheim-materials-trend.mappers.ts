@@ -4,7 +4,8 @@
  * counts 0); the oldest header only serves as a baseline, so fewer than two
  * days → no trend (field omitted, AC3). D12: gains only name prefabs of the
  * row set the trend sits beside. OPEN-1: a base is matched across days by
- * key, else by the nearest unclaimed centroid within {@link BASE_LINK_METRES}.
+ * key, else by the nearest unclaimed centroid within {@link BASE_LINK_METRES},
+ * one-to-one ({@link matchDayBases}).
  */
 import type {
   ValheimMaterialStack,
@@ -90,14 +91,22 @@ export function indexBaseSums(
 const newestFirst = (days: readonly TrendDayRow[]): TrendDayRow[] =>
   [...days].sort((a, b) => (a.playDate < b.playDate ? 1 : -1));
 
-function dayGains(cur: Totals, prev: Totals, shown: ReadonlySet<string>) {
-  const gains: Record<string, number> = {};
+/**
+ * Built with `Object.fromEntries` (own data properties), never `gains[k] =`:
+ * a `__proto__` prefab would hit the prototype setter and vanish.
+ */
+function dayGains(
+  cur: Totals,
+  prev: Totals,
+  shown: ReadonlySet<string>,
+): Record<string, number> {
+  const gains: [string, number][] = [];
   for (const prefab of new Set([...cur.keys(), ...prev.keys()])) {
     if (!shown.has(prefab)) continue;
     const delta = (cur.get(prefab) ?? 0) - (prev.get(prefab) ?? 0);
-    if (delta !== 0) gains[prefab] = delta;
+    if (delta !== 0) gains.push([prefab, delta]);
   }
-  return gains;
+  return Object.fromEntries(gains);
 }
 
 /** D10 + D12. `totals` may lack a day (nothing in scope that day = 0). */
@@ -124,39 +133,111 @@ export function toTrend(
 
 const LINK_SQ = BASE_LINK_METRES * BASE_LINK_METRES;
 
-/**
- * OPEN-1: the day's base for `anchor` — same key, else the nearest base
- * within 64 m whose key is not one of today's (`current`); tie → smaller key.
- */
-export function matchDayBase(
-  day: ReadonlyMap<string, DayBase>,
-  anchor: BaseAnchor,
-  current: ReadonlySet<string>,
-): DayBase | undefined {
-  const same = day.get(anchor.key);
-  if (same) return same;
-  let best: { key: string; d: number; base: DayBase } | undefined;
-  for (const [key, base] of day) {
-    if (current.has(key)) continue;
-    const d = (base.x - anchor.x) ** 2 + (base.z - anchor.z) ** 2;
-    if (!(d <= LINK_SQ)) continue;
-    if (!best || d < best.d || (d === best.d && key < best.key)) {
-      best = { key, d, base };
-    }
-  }
-  return best?.base;
+/** A centroid fallback candidate: today's base `anchor` ↔ the day's `hist`. */
+interface LinkPair {
+  anchor: string;
+  hist: string;
+  d: number;
+  base: DayBase;
 }
 
-/** One base's per-day totals in one segment, matched day by day. */
-export function baseDayTotals(
+const byDistance = (a: LinkPair, b: LinkPair): number =>
+  a.d - b.d ||
+  (a.hist < b.hist ? -1 : a.hist > b.hist ? 1 : 0) ||
+  (a.anchor < b.anchor ? -1 : a.anchor > b.anchor ? 1 : 0);
+
+function fallbackPairs(
+  day: ReadonlyMap<string, DayBase>,
+  open: readonly BaseAnchor[],
+  claimed: ReadonlySet<string>,
+): LinkPair[] {
+  const pairs: LinkPair[] = [];
+  for (const [hist, base] of day) {
+    if (claimed.has(hist)) continue;
+    for (const a of open) {
+      const d = (base.x - a.x) ** 2 + (base.z - a.z) ** 2;
+      if (d <= LINK_SQ) pairs.push({ anchor: a.key, hist, d, base });
+    }
+  }
+  return pairs.sort(byDistance);
+}
+
+/** Historical keys within reach of two or more of today's unmatched bases. */
+function contestedOf(pairs: readonly LinkPair[]): Set<string> {
+  const seen = new Map<string, string>();
+  const out = new Set<string>();
+  for (const p of pairs) {
+    const first = seen.get(p.hist);
+    if (first === undefined) seen.set(p.hist, p.anchor);
+    else if (first !== p.anchor) out.add(p.hist);
+  }
+  return out;
+}
+
+/**
+ * OPEN-1, one-to-one: today's base key → the day's base. Same key first;
+ * else the nearest unclaimed base within 64 m (tie → smaller key). Each of
+ * the day's bases links to at most one of today's. One that two of today's
+ * unmatched bases could both claim (a split) links to neither, and those
+ * bases map to `null` (ambiguous → no trend): an unchanged inventory must
+ * never read as a drop, nor a gain. No entry = no base that day (counts 0).
+ * NaN centroid = key only.
+ */
+export function matchDayBases(
+  day: ReadonlyMap<string, DayBase>,
+  anchors: readonly BaseAnchor[],
+): Map<string, DayBase | null> {
+  const out = new Map<string, DayBase | null>();
+  for (const a of anchors) {
+    const same = day.get(a.key);
+    if (same) out.set(a.key, same);
+  }
+  const claimed = new Set(out.keys());
+  const pairs = fallbackPairs(
+    day,
+    anchors.filter((a) => !out.has(a.key)),
+    claimed,
+  );
+  const contested = contestedOf(pairs);
+  for (const p of pairs) {
+    if (contested.has(p.hist) || claimed.has(p.hist) || out.has(p.anchor))
+      continue;
+    out.set(p.anchor, p.base);
+    claimed.add(p.hist);
+  }
+  for (const p of pairs) {
+    if (contested.has(p.hist) && !out.has(p.anchor)) out.set(p.anchor, null);
+  }
+  return out;
+}
+
+/** day id → today's base key → that day's matched base (built once). */
+export type BaseMatches = Map<number, Map<string, DayBase | null>>;
+
+export function indexBaseMatches(
   index: ReadonlyMap<number, ReadonlyMap<string, DayBase>>,
-  anchor: BaseAnchor,
-  current: ReadonlySet<string>,
-  seg: Segment,
-): DayTotals {
-  const out: DayTotals = new Map();
+  anchors: readonly BaseAnchor[],
+): BaseMatches {
+  const out: BaseMatches = new Map();
   for (const [dayId, day] of index) {
-    const hit = matchDayBase(day, anchor, current);
+    out.set(dayId, matchDayBases(day, anchors));
+  }
+  return out;
+}
+
+/**
+ * One base's per-day totals in one segment, from the shared matching;
+ * undefined when any day's match is ambiguous (the base gets no trend).
+ */
+export function baseDayTotals(
+  matches: BaseMatches,
+  key: string,
+  seg: Segment,
+): DayTotals | undefined {
+  const out: DayTotals = new Map();
+  for (const [dayId, day] of matches) {
+    const hit = day.get(key);
+    if (hit === null) return undefined;
     if (hit) out.set(dayId, hit.totals[seg]);
   }
   return out;
