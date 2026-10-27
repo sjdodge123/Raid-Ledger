@@ -1814,6 +1814,13 @@
       "when": 1792915473990,
       "tag": "0259_companion_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1793073149619,
+      "tag": "0260_lucky_lester",
+      "breakpoints": true
     }
   ]
 }
