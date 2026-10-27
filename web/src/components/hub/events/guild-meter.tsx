@@ -4,14 +4,17 @@
  * one; tokens only, so it reads in every scheme. ROK-1840 gave it a second
  * adopter (the hub setup checklist's progress bar), so it is now listed in
  * design-system.md §3.2 — reuse it rather than hand-rolling a track + fill.
+ * ROK-1905 added the `neutral` tone (`bg-secondary` fill) for plain counts
+ * such as the Forever class breakdown, where green would read as "good".
  */
 import type { JSX } from 'react';
 
-export type MeterTone = 'success' | 'warning';
+export type MeterTone = 'success' | 'warning' | 'neutral';
 
 const METER_FILL: Record<MeterTone, string> = {
     success: 'bg-success',
     warning: 'bg-warning',
+    neutral: 'bg-secondary',
 };
 
 export function GuildMeter({ pct, tone = 'success', label }: { pct: number; tone?: MeterTone; label: string }): JSX.Element {
