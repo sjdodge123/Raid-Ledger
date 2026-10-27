@@ -93,6 +93,13 @@ describe('WhosSavedWidget', () => {
         expect(within(list).getAllByRole('button').map((b) => b.textContent?.split(/\d/)[0])).toEqual(['Molten Core', 'Blackwing Lair', 'Onyxia']);
     });
 
+    it('left-aligns each instance header and stretches its label so name and count span the row', async () => {
+        server.use(rosterInsightsHandler({ all: LOCKOUTS_FIXTURE }));
+        renderWidget();
+        const mc = await screen.findByRole('button', { name: /Molten Core/ });
+        expect(mc).toHaveClass('justify-start', '[&>[data-button-label]]:w-full');
+    });
+
     it('drops a lockout the cached payload still carries once its reset has passed', async () => {
         server.use(rosterInsightsHandler({ all: LOCKOUTS_FIXTURE }));
         renderWidget();

@@ -61,7 +61,7 @@ function LockoutRow({ lockout, nowMs }: { lockout: RosterLockout; nowMs: number 
     return (
         <li className="py-1.5">
             <Button type="button" variant="bare" fullWidth aria-expanded={open} onClick={() => setOpen((v) => !v)}
-                className="min-h-11 rounded-sm text-left text-sm hover:opacity-80">
+                className="min-h-11 justify-start rounded-sm text-left text-sm hover:opacity-80 [&>[data-button-label]]:w-full">
                 <span className="flex w-full flex-col gap-0.5">
                     <span className="flex w-full items-center justify-between gap-2">
                         <span className="min-w-0 truncate font-medium text-foreground">{lockout.name}</span>
