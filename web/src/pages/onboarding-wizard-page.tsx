@@ -14,10 +14,12 @@ import { CharacterStep } from '../components/onboarding/character-step';
 import { GameTimeStep } from '../components/onboarding/gametime-step';
 import { ConnectionStep } from '../components/onboarding/connection-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
+import { CalendarStep } from '../components/onboarding/calendar-step';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import type { StepDef } from './onboarding-wizard/onboarding-types';
 import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
-import { useConditionalStepFlags } from './onboarding-wizard/use-conditional-step-flags';
+import { useConditionalStepFlags, type ConditionalStepFlags } from './onboarding-wizard/use-conditional-step-flags';
+import { useResumeCalendar, useStepResume } from './onboarding-wizard/use-step-resume';
 import { consumePendingPollShare } from '../lib/poll-share-redirect';
 
 /** Resolves hearted games against the game registry to find qualifying games */
@@ -34,9 +36,11 @@ function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
     }, [heartedGamesData, registryGames]);
 }
 
+type StepFlags = Omit<ConditionalStepFlags, 'settled'>;
+
 /** Builds the ordered list of wizard steps from flags and qualifying games */
 function buildSteps(
-    needsConnect: boolean, needsDiscordJoin: boolean, needsSteamConnect: boolean,
+    { needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect }: StepFlags,
     qualifyingGames: GameRegistryDto[], extraCharCounts: Record<string, number>,
 ): StepDef[] {
     const s: StepDef[] = [];
@@ -55,10 +59,26 @@ function buildSteps(
         }
     });
     s.push({ key: 'gametime', label: 'Game Time' });
+    // ROK-2022 (ruling Q1): after Game Time, so it never shifts step 0 while the overview loads.
+    if (needsCalendarConnect) s.push({ key: 'calendar', label: 'Calendar' });
     s.push({ key: 'connection', label: 'Connection' });
     s.push({ key: 'avatar', label: 'Personalize' });
     if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
     return s;
+}
+
+/** The settled flag + the ordered step list for this user (conditional steps + one per character). */
+function useWizardSteps(
+    user: { id: number; discordId: string } | null, extraCharCounts: Record<string, number>, resumeCalendar: boolean,
+): { steps: StepDef[]; settled: boolean } {
+    const { needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect, settled } =
+        useConditionalStepFlags(user, { resumeCalendar });
+    const qualifyingGames = useQualifyingGames(user?.id);
+    const steps = useMemo(
+        () => buildSteps({ needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect }, qualifyingGames, extraCharCounts),
+        [needsConnect, needsDiscordJoin, needsSteamConnect, needsCalendarConnect, qualifyingGames, extraCharCounts],
+    );
+    return { steps, settled };
 }
 
 /** Navigation: go next with validation, go back */
@@ -157,25 +177,22 @@ function useCompletionHandlers(completeOnboarding: ReturnType<typeof useComplete
 /**
  * FTE Onboarding Wizard Page (ROK-219 redesign).
  * Step flow: Connect (conditional) -> Games -> Character x N -> Game Time ->
- * Connection -> Personalize
+ * Calendar (conditional, ROK-2022) -> Connection -> Personalize
  * Centered modal overlay. All steps are skippable. Escape dismisses.
- * Re-runnable from settings via /onboarding?rerun=1.
+ * Re-runnable from settings via /onboarding?rerun=1. `?resume=calendar` (the
+ * calendar OAuth return) opens on the Calendar step and also allows a rerun.
  */
 export function OnboardingWizardPage(): JSX.Element | null {
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
     const completeOnboarding = useCompleteOnboardingFte();
-    const isRerun = searchParams.get('rerun') === '1';
-    const { needsConnect, needsDiscordJoin, needsSteamConnect, settled } = useConditionalStepFlags(user ?? null);
-    const qualifyingGames = useQualifyingGames(user?.id);
+    const resumeCalendar = useResumeCalendar();
+    const isRerun = searchParams.get('rerun') === '1' || resumeCalendar;
     const [currentStep, setCurrentStep] = useState(0);
     const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
     const stepValidatorRef = useRef<(() => boolean) | null>(null);
-
-    const steps = useMemo(
-        () => buildSteps(needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts),
-        [needsConnect, needsDiscordJoin, needsSteamConnect, qualifyingGames, extraCharCounts],
-    );
+    const { steps, settled } = useWizardSteps(user ?? null, extraCharCounts, resumeCalendar);
+    useStepResume(resumeCalendar, settled, steps, setCurrentStep);
     const { goNext, goSkip, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
     const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
     const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
@@ -277,6 +294,7 @@ function WizardContent({ currentStepDef, isCharacterStep, stepValidatorRef, addC
                 />
             )}
             {currentStepDef?.key === 'gametime' && <GameTimeStep />}
+            {currentStepDef?.key === 'calendar' && <CalendarStep />}
             {currentStepDef?.key === 'connection' && <ConnectionStep />}
             {currentStepDef?.key === 'avatar' && <AvatarThemeStep />}
         </div>
