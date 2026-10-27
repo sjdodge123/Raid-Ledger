@@ -6,6 +6,7 @@
  */
 import type {
   ValheimCraftingStation,
+  ValheimPiece,
   ValheimRecipe,
   ValheimRecipeResource,
 } from '@raid-ledger/contract';
@@ -57,7 +58,51 @@ function station(
   upgrader: boolean,
 ): ValheimCraftingStation {
   const maxLevel = upgrader ? 4 : 7;
-  return { prefab, name, maxLevel, stackableExtension: false, upgrader, icon: null };
+  return {
+    prefab,
+    name,
+    maxLevel,
+    stackableExtension: false,
+    upgrader,
+    icon: null,
+  };
+}
+
+/** The upgrader is a buildable piece (spec §1.1 hypothesis (c)). */
+const upgraderPiece: ValheimPiece = {
+  prefab: UPGRADER_TEST_STATION,
+  name: 'Upgrade station',
+  category: 'Crafting',
+  tool: 'Hammer',
+  station: 'forge',
+  icon: null,
+  resources: [
+    { prefab: 'Stone', amount: 10, recover: true },
+    { prefab: 'Bronze', amount: 2, recover: true },
+  ],
+};
+
+function recipes(): ValheimRecipe[] {
+  return [
+    recipe(
+      'Recipe_ArmorBronzeChest',
+      'ArmorBronzeChest',
+      UPGRADER_TEST_STATION,
+      [
+        resource('Bronze', 5, 3),
+        resource('DeerHide', 2, 0),
+        resource('Upgrader1Armor', 1, 0, true),
+      ],
+    ),
+    recipe('Recipe_SwordBronze', 'SwordBronze', 'forge', [
+      resource('Bronze', 8, 4),
+      resource('Wood', 2, 0),
+    ]),
+    recipe('Recipe_Bronze', 'Bronze', 'forge', [
+      resource('Copper', 2, 0),
+      resource('Tin', 1, 0),
+    ]),
+  ];
 }
 
 /** Bronze cuirass at the upgrader, a Bronze sword at the (plain) forge, Bronze at the forge. */
@@ -68,35 +113,8 @@ export function upgraderRecipeRows(): RecipeGraphRows {
       station('forge', 'Forge', false),
       station(UPGRADER_TEST_STATION, 'Upgrade station', true),
     ],
-    pieces: [
-      {
-        prefab: UPGRADER_TEST_STATION,
-        name: 'Upgrade station',
-        category: 'Crafting',
-        tool: 'Hammer',
-        station: 'forge',
-        icon: null,
-        resources: [
-          { prefab: 'Stone', amount: 10, recover: true },
-          { prefab: 'Bronze', amount: 2, recover: true },
-        ],
-      },
-    ],
-    recipes: [
-      recipe('Recipe_ArmorBronzeChest', 'ArmorBronzeChest', UPGRADER_TEST_STATION, [
-        resource('Bronze', 5, 3),
-        resource('DeerHide', 2, 0),
-        resource('Upgrader1Armor', 1, 0, true),
-      ]),
-      recipe('Recipe_SwordBronze', 'SwordBronze', 'forge', [
-        resource('Bronze', 8, 4),
-        resource('Wood', 2, 0),
-      ]),
-      recipe('Recipe_Bronze', 'Bronze', 'forge', [
-        resource('Copper', 2, 0),
-        resource('Tin', 1, 0),
-      ]),
-    ],
+    pieces: [upgraderPiece],
+    recipes: recipes(),
     processors: [],
     processes: [],
   };

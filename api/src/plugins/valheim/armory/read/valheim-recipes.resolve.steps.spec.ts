@@ -85,7 +85,8 @@ describe('planSteps — a q3 craft at an upgrade station (AC 1)', () => {
   it('Σ step resources == the node children (D3 invariant)', () => {
     const sums: Record<string, number> = {};
     for (const s of stepsOf(root) ?? []) {
-      for (const r of s.resources) sums[r.prefab] = (sums[r.prefab] ?? 0) + r.amount;
+      for (const r of s.resources)
+        sums[r.prefab] = (sums[r.prefab] ?? 0) + r.amount;
     }
     const children = Object.fromEntries(
       tree.nodes
@@ -99,8 +100,16 @@ describe('planSteps — a q3 craft at an upgrade station (AC 1)', () => {
 
 describe('planSteps — when steps are emitted (D2)', () => {
   it('a q1 craft and a single upgrade step carry no steps key', () => {
-    const q1 = rootOf(resolveTree(graph, target(CHEST, 1), null, q4).nodes, CHEST);
-    const up = resolveTree(graph, target(CHEST, 3, { fromQuality: 2 }), null, q4);
+    const q1 = rootOf(
+      resolveTree(graph, target(CHEST, 1), null, q4).nodes,
+      CHEST,
+    );
+    const up = resolveTree(
+      graph,
+      target(CHEST, 3, { fromQuality: 2 }),
+      null,
+      q4,
+    );
     expect(q1.via).not.toHaveProperty('steps');
     expect(rootOf(up.nodes, CHEST).via).not.toHaveProperty('steps');
   });
