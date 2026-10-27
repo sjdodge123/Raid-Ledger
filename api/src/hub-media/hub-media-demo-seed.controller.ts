@@ -44,6 +44,7 @@ const CAPTIONS: Record<HubMediaKind, string> = {
   death: 'Died to a Troll',
   screenshot: 'Base at sunset',
   image: 'Map sketch',
+  upload: 'Camp at dawn',
 };
 
 /** Generated pictures, no network: the URL's last segment picks the colour + shape. */

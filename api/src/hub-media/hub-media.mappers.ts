@@ -28,5 +28,7 @@ export function toHubMediaItem(
     source: { type: 'discord', label: 'Discord' },
     link,
     hidden: row.hiddenAt !== null,
+    /** Fail-closed until the per-viewer remove check (ROK-1965 D11) lands. */
+    canRemove: false,
   };
 }

@@ -24,7 +24,7 @@ function demoItem(i: number): HubMediaItem {
         id: i + 1, kind, authorName: ['Jasz', 'Brakka', null][i % 3] ?? null, caption: null,
         capturedAt: new Date(Date.now() - (i + 1) * 3_600_000).toISOString(), width: 480, height: 360,
         thumbPath: `/demo/gallery/${i}/thumb`, fullPath: `/demo/gallery/${i}/full`,
-        source: { type: 'discord', label: 'Discord' }, link: null, hidden: i === 4,
+        source: { type: 'discord', label: 'Discord' }, link: null, hidden: i === 4, canRemove: false,
     };
 }
 

@@ -22,6 +22,7 @@ export function hubMediaItem(id: number, kind: HubMediaKind, over: Partial<HubMe
         source: { type: 'discord', label: 'Discord' },
         link: null,
         hidden: false,
+        canRemove: false,
         ...over,
     };
 }
