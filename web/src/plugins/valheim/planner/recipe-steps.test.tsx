@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ValheimPlanStep } from '@raid-ledger/contract';
+import type { ValheimPlanNode, ValheimPlanStep } from '@raid-ledger/contract';
 import { RecipeSteps } from './recipe-steps';
+import { RecipeTree } from './recipe-tree';
 import type { PlannerNames } from './use-planner-names';
 
 const NAMES: Record<string, string> = {
@@ -86,5 +87,24 @@ describe('RecipeSteps', () => {
     it('shows no build disclosure when the response has no build for the station', () => {
         render(<RecipeSteps steps={UPGRADER} builds={undefined} names={names} />);
         expect(screen.queryByRole('button', { name: /^Build / })).not.toBeInTheDocument();
+    });
+});
+
+// ROK-1861 F4: StatusChip is `whitespace-nowrap`, and Tailwind 4 emits that rule AFTER `.whitespace-normal`,
+// so only the important modifier lets "Armor upgrader · Upgrade station · lvl 3" wrap at 375px.
+describe('upgrade-station chips wrap on a phone', () => {
+    const treeNames: PlannerNames = { ...names, ctxFor: () => ({ serverId: 7, items: {}, atlas: null, atlasUrl: null }) };
+    const node: ValheimPlanNode = {
+        id: 1, parentId: null, prefab: 'ArmorBronzeChest', quantity: 1, alternatives: 0, crafts: 1, have: null, short: null,
+        via: {
+            type: 'recipe', recipeId: 'r', station: 'upgrader_test', stationLevel: 3, quality: 3, upgradeOnly: false,
+            formula: 'custom', anyOneOf: false, upgraderStation: true, steps: UPGRADER,
+        },
+    };
+
+    it('the plan-row via-chip and the step chip both carry the wrap override', () => {
+        render(<RecipeTree nodes={[node]} truncated={false} names={treeNames} label="What your list needs" rootKinds={['item']} />);
+        expect(screen.getByText('Armor upgrader · Upgrade station · lvl 3')).toHaveClass('whitespace-normal!');
+        expect(screen.getByText('Upgrade station · lvl 3')).toHaveClass('whitespace-normal!');
     });
 });

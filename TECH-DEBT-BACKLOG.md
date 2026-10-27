@@ -3667,3 +3667,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (surfaced during final review)
 
 - **low** — `web/src/components/admin/PluginCard.tsx`: the legacy admin plugin card is rendered by no route — only its own specs `PluginCard.test.tsx` and `PluginCard.builtin.test.tsx` import it (the live cards are `pages/admin/plugins/PluginCard.tsx` and `components/admin/onboarding/PluginCard.tsx`), so ROK-1969's move of its buttons onto `plugin-lifecycle-actions.tsx` changed nothing a user sees and the next reviewer will again mistake it for the shipped card. Pre-existing dead code, not introduced by this branch. Suggested: delete it with its two specs.
+
+### 2026-10-27 — feat/rok-1861 (surfaced during fleet UI verify step 5 fix)
+
+- **low** `web/src/components/hub/settings/settings-editors.tsx:66` — `<StatusChip … className="whitespace-normal">` is a silent no-op: `StatusChip` (`web/src/components/ui/status-chip.tsx:38`) already carries `whitespace-nowrap`, and Tailwind 4.3.3 emits `.whitespace-nowrap` AFTER `.whitespace-normal` (checked by compiling both classes), so the inactive-editor chip never wraps. Pre-existing: the file is untouched by ROK-1861, which hit the same trap on the planner chips and fixed them with `whitespace-normal!`. Suggested: give `StatusChip` a `wrap` prop (drops `whitespace-nowrap`) and move both call sites onto it, documenting it in `docs/design-system.md` §4.21.
