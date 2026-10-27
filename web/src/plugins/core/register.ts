@@ -13,6 +13,9 @@ import { registerPlugin } from '../plugin-registry';
 import { LazyHubGalleryWidget } from '../../components/hub/gallery/hub-gallery-widget-lazy';
 import { HubGallerySeeAll } from '../../components/hub/gallery/hub-gallery-see-all';
 import { useGalleryWidgetVisible } from '../../components/hub/gallery/use-hub-gallery-visible';
+import { LazyHubSessionNoteWidget } from '../../components/hub/session-note/hub-session-note-widget-lazy';
+import { HubSessionNoteAction } from '../../components/hub/session-note/hub-session-note-action';
+import { useSessionNoteVisible } from '../../components/hub/session-note/use-session-note-visible';
 
 /** Core plugin (ROK-1969, OQ1) — label "Core" matches the arrange-mode owner label; neutral registry colour. */
 const core = registerPlugin(CORE_PLUGIN_ID, {
@@ -38,4 +41,20 @@ core.registerHubWidget({
     component: LazyHubGalleryWidget,
     action: HubGallerySeeAll,
     useVisible: useGalleryWidgetVisible,
+});
+
+// ROK-1968 D9 — "Before next session": one shared note + checklist per hub, on every game and kind
+// (`games`/`kinds` omitted — core only), right after the Leader post. Members read + tick; the route
+// 404s visitors (ruling 3). Members never see it empty; editors get the "Add a note" hint.
+core.registerHubWidget({
+    id: 'session-note',
+    title: 'Before next session',
+    description: 'A shared note and checklist for the next session.',
+    order: 15,
+    span: 1,
+    audience: 'members',
+    defaultOn: true,
+    component: LazyHubSessionNoteWidget,
+    action: HubSessionNoteAction,
+    useVisible: useSessionNoteVisible,
 });
