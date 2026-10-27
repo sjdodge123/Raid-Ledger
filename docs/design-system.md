@@ -1765,5 +1765,5 @@ viewer. **Light / Dark** — tokens only (`border-edge`, `bg-panel`, `text-secon
   bad. Tokens only, so it reads in every scheme; check `default-dark` AND `default-light`.
 
 **DO** — use it for ≤ ~10 buckets of one count. **DON'T** — add per-bar colours, use it for a single proportion
-(that is a `GuildMeter`), or reach for a chart library inside a hub widget. No `/dev/design-system` demo yet;
-live on a Forever guild hub Overview.
+(that is a `GuildMeter`), or reach for a chart library inside a hub widget. Sample: `/dev/design-system` → "Pattern — meter
+tones and CSS histogram" (`meter-histogram-section.tsx`, static data); live on a Forever guild hub Overview.

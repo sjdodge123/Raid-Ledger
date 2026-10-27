@@ -36,6 +36,9 @@ const CalendarLayerSection = lazy(() => import('./calendar-layer-section')
 const CalendarHubSection = lazy(() => import('./calendar-hub-section')
     .then((m) => ({ default: m.CalendarHubSection })));
 
+const MeterHistogramSection = lazy(() => import('./meter-histogram-section')
+    .then((m) => ({ default: m.MeterHistogramSection })));
+
 function SamplesLoading(): JSX.Element {
     return <p className="text-sm text-muted">Loading samples…</p>;
 }
@@ -55,6 +58,7 @@ const NAV = [
     { id: 'calendar-hub', label: 'Hub suffix' },
     { id: 'map-viewport', label: 'Map viewport' },
     { id: 'hub-widgets', label: 'Hub widgets' },
+    { id: 'meter-histogram', label: 'Meter + histogram' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -111,6 +115,9 @@ function Sections(): JSX.Element {
             <MapViewportSection />
             <SkillTrendSection />
             <HubWidgetsSection />
+            <Suspense fallback={<SamplesLoading />}>
+                <MeterHistogramSection />
+            </Suspense>
             <ArrangeListSection />
         </>
     );
