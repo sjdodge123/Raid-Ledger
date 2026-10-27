@@ -45,7 +45,7 @@ export interface MintCalendarOAuthStateInput {
   /** D8 consent intent; defaults to `connect`. */
   intent?: CalendarOAuthIntent;
   /** ROK-2022: where the callback lands; absent = My Integrations. */
-  returnTarget?: CalendarOAuthReturn;
+  returnTarget?: CalendarOAuthReturn | undefined;
   /** Sets the browser-binding cookie and returns its `r`. */
   bindToBrowser: () => string;
   nowMs?: number;
@@ -72,13 +72,16 @@ export interface VerifiedCalendarOAuthState {
   returnTarget?: CalendarOAuthReturn;
 }
 
-/** Absent claim → `{}`; unknown value → null (the whole state fails). */
-function parseReturnClaim(
-  t: unknown,
-): { returnTarget?: CalendarOAuthReturn } | null {
-  if (t === undefined) return {};
-  const parsed = CalendarOAuthReturnSchema.safeParse(t);
-  return parsed.success ? { returnTarget: parsed.data } : null;
+type EnumClaims = Pick<VerifiedCalendarOAuthState, 'intent' | 'returnTarget'>;
+
+/** The signed `i` + `t` enums; an unknown value of either → null. */
+function parseEnumClaims(i: unknown, t: unknown): EnumClaims | null {
+  const intent = CalendarOAuthIntentSchema.safeParse(i ?? 'connect');
+  if (!intent.success) return null;
+  if (t === undefined) return { intent: intent.data };
+  const target = CalendarOAuthReturnSchema.safeParse(t);
+  if (!target.success) return null;
+  return { intent: intent.data, returnTarget: target.data };
 }
 
 function pkceKey(): Buffer {
@@ -148,10 +151,8 @@ export async function verifyCalendarOAuthState(
   if (!claims || claims.provider !== input.provider) return null;
   const { n } = claims;
   if (typeof n !== 'string' || n.length === 0) return null;
-  const intent = CalendarOAuthIntentSchema.safeParse(claims.i ?? 'connect');
-  if (!intent.success) return null;
-  const returnClaim = parseReturnClaim(claims.t);
-  if (!returnClaim) return null;
+  const enums = parseEnumClaims(claims.i, claims.t);
+  if (!enums) return null;
   if (!boundToBrowser(input.assertBoundToBrowser, claims.r)) return null;
   const fresh = await singleUseToken.consumeTokenOnce(
     db,
@@ -162,7 +163,6 @@ export async function verifyCalendarOAuthState(
     uid: claims.uid,
     provider: input.provider,
     codeVerifier: deriveCodeVerifier(n),
-    intent: intent.data,
-    ...returnClaim,
+    ...enums,
   };
 }

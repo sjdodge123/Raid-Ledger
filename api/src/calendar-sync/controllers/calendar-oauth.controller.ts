@@ -139,12 +139,11 @@ export class CalendarOAuthController {
       throw new NotFoundException();
     }
     const intent = intents.parseOAuthIntentQuery(rawIntent);
-    const returnTarget = parseOAuthReturnQuery(rawReturn);
     const { state, codeChallenge } = mintCalendarOAuthState({
       uid: req.user.id,
       provider: target.key,
       intent,
-      ...(returnTarget === undefined ? {} : { returnTarget }),
+      returnTarget: parseOAuthReturnQuery(rawReturn),
       bindToBrowser: () => bindLinkStateToBrowser(res, target.link),
     });
     const redirectUri = await this.redirectUri(target.key);
