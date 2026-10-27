@@ -166,7 +166,10 @@ describe('ROK-2024 open lock-in (integration)', () => {
   /** An announcement that never comes: poll the full window, then judge. */
   async function announcementsAfterWindow(): Promise<number> {
     try {
-      await waitFor(async () => expect(spy).toHaveBeenCalled(), 3000);
+      await waitFor(
+        () => Promise.resolve(expect(spy).toHaveBeenCalled()),
+        3000,
+      );
     } catch {
       /* none within the window — the count below says so */
     }
@@ -183,7 +186,10 @@ describe('ROK-2024 open lock-in (integration)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ slotId });
     expect(res.status).toBe(201);
-    await waitFor(async () => expect(spy).toHaveBeenCalledTimes(1), 5000);
+    await waitFor(
+      () => Promise.resolve(expect(spy).toHaveBeenCalledTimes(1)),
+      5000,
+    );
     expect(await announcementsAfterWindow()).toBe(1);
     expect(spy.mock.calls[0]?.[2]).toBe(res.body.eventId);
   });
@@ -215,7 +221,10 @@ describe('ROK-2024 open lock-in (integration)', () => {
     expect(lineup?.status).toBe('decided');
 
     await waitForSignupOf(eventId, yesVoter);
-    await waitFor(async () => expect(spy).toHaveBeenCalledTimes(1), 5000);
+    await waitFor(
+      () => Promise.resolve(expect(spy).toHaveBeenCalledTimes(1)),
+      5000,
+    );
     expect(await announcementsAfterWindow()).toBe(1);
     const signups = await signupUserIds(eventId);
     expect(signups).toEqual(
@@ -242,7 +251,10 @@ describe('ROK-2024 open lock-in (integration)', () => {
     expect(await complete(matchId, eventId)).toBe(200);
 
     await waitForSignupOf(eventId, yesVoter);
-    await waitFor(async () => expect(spy).toHaveBeenCalledTimes(1), 5000);
+    await waitFor(
+      () => Promise.resolve(expect(spy).toHaveBeenCalledTimes(1)),
+      5000,
+    );
     expect(await announcementsAfterWindow()).toBe(1);
     expect(spy.mock.calls[0]?.[2]).toBe(eventId);
     expect(signupsAtAnnounce).toEqual([(await signupUserIds(eventId)).length]);
