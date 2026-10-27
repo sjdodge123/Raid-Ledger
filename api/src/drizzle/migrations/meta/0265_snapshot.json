@@ -1,5 +1,5 @@
 {
-  "id": "5d7b833a-2077-420c-91cc-36270a5cb3a5",
+  "id": "89c2d95b-c338-4ab5-a7a3-11558c5e71c0",
   "prevId": "e5adacae-07ca-4335-a842-db92407b3bdf",
   "version": "7",
   "dialect": "postgresql",
@@ -12486,12 +12486,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "uploaded_by": {
-          "name": "uploaded_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12598,21 +12592,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "hub_media_uploaded_by_idx": {
-          "name": "hub_media_uploaded_by_idx",
-          "columns": [
-            {
-              "expression": "uploaded_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -12641,19 +12620,6 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
-        },
-        "hub_media_uploaded_by_users_id_fk": {
-          "name": "hub_media_uploaded_by_users_id_fk",
-          "tableFrom": "hub_media",
-          "tableTo": "users",
-          "columnsFrom": [
-            "uploaded_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12662,11 +12628,11 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord', 'upload')"
+          "value": "\"hub_media\".\"source\" IN ('discord')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
-          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload')"
+          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image')"
         }
       },
       "isRLSEnabled": false
@@ -16984,6 +16950,256 @@
         "valheim_containers_privacy_chk": {
           "name": "valheim_containers_privacy_chk",
           "value": "\"valheim_containers\".\"privacy\" IN ('public','private','group')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_base_item_days": {
+      "name": "valheim_container_base_item_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_key": {
+          "name": "base_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_x": {
+          "name": "base_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_z": {
+          "name": "base_z",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prefab": {
+          "name": "prefab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle": {
+          "name": "vehicle",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_base_item_days_day_fk": {
+          "name": "valheim_container_base_item_days_day_fk",
+          "tableFrom": "valheim_container_base_item_days",
+          "tableTo": "valheim_container_days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_base_item_days_key_uq": {
+          "name": "valheim_container_base_item_days_key_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "day_id",
+            "base_key",
+            "prefab",
+            "vehicle",
+            "owner"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "valheim_container_base_item_days_total_chk": {
+          "name": "valheim_container_base_item_days_total_chk",
+          "value": "\"valheim_container_base_item_days\".\"total\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_days": {
+      "name": "valheim_container_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pelican_server_id": {
+          "name": "pelican_server_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "world_uid": {
+          "name": "world_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "play_date": {
+          "name": "play_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_captured_at": {
+          "name": "first_captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_captured_at": {
+          "name": "last_captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_days_pelican_server_id_pelican_servers_id_fk": {
+          "name": "valheim_container_days_pelican_server_id_pelican_servers_id_fk",
+          "tableFrom": "valheim_container_days",
+          "tableTo": "pelican_servers",
+          "columnsFrom": [
+            "pelican_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_days_server_world_date_uq": {
+          "name": "valheim_container_days_server_world_date_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "pelican_server_id",
+            "world_uid",
+            "play_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_item_days": {
+      "name": "valheim_container_item_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prefab": {
+          "name": "prefab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle": {
+          "name": "vehicle",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_item_days_day_fk": {
+          "name": "valheim_container_item_days_day_fk",
+          "tableFrom": "valheim_container_item_days",
+          "tableTo": "valheim_container_days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_item_days_key_uq": {
+          "name": "valheim_container_item_days_key_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "day_id",
+            "prefab",
+            "vehicle",
+            "owner"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "valheim_container_item_days_total_chk": {
+          "name": "valheim_container_item_days_total_chk",
+          "value": "\"valheim_container_item_days\".\"total\" > 0"
         }
       },
       "isRLSEnabled": false
