@@ -5,6 +5,7 @@
  * holding that item (kept in the hash — ROK-1889); a new search clears the selection. Empty state while the server has sent no scan (`worldUid` null).
  * ROK-1859: the Base filter (also in the hash) narrows shared totals, the
  * personal section and the chest list to one base; a stale key means All bases.
+ * ROK-2014: item rows carry the play-day trend chip of the active row set.
  */
 import { useMemo, useState, type JSX } from 'react';
 import type {
@@ -24,6 +25,7 @@ import {
     sharedTotalsFor,
 } from './materials-bases.helpers';
 import { useMaterialsBase, useMaterialsItem } from './materials-hash';
+import { sharedTrendFor } from './materials-trend.helpers';
 import {
     categoriesOf,
     DEFAULT_MATERIALS_FILTERS,
@@ -155,6 +157,7 @@ function MaterialsBody({
                 caption="Shared chest totals"
                 selected={selected}
                 onSelect={onSelect}
+                trend={sharedTrendFor(data, base)}
             />
             {personal !== null && (
                 <PersonalChestsSection
