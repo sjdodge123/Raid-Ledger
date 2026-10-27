@@ -45,7 +45,7 @@ import { resolveLineupChannelId } from './lineup-scheduling-poll-card.test.js';
  */
 const MEMBER_A_SLOT = 8;
 const MEMBER_B_SLOT = 9;
-const PLAYERS_PREFIX = '\u{1F465} Players (';
+export const PLAYERS_PREFIX = '\u{1F465} Players (';
 const GROUP_LINE_MARK = 'from the group';
 
 interface CreatePollResponse {
@@ -62,7 +62,7 @@ interface GroupPoll {
 }
 
 /** A suggested slot and its start instant (the card's `<t:<sec>:` stamp). */
-interface Slot {
+export interface Slot {
   id: number;
   startSec: number;
 }
@@ -78,7 +78,7 @@ async function resolveGameId(ctx: TestContext): Promise<number> {
 }
 
 /** True when the smoke admin is Discord-linked, i.e. counted in M. */
-async function adminIsInGroup(ctx: TestContext): Promise<boolean> {
+export async function adminIsInGroup(ctx: TestContext): Promise<boolean> {
   const me = await ctx.api.get<{ discordId?: string | null }>('/auth/me');
   return typeof me?.discordId === 'string' && me.discordId.length > 0;
 }
@@ -116,7 +116,7 @@ async function suggestSlot(
 }
 
 /** Vote YES on `slotId` as `member`, asserting the toggle landed ON. */
-async function voteYes(member: FixtureUser, base: string, slotId: number) {
+export async function voteYes(member: FixtureUser, base: string, slotId: number) {
   const res = await member.api.post<{ voted: boolean }>(`${base}/vote`, {
     slotId,
   });
@@ -132,7 +132,7 @@ async function voteYes(member: FixtureUser, base: string, slotId: number) {
  * THIS run's EVENT CREATED embed, if this message has it: it links
  * `/events/<eventId>` and stamps this run's slot start.
  */
-function eventCardOf(
+export function eventCardOf(
   m: SimpleMessage,
   eventId: number,
   slot: Slot,
@@ -200,7 +200,7 @@ async function cleanup(
 }
 
 /** Assert the Players field names `count` players (the `(N)` in its name). */
-function assertPlayerCount(field: { name: string }, count: number): void {
+export function assertPlayerCount(field: { name: string }, count: number): void {
   const expected = `${PLAYERS_PREFIX}${count})`;
   if (field.name !== expected) {
     throw new Error(

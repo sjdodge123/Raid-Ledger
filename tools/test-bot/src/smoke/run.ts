@@ -44,6 +44,7 @@ import { schedulingPollEmbedLifecycleTests } from "./tests/scheduling-poll-embed
 import { schedulingUnanimousDmTests } from "./tests/scheduling-unanimous-dm.test.js";
 import { standalonePollBenchDmTests } from "./tests/standalone-poll-bench-dm.test.js";
 import { eventCreatedGroupCountTests } from "./tests/event-created-group-count.test.js";
+import { eventCreatedOpenLockInTests } from "./tests/event-created-open-lockin.test.js";
 import { publicShareLinkTests } from "./tests/public-share-link.test.js";
 import { lineupPrivateDmTests } from "./tests/lineup-private-dm.test.js";
 import { lineupDeadlineVotingDmTests } from "./tests/lineup-deadline-voting-dm.test.js";
@@ -210,6 +211,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...schedulingUnanimousDmTests,
     ...standalonePollBenchDmTests,
     ...eventCreatedGroupCountTests,
+    ...eventCreatedOpenLockInTests,
     ...publicShareLinkTests,
     ...lineupPrivateDmTests,
     ...lineupDeadlineVotingDmTests,
