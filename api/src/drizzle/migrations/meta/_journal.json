@@ -1814,6 +1814,20 @@
       "when": 1792915473990,
       "tag": "0259_companion_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1793065605760,
+      "tag": "0260_companion_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1793065613804,
+      "tag": "0261_companion_blob_reservations",
+      "breakpoints": true
     }
   ]
 }
