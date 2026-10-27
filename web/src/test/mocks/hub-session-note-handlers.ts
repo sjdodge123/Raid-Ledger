@@ -23,6 +23,7 @@ export function buildSessionNote(over: Partial<HubSessionNote> = {}): HubSession
         updatedAt: NOTE_UPDATED_AT,
         updatedBy: { userId: 7, displayName: 'Mira', avatarUrl: null },
         clearAfter: null,
+        clearAfterPending: false,
         ...over,
     };
 }

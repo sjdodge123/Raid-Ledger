@@ -111,6 +111,19 @@ describe('HubSessionNoteWidget — states (T-W1, T-W2)', () => {
         expect(screen.getByTestId('session-note-clear-after').textContent).toBe(`Clears after ${formatClearAfter(clearAfter, useTimezoneStore.getState().resolved)}`);
     });
 
+    it('says "Clears after the next event" for an armed note with no pinned event (D5b)', async () => {
+        server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote({ clearAfterPending: true }))));
+        renderWithProviders(<Card />);
+        expect((await screen.findByTestId('session-note-clear-after')).textContent).toBe('Clears after the next event');
+    });
+
+    it('shows no clear-after line for a note that is neither pinned nor armed', async () => {
+        server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote())));
+        renderWithProviders(<Card />);
+        expect(await screen.findByText(/^Edited by Mira · /)).toBeTruthy();
+        expect(screen.queryByTestId('session-note-clear-after')).toBeNull();
+    });
+
     it('disables the boxes for a viewer without canTick', async () => {
         server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote(), { canTick: false })));
         renderWithProviders(<Card />);

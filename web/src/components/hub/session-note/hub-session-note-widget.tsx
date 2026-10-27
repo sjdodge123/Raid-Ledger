@@ -12,7 +12,7 @@ import { MarkdownBlock } from '../../ui/markdown-block';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { SessionNoteChecklist } from './session-note-checklist';
 import { useSessionNoteDialog } from './session-note-dialog-store';
-import { editedByLine, formatClearAfter } from './session-note.helpers';
+import { PENDING_CLEAR_AFTER_COPY, editedByLine, formatClearAfter } from './session-note.helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 import { useSessionNote, useTickSessionNoteItem } from './use-hub-session-note';
 
@@ -39,6 +39,9 @@ function NoteFooter({ note }: { note: HubSessionNote }): JSX.Element {
                 <span data-testid="session-note-clear-after">
                     Clears after <span className="font-semibold text-foreground">{formatClearAfter(note.clearAfter, timeZone)}</span>
                 </span>
+            )}
+            {!note.clearAfter && note.clearAfterPending && (
+                <span data-testid="session-note-clear-after">{PENDING_CLEAR_AFTER_COPY}</span>
             )}
         </div>
     );

@@ -18,6 +18,9 @@ export function formatClearAfter(event: HubSessionNoteClearAfter, timeZone?: str
     return `${event.title} · ${formatEventTime(event.startTime, timeZone)}`;
 }
 
+/** The card footer for an armed note (D5b): clear-after is on but no event is pinned yet. */
+export const PENDING_CLEAR_AFTER_COPY = 'Clears after the next event';
+
 /** "Edited by Mira · 2 h ago" (ruling 1: ticks do not bump it). Display-only — never feeds `baseUpdatedAt`. */
 export function editedByLine(note: Pick<HubSessionNote, 'updatedAt' | 'updatedBy'>, now: number = Date.now()): string {
     const who = note.updatedBy?.displayName ?? 'A former member';
@@ -33,7 +36,7 @@ export interface SessionNoteDraft { body: string; items: DraftItem[]; clearAfter
 export function draftOf(note: HubSessionNote | null): SessionNoteDraft {
     if (note === null) return { body: '', items: [], clearAfterNextEvent: false };
     const items = note.items.map((row) => ({ key: `id-${row.id}`, id: row.id, text: row.text }));
-    return { body: note.body, items, clearAfterNextEvent: note.clearAfter !== null };
+    return { body: note.body, items, clearAfterNextEvent: note.clearAfter !== null || note.clearAfterPending };
 }
 
 /** The PUT body. `baseUpdatedAt` is passed through untouched — the server compares it as an exact string. */

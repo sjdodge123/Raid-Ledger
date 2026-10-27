@@ -2,7 +2,8 @@
  * ROK-1968 §6.2 — the editor dialog's fields: the Markdown body (4000 chars,
  * ruling 7), the checklist editor, and "Clear after the next event". The
  * checkbox names the event it will pin (ruling 4a) — the already-pinned one when
- * re-saving (4d), else the hub's next event — and is disabled when there is none.
+ * re-saving (4d), else the hub's next event. With no event scheduled it stays
+ * enabled and arms the note to clear after whichever event is created next (D5b).
  */
 import type { JSX } from 'react';
 import { HUB_POST_BODY_MAX, type HubSessionNoteClearAfter } from '@raid-ledger/contract';
@@ -13,7 +14,7 @@ import { LazyMarkdownEditor } from '../../ui/markdown/lazy-markdown-editor';
 import { SessionNoteItemsEditor } from './session-note-items-editor';
 import { formatClearAfter, type SessionNoteDraft } from './session-note.helpers';
 
-export const NO_NEXT_EVENT_COPY = 'No upcoming event on this hub';
+export const ARMED_CLEAR_AFTER_COPY = 'No event scheduled yet — clears after the next one on this hub';
 export const CLEAR_AFTER_LABEL = 'Clear after the next event';
 
 interface ToggleProps {
@@ -27,9 +28,9 @@ function ClearAfterToggle({ checked, target, onChange }: ToggleProps): JSX.Eleme
     const timeZone = useTimezoneStore((s) => s.resolved);
     return (
         <Checkbox checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} label={CLEAR_AFTER_LABEL}
-            disabled={target === null && !checked} data-testid="session-note-clear-after-checkbox"
+            data-testid="session-note-clear-after-checkbox"
             description={<span data-testid="session-note-clear-after-hint">
-                {target === null ? NO_NEXT_EVENT_COPY : `Clears after ${formatClearAfter(target, timeZone)}`}
+                {target === null ? ARMED_CLEAR_AFTER_COPY : `Clears after ${formatClearAfter(target, timeZone)}`}
             </span>} />
     );
 }

@@ -12,7 +12,7 @@ import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget from './hub-session-note-widget';
 import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
-import { NO_NEXT_EVENT_COPY } from './session-note-form';
+import { ARMED_CLEAR_AFTER_COPY } from './session-note-form';
 import { formatClearAfter } from './session-note.helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 
@@ -125,10 +125,20 @@ describe('SessionNoteDialog close + clear (T-W5)', () => {
 });
 
 describe('SessionNoteDialog clear-after checkbox (T-W6)', () => {
-    it('is disabled with "No upcoming event on this hub" when there is no next event', async () => {
-        await renderDialog(editorResponse(null));
-        expect(await screen.findByTestId('session-note-clear-after-checkbox')).toBeDisabled();
-        expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(NO_NEXT_EVENT_COPY);
+    it('stays enabled with no next event, says it arms, and sends clearAfterNextEvent (D5b)', async () => {
+        const bodies = capturePut();
+        await renderDialog(editorResponse(buildSessionNote()));
+        const toggle = await screen.findByTestId('session-note-clear-after-checkbox');
+        expect(toggle).toBeEnabled();
+        expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(ARMED_CLEAR_AFTER_COPY);
+        fireEvent.click(toggle);
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies[0]?.clearAfterNextEvent).toBe(true));
+    });
+
+    it('starts ticked when editing an armed (pending) note', async () => {
+        await renderDialog(editorResponse(buildSessionNote({ clearAfterPending: true })));
+        expect(await screen.findByTestId('session-note-clear-after-checkbox')).toBeChecked();
     });
 
     it('names the next event and sends clearAfterNextEvent once ticked', async () => {
