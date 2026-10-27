@@ -39,7 +39,10 @@ import {
   seedRecipesDemoScout,
   type RecipesSpoilersPreset,
 } from './valheim-armory-recipes-demo-spoilers';
-import { seedRecipesDemoUpgrader } from './valheim-armory-recipes-demo-upgrader';
+import {
+  seedRecipesDemoUpgrader,
+  stripRecipesDemoUpgraderCatalog,
+} from './valheim-armory-recipes-demo-upgrader';
 
 /** What the seed returns (DEMO_MODE only — not a contract type). */
 export interface RecipesFixtureResponse extends ContainersFixtureResponse {
@@ -133,6 +136,7 @@ export class ValheimArmoryRecipesDemoSeedController {
     // ROK-1861: `upgrader: true` adds the Bronze cuirass at an upgrade station.
     if (upgrader)
       await seedRecipesDemoUpgrader(this.db, base.serverId, scoutId);
+    else await stripRecipesDemoUpgraderCatalog(this.db, base.serverId);
     await applyRecipesSpoilersPreset(this.db, base.serverId, spoilers);
     return {
       ...base,

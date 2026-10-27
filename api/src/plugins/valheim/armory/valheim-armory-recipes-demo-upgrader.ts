@@ -3,17 +3,19 @@
  * recipes demo set plus a Bronze cuirass made and upgraded at an upgrade
  * station ("Armor upgrader", built at the Forge), so the Planner shows its
  * quality steps and the optional station build. Same `capturedAt` and
- * snapshot key as the base set, so the plain seed rewrites it back. The
+ * snapshot key as the base set, so the plain seed rewrites it back (and
+ * strips the catalogue entries below — `stripRecipesDemoUpgraderCatalog`). The
  * station prefab is synthetic — the real 1.0.20 upgrader ids are UNVERIFIED
  * (spec §1.1). Values on the cuirass are the ROK-1894 measured ones.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ValheimRecipe,
   ValheimRecipesMessage,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
+import { ARMORY_FIXTURE_GAME_VERSION } from './valheim-armory-demo-seed.helpers';
 import { RECIPES_DEMO_MESSAGE as BASE } from './valheim-armory-recipes-demo-fixture';
 import {
   importRecipesDemoSet,
@@ -111,6 +113,24 @@ const UPGRADER_ITEMS: Record<string, schema.ValheimItemCatalogEntryRow> = {
   Upgrader1Armor: cell('Armor upgrade kit', 3),
   Stone: cell('Stone', 0),
 };
+
+/** Plain seed: drop the upgrader-only catalogue keys (none is in the base catalogue). */
+export async function stripRecipesDemoUpgraderCatalog(
+  db: Db,
+  serverId: number,
+): Promise<void> {
+  const C = schema.valheimItemCatalogs;
+  const keys = `{${Object.keys(UPGRADER_ITEMS).join(',')}}`;
+  await db
+    .update(C)
+    .set({ items: sql`${C.items} - ${keys}::text[]` })
+    .where(
+      and(
+        eq(C.pelicanServerId, serverId),
+        eq(C.gameVersion, ARMORY_FIXTURE_GAME_VERSION),
+      ),
+    );
+}
 
 /** Import the extended set and let the unclaimed scout know the cuirass and the station. */
 export async function seedRecipesDemoUpgrader(
