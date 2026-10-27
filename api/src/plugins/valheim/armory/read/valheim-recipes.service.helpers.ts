@@ -58,7 +58,8 @@ export function responsePrefabs(res: ResolveResult): string[] {
   const out = new Set(res.nodes.map((n) => n.prefab));
   for (const { via } of res.nodes) {
     if (via.type !== 'recipe') continue;
-    for (const s of via.steps ?? []) for (const r of s.resources) out.add(r.prefab);
+    for (const s of via.steps ?? [])
+      for (const r of s.resources) out.add(r.prefab);
   }
   for (const [station, lines] of res.stationBuilds) {
     out.add(station);
