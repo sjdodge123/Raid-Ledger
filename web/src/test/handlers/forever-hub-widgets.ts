@@ -99,7 +99,7 @@ const PROFESSIONS_BASE = createBareRosterInsights({
     freshness: { roster: { source: 'addon', asOf: '2026-10-22T10:00:00.000Z' }, characters: { addon: 2, blizzard: 0, none: 3 } },
 });
 
-/** Two professions: Alchemy (two members, one with an unknown skill) and Mining. */
+/** A member payload: two professions (Alchemy with two members, one skill unknown; Mining) and no lockouts. */
 export const PROFESSIONS_FIXTURE: WowRosterInsightsDto = {
     ...PROFESSIONS_BASE,
     professions: [
@@ -111,13 +111,13 @@ export const PROFESSIONS_FIXTURE: WowRosterInsightsDto = {
             ],
         },
         { name: 'Mining', members: [{ characterId: MOCK_CHAR_IDS.jaina, name: 'Mixer', skill: 150, maxSkill: 150, source: 'addon' }] },
-    ],
+    ],    lockouts: [],
 };
 
 /** A member viewer on a guild where nobody has set professions. */
 export const NO_PROFESSIONS_FIXTURE: WowRosterInsightsDto = { ...PROFESSIONS_BASE, professions: [] };
 
-/** A visitor's payload: the members-only `professions` key is omitted. */
+/** A visitor's payload: the members-only `professions` and `lockouts` keys are omitted. */
 export const VISITOR_FIXTURE: WowRosterInsightsDto = { ...PROFESSIONS_BASE };
 
 interface RosterInsightsHandlerOptions {
