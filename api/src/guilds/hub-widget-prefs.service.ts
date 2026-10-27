@@ -8,6 +8,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HubWidgetPrefsSchema,
   UpdateHubWidgetPrefsSchema,
+  normaliseHubWidgetPrefs,
   type HubWidgetPrefs,
   type HubWidgetPrefsResponse,
 } from '@raid-ledger/contract';
@@ -80,7 +81,9 @@ export class HubWidgetPrefsService {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten());
     }
-    const widgetPrefs = 'reset' in parsed.data ? null : parsed.data;
+    // ROK-1969 D6: legacy widget ids (Gallery moved to Core) heal on save.
+    const widgetPrefs =
+      'reset' in parsed.data ? null : normaliseHubWidgetPrefs(parsed.data);
     if (!(await findGuild(this.db, guildId))) {
       throw new NotFoundException(HUB_NOT_FOUND);
     }

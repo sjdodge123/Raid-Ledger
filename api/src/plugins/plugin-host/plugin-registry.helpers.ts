@@ -8,7 +8,59 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { plugins, appSettings } from '../../drizzle/schema';
 import type { PluginManifest } from './plugin-manifest.interface';
-import type { PluginIntegrationInfoDto } from '@raid-ledger/contract';
+import {
+  emptyPluginHubManifest,
+  type PluginInfoDto,
+  type PluginIntegrationInfoDto,
+} from '@raid-ledger/contract';
+
+type PluginRow = typeof plugins.$inferSelect;
+
+/** One `GET /admin/plugins` entry from a manifest and its DB row (if any). */
+export function buildPluginInfo(
+  manifest: PluginManifest,
+  record: PluginRow | undefined,
+  integrations: PluginIntegrationInfoDto[],
+): PluginInfoDto {
+  return {
+    ...manifestFields(manifest),
+    integrations,
+    status: pluginStatus(manifest, record),
+    installedAt: record?.installedAt?.toISOString() ?? null,
+    // ROK-1969 §3.5: per-requirement checks are not wired yet, so
+    // `setupStatus` stays absent (= not checked, per PluginInfoSchema).
+  };
+}
+
+/** A built-in plugin is always active (ROK-1969 D3), with or without a row. */
+function pluginStatus(
+  manifest: PluginManifest,
+  record: PluginRow | undefined,
+): PluginInfoDto['status'] {
+  if (manifest.builtIn === true) return 'active';
+  if (!record) return 'not_installed';
+  return record.active ? 'active' : 'inactive';
+}
+
+/** The manifest-derived half of a `PluginInfoDto`. */
+function manifestFields(
+  manifest: PluginManifest,
+): Omit<
+  PluginInfoDto,
+  'integrations' | 'status' | 'installedAt' | 'setupStatus'
+> {
+  return {
+    slug: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    author: manifest.author,
+    gameSlugs: manifest.gameSlugs ?? [],
+    capabilities: manifest.capabilities,
+    builtIn: manifest.builtIn ?? false,
+    hub: manifest.hub ?? emptyPluginHubManifest(),
+  };
+}
 
 /** Resolve integration info for a plugin manifest, batch-fetching credential keys. */
 export async function resolveIntegrationInfo(

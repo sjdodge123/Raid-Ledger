@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { usePluginAdmin } from '../../../hooks/use-plugin-admin';
 import { toast } from '../../../lib/toast';
-import type { PluginInfoDto } from '@raid-ledger/contract';
+import { emptyPluginHubManifest, type PluginInfoDto } from '@raid-ledger/contract';
 import { PluginCard } from './PluginCard';
 
 interface ConnectPluginsStepProps {
@@ -16,6 +16,8 @@ const STUB_PLUGIN: PluginInfoDto = {
   version: '1.0.0',
   description: 'Enables event scheduling, roster management, and community calendar -- the essentials for any gaming community.',
   author: { name: 'Raid Ledger' },
+  builtIn: false,
+  hub: emptyPluginHubManifest(),
   gameSlugs: [],
   capabilities: ['events', 'roster', 'calendar'],
   integrations: [],

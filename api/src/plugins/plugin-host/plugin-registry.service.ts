@@ -5,6 +5,7 @@ import {
   BadRequestException,
   NotFoundException,
   OnModuleInit,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { defined } from '../../common/defined.helpers';
@@ -15,12 +16,21 @@ import { plugins } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { isMissingTableError } from '../../common/pg-error.helpers';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
-import { PluginInfoDto } from '@raid-ledger/contract';
+import { CORE_PLUGIN_ID, type PluginInfoDto } from '@raid-ledger/contract';
 import {
+  buildPluginInfo,
   resolveIntegrationInfo,
   cleanupPluginSettings,
   validateDependencies,
 } from './plugin-registry.helpers';
+import {
+  assertHubOwnersKnown,
+  assertNotBuiltIn,
+  hubOwnerFor,
+  isAlwaysActive,
+  type AdapterOptionsFor,
+  type HubOwnerRecord,
+} from './hub-ownership.helpers';
 import {
   PluginAdapterStore,
   type AdapterRegistrationOptions,
@@ -33,13 +43,15 @@ export interface SuspendedAdapterOwner {
 }
 
 @Injectable()
-export class PluginRegistryService implements OnModuleInit {
+export class PluginRegistryService
+  implements OnModuleInit, OnApplicationBootstrap
+{
   private readonly logger = new Logger(PluginRegistryService.name);
   private manifests = new Map<string, PluginManifest>();
-  private activeSlugs = new Set<string>();
-  private readonly store = new PluginAdapterStore((id) =>
-    this.activeSlugs.has(id),
-  );
+  /** Core is active even before its row exists (ROK-1969 D3). */
+  private activeSlugs = new Set<string>([CORE_PLUGIN_ID]);
+  private readonly hubOwners: HubOwnerRecord[] = [];
+  private readonly store = new PluginAdapterStore((id) => this.isActive(id));
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
@@ -49,6 +61,20 @@ export class PluginRegistryService implements OnModuleInit {
   // STARTUP-CRITICAL: Plugin registry must be loaded for all plugin modules to register. @see bestEffortInit
   async onModuleInit(): Promise<void> {
     await this.refreshActiveCache();
+  }
+
+  /** After every module's init: a hub owner with no manifest is logged (ROK-1969 A2). */
+  onApplicationBootstrap(): void {
+    try {
+      this.assertHubOwnersKnown();
+    } catch (error: unknown) {
+      this.logger.error(error instanceof Error ? error.message : error);
+    }
+  }
+
+  /** Throws naming a hub adapter owner that has no registered manifest. */
+  assertHubOwnersKnown(): void {
+    assertHubOwnersKnown(this.hubOwners, (id) => this.manifests.has(id));
   }
 
   registerManifest(manifest: PluginManifest): void {
@@ -91,24 +117,8 @@ export class PluginRegistryService implements OnModuleInit {
     const recordMap = new Map(dbRecords.map((r) => [r.slug, r]));
     const result: PluginInfoDto[] = [];
     for (const [slug, manifest] of this.manifests) {
-      const record = recordMap.get(slug);
       const integrations = await resolveIntegrationInfo(this.db, manifest);
-      result.push({
-        slug,
-        name: manifest.name,
-        version: manifest.version,
-        description: manifest.description,
-        author: manifest.author,
-        gameSlugs: manifest.gameSlugs ?? [],
-        capabilities: manifest.capabilities,
-        integrations,
-        status: record
-          ? record.active
-            ? 'active'
-            : 'inactive'
-          : 'not_installed',
-        installedAt: record?.installedAt?.toISOString() ?? null,
-      });
+      result.push(buildPluginInfo(manifest, recordMap.get(slug), integrations));
     }
     return result;
   }
@@ -147,6 +157,7 @@ export class PluginRegistryService implements OnModuleInit {
 
   /** Uninstall a plugin (must be deactivated first). */
   async uninstall(slug: string): Promise<void> {
+    assertNotBuiltIn(slug, this.manifests.get(slug), 'uninstalled');
     const [existing] = await this.db
       .select()
       .from(plugins)
@@ -196,6 +207,7 @@ export class PluginRegistryService implements OnModuleInit {
 
   /** Deactivate an installed plugin. */
   async deactivate(slug: string): Promise<void> {
+    assertNotBuiltIn(slug, this.manifests.get(slug), 'deactivated');
     const [existing] = await this.db
       .select()
       .from(plugins)
@@ -218,13 +230,19 @@ export class PluginRegistryService implements OnModuleInit {
     this.logger.log(`Plugin deactivated: ${slug}`);
   }
 
-  /** `opts.ownerPluginId` ties the adapter to a plugin's activate/deactivate (ROK-268). */
-  registerAdapter<T>(
-    extensionPoint: string,
+  /**
+   * `opts.ownerPluginId` ties the adapter to a plugin's activate/deactivate
+   * (ROK-268); a hub extension point requires it (ROK-1969 D5).
+   */
+  registerAdapter<T, P extends string = string>(
+    extensionPoint: P,
     gameSlug: string,
     adapter: T,
-    opts?: AdapterRegistrationOptions,
+    ...rest: AdapterOptionsFor<P>
   ): void {
+    const opts = rest[0];
+    const owner = hubOwnerFor(extensionPoint, gameSlug, opts);
+    if (owner) this.hubOwners.push(owner);
     this.store.registerAdapter(extensionPoint, gameSlug, adapter, opts);
     this.logger.debug(
       `Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`,
@@ -285,6 +303,9 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   isActive(slug: string): boolean {
+    if (isAlwaysActive(slug) || this.manifests.get(slug)?.builtIn === true) {
+      return true;
+    }
     return this.activeSlugs.has(slug);
   }
   getActiveSlugsSync(): ReadonlySet<string> {
@@ -297,13 +318,16 @@ export class PluginRegistryService implements OnModuleInit {
         .select({ slug: plugins.slug })
         .from(plugins)
         .where(eq(plugins.active, true));
-      this.activeSlugs = new Set(activeRecords.map((r) => r.slug));
+      this.activeSlugs = new Set([
+        CORE_PLUGIN_ID,
+        ...activeRecords.map((r) => r.slug),
+      ]);
     } catch (error: unknown) {
       if (isMissingTableError(error)) {
         this.logger.warn(
           'plugins table not found — plugin system disabled until migration is applied',
         );
-        this.activeSlugs = new Set<string>();
+        this.activeSlugs = new Set<string>([CORE_PLUGIN_ID]);
       } else throw error;
     }
     // Adapters registered before their owner was known active (ROK-268).
