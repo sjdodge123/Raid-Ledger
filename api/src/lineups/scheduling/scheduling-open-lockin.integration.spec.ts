@@ -11,7 +11,7 @@
  * Each path must announce exactly once, after the slot voters' signups landed
  * — except a reschedule poll, whose event already exists.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -176,6 +176,66 @@ describe('ROK-2024 open lock-in (integration)', () => {
     return spy.mock.calls.length;
   }
 
+  /** Let the real announcement run (the default spy only records it). */
+  function callThrough(): void {
+    spy.mockRestore();
+    spy = jest.spyOn(
+      testApp.app.get(LineupNotificationService),
+      'notifyEventCreated',
+    );
+  }
+
+  async function addMember(matchId: number, userId: number): Promise<void> {
+    await testApp.db
+      .insert(schema.communityLineupMatchMembers)
+      .values({ matchId, userId, source: 'voted' as const });
+  }
+
+  /** `community_lineup` DM rows of one user: title + payload subtype. */
+  async function dmsOf(
+    userId: number,
+  ): Promise<Array<{ title: string; subtype: unknown; eventId: unknown }>> {
+    const rows = await testApp.db
+      .select({
+        title: schema.notifications.title,
+        payload: schema.notifications.payload,
+      })
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, userId),
+          eq(schema.notifications.type, 'community_lineup'),
+        ),
+      );
+    return rows.map((r) => {
+      const p = r.payload as { subtype?: unknown; eventId?: unknown } | null;
+      return { title: r.title, subtype: p?.subtype, eventId: p?.eventId };
+    });
+  }
+
+  async function waitForEventCreatedDm(userId: number, eventId: number) {
+    await waitFor(async () => {
+      expect(await dmsOf(userId)).toContainEqual(
+        expect.objectContaining({
+          subtype: 'lineup_event_created',
+          eventId,
+        }),
+      );
+    }, 5000);
+  }
+
+  /** A second DM that never comes: poll the full window, then judge. */
+  async function dmsAfterWindow(userId: number) {
+    try {
+      await waitFor(async () => {
+        expect((await dmsOf(userId)).length).toBeGreaterThan(1);
+      }, 2000);
+    } catch {
+      /* no second DM within the window — the rows below say so */
+    }
+    return dmsOf(userId);
+  }
+
   it('(a) expired lock-in announces exactly once', async () => {
     const poll = await seedLineupMatch('archived');
     const slotId = await addSlot(poll.matchId, [
@@ -274,5 +334,56 @@ describe('ROK-2024 open lock-in (integration)', () => {
 
     await waitForSignupOf(eventId, yesVoter);
     expect(await announcementsAfterWindow()).toBe(0);
+  });
+
+  it('(e) open lineup lock-in: yes-voters get only the poll DM, the rest of the group gets EVENT CREATED', async () => {
+    callThrough();
+    const poll = await seedLineupMatch('decided');
+    const yesVoter = await createUser('dm-yes');
+    const bystander = await createUser('dm-bystander');
+    await addMember(poll.matchId, yesVoter);
+    await addMember(poll.matchId, bystander);
+    await addSlot(poll.matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [yesVoter, 'yes'],
+      [bystander, 'no'],
+    ]);
+    const eventId = await createEvent(poll.matchId);
+    expect(await complete(poll.matchId, eventId)).toBe(200);
+
+    await waitForEventCreatedDm(bystander, eventId);
+    expect((await dmsOf(bystander)).map((d) => d.subtype)).toEqual([
+      'lineup_event_created',
+    ]);
+    for (const uid of [yesVoter, testApp.seed.adminUser.id]) {
+      const dms = await dmsAfterWindow(uid);
+      expect({ uid, titles: dms.map((d) => d.title) }).toEqual({
+        uid,
+        titles: ['Auto-signed up'],
+      });
+      expect(dms.map((d) => d.subtype)).not.toContain('lineup_event_created');
+    }
+  });
+
+  it('(f) expired lock-in still DMs the whole group EVENT CREATED', async () => {
+    callThrough();
+    const poll = await seedLineupMatch('archived');
+    const yesVoter = await createUser('exp-yes');
+    const bystander = await createUser('exp-bystander');
+    await addMember(poll.matchId, yesVoter);
+    await addMember(poll.matchId, bystander);
+    const slotId = await addSlot(poll.matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [yesVoter, 'yes'],
+    ]);
+    const res = await testApp.request
+      .post(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/create-event`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slotId });
+    expect(res.status).toBe(201);
+    const eventId = res.body.eventId as number;
+
+    await waitForEventCreatedDm(yesVoter, eventId);
+    await waitForEventCreatedDm(bystander, eventId);
   });
 });
