@@ -9,24 +9,7 @@ import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XMarkIcon } from '@heroicons/
 import { HUB_SESSION_NOTE_ITEMS_MAX } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
-import { itemError, type DraftItem } from './session-note.helpers';
-
-let nextKey = 0;
-
-/** Pure list edits, exported for the specs. */
-export const itemOps = {
-    add: (items: DraftItem[]): DraftItem[] => [...items, { key: `new-${++nextKey}`, id: null, text: '' }],
-    remove: (items: DraftItem[], at: number): DraftItem[] => items.filter((_row, i) => i !== at),
-    text: (items: DraftItem[], at: number, text: string): DraftItem[] =>
-        items.map((row, i) => (i === at ? { ...row, text } : row)),
-    move: (items: DraftItem[], at: number, by: -1 | 1): DraftItem[] => {
-        const row = items[at];
-        const to = at + by;
-        if (row === undefined || to < 0 || to >= items.length) return items;
-        const rest = items.filter((_r, i) => i !== at);
-        return [...rest.slice(0, to), row, ...rest.slice(to)];
-    },
-};
+import { itemError, itemOps, type DraftItem } from './session-note.helpers';
 
 interface RowProps {
     row: DraftItem;

@@ -64,3 +64,20 @@ export function draftError(draft: SessionNoteDraft): string | null {
     if (draft.body.trim() === '' && draft.items.length === 0) return EMPTY_NOTE_ERROR;
     return draft.items.some((row) => itemError(row.text) !== null) ? 'Fix the checklist items marked below' : null;
 }
+
+let nextKey = 0;
+
+/** Pure checklist-row edits for the items editor. */
+export const itemOps = {
+    add: (items: DraftItem[]): DraftItem[] => [...items, { key: `new-${++nextKey}`, id: null, text: '' }],
+    remove: (items: DraftItem[], at: number): DraftItem[] => items.filter((_row, i) => i !== at),
+    text: (items: DraftItem[], at: number, text: string): DraftItem[] =>
+        items.map((row, i) => (i === at ? { ...row, text } : row)),
+    move: (items: DraftItem[], at: number, by: -1 | 1): DraftItem[] => {
+        const row = items[at];
+        const to = at + by;
+        if (row === undefined || to < 0 || to >= items.length) return items;
+        const rest = items.filter((_r, i) => i !== at);
+        return [...rest.slice(0, to), row, ...rest.slice(to)];
+    },
+};

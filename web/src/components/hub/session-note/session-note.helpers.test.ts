@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildSessionNote, NOTE_UPDATED_AT } from '../../../test/mocks/hub-session-note-handlers';
 import {
     EMPTY_NOTE_ERROR, ITEM_BLANK_ERROR, ITEM_TOO_LONG_ERROR,
-    draftError, draftOf, isDirty, itemError, toPutBody,
+    draftError, draftOf, isDirty, itemError, itemOps, toPutBody,
 } from './session-note.helpers';
-import { itemOps } from './session-note-items-editor';
 
 describe('session-note draft helpers', () => {
     it('toPutBody keeps row ids, omits them for new rows and passes baseUpdatedAt verbatim', () => {
