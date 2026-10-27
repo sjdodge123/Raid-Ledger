@@ -17,8 +17,10 @@ export type FollowupCandidateEvent = {
  * Resolve the recipients of a post-event quick-sign-up DM for an ended event
  * (ROK-1371 M1). Returns linked user IDs = everyone who had a signup row on the
  * event EXCEPT `declined` (i.e. signed_up, tentative, roached_out, departed),
- * minus the organizer, banned/kicked/deactivated users, users with no Discord
- * link, and users who opted out of `post_event_followup` Discord delivery.
+ * minus signups benched on the roster (ROK-2019: benching keeps the status
+ * `signed_up` and only sets the roster role to `bench`), the organizer,
+ * banned/kicked/deactivated users, users with no Discord link, and users who
+ * opted out of `post_event_followup` Discord delivery.
  *
  * Anonymous signups (`user_id NULL`) are excluded by the `user_id IS NOT NULL`
  * predicate — we only DM users with an RL account + Discord link.
@@ -42,6 +44,10 @@ export async function resolvePostEventFollowupRecipients(
       AND es.user_id IS NOT NULL
       AND es.user_id <> ${creatorId}
       AND es.status <> 'declined'
+      AND NOT EXISTS (
+        SELECT 1 FROM roster_assignments ra
+        WHERE ra.signup_id = es.id AND ra.role = 'bench'
+      )
       AND u.discord_id IS NOT NULL
       ${sql.raw(ACTIVE_MEMBER_SQL_AND)}
       AND COALESCE(
