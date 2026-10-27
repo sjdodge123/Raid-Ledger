@@ -1811,15 +1811,22 @@
     {
       "idx": 259,
       "version": "7",
-      "when": 1793044707006,
-      "tag": "0259_guild_source_name",
+      "when": 1792915473990,
+      "tag": "0259_companion_devices",
       "breakpoints": true
     },
     {
       "idx": 260,
       "version": "7",
+      "when": 1793044707006,
+      "tag": "0260_guild_source_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
       "when": 1793044708294,
-      "tag": "0260_backfill_guild_source_name",
+      "tag": "0261_backfill_guild_source_name",
       "breakpoints": true
     }
   ]
