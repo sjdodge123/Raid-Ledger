@@ -70,7 +70,9 @@ export class HubMediaService {
    * the same hub → `duplicate` (idempotent double-submit, D5); same bytes
    * that were removed → `rejected: removed` (409).
    */
-  async ingestUpload(input: HubMediaUploadInput): Promise<HubMediaIngestResult> {
+  async ingestUpload(
+    input: HubMediaUploadInput,
+  ): Promise<HubMediaIngestResult> {
     const provenanceKey = uploadProvenanceKey(input.bytes);
     const existing = await findByKey(this.db, input.guildId, provenanceKey);
     if (existing?.removedAt) return reject('removed');
