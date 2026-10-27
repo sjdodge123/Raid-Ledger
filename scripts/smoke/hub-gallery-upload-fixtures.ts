@@ -16,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import type { TestInfo } from '@playwright/test';
+import { HUB_MEDIA_PAGE_MAX } from '@raid-ledger/contract';
 import { API_BASE, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 
 const GAME_INDEX_BASE = 12;
@@ -133,10 +134,18 @@ export async function uploadAs(jwt: string, hubId: number, png: Buffer): Promise
     return JSON.parse(text) as MediaItem;
 }
 
-/** The viewer's own list (newest first). */
+/**
+ * The viewer's own first page (newest first — every picture these specs
+ * look for is the newest on a freshly seeded hub). The `limit` must stay
+ * within the contract's `HUB_MEDIA_PAGE_MAX`: above it the route 400s, and
+ * `apiGet` turns that into `null` — so a null body throws instead of
+ * reading as an empty Gallery.
+ */
 export async function listMedia(jwt: string, hubId: number): Promise<MediaItem[]> {
-    const body = (await apiGet(jwt, `/hubs/${hubId}/media?limit=50`)) as { items?: MediaItem[] } | null;
-    return body?.items ?? [];
+    const path = `/hubs/${hubId}/media?limit=${HUB_MEDIA_PAGE_MAX}`;
+    const body = (await apiGet(jwt, path)) as { items?: MediaItem[] } | null;
+    if (body === null) throw new Error(`[hub-gallery-upload] GET ${path} returned a non-2xx status`);
+    return body.items ?? [];
 }
 
 /** Poll until `id` is (or is no longer) in the viewer's list. */
