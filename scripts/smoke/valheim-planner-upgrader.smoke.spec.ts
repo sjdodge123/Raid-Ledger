@@ -3,8 +3,9 @@
  *
  * Seed: the recipes fixture with `upgrader: true` (the demo set plus a Bronze
  * cuirass made and upgraded at the "Armor upgrader", an upgrade station
- * built at the Forge). The stored list holds the cuirass at quality 3 from
- * scratch, so the plan's root row spans three quality steps. The idle plan
+ * built at the Forge), stored as its own gameVersion 1.0.20 set. The
+ * stored list holds the cuirass at quality 3 from scratch, so the plan's
+ * root row spans three quality steps. The idle plan
  * pane ("What your list needs") shows it on desktop and under the list on
  * phones. Desktop + mobile; no timing assumptions.
  */
@@ -61,6 +62,17 @@ test.describe("Valheim Planner — upgrade-station steps (ROK-1861)", () => {
       await expect(
         q2.getByText("Upgrade station · lvl 2", { exact: true }),
       ).toBeVisible();
+
+      // The set is 1.0.20 (v1 cost rule, "like the game"): the q1 CRAFT takes
+      // no upgrade kit; each UPGRADE step takes one kit and its own Bronze.
+      const step = (q: number) =>
+        steps.locator(`[data-testid="valheim-planner-step"][data-quality="${q}"]`);
+      await expect(step(1)).toContainText("Bronze 5");
+      await expect(step(1)).not.toContainText("Armor upgrade kit");
+      await expect(q2).toContainText("Bronze 3");
+      await expect(q2).toContainText("Armor upgrade kit 1");
+      await expect(step(3)).toContainText("Bronze 6");
+      await expect(step(3)).toContainText("Armor upgrade kit 1");
 
       // Q6: the build cost is offered once, collapsed, and never added to the list.
       const build = steps.getByRole("button", {
