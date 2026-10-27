@@ -34,13 +34,13 @@ export function decodeHubMediaCursor(raw: string): HubMediaCursor {
 
 /**
  * The web's chips are All · Deaths · Screenshots (Lead decision): the
- * `screenshot` filter means every non-death picture — `screenshot` + plain
- * `image`. `death` and `image` match only themselves; no filter → all kinds.
+ * `screenshot` filter means every non-death picture — `screenshot`, plain
+ * `image` and member uploads (ROK-1965 D7). `death` and `image` match only themselves; no filter → all kinds.
  */
 export function kindsForFilter(
   kind: HubMediaKind | undefined,
 ): HubMediaKind[] | null {
   if (kind === undefined) return null;
-  if (kind === 'screenshot') return ['screenshot', 'image'];
+  if (kind === 'screenshot') return ['screenshot', 'image', 'upload'];
   return [kind];
 }
