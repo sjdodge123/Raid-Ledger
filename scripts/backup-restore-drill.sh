@@ -39,6 +39,10 @@
 #                         docker rm "$cid"
 #     --report <path>   report JSON destination (default restore-drill-report.json)
 #     --boot-check      boot the API against the restored DB and assert /health
+#     --uploads-archive <path>  the dump's companion uploads archive (ROK-2023
+#                       D13). Default: <dump minus .dump>.uploads.tar beside
+#                       the dump; if absent the `uploads` tier reports it
+#                       (failed only when the restored rows reference files).
 #     --keep            leave the container running (debugging)
 # =============================================================================
 
@@ -53,6 +57,7 @@ DRILL_DB_NAME="raid_ledger"
 DUMP_FILE=""
 REPORT_PATH="$REPO_ROOT/restore-drill-report.json"
 MIGRATIONS_DIR=""
+UPLOADS_ARCHIVE=""
 BOOT_CHECK=0
 KEEP=0
 META_FILE=""
@@ -92,6 +97,7 @@ parse_args() {
       --dump-file) DUMP_FILE="$2"; shift 2 ;;
       --report) REPORT_PATH="$2"; shift 2 ;;
       --migrations-dir) MIGRATIONS_DIR="$2"; shift 2 ;;
+      --uploads-archive) UPLOADS_ARCHIVE="$2"; shift 2 ;;
       --boot-check) BOOT_CHECK=1; shift ;;
       --keep) KEEP=1; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}" >&2; exit 2 ;;
@@ -107,6 +113,21 @@ parse_args() {
   fi
   [ -f "$DUMP_FILE" ] || { echo -e "${RED}No such dump: $DUMP_FILE${NC}" >&2; exit 2; }
   require_migrations_dir
+  resolve_uploads_archive
+}
+
+# ROK-2023 D13. An explicit --uploads-archive that does not exist is an
+# operator typo (exit 2); a missing DERIVED companion is a finding, not an
+# error -- the module decides whether the restored rows needed one.
+resolve_uploads_archive() {
+  if [ -n "$UPLOADS_ARCHIVE" ]; then
+    [ -f "$UPLOADS_ARCHIVE" ] || {
+      echo -e "${RED}No such uploads archive: $UPLOADS_ARCHIVE${NC}" >&2
+      exit 2
+    }
+    return 0
+  fi
+  UPLOADS_ARCHIVE="${DUMP_FILE%.dump}.uploads.tar"
 }
 
 # D4: the journal check must compare against the migrations of the image that
@@ -231,6 +252,23 @@ run_journal_check() {
   else
     EXTRA_FINDINGS=",$(json_finding journal-hashes-present reconcile failed \
       "journal check errored: $(tr '\n' ' ' < /tmp/rl-drill-journal.err)")"
+  fi
+}
+
+# ROK-2023 D13: tier `uploads` -- U1 archive integrity, U2 every file the
+# restored rows reference is an archive member. Runs against the restored DB
+# after A5's inputs are in place; its findings ride in via EXTRA_FINDINGS like
+# the journal check's, and a harness error is itself a failed finding.
+run_uploads_check() {
+  echo -e "${YELLOW}Uploads: checking the companion archive ($(basename "$UPLOADS_ARCHIVE"))...${NC}"
+  local out
+  if out="$(node "$REPO_ROOT/scripts/restore-drill-uploads.mjs" \
+    --database-url "$DRILL_URL" --archive "$UPLOADS_ARCHIVE" \
+    2>/tmp/rl-drill-uploads.err)"; then
+    EXTRA_FINDINGS="${EXTRA_FINDINGS},$(printf '%s' "$out" | sed 's/^\[//; s/\]$//')"
+  else
+    EXTRA_FINDINGS="${EXTRA_FINDINGS},$(json_finding u1-archive-integrity uploads failed \
+      "uploads check errored: $(tr '\n' ' ' < /tmp/rl-drill-uploads.err)")"
   fi
 }
 
@@ -388,6 +426,7 @@ main() {
   run_journal_check
   run_reconcile
   boot_api_check
+  run_uploads_check
 
   local reconcile_status="failed"
   [ "$RECONCILE_EXIT" = "0" ] && reconcile_status="passed"
