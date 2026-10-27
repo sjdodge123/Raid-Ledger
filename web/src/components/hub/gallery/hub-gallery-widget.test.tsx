@@ -8,7 +8,7 @@ import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { hubMediaFileHandler, hubMediaItem, hubMediaListHandler } from '../../../test/mocks/hub-media-handlers';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
-import HubGalleryWidget, { GALLERY_EDITOR_EMPTY_HINT } from './hub-gallery-widget';
+import HubGalleryWidget, { GALLERY_EMPTY_HINT } from './hub-gallery-widget';
 import { HubGallerySeeAll } from './hub-gallery-see-all';
 import { useHubGalleryStore } from './hub-gallery-store';
 import { hubGalleryTileLabel } from './hub-gallery-labels';
@@ -96,8 +96,8 @@ describe('HubGalleryWidget — kind chips', () => {
     });
 });
 
-describe('HubGalleryWidget — empty hub (D12)', () => {
-    it('a member gets no card: the body renders nothing and the probe is false', async () => {
+describe('HubGalleryWidget — empty hub (ROK-1965 D15)', () => {
+    it('a member keeps the card: the one-liner, Add picture, no See all, and the probe is true', async () => {
         server.use(hubMediaListHandler([]));
         // Settled shares the card's query client, so it reports once the empty response has landed.
         function Settled(): JSX.Element | null {
@@ -106,17 +106,16 @@ describe('HubGalleryWidget — empty hub (D12)', () => {
             return isSuccess ? <span data-testid="settled" data-visible={String(visible)} /> : null;
         }
         renderWithProviders(<><Settled /><div data-testid="card"><Card /></div></>);
-        expect((await screen.findByTestId('settled')).dataset.visible).toBe('false');
-        expect(screen.getByTestId('card').textContent).toBe('');
+        expect((await screen.findByTestId('settled')).dataset.visible).toBe('true');
+        expect((await screen.findByTestId('hub-gallery-empty')).textContent).toBe(GALLERY_EMPTY_HINT);
+        expect(screen.getByRole('button', { name: 'Add picture' })).toBeInTheDocument();
+        expect(screen.queryByTestId('hub-gallery-see-all')).toBeNull();
     });
 
-    it('an editor keeps the card with the one-line hint and no See all', async () => {
-        server.use(hubMediaListHandler([]));
-        const { result } = probe(true);
-        renderWithProviders(<Card canEdit />);
-        expect((await screen.findByTestId('hub-gallery-empty')).textContent).toBe(GALLERY_EDITOR_EMPTY_HINT);
-        await waitFor(() => expect(result.current).toBe(true));
-        expect(screen.queryByTestId('hub-gallery-see-all')).toBeNull();
+    it('a hub with only uploads offers the Screenshots chip', async () => {
+        server.use(hubMediaListHandler([hubMediaItem(1, 'upload'), hubMediaItem(2, 'death')]));
+        renderWithProviders(<Card />);
+        expect(await screen.findByRole('button', { name: 'Screenshots' })).toBeInTheDocument();
     });
 
     it('a visitor-style 404 hides the card for everyone', async () => {

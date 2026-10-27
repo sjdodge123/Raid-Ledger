@@ -26,10 +26,31 @@ export const ValheimMaterialsWarningsSchema = z.object({
     omittedShared: z.number().int().min(0),
 }).strict();
 
+/**
+ * ROK-2014 — one play day's net change per item: today's end-of-day total
+ * minus the previous stored play day's. Zero deltas are omitted; negative =
+ * a net drop. Keys are always prefabs of the row set the trend sits beside.
+ */
+export const ValheimMaterialsTrendDaySchema = z.object({
+    /** The play day in the game server's timezone — no time, no zone. */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    /** prefab → end − previous end (integer, never 0). */
+    gains: z.record(z.string(), z.number().int()),
+}).strict();
+export type ValheimMaterialsTrendDay = z.infer<typeof ValheimMaterialsTrendDaySchema>;
+
+/** ROK-2014 — the last 3 play days that have a predecessor, newest first. */
+export const ValheimMaterialsTrendSchema = z.object({
+    days: z.array(ValheimMaterialsTrendDaySchema).max(3),
+}).strict();
+export type ValheimMaterialsTrend = z.infer<typeof ValheimMaterialsTrendSchema>;
+
 export const ValheimMaterialsSharedSchema = z.object({
     totals: z.array(ValheimMaterialStackSchema),
     chestCount: z.number().int().min(0),
     warnings: ValheimMaterialsWarningsSchema,
+    /** ROK-2014 (additive) — absent before two play days are stored. */
+    trend: ValheimMaterialsTrendSchema.optional(),
 }).strict();
 
 /**
@@ -48,6 +69,8 @@ export const ValheimMaterialsBaseSchema = z.object({
     /** Attached carts/ships under the current includeVehicles (0 when off). */
     vehicleCount: z.number().int().min(0),
     totals: z.array(ValheimMaterialStackSchema),
+    /** ROK-2014 (additive) — this base's per-item trend. */
+    trend: ValheimMaterialsTrendSchema.optional(),
 }).strict();
 export type ValheimMaterialsBase = z.infer<typeof ValheimMaterialsBaseSchema>;
 
@@ -57,6 +80,8 @@ export const ValheimMaterialsPersonalBaseSchema = z.object({
     base: z.string().length(22).nullable(),
     chestCount: z.number().int().min(1),
     totals: z.array(ValheimMaterialStackSchema),
+    /** ROK-2014 (additive) — absent for chests near no base. */
+    trend: ValheimMaterialsTrendSchema.optional(),
 }).strict();
 export type ValheimMaterialsPersonalBase = z.infer<typeof ValheimMaterialsPersonalBaseSchema>;
 
@@ -67,6 +92,8 @@ export const ValheimMaterialsPersonalSchema = z.object({
     omittedPrivate: z.number().int().min(0).nullable(),
     /** ROK-1859 (additive). */
     byBase: z.array(ValheimMaterialsPersonalBaseSchema).optional(),
+    /** ROK-2014 (additive). */
+    trend: ValheimMaterialsTrendSchema.optional(),
 }).strict();
 
 export const ValheimMaterialsResponseSchema = z.object({

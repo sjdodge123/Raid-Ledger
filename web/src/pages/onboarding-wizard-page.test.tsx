@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OnboardingWizardPage } from './onboarding-wizard-page';
 
@@ -155,8 +155,39 @@ vi.mock('../hooks/use-steam-link', async (importOriginal) => {
     };
 });
 
+/** ROK-2022: the Calendar step flag, driven per test (its own logic is unit-tested beside it). */
+const calendarFlag = vi.hoisted(() => ({ current: { needsCalendarConnect: false, settled: true } }));
+vi.mock('./onboarding-wizard/use-calendar-step-flag', () => ({ useCalendarStepFlag: () => calendarFlag.current }));
+/** The stub opens a dialog on the real escape-layer stack, as the Apple connect sheet does (Codex P2). */
+vi.mock('../components/onboarding/calendar-step', async () => {
+    const { useState } = await import('react');
+    const { useEscapeLayer } = await import('../hooks/use-escape-layer');
+    const { useCalendarOAuthFeedback } = await import('../components/features/calendar-sync/use-calendar-oauth-feedback');
+    const extraParams = ['resume'];
+    function CalendarStep() {
+        const [open, setOpen] = useState(false);
+        useEscapeLayer(open, () => setOpen(false));
+        useCalendarOAuthFeedback(extraParams); // as the real step: strips resume + connected / error on mount
+
+        return (
+            <div data-testid="calendar-step-stub">
+                Calendar step
+                <button type="button" onClick={() => setOpen(true)}>Open stub dialog</button>
+                {open && <div data-testid="calendar-stub-dialog" />}
+            </div>
+        );
+    }
+    return { CalendarStep };
+});
+/** Hearted games, driven per test (ROK-2022: a resume must wait for them). */
+vi.mock('../hooks/use-user-profile', () => ({
+    useUserHeartedGames: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
+import { useGameRegistry } from '../hooks/use-game-registry';
+import { useUserHeartedGames } from '../hooks/use-user-profile';
 
 const mockUseSystemStatus = useSystemStatus as unknown as ReturnType<typeof vi.fn>;
 
@@ -171,17 +202,27 @@ function createQueryClient() {
     });
 }
 
-function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding']) {
-    return render(
-        <QueryClientProvider client={createQueryClient()}>
+function LocationProbe() {
+    const loc = useLocation();
+    return <span data-testid="location">{loc.pathname + loc.search}</span>;
+}
+
+function wizardTree(ui: React.ReactElement, initialEntries: string[], client = createQueryClient()) {
+    return (
+        <QueryClientProvider client={client}>
             <MemoryRouter initialEntries={initialEntries}>
                 <Routes>
                     <Route path="/onboarding" element={ui} />
                     <Route path="/calendar" element={<div>Calendar Page</div>} />
                 </Routes>
+                <LocationProbe />
             </MemoryRouter>
-        </QueryClientProvider>,
+        </QueryClientProvider>
     );
+}
+
+function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding']) {
+    return render(wizardTree(ui, initialEntries));
 }
 
 describe('OnboardingWizardPage — part 1', () => {
@@ -465,5 +506,103 @@ describe('OnboardingWizardPage — Steam step settles first (tech-debt [12])', (
         refresh();
         fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
         expect(mockNavigate).toHaveBeenCalledWith('/calendar', { replace: true });
+    });
+});
+
+describe('OnboardingWizardPage — Calendar step (ROK-2022)', () => {
+    const newUser = { id: 1, username: 'newuser', role: 'member', discordId: '12345', onboardingCompletedAt: null };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+        mockUseSystemStatus.mockReturnValue({ data: { discordConfigured: false } });
+        calendarFlag.current = { needsCalendarConnect: true, settled: true };
+    });
+
+    afterEach(() => {
+        vi.mocked(useGameRegistry).mockReturnValue({ games: [], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+        vi.mocked(useUserHeartedGames).mockReturnValue({ data: undefined, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
+    });
+
+    function crumbIndex(needle: string): number {
+        return screen.getAllByRole('button').map((b) => b.textContent ?? '').findIndex((t) => t.includes(needle));
+    }
+
+    it('puts a Calendar breadcrumb after Game Time and before Connection when the flag is on', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />);
+        expect(crumbIndex('Calendar'), 'Calendar must follow Game Time').toBeGreaterThan(crumbIndex('Game Time'));
+        expect(crumbIndex('Calendar'), 'Calendar must precede Connection').toBeLessThan(crumbIndex('Connection'));
+    });
+
+    it('has no Calendar step when the flag is off (switch off / already connected)', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: true };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />);
+        expect(crumbIndex('Calendar'), 'no Calendar breadcrumb').toBe(-1);
+        expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    });
+
+    it('?resume=calendar opens ON the Calendar step (Games, Game Time, Calendar → step 3 of 5)', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&connected=google']);
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'the OAuth return must land on the Calendar step').toHaveTextContent('Step 3 of 5');
+        expect(screen.getByTestId('calendar-step-stub')).toBeInTheDocument();
+    });
+
+    it('?resume=calendar lets an onboarded user (a ?rerun=1 return) stay in the wizard', () => {
+        mockUseAuth.mockReturnValue({ user: { ...newUser, onboardingCompletedAt: '2026-02-01T00:00:00Z' } });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&error=denied']);
+        expect(screen.queryByText('Calendar Page'), 'stripping resume must not bounce to /calendar').toBeNull();
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'an onboarded return must still seek').toHaveTextContent('Step 3 of 5');
+    });
+
+    it('renders nothing while a resume waits for the overview (settled false)', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: false };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar']);
+        expect(screen.queryByRole('dialog'), 'the seek needs the final step list').toBeNull();
+    });
+
+    it('waits for the character-step queries: games that load after the overview still land on Calendar', () => {
+        const wow = { id: 9, name: 'World of Warcraft', shortName: 'WoW', hasRoles: true };
+        const registry = vi.mocked(useGameRegistry);
+        const hearted = vi.mocked(useUserHeartedGames);
+        registry.mockReturnValue({ games: [], isLoading: true } as unknown as ReturnType<typeof useGameRegistry>);
+        hearted.mockReturnValue({ data: undefined, isLoading: true } as unknown as ReturnType<typeof useUserHeartedGames>);
+        mockUseAuth.mockReturnValue({ user: newUser });
+        const client = createQueryClient();
+        const url = ['/onboarding?resume=calendar&connected=google'];
+        const { rerender } = render(wizardTree(<OnboardingWizardPage />, url, client));
+        registry.mockReturnValue({ games: [wow], isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+        hearted.mockReturnValue({ data: { data: [{ name: 'World of Warcraft' }] }, isLoading: false } as unknown as ReturnType<typeof useUserHeartedGames>);
+        rerender(wizardTree(<OnboardingWizardPage />, url, client));
+        expect(screen.getByText(/^Step \d+ of \d+$/), 'Games, WoW, Game Time, Calendar → step 4 of 6').toHaveTextContent('Step 4 of 6');
+        expect(screen.getByTestId('calendar-step-stub'), 'the late character step must not push Calendar off').toBeInTheDocument();
+    });
+
+    it('Escape in a dialog opened from the Calendar step closes only the dialog, never Skip All', () => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar']);
+        fireEvent.click(screen.getByRole('button', { name: 'Open stub dialog' }));
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(screen.queryByTestId('calendar-stub-dialog'), 'Escape closes the top dialog').toBeNull();
+        expect(mockNavigate, 'the same Escape must not skip onboarding').not.toHaveBeenCalled();
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(mockNavigate, 'with no dialog open, Escape still skips all').toHaveBeenCalledWith('/calendar', { replace: true });
+    });
+
+    it.each(['error=denied', 'connected=google'])('an OAuth return (%s) that lands ON the step strips resume AND the outcome', (outcome) => {
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, [`/onboarding?resume=calendar&${outcome}`]);
+        expect(screen.getByTestId('calendar-step-stub')).toBeInTheDocument();
+        expect(screen.getByTestId('location'), 'a reload must not re-seek or re-show the outcome').toHaveTextContent(/^\/onboarding$/);
+    });
+
+    it('a resume with no Calendar step (switch off) strips connected / error with resume', () => {
+        calendarFlag.current = { needsCalendarConnect: false, settled: true };
+        mockUseAuth.mockReturnValue({ user: newUser });
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?resume=calendar&error=denied']);
+        expect(screen.getByTestId('location'), 'no step is there to strip the OAuth params').toHaveTextContent(/^\/onboarding$/);
     });
 });

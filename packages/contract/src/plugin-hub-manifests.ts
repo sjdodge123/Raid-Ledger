@@ -28,7 +28,7 @@ const core = {
     { id: 'schedule', title: 'Schedule', description: 'Repeating sessions.', layoutKey: 'bare' },
     { id: 'events', title: 'Events', description: 'Upcoming and recent events.', layoutKey: 'bare' },
     { id: 'attendance', title: 'Attendance leaderboard', description: 'Who shows up most.', layoutKey: 'bare' },
-    { id: 'gallery', title: 'Gallery', description: 'Recent pictures from this hub — death posts and screenshots.', layoutKey: 'plugin' },
+    { id: 'gallery', title: 'Gallery', description: 'Pictures from this hub — Discord posts and member uploads.', layoutKey: 'plugin' },
     { id: 'steam-achievements', title: 'Achievement race', description: 'Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.', layoutKey: 'plugin' },
     { id: 'steam-playtime', title: 'Playtime', description: 'Lifetime Steam hours per member.', layoutKey: 'plugin' },
   ],
@@ -42,6 +42,7 @@ const core = {
   behaviours: [
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
+    { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
   ],
   setup: CORE_SETUP,
@@ -91,6 +92,7 @@ const blizzard = {
     { id: 'forever-roles', title: 'Role breakdown', description: 'Tanks, healers and DPS ready for dungeons and raids.', layoutKey: 'plugin' },
     { id: 'forever-dungeon-quests', title: 'Dungeon quests', description: 'Who has the quests for upcoming dungeon runs.', layoutKey: 'plugin' },
     { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
+    { id: 'forever-whos-saved', title: "Who's saved", description: 'Who is saved to which instance, and when it resets.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },

@@ -4,7 +4,7 @@
  * nested lists with disclosure rows, every branch open by default.
  */
 import { useMemo, useState, type JSX } from 'react';
-import type { ValheimPlanNode } from '@raid-ledger/contract';
+import type { ValheimPlanNode, ValheimStationBuilds } from '@raid-ledger/contract';
 import { foldNodes, type PlannerKind, type PlanTreeNode } from './planner.helpers';
 import { RecipeTreeRow } from './recipe-tree-row';
 import { rootKindOf, type PlannerNames } from './use-planner-names';
@@ -16,9 +16,10 @@ interface BranchProps {
     collapsed: ReadonlySet<number>;
     onToggle: (id: number) => void;
     label?: string;
+    stationBuilds: ValheimStationBuilds | undefined;
 }
 
-function Branch({ entries, names, kindOf, collapsed, onToggle, label }: BranchProps): JSX.Element {
+function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds }: BranchProps): JSX.Element {
     return (
         <ul aria-label={label} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
             {entries.map(({ node, children }) => {
@@ -32,9 +33,10 @@ function Branch({ entries, names, kindOf, collapsed, onToggle, label }: BranchPr
                             hasChildren={children.length > 0}
                             expanded={expanded}
                             onToggle={() => onToggle(node.id)}
+                            stationBuilds={stationBuilds}
                         />
                         {children.length > 0 && expanded && (
-                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} />
+                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} stationBuilds={stationBuilds} />
                         )}
                     </li>
                 );
@@ -61,6 +63,7 @@ export function RecipeTree({
     names,
     label,
     rootKinds,
+    stationBuilds,
 }: {
     nodes: readonly ValheimPlanNode[];
     truncated: boolean;
@@ -68,6 +71,8 @@ export function RecipeTree({
     label: string;
     /** Target kinds in request order — root i is target i. */
     rootKinds: readonly (PlannerKind | undefined)[];
+    /** ROK-1861: the response's upgrade-station build costs (never netted). */
+    stationBuilds?: ValheimStationBuilds | undefined;
 }): JSX.Element {
     // ROK-1862: never pruned — undiscovered nodes keep their chip so the tree matches the shopping list.
     const roots = useMemo(() => foldNodes(nodes), [nodes]);
@@ -75,7 +80,7 @@ export function RecipeTree({
     const { collapsed, onToggle } = useCollapsed();
     return (
         <div className="space-y-2">
-            <Branch entries={roots} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} label={label} />
+            <Branch entries={roots} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} label={label} stationBuilds={stationBuilds} />
             {truncated && (
                 <p className="text-xs text-muted">This tree is too large to show in full.</p>
             )}

@@ -6,6 +6,8 @@ export const HUB_MEDIA_KIND_LABEL: Record<HubMediaKind, string> = {
     death: 'Death',
     screenshot: 'Screenshot',
     image: 'Picture',
+    /** ROK-1965 — member uploads read as screenshots (their chip). */
+    upload: 'Screenshot',
 };
 
 /** The tile's accessible name; `now` is injectable for specs. */

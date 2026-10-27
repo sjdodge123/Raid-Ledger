@@ -19,6 +19,8 @@ export interface HubGalleryPages {
     total: number;
     kinds: HubMediaKind[];
     loading: boolean;
+    /** A refetch of the loaded pages is in flight (cached list on screen, e.g. right after an upload invalidated it). */
+    refreshing: boolean;
     hasMore: boolean;
     loadingMore: boolean;
     loadMore: () => Promise<unknown>;
@@ -40,6 +42,7 @@ export function useHubGalleryPages(guildId: number, filter: HubMediaFilter): Hub
         total: first?.total ?? 0,
         kinds: first?.kinds ?? [],
         loading: q.isPending,
+        refreshing: q.isFetching && !q.isPending && !q.isFetchingNextPage,
         hasMore: q.hasNextPage,
         loadingMore: q.isFetchingNextPage,
         loadMore: () => q.fetchNextPage(),

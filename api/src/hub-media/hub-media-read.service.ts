@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HUB_MEDIA_KINDS,
@@ -14,9 +19,10 @@ import {
   type GuildActor,
 } from '../guilds/guild-access.service';
 import {
-  assertCanEditHubMedia,
-  assertCanRemoveHubMedia,
+  assertCanRemoveRow,
   assertCanViewHubMedia,
+  canRemoveRow,
+  type HubMediaRights,
 } from './hub-media.access';
 import {
   decodeHubMediaCursor,
@@ -38,10 +44,16 @@ import {
 import { markRemoved } from './hub-media.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
+/** One request's viewer: who, the scope they read, and their rights. */
+export interface HubMediaViewer {
+  actor: GuildActor;
+  scope: HubMediaScope;
+  rights: HubMediaRights;
+}
 export const HUB_MEDIA_NOT_FOUND = 'Picture not found';
 const DEFAULT_LIMIT = 24;
 
-/** ROK-1942 L2 — the Gallery's reads and moderation (D7, D8, D13). */
+/** ROK-1942 L2 — the Gallery's reads and moderation (D7, D8, D13; ROK-1965 D11). */
 @Injectable()
 export class HubMediaReadService {
   constructor(
@@ -55,7 +67,8 @@ export class HubMediaReadService {
     guildId: number,
     query: HubMediaListQuery,
   ): Promise<HubMediaListResponse> {
-    const scope = await this.scope(actor, guildId);
+    const viewer = await this.viewer(actor, guildId);
+    const { scope } = viewer;
     const kinds = kindsForFilter(query.kind);
     const cursor = query.cursor ? decodeHubMediaCursor(query.cursor) : null;
     const limit = query.limit ?? DEFAULT_LIMIT;
@@ -64,7 +77,7 @@ export class HubMediaReadService {
     const last = page[page.length - 1];
     const present = new Set(await kindsPresent(this.db, scope));
     return {
-      items: page.map((r) => this.toItem(r)),
+      items: page.map((r) => this.toItem(r, viewer)),
       nextCursor:
         rows.length > limit && last
           ? encodeHubMediaCursor({ capturedAt: last.capturedAt, id: last.id })
@@ -79,7 +92,8 @@ export class HubMediaReadService {
     guildId: number,
     id: number,
   ): Promise<HubMediaItem> {
-    return this.toItem(await this.visibleRow(actor, guildId, id));
+    const viewer = await this.viewer(actor, guildId);
+    return this.toItem(await this.visibleRow(viewer, id), viewer);
   }
 
   /** Absolute path of a rendition the viewer may see (404 otherwise). */
@@ -89,7 +103,7 @@ export class HubMediaReadService {
     id: number,
     variant: HubMediaVariant,
   ): Promise<string> {
-    const row = await this.visibleRow(actor, guildId, id);
+    const row = await this.visibleRow(await this.viewer(actor, guildId), id);
     return mediaFilePath(guildId, row.storageName, variant);
   }
 
@@ -100,44 +114,51 @@ export class HubMediaReadService {
     id: number,
     hidden: boolean,
   ): Promise<HubMediaItem> {
-    await assertCanEditHubMedia(this.db, this.access, actor, guildId);
+    const viewer = await this.viewer(actor, guildId);
+    if (!viewer.rights.canEdit) {
+      throw new ForbiddenException('Guild editor access required');
+    }
     const row = await setHidden(this.db, guildId, id, hidden ? actor.id : null);
     if (!row) throw new NotFoundException(HUB_MEDIA_NOT_FOUND);
-    return this.toItem(row);
+    return this.toItem(row, viewer);
   }
 
-  /** D8 staff Remove — tombstone (never re-ingested) + unlink both files. */
+  /**
+   * ROK-1965 D11 Remove — the hub leader (any picture) or the uploader (own,
+   * while they can still see it); everyone else who can view → 403. A
+   * tombstone (never re-ingested) + unlink both files.
+   */
   async remove(actor: GuildActor, guildId: number, id: number): Promise<void> {
-    await assertCanRemoveHubMedia(this.db, this.access, actor, guildId);
+    const viewer = await this.viewer(actor, guildId);
+    assertCanRemoveRow(viewer.rights, actor, await this.visibleRow(viewer, id));
     const storageName = await markRemoved(this.db, { guildId, id });
     if (!storageName) throw new NotFoundException(HUB_MEDIA_NOT_FOUND);
     await unlinkMediaFiles(guildId, storageName);
   }
 
-  private async scope(
-    actor: GuildActor,
-    guildId: number,
-  ): Promise<HubMediaScope> {
-    const { canEdit } = await assertCanViewHubMedia(
+  /** The D7 404 gate, then the viewer's rights for this request. */
+  async viewer(actor: GuildActor, guildId: number): Promise<HubMediaViewer> {
+    const rights = await assertCanViewHubMedia(
       this.db,
       this.access,
       actor,
       guildId,
     );
-    return { guildId, includeHidden: canEdit };
+    return { actor, rights, scope: { guildId, includeHidden: rights.canEdit } };
   }
 
-  private async visibleRow(actor: GuildActor, guildId: number, id: number) {
-    const row = await findVisible(
-      this.db,
-      await this.scope(actor, guildId),
-      id,
-    );
+  /** A row the viewer may see (editors include hidden rows), else 404. */
+  async visibleRow(
+    viewer: HubMediaViewer,
+    id: number,
+  ): Promise<schema.HubMediaRow> {
+    const row = await findVisible(this.db, viewer.scope, id);
     if (!row) throw new NotFoundException(HUB_MEDIA_NOT_FOUND);
     return row;
   }
 
-  private toItem(row: schema.HubMediaRow): HubMediaItem {
-    return toHubMediaItem(row, this.decorators.linkFor(row));
+  toItem(row: schema.HubMediaRow, viewer: HubMediaViewer): HubMediaItem {
+    const canRemove = canRemoveRow(viewer.rights, viewer.actor, row);
+    return toHubMediaItem(row, this.decorators.linkFor(row), canRemove);
   }
 }

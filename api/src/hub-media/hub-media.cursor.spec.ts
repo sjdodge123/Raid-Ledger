@@ -34,7 +34,7 @@ describe('kindsForFilter (All · Deaths · Screenshots)', () => {
     }).toEqual({
       none: null,
       death: ['death'],
-      screenshot: ['screenshot', 'image'],
+      screenshot: ['screenshot', 'image', 'upload'],
       image: ['image'],
     });
   });

@@ -61,6 +61,31 @@ export const ValheimRecipeUpgradeSchema = ValheimRecipeCostSchema.extend({
 }).strict();
 export type ValheimRecipeUpgrade = z.infer<typeof ValheimRecipeUpgradeSchema>;
 
+/**
+ * ROK-1861: one quality step of a multi-step recipe node — the step that
+ * produces `quality`, its station + level, and what it consumes for the
+ * node's whole quantity (zero amounts dropped, resource order).
+ */
+export const ValheimPlanStepSchema = ValheimRecipeCostSchema.extend({
+  quality,
+  /** The step's station carries the 1.0.20 `upgrader` flag. */
+  upgraderStation: z.boolean(),
+}).strict();
+export type ValheimPlanStep = z.infer<typeof ValheimPlanStepSchema>;
+
+/** ROK-1861: build cost (×1, never netted) of each upgrader station a step names, keyed by station prefab. */
+export const ValheimStationBuildsSchema = z.record(
+  z.string(),
+  z
+    .array(
+      z
+        .object({ prefab: ValheimPrefabIdSchema, amount: z.number().int().min(1) })
+        .strict(),
+    )
+    .max(VALHEIM_LINK_REQUIREMENTS_MAX),
+);
+export type ValheimStationBuilds = z.infer<typeof ValheimStationBuildsSchema>;
+
 export const ValheimRecipeCatalogEntrySchema = z
   .object({
     prefab: ValheimPrefabIdSchema,
@@ -160,6 +185,8 @@ export const ValheimPlanViaSchema = z.discriminatedUnion("type", [
       formula: z.enum(["vanilla", "custom"]),
       anyOneOf: z.boolean(),
       upgraderStation: z.boolean(),
+      /** ROK-1861: per-step breakdown; only when the node spans ≥ 2 quality steps. */
+      steps: z.array(ValheimPlanStepSchema).max(10).optional(),
     })
     .strict(),
   z
@@ -213,6 +240,7 @@ export const ValheimRecipeTreeResponseSchema = z
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
     discovery: ValheimRecipeDiscoverySchema.optional(),
     spoilers: ValheimRecipeSpoilersSchema.optional(),
+    stationBuilds: ValheimStationBuildsSchema.optional(),
   })
   .strict();
 export type ValheimRecipeTreeResponse = z.infer<
@@ -278,6 +306,7 @@ export const ValheimRecipePlanResponseSchema = z
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
     discovery: ValheimRecipeDiscoverySchema.optional(),
     spoilers: ValheimRecipeSpoilersSchema.optional(),
+    stationBuilds: ValheimStationBuildsSchema.optional(),
   })
   .strict();
 export type ValheimRecipePlanResponse = z.infer<
