@@ -17,7 +17,8 @@ import { events } from './events';
 
 // ROK-1968: a hub's "Before next session" note, one row per guild.
 // `updated_at` is the concurrency token; `clear_after_event_id` pins the
-// event whose end clears the note (lazily) — deleting it drops the auto-clear.
+// event whose end clears the note (lazily) — deleting it drops the auto-clear;
+// `clear_after_armed` waits for an event to pin when none existed at save.
 export const hubSessionNotes = pgTable(
   'hub_session_notes',
   {
@@ -35,6 +36,9 @@ export const hubSessionNotes = pgTable(
       () => events.id,
       { onDelete: 'set null' },
     ),
+    // D5b: "clear after next event" ticked while the hub had no upcoming
+    // event — the first eligible event scheduled later is pinned on read.
+    clearAfterArmed: boolean('clear_after_armed').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

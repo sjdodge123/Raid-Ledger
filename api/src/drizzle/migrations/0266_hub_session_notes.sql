@@ -16,6 +16,7 @@ CREATE TABLE "hub_session_notes" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by" integer,
 	"clear_after_event_id" integer,
+	"clear_after_armed" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "hub_session_notes_body_length" CHECK (char_length("hub_session_notes"."body") <= 4000)
 );

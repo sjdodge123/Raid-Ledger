@@ -1,5 +1,5 @@
 {
-  "id": "7775ad30-c0c6-4fac-af7d-f1e85cb7607c",
+  "id": "39f0937d-5414-40f3-9c64-3af51b367780",
   "prevId": "89c2d95b-c338-4ab5-a7a3-11558c5e71c0",
   "version": "7",
   "dialect": "postgresql",
@@ -12538,6 +12538,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "clear_after_armed": {
+          "name": "clear_after_armed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
