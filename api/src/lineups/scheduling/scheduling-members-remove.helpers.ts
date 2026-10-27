@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { deleteAllUserVotesForMatch } from './scheduling-query.helpers';
+import { lockMatchMember } from './scheduling-member-lock.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -22,6 +23,9 @@ export interface RemovedMemberRows {
  * voter counted in the tally but missing from the roster (or the reverse).
  * Votes on other matches are untouched: the delete is scoped to this match's
  * slots by `deleteAllUserVotesForMatch`.
+ *
+ * Codex P2: the roster lock is taken FIRST, so a concurrent `toggleVote` for
+ * the same user cannot insert a vote between the two deletes.
  */
 export function deleteMatchMemberWithVotes(
   db: Db,
@@ -29,6 +33,7 @@ export function deleteMatchMemberWithVotes(
   userId: number,
 ): Promise<RemovedMemberRows> {
   return db.transaction(async (tx) => {
+    await lockMatchMember(tx, matchId, userId);
     const votes = await deleteAllUserVotesForMatch(
       tx,
       matchId,
