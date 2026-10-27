@@ -9,7 +9,7 @@ import { HubMediaChannelResolver } from './hub-media-channel.queries';
 import {
   HubMediaIngestPool,
   HubMediaIngestQueueFullError,
-} from './hub-media-ingest.pool';
+} from '../../hub-media/hub-media-ingest.pool';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 import type { GatewayPost } from './hub-media-post.mapper';
 
