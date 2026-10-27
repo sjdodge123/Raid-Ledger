@@ -1588,8 +1588,9 @@ ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked
 target and plain text when not, a "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
 since <date>", viewer timezone). Copy this shape for any future ranked-count widget; `useVisible` hides it when
 the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
-CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` hides it from members at 0
-pictures, editors keep it with the §4.5 hint.
+CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` shows it to every hub
+member, empty too (ROK-1965 D15: "No pictures yet. Add the first one." so someone can add the first picture); a visitor's
+404 hides it.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
 (declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
@@ -1693,7 +1694,7 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
   (`opacity-50` image). Named for screen readers: "Death — Jasz, 2 h ago. Open picture". The card strip is
   8 tiles ≥1024px (4 columns), 6 below (3 columns); the See-all grid is 3 / 4 columns.
 - **Chips** — All · Deaths · Screenshots (`hub-gallery-chips.tsx`, the §3.1 `FilterChip`, exclusive, shown only
-  when the hub has both kinds; Screenshots = `screenshot` + `image`). The same chips sit on the card, in the
+  when the hub has both kinds; Screenshots = `screenshot` + `image` + `upload`). The same chips sit on the card, in the
   grid and in the viewer, and are one filter per hub (`hub-gallery-store.ts`). They are an in-card / in-dialog
   toggle, not a page's filter set, so the §4.1 funnel does not apply.
 - **One dialog, two modes** (`hub-gallery-dialog.tsx`): `Modal maxWidth="max-w-3xl"` ≥1024px,
@@ -1704,11 +1705,18 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
   `bg-media-well` well (`aspect-[4/3]`, `lg:aspect-video`; near-black in every scheme, "Loading picture…" in `text-media-well-foreground`), 44px `Button secondary iconOnly` Prev / Next
   ("Previous picture" / "Next picture", `aria-disabled` at either end so focus stays put) over its edges, ←/→ keys (not while typing). Prev/Next walk the
   **filtered** set and page in more through `nextCursor` at the loaded end. Caption: kind badge, author,
-  date + relative time, source, the optional decorator link.
-- **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar): grid → `Load more` (24 a page) while
-  `nextCursor`; viewer → `Back to all`, editors `Hide` (`warning-soft`) / `Unhide` (`success-soft`), staff
-  `Remove` (`destructive-soft`) that asks inline ("Remove for good", `destructive`) instead of stacking a
-  confirm.
+  date + relative time, source ("From Discord"; a member upload says "Uploaded", ROK-1965), the optional decorator link.
+- **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar, always shown): grid → `Add picture`, then
+  `Load more` (24 a page) while `nextCursor`; viewer → `Back to all`, editors `Hide` (`warning-soft`) / `Unhide`
+  (`success-soft`), and `Remove` (`destructive-soft`) on an item whose server-computed `canRemove` is true (the hub
+  leader, or the member who uploaded it — ROK-1965) that asks inline ("Remove for good", `destructive`) instead of
+  stacking a confirm.
+- **Add picture** (ROK-1965, `hub-gallery-add-picture.tsx`): the §3.1 `FilePicker` (`secondary`, accept PNG / JPEG
+  / WebP, one file per pick, no caption step) in the card header before "See all (N)" — "＋ Add" below 1024px, the
+  accessible name stays "Add picture" — and in the grid footer. Picking uploads at once; the button is disabled and
+  reads "Uploading… 40%"; success toasts "Picture added" and refreshes every Gallery query for the hub; each error
+  `code` toasts its plain copy (`hub-media-upload-copy.ts`). A pick over 9 MiB is re-encoded in the browser first
+  (`hub-media-shrink.ts`: canvas ≤4096px, JPEG q0.92 → q0.8). No drop zone in v1. No new primitive.
 - **Images** are behind the bearer token: `useHubMediaImageUrl(path)` fetches → object URL (revoked); a
   missing file leaves the tile's `bg-panel` / the viewer's "Loading picture…".
 
