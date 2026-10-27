@@ -35,7 +35,7 @@ function PlanPane({ plan, names }: Pick<PlannerState, 'plan' | 'names'>): JSX.El
         return (
             <div className="space-y-2">
                 {plan.data.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds} />
+                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds} stationBuilds={plan.data.stationBuilds} />
             </div>
         );
     if (plan.isError) return <MapError text="Couldn’t load your list’s plan." onRetry={() => void plan.refetch()} />;
