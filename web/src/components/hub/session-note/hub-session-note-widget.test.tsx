@@ -16,6 +16,7 @@ import HubSessionNoteWidget, { SESSION_NOTE_EMPTY_HINT } from './hub-session-not
 import { HubSessionNoteAction } from './hub-session-note-action';
 import { useSessionNoteVisible } from './use-session-note-visible';
 import { ITEM_GONE_TOAST } from './use-hub-session-note';
+import { tickQueueKey, ticksWaiting } from './session-note-tick-queue';
 import { sessionNoteKey, sessionNoteQuery } from './hub-session-note-query';
 import { editedByLine, formatClearAfter } from './session-note.helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
@@ -243,6 +244,50 @@ describe('HubSessionNoteWidget — overlapping ticks', () => {
         await waitFor(() => expect(queryClient.isMutating()).toBe(0));
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
         expect([item(1).checked, item(2).checked]).toEqual([false, false]);
+    });
+});
+
+/**
+ * Two ticks on item 1: the first PATCH is held before the server writes it, and released either by a
+ * second PATCH arriving (unserialised client) or by the test once the second tick is queued behind it.
+ */
+function sameItemServer() {
+    const base = buildSessionNoteResponse(buildSessionNote());
+    let items = base.note?.items ?? [];
+    let arrived = 0;
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const respond = () => HttpResponse.json({ ...base, note: base.note && { ...base.note, items } });
+    server.use(
+        http.get(SESSION_NOTE_URL, () => respond()),
+        http.patch(SESSION_NOTE_ITEM_URL, async ({ request, params }) => {
+            const id = Number(params['itemId']);
+            const { done } = (await request.json()) as { done: boolean };
+            arrived += 1;
+            if (arrived === 1) await gate;
+            else release();
+            items = items.map((it) => (it.id === id ? { ...it, done } : it));
+            return respond();
+        }),
+    );
+    return { release: () => release(), arrived: () => arrived, done: (id: number) => items.find((it) => it.id === id)?.done };
+}
+
+describe('HubSessionNoteWidget — repeated ticks on one item', () => {
+    it('sends check-then-uncheck in order, so the server and the box end on the last click', async () => {
+        const srv = sameItemServer();
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<Card />, { queryClient });
+        await screen.findByTestId('session-note-body');
+        fireEvent.click(item(1)); // check — held before the server writes it
+        await waitFor(() => expect(srv.arrived()).toBe(1));
+        fireEvent.click(item(1)); // uncheck
+        await waitFor(() => expect(srv.arrived() === 2 || ticksWaiting(tickQueueKey(5, 1)) > 0).toBe(true));
+        srv.release();
+        await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(srv.done(1), 'the server applied the last click (uncheck)').toBe(false);
+        expect(item(1).checked, 'the box shows the last click').toBe(false);
     });
 });
 

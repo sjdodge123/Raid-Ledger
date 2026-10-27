@@ -16,6 +16,7 @@ import { errorBodyOf, httpStatusOf, isConflictError } from '../../../lib/api/api
 import { toast } from '../../../lib/toast';
 import { clearSessionNote, putSessionNote, tickSessionNoteItem } from './hub-session-note-api';
 import { sessionNoteKey, sessionNoteQuery } from './hub-session-note-query';
+import { enqueueTick, isLatestTick, markTick, tickQueueKey } from './session-note-tick-queue';
 
 export const ITEM_GONE_TOAST = 'That checklist item no longer exists';
 
@@ -67,16 +68,19 @@ function findItem(data: HubSessionNoteResponse | undefined, itemId: number): Not
 
 async function applyOptimisticTick(client: QueryClient, guildId: number, { itemId, done }: TickVars) {
     const key = sessionNoteKey(guildId);
+    const stamp = markTick(tickQueueKey(guildId, itemId)); // at click time, so stamps follow click order
     await client.cancelQueries({ queryKey: key });
     const previous = findItem(client.getQueryData<HubSessionNoteResponse>(key), itemId);
     client.setQueryData<HubSessionNoteResponse>(key, (prev) => withItem(prev, itemId, (item) => ({ ...item, done })));
-    return { previous };
+    return { previous, stamp };
 }
 
 /**
- * Members + editors: optimistic tick. Ticks can overlap and answer out of order, so each one only
- * ever writes (or rolls back) its OWN item, and the last tick to settle refetches to reconcile.
- * A 404 (row or note gone) also toasts.
+ * Members + editors: optimistic tick. Ticks on different items overlap and answer out of order, so
+ * each one only ever writes (or rolls back) its OWN item, and the last tick to settle refetches to
+ * reconcile. Ticks on the SAME item are sent one at a time (`enqueueTick`), so the server applies
+ * them in click order, and only the newest click on an item writes its answer or rollback to the
+ * cache — an older answer would flip the box back mid-sequence. A 404 (row or note gone) also toasts.
  */
 export function useTickSessionNoteItem(guildId: number) {
     const client = useQueryClient();
@@ -87,13 +91,16 @@ export function useTickSessionNoteItem(guildId: number) {
     };
     return useMutation({
         mutationKey,
-        mutationFn: ({ itemId, done }: TickVars) => tickSessionNoteItem(guildId, itemId, done),
+        mutationFn: ({ itemId, done }: TickVars) =>
+            enqueueTick(tickQueueKey(guildId, itemId), () => tickSessionNoteItem(guildId, itemId, done)),
         onMutate: (vars) => applyOptimisticTick(client, guildId, vars),
         onError: (error, { itemId }, context) => {
-            restore(itemId, context?.previous);
+            if (context && isLatestTick(tickQueueKey(guildId, itemId), context.stamp)) restore(itemId, context.previous);
             if (httpStatusOf(error) === 404) toast.error(ITEM_GONE_TOAST);
         },
-        onSuccess: (data, { itemId }) => restore(itemId, findItem(data, itemId)),
+        onSuccess: (data, { itemId }, context) => {
+            if (isLatestTick(tickQueueKey(guildId, itemId), context.stamp)) restore(itemId, findItem(data, itemId));
+        },
         onSettled: () => {
             if (client.isMutating({ mutationKey }) <= 1) void client.invalidateQueries({ queryKey: key });
         },
