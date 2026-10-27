@@ -142,7 +142,12 @@ export class StandalonePollService {
       { id: creatorId ?? -1, isAdmin },
       { eventId, startTime },
     );
-    const result = await completeStandalonePoll(this.db, matchId, eventId);
+    const result = await completeStandalonePoll(
+      this.db,
+      matchId,
+      eventId,
+      startTime,
+    );
     if (result.conflict) {
       throw new ConflictException('This poll has already been completed');
     }

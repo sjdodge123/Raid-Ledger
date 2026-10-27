@@ -9,6 +9,7 @@ import * as schema from '../../drizzle/schema';
 import {
   selectCompletionTarget,
   flipLineupMatch,
+  assertLineupLockIn,
 } from './standalone-poll-complete.helpers';
 import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
@@ -220,6 +221,7 @@ export async function completeStandalonePoll(
   db: Db,
   matchId: number,
   eventId?: number,
+  startTime?: string,
 ): Promise<{
   ok: boolean;
   /** ROK-1844: the poll was no longer `scheduling` — already completed. */
@@ -229,10 +231,15 @@ export async function completeStandalonePoll(
 }> {
   const match = await selectCompletionTarget(db, matchId);
   if (!match) return { ok: false };
-  // ROK-2024: a regular lineup match links the event and keeps its lineup.
+  // ROK-2024: a regular lineup match links the event and keeps its lineup;
+  // it is refused (400) before the flip without an event or on a past slot.
   const flipped = match.standalone
     ? await flipAndArchive(db, match)
-    : await flipLineupMatch(db, match.id, eventId);
+    : await flipLineupMatch(
+        db,
+        match.id,
+        assertLineupLockIn(eventId, startTime),
+      );
   if (!flipped) return { ok: false, conflict: true };
   return {
     ok: true,

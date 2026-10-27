@@ -5,9 +5,11 @@
  * ROK-2024: completion also accepts a REGULAR lineup match — the web create
  * form locks in an open lineup poll through the same `complete` endpoint.
  */
+import { BadRequestException } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { assertSlotIsFuture } from '../scheduling/scheduling-lock-in.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -40,6 +42,26 @@ export async function selectCompletionTarget(db: Db, matchId: number) {
 }
 
 /**
+ * ROK-2024 review fix: what a REGULAR lineup match needs before it may flip.
+ * Without an event it would turn `scheduled` with no linked event — neither
+ * lock-in door could ever finish it again — and, like the expired path
+ * (`assertMayLockInSlot`), a time that already passed is refused.
+ *
+ * @returns The event to link.
+ * @throws BadRequestException when `eventId` is missing or `startTime` passed.
+ */
+export function assertLineupLockIn(
+  eventId: number | undefined,
+  startTime: string | undefined,
+): number {
+  if (eventId === undefined) {
+    throw new BadRequestException('A lineup poll locks in with an event');
+  }
+  assertSlotIsFuture(startTime);
+  return eventId;
+}
+
+/**
  * ROK-2024: lock in a REGULAR lineup match — what `createLockedInEvent` does
  * after it creates the event: compare-and-set `scheduling` → `scheduled` and
  * link the event. The lineup is NOT archived (only standalone polls archive
@@ -48,14 +70,11 @@ export async function selectCompletionTarget(db: Db, matchId: number) {
 export async function flipLineupMatch(
   db: Db,
   matchId: number,
-  eventId: number | undefined,
+  eventId: number,
 ): Promise<boolean> {
   const flipped = await db
     .update(schema.communityLineupMatches)
-    .set({
-      status: 'scheduled',
-      ...(eventId === undefined ? {} : { linkedEventId: eventId }),
-    })
+    .set({ status: 'scheduled', linkedEventId: eventId })
     .where(
       and(
         eq(schema.communityLineupMatches.id, matchId),
