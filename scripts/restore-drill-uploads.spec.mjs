@@ -47,14 +47,20 @@ function archiveFile() {
   return p;
 }
 
-/** Fake tar: `-tf` prints `listing`; `-xf` writes `extract` files into the -C dir. */
-function fakeTar({ listing, extract = [], listError, extractError }) {
+/** Fake tar: `-tf` prints `listing`; `-tvf` prints `verbose` (default: plain files/dirs); `-xf` writes `extract` files into the -C dir. */
+function fakeTar({ listing, extract = [], listError, extractError, verbose, onExtract }) {
   return async (cmd, args) => {
     assert.equal(cmd, 'tar');
+    if (args[0] === '-tvf') {
+      const lines =
+        verbose ?? listing.map((n) => `${n.endsWith('/') ? 'd' : '-'}rw-r--r-- 0/0 1 2026-10-27 02:00 ${n}`);
+      return { stdout: lines.join('\n') + '\n', stderr: '' };
+    }
     if (args[0] === '-tf') {
       if (listError) throw Object.assign(new Error('exit 2'), { stderr: listError });
       return { stdout: listing.join('\n') + '\n', stderr: '' };
     }
+    onExtract?.();
     if (extractError) throw Object.assign(new Error('exit 2'), { stderr: extractError });
     const dest = args[args.indexOf('-C') + 1];
     for (const rel of extract) {
@@ -183,4 +189,55 @@ test('runUploadsTier: a live row whose file is absent fails U2 by name', async (
     ],
   );
   assert.match(findings[1]?.detail ?? '', /missing: uploads\/hub-media\/9\/z\.thumb\.webp$/);
+});
+
+test('archive check: absolute, ".." and link members fail U1 without extracting', async () => {
+  const cases = [
+    { listing: ['/etc/passwd'], hit: /\/etc\/passwd/ },
+    { listing: ['uploads/', 'uploads/../../evil.sh'], hit: /uploads\/\.\.\/\.\.\/evil\.sh/ },
+    {
+      listing: ['uploads/', 'uploads/l'],
+      verbose: ['drwxr-xr-x 0/0 0 2026-10-27 02:00 uploads/', 'lrwxrwxrwx 0/0 0 2026-10-27 02:00 uploads/l -> /etc'],
+      hit: /uploads\/l -> \/etc/,
+    },
+    {
+      listing: ['uploads/', 'uploads/h'],
+      verbose: ['drwxr-xr-x 0/0 0 2026-10-27 02:00 uploads/', 'hrw-r--r-- 0/0 0 2026-10-27 02:00 uploads/h link to /etc/shadow'],
+      hit: /uploads\/h link to/,
+    },
+  ];
+  for (const c of cases) {
+    let extracted = false;
+    const r = await runUploadsArchiveCheck({
+      execFile: fakeTar({ ...c, onExtract: () => (extracted = true) }),
+      archive: archiveFile(),
+      tmpDir: scratch(),
+    });
+    assert.equal(r.findings[0]?.status, 'failed', `expected failed for ${c.listing.join(',')}`);
+    assert.match(r.findings[0]?.detail ?? '', /refusing to extract/);
+    assert.match(r.findings[0]?.detail ?? '', c.hit);
+    assert.equal(extracted, false, 'an unsafe archive must never be extracted');
+    assert.equal(r.members, null);
+  }
+});
+
+test('archive check: too little scratch space fails U1 without extracting', async () => {
+  let extracted = false;
+  const r = await runUploadsArchiveCheck({
+    execFile: fakeTar({ listing: ['uploads/a.png'], extract: ['uploads/a.png'], onExtract: () => (extracted = true) }),
+    archive: archiveFile(),
+    tmpDir: scratch(),
+    statfs: () => ({ bavail: 0, bsize: 4096 }),
+  });
+  assert.equal(r.findings[0]?.status, 'failed');
+  assert.match(r.findings[0]?.detail ?? '', /needs 1 bytes to extract, scratch dir has 0 free/);
+  assert.equal(extracted, false);
+});
+
+test('reference check: the archive top folder need not be named uploads/', () => {
+  const [f] = runUploadsReferenceCheck({
+    members: ['srv-files/', 'srv-files/feedback/7/shot.png'],
+    expected: ['uploads/feedback/7/shot.png'],
+  });
+  assert.equal(f?.status, 'passed', f?.detail);
 });

@@ -3,14 +3,18 @@
  * restore-drill-uploads.mjs — ROK-2023 D13: the restore drill's `uploads` tier.
  *
  * Each daily dump `daily/raid_ledger_<ts>.dump` has a companion archive
- * `raid_ledger_<ts>.uploads.tar` (members under `uploads/`, written straight
- * after the dump — ROK-2023 D1/D3). This module proves the pair restores
- * together:
- *   - `u1-archive-integrity`: `tar -tf` lists the archive, and extracting it
- *     into a scratch dir yields exactly as many non-directory entries as the
- *     listing names (a truncated tar lists fine but extracts short);
+ * `raid_ledger_<ts>.uploads.tar` (members under the uploads root's basename —
+ * `uploads/` in production — written straight after the dump, ROK-2023
+ * D1/D3). This module proves the pair restores together:
+ *   - `u1-archive-integrity`: `tar -tf` lists the archive; no member is an
+ *     absolute path, has a `..` segment or is a symlink/hardlink (checked
+ *     BEFORE extracting); the scratch dir has room for the archive (a plain
+ *     tar's size bounds its extracted size); and extracting it yields exactly
+ *     as many non-directory entries as the listing names (a truncated tar
+ *     lists fine but extracts short);
  *   - `u2-references-resolve`: every file the RESTORED database points at is
- *     a member — `feedback.screenshot_path` (relative to the uploads root) and
+ *     a member (whatever the archive's top folder is called) —
+ *     `feedback.screenshot_path` (relative to the uploads root) and
  *     both webp files of every live `hub_media` row
  *     (`hub-media/<guild_id>/<storage_name>{,.thumb}.webp`). Removed rows are
  *     tombstones whose files are gone by design, so they are skipped.
@@ -43,6 +47,29 @@ export function uploadsArchiveFor(dumpFile) {
 
 /** `./uploads/x` and `uploads/x` name the same member. */
 const normalizeMember = (m) => m.replace(/^\.\//, '');
+
+/** `<any top folder>/x` → `uploads/x`, so U2 does not depend on the root's basename. */
+const canonicalMember = (m) => {
+  const i = m.indexOf('/');
+  return i === -1 ? m : `${ROOT}${m.slice(i)}`;
+};
+
+/** A member that could write outside the scratch dir, or a link (spec MINOR 3). */
+export function unsafeMembers(members, verboseLines) {
+  const bad = members.filter((m) => m.startsWith('/') || m.split('/').includes('..'));
+  const links = verboseLines.filter(
+    (l) => /^[lh]/.test(l) || l.includes(' -> ') || l.includes(' link to '),
+  );
+  return [...bad, ...links];
+}
+
+/** Null when `tmpDir`'s disk can hold the archive's contents, else a detail. */
+function spaceProblem(archive, tmpDir, statfs) {
+  const need = fs.statSync(archive).size;
+  const { bavail, bsize } = statfs(tmpDir);
+  const free = bavail * bsize;
+  return need <= free ? null : `needs ${need} bytes to extract, scratch dir has ${free} free`;
+}
 
 async function tableExists(sql, table) {
   const rows = await sql(`SELECT to_regclass('public.${table}') AS t`);
@@ -84,7 +111,7 @@ const oneLine = (err) => String(err?.stderr || err?.message || err).trim().repla
  * U1. Returns `{ findings, members }`; `members` is `null` when there is no
  * usable archive, which tells U2 it has nothing to resolve against.
  */
-export async function runUploadsArchiveCheck({ execFile, archive, tmpDir }) {
+export async function runUploadsArchiveCheck({ execFile, archive, tmpDir, statfs = fs.statfsSync }) {
   if (!archive || !fs.existsSync(archive)) {
     const detail = `no uploads archive found${archive ? ` at ${path.basename(archive)}` : ''}`;
     return { findings: [finding('u1-archive-integrity', 'informational', detail)], members: null };
@@ -98,6 +125,8 @@ export async function runUploadsArchiveCheck({ execFile, archive, tmpDir }) {
     return { findings: [finding('u1-archive-integrity', 'failed', detail)], members: null };
   }
   const members = listing.split('\n').filter(Boolean).map(normalizeMember);
+  const refusal = await refuseToExtract({ execFile, archive, tmpDir, statfs, members });
+  if (refusal) return { findings: [finding('u1-archive-integrity', 'failed', `${name}: ${refusal}`)], members: null };
   const files = members.filter((m) => !m.endsWith('/'));
   try {
     await execFile('tar', ['-xf', archive, '-C', tmpDir]);
@@ -114,6 +143,22 @@ export async function runUploadsArchiveCheck({ execFile, archive, tmpDir }) {
   };
 }
 
+/** Why the archive must not be extracted (unsafe member, no room), else null. */
+async function refuseToExtract({ execFile, archive, tmpDir, statfs, members }) {
+  let verbose;
+  try {
+    verbose = (await execFile('tar', ['-tvf', archive])).stdout;
+  } catch (err) {
+    return `tar -tvf failed: ${oneLine(err)}`;
+  }
+  const unsafe = unsafeMembers(members, verbose.split('\n').filter(Boolean));
+  if (unsafe.length > 0) {
+    const shown = unsafe.slice(0, MAX_LISTED).join(', ');
+    return `refusing to extract — ${unsafe.length} unsafe member(s) (absolute, '..' or link): ${shown}`;
+  }
+  return spaceProblem(archive, tmpDir, statfs);
+}
+
 /** U2. `members === null` means no usable archive (see U1). */
 export function runUploadsReferenceCheck({ members, expected }) {
   const id = 'u2-references-resolve';
@@ -123,7 +168,7 @@ export function runUploadsReferenceCheck({ members, expected }) {
     }
     return [finding(id, 'failed', `no usable archive, but the database references ${expected.length} file(s)`)];
   }
-  const have = new Set(members);
+  const have = new Set(members.map(canonicalMember));
   const missing = expected.filter((m) => !have.has(m));
   if (missing.length === 0) {
     return [finding(id, 'passed', `${expected.length} referenced file(s) all present`)];
