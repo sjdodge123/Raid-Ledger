@@ -36,6 +36,10 @@ const CalendarLayerSection = lazy(() => import('./calendar-layer-section')
 const CalendarHubSection = lazy(() => import('./calendar-hub-section')
     .then((m) => ({ default: m.CalendarHubSection })));
 
+function SamplesLoading(): JSX.Element {
+    return <p className="text-sm text-muted">Loading samples…</p>;
+}
+
 const NAV = [
     { id: 'tokens', label: 'Tokens' },
     { id: 'semantic', label: 'Semantic' },
@@ -95,8 +99,13 @@ function Sections(): JSX.Element {
             <WeekStripSection />
             <GroupMarksSection />
             <CalendarBusySection />
-            <Suspense fallback={<p className="text-sm text-muted">Loading samples…</p>}>
+            {/* One boundary per lazy section: under a shared boundary React 19 stops at the
+                first child that suspends, so the second chunk's import only started on a later
+                render — a load waterfall that hid BOTH sections until it finished (PR #1820 CI). */}
+            <Suspense fallback={<SamplesLoading />}>
                 <CalendarLayerSection />
+            </Suspense>
+            <Suspense fallback={<SamplesLoading />}>
                 <CalendarHubSection />
             </Suspense>
             <MapViewportSection />
