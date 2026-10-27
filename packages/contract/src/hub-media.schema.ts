@@ -7,14 +7,39 @@ import { z } from 'zod';
  * death post, another game screenshot, or a plain image. The gallery's
  * All · Deaths · Screenshots chips filter on it, and the list response says
  * which kinds a hub actually has so the web never offers an empty chip.
+ * ROK-1965 adds `upload` — a picture a member added from the Gallery; it
+ * sits under the Screenshots chip.
  */
-export const HUB_MEDIA_KINDS = ['death', 'screenshot', 'image'] as const;
+export const HUB_MEDIA_KINDS = ['death', 'screenshot', 'image', 'upload'] as const;
 export const HubMediaKindSchema = z.enum(HUB_MEDIA_KINDS);
 export type HubMediaKind = z.infer<typeof HubMediaKindSchema>;
 
-/** Where a picture came from. Widened when a second source lands. */
-export const HUB_MEDIA_SOURCES = ['discord'] as const;
-export type HubMediaSource = (typeof HUB_MEDIA_SOURCES)[number];
+/** Where a picture came from: a Discord post, or a member upload (ROK-1965). */
+export const HUB_MEDIA_SOURCES = ['discord', 'upload'] as const;
+export const HubMediaSourceSchema = z.enum(HUB_MEDIA_SOURCES);
+export type HubMediaSource = z.infer<typeof HubMediaSourceSchema>;
+
+/**
+ * ROK-1965 — largest raw file `POST /hubs/:guildId/media` accepts (nginx
+ * caps bodies at 10m). The web shrinks a bigger pick before sending.
+ */
+export const HUB_MEDIA_UPLOAD_MAX_BYTES = 9 * 1024 * 1024;
+
+/** File types the web offers to upload; the server re-checks magic bytes. */
+export const HUB_MEDIA_UPLOAD_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export type HubMediaUploadType = (typeof HUB_MEDIA_UPLOAD_TYPES)[number];
+
+/** The `code` on an upload error body, so the web maps copy without string-matching. */
+export const HUB_MEDIA_UPLOAD_ERROR_CODES = [
+    'not_image',
+    'too_large',
+    'cap',
+    'removed',
+    'rate_limited',
+    'busy',
+] as const;
+export const HubMediaUploadErrorCodeSchema = z.enum(HUB_MEDIA_UPLOAD_ERROR_CODES);
+export type HubMediaUploadErrorCode = z.infer<typeof HubMediaUploadErrorCodeSchema>;
 
 /** Largest page the list route serves (the widget asks 8, the dialog 24). */
 export const HUB_MEDIA_PAGE_MAX = 48;
@@ -51,7 +76,7 @@ export const HubMediaItemSchema = z
         thumbPath: z.string(),
         fullPath: z.string(),
         source: z.object({
-            type: z.literal('discord'),
+            type: HubMediaSourceSchema,
             label: z.string().max(100).nullable(),
         }),
         link: z
@@ -64,6 +89,11 @@ export const HubMediaItemSchema = z
             .nullable(),
         /** Only ever true for editors — members never receive hidden rows. */
         hidden: z.boolean(),
+        /**
+         * ROK-1965 — this viewer may remove the picture (the hub's leader, or
+         * the member who uploaded it). Computed server-side per viewer.
+         */
+        canRemove: z.boolean(),
     })
     .strict();
 export type HubMediaItem = z.infer<typeof HubMediaItemSchema>;

@@ -6,7 +6,8 @@
  * module directly. The mock implements only the subset of ioredis methods
  * the codebase touches (set with NX, setex, del, incr, expire, ttl, exists,
  * keys with `*` glob, getdel, ping, quit, disconnect, duplicate, and an
- * `eval` that runs only the compare-and-delete lease release). The `store` Map
+ * `eval` that runs only the compare-and-delete lease release and the
+ * fixed-window counter). The `store` Map
  * is exposed via the returned handle so `truncateAllTables` can purge
  * cross-suite keys (e.g. the `lineup-*` dedup claims) without round-tripping the client.
  *
@@ -17,7 +18,7 @@
  * surface. `ttl` returns -2 for a missing key and -1 for one with no
  * expiry, matching Redis.
  */
-import { COMPARE_AND_DELETE_LUA } from '../redis-lease';
+import { COMPARE_AND_DELETE_LUA, INCR_FIXED_WINDOW_LUA } from '../redis-lease';
 
 /** True when the trailing ioredis args carry the given bare flag (NX/XX). */
 function hasFlag(args: (string | number)[], flag: 'NX' | 'XX'): boolean {
@@ -130,10 +131,18 @@ function mockRedisEval(
   expiries: Map<string, number>,
 ) {
   return (script: string, numKeys: number, ...rest: (string | number)[]) => {
+    const key = String(rest[0]);
+    if (script === INCR_FIXED_WINDOW_LUA && numKeys === 1) {
+      const next = parseInt(store.get(key) ?? '0', 10) + 1;
+      store.set(key, String(next));
+      if (!expiries.has(key)) {
+        expiries.set(key, Date.now() + Number(rest[1]) * 1000);
+      }
+      return Promise.resolve(next);
+    }
     if (script !== COMPARE_AND_DELETE_LUA || numKeys !== 1) {
       return Promise.reject(new Error('redis-mock: unsupported EVAL script'));
     }
-    const key = String(rest[0]);
     if (store.get(key) !== String(rest[1])) return Promise.resolve(0);
     store.delete(key);
     expiries.delete(key);

@@ -294,6 +294,8 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1942: `hub_media.hidden_by` is SET NULL moderation audit; a Gallery
   // picture belongs to the hub (posted in its Discord channel), not to the
   // editor who hid it.
+  // ROK-1965: `hub_media.uploaded_by` is SET NULL too — a member's upload
+  // stays on the hub (the leader can remove it).
   schema.hubMedia,
 ];
 

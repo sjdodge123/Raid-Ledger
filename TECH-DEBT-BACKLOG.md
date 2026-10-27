@@ -3718,6 +3718,16 @@ same day (#1278, #1279, #1280).
 - **nit** `web/src/idle-prefetch.ts` — warms ~40 KB of idle prefetch for logged-out visitors on public landings. Suggested: skip when `getAuthMethod()` reports no session.
 - **nit** `web/src/components/hub/community/hub-join-prompt-lazy.tsx` and `community-hub-module-loader.ts` — each keeps its own chunk-reload idiom. Suggested: use `reloadOnChunkError` from `web/src/lib/chunk-error.ts`.
 
+### 2026-10-27 — feat/rok-1965-gallery-uploads (surfaced during ROK-1965 review)
+
+- **low** `web/src/components/hub/gallery/hub-gallery-dialog.tsx:76-79` — a seek whose `fetchNextPage` is cancelled by an invalidate while the viewer is open leaves `asked.current` equal to the item count, so the viewer shows "Loading…" forever. Suggested: reset `asked.current = -1` while `refreshing`.
+- **nit** `web/src/components/hub/gallery/hub-gallery-dialog.test.tsx:71` — the describe block is over `max-lines-per-function`. Suggested: split it into focused describe blocks (seek / upload / moderation).
+- **nit** `web/src/lib/hub-media-shrink.ts:42` — transparent pixels in a pre-shrunk PNG come out black (canvas starts transparent, JPEG has no alpha). Suggested: `ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h)` before `drawImage` (literal image data, not a theme colour).
+- **nit** `api/src/hub-media/hub-media-upload.service.ts:41` (hidden re-upload 409) — a member re-uploading bytes an editor hid (not removed) gets "That picture was removed from this hub." Suggested: a separate `hidden` message or "isn't available"; the web picks its copy by `code`, so change both together.
+- **nit** `api/src/hub-media/hub-media-upload.service.ts:82` — `read.viewer()` repeats the view gate the guard already ran (a second `findHiddenAt`/`isHiddenFrom`/`canView`/`resolveLadder` per upload). Suggested: let the guard put the viewer rights on `req` and read them in the service.
+- **nit** `web/src/components/hub/gallery/use-hub-gallery-upload.ts` — "Uploading… 0%" shows while the lazy imports load and the shrink runs (seconds on a large pick). Suggested: show "Preparing…" until the first progress event.
+- **nit** `web/src/components/hub/gallery/hub-gallery-footer.tsx:35,56` — the Remove gate is checked twice (outer `canEdit || item.canRemove`, inner `item.canRemove`). Suggested: outer check becomes `item !== undefined`; `ModerationButtons` already gates both buttons.
+- **nit** `scripts/smoke/hub-gallery-upload-fixtures.ts` (seed index `12 + slot`) — the configured-game index wraps onto another spec's game when 12 or fewer games are configured, so a parallel reseed would reset this hub. Suggested: give the smoke its own game or hub instead of the index.
 ### 2026-10-27 — feat/rok-1914-whos-saved (surfaced during ROK-1914 verify)
 
 - **low** `web/src/plugins/wow/hub-widgets/professions-widget.tsx:46` — likely the same centred/shrink-wrapped Button-label pattern fixed for Who's saved in aaa6b75af (`button.tsx:93` label span); not visible on the seeded guild (no professions). Suggested: same call-site `justify-start` + `[&>[data-button-label]]:w-full`, verify with a professions seed.

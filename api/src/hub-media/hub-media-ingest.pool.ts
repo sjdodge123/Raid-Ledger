@@ -12,6 +12,10 @@
  *   not be lost; a backfill submits one post at a time per hub.
  *
  * FIFO, so a delete queued behind a create of the same message starts after it.
+ *
+ * ROK-1965 D9: lives in `hub-media/` (provided + exported by `HubMediaModule`)
+ * so member uploads (`droppable`) share the same gate; `hub-media` never
+ * imports `discord-bot`.
  */
 import { Logger } from '@nestjs/common';
 

@@ -22,7 +22,7 @@ import {
   HubMediaHistorySource,
   type HistoryPort,
 } from './hub-media-history.discord';
-import { HubMediaIngestPool } from './hub-media-ingest.pool';
+import { HubMediaIngestPool } from '../../hub-media/hub-media-ingest.pool';
 import type { PostLike } from './hub-media-post.images';
 import { HubMediaPostIngest } from './hub-media-post.ingest';
 

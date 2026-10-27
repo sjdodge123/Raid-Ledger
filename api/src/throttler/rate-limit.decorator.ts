@@ -45,6 +45,9 @@ export const RATE_LIMIT_TIERS = {
   // 60/min 429'd ordinary browsing. 600/min covers ~5 such viewers at once;
   // the bytes are auth-gated, immutable and browser-cached for a week.
   media: { ttl: 60_000, limit: isBrowseRelaxed ? 999_999 : 600 },
+  // ROK-1965 D8: the coarse per-IP guard on hub Gallery uploads; the real
+  // allowance is the per-user 20/hour window (hub-media-upload.limits.ts).
+  upload: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;

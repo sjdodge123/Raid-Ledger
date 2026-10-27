@@ -27,7 +27,7 @@ import { HubMediaChannelResolver } from './hub-media-channel.queries';
 import {
   HubMediaIngestPool,
   HubMediaIngestQueueFullError,
-} from './hub-media-ingest.pool';
+} from '../../hub-media/hub-media-ingest.pool';
 import { HubMediaPostIngest, isOwnAuthor } from './hub-media-post.ingest';
 import { toPostLike, type GatewayPost } from './hub-media-post.mapper';
 

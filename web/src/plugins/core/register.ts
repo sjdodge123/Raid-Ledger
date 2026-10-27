@@ -27,16 +27,14 @@ const core = registerPlugin(CORE_PLUGIN_ID, {
     label: 'Core',
 });
 
-// ROK-1942 D10 — the shared Gallery card (pictures from the hub's Discord), right after Deaths;
-// members + staff (the route 404s visitors, D7). Members never see it empty (D12); editors get a hint.
-// Moved from the Valheim plugin by ROK-1969 D6 (saved `plugin:valheim:gallery` ids alias to this one).
-// Still Valheim server hubs only — widening it to every game is ROK-1965's call.
+// ROK-1942 D10 — the shared Gallery card, right after Deaths; members + staff (the route 404s
+// visitors, D7). Moved from the Valheim plugin by ROK-1969 D6 (saved `plugin:valheim:gallery` ids
+// alias to this one). ROK-1965 D14/OQ1: members can upload, so every hub has a source — no `games`
+// or `kinds` (every hub kind and game, core may omit them); members see the empty card (D15).
 core.registerHubWidget({
     id: 'gallery',
     title: 'Gallery',
-    description: 'Recent pictures from this hub — death posts and screenshots.',
-    games: ['valheim'],
-    kinds: ['game_server'],
+    description: 'Pictures from this hub — Discord posts and member uploads.',
     order: 47,
     span: 2,
     audience: 'members',
