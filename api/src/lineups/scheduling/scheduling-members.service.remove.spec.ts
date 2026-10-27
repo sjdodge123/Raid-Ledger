@@ -224,6 +224,20 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
     expect(fireOrder).toBeGreaterThan(insertOrder);
   });
 
+  it('addMembers 400s an expired poll before inserting anything', async () => {
+    setLineup(CREATOR_ID, { status: 'archived' });
+    // Same DB priming as the happy add path, so only the guard can refuse.
+    db.where
+      .mockReturnValueOnce(db)
+      .mockReturnValueOnce(Promise.resolve([{ id: TARGET_ID }]));
+    db.returning.mockResolvedValue([{ id: 500 }]);
+    await expect(
+      service.addMembers(LINEUP_ID, MATCH_ID, [TARGET_ID], CREATOR),
+    ).rejects.toThrow('This poll no longer accepts changes');
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(fireUpdateEmbed).not.toHaveBeenCalled();
+  });
+
   it('addMembers does not re-render when the caller is refused', async () => {
     await expect(
       service.addMembers(LINEUP_ID, MATCH_ID, [TARGET_ID], {

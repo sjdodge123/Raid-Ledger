@@ -105,8 +105,9 @@ export class SchedulingMembersService {
     userIds: number[],
     caller: PollMemberCaller,
   ): Promise<AddMatchMembersResult> {
-    await this.assertCallerMayManage(lineupId, caller);
-    const lineup = await this.loadSchedulableMatch(lineupId, matchId);
+    const lineup = await this.assertCallerMayManage(lineupId, caller);
+    const match = await this.loadSchedulableMatch(lineupId, matchId);
+    await this.assertRosterOpen(match, lineup, matchId);
     const unique = Array.from(new Set(userIds));
     await this.assertUsersExist(unique);
 
@@ -117,7 +118,7 @@ export class SchedulingMembersService {
     // yet still inflates the denominator, making the lock HARDER to reach —
     // the exact failure this story exists to remove. So mirror the roster
     // into the invitee list; `addInvitees` is itself idempotent.
-    if (lineup.visibility === 'private') {
+    if (match.visibility === 'private') {
       // ROK-1101 G2: the enrolling caller is the effective inviter.
       await addInvitees(this.db, lineupId, unique, caller.id);
     }
