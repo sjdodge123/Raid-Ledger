@@ -122,23 +122,58 @@ describe('RestoreDrillReportSchema (ROK-1160 D10 / AC2)', () => {
       Object.keys(makeReport()).sort(),
     );
   });
+
+  // ROK-2023 D14 — the drill's companion-archive tier, as
+  // `scripts/restore-drill-uploads.mjs` emits it, rides in the same report.
+  it('parses a report carrying the uploads tier findings', () => {
+    const uploads = [
+      {
+        id: 'u1-archive-integrity',
+        tier: 'uploads',
+        status: 'passed',
+        detail:
+          'raid_ledger_2026-10-27_020000.uploads.tar: 3 listed, 3 extracted',
+      },
+      {
+        id: 'u2-references-resolve',
+        tier: 'uploads',
+        status: 'failed',
+        detail:
+          '1 of 2 referenced file(s) missing: uploads/hub-media/3/a.thumb.webp',
+      },
+    ];
+    const parsed = RestoreDrillReportSchema.parse(
+      makeReport({ findings: [...FINDINGS, ...uploads], status: 'failed' }),
+    );
+
+    expect(parsed.findings.filter((f) => f.tier === 'uploads')).toEqual(
+      uploads,
+    );
+  });
 });
 
 describe('DrillFindingSchema / RestoreDrillStatusSchema (ROK-1160 D10)', () => {
   // Case 2 — every tier and every status the two emitters can produce.
-  it.each(['A1', 'A2', 'A3', 'A4', 'A5', 'restore', 'reconcile', 'boot'])(
-    'accepts tier %s',
-    (tier) => {
-      expect(
-        DrillFindingSchema.parse({
-          id: 'x',
-          tier,
-          status: 'passed',
-          detail: 'd',
-        }).tier,
-      ).toBe(tier);
-    },
-  );
+  it.each([
+    'A1',
+    'A2',
+    'A3',
+    'A4',
+    'A5',
+    'restore',
+    'reconcile',
+    'boot',
+    'uploads',
+  ])('accepts tier %s', (tier) => {
+    expect(
+      DrillFindingSchema.parse({
+        id: 'x',
+        tier,
+        status: 'passed',
+        detail: 'd',
+      }).tier,
+    ).toBe(tier);
+  });
 
   it.each(['passed', 'failed', 'informational'])(
     'accepts finding status %s',

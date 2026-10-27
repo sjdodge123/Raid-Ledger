@@ -463,6 +463,13 @@ function describeBackupService() {
       ).rejects.toThrow('Backup file not found');
     });
 
+    it('should refuse an uploads archive before any snapshot (ROK-2023)', async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      await expect(
+        service.restoreFromBackup('daily', 'x.uploads.tar'),
+      ).rejects.toThrow('Backup file not found');
+    });
+
     it('should throw NotFoundException for missing file', async () => {
       (mockFs.existsSync as jest.Mock).mockReturnValue(false);
       await expect(
