@@ -27,10 +27,7 @@ export interface PinnedEventRow {
  * (`upper(duration) <= now`, A-2). A cancelled pin never clears (ruling 5);
  * a running event has not ended, so it does not either (ruling 4c).
  */
-export function isNoteExpired(
-  pin: PinnedEventRow | null,
-  now: Date,
-): boolean {
+export function isNoteExpired(pin: PinnedEventRow | null, now: Date): boolean {
   if (pin === null || pin.cancelledAt !== null) return false;
   return pin.duration[1].getTime() <= now.getTime();
 }

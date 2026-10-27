@@ -8,14 +8,21 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { HubSessionNoteItemSelect } from '../../drizzle/schema/hub-session-notes';
 import type { HubPostPersonRow } from '../posts/hub-posts.helpers';
-import type { ItemRewritePlan, PinnedEventRow } from './hub-session-note.helpers';
+import type {
+  ItemRewritePlan,
+  PinnedEventRow,
+} from './hub-session-note.helpers';
 
 export type Db = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 export type DbOrTx = Db | Tx;
 
-const { hubSessionNotes: notes, hubSessionNoteItems: items, events, users } =
-  schema;
+const {
+  hubSessionNotes: notes,
+  hubSessionNoteItems: items,
+  events,
+  users,
+} = schema;
 
 const updatedAtText = sql<string>`to_char(${notes.updatedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
@@ -155,7 +162,10 @@ export interface NoteWrite {
 }
 
 /** Create path: false when a concurrent create won the row (D8 → 409). */
-export async function insertNote(tx: DbOrTx, write: NoteWrite): Promise<boolean> {
+export async function insertNote(
+  tx: DbOrTx,
+  write: NoteWrite,
+): Promise<boolean> {
   const rows = await tx
     .insert(notes)
     .values({
@@ -183,7 +193,10 @@ export async function updateNote(tx: DbOrTx, write: NoteWrite): Promise<void> {
 }
 
 /** The ids of the hub's stored checklist rows. */
-export async function findItemIds(tx: DbOrTx, guildId: number): Promise<number[]> {
+export async function findItemIds(
+  tx: DbOrTx,
+  guildId: number,
+): Promise<number[]> {
   const rows = await tx
     .select({ id: items.id })
     .from(items)

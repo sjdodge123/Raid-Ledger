@@ -95,8 +95,9 @@ describe('planItemRewrite (T-U2)', () => {
   });
 
   it('rejects an id the hub does not own', () => {
-    expect(badRequestBody(() => planItemRewrite([1], [{ id: 9, text: 'x' }])))
-      .toEqual({ items: ['That checklist item no longer exists'] });
+    expect(
+      badRequestBody(() => planItemRewrite([1], [{ id: 9, text: 'x' }])),
+    ).toEqual({ items: ['That checklist item no longer exists'] });
   });
 
   it('rejects an id listed twice', () => {
