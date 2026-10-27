@@ -375,23 +375,6 @@ describe('community hub — clear after next event', () => {
     );
   });
 
-  it('T-I8: once the pinned event has ended, GET answers null and deletes the row', async () => {
-    const g = await communityHub();
-    const eventId = await insertEvent(g, 1);
-    const note = await seedNote(g, 'editor', { clearAfterNextEvent: true });
-    expect(note.clearAfter?.eventId).toBe(eventId);
-    const past = Date.now() - 3 * HOUR;
-    await testApp.db
-      .update(schema.events)
-      .set({ duration: [new Date(past), new Date(past + HOUR)] })
-      .where(eq(schema.events.id, eventId));
-    const res = await get(g, 'member');
-    expect(res.status).toBe(200);
-    expect((res.body as HubSessionNoteResponse).note).toBeNull();
-    expect(await noteRows(g)).toEqual([]);
-    expect(await itemRows(g)).toEqual([]);
-  });
-
   it('T-I9a: a cancelled pin keeps the note and drops the auto-clear', async () => {
     const g = await communityHub();
     const eventId = await insertEvent(g, 1);
@@ -407,6 +390,7 @@ describe('community hub — clear after next event', () => {
     const note = noteOf(await get(g, 'member'));
     expect(note.body).toBe('Bring flasks');
     expect(note.clearAfter).toBeNull();
+    expect(note.clearAfterPending).toBe(false);
   });
 
   it('T-I9b: a deleted pin sets the FK null and the note remains', async () => {
@@ -416,11 +400,14 @@ describe('community hub — clear after next event', () => {
     await testApp.db.delete(schema.events).where(eq(schema.events.id, eventId));
     const note = noteOf(await get(g, 'member'));
     expect(note.clearAfter).toBeNull();
+    expect(note.clearAfterPending).toBe(false);
     expect(nonEmpty(await noteRows(g), 'note row')[0].clearAfterEventId).toBe(
       null,
     );
   });
+});
 
+describe('community hub — armed clear-after (D5b)', () => {
   it('T-I10: clear-after with no upcoming event arms the note (D5b)', async () => {
     const g = await communityHub();
     await insertEvent(g, -5);
@@ -461,6 +448,42 @@ describe('community hub — clear after next event', () => {
     expect(await noteRows(g)).toEqual([]);
   });
 
+  it('T-I16c: an armed note whose next event was created and ended before any read is cleared', async () => {
+    const g = await communityHub();
+    await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    // Armed 4h ago; the event ran 3h→1h ago; nobody opened the hub since.
+    await testApp.db
+      .update(schema.hubSessionNotes)
+      .set({ updatedAt: new Date(Date.now() - 4 * HOUR) })
+      .where(eq(schema.hubSessionNotes.guildId, g));
+    await insertEvent(g, -3);
+    await insertEvent(g, 24); // a later event the note must NOT pin
+    const res = await get(g, 'member');
+    expect(res.status).toBe(200);
+    expect((res.body as HubSessionNoteResponse).note).toBeNull();
+    expect(await noteRows(g)).toEqual([]);
+    expect(await itemRows(g)).toEqual([]);
+  });
+});
+
+describe('community hub — re-saves of the clear-after toggle', () => {
+  it('T-I14: re-saving with the toggle on keeps the existing upcoming pin', async () => {
+    const g = await communityHub();
+    const e = await insertEvent(g, 48);
+    const first = await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    expect(first.clearAfter?.eventId).toBe(e);
+    const f = await insertEvent(g, 24);
+    const res = await put(g, 'editor', {
+      body: 'Updated plan',
+      clearAfterNextEvent: true,
+      baseUpdatedAt: first.updatedAt,
+    });
+    expect(res.status).toBe(200);
+    expect(noteOf(res).clearAfter?.eventId).toBe(e);
+    // The editor's toggle label now names F — the pin deliberately does not.
+    expect((res.body as HubSessionNoteResponse).nextEvent?.eventId).toBe(f);
+  });
+
   it('T-I16b: turning the toggle off disarms an armed note', async () => {
     const g = await communityHub();
     const armed = await seedNote(g, 'editor', { clearAfterNextEvent: true });
@@ -473,7 +496,56 @@ describe('community hub — clear after next event', () => {
     await insertEvent(g, 24);
     expect(noteOf(await get(g, 'member')).clearAfter).toBeNull();
   });
+});
 
+describe('community hub — expiry', () => {
+  it('T-I8: once the pinned event has ended, GET answers null and deletes the row', async () => {
+    const g = await communityHub();
+    const eventId = await insertEvent(g, 1);
+    const note = await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    expect(note.clearAfter?.eventId).toBe(eventId);
+    const past = Date.now() - 3 * HOUR;
+    await testApp.db
+      .update(schema.events)
+      .set({ duration: [new Date(past), new Date(past + HOUR)] })
+      .where(eq(schema.events.id, eventId));
+    const res = await get(g, 'member');
+    expect(res.status).toBe(200);
+    expect((res.body as HubSessionNoteResponse).note).toBeNull();
+    expect(await noteRows(g)).toEqual([]);
+    expect(await itemRows(g)).toEqual([]);
+  });
+
+  it('T-I15: the expiry DELETE re-checks the event, so a pin changed since the read survives', async () => {
+    const g = await communityHub();
+    const eventId = await insertEvent(g, 24);
+    await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    // A caller that read a stale "ended" snapshot: the event is still upcoming.
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toHaveLength(1);
+    // Ended but cancelled since the read: still kept (ruling 5).
+    const past = Date.now() - 3 * HOUR;
+    await testApp.db
+      .update(schema.events)
+      .set({
+        cancelledAt: new Date(),
+        duration: [new Date(past), new Date(past + HOUR)],
+      })
+      .where(eq(schema.events.id, eventId));
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toHaveLength(1);
+    // Control: ended and uncancelled — deleted, items cascade.
+    await testApp.db
+      .update(schema.events)
+      .set({ cancelledAt: null })
+      .where(eq(schema.events.id, eventId));
+    await deleteExpiredNote(testApp.db, g, eventId, new Date());
+    expect(await noteRows(g)).toEqual([]);
+    expect(await itemRows(g)).toEqual([]);
+  });
+});
+
+describe('community hub — delete and cross-hub ticks', () => {
   it('T-I11: DELETE twice is 204 both times and cascades the items', async () => {
     const g = await communityHub();
     await seedNote(g);
@@ -505,51 +577,6 @@ describe('community hub — clear after next event', () => {
         ),
       );
     expect(row).toMatchObject({ done: false, doneAt: null, doneBy: null });
-  });
-
-  it('T-I14: re-saving with the toggle on keeps the existing upcoming pin', async () => {
-    const g = await communityHub();
-    const e = await insertEvent(g, 48);
-    const first = await seedNote(g, 'editor', { clearAfterNextEvent: true });
-    expect(first.clearAfter?.eventId).toBe(e);
-    const f = await insertEvent(g, 24);
-    const res = await put(g, 'editor', {
-      body: 'Updated plan',
-      clearAfterNextEvent: true,
-      baseUpdatedAt: first.updatedAt,
-    });
-    expect(res.status).toBe(200);
-    expect(noteOf(res).clearAfter?.eventId).toBe(e);
-    // The editor's toggle label now names F — the pin deliberately does not.
-    expect((res.body as HubSessionNoteResponse).nextEvent?.eventId).toBe(f);
-  });
-
-  it('T-I15: the expiry DELETE re-checks the event, so a pin changed since the read survives', async () => {
-    const g = await communityHub();
-    const eventId = await insertEvent(g, 24);
-    await seedNote(g, 'editor', { clearAfterNextEvent: true });
-    // A caller that read a stale "ended" snapshot: the event is still upcoming.
-    await deleteExpiredNote(testApp.db, g, eventId, new Date());
-    expect(await noteRows(g)).toHaveLength(1);
-    // Ended but cancelled since the read: still kept (ruling 5).
-    const past = Date.now() - 3 * HOUR;
-    await testApp.db
-      .update(schema.events)
-      .set({
-        cancelledAt: new Date(),
-        duration: [new Date(past), new Date(past + HOUR)],
-      })
-      .where(eq(schema.events.id, eventId));
-    await deleteExpiredNote(testApp.db, g, eventId, new Date());
-    expect(await noteRows(g)).toHaveLength(1);
-    // Control: ended and uncancelled — deleted, items cascade.
-    await testApp.db
-      .update(schema.events)
-      .set({ cancelledAt: null })
-      .where(eq(schema.events.id, eventId));
-    await deleteExpiredNote(testApp.db, g, eventId, new Date());
-    expect(await noteRows(g)).toEqual([]);
-    expect(await itemRows(g)).toEqual([]);
   });
 });
 

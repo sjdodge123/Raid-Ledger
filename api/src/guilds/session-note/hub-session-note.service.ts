@@ -180,7 +180,7 @@ export class HubSessionNoteService {
     guildId: number,
     now: Date,
   ): Promise<{ note: NoteRecord; pin: PinnedEventRow | null } | null> {
-    const note = await this.pinArmed(await findNote(this.db, guildId), now);
+    const note = await this.pinArmed(await findNote(this.db, guildId));
     if (note === null) return null;
     const pin = await findPinnedEvent(this.db, note.clearAfterEventId);
     if (!isNoteExpired(pin, now)) return { note, pin };
@@ -188,13 +188,16 @@ export class HubSessionNoteService {
     return null;
   }
 
-  /** D5b: an armed note pins the hub's next event once one exists. */
-  private async pinArmed(
-    note: NoteRecord | null,
-    now: Date,
-  ): Promise<NoteRecord | null> {
+  /**
+   * D5b: an armed note pins the hub's next event once one exists. The search
+   * starts at the save that armed it (a tick never moves `updatedAt`), not at
+   * `now`, so an event created AND ended while nobody opened the hub is still
+   * the one it pins — and the caller's expiry check then clears the note.
+   */
+  private async pinArmed(note: NoteRecord | null): Promise<NoteRecord | null> {
     if (note === null || !isArmedUnpinned(note)) return note;
-    const next = await findNextHubEvent(this.db, note.guildId, now);
+    const armedAt = new Date(note.updatedAt);
+    const next = await findNextHubEvent(this.db, note.guildId, armedAt);
     if (next === null) return note;
     await pinArmedNote(this.db, note.guildId, next.id);
     return findNote(this.db, note.guildId);
