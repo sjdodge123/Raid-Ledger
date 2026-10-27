@@ -95,6 +95,7 @@ export * from './schema/companion-ingest';
 export * from './schema/valheim-armory';
 export * from './schema/valheim-skill-days';
 export * from './schema/valheim-containers';
+export * from './schema/valheim-container-days';
 export * from './schema/valheim-portals';
 export * from './schema/valheim-recipes';
 export * from './schema/valheim-deaths';

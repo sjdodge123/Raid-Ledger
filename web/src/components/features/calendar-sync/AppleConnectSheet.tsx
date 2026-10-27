@@ -22,6 +22,7 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { APPLE_CONNECT_COPY as A } from './apple-connect.copy';
 import { AppleConnectForm } from './AppleConnectForm';
 import { useAppleConnectDraft } from './use-apple-connect-draft';
+import { useCalendarSheetsStacked } from './calendar-sheet-stack';
 
 export interface AppleConnectSheetProps {
     isOpen: boolean;
@@ -77,6 +78,7 @@ function useAppleConnectFlow({ isOpen, onClose, mode, connection }: AppleConnect
 
 export function AppleConnectSheet(props: AppleConnectSheetProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const stacked = useCalendarSheetsStacked();
     const formId = useId();
     const { draft, connect, failure, guard, submit } = useAppleConnectFlow(props);
     const title = props.mode === 'reconnect' ? A.titleReconnect : A.titleConnect;
@@ -94,7 +96,7 @@ export function AppleConnectSheet(props: AppleConnectSheetProps): JSX.Element {
     }
     return (
         <BottomSheet isOpen={props.isOpen} onClose={guard.requestClose} title={title} footer={footer}
-            closeGuard={guard} discardMessage={A.discardMessage} maxHeight="85vh">
+            closeGuard={guard} discardMessage={A.discardMessage} maxHeight="85vh" stacked={stacked}>
             {body}
         </BottomSheet>
     );

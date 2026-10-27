@@ -45,18 +45,22 @@ export function sharedTotalsFor(
     return base === null ? data.shared.totals : base.totals;
 }
 
-/** The viewer's personal chests near the base (no `byBase` → unfiltered). */
+/** The viewer's personal chests near the base (no `byBase` → unfiltered), with that base's trend. */
 export function personalFor(
     personal: Personal,
     base: ValheimMaterialsBase | null,
 ): Personal {
     if (base === null || personal.byBase === undefined) return personal;
     const group = personal.byBase.find((g) => g.base === base.key);
-    return {
+    const next: Personal = {
         ...personal,
         totals: group?.totals ?? [],
         chestCount: group?.chestCount ?? 0,
     };
+    // ROK-2014: the base's trend replaces the all-bases one (none → no chips).
+    delete next.trend;
+    if (group?.trend !== undefined) next.trend = group.trend;
+    return next;
 }
 
 /** The chests in the base; every chest for All bases. */

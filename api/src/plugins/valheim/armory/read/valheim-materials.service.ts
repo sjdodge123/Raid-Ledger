@@ -45,6 +45,7 @@ import {
   materialsBases,
   placeOf,
   toBaseView,
+  withMaterialsTrend,
 } from './valheim-materials-bases.service-helpers';
 
 /** Identical body for "missing" and "personal chest you may not see". */
@@ -85,7 +86,7 @@ export class ValheimMaterialsService {
     const personal = both(personalVisibleSql(viewer), veh);
     // ROK-1859: bases + per-chest sums over everything this viewer may see.
     const visible = both(visibleSql(viewer), veh);
-    const [sTotals, sCounts, pTotals, pCounts, inputs, sums] =
+    const [sTotals, sCounts, pTotals, pCounts, inputs, sums, trend] =
       await Promise.all([
         r.totals(scan.id, shared),
         r.counts(scan.id, shared),
@@ -93,6 +94,8 @@ export class ValheimMaterialsService {
         r.counts(scan.id, personal),
         r.baseInputs(scan.id, visible),
         r.stackSums(scan.id, visible),
+        // ROK-2014: play-day trend of the scan's world, same viewer rules.
+        r.trendInputs(serverId, scan.worldUid, viewer, includeVehicles),
       ]);
     const prefabs = distinctPrefabs(sTotals, pTotals);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
@@ -102,30 +105,33 @@ export class ValheimMaterialsService {
       personal: pTotals.map(toMaterialStack),
     };
     const { bases, byBase } = materialsBases(toBaseView(inputs), sums, order);
-    return {
-      ...scanHeader(scan),
-      gameVersion: scan.gameVersion,
-      catalogFallback: catalog !== null && !catalog.exact,
-      bases,
-      shared: {
-        totals: order.shared,
-        chestCount: sCounts.chestCount,
-        warnings: {
-          unreadable: sCounts.unreadable,
-          omittedEntries: sCounts.omittedEntries,
-          omittedShared: scan.omittedShared,
+    return withMaterialsTrend(
+      {
+        ...scanHeader(scan),
+        gameVersion: scan.gameVersion,
+        catalogFallback: catalog !== null && !catalog.exact,
+        bases,
+        shared: {
+          totals: order.shared,
+          chestCount: sCounts.chestCount,
+          warnings: {
+            unreadable: sCounts.unreadable,
+            omittedEntries: sCounts.omittedEntries,
+            omittedShared: scan.omittedShared,
+          },
         },
+        personal: hasPersonal
+          ? {
+              totals: order.personal,
+              chestCount: pCounts.chestCount,
+              byBase,
+              omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
+            }
+          : null,
+        ...projectCatalog(prefabs, catalog),
       },
-      personal: hasPersonal
-        ? {
-            totals: order.personal,
-            chestCount: pCounts.chestCount,
-            byBase,
-            omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
-          }
-        : null,
-      ...projectCatalog(prefabs, catalog),
-    };
+      trend,
+    );
   }
 
   /**

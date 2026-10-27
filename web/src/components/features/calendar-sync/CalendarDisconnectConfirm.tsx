@@ -10,6 +10,7 @@ import { Button } from '../../ui/button';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { CALENDARS_COPY as C } from './calendar-sync.copy';
+import { useCalendarSheetsStacked } from './calendar-sheet-stack';
 
 export interface CalendarDisconnectConfirmProps {
     isOpen: boolean;
@@ -47,6 +48,7 @@ function ConfirmBody({ accountLabel, failed }: CalendarDisconnectConfirmProps): 
 
 export function CalendarDisconnectConfirm(props: CalendarDisconnectConfirmProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const stacked = useCalendarSheetsStacked();
     const footer = <ConfirmActions {...props} />;
     if (isDesktop) {
         return (
@@ -56,7 +58,7 @@ export function CalendarDisconnectConfirm(props: CalendarDisconnectConfirmProps)
         );
     }
     return (
-        <BottomSheet isOpen={props.isOpen} onClose={props.onCancel} title={C.confirmTitle} footer={footer}>
+        <BottomSheet isOpen={props.isOpen} onClose={props.onCancel} title={C.confirmTitle} footer={footer} stacked={stacked}>
             <ConfirmBody {...props} />
         </BottomSheet>
     );
