@@ -131,13 +131,15 @@ describe('RestoreDrillReportSchema (ROK-1160 D10 / AC2)', () => {
         id: 'u1-archive-integrity',
         tier: 'uploads',
         status: 'passed',
-        detail: 'raid_ledger_2026-10-27_020000.uploads.tar: 3 listed, 3 extracted',
+        detail:
+          'raid_ledger_2026-10-27_020000.uploads.tar: 3 listed, 3 extracted',
       },
       {
         id: 'u2-references-resolve',
         tier: 'uploads',
         status: 'failed',
-        detail: '1 of 2 referenced file(s) missing: uploads/hub-media/3/a.thumb.webp',
+        detail:
+          '1 of 2 referenced file(s) missing: uploads/hub-media/3/a.thumb.webp',
       },
     ];
     const parsed = RestoreDrillReportSchema.parse(
@@ -162,19 +164,16 @@ describe('DrillFindingSchema / RestoreDrillStatusSchema (ROK-1160 D10)', () => {
     'reconcile',
     'boot',
     'uploads',
-  ])(
-    'accepts tier %s',
-    (tier) => {
-      expect(
-        DrillFindingSchema.parse({
-          id: 'x',
-          tier,
-          status: 'passed',
-          detail: 'd',
-        }).tier,
-      ).toBe(tier);
-    },
-  );
+  ])('accepts tier %s', (tier) => {
+    expect(
+      DrillFindingSchema.parse({
+        id: 'x',
+        tier,
+        status: 'passed',
+        detail: 'd',
+      }).tier,
+    ).toBe(tier);
+  });
 
   it.each(['passed', 'failed', 'informational'])(
     'accepts finding status %s',
