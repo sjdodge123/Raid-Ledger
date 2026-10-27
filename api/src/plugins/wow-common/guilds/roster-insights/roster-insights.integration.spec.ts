@@ -2,7 +2,7 @@
  * ROK-1913 (H5) — `GET /plugins/wow/guilds/:id/roster-insights` against a
  * real DB: a Forever guild (roster rows + 3 linked characters + 1 LedgerLink
  * snapshot). Asserts the contract parse, the visitor/member professions
- * split, import invalidation of the 5-min cache (incl. a real first-time
+ * and lockouts (ROK-1914) split, import invalidation of the 5-min cache (incl. a real first-time
  * create import), the hidden-hub 404, and a 2000-row timing guard with 300
  * linked + snapshotted rows so the character/snapshot fact queries run.
  */
@@ -47,6 +47,22 @@ const tokens = {} as Record<Who, string>;
 const charIds = {} as Record<Who, string>;
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
+/** ROK-1914 — real-clock lockouts (the service reads `Date.now()`). */
+const LIVE_RESET_S = Math.floor(Date.now() / 1000) + 7 * 86400;
+const LIVE_LOCKOUT = {
+  name: 'Molten Core',
+  instanceId: 409,
+  difficultyId: 9,
+  resetAt: LIVE_RESET_S,
+  killed: 4,
+  total: 10,
+};
+const EXPIRED_LOCKOUT = {
+  ...LIVE_LOCKOUT,
+  name: 'Onyxia',
+  instanceId: 249,
+  resetAt: Math.floor(Date.now() / 1000) - 3600,
+};
 
 /** The Forever game the create-import route resolves (`foreverGameId`). */
 async function ensureForeverGame(): Promise<number> {
@@ -185,7 +201,7 @@ beforeAll(async () => {
     data: {
       gear: [{ slot: 1, itemId: 16866, ilvl: 66, bonusIds: [] }],
       talents: { nodes: [] },
-      lockouts: [],
+      lockouts: [LIVE_LOCKOUT, EXPIRED_LOCKOUT],
     },
     capturedAt: SNAP,
     payloadSha256: 'a'.repeat(64),
@@ -220,12 +236,36 @@ describe('GET roster-insights (real DB)', () => {
     });
   });
 
-  it('a visitor sees class/level/role but NO professions key', async () => {
+  it('a member gets live lockouts grouped by save; expired ones are dropped (ROK-1914)', async () => {
+    const dto = WowRosterInsightsSchema.parse((await insights('healer')).body);
+    const resetAt = new Date(LIVE_RESET_S * 1000).toISOString();
+    expect(dto.lockouts).toEqual([
+      {
+        instanceId: 409,
+        difficultyId: 9,
+        name: 'Molten Core',
+        difficulty: '40 Player',
+        total: 10,
+        resetAt,
+        members: [
+          expect.objectContaining({
+            characterId: charIds.lead,
+            killed: 4,
+            resetAt,
+          }),
+        ],
+      },
+    ]);
+  });
+
+  it('a visitor sees class/level/role but NO professions or lockouts key', async () => {
     const res = await insights('outsider');
     expect(res.status).toBe(200);
     const dto = WowRosterInsightsSchema.parse(res.body);
     expect(dto.classes.length).toBeGreaterThan(0);
     expect('professions' in res.body).toBe(false);
+    expect('lockouts' in res.body).toBe(false);
+    expect('lockoutReporters' in res.body).toBe(false);
   });
 
   it('serves the cached payload until an import of a guild character invalidates it', async () => {

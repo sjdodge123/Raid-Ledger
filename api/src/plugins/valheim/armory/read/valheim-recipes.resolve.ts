@@ -13,11 +13,14 @@ import {
 } from '@raid-ledger/contract';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import {
+  steppedVia,
+  type StationBuilds,
+} from './valheim-recipes.resolve.steps';
+import {
   PlanBuilder,
   pickSource,
   pieceVia,
   processVia,
-  recipeVia,
   type ProcessSource,
   recipeSteps,
   child,
@@ -39,6 +42,8 @@ interface Ctx {
   graph: RecipeGraph;
   b: PlanBuilder;
   maxDepth: number;
+  /** ROK-1861 D5: upgrader stations named by any node's steps. */
+  builds: StationBuilds;
 }
 
 function nodeBase(need: Need, taken: Taken): NodeBase {
@@ -130,7 +135,8 @@ function expandRecipe(ctx: Ctx, step: Step, recipe: ValheimRecipe): void {
     taken.rest,
     ctx.graph.costRule,
   );
-  const via = recipeVia(ctx.graph, recipe, need.quality);
+  const span = { ...need, rest: taken.rest };
+  const via = steppedVia(ctx.graph, recipe, span, ctx.builds);
   const id = ctx.b.push({
     ...nodeBase(need, taken),
     via,
@@ -280,6 +286,7 @@ export function resolvePlan(
     graph,
     b,
     maxDepth: options.maxDepth ?? RECIPE_TREE_DEPTH_MAX,
+    builds: new Map(),
   };
   const maxQuality = options.maxQuality ?? (() => 1);
   for (const target of targets) expandTarget(ctx, target, maxQuality);
@@ -290,6 +297,7 @@ export function resolvePlan(
     truncated: b.truncated,
     shoppingList,
     fuelEstimates: b.fuelEstimates,
+    stationBuilds: ctx.builds,
   };
 }
 
