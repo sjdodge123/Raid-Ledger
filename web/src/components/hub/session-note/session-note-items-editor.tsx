@@ -2,7 +2,9 @@
  * ROK-1968 §6.4 — the editor's checklist rows: one `Input` per item with
  * move up / move down / remove icon buttons (ruling 10: no drag) and an
  * "Add item" ghost button that hides at the 20-item cap (ruling 7). Every
- * control is the 44px `Button`/`Input` primitive below `lg`.
+ * control is the 44px `Button`/`Input` primitive below `lg`. The input is
+ * `min-w-0 flex-1` and the buttons `shrink-0`, so on a phone-width sheet the
+ * text field narrows instead of pushing Remove off-screen.
  */
 import type { JSX } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -25,19 +27,19 @@ function ItemRow({ row, index, count, onChange }: RowProps): JSX.Element {
     return (
         <li className="flex flex-col gap-1">
             <div className="flex items-center gap-1">
-                <Input className="flex-1" value={row.text} aria-label={`Checklist item ${n}`} invalid={error !== null}
+                <Input className="min-w-0 flex-1" value={row.text} aria-label={`Checklist item ${n}`} invalid={error !== null}
                     data-testid={`session-note-item-input-${index}`} placeholder="What needs doing?"
                     {...(error === null ? {} : { 'aria-describedby': errorId })}
                     onChange={(e) => { const text = e.target.value; onChange((items) => itemOps.text(items, index, text)); }} />
-                <Button variant="ghost" iconOnly aria-label={`Move item ${n} up`} disabled={index === 0}
+                <Button variant="ghost" iconOnly className="shrink-0" aria-label={`Move item ${n} up`} disabled={index === 0}
                     onClick={() => onChange((items) => itemOps.move(items, index, -1))}>
                     <ChevronUpIcon className="h-5 w-5" aria-hidden="true" />
                 </Button>
-                <Button variant="ghost" iconOnly aria-label={`Move item ${n} down`} disabled={index === count - 1}
+                <Button variant="ghost" iconOnly className="shrink-0" aria-label={`Move item ${n} down`} disabled={index === count - 1}
                     onClick={() => onChange((items) => itemOps.move(items, index, 1))}>
                     <ChevronDownIcon className="h-5 w-5" aria-hidden="true" />
                 </Button>
-                <Button variant="ghost" iconOnly aria-label={`Remove item ${n}`} data-testid={`session-note-remove-item-${index}`}
+                <Button variant="ghost" iconOnly className="shrink-0" aria-label={`Remove item ${n}`} data-testid={`session-note-remove-item-${index}`}
                     onClick={() => onChange((items) => itemOps.remove(items, index))}>
                     <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                 </Button>
