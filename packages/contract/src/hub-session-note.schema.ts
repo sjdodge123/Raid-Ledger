@@ -48,6 +48,12 @@ export const HubSessionNoteSchema = z
     /** Null once the editor's account is deleted (FK SET NULL). */
     updatedBy: HubPostPersonSchema.nullable(),
     clearAfter: HubSessionNoteClearAfterSchema.nullable(),
+    /**
+     * D5b: "clear after next event" was ticked while the hub had no upcoming
+     * event — the first eligible event scheduled later becomes the pin. True
+     * only while nothing is pinned (`clearAfter` is then null).
+     */
+    clearAfterPending: z.boolean(),
   })
   .strict();
 export type HubSessionNote = z.infer<typeof HubSessionNoteSchema>;
@@ -58,7 +64,7 @@ export const HubSessionNoteResponseSchema = z
     /** Null = no note (or its pinned event has ended). */
     note: HubSessionNoteSchema.nullable(),
     viewer: z.object({ canEdit: z.boolean(), canTick: z.boolean() }).strict(),
-    /** Editors only (null for members): labels or disables the clear-after toggle. */
+    /** Editors only (null for members): labels the clear-after toggle (null = it will arm, D5b). */
     nextEvent: HubSessionNoteClearAfterSchema.nullable(),
   })
   .strict();

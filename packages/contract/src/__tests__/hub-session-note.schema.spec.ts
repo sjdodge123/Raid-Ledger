@@ -81,11 +81,28 @@ describe('response + tick shapes', () => {
       updatedAt: when,
       updatedBy: null,
       clearAfter: { eventId: 3, title: 'Raid night', startTime: when, endTime: when },
+      clearAfterPending: false,
     };
     const res = { note, viewer: { canEdit: true, canTick: true }, nextEvent: null };
     expect(HubSessionNoteResponseSchema.safeParse(res).success).toBe(true);
     const withDoneBy = { ...note, items: [{ ...note.items[0], doneBy: 9 }] };
     expect(HubSessionNoteResponseSchema.safeParse({ ...res, note: withDoneBy }).success).toBe(false);
+  });
+
+  it('parses an armed note (D5b) and requires clearAfterPending', () => {
+    const when = '2026-10-27T19:00:00.000Z';
+    const armed = {
+      body: 'Bring potions',
+      items: [],
+      updatedAt: when,
+      updatedBy: null,
+      clearAfter: null,
+      clearAfterPending: true,
+    };
+    const res = { note: armed, viewer: { canEdit: true, canTick: true }, nextEvent: null };
+    expect(HubSessionNoteResponseSchema.safeParse(res).success).toBe(true);
+    const { clearAfterPending: _dropped, ...legacy } = armed;
+    expect(HubSessionNoteResponseSchema.safeParse({ ...res, note: legacy }).success).toBe(false);
   });
 
   it('accepts only { done }', () => {
