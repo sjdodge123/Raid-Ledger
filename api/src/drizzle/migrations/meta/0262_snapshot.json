@@ -11181,6 +11181,12 @@
           "notNull": true,
           "default": false
         },
+        "source_name": {
+          "name": "source_name",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "realm_slug": {
           "name": "realm_slug",
           "type": "varchar(100)",
