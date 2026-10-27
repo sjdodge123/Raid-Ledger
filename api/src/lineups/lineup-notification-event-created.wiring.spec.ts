@@ -148,7 +148,7 @@ describe('orchestrateEventCreated — "N of M from the group" line (ROK-1863 AC4
     const { players } = await postedCard(EVENT_ID);
 
     expect(players?.value).toContain(
-      `\n-# ${ROSTERED.length} of ${GROUP.length} from the group signed up`,
+      `\n*${ROSTERED.length} of ${GROUP.length} from the group signed up*`,
     );
   });
 

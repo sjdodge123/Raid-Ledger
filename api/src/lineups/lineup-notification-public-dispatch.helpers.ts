@@ -255,7 +255,7 @@ function eventCreatedBuilder(
       eventDate,
       eventId,
       card.names,
-      card.groupSubtext ?? undefined,
+      card.groupSubtext,
     );
 }
 

@@ -217,11 +217,11 @@ describe('resolveEventRosterCard groupSubtext (ROK-1863)', () => {
 });
 
 describe('EVENT CREATED card — group subtext line (ROK-1863)', () => {
-  it('appends the line as Discord subtext under the roster', () => {
+  it('appends the line in italics under the roster', () => {
     const plain = playersField(ROSTERED)?.value ?? '';
     const field = playersField(ROSTERED, '5 of 12 from the group signed up');
 
-    expect(field?.value).toBe(`${plain}\n-# 5 of 12 from the group signed up`);
+    expect(field?.value).toBe(`${plain}\n*5 of 12 from the group signed up*`);
   });
 
   it('leaves the field value unchanged without a subtext', () => {

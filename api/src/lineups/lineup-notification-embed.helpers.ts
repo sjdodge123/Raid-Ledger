@@ -239,11 +239,11 @@ function eventCreatedLinks(ctx: EmbedContext, eventId?: number): string {
 
 /**
  * ROK-1863: the muted line under the Players field. The ONE place the markup
- * is chosen — Discord subtext (`-# `) today; if it renders as a literal `-#`
- * inside an embed field, switch to italics (`*${text}*`) here.
+ * is chosen — italics, because Discord does not render `-# ` subtext inside
+ * an embed field (it would show a literal `-#`).
  */
 function groupSubtextLine(text: string): string {
-  return `-# ${text}`;
+  return `*${text}*`;
 }
 
 /**
@@ -259,7 +259,7 @@ export function buildEventCreatedEmbed(
   eventDate: Date,
   eventId?: number,
   memberNames?: string[],
-  groupSubtext?: string,
+  groupSubtext?: string | null,
 ): EmbedWithRow {
   const embed = createLineupEmbed(ctx, 'event_created', 'Event Created');
   embed.setDescription(
