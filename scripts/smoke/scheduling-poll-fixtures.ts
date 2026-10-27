@@ -13,8 +13,9 @@
  * Playwright never collects it as tests.
  */
 import type { Locator, Page } from '@playwright/test';
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { API_BASE, apiGet, apiPost, pollForCondition } from './api-helpers';
+import { isPhoneLayout } from './helpers';
 
 /** Attempts for the racy fixture-user seed — see {@link seedFixtureVoter}. */
 const SEED_ATTEMPTS = 3;
@@ -487,4 +488,34 @@ export async function resetToUnanswered(row: Locator): Promise<void> {
     await expect(row).toHaveAttribute('data-no-voted', 'false');
     await expect(yesToggle(row)).toHaveAttribute('aria-pressed', 'false');
     await expect(noToggle(row)).toHaveAttribute('aria-pressed', 'false');
+}
+
+/**
+ * Open the poll's "Manage poll ⋯" control on EVERY project.
+ *
+ * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
+ * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
+ * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
+ * The action components, gates and accessible names are the same in both.
+ */
+export async function openManage(page: Page): Promise<void> {
+    const manage = page.getByTestId('scheduling-manage');
+    await expect(
+        manage,
+        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
+    ).toBeVisible({ timeout: 15_000 });
+    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
+    await expect(
+        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * One Manage action by accessible name: a `button` row in the phone sheet, a
+ * `menuitem` scoped to the desktop popover (ROK-1585).
+ */
+export function manageItem(page: Page, name: RegExp): Locator {
+    return isPhoneLayout(test.info())
+        ? page.getByRole('button', { name })
+        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
 }
