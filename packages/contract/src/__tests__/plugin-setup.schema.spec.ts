@@ -86,8 +86,9 @@ describe('PluginSetupRequirementSchema (§3.5)', () => {
 });
 
 describe('declared setup (§3.5)', () => {
-  it('Core needs nothing', () => {
-    expect(HUB_PLUGIN_MANIFESTS.core.setup.requirements).toEqual([]);
+  it('Core needs only the two optional Steam requirements (ROK-1953 D7)', () => {
+    expect(setupIds('core')).toEqual(['steam-api-key', 'player-steam-link']);
+    expect(HUB_PLUGIN_MANIFESTS.core.setup.requirements.every((r) => !r.required)).toBe(true);
   });
 
   it('declares the real setup each plugin needs on main', () => {

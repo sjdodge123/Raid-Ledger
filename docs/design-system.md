@@ -1590,6 +1590,22 @@ since <date>", viewer timezone). Copy this shape for any future ranked-count wid
 the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
 CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` hides it from members at 0
 pictures, editors keep it with the §4.5 hint.
+**Achievement race** + **Playtime** (ROK-1953, Core, orders 50 / 52, span 1 each, `members`): the bodies are CORE
+(`components/hub/steam-stats/`), registered by Core with `games` omitted (every game) on `game_community` +
+`game_server` hubs; ONE query (`['hub-steam-stats', guildId]`, `GET /hubs/:guildId/steam-stats`) feeds both
+cards and both `useVisible` probes, which hide the pair on the route's 404 or `{ available: false }` (the game's
+Steam app id is not enabled), and hide the race alone when the game has no achievements. Both reuse the Deaths
+ranked-row shape (avatar h-6 · name · `tabular-nums` value over a `GuildMeter`), the §4.6 three `h-11` pulse rows
+while loading, the §4.5 sentence when nobody has linked Steam, and a per-viewer line under the list (unlinked →
+`Button secondary sm` "Link Steam"; private → `text-sm text-warning`; pending → `text-sm text-muted`). Text only —
+no Steam icons in v1. **New pattern: the masked hidden-achievement row** — nothing in the inventory shows a
+redacted item. A hidden achievement the viewer has not earned arrives masked from the server (no name, api name
+or description on the wire) and renders as `LockClosedIcon` (`aria-hidden`) + `text-sm italic text-muted`
+"Hidden achievement" + its rarity % (`text-xs text-muted`); the row's accessible text is "<member>: Hidden
+achievement, 3.2% of players"; no `title`/tooltip. Rare (< 10%) unlocks carry a neutral `StatusChip` "Rare".
+Copy this row for any other redacted item; never mask client-side. Rendered: `/dev/design-system#hub-widgets`
+(seeded "Achievement race" + "Playtime" cells).
+
 WoW: Forever (`web/src/plugins/wow/hub-widgets/`, registered in `wow/register.ts`, `wow_guild` hubs whose
 `gameSlug` is `world-of-warcraft-forever`; ROK-1905): **Class breakdown** (`forever-class-breakdown`, order 45,
 ROK-1921) — one 44px disclosure `Button` row per class (class icon + name + a `tone="neutral"` `GuildMeter` +

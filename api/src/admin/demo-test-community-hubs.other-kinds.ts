@@ -72,6 +72,7 @@ export async function seedOtherKindHubs(
     region: 'us',
     name: w,
     nameKey: hubNameKey(w),
+    sourceName: w,
     lastSnapshotAt: new Date(),
   });
   return { server, guild };
