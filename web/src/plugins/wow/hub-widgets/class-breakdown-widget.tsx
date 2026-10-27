@@ -40,7 +40,7 @@ function ClassBar({ row, max }: { row: ClassRow; max: number }): JSX.Element {
         <li>
             <Button variant="bare" data-testid={`forever-class-${row.class}`} aria-expanded={open} aria-controls={listId}
                 onClick={() => setOpen((v) => !v)}
-                className="min-h-11 w-full justify-start gap-2 rounded-md px-1 text-left text-sm hover:bg-overlay">
+                className="min-h-11 w-full justify-start gap-2 rounded-md px-1 text-left text-sm hover:bg-overlay [&>[data-button-label]]:w-full">
                 {icon !== null && <img src={icon} alt="" className="h-5 w-5 shrink-0 rounded-sm" />}
                 <span className="w-24 shrink-0 truncate font-medium text-foreground">{row.class}</span>
                 <span className="min-w-0 flex-1" aria-hidden="true">

@@ -61,6 +61,8 @@ describe('W1 Class breakdown', () => {
         renderWithProviders(<Body W={ClassBreakdownWidget} />);
         const meter = within(await screen.findByTestId('forever-class-Warrior')).getByRole('meter', { hidden: true });
         expect(meter.firstElementChild).toHaveClass('bg-secondary');
+        // The Button's label span must stretch, or the flex-1 meter collapses to 0 width.
+        expect(screen.getByTestId('forever-class-Warrior')).toHaveClass('[&>[data-button-label]]:w-full');
     });
 
     it('opens a member list: linked names go to the character sheet, unlinked to #members', async () => {
