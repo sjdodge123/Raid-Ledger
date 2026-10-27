@@ -1,5 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, notInArray, sql, type Column, type SQL } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  inArray,
+  notInArray,
+  sql,
+  type Column,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import type { SteamStatsStatus } from '@raid-ledger/contract';
@@ -9,6 +17,7 @@ import type {
   SteamSchemaAchievement,
   SteamUnlockedAchievement,
 } from '../../../steam/steam-achievements-http.util';
+import { STEAM_STATS_APP_IDS } from './steam-stats.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -18,6 +27,7 @@ const apps = schema.steamAppStatsApps;
 const ach = schema.steamAppAchievements;
 const userStats = schema.steamUserAppStats;
 const userAch = schema.steamUserAchievements;
+const gi = schema.gameInterests;
 
 /** Keep the first entry per key — one INSERT … ON CONFLICT may not touch a row twice. */
 function uniqueBy<T>(rows: readonly T[], key: (r: T) => string): T[] {
@@ -29,6 +39,24 @@ function uniqueBy<T>(rows: readonly T[], key: (r: T) => string): T[] {
 /** `api_name NOT IN (...)`, or no filter when the kept set is empty. */
 function notKept(col: Column, names: string[]): SQL | undefined {
   return names.length > 0 ? notInArray(col, names) : undefined;
+}
+
+/** Null `userId`'s `steam_library` playtime on the card games (Codex P2). */
+async function clearCardPlaytime(tx: Writer, userId: number): Promise<void> {
+  const cardGames = tx
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(inArray(schema.games.steamAppId, [...STEAM_STATS_APP_IDS]));
+  await tx
+    .update(gi)
+    .set({ playtimeForever: null, playtime2weeks: null })
+    .where(
+      and(
+        eq(gi.userId, userId),
+        eq(gi.source, 'steam_library'),
+        inArray(gi.gameId, cardGames),
+      ),
+    );
 }
 
 /** Upsert the app row; status follows the achievement count. */
@@ -229,11 +257,16 @@ export class SteamStatsStorageRepository {
    * The user's Steam account went away or was replaced (Codex P2): delete
    * every cached stats + unlock row so nothing from the old account is
    * served, counted or used to unmask. The next refresh rebuilds them.
+   * The card games' `steam_library` playtime is nulled too: library sync
+   * only rewrites games the new account owns, so A's hours would otherwise
+   * read as B's forever. Scoped to {@link STEAM_STATS_APP_IDS} — other
+   * features' library rows keep their pre-1953 unlink behaviour.
    */
   async purgeUser(userId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
       await tx.delete(userAch).where(eq(userAch.userId, userId));
       await tx.delete(userStats).where(eq(userStats.userId, userId));
+      await clearCardPlaytime(tx, userId);
     });
   }
 

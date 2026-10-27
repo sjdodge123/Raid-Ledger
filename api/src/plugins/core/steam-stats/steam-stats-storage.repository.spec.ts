@@ -7,6 +7,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
+import * as schema from '../../../drizzle/schema';
 import { SteamStatsStorageRepository } from './steam-stats-storage.repository';
 
 const APP = 1086940;
@@ -49,5 +50,17 @@ describe('SteamStatsStorageRepository — owner re-check', () => {
     expect(await repo.saveUserOk(OWNER, APP, UNLOCKED, NOW)).toBe(true);
     expect(await repo.saveUserStatus(OWNER, APP, 'private', NOW)).toBe(true);
     expect(db.insert).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('SteamStatsStorageRepository.purgeUser (Codex P2 — replaced account)', () => {
+  it("clears the old account's steam_library playtime, so a replacement that lacks the game never shows it", async () => {
+    const { db, repo } = setup('B');
+    await repo.purgeUser(1);
+    expect(db.update).toHaveBeenCalledWith(schema.gameInterests);
+    expect(db.set).toHaveBeenCalledWith({
+      playtimeForever: null,
+      playtime2weeks: null,
+    });
   });
 });

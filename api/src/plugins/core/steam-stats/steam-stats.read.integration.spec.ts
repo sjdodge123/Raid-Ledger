@@ -385,6 +385,30 @@ describe('GET /hubs/:guildId/steam-stats — Steam account changes (Codex P2)', 
   });
 });
 
+describe('GET /hubs/:guildId/steam-stats — replaced account playtime (Codex P2)', () => {
+  it("I13 — after A→B, A's steam_library hours are not shown as B's; other games' rows are untouched", async () => {
+    await playtime(a.id, gameId, 'steam_library', 1234);
+    const other = await makeGame('i13-other-game', null);
+    await playtime(a.id, other, 'steam_library', 77);
+    const next = '76561190000000998';
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: next })
+      .where(eq(schema.users.id, a.id));
+    const events = testApp.app.get(EventEmitter2);
+    await announceSteamLinkChange(events, a.id, '76561190000000101', next);
+    const body = available(await read(hub, b));
+    const kept = await testApp.db
+      .select({ minutes: schema.gameInterests.playtimeForever })
+      .from(schema.gameInterests)
+      .where(eq(schema.gameInterests.gameId, other));
+    expect({
+      hubGame: body.members.find((m) => m.userId === a.id)?.playtimeMinutes,
+      otherGame: kept.map((r) => r.minutes),
+    }).toEqual({ hubGame: null, otherGame: [77] });
+  });
+});
+
 describe('GET /hubs/:guildId/steam-stats — a failed schema fetch (review MAJOR 1)', () => {
   it('I10 — keeps the stored count and the last good refresh time', async () => {
     await testApp.app.get(SteamStatsStorageRepository).markSchemaError(BG3);
