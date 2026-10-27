@@ -8,7 +8,7 @@
  */
 import { eq } from 'drizzle-orm';
 import { readdirSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Redis from 'ioredis';
@@ -101,16 +101,14 @@ async function listAs(who: Who, qs = '') {
 }
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'hub-media-upload-'));
-  process.env.HUB_MEDIA_DIR = root;
   testApp = await getTestApp();
 });
 
-afterAll(() => {
-  delete process.env.HUB_MEDIA_DIR;
-});
-
 beforeEach(async () => {
+  // A fresh store root per test: truncating the tables leaves the previous
+  // test's files on disk, and `filesOnDisk()` counts the whole root.
+  root = await mkdtemp(join(tmpdir(), 'hub-media-upload-'));
+  process.env.HUB_MEDIA_DIR = root;
   testApp.seed = await truncateAllTables(testApp.db);
   const redis = testApp.app.get<Redis>(REDIS_CLIENT);
   const keys = await redis.keys('hub-media-upload:*');
@@ -144,9 +142,11 @@ beforeEach(async () => {
   ) as Record<Who, string>;
 });
 
-afterEach(() => {
+afterEach(async () => {
   delete process.env.HUB_MEDIA_UPLOAD_PER_HOUR;
   delete process.env.HUB_MEDIA_MAX_BYTES_PER_HUB;
+  delete process.env.HUB_MEDIA_DIR;
+  await rm(root, { recursive: true, force: true });
 });
 
 describe('POST hubs/:guildId/media — who may upload (D2)', () => {
@@ -358,6 +358,104 @@ describe('canRemove per viewer (D12) and the Screenshots chip (D7)', () => {
     expect({ ids: list.items.map((i) => i.id), kinds: list.kinds }).toEqual({
       ids: [id],
       kinds: ['upload'],
+    });
+  });
+});
+
+/** A WoW guild hub with an officer (member editor grant) and a raider. */
+const WOW_SNAP = new Date('2026-10-10T20:00:00.000Z');
+async function seedWowHub() {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        region: 'us',
+        name: 'Ironforge Watch',
+        nameKey: 'ironforge watch',
+        source: 'addon_import',
+        lastSnapshotAt: WOW_SNAP,
+      })
+      .returning({ id: schema.guilds.id }),
+    'wow guild',
+  );
+  const member = async (name: string) => {
+    const u = await makeUser(name);
+    const guid = `Player-1-${name}`;
+    await testApp.db.insert(schema.characters).values({
+      userId: u.id,
+      gameId: testApp.seed.game.id,
+      name,
+      addonGuid: guid,
+      region: 'us',
+    });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.guildMembers)
+        .values({
+          guildId: g.id,
+          guid,
+          characterName: name,
+          rankIndex: 4,
+          rankName: 'Raider',
+          source: 'addon_import',
+          lastSeenAt: WOW_SNAP,
+        })
+        .returning({ id: schema.guildMembers.id }),
+      `guild member ${name}`,
+    );
+    return { token: u.token, memberId: row.id };
+  };
+  const officer = await member('wowofficer');
+  const raider = await member('wowraider');
+  await testApp.db
+    .insert(schema.guildEditors)
+    .values({ guildId: g.id, kind: 'member', guildMemberId: officer.memberId });
+  return { guildId: g.id, officer: officer.token, raider: raider.token };
+}
+
+describe('WoW officer: hides, but removes only their own (spec §7 cases 9–10, D11)', () => {
+  it('officer PATCH hide → 200, DELETE a raider’s upload → 403, DELETE own → 204; canRemove follows', async () => {
+    const wow = await seedWowHub();
+    const as = (token: string) => ({ Authorization: `Bearer ${token}` });
+    const up = async (token: string) => {
+      const res = await testApp.request
+        .post(base(wow.guildId))
+        .set(as(token))
+        .attach('file', await png(), {
+          filename: 'pic.png',
+          contentType: 'image/png',
+        });
+      expect(res.status).toBe(201);
+      return HubMediaItemSchema.parse(res.body).id;
+    };
+    const raiders = await up(wow.raider);
+    const own = await up(wow.officer);
+    const list = HubMediaListResponseSchema.parse(
+      (await testApp.request.get(base(wow.guildId)).set(as(wow.officer))).body,
+    );
+    const canRemove = Object.fromEntries(
+      list.items.map((i) => [i.id, i.canRemove]),
+    );
+    const url = (id: number) => `${base(wow.guildId)}/${id}`;
+    const hide = await testApp.request
+      .patch(url(raiders))
+      .set(as(wow.officer))
+      .send({ hidden: true });
+    const delOther = await testApp.request
+      .delete(url(raiders))
+      .set(as(wow.officer));
+    const delOwn = await testApp.request.delete(url(own)).set(as(wow.officer));
+    expect({
+      canRemove: { raiders: canRemove[raiders], own: canRemove[own] },
+      hide: hide.status,
+      delOther: delOther.status,
+      delOwn: delOwn.status,
+    }).toEqual({
+      canRemove: { raiders: false, own: true },
+      hide: 200,
+      delOther: 403,
+      delOwn: 204,
     });
   });
 });
