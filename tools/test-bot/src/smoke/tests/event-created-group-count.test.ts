@@ -1,7 +1,8 @@
 /**
  * ROK-1863 — the lineup channel's EVENT CREATED card says how much of the
  * group made the roster: under `👥 Players (N)` the field value ends with
- * `\n-# <n> of <m> from the group signed up` when the roster is short, and
+ * `\n*<n> of <m> from the group signed up*` (italics — Discord does not
+ * render `-#` subtext inside an embed field) when the roster is short, and
  * carries no such line when everyone in the group signed up.
  *
  * Where the numbers come from (api `resolveEventRosterCard`):
@@ -16,9 +17,13 @@
  *
  * The lock-in goes through `POST …/create-event`, the only path that fires
  * the EVENT CREATED card (`scheduling-event.helpers.ts` → `fireEventCreated`).
- * The card is found by its `/events/<id>)` link, with the channel snapshotted
- * BEFORE the lock-in so a prior run's card (seeded ids repeat across runs)
- * can never satisfy the probe.
+ * The card is posted to the LINEUP channel (`resolveLineupChannelId`: admin
+ * lineup channel, else the default channel). It is found by its
+ * `/events/<id>)` link AND the `<t:<start>:` timestamp of this run's slot —
+ * event ids restart on every env reset, so another env sharing the guild can
+ * post a card with the same id, but not with the same per-run start minute.
+ * The channel is snapshotted BEFORE the lock-in so an earlier card can never
+ * satisfy the probe.
  *
  * NOT covered: `0 of M` (only a non-member organiser rostered). The creator
  * is always a member here, so that card cannot be staged from the API; the
@@ -31,6 +36,7 @@ import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import { awaitProcessing, deleteEvent, seedFixtureUser } from '../fixtures.js';
 import type { FixtureUser } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { resolveLineupChannelId } from './lineup-scheduling-poll-card.test.js';
 
 /**
  * Fixture slots 8 + 9, shared with the ROK-1874 / unanimous-DM poll smokes.
@@ -53,6 +59,12 @@ interface GroupPoll {
   base: string;
   memberA: FixtureUser;
   memberB: FixtureUser;
+}
+
+/** A suggested slot and its start instant (the card's `<t:<sec>:` stamp). */
+interface Slot {
+  id: number;
+  startSec: number;
 }
 
 /** Resolve a configured gameId (MMO binding → /games/configured). */
@@ -88,7 +100,11 @@ async function createGroupPoll(ctx: TestContext): Promise<GroupPoll> {
  * Suggest a slot `daysOut` days ahead on a per-run minute (auto-votes the
  * admin YES) so a previous run's event cannot share this instant.
  */
-async function suggestSlot(gp: GroupPoll, ctx: TestContext, daysOut: number) {
+async function suggestSlot(
+  gp: GroupPoll,
+  ctx: TestContext,
+  daysOut: number,
+): Promise<Slot> {
   const start = new Date(
     Date.now() + daysOut * 86_400_000 + (Date.now() % 600) * 60_000,
   );
@@ -96,7 +112,7 @@ async function suggestSlot(gp: GroupPoll, ctx: TestContext, daysOut: number) {
   const { id } = await ctx.api.post<{ id: number }>(`${gp.base}/suggest`, {
     proposedTime: start.toISOString(),
   });
-  return id;
+  return { id, startSec: Math.floor(start.getTime() / 1000) };
 }
 
 /** Vote YES on `slotId` as `member`, asserting the toggle landed ON. */
@@ -112,10 +128,21 @@ async function voteYes(member: FixtureUser, base: string, slotId: number) {
   }
 }
 
-/** The EVENT CREATED embed linking `/events/<eventId>`, if this message has it. */
-function eventCardOf(m: SimpleMessage, eventId: number): SimpleEmbed | undefined {
+/**
+ * THIS run's EVENT CREATED embed, if this message has it: it links
+ * `/events/<eventId>` and stamps this run's slot start.
+ */
+function eventCardOf(
+  m: SimpleMessage,
+  eventId: number,
+  slot: Slot,
+): SimpleEmbed | undefined {
   const link = `/events/${eventId})`;
-  return m.embeds.find((e) => (e.description ?? '').includes(link));
+  const stamp = `<t:${slot.startSec}:`;
+  return m.embeds.find((e) => {
+    const d = e.description ?? '';
+    return d.includes(link) && d.includes(stamp);
+  });
 }
 
 /**
@@ -126,23 +153,24 @@ function eventCardOf(m: SimpleMessage, eventId: number): SimpleEmbed | undefined
 async function lockInAndReadPlayers(
   ctx: TestContext,
   gp: GroupPoll,
-  slotId: number,
+  slot: Slot,
   onEventId: (id: number) => void,
 ): Promise<{ name: string; value: string }> {
-  const ghostIds = await snapshotMessageIds(ctx.defaultChannelId);
+  const channelId = await resolveLineupChannelId(ctx.api, ctx.defaultChannelId);
+  const ghostIds = await snapshotMessageIds(channelId);
   const { eventId } = await ctx.api.post<{ eventId: number }>(
     `${gp.base}/create-event`,
-    { slotId },
+    { slotId: slot.id },
   );
   onEventId(eventId);
   await awaitProcessing(ctx.api);
   const msg = await pollForEmbed(
-    ctx.defaultChannelId,
-    (m) => eventCardOf(m, eventId) !== undefined,
+    channelId,
+    (m) => eventCardOf(m, eventId, slot) !== undefined,
     ctx.config.timeoutMs,
     { excludeIds: ghostIds },
   );
-  const card = eventCardOf(msg, eventId);
+  const card = eventCardOf(msg, eventId, slot);
   if (!card) throw new Error(`EVENT CREATED card for event ${eventId} vanished`);
   const players = card.fields.find((f) => f.name.startsWith(PLAYERS_PREFIX));
   if (!players) {
@@ -190,18 +218,18 @@ const shortRosterShowsGroupLine: SmokeTest = {
     try {
       const adminInGroup = await adminIsInGroup(ctx);
       gp = await createGroupPoll(ctx);
-      const slotId = await suggestSlot(gp, ctx, 10);
-      await voteYes(gp.memberA, gp.base, slotId); // B never votes
+      const slot = await suggestSlot(gp, ctx, 10);
+      await voteYes(gp.memberA, gp.base, slot.id); // B never votes
       await awaitProcessing(ctx.api);
 
-      const players = await lockInAndReadPlayers(ctx, gp, slotId, (id) => {
+      const players = await lockInAndReadPlayers(ctx, gp, slot, (id) => {
         eventId = id;
       });
       // Rostered: admin + A. Group: A + B, plus the admin when linked.
       assertPlayerCount(players, 2);
       const n = adminInGroup ? 2 : 1;
       const m = adminInGroup ? 3 : 2;
-      const line = `\n-# ${n} of ${m} from the group signed up`;
+      const line = `\n*${n} of ${m} from the group signed up*`;
       if (!players.value.endsWith(line)) {
         throw new Error(
           `Expected the Players field to end with ${JSON.stringify(line)} ` +
@@ -222,12 +250,12 @@ const fullRosterHasNoGroupLine: SmokeTest = {
     let eventId: number | undefined;
     try {
       gp = await createGroupPoll(ctx);
-      const slotId = await suggestSlot(gp, ctx, 11);
-      await voteYes(gp.memberA, gp.base, slotId);
-      await voteYes(gp.memberB, gp.base, slotId);
+      const slot = await suggestSlot(gp, ctx, 11);
+      await voteYes(gp.memberA, gp.base, slot.id);
+      await voteYes(gp.memberB, gp.base, slot.id);
       await awaitProcessing(ctx.api);
 
-      const players = await lockInAndReadPlayers(ctx, gp, slotId, (id) => {
+      const players = await lockInAndReadPlayers(ctx, gp, slot, (id) => {
         eventId = id;
       });
       assertPlayerCount(players, 3); // admin + A + B
