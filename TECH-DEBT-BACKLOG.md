@@ -3670,3 +3670,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (surfaced during final review)
 
 - **low** — `web/src/components/admin/PluginCard.tsx`: the legacy admin plugin card is rendered by no route — only its own specs `PluginCard.test.tsx` and `PluginCard.builtin.test.tsx` import it (the live cards are `pages/admin/plugins/PluginCard.tsx` and `components/admin/onboarding/PluginCard.tsx`), so ROK-1969's move of its buttons onto `plugin-lifecycle-actions.tsx` changed nothing a user sees and the next reviewer will again mistake it for the shipped card. Pre-existing dead code, not introduced by this branch. Suggested: delete it with its two specs.
+
+### 2026-10-27 — ROK-2023 (status note, surfaced during L3)
+
+- **status** — `/data/uploads` (member uploads, hub media, feedback screenshots, branding) is now backed up by ROK-2023: a `raid_ledger_<ts>.uploads.tar` beside each daily dump, keep 7, and the restore drill's `uploads` tier proves rows resolve to archived files. Still NOT backed up: avatars and Valheim-link blobs stored outside `/data/uploads`. In-app Restore stays database-only (file restore is the runbook's manual steps). Suggested: a follow-up story if the operator rules those in (ROK-2023 OPEN-1/OPEN-4/OPEN-5).
