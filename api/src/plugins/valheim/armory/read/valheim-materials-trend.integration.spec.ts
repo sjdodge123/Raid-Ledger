@@ -6,6 +6,7 @@
  * +60 on 10-14; a cart adds Wood +40 on 10-16 (+85 with vehicles); the
  * owner's private chest Coins +100 on 10-16. One base holds every chest.
  */
+import { eq } from 'drizzle-orm';
 import {
   ValheimMaterialsResponseSchema,
   type ValheimMaterialStack,
@@ -26,6 +27,7 @@ import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import type { ContainersFixtureResponse } from '../valheim-armory-containers-demo-seed.controller';
 import type { MaterialsViewer } from './valheim-materials.privacy';
 import {
+  selectTrendBaseSums,
   selectTrendDays,
   selectTrendItemSums,
 } from './valheim-materials-trend.queries';
@@ -164,6 +166,54 @@ describe('Materials trend (ROK-2014)', () => {
   });
 });
 
+const P = schema.valheimProfiles;
+const MEMBER_PLAYER = '990000000000000002';
+
+/**
+ * A second claimant: the member validly claims their own character (a copy
+ * of the owner's profile under another steam/player id) and has one private
+ * chest of Amber on the newest day, in both the item and the base snapshot.
+ */
+async function seedSecondClaimant(
+  f: ContainersFixtureResponse,
+  dayId: number,
+): Promise<void> {
+  const [own] = await testApp.db
+    .select()
+    .from(P)
+    .where(eq(P.claimedBy, f.ownerUserId))
+    .limit(1);
+  if (!own) throw new Error('seed wrote no owner profile');
+  // A fresh row: the copy drops the owner profile's id.
+  const { id: ownerProfileId, ...copy } = own;
+  expect(ownerProfileId).toBeGreaterThan(0);
+  await testApp.db.insert(P).values({
+    ...copy,
+    steamId: '76561190000000002',
+    playerId: MEMBER_PLAYER,
+    claimedBy: f.memberUserId,
+    claimSource: 'admin',
+  });
+  const B = schema.valheimContainerBaseItemDays;
+  const [base] = await testApp.db
+    .select()
+    .from(B)
+    .where(eq(B.dayId, dayId))
+    .limit(1);
+  if (!base) throw new Error('seed wrote no base snapshot');
+  const row = { dayId, prefab: 'Amber', vehicle: false, owner: MEMBER_PLAYER };
+  await testApp.db
+    .insert(schema.valheimContainerItemDays)
+    .values({ ...row, total: 7 });
+  await testApp.db.insert(B).values({
+    ...row,
+    total: 7,
+    baseKey: base.baseKey,
+    baseX: base.baseX,
+    baseZ: base.baseZ,
+  });
+}
+
 describe('Materials trend — privacy and empty history (ROK-2014)', () => {
   it('snapshot rows follow the claim rule (D13): member and impersonated read no personal rows', async () => {
     const f = await seed(3);
@@ -210,5 +260,38 @@ describe('Materials trend — privacy and empty history (ROK-2014)', () => {
         expect(b).not.toHaveProperty('trend');
       }
     }
+  });
+});
+
+describe('Materials trend — two claimants (ROK-2014 D13)', () => {
+  it('neither claimant reads the other claimant private rows, item AND base sums', async () => {
+    const f = await seed(3);
+    const { worldUid } = await materials(f.serverId, adminToken);
+    if (worldUid === null) throw new Error('seed wrote no scan');
+    const days = await selectTrendDays(testApp.db, f.serverId, worldUid, 4);
+    const ids = days.map((d) => d.id);
+    await seedSecondClaimant(f, nonEmpty(ids, 'newest day')[0]);
+    const viewer = (id: number): MaterialsViewer => ({
+      id,
+      isAdmin: false,
+      impersonated: false,
+    });
+    const privateOf = async (id: number) => {
+      const v = viewer(id);
+      const items = await selectTrendItemSums(testApp.db, ids, v, true);
+      const bases = await selectTrendBaseSums(testApp.db, ids, v, true);
+      const names = (rows: { shared: boolean; prefab: string }[]) => [
+        ...new Set(rows.filter((r) => !r.shared).map((r) => r.prefab)),
+      ];
+      return { items: names(items), bases: names(bases) };
+    };
+    expect(await privateOf(f.ownerUserId)).toEqual({
+      items: ['Coins'],
+      bases: ['Coins'],
+    });
+    expect(await privateOf(f.memberUserId)).toEqual({
+      items: ['Amber'],
+      bases: ['Amber'],
+    });
   });
 });

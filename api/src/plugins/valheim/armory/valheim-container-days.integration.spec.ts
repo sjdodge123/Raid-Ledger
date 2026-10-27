@@ -23,6 +23,7 @@ import { ValheimArmoryImportService } from './valheim-armory-import.service';
 import { importDemoContainers } from './valheim-armory-containers-demo-seed.helpers';
 import { CONTAINERS_DEMO_MESSAGE } from './valheim-armory-containers-demo-fixture';
 import { CONTAINER_DAYS_RETAINED } from './valheim-container-days.helpers';
+import { selectTrendDays } from './read/valheim-materials-trend.queries';
 
 let testApp: TestApp;
 let server: number;
@@ -167,6 +168,30 @@ describe('Valheim container play days (integration)', () => {
       .where(eq(schema.pelicanServers.id, server));
     await pushAndDrain(scanAt('2026-10-18T03:00:00Z'));
     expect((await dayRows()).map((d) => d.playDate)).toEqual(['2026-10-17']);
+  });
+});
+
+describe('Valheim container play days — world switch (integration)', () => {
+  it('a second world the same day gets its own header; reads stay per world (AC5)', async () => {
+    const a = scanAt(T0);
+    const worldB = a.worldUid === '42' ? '43' : '42';
+    expect(await pushAndDrain(a)).toBe(1);
+    expect(
+      await pushAndDrain({
+        ...scanAt('2026-10-17T22:00:00Z'),
+        worldUid: worldB,
+      }),
+    ).toBe(1);
+    const days = await dayRows();
+    expect(days.map((d) => [d.worldUid, d.playDate]).sort()).toEqual(
+      [
+        [a.worldUid, '2026-10-17'],
+        [worldB, '2026-10-17'],
+      ].sort(),
+    );
+    const onlyA = await selectTrendDays(testApp.db, server, a.worldUid, 4);
+    const idA = days.find((d) => d.worldUid === a.worldUid)?.id;
+    expect(onlyA.map((d) => d.id)).toEqual([idA]);
   });
 });
 
