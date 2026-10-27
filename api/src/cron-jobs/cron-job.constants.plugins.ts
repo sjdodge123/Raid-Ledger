@@ -12,4 +12,10 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs the single likely owner of an unclaimed Valheim character played 10+ minutes in a live Quick Play, asking them to claim it, every 5 minutes',
     category: 'Notifications',
   },
+  // ROK-1953 D5: Core's nightly Steam achievements refresh.
+  SteamAppStatsProcessor_scheduledRefresh: {
+    description:
+      'Refreshes Steam achievements for members of game hubs whose game has Steam stats enabled, nightly at 04:30',
+    category: 'Data Sync',
+  },
 };

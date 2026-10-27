@@ -62,6 +62,8 @@ describe('Companion ingest ack + error codes (ROK-1954)', () => {
         expect(CompanionIngestErrorCodeSchema.options).toEqual([
             'invalid_envelope', 'unknown_contract', 'unknown_contract_version', 'retired_contract_version',
             'invalid_payload', 'payload_too_large', 'captured_at_in_future', 'unauthorized', 'rate_limited',
+            // ROK-1956 (additive, appended — never reorder):
+            'unsupported_media', 'hash_mismatch', 'invalid_blob', 'blob_ref_mismatch', 'blob_quota_exceeded',
         ]);
     });
 });
