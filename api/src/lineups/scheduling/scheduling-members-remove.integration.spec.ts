@@ -330,9 +330,9 @@ function describeRemoveMember() {
     ['passed phase deadline', { phaseDeadline: new Date('2000-01-01') }],
   ])(
     '400s an expired poll (%s) while the match is still scheduling, voter intact',
-    async (_label, lifecycle) => {
+    async (label, lifecycle) => {
       const { creator, voter, poll } = await seedWithVoter(
-        `expired-${_label.split(' ')[0]}`,
+        `expired-${label.split(' ')[0]}`,
       );
       await testApp.db
         .update(schema.communityLineups)

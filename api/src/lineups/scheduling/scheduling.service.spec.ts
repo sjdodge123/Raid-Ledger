@@ -254,6 +254,24 @@ describe('SchedulingService', () => {
         expect(mockNudge.touch).not.toHaveBeenCalled();
       });
 
+      // ROK-2020: the auto-vote enrols the suggester, so it must serialise
+      // with a concurrent participant removal exactly like toggleVote does.
+      it('takes the (match, user) roster lock before the auto-vote write', async () => {
+        jest.mocked(lockMatchMember).mockClear();
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(lockMatchMember).toHaveBeenCalledWith(
+          mockDb,
+          SCHEDULING_MATCH.id,
+          7,
+        );
+        const lockOrder =
+          jest.mocked(lockMatchMember).mock.invocationCallOrder[0] ?? Infinity;
+        const voteOrder = voteSpy.mock.invocationCallOrder[0] ?? -1;
+        expect(lockOrder).toBeLessThan(voteOrder);
+      });
+
       it('does not call insertScheduleVote when userId is undefined', async () => {
         mockSuggestSlotFlow();
         await service.suggestSlot(10, SLOT_TIME);

@@ -189,6 +189,7 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
       'This poll no longer accepts changes',
     );
     expect(mockDelete).not.toHaveBeenCalled();
+    expect(fireUpdateEmbed).not.toHaveBeenCalled();
   });
 
   it('404s a match outside this lineup and an unknown lineup', async () => {
