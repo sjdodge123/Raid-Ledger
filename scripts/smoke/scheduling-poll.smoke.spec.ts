@@ -29,7 +29,9 @@ import {
 } from './api-helpers';
 import {
     expectUnanswered,
+    manageItem,
     nonLeadingRow,
+    openManage,
     openPollPage,
     openRowMenu,
     rowMenuTrigger,
@@ -1846,36 +1848,6 @@ function heroCard(page: Page): Locator {
         .first();
 }
 
-/**
- * Open the poll's "Manage poll ⋯" control on EVERY project.
- *
- * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
- * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
- * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
- * The action components, gates and accessible names are the same in both.
- */
-async function openManage(page: Page): Promise<void> {
-    const manage = page.getByTestId('scheduling-manage');
-    await expect(
-        manage,
-        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
-    ).toBeVisible({ timeout: 15_000 });
-    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
-    await expect(
-        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
-    ).toBeVisible({ timeout: 10_000 });
-}
-
-/**
- * One Manage action by accessible name: a `button` row in the phone sheet, a
- * `menuitem` scoped to the desktop popover (ROK-1585).
- */
-function manageItem(page: Page, name: RegExp): Locator {
-    return isPhoneLayout(test.info())
-        ? page.getByRole('button', { name })
-        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
-}
-
 /** Inner (padding-box minus padding) width of the hero card. */
 async function heroInnerWidth(card: Locator): Promise<number> {
     return card.evaluate((el: HTMLElement) => {
@@ -1936,6 +1908,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible();
         const rows = [
             sheet.getByTestId('add-poll-members-button'),
+            sheet.getByTestId('remove-poll-member-button'),
             sheet.getByRole('button', { name: /^remind voters$/i }),
             sheet.getByRole('button', { name: /^cancel poll$/i }),
         ];
@@ -1951,7 +1924,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         }
     });
 
-    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
+    test('desktop: the four actions live in the "Manage poll ⋯" dropdown (ROK-1585, ROK-2020)', async ({
         page,
     }) => {
         test.skip(
@@ -1980,10 +1953,12 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         const mBox = (await menu.boundingBox())!;
         expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
         expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        // ROK-2020 added "Remove Participant" as the second item — exactly four.
         await expect(menu.getByRole('menuitem')).toHaveText([
-            /add participants/i,
-            /remind voters/i,
-            /cancel poll/i,
+            /^add participants$/i,
+            /^remove participant$/i,
+            /^remind voters$/i,
+            /^cancel poll$/i,
         ]);
         await expect(menu.getByRole('separator')).toHaveCount(1);
 
