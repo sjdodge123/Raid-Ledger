@@ -232,8 +232,9 @@ export function findVoteBySlotAndUser(db: Db, slotId: number, userId: number) {
 
 /**
  * Link the just-created event and flip the match to `scheduled` — a
- * compare-and-set on a still-open, unlinked match (ROK-2024: an open
- * `complete` may have locked it in since the caller's read).
+ * compare-and-set on a still-schedulable (`suggested` or `scheduling`),
+ * unlinked match (ROK-2024: an open `complete` may have locked it in since the
+ * caller's read).
  *
  * @returns False when another lock-in won; nothing was written.
  */
@@ -248,7 +249,10 @@ export async function updateMatchLinkedEvent(
     .where(
       and(
         eq(schema.communityLineupMatches.id, matchId),
-        eq(schema.communityLineupMatches.status, 'scheduling'),
+        inArray(schema.communityLineupMatches.status, [
+          'suggested',
+          'scheduling',
+        ]),
         isNull(schema.communityLineupMatches.linkedEventId),
       ),
     )
