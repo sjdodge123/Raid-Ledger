@@ -53,3 +53,19 @@ export function claimChunkReload(now: number = Date.now()): boolean {
         return false;
     }
 }
+
+/**
+ * ROK-1901: the reload-once idiom for any on-demand chunk, as a promise
+ * wrapper. A stale-chunk failure reloads the page once and never settles (the
+ * fallback stays up until the reload); any other failure re-throws. Use it in
+ * a `lazy()` factory only — never on a prefetch, which must fail silently.
+ */
+export function reloadOnChunkError<T>(load: Promise<T>): Promise<T> {
+    return load.catch((error: unknown) => {
+        if (isChunkLoadError(error) && claimChunkReload()) {
+            window.location.reload();
+            return new Promise<T>(() => {});
+        }
+        throw error;
+    });
+}

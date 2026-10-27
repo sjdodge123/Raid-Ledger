@@ -3691,3 +3691,9 @@ same day (#1278, #1279, #1280).
 - **nit** `api/src/plugins/core/steam-stats/steam-stats-storage.repository.spec.ts:57` — `setup('B')` primes `db.for` for an owner re-check that `purgeUser` does not use; harmless but misleading. Suggested: `setup(null)` or a bare mock.
 - **low** `api/src/plugins/core/steam-stats/steam-stats-link.listener.ts:75-79` — when the old account's link job is still WAITING/delayed, the refresh resolves `users.steam_id` at run time so B is fetched twice (extra Steam rate-limit budget; harmless). Suggested: `queue.remove()` the previous link job id in `handleUnlinked` (it has `e.steamId64`, so it can compute the same id), which also drops a stale backoff-delayed A job.
 - **nit** `api/src/plugins/core/steam-stats/steam-stats-link.listener.ts:75` — an unsalted sha256 of a SteamID64 is enumerable (account id < 2^32), so the 12-hex job-id tag reverses by brute force in minutes; "no raw SteamID in Redis" adds little privacy. Suggested: HMAC with an existing server secret, or soften the comment to "not stored verbatim".
+
+### 2026-10-27 — perf/rok-1901-app-entry-diet (surfaced during ROK-1901)
+
+- **low** `web/src/index.css` — the global `.btn` / `.btn-primary` / `.btn-secondary` rules, moved verbatim from `event-detail-page.css`, still use hex/rgba instead of `--color-*` tokens (wrong in 14 of 15 themes). Pre-existing: moved unchanged so `/join` + `/i/:code` are styled on first paint. Suggested: tokenise in a dedicated restyle story with both colour families checked.
+- **nit** `web/src/idle-prefetch.ts` — warms ~40 KB of idle prefetch for logged-out visitors on public landings. Suggested: skip when `getAuthMethod()` reports no session.
+- **nit** `web/src/components/hub/community/hub-join-prompt-lazy.tsx` and `community-hub-module-loader.ts` — each keeps its own chunk-reload idiom. Suggested: use `reloadOnChunkError` from `web/src/lib/chunk-error.ts`.

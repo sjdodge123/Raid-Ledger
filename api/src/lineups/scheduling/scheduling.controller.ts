@@ -51,6 +51,7 @@ import { SchedulingRallyService } from './scheduling-rally.service';
 import {
   SchedulingMembersService,
   type AddMatchMembersResult,
+  type RemoveMatchMemberResult,
 } from './scheduling-members.service';
 
 import { isMemberViewer } from '../../events/roster-public-projection.helpers';
@@ -269,6 +270,27 @@ export class SchedulingController {
       parsed.data.userIds,
       { id: req.user!.id, role: req.user!.role },
     );
+  }
+
+  /**
+   * DELETE /lineups/:lineupId/schedule/:matchId/members/:userId — take one
+   * participant off this poll, with their votes on it (ROK-2020). Same
+   * permission rule as add (enforced in the service); the creator can't be
+   * removed (400).
+   */
+  @Delete(':lineupId/schedule/:matchId/members/:userId')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async removePollMember(
+    @Param('lineupId', ParseIntPipe) lineupId: number,
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Req() req: AuthRequest,
+  ): Promise<RemoveMatchMemberResult> {
+    return this.membersService.removeMember(lineupId, matchId, userId, {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
   }
 
   /** DELETE /lineups/:lineupId/schedule/:matchId/votes — retract all votes. */

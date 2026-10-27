@@ -17,11 +17,16 @@ import {
   updateScheduleVoteStance,
   findVoteBySlotAndUser,
   deleteScheduleVote,
+  ensureMatchMember,
 } from './scheduling-query.helpers';
 import {
+  isAnswering,
   resolveStanceAction,
   type StanceAction,
 } from './scheduling-stance.helpers';
+import { assertSlotStillVotable } from './scheduling-lock-in.helpers';
+import { syncSchedulingSubmittedAt } from './scheduling-submitted-at.helpers';
+import { lockMatchMember } from './scheduling-member-lock.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -64,4 +69,42 @@ export async function applyStance(
     await updateScheduleVoteStance(tx, slotId, userId, action.stance, source);
   }
   return action;
+}
+
+/** The slot being tapped — already proven to belong to its match. */
+export interface TappedSlot {
+  id: number;
+  matchId: number;
+  proposedTime: Date | string | null | undefined;
+}
+
+/**
+ * Everything a slot tap writes, inside the caller's transaction: vote write +
+ * member enrolment + the ROK-1544 stamp commit atomically, so a partial write
+ * can't recreate the voter-without-membership state.
+ *
+ * ROK-2020 (Codex P2): the `(matchId, userId)` roster lock is the FIRST
+ * statement, so a participant removal for this user serialises with the tap
+ * instead of interleaving between its vote and membership deletes.
+ */
+export async function writeSlotTap(
+  tx: Tx,
+  slot: TappedSlot,
+  userId: number,
+  stance: ScheduleVoteStance,
+  source: ScheduleVoteSource,
+): Promise<StanceAction> {
+  const { matchId } = slot;
+  await lockMatchMember(tx, matchId, userId);
+  const resolved = await applyStance(tx, slot.id, userId, stance, source);
+  // ROK-1607/1617: a passed time can't be answered, but can be UN-answered.
+  // Throwing rolls the write back; the statement itself succeeded, so
+  // nothing is poisoned.
+  if (isAnswering(resolved)) {
+    assertSlotStillVotable(slot.proposedTime);
+    await ensureMatchMember(tx, matchId, userId);
+  }
+  // The tap IS the submit — last statement, so it sees this tx's own write.
+  await syncSchedulingSubmittedAt(tx, matchId, userId);
+  return resolved;
 }
