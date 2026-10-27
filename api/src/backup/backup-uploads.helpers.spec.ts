@@ -90,8 +90,15 @@ describe('resolveUploadsDir', () => {
 
 describe('tarCreateArgs', () => {
   it('archives the root under its basename from its parent dir', () => {
-    expect(tarCreateArgs('/b/daily/x.uploads.tar.partial', '/data/uploads'))
-      .toEqual(['-cf', '/b/daily/x.uploads.tar.partial', '-C', '/data', 'uploads']);
+    expect(
+      tarCreateArgs('/b/daily/x.uploads.tar.partial', '/data/uploads'),
+    ).toEqual([
+      '-cf',
+      '/b/daily/x.uploads.tar.partial',
+      '-C',
+      '/data',
+      'uploads',
+    ]);
   });
 });
 
