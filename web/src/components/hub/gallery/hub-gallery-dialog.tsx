@@ -4,11 +4,11 @@
  * two stacked dialogs. The All · Deaths · Screenshots chips (operator ruling
  * 2026-10-24) narrow both modes, and Prev / Next / ←→ walk the FILTERED set
  * (paging in more via `nextCursor` at the end of the loaded list). Editors
- * Hide / Unhide; staff Remove (two-step, inline — no stacked confirm). Closing
+ * Hide / Unhide; the hub leader or the uploader Remove (per-item `canRemove`,
+ * ROK-1965; two-step, inline — no stacked confirm). Closing
  * (Escape, ×, backdrop, swipe) returns focus to the element that opened it.
  */
 import { type RefObject, useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { isOperatorOrAdmin, useAuth } from '../../../hooks/use-auth';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { availableFilters, clampHubMediaFilter, type HubMediaFilter } from '../../../lib/hub-media-query';
@@ -24,7 +24,6 @@ import { HUB_GALLERY_PAGE_SIZE, type HubGalleryPages, useHubGalleryPages } from 
 export interface HubGalleryDialogProps {
     request: HubGalleryOpenRequest;
     canEdit: boolean;
-    canRemove: boolean;
 }
 
 function isTyping(target: EventTarget | null): boolean {
@@ -135,7 +134,7 @@ function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope,
     );
 }
 
-export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDialogProps): JSX.Element {
+export function HubGalleryDialog({ request, canEdit }: HubGalleryDialogProps): JSX.Element {
     const { guildId } = request;
     const desktop = useMediaQuery(DESKTOP_MQ);
     const setCardFilter = useHubGalleryStore((s) => s.setFilter);
@@ -156,17 +155,13 @@ export function HubGalleryDialog({ request, canEdit, canRemove }: HubGalleryDial
     );
     const footer = (
         <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' && !seeking ? item : undefined} pages={pages}
-            canEdit={canEdit} canRemove={canRemove} onBack={() => setMode('grid')} />
+            canEdit={canEdit} onBack={() => setMode('grid')} />
     );
-    const shownFooter = mode === 'viewer' || pages.hasMore ? footer : undefined;
     if (desktop) {
-        return <Modal isOpen onClose={close} title="Gallery" maxWidth="max-w-3xl" footer={shownFooter}>{body}</Modal>;
+        return <Modal isOpen onClose={close} title="Gallery" maxWidth="max-w-3xl" footer={footer}>{body}</Modal>;
     }
-    return <BottomSheet isOpen onClose={close} title="Gallery" maxHeight="95vh" footer={shownFooter}>{body}</BottomSheet>;
+    return <BottomSheet isOpen onClose={close} title="Gallery" maxHeight="95vh" footer={footer}>{body}</BottomSheet>;
 }
 
-/** Lazy entry (mounted by the Overview card): adds the staff check from the session. */
-export default function HubGalleryDialogHost({ request, canEdit }: Omit<HubGalleryDialogProps, 'canRemove'>): JSX.Element {
-    const { user } = useAuth();
-    return <HubGalleryDialog request={request} canEdit={canEdit} canRemove={isOperatorOrAdmin(user)} />;
-}
+/** Lazy entry (`hub-gallery-dialog-mount.tsx`). Remove rights ride on each item (`canRemove`). */
+export default HubGalleryDialog;

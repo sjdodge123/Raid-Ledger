@@ -67,7 +67,7 @@ export default function HubGalleryDemo(): JSX.Element {
                     Open See all
                 </Button>
             </div>
-            {request?.guildId === HUB && <HubGalleryDialog request={request} canEdit canRemove={false} />}
+            {request?.guildId === HUB && <HubGalleryDialog request={request} canEdit />}
         </div>
     );
 }
