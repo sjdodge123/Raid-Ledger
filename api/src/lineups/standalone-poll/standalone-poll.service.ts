@@ -50,7 +50,10 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
-import { fireLockInFanout } from './standalone-poll-lockin.helpers';
+import {
+  fireLockInFanout,
+  type LockIn,
+} from './standalone-poll-lockin.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
@@ -143,36 +146,54 @@ export class StandalonePollService {
     if (result.conflict) {
       throw new ConflictException('This poll has already been completed');
     }
+    if (result.ok) {
+      await this.afterLockIn(result, matchId, eventId, startTime, creatorId);
+    }
+    return result.ok;
+  }
+
+  /** Side effects of a successful `complete()`. */
+  private async afterLockIn(
+    result: Awaited<ReturnType<typeof completeStandalonePoll>>,
+    matchId: number,
+    eventId: number | undefined,
+    startTime: string | undefined,
+    creatorId: number | undefined,
+  ): Promise<void> {
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
-    if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
+    this.schedulingPollEmbed.fireUpdateEmbed(matchId);
     // The contract requires `startTime` with `eventId`; only that slot's
     // yes-voters are signed up (ROK-1844), never every yes-voter.
     // ROK-2024: announce once, after those signups, and never for a
     // reschedule (`linkedEventId`) — its event was announced when created.
-    if (result.ok && eventId && startTime) {
-      fireLockInFanout(
-        {
-          db: this.db,
-          signupsService: this.signupsService,
-          settingsService: this.settingsService,
-          notifications: this.notifications,
-          lineupNotifications: this.lineupNotifications,
-          logger: this.logger,
-        },
-        {
-          matchId,
-          eventId,
-          startTime,
-          creatorId,
-          announce: !result.linkedEventId,
-        },
-      );
+    if (eventId && startTime) {
+      this.startLockInFanout({
+        matchId,
+        eventId,
+        startTime,
+        creatorId,
+        announce: !result.linkedEventId,
+      });
     }
-    if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
+    if (result.linkedEventId && !result.linkedEventCancelled) {
       await this.reemitLinkedEvent(result.linkedEventId);
     }
-    return result.ok;
+  }
+
+  /** Sign up + DM the slot voters, then announce (ROK-1031 / ROK-2024). */
+  private startLockInFanout(lockIn: LockIn): void {
+    fireLockInFanout(
+      {
+        db: this.db,
+        signupsService: this.signupsService,
+        settingsService: this.settingsService,
+        notifications: this.notifications,
+        lineupNotifications: this.lineupNotifications,
+        logger: this.logger,
+      },
+      lockIn,
+    );
   }
 
   /**

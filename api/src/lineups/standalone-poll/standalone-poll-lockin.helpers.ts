@@ -49,16 +49,18 @@ export interface LockIn {
 /**
  * Fire-and-forget: sign up + notify the slot voters, then announce once.
  * A failed signup is logged; the announcement still follows so the event is
- * not left unannounced.
+ * not left unannounced. The EVENT CREATED DM skips the voters the poll DM'd
+ * (ROK-2024) — after a failed signup nobody is skipped.
  */
 export function fireLockInFanout(deps: LockInFanoutDeps, lockIn: LockIn): void {
   const { matchId, eventId, startTime } = lockIn;
   signUpSlotVoters(deps, lockIn)
-    .catch((err: unknown) => {
+    .catch((err: unknown): ReadonlySet<number> => {
       const msg = err instanceof Error ? err.message : String(err);
       deps.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
+      return new Set<number>();
     })
-    .then(() => {
+    .then((pollDmUserIds) => {
       if (!lockIn.announce) return;
       fireEventCreated(
         deps.lineupNotifications,
@@ -67,18 +69,18 @@ export function fireLockInFanout(deps: LockInFanoutDeps, lockIn: LockIn): void {
         matchId,
         new Date(startTime),
         eventId,
+        pollDmUserIds,
       );
     })
     .catch(() => {});
 }
 
-/** Auto-signup + auto-heart + DMs for the winning slot's voters (ROK-1031). */
-async function signUpSlotVoters(
-  deps: LockInFanoutDeps,
-  lockIn: LockIn,
-): Promise<void> {
-  const { db } = deps;
-  const { matchId, eventId, startTime } = lockIn;
+/** The match's yes-voters, split into the winning slot's and the rest. */
+async function pickSlotVoters(
+  db: LockInFanoutDeps['db'],
+  matchId: number,
+  startTime: string,
+) {
   const slots = await findScheduleSlots(db, matchId);
   const allVoters = await findScheduleVotes(
     db,
@@ -86,9 +88,25 @@ async function signUpSlotVoters(
   );
   // ROK-1617: yes-votes only on both sides of the split — see
   // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
-  const { selectedVoters, otherVoters } = splitYesVotersBySlot(
-    slots,
+  return {
     allVoters,
+    ...splitYesVotersBySlot(slots, allVoters, startTime),
+  };
+}
+
+/**
+ * Auto-signup + auto-heart + DMs for the winning slot's voters (ROK-1031).
+ * Returns the users sent "Auto-signed up" / "On the bench" (ROK-2024).
+ */
+async function signUpSlotVoters(
+  deps: LockInFanoutDeps,
+  lockIn: LockIn,
+): Promise<ReadonlySet<number>> {
+  const { db } = deps;
+  const { matchId, eventId, startTime } = lockIn;
+  const { allVoters, selectedVoters, otherVoters } = await pickSlotVoters(
+    db,
+    matchId,
     startTime,
   );
   const { benchedUserIds } = await autoSignupSlotVoters({
@@ -101,11 +119,7 @@ async function signUpSlotVoters(
   // name the DMs below announce.
   const gameName = await heartPollGameForVoters(db, matchId, allVoters);
   await notifyPollVoters(
-    {
-      db,
-      settingsService: deps.settingsService,
-      notifications: deps.notifications,
-    },
+    deps,
     selectedVoters,
     otherVoters,
     benchedUserIds,
@@ -114,4 +128,5 @@ async function signUpSlotVoters(
     gameName ?? 'Game Night',
     await matchHubPayload(db, matchId),
   );
+  return new Set(selectedVoters.map((v) => v.userId));
 }
