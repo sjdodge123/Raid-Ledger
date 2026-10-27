@@ -29,6 +29,7 @@ const core = {
     { id: 'events', title: 'Events', description: 'Upcoming and recent events.', layoutKey: 'bare' },
     { id: 'attendance', title: 'Attendance leaderboard', description: 'Who shows up most.', layoutKey: 'bare' },
     { id: 'gallery', title: 'Gallery', description: 'Recent pictures from this hub — death posts and screenshots.', layoutKey: 'plugin' },
+    { id: 'session-note', title: 'Before next session', description: 'A shared note and checklist for the next session.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'overview', label: 'Overview' },
