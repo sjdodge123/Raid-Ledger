@@ -22,6 +22,9 @@ import { signTestAccessToken } from '../../common/testing/sign-test-access-token
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import * as schema from '../../drizzle/schema';
 import { wipeUserData } from '../../users/users-delete.helpers';
+import { isUniqueViolation } from './community-db-errors';
+import { restoreHub } from './community-hub.lookup';
+import { insertCommunityHub } from './community-proposals.queries';
 import { PROPOSAL_ERRORS } from './community-proposals.service';
 
 type UserRow = typeof schema.users.$inferSelect;
@@ -315,6 +318,42 @@ describe('POST /hubs/proposals — legacy stored keys (ROK-2016 review)', () => 
     });
     expect(clash.status).toBe(409);
     expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+
+  it('P3d restoring an archived hub with a legacy VS16 key re-keys it, so the unique index catches a racing create (ROK-2015 Codex P2)', async () => {
+    // Pre-ROK-2016 key '❤️ raiders' (VS16 was never \p{Cf}, so it was allowed).
+    const id = await seedHub(gameG(), '❤️ Raiders', 'archived');
+    const [hub] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, id)),
+      'archived hub',
+    );
+
+    await restoreHub(testApp.db, hub);
+
+    const [after] = nonEmpty(
+      await testApp.db
+        .select({ nameKey: schema.guilds.nameKey })
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, id)),
+      'restored hub',
+    );
+    expect(after.nameKey).toBe('❤ raiders');
+    // A create whose clash pre-check ran before the restore landed.
+    const err = await insertCommunityHub(testApp.db, {
+      gameId: gameG(),
+      name: '❤ Raiders',
+      blurb: 'Racing create',
+      status: 'active',
+      proposedBy: null,
+      reviewedBy: null,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(isUniqueViolation(err)).toBe(true);
   });
 });
 

@@ -107,10 +107,62 @@ is below.
 | `payload_too_large` | Decoded body larger than `COMPANION_MESSAGE_MAX_BYTES` (before parse) or the entry's `maxBytes` (after lookup); enforced by the reader, not Zod | 413 |
 | `captured_at_in_future` | `capturedAt` more than 5 min past the server clock (§5) | 400 |
 | `unauthorized` | Missing, unknown or revoked device token | 401 |
-| `rate_limited` | Per-token rate limit hit | 429 |
+| `rate_limited` | Per-token rate limit hit (`Retry-After` set) | 429 |
+| `unsupported_media` | `Content-Encoding` other than `gzip`/`identity` (blobs: `identity` only), or the wrong media type | 415 |
+| `hash_mismatch` | Blob body sha256 ≠ the `:sha256` path segment, or a malformed path segment (§4.1) | 400 |
+| `invalid_blob` | Blob is not a still WebP (bad RIFF/WEBP header, animated, edge outside 1…`COMPANION_IMAGE_EDGE_MAX`, RIFF size ≠ length) (§4.1) | 400 |
+| `blob_ref_mismatch` | A message's `CompanionWebpRef` and the stored/uploaded blob disagree on `byteLength`, `width` or `height` | 409 |
+| `blob_quota_exceeded` | The user's stored blob bytes would pass the per-user quota (§4.1) | 413 |
+
+`unsupported_media` … `blob_quota_exceeded` were added by ROK-1956 (additive).
+A gzip body that fails to inflate, or a body that is not JSON, is
+`invalid_envelope` (there is no `bad_gzip` code).
+
+Every error body is `CompanionIngestErrorSchema` (strict):
+
+```json
+{ "code": "retired_contract_version", "message": "…", "currentVersion": 2 }
+```
+
+- `message` ≤ 200 chars, human-readable, not wire — never parse it.
+- `currentVersion` appears only on `unknown_contract_version` /
+  `retired_contract_version`.
+- `issues` (≤ 20 × `{ path, code }`) appears only on `invalid_envelope` /
+  `invalid_payload`. It never carries a payload value.
+
+Every error answer closes the connection.
 
 The app SHOULD treat every 4xx other than 408 and 429 as terminal for that
 message and surface it; it SHOULD re-link the device on 401.
+
+### 4.1 Blob upload — `PUT /companion/v1/blobs/:sha256`
+
+Blob bytes (e.g. a `bg3-save` thumbnail) are uploaded separately from the
+message that references them, in either order. `:sha256` is the lowercase hex
+sha256 of the body (`CompanionSha256Schema`). Body: `Content-Type: image/webp`,
+no `Content-Encoding` (or `identity`), ≤ `COMPANION_WEBP_MAX_BYTES`.
+
+- `201 { "status": "stored", "sha256": … }` — verified and stored.
+- `200 { "status": "exists", "sha256": … }` — this user already stored it;
+  the body is not read. Treat as success.
+
+(`CompanionBlobAckSchema`, strict.) The server checks the RIFF/WEBP header
+(`VP8 `, `VP8L` or a non-animated `VP8X`) before keeping a byte, then the
+length, the hash and every message ref to the same sha before storing. Blobs
+are private to the uploading user; nothing serves the raw bytes. Errors:
+`unauthorized`, `rate_limited`, `unsupported_media`, `payload_too_large`,
+`hash_mismatch`, `invalid_blob`, `blob_ref_mismatch`, `blob_quota_exceeded`.
+
+### 4.2 `GET /companion/v1/config`
+
+`CompanionConfigSchema`: `{ configVersion: 1, minAppVersion, limits, rate?,
+contracts? }`. Anonymous callers get `minAppVersion` + `limits`; a device
+token or a session also gets `rate` (its own per-minute limits, `null` =
+unlimited) and `contracts` (each id with `enabled`, its versions and statuses,
+the current version's `maxBytes`, `blobSlots` and the send `cadence`). An app
+older than `minAppVersion` MUST stop uploading; it MUST NOT send a contract
+listed `enabled: false`. **The app MUST ignore unknown `/config` keys** — new
+keys are additive.
 
 ## 5. Clock rule
 

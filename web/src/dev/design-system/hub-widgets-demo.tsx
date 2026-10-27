@@ -9,10 +9,15 @@
  * skeleton and the contained-error state are the shipped ones.
  */
 import { lazy, type ComponentType, type JSX } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { addHubGameWidget, type HubGameWidget, type HubWidgetCtx } from '../../plugins/hub-game-widgets';
 import { gameWidgetCells } from '../../components/hub/hub-widget-cells';
+import { LazySteamAchievementsWidget } from '../../components/hub/steam-stats/steam-achievements-widget-lazy';
+import { LazySteamPlaytimeWidget } from '../../components/hub/steam-stats/steam-playtime-widget-lazy';
+import { hubSteamStatsKey } from '../../components/hub/steam-stats/use-hub-steam-stats';
+import { DEMO_STEAM_STATS } from './hub-steam-stats-demo-data';
 
 const DEMO = 'ds-demo';
 const ACTIVE: ReadonlySet<string> = new Set([DEMO]);
@@ -40,6 +45,9 @@ const BASE = { games: [DEMO], audience: 'everyone' } as const;
 addHubGameWidget(DEMO, { ...BASE, id: 'classes', title: 'Class breakdown', order: 1, component: lazyOf(ReadyBody), action: SeeAll });
 addHubGameWidget(DEMO, { ...BASE, id: 'loading', title: 'Loading (skeleton)', order: 2, component: lazy(() => new Promise<never>(() => undefined)) });
 addHubGameWidget(DEMO, { ...BASE, id: 'broken', title: 'Contained error', order: 3, component: lazyOf(BrokenBody) });
+// ROK-1953 — the real Core Steam card bodies over a seeded cache entry (masked hidden-achievement row).
+addHubGameWidget(DEMO, { ...BASE, id: 'steam-achievements', title: 'Achievement race', order: 4, component: LazySteamAchievementsWidget });
+addHubGameWidget(DEMO, { ...BASE, id: 'steam-playtime', title: 'Playtime', order: 5, component: LazySteamPlaytimeWidget });
 
 const PAGE: GuildPage = {
     guild: { id: -1, gameId: 0, kind: 'wow_guild', name: 'Demo hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 12, lastSnapshotAt: null, gameSlug: DEMO },
@@ -49,8 +57,10 @@ const PAGE: GuildPage = {
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
 };
 
-/** The demo bento: the three sample widgets as real Overview cells. */
+/** The demo bento: the sample widgets as real Overview cells (the Steam pair reads a seeded cache entry). */
 export default function HubWidgetsDemo(): JSX.Element {
+    const client = useQueryClient();
+    useState(() => client.setQueryData(hubSteamStatsKey(PAGE.guild.id), DEMO_STEAM_STATS));
     const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['ds-hub-widget-raids'], queryFn: () => new Promise(() => undefined), enabled: false });
     const cells = gameWidgetCells({ page: PAGE, raids }, ACTIVE);
     return (

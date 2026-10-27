@@ -118,11 +118,15 @@ export async function restoreHub(
   // A concurrent restore can pass the pre-check too; the partial unique index
   // then rejects this UPDATE — surface it as the same 409 (Codex r3). Nothing
   // runs after the failed statement, so a poisoned tx is never reused.
+  // The key is re-canonicalised (ROK-2015 Codex P2): a pre-ROK-2016 key may
+  // hold a VS16, and kept as-is the unique index would miss a concurrent
+  // create of the same shown name (whose key has it stripped).
   await conflictOnUnique(
     () =>
       db
         .update(g)
         .set({
+          nameKey: hubNameKey(hub.nameKey),
           status: 'active',
           archivedAt: null,
           archivedReason: null,

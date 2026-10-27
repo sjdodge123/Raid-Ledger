@@ -45,9 +45,10 @@ function planError(status: 400 | 404 | 409, message: string): Error {
 /**
  * ROK-1950 — rename a hub (`PATCH /guilds/:id/name`), a Core hub behaviour
  * for every kind. Leader (staff, or a community hub's leader) only; the route
- * guard checks first and this re-checks. Per-kind rules: `planRename`. A
- * server hub's source name comes from its kind adapter's `sourceName` hook,
- * so core never imports the Pelican plugin. No notifications (Q3/Q4); the
+ * guard checks first and this re-checks (for `wow_guild` that is staff only
+ * until ROK-1794). Per-kind rules: `planRename`. Server and WoW hubs' source
+ * names come from their kind adapters' `sourceName` hook, so core never
+ * imports a plugin (ROK-2015 D6). No notifications (Q3/Q4); the
  * `activity_log` `hub_renamed` row is the audit.
  */
 @Injectable()
@@ -85,9 +86,12 @@ export class HubRenameService {
     }
   }
 
-  /** D5: the server name a reset goes back to; null for other kinds. */
+  /**
+   * D5 / ROK-2015 D6: the name a reset goes back to, from the kind adapter
+   * (server name, or WoW in-game name); null for community hubs.
+   */
   private async sourceOf(row: schema.GuildSelect): Promise<string | null> {
-    if (row.kind !== 'game_server') return null;
+    if (row.kind === 'game_community') return null;
     const adapter = this.hubKinds.require(row.kind);
     return (await adapter.sourceName?.(row.id)) ?? null;
   }

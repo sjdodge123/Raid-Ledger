@@ -22,14 +22,20 @@ export function renameErrorCopy(err: Error): string {
     return err.message || 'Couldn’t rename the hub. Try again.';
 }
 
-/** The rename mutation for one hub; its variable is the new name (`null` = reset a server hub). */
-export function useHubRename(hubId: number): UseMutationResult<unknown, Error, HubRenameDto['name']> {
+/**
+ * The rename mutation for one hub; its variable is the new name (`null` = reset
+ * a server hub to its server's name, or a WoW guild to its in-game name).
+ */
+export function useHubRename(
+    hubId: number,
+    resetToast = 'Name reset to the server’s',
+): UseMutationResult<unknown, Error, HubRenameDto['name']> {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (name: HubRenameDto['name']) => fetchApi(`/guilds/${hubId}/name`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
         }),
-        onSuccess: (_data, name) => { toast.success(name === null ? 'Name reset to the server’s' : 'Hub renamed'); },
+        onSuccess: (_data, name) => { toast.success(name === null ? resetToast : 'Hub renamed'); },
         onError: (err) => { toast.error(renameErrorCopy(err)); },
         onSettled: () => invalidateHubName(qc, hubId),
     });
