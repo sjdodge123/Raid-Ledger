@@ -57,7 +57,8 @@ export function trendFor(
     const source = trend?.days ?? [];
     if (source.length === 0) return null;
     const days = source.map((d): TrendDay => {
-        const raw = d.gains[id];
+        // Own keys only: `constructor` / `toString` / `__proto__` are valid prefab ids.
+        const raw = Object.hasOwn(d.gains, id) ? d.gains[id] : undefined;
         const gain = raw === undefined ? null : roundTo(raw, decimals);
         return { date: d.date, gain: gain === 0 ? null : gain };
     });

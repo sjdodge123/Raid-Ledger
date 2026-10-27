@@ -46,6 +46,15 @@ describe('trend.helpers (shared Valheim trend chip)', () => {
         expect(trendFor('Resin', TREND, 1)?.total).toBe(0.4);
     });
 
+    it('a prefab named like an Object.prototype member reads its own gains only (Codex P2)', () => {
+        for (const id of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+            expect(trendFor(id, TREND, 0)).toBeNull();
+        }
+        const own = { days: [{ date: '2026-10-17', gains: JSON.parse('{"__proto__":3,"constructor":2}') }] };
+        expect(trendFor('__proto__', own, 0)?.total).toBe(3);
+        expect(trendFor('constructor', own, 0)?.total).toBe(2);
+    });
+
     it('formats whole items with a thousands separator and the U+2212 minus', () => {
         expect(formatDelta(1240, 0)).toBe('+1,240');
         expect(formatDelta(-10, 0)).toBe('−10');
