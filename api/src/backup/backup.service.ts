@@ -32,12 +32,13 @@ import {
   rotateUploadsArchives,
 } from './backup-rotation.helpers';
 import {
-  archiveUploads,
-  resolveUploadsDir,
   uploadsArchiveFailure,
-  uploadsArchiveName,
   type UploadsArchiveResult,
 } from './backup-uploads.helpers';
+import {
+  archiveUploadsForDump,
+  deleteUploadsArchiveOf,
+} from './backup-uploads.wiring';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
@@ -138,8 +139,7 @@ export class BackupService implements OnModuleInit {
     dumpPath: string;
     archive: UploadsArchiveResult;
   }> {
-    const timestamp = formatBackupTimestamp(new Date());
-    const filename = `raid_ledger_${timestamp}.dump`;
+    const filename = `raid_ledger_${formatBackupTimestamp(new Date())}.dump`;
     const dumpPath = path.join(this.dailyDir, filename);
     this.logger.log(`Starting daily backup: ${filename}`);
     await this.runPgDump(dumpPath);
@@ -147,24 +147,12 @@ export class BackupService implements OnModuleInit {
     this.logger.log(
       `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
     );
-    return { dumpPath, archive: await this.archiveUploadsFor(filename) };
-  }
-
-  /** Write `daily/<dump ts>.uploads.tar`; logs the outcome, never throws. */
-  private async archiveUploadsFor(
-    dumpFilename: string,
-  ): Promise<UploadsArchiveResult> {
-    const archive = await archiveUploads({
-      uploadsDir: resolveUploadsDir(),
-      outPath: path.join(this.dailyDir, uploadsArchiveName(dumpFilename)),
-      dailyDir: this.dailyDir,
-      warn: (m) => this.logger.warn(m),
-    });
-    const failure = uploadsArchiveFailure(archive);
-    if (failure) this.logger.error(failure);
-    else if (archive.status === 'written')
-      this.logger.log(`Uploads archive complete: ${archive.path}`);
-    return archive;
+    const archive = await archiveUploadsForDump(
+      this.dailyDir,
+      filename,
+      this.logger,
+    );
+    return { dumpPath, archive };
   }
 
   /** Create a pre-migration snapshot. */
@@ -265,23 +253,7 @@ export class BackupService implements OnModuleInit {
     fs.unlinkSync(filepath);
     this.logger.log(`Deleted backup: ${type}/${filename}`);
     if (type === 'daily' && filename.endsWith('.dump'))
-      this.deleteUploadsArchiveOf(filename);
-  }
-
-  /** ROK-2023 (spec D10c): a missing companion is not an error; a failed unlink warns. */
-  private deleteUploadsArchiveOf(dumpFilename: string): void {
-    const archive = path.join(this.dailyDir, uploadsArchiveName(dumpFilename));
-    if (!fs.existsSync(archive)) return;
-    try {
-      fs.unlinkSync(archive);
-      this.logger.log(
-        `Deleted uploads archive: daily/${path.basename(archive)}`,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `Could not delete uploads archive ${archive}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+      deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
   }
 
   /** Restore the database from a backup file. */
