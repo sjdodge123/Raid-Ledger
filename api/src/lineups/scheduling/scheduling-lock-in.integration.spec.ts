@@ -26,7 +26,7 @@ import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch } from './scheduling-rally.helpers';
 import { at, nonEmpty } from '../../common/testing/narrow';
-import { resolveEventRosterNames } from '../lineup-notification-event-roster.helpers';
+import { resolveEventRosterCard } from '../lineup-notification-event-roster.helpers';
 import { findMatchMemberUsers } from '../lineup-notification-targets.helpers';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
@@ -230,7 +230,11 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     const eventId = res.body.eventId as number;
 
     const group = await findMatchMemberUsers(testApp.db, poll.matchId);
-    const names = await resolveEventRosterNames(testApp.db, eventId, group);
+    const { names, groupSubtext } = await resolveEventRosterCard(
+      testApp.db,
+      eventId,
+      group,
+    );
     const [admin] = nonEmpty(
       await testApp.db
         .select({
@@ -246,6 +250,10 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     );
     expect(names).not.toContain('lockin-card-elsewhere');
     expect(names).not.toContain('lockin-card-silent');
+    // ROK-1863: the group is the admin (seedExpiredPoll always adds them as a
+    // member) + 3 members = 4; rostered from it: admin + voter = 2.
+    expect(group).toHaveLength(4);
+    expect(groupSubtext).toBe('2 of 4 from the group signed up');
   });
 
   it('moves the poll to its locked-in terminal state', async () => {
