@@ -3738,3 +3738,7 @@ same day (#1278, #1279, #1280).
 - **nit** `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.lockouts.ts:66-80` — group name/total come from the first member seen. Suggested: take `max(total)` across members.
 - **nit** `web/src/plugins/wow/hub-widgets/whos-saved.helpers.ts:27-34` — client-side expiry does not re-sort groups by member count. Suggested: re-sort after filtering expired members.
 - **nit** `web/src/plugins/wow/hub-widgets/whos-saved-widget.test.tsx:28` — `useNowTick` is mocked and `whos-saved.helpers.ts` has no direct unit cases. Suggested: add a `whos-saved.helpers.test.ts` covering expiry filtering and ordering.
+
+### 2026-10-27 — fix/ci-api-lint-heap (surfaced on PR #1837 GitHub `lint`)
+
+- **med** `.github/workflows/ci.yml` (`Lint (api, type-aware, uncached)`) — `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` (exit 134) at ~4013 MB, on run 40500053831 attempts 1 and 2; main and #1839 stayed just under the limit, so it is growth, not #1837's code. Fixed for now by raising `NODE_OPTIONS=--max-old-space-size=8192` on that step; the typed api lint will keep growing toward it. Suggested: measure peak heap per run and split the api lint into two `projectService` passes (src vs specs) before it nears 8 GB.
