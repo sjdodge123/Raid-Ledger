@@ -1,13 +1,13 @@
 /**
  * ROK-1968 §6.2 — the editor dialog's fields: the Markdown body (4000 chars,
  * ruling 7), the checklist editor, and "Clear after the next event". The
- * switch names the event it will pin (ruling 4a) — the already-pinned one when
+ * checkbox names the event it will pin (ruling 4a) — the already-pinned one when
  * re-saving (4d), else the hub's next event — and is disabled when there is none.
  */
-import { useId, type JSX } from 'react';
+import type { JSX } from 'react';
 import { HUB_POST_BODY_MAX, type HubSessionNoteClearAfter } from '@raid-ledger/contract';
 import { Field } from '../../ui/field';
-import { Switch } from '../../ui/switch';
+import { Checkbox } from '../../ui/checkbox';
 import { LazyMarkdownEditor } from '../../ui/markdown/lazy-markdown-editor';
 import { SessionNoteItemsEditor } from './session-note-items-editor';
 import { formatClearAfter, type SessionNoteDraft } from './session-note.helpers';
@@ -22,18 +22,13 @@ interface ToggleProps {
 }
 
 function ClearAfterToggle({ checked, target, onChange }: ToggleProps): JSX.Element {
-    const hintId = useId();
+    // A Checkbox, not a Switch: this only takes effect on Save (design-system Switch rule).
     return (
-        <div className="flex items-start gap-3">
-            <Switch checked={checked} onChange={onChange} label={CLEAR_AFTER_LABEL} aria-describedby={hintId}
-                disabled={target === null && !checked} testId="session-note-clear-after-switch" className="mt-0.5" />
-            <div className="flex flex-col">
-                <span className="text-sm text-foreground">{CLEAR_AFTER_LABEL}</span>
-                <span id={hintId} className="text-xs text-muted" data-testid="session-note-clear-after-hint">
-                    {target === null ? NO_NEXT_EVENT_COPY : `Clears after ${formatClearAfter(target)}`}
-                </span>
-            </div>
-        </div>
+        <Checkbox checked={checked} onChange={(e) => onChange(e.currentTarget.checked)} label={CLEAR_AFTER_LABEL}
+            disabled={target === null && !checked} data-testid="session-note-clear-after-checkbox"
+            description={<span data-testid="session-note-clear-after-hint">
+                {target === null ? NO_NEXT_EVENT_COPY : `Clears after ${formatClearAfter(target)}`}
+            </span>} />
     );
 }
 

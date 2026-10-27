@@ -123,17 +123,17 @@ describe('SessionNoteDialog close + clear (T-W5)', () => {
     });
 });
 
-describe('SessionNoteDialog clear-after switch (T-W6)', () => {
+describe('SessionNoteDialog clear-after checkbox (T-W6)', () => {
     it('is disabled with "No upcoming event on this hub" when there is no next event', async () => {
         await renderDialog(editorResponse(null));
-        expect(await screen.findByTestId('session-note-clear-after-switch')).toBeDisabled();
+        expect(await screen.findByTestId('session-note-clear-after-checkbox')).toBeDisabled();
         expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(NO_NEXT_EVENT_COPY);
     });
 
-    it('names the next event and sends clearAfterNextEvent once switched on', async () => {
+    it('names the next event and sends clearAfterNextEvent once ticked', async () => {
         const bodies = capturePut();
         await renderDialog(editorResponse(buildSessionNote(), { nextEvent: EVENT }));
-        const toggle = await screen.findByTestId('session-note-clear-after-switch');
+        const toggle = await screen.findByTestId('session-note-clear-after-checkbox');
         expect(toggle).toBeEnabled();
         expect(screen.getByTestId('session-note-clear-after-hint')).toHaveTextContent(`Clears after ${formatClearAfter(EVENT)}`);
         fireEvent.click(toggle);

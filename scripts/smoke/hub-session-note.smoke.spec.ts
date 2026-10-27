@@ -6,7 +6,7 @@
  * `POST /admin/test/community-hubs/seed {gameId, withEvent: true}`: "Seed Crew"
  * (leader + officer + 4 members) is recreated with a NEW id — so its note
  * starts empty — plus one upcoming event tagged to it (`hubEvent`), which the
- * editor's "Clear after the next event" switch pins. Each project seeds a
+ * editor's "Clear after the next event" checkbox pins. Each project seeds a
  * DIFFERENT configured game (the seed clears by game) offset from the games
  * the other hub specs use (community-hubs `slot`, hubs-nav `3 + slot`,
  * hub-poll `6 + slot`; this spec `9 + slot`).
@@ -140,12 +140,12 @@ async function fillNewNote(page: Page, form: Locator, eventTitle: string): Promi
         await form.getByTestId('session-note-add-item').click();
         await form.getByTestId(`session-note-item-input-${index}`).fill(text);
     }
-    await expect(form.getByTestId('session-note-clear-after-hint'), 'the switch names the hub\'s next event')
+    await expect(form.getByTestId('session-note-clear-after-hint'), 'the checkbox names the hub\'s next event')
         .toContainText(eventTitle);
-    const toggle = form.getByTestId('session-note-clear-after-switch');
-    await expect(toggle, 'a new note starts with clear-after OFF').toHaveAttribute('aria-checked', 'false');
+    const toggle = form.getByTestId('session-note-clear-after-checkbox');
+    await expect(toggle, 'a new note starts with clear-after OFF').not.toBeChecked();
     await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(toggle).toBeChecked();
 }
 
 test.describe('hub "Before next session" note (ROK-1968)', () => {
