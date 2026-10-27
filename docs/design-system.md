@@ -1598,11 +1598,15 @@ ROK-1921) — the §4.30 CSS histogram + median / highest / at-cap `dl` + top-5 
 **Roles** (`forever-roles`, order 47, ROK-1922) — dungeon / raid role counts with `ROLE_META` colours;
 **Dungeon quests** (`forever-dungeon-quests`, order 48, span 2, ROK-1924) — a signup × quest `StatusChip`
 matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Guild professions**
-(`forever-professions`, order 85, ROK-1923) — 44px disclosure rows per profession. The four roster cards share
+(`forever-professions`, order 85, ROK-1923) — 44px disclosure rows per profession; **Who's saved**
+(`forever-whos-saved`, order 86, ROK-1914) — the same 44px disclosure row per `(instance, difficulty)` save (name +
+"N saved" / difficulty · `formatResetIn` "Resets in …") that expands `CharacterLink` + `font-mono` `killed/total`
+(`text-success` when cleared), one `useNowTick` clock dropping expired saves, a quiet empty line and a `text-xs
+text-dim` "Based on N members' addon exports" line instead of `FreshnessFooter` — no new pattern. The four roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
-Professions and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
-professions payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
+Professions, Who's saved and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
+professions / lockouts payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
 them from non-member staff whom the API lets in.
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
