@@ -103,13 +103,30 @@ describe('tarCreateArgs', () => {
 });
 
 describe('isTarFatal', () => {
-  const exit = (code: number | string) =>
-    Object.assign(new Error('tar'), { code });
+  const CHANGED = 'tar: uploads/a.png: file changed as we read it\n';
+  const exit = (code: number | string, stderr = CHANGED) =>
+    Object.assign(new Error('tar'), { code, stderr });
 
   it('treats exit 1 with a non-empty archive as a warning', () => {
     const out = path.join(tmp, 'a.tar');
     fs.writeFileSync(out, 'x');
     expect(isTarFatal(exit(1), out)).toBe(false);
+    const removed = 'tar: uploads/b.png: File removed before we read it\n';
+    expect(isTarFatal(exit(1, CHANGED + removed), out)).toBe(false);
+  });
+
+  it('treats exit 1 with any non-benign stderr line as fatal (BusyBox)', () => {
+    const out = path.join(tmp, 'a.tar');
+    fs.writeFileSync(out, 'x');
+    const unreadable = "tar: can't open 'uploads/c.png': Permission denied\n";
+    expect(isTarFatal(exit(1, unreadable), out)).toBe(true);
+    expect(isTarFatal(exit(1, CHANGED + unreadable), out)).toBe(true);
+  });
+
+  it('treats exit 1 with empty stderr as fatal (no proof it was benign)', () => {
+    const out = path.join(tmp, 'a.tar');
+    fs.writeFileSync(out, 'x');
+    expect(isTarFatal(exit(1, ''), out)).toBe(true);
   });
 
   it('treats exit 1 with a missing archive as fatal', () => {
@@ -294,7 +311,12 @@ describe('archiveUploads', () => {
       statfs: roomy,
       runTar: (args) => {
         fs.writeFileSync(args[1] ?? '', 'changed-as-we-read');
-        return Promise.reject(Object.assign(new Error('chg'), { code: 1 }));
+        return Promise.reject(
+          Object.assign(new Error('chg'), {
+            code: 1,
+            stderr: 'tar: uploads/x: file changed as we read it\n',
+          }),
+        );
       },
     });
     expect(res).toEqual({ status: 'written', path: outPath });

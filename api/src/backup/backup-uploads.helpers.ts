@@ -88,12 +88,36 @@ function nonEmptyFile(filepath: string): boolean {
   }
 }
 
+/** The only tar warnings a live upload during the run can cause (spec D5). */
+const BENIGN_TAR_WARNINGS = [
+  /file changed as we read it$/i,
+  /file removed before we read it$/i,
+];
+
+function errorStderr(err: unknown): string {
+  if (typeof err !== 'object' || err === null || !('stderr' in err)) return '';
+  return typeof err.stderr === 'string' ? err.stderr : '';
+}
+
+/** True when stderr has at least one line and every line is a benign warning. */
+export function onlyBenignTarWarnings(stderr: string): boolean {
+  const lines = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return false;
+  return lines.every((l) => BENIGN_TAR_WARNINGS.some((re) => re.test(l)));
+}
+
 /**
  * Spec D5: GNU tar exits 1 for "file changed/removed as we read it" — a
- * warning when the archive was still written. Anything else is fatal.
+ * warning when the archive was still written. BusyBox tar also exits 1 on
+ * fatal errors (unreadable file, failed write), so exit 1 is tolerated only
+ * when every stderr line is one of those warnings. Anything else is fatal.
  */
 export function isTarFatal(err: unknown, outPath: string): boolean {
-  return !(errorCode(err) === 1 && nonEmptyFile(outPath));
+  if (errorCode(err) !== 1 || !nonEmptyFile(outPath)) return true;
+  return !onlyBenignTarWarnings(errorStderr(err));
 }
 
 /** Bytes of regular files under `dir`; symlinks are not followed (0). */
