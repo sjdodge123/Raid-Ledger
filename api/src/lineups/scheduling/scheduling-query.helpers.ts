@@ -2,7 +2,7 @@
  * Drizzle query helpers for scheduling poll data (ROK-965).
  * Pure functions — no NestJS dependencies.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ScheduleVoteSource,
@@ -230,16 +230,30 @@ export function findVoteBySlotAndUser(db: Db, slotId: number, userId: number) {
     .limit(1);
 }
 
-/** Update match status and linked event ID after event creation. */
-export function updateMatchLinkedEvent(
+/**
+ * Link the just-created event and flip the match to `scheduled` — a
+ * compare-and-set on a still-open, unlinked match (ROK-2024: an open
+ * `complete` may have locked it in since the caller's read).
+ *
+ * @returns False when another lock-in won; nothing was written.
+ */
+export async function updateMatchLinkedEvent(
   db: Db,
   matchId: number,
   eventId: number,
-) {
-  return db
+): Promise<boolean> {
+  const linked = await db
     .update(schema.communityLineupMatches)
     .set({ status: 'scheduled', linkedEventId: eventId })
-    .where(eq(schema.communityLineupMatches.id, matchId));
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, matchId),
+        eq(schema.communityLineupMatches.status, 'scheduling'),
+        isNull(schema.communityLineupMatches.linkedEventId),
+      ),
+    )
+    .returning({ id: schema.communityLineupMatches.id });
+  return linked.length !== 0;
 }
 
 /** Delete all votes by a user on slots belonging to a given match. */
