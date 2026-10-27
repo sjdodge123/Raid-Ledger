@@ -26,6 +26,11 @@ import { HubGalleryTile } from './hub-gallery-tile';
 
 export const GALLERY_EMPTY_HINT = 'No pictures yet. Add the first one.';
 
+/** D15: the empty card body every member sees ("Add picture" is in the header). */
+export function HubGalleryEmpty(): JSX.Element {
+    return <p className="py-8 text-center text-sm text-muted" data-testid="hub-gallery-empty">{GALLERY_EMPTY_HINT}</p>;
+}
+
 function GalleryStrip({ items, onOpen }: {
     items: readonly HubMediaItem[];
     onOpen: (item: HubMediaItem, index: number, trigger: HTMLButtonElement) => void;
@@ -48,7 +53,7 @@ export default function HubGalleryWidget({ page }: HubWidgetCtx): JSX.Element | 
     const shown = useQuery({ ...hubMediaStripQuery(guildId, filter), placeholderData: keepPreviousData });
     if (all.data === undefined) return null;
     if (all.data.total === 0) {
-        return <p className="py-8 text-center text-sm text-muted" data-testid="hub-gallery-empty">{GALLERY_EMPTY_HINT}</p>;
+        return <HubGalleryEmpty />;
     }
     const limit = desktop ? HUB_GALLERY_STRIP_LIMIT : HUB_GALLERY_STRIP_LIMIT_PHONE;
     return (

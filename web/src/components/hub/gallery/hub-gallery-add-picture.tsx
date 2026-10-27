@@ -18,14 +18,25 @@ export interface HubGalleryAddPictureProps {
     className?: string;
 }
 
-export function HubGalleryAddPicture({
-    guildId, compact = false, inputTestId = 'hub-gallery-add-picture-input', className,
-}: HubGalleryAddPictureProps): JSX.Element {
+export function HubGalleryAddPicture({ guildId, ...rest }: HubGalleryAddPictureProps): JSX.Element {
     const { upload, uploading, progress } = useHubGalleryUpload(guildId);
     const onFiles = (files: File[]): void => {
         const first = files[0];
         if (first !== undefined) upload(first);
     };
+    return <HubGalleryAddPictureView {...rest} uploading={uploading} progress={progress} onFiles={onFiles} />;
+}
+
+export interface HubGalleryAddPictureViewProps extends Omit<HubGalleryAddPictureProps, 'guildId'> {
+    uploading: boolean;
+    progress: number;
+    onFiles: (files: File[]) => void;
+}
+
+/** The picker itself, state passed in — `/dev/design-system` renders its uploading state. */
+export function HubGalleryAddPictureView({
+    compact = false, inputTestId = 'hub-gallery-add-picture-input', className, uploading, progress, onFiles,
+}: HubGalleryAddPictureViewProps): JSX.Element {
     return (
         <FilePicker accept={HUB_MEDIA_UPLOAD_ACCEPT} onFiles={onFiles} disabled={uploading}
             {...(className !== undefined ? { className } : {})}
