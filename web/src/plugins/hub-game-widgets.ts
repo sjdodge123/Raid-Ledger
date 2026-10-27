@@ -12,6 +12,7 @@
 import type { ComponentType, LazyExoticComponent } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
 import type { HubCtx, HubKind } from './hub-module';
+import { isSlugActive } from '../stores/plugin-store';
 
 /** Who sees a widget: anyone who can open the hub, members (not visitors), or editors (`canEdit`). */
 export type HubWidgetAudience = 'everyone' | 'members' | 'editors';
@@ -36,8 +37,12 @@ export interface HubGameWidget {
      * `false`: opt-in — renders nowhere until an editor adds it.
      */
     defaultOn?: boolean;
-    /** Game slugs, matched against `page.guild.gameSlug`. */
-    games: readonly string[];
+    /**
+     * Game slugs, matched against `page.guild.gameSlug`. Omitted = every game —
+     * allowed only for `core` widgets; the ownership guard test enforces that
+     * every other plugin lists its games (ROK-1969 §5.2).
+     */
+    games?: readonly string[];
     /** Hub kinds it may appear on. Omitted = every kind. */
     kinds?: readonly HubKind[];
     /** Merged with the core cells (10/20/30/40/70) and the module's widgets. */
@@ -95,14 +100,14 @@ export function audienceAllows(audience: HubWidgetAudience, viewer: GuildPage['v
 
 function matches(r: HubGameWidgetRegistration, page: GuildPage, active: ReadonlySet<string>, gameSlug: string): boolean {
     const { widget } = r;
-    return active.has(r.pluginSlug)
-        && widget.games.includes(gameSlug)
+    return isSlugActive(active, r.pluginSlug)
+        && (widget.games === undefined || widget.games.includes(gameSlug))
         && (widget.kinds === undefined || widget.kinds.includes(page.guild.kind))
         && audienceAllows(widget.audience, page.viewer);
 }
 
 /**
- * The widgets this hub may show, sorted by `order`: plugin active, game and
+ * The widgets this hub may show, sorted by `order`: plugin active (core always), game and
  * kind match, viewer in audience. `useVisible` runs later, inside each cell.
  */
 export function gatedHubGameWidgets(page: GuildPage, active: ReadonlySet<string>): readonly HubGameWidgetRegistration[] {

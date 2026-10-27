@@ -183,6 +183,17 @@ describe('GuildDiscordMirror — private tag (spec: Pill/StatusChip on a private
         expect(tag?.textContent?.trim(), 'a private bound channel must show a "Private" tag on the card').toBe('Private');
     });
 
+    it.each([
+        ['wow_guild', 'guild'], ['game_server', 'server'], ['game_community', 'hub'],
+    ] as const)('the Private tag tooltip on a %s hub names the %s page', async (kind, noun) => {
+        serve(okMirror([discordMessage(1)], PRIVATE_CHANNEL));
+        renderCard(false, null, kind);
+        await screen.findByRole('heading', { name: '#officers' });
+        expect(screen.getByTestId('guild-discord-private')).toHaveAttribute(
+            'title', `Private Discord channel — everyone who can open this ${noun} page sees it here`,
+        );
+    });
+
     it('shows no Private tag on a public bound channel', async () => {
         serve(okMirror([discordMessage(1)]));
         renderCard(true);

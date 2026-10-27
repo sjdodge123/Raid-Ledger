@@ -1,5 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
-import { applySubscribedGameEmbed } from './notification-embed.subscribed-game';
+import {
+  applyHubEventTaggedEmbed,
+  applySubscribedGameEmbed,
+} from './notification-embed.subscribed-game';
 
 function freshEmbed() {
   return new EmbedBuilder();
@@ -108,5 +111,27 @@ describe('applySubscribedGameEmbed — full payload', () => {
     expect(lines[1]).toContain('(2h 30m)');
     expect(lines[2]).toBe('🔊 <#999>');
     expect(embed.data.thumbnail?.url).toBe('https://example.com/ff.jpg');
+  });
+});
+
+describe('applyHubEventTaggedEmbed — hub name is escaped (ROK-1950 review)', () => {
+  const evil = '[Login](https://evil.example) @everyone';
+
+  it('renders a markdown link and mention in the hub name literally', () => {
+    const embed = freshEmbed();
+    applyHubEventTaggedEmbed(embed, { gameName: 'WoW', guildName: evil });
+    const desc = embed.data.description ?? '';
+    expect(desc).toContain(
+      'Tagged to **\\[Login](https://evil.example) @\u200beveryone**',
+    );
+    expect(desc).not.toMatch(/(?<!\\)\[Login\]\(/);
+  });
+
+  it('drops the raw notification message when there are no game lines', () => {
+    const embed = freshEmbed().setDescription(`Tagged to ${evil}`);
+    applyHubEventTaggedEmbed(embed, { guildName: evil });
+    expect(embed.data.description).toBe(
+      '🛡️ Tagged to **\\[Login](https://evil.example) @\u200beveryone**',
+    );
   });
 });

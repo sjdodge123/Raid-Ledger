@@ -38,6 +38,13 @@ export const RATE_LIMIT_TIERS = {
   // capping token guessing (a 256-bit token, hash-matched, so this is cheap
   // insurance, not the defence).
   calendarFeed: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
+  // ROK-1942: hub Gallery image bytes. One grid page is 24 thumbnails, so
+  // browsing three pages plus a lightbox session (each step fetches the full
+  // rendition and prefetches its neighbours) is ~100 requests in a minute from
+  // ONE viewer, and a guild behind one NAT shares the bucket — the global
+  // 60/min 429'd ordinary browsing. 600/min covers ~5 such viewers at once;
+  // the bytes are auth-gated, immutable and browser-cached for a week.
+  media: { ttl: 60_000, limit: isBrowseRelaxed ? 999_999 : 600 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;

@@ -252,6 +252,19 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
     expect(other.body.gameId).toBe(gameH);
   });
 
+  it('P3b a legacy stored key that still holds a ZWJ clashes with the joiner-free name (ROK-2016 review)', async () => {
+    // seedHub keys with trim+lowercase only, so this is the pre-ROK-2016 key 'iron\u200dwolves'.
+    await seedHub(gameG(), 'Iron\u200DWolves', 'active');
+    const proposer = await seedUser('p3b-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'IronWolves',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+
   it('P4 an archived "BG3 Crew" on G frees the name: 201', async () => {
     await seedHub(gameG(), 'BG3 Crew', 'archived');
     const proposer = await seedUser('p4-proposer');
@@ -287,6 +300,21 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
       .set(proposer.auth);
     expect(mine.status).toBe(200);
     expect(mine.body.items).toHaveLength(2);
+  });
+});
+
+describe('POST /hubs/proposals — legacy stored keys (ROK-2016 review)', () => {
+  it('P3c a legacy key with a ZWJ before U+0301 clashes with the composed name (stored keys NFC, ROK-2016 review)', async () => {
+    // Pre-ROK-2016 key 'cafe\u200d\u0301 club': only NFC after the joiner strip composes it.
+    await seedHub(gameG(), 'Cafe\u200D\u0301 Club', 'active');
+    const proposer = await seedUser('p3c-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'Caf\u00e9 Club',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
   });
 });
 
@@ -437,7 +465,7 @@ describe('POST /admin/hubs/proposals/:id/approve|reject', () => {
         proposalId: id,
         hubName: 'P7 Final Crew',
         guildId: id,
-        url: `/guilds/${id}`,
+        url: `/hubs/${id}`,
       }),
     );
   });

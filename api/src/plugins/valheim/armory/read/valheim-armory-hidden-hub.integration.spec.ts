@@ -8,6 +8,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import sharp from 'sharp';
 import { eq } from 'drizzle-orm';
 import type { Response } from 'superagent';
 import { ValheimCharacterListResponseSchema } from '@raid-ledger/contract';
@@ -26,7 +27,10 @@ import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { memberToken } from '../../../pelican/testing/pelican-integration.helpers';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { blobRelativePath } from '../../link/blobs/valheim-link-blob.store';
-import { fakePng } from '../../link/blobs/valheim-link-blob.testing';
+import {
+  fakePng,
+  referenceBlobAsAsset,
+} from '../../link/blobs/valheim-link-blob.testing';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
@@ -34,6 +38,7 @@ import { ensureFixtureHubId } from '../valheim-armory-map-hub.helpers';
 
 const PLUGINS = [PELICAN_PLUGIN_ID, VALHEIM_PLUGIN_ID];
 const SHA = 'a'.repeat(64); // map-shared-layer base map
+const ICON_SHA = 'c'.repeat(64); // an icon blob (ROK-1949: base maps are refused)
 const BASE = '/plugins/valheim/armory/characters';
 const ORIGINAL_BLOB_DIR = process.env.VALHEIM_LINK_BLOB_DIR;
 let testApp: TestApp;
@@ -110,14 +115,27 @@ async function seed(n: number): Promise<Seeded> {
   return { serverId, id: m.profileId, mapId: m.id, hubId };
 }
 
+/** A decodable base map (2048², the fixture's texture size) — ROK-1949. */
+const basePng = sharp({
+  create: { width: 2048, height: 2048, channels: 3, background: '#3a5f2b' },
+})
+  .png()
+  .toBuffer();
+
+/** The base map under SHA plus an icon under ICON_SHA (the blob route refuses base maps). */
 async function storePng(serverId: number): Promise<void> {
-  const storagePath = blobRelativePath(serverId, SHA);
-  const png = fakePng(8, 8);
+  await storeOne(serverId, SHA, await basePng);
+  await storeOne(serverId, ICON_SHA, fakePng(8, 8));
+  await referenceBlobAsAsset(testApp.db, serverId, ICON_SHA);
+}
+
+async function storeOne(serverId: number, sha: string, png: Buffer) {
+  const storagePath = blobRelativePath(serverId, sha);
   await mkdir(dirname(join(blobDir, storagePath)), { recursive: true });
   await writeFile(join(blobDir, storagePath), png);
   await testApp.db.insert(schema.valheimLinkBlobs).values({
     pelicanServerId: serverId,
-    sha256: SHA,
+    sha256: sha,
     byteLength: png.length,
     contentType: 'image/png',
     width: 8,
@@ -179,7 +197,7 @@ const READS: Array<[string, (s: Seeded) => string]> = [
   ['map bytes: fog', (s) => `${BASE}/${s.id}/maps/${s.mapId}/fog?layer=shared`],
   [
     'server blob',
-    (s) => `/plugins/valheim/armory/servers/${s.serverId}/blobs/${SHA}`,
+    (s) => `/plugins/valheim/armory/servers/${s.serverId}/blobs/${ICON_SHA}`,
   ],
 ];
 

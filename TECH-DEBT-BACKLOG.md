@@ -3591,7 +3591,79 @@ same day (#1278, #1279, #1280).
 - **low** `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — one hub lookup per poll even when every reminder is deduped. Suggested: resolve the hub only after dedupe finds a recipient.
 - **med** `web/src/components/hub/hub-page.tsx:266` — the ROK-1947 recovery latch keys only on `dataUpdatedAt`; a 403/404/5xx from another refetch path can sit behind a stale Sign in until reload. Suggested: also store/compare `errorUpdatedAt`.
 - **low** `web/src/lib/api/resume-refresh.ts:44-47` — a batch refetch that never settles keeps the batch guard set and drops later refresh notifications. Suggested: race the batch with a ~15 s timeout.
+### 2026-10-24 — feat/rok-1859-chest-bases (surfaced during review, deferred)
+
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials-bases.queries.ts:60` — `selectStackSums` returns one row per chest per item to Node (fine at prod's ~111 chests, but ~10^5–10^6 rows per Materials read at the 50k-container cap) and redoes the work of `totals()`. Suggested: sum per base in SQL after the base assignment.
+- **low** `api/src/plugins/valheim/armory/read/valheim-materials.service.ts:184` — the chest detail route reads the whole scope's base inputs to number one chest (O(scan) per detail open). Suggested: cache the base view per transaction, or store the base/index with the scan.
+- **low** `web/src/plugins/valheim/map/use-chest-layer.ts:134` — the Map's Chests layer (on by default) pulls the full `/materials` read only for base display names. Suggested: add `bases` (key, x, z) to the `/containers` list response (additive contract change) and drop the `/materials` call.
 
 ### 2026-10-24 — feat/rok-1938-insights-late (surfaced during ROK-1938 web lane)
 
 - **low** `web/src/components/analytics/attendance-trends-chart.tsx:65-67` — outcome series still hardcode `stroke="#34D399"` / `"#F87171"` / `"#FBBF24"` (Attended / No-Show / Excused); they do not repaint across the 15 schemes. ROK-1938 tokenised the sibling Per-Game chart only (scope guard). Suggested: `var(--color-success)` / `var(--color-danger)` and a neutral (e.g. `var(--color-muted)`) for Excused, so amber means "late" everywhere (ROK-1938 OQ-5).
+
+### 2026-10-24 — fix-batch/2026-10-24-api-td (resolutions)
+
+- **resolved** `api/src/lineups/lineup-notification-deadline-extended.helpers.ts:75` (private lineups get the "Deadline extended" channel embed) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
+- **resolved (partial)** `api/src/lineups/lineups-voting.helpers.ts:67` (vote on a never-nominated game) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): the add branch now 400s via `isGameNominated`. Still open from that entry: inner-join entries in `countVotesPerGame` and an integration case.
+- **resolved (partial)** `api/src/users/users.service.ts:268` (display-name ilike uses raw input) — Resolved in fix-batch/2026-10-24-api-td (PR to follow): input goes through `escapeLikePattern()`. Still open from that entry: uniqueness is advisory only (no DB constraint).
+- **resolved** `api/src/notifications/hub-notification.service.ts:81` (`hub-post:<id>` cooldown claimed with an empty recipient set) — Resolved in fix-batch/2026-10-24-api-td (PR to follow).
+
+### 2026-10-24 — rl-infra fleet (surfaced while freeing VM disk, Lead sessions ap/aq)
+
+- **high** — `rl-infra/docker-compose.yml:156` (`rl-registry`, volume `rl-infra_registry-data`): the fleet's local image registry is never garbage-collected. Every env build pushes a ~1.5 GB `rl-allinone:<slug>` tag and nothing deletes it; 424 tags built up to 134 GB and blocked image builds (≥20 GB free required). Operator cleared it by hand 2026-10-24 (manifest DELETE per tag + `registry garbage-collect --delete-untagged`). Suggested: `rl_env_destroy` deletes the env's tag, plus a nightly `registry garbage-collect` in gc-sweeper when no image build is admitted.
+- **med** — `rl_status.settings_bundle`: the VM settings bundle is 1244 h old, and `sync_settings` falls back on FAIL. Suggested: alert in `rl_status` when the bundle is older than 30 days, and re-sync it.
+
+### 2026-10-24 — feat/rok-1948-planner-spoilers (Opus delta review of the Codex P2 fixes, verdict SHIP)
+
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.ts:44`: the pruned-graph cache fingerprint md5s every profile's known lists on every Planner request (~0.4 MB at 50×300 entries, about as much as the read it guards). Suggested: `count(*)::text || ':' || md5(coalesce(string_agg(p.id::text || ':' || p.xmin::text, ',' order by p.id), ''))` (xmin changes on every committed write and needs no de-TOAST).
+- **minor** — `api/src/plugins/valheim/armory/read/valheim-recipes.read.repository.spec.ts:13`: the spec matches only the rendered SQL text. Suggested: an integration case that changes one profile's `known_items` with the same `imported_at` and asserts the fingerprint changes.
+- **minor** — `web/src/plugins/valheim/planner/valheim-planner-tab.tsx:69`: `ProtectedEmpty` mounts the full `usePlannerState` (an unneeded materials request), and it branches by comparing `empty === SPOILERS_EMPTY_COPY`. Suggested: `emptyCopy` returns a discriminant.
+### 2026-10-24 — feat/rok-1948-planner-spoilers (surfaced during ROK-1948 review fix round)
+
+- **low** — `api/src/plugins/valheim/armory/read/valheim-recipes.service.ts` (`recipeAtlas` on catalogue/tree/plan) + the stored items atlas: spoiler protection prunes every JSON field, but the recipe/items atlas PNGs are served whole, so a member can still see hidden items' and stations' ICONS by opening the atlas image (no names, recipes or counts). Pre-existing design of the shared atlas; not in ROK-1948's scope. Suggested: serve a per-visible-set atlas (or per-icon crops) while `spoilers === 'protected'`, cached on the same pruned-graph key.
+
+### 2026-10-24 — PR #1798 feat/rok-1942-hub-gallery (surfaced in GitHub CI discord-smoke; branch touches no Discord paths)
+
+- **med (CI flake; pre-existing)** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts` "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count" — run 40140524373 job 121011249490: `AC7: no PLAYING NOW post with a voice link … last rendered "<no post for this game>"` after 95.3s; 47/48 passed. The ROK-1942 diff has 0 files under discord-bot/notifications/lfg/voice/test-bot. Likely the now-spawn voice channel/positional-pick fragility already noted under 2026-09-07 rok-1494. Suggested: make the now-group spawn pick its voice channel by id, not index, and loop the spec 50× with the targeted-smoke recipe to measure the rate.
+
+### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (surfaced during ROK-1969 L4 install sheet)
+
+- **low** — `web/src/pages/admin/plugins/PluginCard.tsx` (`PluginCardActions` Install/Activate/Deactivate buttons, the "Supported Games" `TagList`, the `IntegrationsList` "Not Configured" chip) and `web/src/components/admin/AdminPluginSection.tsx` (`STATUS_STYLES.not_installed`): hard-coded colours — `bg-emerald-600`/`bg-amber-600` button fills, `bg-blue-500/10 text-blue-400 border-blue-500/20`, `bg-gray-500/20 text-gray-400`. Pre-existing (ROK-281 card); they do not remap across the 15 themes. L4 left them unchanged to keep the diff on the approved additions. Suggested: swap the buttons for `Button variant="primary" | "warning-soft" | "destructive-soft"`, the game tags and "Not Configured"/"Not Installed" pills for `StatusChip tone="neutral"`.
+### 2026-10-25 — feat/rok-1950-hub-rename (surfaced during ROK-1950 review)
+
+- **low** `api/src/guilds/**` `hubNameKey` — ROK-1950 now NFC-normalises hub name keys, but keys stored before it were not normalised, so a hub saved in decomposed form can get a visually identical twin. Very unlikely in practice. Suggested: a one-off SQL backfill of `name_key` to NFC after a duplicate check (self-contained migration), or accept the gap.
+- **low** `api/src/notifications/hub-proposal-notices.ts:29` — the PROPOSED hub name is sent to staff unescaped, so a markdown link in a proposal renders clickable in the staff DM. Pre-existing (not touched by ROK-1950, which escaped the tagged-event and welcome embeds). Suggested: wrap it in `escapeHubName` like the other embeds.
+
+### 2026-10-25 — fix-batch/2026-10-25-td
+
+- **resolved** 2026-10-17 fix/security-p2-batch `api/src/discord-bot/commands/invite.command.ts` — `/invite` now refuses a deactivated or banned caller with `LFG_BLOCKED_REPLY`, mirroring `/lfg` (this branch).
+- **resolved** 2026-10-23 feat/rok-1943 (Codex r5 P3) `api/src/guilds/community/community-directory.cursor.ts` + `community-directory.queries.ts` — `/hubs` cursor row id and member-count key are bounded to int4, so a crafted cursor 400s instead of 500ing (this branch).
+- **resolved** 2026-10-22 Lead session ag `api/src/discord-bot/services/ad-hoc-event-end.helpers.ts` + `ad-hoc-event.helpers.ts` — `setGracePeriodStatus` returns whether the `live`-guarded update flipped a row, and `startGracePeriod` bails before enqueue/emit when it did not (this branch).
+- **resolved** 2026-10-14 feat/rok-1775-pelican-month-schedule `web/src/pages/calendar-page.tsx:33-35` — `/calendar?view=week|day` on desktop now opens in that view (seeded from a valid `?view` param) (this branch).
+- **resolved** 2026-10-15 feat/rok-1767-game-role `web/src/pages/profile/identity-sections.tsx:165` — the Auto-heart `role="switch"` is named by its card heading via `aria-labelledby` (this branch).
+### 2026-10-25 — fix/hub-copy-and-proposal-smoke
+
+- **mitigated (unproven)** 2026-10-21 feat/rok-1875-hubs-nav `scripts/smoke/community-hubs.smoke.spec.ts:335` ([mobile] "Admin → Hubs approves the seeded proposal") — the spec already polled `GET /notifications` before the UI check; the suspected cause is the phone `/calendar` auto-scroll closing the bell (close-on-scroll), so this branch opens the bell on `/players` instead. NOT reproduced — keep the entry open until a GitHub CI run shows it gone for a week.
+
+### 2026-10-25 — fix-batch/2026-10-25-hub-td (resolutions)
+
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/notifications/notification-embed.buttons.ts:346`, `hub-posts.helpers.ts:87`, `hub-notification.service.ts:81`, `hub-proposal-notices.ts:48` — API-built hub links go through one `hubPath(id)` helper (`api/src/guilds/hub-path.ts`) → `/hubs/<id>` (this branch).
+- **resolved** 2026-10-24 feat/rok-1896 `api/src/lineups/standalone-poll/standalone-poll-reminder.service.ts:82` — the hub is resolved only once dedupe leaves a recipient (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/components/hub/hub-page.tsx:266` — the recovery latch is released by a newer non-401 error; a still-401 refetch keeps Sign in (this branch).
+- **resolved** 2026-10-24 fix/rok-1947 `web/src/lib/api/resume-refresh.ts:44-47` — the batch guard is released after 15 s if a refetch never settles (this branch).
+- **resolved** 2026-10-24 feat/rok-1938 `web/src/components/analytics/attendance-trends-chart.tsx:65-67` — lines use `--color-success` / `--color-danger` / `--color-warning` (this branch).
+- **resolved** 2026-10-24 feat/rok-1943 `web/src/plugins/valheim/map/valheim-map-view.tsx:92` (status chip under the zoom column) — the chip stack in `map-status.tsx` wraps short of the zoom column below 1024px (this branch). The landscape-phone legend overlap entry stays open.
+- **resolved** 2026-10-25 feat/rok-1950 `api/src/notifications/hub-proposal-notices.ts:29` — the proposed hub name AND the proposer's display name are escaped in the staff Discord DM; in-app text unchanged (this branch).
+- `nit` `api/src/notifications/notification-embed.hub-proposal.ts:19` — the DM escaping matches names as substrings, so a name like `_` also escapes those characters in the game name (renders identically in Discord). Suggested: escape the name fields where the description is composed instead of substring-replacing the finished text.
+
+### 2026-10-25 — Lead session as (flake reproduction, no fix shipped)
+
+- **med (unreproduced)** 2026-10-24 fix/rok-1935 `api/src/guilds/community/hub-auto-membership.integration.spec.ts:167` ("A2: auto — the signer is joined (source auto) and told once", prompt row `undefined`) — `./scripts/spec-loop.sh hub-auto-membership.integration 50 false` on fleet slot 3 at bd9e900df: **50/50 PASS** (task 29134f678894, ~22 s/run, Redis sidecar). Does not reproduce in isolation → per the flake rule no fix was designed. Likely load/order-dependent in the sharded CI run (member row and prompt row are written by separate statements in `hub-auto-membership.service.ts:92-96`; the spec's `waitFor` at :162-164 waits only on `joinSource`). Suggested: if it recurs in CI, loop the whole shard (not the file) or make the `waitFor` predicate include the prompt row.
+
+### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (fleet UI verify step 2 follow-up)
+
+- **resolved (partial)** — the 2026-10-26 entry on `web/src/pages/admin/plugins/PluginCard.tsx` hard-coded colours: the Install / Activate / Deactivate / Uninstall buttons (both plugin cards users see, `pages/admin/plugins/PluginCard.tsx` via the shared `web/src/components/admin/plugin-lifecycle-actions.tsx`, and the onboarding card `components/admin/onboarding/PluginCard.tsx` `PluginActionButton`) now render on the design-system `Button` (`primary` / `warning-soft` / `destructive-soft`, `size="sm"` = 44px below `lg`), so the `bg-amber-600` / `bg-emerald-800` fills are gone. Still open from that entry: the "Supported Games" `TagList` (`bg-blue-500/10 text-blue-400`), the "Not Configured" chip and `AdminPluginSection` `STATUS_STYLES.not_installed` (`bg-gray-500/20 text-gray-400`). Suggested: unchanged — `StatusChip tone="neutral"`.
+
+### 2026-10-26 — feat/rok-1969-plugin-owned-widgets (surfaced during final review)
+
+- **low** — `web/src/components/admin/PluginCard.tsx`: the legacy admin plugin card is rendered by no route — only its own specs `PluginCard.test.tsx` and `PluginCard.builtin.test.tsx` import it (the live cards are `pages/admin/plugins/PluginCard.tsx` and `components/admin/onboarding/PluginCard.tsx`), so ROK-1969's move of its buttons onto `plugin-lifecycle-actions.tsx` changed nothing a user sees and the next reviewer will again mistake it for the shipped card. Pre-existing dead code, not introduced by this branch. Suggested: delete it with its two specs.

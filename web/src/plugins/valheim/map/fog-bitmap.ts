@@ -10,8 +10,8 @@
 import { valheimLinkBitmapBytes } from '@raid-ledger/contract';
 import { bitIndex, isBitSet, textureRowFor } from './valheim-grid';
 
-/** Unexplored fog opacity (D7). */
-export const FOG_ALPHA_UNEXPLORED = 0.92;
+/** Unexplored fog opacity (D7). Fully opaque: no terrain may show through (ROK-1949). */
+export const FOG_ALPHA_UNEXPLORED = 1;
 /** Opacity of pixels explored only by the shared cartography layer (D7, AC2). */
 export const FOG_ALPHA_SHARED_ONLY = 0.45;
 

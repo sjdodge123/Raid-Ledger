@@ -7,19 +7,22 @@
  * ROK-1946 D11/D13: "Scanned portals" (12th chip, right after Portal) is its
  * own source — it claims no raw map pin type and sends nothing to the server
  * pins read.
+ *
+ * ROK-1859 D12: "Chests" (13th chip, right after Scanned portals) is the
+ * container scan — same rules as the portal layer.
  */
 import type { ComponentType, SVGProps } from 'react';
-import { ArrowsRightLeftIcon, MapPinIcon } from '@heroicons/react/24/solid';
+import { ArchiveBoxIcon, ArrowsRightLeftIcon, MapPinIcon } from '@heroicons/react/24/solid';
 import { pinStyleFor } from './pin-types';
 
 export const PIN_TYPE_GROUP_IDS = [
-    'death', 'bed', 'portal', 'scanned-portal', 'boss', 'home', 'fire',
+    'death', 'bed', 'portal', 'scanned-portal', 'chest', 'boss', 'home', 'fire',
     'workshop', 'mine', 'shout', 'hildir', 'other',
 ] as const;
 export type PinTypeGroupId = (typeof PIN_TYPE_GROUP_IDS)[number];
 
-/** Where a chip's pins come from: the maps' own pins, or the server's portal scan (ROK-1946). */
-export type PinSource = 'map' | 'portal-scan';
+/** Where a chip's pins come from: the maps' own pins, the server's portal scan (ROK-1946) or its container scan (ROK-1859). */
+export type PinSource = 'map' | 'portal-scan' | 'container-scan';
 
 export interface PinTypeGroup {
     id: PinTypeGroupId;
@@ -33,7 +36,7 @@ export interface PinTypeGroup {
     source: PinSource;
 }
 
-type MapGroupId = Exclude<PinTypeGroupId, 'other' | 'scanned-portal'>;
+type MapGroupId = Exclude<PinTypeGroupId, 'other' | 'scanned-portal' | 'chest'>;
 
 const RAW_TYPES: Readonly<Record<MapGroupId, readonly string[]>> = {
     death: ['Death'], bed: ['Bed'], portal: ['Icon4'], boss: ['Boss'], home: ['Icon1'],
@@ -63,8 +66,15 @@ const SCANNED_PORTALS: PinTypeGroup = {
     rawTypes: [], match: () => false, source: 'portal-scan',
 };
 
+/** ROK-1859 D12: the container-scan layer — never claims a map pin either. */
+const CHESTS: PinTypeGroup = {
+    id: 'chest', label: 'Chests', Icon: ArchiveBoxIcon, toneClass: 'text-warning',
+    rawTypes: [], match: () => false, source: 'container-scan',
+};
+
 function groupFor(id: PinTypeGroupId): PinTypeGroup {
     if (id === 'other') return OTHER;
+    if (id === 'chest') return CHESTS;
     return id === 'scanned-portal' ? SCANNED_PORTALS : knownGroup(id);
 }
 
@@ -73,7 +83,7 @@ export const PIN_TYPE_GROUPS: readonly PinTypeGroup[] = PIN_TYPE_GROUP_IDS.map(g
 
 const MAP_GROUPS = PIN_TYPE_GROUPS.filter((g) => g.source === 'map');
 
-/** True for one of the 12 chip ids (URL tokens are untrusted). */
+/** True for one of the 13 chip ids (URL tokens are untrusted). */
 export function isPinTypeGroupId(value: string): value is PinTypeGroupId {
     return (PIN_TYPE_GROUP_IDS as readonly string[]).includes(value);
 }

@@ -34,17 +34,33 @@ export function refetchUnauthorized(queryClient: QueryClient): Promise<void> {
 }
 
 /**
+ * How long one refetch batch may hold the guard. A refetch that never settles
+ * (a request the network swallowed) would otherwise keep it forever and drop
+ * every later refresh notification.
+ */
+export const REFETCH_BATCH_TIMEOUT_MS = 15_000;
+
+/** Settle when `work` does or after `ms`, whichever is first; the timer is always cleared. */
+function settleWithin(work: Promise<void>, ms: number): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); });
+    return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
  * Refetch the 401'd queries after a refresh, one batch at a time. A batch's own
  * refetches can refresh again (the 401 backstop in `fetchWithAuth`); those
  * notifications are dropped, or two queries that still 401 would restart each
- * other forever. A batch ends when its refetches settle, so this terminates.
+ * other forever. A batch ends when its refetches settle or after `timeoutMs`,
+ * so the guard always resets. Exported for its spec; the app uses
+ * `installResumeRefresh`.
  */
-function batchedRefetch(queryClient: QueryClient): () => void {
+export function batchedRefetch(queryClient: QueryClient, timeoutMs: number = REFETCH_BATCH_TIMEOUT_MS): () => void {
     let running = false;
     return () => {
         if (running) return;
         running = true;
-        void refetchUnauthorized(queryClient).finally(() => { running = false; });
+        void settleWithin(refetchUnauthorized(queryClient), timeoutMs).finally(() => { running = false; });
     };
 }
 

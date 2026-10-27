@@ -242,6 +242,7 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildEditors,
   // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
   // are SET NULL audit columns; the guild's content outlives its editor.
+  // ROK-1941: `media_channel_set_by` is the same kind of SET NULL audit.
   schema.guildProfiles,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).
@@ -268,6 +269,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // hub's history, but the community wipe (community-user-wipe.helpers)
   // revokes every open link the user made first, so none keeps working.
   schema.hubInvites,
+  // ROK-1942: `hub_media.hidden_by` is SET NULL moderation audit; a Gallery
+  // picture belongs to the hub (posted in its Discord channel), not to the
+  // editor who hid it.
+  schema.hubMedia,
 ];
 
 /**

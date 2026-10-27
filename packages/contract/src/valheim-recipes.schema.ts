@@ -99,6 +99,19 @@ export type ValheimRecipeDiscovery = z.infer<
   typeof ValheimRecipeDiscoverySchema
 >;
 
+/**
+ * ROK-1948 D4: server-wide spoiler protection. `protected` = only what some
+ * character on the server has discovered is shown; `off-no-data` = no usable
+ * (non-empty, 0.4.2+) known list on the server; `off-truncated` = a list hit
+ * the store cap. Off = everything shows, as before.
+ */
+export const ValheimRecipeSpoilersSchema = z.enum([
+  "protected",
+  "off-no-data",
+  "off-truncated",
+]);
+export type ValheimRecipeSpoilers = z.infer<typeof ValheimRecipeSpoilersSchema>;
+
 export const ValheimRecipeStationSchema = z
   .object({
     prefab: ValheimPrefabIdSchema,
@@ -128,6 +141,7 @@ export const ValheimRecipeCatalogResponseSchema = z
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
     discovery: ValheimRecipeDiscoverySchema.optional(),
+    spoilers: ValheimRecipeSpoilersSchema.optional(),
   })
   .strict();
 export type ValheimRecipeCatalogResponse = z.infer<
@@ -161,6 +175,8 @@ export const ValheimPlanViaSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("fuel") }).strict(),
   z.object({ type: z.literal("gathered") }).strict(),
   z.object({ type: z.literal("cycle") }).strict(),
+  /** ROK-1948 D7: needs something nobody on the server has found yet — a leaf, no names. */
+  z.object({ type: z.literal("undiscovered") }).strict(),
 ]);
 export type ValheimPlanVia = z.infer<typeof ValheimPlanViaSchema>;
 
@@ -196,6 +212,7 @@ export const ValheimRecipeTreeResponseSchema = z
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
     discovery: ValheimRecipeDiscoverySchema.optional(),
+    spoilers: ValheimRecipeSpoilersSchema.optional(),
   })
   .strict();
 export type ValheimRecipeTreeResponse = z.infer<
@@ -260,6 +277,7 @@ export const ValheimRecipePlanResponseSchema = z
     itemAtlas: ValheimMapBaseMapSchema.nullable(),
     recipeAtlas: ValheimMapBaseMapSchema.nullable(),
     discovery: ValheimRecipeDiscoverySchema.optional(),
+    spoilers: ValheimRecipeSpoilersSchema.optional(),
   })
   .strict();
 export type ValheimRecipePlanResponse = z.infer<

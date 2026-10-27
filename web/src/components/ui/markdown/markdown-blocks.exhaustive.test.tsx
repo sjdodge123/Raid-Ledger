@@ -58,7 +58,7 @@ const CONSTRUCTS: string[] = [
     '---', '***', '___', '* * *', '- - -', '$\n---', '$\n===', '$\n--', '$\n=', '$\n\n---\n\n$',
     '| $ | $ |\n|---|---|\n| $ | $ |', '$ | $\n--|--\n$ | $', '|---|',
     '<div>$</div>', '<!-- c -->\n$', '<b>$</b>', '<https://example.com> $', '<br>\n$',
-    '[x]: https://example.com\n$', '[x]: https://example.com', '![img](https://example.com/i.png) $',
+    '[x]: https://example.com\n$', '[x]: https://example.com', '[[x]: y](/p) $', '[a\\[b]: https://example.com\n$', '[a\\]b]: https://example.com\n$', '![img](https://example.com/i.png) $',
     '$\n$', '$\n\n$', '$\n\n\n\n$', '\n\n$\n\n', '$  \n$', '$\\\n$', '$\r\n$', '$\r\n\r\n$', '  $  ',
     '&lt;$&gt;', '\\# $', '\\- $', '1\\. $', '\\> $', '\\* $', '\\+ $', '- \\- $', '$ https://example.com $',
     // Codex r14: an autolink's destination is verbatim (no escapes, no entities); only `~~` strikes.

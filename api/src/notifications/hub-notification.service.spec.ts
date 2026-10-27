@@ -76,7 +76,7 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
       payload: {
         guildId: 7,
         guildName: 'Onyx',
-        url: '/guilds/7?post=42#posts',
+        url: '/hubs/7?post=42#posts',
         postId: 42,
       },
     });
@@ -128,6 +128,19 @@ describe('HubNotificationService.notifyLeaderPost cooldown give-back (D7)', () =
       svc.notifyLeaderPost({ guildId: 7, actorId: 2, postId: 42, body: 'Hi' }),
     ).rejects.toThrow('db down');
     expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+  });
+
+  it('claims no cooldown when nobody is left to notify', async () => {
+    const { svc, notifications, dedup } = setup();
+    q.filterGroupRecipients.mockResolvedValue([]);
+    await svc.notifyLeaderPost({
+      guildId: 7,
+      actorId: 2,
+      postId: 42,
+      body: 'Hi',
+    });
+    expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(notifications.create).not.toHaveBeenCalled();
   });
 
   it('gives the cooldown back when every send fails', async () => {

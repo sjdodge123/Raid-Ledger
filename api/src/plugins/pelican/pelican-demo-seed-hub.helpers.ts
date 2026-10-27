@@ -189,6 +189,19 @@ async function hubGuildId(tx: PelicanTx, serverId: number): Promise<number> {
   return row.id;
 }
 
+/** Undo a ROK-1950 rename: the hub follows its server's name again. */
+async function resetHubName(
+  tx: PelicanTx,
+  guildId: number,
+  serverName: string,
+): Promise<void> {
+  const name = serverName.slice(0, 64);
+  await tx
+    .update(schema.guilds)
+    .set({ name, nameKey: name.toLowerCase(), nameOverridden: false })
+    .where(eq(schema.guilds.id, guildId));
+}
+
 /** Replace every member row with the cast's initial state. */
 async function resetMembers(
   tx: PelicanTx,
@@ -307,6 +320,7 @@ export async function seedServerHub(
       now,
     );
     const guildId = await hubGuildId(tx, server.id);
+    await resetHubName(tx, guildId, server.name);
     const quickPlay = {
       serverId: server.id,
       gameId,

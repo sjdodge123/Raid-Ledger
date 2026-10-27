@@ -125,6 +125,42 @@ async function claimProfile(playerId: string, c: Claim): Promise<void> {
   });
 }
 
+/**
+ * ROK-1948: an UNCLAIMED character who has found the whole fixture, so
+ * server-wide spoiler protection hides nothing and these per-viewer flags
+ * are read on the full catalogue (the union never reaches a viewer's flags).
+ */
+async function worldKnowsEverything(): Promise<void> {
+  const ch = ValheimCharacterMessageSchema.parse(
+    loadValheimFixture('character-vanilla'),
+  );
+  await testApp.db.insert(schema.valheimProfiles).values({
+    pelicanServerId: server,
+    steamId: 'S_WORLD',
+    playerId: '1999999999999999',
+    worldUid: '1234567890123',
+    worldName: 'W',
+    name: 'world',
+    gameVersion: '0.220.5',
+    modVersion: '1.0.0',
+    capturedAt: new Date('2026-10-17T20:15:42Z'),
+    equipment: ch.equipment,
+    inventory: ch.inventory,
+    skills: ch.skills,
+    trophies: [],
+    knownItems: ['CopperOre', 'TinOre', 'Wood'],
+    knownRecipes: [
+      'Recipe_Bronze',
+      'Recipe_SwordBronze',
+      'piece_chest',
+      'piece_workbench',
+      'forge',
+      'smelter',
+      'charcoal_kiln',
+    ],
+  });
+}
+
 async function catalogue(t: string) {
   const res = await get(base(server), t);
   expect({ status: res.status, body: res.body as unknown }).toMatchObject({
@@ -197,6 +233,7 @@ beforeEach(async () => {
   owner = await sign(ownerId);
   member = await sign(await makeUser('member'));
   await importRecipes();
+  await worldKnowsEverything();
 });
 
 afterEach(async () => {

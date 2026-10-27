@@ -1,0 +1,109 @@
+import { and, count, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { HubMediaKind } from '@raid-ledger/contract';
+import * as schema from '../drizzle/schema';
+import type { HubMediaCursor } from './hub-media.cursor';
+
+type Db = PostgresJsDatabase<typeof schema>;
+const { hubMedia: M } = schema;
+
+export interface HubMediaScope {
+  guildId: number;
+  /** Editors see hidden rows (flagged); everyone else never does (D8). */
+  includeHidden: boolean;
+}
+
+/** Live (not tombstoned) rows of the hub this viewer may see. */
+function visible(scope: HubMediaScope): SQL {
+  const live = and(eq(M.guildId, scope.guildId), isNull(M.removedAt));
+  const where = scope.includeHidden ? live : and(live, isNull(M.hiddenAt));
+  return where ?? eq(M.guildId, scope.guildId);
+}
+
+function filtered(scope: HubMediaScope, kinds: HubMediaKind[] | null): SQL {
+  const base = visible(scope);
+  return kinds ? (and(base, inArray(M.kind, kinds)) ?? base) : base;
+}
+
+/** One page newest-first by `(captured_at, id)`; asks `limit + 1` to detect more. */
+export async function listPage(
+  db: Db,
+  scope: HubMediaScope,
+  q: {
+    kinds: HubMediaKind[] | null;
+    cursor: HubMediaCursor | null;
+    limit: number;
+  },
+): Promise<schema.HubMediaRow[]> {
+  const after = q.cursor
+    ? or(
+        lt(M.capturedAt, q.cursor.capturedAt),
+        and(eq(M.capturedAt, q.cursor.capturedAt), lt(M.id, q.cursor.id)),
+      )
+    : undefined;
+  return db
+    .select()
+    .from(M)
+    .where(and(filtered(scope, q.kinds), after))
+    .orderBy(desc(M.capturedAt), desc(M.id))
+    .limit(q.limit + 1);
+}
+
+/** Visible pictures matching the filter (the response `total`). */
+export async function countVisible(
+  db: Db,
+  scope: HubMediaScope,
+  kinds: HubMediaKind[] | null,
+): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(M)
+    .where(filtered(scope, kinds));
+  return row?.n ?? 0;
+}
+
+/** Kinds the viewer can see on this hub (for the filter chips). */
+export async function kindsPresent(
+  db: Db,
+  scope: HubMediaScope,
+): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ kind: M.kind })
+    .from(M)
+    .where(visible(scope));
+  return rows.map((r) => r.kind);
+}
+
+/** One visible row by id, or undefined (removed, hidden for this viewer, other hub). */
+export async function findVisible(
+  db: Db,
+  scope: HubMediaScope,
+  id: number,
+): Promise<schema.HubMediaRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(M)
+    .where(and(visible(scope), eq(M.id, id)))
+    .limit(1);
+  return row;
+}
+
+/** Hide (`hidden_at`, `hidden_by`) or unhide a live row; null when no such row. */
+export async function setHidden(
+  db: Db,
+  guildId: number,
+  id: number,
+  hiddenBy: number | null,
+): Promise<schema.HubMediaRow | null> {
+  const [row] = await db
+    .update(M)
+    .set(
+      hiddenBy === null
+        ? { hiddenAt: null, hiddenBy: null }
+        : { hiddenAt: new Date(), hiddenBy },
+    )
+    .where(and(eq(M.guildId, guildId), eq(M.id, id), isNull(M.removedAt)))
+    .returning();
+  return row ?? null;
+}

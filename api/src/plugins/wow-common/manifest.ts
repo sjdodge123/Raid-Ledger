@@ -1,3 +1,4 @@
+import { HUB_PLUGIN_MANIFESTS } from '@raid-ledger/contract';
 import type { PluginManifest } from '../plugin-host/plugin-manifest.interface';
 import {
   WOW_FOREVER_PROBE_SETTING_KEYS,
@@ -24,6 +25,7 @@ export const WOW_COMMON_MANIFEST: PluginManifest = {
   author: { name: 'Raid Ledger' },
   gameSlugs: ALL_WOW_GAME_SLUGS,
   capabilities: ['character-sync', 'content-provider', 'cron-registrar'],
+  hub: HUB_PLUGIN_MANIFESTS.blizzard,
   settingKeys: [
     'blizzard_client_id',
     'blizzard_client_secret',

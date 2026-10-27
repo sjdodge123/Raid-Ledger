@@ -10,9 +10,11 @@ import type {
 import * as schema from '../../drizzle/schema';
 import {
   decodeCursor,
+  parseMembersKey,
   type DirectoryCursor,
 } from './community-directory.cursor';
 import { escapeLike, pageOf } from './community-directory.params';
+import { hubNameKey, storedNameKey } from './community-proposals.queries';
 import { viewerStateOf } from './community-ladder.helpers';
 import {
   joinedPredicate,
@@ -53,7 +55,8 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
   const conds: SQL[] = [visibleKinds(scope)];
   if (query.gameId !== undefined) conds.push(eq(g.gameId, query.gameId));
   if (query.q) {
-    conds.push(ilike(g.nameKey, `%${escapeLike(query.q.toLowerCase())}%`));
+    const needle = escapeLike(hubNameKey(query.q));
+    conds.push(ilike(storedNameKey(g.nameKey), `%${needle}%`));
   }
   const joined = joinedPredicate(scope);
   if (query.membership === 'joined') conds.push(joined);
@@ -64,8 +67,7 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
 /** Rows strictly after the cursor in the sort's order; 400 on a bad key. */
 function afterCursor(c: DirectoryCursor): SQL {
   if (c.s === 'members') {
-    const n = Number(c.v);
-    if (!Number.isInteger(n)) throw new BadRequestException('Invalid cursor');
+    const n = parseMembersKey(c.v);
     return sql`(${g.memberCount}, ${g.id}) < (${n}::int, ${c.id}::int)`;
   }
   if (c.s === 'name') {

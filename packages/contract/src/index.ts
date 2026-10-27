@@ -71,6 +71,10 @@ export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
+// Plugin-owned hub widgets/tabs/behaviours + the Core plugin (ROK-1969).
+export * from './plugin-hub-manifest.schema.js';
+export * from './plugin-hub-manifests.js';
+export * from './plugin-setup.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 export * from './pelican-servers.schema.js';
@@ -238,11 +242,23 @@ export * from './valheim-server-pins.schema.js';
 // Map tab scanned-portal layer read (ROK-1946).
 export * from './valheim-server-portals.schema.js';
 
+// Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
+export * from './companion-common.schema.js';
+export * from './companion-envelope.schema.js';
+export * from './companion-bg3-save.schema.js';
+export * from './companion-bg3-save-raw.schema.js';
+export * from './companion-bg3-save-normalise.js';
+export * from './companion-registry.js';
+export * from './companion-bg3-display.js';
+export * from './companion-json-schema.js';
+
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
 export * from './hub-welcome.schema.js';
 export * from './valheim-claim-status.schema.js';
 export * from './community-hubs.schema.js';
+// Hub rename — PATCH /guilds/:id/name (ROK-1950).
+export * from './hub-rename.schema.js';
 export * from './hub-invite.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
@@ -263,6 +279,9 @@ export * from './guild-discord.schema.js';
 export * from './hub-onboarding.schema.js';
 // Game-server community hub — join, Quick Play list, hide (ROK-1831).
 export * from './hub-server.schema.js';
+// Hub media store + Gallery widget — pictures with a source kind (ROK-1942).
+export * from './hub-media.schema.js';
+export * from './hub-media-channel.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

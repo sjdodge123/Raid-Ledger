@@ -20,12 +20,14 @@ import { HubMineController } from './hub-mine.controller';
 import { HubNotificationMuteController } from './hub-notification-mute.controller';
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
+import { HubRenameService } from './hub-rename.service';
 import { HubVisibleGuard } from './hub-visible.guard';
 import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
 import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   EVENT_GUILD_TAGGER_KEY,
@@ -66,6 +68,7 @@ import {
     HubKindRegistry,
     HubOnboardingService,
     HubService,
+    HubRenameService,
     HubVisibleGuard,
     HubWidgetPrefsService,
     HubEventTagger,
@@ -95,18 +98,20 @@ export class GuildsCoreModule implements OnModuleInit {
     private readonly hubKinds: HubKindRegistry,
   ) {}
 
-  /** ROK-1831 Q2: core owns event tagging for every hub kind (no owner plugin). */
+  /** ROK-1831 Q2 / ROK-1969 D5: the Core plugin owns event tagging + `game_community`. */
   onModuleInit(): void {
     this.plugins.registerAdapter(
       EXTENSION_POINTS.EVENT_GUILD_TAGGER,
       EVENT_GUILD_TAGGER_KEY,
       this.tagger,
+      { ownerPluginId: CORE_PLUGIN_ID },
     );
-    // ROK-1870 A4: core owns `game_community` — no owner plugin, always live.
+    // ROK-1870 A4: core owns `game_community`; Core is always active (ROK-1969 D3).
     this.plugins.registerAdapter(
       EXTENSION_POINTS.HUB_KIND,
       'game_community',
       this.communityHubs,
+      { ownerPluginId: CORE_PLUGIN_ID },
     );
     // ROK-1428 Codex r17 P2: embeds + channel auto-link skip a hub kind whose
     // plugin is off (its URLs 403 via `HubKindRegistry.require`).

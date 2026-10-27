@@ -4,7 +4,19 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  isNull,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -25,6 +37,7 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
+const recipeSets = schema.valheimRecipeSets;
 const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
 const skillDays = schema.valheimProfileSkillDays;
@@ -267,7 +280,13 @@ export class ValheimArmoryReadRepository {
     return row ?? null;
   }
 
-  /** A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6). */
+  /**
+   * A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6) —
+   * never a base map of that server (ROK-1949 D8: those are served masked).
+   * Allowlist: only a sha the server currently references as an item or
+   * recipe atlas, or as an item file icon, is served — a rotated, orphaned
+   * or re-imported base map is never one of those.
+   */
   async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
     const [row] = await this.db
       .select({ storagePath: blobs.storagePath })
@@ -277,9 +296,45 @@ export class ValheimArmoryReadRepository {
           eq(blobs.pelicanServerId, serverId),
           eq(blobs.sha256, sha256),
           eq(blobs.contentType, 'image/png'),
+          notExists(
+            this.db
+              .select({ one: sql`1` })
+              .from(m)
+              .where(
+                and(
+                  eq(m.pelicanServerId, serverId),
+                  eq(m.baseMapSha256, sha256),
+                ),
+              ),
+          ),
+          this.referencedAsAsset(serverId, sha256),
         ),
       )
       .limit(1);
     return row?.storagePath ?? null;
+  }
+
+  /** `sha256` is a current item/recipe atlas or item file icon of `serverId`. */
+  private referencedAsAsset(serverId: number, sha256: string): SQL {
+    const fileIcon = sql`exists (select 1 from jsonb_each(${cat.items}) e where e.value->'icon'->>'kind' = 'file' and e.value->'icon'->>'sha256' = ${sha256})`;
+    const items = this.db
+      .select({ one: sql`1` })
+      .from(cat)
+      .where(
+        and(
+          eq(cat.pelicanServerId, serverId),
+          or(eq(cat.atlasSha256, sha256), fileIcon),
+        ),
+      );
+    const recipes = this.db
+      .select({ one: sql`1` })
+      .from(recipeSets)
+      .where(
+        and(
+          eq(recipeSets.pelicanServerId, serverId),
+          eq(recipeSets.atlasSha256, sha256),
+        ),
+      );
+    return or(exists(items), exists(recipes)) ?? sql`false`;
   }
 }

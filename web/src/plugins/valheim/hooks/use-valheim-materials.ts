@@ -85,6 +85,8 @@ function serverPath(
 export function useValheimMaterials(
     serverId: number,
     includeVehicles: boolean,
+    /** ROK-1859: the Map's Chests layer fetches only while its chip can show. */
+    enabled = true,
 ): UseQueryResult<ValheimMaterialsResponse> {
     const scope = useViewerCacheScope();
     return useQuery({
@@ -98,6 +100,7 @@ export function useValheimMaterials(
         placeholderData: (prev, prevQuery) =>
             sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
+        enabled,
     });
 }
 
@@ -109,6 +112,8 @@ export function useValheimContainers(
     serverId: number,
     includeVehicles: boolean,
     prefab: string | null,
+    /** ROK-1859: the Map's Chests layer fetches only while its chip can show. */
+    enabled = true,
 ): UseQueryResult<ValheimContainerListResponse> {
     const scope = useViewerCacheScope();
     return useQuery({
@@ -127,6 +132,7 @@ export function useValheimContainers(
         placeholderData: (prev, prevQuery) =>
             sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
+        enabled,
     });
 }
 

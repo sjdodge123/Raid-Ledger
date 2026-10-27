@@ -391,6 +391,8 @@ describe('AdHocEventService — voice', () => {
         id: 'binding-leave',
         config: { gracePeriod: 5 },
       });
+      // The live-only grace update flips the row (setGracePeriodStatus).
+      mocks.db.returning.mockResolvedValueOnce([{ id: 400 }]);
       await service.handleVoiceLeave('binding-leave', 'discord-123');
       expect(mocks.participantService.markLeave).toHaveBeenCalledWith(
         400,
@@ -421,6 +423,8 @@ describe('AdHocEventService — voice', () => {
         id: 'binding-default-grace',
         config: null,
       });
+      // The live-only grace update flips the row (setGracePeriodStatus).
+      mocks.db.returning.mockResolvedValueOnce([{ id: 401 }]);
       await service.handleVoiceLeave('binding-default-grace', 'discord-123');
       expect(mocks.gracePeriodQueue.enqueue).toHaveBeenCalledWith(
         401,

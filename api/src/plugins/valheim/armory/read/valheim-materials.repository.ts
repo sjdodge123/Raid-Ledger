@@ -25,6 +25,12 @@ import {
   type MaterialsCountsRow,
   type MaterialsTotalRow,
 } from './valheim-materials.mappers';
+import {
+  selectBaseInputs,
+  selectStackSums,
+  type BaseInputRow,
+  type StackSumRow,
+} from './valheim-materials-bases.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
@@ -102,6 +108,16 @@ export class MaterialsReader {
   /** D4: the server's newest scan, or null before the first import. */
   latestScan(serverId: number): Promise<schema.ValheimContainerScan | null> {
     return findLatestContainerScan(this.db, serverId);
+  }
+
+  /** ROK-1859: every chest in the scope — base clusters + chest numbering. */
+  baseInputs(scanId: number, scope: ContainerScope): Promise<BaseInputRow[]> {
+    return selectBaseInputs(this.db, scanId, scope);
+  }
+
+  /** ROK-1859: per-chest stack sums — per-base totals. */
+  stackSums(scanId: number, scope: ContainerScope): Promise<StackSumRow[]> {
+    return selectStackSums(this.db, scanId, scope);
   }
 
   /** SUM(stack) per (prefab, quality) over the scope's containers. */

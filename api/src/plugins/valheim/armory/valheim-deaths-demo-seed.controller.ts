@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { HubMediaService } from '../../../hub-media/hub-media.service';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { PelicanConfigService } from '../../pelican/pelican-config.service';
@@ -33,6 +34,13 @@ import {
   type DeathsFixture,
 } from './valheim-deaths-demo-seed.helpers';
 import { ensureDeathsHub } from './valheim-deaths-demo-seed.server';
+import {
+  demoDeathDownloader,
+  hasTopCharacter,
+  parseDeathPicturesBody,
+  seedDeathPictures,
+  type DeathPicturesFixture,
+} from './valheim-death-pictures-demo-seed.helpers';
 import { seedDeathsPortals } from './valheim-portals-demo-seed.helpers';
 
 const RequestSchema = z
@@ -65,22 +73,47 @@ function parseWorker(body: unknown): number {
  * a hub member and a non-member visitor, plus (ROK-1946) one portals scan of
  * 5 portals on the world. Re-running a worker resets the
  * characters, maps, deaths and portals; the server, hub and users keep their ids.
+ *
+ * ROK-1941 L6 — `POST death-pictures { worker?, count?, hidden?, removed? }`
+ * links `count` generated death pictures to the worker's `top` character
+ * (seeding the Deaths fixture first when the hub has none), see
+ * `valheim-death-pictures-demo-seed.helpers.ts`.
  */
 @Controller('admin/test/valheim')
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class ValheimDeathsDemoSeedController {
+  private readonly store: HubMediaService;
+
   constructor(
     private readonly registry: PluginRegistryService,
     private readonly pelicanConfig: PelicanConfigService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) {
+    this.store = new HubMediaService(db, demoDeathDownloader);
+  }
 
   @Post('deaths-fixture')
   @HttpCode(HttpStatus.OK)
-  async seed(@Body() body: unknown): Promise<DeathsFixture> {
-    const worker = parseWorker(body);
+  seed(@Body() body: unknown): Promise<DeathsFixture> {
+    return this.seedFixture(parseWorker(body));
+  }
+
+  @Post('death-pictures')
+  @HttpCode(HttpStatus.OK)
+  async deathPictures(@Body() body: unknown): Promise<DeathPicturesFixture> {
+    const req = parseDeathPicturesBody(body);
+    const gameId = await this.prepare();
+    const hub = await ensureDeathsHub(this.db, req.worker, gameId);
+    if (!(await hasTopCharacter(this.db, hub.serverId, req.worker))) {
+      await this.seedFixture(req.worker);
+    }
+    return seedDeathPictures(this.db, this.store, { ...req, ...hub });
+  }
+
+  /** The Deaths fixture for one worker (see the class doc). */
+  private async seedFixture(worker: number): Promise<DeathsFixture> {
     const gameId = await this.prepare();
     const { serverId, guildId } = await ensureDeathsHub(
       this.db,

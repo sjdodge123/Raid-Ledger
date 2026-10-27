@@ -65,6 +65,27 @@ describe('notifyDeadlineExtended', () => {
     );
   });
 
+  it('posts nothing for a private lineup (ROK-1528)', async () => {
+    await notifyDeadlineExtended(
+      {} as never,
+      { id: 42, channelOverrideId: 'chan-9', visibility: 'private' },
+      NEW_DEADLINE,
+      0,
+    );
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockResolveCtx).not.toHaveBeenCalled();
+  });
+
+  it('still posts for a public lineup', async () => {
+    await notifyDeadlineExtended(
+      {} as never,
+      { id: 42, channelOverrideId: null, visibility: 'public' },
+      NEW_DEADLINE,
+      0,
+    );
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves the context with the NEW deadline so the author line reads it', async () => {
     await notifyDeadlineExtended(
       {} as never,

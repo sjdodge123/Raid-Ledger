@@ -78,6 +78,9 @@ export async function toggleVote(
       await deleteVote(tx, existing.id);
       return 'removed';
     }
+    if (!(await isGameNominated(tx, lineupId, gameId))) {
+      throw new BadRequestException('Game is not nominated in this lineup');
+    }
     const count = await countUserVotes(tx, lineupId, userId);
     if (count >= maxVotes) {
       throw new BadRequestException(

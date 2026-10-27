@@ -29,6 +29,7 @@ const RULED_ORDER = [
     'bed',
     'portal',
     'scanned-portal',
+    'chest',
     'boss',
     'home',
     'fire',
@@ -66,6 +67,10 @@ function summaryState(over: Partial<PinFilterSummary> = {}): PinFilterSummary {
         portalsPending: false,
         portalsOmitted: 0,
         onRetryPortals: vi.fn(),
+        chestsError: false,
+        chestsPending: false,
+        chestsOtherWorld: false,
+        onRetryChests: vi.fn(),
         ...over,
     };
 }
@@ -94,7 +99,7 @@ beforeEach(() => {
 });
 
 describe('PinFilterPanel — pin types (S18)', () => {
-    it('renders all 12 chips in the ruled order, none pressed for every type', () => {
+    it('renders all 13 chips in the ruled order, none pressed for every type', () => {
         renderFilters(panelState());
         const chips = within(
             screen.getByTestId('map-pin-filter-types'),

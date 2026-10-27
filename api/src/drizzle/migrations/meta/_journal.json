@@ -1786,6 +1786,27 @@
       "when": 1792818120933,
       "tag": "0255_valheim_portals",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1792853930019,
+      "tag": "0256_hub_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1792915273990,
+      "tag": "0257_guild_name_overridden",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1792915373990,
+      "tag": "0258_valheim_death_screenshots",
+      "breakpoints": true
     }
   ]
 }
