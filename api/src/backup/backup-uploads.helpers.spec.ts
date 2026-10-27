@@ -123,6 +123,19 @@ describe('isTarFatal', () => {
     expect(isTarFatal(exit(1, CHANGED + unreadable), out)).toBe(true);
   });
 
+  it('treats a BusyBox vanished member + delayed-exit trailer as a warning (AC9)', () => {
+    const out = path.join(tmp, 'a.tar');
+    fs.writeFileSync(out, 'x');
+    const vanished = 'tar: uploads/f2178: No such file or directory\n';
+    const delayed = 'tar: error exit delayed from previous errors\n';
+    expect(isTarFatal(exit(1, vanished + delayed), out)).toBe(false);
+    expect(isTarFatal(exit(1, delayed), out)).toBe(true);
+    const unreadable = "tar: can't open 'uploads/s': Permission denied\n";
+    expect(isTarFatal(exit(1, vanished + unreadable + delayed), out)).toBe(
+      true,
+    );
+  });
+
   it('treats exit 1 with empty stderr as fatal (no proof it was benign)', () => {
     const out = path.join(tmp, 'a.tar');
     fs.writeFileSync(out, 'x');

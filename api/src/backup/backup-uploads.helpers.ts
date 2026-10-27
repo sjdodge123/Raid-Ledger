@@ -92,7 +92,12 @@ function nonEmptyFile(filepath: string): boolean {
 const BENIGN_TAR_WARNINGS = [
   /file changed as we read it$/i,
   /file removed before we read it$/i,
+  // BusyBox (the alpine images) words a vanished member this way (AC9).
+  /^tar: .+: No such file or directory$/i,
 ];
+
+/** BusyBox's closing line after any per-member error; benign only beside benign ones. */
+const BUSYBOX_DELAYED_EXIT = /^tar: error exit delayed from previous errors$/i;
 
 function errorStderr(err: unknown): string {
   if (typeof err !== 'object' || err === null || !('stderr' in err)) return '';
@@ -105,8 +110,9 @@ export function onlyBenignTarWarnings(stderr: string): boolean {
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
-  if (lines.length === 0) return false;
-  return lines.every((l) => BENIGN_TAR_WARNINGS.some((re) => re.test(l)));
+  const warnings = lines.filter((l) => !BUSYBOX_DELAYED_EXIT.test(l));
+  if (warnings.length === 0) return false;
+  return warnings.every((l) => BENIGN_TAR_WARNINGS.some((re) => re.test(l)));
 }
 
 /**
