@@ -126,11 +126,12 @@ export async function importRecipesDemoStock(
 export async function importRecipesDemoSet(
   db: Db,
   serverId: number,
+  msg: ValheimRecipesMessage = RECIPES,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const key = `demo-recipes:${RECIPES.gameVersion}`;
-    const snap = await storeSnapshot(tx, serverId, RECIPES, key);
-    if (!(await importRecipes(tx, snap, RECIPES))) {
+    const key = `demo-recipes:${msg.gameVersion}`;
+    const snap = await storeSnapshot(tx, serverId, msg, key);
+    if (!(await importRecipes(tx, snap, msg))) {
       throw new Error('recipes fixture: a newer recipe set is stored');
     }
   });
@@ -140,12 +141,13 @@ export async function importRecipesDemoSet(
 export async function mergeRecipesDemoCatalog(
   db: Db,
   serverId: number,
+  items: Record<string, schema.ValheimItemCatalogEntryRow> = RECIPES_DEMO_ITEMS,
 ): Promise<void> {
   const C = schema.valheimItemCatalogs;
   const rows = await db
     .update(C)
     .set({
-      items: sql`${C.items} || ${JSON.stringify(RECIPES_DEMO_ITEMS)}::jsonb`,
+      items: sql`${C.items} || ${JSON.stringify(items)}::jsonb`,
     })
     .where(
       and(

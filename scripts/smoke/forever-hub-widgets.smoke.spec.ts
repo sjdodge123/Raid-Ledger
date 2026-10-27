@@ -1,18 +1,22 @@
 /**
  * ROK-1905 — the WoW: Forever guild hub widgets on a `wow_guild` hub's Overview:
- * Class breakdown (W1), Level progression (W2), Role breakdown (W3) and Guild
- * professions (W4). Desktop AND mobile.
+ * Class breakdown (W1), Level progression (W2), Role breakdown (W3), Guild
+ * professions (W4) and, ROK-1914, Who's saved (W6). Desktop AND mobile.
  *
  * Fixture: `POST /admin/test/wow/seed-guild` (ROK-1785) with a per-project,
  * per-worker, per-run name — a Forever guild (the fixture's default slug) with
  * five live roster rows, every one a level-60 Warrior: three linked to seeded
- * members (gm tank, officer healer, member dps) and two unlinked. The GM then
+ * members (gm tank, officer healer, member dps) and two unlinked. With
+ * `withLockouts: true` (ROK-1914) each linked character also gets a LedgerLink
+ * snapshot: Molten Core live on the GM + officer, Onyxia's Lair live on the
+ * member, and an expired Blackwing Lair on the GM. The GM then
  * sets Tailoring on their own character through the ordinary
  * `PATCH /users/me/characters/:id` (manual professions). That write lands
  * BEFORE anything reads `/plugins/wow/guilds/:id/roster-insights`: the
  * endpoint caches each guild + audience for 5 minutes, so an earlier read
  * would pin a professions-less payload. The spec then polls the endpoint as
- * the GM until Tailoring shows, and asserts the cards against that payload.
+ * the GM until Tailoring and the lockouts show, and asserts the cards against
+ * that payload.
  *
  * Nothing depends on an IGDB-rewritable name: the game is resolved by slug and
  * the cards by their registered titles. Seeded users are deleted in `finally`
@@ -29,6 +33,11 @@ const SEEDED_CLASS = 'Warrior';
 const SEEDED_ROSTER_SIZE = 5;
 const SEEDED_LEVEL = 60;
 const PROFESSION = 'Tailoring';
+/** seed-guild `withLockouts` (`demo-test-guild-lockouts.helpers.ts`). */
+const SHARED_SAVE = 'Molten Core';
+const SOLO_SAVE = "Onyxia's Lair";
+const EXPIRED_SAVE = 'Blackwing Lair';
+const LINKED_COUNT = 3;
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -47,6 +56,9 @@ interface Insights {
     levels: { max: number | null; atCap: number };
     roles: { dungeon: Record<string, number>; raid: Record<string, number> };
     professions?: { name: string; members: { name: string }[] }[];
+    lockouts?: { name: string; members: { name: string; killed: number }[] }[];
+    lockoutReporters?: number;
+    freshness: { characters: { addon: number } };
 }
 
 let gameId: number | null = null;
@@ -60,6 +72,7 @@ async function seedGuild(token: string, testInfo: TestInfo): Promise<SeededGuild
     const body = (await apiPost(token, '/admin/test/wow/seed-guild', {
         name: guildName(testInfo),
         gameSlug: GAME_SLUG,
+        withLockouts: true,
     })) as Partial<SeededGuild>;
     if (typeof body.guildId !== 'number' || !body.users) {
         throw new Error(`seed-guild: ${JSON.stringify(body)}`);
@@ -87,14 +100,16 @@ async function setGmProfession(gmJwt: string, characterId: string): Promise<void
     expect(res.professions, `the GM's professions PATCH should save: ${JSON.stringify(res.message ?? res)}`).toBeTruthy();
 }
 
-/** Poll the roster insights as the GM until the profession lands (first read happens after the write). */
+/** Poll the roster insights as the GM until the profession and lockouts land (first read happens after the writes). */
 async function waitForInsights(gmJwt: string, guildId: number): Promise<Insights> {
     return pollForCondition(
         async () => {
             const data = (await apiGet(gmJwt, `/plugins/wow/guilds/${guildId}/roster-insights`)) as Insights | null;
-            return data?.professions?.some((p) => p.name === PROFESSION) ? data : null;
+            const hasProfession = data?.professions?.some((p) => p.name === PROFESSION) ?? false;
+            const hasLockouts = (data?.lockouts?.length ?? 0) > 0;
+            return hasProfession && hasLockouts ? data : null;
         },
-        { timeoutMs: 15_000, description: `roster-insights for guild ${guildId} lists ${PROFESSION}` },
+        { timeoutMs: 15_000, description: `roster-insights for guild ${guildId} lists ${PROFESSION} and lockouts` },
     );
 }
 
@@ -150,6 +165,37 @@ async function expectProfessions(page: Page): Promise<void> {
     await expect(region.getByRole('list', { name: `${PROFESSION} members` })).toContainText('Aldren');
 }
 
+function expectLockoutsPayload(insights: Insights): void {
+    const groups = (insights.lockouts ?? []).map((g) => [g.name, g.members.map((m) => `${m.name} ${m.killed}`)]);
+    expect(groups, 'the API groups the shared save first and drops the expired one').toEqual([
+        [SHARED_SAVE, ['Aldren 10', 'Brisa 4']],
+        [SOLO_SAVE, ['Dainel 1']],
+    ]);
+    expect(insights.freshness.characters.addon, 'every linked character reports an addon export').toBe(LINKED_COUNT);
+    expect(insights.lockoutReporters, 'every linked character reported lockouts').toBe(LINKED_COUNT);
+}
+
+async function expectWhosSaved(page: Page, insights: Insights): Promise<void> {
+    expectLockoutsPayload(insights);
+    const region = card(page, "Who's saved");
+    await expect(region, "a guild member sees the Who's saved card").toBeVisible({ timeout: 20_000 });
+    const list = region.getByRole('list', { name: 'Saved instances' });
+    await expect(list.getByRole('button'), 'one row per live save').toHaveCount(2);
+    const shared = list.getByRole('button', { name: new RegExp(SHARED_SAVE) });
+    await expect(shared).toContainText('2 saved');
+    await expect(shared, 'the row shows the reset countdown').toContainText(/Resets in \d+d \d+h/);
+    await expect(list.getByRole('button', { name: new RegExp(SOLO_SAVE) })).toContainText('1 saved');
+    await expect(region.getByText(EXPIRED_SAVE), 'an expired save is never listed').toHaveCount(0);
+    await expect(shared).toHaveAttribute('aria-expanded', 'false');
+    await shared.click();
+    await expect(shared, 'a click expands the instance').toHaveAttribute('aria-expanded', 'true');
+    const members = region.getByRole('list', { name: `${SHARED_SAVE} saved members` });
+    await expect(members.getByRole('link'), 'both saved characters link to their pages').toHaveCount(2);
+    await expect(members.getByRole('link', { name: 'Aldren' })).toHaveAttribute('href', /\/characters\//);
+    await expect(members.getByTestId('whos-saved-kills')).toHaveText(['10/10', '4/10']);
+    await expect(region.getByTestId('whos-saved-footer')).toHaveText(`Based on ${LINKED_COUNT} members' addon exports`);
+}
+
 test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
     test.beforeAll(async () => {
         const token = await getAdminToken();
@@ -161,7 +207,7 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
         test.skip(gameId === null, `"${GAME_SLUG}" is not in this env (boot seed seed-games.data.ts did not run)`);
     });
 
-    test('Overview: class, level, role and professions cards render the seeded roster', async ({ page }, testInfo) => {
+    test("Overview: class, level, role, professions and Who's saved cards render the seeded roster", async ({ page }, testInfo) => {
         const token = await getAdminToken();
         const guild = await seedGuild(token, testInfo);
         try {
@@ -176,6 +222,7 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
             await expectLevelProgression(page, insights);
             await expectRoleBreakdown(page, insights);
             await expectProfessions(page);
+            await expectWhosSaved(page, insights);
         } finally {
             await removeUsers(token, guild);
         }

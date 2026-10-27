@@ -45,3 +45,18 @@ export function shownRecipes(
   const shown = recipes.filter((r) => !hidesStep(graph, r, from, to));
   return { shown, hidden: shown.length < recipes.length };
 }
+
+/**
+ * ROK-1861: the ONE place that decides whether a step's station is a 1.0.20
+ * upgrade station. Hypothesis (spec §1.1, Lane 0 not yet run): the upgrader is
+ * the recipe's own `station` / `repairStation`, flagged `upgrader` on the
+ * station row. A reroute after the data audit changes only this function —
+ * step chips, station builds and the catalogue widening (`catalogRoots`)
+ * all ask it.
+ */
+export function isUpgraderStation(
+  graph: RecipeGraph,
+  station: string | null,
+): boolean {
+  return station !== null && (graph.stations.get(station)?.upgrader ?? false);
+}

@@ -4,7 +4,7 @@
  * chips, and (de)serialise the stored shopping list behind a schema guard.
  */
 import { z } from 'zod';
-import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia, type ValheimRecipeDiscovery } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanStep, type ValheimPlanVia, type ValheimRecipeDiscovery } from '@raid-ledger/contract';
 import { isUndiscoveredNode } from './spoilers.helpers';
 
 export type PlannerKind = 'item' | 'piece';
@@ -169,11 +169,26 @@ function recipeChips(
     stationName: (prefab: string) => string,
 ): string[] {
     const chips: string[] = [];
+    // ROK-1861 Q3: an upgrade station is one chip — "Forge · Upgrade station · lvl 3".
     if (via.station !== null)
-        chips.push(`${stationName(via.station)} · lvl ${via.stationLevel}`);
-    if (via.upgraderStation) chips.push('Upgrade station');
+        chips.push(`${stationName(via.station)}${via.upgraderStation ? ' · Upgrade station' : ''} · lvl ${via.stationLevel}`);
     if (via.formula === 'custom') chips.push('Cost may differ in game');
     return chips;
+}
+
+/** ROK-1861 — a quality step's label ("Quality 2 · Forge · lvl 3"); an upgrade-station step moves the level onto its chip. */
+export function stepLabel(
+    step: Pick<ValheimPlanStep, 'quality' | 'station' | 'stationLevel' | 'upgraderStation'>,
+    stationName: (prefab: string) => string,
+): { label: string; chip: string | null } {
+    const at = `Quality ${step.quality} · ${step.station === null ? 'By hand' : stationName(step.station)}`;
+    if (step.upgraderStation) return { label: at, chip: `Upgrade station · lvl ${step.stationLevel}` };
+    return { label: step.station === null ? at : `${at} · lvl ${step.stationLevel}`, chip: null };
+}
+
+/** "Bronze 3 · Upgrade item 1" — a step's (or a station build's) cost on one line. */
+export function costLine(lines: readonly { prefab: string; amount: number }[], nameOf: (prefab: string) => string): string {
+    return lines.map((l) => `${nameOf(l.prefab)} ${formatAmount(l.amount)}`).join(' · ');
 }
 
 /** The row's via-chips, plus "+N other ways" when alternatives exist; none for a withheld node (ROK-1948). */

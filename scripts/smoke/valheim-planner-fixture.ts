@@ -85,10 +85,19 @@ const READY: Record<
     (c.entries ?? []).some((e) => e.name === "Bronze"),
 };
 
+/** ROK-1861: the upgrader set is in when the catalogue lists the Bronze cuirass. */
+const isReady = (
+  spoilers: RecipesSpoilersPreset,
+  upgrader: boolean,
+  c: CatalogProbe | null,
+) =>
+  READY[spoilers](c) &&
+  (!upgrader || (c?.entries ?? []).some((e) => e.name === "Bronze cuirass"));
+
 /** Seed this worker's recipes fixture and wait until its catalogue matches `spoilers`. */
 export async function seedRecipes(
   testInfo: TestInfo,
-  opts: { spoilers?: RecipesSpoilersPreset } = {},
+  opts: { spoilers?: RecipesSpoilersPreset; upgrader?: boolean } = {},
 ): Promise<RecipesFixture> {
   const spoilers = opts.spoilers ?? "all";
   const token = await getAdminToken();
@@ -97,6 +106,8 @@ export async function seedRecipes(
   const body = (await apiPost(token, FIXTURE, {
     worker: testInfo.parallelIndex % SLOTS,
     ...(opts.spoilers === undefined ? {} : { spoilers }),
+    // ROK-1861: add the Bronze cuirass at an upgrade station to the set.
+    ...(opts.upgrader === true ? { upgrader: true } : {}),
   })) as Partial<RecipesFixture> | null;
   expect(
     body?.guildId,
@@ -108,7 +119,9 @@ export async function seedRecipes(
   await expect
     .poll(
       async () =>
-        READY[spoilers](
+        isReady(
+          spoilers,
+          opts.upgrader === true,
           (await apiGet(token, recipesPath(f))) as CatalogProbe | null,
         ),
       {
