@@ -20,6 +20,7 @@ import { SheetTitleRow } from '../../../pages/scheduling/SheetTitleRow';
 import { SCHEDULING_MANAGE_BUTTON } from './scheduling-action-button';
 import { pendingVoterCount, useCanManagePoll } from './scheduling-manage.helpers';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
+import { SchedulingRemoveMemberAction } from './SchedulingRemoveMemberAction';
 import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
 
@@ -55,13 +56,22 @@ export function SchedulingManageSheet(
   );
 }
 
-/** The three action rows, each rendering its own hook/modal (no duplication). */
+/**
+ * The action rows — Add Participants · Remove Participant (ROK-2020) · Remind
+ * Voters · Cancel Poll — each rendering its own hook/modal (no duplication).
+ */
 function ManageRows(props: SchedulingManageProps): JSX.Element {
   const { lineupId, matchId, match, readOnly, uniqueVoterCount } = props;
   return (
     <>
       <SchedulingAddMembersAction
         variant="row"
+        lineupId={lineupId}
+        matchId={matchId}
+        match={match}
+        readOnly={readOnly}
+      />
+      <SchedulingRemoveMemberAction
         lineupId={lineupId}
         matchId={matchId}
         match={match}
