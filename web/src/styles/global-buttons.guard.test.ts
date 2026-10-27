@@ -44,6 +44,13 @@ describe('shared .btn classes are global (ROK-1901)', () => {
         expect(offenders, 'a lazily-loaded stylesheet defines a shared .btn class — move it to index.css').toEqual([]);
     });
 
+    // fbce1b497 overwrote index.css with only this block, dropping `@import "tailwindcss"`
+    // and every token — no utility class applied (19 fleet e2e failures).
+    it('index.css still carries Tailwind and the theme tokens', () => {
+        expect(indexCss, 'index.css lost `@import "tailwindcss"`').toMatch(/@import\s+["']tailwindcss["']/);
+        expect(indexCss, 'index.css lost its `@theme` token block').toMatch(/@theme\s*\{/);
+    });
+
     it('the scanner reads page stylesheets (self-check)', () => {
         const files = STYLESHEETS.map(([f]) => f);
         expect(files).toContain('pages/event-detail-page.css');
