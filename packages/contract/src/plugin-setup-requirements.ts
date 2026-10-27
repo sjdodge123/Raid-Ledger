@@ -9,8 +9,32 @@ import type { PluginSetup } from './plugin-setup.schema.js';
 const VALHEIM_MOD_REPO = 'https://github.com/Raid-Ledger-Plugins/rl-valheim-link';
 const VALHEIM_MOD_CFG = 'BepInEx/config/RaidLedger.ValheimLink.cfg';
 
-/** Core needs nothing. */
-export const CORE_SETUP = { requirements: [] } satisfies PluginSetup;
+/**
+ * ROK-1953 D7 — Core works without either; the shared Steam cards
+ * (Achievement race, Playtime) on game hubs need both.
+ */
+export const CORE_SETUP = {
+  requirements: [
+    {
+      id: 'steam-api-key',
+      kind: 'admin_setting',
+      title: 'Steam Web API key',
+      instructions:
+        '1. Get a key at https://steamcommunity.com/dev/apikey.\n2. Enter it in Admin → Integrations → Steam. The Achievement race and Playtime cards on game hubs use it.',
+      required: false,
+      links: [{ label: 'Steam Web API key page', url: 'https://steamcommunity.com/dev/apikey' }],
+      check: 'core.steam_api_key',
+    },
+    {
+      id: 'player-steam-link',
+      kind: 'steam_link',
+      title: 'Players link Steam',
+      instructions:
+        "Each player links Steam on their Raid Ledger profile and sets Game Details to Public in Steam's privacy settings. Unlinked players are left off the Achievement race and Playtime cards.",
+      required: false,
+    },
+  ],
+} satisfies PluginSetup;
 
 export const VALHEIM_SETUP = {
   requirements: [

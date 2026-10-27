@@ -8,6 +8,7 @@
  * Field names are camelCase (repo convention); RFC 8628 uses snake_case.
  */
 import { z } from "zod";
+import { COMPANION_DISPLAY_TEXT_RE } from "./companion-common.schema.js";
 
 /** Raw device token: `rlcd_` + 43 base64url chars (32 random bytes). */
 export const COMPANION_DEVICE_TOKEN_PATTERN = /^rlcd_[A-Za-z0-9_-]{43}$/;
@@ -49,26 +50,13 @@ const DisplayUserCodeSchema = z
   .string()
   .regex(COMPANION_USER_CODE_DISPLAY_PATTERN);
 
-/**
- * Text shown to a human on the approve page / Devices list (the S-3 phishing
- * surface): rejects C0/C1 controls (incl. line breaks), U+2028/2029, lone
- * surrogates, bidi overrides/isolates and whitespace-only. React escapes it,
- * so this is about spoofing, not XSS.
- *
- * DUPLICATE of ROK-1954's `COMPANION_DISPLAY_TEXT_RE`
- * (`companion-common.schema.ts`, PR #1802, not on main yet) — once that
- * lands, import it from there and delete this copy.
- */
-export const COMPANION_DEVICE_DISPLAY_TEXT_RE =
-  /^(?!\s*$)[^\p{Cc}\p{Cs}\u2028\u2029\u202A-\u202E\u2066-\u2069]+$/u;
-
 /** Device display name — user-editable, trimmed, 1..64, display-safe. */
 export const CompanionDeviceNameSchema = z
   .string()
   .trim()
   .min(1)
   .max(64)
-  .regex(COMPANION_DEVICE_DISPLAY_TEXT_RE);
+  .regex(COMPANION_DISPLAY_TEXT_RE);
 
 export const CompanionDeviceOsSchema = z.enum([
   "windows",
@@ -86,7 +74,7 @@ export const CompanionDeviceInfoSchema = z
     osVersion: z
       .string()
       .max(32)
-      .regex(COMPANION_DEVICE_DISPLAY_TEXT_RE)
+      .regex(COMPANION_DISPLAY_TEXT_RE)
       .optional(),
     appVersion: z.string().max(32).regex(APP_VERSION_PATTERN),
   })
