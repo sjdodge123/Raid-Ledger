@@ -11,13 +11,17 @@
  *    (`1 + parallelIndex`, the server-hub.smoke pattern). A re-seed puts the hub
  *    back on its server's name and clears the override, so a run that dies
  *    mid-rename leaves nothing behind; the server test also resets in `finally`.
+ *  - WoW guild (ROK-2015): `POST /admin/test/wow/seed-guild {name}` with a
+ *    per-project, per-worker, per-run name (the guild-page.smoke pattern); its
+ *    `source_name` is that name. `finally` resets the name via the API and
+ *    deletes the seeded member users.
  *
  * Every write is confirmed by polling `GET /guilds/:id` before the UI is
  * trusted (memory `feedback_smoke_polling_for_async_writes`). No `sleep()`.
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 
 interface CommunitySeed {
@@ -32,6 +36,13 @@ interface HubName {
     name: string;
     nameOverridden?: boolean;
     serverName?: string;
+    inGameName?: string | null;
+}
+
+interface WowSeed {
+    guildId: number;
+    name: string;
+    userIds: number[];
 }
 
 const ADMIN_HUBS_ACTIVE = '/admin/settings/general/hubs#active';
@@ -78,16 +89,31 @@ async function seedServerHub(token: string, testInfo: TestInfo): Promise<number>
     return body.guildId;
 }
 
-/** The hub's name, override flag and (server hubs) Pelican name, as the API sends them. */
+/** A WoW guild named for this project, worker and run (fixture: 3-48 chars). */
+async function seedWowGuild(token: string, testInfo: TestInfo): Promise<WowSeed> {
+    const name = `Rename ${testInfo.project.name} w${testInfo.workerIndex} ${Date.now().toString(36)}`;
+    const body = (await apiPost(token, '/admin/test/wow/seed-guild', { name })) as {
+        guildId?: unknown;
+        users?: Record<string, { userId?: unknown }>;
+    } | null;
+    if (typeof body?.guildId !== 'number') throw new Error(`[hub-rename] seed-guild: ${JSON.stringify(body)}`);
+    const userIds = Object.values(body.users ?? {})
+        .map((u) => u.userId)
+        .filter((id): id is number => typeof id === 'number');
+    return { guildId: body.guildId, name, userIds };
+}
+
+/** The hub's name, override flag and source name (Pelican's / in-game), as the API sends them. */
 async function hubName(token: string, hubId: number): Promise<HubName> {
     const body = (await apiGet(token, `/guilds/${hubId}`)) as {
-        guild?: { name?: string; nameOverridden?: boolean };
+        guild?: { name?: string; nameOverridden?: boolean; inGameName?: string | null };
         server?: { serverName?: string };
     } | null;
     const name = must(body?.guild?.name, `GET /guilds/${hubId} guild.name`);
     return {
         name,
         ...(body?.guild?.nameOverridden !== undefined ? { nameOverridden: body.guild.nameOverridden } : {}),
+        ...(body?.guild?.inGameName !== undefined ? { inGameName: body.guild.inGameName } : {}),
         ...(body?.server?.serverName !== undefined ? { serverName: body.server.serverName } : {}),
     };
 }
@@ -225,6 +251,40 @@ test.describe('hub rename — server hub (ROK-1950)', () => {
             await expect(sheet.getByTestId('hub-name-reset'), 'Reset disappears after the fallback').toHaveCount(0, { timeout: 15_000 });
         } finally {
             await apiPatch(admin, `/guilds/${hubId}/name`, { name: null }).catch(() => undefined);
+        }
+    });
+});
+
+test.describe('hub rename — WoW guild (ROK-2015)', () => {
+    test('admin renames from the settings sheet, then "Reset to in-game name" falls back', async ({ page }, testInfo) => {
+        const admin = await getAdminToken();
+        const seed = await seedWowGuild(admin, testInfo);
+        try {
+            expect(await hubName(admin, seed.guildId), 'the seed starts on its in-game name')
+                .toMatchObject({ name: seed.name, nameOverridden: false, inGameName: seed.name });
+            const next = uniqueName(testInfo, 'Guild named');
+            const sheet = await openSettings(page, seed.guildId);
+            const section = sheet.getByTestId('hub-name-section');
+            await expect(section, 'an admin sees "Hub name" on a WoW guild').toBeVisible();
+            await expect(section.getByTestId('hub-name-reset'), 'no Reset before a rename').toHaveCount(0);
+            await section.getByTestId('hub-name-input').fill(next);
+            await section.getByTestId('hub-name-save').click();
+            await expect.poll(() => hubName(admin, seed.guildId), { message: 'the rename sets the override' })
+                .toMatchObject({ name: next, nameOverridden: true, inGameName: seed.name });
+            await expect(hero(page, next), 'the hero shows the Raid Ledger name').toBeVisible({ timeout: 15_000 });
+            await expect(sheet.getByTestId('hub-name-section'), 'the hint names the in-game guild')
+                .toContainText(`In game this guild is called “${seed.name}”.`, { timeout: 15_000 });
+
+            const reset = sheet.getByTestId('hub-name-section').getByTestId('hub-name-reset');
+            await expect(reset, 'Reset appears once the guild carries its own name').toHaveText('Reset to in-game name', { timeout: 15_000 });
+            await reset.click();
+            await expect.poll(() => hubName(admin, seed.guildId), { message: 'Reset restores the in-game name' })
+                .toMatchObject({ name: seed.name, nameOverridden: false });
+            await expect(hero(page, seed.name), 'the hero falls back to the in-game name').toBeVisible({ timeout: 15_000 });
+            await expect(sheet.getByTestId('hub-name-reset'), 'Reset disappears after the fallback').toHaveCount(0, { timeout: 15_000 });
+        } finally {
+            await apiPatch(admin, `/guilds/${seed.guildId}/name`, { name: null }).catch(() => undefined);
+            for (const id of seed.userIds) await apiDelete(admin, `/users/${id}`).catch(() => undefined);
         }
     });
 });

@@ -2,7 +2,8 @@
  * ROK-1950 A2 — `PATCH /guilds/:id/name` against a real database (spec §4
  * cases 1–16). Fleet-only. Community hubs are built with the core insert
  * helper; server hubs through the Pelican admin PATCH (as in A1's
- * `server-hub-rename-sync.integration.spec.ts`); the WoW row directly.
+ * `server-hub-rename-sync.integration.spec.ts`). WoW guilds: see
+ * `hub-rename-wow.integration.spec.ts` (ROK-2015).
  *
  * Mutations (for the Lead): drop the service leader re-check AND the route
  * guard → the officer case goes red; drop `hasNameClash` → "taken name" stays
@@ -125,23 +126,6 @@ async function mkServerHub(
     'server hub',
   );
   return { serverId: row.id, guildId: hub.id };
-}
-
-async function mkWowGuild(): Promise<number> {
-  const [g] = nonEmpty(
-    await testApp.db
-      .insert(schema.guilds)
-      .values({
-        gameId: testApp.seed.game.id,
-        region: 'us',
-        name: 'Rename Wow Guild',
-        nameKey: 'rename wow guild',
-        source: 'addon_import',
-      })
-      .returning({ id: schema.guilds.id }),
-    'wow guild',
-  );
-  return g.id;
 }
 
 async function hubRow(id: number): Promise<schema.GuildSelect> {
@@ -404,17 +388,8 @@ describe('PATCH /guilds/:id/name — server hubs', () => {
   });
 });
 
-describe('PATCH /guilds/:id/name — WoW and unknown ids', () => {
-  it('15: a WoW guild is refused with 409 (D3, OQ-1)', async () => {
-    await registry().ensureInstalled('blizzard');
-    await registry().activate('blizzard');
-    const id = await mkWowGuild();
-    const res = await rename(id, admin, { name: 'New Wow Name' });
-    expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ message: RENAME_ERRORS.wowRefused });
-    expect((await hubRow(id)).name).toBe('Rename Wow Guild');
-  });
-
+describe('PATCH /guilds/:id/name — unknown ids', () => {
+  // Case 15 (WoW) moved to `hub-rename-wow.integration.spec.ts` A3-1 (ROK-2015 A3-8).
   it('16: an unknown id is 404 for an admin', async () => {
     expect((await rename(999999, admin, { name: 'Ghost Name' })).status).toBe(
       404,

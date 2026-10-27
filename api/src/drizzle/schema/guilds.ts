@@ -43,13 +43,22 @@ export const guilds = pgTable(
       .notNull(),
     region: varchar('region', { length: 10 }).notNull(),
     name: varchar('name', { length: 64 }).notNull(),
-    /** lower(name) — the realm-less identity key. */
+    /**
+     * lower(in-game name) — the realm-less WoW identity key. A Raid Ledger
+     * rename never changes it on `wow_guild` (ROK-2015).
+     */
     nameKey: varchar('name_key', { length: 64 }).notNull(),
     /**
      * ROK-1950: a Raid Ledger rename — syncs (Pelican `syncServerHub`) leave
      * `name` alone while true. Never true on community hubs.
      */
     nameOverridden: boolean('name_overridden').default(false).notNull(),
+    /**
+     * ROK-2015: the in-game name the addon last reported (`wow_guild` only).
+     * What a rename reset restores. `name_key` stays this name's key, so it
+     * is the import identity.
+     */
+    sourceName: varchar('source_name', { length: 64 }),
     realmSlug: varchar('realm_slug', { length: 100 }),
     guildSlug: varchar('guild_slug', { length: 100 }),
     blizzardGuildId: bigint('blizzard_guild_id', { mode: 'number' }),

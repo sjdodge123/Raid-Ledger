@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   GuildKind,
@@ -114,6 +115,20 @@ export class WowHubKindAdapter implements HubKindAdapter {
 
   isLiveMember(guildId: number, memberId: number): Promise<boolean> {
     return isLiveMemberOf(this.db, guildId, memberId);
+  }
+
+  /**
+   * ROK-2015 D6: the in-game name the last LedgerLink import reported — what
+   * a hub rename reset goes back to. Null when none is on record.
+   */
+  async sourceName(guildId: number): Promise<string | null> {
+    const g = schema.guilds;
+    const [row] = await this.db
+      .select({ sourceName: g.sourceName })
+      .from(g)
+      .where(and(eq(g.id, guildId), eq(g.kind, 'wow_guild')))
+      .limit(1);
+    return row?.sourceName ?? null;
   }
 
   /** ROK-1794 (review): whether each grant confers rights, and to whom. */

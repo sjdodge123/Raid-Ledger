@@ -167,10 +167,6 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
   return [...new Map(members.map((m) => [m.guid, m])).values()];
 }
 
-/**
- * Upsert the realm-less guild — only when this snapshot is not older than
- * the stored one (`setWhere`, atomic). No row back = stale, nothing written.
- */
 /** Guild columns an addon snapshot owns (insert + conflict update). */
 export function guildSet(
   payload: AddonGuildExport,
@@ -178,6 +174,7 @@ export function guildSet(
 ) {
   return {
     name: payload.data.name,
+    sourceName: payload.data.name,
     memberCount: payload.data.members.length,
     lastSnapshotAt: seenAt,
     rawRealm: payload.data.rawRealm ?? null,
@@ -186,6 +183,23 @@ export function guildSet(
   };
 }
 
+/**
+ * ROK-2015 D2: the conflict update keeps a Raid Ledger rename — `name` only
+ * follows the game while `name_overridden` is false. `source_name` (and every
+ * other snapshot column) always tracks the import.
+ */
+export function guildConflictSet(set: ReturnType<typeof guildSet>) {
+  return {
+    ...set,
+    name: sql<string>`CASE WHEN ${guilds.nameOverridden} THEN ${guilds.name} ELSE excluded.name END`,
+  };
+}
+
+/**
+ * Upsert the realm-less guild — only when this snapshot is not older than
+ * the stored one (`setWhere`, atomic). No row back = stale, nothing written.
+ * The lookup / conflict target stays `name_key` = the in-game key (D1).
+ */
 async function upsertGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
@@ -204,7 +218,7 @@ async function upsertGuild(
     .onConflictDoUpdate({
       target: [guilds.gameId, guilds.region, guilds.nameKey],
       targetWhere: sql`${guilds.realmSlug} IS NULL AND ${guilds.kind} = 'wow_guild'`,
-      set,
+      set: guildConflictSet(set),
       // Compare against `excluded`, never a bound JS Date: drizzle's
       // postgres.js driver does not serialize a Date inside raw `sql`
       // (ERR_INVALID_ARG_TYPE → 500).
