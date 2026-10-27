@@ -4,12 +4,12 @@ import { fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import type { JSX, ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClientProvider, useQuery } from '@tanstack/react-query';
-import type { GuildPage } from '@raid-ledger/contract';
+import type { GuildPage, HubSessionNoteResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
-    NOTE_UPDATED_AT, SESSION_NOTE_ITEM_URL, buildSessionNote, buildSessionNoteResponse,
-    sessionNoteGetHandler, sessionNoteTickHandler,
+    NOTE_UPDATED_AT, SESSION_NOTE_ITEM_URL, SESSION_NOTE_URL, buildSessionNote, buildSessionNoteResponse,
+    sessionNoteGetHandler,
 } from '../../../test/mocks/hub-session-note-handlers';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget, { SESSION_NOTE_EMPTY_HINT } from './hub-session-note-widget';
@@ -120,8 +120,7 @@ describe('HubSessionNoteWidget — states (T-W1, T-W2)', () => {
 
 describe('HubSessionNoteWidget — ticking (T-W3)', () => {
     it('ticks optimistically and stores the server copy with updatedAt verbatim', async () => {
-        const base = buildSessionNoteResponse(buildSessionNote());
-        server.use(sessionNoteGetHandler(base), sessionNoteTickHandler(base));
+        overlappingServer(0, 200); // nothing held; GET reads the ticked state back, as a real server would
         const queryClient = createTestQueryClient();
         renderWithProviders(<Card />, { queryClient });
         await screen.findByTestId('session-note-body');
@@ -129,7 +128,7 @@ describe('HubSessionNoteWidget — ticking (T-W3)', () => {
         await waitFor(() => expect(item(1).checked).toBe(true));
         await waitFor(() => expect(queryClient.isMutating()).toBe(0));
         expect(item(1).checked).toBe(true);
-        const cached = queryClient.getQueryData<typeof base>(sessionNoteKey(5));
+        const cached = queryClient.getQueryData<HubSessionNoteResponse>(sessionNoteKey(5));
         expect(cached?.note?.updatedAt).toBe(NOTE_UPDATED_AT);
     });
 
@@ -156,6 +155,66 @@ describe('HubSessionNoteWidget — ticking (T-W3)', () => {
         release();
         await waitFor(() => expect(toastError).toHaveBeenCalledWith(ITEM_GONE_TOAST));
         expect(item(2).checked).toBe(true);
+    });
+});
+
+/**
+ * A stateful server for two overlapping ticks: every PATCH snapshots the checklist as it read it, the
+ * PATCH for `heldId` is held until `release()` and answers `heldStatus`, and GET returns live state.
+ */
+function overlappingServer(heldId: number, heldStatus: number) {
+    const base = buildSessionNoteResponse(buildSessionNote());
+    let items = base.note?.items ?? [];
+    const answered: number[] = [];
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const respond = (snapshot: typeof items) => HttpResponse.json({ ...base, note: base.note && { ...base.note, items: snapshot } });
+    server.use(
+        http.get(SESSION_NOTE_URL, () => respond(items)),
+        http.patch(SESSION_NOTE_ITEM_URL, async ({ request, params }) => {
+            const id = Number(params['itemId']);
+            const { done } = (await request.json()) as { done: boolean };
+            const read = items.map((it) => (it.id === id ? { ...it, done } : it));
+            if (id !== heldId) { items = items.map((it) => (it.id === id ? { ...it, done } : it)); answered.push(id); return respond(read); }
+            await gate;
+            if (heldStatus !== 200) return HttpResponse.json({ statusCode: heldStatus, message: 'boom' }, { status: heldStatus });
+            items = items.map((it) => (it.id === id ? { ...it, done } : it));
+            return respond(read); // the older snapshot: it does not include the other tick
+        }),
+    );
+    return { release: () => release(), answered };
+}
+
+/** Tick item 1 (held at the gate), then untick item 2 (seeded done), and wait for item 2's answer. */
+async function tickOneThenTwo(queryClient: ReturnType<typeof createTestQueryClient>, answered: number[]) {
+    renderWithProviders(<Card />, { queryClient });
+    await screen.findByTestId('session-note-body');
+    fireEvent.click(item(1));
+    await waitFor(() => expect(item(1).checked).toBe(true));
+    fireEvent.click(item(2));
+    await waitFor(() => expect(answered).toEqual([2]));
+    await waitFor(() => expect(queryClient.isMutating()).toBe(1));
+}
+
+describe('HubSessionNoteWidget — overlapping ticks', () => {
+    it('keeps both changes when the older snapshot (item 2 still done) lands last', async () => {
+        const { release, answered } = overlappingServer(1, 200);
+        const queryClient = createTestQueryClient();
+        await tickOneThenTwo(queryClient, answered);
+        release();
+        await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect([item(1).checked, item(2).checked]).toEqual([true, false]);
+    });
+
+    it("rolls back only the failed tick, keeping the other item's untick", async () => {
+        const { release, answered } = overlappingServer(1, 500);
+        const queryClient = createTestQueryClient();
+        await tickOneThenTwo(queryClient, answered);
+        release();
+        await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect([item(1).checked, item(2).checked]).toEqual([false, false]);
     });
 });
 
