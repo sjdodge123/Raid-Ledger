@@ -12750,6 +12750,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "uploaded_by": {
+          "name": "uploaded_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12856,6 +12862,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "hub_media_uploaded_by_idx": {
+          "name": "hub_media_uploaded_by_idx",
+          "columns": [
+            {
+              "expression": "uploaded_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12884,6 +12905,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "hub_media_uploaded_by_users_id_fk": {
+          "name": "hub_media_uploaded_by_users_id_fk",
+          "tableFrom": "hub_media",
+          "tableTo": "users",
+          "columnsFrom": [
+            "uploaded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12892,11 +12926,11 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord')"
+          "value": "\"hub_media\".\"source\" IN ('discord', 'upload')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
-          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image')"
+          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload')"
         }
       },
       "isRLSEnabled": false
