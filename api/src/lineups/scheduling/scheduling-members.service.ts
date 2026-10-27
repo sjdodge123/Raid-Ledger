@@ -17,10 +17,15 @@
  * `loadMatchMembers(matchId)`, so a newly added member is reachable by
  * "Remind voters" until they vote.
  *
+ * ROK-2020 adds the inverse — `removeMember` — under the same permission
+ * rule. Both re-render the Discord poll card AFTER their write commits (via
+ * `SchedulingPollEmbedService.fireUpdateEmbed`), so the card's counts move.
+ *
  * Lives in its own service (like `SchedulingRemindService`) rather than on
  * `SchedulingService`, keeping both files clear of the STRICT max-lines cap.
  */
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -37,6 +42,11 @@ import {
   assertSchedulingEnabled,
 } from './scheduling-guard.helpers';
 import { addInvitees } from '../lineups-invitees.helpers';
+import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
+import {
+  countMatchMembers,
+  deleteMatchMemberWithVotes,
+} from './scheduling-members-remove.helpers';
 
 /** Caller identity for poll-roster authorization. */
 export interface PollMemberCaller {
@@ -52,11 +62,20 @@ export interface AddMatchMembersResult {
   memberCount: number;
 }
 
+/** Outcome of a remove-member call (ROK-2020). */
+export interface RemoveMatchMemberResult {
+  /** That user's vote rows deleted from this poll's slots (yes and no). */
+  removedVotes: number;
+  /** Total roster size after the call — the poll's new denominator. */
+  memberCount: number;
+}
+
 @Injectable()
 export class SchedulingMembersService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly pollEmbed: SchedulingPollEmbedService,
   ) {}
 
   /**
@@ -100,27 +119,66 @@ export class SchedulingMembersService {
       })
       .returning({ id: schema.communityLineupMatchMembers.id });
 
-    const roster = await this.db
-      .select({ id: schema.communityLineupMatchMembers.id })
-      .from(schema.communityLineupMatchMembers)
-      .where(eq(schema.communityLineupMatchMembers.matchId, matchId));
-
-    return { added: inserted.length, memberCount: roster.length };
+    // ROK-2020 (OPEN-4): after the insert has landed, so the card's
+    // "N of M" counts move on add too.
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    return {
+      added: inserted.length,
+      memberCount: await countMatchMembers(this.db, matchId),
+    };
   }
 
-  /** Lineup creator OR admin/operator — mirrors `assertCallerMayRemind`. */
+  /**
+   * Take one user off a match's scheduling poll (ROK-2020): their roster row
+   * and every stance they hold on this poll's slots go in one transaction.
+   * Not a ban — a removed user who votes again is re-enrolled by
+   * `ensureMatchMember`. The poll creator cannot be removed (cancel the poll
+   * instead). No DM is sent to the removed user.
+   */
+  async removeMember(
+    lineupId: number,
+    matchId: number,
+    userId: number,
+    caller: PollMemberCaller,
+  ): Promise<RemoveMatchMemberResult> {
+    const createdBy = await this.assertCallerMayManage(lineupId, caller);
+    await this.loadSchedulableMatch(lineupId, matchId);
+    if (userId === createdBy) {
+      throw new BadRequestException(
+        "The poll creator can't be removed — cancel the poll instead",
+      );
+    }
+    const removed = await deleteMatchMemberWithVotes(this.db, matchId, userId);
+    if (removed.removedVotes === 0 && removed.removedMembers === 0) {
+      throw new NotFoundException('Not a participant of this poll');
+    }
+    // After the transaction has committed — never inside it.
+    this.pollEmbed.fireUpdateEmbed(matchId);
+    return {
+      removedVotes: removed.removedVotes,
+      memberCount: await countMatchMembers(this.db, matchId),
+    };
+  }
+
+  /**
+   * Lineup creator OR admin/operator — mirrors `assertCallerMayRemind`.
+   * Returns the lineup's creator id (the remove path refuses to remove them).
+   */
   private async assertCallerMayManage(
     lineupId: number,
     caller: PollMemberCaller,
-  ): Promise<void> {
-    if (caller.role === 'admin' || caller.role === 'operator') return;
+  ): Promise<number> {
     const [lineup] = await findLineupPollMeta(this.db, lineupId);
     if (!lineup) throw new NotFoundException('Lineup not found');
+    if (caller.role === 'admin' || caller.role === 'operator') {
+      return lineup.createdBy;
+    }
     if (lineup.createdBy !== caller.id) {
       throw new ForbiddenException(
-        'Only the poll creator or an operator can add participants',
+        'Only the poll creator or an operator can manage participants',
       );
     }
+    return lineup.createdBy;
   }
 
   /**
