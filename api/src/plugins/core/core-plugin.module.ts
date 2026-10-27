@@ -3,13 +3,14 @@ import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { CORE_MANIFEST } from './core.manifest';
+import { CoreSteamStatsModule } from './steam-stats/core-steam-stats.module';
 
 /**
  * ROK-1969 D2 — registers the Core manifest and installs its row on boot
  * (same pattern as Discord / Blizzard). Core is active regardless (D3), so
  * a failed install only hides it from `GET /admin/plugins` until next boot.
  */
-@Module({})
+@Module({ imports: [CoreSteamStatsModule] })
 export class CorePluginModule implements OnModuleInit {
   private readonly logger = new Logger(CorePluginModule.name);
 

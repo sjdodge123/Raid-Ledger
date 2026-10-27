@@ -112,7 +112,8 @@ export async function upsertGuild(
     lastSnapshotAt: now,
     updatedAt: now,
   };
-  const values = { gameId, region: SEED_GUILD_REGION, name, ...set };
+  const region = SEED_GUILD_REGION;
+  const values = { gameId, region, name, sourceName: name, ...set };
   const [row] = await db
     .insert(schema.guilds)
     .values({ ...values, nameKey: name.toLowerCase(), source: 'addon_import' })
