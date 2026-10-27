@@ -160,7 +160,7 @@ describe('diffDay (D6)', () => {
     };
     const moved = { ...base, baseX: 4 };
     const desired = new Map([[baseSegKey(moved), moved]]);
-    const diff = diffDay(
+    const diff = diffDay<DayBaseItemTotal>(
       [{ ...base, id: 9 }],
       desired,
       baseSegKey,

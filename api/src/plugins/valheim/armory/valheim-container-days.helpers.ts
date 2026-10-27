@@ -133,7 +133,7 @@ export interface DayDiff<T> {
  * unchanged row (per `same`, total by default) is not written.
  */
 export function diffDay<T extends DayItemTotal>(
-  existing: readonly (T & { id: number })[],
+  existing: readonly NoInfer<T & { id: number }>[],
   desired: ReadonlyMap<string, T>,
   keyOf: (r: T) => string,
   same: (a: T, b: T) => boolean = (a, b) => a.total === b.total,

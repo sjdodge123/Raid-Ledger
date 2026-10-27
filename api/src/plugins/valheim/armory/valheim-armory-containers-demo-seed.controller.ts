@@ -39,6 +39,10 @@ import {
   upsertArmoryProfile,
 } from './valheim-armory-demo-seed.helpers';
 import { ensureFixtureHubId } from './valheim-armory-map-hub.helpers';
+import {
+  DEMO_CONTAINER_TREND_DAYS,
+  type DemoContainerTrendDays,
+} from './valheim-armory-container-days-demo.helpers';
 
 /** What the seed returns (DEMO_MODE only — not a contract type). */
 export interface ContainersFixtureResponse {
@@ -61,20 +65,32 @@ const RequestSchema = z
       .max(VALHEIM_LINK_FIXTURE_SLOTS - 1),
     /** ROK-1859 D11: add a second base ~700 m away (default off). */
     secondBase: z.boolean(),
+    /** ROK-2014: 3 earlier play days of Materials history (default 0). */
+    trendDays: z.union([
+      z.literal(DEMO_CONTAINER_TREND_DAYS[0]),
+      z.literal(DEMO_CONTAINER_TREND_DAYS[1]),
+    ]),
   })
   .partial()
   .strict();
 
-function parseBody(body: unknown): { worker: number; secondBase: boolean } {
+interface SeedBody {
+  worker: number;
+  secondBase: boolean;
+  trendDays: DemoContainerTrendDays;
+}
+
+function parseBody(body: unknown): SeedBody {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, secondBase?: boolean }`,
+      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, secondBase?: boolean, trendDays?: 0 | 3 }`,
     );
   }
   return {
     worker: parsed.data.worker ?? 0,
     secondBase: parsed.data.secondBase ?? false,
+    trendDays: parsed.data.trendDays ?? 0,
   };
 }
 
@@ -85,6 +101,7 @@ function parseBody(body: unknown): { worker: number; secondBase: boolean } {
  * through the real importer, an owner user who claims (`admin`) the `c1`
  * identity that built the private chest, and a member who claims nothing.
  * `secondBase: true` (ROK-1859) adds a second base of two chests.
+ * `trendDays: 3` (ROK-2014) adds 3 earlier play days (shared Wood +45).
  * Idempotent: a re-run resets the scan and claim, and returns the same ids.
  */
 @Controller('admin/test/valheim/armory')
@@ -104,7 +121,7 @@ export class ValheimArmoryContainersDemoSeedController {
     @Body() body: unknown,
     @Request() req: AuthenticatedRequest,
   ): Promise<ContainersFixtureResponse> {
-    const { worker, secondBase } = parseBody(body);
+    const { worker, secondBase, trendDays } = parseBody(body);
     const valheimGameId = await findValheimGameId(this.db);
     if (valheimGameId === null) {
       throw new NotFoundException('No Valheim game — seed games first');
@@ -117,7 +134,7 @@ export class ValheimArmoryContainersDemoSeedController {
       new Date(),
     );
     await ensureArmoryCatalog(this.db, serverId);
-    await importDemoContainers(this.db, serverId, secondBase);
+    await importDemoContainers(this.db, serverId, secondBase, trendDays);
     const ownerUserId = await this.seedOwner(serverId, worker);
     const hubId = await ensureFixtureHubId(this.db, serverId, valheimGameId);
     return {
