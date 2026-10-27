@@ -17,6 +17,7 @@ import {
     shoppingListText,
     stockAgeLabel,
     viaChips,
+    stepLabel,
     hidesUndiscovered,
 } from './planner.helpers';
 
@@ -86,7 +87,12 @@ describe('formatting', () => {
 describe('viaChips', () => {
     it('names the station and level, upgrade station and custom formula', () => {
         const via = { type: 'recipe', recipeId: 'r', station: 'forge', stationLevel: 3, quality: 3, upgradeOnly: false, formula: 'custom', anyOneOf: false, upgraderStation: true } as const;
-        expect(viaChips(node({ via, alternatives: 2 }), station)).toEqual(['Forge · lvl 3', 'Upgrade station', 'Cost may differ in game', '+2 other ways']);
+        // ROK-1861 Q3: one chip names the station, the upgrade-station flag and the level.
+        expect(viaChips(node({ via, alternatives: 2 }), station)).toEqual(['Forge · Upgrade station · lvl 3', 'Cost may differ in game', '+2 other ways']);
+    });
+    it('keeps the plain station chip when the station is not an upgrade station', () => {
+        const via = { type: 'recipe', recipeId: 'r', station: 'forge', stationLevel: 2, quality: 2, upgradeOnly: false, formula: 'vanilla', anyOneOf: false, upgraderStation: false } as const;
+        expect(viaChips(node({ via }), station)).toEqual(['Forge · lvl 2']);
     });
     it('labels processes, cycles and gathered leaves', () => {
         const proc = { type: 'process', processor: 'fermenter', processorType: 'fermenter', seconds: 2400, windPowered: false, fuel: null } as const;
@@ -146,5 +152,28 @@ describe('undiscovered filter (ROK-1862)', () => {
         expect(hidesUndiscovered(on, 'outdated')).toBe(false);
         expect(hidesUndiscovered(on, undefined)).toBe(false);
         expect(hidesUndiscovered({ hideUndiscovered: false }, 'known')).toBe(false);
+    });
+});
+
+describe('stepLabel (ROK-1861)', () => {
+    const step = (over: { station: string | null; stationLevel: number; upgraderStation: boolean }) =>
+        ({ quality: 2, anyOneOf: false, resources: [], ...over });
+    it('an upgrade-station step names the station and puts the level on the chip', () => {
+        expect(stepLabel(step({ station: 'forge', stationLevel: 3, upgraderStation: true }), station)).toEqual({
+            label: 'Quality 2 · Forge',
+            chip: 'Upgrade station · lvl 3',
+        });
+    });
+    it('a plain station step carries its level in the label and has no chip', () => {
+        expect(stepLabel(step({ station: 'forge', stationLevel: 3, upgraderStation: false }), station)).toEqual({
+            label: 'Quality 2 · Forge · lvl 3',
+            chip: null,
+        });
+    });
+    it('a stationless step reads "By hand"', () => {
+        expect(stepLabel(step({ station: null, stationLevel: 0, upgraderStation: false }), station)).toEqual({
+            label: 'Quality 2 · By hand',
+            chip: null,
+        });
     });
 });
