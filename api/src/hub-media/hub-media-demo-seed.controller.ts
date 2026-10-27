@@ -14,11 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
-import {
-  HUB_MEDIA_KINDS,
-  HUB_MEDIA_PAGE_MAX,
-  type HubMediaKind,
-} from '@raid-ledger/contract';
+import { HUB_MEDIA_PAGE_MAX, type HubMediaKind } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoModeGuard } from '../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -28,23 +24,34 @@ import type { HubMediaDownloader } from './hub-media-download';
 import { HubMediaService } from './hub-media.service';
 import { solidPng } from './hub-media.testing';
 
+/**
+ * The Discord-sourced kinds the seed cycles through. `upload` is excluded: an
+ * upload row is `source: 'upload'` with an uploader (ROK-1965), never a
+ * Discord-sourced picture, so the seed must not mint that hybrid.
+ */
+const SEED_KINDS = [
+  'death',
+  'screenshot',
+  'image',
+] as const satisfies readonly HubMediaKind[];
+type SeedKind = (typeof SEED_KINDS)[number];
+
 const BodySchema = z
   .object({
     guildId: z.number().int().positive(),
     count: z
       .number()
       .int()
-      .min(HUB_MEDIA_KINDS.length)
+      .min(SEED_KINDS.length)
       .max(HUB_MEDIA_PAGE_MAX)
       .default(14),
   })
   .strict();
 
-const CAPTIONS: Record<HubMediaKind, string> = {
+const CAPTIONS: Record<SeedKind, string> = {
   death: 'Died to a Troll',
   screenshot: 'Base at sunset',
   image: 'Map sketch',
-  upload: 'Camp at dawn',
 };
 
 /** Generated pictures, no network: the URL's last segment picks the colour + shape. */
@@ -58,8 +65,9 @@ const generated: HubMediaDownloader = {
 /**
  * ROK-1942 L2 — DEMO_MODE `POST /admin/test/hub-media/seed { guildId, count }`:
  * `count` (≥ 3, default 14) generated pictures through the real `ingest`
- * (stub downloader), cycling death → screenshot → image so every kind is
- * present, one per hour back from now. Each call adds a fresh batch.
+ * (stub downloader), cycling death → screenshot → image so every Discord
+ * kind is present (never `upload` — ROK-1965), one per hour back from now.
+ * Each call adds a fresh batch.
  */
 @Controller('admin/test/hub-media')
 @SkipThrottle()
@@ -82,7 +90,7 @@ export class HubMediaDemoSeedController {
     const parsed = BodySchema.safeParse(body ?? {});
     if (!parsed.success) {
       throw new BadRequestException(
-        `Expected { guildId, count?: ${HUB_MEDIA_KINDS.length}..${HUB_MEDIA_PAGE_MAX} }`,
+        `Expected { guildId, count?: ${SEED_KINDS.length}..${HUB_MEDIA_PAGE_MAX} }`,
       );
     }
     const { guildId, count } = parsed.data;
@@ -100,7 +108,7 @@ export class HubMediaDemoSeedController {
 }
 
 function seedInput(guildId: number, run: string, i: number) {
-  const kind = HUB_MEDIA_KINDS[i % HUB_MEDIA_KINDS.length] ?? 'image';
+  const kind = SEED_KINDS[i % SEED_KINDS.length] ?? 'image';
   return {
     guildId,
     source: 'discord' as const,
