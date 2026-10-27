@@ -76,7 +76,7 @@ describe('HubNotificationService.notifyLeaderPost (D3/D7)', () => {
       payload: {
         guildId: 7,
         guildName: 'Onyx',
-        url: '/guilds/7?post=42#posts',
+        url: '/hubs/7?post=42#posts',
         postId: 42,
       },
     });

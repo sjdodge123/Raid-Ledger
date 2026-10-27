@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { useId } from 'react';
 import type { UserRole } from '@raid-ledger/contract';
 import { SteamIcon } from '../../components/icons/SteamIcon';
 import { RoleBadge } from '../../components/ui/role-badge';
@@ -165,14 +166,15 @@ export function SteamSection({ steamStatus, linkSteam, linkPending, unlinkSteam,
 export function AutoHeartToggle({ enabled, onToggle, isPending }: {
     enabled: boolean; onToggle: (v: boolean) => void; isPending: boolean;
 }): JSX.Element {
+    const headingId = useId();
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
             <div className="flex items-center justify-between gap-4">
                 <div>
-                    <h3 className="text-sm font-semibold text-foreground">Auto-heart games</h3>
+                    <h3 id={headingId} className="text-sm font-semibold text-foreground">Auto-heart games</h3>
                     <p className="text-sm text-muted mt-0.5">Automatically heart games you play for 5+ hours so you get notified about new events</p>
                 </div>
-                <button type="button" role="switch" aria-checked={enabled} onClick={() => onToggle(!enabled)} disabled={isPending}
+                <button type="button" role="switch" aria-checked={enabled} aria-labelledby={headingId} onClick={() => onToggle(!enabled)} disabled={isPending}
                     className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-backdrop ${
                         enabled ? 'bg-emerald-600' : 'bg-overlay'
                     } ${isPending ? 'opacity-50' : ''}`}>

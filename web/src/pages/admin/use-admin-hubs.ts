@@ -1,7 +1,7 @@
 /**
  * ROK-1870 — Admin → Hubs queue data: pending proposals, active/archived
  * community hubs, and the staff actions (approve, reject, create, transfer
- * leader, archive/restore). Every mutation invalidates the `['admin-hubs']`
+ * leader, archive/restore, rename). Every mutation invalidates the `['admin-hubs']`
  * prefix, so each tab's list (`['admin-hubs', tab]`) refetches.
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import {
 } from '@raid-ledger/contract';
 import { getAuthToken } from '../../hooks/use-auth';
 import { adminFetch } from '../../hooks/admin/admin-fetch';
-import { invalidateHubMembership } from '../../components/hub/community/invalidate-hub-membership';
+import { invalidateHubMembership, invalidateHubName } from '../../components/hub/community/invalidate-hub-membership';
 
 export type AdminHubTab = 'pending' | 'active' | 'archived';
 export const ADMIN_HUBS_KEY = 'admin-hubs';
@@ -82,6 +82,13 @@ export function useSetHubStatus(): UseMutationResult<unknown, Error, { hubId: nu
     return useHubMutation(({ hubId, status }: { hubId: number } & HubStatusUpdateDto) =>
         adminFetch<unknown>(`/hubs/${hubId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }, 'Failed to update hub'),
     (qc, { hubId }) => invalidateHubMembership(qc, hubId));
+}
+
+/** Rename a hub (ROK-1950); every surface showing its name refetches too. */
+export function useRenameHub(): UseMutationResult<GuildSummary, Error, { hubId: number; name: string }> {
+    return useHubMutation(({ hubId, name }: { hubId: number; name: string }) =>
+        adminFetch<GuildSummary>(`/guilds/${hubId}/name`, { method: 'PATCH', body: JSON.stringify({ name }) }, 'Failed to rename hub'),
+    (qc, { hubId }) => invalidateHubName(qc, hubId));
 }
 
 /** A 204 has no JSON body — `adminFetch`'s parse fails after an ok response; treat that as success. */

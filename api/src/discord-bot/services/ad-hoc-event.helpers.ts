@@ -257,17 +257,24 @@ export async function claimAndEndEvent(
   return claimed ?? null;
 }
 
-/** Set event status to grace_period — only from `live` (never revive an ended event). */
+/**
+ * Set event status to grace_period — only from `live` (never revive an ended
+ * event).
+ *
+ * @returns Whether a `live` row was flipped; false when the guard matched none.
+ */
 export async function setGracePeriodStatus(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(tables.events)
     .set({ adHocStatus: 'grace_period', updatedAt: new Date() })
     .where(
       and(eq(tables.events.id, eventId), eq(tables.events.adHocStatus, 'live')),
-    );
+    )
+    .returning({ id: tables.events.id });
+  return rows.length > 0;
 }
 
 /** Stale threshold: events whose effective end is > 30 minutes ago. */

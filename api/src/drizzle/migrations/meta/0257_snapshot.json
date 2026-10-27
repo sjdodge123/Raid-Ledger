@@ -1,5 +1,5 @@
 {
-  "id": "34ef95f9-d61b-4fc6-8df0-2f89116bc058",
+  "id": "9ac2ffe3-8fb1-4a15-8812-1987f4c691af",
   "prevId": "db733e58-1a46-44fe-87ea-d984d2094f9c",
   "version": "7",
   "dialect": "postgresql",
@@ -11174,6 +11174,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "name_overridden": {
+          "name": "name_overridden",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "realm_slug": {
           "name": "realm_slug",
           "type": "varchar(100)",
@@ -11534,6 +11541,10 @@
         "guilds_auto_membership_kind_check": {
           "name": "guilds_auto_membership_kind_check",
           "value": "\"guilds\".\"kind\" = 'game_community' OR \"guilds\".\"auto_membership\" = 'off'"
+        },
+        "guilds_name_override_kind_check": {
+          "name": "guilds_name_override_kind_check",
+          "value": "\"guilds\".\"name_overridden\" = false OR \"guilds\".\"kind\" <> 'game_community'"
         }
       },
       "isRLSEnabled": false
@@ -17395,309 +17406,6 @@
         "discord_game_roles_window_days_range": {
           "name": "discord_game_roles_window_days_range",
           "value": "\"discord_game_roles\".\"window_days\" BETWEEN 1 AND 365"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.steam_app_achievements": {
-      "name": "steam_app_achievements",
-      "schema": "",
-      "columns": {
-        "app_id": {
-          "name": "app_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_name": {
-          "name": "api_name",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "icon_url": {
-          "name": "icon_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "hidden": {
-          "name": "hidden",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "global_pct": {
-          "name": "global_pct",
-          "type": "numeric(6, 3)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "steam_app_achievements_app_id_steam_app_stats_apps_app_id_fk": {
-          "name": "steam_app_achievements_app_id_steam_app_stats_apps_app_id_fk",
-          "tableFrom": "steam_app_achievements",
-          "tableTo": "steam_app_stats_apps",
-          "columnsFrom": [
-            "app_id"
-          ],
-          "columnsTo": [
-            "app_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "steam_app_achievements_app_id_api_name_pk": {
-          "name": "steam_app_achievements_app_id_api_name_pk",
-          "columns": [
-            "app_id",
-            "api_name"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.steam_app_stats_apps": {
-      "name": "steam_app_stats_apps",
-      "schema": "",
-      "columns": {
-        "app_id": {
-          "name": "app_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "achievement_count": {
-          "name": "achievement_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "schema_status": {
-          "name": "schema_status",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "schema_fetched_at": {
-          "name": "schema_fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "steam_app_stats_apps_schema_status_check": {
-          "name": "steam_app_stats_apps_schema_status_check",
-          "value": "\"steam_app_stats_apps\".\"schema_status\" IN ('ok', 'no_stats', 'error')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.steam_user_achievements": {
-      "name": "steam_user_achievements",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "app_id": {
-          "name": "app_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_name": {
-          "name": "api_name",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unlocked_at": {
-          "name": "unlocked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "steam_user_achievements_app_unlocked_idx": {
-          "name": "steam_user_achievements_app_unlocked_idx",
-          "columns": [
-            {
-              "expression": "app_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unlocked_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "steam_user_achievements_user_id_users_id_fk": {
-          "name": "steam_user_achievements_user_id_users_id_fk",
-          "tableFrom": "steam_user_achievements",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "steam_user_achievements_user_id_app_id_api_name_pk": {
-          "name": "steam_user_achievements_user_id_app_id_api_name_pk",
-          "columns": [
-            "user_id",
-            "app_id",
-            "api_name"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.steam_user_app_stats": {
-      "name": "steam_user_app_stats",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "app_id": {
-          "name": "app_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unlocked_count": {
-          "name": "unlocked_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fetched_at": {
-          "name": "fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "steam_user_app_stats_app_fetched_idx": {
-          "name": "steam_user_app_stats_app_fetched_idx",
-          "columns": [
-            {
-              "expression": "app_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fetched_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "steam_user_app_stats_user_id_users_id_fk": {
-          "name": "steam_user_app_stats_user_id_users_id_fk",
-          "tableFrom": "steam_user_app_stats",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "steam_user_app_stats_user_id_app_id_pk": {
-          "name": "steam_user_app_stats_user_id_app_id_pk",
-          "columns": [
-            "user_id",
-            "app_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "steam_user_app_stats_status_check": {
-          "name": "steam_user_app_stats_status_check",
-          "value": "\"steam_user_app_stats\".\"status\" IN ('ok', 'private', 'not_owned', 'pending', 'unlinked', 'error')"
         }
       },
       "isRLSEnabled": false

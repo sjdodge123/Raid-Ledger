@@ -1,3 +1,4 @@
+import { hubPath } from '../../../guilds/hub-path';
 import {
   BadRequestException,
   Body,
@@ -126,7 +127,7 @@ export class ValheimArmoryRecipesDemoSeedController {
     return {
       ...base,
       guildId: base.hubId,
-      guildPageUrl: `/guilds/${base.hubId}#planner`,
+      guildPageUrl: `${hubPath(base.hubId)}#planner`,
       copperChestKey: DEMO_COPPER_CHEST_KEY,
       counts: RECIPES_DEMO_COUNTS,
     };

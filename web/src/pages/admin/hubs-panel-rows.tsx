@@ -58,13 +58,14 @@ export function PendingHubRow({ proposal: p, onApprove, onReject }: PendingRowPr
 
 export interface ActiveRowProps {
     hub: AdminHubEntry;
+    onRename: (h: AdminHubEntry) => void;
     onTransfer: (h: AdminHubEntry) => void;
     onArchive: (h: AdminHubEntry) => void;
     busy: boolean;
 }
 
 /** An active hub: leader (or a "No leader" warning), members, actions. */
-export function ActiveHubRow({ hub, onTransfer, onArchive, busy }: ActiveRowProps): JSX.Element {
+export function ActiveHubRow({ hub, onRename, onTransfer, onArchive, busy }: ActiveRowProps): JSX.Element {
     const leader = hub.leader === null
         ? <span className="font-medium text-warning">No leader</span>
         : <span>Leader: {hub.leader.username}</span>;
@@ -78,6 +79,7 @@ export function ActiveHubRow({ hub, onTransfer, onArchive, busy }: ActiveRowProp
     );
     return (
         <RowShell title={hub.name} meta={meta}>
+            <Button variant="secondary" size="sm" onClick={() => onRename(hub)}>Rename</Button>
             <Button variant="secondary" size="sm" onClick={() => onTransfer(hub)}>Transfer leader</Button>
             <Button variant="warning-soft" size="sm" loading={busy} onClick={() => onArchive(hub)}>Archive</Button>
         </RowShell>

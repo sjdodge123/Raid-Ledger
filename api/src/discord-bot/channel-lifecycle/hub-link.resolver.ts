@@ -9,6 +9,7 @@
  * kinds in {@link HUB_LINK_KINDS} count. ROK-1896: one hub's page is
  * `/hubs/<id>` (canonical since ROK-1891; `/guilds/<id>` only redirects).
  */
+import { hubPath } from '../../guilds/hub-path';
 import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
@@ -147,7 +148,7 @@ export function pickHubLink(
   base: string,
 ): HubLink | null {
   const hubUrl = (id: number): HubLink => ({
-    url: `${base}/hubs/${id}`,
+    url: `${base}${hubPath(id)}`,
     label: HUB_LINK_LABEL,
   });
   const taggedHub = hubs.find((h) => tagged !== null && h.id === tagged);

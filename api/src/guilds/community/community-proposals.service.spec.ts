@@ -45,6 +45,7 @@ const hubRow: schema.GuildSelect = {
   region: 'community',
   name: 'BG3 Crew',
   nameKey: 'bg3 crew',
+  nameOverridden: false,
   realmSlug: null,
   guildSlug: null,
   faction: null,

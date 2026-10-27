@@ -60,7 +60,7 @@ beforeEach(() => {
   adHoc.finalizeEvent.mockResolvedValue(undefined);
   ephemeralVoice.destroyById.mockResolvedValue(true);
   jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
-  jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
+  jest.mocked(setGracePeriodStatus).mockResolvedValue(true);
   jest.mocked(readBoardThreadMembers).mockResolvedValue({
     threadId: 't1',
     memberIds: ['111'],

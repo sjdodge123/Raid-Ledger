@@ -3,7 +3,7 @@
  * handler list: specs `server.use()` them.
  */
 import { http, HttpResponse } from 'msw';
-import type { ValheimDeathPlayer, ValheimDeathsResponse, ValheimServerPin, ValheimServerPinsResponse } from '@raid-ledger/contract';
+import type { ValheimDeathPicture, ValheimDeathPlayer, ValheimDeathsResponse, ValheimServerPin, ValheimServerPinsResponse } from '@raid-ledger/contract';
 
 export const VALHEIM_DEATHS_URL = 'http://localhost:3000/plugins/valheim/armory/servers/:serverId/deaths';
 
@@ -21,6 +21,31 @@ export const valheimDeathsFixture: ValheimDeathsResponse = {
     players: [
         valheimDeathPlayer({ name: 'Ragnhild', deaths: 12, characterId: 11 }),
         valheimDeathPlayer({ name: 'Hrafn', deaths: 6, characterId: 12 }),
+        valheimDeathPlayer({ name: 'Left-the-hub', deaths: 3 }),
+    ],
+    since: '2026-10-01T12:00:00.000Z',
+};
+
+/** ROK-1941 D13 — one death picture on a bar (hub 5's bytes route, like `hubMediaItem`). */
+export function valheimDeathPicture(mediaId: number, hoursAgo = mediaId): ValheimDeathPicture {
+    return {
+        mediaId,
+        thumbPath: `/hubs/5/media/${mediaId}/thumb`,
+        capturedAt: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+    };
+}
+
+/**
+ * ROK-1941 — Ragnhild: 3 of 5 pictures served (newest first) → "+2"; Hrafn:
+ * his only picture → no "+N"; Left-the-hub: none (both fields absent, D13).
+ */
+export const valheimDeathsPicturesFixture: ValheimDeathsResponse = {
+    players: [
+        valheimDeathPlayer({
+            name: 'Ragnhild', deaths: 12, characterId: 11,
+            pictures: [valheimDeathPicture(41, 24), valheimDeathPicture(40, 30), valheimDeathPicture(38, 50)], pictureCount: 5,
+        }),
+        valheimDeathPlayer({ name: 'Hrafn', deaths: 6, characterId: 12, pictures: [valheimDeathPicture(39, 72)], pictureCount: 1 }),
         valheimDeathPlayer({ name: 'Left-the-hub', deaths: 3 }),
     ],
     since: '2026-10-01T12:00:00.000Z',

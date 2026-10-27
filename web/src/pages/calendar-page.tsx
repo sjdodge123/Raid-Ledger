@@ -16,6 +16,20 @@ import { useCalendarGameFilter, type CalendarGameFilter } from './calendar/use-c
 import { useCalendarLayerToggles, type CalendarLayerToggles } from './calendar/use-calendar-layer-toggles';
 import '../components/calendar/calendar-styles.css';
 
+const DEEP_LINK_VIEWS: readonly CalendarViewMode[] = ['month', 'week', 'day'];
+
+/**
+ * The view the page opens in. Phones (<768px) always open in Schedule; wider
+ * screens honour a valid `?view=month|week|day` deep link and otherwise open
+ * in Month. Seeding from the URL stops CalendarView's mount sync from
+ * overwriting `?view=week` with the Month default.
+ */
+function initialCalendarView(viewParam: string | null, width: number): CalendarViewMode {
+    if (width < 768) return 'schedule';
+    const match = DEEP_LINK_VIEWS.find((v) => v === viewParam);
+    return match ?? 'month';
+}
+
 /**
  * Calendar page - displays events in a month grid view.
  * ROK-171: Calendar Month View
@@ -31,7 +45,7 @@ function useCalendarState() {
         return new Date();
     });
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
-        () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
+        () => initialCalendarView(searchParams.get('view'), typeof window !== 'undefined' ? window.innerWidth : 1024),
     );
     const [filtersOpen, setFiltersOpen] = useState(false);
 

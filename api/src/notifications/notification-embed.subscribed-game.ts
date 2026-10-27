@@ -5,6 +5,7 @@
 import { absoluteEmbedImageUrl } from '../discord-bot/services/embed-thumbnail.helpers';
 import { EmbedBuilder } from 'discord.js';
 import { formatDurationMs } from '../discord-bot/utils/format-duration';
+import { escapeHubName } from '../discord-bot/services/discord-embed-event-body.helpers';
 import { toStr } from './notification-embed.helpers';
 
 /** Override the embed description with structured game-affinity lines. */
@@ -34,15 +35,22 @@ export function applySubscribedGameEmbed(
 
 /**
  * ROK-1832 §6: a group-tagged event reuses the game-affinity layout plus a
- * "Tagged to <Group>" line, so the DM says why the reader got it.
+ * "Tagged to <Group>" line, so the DM says why the reader got it. ROK-1950
+ * review: the hub name is leader-controlled, so it goes through
+ * `escapeHubName`, and the raw `Tagged to <name>` notification message is
+ * dropped rather than left as the description.
  */
 export function applyHubEventTaggedEmbed(
   embed: EmbedBuilder,
   payload: Record<string, unknown>,
 ): void {
+  if (typeof payload.guildName !== 'string' || payload.guildName === '') {
+    applySubscribedGameEmbed(embed, payload);
+    return;
+  }
+  embed.setDescription(null);
   applySubscribedGameEmbed(embed, payload);
-  if (typeof payload.guildName !== 'string' || payload.guildName === '') return;
-  const tagged = `🛡️ Tagged to **${payload.guildName}**`;
+  const tagged = `🛡️ Tagged to **${escapeHubName(payload.guildName)}**`;
   const current = embed.data.description;
   embed.setDescription(current ? `${current}\n${tagged}` : tagged);
 }

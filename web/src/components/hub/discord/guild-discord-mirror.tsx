@@ -22,6 +22,7 @@ import type { DiscordChannelName } from '../../discord/discord-markup.parse';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle } from '../hub-bits';
+import { privateTagTitle } from '../hub-copy';
 import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
 import { httpStatusOf } from '../../../lib/api/api-error';
@@ -121,21 +122,27 @@ function MirrorError(): JSX.Element {
 }
 
 /** Spec D8/§UI: a private bound channel carries a "Private" tag on the card itself, for every viewer. */
-function PrivateTag(): JSX.Element {
+function PrivateTag({ kind }: { kind: GuildKind | undefined }): JSX.Element {
     return (
-        <span data-testid="guild-discord-private" title="Private Discord channel — everyone who can open this guild page sees it here">
+        <span data-testid="guild-discord-private" title={privateTagTitle(kind)}>
             <Pill><LockClosedIcon className="h-3 w-3" aria-hidden="true" /> Private</Pill>
         </span>
     );
 }
 
-function headerAction({ mirror, onChange }: { mirror: GuildDiscordMirrorDto | undefined; onChange: (() => void) | null }): JSX.Element | undefined {
+interface HeaderActionArgs {
+    mirror: GuildDiscordMirrorDto | undefined;
+    onChange: (() => void) | null;
+    kind: GuildKind | undefined;
+}
+
+function headerAction({ mirror, onChange, kind }: HeaderActionArgs): JSX.Element | undefined {
     const isPrivate = mirror?.state === 'ok' && mirror.channel.visibility === 'private';
     const change = onChange && mirror && mirror.state !== 'unset'
         ? <Button variant="ghost" size="sm" onClick={onChange} data-testid="guild-discord-change">Change channel</Button>
         : null;
     if (!isPrivate && !change) return undefined;
-    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag />}{change}</div>;
+    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag kind={kind} />}{change}</div>;
 }
 
 interface MirrorProps {
@@ -158,7 +165,7 @@ export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null, k
     // ROK-1831: a 403 (a visitor on a members-first hub) hides the card — never a red error.
     if (httpStatusOf(query.error) === 403) return null;
     const open = onChangeChannel;
-    const action = headerAction({ mirror, onChange: open });
+    const action = headerAction({ mirror, onChange: open, kind });
     return (
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>

@@ -92,7 +92,7 @@ describe('POST /admin/test/valheim/recipes-fixture (ROK-1854 L5)', () => {
   it('seeds a catalogue listing Bronze and a plan with Copper covered, Tin short', async () => {
     const f = await seed();
     expect(f.guildId).toBe(f.hubId);
-    expect(f.guildPageUrl).toBe(`/guilds/${f.hubId}#planner`);
+    expect(f.guildPageUrl).toBe(`/hubs/${f.hubId}#planner`);
     const member = bearer(await sign(f.memberUserId));
     const cat = await testApp.request.get(recipesUrl(f.serverId)).set(member);
     expect(cat.status).toBe(200);

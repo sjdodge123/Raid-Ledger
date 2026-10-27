@@ -20,6 +20,7 @@ import { HubMineController } from './hub-mine.controller';
 import { HubNotificationMuteController } from './hub-notification-mute.controller';
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
+import { HubRenameService } from './hub-rename.service';
 import { HubVisibleGuard } from './hub-visible.guard';
 import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
@@ -67,6 +68,7 @@ import {
     HubKindRegistry,
     HubOnboardingService,
     HubService,
+    HubRenameService,
     HubVisibleGuard,
     HubWidgetPrefsService,
     HubEventTagger,

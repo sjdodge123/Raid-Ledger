@@ -11,11 +11,12 @@ import { useNow } from '../../../hooks/use-now';
 import { MapError } from '../map/map-error';
 import { useValheimRecipeCatalog } from '../hooks/use-valheim-recipes';
 import { CraftingWindow } from './crafting-window';
-import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel } from './planner.helpers';
+import { PLANNER_NO_SET_COPY, PLANNER_NO_STOCK_COPY, stockAgeLabel, type PlannerTarget } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
-import { SPOILERS_EMPTY_COPY } from './spoilers.helpers';
+import { isHiddenTarget, SPOILERS_EMPTY_COPY } from './spoilers.helpers';
 import { ShoppingList } from './shopping-list';
-import { usePlannerState, type PlannerState } from './use-planner-state';
+import { usePlannerNames } from './use-planner-names';
+import { usePlannerState, usePlannerTargets, type PlannerState } from './use-planner-state';
 
 function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResponse; capturedAt: string | null }): JSX.Element {
     const now = useNow();
@@ -64,21 +65,29 @@ function EmptyState({ copy }: { copy: string }): JSX.Element {
 /**
  * ROK-1948: protected with nothing visible. Saved targets stay manageable —
  * their generic hidden rows and Remove controls still render under the copy.
+ * With no visible entries every saved target is hidden, so there is no plan
+ * (hidden targets never reach `/plan`) and no materials scope to offer: only
+ * the stored list is read, never the full `usePlannerState` and its queries.
  */
 function ProtectedEmpty({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
-    const s = usePlannerState(serverId, catalog);
+    const [targets, setTargets] = usePlannerTargets(serverId);
+    const names = usePlannerNames(serverId, catalog, undefined, undefined, 'plan');
+    const isHidden = (t: PlannerTarget): boolean => isHiddenTarget(catalog, t);
+    const onRemove = (i: number): void => setTargets(targets.filter((_, j) => j !== i));
     return (
         <div className="space-y-4">
             <EmptyState copy={SPOILERS_EMPTY_COPY} />
-            {s.targets.length > 0 && <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} isHidden={s.isHidden} />}
+            {targets.length > 0 && <ShoppingList targets={targets} plan={undefined} names={names} onRemove={onRemove} isHidden={isHidden} />}
         </div>
     );
 }
 
-/** The empty state's copy, or null when there is something to show (ROK-1948: protected-and-empty has its own). */
-function emptyCopy(c: ValheimRecipeCatalogResponse): string | null {
-    if (c.capturedAt !== null && c.entries.length === 0 && c.spoilers === 'protected') return SPOILERS_EMPTY_COPY;
-    return c.capturedAt === null || c.entries.length === 0 ? PLANNER_NO_SET_COPY : null;
+/** Why the Planner has nothing to craft (ROK-1948: protected-and-empty is its own state), or null. */
+type PlannerEmpty = { kind: 'protected' } | { kind: 'empty'; copy: string } | null;
+
+function plannerEmpty(c: ValheimRecipeCatalogResponse): PlannerEmpty {
+    if (c.capturedAt !== null && c.entries.length === 0 && c.spoilers === 'protected') return { kind: 'protected' };
+    return c.capturedAt === null || c.entries.length === 0 ? { kind: 'empty', copy: PLANNER_NO_SET_COPY } : null;
 }
 
 export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Element {
@@ -90,9 +99,9 @@ export function ValheimPlannerTab({ serverId }: { serverId: number }): JSX.Eleme
                 Couldn’t load recipes. Try again in a moment.
             </p>
         );
-    const empty = emptyCopy(q.data);
-    if (empty === SPOILERS_EMPTY_COPY) return <ProtectedEmpty key={serverId} serverId={serverId} catalog={q.data} />;
-    if (empty !== null) return <EmptyState copy={empty} />;
+    const empty = plannerEmpty(q.data);
+    if (empty?.kind === 'protected') return <ProtectedEmpty key={serverId} serverId={serverId} catalog={q.data} />;
+    if (empty?.kind === 'empty') return <EmptyState copy={empty.copy} />;
     // Keyed by server: moving between two cached hubs remounts the body, so
     // one server's list never shows (or saves) under another's.
     return <PlannerBody key={serverId} serverId={serverId} catalog={q.data} />;

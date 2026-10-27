@@ -61,6 +61,7 @@ const HUB: schema.GuildSelect = {
   region: 'community',
   name: 'Crew',
   nameKey: 'crew',
+  nameOverridden: false,
   realmSlug: null,
   guildSlug: null,
   faction: null,
