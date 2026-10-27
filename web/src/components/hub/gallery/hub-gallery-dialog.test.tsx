@@ -5,7 +5,8 @@ import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
 import { HUB_MEDIA_KINDS, type HubMediaItem, type HubMediaListResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import type { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { HUB_MEDIA_LIST_URL, hubMediaFileHandler, hubMediaItem } from '../../../test/mocks/hub-media-handlers';
 import { HubGalleryDialog } from './hub-gallery-dialog';
 import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
@@ -47,7 +48,7 @@ function Harness({ canEdit = false }: { canEdit?: boolean }): JSX.Element | null
 /** ROK-1965: Remove rights ride on each item (`canRemove`, computed server-side per viewer). */
 const removable = (items: HubMediaItem[]): HubMediaItem[] => items.map((i) => ({ ...i, canRemove: true }));
 
-function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: boolean } = {}) {
+function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: boolean } = {}, queryClient?: QueryClient) {
     const trigger = document.createElement('button');
     trigger.textContent = 'tile';
     document.body.appendChild(trigger);
@@ -55,7 +56,7 @@ function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: bool
     useHubGalleryStore.setState({
         filters: {}, request: { guildId: 5, mode: 'viewer', filter: 'all', index: 0, returnFocus: trigger, ...over },
     });
-    renderWithProviders(<Harness {...roles} />);
+    renderWithProviders(<Harness {...roles} />, queryClient === undefined ? {} : { queryClient });
     return trigger;
 }
 
@@ -153,6 +154,18 @@ describe('HubGalleryDialog — viewer', () => {
         open({ index: 0, mediaId: 28 });
         expect(await caption()).toMatch(who(28));
         expect(counter()).toBe('28 of 30');
+    });
+
+    it('a fresh upload opened from the strip resolves against the refetched list, not a stale cached one (ROK-1965)', async () => {
+        // The dialog's pages query is cached from an earlier open: page 1 of the OLD list, more to load.
+        const queryClient = createTestQueryClient();
+        const stale: HubMediaListResponse = { items: ITEMS.slice(0, 24), nextCursor: '24', total: 30, kinds: ['death', 'screenshot', 'image'] };
+        queryClient.setQueryData(['hub-media', 5, 'pages', 'all'], { pages: [stale], pageParams: [null] });
+        await queryClient.invalidateQueries({ queryKey: ['hub-media', 5] });
+        server.use(pagedHandler([hubMediaItem(99, 'upload'), ...ITEMS]));
+        open({ index: 0, mediaId: 99 }, {}, queryClient);
+        await waitFor(() => expect(counter()).toBe('1 of 31'));
+        expect(await caption()).toMatch(who(99));
     });
 
     it('an id in no page falls back to the requested index once every page is loaded', async () => {

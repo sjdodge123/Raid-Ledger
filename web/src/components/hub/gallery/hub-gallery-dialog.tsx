@@ -64,17 +64,20 @@ const HUB_GALLERY_SEEK_MAX_PAGES = 10;
  * ROK-1941: a requested id that is not loaded yet (a Deaths thumb whose picture
  * sits past the first page) pages in — once per loaded length — until it is
  * found, the list ends, or the page cap is hit. True while still looking.
+ * ROK-1965: a cached list being refetched (an upload invalidated it) is not
+ * searched or paged — paging would cancel the refetch and append to the stale
+ * pages — so the new picture's id resolves in the fresh list.
  */
 function useSeekAnchor(pages: HubGalleryPages, anchorId: number | null, found: boolean): boolean {
     const asked = useRef(-1);
     const pageCap = HUB_GALLERY_SEEK_MAX_PAGES * HUB_GALLERY_PAGE_SIZE;
-    const seeking = anchorId !== null && !found && (pages.loading || (pages.hasMore && pages.items.length < pageCap));
-    const { loading, loadingMore, loadMore, items } = pages;
+    const { loading, refreshing, loadingMore, loadMore, items } = pages;
+    const seeking = anchorId !== null && !found && (loading || refreshing || (pages.hasMore && items.length < pageCap));
     useEffect(() => {
-        if (!seeking || loading || loadingMore || asked.current === items.length) return;
+        if (!seeking || loading || refreshing || loadingMore || asked.current === items.length) return;
         asked.current = items.length;
         void loadMore();
-    }, [seeking, loading, loadingMore, loadMore, items.length]);
+    }, [seeking, loading, refreshing, loadingMore, loadMore, items.length]);
     return seeking;
 }
 
