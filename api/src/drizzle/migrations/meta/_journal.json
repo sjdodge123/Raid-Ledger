@@ -1828,6 +1828,20 @@
       "when": 1793044708294,
       "tag": "0261_backfill_guild_source_name",
       "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1793065605760,
+      "tag": "0262_companion_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1793065613804,
+      "tag": "0263_companion_blob_reservations",
+      "breakpoints": true
     }
   ]
 }
