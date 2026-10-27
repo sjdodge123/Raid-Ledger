@@ -175,10 +175,30 @@ describe('handleDailyBackup — cron outcome (D9)', () => {
     expect(events).toEqual([
       'pg_dump',
       'archive',
+      'rotate-uploads', // pre-prune to 6 found nothing → no retry
       'rotate-daily',
       'rotate-uploads',
     ]);
     expect(rotateMigrationDir).toHaveBeenCalled();
+  });
+});
+
+describe('insufficient space with 7 archives present (Codex P2)', () => {
+  it('prunes to 6 and retries once, so the run succeeds', async () => {
+    mockArchive
+      .mockResolvedValueOnce({ status: 'failed', reason: 'insufficient-space' })
+      .mockResolvedValueOnce({ status: 'written', path: '/x.uploads.tar' });
+    jest.mocked(rotateUploadsArchives).mockReturnValueOnce(1);
+    await expect(service.handleDailyBackup()).resolves.toBeUndefined();
+    expect(mockArchive).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(rotateUploadsArchives).mock.calls[0]?.[1]).toBe(6);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not retry on a non-space failure', async () => {
+    archiveReturns({ status: 'failed', reason: 'tar-failed', detail: 'x' });
+    await expect(service.handleDailyBackup()).rejects.toThrow(/tar-failed/);
+    expect(mockArchive).toHaveBeenCalledTimes(1);
   });
 });
 

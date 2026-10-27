@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { rotateUploadsArchives } from './backup-rotation.helpers';
 import {
   archiveUploads,
   resolveUploadsDir,
@@ -20,18 +21,53 @@ export interface BackupLogger {
   error(message: string): void;
 }
 
-/** Write `daily/<dump ts>.uploads.tar`; logs the outcome (failed → error), never throws. */
-export async function archiveUploadsForDump(
+function archiveOnce(
   dailyDir: string,
   dumpFilename: string,
   logger: BackupLogger,
 ): Promise<UploadsArchiveResult> {
-  const archive = await archiveUploads({
+  return archiveUploads({
     uploadsDir: resolveUploadsDir(),
     outPath: path.join(dailyDir, uploadsArchiveName(dumpFilename)),
     dailyDir,
     warn: (m) => logger.warn(m),
   });
+}
+
+/**
+ * Codex P2: with `keep` archives already present and no room for another,
+ * prune to `keep - 1` — the oldest, which this run's keep-`keep` rotation
+ * drops anyway once the new archive lands — and retry once. Nothing pruned
+ * means nothing to gain: the first failure stands.
+ */
+async function retryAfterPrune(
+  dailyDir: string,
+  dumpFilename: string,
+  logger: BackupLogger,
+  keep: number,
+): Promise<UploadsArchiveResult | null> {
+  const removed = rotateUploadsArchives(dailyDir, keep - 1, (m) =>
+    logger.warn(m),
+  );
+  if (removed === 0) return null;
+  logger.warn(
+    `uploads archive: no room; pruned ${removed} oldest archive(s) to keep ${keep - 1}, retrying`,
+  );
+  return archiveOnce(dailyDir, dumpFilename, logger);
+}
+
+/** Write `daily/<dump ts>.uploads.tar`; logs the outcome (failed → error), never throws. */
+export async function archiveUploadsForDump(
+  dailyDir: string,
+  dumpFilename: string,
+  logger: BackupLogger,
+  keep: number,
+): Promise<UploadsArchiveResult> {
+  let archive = await archiveOnce(dailyDir, dumpFilename, logger);
+  if (archive.status === 'failed' && archive.reason === 'insufficient-space') {
+    archive =
+      (await retryAfterPrune(dailyDir, dumpFilename, logger, keep)) ?? archive;
+  }
   const failure = uploadsArchiveFailure(archive);
   if (failure) logger.error(failure);
   else if (archive.status === 'written')

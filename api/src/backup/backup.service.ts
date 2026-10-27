@@ -151,6 +151,7 @@ export class BackupService implements OnModuleInit {
       this.dailyDir,
       filename,
       this.logger,
+      UPLOADS_ARCHIVE_KEEP,
     );
     return { dumpPath, archive };
   }
