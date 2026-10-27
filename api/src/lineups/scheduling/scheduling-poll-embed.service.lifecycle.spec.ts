@@ -340,6 +340,7 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       { getClientUrl: jest.fn().mockResolvedValue(CLIENT_URL) } as never,
       { emitLifecycleEvent: jest.fn().mockResolvedValue(undefined) } as never,
       { enqueue: jest.fn().mockResolvedValue(undefined) } as never,
+      { notifyEventCreated: jest.fn() } as never,
     );
 
     await expect(

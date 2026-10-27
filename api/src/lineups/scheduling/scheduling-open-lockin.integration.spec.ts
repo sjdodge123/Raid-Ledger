@@ -88,9 +88,11 @@ describe('ROK-2024 open lock-in (integration)', () => {
         .returning(),
       'slot',
     );
-    await testApp.db.insert(schema.communityLineupScheduleVotes).values(
-      votes.map(([userId, stance]) => ({ slotId: slot.id, userId, stance })),
-    );
+    await testApp.db
+      .insert(schema.communityLineupScheduleVotes)
+      .values(
+        votes.map(([userId, stance]) => ({ slotId: slot.id, userId, stance })),
+      );
     return slot.id;
   }
 

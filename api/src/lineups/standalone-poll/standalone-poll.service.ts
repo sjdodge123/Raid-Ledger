@@ -39,19 +39,9 @@ import {
   assertCanRescheduleEvent,
   assertCanCompletePoll,
 } from './standalone-poll-auth.helpers';
-import {
-  findScheduleSlots,
-  findScheduleVotes,
-} from '../scheduling/scheduling-query.helpers';
-import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
 import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
-import {
-  splitYesVotersBySlot,
-  notifyPollVoters,
-  heartPollGameForVoters,
-} from './standalone-poll-voter.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import {
   assertVisibilityAllowed,
@@ -60,7 +50,8 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
-import { matchHubPayload } from './poll-hub-payload.helpers';
+import { fireLockInFanout } from './standalone-poll-lockin.helpers';
+import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -118,6 +109,7 @@ export class StandalonePollService {
     private readonly eventsService: EventsService,
     @Inject(forwardRef(() => EmbedSyncQueueService))
     private readonly embedSyncQueue: EmbedSyncQueueService,
+    private readonly lineupNotifications: LineupNotificationService,
     @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
@@ -126,8 +118,10 @@ export class StandalonePollService {
     return findActiveStandalonePolls(this.db, caller);
   }
 
-  /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
-   *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
+  /** Mark a poll as completed (match -> scheduled; a standalone lineup ->
+   *  archived, a regular lineup match -> linked to the event — ROK-2024).
+   *  When eventId is provided, auto-signup slot voters and auto-heart the game
+   *  (ROK-1031), then announce EVENT CREATED unless it is a reschedule. */
   async complete(
     matchId: number,
     eventId?: number,
@@ -145,7 +139,7 @@ export class StandalonePollService {
       { id: creatorId ?? -1, isAdmin },
       { eventId, startTime },
     );
-    const result = await completeStandalonePoll(this.db, matchId);
+    const result = await completeStandalonePoll(this.db, matchId, eventId);
     if (result.conflict) {
       throw new ConflictException('This poll has already been completed');
     }
@@ -154,11 +148,24 @@ export class StandalonePollService {
     if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
     // The contract requires `startTime` with `eventId`; only that slot's
     // yes-voters are signed up (ROK-1844), never every yes-voter.
+    // ROK-2024: announce once, after those signups, and never for a
+    // reschedule (`linkedEventId`) — its event was announced when created.
     if (result.ok && eventId && startTime) {
-      this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
+      fireLockInFanout(
+        {
+          db: this.db,
+          signupsService: this.signupsService,
+          settingsService: this.settingsService,
+          notifications: this.notifications,
+          lineupNotifications: this.lineupNotifications,
+          logger: this.logger,
+        },
+        {
+          matchId,
+          eventId,
+          startTime,
+          creatorId,
+          announce: !result.linkedEventId,
         },
       );
     }
@@ -187,48 +194,6 @@ export class StandalonePollService {
     // embed deterministically. Symmetric to the poll-start RESCHEDULING
     // teardown's updateEmbedState.
     await this.embedSyncQueue.enqueue(linkedEventId, 'reschedule-poll-lockin');
-  }
-
-  /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
-  private async fireAutoSignup(
-    matchId: number,
-    eventId: number,
-    startTime: string,
-    creatorId?: number,
-  ): Promise<void> {
-    const slots = await findScheduleSlots(this.db, matchId);
-    const slotIds = slots.map((s) => s.id);
-    const allVoters = await findScheduleVotes(this.db, slotIds);
-    // ROK-1617: yes-votes only on both sides of the split — see
-    // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
-    const { selectedVoters, otherVoters } = splitYesVotersBySlot(
-      slots,
-      allVoters,
-      startTime,
-    );
-    const { benchedUserIds } = await autoSignupSlotVoters({
-      eventId,
-      creatorId: creatorId ?? -1,
-      voters: selectedVoters,
-      signupsService: this.signupsService,
-    });
-    // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
-    // name the DMs below announce.
-    const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
-    await notifyPollVoters(
-      {
-        db: this.db,
-        settingsService: this.settingsService,
-        notifications: this.notifications,
-      },
-      selectedVoters,
-      otherVoters,
-      benchedUserIds,
-      startTime,
-      eventId,
-      gameName ?? 'Game Night',
-      await matchHubPayload(this.db, matchId),
-    );
   }
 
   /**
