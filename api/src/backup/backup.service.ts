@@ -26,12 +26,25 @@ import {
   formatBackupTimestamp,
   isSafeBackupFilename,
 } from './backup.helpers';
-import { rotateDailyDir, rotateMigrationDir } from './backup-rotation.helpers';
+import {
+  rotateDailyDir,
+  rotateMigrationDir,
+  rotateUploadsArchives,
+} from './backup-rotation.helpers';
+import {
+  archiveUploads,
+  resolveUploadsDir,
+  uploadsArchiveFailure,
+  uploadsArchiveName,
+  type UploadsArchiveResult,
+} from './backup-uploads.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
 /** ROK-1663: newest pre_migration_*.dump snapshots kept (one is written per boot). */
 const MIGRATION_SNAPSHOT_KEEP = 10;
+/** ROK-2023 (spec D10b): newest daily uploads archives kept. */
+const UPLOADS_ARCHIVE_KEEP = 7;
 const DEFAULT_DB_CONTAINER = 'raid-ledger-db';
 
 // ROK-1279: tables whose ROW DATA is excluded from every dump produced by this
@@ -91,31 +104,67 @@ export class BackupService implements OnModuleInit {
     }
   }
 
-  /** Daily scheduled backup at 2 AM. */
+  /**
+   * Daily scheduled backup at 2 AM. ROK-2023 (spec D9): every rotation runs
+   * even when the uploads archive failed (a full disk must still free up);
+   * only then does a failed archive fail the tracked run.
+   */
   @Cron('10 0 2 * * *', { name: 'BackupService_dailyBackup' })
   async handleDailyBackup(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'BackupService_dailyBackup',
       async () => {
-        await this.createDailyBackup();
+        const { archive } = await this.createDailyBackupWithArchive();
         this.rotateDailyBackups();
         this.rotateMigrationSnapshots();
+        this.rotateUploadsArchives();
+        const failure = uploadsArchiveFailure(archive);
+        if (failure) throw new Error(failure);
       },
     );
   }
 
-  /** Create a daily pg_dump backup. */
+  /**
+   * Create a daily pg_dump backup plus its companion uploads archive. A failed
+   * archive never loses the dump (it is logged; the cron run reports it).
+   */
   async createDailyBackup(): Promise<string> {
+    const { dumpPath } = await this.createDailyBackupWithArchive();
+    return dumpPath;
+  }
+
+  /** Dump FIRST, then archive (spec D3): every dumped row has its file on disk. */
+  private async createDailyBackupWithArchive(): Promise<{
+    dumpPath: string;
+    archive: UploadsArchiveResult;
+  }> {
     const timestamp = formatBackupTimestamp(new Date());
     const filename = `raid_ledger_${timestamp}.dump`;
-    const filepath = path.join(this.dailyDir, filename);
+    const dumpPath = path.join(this.dailyDir, filename);
     this.logger.log(`Starting daily backup: ${filename}`);
-    await this.runPgDump(filepath);
-    const stats = fs.statSync(filepath);
+    await this.runPgDump(dumpPath);
+    const stats = fs.statSync(dumpPath);
     this.logger.log(
       `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
     );
-    return filepath;
+    return { dumpPath, archive: await this.archiveUploadsFor(filename) };
+  }
+
+  /** Write `daily/<dump ts>.uploads.tar`; logs the outcome, never throws. */
+  private async archiveUploadsFor(
+    dumpFilename: string,
+  ): Promise<UploadsArchiveResult> {
+    const archive = await archiveUploads({
+      uploadsDir: resolveUploadsDir(),
+      outPath: path.join(this.dailyDir, uploadsArchiveName(dumpFilename)),
+      dailyDir: this.dailyDir,
+      warn: (m) => this.logger.warn(m),
+    });
+    const failure = uploadsArchiveFailure(archive);
+    if (failure) this.logger.error(failure);
+    else if (archive.status === 'written')
+      this.logger.log(`Uploads archive complete: ${archive.path}`);
+    return archive;
   }
 
   /** Create a pre-migration snapshot. */
@@ -151,6 +200,17 @@ export class BackupService implements OnModuleInit {
     );
     if (removed > 0)
       this.logger.log(`Pruned ${removed} pre-migration snapshot(s)`);
+    return removed;
+  }
+
+  /** Keep the newest UPLOADS_ARCHIVE_KEEP uploads archives (warns, never throws). */
+  rotateUploadsArchives(): number {
+    const removed = rotateUploadsArchives(
+      this.dailyDir,
+      UPLOADS_ARCHIVE_KEEP,
+      (m) => this.logger.warn(m),
+    );
+    if (removed > 0) this.logger.log(`Pruned ${removed} uploads archive(s)`);
     return removed;
   }
 
@@ -199,11 +259,29 @@ export class BackupService implements OnModuleInit {
     return resolved;
   }
 
-  /** Delete a specific backup file. */
+  /** Delete a specific backup file (a daily dump takes its uploads archive with it). */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
     const filepath = this.getBackupFilePath(type, filename);
     fs.unlinkSync(filepath);
     this.logger.log(`Deleted backup: ${type}/${filename}`);
+    if (type === 'daily' && filename.endsWith('.dump'))
+      this.deleteUploadsArchiveOf(filename);
+  }
+
+  /** ROK-2023 (spec D10c): a missing companion is not an error; a failed unlink warns. */
+  private deleteUploadsArchiveOf(dumpFilename: string): void {
+    const archive = path.join(this.dailyDir, uploadsArchiveName(dumpFilename));
+    if (!fs.existsSync(archive)) return;
+    try {
+      fs.unlinkSync(archive);
+      this.logger.log(
+        `Deleted uploads archive: daily/${path.basename(archive)}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Could not delete uploads archive ${archive}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /** Restore the database from a backup file. */

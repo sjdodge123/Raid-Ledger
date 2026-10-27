@@ -19,7 +19,10 @@ import {
   rotateMigrationDir,
   rotateUploadsArchives,
 } from './backup-rotation.helpers';
-import { archiveUploads, type UploadsArchiveResult } from './backup-uploads.helpers';
+import {
+  archiveUploads,
+  type UploadsArchiveResult,
+} from './backup-uploads.helpers';
 
 jest.mock('node:fs');
 jest.mock('../../scripts/run-migrations-with-sentry', () => ({
@@ -111,7 +114,7 @@ describe('createDailyBackup — companion uploads archive (AC1)', () => {
 
     expect(events).toEqual(['pg_dump', 'archive']);
     const ts = DUMP_RE.exec(path.basename(dumpPath))?.[1];
-    expect(ts).toEqual(expect.any(String));
+    if (!ts) throw new Error(`dump name has no timestamp: ${dumpPath}`);
     expect(mockArchive).toHaveBeenCalledWith(
       expect.objectContaining({
         uploadsDir: '/srv/uploads',
@@ -128,7 +131,11 @@ describe('createDailyBackup — companion uploads archive (AC1)', () => {
   });
 
   it('a failed archive keeps the dump and resolves (manual POST unchanged) but logs an error (AC4/AC5)', async () => {
-    archiveReturns({ status: 'failed', reason: 'tar-failed', detail: 'exit 2' });
+    archiveReturns({
+      status: 'failed',
+      reason: 'tar-failed',
+      detail: 'exit 2',
+    });
     const dumpPath = await service.createDailyBackup();
     expect(path.dirname(dumpPath)).toBe(DAILY_DIR);
     expect(mockFs.unlinkSync).not.toHaveBeenCalled();
@@ -141,9 +148,18 @@ describe('createDailyBackup — companion uploads archive (AC1)', () => {
 describe('handleDailyBackup — cron outcome (D9)', () => {
   it('runs every rotation, keeps 7 archives, and succeeds when the archive was written', async () => {
     await expect(service.handleDailyBackup()).resolves.toBeUndefined();
-    expect(events).toEqual(['pg_dump', 'archive', 'rotate-daily', 'rotate-uploads']);
+    expect(events).toEqual([
+      'pg_dump',
+      'archive',
+      'rotate-daily',
+      'rotate-uploads',
+    ]);
     expect(rotateMigrationDir).toHaveBeenCalled();
-    expect(rotateUploadsArchives).toHaveBeenCalledWith(DAILY_DIR, 7, expect.any(Function));
+    expect(rotateUploadsArchives).toHaveBeenCalledWith(
+      DAILY_DIR,
+      7,
+      expect.any(Function),
+    );
   });
 
   it('succeeds when the uploads root is missing (skipped is not a failure, AC3)', async () => {
@@ -156,25 +172,35 @@ describe('handleDailyBackup — cron outcome (D9)', () => {
     await expect(service.handleDailyBackup()).rejects.toThrow(
       /uploads archive failed.*insufficient-space/,
     );
-    expect(events).toEqual(['pg_dump', 'archive', 'rotate-daily', 'rotate-uploads']);
+    expect(events).toEqual([
+      'pg_dump',
+      'archive',
+      'rotate-daily',
+      'rotate-uploads',
+    ]);
     expect(rotateMigrationDir).toHaveBeenCalled();
   });
 });
 
 describe('deleteBackup — companion archive (D10c, AC7)', () => {
   const dump = 'raid_ledger_2026-10-27_020010.dump';
-  const companion = path.join(DAILY_DIR, 'raid_ledger_2026-10-27_020010.uploads.tar');
+  const companion = path.join(
+    DAILY_DIR,
+    'raid_ledger_2026-10-27_020010.uploads.tar',
+  );
 
   it('deletes the dump and its companion archive', () => {
     (mockFs.existsSync as jest.Mock).mockReturnValue(true);
     service.deleteBackup('daily', dump);
-    expect(mockFs.unlinkSync.mock.calls.map((c) => String(c[0])).sort()).toEqual(
-      [path.join(DAILY_DIR, dump), companion].sort(),
-    );
+    expect(
+      mockFs.unlinkSync.mock.calls.map((c) => String(c[0])).sort(),
+    ).toEqual([path.join(DAILY_DIR, dump), companion].sort());
   });
 
   it('deletes a dump that has no companion without error', () => {
-    (mockFs.existsSync as jest.Mock).mockImplementation((p: string) => p !== companion);
+    (mockFs.existsSync as jest.Mock).mockImplementation(
+      (p: string) => p !== companion,
+    );
     expect(() => service.deleteBackup('daily', dump)).not.toThrow();
     expect(mockFs.unlinkSync.mock.calls.map((c) => String(c[0]))).toEqual([
       path.join(DAILY_DIR, dump),

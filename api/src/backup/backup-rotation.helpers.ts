@@ -38,8 +38,25 @@ export function rotateDailyDir(
 // ROK-1663: only the per-boot entrypoint dumps rotate. pre_restore_ and
 // pre_factory-reset_ snapshots share the directory but are operator-triggered
 // safety nets — manual delete only.
-const SNAPSHOT_PREFIX = 'pre_migration_';
-const SNAPSHOT_SUFFIX = '.dump';
+const MIGRATION_SNAPSHOTS: SnapshotPattern = {
+  prefix: 'pre_migration_',
+  suffix: '.dump',
+  label: 'Snapshot rotation',
+};
+
+// ROK-2023: companion uploads archives written next to each daily dump.
+const UPLOADS_ARCHIVES: SnapshotPattern = {
+  prefix: 'raid_ledger_',
+  suffix: '.uploads.tar',
+  label: 'Uploads archive rotation',
+};
+
+interface SnapshotPattern {
+  prefix: string;
+  suffix: string;
+  /** Prefix of every warning, e.g. `Snapshot rotation`. */
+  label: string;
+}
 
 interface Snapshot {
   name: string;
@@ -54,18 +71,22 @@ interface Snapshot {
 const newestFirst = (a: Snapshot, b: Snapshot): number =>
   b.mtimeMs - a.mtimeMs || (a.name < b.name ? 1 : a.name > b.name ? -1 : 0);
 
-/** Regular `pre_migration_*.dump` files in `dir`; symlinks and unstat-able files are skipped. */
-function listSnapshots(dir: string, warn: WarnFn): Snapshot[] {
+/** Regular `<prefix>*<suffix>` files in `dir`; symlinks and unstat-able files are skipped. */
+function listSnapshots(
+  dir: string,
+  pattern: SnapshotPattern,
+  warn: WarnFn,
+): Snapshot[] {
   let names: string[];
   try {
     names = fs.readdirSync(dir);
   } catch (err) {
-    warn(`Snapshot rotation: cannot read ${dir}: ${errMessage(err)}`);
+    warn(`${pattern.label}: cannot read ${dir}: ${errMessage(err)}`);
     return [];
   }
   const snapshots: Snapshot[] = [];
   for (const name of names) {
-    if (!name.startsWith(SNAPSHOT_PREFIX) || !name.endsWith(SNAPSHOT_SUFFIX))
+    if (!name.startsWith(pattern.prefix) || !name.endsWith(pattern.suffix))
       continue;
     const filepath = path.join(dir, name);
     try {
@@ -73,19 +94,20 @@ function listSnapshots(dir: string, warn: WarnFn): Snapshot[] {
       if (stats.isFile())
         snapshots.push({ name, filepath, mtimeMs: stats.mtime.getTime() });
     } catch (err) {
-      warn(`Snapshot rotation: cannot stat ${name}: ${errMessage(err)}`);
+      warn(`${pattern.label}: cannot stat ${name}: ${errMessage(err)}`);
     }
   }
   return snapshots;
 }
 
-/** Keep the newest `keep` (min 1) pre-migration snapshots in `dir`; unlink the rest. */
-export function rotateMigrationDir(
+/** Keep the newest `keep` (min 1) files matching `pattern` in `dir`; unlink the rest. */
+function keepNewest(
   dir: string,
+  pattern: SnapshotPattern,
   keep: number,
   warn: WarnFn,
 ): number {
-  const stale = listSnapshots(dir, warn)
+  const stale = listSnapshots(dir, pattern, warn)
     .sort(newestFirst)
     .slice(Math.max(1, keep));
   let removed = 0;
@@ -94,8 +116,29 @@ export function rotateMigrationDir(
       fs.unlinkSync(filepath);
       removed++;
     } catch (err) {
-      warn(`Snapshot rotation: cannot remove ${name}: ${errMessage(err)}`);
+      warn(`${pattern.label}: cannot remove ${name}: ${errMessage(err)}`);
     }
   }
   return removed;
+}
+
+/** Keep the newest `keep` (min 1) pre-migration snapshots in `dir`; unlink the rest. */
+export function rotateMigrationDir(
+  dir: string,
+  keep: number,
+  warn: WarnFn,
+): number {
+  return keepNewest(dir, MIGRATION_SNAPSHOTS, keep, warn);
+}
+
+/**
+ * ROK-2023 (spec D10b): keep the newest `keep` (min 1) `raid_ledger_*.uploads.tar`
+ * archives in the daily dir. Dumps are left to `rotateDailyDir`'s 30-day age-out.
+ */
+export function rotateUploadsArchives(
+  dir: string,
+  keep: number,
+  warn: WarnFn,
+): number {
+  return keepNewest(dir, UPLOADS_ARCHIVES, keep, warn);
 }

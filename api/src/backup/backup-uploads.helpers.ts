@@ -192,3 +192,12 @@ export async function archiveUploads(
   }
   return preflightSpace(input) ?? writeArchive(input);
 }
+
+/** One-line description of a failed archive for logs and the cron error, else null. */
+export function uploadsArchiveFailure(
+  result: UploadsArchiveResult,
+): string | null {
+  if (result.status !== 'failed') return null;
+  const detail = 'detail' in result ? `: ${result.detail}` : '';
+  return `uploads archive failed (${result.reason}${detail})`;
+}

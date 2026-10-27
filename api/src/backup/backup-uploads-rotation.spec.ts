@@ -98,7 +98,10 @@ describe('rotateUploadsArchives', () => {
     touch('pre_migration_2026-10-02_020000.dump', 2);
     expect(rotateMigrationDir(dir, 1, jest.fn())).toBe(1);
     expect(remaining()).toEqual(
-      [...[1, 2, 3].map(archive), 'pre_migration_2026-10-02_020000.dump'].sort(),
+      [
+        ...[1, 2, 3].map(archive),
+        'pre_migration_2026-10-02_020000.dump',
+      ].sort(),
     );
   });
 });
