@@ -63,7 +63,7 @@ export class TestWorld {
             apiPost(token, '/admin/test/reset-lineups', {
                 titlePrefix: this.prefix,
             }).catch(() => {}),
-            apiPost(token, '/admin/test/reset-scheduled-events', {
+            apiPost(token, '/admin/test/reset-events', {
                 titlePrefix: this.prefix,
             }).catch(() => {}),
         ]);
