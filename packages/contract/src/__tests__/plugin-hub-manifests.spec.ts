@@ -50,6 +50,7 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
   it('puts the Gallery under core and the core band as bare keys', () => {
     expect(widgetIds(CORE_PLUGIN_ID)).toEqual([
       'gm-post', 'discord', 'schedule', 'events', 'attendance', 'gallery', 'session-note',
+      'steam-achievements', 'steam-playtime',
     ]);
     const core = must(hubManifestFor(CORE_PLUGIN_ID), 'core');
     const bare = core.widgets.filter((w) => w.layoutKey === 'bare');

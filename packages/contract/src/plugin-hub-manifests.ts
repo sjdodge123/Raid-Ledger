@@ -30,6 +30,8 @@ const core = {
     { id: 'attendance', title: 'Attendance leaderboard', description: 'Who shows up most.', layoutKey: 'bare' },
     { id: 'gallery', title: 'Gallery', description: 'Recent pictures from this hub — death posts and screenshots.', layoutKey: 'plugin' },
     { id: 'session-note', title: 'Before next session', description: 'A shared note and checklist for the next session.', layoutKey: 'plugin' },
+    { id: 'steam-achievements', title: 'Achievement race', description: 'Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.', layoutKey: 'plugin' },
+    { id: 'steam-playtime', title: 'Playtime', description: 'Lifetime Steam hours per member.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'overview', label: 'Overview' },
@@ -41,6 +43,7 @@ const core = {
   behaviours: [
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
+    { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
   ],
   setup: CORE_SETUP,
 } satisfies PluginHubManifest;
@@ -82,6 +85,13 @@ const blizzard = {
   widgets: [
     { id: 'role-composition', title: 'Role composition', layoutKey: 'module' },
     { id: 'members-summary', title: 'Members summary', layoutKey: 'module' },
+    // WoW: Forever guild hub widgets (ROK-1905). Ids are saved layout keys
+    // (`plugin:blizzard:<id>`) — never rename them.
+    { id: 'forever-class-breakdown', title: 'Class breakdown', description: 'How many members play each class.', layoutKey: 'plugin' },
+    { id: 'forever-level-progression', title: 'Level progression', description: 'Where the roster’s levels sit and who is at cap.', layoutKey: 'plugin' },
+    { id: 'forever-roles', title: 'Role breakdown', description: 'Tanks, healers and DPS ready for dungeons and raids.', layoutKey: 'plugin' },
+    { id: 'forever-dungeon-quests', title: 'Dungeon quests', description: 'Who has the quests for upcoming dungeon runs.', layoutKey: 'plugin' },
+    { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
@@ -92,6 +102,9 @@ const blizzard = {
     { id: 'wow_guild', kind: 'hub-kind', label: 'World of Warcraft guild hubs' },
     { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
   ],
+  // Hub-widget game scope only (web guard W4) — the api manifest's own
+  // `gameSlugs` (every WoW variant) is separate and unchanged.
+  gameSlugs: ['world-of-warcraft-forever'],
   setup: BLIZZARD_SETUP,
 } satisfies PluginHubManifest;
 

@@ -95,11 +95,20 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
     faction: row.faction,
     memberCount: row.memberCount,
     lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,
-    // ROK-1950 D8: only server hubs have a source name to override.
-    ...(row.kind === 'game_server'
-      ? { nameOverridden: row.nameOverridden }
-      : {}),
+    ...kindNameFields(row),
   };
+}
+
+/**
+ * ROK-1950 D8 / ROK-2015 D10: the rename fields a kind sends — server and
+ * WoW hubs have a source name to override; WoW also names it (`inGameName`).
+ */
+function kindNameFields(
+  row: schema.GuildSelect,
+): Pick<GuildSummary, 'nameOverridden' | 'inGameName'> {
+  if (row.kind === 'game_server') return { nameOverridden: row.nameOverridden };
+  if (row.kind !== 'wow_guild') return {};
+  return { nameOverridden: row.nameOverridden, inGameName: row.sourceName };
 }
 
 /**
