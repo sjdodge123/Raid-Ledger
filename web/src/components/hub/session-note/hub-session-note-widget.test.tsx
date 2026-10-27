@@ -114,7 +114,8 @@ describe('HubSessionNoteWidget — states (T-W1, T-W2)', () => {
     it('says "Clears after the next event" for an armed note with no pinned event (D5b)', async () => {
         server.use(sessionNoteGetHandler(buildSessionNoteResponse(buildSessionNote({ clearAfterPending: true }))));
         renderWithProviders(<Card />);
-        expect((await screen.findByTestId('session-note-clear-after')).textContent).toBe('Clears after the next event');
+        expect(await screen.findByText(/^Edited by Mira · /)).toBeTruthy();
+        expect(screen.queryByTestId('session-note-clear-after')?.textContent ?? 'no clear-after line').toBe('Clears after the next event');
     });
 
     it('shows no clear-after line for a note that is neither pinned nor armed', async () => {
