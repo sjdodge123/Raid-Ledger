@@ -27,7 +27,7 @@ export function useDungeonQuestsVisible({ page, raids }: HubWidgetCtx): boolean 
 /** Add the Dungeon quests widget to the WoW plugin. */
 export function registerDungeonQuestsWidget(plugin: PluginHandle): void {
     plugin.registerHubWidget({
-        id: 'dungeon-quests',
+        id: 'forever-dungeon-quests',
         title: 'Dungeon quests',
         description: 'Who has the quests for upcoming dungeon runs.',
         games: [WOW_FOREVER_GAME_SLUG],
