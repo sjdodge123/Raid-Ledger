@@ -135,12 +135,7 @@ export class DemoTestGuildController {
     const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
     const raids = await this.seedRaids(ctx, users);
-    const content = input.withContent
-      ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
-      : null;
-    const lockouts = input.withLockouts
-      ? await this.seedLockouts(users, now)
-      : null;
+    const extras = await this.seedOptional(input, ctx, users);
     return {
       guildId,
       gameId,
@@ -150,6 +145,24 @@ export class DemoTestGuildController {
       users,
       unlinkedMemberIds: unlinked,
       raids,
+      ...extras,
+    };
+  }
+
+  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914). */
+  private async seedOptional(
+    input: { withContent: boolean; withLockouts: boolean },
+    ctx: RosterCtx,
+    users: Record<SeedGuildRole, SeedGuildUser>,
+  ): Promise<Pick<SeedGuildResponse, 'content' | 'lockouts'>> {
+    const gm = users.gm.userId;
+    const content = input.withContent
+      ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
+      : null;
+    const lockouts = input.withLockouts
+      ? await this.seedLockouts(users, ctx.now)
+      : null;
+    return {
       ...(content ? { content } : {}),
       ...(lockouts ? { lockouts } : {}),
     };
@@ -160,10 +173,12 @@ export class DemoTestGuildController {
     users: Record<SeedGuildRole, SeedGuildUser>,
     now: Date,
   ): Promise<SeededGuildLockouts> {
-    const owners = (['gm', 'officer', 'member'] as const).map((owner) => ({
-      owner,
-      characterId: defined(users[owner].characterId, `${owner} character`),
-    }));
+    const owners = (['gm', 'officer', 'member'] as const).map((owner) => {
+      const characterId = users[owner].characterId;
+      if (characterId === null)
+        throw new Error(`seeded ${owner} has no character`);
+      return { owner, characterId };
+    });
     return seedGuildLockouts(this.db, owners, now);
   }
 

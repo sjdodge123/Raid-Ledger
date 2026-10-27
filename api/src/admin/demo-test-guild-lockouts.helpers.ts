@@ -16,7 +16,10 @@
  */
 import { createHash } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { AddonCharSnapshotData, AddonLockout } from '@raid-ledger/contract';
+import type {
+  AddonCharSnapshotData,
+  AddonLockout,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;

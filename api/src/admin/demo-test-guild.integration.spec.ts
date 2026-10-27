@@ -396,8 +396,9 @@ describe('POST /admin/test/wow/seed-guild — withLockouts (ROK-1914)', () => {
   it('without the flag: no lockouts key and no snapshots', async () => {
     const out = await seedGuild('Unsaved Keepers');
     expect(out).not.toHaveProperty('lockouts');
-    const ids = [out.users.gm.characterId, out.users.member.characterId]
-      .filter((id): id is string => id !== null);
+    const ids = [out.users.gm.characterId, out.users.member.characterId].filter(
+      (id): id is string => id !== null,
+    );
     const rows = await testApp.db
       .select({ id: schema.characterAddonSnapshots.id })
       .from(schema.characterAddonSnapshots)
