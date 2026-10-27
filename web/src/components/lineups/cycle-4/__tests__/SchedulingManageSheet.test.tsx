@@ -95,7 +95,7 @@ describe('SchedulingManageButton (ROK-1584)', () => {
         expect(screen.queryByRole('button', { name: 'Cancel Poll' })).toBeNull();
     });
 
-    it('opens a "Manage poll" sheet with the three action rows', async () => {
+    it('opens a "Manage poll" sheet with the four action rows', async () => {
         renderManage();
         await userEvent.click(screen.getByTestId('scheduling-manage'));
 
@@ -105,6 +105,7 @@ describe('SchedulingManageButton (ROK-1584)', () => {
         );
         const rows = [
             screen.getByRole('button', { name: 'Add Participants' }),
+            screen.getByRole('button', { name: 'Remove Participant' }),
             screen.getByRole('button', { name: 'Remind Voters' }),
             screen.getByRole('button', { name: 'Cancel Poll' }),
         ];
@@ -114,7 +115,8 @@ describe('SchedulingManageButton (ROK-1584)', () => {
             }
         }
         expect(SCHEDULING_SHEET_ROW_BASE).toContain('min-h-[52px]');
-        expect(rows[2]?.className).toContain('text-danger');
+        expect(rows[1]?.className).not.toContain('text-danger');
+        expect(rows[3]?.className).toContain('text-danger');
     });
 
     it('sublines the rows with the invite hint and the not-yet-voted count', async () => {
@@ -123,6 +125,9 @@ describe('SchedulingManageButton (ROK-1584)', () => {
         expect(
             screen.getByRole('button', { name: 'Add Participants' }),
         ).toHaveTextContent('invite more people');
+        expect(
+            screen.getByRole('button', { name: 'Remove Participant' }),
+        ).toHaveTextContent('take someone off this poll');
         expect(
             screen.getByRole('button', { name: 'Remind Voters' }),
         ).toHaveTextContent("1 haven't voted");
