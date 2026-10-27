@@ -1,9 +1,12 @@
 /**
  * ROK-1592 (plan L3/L4/L5/L6): the calendar OAuth round-trip state.
  *
- * The state is `signState({uid, provider, n, r, i}, 'calendar-oauth')`:
+ * The state is `signState({uid, provider, n, r, i, t?}, 'calendar-oauth')`:
  * - `i` is the consent intent (ROK-1596 D8; absent = `connect`). It is signed, so
  *   a browser cannot upgrade `connect` to `primary`; an unknown value fails.
+ * - `t` is the optional named return target (ROK-2022; absent = My
+ *   Integrations). An enum, never a URL, so no open redirect; an unknown value
+ *   fails the state like `i`.
  * - `n` is a 16-byte random nonce. It is consumed once at the callback
  *   (`consumeTokenOnce`, L5), so a replayed callback URL fails.
  * - `r` is the ROK-1366 browser binding. The start route mints it with
@@ -19,7 +22,9 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import {
   CalendarOAuthIntentSchema,
+  CalendarOAuthReturnSchema,
   type CalendarOAuthIntent,
+  type CalendarOAuthReturn,
 } from '@raid-ledger/contract';
 import * as singleUseToken from '../../auth/single-use-token.helpers';
 import type * as schema from '../../drizzle/schema';
@@ -39,6 +44,8 @@ export interface MintCalendarOAuthStateInput {
   provider: CalendarProviderKey;
   /** D8 consent intent; defaults to `connect`. */
   intent?: CalendarOAuthIntent;
+  /** ROK-2022: where the callback lands; absent = My Integrations. */
+  returnTarget?: CalendarOAuthReturn | undefined;
   /** Sets the browser-binding cookie and returns its `r`. */
   bindToBrowser: () => string;
   nowMs?: number;
@@ -61,6 +68,20 @@ export interface VerifiedCalendarOAuthState {
   provider: CalendarProviderKey;
   codeVerifier: string;
   intent: CalendarOAuthIntent;
+  /** Present only when the start route signed one in (ROK-2022). */
+  returnTarget?: CalendarOAuthReturn;
+}
+
+type EnumClaims = Pick<VerifiedCalendarOAuthState, 'intent' | 'returnTarget'>;
+
+/** The signed `i` + `t` enums; an unknown value of either → null. */
+function parseEnumClaims(i: unknown, t: unknown): EnumClaims | null {
+  const intent = CalendarOAuthIntentSchema.safeParse(i ?? 'connect');
+  if (!intent.success) return null;
+  if (t === undefined) return { intent: intent.data };
+  const target = CalendarOAuthReturnSchema.safeParse(t);
+  if (!target.success) return null;
+  return { intent: intent.data, returnTarget: target.data };
 }
 
 function pkceKey(): Buffer {
@@ -94,6 +115,7 @@ export function mintCalendarOAuthState(
       n,
       r,
       i: input.intent ?? 'connect',
+      ...(input.returnTarget === undefined ? {} : { t: input.returnTarget }),
     },
     'calendar-oauth',
     input.nowMs === undefined ? {} : { nowMs: input.nowMs },
@@ -129,8 +151,8 @@ export async function verifyCalendarOAuthState(
   if (!claims || claims.provider !== input.provider) return null;
   const { n } = claims;
   if (typeof n !== 'string' || n.length === 0) return null;
-  const intent = CalendarOAuthIntentSchema.safeParse(claims.i ?? 'connect');
-  if (!intent.success) return null;
+  const enums = parseEnumClaims(claims.i, claims.t);
+  if (!enums) return null;
   if (!boundToBrowser(input.assertBoundToBrowser, claims.r)) return null;
   const fresh = await singleUseToken.consumeTokenOnce(
     db,
@@ -141,6 +163,6 @@ export async function verifyCalendarOAuthState(
     uid: claims.uid,
     provider: input.provider,
     codeVerifier: deriveCodeVerifier(n),
-    intent: intent.data,
+    ...enums,
   };
 }

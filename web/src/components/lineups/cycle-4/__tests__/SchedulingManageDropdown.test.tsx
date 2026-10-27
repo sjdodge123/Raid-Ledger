@@ -31,6 +31,18 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     useCancelSchedulePoll: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock('../../../../hooks/use-remove-poll-member', () => ({
+    useRemovePollMember: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock('../../../../hooks/use-lineups', () => ({
+    useLineupParticipants: () => ({
+        isLoading: false,
+        isError: false,
+        data: { participants: [] },
+    }),
+}));
+
 let viewer: { id: number; role: string } = { id: 10, role: 'operator' };
 vi.mock('../../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: viewer }),
@@ -84,7 +96,7 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         expect(screen.queryByTestId('scheduling-manage')).toBeNull();
     });
 
-    it('opens a 232px menu: Add · Remind · separator · Cancel', async () => {
+    it('opens a 232px menu: Add · Remove · Remind · separator · Cancel', async () => {
         renderDropdown();
         await userEvent.click(trigger());
         expect(trigger()).toHaveAttribute('aria-expanded', 'true');
@@ -96,14 +108,16 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         );
         expect(children).toEqual([
             'menuitem:Add Participants',
+            'menuitem:Remove Participant',
             'menuitem:Remind Voters',
             'separator:',
             'menuitem:Cancel Poll',
         ]);
         const items = within(menu()).getAllByRole('menuitem');
         expect(items[0]?.className).toContain('min-h-[40px]');
-        expect(items).toHaveLength(3);
-        expect(items[2]?.className).toContain('text-danger');
+        expect(items).toHaveLength(4);
+        expect(items[1]?.className).not.toContain('text-danger');
+        expect(items[3]?.className).toContain('text-danger');
         // Menu density: no sublines.
         expect(menu()).not.toHaveTextContent('invite more people');
     });
@@ -115,14 +129,14 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         expect(items[0]).toHaveFocus();
         await userEvent.keyboard('{ArrowDown}');
         expect(items[1]).toHaveFocus();
-        await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+        await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
         expect(items[0]).toHaveFocus(); // wraps past the last
         await userEvent.keyboard('{ArrowUp}');
-        expect(items[2]).toHaveFocus(); // wraps before the first
+        expect(items[3]).toHaveFocus(); // wraps before the first
         await userEvent.keyboard('{Home}');
         expect(items[0]).toHaveFocus();
         await userEvent.keyboard('{End}');
-        expect(items[2]).toHaveFocus();
+        expect(items[3]).toHaveFocus();
         await userEvent.keyboard('{Escape}');
         expect(trigger()).toHaveFocus();
     });
@@ -169,6 +183,16 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         );
         expect(menu()).not.toBeVisible();
         expect(screen.getByTestId('add-poll-members-submit')).toBeInTheDocument();
+    });
+
+    it('Remove Participant closes the menu AND opens its modal (ROK-2020)', async () => {
+        renderDropdown();
+        await userEvent.click(trigger());
+        await userEvent.click(
+            within(menu()).getByRole('menuitem', { name: 'Remove Participant' }),
+        );
+        expect(menu()).not.toBeVisible();
+        expect(screen.getByTestId('remove-poll-member-empty')).toBeInTheDocument();
     });
 
     it('Remind Voters shows its in-flight copy', async () => {
