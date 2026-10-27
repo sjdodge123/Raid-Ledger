@@ -262,6 +262,9 @@ export class BackupService implements OnModuleInit {
     type: 'daily' | 'migration',
     filename: string,
   ): Promise<void> {
+    // Only pg_dump files restore; a sibling .uploads.tar must 404 (ROK-2023).
+    if (!filename.endsWith('.dump'))
+      throw new NotFoundException(`Backup file not found: ${type}/${filename}`);
     const filepath = this.getBackupFilePath(type, filename);
     await this.createMigrationSnapshot('restore');
     this.logger.warn(`Starting database restore from: ${type}/${filename}`);
