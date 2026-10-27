@@ -133,7 +133,9 @@ export class ValheimArmoryImportService {
     }
     if (msg.kind === 'map') return this.applyMap(tx, snap, msg);
     if (msg.kind === 'items') return this.applyItems(tx, snap, msg);
-    if (msg.kind === 'containers') return applyContainers(tx, snap, msg);
+    if (msg.kind === 'containers') {
+      return applyContainers(tx, snap, msg, defaultTz);
+    }
     if (msg.kind === 'recipes') return this.applyRecipes(tx, snap, msg);
     if (msg.kind === 'portals') return applyPortals(tx, snap, msg);
     return unsupportedKind(msg);
@@ -211,8 +213,9 @@ async function applyContainers(
   tx: ValheimLinkTx,
   snap: ArmorySnapshot,
   msg: Extract<ValheimLinkMessage, { kind: 'containers' }>,
+  defaultTz: string | null,
 ): Promise<Applied> {
-  return (await importContainers(tx, snap, msg)) ? IMPORTED : STALE;
+  return (await importContainers(tx, snap, msg, defaultTz)) ? IMPORTED : STALE;
 }
 
 /** ROK-1946: a world's portals, latest scan wins (D3); an empty scan still wins. */
