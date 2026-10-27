@@ -26,6 +26,8 @@ import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
 import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
+import { HubSessionNoteController } from './session-note/hub-session-note.controller';
+import { HubSessionNoteService } from './session-note/hub-session-note.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
@@ -56,6 +58,7 @@ import {
     HubNotificationMuteController,
     GuildDiscordController,
     HubPostsController,
+    HubSessionNoteController,
   ],
   providers: [
     GuildAccessService,
@@ -74,6 +77,7 @@ import {
     HubEventTagger,
     HubPostRelayService,
     HubPostsService,
+    HubSessionNoteService,
     CommunityHubKindAdapter,
   ],
   exports: [

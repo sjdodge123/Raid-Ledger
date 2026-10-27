@@ -29,6 +29,7 @@ const core = {
     { id: 'events', title: 'Events', description: 'Upcoming and recent events.', layoutKey: 'bare' },
     { id: 'attendance', title: 'Attendance leaderboard', description: 'Who shows up most.', layoutKey: 'bare' },
     { id: 'gallery', title: 'Gallery', description: 'Pictures from this hub — Discord posts and member uploads.', layoutKey: 'plugin' },
+    { id: 'session-note', title: 'Before next session', description: 'A shared note and checklist for the next session.', layoutKey: 'plugin' },
     { id: 'steam-achievements', title: 'Achievement race', description: 'Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.', layoutKey: 'plugin' },
     { id: 'steam-playtime', title: 'Playtime', description: 'Lifetime Steam hours per member.', layoutKey: 'plugin' },
   ],
