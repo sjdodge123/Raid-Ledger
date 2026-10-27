@@ -14,8 +14,11 @@
  *    `order` lands at the top (Q3).
  * 4. Audience is re-checked here: prefs can only remove or opt in among widgets
  *    the viewer may already see — adding never bypasses audience (AC4).
+ * 0. Before all of these, legacy ids are mapped to their current id
+ *    (`normaliseHubWidgetPrefs`, ROK-1969 D6), so a renamed widget such as the
+ *    Gallery (`plugin:valheim:gallery` → `plugin:core:gallery`) keeps its slot.
  */
-import type { GuildPage, HubWidgetId, HubWidgetPrefs } from '@raid-ledger/contract';
+import { normaliseHubWidgetPrefs, type GuildPage, type HubWidgetId, type HubWidgetPrefs } from '@raid-ledger/contract';
 import { audienceAllows, type HubWidgetAudience } from '../../../plugins/hub-game-widgets';
 
 /** What the resolver (and the arrange list) needs to know about one widget. */
@@ -93,9 +96,10 @@ function placedInOrder<E extends HubLayoutEntry>(sorted: readonly E[], prefs: Hu
  */
 export function resolveHubLayout<E extends HubLayoutEntry>(
     catalog: readonly E[],
-    prefs: HubWidgetPrefs | null,
+    savedPrefs: HubWidgetPrefs | null,
     viewer: Viewer,
 ): ResolvedHubLayout<E> {
+    const prefs = savedPrefs === null ? null : normaliseHubWidgetPrefs(savedPrefs);
     const sorted = byDefaultOrder(catalog.filter((e) => audienceAllows(e.audience, viewer)));
     const arranged = placedInOrder(sorted, prefs).map((entry) => ({ entry, on: placement(entry, prefs).on }));
     return {

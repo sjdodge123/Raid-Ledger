@@ -274,7 +274,8 @@ async function buildFailService(pgError?: Error) {
 async function testEmptyActiveSlugsOnMissingTable() {
   const failService = await buildFailService();
   expect(failService.isActive('anything')).toBe(false);
-  expect(failService.getActiveSlugsSync().size).toBe(0);
+  // ROK-1969 D3: Core stays active even with no plugins table.
+  expect([...failService.getActiveSlugsSync()]).toEqual(['core']);
 }
 
 async function testLogWarningOnMissingTable() {
@@ -311,7 +312,7 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) table missing',
     expect(warn).toHaveBeenCalledWith(
       'plugins table not found — plugin system disabled until migration is applied',
     );
-    expect(failService.getActiveSlugsSync().size).toBe(0);
+    expect([...failService.getActiveSlugsSync()]).toEqual(['core']);
   });
 
   it('should re-throw non-table-missing database errors', async () => {
@@ -368,7 +369,11 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) error handling'
     expect(service.isActive('plugin-a')).toBe(true);
     expect(service.isActive('plugin-b')).toBe(true);
     expect(service.isActive('plugin-c')).toBe(false);
-    expect(service.getActiveSlugsSync().size).toBe(2);
+    expect([...service.getActiveSlugsSync()].sort()).toEqual([
+      'core',
+      'plugin-a',
+      'plugin-b',
+    ]);
   });
 });
 

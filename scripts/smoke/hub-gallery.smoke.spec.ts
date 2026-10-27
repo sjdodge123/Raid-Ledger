@@ -48,7 +48,7 @@ async function seed(testInfo: TestInfo): Promise<{ f: Fixture; total: number; de
   return { f, total: all.total, deaths: deaths.total };
 }
 
-const card = (page: Page): Locator => page.locator("#hub-widget-valheim-gallery");
+const card = (page: Page): Locator => page.locator("#hub-widget-core-gallery");
 const dialog = (page: Page): Locator => page.getByRole("dialog", { name: "Gallery" });
 const viewer = (page: Page): Locator => page.getByTestId("hub-gallery-viewer");
 

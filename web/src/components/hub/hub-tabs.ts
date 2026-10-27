@@ -28,8 +28,8 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
     return ctx.page.viewer.role !== 'visitor';
 }
 
-/** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. */
-const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
+/** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. Declared under `core` (ROK-1969). */
+export const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
 
 /**
  * The module band: the kind module's own tabs plus every plugin's game tabs

@@ -469,8 +469,8 @@ describe('PluginRegistryService — ensureInstalled & isActive', () => {
   });
 
   describe('getActiveSlugsSync()', () => {
-    it('should return empty set initially', () => {
-      expect(service.getActiveSlugsSync().size).toBe(0);
+    it('holds only the built-in Core plugin initially (ROK-1969 D3)', () => {
+      expect([...service.getActiveSlugsSync()]).toEqual(['core']);
     });
   });
 });

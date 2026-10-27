@@ -10,9 +10,10 @@ import { addHubGameTab, hubGameTabs } from '../../hub-game-tabs';
 
 /**
  * @deprecated Use `PluginHandle.registerHubGameTab([gameSlug], tab)`. Adds a tab
- * to hubs of one game, visible while `pluginSlug` (default: the game slug) is active.
+ * to hubs of one game, visible while `pluginSlug` is active. The owner is required
+ * (ROK-1969 D4) — it used to default to the game slug, i.e. no real plugin.
  */
-export function registerServerHubGameTab(gameSlug: string, tab: HubTab, pluginSlug: string = gameSlug): void {
+export function registerServerHubGameTab(gameSlug: string, tab: HubTab, pluginSlug: string): void {
     addHubGameTab(pluginSlug, [gameSlug], tab);
 }
 

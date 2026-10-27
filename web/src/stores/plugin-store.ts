@@ -1,6 +1,16 @@
 import { create } from 'zustand';
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
+
+/**
+ * ROK-1969 D3 — whether `slug` is active in `active`. The built-in Core plugin is
+ * always on, even before the api's list arrives, so nothing core waits on hydration.
+ */
+export function isSlugActive(active: ReadonlySet<string>, slug: string): boolean {
+    return slug === CORE_PLUGIN_ID || active.has(slug);
+}
 
 interface PluginState {
+    /** Active plugin slugs; always includes the built-in `core` (ROK-1969 D3). */
     activeSlugs: Set<string>;
     initialized: boolean;
     /**
@@ -27,12 +37,12 @@ interface PluginState {
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
-    activeSlugs: new Set<string>(),
+    activeSlugs: new Set<string>([CORE_PLUGIN_ID]),
     initialized: false,
     settled: false,
 
     setActiveSlugs(slugs: string[]) {
-        set({ activeSlugs: new Set(slugs), initialized: true, settled: true });
+        set({ activeSlugs: new Set([CORE_PLUGIN_ID, ...slugs]), initialized: true, settled: true });
     },
 
     markSettled() {
@@ -40,6 +50,6 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     },
 
     isPluginActive(slug: string) {
-        return get().activeSlugs.has(slug);
+        return isSlugActive(get().activeSlugs, slug);
     },
 }));

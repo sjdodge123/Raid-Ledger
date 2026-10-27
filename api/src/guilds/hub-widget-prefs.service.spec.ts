@@ -80,6 +80,25 @@ describe('HubWidgetPrefsService.update', () => {
     });
   });
 
+  it('ROK-1969 I4: rewrites the legacy Gallery id before it persists', async () => {
+    const res = await service().update(actor, 7, {
+      order: ['plugin:valheim:gallery', 'raids'],
+      hidden: [],
+      added: [],
+    });
+    const want = {
+      order: ['plugin:core:gallery', 'raids'],
+      hidden: [],
+      added: [],
+      config: {},
+    };
+    expect(res.widgetPrefs).toEqual(want);
+    expect(upsert).toHaveBeenCalledWith(db, 7, {
+      widgetPrefs: want,
+      updatedAt: expect.any(Date),
+    });
+  });
+
   it('Reset stores null (registry default)', async () => {
     const res = await service().update(actor, 7, { reset: true });
     expect(res).toEqual({ widgetPrefs: null });
