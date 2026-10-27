@@ -255,30 +255,6 @@
     }
 }
 
-/* Button */
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.625rem 1.25rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border-radius: 0.5rem;
-    text-decoration: none;
-    transition: all 0.15s ease;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-    color: #fff;
-    border: none;
-}
-
-.btn-primary:hover {
-    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
-    transform: translateY(-1px);
-}
-
 /* ============================================
    Light Theme Overrides (ROK-124)
    ============================================ */
