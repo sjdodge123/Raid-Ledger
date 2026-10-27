@@ -192,6 +192,7 @@ export async function routeEventCreatedIfPrivate(
   eventDate: Date,
   eventId: number | undefined,
   defaultTimezone: string,
+  skipDmUserIds?: ReadonlySet<number>,
 ): Promise<boolean> {
   const visibility = await resolveLineupVisibility(db, lineup);
   if (visibility === null) return true;
@@ -204,6 +205,7 @@ export async function routeEventCreatedIfPrivate(
     eventDate,
     eventId,
     defaultTimezone,
+    skipDmUserIds,
   );
   return true;
 }

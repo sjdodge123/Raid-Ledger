@@ -259,14 +259,59 @@ function eventCreatedBuilder(
     );
 }
 
-/** AC-10: Event-created notification — gates on visibility, then posts. */
+/**
+ * AC-10: Event-created notification — gates on visibility, then posts.
+ * `skipDmUserIds` (ROK-2024): users the open poll lock-in already DM'd
+ * ("Auto-signed up" / "On the bench") get no second, EVENT CREATED, DM. The
+ * channel card still posts; the expired lock-in passes none.
+ */
 export async function orchestrateEventCreated(
   deps: OrchestrationDeps,
   match: MatchInfo,
   eventDate: Date,
   eventId: number | undefined,
   lineupInfo?: Partial<LineupInfo>,
+  skipDmUserIds?: ReadonlySet<number>,
 ): Promise<void> {
+  const { routedPrivate, defaultTimezone } = await routeEventCreatedPrivate(
+    deps,
+    match,
+    eventDate,
+    eventId,
+    lineupInfo,
+    skipDmUserIds,
+  );
+  if (routedPrivate) return;
+  const members = await postEventCreatedCard(deps, match, eventDate, eventId);
+  await fanOutEventCreatedDMs(
+    deps.db,
+    deps.notificationService,
+    deps.dedupService,
+    match,
+    eventDate,
+    eventId,
+    withoutSkipped(members, skipDmUserIds),
+    defaultTimezone,
+  );
+}
+
+/** Drop the users a lock-in already DM'd (ROK-2024); no set = keep all. */
+function withoutSkipped<T extends { userId: number }>(
+  members: T[],
+  skip: ReadonlySet<number> | undefined,
+): T[] {
+  return skip ? members.filter((m) => !skip.has(m.userId)) : members;
+}
+
+/** Resolve the guild tz, then DM invitees instead when the lineup is private. */
+async function routeEventCreatedPrivate(
+  deps: OrchestrationDeps,
+  match: MatchInfo,
+  eventDate: Date,
+  eventId: number | undefined,
+  lineupInfo: Partial<LineupInfo> | undefined,
+  skipDmUserIds: ReadonlySet<number> | undefined,
+) {
   const lineup: LineupInfo = { id: match.lineupId, ...lineupInfo };
   const defaultTimezone =
     (await deps.settingsService.getDefaultTimezone()) ?? 'UTC';
@@ -279,8 +324,18 @@ export async function orchestrateEventCreated(
     eventDate,
     eventId,
     defaultTimezone,
+    skipDmUserIds,
   );
-  if (routedPrivate) return;
+  return { routedPrivate, defaultTimezone };
+}
+
+/** Post the public EVENT CREATED card; returns the match group it read. */
+async function postEventCreatedCard(
+  deps: OrchestrationDeps,
+  match: MatchInfo,
+  eventDate: Date,
+  eventId: number | undefined,
+) {
   // ROK-1872: ctx (+ hub link) before the roster reads, so the card's
   // event-roster lookup stays the last DB read the builder depends on.
   const base = await resolveEmbedCtx(
@@ -303,14 +358,5 @@ export async function orchestrateEventCreated(
     eventCreatedBuilder(match, ctx, eventDate, eventId, card),
     ctx,
   );
-  await fanOutEventCreatedDMs(
-    deps.db,
-    deps.notificationService,
-    deps.dedupService,
-    match,
-    eventDate,
-    eventId,
-    members,
-    defaultTimezone,
-  );
+  return members;
 }

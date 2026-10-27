@@ -209,6 +209,33 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     }
   });
 
+  // ROK-2024: the link is a compare-and-set now — it must still accept a
+  // `suggested` match, which `assertSchedulable` lets this path lock in.
+  it('locks in a match still on `suggested` and links the event', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'suggested' })
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const slotId = at(poll.slotIds, 0);
+    await seedVote(slotId, testApp.seed.adminUser.id);
+
+    const res = await lockIn(poll, slotId, adminToken);
+
+    expect(res.status).toBe(201);
+    const [match] = await testApp.db
+      .select({
+        status: schema.communityLineupMatches.status,
+        linkedEventId: schema.communityLineupMatches.linkedEventId,
+      })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    expect(match).toEqual({
+      status: 'scheduled',
+      linkedEventId: res.body.eventId as number,
+    });
+  });
+
   // ROK-1624 AC3: the EVENT CREATED card's Players list, read against the real
   // event this path just created — a group of 4 where only 2 voted for the
   // locked slot must name exactly those 2, not the group.

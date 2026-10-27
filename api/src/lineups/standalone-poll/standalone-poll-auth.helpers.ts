@@ -19,7 +19,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { assertCallerMayViewPoll } from '../scheduling/scheduling-guard.helpers';
@@ -67,7 +67,7 @@ interface PollContext {
   pollGameId: number;
 }
 
-/** Fetch a standalone match's ownership/linkage context, or null. */
+/** Fetch a poll match's ownership/linkage context, or null. */
 async function fetchPollContext(
   db: Db,
   matchId: number,
@@ -86,12 +86,9 @@ async function fetchPollContext(
       schema.communityLineups,
       eq(schema.communityLineups.id, schema.communityLineupMatches.lineupId),
     )
-    .where(
-      and(
-        eq(schema.communityLineupMatches.id, matchId),
-        sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' = 'true'`,
-      ),
-    )
+    // ROK-2024: a regular lineup match is completed through the same path, so
+    // it gets the same guards — its organiser is the lineup's creator.
+    .where(eq(schema.communityLineupMatches.id, matchId))
     .limit(1);
   return ctx ?? null;
 }

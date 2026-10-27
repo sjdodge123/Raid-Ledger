@@ -3,7 +3,12 @@
  * Extracted from scheduling.service.ts to stay within the 300-line limit.
  */
 import { eq } from 'drizzle-orm';
-import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -168,7 +173,11 @@ export async function createLockedInEvent(
     ...dto,
     schedulingMatchId: matchId,
   });
-  await updateMatchLinkedEvent(db, matchId, event.id);
+  // ROK-2024: an open lock-in may have won since the caller's read — bail
+  // before any signup or announcement (the event just created is orphaned).
+  if (!(await updateMatchLinkedEvent(db, matchId, event.id))) {
+    throw new ConflictException('This poll has already been locked in');
+  }
   // ROK-1617: YES voters only. A member who answered "that time does not work"
   // must not be rostered onto — or auto-hearted for — exactly that time.
   const voters = yesVotesOnly(await findScheduleVotes(db, [slot.id]));

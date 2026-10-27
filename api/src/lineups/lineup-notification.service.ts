@@ -221,12 +221,14 @@ export class LineupNotificationService {
     await orchestrateSchedulingOpen(this.orchestrationDeps, match, lineupInfo);
   }
 
-  /** AC-10: Post channel embed + DMs when event is created. */
+  /** AC-10: Post channel embed + DMs when event is created. The DMs skip
+   *  `skipDmUserIds` — users a poll lock-in already DM'd (ROK-2024). */
   async notifyEventCreated(
     match: MatchInfo,
     eventDate: Date,
     eventId?: number,
     lineupInfo?: Partial<LineupInfo>,
+    skipDmUserIds?: ReadonlySet<number>,
   ): Promise<void> {
     await orchestrateEventCreated(
       this.orchestrationDeps,
@@ -234,6 +236,7 @@ export class LineupNotificationService {
       eventDate,
       eventId,
       lineupInfo,
+      skipDmUserIds,
     );
   }
 

@@ -25,6 +25,7 @@ import {
   findDiscordLinkedMembers,
   findDiscordMembersByUserIds,
   findInviteeDiscordMembers,
+  findInviteeRecipients,
   findMatchMemberUsers,
 } from './lineup-notification-targets.helpers';
 import { eq } from 'drizzle-orm';
@@ -323,7 +324,7 @@ export async function fanOutSchedulingDMsToInvitees(
 
 /**
  * Fan-out event-created DMs to invitees + creator for a private lineup
- * (ROK-1115).
+ * (ROK-1115), minus `skipDmUserIds` (ROK-2024).
  */
 export async function fanOutEventCreatedDMsToInvitees(
   db: Db,
@@ -333,12 +334,13 @@ export async function fanOutEventCreatedDMsToInvitees(
   eventDate: Date,
   eventId: number | undefined,
   defaultTimezone: string,
+  skipDmUserIds?: ReadonlySet<number>,
 ): Promise<void> {
-  const members = await findInviteeDiscordMembers(db, match.lineupId);
-  const tzByUser = await resolveUserTimezones(
+  const { members, tzByUser } = await findInviteeRecipients(
     db,
-    members.map((m) => m.userId),
+    match.lineupId,
     defaultTimezone,
+    skipDmUserIds,
   );
   await fanOutInBatches(
     members,
