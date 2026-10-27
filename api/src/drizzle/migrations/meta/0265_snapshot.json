@@ -1,5 +1,5 @@
 {
-  "id": "7775ad30-c0c6-4fac-af7d-f1e85cb7607c",
+  "id": "89c2d95b-c338-4ab5-a7a3-11558c5e71c0",
   "prevId": "e5adacae-07ca-4335-a842-db92407b3bdf",
   "version": "7",
   "dialect": "postgresql",
@@ -12374,263 +12374,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.hub_session_note_items": {
-      "name": "hub_session_note_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "text": {
-          "name": "text",
-          "type": "varchar(200)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "done": {
-          "name": "done",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "done_by": {
-          "name": "done_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "done_at": {
-          "name": "done_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idx_hub_session_note_items_guild_position": {
-          "name": "idx_hub_session_note_items_guild_position",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_session_note_items_done_by": {
-          "name": "idx_hub_session_note_items_done_by",
-          "columns": [
-            {
-              "expression": "done_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_session_note_items_guild_id_hub_session_notes_guild_id_fk": {
-          "name": "hub_session_note_items_guild_id_hub_session_notes_guild_id_fk",
-          "tableFrom": "hub_session_note_items",
-          "tableTo": "hub_session_notes",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "guild_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_session_note_items_done_by_users_id_fk": {
-          "name": "hub_session_note_items_done_by_users_id_fk",
-          "tableFrom": "hub_session_note_items",
-          "tableTo": "users",
-          "columnsFrom": [
-            "done_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_session_note_items_text_length": {
-          "name": "hub_session_note_items_text_length",
-          "value": "char_length(\"hub_session_note_items\".\"text\") BETWEEN 1 AND 200"
-        },
-        "hub_session_note_items_done_pair": {
-          "name": "hub_session_note_items_done_pair",
-          "value": "(\"hub_session_note_items\".\"done\" = false) = (\"hub_session_note_items\".\"done_at\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.hub_session_notes": {
-      "name": "hub_session_notes",
-      "schema": "",
-      "columns": {
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "''"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "clear_after_event_id": {
-          "name": "clear_after_event_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_hub_session_notes_updated_by": {
-          "name": "idx_hub_session_notes_updated_by",
-          "columns": [
-            {
-              "expression": "updated_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_session_notes_clear_after_event": {
-          "name": "idx_hub_session_notes_clear_after_event",
-          "columns": [
-            {
-              "expression": "clear_after_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_session_notes_guild_id_guilds_id_fk": {
-          "name": "hub_session_notes_guild_id_guilds_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_session_notes_updated_by_users_id_fk": {
-          "name": "hub_session_notes_updated_by_users_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "hub_session_notes_clear_after_event_id_events_id_fk": {
-          "name": "hub_session_notes_clear_after_event_id_events_id_fk",
-          "tableFrom": "hub_session_notes",
-          "tableTo": "events",
-          "columnsFrom": [
-            "clear_after_event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "hub_session_notes_body_length": {
-          "name": "hub_session_notes_body_length",
-          "value": "char_length(\"hub_session_notes\".\"body\") <= 4000"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.hub_media": {
       "name": "hub_media",
       "schema": "",
@@ -17207,6 +16950,256 @@
         "valheim_containers_privacy_chk": {
           "name": "valheim_containers_privacy_chk",
           "value": "\"valheim_containers\".\"privacy\" IN ('public','private','group')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_base_item_days": {
+      "name": "valheim_container_base_item_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_key": {
+          "name": "base_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_x": {
+          "name": "base_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_z": {
+          "name": "base_z",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prefab": {
+          "name": "prefab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle": {
+          "name": "vehicle",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_base_item_days_day_fk": {
+          "name": "valheim_container_base_item_days_day_fk",
+          "tableFrom": "valheim_container_base_item_days",
+          "tableTo": "valheim_container_days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_base_item_days_key_uq": {
+          "name": "valheim_container_base_item_days_key_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "day_id",
+            "base_key",
+            "prefab",
+            "vehicle",
+            "owner"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "valheim_container_base_item_days_total_chk": {
+          "name": "valheim_container_base_item_days_total_chk",
+          "value": "\"valheim_container_base_item_days\".\"total\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_days": {
+      "name": "valheim_container_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pelican_server_id": {
+          "name": "pelican_server_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "world_uid": {
+          "name": "world_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "play_date": {
+          "name": "play_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_captured_at": {
+          "name": "first_captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_captured_at": {
+          "name": "last_captured_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_days_pelican_server_id_pelican_servers_id_fk": {
+          "name": "valheim_container_days_pelican_server_id_pelican_servers_id_fk",
+          "tableFrom": "valheim_container_days",
+          "tableTo": "pelican_servers",
+          "columnsFrom": [
+            "pelican_server_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_days_server_world_date_uq": {
+          "name": "valheim_container_days_server_world_date_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "pelican_server_id",
+            "world_uid",
+            "play_date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.valheim_container_item_days": {
+      "name": "valheim_container_item_days",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "day_id": {
+          "name": "day_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prefab": {
+          "name": "prefab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle": {
+          "name": "vehicle",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "valheim_container_item_days_day_fk": {
+          "name": "valheim_container_item_days_day_fk",
+          "tableFrom": "valheim_container_item_days",
+          "tableTo": "valheim_container_days",
+          "columnsFrom": [
+            "day_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "valheim_container_item_days_key_uq": {
+          "name": "valheim_container_item_days_key_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "day_id",
+            "prefab",
+            "vehicle",
+            "owner"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "valheim_container_item_days_total_chk": {
+          "name": "valheim_container_item_days_total_chk",
+          "value": "\"valheim_container_item_days\".\"total\" > 0"
         }
       },
       "isRLSEnabled": false
