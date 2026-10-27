@@ -21,6 +21,7 @@ const LAZY_ONLY = [
     'components/layout/more-drawer-game-time.tsx',
     'pages/scheduling/GameTimeCheckSheet.tsx',
     'components/features/game-time/phone/PhoneWeekCheckStep.tsx',
+    'components/admin/admin-nav-data.tsx',
 ];
 
 function resolveLocal(fromFile: string, spec: string): string | null {
