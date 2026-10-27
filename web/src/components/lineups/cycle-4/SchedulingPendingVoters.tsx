@@ -17,6 +17,17 @@ export interface SchedulingPendingVotersProps {
   members: readonly SchedulingPollMember[];
 }
 
+/** The avatar-group shape of a poll member. */
+function toAvatarMember(m: SchedulingPollMember) {
+  return {
+    userId: m.userId,
+    displayName: m.displayName,
+    avatar: m.avatar,
+    discordId: m.discordId,
+    customAvatarUrl: m.customAvatarUrl,
+  };
+}
+
 /** Outstanding-voter panel — see file-level docstring. */
 export function SchedulingPendingVoters(
   props: SchedulingPendingVotersProps,
@@ -33,16 +44,7 @@ export function SchedulingPendingVoters(
       className="flex items-center gap-2 rounded-lg border border-edge bg-panel/40 px-3 py-2"
     >
       <div aria-hidden={namesInCopy ? true : undefined}>
-        <MemberAvatarGroup
-          members={pending.map((m) => ({
-            userId: m.userId,
-            displayName: m.displayName,
-            avatar: m.avatar,
-            discordId: m.discordId,
-            customAvatarUrl: m.customAvatarUrl,
-          }))}
-          max={5}
-        />
+        <MemberAvatarGroup members={pending.map(toAvatarMember)} max={5} />
       </div>
       <span
         data-testid="scheduling-pending-voters-summary"
