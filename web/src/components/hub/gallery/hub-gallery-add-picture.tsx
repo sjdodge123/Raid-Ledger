@@ -1,0 +1,38 @@
+/**
+ * ROK-1965 — "Add picture" (approved mockup frames A–C, G): a `FilePicker`
+ * (§3, rule: every file upload is one) for one PNG / JPEG / WebP per pick,
+ * which uploads at once — no caption step (ruling 4). While uploading it is
+ * disabled and reads "Uploading… 40%". `compact` shows "Add" (phone header);
+ * the accessible name stays "Add picture" either way.
+ */
+import type { JSX } from 'react';
+import { HUB_MEDIA_UPLOAD_ACCEPT } from '../../../lib/hub-media-upload-copy';
+import { FilePicker } from '../../ui/file-picker';
+import { useHubGalleryUpload } from './use-hub-gallery-upload';
+
+export interface HubGalleryAddPictureProps {
+    guildId: number;
+    compact?: boolean;
+    /** Lands on the hidden native input (`setInputFiles` in Playwright). */
+    inputTestId?: string;
+    className?: string;
+}
+
+export function HubGalleryAddPicture({
+    guildId, compact = false, inputTestId = 'hub-gallery-add-picture-input', className,
+}: HubGalleryAddPictureProps): JSX.Element {
+    const { upload, uploading, progress } = useHubGalleryUpload(guildId);
+    const onFiles = (files: File[]): void => {
+        const first = files[0];
+        if (first !== undefined) upload(first);
+    };
+    return (
+        <FilePicker accept={HUB_MEDIA_UPLOAD_ACCEPT} onFiles={onFiles} disabled={uploading}
+            {...(className !== undefined ? { className } : {})}
+            inputProps={{ 'data-testid': inputTestId }}>
+            {uploading
+                ? <span data-testid="hub-gallery-upload-progress">Uploading… {progress}%</span>
+                : <><span aria-hidden="true">＋</span>{compact ? <>Add<span className="sr-only"> picture</span></> : 'Add picture'}</>}
+        </FilePicker>
+    );
+}
