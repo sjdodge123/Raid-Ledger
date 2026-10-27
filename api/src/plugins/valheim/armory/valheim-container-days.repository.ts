@@ -127,27 +127,36 @@ function idsParam(ids: readonly number[]) {
   return sql`ANY(${`{${ids.join(',')}}`}::bigint[])`;
 }
 
+/** The stored segment columns each sync reads back (D6). */
+const ITEM_COLS = {
+  id: items.id,
+  prefab: items.prefab,
+  vehicle: items.vehicle,
+  owner: items.owner,
+  total: items.total,
+};
+const BASE_COLS = {
+  id: baseItems.id,
+  baseKey: baseItems.baseKey,
+  baseX: baseItems.baseX,
+  baseZ: baseItems.baseZ,
+  prefab: baseItems.prefab,
+  vehicle: baseItems.vehicle,
+  owner: baseItems.owner,
+  total: baseItems.total,
+};
+
 async function syncItems(
   tx: ValheimLinkTx,
   dayId: number,
   desired: ReadonlyMap<string, DayItemTotal>,
 ): Promise<void> {
   const existing = await tx
-    .select({
-      id: items.id,
-      prefab: items.prefab,
-      vehicle: items.vehicle,
-      owner: items.owner,
-      total: items.total,
-    })
+    .select(ITEM_COLS)
     .from(items)
     .where(eq(items.dayId, dayId));
-  const { upserts, deleteIds } = diffDay<DayItemTotal>(
-    existing,
-    desired,
-    itemSegKey,
-  );
-  for (const chunk of chunked(upserts, DAY_ROW_CHUNK)) {
+  const diff = diffDay<DayItemTotal>(existing, desired, itemSegKey);
+  for (const chunk of chunked(diff.upserts, DAY_ROW_CHUNK)) {
     await tx
       .insert(items)
       .values(chunk.map((r) => ({ ...r, dayId })))
@@ -156,8 +165,8 @@ async function syncItems(
         set: { total: sql`excluded.total` },
       });
   }
-  if (deleteIds.length === 0) return;
-  await tx.delete(items).where(sql`${items.id} = ${idsParam(deleteIds)}`);
+  if (diff.deleteIds.length === 0) return;
+  await tx.delete(items).where(sql`${items.id} = ${idsParam(diff.deleteIds)}`);
 }
 
 async function syncBaseItems(
@@ -166,19 +175,7 @@ async function syncBaseItems(
   desired: ReadonlyMap<string, DayBaseItemTotal>,
 ): Promise<void> {
   const B = baseItems;
-  const existing = await tx
-    .select({
-      id: B.id,
-      baseKey: B.baseKey,
-      baseX: B.baseX,
-      baseZ: B.baseZ,
-      prefab: B.prefab,
-      vehicle: B.vehicle,
-      owner: B.owner,
-      total: B.total,
-    })
-    .from(B)
-    .where(eq(B.dayId, dayId));
+  const existing = await tx.select(BASE_COLS).from(B).where(eq(B.dayId, dayId));
   const diff = diffDay<DayBaseItemTotal>(
     existing,
     desired,
