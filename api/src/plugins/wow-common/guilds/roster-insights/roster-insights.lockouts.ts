@@ -2,12 +2,15 @@
  * ROK-1914 (W6 "Who's saved") — pure grouping of the roster's resolved
  * `lockouts` facts by instance save. No I/O; the clock is passed in.
  */
-import type { WowRosterLockoutDto } from '@raid-ledger/contract';
+import {
+  MAX_ROSTER_LOCKOUTS,
+  type WowRosterLockoutDto,
+} from '@raid-ledger/contract';
 import { difficultyLabel } from '../../forever-lockouts.adapter';
 import type { InsightRow } from './roster-insights.types';
 
 /** Contract cap on `lockouts[]`. */
-export const MAX_LOCKOUT_GROUPS = 200;
+export const MAX_LOCKOUT_GROUPS = MAX_ROSTER_LOCKOUTS;
 
 interface Group {
   instanceId: number;
@@ -44,13 +47,7 @@ export function computeLockouts(
       if (l.resetAt * 1000 <= nowMs) continue;
       const key = `${l.instanceId}:${l.difficultyId}`;
       const g = groups.get(key) ?? newGroup(l);
-      g.resetAt = Math.min(g.resetAt, l.resetAt);
-      g.members.push({
-        characterId: row.characterId,
-        name: row.name,
-        killed: l.killed,
-        resetAt: l.resetAt,
-      });
+      addMember(g, { ...row, characterId: row.characterId }, l);
       groups.set(key, g);
     }
   }
@@ -61,6 +58,39 @@ export function computeLockouts(
     )
     .slice(0, MAX_LOCKOUT_GROUPS)
     .map(toDto);
+}
+
+/**
+ * Add one character's save to its group. The addon does not enforce one
+ * entry per instance save, so a repeat for a character already in the group
+ * keeps the higher kill count instead of listing the character twice.
+ */
+function addMember(
+  g: Group,
+  row: { characterId: string; name: string },
+  l: { killed: number; resetAt: number },
+): void {
+  g.resetAt = Math.min(g.resetAt, l.resetAt);
+  const seen = g.members.find((m) => m.characterId === row.characterId);
+  if (seen) {
+    seen.killed = Math.max(seen.killed, l.killed);
+    return;
+  }
+  g.members.push({
+    characterId: row.characterId,
+    name: row.name,
+    killed: l.killed,
+    resetAt: l.resetAt,
+  });
+}
+
+/**
+ * Characters whose addon export reported lockouts — an empty list counts
+ * (reported, not saved); no `lockouts` fact (e.g. a guild-only import) does
+ * not. The "Who's saved" reporting line.
+ */
+export function countLockoutReporters(rows: readonly InsightRow[]): number {
+  return rows.filter((r) => r.characterId !== null && r.facts?.lockouts).length;
 }
 
 function newGroup(l: {

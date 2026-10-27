@@ -109,6 +109,9 @@ export const WowRosterLockoutSchema = z
   .strict();
 export type WowRosterLockoutDto = z.infer<typeof WowRosterLockoutSchema>;
 
+/** Cap on `lockouts[]` (one entry per instance save). */
+export const MAX_ROSTER_LOCKOUTS = 200;
+
 export const WowRosterInsightsSchema = z
   .object({
     classes: z.array(WowRosterClassSchema).max(40),
@@ -119,7 +122,16 @@ export const WowRosterInsightsSchema = z
     /** Members and staff only; absent for visitors. */
     professions: z.array(WowRosterProfessionSchema).max(40).optional(),
     /** ROK-1914 — members and staff only; absent for visitors. */
-    lockouts: z.array(WowRosterLockoutSchema).max(200).optional(),
+    lockouts: z
+      .array(WowRosterLockoutSchema)
+      .max(MAX_ROSTER_LOCKOUTS)
+      .optional(),
+    /**
+     * ROK-1914 — how many characters' addon exports reported lockouts (an
+     * empty list counts; a guild-only import does not). Members/staff only,
+     * beside `lockouts`; the "Who's saved" reporting line.
+     */
+    lockoutReporters: z.number().int().nonnegative().optional(),
     freshness: z
       .object({
         roster: HubFactFreshnessSchema.nullable(),

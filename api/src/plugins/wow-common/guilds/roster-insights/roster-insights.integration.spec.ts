@@ -265,6 +265,7 @@ describe('GET roster-insights (real DB)', () => {
     expect(dto.classes.length).toBeGreaterThan(0);
     expect('professions' in res.body).toBe(false);
     expect('lockouts' in res.body).toBe(false);
+    expect('lockoutReporters' in res.body).toBe(false);
   });
 
   it('serves the cached payload until an import of a guild character invalidates it', async () => {

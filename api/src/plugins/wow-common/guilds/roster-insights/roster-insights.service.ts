@@ -17,7 +17,10 @@ import {
   mainsOnly,
 } from './roster-insights.helpers';
 import { computeClasses, computeLevels } from './roster-insights.levels';
-import { computeLockouts } from './roster-insights.lockouts';
+import {
+  computeLockouts,
+  countLockoutReporters,
+} from './roster-insights.lockouts';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
@@ -73,6 +76,7 @@ export class RosterInsightsService {
         ? {
             professions: computeProfessions(rows),
             lockouts: computeLockouts(rows, Date.now()),
+            lockoutReporters: countLockoutReporters(rows),
           }
         : {}),
       freshness: computeFreshness(rows),

@@ -1,6 +1,9 @@
 import type { AddonLockout } from '@raid-ledger/contract';
 import type { ResolvedWowFacts } from '../../facts/wow-fact.types';
-import { computeLockouts } from './roster-insights.lockouts';
+import {
+  computeLockouts,
+  countLockoutReporters,
+} from './roster-insights.lockouts';
 import type { InsightRow } from './roster-insights.types';
 
 const NOW_S = 1_800_000_000;
@@ -152,5 +155,32 @@ describe('computeLockouts (ROK-1914)', () => {
       NOW_MS,
     );
     expect(out[0]?.difficulty).toBeNull();
+  });
+
+  it('lists a character once when its snapshot repeats a save, keeping the higher kill count', () => {
+    const out = computeLockouts(
+      [
+        row('Ana', [lock({ killed: 2 }), lock({ killed: 7 })]),
+        row('Bo', [lock()]),
+      ],
+      NOW_MS,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]?.members.map((m) => [m.name, m.killed])).toEqual([
+      ['Ana', 7],
+      ['Bo', 3],
+    ]);
+  });
+});
+
+describe('countLockoutReporters (ROK-1914)', () => {
+  it('counts linked characters with a lockouts fact, an empty list included', () => {
+    const rows = [
+      row('Ana', [lock()]),
+      row('Bo', []),
+      row('Cy', null),
+      row('Di', [lock()], null),
+    ];
+    expect(countLockoutReporters(rows)).toBe(2);
   });
 });
