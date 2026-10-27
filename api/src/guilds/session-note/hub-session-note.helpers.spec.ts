@@ -1,11 +1,14 @@
 /**
  * ROK-1968 §8.2 — pure session-note helpers: the lazy auto-clear predicate
- * (T-U1), the checklist rewrite plan (T-U2) and the body pipeline.
+ * (T-U1), the checklist rewrite plan (T-U2), the body pipeline and the D5b
+ * clear-after plan (T-U5).
  */
 import { BadRequestException } from '@nestjs/common';
 import {
+  isArmedUnpinned,
   isNoteExpired,
   noteBody,
+  planClearAfter,
   planItemRewrite,
   toClearAfter,
   type PinnedEventRow,
@@ -124,5 +127,39 @@ describe('noteBody', () => {
 
   it('keeps a valid markdown body', () => {
     expect(noteBody('Bring **potions**', 0)).toBe('Bring **potions**');
+  });
+});
+
+describe('planClearAfter / isArmedUnpinned (T-U5, D5b)', () => {
+  it('toggle off: no pin, not armed — even with a kept pin and a next event', () => {
+    expect(planClearAfter(false, 5, 7)).toEqual({
+      eventId: null,
+      armed: false,
+    });
+  });
+
+  it('toggle on: keeps a live pin over a newer next event (ruling 4d)', () => {
+    expect(planClearAfter(true, 5, 7)).toEqual({ eventId: 5, armed: false });
+  });
+
+  it('toggle on, no kept pin: pins the next event', () => {
+    expect(planClearAfter(true, null, 7)).toEqual({ eventId: 7, armed: false });
+  });
+
+  it('toggle on, no event at all: arms the note instead of failing', () => {
+    expect(planClearAfter(true, null, null)).toEqual({
+      eventId: null,
+      armed: true,
+    });
+  });
+
+  it('is pending only while armed AND unpinned', () => {
+    const row = (armed: boolean, eventId: number | null) => ({
+      clearAfterArmed: armed,
+      clearAfterEventId: eventId,
+    });
+    expect(isArmedUnpinned(row(true, null))).toBe(true);
+    expect(isArmedUnpinned(row(true, 9))).toBe(false);
+    expect(isArmedUnpinned(row(false, null))).toBe(false);
   });
 });

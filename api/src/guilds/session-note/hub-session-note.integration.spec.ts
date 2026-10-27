@@ -1,8 +1,9 @@
 /**
  * ROK-1968 §8.3 — the hub "Before next session" note against a real database
- * (T-I1–T-I15): per-kind read / save / tick rights, the members-only 404, the
+ * (T-I1–T-I16): per-kind read / save / tick rights, the members-only 404, the
  * D8 `baseUpdatedAt` 409, the clear-after pin (next tagged event, lazy expiry,
- * cancelled/deleted pin, keep-the-pin on re-save) and the item-cascade clear.
+ * cancelled/deleted pin, keep-the-pin on re-save, the D5b armed pin) and the
+ * item-cascade clear.
  * Users are created once; every test builds its own hub, so randomized order
  * never shares a note. No afterAll DB work: the shared setup closes the pool.
  */
@@ -420,15 +421,57 @@ describe('community hub — clear after next event', () => {
     );
   });
 
-  it('T-I10: clear-after with no upcoming event is 400 and writes nothing', async () => {
+  it('T-I10: clear-after with no upcoming event arms the note (D5b)', async () => {
     const g = await communityHub();
     await insertEvent(g, -5);
     const res = await put(g, 'editor', { clearAfterNextEvent: true });
-    expect(res.status).toBe(400);
-    expect((res.body as Record<string, unknown>).clearAfterNextEvent).toEqual([
-      'No upcoming event to clear after',
-    ]);
+    expect(res.status).toBe(200);
+    const note = noteOf(res);
+    expect(note.clearAfter).toBeNull();
+    expect(note.clearAfterPending).toBe(true);
+    expect(nonEmpty(await noteRows(g), 'note row')[0]).toMatchObject({
+      clearAfterEventId: null,
+      clearAfterArmed: true,
+    });
+  });
+
+  it('T-I16: an armed note pins the first event created later on GET, then auto-clears after it ends', async () => {
+    const g = await communityHub();
+    const armed = await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    expect(armed.clearAfterPending).toBe(true);
+    const later = await insertEvent(g, 48);
+    const first = await insertEvent(g, 24);
+    const pinned = noteOf(await get(g, 'member'));
+    expect(pinned.clearAfter?.eventId).toBe(first);
+    expect(pinned.clearAfter?.eventId).not.toBe(later);
+    expect(pinned.clearAfterPending).toBe(false);
+    // The pin is not an edit: the D8 concurrency token is untouched.
+    expect(pinned.updatedAt).toBe(armed.updatedAt);
+    expect(nonEmpty(await noteRows(g), 'note row')[0]).toMatchObject({
+      clearAfterEventId: first,
+      clearAfterArmed: false,
+    });
+    const past = Date.now() - 3 * HOUR;
+    await testApp.db
+      .update(schema.events)
+      .set({ duration: [new Date(past), new Date(past + HOUR)] })
+      .where(eq(schema.events.id, first));
+    const res = await get(g, 'member');
+    expect((res.body as HubSessionNoteResponse).note).toBeNull();
     expect(await noteRows(g)).toEqual([]);
+  });
+
+  it('T-I16b: turning the toggle off disarms an armed note', async () => {
+    const g = await communityHub();
+    const armed = await seedNote(g, 'editor', { clearAfterNextEvent: true });
+    const res = await put(g, 'editor', {
+      clearAfterNextEvent: false,
+      baseUpdatedAt: armed.updatedAt,
+    });
+    expect(res.status).toBe(200);
+    expect(noteOf(res).clearAfterPending).toBe(false);
+    await insertEvent(g, 24);
+    expect(noteOf(await get(g, 'member')).clearAfter).toBeNull();
   });
 
   it('T-I11: DELETE twice is 204 both times and cascades the items', async () => {
