@@ -44,12 +44,12 @@ function demoMode(enabled: boolean): void {
 }
 
 /**
- * Load the two lazy sample chunks (ROK-1893 P4) before any test waits on them. On a
+ * Load the lazy sample chunks (ROK-1893 P4) before any test waits on them. On a
  * loaded CI coverage shard their cold import took >5s and was billed to whichever
  * heading case first awaited the boundary (PR #1820); here it gets the hook's budget.
  */
 beforeAll(async () => {
-    await Promise.all([import('./calendar-layer-section'), import('./calendar-hub-section')]);
+    await Promise.all([import('./calendar-layer-section'), import('./calendar-hub-section'), import('./meter-histogram-section')]);
 }, 30_000);
 
 describe('DesignSystemPage', () => {
@@ -78,6 +78,7 @@ describe('DesignSystemPage', () => {
         'Forms — the form primitives',
         'Pattern — Valheim trend chip',
         'Pattern — plugin hub widgets',
+        'Pattern — meter tones and CSS histogram',
     ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
@@ -723,6 +724,17 @@ describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
         expect(within(demo).getByTestId('hub-widget-loading')).toHaveAttribute('aria-busy', 'true');
         expect(await within(demo).findByRole('alert')).toHaveTextContent("Couldn't load this widget.");
         expect(document.getElementById('hub-widget-ds-demo-classes')).not.toBeNull();
+    });
+
+    it('renders every GuildMeter tone and the CSS histogram (§3.2 / §4.30)', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const meters = await screen.findByTestId('ds-guild-meter', undefined, { timeout: 5000 });
+        expect(within(meters).getAllByRole('meter').map((m) => m.getAttribute('aria-label')))
+            .toEqual(['success meter 80%', 'warning meter 45%', 'neutral meter 62%']);
+        const histogram = screen.getByTestId('ds-css-histogram');
+        expect(within(histogram).getByRole('link', { name: 'Levels 50–60: 14 members' })).toBeInTheDocument();
+        expect(within(histogram).getAllByRole('link')).toHaveLength(6);
     });
 
     it('renders the arrange list (§4.28) through the real ArrangeRow: arrows reorder and announce', async () => {

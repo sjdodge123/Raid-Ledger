@@ -63,6 +63,7 @@ describe('planRename — community hubs', () => {
   });
 });
 
+/** U5 (ROK-2015): server cases run unchanged through `planSourced(…, true)`. */
 describe('planRename — server hubs', () => {
   it('a new name sets the override and lowercases the key', () => {
     expect(planRename(server, 'Our Viking Home', 'Valheim Main')).toEqual({
@@ -129,13 +130,56 @@ describe('planRename — server hubs', () => {
   });
 });
 
-describe('planRename — WoW guilds (D3, OQ-1)', () => {
-  it.each(['New Name', null])('refuses %p with 409', (name) => {
-    expect(planRename(wow, name, null)).toEqual({
+describe('planRename — WoW guilds (ROK-2015 D5)', () => {
+  const ingame = 'Iron Vanguard';
+
+  it('U1: a new name sets the override and never touches nameKey', () => {
+    const plan = planRename(wow, 'The Iron Lads', ingame);
+    expect(plan).toEqual({
+      ok: true,
+      set: { name: 'The Iron Lads', nameOverridden: true },
+      from: 'Guild',
+      to: 'The Iron Lads',
+      reset: false,
+    });
+    expect(plan.ok && 'nameKey' in plan.set).toBe(false);
+  });
+
+  it('U2: null resets to the in-game name and clears the flag', () => {
+    const renamed = { ...wow, name: 'The Iron Lads', nameOverridden: true };
+    const plan = planRename(renamed, null, ingame);
+    expect(plan).toEqual({
+      ok: true,
+      set: { name: ingame, nameOverridden: false },
+      from: 'The Iron Lads',
+      to: ingame,
+      reset: true,
+    });
+    expect(plan.ok && 'nameKey' in plan.set).toBe(false);
+  });
+
+  it('U3: exactly the in-game name is a reset; a case variant overrides', () => {
+    const renamed = { ...wow, name: 'The Iron Lads', nameOverridden: true };
+    const exact = planRename(renamed, ingame, ingame);
+    expect(exact.ok && exact.reset).toBe(true);
+    expect(exact.ok && exact.set.nameOverridden).toBe(false);
+    const variant = planRename(wow, 'iron vanguard', ingame);
+    expect(variant.ok && variant.reset).toBe(false);
+    expect(variant.ok && variant.set.nameOverridden).toBe(true);
+  });
+
+  it('U4: no in-game name on record — reset is 409, an override still works', () => {
+    expect(planRename(wow, null, null)).toEqual({
       ok: false,
       status: 409,
-      message: RENAME_ERRORS.wowRefused,
+      message: RENAME_ERRORS.wowNoSource,
     });
+    const plan = planRename(wow, 'X', null);
+    expect(plan.ok && plan.set).toEqual({ name: 'X', nameOverridden: true });
+  });
+
+  it('D5: the old wowRefused message is gone', () => {
+    expect('wowRefused' in RENAME_ERRORS).toBe(false);
   });
 });
 
