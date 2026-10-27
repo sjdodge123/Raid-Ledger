@@ -76,6 +76,8 @@ scripts/*
 !scripts/restore-drill-corruption.spec.mjs
 !scripts/restore-drill-journal.mjs
 !scripts/restore-drill-journal.spec.mjs
+!scripts/restore-drill-uploads.mjs
+!scripts/restore-drill-uploads.spec.mjs
 !scripts/validate-ci-discord-env.spec.mjs
 !scripts/validate-ci-smoke-ci-parity.spec.mjs
 # ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
