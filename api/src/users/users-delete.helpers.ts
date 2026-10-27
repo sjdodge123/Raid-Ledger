@@ -295,6 +295,11 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // picture belongs to the hub (posted in its Discord channel), not to the
   // editor who hid it.
   schema.hubMedia,
+  // ROK-1968: `hub_session_notes.updated_by` / `hub_session_note_items.done_by`
+  // are SET NULL attributions on the hub's shared "Before next session" note;
+  // the note and its checklist belong to the hub, not to the last editor/ticker.
+  schema.hubSessionNotes,
+  schema.hubSessionNoteItems,
 ];
 
 /**

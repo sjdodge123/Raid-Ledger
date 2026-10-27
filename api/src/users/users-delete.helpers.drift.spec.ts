@@ -85,6 +85,21 @@ describe('user-FK wipe manifest drift guard (ROK-313 §9.6)', () => {
     );
   });
 
+  // ROK-1968: the session note's `updated_by` and an item's `done_by` are SET
+  // NULL attributions on shared hub content — KEEP, never wiped with the user.
+  it('keeps the ROK-1968 hub session-note tables (SET NULL attribution)', () => {
+    const keep = KEEP_TABLES.map(tableName);
+    expect(keep).toEqual(
+      expect.arrayContaining(['hub_session_notes', 'hub_session_note_items']),
+    );
+    const wipe = [
+      ...WIPE_BY_COLUMN.map((w) => tableName(w.table)),
+      ...WIPE_SPECIAL_TABLES.map(tableName),
+    ];
+    expect(wipe).not.toContain('hub_session_notes');
+    expect(wipe).not.toContain('hub_session_note_items');
+  });
+
   it('sanity: the manifest is non-trivial and the users table is excluded', () => {
     expect(referencing.size).toBeGreaterThan(20);
     expect(classifiedSet.has('users')).toBe(false);
