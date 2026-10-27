@@ -27,7 +27,7 @@ function RoleLink({ band, role, count }: { band: RoleBandKey; role: BandRole; co
     const tint = role === 'unknown' ? 'border-edge' : ROLE_META[role].cls;
     return (
         <a href="#members" data-testid={`forever-roles-${band}-${role}`} aria-label={roleLinkLabel(band, role, count)}
-            className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border bg-panel px-2.5 hover:bg-overlay ${tint} ${FOCUS_RING}`}>
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border bg-panel px-2.5 hover:bg-overlay ${tint} ${FOCUS_RING}`}>
             <RoleMark role={role} />
             <span className="text-sm font-semibold text-foreground">{count}</span>
             <span className="text-sm text-secondary">{role === 'unknown' ? 'Unknown' : ROLE_META[role].label}</span>

@@ -4,7 +4,7 @@
  * lists the class's roster rows: linked names open `/characters/:id`, unlinked
  * names jump to the Members tab (it has no class filter yet). Theme tokens
  * only — there are no class-colour tokens, so the Blizzard class icon carries
- * the class identity and the bar uses the neutral `secondary` token.
+ * the class identity and the bar is the shared `GuildMeter`.
  */
 import { useState, type JSX } from 'react';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
@@ -12,6 +12,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { CharacterLink } from '../../../components/hub/character-link';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { Button } from '../../../components/ui/button';
+import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { getClassIconUrl } from '../lib/class-icons';
 import { useRosterInsights } from './use-roster-insights';
 import { RosterWidgetShell } from './widget-shell';
@@ -41,8 +42,8 @@ function ClassBar({ row, max }: { row: ClassRow; max: number }): JSX.Element {
                 className="min-h-11 w-full justify-start gap-2 rounded-md px-1 text-left text-sm hover:bg-overlay">
                 {icon !== null && <img src={icon} alt="" className="h-5 w-5 shrink-0 rounded-sm" />}
                 <span className="w-24 shrink-0 truncate font-medium text-foreground">{row.class}</span>
-                <span className="h-2 flex-1 overflow-hidden rounded-full bg-overlay" aria-hidden="true">
-                    <span className="block h-full rounded-full bg-secondary" style={{ width: `${width}%` }} />
+                <span className="min-w-0 flex-1" aria-hidden="true">
+                    <GuildMeter pct={width} label={`${row.class}: ${row.count}`} />
                 </span>
                 <span className="w-8 shrink-0 text-right font-semibold text-foreground">{row.count}</span>
             </Button>

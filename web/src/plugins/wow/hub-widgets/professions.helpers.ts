@@ -38,6 +38,11 @@ export function charactersWithProfessions(professions: readonly RosterProfession
     return new Set(professions.flatMap((p) => p.members.map((m) => m.characterId))).size;
 }
 
+/** `1 character` / `3 characters`. */
+export function characterCount(n: number): string {
+    return `${n} ${n === 1 ? 'character' : 'characters'}`;
+}
+
 /** `1 member` / `3 members`. */
 export function memberCount(n: number): string {
     return `${n} ${n === 1 ? 'member' : 'members'}`;

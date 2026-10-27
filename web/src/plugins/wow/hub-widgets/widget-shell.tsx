@@ -36,7 +36,7 @@ export function RosterWidgetShell({ query, mainsOnly, onMainsOnly, children }: R
             {data !== undefined ? children(data) : (
                 <QuietEmpty>{isError ? 'Roster stats are unavailable right now.' : 'Loading roster…'}</QuietEmpty>
             )}
-            <FreshnessFooter freshness={data?.freshness.roster ?? null} />
+            {data !== undefined && <FreshnessFooter freshness={data.freshness.roster} />}
         </div>
     );
 }

@@ -10,6 +10,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { hasRoster } from './class-level.helpers';
 import { useRosterInsights } from './use-roster-insights';
+import { MembersSeeAll } from './see-all-actions';
 
 /** `useVisible` probe: shown only once the (full) roster has a row. Shares the bodies' default query. */
 function useHasRoster(ctx: HubWidgetCtx): boolean {
@@ -27,6 +28,7 @@ export function registerClassLevelWidgets(handle: PluginHandle): void {
     handle.registerHubWidget({
         ...base, id: 'forever-level-progression', title: 'Level progression', order: 46, span: 2,
         description: 'Where the roster’s levels sit and who is at cap.',
+        action: MembersSeeAll,
         component: lazy(() => import('./level-progression-widget')),
     });
 }

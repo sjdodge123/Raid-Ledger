@@ -11,8 +11,9 @@ import { Button } from '../../../components/ui/button';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useRosterInsights } from './use-roster-insights';
 import { ProfessionsEmpty } from './professions-empty';
+import { FreshnessFooter } from './freshness-footer';
 import {
-    bestMember, charactersWithProfessions, formatSkill, memberCount, sortMembers, sourceLabel,
+    bestMember, characterCount, charactersWithProfessions, formatSkill, memberCount, sortMembers, sourceLabel,
     type ProfessionMember, type RosterProfession,
 } from './professions.helpers';
 
@@ -29,8 +30,9 @@ export default function ProfessionsWidget({ page }: Pick<HubWidgetCtx, 'page'>):
                 {professions.map((p) => <ProfessionRow key={p.name} profession={p} />)}
             </ul>
             <p data-testid="professions-footer" className="text-xs text-muted">
-                {charactersWithProfessions(professions)} characters with professions · manual entry, the addon or the Armory
+                {characterCount(charactersWithProfessions(professions))} with professions
             </p>
+            {data.freshness.roster !== null && <FreshnessFooter freshness={data.freshness.roster} testId="professions-freshness" />}
         </div>
     );
 }
@@ -42,7 +44,7 @@ function ProfessionRow({ profession }: { profession: RosterProfession }): JSX.El
     return (
         <li className="py-1.5">
             <Button type="button" variant="bare" fullWidth aria-expanded={open} onClick={() => setOpen((v) => !v)}
-                className="min-h-[40px] rounded-sm text-left text-sm hover:opacity-80">
+                className="min-h-11 rounded-sm text-left text-sm hover:opacity-80">
                 <span className="flex w-full items-center justify-between gap-2">
                     <span className="min-w-0 truncate font-medium text-foreground">{profession.name}</span>
                     <span className="shrink-0 text-xs text-muted">
