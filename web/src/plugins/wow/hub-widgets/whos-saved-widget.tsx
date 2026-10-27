@@ -6,6 +6,9 @@
  * (`ProfessionRow`). Always all characters, never mains-only (D4): the point
  * is spotting saved alts. Core draws the `WidgetCard` chrome; the
  * registration (`whos-saved.register.ts`) gates it to members + staff.
+ * The reporting line counts `lockoutReporters` (characters whose export
+ * carried lockouts), not every addon-sourced character: a guild-only import
+ * says nothing about saves.
  */
 import { useState, type JSX } from 'react';
 import { CharacterLink } from '../../../components/hub/character-link';
@@ -30,7 +33,7 @@ export default function WhosSavedWidget({ page }: Pick<HubWidgetCtx, 'page'>): J
     const lockouts = liveLockouts(all, nowMs);
     const footer = (
         <p data-testid="whos-saved-footer" className="text-xs text-dim">
-            {reportingLine(data.freshness.characters.addon)}
+            {reportingLine(data.lockoutReporters ?? 0)}
         </p>
     );
     if (lockouts.length === 0) {

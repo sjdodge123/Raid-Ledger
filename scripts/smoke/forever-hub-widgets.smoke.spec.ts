@@ -171,6 +171,7 @@ function expectLockoutsPayload(insights: Insights): void {
         [SOLO_SAVE, ['Dainel 1']],
     ]);
     expect(insights.freshness.characters.addon, 'every linked character reports an addon export').toBe(LINKED_COUNT);
+    expect(insights.lockoutReporters, 'every linked character reported lockouts').toBe(LINKED_COUNT);
 }
 
 async function expectWhosSaved(page: Page, insights: Insights): Promise<void> {

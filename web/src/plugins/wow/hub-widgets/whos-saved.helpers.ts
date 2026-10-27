@@ -43,8 +43,8 @@ export function isCleared(killed: number, total: number): boolean {
 }
 
 /** "Based on 3 members' addon exports" — the empty-state / footer reporting line (Q5). */
-export function reportingLine(addonCount: number): string {
-    return addonCount === 1
+export function reportingLine(reporters: number): string {
+    return reporters === 1
         ? "Based on 1 member's addon export"
-        : `Based on ${addonCount} members' addon exports`;
+        : `Based on ${reporters} members' addon exports`;
 }

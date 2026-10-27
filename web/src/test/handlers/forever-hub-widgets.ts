@@ -111,7 +111,8 @@ export const PROFESSIONS_FIXTURE: WowRosterInsightsDto = {
             ],
         },
         { name: 'Mining', members: [{ characterId: MOCK_CHAR_IDS.jaina, name: 'Mixer', skill: 150, maxSkill: 150, source: 'addon' }] },
-    ],    lockouts: [],
+    ],
+    lockouts: [],
 };
 
 /** A member viewer on a guild where nobody has set professions. */

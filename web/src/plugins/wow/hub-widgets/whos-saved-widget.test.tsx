@@ -34,7 +34,8 @@ const WREN_ID = '44444444-4444-4444-8444-444444444444';
 
 /** Molten Core (two members, one cleared), Onyxia (no difficulty label), BWL (two resets), ZG (expired). */
 const LOCKOUTS_FIXTURE: WowRosterInsightsDto = createBareRosterInsights({
-    freshness: { roster: { source: 'addon', asOf: at(-HOUR) }, characters: { addon: 3, blizzard: 0, none: 2 } },
+    freshness: { roster: { source: 'addon', asOf: at(-HOUR) }, characters: { addon: 4, blizzard: 0, none: 1 } },
+    lockoutReporters: 3,
     lockouts: [
         { instanceId: 409, difficultyId: 9, name: 'Molten Core', difficulty: '40 Player', total: 10, resetAt: at(3 * 24 * HOUR + 15 * HOUR),
             members: [
@@ -154,10 +155,17 @@ describe('WhosSavedWidget', () => {
     });
 
     it('says "1 member\'s addon export" (singular) when one member reports', async () => {
-        const one = { ...EMPTY_FIXTURE, freshness: { ...EMPTY_FIXTURE.freshness, characters: { addon: 1, blizzard: 0, none: 0 } } };
+        const one = { ...EMPTY_FIXTURE, lockoutReporters: 1 };
         server.use(rosterInsightsHandler({ all: one }));
         renderWidget();
         expect(await screen.findByTestId('whos-saved-footer')).toHaveTextContent(/^Based on 1 member's addon export$/);
+    });
+
+    it('counts only characters that reported lockouts, not every addon-sourced one (a guild-only import has none)', async () => {
+        const guildOnly = { ...EMPTY_FIXTURE, lockoutReporters: 0 };
+        server.use(rosterInsightsHandler({ all: guildOnly }));
+        renderWidget();
+        expect(await screen.findByTestId('whos-saved-footer')).toHaveTextContent(/^Based on 0 members' addon exports$/);
     });
 
     it('asks for the full roster, never mains only', async () => {
