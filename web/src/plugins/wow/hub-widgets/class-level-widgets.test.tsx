@@ -56,6 +56,13 @@ describe('W1 Class breakdown', () => {
         expect(screen.getByTestId('forever-class-Mage')).toHaveTextContent('2');
     });
 
+    it('draws the class bar in the neutral meter tone (a count is not good or bad)', async () => {
+        server.use(rosterInsightsHandler());
+        renderWithProviders(<Body W={ClassBreakdownWidget} />);
+        const meter = within(await screen.findByTestId('forever-class-Warrior')).getByRole('meter', { hidden: true });
+        expect(meter.firstElementChild).toHaveClass('bg-secondary');
+    });
+
     it('opens a member list: linked names go to the character sheet, unlinked to #members', async () => {
         server.use(rosterInsightsHandler());
         renderWithProviders(<Body W={ClassBreakdownWidget} />);

@@ -4,7 +4,8 @@
  * lists the class's roster rows: linked names open `/characters/:id`, unlinked
  * names jump to the Members tab (it has no class filter yet). Theme tokens
  * only — there are no class-colour tokens, so the Blizzard class icon carries
- * the class identity and the bar is the shared `GuildMeter`.
+ * the class identity and the bar is the shared `GuildMeter` in its neutral
+ * tone (a class count is not good or bad, so no success green).
  */
 import { useState, type JSX } from 'react';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
@@ -43,7 +44,7 @@ function ClassBar({ row, max }: { row: ClassRow; max: number }): JSX.Element {
                 {icon !== null && <img src={icon} alt="" className="h-5 w-5 shrink-0 rounded-sm" />}
                 <span className="w-24 shrink-0 truncate font-medium text-foreground">{row.class}</span>
                 <span className="min-w-0 flex-1" aria-hidden="true">
-                    <GuildMeter pct={width} label={`${row.class}: ${row.count}`} />
+                    <GuildMeter pct={width} tone="neutral" label={`${row.class}: ${row.count}`} />
                 </span>
                 <span className="w-8 shrink-0 text-right font-semibold text-foreground">{row.count}</span>
             </Button>
