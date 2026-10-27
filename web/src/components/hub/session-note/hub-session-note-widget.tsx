@@ -5,7 +5,7 @@
  * (`useSessionNoteVisible`); editors get the one-line §4.5 hint with "Add note".
  * Default export so the registration can `React.lazy` it.
  */
-import type { JSX } from 'react';
+import { Suspense, lazy, type JSX } from 'react';
 import type { HubSessionNote } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { MarkdownBlock } from '../../ui/markdown-block';
@@ -15,6 +15,8 @@ import { useSessionNoteDialog } from './session-note-dialog-store';
 import { editedByLine, formatClearAfter } from './session-note.helpers';
 import { useSessionNote, useTickSessionNoteItem } from './use-hub-session-note';
 
+const LazySessionNoteDialog = lazy(() => import('./session-note-dialog'));
+
 export const SESSION_NOTE_EMPTY_HINT = 'Add a note for next session';
 
 function EditorHint({ guildId }: { guildId: number }): JSX.Element {
@@ -22,7 +24,7 @@ function EditorHint({ guildId }: { guildId: number }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center justify-between gap-3 py-2" data-testid="session-note-hint">
             <p className="text-sm text-muted">{SESSION_NOTE_EMPTY_HINT}</p>
-            <Button variant="ghost" size="sm" onClick={() => open(guildId)}>Add note</Button>
+            <Button variant="ghost" size="sm" data-testid="session-note-add" onClick={() => open(guildId)}>Add note</Button>
         </div>
     );
 }
@@ -40,15 +42,25 @@ function NoteFooter({ note }: { note: HubSessionNote }): JSX.Element {
     );
 }
 
+/** The editor dialog, lazy-loaded, while the store says this hub's editor is open. */
+function DialogMount({ guildId }: { guildId: number }): JSX.Element | null {
+    const openFor = useSessionNoteDialog((s) => s.guildId);
+    const close = useSessionNoteDialog((s) => s.close);
+    if (openFor !== guildId) return null;
+    return <Suspense fallback={null}><LazySessionNoteDialog guildId={guildId} onClose={close} /></Suspense>;
+}
+
 export default function HubSessionNoteWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const guildId = page.guild.id;
     const { data } = useSessionNote(guildId);
     const tick = useTickSessionNoteItem(guildId);
     if (data === undefined) return null;
     const { note, viewer } = data;
-    if (note === null) return viewer.canEdit ? <EditorHint guildId={guildId} /> : null;
+    const dialog = viewer.canEdit ? <DialogMount guildId={guildId} /> : null;
+    if (note === null) return viewer.canEdit ? <><EditorHint guildId={guildId} />{dialog}</> : null;
     return (
         <div className="flex flex-col gap-3">
+            {dialog}
             {note.body.trim() !== '' && <MarkdownBlock text={note.body} testId="session-note-body" />}
             <SessionNoteChecklist items={note.items} canTick={viewer.canTick}
                 onTick={(itemId, done) => tick.mutate({ itemId, done })} />

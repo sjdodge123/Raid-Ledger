@@ -1,8 +1,11 @@
 /**
- * ROK-1968 — pure labels for the note card (W1); the editor's draft helpers
- * (W2: `toPutBody`, `isDirty`, `itemError`) join them here.
+ * ROK-1968 — pure labels for the note card (W1) and the editor's draft
+ * helpers (W2: `draftOf`, `toPutBody`, `isDirty`, `itemError`, `draftError`).
  */
-import type { HubSessionNote, HubSessionNoteClearAfter } from '@raid-ledger/contract';
+import {
+    HUB_POST_BODY_MAX, HUB_SESSION_NOTE_ITEM_TEXT_MAX,
+    type HubSessionNote, type HubSessionNoteClearAfter, type PutHubSessionNoteInput,
+} from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
 
 const WHEN = new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
@@ -17,4 +20,47 @@ export function formatClearAfter(event: HubSessionNoteClearAfter): string {
 export function editedByLine(note: Pick<HubSessionNote, 'updatedAt' | 'updatedBy'>, now: number = Date.now()): string {
     const who = note.updatedBy?.displayName ?? 'A former member';
     return `Edited by ${who} · ${syncedAgo(note.updatedAt, now)}`;
+}
+
+/** One editable checklist row. `id` null = a new row; `key` is the stable React key. */
+export interface DraftItem { key: string; id: number | null; text: string }
+
+export interface SessionNoteDraft { body: string; items: DraftItem[]; clearAfterNextEvent: boolean }
+
+/** The editor's starting draft: the server note, or an empty one. */
+export function draftOf(note: HubSessionNote | null): SessionNoteDraft {
+    if (note === null) return { body: '', items: [], clearAfterNextEvent: false };
+    const items = note.items.map((row) => ({ key: `id-${row.id}`, id: row.id, text: row.text }));
+    return { body: note.body, items, clearAfterNextEvent: note.clearAfter !== null };
+}
+
+/** The PUT body. `baseUpdatedAt` is passed through untouched — the server compares it as an exact string. */
+export function toPutBody(draft: SessionNoteDraft, baseUpdatedAt: string | null): PutHubSessionNoteInput {
+    const items = draft.items.map((row) => ({ ...(row.id === null ? {} : { id: row.id }), text: row.text.trim() }));
+    return { body: draft.body, items, clearAfterNextEvent: draft.clearAfterNextEvent, baseUpdatedAt };
+}
+
+/** True when the draft differs from the note it started from. */
+export function isDirty(draft: SessionNoteDraft, start: SessionNoteDraft): boolean {
+    if (draft.body !== start.body || draft.clearAfterNextEvent !== start.clearAfterNextEvent) return true;
+    if (draft.items.length !== start.items.length) return true;
+    return draft.items.some((row, i) => row.id !== start.items[i]?.id || row.text !== start.items[i]?.text);
+}
+
+export const ITEM_BLANK_ERROR = 'Add some text or remove this item';
+export const ITEM_TOO_LONG_ERROR = `Keep items to ${HUB_SESSION_NOTE_ITEM_TEXT_MAX} characters`;
+
+/** A checklist row's error, or null. */
+export function itemError(text: string): string | null {
+    if (text.trim() === '') return ITEM_BLANK_ERROR;
+    return text.trim().length > HUB_SESSION_NOTE_ITEM_TEXT_MAX ? ITEM_TOO_LONG_ERROR : null;
+}
+
+export const EMPTY_NOTE_ERROR = 'Add a note or at least one checklist item';
+
+/** Why Save is disabled, or null when the draft can be saved (mirrors `PutHubSessionNoteSchema`). */
+export function draftError(draft: SessionNoteDraft): string | null {
+    if (draft.body.length > HUB_POST_BODY_MAX) return `Keep the note to ${HUB_POST_BODY_MAX} characters`;
+    if (draft.body.trim() === '' && draft.items.length === 0) return EMPTY_NOTE_ERROR;
+    return draft.items.some((row) => itemError(row.text) !== null) ? 'Fix the checklist items marked below' : null;
 }
