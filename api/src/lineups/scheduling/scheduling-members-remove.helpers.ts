@@ -29,8 +29,11 @@ export function deleteMatchMemberWithVotes(
   userId: number,
 ): Promise<RemovedMemberRows> {
   return db.transaction(async (tx) => {
-    const votes = await deleteAllUserVotesForMatch(tx, matchId, userId)
-      .returning({ id: schema.communityLineupScheduleVotes.id });
+    const votes = await deleteAllUserVotesForMatch(
+      tx,
+      matchId,
+      userId,
+    ).returning({ id: schema.communityLineupScheduleVotes.id });
     const members = await tx
       .delete(schema.communityLineupMatchMembers)
       .where(

@@ -14,7 +14,10 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import { SchedulingMembersService } from './scheduling-members.service';
 import type { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { findLineupPollMeta } from './scheduling-query.helpers';
@@ -106,14 +109,16 @@ describe('SchedulingMembersService.removeMember (ROK-2020)', () => {
   });
 
   it('lets an operator who is not the creator remove a participant', async () => {
-    await expect(remove(TARGET_ID, { id: 99, role: 'operator' })).resolves
-      .toEqual({ removedVotes: 2, memberCount: 3 });
+    await expect(
+      remove(TARGET_ID, { id: 99, role: 'operator' }),
+    ).resolves.toEqual({ removedVotes: 2, memberCount: 3 });
     expect(fireUpdateEmbed).toHaveBeenCalledTimes(1);
   });
 
   it('403s an ordinary member and writes nothing', async () => {
-    await expect(remove(TARGET_ID, { id: 55, role: 'member' })).rejects
-      .toBeInstanceOf(ForbiddenException);
+    await expect(
+      remove(TARGET_ID, { id: 55, role: 'member' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(mockDelete).not.toHaveBeenCalled();
     expect(fireUpdateEmbed).not.toHaveBeenCalled();
   });

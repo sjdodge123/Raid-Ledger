@@ -106,24 +106,13 @@ export class SchedulingMembersService {
       await addInvitees(this.db, lineupId, unique, caller.id);
     }
 
-    const inserted = await this.db
-      .insert(schema.communityLineupMatchMembers)
-      .values(
-        unique.map((userId) => ({ matchId, userId, source: 'added' as const })),
-      )
-      .onConflictDoNothing({
-        target: [
-          schema.communityLineupMatchMembers.matchId,
-          schema.communityLineupMatchMembers.userId,
-        ],
-      })
-      .returning({ id: schema.communityLineupMatchMembers.id });
+    const added = await this.insertAddedMembers(matchId, unique);
 
     // ROK-2020 (OPEN-4): after the insert has landed, so the card's
     // "N of M" counts move on add too.
     this.pollEmbed.fireUpdateEmbed(matchId);
     return {
-      added: inserted.length,
+      added,
       memberCount: await countMatchMembers(this.db, matchId),
     };
   }
@@ -215,6 +204,30 @@ export class SchedulingMembersService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     return { visibility: match.visibility };
+  }
+
+  /** Insert `source: 'added'` rows, skipping existing members; returns the count. */
+  private async insertAddedMembers(
+    matchId: number,
+    userIds: number[],
+  ): Promise<number> {
+    const inserted = await this.db
+      .insert(schema.communityLineupMatchMembers)
+      .values(
+        userIds.map((userId) => ({
+          matchId,
+          userId,
+          source: 'added' as const,
+        })),
+      )
+      .onConflictDoNothing({
+        target: [
+          schema.communityLineupMatchMembers.matchId,
+          schema.communityLineupMatchMembers.userId,
+        ],
+      })
+      .returning({ id: schema.communityLineupMatchMembers.id });
+    return inserted.length;
   }
 
   /** Unknown/deactivated ids surface as 404 rather than an FK 500. */
