@@ -4,7 +4,7 @@
  */
 import { lazy } from 'react';
 import type { ComponentType } from 'react';
-import { claimChunkReload, isChunkLoadError } from './lib/chunk-error';
+import { reloadOnChunkError } from './lib/chunk-error';
 
 export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
 
@@ -16,15 +16,7 @@ export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
 export function lazyWithRetry<
     T extends ComponentType<Record<string, never>>,
 >(importFn: () => Promise<{ default: T }>) {
-    return lazy(() =>
-        importFn().catch((error: unknown) => {
-            if (isChunkLoadError(error) && claimChunkReload()) {
-                window.location.reload();
-                return new Promise<{ default: T }>(() => {});
-            }
-            throw error;
-        }),
-    );
+    return lazy(() => reloadOnChunkError(importFn()));
 }
 
 // -- Lazy loaded public pages --
@@ -53,8 +45,9 @@ export const CalendarPage = lazyWithRetry(() =>
 );
 /**
  * ROK-1901: `/events` and `/events/:id` left the app-entry chunk (−45 KB gz).
- * `prefetchEventRoutes()` warms both once the shell is idle, so following an
- * event link rarely shows the route spinner.
+ * `prefetchEventRoutes()` warms both once the first route is up and the shell
+ * is idle (`idle-prefetch.ts`), so following an event link rarely shows the
+ * route spinner.
  */
 const loadEventsPage = () => import('./pages/events-page');
 const loadEventDetailPage = () => import('./pages/event-detail-page');
@@ -65,14 +58,10 @@ export const EventDetailPage = lazyWithRetry(() =>
     loadEventDetailPage().then((m) => ({ default: m.EventDetailPage })),
 );
 
-/** Idle-prefetch the event route chunks; a failure is ignored (the route retries on navigation). */
+/** Warm the event route chunks; a failure is ignored (the route retries on navigation). */
 export function prefetchEventRoutes(): void {
-    const run = () => {
-        loadEventsPage().catch(() => undefined);
-        loadEventDetailPage().catch(() => undefined);
-    };
-    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(run, { timeout: 5000 });
-    else window.setTimeout(run, 2000);
+    loadEventsPage().catch(() => undefined);
+    loadEventDetailPage().catch(() => undefined);
 }
 export const CreateEventPage = lazyWithRetry(() =>
     import('./pages/create-event-page').then((m) => ({ default: m.CreateEventPage })),
