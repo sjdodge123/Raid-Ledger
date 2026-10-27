@@ -7,7 +7,7 @@
  * `quality − 1 → quality` step.
  */
 import { useMemo, useState, type JSX } from 'react';
-import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse } from '@raid-ledger/contract';
+import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse, ValheimStationBuilds } from '@raid-ledger/contract';
 import { MapError } from '../map/map-error';
 import { useValheimRecipePlan } from '../hooks/use-valheim-recipes';
 import type { CraftMode } from './crafting.helpers';
@@ -36,6 +36,7 @@ export interface CraftBreakdownProps {
 interface BreakdownData extends PlannerNameSource {
     nodes: readonly ValheimPlanNode[];
     truncated: boolean;
+    stationBuilds?: ValheimStationBuilds | undefined;
 }
 
 interface BreakdownQuery {
@@ -61,7 +62,7 @@ function BreakdownBody({ props, q }: { props: CraftBreakdownProps; q: BreakdownQ
     const names = usePlannerNames(serverId, catalog, q.data, undefined, 'plan');
     const kinds = useMemo(() => [entry.kind], [entry.kind]);
     if (q.data !== undefined)
-        return <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds} />;
+        return <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds} stationBuilds={q.data.stationBuilds} />;
     if (q.isError) return <MapError text={`Couldn’t load what ${entry.name} needs.`} onRetry={() => void q.refetch()} />;
     return <p className="text-sm text-muted">Loading the breakdown…</p>;
 }

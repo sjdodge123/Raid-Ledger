@@ -31,6 +31,11 @@ import {
   type BaseInputRow,
   type StackSumRow,
 } from './valheim-materials-bases.queries';
+import type { MaterialsViewer } from './valheim-materials.privacy';
+import {
+  selectTrendInputs,
+  type TrendInputs,
+} from './valheim-materials-trend.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
@@ -118,6 +123,22 @@ export class MaterialsReader {
   /** ROK-1859: per-chest stack sums — per-base totals. */
   stackSums(scanId: number, scope: ContainerScope): Promise<StackSumRow[]> {
     return selectStackSums(this.db, scanId, scope);
+  }
+
+  /** ROK-2014: the world's newest play days + their in-scope sums. */
+  trendInputs(
+    serverId: number,
+    worldUid: string,
+    viewer: MaterialsViewer,
+    includeVehicles: boolean,
+  ): Promise<TrendInputs> {
+    return selectTrendInputs(
+      this.db,
+      serverId,
+      worldUid,
+      viewer,
+      includeVehicles,
+    );
   }
 
   /** SUM(stack) per (prefab, quality) over the scope's containers. */

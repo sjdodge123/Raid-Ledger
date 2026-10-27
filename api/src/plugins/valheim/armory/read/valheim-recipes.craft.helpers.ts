@@ -17,6 +17,7 @@ import {
   stationLevelAt,
   type InputLine,
 } from './valheim-recipes.resolve.helpers';
+import { isUpgraderStation } from './valheim-recipes.station-steps';
 
 /** Highest quality the contract carries (`ValheimRecipeUpgradeSchema.quality`). */
 const QUALITY_MAX = 10;
@@ -93,8 +94,7 @@ function upgradeAt(
     stationLevel: stationLevelAt(r, q),
     anyOneOf: r.anyOneOf,
     resources: positive(recipeSteps(r, q, q, 1, graph.costRule).totals),
-    upgraderStation:
-      station !== null && (graph.stations.get(station)?.upgrader ?? false),
+    upgraderStation: isUpgraderStation(graph, station),
   };
 }
 

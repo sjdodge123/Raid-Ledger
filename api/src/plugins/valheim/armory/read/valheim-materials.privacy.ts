@@ -3,7 +3,7 @@
  * that can reach a `private` container ANDs `personalVisibleSql`; shared
  * queries use `sharedSql` and never see a private row.
  */
-import { sql, type SQL } from 'drizzle-orm';
+import { sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import * as schema from '../../../../drizzle/schema';
 import type { AuthenticatedUser } from '../../../../auth/types';
 
@@ -80,11 +80,47 @@ export function claimedProfileSql(viewerId: number): SQL {
 
 /** Private chests whose creator is a character `viewerId` validly claims. */
 function claimedPrivateSql(viewerId: number): SQL {
-  return sql`(${c.privacy} = 'private' AND EXISTS (
+  return sql`(${c.privacy} = 'private' AND ${claimedCreatorSql(
+    viewerId,
+    c.pelicanServerId,
+    c.creatorPlayerId,
+  )})`;
+}
+
+/**
+ * ROK-2014 D13 — "the playerId in `creatorCol` on the server in `serverCol`
+ * is a character `viewerId` validly claims", column-parameterised so the
+ * private chests and the play-day snapshot rows share one claim rule.
+ */
+function claimedCreatorSql(
+  viewerId: number,
+  serverCol: AnyColumn | SQL,
+  creatorCol: AnyColumn | SQL,
+): SQL {
+  return sql`EXISTS (
     SELECT 1 FROM valheim_profiles p JOIN users u ON u.id = p.claimed_by
-    WHERE p.pelican_server_id = ${c.pelicanServerId}
-      AND p.player_id = ${c.creatorPlayerId}
-      AND ${claimedProfileSql(viewerId)}))`;
+    WHERE p.pelican_server_id = ${serverCol}
+      AND p.player_id = ${creatorCol}
+      AND ${claimedProfileSql(viewerId)})`;
+}
+
+/**
+ * ROK-2014 D13 — personal play-day snapshot rows (`ownerCol` = the private
+ * chest's creator, `''` = shared) this viewer may see: the same rule as
+ * {@link personalVisibleSql}. Admins/operators every owner, impersonated none.
+ */
+export function personalOwnerSql(
+  viewer: MaterialsViewer,
+  serverCol: AnyColumn | SQL,
+  ownerCol: AnyColumn | SQL,
+): SQL {
+  if (viewer.impersonated) return sql`false`;
+  if (viewer.isAdmin) return sql`${ownerCol} <> ''`;
+  return sql`(${ownerCol} <> '' AND ${claimedCreatorSql(
+    viewer.id,
+    serverCol,
+    ownerCol,
+  )})`;
 }
 
 /** Shared ∪ personal-visible — the list and detail routes. */
