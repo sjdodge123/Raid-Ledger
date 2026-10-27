@@ -16,6 +16,9 @@
  *   - with `withContent: true` (ROK-1786), the guild page content too: GM
  *     post, rules, links and two recommended addons (see
  *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
+ *   - with `withLockouts: true` (ROK-1914), LedgerLink lockout snapshots on
+ *     the three linked characters for the Who's saved widget (see
+ *     `demo-test-guild-lockouts.helpers.ts`). Re-seeding restores them.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -62,6 +65,10 @@ import {
   seedGuildContent,
   type SeedGuildContent,
 } from './demo-test-guild-content.helpers';
+import {
+  seedGuildLockouts,
+  type SeededGuildLockouts,
+} from './demo-test-guild-lockouts.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -96,6 +103,8 @@ export interface SeedGuildResponse {
   raids: SeededGuildRaids;
   /** Present only when the body sent `withContent: true`. */
   content?: SeedGuildContent;
+  /** Present only when the body sent `withLockouts: true`. */
+  lockouts?: SeededGuildLockouts;
 }
 
 interface SeededRoster {
@@ -129,6 +138,9 @@ export class DemoTestGuildController {
     const content = input.withContent
       ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
       : null;
+    const lockouts = input.withLockouts
+      ? await this.seedLockouts(users, now)
+      : null;
     return {
       guildId,
       gameId,
@@ -139,7 +151,20 @@ export class DemoTestGuildController {
       unlinkedMemberIds: unlinked,
       raids,
       ...(content ? { content } : {}),
+      ...(lockouts ? { lockouts } : {}),
     };
+  }
+
+  /** ROK-1914 — lockout snapshots on the three linked characters. */
+  private seedLockouts(
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    now: Date,
+  ): Promise<SeededGuildLockouts> {
+    const owners = (['gm', 'officer', 'member'] as const).map((owner) => ({
+      owner,
+      characterId: defined(users[owner].characterId, `${owner} character`),
+    }));
+    return seedGuildLockouts(this.db, owners, now);
   }
 
   /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */

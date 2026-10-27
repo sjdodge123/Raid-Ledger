@@ -21,6 +21,10 @@ import {
   SEED_GUILD_RULES,
 } from './demo-test-guild-content.helpers';
 import { SEED_HUB_POST_NEWEST } from './demo-test-hub-posts.helpers';
+import {
+  SEED_LOCKOUT_SHARED,
+  SEED_LOCKOUT_SOLO,
+} from './demo-test-guild-lockouts.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/wow/seed-guild';
@@ -360,6 +364,49 @@ describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', (
 
   it('is 400 for a non-boolean withContent', async () => {
     const res = await seed({ name: 'Flag Keepers', withContent: 'yes' });
+    expect(res.status).toBe(400);
+  });
+});
+
+interface LockoutGroup {
+  name: string;
+  members: { name: string; killed: number }[];
+}
+
+describe('POST /admin/test/wow/seed-guild — withLockouts (ROK-1914)', () => {
+  it('seeds a shared live save, a solo live save and an expired one the insights drop', async () => {
+    const out = await seedGuild('Saved Keepers', { withLockouts: true });
+    expect(out.lockouts?.characterIds).toHaveLength(3);
+    const res = await guildGet(
+      out.guildId,
+      'roster-insights',
+      await tokenFor(out.users.gm),
+    );
+    expect(res.status).toBe(200);
+    const groups = (res.body.lockouts as LockoutGroup[]).map((g) => [
+      g.name,
+      g.members.map((m) => `${m.name} ${m.killed}`),
+    ]);
+    expect(groups).toEqual([
+      [SEED_LOCKOUT_SHARED.name, ['Aldren 10', 'Brisa 4']],
+      [SEED_LOCKOUT_SOLO.name, ['Dainel 1']],
+    ]);
+  });
+
+  it('without the flag: no lockouts key and no snapshots', async () => {
+    const out = await seedGuild('Unsaved Keepers');
+    expect(out).not.toHaveProperty('lockouts');
+    const ids = [out.users.gm.characterId, out.users.member.characterId]
+      .filter((id): id is string => id !== null);
+    const rows = await testApp.db
+      .select({ id: schema.characterAddonSnapshots.id })
+      .from(schema.characterAddonSnapshots)
+      .where(inArray(schema.characterAddonSnapshots.characterId, ids));
+    expect(rows).toEqual([]);
+  });
+
+  it('is 400 for a non-boolean withLockouts', async () => {
+    const res = await seed({ name: 'Flag Savers', withLockouts: 'yes' });
     expect(res.status).toBe(400);
   });
 });
