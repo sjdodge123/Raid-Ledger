@@ -81,6 +81,7 @@ const CTX: ScanContext = {
     'WOW_COMMON_MANIFEST.id': WOW_COMMON_MANIFEST.id,
   },
   folderOwners: {
+    core: CORE_PLUGIN_ID,
     valheim: VALHEIM_PLUGIN_ID,
     pelican: PELICAN_PLUGIN_ID,
     'wow-common': WOW_COMMON_MANIFEST.id,

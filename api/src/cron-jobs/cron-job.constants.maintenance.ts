@@ -58,4 +58,9 @@ export const MAINTENANCE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
     category: 'Maintenance',
   },
+  CompanionBlobCleanupService_purgeOrphans: {
+    description:
+      'Deletes unreferenced Companion blobs (24 h), dangling blob refs (7 d) and orphan or stale temp files — daily at 04:35',
+    category: 'Maintenance',
+  },
 };
