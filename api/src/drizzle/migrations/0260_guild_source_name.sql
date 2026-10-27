@@ -1,0 +1,1 @@
+ALTER TABLE "guilds" ADD COLUMN "source_name" varchar(64);
