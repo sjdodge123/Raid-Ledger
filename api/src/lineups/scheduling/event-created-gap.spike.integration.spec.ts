@@ -103,7 +103,10 @@ describe('SPIKE: EVENT CREATED per lock-in path', () => {
   }
 
   /** The web's open-poll lock-in: POST /events then POST complete. */
-  async function openLockIn(matchId: number): Promise<number> {
+  async function openLockIn(
+    matchId: number,
+    expectComplete = 200,
+  ): Promise<number> {
     const created = await testApp.request
       .post('/events')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -122,7 +125,7 @@ describe('SPIKE: EVENT CREATED per lock-in path', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ eventId, startTime: SLOT.toISOString() });
     console.log(`PROBE POST complete status=${done.status}`);
-    expect(done.status).toBe(200);
+    expect(done.status).toBe(expectComplete);
     return eventId;
   }
 
@@ -168,9 +171,19 @@ describe('SPIKE: EVENT CREATED per lock-in path', () => {
 
   it('(b) open lineup-poll lock-in via POST /events + complete: records calls', async () => {
     const poll = await seedLineupPoll('decided');
-    const eventId = await openLockIn(poll.matchId);
-    await waitForSignup(eventId);
+    // Run 1 (task c0b7e89dc86c): complete 404s — `selectCompletionTarget`
+    // only accepts standalone lineups. Pin that, then check the side effects.
+    const eventId = await openLockIn(poll.matchId, 404);
     expect(await settleAndCount('b-open-lineup-events+complete')).toBe(0);
+    const signups = await testApp.db
+      .select({ id: schema.eventSignups.id })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+    const [m] = await testApp.db
+      .select({ status: schema.communityLineupMatches.status, linked: schema.communityLineupMatches.linkedEventId })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    console.log(`PROBE path=b signups=${signups.length} matchStatus=${m?.status} linkedEventId=${m?.linked}`);
   });
 
   it('(c) open standalone-poll lock-in via POST /events + complete: records calls', async () => {
