@@ -24,6 +24,8 @@ describe('session-note draft helpers', () => {
         expect(isDirty(draftOf(buildSessionNote()), start)).toBe(false);
         expect(isDirty({ ...start, items: itemOps.text(start.items, 0, 'Repair all gear') }, start)).toBe(true);
         expect(isDirty({ ...start, items: itemOps.move(start.items, 0, 1) }, start)).toBe(true);
+        // A row deleted and re-added with the same text is a new row (its tick would be lost).
+        expect(isDirty({ ...start, items: start.items.map((r, i) => (i === 0 ? { ...r, id: null } : r)) }, start)).toBe(true);
     });
 
     it('itemError flags blank and over-200 rows only', () => {
