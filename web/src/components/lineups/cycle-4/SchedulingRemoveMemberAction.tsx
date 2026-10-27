@@ -88,15 +88,11 @@ function RemoveMemberModal(props: ModalProps): JSX.Element {
   const footer = target ? (
     <ConfirmFooter onCancel={() => setTarget(null)} onConfirm={confirm} isPending={pending} />
   ) : undefined;
+  const guardedClose = (): void => {
+    if (!pending) onClose();
+  };
   return (
-    <Modal
-      isOpen
-      onClose={() => {
-        if (!pending) onClose();
-      }}
-      title="Remove Participant"
-      footer={footer}
-    >
+    <Modal isOpen onClose={guardedClose} title="Remove Participant" footer={footer}>
       {target ? (
         <ConfirmBody name={target.displayName} />
       ) : (
@@ -144,18 +140,11 @@ function PickRow({
   participant: LineupParticipantDto;
   onPick: (p: LineupParticipantDto) => void;
 }): JSX.Element {
+  const { userId: id, avatar, discordId, customAvatarUrl } = p;
+  const user = toAvatarUser({ id, avatar, discordId, customAvatarUrl });
   return (
     <li className="flex items-center gap-3 px-2 py-2 rounded border border-edge bg-panel">
-      <AvatarWithFallback
-        user={toAvatarUser({
-          id: p.userId,
-          avatar: p.avatar,
-          discordId: p.discordId,
-          customAvatarUrl: p.customAvatarUrl,
-        })}
-        username={p.displayName}
-        sizeClassName="w-8 h-8"
-      />
+      <AvatarWithFallback user={user} username={p.displayName} sizeClassName="w-8 h-8" />
       <span className="flex-1 min-w-0 truncate text-sm text-foreground">{p.displayName}</span>
       <Button
         variant="destructive-soft"

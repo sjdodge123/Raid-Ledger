@@ -62,35 +62,18 @@ export function SchedulingManageSheet(
  */
 function ManageRows(props: SchedulingManageProps): JSX.Element {
   const { lineupId, matchId, match, readOnly, uniqueVoterCount } = props;
+  const ids = { lineupId, matchId, readOnly };
   return (
     <>
-      <SchedulingAddMembersAction
-        variant="row"
-        lineupId={lineupId}
-        matchId={matchId}
-        match={match}
-        readOnly={readOnly}
-      />
-      <SchedulingRemoveMemberAction
-        lineupId={lineupId}
-        matchId={matchId}
-        match={match}
-        readOnly={readOnly}
-      />
+      <SchedulingAddMembersAction variant="row" {...ids} match={match} />
+      <SchedulingRemoveMemberAction {...ids} match={match} />
       <SchedulingRemindAction
         variant="row"
-        lineupId={lineupId}
-        matchId={matchId}
+        {...ids}
         match={match}
-        readOnly={readOnly}
         pendingVoterCount={pendingVoterCount(match, uniqueVoterCount)}
       />
-      <SchedulingCancelAction
-        variant="row"
-        lineupId={lineupId}
-        matchId={matchId}
-        readOnly={readOnly}
-      />
+      <SchedulingCancelAction variant="row" {...ids} />
     </>
   );
 }
