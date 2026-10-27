@@ -5,7 +5,6 @@
  */
 import { HttpException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
 import { HubMediaIngestPool } from './hub-media-ingest.pool';
 import type { HubMediaReadService } from './hub-media-read.service';
@@ -68,7 +67,6 @@ describe('HubMediaUploadService.upload', () => {
         from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
       }),
     };
-    const redis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
     const store = {
       ingestUpload: jest
         .fn()
@@ -77,7 +75,6 @@ describe('HubMediaUploadService.upload', () => {
     const read = { viewer: jest.fn().mockResolvedValue(viewer) };
     const svc = new HubMediaUploadService(
       db as unknown as PostgresJsDatabase<typeof schema>,
-      redis as unknown as Redis,
       store as unknown as HubMediaService,
       pool,
       read as unknown as HubMediaReadService,

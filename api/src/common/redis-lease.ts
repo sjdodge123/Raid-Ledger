@@ -11,3 +11,11 @@
  */
 export const COMPARE_AND_DELETE_LUA =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
+
+/**
+ * Fixed-window counter: `INCR KEYS[1]` and, whenever the key has no expiry
+ * (just created, or left without one), `EXPIRE` it for `ARGV[1]` seconds —
+ * atomically, so the window can never become permanent. Returns the count.
+ */
+export const INCR_FIXED_WINDOW_LUA =
+  "local n = redis.call('incr', KEYS[1]) if redis.call('ttl', KEYS[1]) < 0 then redis.call('expire', KEYS[1], ARGV[1]) end return n";

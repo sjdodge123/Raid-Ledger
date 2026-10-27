@@ -6,18 +6,16 @@ import {
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import Redis from 'ioredis';
 import type { HubMediaItem } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import type { GuildActor } from '../guilds/guild-access.service';
-import { REDIS_CLIENT } from '../redis/redis.module';
 import {
   HubMediaIngestPool,
   HubMediaIngestQueueFullError,
 } from './hub-media-ingest.pool';
 import { HubMediaReadService } from './hub-media-read.service';
-import { checkUploadRate, uploadError } from './hub-media-upload.limits';
+import { uploadError } from './hub-media-upload.limits';
 import { sniffHubMediaImage } from './hub-media.encode';
 import { HubMediaService } from './hub-media.service';
 import type { HubMediaIngestResult } from './hub-media.types';
@@ -56,8 +54,8 @@ const busy = () =>
   );
 
 /**
- * ROK-1965 §4.3 — after the guard's 404 gate and multer's 413: the per-user
- * window (429) → magic-byte type (415, GIF refused) → the shared encode pool
+ * ROK-1965 §4.3 — after the guard (400 id, 404 gate, 429 per-user window)
+ * and multer's 413: magic-byte type (415, GIF refused) → the shared encode pool
  * (503 when full) → `ingestUpload` → the item as this viewer sees it.
  */
 @Injectable()
@@ -65,7 +63,6 @@ export class HubMediaUploadService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly store: HubMediaService,
     private readonly pool: HubMediaIngestPool,
     private readonly read: HubMediaReadService,
@@ -77,7 +74,6 @@ export class HubMediaUploadService {
     bytes: Buffer,
   ): Promise<HubMediaUploadOutcome> {
     const viewer = await this.read.viewer(actor, guildId);
-    await checkUploadRate(this.redis, actor.id);
     const type = sniffHubMediaImage(bytes);
     if (type === null || !UPLOAD_TYPES.has(type)) throw notImage();
     const result = await this.ingest(actor, guildId, bytes);

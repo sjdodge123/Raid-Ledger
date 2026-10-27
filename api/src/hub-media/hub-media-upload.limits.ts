@@ -4,6 +4,7 @@ import {
   HUB_MEDIA_UPLOAD_MAX_BYTES,
   type HubMediaUploadErrorCode,
 } from '@raid-ledger/contract';
+import { INCR_FIXED_WINDOW_LUA } from '../common/redis-lease';
 
 /**
  * ROK-1965 D4 — multer limits: memory storage, one `file` part, nothing
@@ -49,8 +50,10 @@ export const uploadRateKey = (userId: number): string =>
   `hub-media-upload:${userId}`;
 
 /**
- * D8 fixed window across every hub (Redis `INCR` + `EXPIRE`, like the avatar
- * limit). Counted BEFORE the encode, so a rejected file still costs a slot.
+ * D8 fixed window across every hub. `INCR` and the expiry run as ONE Lua
+ * script, so a key can never be left without a TTL (a crash between two
+ * separate calls would lock the user out for good). Counted BEFORE the
+ * encode (by `HubMediaUploadGuard`), so a rejected file still costs a slot.
  */
 export async function checkUploadRate(
   redis: Redis,
@@ -58,9 +61,14 @@ export async function checkUploadRate(
 ): Promise<void> {
   const limit = uploadsPerHour();
   if (limit === null) return;
-  const key = uploadRateKey(userId);
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, UPLOAD_WINDOW_SECONDS);
+  const count = Number(
+    await redis.eval(
+      INCR_FIXED_WINDOW_LUA,
+      1,
+      uploadRateKey(userId),
+      UPLOAD_WINDOW_SECONDS,
+    ),
+  );
   if (count > limit) {
     throw uploadError(
       HttpStatus.TOO_MANY_REQUESTS,
