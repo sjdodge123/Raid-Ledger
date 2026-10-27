@@ -74,5 +74,5 @@ export function steppedVia(
   const { startStep, quality, rest } = span;
   const steps = planSteps(graph, recipe, startStep, quality, rest);
   addStationBuilds(graph, steps, builds);
-  return { ...via, steps };
+  return steps.length > 1 ? { ...via, steps } : via;
 }

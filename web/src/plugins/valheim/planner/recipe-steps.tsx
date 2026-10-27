@@ -73,11 +73,13 @@ function buildsPerStep(steps: readonly ValheimPlanStep[], builds: ValheimStation
 }
 
 export function RecipeSteps({ steps, builds, names }: RecipeStepsProps): JSX.Element {
-    const [open, setOpen] = useState(() => steps.some((s) => s.upgraderStation));
+    // Q4 default re-derives from the current steps; a user toggle overrides it.
+    const [toggled, setToggled] = useState<boolean | null>(null);
+    const open = toggled ?? steps.some((s) => s.upgraderStation);
     const perStep = buildsPerStep(steps, builds);
     return (
         <div data-testid="valheim-planner-steps">
-            <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setToggled(!open)}>
                 <span aria-hidden="true" className={`mr-1 inline-block transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
                 {steps.length} steps
             </Button>
