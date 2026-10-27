@@ -287,3 +287,23 @@ export function cleanupPartialFile(filepath: string): void {
     // ignore cleanup errors
   }
 }
+
+// Traversal-only filename guard: block path separators and '..' but accept any
+// other character (spaces, '+', …) — listBackups only filters on '.dump', so a
+// stricter charset would make listed files impossible to download/delete/restore.
+export const isSafeBackupFilename = (filename: string): boolean =>
+  filename.length > 0 &&
+  !filename.includes('/') &&
+  !filename.includes('\\') &&
+  !filename.includes('..');
+
+/** Format a Date as YYYY-MM-DD_HHMMSS (local time). */
+export function formatBackupTimestamp(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${d}_${h}${mi}${s}`;
+}

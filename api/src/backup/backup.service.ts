@@ -23,6 +23,8 @@ import {
   seedGameData,
   dropSchemas,
   cleanupPartialFile,
+  formatBackupTimestamp,
+  isSafeBackupFilename,
 } from './backup.helpers';
 import { rotateDailyDir, rotateMigrationDir } from './backup-rotation.helpers';
 
@@ -42,15 +44,6 @@ const SANITIZED_EXCLUDED_TABLES = [
   'sessions',
   'consumed_intent_tokens',
 ] as const;
-
-// Traversal-only filename guard: block path separators and '..' but accept any
-// other character (spaces, '+', …) — listBackups only filters on '.dump', so a
-// stricter charset would make listed files impossible to download/delete/restore.
-const isSafeBackupFilename = (filename: string): boolean =>
-  filename.length > 0 &&
-  !filename.includes('/') &&
-  !filename.includes('\\') &&
-  !filename.includes('..');
 
 @Injectable()
 export class BackupService implements OnModuleInit {
@@ -113,7 +106,7 @@ export class BackupService implements OnModuleInit {
 
   /** Create a daily pg_dump backup. */
   async createDailyBackup(): Promise<string> {
-    const timestamp = this.formatTimestamp(new Date());
+    const timestamp = formatBackupTimestamp(new Date());
     const filename = `raid_ledger_${timestamp}.dump`;
     const filepath = path.join(this.dailyDir, filename);
     this.logger.log(`Starting daily backup: ${filename}`);
@@ -127,7 +120,7 @@ export class BackupService implements OnModuleInit {
 
   /** Create a pre-migration snapshot. */
   async createMigrationSnapshot(migrationLabel: string): Promise<string> {
-    const timestamp = this.formatTimestamp(new Date());
+    const timestamp = formatBackupTimestamp(new Date());
     const safeName = migrationLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `pre_${safeName}_${timestamp}.dump`;
     const filepath = path.join(this.migrationDir, filename);
@@ -315,16 +308,5 @@ export class BackupService implements OnModuleInit {
       cleanupPartialFile(outputPath);
       throw new Error(`pg_dump failed: ${msg}`, { cause: err });
     }
-  }
-
-  /** Format a Date as YYYY-MM-DD_HHMMSS. */
-  private formatTimestamp(date: Date): string {
-    const y = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${y}-${mo}-${d}_${h}${mi}${s}`;
   }
 }
