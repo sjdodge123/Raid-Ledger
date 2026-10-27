@@ -20,6 +20,7 @@ import { SCHEDULING_ACTION_BUTTON } from './scheduling-action-button';
 import { pendingVoterCount, useCanManagePoll } from './scheduling-manage.helpers';
 import { ManageMenuSurface } from './scheduling-sheet-row';
 import { SchedulingAddMembersAction } from './SchedulingAddMembersAction';
+import { SchedulingRemoveMemberAction } from './SchedulingRemoveMemberAction';
 import { SchedulingRemindAction } from './SchedulingRemindAction';
 import { SchedulingCancelAction } from './SchedulingCancelAction';
 import type { SchedulingManageProps } from './SchedulingManageSheet';
@@ -81,13 +82,14 @@ function ManagePopover(
   );
 }
 
-/** Add Participants · Remind Voters · separator · Cancel Poll. */
+/** Add Participants · Remove Participant · Remind Voters · separator · Cancel Poll. */
 function ManageMenuItems(props: SchedulingManageProps): JSX.Element {
   const { lineupId, matchId, match, readOnly, uniqueVoterCount } = props;
   const ids = { lineupId, matchId, readOnly };
   return (
     <>
       <SchedulingAddMembersAction variant="row" {...ids} match={match} />
+      <SchedulingRemoveMemberAction {...ids} match={match} />
       <SchedulingRemindAction
         variant="row"
         {...ids}

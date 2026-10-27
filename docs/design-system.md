@@ -941,8 +941,8 @@ form as current until the operator rules otherwise.
 
 ### 4.14 Manage — a sheet on phones, a dropdown on desktop
 
-**DO** — one trigger labelled `Manage poll ⋯`, one action list (Add Participants / Remind Voters / Cancel
-Poll), two shells chosen by `useMediaQuery(DESKTOP_MQ)` (`lib/breakpoints.ts:15`):
+**DO** — one trigger labelled `Manage poll ⋯`, one action list (Add Participants / Remove Participant / Remind
+Voters / Cancel Poll), two shells chosen by `useMediaQuery(DESKTOP_MQ)` (`lib/breakpoints.ts:15`):
 
 - **Below 1024px** — `SchedulingManageButton` (`web/src/components/lineups/cycle-4/SchedulingManageSheet.tsx:95-118`)
   in the hero's `manage` slot: a full-width 44px row (`SCHEDULING_MANAGE_BUTTON`,
@@ -954,6 +954,13 @@ Poll), two shells chosen by `useMediaQuery(DESKTOP_MQ)` (`lib/breakpoints.ts:15`
 
 Both shells render the SAME action components (`variant="row"`), so hooks, gates and in-flight copy are
 never duplicated. Members and read-only polls get nothing (`useCanManagePoll`).
+
+Remove Participant (ROK-2020, `SchedulingRemoveMemberAction.tsx`) is the worked example of "a new creator
+action is a new row": it renders the row in both shells and owns a `Modal` that lists the poll roster minus the
+creator (a `destructive-soft` `sm` "Remove" per person), then swaps to a confirm whose footer is Cancel
+(`secondary`) + `destructive` "Remove" (`loadingLabel` "Removing…"), unclosable while the request is in flight
+(the §3 unlink-confirm idiom). The removal is optimistic on the roster cache. The toolbar's shared Participants
+modal stays read-only; removal lives only here.
 
 **DON'T** build a third shell, a phone-only modal, or a row of buttons in the hero header (the ROK-1582
 overflow this replaced). A new creator action is a new row in both shells, not a new button.

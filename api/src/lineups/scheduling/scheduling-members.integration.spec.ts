@@ -288,6 +288,31 @@ function describeSchedulingMembers() {
     expect(await loadRoster(matchId)).toHaveLength(1);
   });
 
+  it.each([
+    ['archived', { status: 'archived' as const }],
+    ['deadline', { phaseDeadline: new Date('2000-01-01') }],
+  ])(
+    '400s an expired poll (%s) while the match is still scheduling, writing no member row',
+    async (label, lifecycle) => {
+      const creator = await createUser(`expired-${label}-creator`);
+      const alice = await createUser(`expired-${label}-alice`);
+      const { lineupId, matchId } = await seedPoll(creator.id);
+      await testApp.db
+        .update(schema.communityLineups)
+        .set(lifecycle)
+        .where(eq(schema.communityLineups.id, lineupId));
+
+      const res = await postMembers(creator.token, lineupId, matchId, [
+        alice.id,
+      ]);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('This poll no longer accepts changes');
+      const roster = await loadRoster(matchId);
+      expect(roster.map((r) => r.userId)).not.toContain(alice.id);
+    },
+  );
+
   it('404s when the lineup opted out of the scheduling phase', async () => {
     const creator = await createUser('optout-creator');
     const alice = await createUser('optout-alice');
