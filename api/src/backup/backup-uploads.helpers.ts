@@ -27,6 +27,7 @@ export type UploadsArchiveResult =
   | { status: 'written'; path: string }
   | { status: 'skipped'; reason: 'missing-root' }
   | { status: 'failed'; reason: 'insufficient-space' }
+  | { status: 'failed'; reason: 'measure-failed'; detail: string }
   | { status: 'failed'; reason: 'tar-failed'; detail: string };
 
 export interface ArchiveUploadsInput {
@@ -37,6 +38,7 @@ export interface ArchiveUploadsInput {
   reserveBytes?: number;
   statfs?: StatfsFn;
   runTar?: RunTarFn;
+  measure?: (dir: string) => number;
 }
 
 /**
@@ -138,37 +140,55 @@ async function runTarTolerant(
   }
 }
 
-/**
- * Archive `uploadsDir` to `outPath` (spec D4/D7/D8). Never throws: the
- * caller decides how loud each outcome is. Missing root → skipped; too
- * little free space → failed before tar runs; tar failure → failed with the
- * partial removed.
- */
-export async function archiveUploads(
+type ArchiveFailure = Extract<UploadsArchiveResult, { status: 'failed' }>;
+
+/** Spec D8 pre-flight: tree bytes + reserve must fit the backup disk. */
+function preflightSpace(input: ArchiveUploadsInput): ArchiveFailure | null {
+  try {
+    const bytes = (input.measure ?? measureTree)(input.uploadsDir);
+    const reserve = input.reserveBytes ?? UPLOADS_RESERVE_BYTES;
+    const statfs = input.statfs ?? fs.statfsSync;
+    if (hasRoomFor(bytes, input.dailyDir, reserve, statfs)) return null;
+    return { status: 'failed', reason: 'insufficient-space' };
+  } catch (err) {
+    return {
+      status: 'failed',
+      reason: 'measure-failed',
+      detail: errMessage(err),
+    };
+  }
+}
+
+/** Run tar into `<out>.partial`, then rename it into place (spec D4). */
+async function writeArchive(
   input: ArchiveUploadsInput,
 ): Promise<UploadsArchiveResult> {
-  const { uploadsDir, outPath, dailyDir, warn } = input;
-  if (!fs.existsSync(uploadsDir)) {
-    warn(`uploads dir missing; no uploads archive (${uploadsDir})`);
-    return { status: 'skipped', reason: 'missing-root' };
-  }
-  const reserve = input.reserveBytes ?? UPLOADS_RESERVE_BYTES;
-  const statfs = input.statfs ?? fs.statfsSync;
-  if (!hasRoomFor(measureTree(uploadsDir), dailyDir, reserve, statfs)) {
-    return { status: 'failed', reason: 'insufficient-space' };
-  }
+  const { uploadsDir, outPath, warn } = input;
   const partial = `${outPath}.partial`;
   const runTar = input.runTar ?? defaultRunTar;
   const ok = await runTarTolerant(runTar, partial, uploadsDir, warn);
-  if (ok !== true) {
-    cleanupPartialFile(partial);
-    return { status: 'failed', reason: 'tar-failed', detail: ok };
-  }
   try {
+    if (ok !== true) throw new Error(ok);
     fs.renameSync(partial, outPath);
+    return { status: 'written', path: outPath };
   } catch (err) {
     cleanupPartialFile(partial);
     return { status: 'failed', reason: 'tar-failed', detail: errMessage(err) };
   }
-  return { status: 'written', path: outPath };
+}
+
+/**
+ * Archive `uploadsDir` to `outPath` (spec D4/D7/D8). Never throws: the
+ * caller decides how loud each outcome is. Missing root → skipped; an
+ * unreadable tree or too little free space → failed before tar runs; a tar
+ * failure → failed with the partial removed.
+ */
+export async function archiveUploads(
+  input: ArchiveUploadsInput,
+): Promise<UploadsArchiveResult> {
+  if (!fs.existsSync(input.uploadsDir)) {
+    input.warn(`uploads dir missing; no uploads archive (${input.uploadsDir})`);
+    return { status: 'skipped', reason: 'missing-root' };
+  }
+  return preflightSpace(input) ?? writeArchive(input);
 }

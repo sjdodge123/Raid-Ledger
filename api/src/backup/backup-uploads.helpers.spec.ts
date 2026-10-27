@@ -242,6 +242,29 @@ describe('archiveUploads', () => {
     expect(fs.readdirSync(path.dirname(outPath))).toEqual([]);
   });
 
+  it('fails with measure-failed when the tree cannot be walked', async () => {
+    const outPath = outFor();
+    const runTar = jest.fn();
+    const res = await archiveUploads({
+      uploadsDir: seedUploads(),
+      outPath,
+      dailyDir: path.dirname(outPath),
+      warn: noWarn,
+      statfs: roomy,
+      runTar,
+      measure: () => {
+        throw new Error('EACCES: permission denied');
+      },
+    });
+    expect(res).toEqual({
+      status: 'failed',
+      reason: 'measure-failed',
+      detail: 'EACCES: permission denied',
+    });
+    expect(runTar).not.toHaveBeenCalled();
+    expect(fs.readdirSync(path.dirname(outPath))).toEqual([]);
+  });
+
   it('fails with tar-failed and removes the partial when tar errors', async () => {
     const outPath = outFor();
     const res = await archiveUploads({
