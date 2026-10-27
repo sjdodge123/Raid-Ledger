@@ -27,8 +27,10 @@ vi.mock('../../../../lib/toast', () => ({
 }));
 
 let viewer: { id: number; role: string } = { id: 10, role: 'member' };
+// `fetchApi` reads the token from this module too — the real MSW round trip needs it.
 vi.mock('../../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: viewer }),
+    getAuthToken: () => null,
     isOperatorOrAdmin: (u: { role?: string } | null) =>
         u?.role === 'operator' || u?.role === 'admin',
 }));
@@ -101,9 +103,9 @@ describe('SchedulingRemoveMemberAction (ROK-2020)', () => {
         expect(getCalls).toEqual(['9']);
     });
 
-    it('confirm sends the DELETE, toasts, closes and refetches the roster', async () => {
+    it('confirm sends the DELETE, toasts, closes and invalidates the roster', async () => {
         server.use(removePollMemberHandler({ removedVotes: 2, memberCount: 2 }, deleteCalls));
-        renderAction();
+        const qc = renderAction();
         await pickBob();
         expect(screen.getByTestId('remove-poll-member-confirm-body')).toHaveTextContent(
             'Remove Bob from this poll? Their votes on this poll are deleted too.',
@@ -112,7 +114,9 @@ describe('SchedulingRemoveMemberAction (ROK-2020)', () => {
         await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Removed Bob from this poll'));
         expect(deleteCalls).toEqual(['5/9/2']);
         expect(screen.queryByRole('dialog')).toBeNull();
-        await waitFor(() => expect(getCalls.length).toBe(2));
+        // The modal (the roster's only observer) closed, so the roster is marked
+        // stale for the next open rather than refetched now.
+        await waitFor(() => expect(qc.getQueryState(ROSTER_KEY)?.isInvalidated).toBe(true));
     });
 
     it('drops the person from the cached roster before the server answers', async () => {
