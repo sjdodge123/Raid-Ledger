@@ -64,11 +64,18 @@ describe('admin plugins PluginCard — hub contributions', () => {
         expect(screen.getByText('Built in — cannot be deactivated or uninstalled.')).toBeInTheDocument();
     });
 
-    it('W7: Core lists its shared widgets, including Gallery, and needs no setup', () => {
+    it('W7: Core lists its shared widgets, including Gallery and the Steam cards, and its setup is optional only (ROK-1953 D7)', () => {
         renderPlugin(corePluginInfo());
         const widgets = screen.getByRole('list', { name: 'Widgets' });
-        expect(within(widgets).getByText('Gallery')).toBeInTheDocument();
-        expect(within(setupBlock()).getByText('No setup needed')).toBeInTheDocument();
+        for (const label of ['Gallery', 'Achievement race', 'Playtime']) {
+            expect(within(widgets).getByText(label)).toBeInTheDocument();
+        }
+        const setup = setupBlock();
+        expect(setup).not.toHaveAttribute('open');
+        expect(within(setup).getByText('2 optional')).toBeInTheDocument();
+        expect(within(setup).getAllByText('Ready').length).toBeGreaterThan(0);
+        expect(within(setup).getByText('Steam Web API key')).toBeInTheDocument();
+        expect(within(setup).getByText('Players link Steam')).toBeInTheDocument();
     });
 
     it('W8: the Valheim card lists Characters, Map, Materials and Planner tabs and the Deaths widget — not Gallery', () => {
