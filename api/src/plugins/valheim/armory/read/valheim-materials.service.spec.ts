@@ -95,7 +95,7 @@ const READ_ONLY_RR = {
 };
 
 describe('ValheimMaterialsService — one read-only transaction per request', () => {
-  it('materials: scan lookup + four totals/counts + base inputs/sums + catalog on the tx handle', async () => {
+  it('materials: scan lookup + four totals/counts + base inputs/sums + trend days + catalog on the tx handle', async () => {
     const { db, tx, service } = harness([[SCAN]]);
     await service.materials(7, USER, false);
     expect(db.transaction).toHaveBeenCalledTimes(1);
@@ -104,7 +104,7 @@ describe('ValheimMaterialsService — one read-only transaction per request', ()
       READ_ONLY_RR,
     );
     expect(db.select).not.toHaveBeenCalled();
-    expect(tx.select).toHaveBeenCalledTimes(8);
+    expect(tx.select).toHaveBeenCalledTimes(9);
   });
 
   it('containers: scan lookup + list + base inputs + catalog on the tx handle', async () => {
