@@ -187,6 +187,14 @@ export const CalendarOAuthIntentSchema = z.enum(['connect', 'primary', 'read']);
 export type CalendarOAuthIntent = z.infer<typeof CalendarOAuthIntentSchema>;
 
 /**
+ * `?return=` on the OAuth start route (ROK-2022). A named target, never a URL
+ * (no open redirect): `onboarding` sends the callback back to the first-run
+ * wizard's Calendar step instead of `/profile/integrations`.
+ */
+export const CalendarOAuthReturnSchema = z.enum(['onboarding']);
+export type CalendarOAuthReturn = z.infer<typeof CalendarOAuthReturnSchema>;
+
+/**
  * `?error=<code>` on the OAuth callback's redirect to
  * `/profile/integrations` (ROK-1592 L10; moved by ROK-1780). A closed set, so the page maps
  * a code to copy and never echoes the query string.

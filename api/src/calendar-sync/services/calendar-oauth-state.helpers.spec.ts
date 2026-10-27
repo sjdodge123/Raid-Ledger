@@ -188,3 +188,55 @@ describe('calendar OAuth state intent (ROK-1596 D8)', () => {
     expect(consume).not.toHaveBeenCalled();
   });
 });
+
+describe('calendar OAuth state return target (ROK-2022)', () => {
+  const body = (state: string) =>
+    Buffer.from(state.split('.')[0] ?? '', 'base64url').toString();
+
+  it('round-trips t=onboarding, signed into the payload', async () => {
+    const { state } = mintCalendarOAuthState({
+      uid: 42,
+      provider: 'google',
+      returnTarget: 'onboarding',
+      bindToBrowser: () => R,
+      nowMs: NOW,
+    });
+    expect(body(state)).toContain('"t":"onboarding"');
+    expect(must(await verify(state)).returnTarget).toBe('onboarding');
+  });
+
+  it('absent claim → no t in the payload and returnTarget undefined', async () => {
+    const { state } = mint();
+    expect(body(state)).not.toContain('"t"');
+    const v = must(await verify(state));
+    expect(v.returnTarget).toBeUndefined();
+    expect('returnTarget' in v).toBe(false);
+  });
+
+  it('a state edited to add t=onboarding → null, nonce not consumed', async () => {
+    const { state } = mint();
+    const [, sig] = state.split('.') as [string, string];
+    const forged = Buffer.from(
+      body(state).replace('"i":"connect"', '"i":"connect","t":"onboarding"'),
+    ).toString('base64url');
+    expect(await verify(`${forged}.${sig}`)).toBeNull();
+    expect(consume).not.toHaveBeenCalled();
+  });
+
+  it('a validly signed unknown return target → null, nonce not consumed', async () => {
+    const state = signState(
+      {
+        uid: 42,
+        provider: 'google',
+        n: 'nonce-1',
+        r: R,
+        i: 'connect',
+        t: 'evil',
+      },
+      'calendar-oauth',
+      { nowMs: NOW },
+    );
+    expect(await verify(state)).toBeNull();
+    expect(consume).not.toHaveBeenCalled();
+  });
+});

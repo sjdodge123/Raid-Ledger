@@ -174,7 +174,7 @@ async function optimisticToggle(
  * same votes the slot ladder does, so a mutation that leaves it alone strands
  * the modal on the page-load snapshot.
  */
-function invalidatePollViews(
+export function invalidatePollViews(
   qc: QueryClient,
   lineupId: number,
   matchId: number,
