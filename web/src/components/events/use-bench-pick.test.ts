@@ -7,7 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { completeStandalonePoll } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
-import { BENCH_PICKER_ID, benchPickError, completeLockIn, guardBenchPick, useBenchPick, type BenchPick } from './use-bench-pick';
+import { QueryClient } from '@tanstack/react-query';
+import { BENCH_PICKER_ID, benchPickError, completeLockIn, guardBenchPick, refreshLockedInEvent, useBenchPick, type BenchPick } from './use-bench-pick';
 import type { SchedulingOverflow } from './use-scheduling-overflow';
 import { withHttpStatus } from '../../lib/api/api-error';
 
@@ -142,5 +143,22 @@ describe('completeLockIn', () => {
         vi.mocked(completeStandalonePoll).mockRejectedValue(new Error('x'));
         await expect(completeLockIn(5, undefined, undefined, [4])).rejects.toThrow('x');
         expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, undefined, undefined]]);
+    });
+});
+
+describe('refreshLockedInEvent (ROK-2031)', () => {
+    it("invalidates the new event's queries so the roster refetches with the voters signed up", () => {
+        const qc = new QueryClient();
+        const spy = vi.spyOn(qc, 'invalidateQueries').mockResolvedValue(undefined);
+        refreshLockedInEvent(qc, 77);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith({ queryKey: ['events', 77] });
+    });
+
+    it('does nothing without an event (no winning slot, no signups)', () => {
+        const qc = new QueryClient();
+        const spy = vi.spyOn(qc, 'invalidateQueries');
+        refreshLockedInEvent(qc, undefined);
+        expect(spy).not.toHaveBeenCalled();
     });
 });
