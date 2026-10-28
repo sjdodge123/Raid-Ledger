@@ -124,18 +124,21 @@ describe('LastSeenWidget', () => {
 });
 
 describe('LastSeenWidget footer', () => {
-    it('dates the footer by the guild snapshot time, not the roster fact freshness', async () => {
-        // Roster facts are fresh ("just now"); the presence export is 20 days old.
+    it('dates the footer by lastSeen.snapshotAt from the same response, not the cached guild page', async () => {
+        // The presence export is 20 days old; the (separately cached) guild page
+        // still holds an older export time, and roster facts are "just now".
         const snapshot = new Date(Date.now() - 20 * 86_400_000).toISOString();
-        await renderWith(POPULATED, snapshot);
+        const olderPageSnapshot = new Date(Date.now() - 60 * 86_400_000).toISOString();
+        await renderWith({ ...POPULATED, snapshotAt: snapshot }, olderPageSnapshot);
         const footer = screen.getByTestId('forever-freshness');
         expect(footer).toHaveTextContent('via LedgerLink · as of 20 days ago');
         expect(footer).toHaveAttribute('data-stale', 'true');
         expect(footer).toHaveAttribute('title', `Roster exported ${new Date(snapshot).toLocaleString()}`);
     });
 
-    it('shows no date in the footer before any guild snapshot, even with fresh roster facts', async () => {
-        await renderWith(POPULATED, null);
+    it('shows no date in the footer when the response has no snapshot time, whatever the guild page says', async () => {
+        const pageSnapshot = new Date(Date.now() - 20 * 86_400_000).toISOString();
+        await renderWith({ ...POPULATED, snapshotAt: null }, pageSnapshot);
         expect(screen.getByTestId('forever-freshness')).toHaveTextContent(/^via LedgerLink$/);
     });
 });

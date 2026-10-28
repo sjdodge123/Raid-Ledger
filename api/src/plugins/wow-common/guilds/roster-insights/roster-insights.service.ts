@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
@@ -69,6 +70,8 @@ export class RosterInsightsService {
   ): Promise<WowRosterInsightsDto> {
     const all = await this.loadRows(guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
+    const snapshotAt =
+      audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
     return {
       classes: computeClasses(rows),
       levels: computeLevels(rows),
@@ -79,11 +82,21 @@ export class RosterInsightsService {
             lockouts: computeLockouts(rows, Date.now()),
             lockoutReporters: countLockoutReporters(rows),
             // Presence is per character: the full roster, never mainsOnly (D4).
-            lastSeen: computeLastSeen(all),
+            lastSeen: { ...computeLastSeen(all), snapshotAt },
           }
         : {}),
       freshness: computeFreshness(rows),
     };
+  }
+
+  /** The guild's latest snapshot time — the export the presence rows are from. */
+  private async loadSnapshotAt(guildId: number): Promise<string | null> {
+    const [g] = await this.db
+      .select({ at: schema.guilds.lastSnapshotAt })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, guildId))
+      .limit(1);
+    return g?.at ? g.at.toISOString() : null;
   }
 
   /** Roster rows (one per member) joined to their resolved facts. */

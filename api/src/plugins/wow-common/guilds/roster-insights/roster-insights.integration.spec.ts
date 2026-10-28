@@ -344,6 +344,7 @@ describe('GET roster-insights (real DB)', () => {
         { name: 'Pugone', characterId: null, days: 40 },
         { name: 'Pugtwo', characterId: null, days: 2 },
       ],
+      snapshotAt: SNAP.toISOString(),
     });
   });
 
@@ -362,6 +363,7 @@ describe('GET roster-insights (real DB)', () => {
       onlineCount: 1,
       online: [{ name: 'Leadalt', characterId: altId }],
       away: [{ name: 'lead', characterId: charIds.lead, days: 5 }],
+      snapshotAt: SNAP.toISOString(),
     });
   });
 

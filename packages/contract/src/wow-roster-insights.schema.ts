@@ -148,6 +148,12 @@ export const WowRosterLastSeenSchema = z
           .strict(),
       )
       .max(MAX_LAST_SEEN_AWAY),
+    /**
+     * The guild's latest LedgerLink snapshot time — the export these presence
+     * values come from (null before any snapshot). Travels in the same payload
+     * so the widget never dates new presence with an older cached export time.
+     */
+    snapshotAt: z.iso.datetime({ offset: true }).nullable().optional(),
   })
   .strict();
 export type WowRosterLastSeenDto = z.infer<typeof WowRosterLastSeenSchema>;

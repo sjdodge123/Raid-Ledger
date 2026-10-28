@@ -6,8 +6,10 @@
  * presence-bearing export yet, or one imported before this shipped) shows the
  * quiet no-export state; nobody online with no day counts is one quiet line
  * (no bare "0" headline). The shared `FreshnessFooter` dates the export from
- * the guild's LedgerLink snapshot time (`page.guild.lastSnapshotAt`) — not the
- * roster's level/class fact freshness; its tooltip carries the absolute time (Q4). Core draws the `WidgetCard` chrome;
+ * `lastSeen.snapshotAt` — the guild's LedgerLink snapshot time carried in the
+ * SAME response as the presence values (never the separately cached guild
+ * page, never the roster's level/class fact freshness); its tooltip carries
+ * the absolute time (Q4). Core draws the `WidgetCard` chrome;
  * the registration (`last-seen.register.ts`) gates it to members + staff.
  */
 import type { JSX } from 'react';
@@ -22,8 +24,8 @@ export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JS
     const { data, isPending, isError } = useRosterInsights(page.guild.id, false);
     if (isPending) return <div className="h-24 animate-pulse rounded-md bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
-    const footer = <Footer asOf={page.guild.lastSnapshotAt} />;
     const lastSeen = data.lastSeen;
+    const footer = <Footer asOf={lastSeen?.snapshotAt ?? null} />;
     if (lastSeen === undefined || lastSeen.reported === 0) return <NoExport footer={footer} />;
     if (lastSeen.onlineCount === 0 && lastSeen.away.length === 0) {
         return (
