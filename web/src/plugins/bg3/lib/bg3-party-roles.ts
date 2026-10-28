@@ -1,9 +1,9 @@
 /**
  * ROK-1958 (operator ruling Q4) — the party coverage strip: which of
  * healer / arcane / tank / face the current party covers. DRAFT table for the
- * operator to veto on the PR. Only class/subclass ids seen in a real save
- * (contract `bg3-save` fixtures) are listed; an unknown id adds no role.
- * Not seen yet (deliberately absent): Bard, Druid, Monk, Sorcerer.
+ * operator to veto on the PR. All 12 base classes, keyed by the raw class id a
+ * `bg3-save` payload carries (PascalCase, as in the contract fixture
+ * `act2-party-4p-summon`: `Barbarian`, `Wizard`, …). An unknown id adds no role.
  */
 import type { Bg3Class } from '@raid-ledger/contract';
 
@@ -22,22 +22,30 @@ export const BG3_ROLE_LABELS: Readonly<Record<Bg3Role, string>> = Object.freeze(
 /** Main class → roles. `face` = a Charisma class (dialogue checks). */
 export const BG3_CLASS_ROLES: Readonly<Record<string, readonly Bg3Role[]>> = Object.freeze({
     Barbarian: ['tank'],
+    Bard: ['arcane', 'face', 'healer'],
     Cleric: ['healer'],
+    Druid: ['healer'],
     Fighter: ['tank'],
+    Monk: [],
     Paladin: ['tank', 'healer', 'face'],
     Ranger: [],
     Rogue: [],
+    Sorcerer: ['arcane', 'face'],
     Warlock: ['arcane', 'face'],
     Wizard: ['arcane'],
 });
 
 /**
- * Subclass → roles it ADDS on top of its class. No seen subclass
+ * Subclass → roles it ADDS on top of its class. The seen subclasses
  * (BerserkerPath, Fiend, GloomStalker, NecromancySchool, Thief, Vengeance)
- * changes its class's roles; add e.g. `EldritchKnight: ['arcane']` once a
- * save shows it.
+ * change nothing, so only role-changing subclasses are listed. None of these
+ * three ids appears in a repo fixture yet.
  */
-export const BG3_SUBCLASS_ROLES: Readonly<Record<string, readonly Bg3Role[]>> = Object.freeze({});
+export const BG3_SUBCLASS_ROLES: Readonly<Record<string, readonly Bg3Role[]>> = Object.freeze({
+    EldritchKnight: ['arcane'], // UNVERIFIED raw id (Fighter)
+    ArcaneTrickster: ['arcane'], // UNVERIFIED raw id (Rogue)
+    CircleOfTheMoon: ['tank'], // UNVERIFIED raw id (Druid)
+});
 
 function own(table: Readonly<Record<string, readonly Bg3Role[]>>, key: string): readonly Bg3Role[] {
     return Object.prototype.hasOwnProperty.call(table, key) ? (table[key] ?? []) : [];

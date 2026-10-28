@@ -13,6 +13,35 @@ describe('party roles (Q4)', () => {
             .toEqual(['arcane', 'face', 'healer', 'tank']);
     });
 
+    it.each([
+        ['Barbarian', ['tank']],
+        ['Bard', ['arcane', 'face', 'healer']],
+        ['Cleric', ['healer']],
+        ['Druid', ['healer']],
+        ['Fighter', ['tank']],
+        ['Monk', []],
+        ['Paladin', ['face', 'healer', 'tank']],
+        ['Ranger', []],
+        ['Rogue', []],
+        ['Sorcerer', ['arcane', 'face']],
+        ['Warlock', ['arcane', 'face']],
+        ['Wizard', ['arcane']],
+    ])('maps base class %s to %j', (main, roles) => {
+        expect([...bg3MemberRoles([{ main, sub: null }])].sort()).toEqual(roles);
+    });
+
+    it.each([
+        ['Fighter', 'EldritchKnight', ['arcane', 'tank']],
+        ['Rogue', 'ArcaneTrickster', ['arcane']],
+        ['Druid', 'CircleOfTheMoon', ['healer', 'tank']],
+    ])('adds the %s subclass %s roles: %j', (main, sub, roles) => {
+        expect([...bg3MemberRoles([{ main, sub }])].sort()).toEqual(roles);
+    });
+
+    it('covers a healer for a Druid-led party', () => {
+        expect(coveredRoles([member([{ main: 'Druid', sub: 'CircleOfTheLand' }])])).toEqual(['healer']);
+    });
+
     it('gives an unknown class no role', () => {
         expect(bg3MemberRoles([{ main: 'Artificer', sub: null }]).size).toBe(0);
     });
