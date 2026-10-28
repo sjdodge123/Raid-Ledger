@@ -29,7 +29,8 @@ type Db = PostgresJsDatabase<typeof schema>;
  */
 export async function findBg3Game(db: Db): Promise<number> {
   const id = await findBg3GameId(db);
-  if (id === null) throw new NotFoundException("Baldur's Gate 3 game not found");
+  if (id === null)
+    throw new NotFoundException("Baldur's Gate 3 game not found");
   return id;
 }
 
