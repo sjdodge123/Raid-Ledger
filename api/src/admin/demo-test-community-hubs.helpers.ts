@@ -89,7 +89,9 @@ export async function findBg3GameId(db: Db): Promise<number | null> {
   const [hit] = await db
     .select({ id: gm.id })
     .from(gm)
-    .where(or(eq(gm.igdbId, BG3_IGDB_ID), inArray(gm.slug, [...BG3_GAME_SLUGS])))
+    .where(
+      or(eq(gm.igdbId, BG3_IGDB_ID), inArray(gm.slug, [...BG3_GAME_SLUGS])),
+    )
     .orderBy(sql`(${gm.igdbId} = ${BG3_IGDB_ID}) desc nulls last`, asc(gm.id))
     .limit(1);
   return hit?.id ?? null;
@@ -108,7 +110,11 @@ export async function resolveSeedGame(
     const bg3 = await findBg3GameId(db);
     if (bg3 !== null) return bg3;
   } else {
-    const [hit] = await db.select({ id: gm.id }).from(gm).where(eq(gm.id, gameId)).limit(1);
+    const [hit] = await db
+      .select({ id: gm.id })
+      .from(gm)
+      .where(eq(gm.id, gameId))
+      .limit(1);
     if (hit) return hit.id;
     throw new NotFoundException('Game not found');
   }

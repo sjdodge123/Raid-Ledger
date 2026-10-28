@@ -310,13 +310,21 @@ function bootSeedBg3(): { igdbId: number; name: string; slug: string } {
   const file = join(__dirname, '../../../../seeds/games-seed.json');
   const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
   const games: unknown[] =
-    typeof raw === 'object' && raw !== null && 'games' in raw && Array.isArray(raw.games)
+    typeof raw === 'object' &&
+    raw !== null &&
+    'games' in raw &&
+    Array.isArray(raw.games)
       ? raw.games
       : [];
   for (const g of games) {
     if (typeof g !== 'object' || g === null) continue;
     if (!('igdbId' in g) || g.igdbId !== BG3_IGDB_ID) continue;
-    if ('name' in g && 'slug' in g && typeof g.name === 'string' && typeof g.slug === 'string')
+    if (
+      'name' in g &&
+      'slug' in g &&
+      typeof g.name === 'string' &&
+      typeof g.slug === 'string'
+    )
       return { igdbId: BG3_IGDB_ID, name: g.name, slug: g.slug };
   }
   throw new Error('games-seed.json has no BG3 entry');
@@ -334,7 +342,11 @@ describe('ROK-2038 — BG3 hub on the game row the boot seed writes', () => {
 
   async function readStatuses(): Promise<number[]> {
     const r = routes(hub);
-    const res = [await r.campaigns(host), await r.snapshot(host), await r.sessions(host)];
+    const res = [
+      await r.campaigns(host),
+      await r.snapshot(host),
+      await r.sessions(host),
+    ];
     return res.map((x) => x.status);
   }
 

@@ -3,7 +3,7 @@
  * DB (spec §9.2 I-1…I-6, plus I-9's "ingest with the plugin inactive"). The
  * production `Bg3SaveHandler` is registered by `Bg3Module`; nothing here
  * stubs it. Hubs are inserted directly (a `game_community` hub of the
- * `baldurs-gate-3` game); campaigns, bindings and defaults go through the
+ * `BG3_GAME_SLUG` game); campaigns, bindings and defaults go through the
  * routes. No blob bytes are uploaded — ingest only records the thumbnail ref.
  */
 import { readFileSync } from 'node:fs';

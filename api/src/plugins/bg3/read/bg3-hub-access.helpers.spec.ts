@@ -37,6 +37,15 @@ describe('refuseNonBg3Hub (D-2, D-15)', () => {
     expect(() => refuseNonBg3Hub(row, member)).toThrow(NotFoundException);
   });
 
+  it.each(['baldurs-gate-iii', 'baldurs-gate-3'])(
+    'ROK-2038: admits a BG3 hub whose game slug is %s',
+    (gameSlug) => {
+      expect(refuseNonBg3Hub(hub({ gameSlug }), member)).toEqual(
+        hub({ gameSlug }),
+      );
+    },
+  );
+
   it('lets staff see a hidden BG3 hub', () => {
     expect(refuseNonBg3Hub(hub({ hidden: true }), staff)).toEqual(
       hub({ hidden: true }),

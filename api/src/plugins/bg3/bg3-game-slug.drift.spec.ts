@@ -19,7 +19,12 @@ interface SeedGame {
 }
 
 function hasGames(v: unknown): v is { games: SeedGame[] } {
-  return typeof v === 'object' && v !== null && 'games' in v && Array.isArray(v.games);
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'games' in v &&
+    Array.isArray(v.games)
+  );
 }
 
 function seededBg3(): SeedGame[] {
