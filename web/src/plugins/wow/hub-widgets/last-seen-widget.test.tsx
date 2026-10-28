@@ -69,7 +69,7 @@ describe('LastSeenWidget', () => {
         expect(headline).toHaveTextContent('7');
         expect(headline).toHaveTextContent('online at last export');
         expect(screen.getByText('of 42 members in the export')).toBeInTheDocument();
-        expect(document.body).not.toHaveTextContent(/online now|live/i);
+        expect(document.body).not.toHaveTextContent(/online now|\blive\b/i);
     });
 
     it('lists at most five online names, linking linked characters, then "+N more"', async () => {
