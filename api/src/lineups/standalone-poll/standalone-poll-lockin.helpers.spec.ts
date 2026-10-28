@@ -103,7 +103,9 @@ function lockIn(overrides: Partial<LockIn> = {}): LockIn {
 /** The skip-set (7th arg) of the only EVENT CREATED call. */
 function announcedSkipSet(): unknown {
   expect(announceMock).toHaveBeenCalledTimes(1);
-  return announceMock.mock.calls[0]?.[6];
+  const [call] = announceMock.mock.calls;
+  if (!call) throw new Error('EVENT CREATED was not announced');
+  return call[6];
 }
 
 beforeEach(() => {
