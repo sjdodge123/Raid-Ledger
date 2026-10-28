@@ -18,6 +18,9 @@
  *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
  *   - with `withDings: true` (ROK-1919), three level-up events for the
  *     "Recent dings" widget (`demo-test-guild-dings.helpers.ts`).
+ *   - with `withPresence: true` (ROK-1916), guild-export presence on the
+ *     five roster rows for the "Last seen" widget: 2 online, 3 away
+ *     (`demo-test-guild-presence.helpers.ts`).
  *   - with `withLockouts: true` (ROK-1914), LedgerLink lockout snapshots on
  *     the three linked characters for the Who's saved widget (see
  *     `demo-test-guild-lockouts.helpers.ts`). Re-seeding restores them.
@@ -58,6 +61,7 @@ import {
   upsertGuild,
   upsertMember,
   upsertSeedUser,
+  type SeedGuildInput,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
 import {
@@ -77,6 +81,10 @@ import {
   seedGuildDings,
   type SeededGuildDings,
 } from './demo-test-guild-dings.helpers';
+import {
+  seedGuildPresence,
+  type SeededGuildPresence,
+} from './demo-test-guild-presence.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -115,6 +123,8 @@ export interface SeedGuildResponse {
   lockouts?: SeededGuildLockouts;
   /** Present only when the body sent `withDings: true` (ROK-1919). */
   dings?: SeededGuildDings;
+  /** Present only when the body sent `withPresence: true` (ROK-1916). */
+  presence?: SeededGuildPresence;
 }
 
 interface SeededRoster {
@@ -160,12 +170,15 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919). */
+  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916). */
   private async seedOptional(
-    input: { withContent: boolean; withLockouts: boolean; withDings: boolean },
+    input: Omit<SeedGuildInput, 'name' | 'gameSlug'>,
     ctx: RosterCtx,
-    { users, unlinked }: SeededRoster,
-  ): Promise<Pick<SeedGuildResponse, 'content' | 'lockouts' | 'dings'>> {
+    roster: SeededRoster,
+  ): Promise<
+    Pick<SeedGuildResponse, 'content' | 'lockouts' | 'dings' | 'presence'>
+  > {
+    const { users, unlinked } = roster;
     const gm = users.gm.userId;
     const content = input.withContent
       ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
@@ -176,10 +189,14 @@ export class DemoTestGuildController {
     const dings = input.withDings
       ? await this.seedDings(users, unlinked, ctx)
       : null;
+    const presence = input.withPresence
+      ? await this.seedPresence(roster, ctx.guildId)
+      : null;
     return {
       ...(content ? { content } : {}),
       ...(lockouts ? { lockouts } : {}),
       ...(dings ? { dings } : {}),
+      ...(presence ? { presence } : {}),
     };
   }
 
@@ -199,10 +216,35 @@ export class DemoTestGuildController {
       return { owner, characterId };
     });
     const seeded = await seedGuildLockouts(this.db, owners, ctx.now);
+    this.invalidateInsights(ctx.guildId);
+    return seeded;
+  }
+
+  /** ROK-1916 — presence on the five roster rows, then a fresh insights cache. */
+  private async seedPresence(
+    { users, unlinked }: SeededRoster,
+    guildId: number,
+  ): Promise<SeededGuildPresence> {
+    const memberOf = (role: SeedGuildRole): number =>
+      defined(users[role].memberId ?? undefined, `seeded ${role} member`);
+    const seeded = await seedGuildPresence(this.db, {
+      gm: memberOf('gm'),
+      officer: memberOf('officer'),
+      member: memberOf('member'),
+      unlinked: [
+        defined(unlinked[0], 'seeded unlinked member'),
+        defined(unlinked[1], 'seeded second unlinked member'),
+      ],
+    });
+    this.invalidateInsights(guildId);
+    return seeded;
+  }
+
+  /** Drops the guild's 5-minute roster-insights cache (WowCommonModule owns it). */
+  private invalidateInsights(guildId: number): void {
     this.moduleRef
       .get(RosterInsightsCache, { strict: false })
-      .invalidateGuild(ctx.guildId);
-    return seeded;
+      .invalidateGuild(guildId);
   }
 
   /** ROK-1919 — three level-up events: GM (linked), an unlinked row, member (31 days old). */
