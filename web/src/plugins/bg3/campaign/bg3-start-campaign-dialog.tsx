@@ -4,7 +4,7 @@
  * Exported for ROK-1960 (D-16). Close paths are dirty-guarded (§4.4).
  */
 import { useId, useState, type FormEvent, type JSX } from 'react';
-import { BG3_CAMPAIGN_NAME_MAX, type Bg3CampaignSummary } from '@raid-ledger/contract';
+import type { Bg3CampaignSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { Field } from '../../../components/ui/field';
@@ -13,20 +13,13 @@ import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useCreateBg3Campaign } from '../hooks/use-bg3-mutations';
 import { Bg3Overlay } from './bg3-overlay';
 import { toastBg3CampaignError } from './bg3-campaign-toast';
+import { bg3CampaignNameError } from './bg3-campaign-name';
 
 export interface Bg3StartCampaignDialogProps {
     readonly isOpen: boolean;
     readonly hubId: number;
     readonly onClose: () => void;
     readonly onCreated?: (campaign: Bg3CampaignSummary) => void;
-}
-
-/** The name error, or null when 1–64 characters after trimming. */
-export function bg3CampaignNameError(name: string): string | null {
-    const trimmed = name.trim();
-    if (trimmed.length === 0) return 'Give the campaign a name.';
-    if (trimmed.length > BG3_CAMPAIGN_NAME_MAX) return `Use ${BG3_CAMPAIGN_NAME_MAX} characters or fewer.`;
-    return null;
 }
 
 function useStartForm(onClose: () => void) {
@@ -36,6 +29,15 @@ function useStartForm(onClose: () => void) {
     const close = (): void => { setName(''); setPutSaves(true); setShowError(false); onClose(); };
     const guard = useDirtyCloseGuard(name !== '' || !putSaves, close);
     return { name, setName, putSaves, setPutSaves, showError, setShowError, close, guard };
+}
+
+function StartFooter({ formId, onCancel, pending }: { formId: string; onCancel: () => void; pending: boolean }): JSX.Element {
+    return (
+        <>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button type="submit" form={formId} loading={pending}>Start campaign</Button>
+        </>
+    );
 }
 
 export function Bg3StartCampaignDialog({ isOpen, hubId, onClose, onCreated }: Bg3StartCampaignDialogProps): JSX.Element {
@@ -51,12 +53,7 @@ export function Bg3StartCampaignDialog({ isOpen, hubId, onClose, onCreated }: Bg
             onError: (err) => toastBg3CampaignError(err, "Couldn't start the campaign."),
         });
     };
-    const footer = (
-        <>
-            <Button variant="secondary" onClick={form.guard.requestClose}>Cancel</Button>
-            <Button type="submit" form={formId} loading={create.isPending}>Start campaign</Button>
-        </>
-    );
+    const footer = <StartFooter formId={formId} onCancel={form.guard.requestClose} pending={create.isPending} />;
     return (
         <Bg3Overlay isOpen={isOpen} title="Start a campaign" onClose={form.close} footer={footer}
             closeGuard={form.guard} discardMessage="The campaign name you typed will be lost.">

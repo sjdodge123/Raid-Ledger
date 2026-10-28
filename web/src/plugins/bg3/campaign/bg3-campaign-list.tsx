@@ -42,41 +42,60 @@ function CampaignRow({ campaign, active, children }: RowProps): JSX.Element {
     );
 }
 
-export function Bg3CampaignList({ hubId, data, viewerId, onArchive, onStart }: Bg3CampaignListProps): JSX.Element {
+function useCampaignActions(hubId: number) {
     const update = useUpdateBg3Campaign(hubId);
     const settings = useUpdateBg3HubSettings(hubId);
+    return {
+        makeActive: (id: number): void => settings.mutate({ activeCampaignId: id }, {
+            onError: (err) => toastBg3CampaignError(err, "Couldn't change the active campaign."),
+        }),
+        unarchive: (id: number): void => update.mutate({ campaignId: id, body: { archived: false } }, {
+            onError: (err) => toastBg3CampaignError(err, "Couldn't unarchive the campaign."),
+        }),
+    };
+}
+
+interface LiveProps {
+    readonly data: Bg3HubCampaignsResponse;
+    readonly live: readonly Bg3CampaignSummary[];
+    readonly canArchive: (c: Bg3CampaignSummary) => boolean;
+    readonly onArchive: (c: Bg3CampaignSummary) => void;
+    readonly onMakeActive: (id: number) => void;
+}
+
+function LiveCampaigns({ data, live, canArchive, onArchive, onMakeActive }: LiveProps): JSX.Element {
+    if (live.length === 0) return <p className="text-sm text-muted">No campaign on this hub yet.</p>;
+    return (
+        <ul className="divide-y divide-edge" aria-label="Campaigns">
+            {live.map((c) => {
+                const active = c.id === data.settings.activeCampaignId;
+                return (
+                    <CampaignRow key={c.id} campaign={c} active={active}>
+                        <>
+                            {data.canEdit && !active && <Button variant="ghost" size="sm" onClick={() => onMakeActive(c.id)}>Make active</Button>}
+                            {canArchive(c) && <Button variant="ghost" size="sm" onClick={() => onArchive(c)}>Archive</Button>}
+                        </>
+                    </CampaignRow>
+                );
+            })}
+        </ul>
+    );
+}
+
+export function Bg3CampaignList({ hubId, data, viewerId, onArchive, onStart }: Bg3CampaignListProps): JSX.Element {
+    const actions = useCampaignActions(hubId);
     const canArchive = (c: Bg3CampaignSummary): boolean => data.canEdit || (viewerId !== null && c.hostUserId === viewerId);
     const live = data.campaigns.filter((c) => c.archivedAt === null);
     const archived = data.campaigns.filter((c) => c.archivedAt !== null);
-    const makeActive = (id: number): void => settings.mutate({ activeCampaignId: id }, {
-        onError: (err) => toastBg3CampaignError(err, "Couldn't change the active campaign."),
-    });
-    const unarchive = (id: number): void => update.mutate({ campaignId: id, body: { archived: false } }, {
-        onError: (err) => toastBg3CampaignError(err, "Couldn't unarchive the campaign."),
-    });
     return (
         <div className="flex flex-col gap-3">
-            {live.length === 0 ? <p className="text-sm text-muted">No campaign on this hub yet.</p> : (
-                <ul className="divide-y divide-edge" aria-label="Campaigns">
-                    {live.map((c) => {
-                        const active = c.id === data.settings.activeCampaignId;
-                        return (
-                            <CampaignRow key={c.id} campaign={c} active={active}>
-                                <>
-                                    {data.canEdit && !active && <Button variant="ghost" size="sm" onClick={() => makeActive(c.id)}>Make active</Button>}
-                                    {canArchive(c) && <Button variant="ghost" size="sm" onClick={() => onArchive(c)}>Archive</Button>}
-                                </>
-                            </CampaignRow>
-                        );
-                    })}
-                </ul>
-            )}
+            <LiveCampaigns data={data} live={live} canArchive={canArchive} onArchive={onArchive} onMakeActive={actions.makeActive} />
             {archived.length > 0 && (
                 <ScrollCollapsible title={`Archived (${archived.length})`}>
                     <ul className="divide-y divide-edge" aria-label="Archived campaigns">
                         {archived.map((c) => (
                             <CampaignRow key={c.id} campaign={c} active={false}>
-                                {canArchive(c) && <Button variant="ghost" size="sm" onClick={() => unarchive(c.id)}>Unarchive</Button>}
+                                {canArchive(c) && <Button variant="ghost" size="sm" onClick={() => actions.unarchive(c.id)}>Unarchive</Button>}
                             </CampaignRow>
                         ))}
                     </ul>

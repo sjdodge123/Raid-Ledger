@@ -46,6 +46,17 @@ function SaveList({ saves, selected, onToggle }: { saves: readonly Bg3MySave[]; 
     );
 }
 
+interface FooterProps { count: number; onCancel: () => void; onSubmit: () => void; pending: boolean }
+
+function AddFooter({ count, onCancel, onSubmit, pending }: FooterProps): JSX.Element {
+    return (
+        <>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button onClick={onSubmit} disabled={count === 0} loading={pending}>{count === 1 ? 'Add 1 save' : `Add ${count} saves`}</Button>
+        </>
+    );
+}
+
 export function Bg3AddSavesSheet({ isOpen, hubId, campaignId, campaignName, onClose }: Bg3AddSavesSheetProps): JSX.Element {
     const query = useBg3MyUnassignedSaves(isOpen);
     const saves = (query.data?.saves ?? []).filter((s) => s.campaignId === null);
@@ -59,14 +70,7 @@ export function Bg3AddSavesSheet({ isOpen, hubId, campaignId, campaignName, onCl
         onSuccess: close,
         onError: (err) => toastBg3CampaignError(err, "Couldn't add your saves."),
     });
-    const footer = (
-        <>
-            <Button variant="secondary" onClick={guard.requestClose}>Cancel</Button>
-            <Button onClick={submit} disabled={picked.length === 0} loading={bind.isPending}>
-                {picked.length === 1 ? 'Add 1 save' : `Add ${picked.length} saves`}
-            </Button>
-        </>
-    );
+    const footer = <AddFooter count={picked.length} onCancel={guard.requestClose} onSubmit={submit} pending={bind.isPending} />;
     return (
         <Bg3Overlay isOpen={isOpen} title={`Add my saves to ${campaignName}`} onClose={close} footer={footer}
             closeGuard={guard} discardMessage="The saves you picked won't be added.">
