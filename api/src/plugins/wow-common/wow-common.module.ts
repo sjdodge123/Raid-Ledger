@@ -159,17 +159,14 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly identityProvider: WowForeverIdentityProvider,
     private readonly hubKindAdapter: WowHubKindAdapter,
     private readonly companionRegistry: CompanionHandlerRegistry,
-    private readonly ledgerlinkHandler: WowLedgerlinkHandler,
+    private readonly ledgerlink: WowLedgerlinkHandler,
   ) {}
 
   async onModuleInit(): Promise<void> {
     // ROK-1964: outside bestEffortInit — a bad registration is a boot error,
     // and a failed seed must not leave the contract unhandled. The registry
     // resolves it only while `blizzard` is active.
-    this.companionRegistry.register(
-      WOW_COMMON_MANIFEST.id,
-      this.ledgerlinkHandler,
-    );
+    this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.ledgerlink);
     await bestEffortInit('WowCommonModule.init', this.logger, async () => {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);
