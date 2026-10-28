@@ -214,9 +214,10 @@ describe('GET recent-dings links and departures (real DB)', () => {
     }
   });
 
-  it('dings of a member who has since left the guild still show', async () => {
+  it('a member who has left the guild drops out of the feed; the log row stays', async () => {
     const gid = await insertGuild('Dings Departed');
     const gone = await insertMember(gid, 'Player-9-dgone', 'Gone');
+    const here = await insertMember(gid, 'Player-9-dhere', 'Here');
     // Re-import never deletes a departed member: its row just stops being
     // seen, so lastSeenAt falls behind the guild's latest snapshot.
     await testApp.db
@@ -224,10 +225,16 @@ describe('GET recent-dings links and departures (real DB)', () => {
       .set({ lastSeenAt: ago(5) })
       .where(eq(schema.guildMembers.id, gone));
     await insertDing(gid, gone, 33, ago(6));
+    await insertDing(gid, here, 21, ago(7));
     const dto = WowRecentDingsSchema.parse((await dings('visitor', gid)).body);
     expect(dto.dings).toEqual([
-      expect.objectContaining({ name: 'Gone', fromLevel: 32, toLevel: 33 }),
+      expect.objectContaining({ name: 'Here', fromLevel: 20, toLevel: 21 }),
     ]);
+    const kept = await testApp.db
+      .select({ id: schema.guildMemberLevelEvents.id })
+      .from(schema.guildMemberLevelEvents)
+      .where(eq(schema.guildMemberLevelEvents.guildMemberId, gone));
+    expect(kept).toHaveLength(1);
   });
 });
 

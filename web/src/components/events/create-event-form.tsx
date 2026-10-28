@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
 import type { CreateEventDto, UpdateEventDto, TemplateConfigDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
 import { createEvent, updateEvent, updateSeries } from '../../lib/api-client';
-import { completeLockIn, guardBenchPick, useLockBenchPick, type BenchPick } from './use-bench-pick';
+import { completeLockIn, guardBenchPick, refreshLockedInEvent, useLockBenchPick, type BenchPick } from './use-bench-pick';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -48,7 +48,7 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             if (schedulingMatchId) {
                 // ROK-1844: signups need the winning slot — without one just close the poll.
                 const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeLockIn(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined, submitted?.benchAtSubmit).then(() => invalidateHubPolls(queryClient), () => {
+                completeLockIn(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined, submitted?.benchAtSubmit).then(() => { invalidateHubPolls(queryClient); refreshLockedInEvent(queryClient, signupEventId); }, () => {
                     toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
                 });
             }

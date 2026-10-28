@@ -51,6 +51,10 @@
     "path": "payload.saveName",
     "code": "invalid_format"
   },
+  "save-name-lone-surrogate": {
+    "path": "payload.saveName",
+    "code": "invalid_format"
+  },
   "campaign-key-raw-folder": {
     "path": "payload.campaignKey",
     "code": "invalid_format"
