@@ -112,6 +112,7 @@ export class StandalonePollController {
       parsed.data.startTime,
       req.user.id,
       isOperatorOrAdmin(req.user.role),
+      parsed.data.benchUserIds,
     );
     if (!ok) throw new NotFoundException('Poll not found');
     return { ok: true };

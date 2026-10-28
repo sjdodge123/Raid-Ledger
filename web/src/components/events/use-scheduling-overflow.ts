@@ -27,9 +27,17 @@ import { schedulePollKey } from '../../hooks/use-scheduling';
 import { liveRefetchInterval, useSchedulePollRealtime } from '../../hooks/use-schedule-poll-realtime';
 import type { FormState } from './create-event-form.types';
 
+/** A yes-voter the organizer can bench (ROK-2025). */
+export interface BenchCandidate {
+    userId: number;
+    displayName: string;
+}
+
 export interface SchedulingOverflow {
     /** Yes-voters' display names, creator omitted, server order. */
     voters: string[];
+    /** The same voters with ids, in server vote order — earliest yes first (ROK-2025). */
+    people: BenchCandidate[];
     rostered: number;
     cap: number;
     benched: number;
@@ -74,17 +82,28 @@ export function computeSchedulingOverflow(
     const cap = resolveRosterCap(roster.slotPlayer, roster.maxAttendees);
     if (cap === null) return null;
     const seen = new Set<number>();
-    const voters: string[] = [];
+    const people: BenchCandidate[] = [];
     for (const v of slot.votes) {
         if (v.userId === creatorId || seen.has(v.userId)) continue;
         seen.add(v.userId);
-        voters.push(v.displayName);
+        people.push({ userId: v.userId, displayName: v.displayName });
     }
+    const voters = people.map((p) => p.displayName);
     const rostered = 1 + voters.length;
     const benched = Math.max(0, rostered - cap);
     if (benched === 0) return null;
     const creatorVoted = slot.votes.some((v) => v.userId === creatorId);
-    return { voters, rostered, cap, benched, creatorVoted };
+    return { voters, people, rostered, cap, benched, creatorVoted };
+}
+
+/**
+ * ROK-2025 default: the LATEST yes-voters go to the bench, so first-come keeps
+ * their spot. `people` is in vote order (the API orders votes by when each
+ * person said yes), so the latest are at the end.
+ */
+export function defaultBenchPick(people: BenchCandidate[], benched: number): number[] {
+    if (benched <= 0) return [];
+    return people.slice(-benched).map((p) => p.userId);
 }
 
 export interface SchedulingOverflowParams extends RosterCapInput {

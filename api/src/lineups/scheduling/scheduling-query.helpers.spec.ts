@@ -2,6 +2,8 @@
  * Unit tests for scheduling query helpers (ROK-965).
  * Uses flat drizzle-mock to verify query builder invocations.
  */
+import { sql } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   createDrizzleMock,
   type MockDb,
@@ -17,6 +19,8 @@ import {
   findVoteBySlotAndUser,
   updateMatchLinkedEvent,
 } from './scheduling-query.helpers';
+
+const dialect = new PgDialect();
 
 describe('scheduling-query.helpers', () => {
   let mockDb: MockDb;
@@ -68,7 +72,7 @@ describe('scheduling-query.helpers', () => {
     });
 
     it('queries votes with join for non-empty slotIds', async () => {
-      mockDb.where.mockResolvedValueOnce([
+      mockDb.orderBy.mockResolvedValueOnce([
         { id: 1, slotId: 20, userId: 100, displayName: 'Alice' },
       ]);
 
@@ -81,7 +85,7 @@ describe('scheduling-query.helpers', () => {
 
     // ROK-1014: findScheduleVotes must include avatar fields from users table
     it('returns avatar, discordId, and customAvatarUrl fields (ROK-1014)', async () => {
-      mockDb.where.mockResolvedValueOnce([
+      mockDb.orderBy.mockResolvedValueOnce([
         {
           id: 1,
           slotId: 20,
@@ -105,6 +109,23 @@ describe('scheduling-query.helpers', () => {
       expect(selectArg).toHaveProperty('avatar');
       expect(selectArg).toHaveProperty('discordId');
       expect(selectArg).toHaveProperty('customAvatarUrl');
+    });
+
+    // ROK-2025: vote order, earliest yes first. A stance flip stamps
+    // updated_at, so a no→yes flipper counts from the moment they said yes;
+    // id breaks created_at ties. The bench pick pre-marks the LAST voters.
+    it('orders votes by when each one said yes, then id (ROK-2025)', async () => {
+      mockDb.orderBy.mockResolvedValueOnce([]);
+
+      await findScheduleVotes(mockDb as never, [20]);
+
+      const args: unknown[] | undefined = mockDb.orderBy.mock.calls[0];
+      if (!args) throw new Error('findScheduleVotes never called orderBy');
+      const rendered = args.map((a) => dialect.sqlToQuery(sql`${a}`).sql);
+      expect(rendered).toEqual([
+        'coalesce("community_lineup_schedule_votes"."updated_at", "community_lineup_schedule_votes"."created_at")',
+        '"community_lineup_schedule_votes"."id"',
+      ]);
     });
   });
 
