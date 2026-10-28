@@ -24,6 +24,7 @@ import {
   type GuildPage,
   type GuildRaidsDto,
   type MyGuilds,
+  type WowRecentDingsDto,
   type WowRosterInsightsDto,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../../auth/types';
@@ -37,6 +38,7 @@ import { HubService } from '../../../guilds/hub.service';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 import { RosterInsightsService } from './roster-insights/roster-insights.service';
+import { RecentDingsService } from './recent-dings/recent-dings.service';
 
 const jwt = AuthGuard('jwt');
 
@@ -56,6 +58,7 @@ export class GuildsController {
     private readonly raidsSvc: GuildRaidsService,
     private readonly hubs: HubService,
     private readonly insightsSvc: RosterInsightsService,
+    private readonly dingsSvc: RecentDingsService,
   ) {}
 
   @Get()
@@ -120,6 +123,15 @@ export class GuildsController {
     @Query('mainsOnly') mainsOnly?: string,
   ): Promise<WowRosterInsightsDto> {
     return this.insightsSvc.insights(req.user, id, mainsOnly === 'true');
+  }
+
+  /** ROK-1919 — Forever "Recent dings" (last 30 days). Anyone who can view the hub. */
+  @Get(':id/recent-dings')
+  @UseGuards(jwt, HubVisibleGuard)
+  recentDings(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<WowRecentDingsDto> {
+    return this.dingsSvc.recentDings(id);
   }
 
   @Get(':id/editors')
