@@ -247,3 +247,44 @@ describe("characterId is the characters table uuid (ROK-1911 review)", () => {
     expect(r.success).toBe(false);
   });
 });
+
+describe("WowRosterInsights lastSeen (ROK-1916)", () => {
+  const LINKED = "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c";
+  const lastSeen = {
+    reported: 3,
+    onlineCount: 1,
+    online: [{ name: "Wren", characterId: LINKED }],
+    away: [
+      { name: "Pug", characterId: null, days: 34 },
+      { name: "Ash", characterId: null, days: 0 },
+    ],
+  };
+  it("parses a member payload with lastSeen and a visitor payload without", () => {
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, lastSeen }).success,
+    ).toBe(true);
+    expect(WowRosterInsightsSchema.safeParse(insights).success).toBe(true);
+  });
+  it("caps online at 25 and away at 10, and rejects negative days", () => {
+    const online = Array.from({ length: 26 }, (_, i) => ({
+      name: `m${i}`,
+      characterId: null,
+    }));
+    const away = Array.from({ length: 11 }, (_, i) => ({
+      name: `m${i}`,
+      characterId: null,
+      days: i,
+    }));
+    const bad = [
+      { ...lastSeen, online },
+      { ...lastSeen, away },
+      { ...lastSeen, away: [{ name: "x", characterId: null, days: -1 }] },
+      { ...lastSeen, extra: 1 },
+    ];
+    for (const ls of bad)
+      expect(
+        WowRosterInsightsSchema.safeParse({ ...insights, lastSeen: ls })
+          .success,
+      ).toBe(false);
+  });
+});
