@@ -13,12 +13,13 @@ import DeathsStripDemo from './deaths-strip-demo';
 beforeEach(() => { useHubGalleryStore.setState({ request: null }); });
 
 describe('DeathsStripDemo', () => {
-    it('draws three thumbs and "+N" as a sibling of the row link', () => {
+    it('draws three thumbs and "+N" as a sibling of both row links', () => {
         renderWithProviders(<DeathsStripDemo />);
         const group = screen.getByRole('group', { name: "Jasz's death pictures" });
         expect(within(group).getAllByTestId('valheim-death-thumb')).toHaveLength(3);
         expect(within(group).getByTestId('valheim-death-thumbs-more')).toHaveTextContent('+2');
-        expect(screen.getByTestId('ds-deaths-strip-row').contains(group), 'the strip is not inside the row link').toBe(false);
+        const links = ["Open Jasz's character page", "Show Jasz's 7 deaths on the map"].map((name) => screen.getByRole('link', { name }));
+        expect(links.some((l) => l.contains(group)), 'the strip is not inside either row link').toBe(false);
     });
 
     it('a thumb opens the Gallery demo viewer at that death picture', async () => {

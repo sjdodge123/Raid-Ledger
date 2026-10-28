@@ -38,7 +38,7 @@ function DemoRow(): JSX.Element {
     return (
         <div data-testid="ds-deaths-strip-row">
             <div className="flex min-h-[44px] items-center justify-between gap-3">
-                <a href="#hub-widgets" aria-label="Open Jasz's character page" className={`${link} min-w-0`}>
+                <a href="#hub-widgets" aria-label="Open Jasz's character page" className={`${link} min-w-[44px]`}>
                     <span className="truncate">{PLAYER.name}</span>
                 </a>
                 <a href="#hub-widgets" aria-label="Show Jasz's 7 deaths on the map"

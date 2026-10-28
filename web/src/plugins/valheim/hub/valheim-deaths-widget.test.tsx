@@ -2,7 +2,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderHook } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { JSX, ReactNode } from 'react';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { GuildPage } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -27,6 +29,16 @@ function ctx(): HubWidgetCtx {
 const Widget = (): JSX.Element => <ValheimDeathsWidget {...ctx()} />;
 const rows = (): HTMLElement[] => screen.getAllByTestId('valheim-deaths-row');
 
+function must<T>(value: T | null | undefined, label: string): T {
+    if (value === null || value === undefined) throw new Error(`missing: ${label}`);
+    return value;
+}
+
+/** The character route's stand-in: prints the router state the name link sent. */
+function StateProbe(): JSX.Element {
+    return <pre data-testid="state-probe">{JSON.stringify(useLocation().state)}</pre>;
+}
+
 function probe() {
     const client = createTestQueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -46,41 +58,6 @@ describe('ValheimDeathsWidget', () => {
         expect(rows().map((r) => r.dataset.key)).toEqual(['c11', 'c12', 'nLeft-the-hub']);
         const values = screen.getAllByRole('meter').map((m) => m.getAttribute('aria-valuenow'));
         expect(values).toEqual(['100', '50', '25']);
-    });
-
-    it('ROK-2029: the name opens the character page; the count + pin opens their death pins on the Map tab', async () => {
-        server.use(valheimDeathsHandler());
-        renderWithProviders(<Widget />);
-        const name = await screen.findByRole('link', { name: "Open Ragnhild's character page" });
-        expect(name.getAttribute('href')).toBe('/valheim/characters/11');
-        expect(name.textContent).toBe('Ragnhild');
-        const map = screen.getByRole('link', { name: "Show Ragnhild's 12 deaths on the map" });
-        expect(map.getAttribute('href')).toBe('/?pins=death&vc=11#map');
-        expect(map.textContent).toBe('12');
-        // Two separate links per claimed row, neither inside the other.
-        const row = rows()[0] as HTMLElement;
-        expect(within(row).getAllByRole('link')).toHaveLength(2);
-        expect(name.contains(map) || map.contains(name)).toBe(false);
-    });
-
-    it('ROK-2029: both links are 44px touch targets', async () => {
-        server.use(valheimDeathsHandler());
-        renderWithProviders(<Widget />);
-        const name = await screen.findByRole('link', { name: "Open Hrafn's character page" });
-        const map = screen.getByRole('link', { name: "Show Hrafn's 6 deaths on the map" });
-        expect(name.className).toContain('min-h-[44px]');
-        expect(map.className).toContain('min-h-[44px]');
-        expect(map.className).toContain('min-w-[44px]');
-    });
-
-    it('ROK-2029: a row without a character has no links — plain name and count', async () => {
-        server.use(valheimDeathsHandler());
-        renderWithProviders(<Widget />);
-        await waitFor(() => expect(rows()).toHaveLength(3));
-        const unlinked = rows()[2] as HTMLElement;
-        expect(within(unlinked).queryByRole('link')).toBeNull();
-        expect(within(unlinked).getByText('Left-the-hub')).toBeTruthy();
-        expect(within(unlinked).getByText('3')).toBeTruthy();
     });
 
     it('shows at most 8 bars', async () => {
@@ -108,6 +85,58 @@ describe('ValheimDeathsWidget', () => {
         await waitFor(() => expect(screen.queryByTestId('valheim-deaths-row')).toBeNull());
         expect(container.innerHTML).toBe('');
         expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('ValheimDeathsWidget — row links (ROK-2029)', () => {
+    it('ROK-2029: the name opens the character page; the count + pin opens their death pins on the Map tab', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        const name = await screen.findByRole('link', { name: "Open Ragnhild's character page" });
+        expect(name.getAttribute('href')).toBe('/valheim/characters/11');
+        expect(name.textContent).toBe('Ragnhild');
+        const map = screen.getByRole('link', { name: "Show Ragnhild's 12 deaths on the map" });
+        expect(map.getAttribute('href')).toBe('/?pins=death&vc=11#map');
+        expect(map.textContent).toBe('12');
+        // Two separate links per claimed row, neither inside the other.
+        const row = must(rows()[0], 'first row');
+        expect(within(row).getAllByRole('link')).toHaveLength(2);
+        expect(name.contains(map) || map.contains(name)).toBe(false);
+    });
+
+    it('ROK-2029: both links are 44px touch targets', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        const name = await screen.findByRole('link', { name: "Open Hrafn's character page" });
+        const map = screen.getByRole('link', { name: "Show Hrafn's 6 deaths on the map" });
+        expect(name.className).toContain('min-h-[44px]');
+        expect(map.className).toContain('min-h-[44px]');
+        expect(name.className).toContain('min-w-[44px]');
+        expect(map.className).toContain('min-w-[44px]');
+    });
+
+    it('ROK-2029: a row without a character has no links — plain name and count', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        await waitFor(() => expect(rows()).toHaveLength(3));
+        const unlinked = must(rows()[2], 'third row');
+        expect(within(unlinked).queryByRole('link')).toBeNull();
+        expect(within(unlinked).getByText('Left-the-hub')).toBeTruthy();
+        expect(within(unlinked).getByText('3')).toBeTruthy();
+    });
+
+    it('ROK-2029: the name link sends the hub Characters tab (search kept) as the crumb target', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(
+            <Routes>
+                <Route path="/hubs/:id" element={<Widget />} />
+                <Route path="/valheim/characters/:id" element={<StateProbe />} />
+            </Routes>,
+            { initialEntries: ['/hubs/5?tab=overview'] },
+        );
+        await userEvent.click(await screen.findByRole('link', { name: "Open Ragnhild's character page" }));
+        const probe = await screen.findByTestId('state-probe');
+        expect(JSON.parse(probe.textContent ?? 'null')).toEqual({ hubPath: '/hubs/5?tab=overview#characters' });
     });
 });
 

@@ -1,25 +1,25 @@
 /**
  * ROK-1930 — the Valheim server hub Overview "Deaths" card (option A): one
  * `GuildMeter` bar per player, top 8, scaled to the top player, in the order
- * the API serves. A bar with a character is a link to that character's death
- * pins on the Map tab (D13); one without is plain text. Players who left the
- * hub still show (Q6). ROK-2029: the name links to the character page and the
- * count + map pin is the (separate) link to their death pins. ROK-1941: a row with death pictures gets a thumb strip
- * under the meter (`valheim-deaths-pictures.tsx`). Default export so
- * `register.ts` can `React.lazy` it.
+ * the API serves. Players who left the hub still show (Q6). ROK-2029: the
+ * name links to the character page and the count + map pin is the (separate)
+ * link to that character's death pins on the Map tab (D13); a player with no
+ * character gets plain text for both. ROK-1941: a row with death pictures gets
+ * a thumb strip under the meter (`valheim-deaths-pictures.tsx`). Default
+ * export so `register.ts` can `React.lazy` it.
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { MapPinIcon } from '@heroicons/react/24/outline';
 import type { ValheimDeathPlayer } from '@raid-ledger/contract';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
-import { HUB_PAGE_PREFIX } from '../../../components/routing/hub-paths';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { useTimezoneStore } from '../../../stores/timezone-store';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useValheimDeaths } from '../hooks/use-valheim-deaths';
 import { valheimCharacterHref } from '../lib/valheim-routes';
 import { ValheimDeathsPictures } from './valheim-deaths-pictures';
+import { charactersTabHubPath } from './valheim-hub-paths';
 import { countedSinceLine, deathsMapHref, meterPct, visibleRows } from './valheim-deaths.helpers';
 
 const deathsWord = (n: number): string => `${n} ${n === 1 ? 'death' : 'deaths'}`;
@@ -28,13 +28,17 @@ const LINK_BASE = `inline-flex min-h-[44px] items-center rounded-sm text-sm text
 const NAME_TEXT = 'min-w-0 truncate text-sm text-foreground';
 const COUNT_TEXT = 'shrink-0 text-sm font-medium tabular-nums text-foreground';
 
-/** ROK-2029: the name opens the character page; plain text for a name-only player. */
-function PlayerName({ player, guildId }: { player: ValheimDeathPlayer; guildId: number }): JSX.Element {
+/**
+ * ROK-2029: the name opens the character page; plain text for a name-only player.
+ * Its crumb ("<server> · Characters") returns to this hub's Characters tab, as from that tab.
+ */
+function PlayerName({ player }: { player: ValheimDeathPlayer }): JSX.Element {
+    const { pathname, search } = useLocation();
     if (player.characterId === null) return <span className={`${NAME_TEXT} px-2`}>{player.name}</span>;
     return (
-        <Link to={valheimCharacterHref(player.characterId)} state={{ hubPath: `${HUB_PAGE_PREFIX}${guildId}` }}
+        <Link to={valheimCharacterHref(player.characterId)} state={{ hubPath: charactersTabHubPath(pathname, search) }}
             aria-label={`Open ${player.name}'s character page`} data-testid="valheim-deaths-name-link"
-            className={`${LINK_BASE} min-w-0 px-2`}>
+            className={`${LINK_BASE} min-w-[44px] px-2`}>
             <span className="truncate">{player.name}</span>
         </Link>
     );
@@ -59,7 +63,7 @@ function DeathRow({ player, max, guildId }: { player: ValheimDeathPlayer; max: n
     return (
         <li data-testid="valheim-deaths-row" data-key={player.key}>
             <div className="flex min-h-[44px] items-center justify-between gap-3">
-                <PlayerName player={player} guildId={guildId} />
+                <PlayerName player={player} />
                 <DeathsMapLink player={player} />
             </div>
             <div className="px-2 pb-1">
