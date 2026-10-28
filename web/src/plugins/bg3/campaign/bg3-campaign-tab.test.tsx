@@ -33,8 +33,11 @@ const spyAs = (tag: string) => (body: unknown, params: Record<string, unknown>) 
     (bodies[tag] ??= []).push(tag === 'key' ? params['campaignKey'] : body);
 };
 
-function renderTab() {
-    const page = { guild: { id: BG3_HUB_ID }, viewer: { role: 'member', canEdit: false, canManageEditors: false } } as GuildPage;
+function renderTab(joined?: boolean) {
+    // Staff resolve as ladder `leader` everywhere; `community.viewerJoined` says whether they joined.
+    const viewer = { role: joined === false ? 'leader' : 'member', canEdit: joined === false, canManageEditors: false };
+    const community = joined === undefined ? {} : { community: { viewerJoined: joined } };
+    const page = { guild: { id: BG3_HUB_ID }, viewer, ...community } as GuildPage;
     return renderWithProviders(<Bg3CampaignTab {...({ page } as HubCtx)} />);
 }
 
@@ -100,6 +103,26 @@ describe('V-9 add my saves', () => {
         await waitFor(() => expect(calls).toEqual(['key', 'key', 'default']));
         expect(bodies['key']).toEqual([BG3_SAVE_KEY, 'b'.repeat(64)]);
         expect(bodies['default']).toEqual([{ campaignId: BG3_CAMPAIGN_ID }]);
+    });
+});
+
+describe('Q9 staff are view-only', () => {
+    it('hides Start a campaign, Add my saves and New saves go to from non-member staff', async () => {
+        campaigns = buildBg3CampaignsResponse({ canEdit: true });
+        renderTab(false);
+        expect(within(await screen.findByRole('list', { name: 'Campaigns' })).getByText('Tactician run')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Start a campaign' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Your saves' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Add my saves' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/New saves go to/)).not.toBeInTheDocument();
+        expect(screen.getByTestId('bg3-editor-section')).toBeInTheDocument();
+    });
+
+    it('keeps them for a member who joined the hub', async () => {
+        renderTab(true);
+        expect(await screen.findByRole('button', { name: 'Start a campaign' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add my saves' })).toBeInTheDocument();
+        expect(screen.getByText(/New saves go to/)).toBeInTheDocument();
     });
 });
 

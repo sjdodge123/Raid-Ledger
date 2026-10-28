@@ -13,6 +13,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useBg3Campaigns, useBg3Snapshot } from '../hooks/use-bg3-hub';
 import { useClaimBg3Slot, useUnclaimBg3Slot } from '../hooks/use-bg3-mutations';
 import { bg3SummonsLine } from '../lib/bg3-labels';
+import { isBg3HubMember } from '../lib/bg3-membership';
 import { Bg3PartyCoverage } from './bg3-party-coverage';
 import { Bg3PartyDialogs, type Bg3PartyDialog } from './bg3-party-dialogs';
 import { Bg3PartyEmpty, Bg3PartyError, type Bg3PartyEmptyKind } from './bg3-party-empty';
@@ -89,7 +90,7 @@ export default function Bg3PartyWidget({ page }: HubWidgetCtx): JSX.Element {
                 ? <Bg3PartyEmpty kind={kind ?? 'no-active'} campaignName={campaign?.name ?? null} canEdit={campaigns.data.canEdit}
                     onStartCampaign={() => setDialog('start')} onAddSaves={() => setDialog('add-saves')} />
                 : <PartyGrid hubId={hubId} snap={snap} campaign={campaign} canEdit={campaigns.data.canEdit}
-                    isMember={page.viewer.role !== 'visitor'} />}
+                    isMember={isBg3HubMember(page)} />}
             <Bg3PartyDialogs open={dialog} onClose={() => setDialog(null)} hubId={hubId}
                 campaignId={snap?.campaignId ?? null} campaignName={campaign?.name ?? null} />
         </>

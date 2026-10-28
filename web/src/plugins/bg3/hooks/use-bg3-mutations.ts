@@ -5,7 +5,7 @@
  */
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotResponse } from '@raid-ledger/contract';
-import { isConflictError } from '../../../lib/api/api-error';
+import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
     bindBg3CampaignKey,
@@ -21,6 +21,8 @@ import { bg3Keys, invalidateBg3Hub } from './bg3-keys';
 
 export const BG3_CLAIM_CONFLICT_TOAST = 'Someone claimed this character first.';
 export const BG3_CLAIM_ERROR_TOAST = "Couldn't update the claim.";
+/** 409 `already_claimed`: the viewer's claim sits on a character no longer in the party. */
+export const BG3_CLAIM_ALREADY_TOAST = "You've already claimed a character in this campaign.";
 
 /** Start a campaign; `makeDefault` also files the caller's saves into it (D-4). */
 export function useCreateBg3Campaign(hubId: number) {
@@ -103,7 +105,13 @@ function useOptimisticClaim(hubId: number, claimFor: () => Bg3PartyClaim | null,
 
 function rollback(qc: QueryClient, key: readonly unknown[], previous: Snap, error: unknown): void {
     qc.setQueryData<Snap>(key, previous);
-    toast.error(isConflictError(error) ? BG3_CLAIM_CONFLICT_TOAST : BG3_CLAIM_ERROR_TOAST);
+    toast.error(claimErrorToast(error));
+}
+
+/** 409 `already_claimed` / `slot_taken` (D-6) each get their own message. */
+function claimErrorToast(error: unknown): string {
+    if (!isConflictError(error)) return BG3_CLAIM_ERROR_TOAST;
+    return errorBodyOf(error)?.['message'] === 'already_claimed' ? BG3_CLAIM_ALREADY_TOAST : BG3_CLAIM_CONFLICT_TOAST;
 }
 
 /** "That's me" — `viewer` is shown on the slot until the server answers. */

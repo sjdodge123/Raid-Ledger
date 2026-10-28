@@ -17,7 +17,8 @@ export interface Bg3CampaignListProps {
     readonly data: Bg3HubCampaignsResponse;
     readonly viewerId: number | null;
     readonly onArchive: (campaign: Bg3CampaignSummary) => void;
-    readonly onStart: () => void;
+    /** `null` hides "Start a campaign" (non-member staff are view-only, Q9). */
+    readonly onStart: (() => void) | null;
 }
 
 function metaLine(c: Bg3CampaignSummary): string {
@@ -101,7 +102,7 @@ export function Bg3CampaignList({ hubId, data, viewerId, onArchive, onStart }: B
                     </ul>
                 </ScrollCollapsible>
             )}
-            <div><Button variant="secondary" size="sm" onClick={onStart}>Start a campaign</Button></div>
+            {onStart && <div><Button variant="secondary" size="sm" onClick={onStart}>Start a campaign</Button></div>}
         </div>
     );
 }

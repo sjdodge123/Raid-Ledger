@@ -92,8 +92,8 @@ export const bg3HubSettingsHandler = (
 ) => writeHandler('put', BG3_SETTINGS_URL, () => HttpResponse.json(settings), spy);
 
 /** POST claim → 204, or `status` (409 = someone got there first). */
-export const bg3ClaimHandler = (status = 204, spy?: Bg3Spy) =>
-    writeHandler('post', BG3_CLAIMS_URL, () => (status === 204 ? noContent() : bg3Error(status)), spy);
+export const bg3ClaimHandler = (status = 204, spy?: Bg3Spy, message = 'slot_taken') =>
+    writeHandler('post', BG3_CLAIMS_URL, () => (status === 204 ? noContent() : bg3Error(status, message)), spy);
 export const bg3UnclaimHandler = (status = 204, spy?: Bg3Spy) =>
     writeHandler('delete', BG3_CLAIM_URL, () => (status === 204 ? noContent() : bg3Error(status, 'Claim not found')), spy);
 

@@ -4,6 +4,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { GuildPage } from '@raid-ledger/contract';
+import type { User } from '../../../hooks/use-auth';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
@@ -17,8 +18,9 @@ import { toast } from '../../../lib/toast';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import Bg3PartyWidget from './bg3-party-widget';
 
-const auth = vi.hoisted(() => ({
-    user: { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member' as string } as Record<string, unknown> | null,
+type AuthUser = Pick<User, 'id' | 'username' | 'displayName' | 'role'>;
+const auth = vi.hoisted((): { user: AuthUser | null } => ({
+    user: { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member' },
 }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -123,6 +125,16 @@ describe('Bg3PartyWidget — claim conflict (V-3)', () => {
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Someone claimed this character first.'));
         await waitFor(() => expect(claimButtons()).toHaveLength(3));
         expect(within(slot('Generic:Human:1')).queryByText('You')).toBeNull();
+    });
+
+    it('says the viewer already has a claim on a 409 already_claimed (claim on a character out of the party)', async () => {
+        serve();
+        server.use(bg3ClaimHandler(409, undefined, 'already_claimed'));
+        await renderParty();
+        await userEvent.click(must(within(slot('Generic:Human:1')).queryByRole('button', { name: "That's me" }), 'claim'));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith("You've already claimed a character in this campaign."));
+        expect(toast.error).not.toHaveBeenCalledWith('Someone claimed this character first.');
+        await waitFor(() => expect(within(slot('Generic:Human:1')).queryByText('You')).toBeNull());
     });
 });
 
