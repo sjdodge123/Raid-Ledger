@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
 import type {
@@ -15,8 +16,11 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => ({ user: { id: 7 } }),
 }));
 vi.mock('./valheim-map-view', () => ({
-    ValheimMapView: (p: { characterId: number; mapId: number }) => (
-        <div data-testid="map-view">{`${p.characterId}:${p.mapId}`}</div>
+    ValheimMapView: (p: { characterId: number; mapId: number; toolbarStart?: ReactNode }) => (
+        <>
+            <div data-testid="map-toolbar">{p.toolbarStart}</div>
+            <div data-testid="map-view">{`${p.characterId}:${p.mapId}`}</div>
+        </>
     ),
 }));
 
@@ -103,6 +107,10 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             '1',
         );
         expect(screen.queryByRole('combobox', { name: 'World' })).toBeNull();
+        // ROK-2028: the pickers ride in the map's toolbar row, not a row of their own.
+        expect(
+            within(screen.getByTestId('map-toolbar')).getByRole('combobox', { name: 'Character' }),
+        ).toBeInTheDocument();
     });
 
     it('reads ?vc&vm and shows the world picker for a multi-map character', async () => {

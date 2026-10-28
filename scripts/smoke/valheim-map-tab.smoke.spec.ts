@@ -306,4 +306,50 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
       "unexplored fog canvas alpha must be fully opaque (255)",
     ).toBe(255);
   });
+
+  test("ROK-2028: picker and Filters share one toolbar row; the map opens framed on the explored area", async ({
+    page,
+  }, testInfo) => {
+    const fixture = await seedMap(testInfo.parallelIndex);
+    expect(fixture.guildId, "map-fixture must return the hub id").not.toBeNull();
+    await page.goto(
+      `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
+    );
+    const map = page.getByRole("application", { name: "Valheim map" });
+    await expect(map).toBeVisible({ timeout: 15_000 });
+
+    // No orphan row: the Character picker lives inside the map's toolbar row.
+    const toolbar = page.getByTestId("map-filter-toolbar");
+    const picker = toolbar.getByRole("combobox", { name: "Character" });
+    await expect(picker).toBeVisible();
+    if (isDesktop(testInfo)) {
+      const trigger = toolbar.getByRole("button", { name: "Filters", exact: true });
+      await expect(trigger).toBeVisible();
+      const [p, t] = await Promise.all([picker.boundingBox(), trigger.boundingBox()]);
+      if (!p || !t) throw new Error("picker or Filters trigger has no bounding box");
+      const pMid = p.y + p.height / 2;
+      const tMid = t.y + t.height / 2;
+      expect(
+        Math.abs(pMid - tMid),
+        `picker centre y=${pMid} vs Filters centre y=${tMid} — not one row`,
+      ).toBeLessThanOrEqual(4);
+      expect(t.x, "Filters must sit right of the picker").toBeGreaterThan(p.x + p.width);
+    }
+
+    // Framing: once the fog decodes the view is well above the whole-world fit
+    // (the fixture explores a 240px square of a 2048px world).
+    const worldFit = await map.evaluate((el) => {
+      const layer = el.querySelector<HTMLElement>('[data-testid="map-texture-layer"]');
+      const size = layer ? layer.offsetWidth : 0;
+      return size > 0 ? Math.min(el.clientWidth, el.clientHeight) / size : Number.NaN;
+    });
+    expect(worldFit, "world-fit scale must be measurable").toBeGreaterThan(0);
+    const stack = map.locator("[data-zoom]");
+    await expect
+      .poll(async () => Number(await stack.getAttribute("data-zoom")), {
+        message: `initial zoom must exceed 2x the world-fit scale (${worldFit.toFixed(2)})`,
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(worldFit * 2);
+  });
 });
