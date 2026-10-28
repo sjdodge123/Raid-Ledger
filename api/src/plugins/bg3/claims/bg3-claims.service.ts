@@ -17,10 +17,7 @@ import {
   GuildAccessService,
   type GuildActor,
 } from '../../../guilds/guild-access.service';
-import {
-  isCurrentHost,
-  refuseNonBg3Hub,
-} from '../read/bg3-hub-access.helpers';
+import { isCurrentHost, refuseNonBg3Hub } from '../read/bg3-hub-access.helpers';
 import type { Bg3CampaignRow } from '../campaigns/bg3-campaigns.repository';
 import { Bg3CampaignsRepository } from '../campaigns/bg3-campaigns.repository';
 import { Bg3CampaignsService } from '../campaigns/bg3-campaigns.service';
