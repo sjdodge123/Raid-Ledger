@@ -1,10 +1,7 @@
 import { and, asc, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../../drizzle/schema';
-import {
-  characterLink,
-  inLatestSnapshot,
-} from '../guild-membership.helpers';
+import { characterLink, inLatestSnapshot } from '../guild-membership.helpers';
 import { ownerIsActive } from '../guild-roster.helpers';
 import type { RawDingRow } from './recent-dings.helpers';
 
@@ -20,6 +17,15 @@ function dingOrder() {
     sql`${characters.region} IS NULL`,
     asc(characters.id),
   ];
+}
+
+/** One guild's events since `since`, from members in its latest snapshot. */
+function inFeedWindow(guildId: number, since: Date) {
+  return and(
+    eq(ev.guildId, guildId),
+    gte(ev.occurredAt, since),
+    inLatestSnapshot(),
+  );
 }
 
 /**
@@ -54,13 +60,7 @@ export async function loadDingRows(
       characters,
       and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
     )
-    .where(
-      and(
-        eq(ev.guildId, guildId),
-        gte(ev.occurredAt, since),
-        inLatestSnapshot(),
-      ),
-    )
+    .where(inFeedWindow(guildId, since))
     .orderBy(...dingOrder())
     .limit(rowCap);
 }
