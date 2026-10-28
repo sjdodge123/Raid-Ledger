@@ -12,6 +12,7 @@ import type { Bg3HubLookup, Bg3HubRow } from '../read/bg3-hub-access.helpers';
 import { toBg3CampaignSummary } from '../read/bg3-read.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export interface Bg3CampaignRow {
   id: number;
@@ -30,6 +31,22 @@ export interface Bg3CampaignPatch {
 const c = schema.bg3Campaigns;
 const s = schema.bg3Saves;
 const h = schema.bg3HubSettings;
+
+/** Make `campaignId` the hub's active campaign only when it has none (D-11). */
+async function activateIfNoneActive(
+  tx: Tx,
+  guildId: number,
+  campaignId: number,
+): Promise<void> {
+  await tx
+    .insert(h)
+    .values({ guildId, activeCampaignId: campaignId })
+    .onConflictDoUpdate({
+      target: h.guildId,
+      set: { activeCampaignId: campaignId, updatedAt: new Date() },
+      setWhere: isNull(h.activeCampaignId),
+    });
+}
 
 @Injectable()
 export class Bg3CampaignsRepository implements Bg3HubLookup {
@@ -83,24 +100,21 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         .values({ guildId, name, hostUserId: userId, createdByUserId: userId })
         .returning({ id: c.id });
       if (!row) throw new Error('bg3 campaign insert returned no row');
-      await tx
-        .insert(h)
-        .values({ guildId, activeCampaignId: row.id })
-        .onConflictDoUpdate({
-          target: h.guildId,
-          set: { activeCampaignId: row.id, updatedAt: new Date() },
-          setWhere: isNull(h.activeCampaignId),
-        });
+      await activateIfNoneActive(tx, guildId, row.id);
       return row.id;
     });
   }
 
-  /** Archiving the hub's active campaign also clears `activeCampaignId` (D-11). */
+  /**
+   * D-11: archiving the hub's active campaign clears `activeCampaignId`;
+   * unarchiving one on a hub with no active campaign makes it active again
+   * (the party returns). A hub that already has an active one keeps it.
+   */
   async updateCampaign(id: number, patch: Bg3CampaignPatch): Promise<void> {
     const { archived, ...fields } = patch;
     const now = new Date();
     await this.db.transaction(async (tx) => {
-      await tx
+      const [row] = await tx
         .update(c)
         .set({
           ...fields,
@@ -109,8 +123,10 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
             : {}),
           updatedAt: now,
         })
-        .where(eq(c.id, id));
-      if (archived !== true) return;
+        .where(eq(c.id, id))
+        .returning({ guildId: c.guildId });
+      if (!row || archived === undefined) return;
+      if (!archived) return activateIfNoneActive(tx, row.guildId, id);
       await tx
         .update(h)
         .set({ activeCampaignId: null, updatedAt: now })

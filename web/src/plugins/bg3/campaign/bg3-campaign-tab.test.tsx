@@ -192,6 +192,20 @@ describe('V-10 editor section and archive', () => {
     });
 });
 
+describe('Campaigns section — every campaign archived', () => {
+    it('says there is no active campaign, not "none yet", above "Archived (1)"', async () => {
+        campaigns = buildBg3CampaignsResponse({
+            canEdit: true,
+            settings: { hideLocationAndScreenshots: false, activeCampaignId: null },
+            campaigns: [buildBg3CampaignSummary({ archivedAt: '2026-10-28T10:00:00.000Z' })],
+        });
+        renderTab();
+        expect(await screen.findByText('No active campaign.')).toBeInTheDocument();
+        expect(screen.getByText('Archived (1)')).toBeInTheDocument();
+        expect(screen.queryByText('No campaign on this hub yet.')).toBeNull();
+    });
+});
+
 describe('History section (D-9)', () => {
     it('lists the active campaign\'s sessions and pages with "Show more" via nextCursor', async () => {
         const cursors: (string | null)[] = [];

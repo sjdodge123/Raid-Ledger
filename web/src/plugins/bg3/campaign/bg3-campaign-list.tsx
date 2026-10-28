@@ -62,10 +62,14 @@ interface LiveProps {
     readonly canArchive: (c: Bg3CampaignSummary) => boolean;
     readonly onArchive: (c: Bg3CampaignSummary) => void;
     readonly onMakeActive: (id: number) => void;
+    /** Every campaign is archived → "No active campaign." instead of "…yet." */
+    readonly allArchived: boolean;
 }
 
-function LiveCampaigns({ data, live, canArchive, onArchive, onMakeActive }: LiveProps): JSX.Element {
-    if (live.length === 0) return <p className="text-sm text-muted">No campaign on this hub yet.</p>;
+function LiveCampaigns({ data, live, canArchive, onArchive, onMakeActive, allArchived }: LiveProps): JSX.Element {
+    if (live.length === 0) {
+        return <p className="text-sm text-muted">{allArchived ? 'No active campaign.' : 'No campaign on this hub yet.'}</p>;
+    }
     return (
         <ul className="divide-y divide-edge" aria-label="Campaigns">
             {live.map((c) => {
@@ -90,7 +94,8 @@ export function Bg3CampaignList({ hubId, data, viewerId, onArchive, onStart }: B
     const archived = data.campaigns.filter((c) => c.archivedAt !== null);
     return (
         <div className="flex flex-col gap-3">
-            <LiveCampaigns data={data} live={live} canArchive={canArchive} onArchive={onArchive} onMakeActive={actions.makeActive} />
+            <LiveCampaigns data={data} live={live} canArchive={canArchive} onArchive={onArchive} onMakeActive={actions.makeActive}
+                allArchived={archived.length > 0} />
             {archived.length > 0 && (
                 <ScrollCollapsible title={`Archived (${archived.length})`}>
                     <ul className="divide-y divide-edge" aria-label="Archived campaigns">

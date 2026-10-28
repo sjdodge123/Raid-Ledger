@@ -318,6 +318,27 @@ describe('D-11 the active campaign', () => {
   });
 });
 
+describe('D-11 unarchive restores', () => {
+  it('unarchiving on a hub with no active campaign makes it active again', async () => {
+    const w = await world();
+    await archive(w.host.token, w.campaignId);
+    const restored = await archive(w.host.token, w.campaignId, false);
+    expect(restored.isActive).toBe(true);
+    const list = await hubCampaigns(w.host.token, w.hubId);
+    expect(list.settings.activeCampaignId).toBe(w.campaignId);
+  });
+
+  it('unarchiving while another campaign is active only un-archives', async () => {
+    const w = await world();
+    const other = await createCampaign(w.host.token, w.hubId, 'Side Run');
+    await archive(w.host.token, other);
+    const restored = await archive(w.host.token, other, false);
+    expect([restored.archivedAt, restored.isActive]).toEqual([null, false]);
+    const list = await hubCampaigns(w.host.token, w.hubId);
+    expect(list.settings.activeCampaignId).toBe(w.campaignId);
+  });
+});
+
 describe('D-11 defaults and bindings', () => {
   it('an archived default is ignored for a new save and reported as no default', async () => {
     const w = await world();
