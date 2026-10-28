@@ -90,11 +90,16 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
       name: `${PICTURES - 3} more death pictures. Open the gallery`,
     });
     await expect(more).toHaveText(`+${PICTURES - 3}`);
-    // The row text stays the map link and never contains a thumb (Q1 = A).
-    const link = page.getByRole("link", {
-      name: new RegExp(`^${top.name}, \\d+ deaths — show on map$`),
-    });
-    await expect(link.getByRole("button")).toHaveCount(0);
+    // Neither row link (ROK-2029: name + map) ever contains a thumb (Q1 = A).
+    for (const link of [
+      page.getByRole("link", { name: `Open ${top.name}'s character page` }),
+      page.getByRole("link", {
+        name: new RegExp(`^Show ${top.name}'s \\d+ deaths on the map$`),
+      }),
+    ]) {
+      await expect(link).toHaveCount(1);
+      await expect(link.getByRole("button")).toHaveCount(0);
+    }
 
     const media = responseTo(page, `/hubs/${f.guildId}/media`);
     await group.getByTestId("valheim-death-thumb").first().click();

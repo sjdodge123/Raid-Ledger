@@ -28,6 +28,20 @@ function makeSelectChain(rows: unknown[] = []) {
   return chain;
 }
 
+/** Row the processor re-reads first: a live (not cancelled) event. */
+const LIVE_EVENT_ROW = { id: 42, cancelledAt: null };
+
+/**
+ * `db.select` whose FIRST call is the processor's event-row re-read (live),
+ * then empty results (no Discord message record) for every later select.
+ */
+function liveEventSelect(): jest.Mock {
+  return jest
+    .fn()
+    .mockReturnValueOnce(makeSelectChain([LIVE_EVENT_ROW]))
+    .mockReturnValue(makeSelectChain([]));
+}
+
 function makePayload(overrides?: Partial<EventPayload>): EventPayload {
   return {
     eventId: 42,
@@ -120,7 +134,7 @@ describe('EventLifecycleProcessor — happy path', () => {
 
   beforeEach(async () => {
     mockDb = {
-      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      select: liveEventSelect(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -213,7 +227,7 @@ describe('EventLifecycleProcessor — skip conditions', () => {
 
   beforeEach(async () => {
     mockDb = {
-      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      select: liveEventSelect(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -303,7 +317,7 @@ describe('EventLifecycleProcessor — lead-time gating', () => {
 
   beforeEach(async () => {
     mockDb = {
-      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      select: liveEventSelect(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -383,7 +397,7 @@ describe('EventLifecycleProcessor — error handling', () => {
 
   beforeEach(async () => {
     mockDb = {
-      select: jest.fn().mockReturnValue(makeSelectChain([])),
+      select: liveEventSelect(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -425,5 +439,59 @@ describe('EventLifecycleProcessor — error handling', () => {
     const payload = makePayload();
 
     await expect(processor.process(makeJob(payload))).resolves.not.toThrow();
+  });
+});
+
+// =========================================================================
+// ROK-2024 follow-up (F3): the job acts only on a still-live event row
+// =========================================================================
+
+describe('EventLifecycleProcessor — event deleted or cancelled before the job ran', () => {
+  let processor: EventLifecycleProcessor;
+  let scheduledEventService: jest.Mocked<ScheduledEventService>;
+  let embedPoster: jest.Mocked<EmbedPosterService>;
+  let gameAffinityService: jest.Mocked<GameAffinityNotificationService>;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let mockDb: Record<'select', jest.Mock>;
+
+  beforeEach(async () => {
+    mockDb = { select: jest.fn() };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(mockDb),
+    }).compile();
+    processor = module.get(EventLifecycleProcessor);
+    scheduledEventService = module.get(ScheduledEventService);
+    embedPoster = module.get(EmbedPosterService);
+    gameAffinityService = module.get(GameAffinityNotificationService);
+    clientService = module.get(DiscordBotClientService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  function expectNoDiscordWork(): void {
+    expect(scheduledEventService.createScheduledEvent).not.toHaveBeenCalled();
+    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
+  }
+
+  it('posts no embed and creates no Scheduled Event when the event row is gone', async () => {
+    mockDb.select.mockReturnValue(makeSelectChain([]));
+    await processor.process(makeJob(makePayload()));
+    expectNoDiscordWork();
+  });
+
+  it('posts no embed and creates no Scheduled Event when the event was cancelled', async () => {
+    mockDb.select.mockReturnValue(
+      makeSelectChain([{ id: 42, cancelledAt: new Date() }]),
+    );
+    await processor.process(makeJob(makePayload()));
+    expectNoDiscordWork();
+  });
+
+  it('sends no bot-less group notice for a deleted event either', async () => {
+    clientService.isConnected.mockReturnValue(false);
+    mockDb.select.mockReturnValue(makeSelectChain([]));
+    await processor.process(makeJob(makePayload()));
+    expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
   });
 });

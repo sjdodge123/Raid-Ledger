@@ -65,6 +65,8 @@ export class EventLifecycleProcessor
 
     this.logger.log(`Processing event lifecycle for event ${eventId}`);
 
+    if (!(await this.isEventLive(eventId))) return;
+
     if (!this.clientService.isConnected()) {
       this.logger.warn(
         `Bot not connected, skipping Discord work for ${eventId}`,
@@ -108,6 +110,27 @@ export class EventLifecycleProcessor
       event: { ...payload.event, game: null },
     };
     await this.sendGameAffinityNotifications(groupOnly, false);
+  }
+
+  /**
+   * ROK-2024 follow-up (F3): the job carries a snapshot payload, so re-read
+   * the row — a lock-in that lost its race deletes its event, and a DELETED
+   * handled before this job ran must not be followed by a fresh embed or
+   * Scheduled Event. A cancelled event gets no announcement either.
+   */
+  private async isEventLive(eventId: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ cancelledAt: schema.events.cancelledAt })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    const live = row !== undefined && !row.cancelledAt;
+    if (!live) {
+      this.logger.log(
+        `Event ${eventId} was deleted or cancelled before its lifecycle job ran, skipping`,
+      );
+    }
+    return live;
   }
 
   /** Check if the event is within the lead-time window for embed posting. */
