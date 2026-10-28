@@ -40,7 +40,10 @@ const Limit = z.coerce.number().int().min(1).max(20).default(20);
 /** `image/webp` response, never cached (D-12: the toggle applies at once). */
 export function webp(res: Response, bytes: Buffer): StreamableFile {
   res.set({ 'X-Content-Type-Options': 'nosniff' });
-  return new StreamableFile(bytes, { type: 'image/webp', length: bytes.length });
+  return new StreamableFile(bytes, {
+    type: 'image/webp',
+    length: bytes.length,
+  });
 }
 
 /** ROK-1957 §5.6 — hub-scoped BG3 reads + the settings write. */

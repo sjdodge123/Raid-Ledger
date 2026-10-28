@@ -16,9 +16,7 @@ import { encodeBlobOr404, type Bg3ThumbnailSize } from './bg3-thumbnail.encode';
 
 export const BG3_MY_SAVES_PAGE = 50;
 
-type MySaveRow = Awaited<
-  ReturnType<Bg3SavesReadRepository['mySaves']>
->[number];
+type MySaveRow = Awaited<ReturnType<Bg3SavesReadRepository['mySaves']>>[number];
 
 export function toMySave(row: MySaveRow): Bg3MySave {
   return {

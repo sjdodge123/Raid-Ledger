@@ -36,16 +36,18 @@ export function toGalleryItems(rows: readonly FeedRow[]): Bg3GalleryItem[] {
     .flatMap((r) =>
       r.sha256 === null
         ? []
-        : [{
-            saveId: r.id,
-            uploaderUserId: r.uploaderUserId,
-            uploaderDisplayName: r.displayName ?? r.username,
-            sha256: r.sha256,
-            savedAt: r.savedAt,
-            campaignId: r.campaignId,
-            area: r.area,
-            provenanceKey: `${r.campaignKey}:${r.savedAt.toISOString()}`,
-          }],
+        : [
+            {
+              saveId: r.id,
+              uploaderUserId: r.uploaderUserId,
+              uploaderDisplayName: r.displayName ?? r.username,
+              sha256: r.sha256,
+              savedAt: r.savedAt,
+              campaignId: r.campaignId,
+              area: r.area,
+              provenanceKey: `${r.campaignKey}:${r.savedAt.toISOString()}`,
+            },
+          ],
     );
 }
 

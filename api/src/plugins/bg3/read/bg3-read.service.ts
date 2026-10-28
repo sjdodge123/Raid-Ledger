@@ -40,7 +40,10 @@ import {
   toSnapshot,
 } from './bg3-read.mappers';
 import { Bg3ReadRepository } from './bg3-read.repository';
-import { Bg3SavesReadRepository, type Bg3SaveRef } from './bg3-saves.read.repository';
+import {
+  Bg3SavesReadRepository,
+  type Bg3SaveRef,
+} from './bg3-saves.read.repository';
 import { encodeBlobOr404, type Bg3ThumbnailSize } from './bg3-thumbnail.encode';
 
 /** Newest rows scanned for the snapshot (twins share `savedAt`, so sit together). */
@@ -85,7 +88,11 @@ export class Bg3ReadService {
     const campaign = await this.campaignIn(hubId, id);
     const rows = await this.repo.snapshotRows(id, BG3_SNAPSHOT_SCAN);
     const claims = await this.repo.claims(id);
-    const ctx = { hubId, campaignId: id, hidden: settings.hideLocationAndScreenshots };
+    const ctx = {
+      hubId,
+      campaignId: id,
+      hidden: settings.hideLocationAndScreenshots,
+    };
     for (const row of pickCanonical(rows, campaign.hostUserId)) {
       const party = PartySchema.safeParse(row.party);
       if (party.success)
