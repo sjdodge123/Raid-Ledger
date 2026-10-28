@@ -1870,6 +1870,13 @@
       "when": 1793075423285,
       "tag": "0267_hub_session_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1793162848157,
+      "tag": "0268_bg3_plugin",
+      "breakpoints": true
     }
   ]
 }
