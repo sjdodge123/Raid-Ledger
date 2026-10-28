@@ -3,7 +3,11 @@
  * any event exists, a lost claim creates nothing, a failed create releases the
  * claim, and a pick that no longer fits falls back softly.
  */
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE,
   type CreateEventDto,
@@ -66,8 +70,16 @@ function buildDeps(log: string[]) {
     log.push('create');
     return Promise.resolve({ id: 900, allEventIds: [900, 901], dto });
   });
+  // The match-status read behind the pre-claim 400 → 409 remap.
+  const statusLimit = jest.fn().mockResolvedValue([{ status: 'scheduling' }]);
+  const select = jest.fn(() => ({
+    from: () => ({ where: () => ({ limit: statusLimit }) }),
+  }));
   const deps = {
-    db: { transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)) },
+    db: {
+      transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+      select,
+    },
     eventsService: { create, delete: jest.fn().mockResolvedValue(undefined) },
     signupsService: {
       signup: jest.fn(() => {
@@ -81,7 +93,7 @@ function buildDeps(log: string[]) {
       return Promise.resolve();
     }),
   };
-  return { deps, create, archiveWhere };
+  return { deps, create, archiveWhere, statusLimit };
 }
 
 /** The deps as the helper's interface (the mocks only cover what it calls). */
@@ -304,6 +316,57 @@ describe('createLockedInPollEvent', () => {
     const { deps } = buildDeps([]);
     target.mockResolvedValue(null);
     await expect(run(asDeps(deps))).rejects.toThrow('Poll not found');
+    expect(claim).not.toHaveBeenCalled();
+  });
+});
+
+describe('createLockedInPollEvent: cleanup and 409 mapping', () => {
+  it('a creator-signup failure deletes every instance, then releases the claim (M1)', async () => {
+    const { deps } = buildDeps([]);
+    const boom = new Error('signup failed');
+    deps.signupsService.signup.mockRejectedValueOnce(boom);
+    await expect(run(asDeps(deps))).rejects.toBe(boom);
+    const del = deps.eventsService.delete;
+    expect(del).toHaveBeenCalledWith(900, caller.id, false);
+    expect(del).toHaveBeenCalledWith(901, caller.id, false);
+    expect(release).toHaveBeenCalledWith(
+      deps.db,
+      MATCH_ID,
+      'scheduling',
+      deps.logger,
+    );
+    const lastDelete = Math.max(...del.mock.invocationCallOrder);
+    expect(lastDelete).toBeLessThan(release.mock.invocationCallOrder[0] ?? 0);
+    expect(link).not.toHaveBeenCalled();
+  });
+
+  it('a pre-claim 400 on a poll another lock-in claimed becomes the 409', async () => {
+    const { deps, statusLimit } = buildDeps([]);
+    canLockIn.mockRejectedValue(new BadRequestException('reschedule poll'));
+    statusLimit.mockResolvedValue([{ status: 'scheduled' }]);
+    await expect(run(asDeps(deps))).rejects.toThrow(
+      SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE,
+    );
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it("the winner's own post-claim 400 stays a 400 while the match is scheduled (m1)", async () => {
+    const { deps, create, statusLimit } = buildDeps([]);
+    // A failed release leaves the match `scheduled`; that must not read as a lost race.
+    statusLimit.mockResolvedValue([{ status: 'scheduled' }]);
+    const own = new BadRequestException('bad event');
+    create.mockRejectedValueOnce(own);
+    await expect(run(asDeps(deps))).rejects.toBe(own);
+    expect(statusLimit).not.toHaveBeenCalled();
+  });
+
+  it('authz runs before the body-shape 400s: a non-owner gets the 403 (m2)', async () => {
+    const { deps, statusLimit } = buildDeps([]);
+    canLockIn.mockRejectedValue(new ForbiddenException('not owner'));
+    await expect(run(asDeps(deps), { benchUserIds: [11, 11] })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(statusLimit).not.toHaveBeenCalled();
     expect(claim).not.toHaveBeenCalled();
   });
 });

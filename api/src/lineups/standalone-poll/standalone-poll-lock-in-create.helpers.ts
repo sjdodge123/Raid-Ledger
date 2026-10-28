@@ -9,7 +9,8 @@
  * 1. Validate with no writes (hub permission + provenance via `assertCreate`,
  *    the poll-level `assertCanLockInPoll`, the bench pick's shape).
  * 2. Claim `scheduling` → `scheduled` (committed; a loser 409s, creates nothing).
- * 3. Create the event and sign its creator up. A throw releases the claim.
+ * 3. Create the event and sign its creator up. A create throw releases the
+ *    claim; a signup throw also deletes the (announced) event first.
  * 4. Link the event; a standalone poll also archives its lineup (one tx).
  * 5. Check the bench pick now that the event exists; a misfit falls back.
  *
@@ -115,24 +116,69 @@ function assertBenchShape(ids: readonly number[] | undefined): void {
   }
 }
 
-/** Every pre-claim check. Makes no writes; returns the match to claim. */
+/**
+ * A lock-in that loses the race BEFORE the claim fails a pre-claim check
+ * instead (provenance's 400 "no longer open", or the reschedule guard once
+ * the winner linked). It is the same loser as one that loses the claim: 409,
+ * so the form shows the Q3 copy. Only {@link assertMayLockIn} routes here — a
+ * 400 raised after this request's own claim (its create, say, with a failed
+ * release leaving the match `scheduled`) must stay a 400.
+ */
+async function rethrowAsLoser(
+  db: Db,
+  matchId: number,
+  err: unknown,
+): Promise<never> {
+  if (!(err instanceof BadRequestException)) throw err;
+  const [row] = await db
+    .select({ status: schema.communityLineupMatches.status })
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (row?.status === 'scheduled') {
+    throw new ConflictException(SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE);
+  }
+  throw err;
+}
+
+/**
+ * Authz first (owner/staff 403/404 via `assertCanLockInPoll`), then the
+ * hub-permission + provenance checks. These are the checks a concurrent
+ * winner can flip, so a 400 from them on a claimed poll becomes the 409.
+ */
+async function assertMayLockIn(
+  deps: LockInCreateDeps,
+  req: LockInRequest,
+  dto: CreateEventDto,
+): Promise<void> {
+  try {
+    await assertCanLockInPoll(deps.db, req.matchId, req.caller, {
+      eventStart: dto.startTime,
+      startTime: req.body.startTime,
+    });
+    await deps.assertCreate(dto);
+  } catch (err: unknown) {
+    await rethrowAsLoser(deps.db, req.matchId, err);
+  }
+}
+
+/**
+ * Every pre-claim check. Makes no writes; returns the match to claim. The
+ * body-shape 400s (D4, duplicate pick) run after authz so a non-owner gets
+ * the authz error, not a validation hint.
+ */
 async function validateLockIn(
   deps: LockInCreateDeps,
   req: LockInRequest,
   dto: CreateEventDto,
 ): Promise<LockInMatch> {
-  const { matchId, caller, body } = req;
-  const match = await selectCompletionTarget(deps.db, matchId);
+  const match = await selectCompletionTarget(deps.db, req.matchId);
   if (!match) throw new NotFoundException('Poll not found');
-  if (!match.standalone && body.startTime === undefined) {
+  await assertMayLockIn(deps, req, dto);
+  if (!match.standalone && req.body.startTime === undefined) {
     throw new BadRequestException(LOCK_IN_LINEUP_NEEDS_TIME);
   }
-  assertBenchShape(body.benchUserIds);
-  await deps.assertCreate(dto);
-  await assertCanLockInPoll(deps.db, matchId, caller, {
-    eventStart: dto.startTime,
-    startTime: body.startTime,
-  });
+  assertBenchShape(req.body.benchUserIds);
   return {
     id: match.id,
     lineupId: match.lineupId,
@@ -140,27 +186,59 @@ async function validateLockIn(
   };
 }
 
-/** Create the event + the creator's signup; a throw releases the claim. */
+/** Delete every instance this lock-in made; a failed delete is logged. */
+async function discardEvents(
+  deps: LockInCreateDeps,
+  eventIds: readonly number[],
+  userId: number,
+): Promise<void> {
+  for (const id of eventIds) {
+    try {
+      await deps.eventsService.delete(id, userId, false);
+    } catch (err: unknown) {
+      deps.logger.error(
+        `Lost lock-in: event ${id} not deleted: ${String(err)}`,
+      );
+    }
+  }
+}
+
+type CreatedEvent = EventResponseDto & { allEventIds?: number[] };
+
+/**
+ * Create the event, then sign its creator up to every occurrence. A create
+ * throw releases the claim. A signup throw comes AFTER `create` emitted
+ * EVENT CREATED, so it also deletes every instance first — otherwise a retry
+ * would announce a second event (ROK-2032 review M1).
+ */
 async function createOrRelease(
   deps: LockInCreateDeps,
   match: LockInMatch,
   userId: number,
   dto: CreateEventDto,
   prior: ClaimedFromStatus,
-): Promise<EventResponseDto & { allEventIds?: number[] }> {
+): Promise<CreatedEvent> {
+  let event: CreatedEvent;
   try {
-    const event = await deps.eventsService.create(userId, dto);
-    // Today's `POST /events` behaviour: the creator joins every occurrence.
-    for (const id of event.allEventIds ?? [event.id]) {
-      await deps.signupsService.signup(id, userId, undefined, {
-        skipEndedCheck: true,
-      });
-    }
-    return event;
+    event = await deps.eventsService.create(userId, dto);
   } catch (err: unknown) {
     await releaseMatchClaim(deps.db, match.id, prior, deps.logger);
     throw err;
   }
+  const eventIds = event.allEventIds ?? [event.id];
+  try {
+    // Today's `POST /events` behaviour: the creator joins every occurrence.
+    for (const id of eventIds) {
+      await deps.signupsService.signup(id, userId, undefined, {
+        skipEndedCheck: true,
+      });
+    }
+  } catch (err: unknown) {
+    await discardEvents(deps, eventIds, userId);
+    await releaseMatchClaim(deps.db, match.id, prior, deps.logger);
+    throw err;
+  }
+  return event;
 }
 
 /** Link the claimed match and (standalone only) archive its lineup, atomically. */
@@ -179,23 +257,6 @@ function linkAndArchive(
     }
     return linked;
   });
-}
-
-/** Delete every instance this lock-in made; a failed delete is logged. */
-async function discardEvents(
-  deps: LockInCreateDeps,
-  eventIds: readonly number[],
-  userId: number,
-): Promise<void> {
-  for (const id of eventIds) {
-    try {
-      await deps.eventsService.delete(id, userId, false);
-    } catch (err: unknown) {
-      deps.logger.error(
-        `Lost lock-in: event ${id} not deleted: ${String(err)}`,
-      );
-    }
-  }
 }
 
 /**
