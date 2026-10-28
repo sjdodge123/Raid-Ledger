@@ -10,8 +10,24 @@ import { BG3_ID_RE, BG3_SAVE_CONTRACT_ID, Bg3PartyMemberSchema } from './compani
 
 /** Plugin slug (api manifest id, `HUB_PLUGIN_MANIFESTS` key). */
 export const BG3_PLUGIN_ID = 'bg3' as const;
-/** `games.slug` of Baldur's Gate 3 (seen in the demo seed; prod UNVERIFIED — spec §12). */
-export const BG3_GAME_SLUG = 'baldurs-gate-3' as const;
+/**
+ * Canonical `games.slug` of Baldur's Gate 3: the boot seed
+ * (`api/seeds/games-seed.json`, IGDB-sourced) rewrites the row to this on
+ * every boot (ROK-2038). Match a hub's game with `isBg3GameSlug`, not `===`.
+ */
+export const BG3_GAME_SLUG = 'baldurs-gate-iii' as const;
+/**
+ * Every `games.slug` a BG3 row can carry: the seeded/IGDB slug, plus the
+ * Steam/ITAD-discovered `baldurs-gate-3` a not-yet-merged row may keep.
+ */
+export const BG3_GAME_SLUGS = [BG3_GAME_SLUG, 'baldurs-gate-3'] as const;
+/** IGDB id of Baldur's Gate 3 — the stable key when the slug is unknown. */
+export const BG3_IGDB_ID = 119171 as const;
+
+/** True when `slug` is one of the `games.slug` values of Baldur's Gate 3. */
+export function isBg3GameSlug(slug: string | null | undefined): boolean {
+    return slug != null && (BG3_GAME_SLUGS as readonly string[]).includes(slug);
+}
 /** Hub behaviour ids (D-16): the ingest source and the retention job name. */
 export const BG3_INGEST_SOURCE_ID = BG3_SAVE_CONTRACT_ID;
 export const BG3_RETENTION_JOB_NAME = 'Bg3HistoryRetentionCron_prune' as const;
