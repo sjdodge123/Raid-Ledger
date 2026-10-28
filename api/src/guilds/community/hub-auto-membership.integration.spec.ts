@@ -159,12 +159,15 @@ describe('signup → auto-membership (A1–A4)', () => {
     const event = await mkEvent(hub);
     const res = await call('post', `/events/${event}/signup`, u.token, {});
     expect(res.status).toBe(201);
+    // The signup's auto-membership runs after the response: the join lands,
+    // then the prompt is written — wait for both (1/50 flake read the prompt
+    // between the two writes).
     await waitFor(async () => {
       expect((await memberRow(hub, u.id))?.joinSource).toBe('auto');
+      expect((await promptRow(hub, u.id))?.kind).toBe('auto-joined');
     });
     const member = await memberRow(hub, u.id);
     expect(member?.leftAt).toBeNull();
-    expect((await promptRow(hub, u.id))?.kind).toBe('auto-joined');
   });
 
   it('A2b: auto, signer not in the Discord server → a suggest prompt instead', async () => {
