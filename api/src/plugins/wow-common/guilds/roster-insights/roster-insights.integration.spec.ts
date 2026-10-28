@@ -196,6 +196,51 @@ async function seedPresence(): Promise<void> {
       );
 }
 
+/**
+ * ROK-1916 (D4) — a second guild where lead's MAIN was away 5 days and lead's
+ * ALT was online. `mainsOnly` drops the alt from the breakdowns, but presence
+ * is per character, so `lastSeen` must still count it.
+ */
+async function seedAltPresenceGuild(): Promise<{ gid: number; altId: string }> {
+  const gid = await insertGuild('Forever Alt Presence');
+  const [main] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, charIds.lead)),
+    'lead main',
+  );
+  const [alt] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: main.userId,
+        gameId: testApp.seed.game.id,
+        name: 'Leadalt',
+        class: 'Rogue',
+        level: 30,
+        addonGuid: 'Player-7-leadalt',
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+        isMain: false,
+      })
+      .returning(),
+    'lead alt',
+  );
+  await testApp.db.insert(schema.guildMembers).values([
+    {
+      ...memberRow(gid, 'Player-7-lead', 'lead', 60, 'Warrior'),
+      onlineAtExport: false,
+      lastOnlineDays: 5,
+    },
+    {
+      ...memberRow(gid, 'Player-7-leadalt', 'Leadalt', 30, 'Rogue'),
+      onlineAtExport: true,
+    },
+  ]);
+  return { gid, altId: alt.id };
+}
+
 const insights = (who: Who, gid = guildId) =>
   testApp.request
     .get(`/plugins/wow/guilds/${gid}/roster-insights`)
@@ -299,6 +344,24 @@ describe('GET roster-insights (real DB)', () => {
         { name: 'Pugone', characterId: null, days: 40 },
         { name: 'Pugtwo', characterId: null, days: 2 },
       ],
+    });
+  });
+
+  it('lastSeen uses the full roster even with ?mainsOnly=true (ROK-1916 D4)', async () => {
+    const { gid, altId } = await seedAltPresenceGuild();
+    const res = await testApp.request
+      .get(`/plugins/wow/guilds/${gid}/roster-insights?mainsOnly=true`)
+      .set('Authorization', `Bearer ${tokens.lead}`);
+    expect(res.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(res.body);
+    // mainsOnly took effect: the alt's Rogue is gone from the breakdown...
+    expect(dto.classes.map((c) => c.class)).toEqual(['Warrior']);
+    // ...but the online alt still counts and is listed.
+    expect(dto.lastSeen).toEqual({
+      reported: 2,
+      onlineCount: 1,
+      online: [{ name: 'Leadalt', characterId: altId }],
+      away: [{ name: 'lead', characterId: charIds.lead, days: 5 }],
     });
   });
 
