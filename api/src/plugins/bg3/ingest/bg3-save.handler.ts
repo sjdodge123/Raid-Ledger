@@ -10,7 +10,6 @@ import type {
   CompanionHandlerContext,
 } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
-import { GuildAccessService } from '../../../guilds/guild-access.service';
 import {
   Bg3SavesWriteRepository,
   type Bg3SaveInsert,
@@ -63,10 +62,7 @@ export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> 
   /** D-5: the browser drag-and-drop path (ROK-1960) posts as a session. */
   readonly sources: readonly CompanionIngestVia[] = ['device', 'session'];
 
-  constructor(
-    private readonly repo: Bg3SavesWriteRepository,
-    private readonly access: GuildAccessService,
-  ) {}
+  constructor(private readonly repo: Bg3SavesWriteRepository) {}
 
   /** D-4: one latest marker per campaign key. */
   latestWins(msg: Bg3SaveMessage): { key: string; at: Date } {
@@ -85,7 +81,10 @@ export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> 
     await this.repo.insertSave(ctx.tx, toBg3SaveRow(ctx, msg, campaignId));
   }
 
-  /** D-6 resolution; a campaign whose hub the uploader left → unassigned. */
+  /**
+   * D-6 resolution; a campaign whose hub the uploader left → unassigned.
+   * The membership read runs on `ctx.tx` (review fix 1), never the pool.
+   */
   private async campaignFor(
     ctx: CompanionHandlerContext,
     campaignKey: string,
@@ -96,7 +95,11 @@ export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> 
       campaignKey,
     );
     if (target === null) return null;
-    const member = await this.access.isMember(ctx.userId, target.guildId);
+    const member = await this.repo.isHubMember(
+      ctx.tx,
+      ctx.userId,
+      target.guildId,
+    );
     return member ? target.id : null;
   }
 }

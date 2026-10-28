@@ -7,6 +7,7 @@ import { Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
+import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
 
 /** A campaign an incoming save may be assigned to, with its hub. */
 export interface Bg3CampaignTarget {
@@ -45,6 +46,20 @@ export class Bg3SavesWriteRepository {
       .where(eq(d.userId, userId))
       .limit(1);
     return fallback ?? null;
+  }
+
+  /**
+   * D-2/D-6: is the uploader a live member of the campaign's hub? BG3 hubs
+   * are `game_community` hubs only, so this is the community-hub `isMember`
+   * gate — read on the ingest tx (a second pool connection while the tx
+   * holds one deadlocks `DB_POOL_MAX=1`).
+   */
+  async isHubMember(
+    tx: CompanionDeviceTx,
+    userId: number,
+    guildId: number,
+  ): Promise<boolean> {
+    return (await liveCommunityRole(tx, guildId, userId)) !== null;
   }
 
   /**

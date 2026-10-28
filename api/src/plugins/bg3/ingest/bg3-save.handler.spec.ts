@@ -10,7 +10,6 @@ import {
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
-import type { GuildAccessService } from '../../../guilds/guild-access.service';
 import { Bg3SaveHandler, partyMaxLevel } from './bg3-save.handler';
 
 const FIXTURES = join(
@@ -25,12 +24,9 @@ function setup(target: { id: number; guildId: number } | null, member = true) {
   const repo = {
     resolveCampaign: jest.fn().mockResolvedValue(target),
     insertSave: jest.fn().mockResolvedValue(true),
+    isHubMember: jest.fn().mockResolvedValue(member),
   };
-  const access = { isMember: jest.fn().mockResolvedValue(member) };
-  const handler = new Bg3SaveHandler(
-    repo,
-    access as unknown as GuildAccessService,
-  );
+  const handler = new Bg3SaveHandler(repo);
   const tx: unknown = { tx: true };
   const ctx = {
     tx,
@@ -39,7 +35,7 @@ function setup(target: { id: number; guildId: number } | null, member = true) {
     deviceId: 3,
     receivedAt: new Date('2026-10-24T12:01:00Z'),
   } as CompanionHandlerContext;
-  return { repo, access, handler, ctx };
+  return { repo, handler, ctx };
 }
 
 function insertedRow(repo: ReturnType<typeof setup>['repo']): unknown {
@@ -75,14 +71,16 @@ describe('Bg3SaveHandler — contract wiring (U-5)', () => {
 
 describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
   it('assigns the bound campaign when the uploader is in its hub', async () => {
-    const { repo, access, handler, ctx } = setup({ id: 11, guildId: 5 });
+    const { repo, handler, ctx } = setup({ id: 11, guildId: 5 });
     await handler.handle(ctx, ACT2);
     expect(repo.resolveCampaign).toHaveBeenCalledWith(
       ctx.tx,
       7,
       ACT2.payload.campaignKey,
     );
-    expect(access.isMember).toHaveBeenCalledWith(7, 5);
+    // Review fix 1: the membership read runs on the ingest tx, never a
+    // second pool connection (that deadlocks at DB_POOL_MAX=1).
+    expect(repo.isHubMember).toHaveBeenCalledWith(ctx.tx, 7, 5);
     expect(insertedRow(repo)).toMatchObject({
       uploaderUserId: 7,
       deviceId: 3,
@@ -102,9 +100,9 @@ describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
   });
 
   it('leaves the save unassigned with no binding or default', async () => {
-    const { repo, access, handler, ctx } = setup(null);
+    const { repo, handler, ctx } = setup(null);
     await handler.handle(ctx, ACT2);
-    expect(access.isMember).not.toHaveBeenCalled();
+    expect(repo.isHubMember).not.toHaveBeenCalled();
     expect(insertedRow(repo)).toMatchObject({ campaignId: null });
   });
 

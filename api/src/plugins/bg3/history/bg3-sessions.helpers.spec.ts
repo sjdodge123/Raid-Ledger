@@ -84,3 +84,38 @@ describe('clusterSessions', () => {
     expect(clusterSessions([])).toEqual([]);
   });
 });
+
+describe('clusterSessions — collapsed rows are intervals', () => {
+  // Review fix 3: a collapsed row is an INTERVAL [first save, last save];
+  // clustering merges overlapping / near intervals, not just endpoints.
+  it('merges a collapsed row whose interval spans a later raw save back into the earlier session', () => {
+    const collapsed = row(3, 19 * HOUR, {
+      sessionFirstSavedAt: new Date(T0 + 2 * HOUR),
+      sessionSaveCount: 5,
+    });
+    const sessions = clusterSessions([row(1, 0), row(2, 11 * HOUR), collapsed]);
+    expect(sessions.map((s) => [...s.rowIds].sort())).toEqual([[1, 2, 3]]);
+    expect(sessions[0]).toMatchObject({
+      startedAt: new Date(T0),
+      endedAt: new Date(T0 + 19 * HOUR),
+      saveCount: 7,
+      lastSaveId: 3,
+      partyLevelTo: 3,
+    });
+  });
+
+  it('starts a session at a collapsed row’s first save when it opens before a raw save inside it', () => {
+    const collapsed = row(3, 20 * HOUR, {
+      sessionFirstSavedAt: new Date(T0 + 6 * HOUR),
+      sessionSaveCount: 4,
+    });
+    const sessions = clusterSessions([row(1, 0), row(2, 12 * HOUR), collapsed]);
+    expect(sessions.map((s) => [...s.rowIds].sort())).toEqual([[1], [2, 3]]);
+    expect(sessions[1]).toMatchObject({
+      startedAt: new Date(T0 + 6 * HOUR),
+      endedAt: new Date(T0 + 20 * HOUR),
+      saveCount: 5,
+      lastSaveId: 3,
+    });
+  });
+});

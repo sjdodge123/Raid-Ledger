@@ -37,6 +37,7 @@ import {
   makeUser,
 } from '../../companion/devices/testing/companion-link.helpers';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { Bg3SaveHandler } from './ingest/bg3-save.handler';
 
 const MESSAGES = `/companion/v1/messages/${BG3_SAVE_CONTRACT_ID}`;
 const BG3 = '/plugins/bg3';
@@ -340,6 +341,45 @@ describe('I-2 unassigned → bind', () => {
       );
     expectAck(await ingest(w.mate.token), 'accepted');
     expect(await placement()).toEqual([[KEY_A, null]]);
+  });
+});
+
+/**
+ * Review fix 1: the hub-membership read runs on the ingest tx. Proof: the
+ * uploader re-joins INSIDE the tx (uncommitted) — only a read on that same
+ * tx sees it. A read on a second pool connection sees "left" (and, at
+ * DB_POOL_MAX=1, waits forever on the connection the tx holds).
+ */
+describe('I-2b membership is read on the ingest tx', () => {
+  it('an uncommitted re-join inside the ingest tx assigns the save to the bound campaign', async () => {
+    const w = await world();
+    await bind(w.mate.token, KEY_A, w.campaignId);
+    const mateRow = and(
+      eq(schema.hubCommunityMembers.guildId, w.hubId),
+      eq(schema.hubCommunityMembers.userId, w.mate.id),
+    );
+    await testApp.db
+      .update(schema.hubCommunityMembers)
+      .set({ leftAt: new Date() })
+      .where(mateRow);
+    const handler = testApp.app.get(Bg3SaveHandler);
+    await testApp.db.transaction(async (tx) => {
+      await tx
+        .update(schema.hubCommunityMembers)
+        .set({ leftAt: null })
+        .where(mateRow);
+      await handler.handle(
+        {
+          tx,
+          userId: w.mate.id,
+          via: 'session',
+          deviceId: null,
+          receivedAt: new Date(),
+        },
+        save(),
+      );
+    });
+    expect(await placement()).toEqual([[KEY_A, w.campaignId]]);
   });
 });
 

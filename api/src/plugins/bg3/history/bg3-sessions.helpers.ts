@@ -16,7 +16,7 @@ export interface Bg3SessionRow {
   partyMaxLevel: number;
 }
 
-/** One clustered session, oldest row first in `rowIds`. */
+/** One clustered session; `rowIds` in order of each row's first save. */
 export interface Bg3ClusteredSession {
   startedAt: Date;
   endedAt: Date;
@@ -54,22 +54,40 @@ function open(r: Bg3SessionRow): Bg3ClusteredSession {
   };
 }
 
-function extend(s: Bg3ClusteredSession, r: Bg3SessionRow): void {
-  s.endedAt = r.savedAt;
-  s.saveCount += countOf(r);
-  s.partyLevelTo = r.partyMaxLevel;
-  if (!s.areas.includes(r.currentLevel)) s.areas.push(r.currentLevel);
-  s.lastSaveId = r.id;
-  s.rowIds.push(r.id);
+/** Rows by first save, then `savedAt`, then `id` (a copy). */
+function sortByStart(rows: readonly Bg3SessionRow[]): Bg3SessionRow[] {
+  return [...rows].sort(
+    (a, b) =>
+      startOf(a).getTime() - startOf(b).getTime() ||
+      a.savedAt.getTime() - b.savedAt.getTime() ||
+      a.id - b.id,
+  );
 }
 
-/** Sessions oldest first. The gap is measured to a row's first save. */
+/** The session's end + last save move only to a later (or tied) save. */
+function extend(s: Bg3ClusteredSession, r: Bg3SessionRow): void {
+  s.saveCount += countOf(r);
+  if (!s.areas.includes(r.currentLevel)) s.areas.push(r.currentLevel);
+  s.rowIds.push(r.id);
+  if (r.savedAt.getTime() < s.endedAt.getTime()) return;
+  s.endedAt = r.savedAt;
+  s.partyLevelTo = r.partyMaxLevel;
+  s.lastSaveId = r.id;
+}
+
+/**
+ * Sessions oldest first. Each row is the interval [first save, `savedAt`]
+ * (a collapsed row spans its whole session); intervals are merged in order
+ * of their first save while the gap to the session's end stays under
+ * `gapMs` — interval clustering, so a collapsed row overlapping a later raw
+ * save joins it (review fix 3).
+ */
 export function clusterSessions(
   rows: readonly Bg3SessionRow[],
   gapMs: number = BG3_SESSION_GAP_MS,
 ): Bg3ClusteredSession[] {
   const sessions: Bg3ClusteredSession[] = [];
-  for (const r of sortBySavedAt(rows)) {
+  for (const r of sortByStart(rows)) {
     const current = sessions.at(-1);
     const near =
       current !== undefined &&
