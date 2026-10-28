@@ -16,6 +16,7 @@ import {
   type ValheimRecipeCatalogResponse,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeSourceRef,
   type ValheimRecipeStockResponse,
   type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
@@ -67,6 +68,21 @@ import {
   visibleRecipes,
   type VisibleRecipes,
 } from './valheim-recipes.spoilers.cache';
+
+/** ROK-1860 D3: per-prefab source overrides (`sources=`). */
+type SourcePicks = ReadonlyMap<string, ValheimRecipeSourceRef>;
+
+interface TreeAsk {
+  prefab: string;
+  quality: number;
+  kind: RecipeKind | undefined;
+  sources: SourcePicks;
+}
+
+interface PlanAsk {
+  targets: ValheimRecipePlanTarget[];
+  sources: SourcePicks;
+}
 
 /** D8: while protected, hidden targets are dropped (and not echoed). */
 function shownTargets(
@@ -169,10 +185,12 @@ export class ValheimRecipesService {
     quality: number,
     kind: RecipeKind | undefined,
     user: AuthenticatedUser,
+    sources: SourcePicks = new Map(),
   ): Promise<ValheimRecipeTreeResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
+    const ask = { prefab, quality, kind, sources };
     const body = await this.repo.read((r) =>
-      this.treeIn(r, serverId, { prefab, quality, kind }, user),
+      this.treeIn(r, serverId, ask, user),
     );
     return ValheimRecipeTreeResponseSchema.parse(body);
   }
@@ -180,7 +198,7 @@ export class ValheimRecipesService {
   private async treeIn(
     r: RecipesReader,
     serverId: number,
-    ask: { prefab: string; quality: number; kind: RecipeKind | undefined },
+    ask: TreeAsk,
     user: AuthenticatedUser,
   ) {
     const { prefab, kind } = ask;
@@ -195,9 +213,13 @@ export class ValheimRecipesService {
     const { cat, maxQ } = await catalogFor(r, set, graph, [prefab]);
     const q = kind === 'piece' ? 1 : Math.min(ask.quality, maxQ(prefab));
     const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
-    const res = resolveTree(graph, kind ? { ...target, kind } : target, null, {
-      maxQuality: maxQ,
-    });
+    const opts = { maxQuality: maxQ, sources: ask.sources };
+    const res = resolveTree(
+      graph,
+      kind ? { ...target, kind } : target,
+      null,
+      opts,
+    );
     return {
       target: { prefab, quality: q },
       ...pickTree(res, graph, k),
@@ -214,6 +236,7 @@ export class ValheimRecipesService {
     targets: ValheimRecipePlanTarget[],
     opts: PlanStockOptions,
     user: AuthenticatedUser,
+    sources: SourcePicks = new Map(),
   ): Promise<ValheimRecipePlanResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
     const scope = stockScope(user, opts);
@@ -224,7 +247,7 @@ export class ValheimRecipesService {
         const spoilers = await serverSpoilers(r, serverId);
         return { ...emptyPlan(targets), discovery: k.status, spoilers };
       }
-      return this.planIn(r, set, targets, scope, k);
+      return this.planIn(r, set, { targets, sources }, scope, k);
     });
     return ValheimRecipePlanResponseSchema.parse(body);
   }
@@ -232,17 +255,18 @@ export class ValheimRecipesService {
   private async planIn(
     r: RecipesReader,
     set: ValheimRecipeSetRow,
-    targets: ValheimRecipePlanTarget[],
+    ask: PlanAsk,
     scope: SQL,
     k: KnownRecipes,
   ): Promise<ValheimRecipePlanResponse> {
     const { graph, spoilers } = await this.visible(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
-    const shown = shownTargets({ graph, spoilers }, targets);
+    const shown = shownTargets({ graph, spoilers }, ask.targets);
     const ids = shown.map((t) => t.prefab);
     const { cat, maxQ } = await catalogFor(r, set, graph, ids);
     const planned = clampTargets(shown, maxQ);
-    const res = resolvePlan(graph, planned, stock, { maxQuality: maxQ });
+    const opts = { maxQuality: maxQ, sources: ask.sources };
+    const res = resolvePlan(graph, planned, stock, opts);
     const { items, itemAtlas } = nodeCatalog(res, cat, graph);
     return {
       targets: planned,
