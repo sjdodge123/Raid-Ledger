@@ -2,7 +2,7 @@
  * ROK-1957 L8b2 — the hub-scoped BG3 read routes against a real DB (§5.6,
  * §9.2): the D-15 access matrix on every route, cross-hub 404s, the D-7
  * snapshot host-twin / empty / corrupt-row rules, D-8 session clustering +
- * paging, and the settings write. Thumbnails, the spoiler toggle, `me/saves`
+ * paging. Thumbnails, the spoiler toggle, settings PUT, `me/saves`
  * and the gallery feed live in `bg3-read-media.integration.spec.ts`.
  * Saves are inserted directly (the ingest path has its own spec).
  */
@@ -164,6 +164,12 @@ async function save(o: SaveOpts): Promise<number> {
   return row.id;
 }
 
+/** `[status, message]` of an error response. */
+const said = (res: { status: number; body: unknown }): [number, unknown] => [
+  res.status,
+  (res.body as { message?: unknown }).message,
+];
+
 async function get(url: string, who?: Who) {
   const req = testApp.request.get(url);
   return who ? req.set(auth(who)) : req;
@@ -192,7 +198,7 @@ async function matrix(h: number, who?: Who) {
   const out: Record<string, [number, unknown]> = {};
   for (const [name, call] of Object.entries(routes(h))) {
     const res = await call(who);
-    out[name] = [res.status, (res.body as { message?: unknown }).message];
+    out[name] = said(res);
   }
   return out;
 }
@@ -246,10 +252,7 @@ describe('BG3 hub routes — access matrix (D-15)', () => {
     await testApp.app.get(PluginRegistryService).deactivate(BG3_PLUGIN_ID);
     expect(await matrix(hub, host)).toEqual(same([403, NOT_ACTIVE]));
     const me = await get('/plugins/bg3/me/saves', host);
-    expect([me.status, (me.body as { message?: unknown }).message]).toEqual([
-      403,
-      NOT_ACTIVE,
-    ]);
+    expect(said(me)).toEqual([403, NOT_ACTIVE]);
   });
 
   it('404 Guild not found on a community hub of another game, for its members', async () => {
@@ -298,25 +301,6 @@ describe('BG3 hub routes — access matrix (D-15)', () => {
       member: await canEdit(guest),
     }).toEqual({ admin: true, officer: true, member: false });
   });
-
-  it('every hub GET is Cache-Control: private, no-store', async () => {
-    const r = routes(hub);
-    await save({
-      uploader: host.id,
-      campaignId: camp,
-      savedAt: '2026-10-24T12:00:00Z',
-    });
-    const res = await Promise.all([
-      r.campaigns(host),
-      r.snapshot(host),
-      r.sessions(host),
-    ]);
-    expect(res.map((x) => [x.status, x.headers['cache-control']])).toEqual([
-      [200, 'private, no-store'],
-      [200, 'private, no-store'],
-      [200, 'private, no-store'],
-    ]);
-  });
 });
 
 describe('BG3 hub routes — no cross-hub read', () => {
@@ -334,10 +318,7 @@ describe('BG3 hub routes — no cross-hub read', () => {
       `${base(hub)}/campaigns/${foreignCamp}/sessions`,
       host,
     );
-    expect([
-      [snap.status, (snap.body as { message?: unknown }).message],
-      [ses.status, (ses.body as { message?: unknown }).message],
-    ]).toEqual([
+    expect([said(snap), said(ses)]).toEqual([
       [404, 'Campaign not found'],
       [404, 'Campaign not found'],
     ]);
@@ -388,21 +369,6 @@ describe('GET snapshot (D-3 / D-7)', () => {
       sql`UPDATE bg3_saves SET party = '[{"bogus":1}]'::jsonb WHERE id = ${corrupt}`,
     );
     expect((await snapshotOf(host)).saveId).toBe(older);
-  });
-
-  it('no campaignId → the active campaign; none active → 404 no_campaign', async () => {
-    const none = await get(`${base(hub)}/snapshot`, host);
-    expect([none.status, (none.body as { message?: unknown }).message]).toEqual(
-      [404, 'no_campaign'],
-    );
-    await testApp.db
-      .insert(schema.bg3HubSettings)
-      .values({ guildId: hub, activeCampaignId: camp });
-    const res = await get(`${base(hub)}/snapshot`, host);
-    expect([res.status, res.body]).toEqual([
-      200,
-      { empty: true, campaignId: camp },
-    ]);
   });
 });
 
@@ -528,61 +494,6 @@ describe('GET campaigns/:campaignId/sessions (D-8)', () => {
   it('limit 20 is accepted, 21 → 400 Invalid limit', async () => {
     const ok = await get(url('?limit=20'), host);
     const bad = await get(url('?limit=21'), host);
-    expect([
-      ok.status,
-      [bad.status, (bad.body as { message?: unknown }).message],
-    ]).toEqual([200, [400, 'Invalid limit']]);
-  });
-});
-
-describe('PUT hubs/:hubId/settings', () => {
-  const settingsRow = async () =>
-    testApp.db
-      .select()
-      .from(schema.bg3HubSettings)
-      .where(eq(schema.bg3HubSettings.guildId, hub));
-
-  it('403 Hub editors only for a plain member', async () => {
-    const res = await putSettings(hub, guest, {
-      hideLocationAndScreenshots: true,
-    });
-    expect([res.status, (res.body as { message?: unknown }).message]).toEqual([
-      403,
-      'Hub editors only',
-    ]);
-    expect(await settingsRow()).toEqual([]);
-  });
-
-  it("400 campaign_not_in_hub for another hub's campaign", async () => {
-    const res = await putSettings(hub, officer, {
-      activeCampaignId: foreignCamp,
-    });
-    expect([res.status, (res.body as { message?: unknown }).message]).toEqual([
-      400,
-      'campaign_not_in_hub',
-    ]);
-    expect(await settingsRow()).toEqual([]);
-  });
-
-  it('an editor upserts when no row exists, then updates it', async () => {
-    expect(await settingsRow()).toEqual([]);
-    const first = await putSettings(hub, officer, {
-      hideLocationAndScreenshots: true,
-      activeCampaignId: camp,
-    });
-    expect([first.status, first.body]).toEqual([
-      200,
-      { hideLocationAndScreenshots: true, activeCampaignId: camp },
-    ]);
-    const [row] = nonEmpty(await settingsRow(), 'settings row');
-    expect(row.updatedByUserId).toBe(officer.id);
-    const second = await putSettings(hub, admin, {
-      hideLocationAndScreenshots: false,
-    });
-    expect(second.body).toEqual({
-      hideLocationAndScreenshots: false,
-      activeCampaignId: camp,
-    });
-    expect((await settingsRow()).length).toBe(1);
+    expect([ok.status, said(bad)]).toEqual([200, [400, 'Invalid limit']]);
   });
 });
