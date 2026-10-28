@@ -30,6 +30,14 @@ jest.mock('./scheduling-query.helpers');
 jest.mock('./scheduling-auto-signup.helpers');
 jest.mock('./scheduling-auto-heart.helpers');
 jest.mock('../lineups-notify-hooks.helpers');
+// The claim's lock + re-check is covered by its own spec; here it just runs fn.
+jest.mock('./scheduling-lockin-claim.helpers', () => ({
+  withMatchLockInClaim: (
+    db: unknown,
+    _matchId: number,
+    fn: (tx: unknown) => Promise<unknown>,
+  ) => fn(db),
+}));
 
 const mockFindVotes = findScheduleVotes as jest.MockedFunction<
   typeof findScheduleVotes
@@ -99,7 +107,10 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     db.limit.mockResolvedValue([]);
     return {
       db: db as unknown as LockInEventDeps['db'],
-      eventsService: { create: jest.fn().mockResolvedValue({ id: 55 }) },
+      eventsService: {
+        create: jest.fn().mockResolvedValue({ id: 55 }),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
       signupsService: { signup: jest.fn() },
       lineupNotifications: {} as LockInEventDeps['lineupNotifications'],
       pollEmbed: { fireUpdateEmbed: jest.fn() },
@@ -162,6 +173,21 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     expect(mockAutoSignup).not.toHaveBeenCalled();
     expect(mockAutoHeart).not.toHaveBeenCalled();
     expect(deps.pollEmbed.fireUpdateEmbed).not.toHaveBeenCalled();
+    // ROK-2024 F2: the losing event is deleted, not left as an orphan.
+    expect(deps.eventsService.delete).toHaveBeenCalledWith(55, 10, false);
+  });
+
+  it('deletes nothing when the link write wins (ROK-2024 F2)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    const deps = buildDeps();
+    await createLockedInEvent(
+      deps,
+      { id: 3, gameId: 7 },
+      { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+      10,
+      false,
+    );
+    expect(deps.eventsService.delete).not.toHaveBeenCalled();
   });
 });
 

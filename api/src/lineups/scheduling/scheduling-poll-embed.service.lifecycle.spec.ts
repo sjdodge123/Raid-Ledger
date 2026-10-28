@@ -312,6 +312,8 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },
     ]);
+    // ROK-2024 F2: the lock-in claim's re-check — the match is still unclaimed.
+    mockDb.limit.mockResolvedValueOnce([{ id: MATCH_ID }]);
   });
 
   it('asks the poll embed to re-render once the event exists', async () => {

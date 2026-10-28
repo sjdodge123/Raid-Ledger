@@ -19,6 +19,7 @@ import {
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
 import { updateMatchLinkedEvent } from './scheduling-query.helpers';
+import { withMatchLockInClaim } from './scheduling-lockin-claim.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { yesVotesOnly } from './scheduling-stance.helpers';
@@ -128,11 +129,46 @@ export function buildCreateEventDto(
 /** Everything `createLockedInEvent` reaches outside the database. */
 export interface LockInEventDeps {
   db: Db;
-  eventsService: { create: EventsService['create'] };
+  eventsService: Pick<EventsService, 'create' | 'delete'>;
   signupsService: Pick<SignupsService, 'signup'>;
   lineupNotifications: LineupNotificationService;
   pollEmbed: { fireUpdateEmbed: (matchId: number) => void };
   logger: Logger;
+}
+
+/**
+ * Claim the match, create its event and link it (ROK-2024 follow-up F2).
+ *
+ * A concurrent expired-path lock-in blocks on the claim and 409s before it
+ * creates anything. An OPEN-path `complete` does not take the claim, so it can
+ * still win between the re-check and the link write — then the event this
+ * call just made is deleted (its DELETED listener removes any Discord post)
+ * before the 409, instead of being left behind as an orphan.
+ *
+ * @returns The linked event's id.
+ */
+async function claimAndCreateEvent(
+  deps: LockInEventDeps,
+  matchId: number,
+  userId: number,
+  dto: CreateEventDto,
+): Promise<number> {
+  const outcome = await withMatchLockInClaim(deps.db, matchId, async (tx) => {
+    // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
+    // the event with the poll's hub (creator-membership rule included).
+    const event = await deps.eventsService.create(userId, {
+      ...dto,
+      schedulingMatchId: matchId,
+    });
+    const linked = await updateMatchLinkedEvent(tx, matchId, event.id);
+    return { eventId: event.id, linked };
+  });
+  if (!outcome.linked) {
+    // Outside the claim's transaction: the delete runs on its own connection.
+    await deps.eventsService.delete(outcome.eventId, userId, false);
+    throw new ConflictException('This poll has already been locked in');
+  }
+  return outcome.eventId;
 }
 
 /**
@@ -166,18 +202,7 @@ export async function createLockedInEvent(
     recurring,
     playerCap,
   );
-  // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags the
-  // event with the poll's hub (creator-membership rule included) — the
-  // expired-poll lock-in otherwise lands untagged, off the hub's Events tab.
-  const event = await deps.eventsService.create(userId, {
-    ...dto,
-    schedulingMatchId: matchId,
-  });
-  // ROK-2024: an open lock-in may have won since the caller's read — bail
-  // before any signup or announcement (the event just created is orphaned).
-  if (!(await updateMatchLinkedEvent(db, matchId, event.id))) {
-    throw new ConflictException('This poll has already been locked in');
-  }
+  const eventId = await claimAndCreateEvent(deps, matchId, userId, dto);
   // ROK-1617: YES voters only. A member who answered "that time does not work"
   // must not be rostered onto — or auto-hearted for — exactly that time.
   const voters = yesVotesOnly(await findScheduleVotes(db, [slot.id]));
@@ -186,7 +211,7 @@ export async function createLockedInEvent(
   // the signup (and the roster slot) too. An organiser who did NOT vote for
   // this slot is absent from `voters` and stays off the event (ROK-1610).
   await autoSignupSlotVoters({
-    eventId: event.id,
+    eventId,
     creatorId: null,
     voters,
     signupsService: deps.signupsService,
@@ -201,7 +226,7 @@ export async function createLockedInEvent(
     db,
     matchId,
     slot.proposedTime,
-    event.id,
+    eventId,
   );
-  return event.id;
+  return eventId;
 }
