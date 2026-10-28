@@ -195,6 +195,13 @@ const submit = () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Event Title' }), { target: { value: 'Game night' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
 };
+/** Submit, let the mutation's async start run, then assert the guard held: no POST /events, the picker scrolled into view. */
+async function expectSubmitBlocked() {
+    submit();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(createEvent).not.toHaveBeenCalled();
+    expect(vi.mocked(window.HTMLElement.prototype.scrollIntoView).mock.contexts).toContain(screen.getByTestId('scheduling-bench-picker'));
+}
 
 describe('bench picker on the lock-in create form (ROK-2025)', () => {
     beforeEach(() => {
@@ -220,8 +227,7 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
         fireEvent.click(box(5));
         expect(screen.getByRole('alert')).toHaveTextContent('Pick 1 more for the bench.');
         expect(screen.getByTestId('bench-pick-count')).toHaveTextContent('0 of 1 picked');
-        submit();
-        expect(createEvent).not.toHaveBeenCalled();
+        await expectSubmitBlocked();
     });
 
     it('an over-full pick shows the "Unmark" error and blocks the submit', async () => {
@@ -229,8 +235,7 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
         await screen.findByTestId('scheduling-bench-picker');
         fireEvent.click(box(2));
         expect(screen.getByRole('alert')).toHaveTextContent('Only 1 can go to the bench. Unmark 1.');
-        submit();
-        expect(createEvent).not.toHaveBeenCalled();
+        await expectSubmitBlocked();
     });
 
     it("sends the organizer's pick on lock-in", async () => {
