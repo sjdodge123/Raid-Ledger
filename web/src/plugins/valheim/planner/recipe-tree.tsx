@@ -6,7 +6,7 @@
 import { useMemo, useState, type JSX } from 'react';
 import type { ValheimPlanNode, ValheimStationBuilds } from '@raid-ledger/contract';
 import { foldNodes, type PlannerKind, type PlanTreeNode } from './planner.helpers';
-import { RecipeTreeRow } from './recipe-tree-row';
+import { RecipeTreeRow, type SourceChooser } from './recipe-tree-row';
 import { rootKindOf, type PlannerNames } from './use-planner-names';
 
 interface BranchProps {
@@ -17,11 +17,17 @@ interface BranchProps {
     onToggle: (id: number) => void;
     label?: string;
     stationBuilds: ValheimStationBuilds | undefined;
+    onChooseSource: SourceChooser | undefined;
+    /** AC8: these are the ingredients of an anyOneOf recipe — their `alternatives` count stand-ins, so no picker. */
+    underAnyOneOf?: boolean;
 }
 
-function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds }: BranchProps): JSX.Element {
+const isAnyOneOf = (node: ValheimPlanNode): boolean => node.via.type === 'recipe' && node.via.anyOneOf;
+
+function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds, onChooseSource, underAnyOneOf = false }: BranchProps): JSX.Element {
     return (
-        <ul aria-label={label} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
+        // tabIndex -1 on the labelled root: the AC9 focus fallback after a source pick (source-picker-focus.ts).
+        <ul aria-label={label} tabIndex={label === undefined ? undefined : -1} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
             {entries.map(({ node, children }) => {
                 const expanded = !collapsed.has(node.id);
                 return (
@@ -34,9 +40,11 @@ function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBui
                             expanded={expanded}
                             onToggle={() => onToggle(node.id)}
                             stationBuilds={stationBuilds}
+                            onChooseSource={underAnyOneOf ? undefined : onChooseSource}
                         />
                         {children.length > 0 && expanded && (
-                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} stationBuilds={stationBuilds} />
+                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} stationBuilds={stationBuilds} onChooseSource={onChooseSource}
+                                underAnyOneOf={isAnyOneOf(node)} />
                         )}
                     </li>
                 );
@@ -64,6 +72,7 @@ export function RecipeTree({
     label,
     rootKinds,
     stationBuilds,
+    onChooseSource,
 }: {
     nodes: readonly ValheimPlanNode[];
     truncated: boolean;
@@ -73,6 +82,8 @@ export function RecipeTree({
     rootKinds: readonly (PlannerKind | undefined)[];
     /** ROK-1861: the response's upgrade-station build costs (never netted). */
     stationBuilds?: ValheimStationBuilds | undefined;
+    /** ROK-1860: opens the source picker from a multi-source row. */
+    onChooseSource?: SourceChooser | undefined;
 }): JSX.Element {
     // ROK-1862: never pruned — undiscovered nodes keep their chip so the tree matches the shopping list.
     const roots = useMemo(() => foldNodes(nodes), [nodes]);
@@ -80,7 +91,7 @@ export function RecipeTree({
     const { collapsed, onToggle } = useCollapsed();
     return (
         <div className="space-y-2">
-            <Branch entries={roots} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} label={label} stationBuilds={stationBuilds} />
+            <Branch entries={roots} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} label={label} stationBuilds={stationBuilds} onChooseSource={onChooseSource} />
             {truncated && (
                 <p className="text-xs text-muted">This tree is too large to show in full.</p>
             )}

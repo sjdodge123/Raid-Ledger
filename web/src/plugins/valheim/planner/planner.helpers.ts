@@ -4,7 +4,7 @@
  * chips, and (de)serialise the stored shopping list behind a schema guard.
  */
 import { z } from 'zod';
-import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanStep, type ValheimPlanVia, type ValheimRecipeDiscovery } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanStep, type ValheimPlanVia, type ValheimRecipeDiscovery, type ValheimRecipeSourceRef } from '@raid-ledger/contract';
 import { isUndiscoveredNode } from './spoilers.helpers';
 
 export type PlannerKind = 'item' | 'piece';
@@ -91,6 +91,19 @@ export function foldNodes(nodes: readonly ValheimPlanNode[]): PlanTreeNode[] {
 /** `prefab:quality:amount:fromQuality:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
 export function serializeTargets(targets: readonly PlannerTarget[]): string {
     return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:${t.fromQuality}:${t.kind}`).join(',');
+}
+
+/** ROK-1860 D3 — one override on the wire: `<prefab>:r:<recipeId>` or `<prefab>:p:<processor>:<index>`. */
+function sourceToken(prefab: string, ref: ValheimRecipeSourceRef): string {
+    return ref.type === 'recipe' ? `${prefab}:r:${ref.recipeId}` : `${prefab}:p:${ref.processor}:${ref.index}`;
+}
+
+/** ROK-1860 D3 — the `sources=` value: tokens sorted by prefab, comma-joined; '' when there are none. */
+export function serializeSources(sources: ReadonlyMap<string, ValheimRecipeSourceRef>): string {
+    return [...sources.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([prefab, ref]) => sourceToken(prefab, ref))
+        .join(',');
 }
 
 /** The plan route's target cap — the list never grows past it. */
@@ -210,6 +223,11 @@ export function viaChips(
                   : ['Gathered'];
     if (node.alternatives > 0) chips.push(`+${node.alternatives} other ways`);
     return chips;
+}
+
+/** ROK-1860 — how many other ways the row's source picker offers; 0 for a withheld node (ROK-1948), as in viaChips. */
+export function otherWaysCount(node: Pick<ValheimPlanNode, 'via' | 'alternatives'>): number {
+    return isUndiscoveredNode(node) ? 0 : node.alternatives;
 }
 
 /** Fill ratio for the have/need meter, 0–100. */
