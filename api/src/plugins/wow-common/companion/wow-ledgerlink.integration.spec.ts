@@ -67,6 +67,19 @@ let testApp: TestApp;
 const plugins = (): PluginRegistryService =>
   testApp.app.get(PluginRegistryService);
 
+/** The Forever game's id in the CURRENT seed (serials move per truncate). */
+async function foreverGameId(): Promise<number> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.slug, FOREVER_SLUG))
+      .limit(1),
+    'forever game',
+  );
+  return row.id;
+}
+
 async function ensureGame(): Promise<void> {
   const [existing] = await testApp.db
     .select({ id: schema.games.id })
@@ -144,13 +157,18 @@ function omit<T extends object>(row: T, keys: readonly string[]) {
   );
 }
 
-/** Character + snapshot rows minus owner, ids and write timestamps. */
+/**
+ * Character + snapshot rows minus owner, ids and write timestamps. `gameId`
+ * is a serial: `truncateAllTables` DELETEs without resetting identities, so
+ * the reseeded Forever game gets a new id — each side asserts its own
+ * character landed on the Forever game instead.
+ */
 async function importedState() {
   const chars = await testApp.db.select().from(schema.characters);
   const snaps = await snapshots();
   return {
     characters: chars.map((c) =>
-      omit(c, ['id', 'userId', 'createdAt', 'updatedAt']),
+      omit(c, ['id', 'userId', 'gameId', 'createdAt', 'updatedAt']),
     ),
     snapshots: snaps.map((s) => omit(s, ['id', 'characterId', 'importedAt'])),
   };
@@ -188,7 +206,11 @@ describe('collector message → same result as a paste (AC)', () => {
       await testApp.db.select().from(schema.characters),
       'collector character',
     );
-    expect(charA).toMatchObject({ userId: a.id, name: 'Ana Forever' });
+    expect(charA).toMatchObject({
+      userId: a.id,
+      name: 'Ana Forever',
+      gameId: await foreverGameId(),
+    });
     const viaCompanion = await importedState();
     expect(viaCompanion.snapshots).toHaveLength(1);
 
@@ -202,6 +224,14 @@ describe('collector message → same result as a paste (AC)', () => {
     expect({ status: paste.status, result: paste.body.status }).toEqual({
       status: 200,
       result: 'applied',
+    });
+    const [charB] = nonEmpty(
+      await testApp.db.select().from(schema.characters),
+      'pasted character',
+    );
+    expect(charB).toMatchObject({
+      userId: b.id,
+      gameId: await foreverGameId(),
     });
     expect(await importedState()).toEqual(viaCompanion);
   });
