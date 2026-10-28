@@ -1624,7 +1624,11 @@ count) that expands its roster names; **Level progression** (`forever-level-prog
 ROK-1921) — the §4.30 CSS histogram + median / highest / at-cap `dl` + top-5 names, "See all" `action`;
 **Roles** (`forever-roles`, order 47, ROK-1922) — dungeon / raid role counts with `ROLE_META` colours;
 **Dungeon quests** (`forever-dungeon-quests`, order 48, span 2, ROK-1924) — a signup × quest `StatusChip`
-matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Guild professions**
+matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Recent dings**
+(`forever-recent-dings`, order 49, ROK-1919) — a `divide-edge` list of 44px rows (`CharacterLink` name · `text-muted`
+"hit 41" · a `text-xs text-dim` `<time>` in the shared `syncedAgo` wording, `title` "Seen in the roster export at …"
+because the real ding time is unknown), its own `useRecentDings` query, a quiet empty line + re-export hint, every
+hub viewer — no new pattern; **Guild professions**
 (`forever-professions`, order 85, ROK-1923) — 44px disclosure rows per profession; **Who's saved**
 (`forever-whos-saved`, order 86, ROK-1914) — the same 44px disclosure row per `(instance, difficulty)` save (name +
 "N saved" / difficulty · `formatResetIn` "Resets in …") that expands `CharacterLink` + `font-mono` `killed/total`
