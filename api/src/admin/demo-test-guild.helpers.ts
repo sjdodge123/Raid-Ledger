@@ -32,6 +32,8 @@ export interface SeedGuildInput {
   withContent: boolean;
   /** ROK-1914: also seed LedgerLink lockout snapshots (Who's saved). */
   withLockouts: boolean;
+  /** ROK-1919: also seed three level-up events (Recent dings). */
+  withDings: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -60,6 +62,15 @@ export const SEED_GUILD_EDITOR_RANK = 1;
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{2,47}$/;
 
+/** An optional boolean body flag (absent = false). */
+function boolFlag(value: unknown, name: string): boolean {
+  const flag = value ?? false;
+  if (typeof flag !== 'boolean') {
+    throw new BadRequestException(`${name} must be a boolean`);
+  }
+  return flag;
+}
+
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   const raw = (body ?? {}) as {
@@ -67,6 +78,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
     gameSlug?: unknown;
     withContent?: unknown;
     withLockouts?: unknown;
+    withDings?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -77,15 +89,10 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof gameSlug !== 'string' || !ALL_WOW_GAME_SLUGS.includes(gameSlug)) {
     throw new BadRequestException('gameSlug must be a WoW game slug');
   }
-  const withContent = raw.withContent ?? false;
-  if (typeof withContent !== 'boolean') {
-    throw new BadRequestException('withContent must be a boolean');
-  }
-  const withLockouts = raw.withLockouts ?? false;
-  if (typeof withLockouts !== 'boolean') {
-    throw new BadRequestException('withLockouts must be a boolean');
-  }
-  return { name: raw.name, gameSlug, withContent, withLockouts };
+  const withContent = boolFlag(raw.withContent, 'withContent');
+  const withLockouts = boolFlag(raw.withLockouts, 'withLockouts');
+  const withDings = boolFlag(raw.withDings, 'withDings');
+  return { name: raw.name, gameSlug, withContent, withLockouts, withDings };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */

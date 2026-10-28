@@ -16,6 +16,7 @@ import {
   upgradesOf,
 } from './valheim-recipes.craft.helpers';
 import type { RecipeGraph } from './valheim-recipes.graph';
+import { sourceOptionsOf } from './valheim-recipes.source-options';
 
 type CatalogItems = Record<string, ValheimItemCatalogEntryRow>;
 
@@ -67,6 +68,7 @@ function itemEntry(
   const recipes = graph.recipesByResult.get(prefab) ?? [];
   const processes = graph.processesByOutput.get(prefab) ?? [];
   const maxQuality = clampQuality(e?.maxQuality);
+  const sourceOptions = sourceOptionsOf(graph, prefab);
   return {
     prefab,
     kind: 'item',
@@ -82,6 +84,7 @@ function itemEntry(
         (p) => graph.processors.get(p.processor)?.type !== 'incinerator',
       ).length,
     },
+    ...(sourceOptions ? { sourceOptions } : {}),
   };
 }
 
@@ -121,7 +124,7 @@ export function catalogueReadPrefabs(graph: RecipeGraph): string[] {
   return [...new Set([...produced, ...inputs])].sort();
 }
 
-/** Sorted prefabs named in any entry's `craft` / `upgrades` resources. */
+/** Sorted prefabs named in any entry's `craft` / `upgrades` / `sourceOptions` resources. */
 export function ingredientPrefabs(
   entries: readonly ValheimRecipeCatalogEntry[],
 ): string[] {
@@ -129,6 +132,9 @@ export function ingredientPrefabs(
   for (const e of entries) {
     for (const r of e.craft?.resources ?? []) set.add(r.prefab);
     for (const u of e.upgrades) for (const r of u.resources) set.add(r.prefab);
+    for (const o of e.sourceOptions ?? []) {
+      for (const r of o.resources) set.add(r.prefab);
+    }
   }
   return [...set].sort();
 }

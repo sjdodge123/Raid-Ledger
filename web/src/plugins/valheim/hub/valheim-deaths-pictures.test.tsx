@@ -78,11 +78,15 @@ describe('ValheimDeathsWidget — picture strip', () => {
         fireEvent.click(second);
         expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: 5, mode: 'viewer', filter: 'death', mediaId: 40 });
         expect(useHubGalleryStore.getState().request?.returnFocus).toBe(second);
+        expect(useHubGalleryStore.getState().request?.subject).toBeUndefined();
     });
 
-    it('"+N" opens the Gallery grid with the Deaths chip on', async () => {
+    it('"+N" opens the Gallery grid scoped to that player\'s deaths (ROK-2027 subject = the bar key)', async () => {
         renderWithProviders(<Widget />);
         fireEvent.click(await screen.findByRole('button', { name: '2 more death pictures. Open the gallery' }));
-        expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: 5, mode: 'grid', filter: 'death' });
+        expect(useHubGalleryStore.getState().request).toMatchObject({
+            guildId: 5, mode: 'grid', filter: 'death', subject: { id: 'valheim-death:c11', label: 'Ragnhild' },
+        });
+        expect(useHubGalleryStore.getState().filters).toEqual({});
     });
 });

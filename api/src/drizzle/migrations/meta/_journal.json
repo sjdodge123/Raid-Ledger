@@ -1870,6 +1870,13 @@
       "when": 1793075423285,
       "tag": "0267_hub_session_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1793162395338,
+      "tag": "0268_guild_member_level_events",
+      "breakpoints": true
     }
   ]
 }

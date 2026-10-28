@@ -24,6 +24,15 @@ function handleKeyDown(e: KeyboardEvent): void {
     layers[layers.length - 1]?.current();
 }
 
+/**
+ * True while any overlay is open. A React `onKeyDown` runs before the window
+ * listener, so a host can leave an Escape that belongs to an overlay it opened
+ * (portal events bubble through the React tree) to that overlay.
+ */
+export function hasOpenEscapeLayer(): boolean {
+    return layers.length > 0;
+}
+
 /** Registers an open overlay; `onEscape` runs only while it is the top layer (see file docstring). */
 export function useEscapeLayer(active: boolean, onEscape: () => void): void {
     const onEscapeRef = useRef(onEscape);

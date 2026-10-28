@@ -38,6 +38,7 @@ export const HUB_POINT_KINDS: Readonly<Record<string, HubBehaviourKind>> = {
 export const SCANNED_KINDS: readonly HubBehaviourKind[] = [
   ...Object.values(HUB_POINT_KINDS),
   'media-decorator',
+  'media-subject',
   'ingest-source',
 ];
 
@@ -252,6 +253,29 @@ function mediaDecorators(
     );
 }
 
+/** ROK-2027 — every `HubMediaSubjectRegistry` `.register(owner, 'namespace', fn)` call. */
+function mediaSubjects(all: readonly ScanSource[], ctx: ScanContext): Found[] {
+  const re = /\.register\(\s*([\w.']+)\s*,\s*([\w.'-]+)\s*,/g;
+  return all
+    .filter(
+      (s) =>
+        s.text.includes('HubMediaSubjectRegistry') &&
+        !s.file.startsWith('hub-media/hub-media.subjects'),
+    )
+    .flatMap((src) =>
+      [...src.text.matchAll(re)].map((m): Found => {
+        const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
+        const ns = resolveExpr(m[2] ?? '', src, all, ctx.constants);
+        if (owner === undefined || ns === undefined) {
+          return {
+            problem: `${src.file}: media subject owner "${m[1] ?? ''}" / namespace "${m[2] ?? ''}" is unresolvable`,
+          };
+        }
+        return { key: `${owner}/media-subject/${ns}` };
+      }),
+    );
+}
+
 /** ROK-1965 D17 — every literal `registerHubIngestSource(owner, 'id')` call. */
 function ingestSources(all: readonly ScanSource[], ctx: ScanContext): Found[] {
   const re = /registerHubIngestSource\(\s*([\w.']+)\s*,\s*'([\w.-]+)'\s*\)/g;
@@ -277,6 +301,7 @@ export function scanHubRegistrations(
     ...adapterRegistrations(sources, ctx),
     ...bareCrons(sources, ctx),
     ...mediaDecorators(sources, ctx),
+    ...mediaSubjects(sources, ctx),
     ...ingestSources(sources, ctx),
   ];
   return {

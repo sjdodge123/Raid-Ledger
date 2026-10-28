@@ -1,8 +1,7 @@
 import { useId, useState, useMemo } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { WowInstanceDetailDto, WowInstanceDto } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
+import { RemovableChip } from '../../../components/ui/removable-chip';
 import { SearchInput } from '../../../components/ui/search-input';
 import { useWowInstances } from '../hooks/use-wow-instances';
 import { fetchWowInstanceDetail } from '../api-client';
@@ -50,19 +49,15 @@ function levelRange(min: number, max?: number | null): string {
     return `Lv${min}${max ? `-${max}` : '+'}`;
 }
 
-/** Selected-instance chips: fixed 44px chip geometry (design-system §4.3); the Remove target sits flush right. */
+/** Selected-instance chips: the shared `RemovableChip` (design-system §4.3); the Remove target sits flush right. */
 function SelectedChips({ instances, onRemove }: { instances: WowInstanceDetailDto[]; onRemove: (id: number) => void }) {
     if (instances.length === 0) return null;
     return (
         <div className="flex flex-wrap gap-2 mb-3">
             {instances.map((inst) => (
-                <span key={inst.id} className="inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success">
-                    {inst.shortName || inst.name}
-                    {inst.minimumLevel != null && <span className="text-xs text-muted">{levelRange(inst.minimumLevel, inst.maximumLevel)}</span>}
-                    <Button variant="ghost" iconOnly aria-label={`Remove ${inst.name}`} onClick={() => onRemove(inst.id)}>
-                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
-                    </Button>
-                </span>
+                <RemovableChip key={inst.id} label={inst.shortName || inst.name} removeLabel={`Remove ${inst.name}`}
+                    onRemove={() => onRemove(inst.id)}
+                    {...(inst.minimumLevel != null ? { detail: levelRange(inst.minimumLevel, inst.maximumLevel) } : {})} />
             ))}
         </div>
     );
