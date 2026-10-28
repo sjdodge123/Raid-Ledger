@@ -174,7 +174,9 @@ async function discardEvents(
     try {
       await deps.eventsService.delete(id, userId, false);
     } catch (err: unknown) {
-      deps.logger.error(`Lost lock-in: event ${id} not deleted: ${String(err)}`);
+      deps.logger.error(
+        `Lost lock-in: event ${id} not deleted: ${String(err)}`,
+      );
     }
   }
 }
