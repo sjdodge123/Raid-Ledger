@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     HUB_MEDIA_UPLOAD_MAX_BYTES,
     HUB_MEDIA_UPLOAD_TYPES,
+    HUB_MEDIA_SUBJECT_RE,
     HubMediaItemSchema,
+    HubMediaListQuerySchema,
     HubMediaUploadErrorCodeSchema,
     isSafeHubMediaHref,
 } from '../hub-media.schema.js';
@@ -103,5 +105,35 @@ describe('upload constants (ROK-1965)', () => {
             'rate_limited',
             'busy',
         ]);
+    });
+});
+
+describe('HubMediaListQuerySchema subject (ROK-2027)', () => {
+    it.each(['valheim-death:c42', 'valheim-death:nCallahan~2', 'valheim-death:nOld Bjorn', 'a:x'])(
+        'accepts %s',
+        (subject) => {
+            expect(HubMediaListQuerySchema.safeParse({ subject }).success).toBe(true);
+            expect(HUB_MEDIA_SUBJECT_RE.test(subject)).toBe(true);
+        },
+    );
+
+    it.each([
+        ['no namespace', ':c42'],
+        ['no payload', 'valheim-death:'],
+        ['no colon', 'valheim-death'],
+        ['upper-case namespace', 'Valheim:c1'],
+        ['namespace over 32 chars', `${'a'.repeat(33)}:c1`],
+        ['payload over 100 chars', `valheim-death:${'x'.repeat(101)}`],
+        ['leading space in payload', 'valheim-death: c1'],
+        ['newline in payload', 'valheim-death:c1\nc2'],
+    ])('refuses %s', (_label, subject) => {
+        expect(HubMediaListQuerySchema.safeParse({ subject }).success).toBe(false);
+    });
+
+    it('stays optional: a query without subject parses unchanged', () => {
+        expect(HubMediaListQuerySchema.parse({ kind: 'death', limit: '5' })).toEqual({
+            kind: 'death',
+            limit: 5,
+        });
     });
 });
