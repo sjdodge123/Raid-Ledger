@@ -78,9 +78,30 @@ export function fetchBg3Sessions(
     return fetchApi(path, {}, Bg3SessionsResponseSchema);
 }
 
-/** The caller's saves that are in no campaign (first page). */
-export function fetchBg3MyUnassignedSaves(): Promise<Bg3MySavesResponse> {
-    return fetchApi(`${BG3_API}/me/saves?unassigned=true`, {}, Bg3MySavesResponseSchema);
+/** Safety stop for the page walk below: 50 saves a page (api `BG3_MY_SAVES_PAGE`) × 40 = 2000 saves. */
+export const BG3_MY_SAVES_MAX_PAGES = 40;
+
+function fetchBg3MyUnassignedPage(cursor: string | null): Promise<Bg3MySavesResponse> {
+    const q = new URLSearchParams({ unassigned: 'true' });
+    if (cursor !== null) q.set('cursor', cursor);
+    return fetchApi(`${BG3_API}/me/saves?${q.toString()}`, {}, Bg3MySavesResponseSchema);
+}
+
+/**
+ * Every one of the caller's saves that is in no campaign: walks `nextCursor`
+ * (the api pages 50 at a time) so the Add my saves list and the count are
+ * whole. `nextCursor` is non-null only if the safety stop cut the walk short.
+ */
+export async function fetchBg3MyUnassignedSaves(): Promise<Bg3MySavesResponse> {
+    const first = await fetchBg3MyUnassignedPage(null);
+    const saves = [...first.saves];
+    let cursor = first.nextCursor;
+    for (let page = 1; cursor !== null && page < BG3_MY_SAVES_MAX_PAGES; page += 1) {
+        const next = await fetchBg3MyUnassignedPage(cursor);
+        saves.push(...next.saves);
+        cursor = next.nextCursor;
+    }
+    return { saves, nextCursor: cursor, defaultCampaignId: first.defaultCampaignId };
 }
 
 export function createBg3Campaign(hubId: number, name: string): Promise<Bg3CampaignSummary> {
