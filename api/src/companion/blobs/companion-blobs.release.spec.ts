@@ -16,8 +16,13 @@ const BEFORE = new Date('2026-10-28T05:15:00Z');
 
 function build() {
   const where = jest.fn().mockResolvedValue({ count: 1 });
-  const tx = { delete: jest.fn().mockReturnValue({ where }) };
-  return { tx: tx as unknown as Pick<Db, 'delete'>, where };
+  const execute = jest.fn().mockResolvedValue([]);
+  const tx = { delete: jest.fn().mockReturnValue({ where }), execute };
+  return {
+    tx: tx as unknown as Pick<Db, 'delete' | 'execute'>,
+    where,
+    execute,
+  };
 }
 
 function rendered(arg: unknown): { sql: string; params: unknown[] } {
@@ -44,6 +49,24 @@ describe('releaseUnusedRefsIn (D-11)', () => {
       '"sha256" not in (select "thumbnail_sha256" from "bg3_saves")',
     );
     expect(q.params).toEqual([7, 'bg3-save', SHA, BEFORE.toISOString()]);
+  });
+
+  it('takes the user’s blob lock (the one ingest holds) before the delete (review fix 2)', async () => {
+    const { tx, where, execute } = build();
+    await releaseUnusedRefsIn(tx, {
+      userId: 7,
+      contract: 'bg3-save',
+      shas: [SHA],
+      referencedBefore: BEFORE,
+    });
+    const lock = rendered(execute.mock.calls[0]?.[0]);
+    expect([lock.sql, lock.params]).toEqual([
+      'select pg_advisory_xact_lock(hashtext($1))',
+      ['companion-blobs:7'],
+    ]);
+    expect(execute.mock.invocationCallOrder[0]).toBeLessThan(
+      where.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
   it('issues no statement for an empty sha list', async () => {

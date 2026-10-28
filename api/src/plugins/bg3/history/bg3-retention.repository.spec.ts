@@ -50,7 +50,7 @@ function build(rows: Bg3RetentionRow[]) {
     db as unknown as Db,
     store as unknown as CompanionBlobStore,
   );
-  return { repo, deleteWhere, set, updateWhere, store };
+  return { repo, db, deleteWhere, set, updateWhere, store };
 }
 
 const GROUP = { userId: 7, campaignId: 3 };
@@ -91,6 +91,19 @@ describe('Bg3RetentionRepository.pruneGroup', () => {
         shas: [SHA_A],
         referencedBefore: STARTED,
       }),
+    );
+  });
+
+  it('takes the uploader’s blob lock before it locks any save row (review fix 2)', async () => {
+    const { repo, db } = build([row(1, OLD, SHA_A), row(2, OLD + H, SHA_A)]);
+    await repo.pruneGroup(GROUP, CUTOFF, STARTED, BG3_SESSION_GAP_MS);
+    const lock = rendered(db.execute.mock.calls[0]?.[0]);
+    expect([lock.sql, lock.params]).toEqual([
+      'select pg_advisory_xact_lock(hashtext($1))',
+      ['companion-blobs:7'],
+    ]);
+    expect(db.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      db.for.mock.invocationCallOrder[0] ?? 0,
     );
   });
 

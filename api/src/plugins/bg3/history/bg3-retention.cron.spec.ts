@@ -18,14 +18,18 @@ const GROUPS = [
   { userId: 7, campaignId: null },
 ];
 
+/** The DB clock, deliberately apart from the app's `now` (review fix 10). */
+const DB_NOW = new Date('2026-10-28T05:15:07Z');
+
 function build(active: boolean) {
   const repo = {
     listGroups: jest.fn().mockResolvedValue(GROUPS),
     pruneGroup: jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(0),
+    dbNow: jest.fn().mockResolvedValue(DB_NOW),
   };
   const cronJobService = {
-    executeWithTracking: jest.fn((_name: string, fn: () => Promise<boolean>) =>
-      fn(),
+    executeWithTracking: jest.fn(
+      (_name: string, fn: () => Promise<unknown>): Promise<unknown> => fn(),
     ),
   };
   const registry = { isActive: jest.fn().mockReturnValue(active) };
@@ -60,21 +64,48 @@ describe('Bg3HistoryRetentionCron', () => {
     const { cron, repo } = build(true);
     const now = new Date('2026-10-28T05:15:00Z');
     const cutoff = retentionCutoff(now);
-    await expect(cron.runOnce(now)).resolves.toBe(2);
+    await expect(cron.runOnce(now)).resolves.toEqual({
+      deleted: 2,
+      failedGroups: 0,
+    });
     expect(repo.listGroups).toHaveBeenCalledWith(cutoff, BG3_SESSION_GAP_MS);
     expect(repo.pruneGroup).toHaveBeenNthCalledWith(
       1,
       GROUPS[0],
       cutoff,
-      now,
+      DB_NOW,
       BG3_SESSION_GAP_MS,
     );
     expect(repo.pruneGroup).toHaveBeenNthCalledWith(
       2,
       GROUPS[1],
       cutoff,
-      now,
+      DB_NOW,
       BG3_SESSION_GAP_MS,
     );
+  });
+
+  it('logs a throwing group, prunes the rest, and reports the run degraded', async () => {
+    const { cron, repo, cronJobService } = build(true);
+    repo.pruneGroup.mockReset();
+    repo.pruneGroup
+      .mockRejectedValueOnce(new Error('deadlock detected'))
+      .mockResolvedValueOnce(3);
+    await expect(cron.runOnce()).resolves.toEqual({
+      deleted: 3,
+      failedGroups: 1,
+    });
+    repo.pruneGroup
+      .mockRejectedValueOnce(new Error('deadlock detected'))
+      .mockResolvedValueOnce(3);
+    let tracked: unknown;
+    cronJobService.executeWithTracking.mockImplementationOnce(
+      async (_name: string, fn: () => Promise<unknown>) => {
+        tracked = await fn();
+        return tracked;
+      },
+    );
+    await cron.prune();
+    expect(tracked).toEqual({ degraded: true });
   });
 });

@@ -207,7 +207,8 @@ async function world() {
   await seedSave(w, c3, CUTOFF.getTime() + HOUR);
   const stale = new Date(OLD);
   await seedRef(u, SHA1, stale);
-  await seedRef(u, SHA2, new Date(NOW.getTime() + 60_000));
+  // The ref cutoff is the run start on the DB clock (review fix 10), not NOW.
+  await seedRef(u, SHA2, new Date(Date.now() + HOUR));
   await seedRef(u, SHA_X, stale);
   await seedRef(u, SHA3, stale);
   await seedRef(u, SHA1, stale, 'other-contract');
@@ -228,7 +229,7 @@ describe('I-7 listGroups (the window query)', () => {
 describe('I-7 runOnce', () => {
   it('thins each old session to its last row, stamped with first save + count; recent, straddling and single-row sessions untouched', async () => {
     const x = await world();
-    expect(await cron().runOnce(NOW)).toBe(5);
+    expect(await cron().runOnce(NOW)).toEqual({ deleted: 5, failedGroups: 0 });
     const { u, v, w, c, c2, c3 } = x;
     // rows() order: uploader, then savedAt.
     expect(await rows()).toEqual([
@@ -265,7 +266,7 @@ describe('I-7 runOnce', () => {
     await cron().runOnce(NOW);
     const afterRows = await rows();
     const afterRefs = await refs();
-    expect(await cron().runOnce(NOW)).toBe(0);
+    expect(await cron().runOnce(NOW)).toEqual({ deleted: 0, failedGroups: 0 });
     expect([await rows(), await refs()]).toEqual([afterRows, afterRefs]);
     const groups = await repo().listGroups(CUTOFF, BG3_SESSION_GAP_MS);
     expect(groups.map(groupKey)).toEqual([`${x.w}/${x.c3}`]);

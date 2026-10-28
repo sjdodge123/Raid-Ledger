@@ -12,6 +12,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
+import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-lock';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
 import {
   planRetention,
@@ -116,7 +117,21 @@ export class Bg3RetentionRepository {
       .limit(BG3_RETENTION_GROUPS_PER_RUN);
   }
 
-  /** Thin one group (D-9) and release its freed refs (D-11); rows deleted. */
+  /** D-11 (review fix 10): the run start on the DB clock `referenced_at` uses. */
+  async dbNow(): Promise<Date> {
+    const rows = await this.db.execute<{ now: Date | string }>(
+      sql`select now() as now`,
+    );
+    const [row] = rows;
+    if (row === undefined) throw new Error('select now() returned no row');
+    return new Date(row.now);
+  }
+
+  /**
+   * Thin one group (D-9) and release its freed refs (D-11); rows deleted.
+   * The uploader's blob lock is taken FIRST (ingest's order: blob lock,
+   * then `bg3_saves`), so the ref release cannot race an ingest.
+   */
   pruneGroup(
     g: Bg3RetentionGroup,
     cutoff: Date,
@@ -124,6 +139,7 @@ export class Bg3RetentionRepository {
     gapMs: number,
   ): Promise<number> {
     return this.db.transaction(async (tx) => {
+      await lockCompanionUserBlobs(tx, g.userId);
       const until = new Date(cutoff.getTime() + gapMs);
       const plan = planRetention(await loadGroup(tx, g, until), cutoff, gapMs);
       if (plan.deleteIds.length === 0) return 0;

@@ -104,17 +104,22 @@ export interface CompanionRefRelease {
 }
 
 /**
- * ROK-1957 D-11 — one statement inside the caller's transaction: drop
- * `contract`'s refs to `shas` that predate `referencedBefore` and that no
- * remaining plugin row uses. Never retried (a failed statement poisons the
- * tx). A blob left with no ref is reaped by the daily cleanup after 24 h.
+ * ROK-1957 D-11 — inside the caller's transaction: take the user's blob
+ * lock (the one ingest holds while it upserts refs — review fix 2), then ONE
+ * statement drops `contract`'s refs to `shas` that predate
+ * `referencedBefore` and that no remaining plugin row uses. Never retried
+ * (a failed statement poisons the tx). A blob left with no ref is reaped
+ * by the daily cleanup after 24 h. Callers that also lock plugin rows take
+ * the blob lock FIRST (`lockCompanionUserBlobs`), as ingest does; the lock
+ * is re-entrant within the transaction.
  */
 export async function releaseUnusedRefsIn(
-  tx: Pick<Db, 'delete'>,
+  tx: Pick<Db, 'delete' | 'execute'>,
   release: CompanionRefRelease,
 ): Promise<number> {
   const { userId, contract, shas, referencedBefore, stillUsed } = release;
   if (shas.length === 0) return 0;
+  await lockCompanionUserBlobs(tx, userId);
   const result = await tx
     .delete(refs)
     .where(
@@ -240,23 +245,28 @@ export class CompanionBlobsRepository {
     });
   }
 
-  /** Plugin API: drop this contract's refs to `shas` (cleanup may then reap). */
+  /**
+   * Plugin API: drop this contract's refs to `shas` (cleanup may then reap),
+   * under the user's blob lock so it serialises with ingest (review fix 2).
+   */
   async releaseRefs(
     userId: number,
     contract: string,
     shas: readonly string[],
   ): Promise<number> {
     if (shas.length === 0) return 0;
-    const result = await this.db
-      .delete(refs)
-      .where(
-        and(
-          eq(refs.userId, userId),
-          eq(refs.contract, contract),
-          inArray(refs.sha256, [...shas]),
-        ),
-      );
-    return result.count;
+    return this.withUserLock(userId, async (tx) => {
+      const result = await tx
+        .delete(refs)
+        .where(
+          and(
+            eq(refs.userId, userId),
+            eq(refs.contract, contract),
+            inArray(refs.sha256, [...shas]),
+          ),
+        );
+      return result.count;
+    });
   }
 }
 
