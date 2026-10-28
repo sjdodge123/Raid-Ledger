@@ -27,7 +27,7 @@ export function buildBg3Claim(over: Partial<Bg3PartyClaim> = {}): Bg3PartyClaim 
 export function buildBg3CampaignSummary(over: Partial<Bg3CampaignSummary> = {}): Bg3CampaignSummary {
     return {
         id: BG3_CAMPAIGN_ID, name: 'Tactician run', hostUserId: 21, isActive: true,
-        lastSavedAt: '2026-10-27T23:05:00.000Z', saveCount: 41, ...over,
+        lastSavedAt: '2026-10-27T23:05:00.000Z', saveCount: 41, archivedAt: null, ...over,
     };
 }
 
