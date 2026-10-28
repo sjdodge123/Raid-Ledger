@@ -9,6 +9,7 @@
  */
 import { valheimLinkBitmapBytes } from '@raid-ledger/contract';
 import { bitIndex, isBitSet, textureRowFor } from './valheim-grid';
+import type { Bounds } from './map-viewport.math';
 
 /** Unexplored fog opacity (D7). Fully opaque: no terrain may show through (ROK-1949). */
 export const FOG_ALPHA_UNEXPLORED = 1;
@@ -134,4 +135,35 @@ export function buildFogPixels(
         }
     }
     return out;
+}
+
+/**
+ * ROK-2028 — the bounding box of the set bits of a fog bitset (`size²` bits,
+ * LSB first, `py = 0` south), flipped to canvas rows so it lines up with the
+ * texture layer (max exclusive); null when nothing is explored. Zero bytes are
+ * skipped, so a mostly-unexplored world is cheap.
+ */
+export function exploredBounds(size: number, bits: Uint8Array): Bounds | null {
+    let minPx = size, maxPx = -1, minPy = size, maxPy = -1;
+    for (let byte = 0; byte < bits.length; byte++) {
+        const v = bits[byte] ?? 0;
+        if (v === 0) continue;
+        for (let k = 0; k < 8; k++) {
+            const i = byte * 8 + k;
+            if (((v >> k) & 1) === 0 || i >= size * size) continue;
+            const px = i % size;
+            const py = Math.floor(i / size);
+            minPx = Math.min(minPx, px);
+            maxPx = Math.max(maxPx, px);
+            minPy = Math.min(minPy, py);
+            maxPy = Math.max(maxPy, py);
+        }
+    }
+    if (maxPx < 0) return null;
+    return {
+        minX: minPx,
+        maxX: maxPx + 1,
+        minY: textureRowFor(size, maxPy),
+        maxY: textureRowFor(size, minPy) + 1,
+    };
 }

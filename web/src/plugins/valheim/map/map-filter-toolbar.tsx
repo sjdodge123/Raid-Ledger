@@ -1,10 +1,11 @@
 /**
- * ROK-1943 D12/D15 — the row above the map: the filter summary (left,
+ * ROK-1943 D12/D15 — the row above the map: the Map tab's pickers (ROK-2028,
+ * `leading`), then the filter summary (`flex-1`,
  * `role="status"`) and the §4.1 funnel trigger (right, ≥1024px only), with the
  * filter body under it (`PinFilterPanel`). Below 1024px the trigger renders
  * nothing and the Filters FAB opens the same body in a BottomSheet.
  */
-import { useState, type JSX } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { Button } from '../../../components/ui/button';
@@ -53,7 +54,7 @@ export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary
     const { status, activeCount, count, truncated } = summary;
     const empty = activeCount > 0 && count === 0 && layersSettled(summary);
     return (
-        <div role="status" data-testid="map-pin-filter" className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted">
+        <div role="status" data-testid="map-pin-filter" className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm text-muted">
             {status === 'loading' && <span>{PIN_SUMMARY_TEXT.loading}</span>}
             {status === 'forbidden' && <span>{PIN_SUMMARY_TEXT.forbidden}</span>}
             {status === 'error' && (
@@ -78,10 +79,12 @@ export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary
 export interface MapPinFiltersProps {
     filter: Pick<PinFilterView, 'panel' | 'summary'>;
     serverId?: number | undefined;
+    /** ROK-2028: the Map tab's pickers, at the row's start so picker and Filters share one line. */
+    leading?: ReactNode;
 }
 
 /** Owns the panel's open state and reset key; renders the toolbar row + the filter body. */
-export function MapPinFilters({ filter, serverId }: MapPinFiltersProps): JSX.Element {
+export function MapPinFilters({ filter, serverId, leading }: MapPinFiltersProps): JSX.Element {
     const [isOpen, setOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [clearing, setClearing] = useState(false);
@@ -98,7 +101,8 @@ export function MapPinFilters({ filter, serverId }: MapPinFiltersProps): JSX.Ele
     };
     return (
         <>
-            <div className="flex min-w-0 items-center justify-between gap-2" data-testid="map-filter-toolbar">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" data-testid="map-filter-toolbar">
+                {leading}
                 <PinSummaryLine summary={summary} onClear={clear} />
                 <FilterEntryTrigger activeCount={panel.activeCount} isOpen={isOpen} onOpenChange={setOpen} />
             </div>
