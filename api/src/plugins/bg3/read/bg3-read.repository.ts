@@ -1,0 +1,171 @@
+/**
+ * ROK-1957 §5.6 — hub-scoped BG3 reads: campaign list, settings, the rows
+ * a snapshot or session list is built from, and party claims. Session
+ * reads select columns only (never `party`); canonical dedupe happens in TS.
+ */
+import { Inject, Injectable } from '@nestjs/common';
+import { and, asc, count, desc, eq, max } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  Bg3CampaignSummary,
+  Bg3HubSettings,
+  Bg3HubSettingsBody,
+} from '@raid-ledger/contract';
+import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import * as schema from '../../../drizzle/schema';
+import type { Bg3RetentionRow } from '../history/bg3-retention.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+const c = schema.bg3Campaigns;
+const s = schema.bg3Saves;
+const h = schema.bg3HubSettings;
+
+/** A save as session clustering + `pickCanonical` need it (no party). */
+export interface Bg3SaveLiteRow extends Bg3RetentionRow {
+  uploaderUserId: number;
+  campaignKey: string;
+}
+
+export interface Bg3SnapshotRow extends Bg3SaveLiteRow {
+  saveName: string;
+  receivedAt: Date;
+  difficulty: string;
+  ruleset: string | null;
+  gameVersion: string;
+  platform: string;
+  party: unknown;
+}
+
+export interface Bg3ClaimView {
+  slotKey: string;
+  userId: number;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export const SAVE_LITE_COLS = {
+  id: s.id,
+  uploaderUserId: s.uploaderUserId,
+  campaignKey: s.campaignKey,
+  savedAt: s.savedAt,
+  sessionFirstSavedAt: s.sessionFirstSavedAt,
+  sessionSaveCount: s.sessionSaveCount,
+  currentLevel: s.currentLevel,
+  partyMaxLevel: s.partyMaxLevel,
+  thumbnailSha256: s.thumbnailSha256,
+};
+
+const SNAPSHOT_COLS = {
+  ...SAVE_LITE_COLS,
+  saveName: s.saveName,
+  receivedAt: s.receivedAt,
+  difficulty: s.difficulty,
+  ruleset: s.ruleset,
+  gameVersion: s.gameVersion,
+  platform: s.platform,
+  party: s.party,
+};
+
+const DEFAULT_SETTINGS: Bg3HubSettings = {
+  hideLocationAndScreenshots: false,
+  activeCampaignId: null,
+};
+
+@Injectable()
+export class Bg3ReadRepository {
+  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+
+  async hubCampaigns(guildId: number): Promise<Bg3CampaignSummary[]> {
+    const rows = await this.db
+      .select({
+        id: c.id,
+        name: c.name,
+        hostUserId: c.hostUserId,
+        activeId: h.activeCampaignId,
+        lastSavedAt: max(s.savedAt),
+        saveCount: count(s.id),
+      })
+      .from(c)
+      .leftJoin(h, eq(h.guildId, c.guildId))
+      .leftJoin(s, eq(s.campaignId, c.id))
+      .where(eq(c.guildId, guildId))
+      .groupBy(c.id, h.activeCampaignId)
+      .orderBy(asc(c.id));
+    return rows.map(({ activeId, lastSavedAt, ...rest }) => ({
+      ...rest,
+      isActive: activeId === rest.id,
+      lastSavedAt: lastSavedAt ? lastSavedAt.toISOString() : null,
+    }));
+  }
+
+  async settings(guildId: number): Promise<Bg3HubSettings> {
+    const [row] = await this.db
+      .select({
+        hideLocationAndScreenshots: h.hideLocationAndScreenshots,
+        activeCampaignId: h.activeCampaignId,
+      })
+      .from(h)
+      .where(eq(h.guildId, guildId))
+      .limit(1);
+    return row ?? DEFAULT_SETTINGS;
+  }
+
+  async upsertSettings(
+    guildId: number,
+    patch: Bg3HubSettingsBody,
+    userId: number,
+  ): Promise<void> {
+    const set = { ...patch, updatedByUserId: userId, updatedAt: new Date() };
+    await this.db
+      .insert(h)
+      .values({ guildId, ...set })
+      .onConflictDoUpdate({ target: h.guildId, set });
+  }
+
+  async campaignInHub(campaignId: number, guildId: number) {
+    const [row] = await this.db
+      .select({ id: c.id, hostUserId: c.hostUserId })
+      .from(c)
+      .where(and(eq(c.id, campaignId), eq(c.guildId, guildId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** Every assigned row of the campaign (bounded by retention, D-9). */
+  sessionRows(campaignId: number): Promise<Bg3SaveLiteRow[]> {
+    return this.db
+      .select(SAVE_LITE_COLS)
+      .from(s)
+      .where(eq(s.campaignId, campaignId));
+  }
+
+  /** The newest `limit` rows, newest first, with party. */
+  snapshotRows(campaignId: number, limit: number): Promise<Bg3SnapshotRow[]> {
+    return this.db
+      .select(SNAPSHOT_COLS)
+      .from(s)
+      .where(eq(s.campaignId, campaignId))
+      .orderBy(desc(s.savedAt), desc(s.id))
+      .limit(limit);
+  }
+
+  async claims(campaignId: number): Promise<Bg3ClaimView[]> {
+    const k = schema.bg3PartyClaims;
+    const u = schema.users;
+    const rows = await this.db
+      .select({
+        slotKey: k.slotKey,
+        userId: k.userId,
+        displayName: u.displayName,
+        username: u.username,
+        avatarUrl: u.customAvatarUrl,
+      })
+      .from(k)
+      .innerJoin(u, eq(u.id, k.userId))
+      .where(eq(k.campaignId, campaignId));
+    return rows.map(({ displayName, username, ...rest }) => ({
+      ...rest,
+      displayName: displayName ?? username,
+    }));
+  }
+}
