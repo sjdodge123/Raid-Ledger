@@ -265,7 +265,7 @@ async function expectLastSeen(page: Page, seen: { onlineCount: number; away: { n
     await expect(away, 'all three away members are listed').toHaveCount(3);
     await expect(away.first(), 'the longest away is first').toContainText(LONGEST_AWAY);
     await expect(away.first(), 'with its day count before the export').toContainText(LONGEST_AWAY_DAYS);
-    await expect(region.getByText(/online now/i), 'presence is never called live').toHaveCount(0);
+    await expect(region.getByText(/online now|\blive\b/i), 'presence is never called live').toHaveCount(0);
 }
 
 test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {

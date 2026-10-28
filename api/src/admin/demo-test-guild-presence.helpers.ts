@@ -40,6 +40,7 @@ export function seedPresenceRows(m: SeedPresenceMembers): SeedPresenceRow[] {
   const online = (id: number): SeedPresenceRow => ({
     id,
     onlineAtExport: true,
+    // The wire omits it when online; 0 deliberately exercises D3 (online wins).
     lastOnlineDays: 0,
   });
   const away = (id: number, days: number): SeedPresenceRow => ({

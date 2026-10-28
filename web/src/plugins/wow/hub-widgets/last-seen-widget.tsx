@@ -4,7 +4,8 @@
  * "N online at last export" (+ "of M members in the export"), up to five
  * online names, then the five longest away. `reported === 0` (no
  * presence-bearing export yet, or one imported before this shipped) shows the
- * quiet no-export state. The shared `FreshnessFooter` dates the export; its
+ * quiet no-export state; nobody online with no day counts is one quiet line
+ * (no bare "0" headline). The shared `FreshnessFooter` dates the export; its
  * tooltip carries the absolute time (Q4). Core draws the `WidgetCard` chrome;
  * the registration (`last-seen.register.ts`) gates it to members + staff.
  */
@@ -22,11 +23,11 @@ export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JS
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
     const footer = <Footer freshness={data.freshness.roster} />;
     const lastSeen = data.lastSeen;
-    if (lastSeen === undefined || lastSeen.reported === 0) {
+    if (lastSeen === undefined || lastSeen.reported === 0) return <NoExport footer={footer} />;
+    if (lastSeen.onlineCount === 0 && lastSeen.away.length === 0) {
         return (
-            <div data-testid="last-seen-empty" className="flex flex-col gap-1">
-                <p className="text-sm text-muted">No online data yet.</p>
-                <p className="text-xs text-dim">Shows up when an officer exports the roster from LedgerLink.</p>
+            <div data-testid="last-seen-nobody" className="flex flex-col">
+                <p className="text-sm text-muted">Nobody was online at the last export.</p>
                 {footer}
             </div>
         );
@@ -36,6 +37,17 @@ export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JS
             <Headline lastSeen={lastSeen} />
             <OnlineSection lastSeen={lastSeen} />
             <AwaySection away={lastSeen.away} />
+            {footer}
+        </div>
+    );
+}
+
+/** The quiet §4.5 state before any presence-bearing export. */
+function NoExport({ footer }: { footer: JSX.Element }): JSX.Element {
+    return (
+        <div data-testid="last-seen-empty" className="flex flex-col gap-1">
+            <p className="text-sm text-muted">No online data yet.</p>
+            <p className="text-xs text-dim">Shows up when an officer exports the roster from LedgerLink.</p>
             {footer}
         </div>
     );
@@ -57,9 +69,5 @@ function Headline({ lastSeen }: { lastSeen: WowRosterLastSeenDto }): JSX.Element
 function Footer({ freshness }: { freshness: HubFactFreshness | null }): JSX.Element {
     const asOf = freshness?.asOf ?? null;
     const title = asOf === null ? undefined : `Roster exported ${new Date(asOf).toLocaleString()}`;
-    return (
-        <div {...(title === undefined ? {} : { title })}>
-            <FreshnessFooter freshness={freshness} />
-        </div>
-    );
+    return <FreshnessFooter freshness={freshness} {...(title === undefined ? {} : { title })} />;
 }

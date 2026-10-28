@@ -107,6 +107,13 @@ describe('LastSeenWidget', () => {
         expect(screen.getByRole('list', { name: 'Longest away' })).toBeInTheDocument();
     });
 
+    it('is one quiet line, no bare "0" headline, when nobody was online and no day counts came in', async () => {
+        await renderWith({ reported: 3, onlineCount: 0, online: [], away: [] });
+        expect(screen.getByTestId('last-seen-nobody')).toHaveTextContent('Nobody was online at the last export.');
+        expect(screen.queryByTestId('last-seen-headline')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Longest away' })).toBeNull();
+    });
+
     it('shows the no-export state before any presence-bearing import', async () => {
         await renderWith({ reported: 0, onlineCount: 0, online: [], away: [] });
         const empty = screen.getByTestId('last-seen-empty');
