@@ -46,6 +46,8 @@ export interface Bg3SnapshotRow extends Bg3SaveLiteRow {
   gameVersion: string;
   platform: string;
   party: unknown;
+  /** `display_name ?? username` of the uploader (D-8); null if the user row is gone. */
+  uploaderDisplayName: string | null;
 }
 
 export interface Bg3ClaimView {
@@ -170,13 +172,26 @@ export class Bg3ReadRepository {
   }
 
   /** The newest `limit` rows, newest first, with party. */
-  snapshotRows(campaignId: number, limit: number): Promise<Bg3SnapshotRow[]> {
-    return this.db
-      .select(SNAPSHOT_COLS)
+  async snapshotRows(
+    campaignId: number,
+    limit: number,
+  ): Promise<Bg3SnapshotRow[]> {
+    const u = schema.users;
+    const rows = await this.db
+      .select({
+        ...SNAPSHOT_COLS,
+        displayName: u.displayName,
+        username: u.username,
+      })
       .from(s)
+      .leftJoin(u, eq(u.id, s.uploaderUserId))
       .where(eq(s.campaignId, campaignId))
       .orderBy(...BG3_NEWEST_FIRST)
       .limit(limit);
+    return rows.map(({ displayName, username, ...rest }) => ({
+      ...rest,
+      uploaderDisplayName: displayName ?? username,
+    }));
   }
 
   async claims(campaignId: number): Promise<Bg3ClaimView[]> {

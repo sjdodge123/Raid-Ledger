@@ -49,6 +49,7 @@ function snapRow(id: number, uploader: number, h = 1): Bg3SnapshotRow {
     gameVersion: '4.1',
     platform: 'steam',
     party: [MEMBER],
+    uploaderDisplayName: `user${uploader}`,
   };
 }
 

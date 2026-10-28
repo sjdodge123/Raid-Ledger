@@ -2,7 +2,8 @@
  * ROK-1958 D-8 / §3.2 — the BG3 "Where we are" card body (order 41, span 1).
  * Fed by the ONE snapshot query Party also reads (D-14). Screenshot (16:9
  * media well, collapses on a failed fetch or `onError`), "Act N · <area>", a
- * neutral difficulty chip, "Saved <relative>" and the patch footnote. No
+ * neutral difficulty chip, "Saved <relative> by <uploader>" and the patch
+ * footnote. No
  * Honour badge (Q7). Spoilers on → one line replaces image + area. With no
  * active campaign / an empty snapshot the probe hides the card (D-10).
  */
@@ -33,11 +34,6 @@ function patchLine(snap: Bg3Snapshot): string {
     return `Patch ${snap.gameVersion.split('.').slice(0, 3).join('.')} · ${snap.platform}`;
 }
 
-/** Best effort: the DTO carries only `uploaderUserId`, so the name comes from a party claim. */
-function uploaderName(snap: Bg3Snapshot): string | null {
-    return snap.party.find((s) => s.claim?.userId === snap.uploaderUserId)?.claim?.displayName ?? null;
-}
-
 function absoluteTime(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 }
@@ -55,11 +51,11 @@ function Screenshot({ path }: { path: string }): JSX.Element | null {
 }
 
 function WhereBody({ snap }: { snap: Bg3Snapshot }): JSX.Element {
-    const name = uploaderName(snap);
+    const name = snap.uploader?.displayName ?? null;
     return (
         <div className="flex flex-col" data-testid="bg3-where">
             {snap.spoilersHidden
-                ? <p className="mb-2.5 rounded-md border border-edge bg-panel p-2.5 text-sm text-muted">{BG3_SPOILERS_LINE}</p>
+                ? <p className="mb-2.5 text-sm text-muted">{BG3_SPOILERS_LINE}</p>
                 : <>
                     {snap.thumbnailUrl !== null && <Screenshot path={snap.thumbnailUrl} />}
                     {snap.area !== null && <p className="text-base font-semibold text-foreground" data-testid="bg3-where-place">{bg3PlaceLabel(snap.area)}</p>}

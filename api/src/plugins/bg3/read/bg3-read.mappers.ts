@@ -57,6 +57,10 @@ export function toSnapshot(
     savedAt: row.savedAt.toISOString(),
     receivedAt: row.receivedAt.toISOString(),
     uploaderUserId: row.uploaderUserId,
+    uploader:
+      row.uploaderDisplayName === null
+        ? null
+        : { userId: row.uploaderUserId, displayName: row.uploaderDisplayName },
     area: ctx.hidden ? null : row.currentLevel,
     difficulty: row.difficulty,
     ruleset: row.ruleset,

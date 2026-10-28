@@ -81,6 +81,7 @@ export function buildBg3Snapshot(over: Partial<Bg3Snapshot> = {}): Bg3Snapshot {
     return {
         empty: false, campaignId: BG3_CAMPAIGN_ID, saveId: 301, saveName: 'QuickSave_1',
         savedAt: '2026-10-27T23:05:00.000Z', receivedAt: '2026-10-27T23:05:09.000Z', uploaderUserId: 21,
+        uploader: { userId: 21, displayName: 'Moonwhisper' },
         area: 'SCL_Main_A', difficulty: 'DifficultyHard', ruleset: 'RulesetLarian',
         gameVersion: '4.1.1.7631656', platform: 'Steam', party: buildBg3Party(),
         thumbnailUrl: `/plugins/bg3/hubs/${BG3_HUB_ID}/saves/301/thumbnail`, spoilersHidden: false, ...over,

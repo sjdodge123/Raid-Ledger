@@ -60,10 +60,19 @@ describe('Bg3WhereWidget (V-5)', () => {
         expect(card).toHaveTextContent('Patch 4.1.1 · Steam');
     });
 
-    it('drops the name when the uploader holds no claim, and shows a non-act area alone', async () => {
-        serve(buildBg3Snapshot({ uploaderUserId: 99, area: 'SYS_Menuscreen_Camp_A' }));
+    it('names an uploader who holds no claim, and shows a non-act area alone', async () => {
+        serve(buildBg3Snapshot({
+            uploaderUserId: 99, uploader: { userId: 99, displayName: 'Quillfeather' }, area: 'SYS_Menuscreen_Camp_A',
+        }));
         const card = await renderWhere();
         expect(screen.getByTestId('bg3-where-place')).toHaveTextContent(/^Camp$/);
+        expect(card).toHaveTextContent(/Saved .+ ago by Quillfeather/);
+    });
+
+    it('drops " by …" when the uploader is unknown (user row gone)', async () => {
+        serve(buildBg3Snapshot({ uploaderUserId: 99, uploader: null }));
+        const card = await renderWhere();
+        expect(card).toHaveTextContent(/Saved .+ ago/);
         expect(card).not.toHaveTextContent(/ by /);
     });
 
