@@ -3,12 +3,14 @@
  * routes, the uploader's own list (`me/saves`) and the ROK-1959 gallery feed.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gt, isNull, lt, or, type SQL } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { BG3_GAME_SLUG } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { HubMediaCursor } from '../../../hub-media/hub-media.cursor';
+import { pickCanonical } from '../history/bg3-canonical.helpers';
+import { BG3_NEWEST_FIRST } from './bg3-read.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const c = schema.bg3Campaigns;
@@ -32,6 +34,19 @@ export interface Bg3SaveRef {
   guildId: number;
   hostUserId: number | null;
   thumbnailSha256: string | null;
+}
+
+/** D-7: is `save` the canonical row among its `(campaignKey, savedAt)` twins? */
+export async function isCanonicalSave(
+  saves: Pick<Bg3SavesReadRepository, 'twins'>,
+  save: Bg3SaveRef,
+): Promise<boolean> {
+  const twins = await saves.twins(
+    save.campaignId,
+    save.campaignKey,
+    save.savedAt,
+  );
+  return pickCanonical(twins, save.hostUserId)[0]?.id === save.id;
 }
 
 export interface Bg3MySavesQuery {
@@ -91,7 +106,7 @@ export class Bg3SavesReadRepository {
       })
       .from(s)
       .where(and(...where))
-      .orderBy(desc(s.savedAt), desc(s.id))
+      .orderBy(...BG3_NEWEST_FIRST)
       .limit(q.limit);
   }
 

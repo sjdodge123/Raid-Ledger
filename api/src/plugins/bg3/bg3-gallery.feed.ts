@@ -10,7 +10,10 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from './bg3.constants';
 import { pickCanonical } from './history/bg3-canonical.helpers';
 import { Bg3ReadRepository } from './read/bg3-read.repository';
-import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
+import {
+  Bg3SavesReadRepository,
+  isCanonicalSave,
+} from './read/bg3-saves.read.repository';
 import { encodeBg3Thumbnail, readBg3Blob } from './read/bg3-thumbnail.encode';
 
 export interface Bg3GalleryItem {
@@ -87,12 +90,7 @@ export class Bg3GalleryFeed {
     if (!save?.thumbnailSha256 || save.guildId !== guildId) return null;
     const settings = await this.read.settings(guildId);
     if (settings.hideLocationAndScreenshots) return null;
-    const twins = await this.saves.twins(
-      save.campaignId,
-      save.campaignKey,
-      save.savedAt,
-    );
-    if (pickCanonical(twins, save.hostUserId)[0]?.id !== save.id) return null;
+    if (!(await isCanonicalSave(this.saves, save))) return null;
     return readBg3Blob(this.blobs, save.uploaderUserId, save.thumbnailSha256);
   }
 

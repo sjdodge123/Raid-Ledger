@@ -42,7 +42,7 @@ import {
 import { Bg3ReadRepository } from './bg3-read.repository';
 import {
   Bg3SavesReadRepository,
-  type Bg3SaveRef,
+  isCanonicalSave,
 } from './bg3-saves.read.repository';
 import { encodeBlobOr404, type Bg3ThumbnailSize } from './bg3-thumbnail.encode';
 
@@ -145,7 +145,7 @@ export class Bg3ReadService {
       throw new NotFoundException(THUMB_404);
     const save = await this.saves.saveInCampaign(saveId);
     const sha = save?.guildId === hubId ? save.thumbnailSha256 : null;
-    if (!save || sha === null || !(await this.isCanonical(save)))
+    if (!save || sha === null || !(await isCanonicalSave(this.saves, save)))
       throw new NotFoundException(THUMB_404);
     return encodeBlobOr404(this.blobs, save.uploaderUserId, sha, size);
   }
@@ -169,14 +169,5 @@ export class Bg3ReadService {
     const campaign = await this.repo.campaignInHub(campaignId, hubId);
     if (!campaign) throw new NotFoundException('Campaign not found');
     return campaign;
-  }
-
-  private async isCanonical(save: Bg3SaveRef): Promise<boolean> {
-    const twins = await this.saves.twins(
-      save.campaignId,
-      save.campaignKey,
-      save.savedAt,
-    );
-    return pickCanonical(twins, save.hostUserId)[0]?.id === save.id;
   }
 }
