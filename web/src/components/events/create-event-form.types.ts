@@ -40,6 +40,8 @@ export interface FormErrors {
     duration?: string;
     maxAttendees?: string;
     recurrenceUntil?: string;
+    /** ROK-2025: the bench pick on a lock-in is the wrong size. */
+    benchPick?: string;
 }
 
 export interface EventFormProps {
@@ -79,4 +81,5 @@ export const ERROR_FIELD_MAP: Record<string, string> = {
     startTime: 'startTime',
     maxAttendees: 'maxAttendees',
     recurrenceUntil: 'recurrenceUntil',
+    benchPick: 'scheduling-bench-picker',
 };

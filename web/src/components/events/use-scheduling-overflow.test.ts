@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { SchedulePollPageResponseDto, ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
-import { computeSchedulingOverflow, findSlotByTime, resolveRosterCap } from './use-scheduling-overflow';
+import { computeSchedulingOverflow, defaultBenchPick, findSlotByTime, resolveRosterCap } from './use-scheduling-overflow';
 import { partialResult } from '../../test/partial-result';
 
 const CREATOR = 1;
@@ -19,6 +19,8 @@ function slot(voterIds: number[], proposedTime = TIME): ScheduleSlotWithVotesDto
         votes: voterIds.map((userId) => ({ userId, displayName: `User ${userId}`, avatar: null, discordId: null, customAvatarUrl: null })),
     };
 }
+
+const people = (ids: number[]) => ids.map((userId) => ({ userId, displayName: `User ${userId}` }));
 
 const generic = (slotPlayer: number, maxAttendees: string) => ({ slotType: 'generic' as const, slotPlayer, maxAttendees });
 
@@ -34,13 +36,13 @@ describe('resolveRosterCap', () => {
 describe('computeSchedulingOverflow', () => {
     it('creator voted: 4-spot roster, 5 yes-votes incl. creator → 1 benched', () => {
         expect(computeSchedulingOverflow(slot([1, 2, 3, 4, 5]), CREATOR, generic(4, '4'))).toEqual({
-            voters: ['User 2', 'User 3', 'User 4', 'User 5'], rostered: 5, cap: 4, benched: 1, creatorVoted: true,
+            voters: ['User 2', 'User 3', 'User 4', 'User 5'], people: people([2, 3, 4, 5]), rostered: 5, cap: 4, benched: 1, creatorVoted: true,
         });
     });
 
     it('creator did NOT vote: they still take a spot', () => {
         expect(computeSchedulingOverflow(slot([2, 3, 4]), CREATOR, generic(3, ''))).toEqual({
-            voters: ['User 2', 'User 3', 'User 4'], rostered: 4, cap: 3, benched: 1, creatorVoted: false,
+            voters: ['User 2', 'User 3', 'User 4'], people: people([2, 3, 4]), rostered: 4, cap: 3, benched: 1, creatorVoted: false,
         });
     });
 
@@ -50,7 +52,7 @@ describe('computeSchedulingOverflow', () => {
 
     it('a 0-player roster (saved template / copied event) benches everyone, as the API does (Codex r2)', () => {
         expect(computeSchedulingOverflow(slot([2, 3]), CREATOR, generic(0, '6'))).toEqual({
-            voters: ['User 2', 'User 3'], rostered: 3, cap: 0, benched: 3, creatorVoted: false,
+            voters: ['User 2', 'User 3'], people: people([2, 3]), rostered: 3, cap: 0, benched: 3, creatorVoted: false,
         });
     });
 
@@ -81,5 +83,25 @@ describe('findSlotByTime', () => {
         const poll = partialResult<SchedulePollPageResponseDto>({ slots: [slot([1], '2035-06-10T20:00:00Z'), slot([2], '2035-06-11T20:00:00.000Z')] });
         expect(findSlotByTime(poll, TIME)?.votes[0]?.userId).toBe(1);
         expect(findSlotByTime(poll, '2035-06-12T20:00:00.000Z')).toBeUndefined();
+    });
+});
+
+describe('ROK-2025: people + defaultBenchPick', () => {
+    it('people keeps server vote order, creator and duplicates omitted', () => {
+        const o = computeSchedulingOverflow(slot([3, 1, 2, 3, 5]), CREATOR, generic(2, ''));
+        expect(o?.people).toEqual([
+            { userId: 3, displayName: 'User 3' }, { userId: 2, displayName: 'User 2' }, { userId: 5, displayName: 'User 5' },
+        ]);
+    });
+
+    it('marks the LATEST yes-voters (the end of vote order) for the bench', () => {
+        const people = [10, 11, 12, 13].map((userId) => ({ userId, displayName: `U${userId}` }));
+        expect(defaultBenchPick(people, 2)).toEqual([12, 13]);
+    });
+
+    it('marks nobody for 0 benched, and at most everyone', () => {
+        const people = [10, 11].map((userId) => ({ userId, displayName: `U${userId}` }));
+        expect(defaultBenchPick(people, 0)).toEqual([]);
+        expect(defaultBenchPick(people, 3)).toEqual([10, 11]);
     });
 });
