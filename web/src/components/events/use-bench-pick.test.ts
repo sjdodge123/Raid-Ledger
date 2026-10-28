@@ -9,7 +9,7 @@ import { completeStandalonePoll } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
 import { BENCH_PICKER_ID, benchPickError, completeLockIn, guardBenchPick, useBenchPick, type BenchPick } from './use-bench-pick';
 import type { SchedulingOverflow } from './use-scheduling-overflow';
-import type { FormErrors } from './create-event-form.types';
+import { withHttpStatus } from '../../lib/api/api-error';
 
 vi.mock('../../lib/api-client', () => ({ completeStandalonePoll: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: { warning: vi.fn() } }));
@@ -72,23 +72,24 @@ describe('benchPickError', () => {
 describe('guardBenchPick', () => {
     const bench = (mismatch: number): BenchPick => ({ overflow: overflow([2, 3], 1), picked: [], need: 1, mismatch, benchUserIds: [], toggle: vi.fn() });
 
-    it('blocks the submit, sets the form error and scrolls to the picker on a mismatch', () => {
+    it('blocks the submit and scrolls to the picker on a mismatch', () => {
         const el = document.createElement('fieldset');
         el.id = BENCH_PICKER_ID;
         el.scrollIntoView = vi.fn();
         document.body.appendChild(el);
-        let errors: FormErrors = {};
-        const setErrors = vi.fn((u: FormErrors | ((p: FormErrors) => FormErrors)) => { errors = typeof u === 'function' ? u(errors) : u; });
-        expect(guardBenchPick(bench(-1), setErrors)).toBe(true);
-        expect(errors.benchPick).toBe('Pick 1 more for the bench.');
+        expect(guardBenchPick(bench(-1))).toBe(true);
         expect(el.scrollIntoView).toHaveBeenCalled();
         el.remove();
     });
 
-    it('lets a matching pick through untouched', () => {
-        const setErrors = vi.fn();
-        expect(guardBenchPick(bench(0), setErrors)).toBe(false);
-        expect(setErrors).not.toHaveBeenCalled();
+    it('lets a matching pick through without scrolling', () => {
+        const el = document.createElement('fieldset');
+        el.id = BENCH_PICKER_ID;
+        el.scrollIntoView = vi.fn();
+        document.body.appendChild(el);
+        expect(guardBenchPick(bench(0))).toBe(false);
+        expect(el.scrollIntoView).not.toHaveBeenCalled();
+        el.remove();
     });
 });
 
@@ -101,16 +102,27 @@ describe('completeLockIn', () => {
         expect(toast.warning).not.toHaveBeenCalled();
     });
 
-    it('retries once WITHOUT the pick when the server refuses it, then warns (D6)', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(new Error('The votes changed')).mockResolvedValueOnce(undefined);
+    it('retries once WITHOUT the pick when the server refuses it (HTTP 400), then warns (D6)', async () => {
+        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockResolvedValueOnce(undefined);
         await completeLockIn(5, 77, 'T', [4]);
         expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, 'T', [4]], [5, 77, 'T']]);
         expect(toast.warning).toHaveBeenCalledWith(FALLBACK);
     });
 
     it('rejects when the retry fails too, with no fallback toast', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValue(new Error('gone'));
+        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockRejectedValueOnce(new Error('gone'));
         await expect(completeLockIn(5, 77, 'T', [4])).rejects.toThrow('gone');
+        expect(toast.warning).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['a network failure (no HTTP status)', new TypeError('Failed to fetch')],
+        ['a 409', withHttpStatus(new Error('Already completed'), 409)],
+        ['a 500', withHttpStatus(new Error('Internal error'), 500)],
+    ])('does NOT retry or claim the votes changed on %s', async (_label, failure) => {
+        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
+        await expect(completeLockIn(5, 77, 'T', [4])).rejects.toBe(failure);
+        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, 'T', [4]]]);
         expect(toast.warning).not.toHaveBeenCalled();
     });
 

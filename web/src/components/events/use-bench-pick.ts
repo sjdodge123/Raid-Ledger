@@ -5,13 +5,14 @@
  * once touched, the marks are kept (minus anyone who stopped voting yes) and
  * never filled in automatically (D7). Submit is blocked until exactly the
  * overflow is marked. If the server refuses the pick on lock-in (the votes
- * changed meanwhile), the lock-in is retried once without it, so the server
+ * changed meanwhile — an HTTP 400), the lock-in is retried once without it, so the server
  * benches the latest yes-voters, and the organizer is told (D6).
  */
 import { useState } from 'react';
 import { completeStandalonePoll } from '../../lib/api-client';
+import { httpStatusOf } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
-import type { FormErrors, FormState } from './create-event-form.types';
+import type { FormState } from './create-event-form.types';
 import { defaultBenchPick, useSchedulingOverflow, type SchedulingOverflow } from './use-scheduling-overflow';
 
 export const BENCH_PICKER_ID = 'scheduling-bench-picker';
@@ -69,20 +70,19 @@ export function benchPickError(mismatch: number, need: number): string | undefin
 }
 
 /** True (and the picker scrolled into view) when the pick blocks the submit. */
-export function guardBenchPick(bench: BenchPick, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>): boolean {
-    const error = benchPickError(bench.mismatch, bench.need);
-    if (error === undefined) return false;
-    setErrors((prev) => ({ ...prev, benchPick: error }));
+export function guardBenchPick(bench: BenchPick): boolean {
+    if (benchPickError(bench.mismatch, bench.need) === undefined) return false;
     document.getElementById(BENCH_PICKER_ID)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return true;
 }
 
-/** Completes the lock-in with the pick; on a refusal retries once without it (D6). */
+/** Completes the lock-in with the pick; on a 400 refusal retries once without it (D6). Any other failure rethrows untouched. */
 export async function completeLockIn(matchId: number, eventId: number | undefined, startTime: string | undefined, benchUserIds: number[] | undefined): Promise<void> {
     if (eventId === undefined || benchUserIds === undefined) return completeStandalonePoll(matchId, eventId, startTime);
     try {
         await completeStandalonePoll(matchId, eventId, startTime, benchUserIds);
-    } catch {
+    } catch (error) {
+        if (httpStatusOf(error) !== 400) throw error;
         await completeStandalonePoll(matchId, eventId, startTime);
         toast.warning(FALLBACK_TOAST);
     }
