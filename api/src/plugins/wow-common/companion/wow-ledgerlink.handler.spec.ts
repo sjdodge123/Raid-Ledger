@@ -137,6 +137,24 @@ describe('WowLedgerlinkHandler — reject mapping (§6.2)', () => {
     expect(JSON.stringify(got.body)).not.toContain(held.body.message);
   });
 
+  it.each([' ', '  \n\t  '])(
+    'a blank/whitespace-only export %j → 400 invalid_payload INVALID_PAYLOAD, never imported',
+    async (exportString) => {
+      const importNew = jest.fn().mockResolvedValue(result('applied'));
+      const blank = { ...msg, payload: { exportString } };
+      const got = await rejection(handlerWith(importNew).handle(ctx, blank));
+      expect(got).toEqual({
+        status: 400,
+        body: {
+          code: 'invalid_payload',
+          message: WOW_LEDGERLINK_REJECT_MESSAGES.invalid_payload,
+          issues: [{ path: WOW_LEDGERLINK_EXPORT_PATH, code: 'INVALID_PAYLOAD' }],
+        },
+      });
+      expect(importNew).not.toHaveBeenCalled();
+    },
+  );
+
   it('a non-import error passes through unchanged', async () => {
     const boom = new Error('connection reset');
     expect(companionErrorForImport(boom)).toBe(boom);

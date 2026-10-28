@@ -24,7 +24,10 @@ import type {
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
 import { AddonImportCreateService } from '../addon-import/addon-import-create.service';
 import { AddonImportError } from '../addon-import/addon-import.errors';
-import { companionErrorForImport } from './wow-ledgerlink.errors';
+import {
+  companionErrorForImport,
+  companionErrorForImportCode,
+} from './wow-ledgerlink.errors';
 
 /** Ids, the import status and section statuses only — never the string. */
 export function describeImportOutcome(res: AddonImportNewResultDto): string {
@@ -49,6 +52,12 @@ export class WowLedgerlinkHandler implements CompanionContractHandler<WowLedgerl
     msg: WowLedgerlinkMessage,
   ): Promise<void> {
     const who = `user=${ctx.userId} device=${ctx.deviceId ?? '-'}`;
+    // The paste route trims and rejects a blank string with a plain 400 that
+    // carries no companion code — refuse it here with the pinned one instead.
+    if (msg.payload.exportString.trim() === '') {
+      this.logger.log(`wow-ledgerlink ${who} rejected code=INVALID_PAYLOAD`);
+      throw companionErrorForImportCode('INVALID_PAYLOAD');
+    }
     let res: AddonImportNewResultDto;
     try {
       res = await this.imports.importNew(ctx.userId, {

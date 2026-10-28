@@ -295,6 +295,16 @@ describe('rejects → pinned companion codes, nothing written', () => {
     expect(await written()).toEqual(NOTHING);
   });
 
+  it('a whitespace-only export string → 400 invalid_payload INVALID_PAYLOAD, nothing written', async () => {
+    const a = await member('ll-blank');
+    const res = await post(a.token, message('   \n\t  '));
+    expectError(res, 400, 'invalid_payload');
+    expect(res.body.issues).toEqual([
+      { path: WOW_LEDGERLINK_EXPORT_PATH, code: 'INVALID_PAYLOAD' },
+    ]);
+    expect(await written()).toEqual(NOTHING);
+  });
+
   it('D2/Q6 pinned: a create from an export with no ruleset → 400 invalid_payload RULESET_REQUIRED, nothing written', async () => {
     const a = await member('ll-noruleset');
     const noRuleset = buildCharPayload({ who: buildWho({ ruleset: null }) });
