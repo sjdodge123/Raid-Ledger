@@ -49,7 +49,10 @@ export class HubMediaSubjectRegistry {
     if (!entry || !this.plugins.isActive(entry.ownerPluginId)) {
       throw new BadRequestException(INVALID_QUERY);
     }
-    const ids = await entry.resolve({ guildId, payload: subject.slice(at + 1) });
+    const ids = await entry.resolve({
+      guildId,
+      payload: subject.slice(at + 1),
+    });
     if (ids === null) throw new BadRequestException(INVALID_QUERY);
     return ids;
   }
