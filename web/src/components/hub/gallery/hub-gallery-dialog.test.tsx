@@ -339,12 +339,12 @@ describe('HubGalleryDialog — scoped to a subject (ROK-2027)', () => {
         const calls: string[] = [];
         server.use(subjectHandler(calls), pagedHandler(ITEMS, calls));
         open({ mode: 'grid', filter: 'death', subject: CALLAHAN });
+        await waitFor(() => expect(calls[0]).toContain('subject=valheim-death%3Ac42'));
         expect(await screen.findByText('3 pictures')).toBeInTheDocument();
         expect(screen.getByTestId('hub-gallery-subject-chip')).toHaveTextContent("Callahan's deaths");
         expect(screen.getByRole('button', { name: "Remove Callahan's deaths" })).toBeInTheDocument();
         for (const f of ['all', 'death', 'screenshot']) expect(screen.queryByTestId(`hub-gallery-chip-${f}`)).toBeNull();
         expect(calls).toHaveLength(1);
-        expect(calls[0]).toContain('subject=valheim-death%3Ac42');
         expect(calls[0]).not.toContain('kind=');
     });
 
@@ -354,11 +354,11 @@ describe('HubGalleryDialog — scoped to a subject (ROK-2027)', () => {
         open({ mode: 'grid', filter: 'death', subject: CALLAHAN });
         expect(await screen.findByText('3 pictures')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: "Remove Callahan's deaths" }));
+        await waitFor(() => expect(calls.at(-1)).not.toContain('subject='));
+        expect(calls.at(-1)).toContain('kind=death');
         expect(await screen.findByText('10 pictures')).toBeInTheDocument();
         expect(screen.queryByTestId('hub-gallery-subject-chip')).toBeNull();
         expect(screen.getByTestId('hub-gallery-chip-death')).toHaveAttribute('aria-pressed', 'true');
-        expect(calls.at(-1)).toContain('kind=death');
-        expect(calls.at(-1)).not.toContain('subject=');
         expect(useHubGalleryStore.getState().filters[5]).toBeUndefined();
     });
 
