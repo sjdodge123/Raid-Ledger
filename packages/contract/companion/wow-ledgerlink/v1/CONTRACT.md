@@ -66,8 +66,10 @@ never the import's message text or the string:
 A **new** character is created automatically when its export carries a
 ruleset, or when its realm is in the admin realm→ruleset map. A **Hardcore**
 mapping is never used as that fallback: a Hardcore character without a
-ruleset in its export is rejected with `RULESET_REQUIRED` — create it by a
-paste first, after which uploads update it.
+ruleset in its export is rejected with `RULESET_REQUIRED`. Creating a
+Hardcore character is refused on every import path today, paste included
+(ruling A1, `assertCreatable`), until that ruling is lifted. Uploads for a
+Hardcore character that already exists update it as normal.
 
 ## 3. Size cap (spec D3)
 
