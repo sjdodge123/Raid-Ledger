@@ -1,10 +1,13 @@
 /**
  * ROK-1956 L7 — `GET /companion/v1/config` against a real DB (spec §10
- * I-22, I-23). No production module registers a companion handler (D-4), so
- * this file registers one for `bg3-save` v1, owned by an active plugin.
+ * I-22, I-23). Since ROK-1957 the `bg3` plugin's real `Bg3SaveHandler` owns
+ * `bg3-save` v1 in the shared AppModule (the registry refuses a second
+ * owner), so this file shadows a stub with its own cadence onto that real
+ * registration and activates its owner plugin, `bg3`.
  */
 import type { Response } from 'supertest';
 import {
+  BG3_PLUGIN_ID,
   BG3_SAVE_CONTRACT_ID,
   COMPANION_CAPTURED_AT_MAX_FUTURE_MS,
   COMPANION_IMAGE_EDGE_MAX,
@@ -17,7 +20,6 @@ import {
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
 import {
   bearer,
   expireLimiterWindows,
@@ -29,12 +31,14 @@ import {
   CompanionHandlerRegistry,
   type CompanionContractHandler,
 } from '../ingest/companion-handler.registry';
+import { shadowBg3SaveHandler } from '../ingest/testing/shadow-bg3-save-handler';
 import { CompanionConfigService } from './companion-config.service';
 
 const CONFIG = '/companion/v1/config';
-const OWNER = PELICAN_PLUGIN_ID;
+const OWNER = BG3_PLUGIN_ID;
 
 let testApp: TestApp;
+let restoreHandler: (() => void) | undefined;
 
 const handler: CompanionContractHandler = {
   contract: BG3_SAVE_CONTRACT_ID,
@@ -45,11 +49,18 @@ const handler: CompanionContractHandler = {
 
 beforeAll(async () => {
   testApp = await getTestApp();
-  const registry = testApp.app.get(CompanionHandlerRegistry);
-  // The registry is a singleton; never double-register in a shared app.
-  if (!registry.list().some((l) => l.contract === BG3_SAVE_CONTRACT_ID)) {
-    registry.register(OWNER, handler);
-  }
+  restoreHandler = shadowBg3SaveHandler(testApp.app, handler);
+  // The shadowed registration is the only bg3-save v1 owner, and it is OWNER.
+  const owners = testApp.app
+    .get(CompanionHandlerRegistry)
+    .list()
+    .filter((l) => l.contract === BG3_SAVE_CONTRACT_ID)
+    .map((l) => l.ownerPluginId);
+  expect(owners).toEqual([OWNER]);
+});
+
+afterAll(() => {
+  restoreHandler?.();
 });
 
 beforeEach(async () => {
