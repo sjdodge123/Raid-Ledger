@@ -1,6 +1,12 @@
 import type { z } from 'zod';
 import { COMPANION_BG3_SAVE_MAX_BYTES } from './companion-common.schema.js';
 import { BG3_SAVE_CONTRACT_ID, BG3_SAVE_CONTRACT_VERSION, Bg3SaveMessageSchema } from './companion-bg3-save.schema.js';
+import {
+    COMPANION_WOW_LEDGERLINK_MAX_BYTES,
+    WOW_LEDGERLINK_CONTRACT_ID,
+    WOW_LEDGERLINK_CONTRACT_VERSION,
+    WowLedgerlinkMessageSchema,
+} from './companion-wow-ledgerlink.schema.js';
 
 // ============================================================
 // Companion contract registry (ROK-1954, spec D3) — the DATA half both
@@ -36,9 +42,18 @@ const BG3_SAVE_V1: CompanionContractVersionSpec = {
     status: 'current',
 };
 
-/** The shipped registry: `bg3-save` v1 only. */
+/** `wow-ledgerlink` v1 (ROK-1964): wraps one LedgerLink v1 export string; no blobs. */
+const WOW_LEDGERLINK_V1: CompanionContractVersionSpec = {
+    schema: WowLedgerlinkMessageSchema,
+    maxBytes: COMPANION_WOW_LEDGERLINK_MAX_BYTES,
+    blobSlots: Object.freeze<CompanionBlobSlot[]>([]),
+    status: 'current',
+};
+
+/** The shipped registry: `bg3-save` v1 and `wow-ledgerlink` v1. */
 export const COMPANION_CONTRACTS: CompanionContractTable = Object.freeze({
     [BG3_SAVE_CONTRACT_ID]: Object.freeze({ [BG3_SAVE_CONTRACT_VERSION]: Object.freeze(BG3_SAVE_V1) }),
+    [WOW_LEDGERLINK_CONTRACT_ID]: Object.freeze({ [WOW_LEDGERLINK_CONTRACT_VERSION]: Object.freeze(WOW_LEDGERLINK_V1) }),
 });
 
 /** Result of `lookupCompanionContract`; C3 maps each non-`ok` kind to an ingest error code. */

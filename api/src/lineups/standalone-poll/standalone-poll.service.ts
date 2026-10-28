@@ -47,10 +47,7 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
-import {
-  fireLockInFanout,
-  type LockIn,
-} from './standalone-poll-lockin.helpers';
+import { runLockInFanout, type LockIn } from './standalone-poll-lockin.helpers';
 import { assertCanCompleteWithBench } from './standalone-poll-bench-pick.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
@@ -121,8 +118,9 @@ export class StandalonePollService {
 
   /** Mark a poll as completed (match -> scheduled; a standalone lineup ->
    *  archived, a regular lineup match -> linked to the event — ROK-2024).
-   *  When eventId is provided, auto-signup slot voters and auto-heart the game
-   *  (ROK-1031), then announce EVENT CREATED unless it is a reschedule.
+   *  When eventId is provided, resolves only after the slot voters' signups
+   *  (ROK-1031/2031); heart, DMs and EVENT CREATED (skipped for a reschedule)
+   *  follow without being awaited.
    *  ROK-2025: `benchUserIds` = the organizer's bench pick, checked before
    *  the flip so a 400 leaves the poll open for a retry. */
   async complete(
@@ -180,8 +178,9 @@ export class StandalonePollService {
     // yes-voters are signed up (ROK-1844), never every yes-voter.
     // ROK-2024: announce once, after those signups, and never for a
     // reschedule (`linkedEventId`) — its event was announced when created.
+    // ROK-2031: awaited, so the roster is populated when `complete` returns.
     if (eventId && startTime) {
-      this.startLockInFanout({
+      await this.startLockInFanout({
         matchId,
         eventId,
         startTime,
@@ -195,9 +194,9 @@ export class StandalonePollService {
     }
   }
 
-  /** Sign up + DM the slot voters, then announce (ROK-1031 / ROK-2024). */
-  private startLockInFanout(lockIn: LockIn): void {
-    fireLockInFanout(
+  /** Sign up the slot voters (awaited), then fire DMs + announce. */
+  private startLockInFanout(lockIn: LockIn): Promise<void> {
+    return runLockInFanout(
       {
         db: this.db,
         signupsService: this.signupsService,

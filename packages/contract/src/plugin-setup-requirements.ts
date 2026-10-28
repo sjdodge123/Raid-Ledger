@@ -139,6 +139,16 @@ export const BLIZZARD_SETUP = {
       appliesTo: ['wow_guild'],
       links: [{ label: 'LedgerLink on GitHub', url: 'https://github.com/sjdodge123/ledger-link' }],
     },
+    {
+      // ROK-1964: optional auto-upload; paste keeps working without it.
+      id: 'ledgerlink-companion',
+      kind: 'companion_app',
+      title: 'Raid Ledger Companion (optional auto-upload)',
+      instructions:
+        '1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.',
+      required: false,
+      appliesTo: ['wow_guild'],
+    },
   ],
 } satisfies PluginSetup;
 
