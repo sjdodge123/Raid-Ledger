@@ -4,6 +4,7 @@
  */
 import {
   BG3_SAVE_CONTRACT_ID,
+  WOW_LEDGERLINK_CONTRACT_ID,
   Bg3SaveMessageSchema,
   COMPANION_CAPTURED_AT_MAX_FUTURE_MS,
   COMPANION_IMAGE_EDGE_MAX,
@@ -164,9 +165,9 @@ describe('authenticated', () => {
     }
   });
 
-  it('defaults to the shipped table: bg3-save is listed', () => {
+  it('defaults to the shipped table: bg3-save and wow-ledgerlink are listed', () => {
     const shipped = new CompanionConfigService(registry);
     const ids = shipped.build(DEVICE).contracts?.map((c) => c.id);
-    expect(ids).toEqual([BG3_SAVE_CONTRACT_ID]);
+    expect(ids).toEqual([BG3_SAVE_CONTRACT_ID, WOW_LEDGERLINK_CONTRACT_ID]);
   });
 });
