@@ -1,0 +1,24 @@
+/**
+ * ROK-1958 D-4 / D-5 — the seam between the Party card's empty-state buttons
+ * and the Start-a-campaign dialog / Add-my-saves sheet, which lane W4 builds
+ * under `../campaign/`. W5 renders them here (`open === 'start'` →
+ * start dialog, `'add-saves'` → add-saves sheet) once they exist. Until then
+ * this renders nothing, so the buttons are inert — never ship it that way.
+ */
+import type { JSX } from 'react';
+
+export type Bg3PartyDialog = 'start' | 'add-saves' | null;
+
+export interface Bg3PartyDialogsProps {
+    readonly open: Bg3PartyDialog;
+    readonly onClose: () => void;
+    readonly hubId: number;
+    /** The active campaign (add-saves target); null when there is none. */
+    readonly campaignId: number | null;
+    readonly campaignName: string | null;
+}
+
+export function Bg3PartyDialogs(props: Bg3PartyDialogsProps): JSX.Element | null {
+    void props; // W5: render the W4 dialogs from these props.
+    return null;
+}
