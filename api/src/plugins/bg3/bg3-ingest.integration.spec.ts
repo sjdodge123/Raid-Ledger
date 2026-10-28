@@ -144,7 +144,7 @@ async function insertHub(name: string): Promise<number> {
   return hub.id;
 }
 
-async function join(guildId: number, userId: number): Promise<void> {
+async function joinHub(guildId: number, userId: number): Promise<void> {
   await testApp.db
     .insert(schema.hubCommunityMembers)
     .values({ guildId, userId, role: 'member' });
@@ -168,8 +168,8 @@ async function world() {
   const hubId = await insertHub('BG3 Crew');
   const host = await makeUser(testApp, 'bg3-host');
   const mate = await makeUser(testApp, 'bg3-mate');
-  await join(hubId, host.id);
-  await join(hubId, mate.id);
+  await joinHub(hubId, host.id);
+  await joinHub(hubId, mate.id);
   const campaignId = await createCampaign(host.token, hubId, 'Act Two');
   return { hubId, host, mate, campaignId };
 }

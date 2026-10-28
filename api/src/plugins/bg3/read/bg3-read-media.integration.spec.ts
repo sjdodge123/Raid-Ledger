@@ -109,7 +109,7 @@ async function makeHub(gameId: number, name: string): Promise<number> {
   return h.id;
 }
 
-async function join(
+async function joinHub(
   guildId: number,
   userId: number,
   role: 'member' | 'officer' = 'member',
@@ -294,9 +294,9 @@ beforeEach(async () => {
   guest = await makeUser('guest');
   officer = await makeUser('officer');
   admin = await makeUser('staff', 'admin');
-  for (const u of [host, guest]) await join(hub, u.id);
-  await join(hub, officer.id, 'officer');
-  await join(otherHub, guest.id);
+  for (const u of [host, guest]) await joinHub(hub, u.id);
+  await joinHub(hub, officer.id, 'officer');
+  await joinHub(otherHub, guest.id);
   camp = await makeCampaign(hub, host.id);
   foreignCamp = await makeCampaign(otherHub, host.id);
 });
