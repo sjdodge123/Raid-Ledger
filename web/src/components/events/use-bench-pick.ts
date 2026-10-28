@@ -9,6 +9,7 @@
  * benches the latest yes-voters, and the organizer is told (D6).
  */
 import { useState } from 'react';
+import type { QueryClient } from '@tanstack/react-query';
 import { completeStandalonePoll } from '../../lib/api-client';
 import { httpStatusOf } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
@@ -89,4 +90,9 @@ export async function completeLockIn(matchId: number, eventId: number | undefine
         await completeStandalonePoll(matchId, eventId, startTime);
         toast.warning(FALLBACK_TOAST);
     }
+}
+
+/** ROK-2031: `complete` signs the slot's voters up after the event page has loaded — refetch that event's queries (roster, signups) once it resolves. */
+export function refreshLockedInEvent(qc: QueryClient, eventId: number | undefined): void {
+    if (eventId !== undefined) void qc.invalidateQueries({ queryKey: ['events', eventId] });
 }
