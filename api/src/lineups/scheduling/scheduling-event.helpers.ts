@@ -18,8 +18,12 @@ import {
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
-import { updateMatchLinkedEvent } from './scheduling-query.helpers';
-import { withMatchLockInClaim } from './scheduling-lockin-claim.helpers';
+import {
+  claimMatchForLockIn,
+  linkClaimedMatch,
+  releaseMatchClaim,
+  type ClaimedFromStatus,
+} from './scheduling-lockin-claim.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { yesVotesOnly } from './scheduling-stance.helpers';
@@ -136,14 +140,54 @@ export interface LockInEventDeps {
   logger: Logger;
 }
 
+/** Create the event; on a throw, release the claim before re-throwing. */
+async function createOrRelease(
+  deps: LockInEventDeps,
+  matchId: number,
+  userId: number,
+  dto: CreateEventDto,
+  prior: ClaimedFromStatus,
+): Promise<{ id: number; allEventIds?: number[] }> {
+  try {
+    // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
+    // the event with the poll's hub (creator-membership rule included).
+    return await deps.eventsService.create(userId, {
+      ...dto,
+      schedulingMatchId: matchId,
+    });
+  } catch (err: unknown) {
+    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    throw err;
+  }
+}
+
+/**
+ * Delete every instance this lock-in created (a recurring lock-in makes ~5).
+ * A failed delete is logged and skipped so the caller still gets its 409.
+ */
+async function discardEvents(
+  deps: LockInEventDeps,
+  eventIds: number[],
+  userId: number,
+): Promise<void> {
+  for (const id of eventIds) {
+    try {
+      await deps.eventsService.delete(id, userId, false);
+    } catch (err: unknown) {
+      deps.logger.error(`Lost lock-in: event ${id} not deleted: ${String(err)}`);
+    }
+  }
+}
+
 /**
  * Claim the match, create its event and link it (ROK-2024 follow-up F2).
  *
- * A concurrent expired-path lock-in blocks on the claim and 409s before it
- * creates anything. An OPEN-path `complete` does not take the claim, so it can
- * still win between the re-check and the link write — then the event this
- * call just made is deleted (its DELETED listener removes any Discord post)
- * before the 409, instead of being left behind as an orphan.
+ * The claim commits BEFORE the create (see `scheduling-lockin-claim.helpers`),
+ * so no pooled connection is held while `EventsService.create` takes its own.
+ * A concurrent lock-in — expired or open path — 409s before creating anything.
+ * If the claimed row still moves before the link write (a cancel), every
+ * instance this call made is deleted (their DELETED listeners remove any
+ * Discord post) before the 409, instead of being left behind as orphans.
  *
  * @returns The linked event's id.
  */
@@ -153,22 +197,11 @@ async function claimAndCreateEvent(
   userId: number,
   dto: CreateEventDto,
 ): Promise<number> {
-  const outcome = await withMatchLockInClaim(deps.db, matchId, async (tx) => {
-    // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
-    // the event with the poll's hub (creator-membership rule included).
-    const event = await deps.eventsService.create(userId, {
-      ...dto,
-      schedulingMatchId: matchId,
-    });
-    const linked = await updateMatchLinkedEvent(tx, matchId, event.id);
-    return { eventId: event.id, linked };
-  });
-  if (!outcome.linked) {
-    // Outside the claim's transaction: the delete runs on its own connection.
-    await deps.eventsService.delete(outcome.eventId, userId, false);
-    throw new ConflictException('This poll has already been locked in');
-  }
-  return outcome.eventId;
+  const prior = await claimMatchForLockIn(deps.db, matchId);
+  const event = await createOrRelease(deps, matchId, userId, dto, prior);
+  if (await linkClaimedMatch(deps.db, matchId, event.id)) return event.id;
+  await discardEvents(deps, event.allEventIds ?? [event.id], userId);
+  throw new ConflictException('This poll has already been locked in');
 }
 
 /**

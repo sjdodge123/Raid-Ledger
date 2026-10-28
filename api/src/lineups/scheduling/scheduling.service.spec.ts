@@ -517,8 +517,8 @@ describe('SchedulingService', () => {
       ]);
       // 4. resolveGameName → resolveGameInfo
       mockDb.limit.mockResolvedValueOnce([GAME_ROW]);
-      // 5. the lock-in claim's re-check (ROK-2024 F2): still unclaimed
-      mockDb.limit.mockResolvedValueOnce([{ id: 10 }]);
+      // 5. the lock-in claim's FOR UPDATE read (ROK-2024 F2): still unclaimed
+      mockDb.for.mockResolvedValueOnce([{ status: 'scheduling' }]);
       // 6. eventsService.create
       mockEventsService.create.mockResolvedValueOnce({ id: 100 });
     }

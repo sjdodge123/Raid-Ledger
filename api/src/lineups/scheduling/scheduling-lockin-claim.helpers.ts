@@ -3,71 +3,115 @@
  *
  * The expired-poll lock-in used to create its event FIRST and only then try
  * the link compare-and-set, so the loser of two concurrent lock-ins left an
- * orphaned event that was already on Discord. It now takes this lock and
- * re-checks that the match is still unclaimed BEFORE creating anything: the
- * second caller blocks until the winner's transaction (holding the link
- * write) commits, then re-reads, sees the link and 409s with no event made.
+ * orphaned event that was already on Discord. It now CLAIMS the match before
+ * creating anything, and the claim is a committed row state, not a held lock:
  *
- * Two-argument `pg_advisory_xact_lock(int4, int4)`, the same form as
- * `scheduling-member-lock.helpers.ts`, keyed by the story id `2024`.
+ * 1. `claimMatchForLockIn` — one short transaction: `SELECT … FOR UPDATE` the
+ *    still-unclaimed match, then flip it to `scheduled` with no linked event
+ *    yet. It commits before the event is created, so NO pooled connection is
+ *    held across `EventsService.create` (which queries through the outer pool:
+ *    holding one here would hang every lock-in at `DB_POOL_MAX=1`, and N
+ *    concurrent lock-ins would exhaust a pool of N — Codex P1). A second
+ *    expired-path caller finds the row no longer `suggested`/`scheduling` and
+ *    409s with no event made; so does an open-path `complete`, whose flip
+ *    requires `status = 'scheduling'`.
+ * 2. `linkClaimedMatch` — after the create, a single compare-and-set writes
+ *    the event id onto the row we claimed.
+ * 3. `releaseMatchClaim` — when the create throws, put the prior status back.
  *
- * The re-check is a plain read — NOT `FOR UPDATE`. `eventsService.create`
- * runs on its own pooled connection and its event insert takes `FOR KEY
- * SHARE` on this match row (the `created_from_poll_id` FK); a row lock held
- * here would make that insert wait on this transaction while this transaction
- * waits on the create — a wait Postgres cannot see as a deadlock.
+ * `scheduled` with a null `linked_event_id` is already a legal state (the
+ * link FK is `ON DELETE SET NULL`), so a reader that sees the claim mid-flight
+ * sees nothing new.
  */
-import { ConflictException } from '@nestjs/common';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { ConflictException, type Logger } from '@nestjs/common';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Advisory-lock class for match lock-ins (ROK-2024). */
-export const MATCH_LOCKIN_LOCK_CLASS = 2024;
+/** The statuses a match may be locked in from. */
+const CLAIMABLE = ['suggested', 'scheduling'] as const;
 
-/** True while the match is schedulable (`suggested`/`scheduling`) and unlinked. */
-export async function isMatchUnclaimed(
+/** The status the match had before the claim (restored on a failed create). */
+export type ClaimedFromStatus = (typeof CLAIMABLE)[number];
+
+const m = schema.communityLineupMatches;
+
+/**
+ * Claim the match for this lock-in, or 409 when it is already locked in (or
+ * being locked in). Commits before returning; holds nothing afterwards.
+ */
+export async function claimMatchForLockIn(
   db: Db,
   matchId: number,
+): Promise<ClaimedFromStatus> {
+  const prior = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ status: m.status })
+      .from(m)
+      .where(
+        and(
+          eq(m.id, matchId),
+          inArray(m.status, [...CLAIMABLE]),
+          isNull(m.linkedEventId),
+        ),
+      )
+      .for('update');
+    if (!row) return null;
+    await tx.update(m).set({ status: 'scheduled' }).where(eq(m.id, matchId));
+    return row.status;
+  });
+  if (prior !== 'suggested' && prior !== 'scheduling') {
+    throw new ConflictException('This poll has already been locked in');
+  }
+  return prior;
+}
+
+/** Write the event onto the match this lock-in claimed. False when it moved. */
+export async function linkClaimedMatch(
+  db: Db,
+  matchId: number,
+  eventId: number,
 ): Promise<boolean> {
-  const rows = await db
-    .select({ id: schema.communityLineupMatches.id })
-    .from(schema.communityLineupMatches)
+  const linked = await db
+    .update(m)
+    .set({ linkedEventId: eventId })
     .where(
       and(
-        eq(schema.communityLineupMatches.id, matchId),
-        inArray(schema.communityLineupMatches.status, [
-          'suggested',
-          'scheduling',
-        ]),
-        isNull(schema.communityLineupMatches.linkedEventId),
+        eq(m.id, matchId),
+        eq(m.status, 'scheduled'),
+        isNull(m.linkedEventId),
       ),
     )
-    .limit(1);
-  return rows.length !== 0;
+    .returning({ id: m.id });
+  return linked.length !== 0;
 }
 
 /**
- * Run `fn` holding the match's lock-in lock, after confirming nobody has
- * locked the match in. Throws 409 before `fn` runs when someone has.
- *
- * `fn` must issue its link write on the `tx` it is handed, so the lock is only
- * released once that write is committed and visible to the next caller.
+ * Undo a claim whose event was never created. Never throws: the caller is
+ * already failing with the create's own error, which must reach the client.
  */
-export async function withMatchLockInClaim<T>(
+export async function releaseMatchClaim(
   db: Db,
   matchId: number,
-  fn: (tx: Db) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${MATCH_LOCKIN_LOCK_CLASS}::int4, ${matchId}::int4)`,
+  prior: ClaimedFromStatus,
+  logger: Pick<Logger, 'error'>,
+): Promise<void> {
+  try {
+    await db
+      .update(m)
+      .set({ status: prior })
+      .where(
+        and(
+          eq(m.id, matchId),
+          eq(m.status, 'scheduled'),
+          isNull(m.linkedEventId),
+        ),
+      );
+  } catch (err: unknown) {
+    logger.error(
+      `Lock-in claim on match ${matchId} not released: ${String(err)}`,
     );
-    if (!(await isMatchUnclaimed(tx, matchId))) {
-      throw new ConflictException('This poll has already been locked in');
-    }
-    return fn(tx);
-  });
+  }
 }
