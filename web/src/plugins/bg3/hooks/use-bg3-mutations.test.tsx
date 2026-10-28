@@ -1,20 +1,30 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
+import { http } from 'msw';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { Bg3SnapshotResponse } from '@raid-ledger/contract';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
 import {
+    BG3_DEFAULT_URL,
     bg3BindKeyHandler,
     bg3ClaimHandler,
+    bg3CreateCampaignHandler,
     bg3DefaultCampaignHandler,
+    bg3Error,
     bg3SnapshotHandler,
 } from '../../../test/mocks/bg3-handlers';
-import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3Claim, buildBg3Snapshot } from '../../../test/factories/bg3';
+import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignSummary, buildBg3Claim, buildBg3Snapshot } from '../../../test/factories/bg3';
 import { toast } from '../../../lib/toast';
 import { bg3Keys } from './bg3-keys';
-import { BG3_CLAIM_CONFLICT_TOAST, useBindBg3Saves, useClaimBg3Slot } from './use-bg3-mutations';
+import {
+    BG3_CLAIM_CONFLICT_TOAST,
+    BG3_CREATED_DEFAULT_FAILED_TOAST,
+    useBindBg3Saves,
+    useClaimBg3Slot,
+    useCreateBg3Campaign,
+} from './use-bg3-mutations';
 
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -71,5 +81,21 @@ describe('use-bg3-mutations', () => {
             `key:b:{"campaignId":${BG3_CAMPAIGN_ID}}`,
             `default:{"campaignId":${BG3_CAMPAIGN_ID}}`,
         ]);
+    });
+
+    it('settles as created (not failed) when the default PUT fails after the POST, so a retry cannot duplicate', async () => {
+        const { wrapper } = setup();
+        let creates = 0;
+        server.use(
+            bg3CreateCampaignHandler(buildBg3CampaignSummary({ id: 12, name: 'The Long Rest' }), () => { creates += 1; }),
+            http.put(BG3_DEFAULT_URL, () => bg3Error(500, 'boom')),
+        );
+        const { result } = renderHook(() => useCreateBg3Campaign(BG3_HUB_ID), { wrapper });
+        act(() => result.current.mutate({ name: 'The Long Rest', makeDefault: true }));
+        await waitFor(() => expect(result.current.isPending).toBe(false));
+        expect(result.current.status).toBe('success');
+        expect(result.current.data?.id).toBe(12);
+        expect(creates).toBe(1);
+        expect(toast.error).toHaveBeenCalledWith(BG3_CREATED_DEFAULT_FAILED_TOAST);
     });
 });

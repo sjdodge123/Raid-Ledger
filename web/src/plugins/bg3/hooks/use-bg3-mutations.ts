@@ -24,13 +24,23 @@ export const BG3_CLAIM_ERROR_TOAST = "Couldn't update the claim.";
 /** 409 `already_claimed`: the viewer's claim sits on a character no longer in the party. */
 export const BG3_CLAIM_ALREADY_TOAST = "You've already claimed a character in this campaign.";
 
-/** Start a campaign; `makeDefault` also files the caller's saves into it (D-4). */
+/** The campaign exists but the default PUT failed — the dialog still closes, so a retry can't duplicate it. */
+export const BG3_CREATED_DEFAULT_FAILED_TOAST =
+    "Campaign started, but your saves weren't moved into it. Pick it under “New saves go to” on the Campaign tab.";
+
+/**
+ * Start a campaign; `makeDefault` also files the caller's saves into it (D-4).
+ * Once the POST succeeds the mutation succeeds: a failed default PUT is a
+ * partial success (toast), never a rejection that invites a duplicate create.
+ */
 export function useCreateBg3Campaign(hubId: number) {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: async ({ name, makeDefault }: { name: string; makeDefault: boolean }) => {
             const campaign = await createBg3Campaign(hubId, name);
-            if (makeDefault) await setBg3DefaultCampaign(campaign.id);
+            if (makeDefault) {
+                await setBg3DefaultCampaign(campaign.id).catch(() => toast.error(BG3_CREATED_DEFAULT_FAILED_TOAST));
+            }
             return campaign;
         },
         onSettled: () => invalidateBg3Hub(qc, hubId),
