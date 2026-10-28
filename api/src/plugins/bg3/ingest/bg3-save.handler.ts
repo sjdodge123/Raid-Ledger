@@ -17,7 +17,9 @@ import {
 } from './bg3-saves.write.repository';
 
 /** Highest level among the non-summons (summons only as a fallback). */
-export function partyMaxLevel(party: Bg3SaveMessage['payload']['party']): number {
+export function partyMaxLevel(
+  party: Bg3SaveMessage['payload']['party'],
+): number {
   const heroes = party.filter((m) => !m.isSummon);
   const levels = (heroes.length > 0 ? heroes : party).map((m) => m.level);
   return levels.length > 0 ? Math.max(...levels) : 0;
@@ -75,7 +77,10 @@ export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> 
     return msg.payload.thumbnail ? [msg.payload.thumbnail] : [];
   }
 
-  async handle(ctx: CompanionHandlerContext, msg: Bg3SaveMessage): Promise<void> {
+  async handle(
+    ctx: CompanionHandlerContext,
+    msg: Bg3SaveMessage,
+  ): Promise<void> {
     const campaignId = await this.campaignFor(ctx, msg.payload.campaignKey);
     await this.repo.insertSave(ctx.tx, toBg3SaveRow(ctx, msg, campaignId));
   }
@@ -85,7 +90,11 @@ export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> 
     ctx: CompanionHandlerContext,
     campaignKey: string,
   ): Promise<number | null> {
-    const target = await this.repo.resolveCampaign(ctx.tx, ctx.userId, campaignKey);
+    const target = await this.repo.resolveCampaign(
+      ctx.tx,
+      ctx.userId,
+      campaignKey,
+    );
     if (target === null) return null;
     const member = await this.access.isMember(ctx.userId, target.guildId);
     return member ? target.id : null;

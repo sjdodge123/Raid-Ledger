@@ -51,7 +51,10 @@ export class Bg3SavesWriteRepository {
    * D-4: insert one save; a replay of `(uploader, campaignKey, savedAt)` is
    * a no-op. Returns whether a row was written.
    */
-  async insertSave(tx: CompanionDeviceTx, row: Bg3SaveInsert): Promise<boolean> {
+  async insertSave(
+    tx: CompanionDeviceTx,
+    row: Bg3SaveInsert,
+  ): Promise<boolean> {
     const s = schema.bg3Saves;
     const written = await tx
       .insert(s)
