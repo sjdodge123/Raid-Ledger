@@ -93,6 +93,7 @@ const blizzard = {
     { id: 'forever-level-progression', title: 'Level progression', description: 'Where the roster’s levels sit and who is at cap.', layoutKey: 'plugin' },
     { id: 'forever-roles', title: 'Role breakdown', description: 'Tanks, healers and DPS ready for dungeons and raids.', layoutKey: 'plugin' },
     { id: 'forever-dungeon-quests', title: 'Dungeon quests', description: 'Who has the quests for upcoming dungeon runs.', layoutKey: 'plugin' },
+    { id: 'forever-recent-dings', title: 'Recent dings', description: 'Who levelled up in the last 30 days.', layoutKey: 'plugin' },
     { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
     { id: 'forever-whos-saved', title: "Who's saved", description: 'Who is saved to which instance, and when it resets.', layoutKey: 'plugin' },
   ],

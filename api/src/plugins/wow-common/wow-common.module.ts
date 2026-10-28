@@ -58,6 +58,7 @@ import { CharacterRowFactSource } from './facts/character-row.fact-source';
 import { WowFactsService } from './facts/wow-facts.service';
 import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
 import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
+import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule, GuildsCoreModule],
@@ -117,6 +118,8 @@ import { RosterInsightsService } from './guilds/roster-insights/roster-insights.
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,
     RosterInsightsService,
+    // ROK-1919: Recent dings feed.
+    RecentDingsService,
   ],
   exports: [
     BlizzardService,
