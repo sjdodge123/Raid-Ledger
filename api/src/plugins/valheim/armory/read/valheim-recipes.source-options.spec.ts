@@ -70,7 +70,6 @@ describe('sourceOptionsOf', () => {
       }),
     ]);
   });
-
 });
 
 describe('sourceOptionsOf default + rank', () => {
@@ -100,7 +99,6 @@ describe('sourceOptionsOf default + rank', () => {
       ['process', false],
     ]);
   });
-
 });
 
 describe('sourceOptionsOf exclusions', () => {
