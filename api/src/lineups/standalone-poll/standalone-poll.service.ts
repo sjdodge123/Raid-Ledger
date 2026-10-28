@@ -35,10 +35,7 @@ import {
   completeStandalonePoll,
   stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
-import {
-  assertCanRescheduleEvent,
-  assertCanCompletePoll,
-} from './standalone-poll-auth.helpers';
+import { assertCanRescheduleEvent } from './standalone-poll-auth.helpers';
 import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
@@ -54,6 +51,7 @@ import {
   fireLockInFanout,
   type LockIn,
 } from './standalone-poll-lockin.helpers';
+import { assertCanCompleteWithBench } from './standalone-poll-bench-pick.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
@@ -124,23 +122,25 @@ export class StandalonePollService {
   /** Mark a poll as completed (match -> scheduled; a standalone lineup ->
    *  archived, a regular lineup match -> linked to the event — ROK-2024).
    *  When eventId is provided, auto-signup slot voters and auto-heart the game
-   *  (ROK-1031), then announce EVENT CREATED unless it is a reschedule. */
+   *  (ROK-1031), then announce EVENT CREATED unless it is a reschedule.
+   *  ROK-2025: `benchUserIds` = the organizer's bench pick, checked before
+   *  the flip so a 400 leaves the poll open for a retry. */
   async complete(
     matchId: number,
     eventId?: number,
     startTime?: string,
     creatorId?: number,
     isAdmin = false,
+    benchUserIds?: number[],
   ): Promise<boolean> {
     // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
     // SE recreated) — restrict it to the poll/event owner or an admin.
     // ROK-1844: every completion is owner/staff-only, and `eventId` must be
     // the caller's and come from this poll — checked before anything changes.
-    await assertCanCompletePoll(
+    const bench = await assertCanCompleteWithBench(
       this.db,
-      matchId,
       { id: creatorId ?? -1, isAdmin },
-      { eventId, startTime },
+      { matchId, eventId, startTime, benchUserIds },
     );
     const result = await completeStandalonePoll(
       this.db,
@@ -152,7 +152,14 @@ export class StandalonePollService {
       throw new ConflictException('This poll has already been completed');
     }
     if (result.ok) {
-      await this.afterLockIn(result, matchId, eventId, startTime, creatorId);
+      await this.afterLockIn(
+        result,
+        matchId,
+        eventId,
+        startTime,
+        creatorId,
+        bench,
+      );
     }
     return result.ok;
   }
@@ -164,6 +171,7 @@ export class StandalonePollService {
     eventId: number | undefined,
     startTime: string | undefined,
     creatorId: number | undefined,
+    benchUserIds?: ReadonlySet<number>,
   ): Promise<void> {
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
@@ -179,6 +187,7 @@ export class StandalonePollService {
         startTime,
         creatorId,
         announce: !result.linkedEventId,
+        benchUserIds,
       });
     }
     if (result.linkedEventId && !result.linkedEventCancelled) {

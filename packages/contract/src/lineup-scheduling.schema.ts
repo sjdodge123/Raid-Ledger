@@ -237,6 +237,9 @@ export const ScheduleSlotWithVotesSchema = LineupScheduleSlotSchema.extend({
    * YES votes only — unchanged meaning (ROK-1617). Every surface that counts
    * `votes.length` as "how many want this time" stays correct; the `no`s live
    * in their own array rather than inflating this one.
+   * ROK-2025: in vote order, earliest yes first. The lock form's bench pick
+   * pre-marks the LAST entries (the latest yes-voters), so this order is part
+   * of the contract.
    */
   votes: z.array(ScheduleVoteVoterSchema),
   /** ROK-1617: members who said this time does NOT work. */
