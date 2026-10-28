@@ -182,3 +182,24 @@ export function toDeathsResponse(
     .map((b) => toPlayer(b, byBar.get(b.mergeKey)));
   return { players, since: earliest(counts.groups) };
 }
+
+/** One `(steam_id, character_name)` death bucket on the server. */
+export type DeathBucketRef = Pick<DeathGroupRow, 'steamId' | 'characterName'>;
+
+/**
+ * ROK-2027 D1 — the stored buckets behind the bar whose wire `key` is `key`
+ * (the same fold and keys as `toDeathsResponse`, resolved against every bar,
+ * not just the capped first 200), or `[]` when no bar carries it.
+ */
+export function bucketsForBarKey(
+  counts: DeathCounts,
+  key: string,
+): DeathBucketRef[] {
+  const bar = withKeys(mergeBars(counts), counts.profiles).find(
+    (b) => b.key === key,
+  );
+  if (!bar) return [];
+  return counts.groups
+    .filter((g) => barMergeKey(g, counts.profiles) === bar.mergeKey)
+    .map((g) => ({ steamId: g.steamId, characterName: g.characterName }));
+}

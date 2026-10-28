@@ -1,5 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -7,9 +17,10 @@ import {
   MAX_BAR_PICTURES,
   type DeathPictureBucket,
 } from './valheim-deaths-pictures.mappers';
+import type { DeathBucketRef } from './valheim-deaths.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
-const { valheimPlayerDeaths: deaths, hubMedia: media } = schema;
+const { valheimPlayerDeaths: deaths, hubMedia: media, guilds } = schema;
 
 /**
  * ROK-1941 D13 — per `(steam_id, character_name)` death bucket on one
@@ -46,6 +57,47 @@ export class ValheimDeathsPicturesRepository {
       buckets.set(key, b);
     }
     return [...buckets.values()];
+  }
+
+  /** ROK-2027 — the Pelican server behind hub `guildId`, or null (1:1). */
+  async serverIdOfHub(guildId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ serverId: guilds.pelicanServerId })
+      .from(guilds)
+      .where(eq(guilds.id, guildId))
+      .limit(1);
+    return row?.serverId ?? null;
+  }
+
+  /**
+   * ROK-2027 D4 — every media id linked to a death in `buckets` on the
+   * server. Visibility-agnostic on purpose: core's Gallery `visible()`
+   * applies hidden/removed/other-hub rules to these ids.
+   */
+  async mediaIdsFor(
+    serverId: number,
+    buckets: DeathBucketRef[],
+  ): Promise<number[]> {
+    if (buckets.length === 0) return [];
+    const inBucket = buckets.map((b) =>
+      and(
+        b.steamId === null
+          ? isNull(deaths.steamId)
+          : eq(deaths.steamId, b.steamId),
+        eq(deaths.characterName, b.characterName),
+      ),
+    );
+    const rows = await this.db
+      .select({ id: deaths.hubMediaId })
+      .from(deaths)
+      .where(
+        and(
+          eq(deaths.pelicanServerId, serverId),
+          isNotNull(deaths.hubMediaId),
+          or(...inBucket),
+        ),
+      );
+    return rows.flatMap((r) => (r.id === null ? [] : [r.id]));
   }
 
   /** Visible linked pictures, ranked newest-first within each bucket. */

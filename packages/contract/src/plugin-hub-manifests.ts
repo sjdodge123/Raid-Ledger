@@ -64,6 +64,7 @@ const valheim = {
     { id: 'valheim', kind: 'log-parser', label: 'Reads joins, leaves and deaths from the server log' },
     { id: 'valheim', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
+    { id: 'valheim-death', kind: 'media-subject', label: "Shows one player's death pictures in the Gallery" },
   ],
   gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,

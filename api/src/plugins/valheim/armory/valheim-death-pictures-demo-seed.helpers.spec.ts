@@ -13,15 +13,21 @@ describe('parseDeathPicturesBody', () => {
       count: 5,
       hidden: false,
       removed: false,
+      secondCount: 0,
+      screenshot: false,
     });
   });
 
-  it.each([{ count: 0 }, { count: 25 }, { worker: -1 }, { extra: 1 }])(
-    '400s %p',
-    (body) => {
-      expect(() => parseDeathPicturesBody(body)).toThrow(BadRequestException);
-    },
-  );
+  it.each([
+    { count: 0 },
+    { count: 25 },
+    { worker: -1 },
+    { extra: 1 },
+    { secondCount: -1 },
+    { secondCount: 25 },
+  ])('400s %p', (body) => {
+    expect(() => parseDeathPicturesBody(body)).toThrow(BadRequestException);
+  });
 });
 
 describe('demoDeathDownloader', () => {

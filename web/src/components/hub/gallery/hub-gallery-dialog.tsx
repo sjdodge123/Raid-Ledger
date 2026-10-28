@@ -7,6 +7,9 @@
  * Hide / Unhide; the hub leader or the uploader Remove (per-item `canRemove`,
  * ROK-1965; two-step, inline — no stacked confirm). Closing
  * (Escape, ×, backdrop, swipe) returns focus to the element that opened it.
+ * ROK-2027: a request may carry a plugin-resolved `subject` (one Deaths bar);
+ * it is dialog-local (never the card filter, D10) and swaps the chips for one
+ * removable "<Name>'s deaths" chip until cleared (D9).
  */
 import { type RefObject, useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -15,6 +18,7 @@ import { availableFilters, clampHubMediaFilter, type HubMediaFilter } from '../.
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { Modal } from '../../ui/modal';
 import { HubGalleryChips } from './hub-gallery-chips';
+import { HubGallerySubjectChip } from './hub-gallery-subject-chip';
 import { HubGalleryFooter } from './hub-gallery-footer';
 import { HubGalleryGrid } from './hub-gallery-grid';
 import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
@@ -92,9 +96,9 @@ function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) 
     return { index, setIndex, seeking };
 }
 
-/** A chip the refreshed `kinds` no longer justify (staff removed its last picture) falls back to All. */
-function useClampFilter(pages: HubGalleryPages, filter: HubMediaFilter, changeFilter: (f: HubMediaFilter) => void): void {
-    const clamped = pages.loading ? filter : clampHubMediaFilter(filter, pages.kinds);
+/** A chip the refreshed `kinds` no longer justify (staff removed its last picture) falls back to All. Not while scoped: no chips show. */
+function useClampFilter(pages: HubGalleryPages, filter: HubMediaFilter, changeFilter: (f: HubMediaFilter) => void, scoped: boolean): void {
+    const clamped = pages.loading || scoped ? filter : clampHubMediaFilter(filter, pages.kinds);
     useEffect(() => { if (clamped !== filter) changeFilter(clamped); }, [clamped, filter, changeFilter]);
 }
 
@@ -108,10 +112,33 @@ function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
     }, [request.returnFocus, closeGallery]);
 }
 
+type GallerySubject = NonNullable<HubGalleryOpenRequest['subject']>;
+
+/**
+ * The dialog's list: chip filter + optional subject (both dialog state), its
+ * pages and the viewer index. A chip syncs the card filter; clearing the
+ * subject does not (D10) — it returns to the request's filter at index 0.
+ */
+function useGalleryList(request: HubGalleryOpenRequest) {
+    const { guildId } = request;
+    const setCardFilter = useHubGalleryStore((s) => s.setFilter);
+    const [filter, setFilter] = useState<HubMediaFilter>(request.filter);
+    const [subject, setSubject] = useState<GallerySubject | null>(request.subject ?? null);
+    const pages = useHubGalleryPages(guildId, filter, subject?.id ?? null);
+    const viewer = useViewerIndex(request, pages);
+    const { setIndex } = viewer;
+    const changeFilter = useCallback((f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); }, [setIndex, setCardFilter, guildId]);
+    const clearSubject = useCallback((): void => { setSubject(null); setFilter(request.filter); setIndex(0); }, [setIndex, request.filter]);
+    useClampFilter(pages, filter, changeFilter, subject !== null);
+    return { ...viewer, pages, filter, subject, changeFilter, clearSubject };
+}
+
 interface GalleryBodyProps {
     mode: 'grid' | 'viewer';
     filter: HubMediaFilter;
     onFilter: (f: HubMediaFilter) => void;
+    subject: GallerySubject | null;
+    onClearSubject: () => void;
     pages: HubGalleryPages;
     index: number;
     nav: ReturnType<typeof useViewerNav>;
@@ -121,12 +148,14 @@ interface GalleryBodyProps {
     seeking: boolean;
 }
 
-function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope, seeking }: GalleryBodyProps): JSX.Element {
+function GalleryBody({ mode, filter, onFilter, subject, onClearSubject, pages, index, nav, onOpen, scope, seeking }: GalleryBodyProps): JSX.Element {
     const item = seeking ? undefined : pages.items[index];
     const loading = pages.loading || seeking;
     return (
         <div ref={scope} className="flex flex-col gap-3">
-            <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />
+            {subject !== null
+                ? <HubGallerySubjectChip label={subject.label} onClear={onClearSubject} />
+                : <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />}
             {loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
             {!loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
             {mode === 'grid' && !seeking && pages.items.length > 0 && <HubGalleryGrid items={pages.items} total={pages.total} onOpen={onOpen} />}
@@ -140,20 +169,15 @@ function GalleryBody({ mode, filter, onFilter, pages, index, nav, onOpen, scope,
 export function HubGalleryDialog({ request, canEdit }: HubGalleryDialogProps): JSX.Element {
     const { guildId } = request;
     const desktop = useMediaQuery(DESKTOP_MQ);
-    const setCardFilter = useHubGalleryStore((s) => s.setFilter);
     const [mode, setMode] = useState(request.mode);
-    const [filter, setFilter] = useState<HubMediaFilter>(request.filter);
-    const pages = useHubGalleryPages(guildId, filter);
-    const { index, setIndex, seeking } = useViewerIndex(request, pages);
+    const { index, setIndex, seeking, pages, filter, subject, changeFilter, clearSubject } = useGalleryList(request);
     const item = pages.items[index];
     const nav = useViewerNav(pages, index, setIndex);
     const scope = useRef<HTMLDivElement>(null);
     useArrowKeys(scope, mode === 'viewer' && item !== undefined && !seeking, nav.prev, nav.next);
     const close = useCloseAndReturnFocus(request);
-    const changeFilter = useCallback((f: HubMediaFilter): void => { setFilter(f); setIndex(0); setCardFilter(guildId, f); }, [setIndex, setCardFilter, guildId]);
-    useClampFilter(pages, filter, changeFilter);
     const body = (
-        <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} pages={pages} index={index}
+        <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} subject={subject} onClearSubject={clearSubject} pages={pages} index={index}
             nav={nav} scope={scope} seeking={seeking} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
     );
     const footer = (

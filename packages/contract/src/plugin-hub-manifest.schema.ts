@@ -22,6 +22,8 @@ export const HUB_BEHAVIOUR_KINDS = [
   'ingest-source',
   'media-classifier',
   'media-decorator',
+  /** ROK-2027 — resolves a Gallery `?subject=<namespace>:<payload>` scope. */
+  'media-subject',
 ] as const;
 export const HubBehaviourKindSchema = z.enum(HUB_BEHAVIOUR_KINDS);
 export type HubBehaviourKind = z.infer<typeof HubBehaviourKindSchema>;
