@@ -1,10 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
 import type { CreateEventDto, UpdateEventDto, TemplateConfigDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
-import { createEvent, updateEvent, updateSeries } from '../../lib/api-client';
-import { completeLockIn, guardBenchPick, refreshLockedInEvent, useLockBenchPick, type BenchPick } from './use-bench-pick';
+import { guardBenchPick, useLockBenchPick, type BenchPick } from './use-bench-pick';
+import { useCreateEventMutation } from './use-create-event-mutation';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -18,45 +17,11 @@ import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
-import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import { InheritedHubLine } from './inherited-hub-line';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
-
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null, benchUserIds?: number[]) {
-    const navigate = useNavigate();
-    const queryClient = useQueryClient();
-    const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
-
-    return useMutation({
-        mutationFn: (dto: CreateEventDto | UpdateEventDto) => {
-            if (isSeriesEdit) return updateSeries(editEventId!, seriesScope!, dto as UpdateEventDto).then(() => undefined);
-            if (isEditMode) return updateEvent(editEventId!, dto as UpdateEventDto);
-            // ROK-1844: stamp the poll this event is created from — completing the
-            // poll may sign its voters up to this event and no other.
-            return createEvent({ ...(dto as CreateEventDto), ...(schedulingMatchId ? { schedulingMatchId } : {}) });
-        },
-        // Codex P2: snapshot the pick at submit time — `benchUserIds` is read from
-        // the latest render, so a pick changed while the request ran must not leak in.
-        onMutate: () => ({ benchAtSubmit: benchUserIds }),
-        onSuccess: (event, _dto, submitted) => {
-            toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) {
-                // ROK-1844: signups need the winning slot — without one just close the poll.
-                const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeLockIn(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined, submitted?.benchAtSubmit).then(() => { invalidateHubPolls(queryClient); refreshLockedInEvent(queryClient, signupEventId); }, () => {
-                    toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
-                });
-            }
-            navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
-        },
-        onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
-    });
-}
 
 function loadTemplateIntoForm(config: TemplateConfigDto, setForm: React.Dispatch<React.SetStateAction<FormState>>) {
     setForm((prev) => ({
@@ -160,7 +125,7 @@ function useCreateEventFormState(
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
     // ROK-2025: on a lock-in the organizer picks who goes to the bench.
     const bench = useLockBenchPick(!editEvent && schedulingLineupId && schedulingMatchId && initialStartTime ? { lineupId: schedulingLineupId, matchId: schedulingMatchId, startTime: initialStartTime } : null, form);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime, bench.benchUserIds);
+    const mutation = useCreateEventMutation({ isEditMode: !!editEvent, editEventId: editEvent?.id, seriesScope, schedulingMatchId, schedulingLineupId, schedulingStartTime: initialStartTime, benchUserIds: bench.benchUserIds });
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);

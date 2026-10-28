@@ -5,6 +5,8 @@
 import type {
   ActiveStandalonePollDto,
   CreateSchedulingPollDto,
+  LockInSchedulingPollDto,
+  LockInSchedulingPollResponseDto,
   SchedulingPollResponseDto,
   PollSharePreviewDto,
   PollShareJoinResponseDto,
@@ -31,6 +33,18 @@ export async function completeStandalonePoll(
   await fetchApi(`/scheduling-polls/${matchId}/complete`, {
     method: 'POST',
     ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+/** ROK-2032: lock a poll in claim-first — the server claims the match, then
+ *  creates the event and fills its roster. A losing racer gets a 409 and no event. */
+export async function lockInSchedulingPoll(
+  matchId: number,
+  body: LockInSchedulingPollDto,
+): Promise<LockInSchedulingPollResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/lock-in`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }
 
