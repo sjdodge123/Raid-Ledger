@@ -12,7 +12,8 @@ const level = z.number().int().min(0).max(100);
 
 export const WowRecentDingSchema = z
   .object({
-    name: z.string().max(64),
+    /** Same cap as `AddonGuildMemberSchema.name` — the stored member name. */
+    name: z.string().max(100),
     /** The linked RL character (`characters.id`), when one carries the GUID. */
     characterId: z.string().uuid().nullable(),
     fromLevel: level,

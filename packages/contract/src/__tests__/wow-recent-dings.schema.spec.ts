@@ -20,6 +20,17 @@ describe('WowRecentDingsSchema (ROK-1919)', () => {
         expect(parsed.dings).toHaveLength(2);
     });
 
+    it('accepts a name up to the guild-member cap (100) and rejects 101', () => {
+        const ok = WowRecentDingsSchema.safeParse({
+            dings: [{ ...ding, name: 'x'.repeat(100) }],
+        });
+        expect(ok.success).toBe(true);
+        const tooLong = WowRecentDingsSchema.safeParse({
+            dings: [{ ...ding, name: 'x'.repeat(101) }],
+        });
+        expect(tooLong.error?.issues[0]?.path).toEqual(['dings', 0, 'name']);
+    });
+
     it('rejects an unknown key (strict)', () => {
         const result = WowRecentDingsSchema.safeParse({
             dings: [{ ...ding, guid: 'Player-1-x' }],
