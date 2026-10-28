@@ -1,4 +1,6 @@
 import type { CompanionBlobStore } from '../../companion/blobs/companion-blob.store';
+import type { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { BG3_PLUGIN_ID } from './bg3.constants';
 import { Bg3GalleryFeed, toGalleryItems } from './bg3-gallery.feed';
 import type { Bg3ReadRepository } from './read/bg3-read.repository';
 import type { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
@@ -52,14 +54,24 @@ describe('toGalleryItems (§5.7 + ROK-1959 §5.1)', () => {
 });
 
 describe('Bg3GalleryFeed', () => {
-  function feed(hidden: boolean) {
+  const SAVE = {
+    id: 1,
+    uploaderUserId: 7,
+    campaignKey: 'k',
+    savedAt: at,
+    campaignId: 11,
+    guildId: 5,
+    hostUserId: 2,
+    thumbnailSha256: SHA,
+  };
+  function feed(
+    hidden: boolean,
+    o: { active?: boolean; twins?: unknown[] } = {},
+  ) {
     const saves = {
       feedRows: jest.fn().mockResolvedValue([row(1, 7)]),
-      saveInCampaign: jest.fn().mockResolvedValue({
-        uploaderUserId: 7,
-        guildId: 5,
-        thumbnailSha256: SHA,
-      }),
+      saveInCampaign: jest.fn().mockResolvedValue(SAVE),
+      twins: jest.fn().mockResolvedValue(o.twins ?? [SAVE]),
       bg3HubIds: jest.fn().mockResolvedValue([5]),
     };
     const read = {
@@ -69,28 +81,52 @@ describe('Bg3GalleryFeed', () => {
       }),
     };
     const blobs = { open: jest.fn().mockResolvedValue(null) };
+    const registry = { isActive: jest.fn().mockReturnValue(o.active ?? true) };
     const f = new Bg3GalleryFeed(
       saves as unknown as Bg3SavesReadRepository,
       read as unknown as Bg3ReadRepository,
       blobs as unknown as CompanionBlobStore,
+      registry as unknown as PluginRegistryService,
     );
-    return { f, saves, blobs };
+    return { f, saves, blobs, registry };
   }
 
   it('is empty while the hub hides spoilers (D-14)', async () => {
     const { f, saves, blobs } = feed(true);
     expect(await f.canonicalThumbnails(5)).toEqual([]);
     expect(saves.feedRows).not.toHaveBeenCalled();
-    expect(await f.openRawThumbnail(1)).toBeNull();
+    expect(await f.openRawThumbnail(5, 1)).toBeNull();
     expect(blobs.open).not.toHaveBeenCalled();
   });
 
   it('lists canonical thumbnails and opens the raw blob of the uploader', async () => {
-    const { f, blobs } = feed(false);
+    const { f, blobs, saves } = feed(false);
     expect((await f.canonicalThumbnails(5)).map((i) => i.saveId)).toEqual([1]);
-    expect(await f.openRawThumbnail(1)).toBeNull();
+    expect(await f.openRawThumbnail(5, 1)).toBeNull();
+    expect(saves.twins).toHaveBeenCalledWith(11, 'k', at);
     expect(blobs.open).toHaveBeenCalledWith(7, SHA);
     expect(await f.bg3HubIds()).toEqual([5]);
+  });
+
+  it('openRawThumbnail refuses a save of another hub', async () => {
+    const { f, blobs } = feed(false);
+    expect(await f.openRawThumbnail(6, 1)).toBeNull();
+    expect(blobs.open).not.toHaveBeenCalled();
+  });
+
+  it('openRawThumbnail refuses a non-canonical twin (the host row wins)', async () => {
+    const hostTwin = { ...SAVE, id: 2, uploaderUserId: 2 };
+    const { f, blobs } = feed(false, { twins: [SAVE, hostTwin] });
+    expect(await f.openRawThumbnail(5, 1)).toBeNull();
+    expect(blobs.open).not.toHaveBeenCalled();
+  });
+
+  it('openRawThumbnail refuses while bg3 is inactive', async () => {
+    const { f, saves, blobs, registry } = feed(false, { active: false });
+    expect(await f.openRawThumbnail(5, 1)).toBeNull();
+    expect(registry.isActive).toHaveBeenCalledWith(BG3_PLUGIN_ID);
+    expect(saves.saveInCampaign).not.toHaveBeenCalled();
+    expect(blobs.open).not.toHaveBeenCalled();
   });
 });
 

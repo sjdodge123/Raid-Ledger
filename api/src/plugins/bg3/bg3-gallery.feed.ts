@@ -6,6 +6,8 @@
  */
 import { Injectable } from '@nestjs/common';
 import { CompanionBlobStore } from '../../companion/blobs/companion-blob.store';
+import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { BG3_PLUGIN_ID } from './bg3.constants';
 import { pickCanonical } from './history/bg3-canonical.helpers';
 import { Bg3ReadRepository } from './read/bg3-read.repository';
 import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
@@ -57,6 +59,7 @@ export class Bg3GalleryFeed {
     private readonly saves: Bg3SavesReadRepository,
     private readonly read: Bg3ReadRepository,
     private readonly blobs: CompanionBlobStore,
+    private readonly registry: PluginRegistryService,
   ) {}
 
   /** BG3 community hubs with a non-archived campaign. */
@@ -70,18 +73,32 @@ export class Bg3GalleryFeed {
     return toGalleryItems(await this.saves.feedRows(guildId, sinceSavedAt));
   }
 
-  /** Raw stored bytes (1959 re-encodes once); null when hidden or gone. */
-  async openRawThumbnail(saveId: number): Promise<Buffer | null> {
+  /**
+   * Raw stored bytes (1959 re-encodes once) of a canonical save in `guildId`.
+   * Null while bg3 is inactive, for a save of another hub, a non-canonical
+   * twin, a hub hiding spoilers (D-14), or no picture.
+   */
+  async openRawThumbnail(
+    guildId: number,
+    saveId: number,
+  ): Promise<Buffer | null> {
+    if (!this.registry.isActive(BG3_PLUGIN_ID)) return null;
     const save = await this.saves.saveInCampaign(saveId);
-    if (!save?.thumbnailSha256) return null;
-    const settings = await this.read.settings(save.guildId);
+    if (!save?.thumbnailSha256 || save.guildId !== guildId) return null;
+    const settings = await this.read.settings(guildId);
     if (settings.hideLocationAndScreenshots) return null;
+    const twins = await this.saves.twins(
+      save.campaignId,
+      save.campaignKey,
+      save.savedAt,
+    );
+    if (pickCanonical(twins, save.hostUserId)[0]?.id !== save.id) return null;
     return readBg3Blob(this.blobs, save.uploaderUserId, save.thumbnailSha256);
   }
 
   /** The D-12 re-encoded full rendition. */
-  async openThumbnail(saveId: number): Promise<Buffer | null> {
-    const raw = await this.openRawThumbnail(saveId);
+  async openThumbnail(guildId: number, saveId: number): Promise<Buffer | null> {
+    const raw = await this.openRawThumbnail(guildId, saveId);
     return raw ? encodeBg3Thumbnail(raw, 'full') : null;
   }
 }

@@ -492,16 +492,19 @@ describe('GET me/saves (§5.4)', () => {
 });
 
 describe('Bg3GalleryFeed (§5.7)', () => {
-  it('canonicalThumbnails keeps the host twin; openRawThumbnail returns stored bytes', async () => {
+  it('canonicalThumbnails keeps the host twin; openRawThumbnail returns only its stored bytes', async () => {
     const at = '2026-10-24T12:00:00.000Z';
-    await pictured(10, guest, at);
+    const guestTwin = await pictured(10, guest, at);
     const hostTwin = await pictured(200, host, at);
     const feed = testApp.app.get(Bg3GalleryFeed);
     const items = await feed.canonicalThumbnails(hub);
     expect(items.map((i) => [i.saveId, i.uploaderUserId, i.sha256])).toEqual([
       [hostTwin.id, host.id, hostTwin.sha],
     ]);
-    const raw = await feed.openRawThumbnail(hostTwin.id);
+    const raw = await feed.openRawThumbnail(hub, hostTwin.id);
+    // Not canonical (the host twin wins), or asked for under another hub.
+    expect(await feed.openRawThumbnail(hub, guestTwin.id)).toBeNull();
+    expect(await feed.openRawThumbnail(hub + 100_000, hostTwin.id)).toBeNull();
     expect(
       raw?.equals(
         readFileSync(join(root, String(host.id), `${hostTwin.sha}.webp`)),
@@ -510,7 +513,7 @@ describe('Bg3GalleryFeed (§5.7)', () => {
     await hideSpoilers();
     expect([
       await feed.canonicalThumbnails(hub),
-      await feed.openRawThumbnail(hostTwin.id),
+      await feed.openRawThumbnail(hub, hostTwin.id),
     ]).toEqual([[], null]);
   });
 });
