@@ -16,6 +16,8 @@ export interface Bg3PartyEmptyProps {
     readonly campaignName: string | null;
     /** Hub editor / staff — "Pick the active campaign." instead of "No active campaign." */
     readonly canEdit: boolean;
+    /** Joined the hub — non-member staff are view-only (Q9), so no start/add buttons. */
+    readonly isMember: boolean;
     readonly onStartCampaign: () => void;
     readonly onAddSaves: () => void;
 }
@@ -42,14 +44,14 @@ export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
     if (props.kind === 'no-campaign') {
         return (
             <EmptyFrame text="No campaign on this hub yet.">
-                <Button variant="primary" size="sm" onClick={props.onStartCampaign}>Start a campaign</Button>
+                {props.isMember && <Button variant="primary" size="sm" onClick={props.onStartCampaign}>Start a campaign</Button>}
             </EmptyFrame>
         );
     }
     if (props.kind === 'no-saves') {
         return (
             <EmptyFrame text={`No saves in ${props.campaignName ?? 'this campaign'} yet.`}>
-                <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>
+                {props.isMember && <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>}
             </EmptyFrame>
         );
     }

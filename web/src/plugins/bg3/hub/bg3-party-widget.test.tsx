@@ -214,6 +214,14 @@ describe('Bg3PartyWidget — empty and error states (V-4)', () => {
         expect(screen.getByRole('button', { name: 'Start a campaign' })).toBeInTheDocument();
     });
 
+    it('staff non-member sees the empty states without the start/add buttons (Q9)', async () => {
+        auth.user = { id: 50, username: 'op', displayName: 'Op', role: 'operator' };
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        renderWithProviders(<Bg3PartyWidget {...ctx('visitor')} />);
+        expect(await screen.findByText('No campaign on this hub yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Start a campaign' })).not.toBeInTheDocument();
+    });
+
     it('active campaign with no saves → "Add my saves"', async () => {
         serve(undefined, { empty: true, campaignId: BG3_CAMPAIGN_ID } as never);
         renderWithProviders(<Bg3PartyWidget {...ctx()} />);
