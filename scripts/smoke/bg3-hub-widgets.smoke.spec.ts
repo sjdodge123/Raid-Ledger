@@ -20,7 +20,8 @@ import { apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers'
 import { signInOnboardedMember } from './browser-session';
 import { hubSeedTag } from './hub-seed';
 
-const GAME_SLUG = 'baldurs-gate-3';
+/** Mirrors `BG3_GAME_SLUGS` (ROK-2038): the boot seed writes the first. */
+const GAME_SLUGS = ['baldurs-gate-iii', 'baldurs-gate-3'] as const;
 const CAMPAIGN_NAME = 'Smoke run';
 const WHERE_TEXT = 'Act 2 · Shadow-Cursed Lands';
 const SPOILERS_LINE = 'Location and screenshots are hidden on this hub.';
@@ -42,8 +43,6 @@ interface SnapshotSlot {
 }
 
 type Snapshot = { empty: true } | { empty: false; party: SnapshotSlot[]; spoilersHidden: boolean };
-
-let gameId: number | null = null;
 
 async function seedHub(testInfo: TestInfo, variant: Variant): Promise<Seed> {
     const token = await getAdminToken();
@@ -86,13 +85,14 @@ function partyList(page: Page) {
 
 test.describe('BG3 hub widgets (ROK-1958)', () => {
     test.beforeAll(async () => {
+        // Fail loudly, never skip: a silent skip hid the slug bug (ROK-2038).
         const token = await getAdminToken();
-        const game = (await apiGet(token, `/games/slug/${GAME_SLUG}`)) as { id?: number } | null;
-        gameId = game?.id ?? null;
-    });
-
-    test.beforeEach(() => {
-        test.skip(gameId === null, `"${GAME_SLUG}" is not in this env (boot seed did not run)`);
+        const ids: number[] = [];
+        for (const slug of GAME_SLUGS) {
+            const game = (await apiGet(token, `/games/slug/${slug}`)) as { id?: number } | null;
+            if (typeof game?.id === 'number') ids.push(game.id);
+        }
+        expect(ids.length, `no BG3 game (${GAME_SLUGS.join(' / ')}) in this env — the boot seed did not run`).toBeGreaterThan(0);
     });
 
     test('Party: empty → Start a campaign files the host\'s saves and the party renders', async ({ page }, testInfo) => {
