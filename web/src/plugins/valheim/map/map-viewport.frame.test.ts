@@ -92,7 +92,7 @@ describe('viewportReducer frame / fit (ROK-2028)', () => {
     });
 
     it('a frame that lands after the user panned keeps their view', () => {
-        const panned = viewportReducer(measured(), { type: 'pan', dx: 0, dy: 0 });
+        const panned = viewportReducer(measured(), { type: 'pan', dx: 40, dy: -25 });
         const next = viewportReducer(panned, { type: 'frame', frame: EXPLORED });
         expect(next.vp).toEqual(panned.vp);
         expect(next.frame).toEqual(EXPLORED);
@@ -136,5 +136,25 @@ describe('exploredBounds (ROK-2028)', () => {
             minY: 3,
             maxY: 13,
         });
+    });
+
+    /** A packed LSB-first `size²` bitset with the given (px, py) bits set. */
+    const sized = (size: number, set: [number, number][]) => {
+        const out = new Uint8Array(Math.ceil((size * size) / 8));
+        for (const [px, py] of set) {
+            const i = py * size + px;
+            out[i >> 3] = (out[i >> 3] ?? 0) | (1 << (i & 7));
+        }
+        return out;
+    };
+
+    it('finds a sparse box on a large world (row scan, zero bytes skipped)', () => {
+        const big = sized(2048, [[7, 100], [2000, 1900], [1024, 1024]]);
+        expect(exploredBounds(2048, big)).toEqual({ minX: 7, maxX: 2001, minY: 147, maxY: 1948 });
+    });
+
+    it('handles rows that do not start on a byte boundary', () => {
+        const odd = sized(13, [[12, 2], [0, 3], [6, 9]]);
+        expect(exploredBounds(13, odd)).toEqual({ minX: 0, maxX: 13, minY: 3, maxY: 11 });
     });
 });
