@@ -12,6 +12,7 @@ import {
   type ValheimPlanNode,
   type ValheimRecipePlanResponse,
 } from '@raid-ledger/contract';
+import { eq, sql } from 'drizzle-orm';
 import { signTestAccessToken } from '../../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import {
@@ -25,6 +26,10 @@ import { PluginRegistryService } from '../../../plugin-host/plugin-registry.serv
 import { PELICAN_PLUGIN_ID } from '../../../pelican/pelican.constants';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import type { RecipesFixtureResponse } from '../valheim-armory-recipes-demo-seed.controller';
+import {
+  RECIPES_DEMO_ALL_KNOWN,
+  RECIPES_DEMO_ALL_KNOWN_ITEMS,
+} from '../valheim-armory-recipes-demo-seed.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/valheim/recipes-fixture';
@@ -209,7 +214,7 @@ describe('catalogue sourceOptions (ROK-1860 AC5)', () => {
     );
   });
 
-  it("spoilers on ('early'): a hidden source never appears", async () => {
+  it("spoilers on ('early'): every Bronze source hidden → no options, no hidden ids", async () => {
     await seed({ spoilers: 'early' });
     const cat = await catalogue();
     expect(cat.spoilers).toBe('protected');
@@ -221,5 +226,44 @@ describe('catalogue sourceOptions (ROK-1860 AC5)', () => {
         found: false,
       });
     }
+  });
+});
+
+describe('catalogue sourceOptions, partly hidden (ROK-1860 D6)', () => {
+  const catalogue = async () =>
+    ValheimRecipeCatalogResponseSchema.parse(await get(''));
+
+  it('spoilers on, one Bronze source hidden: Bronze offers no options and the hidden recipe is never named', async () => {
+    await seed();
+    // R3: `Recipe_Bronze` is known by id; with `Bronze` itself unlisted, `Recipe_Bronze5` stays hidden.
+    const knownRecipes = [
+      ...RECIPES_DEMO_ALL_KNOWN.filter((p) => p !== 'Bronze'),
+      'Recipe_Bronze',
+    ];
+    const P = schema.valheimProfiles;
+    await testApp.db
+      .update(P)
+      .set({
+        knownRecipes,
+        knownItems: [...RECIPES_DEMO_ALL_KNOWN_ITEMS],
+        importedAt: sql`now()`,
+      })
+      .where(eq(P.pelicanServerId, f.serverId));
+    const cat = await catalogue();
+    expect(cat.spoilers).toBe('protected');
+    const bronze = cat.entries.find(
+      (e) => e.kind === 'item' && e.prefab === 'Bronze',
+    );
+    expect({
+      shown: bronze !== undefined,
+      options: bronze?.sourceOptions,
+    }).toEqual({
+      shown: true,
+      options: undefined,
+    });
+    expect(
+      cat.entries.filter((e) => e.sourceOptions).map((e) => e.prefab),
+    ).toEqual(['Coal']);
+    expect(JSON.stringify(cat).includes('Recipe_Bronze5')).toBe(false);
   });
 });
