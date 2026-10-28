@@ -10,7 +10,7 @@ import type {
   AddonImportNewResultDto,
   WowLedgerlinkMessage,
 } from '@raid-ledger/contract';
-import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
+import type { CompanionAfterCommitContext } from '../../../companion/ingest/companion-handler.registry';
 import type { AddonImportCreateService } from '../addon-import/addon-import-create.service';
 import { AddonImportError } from '../addon-import/addon-import.errors';
 import { RosterHeldError } from '../addon-import/addon-import-guild.guard';
@@ -34,7 +34,12 @@ const msg: WowLedgerlinkMessage = {
   payload: { exportString: EXPORT },
 };
 
-const ctx = { userId: 7, deviceId: 3 } as CompanionHandlerContext;
+const ctx: CompanionAfterCommitContext = {
+  userId: 7,
+  via: 'device',
+  deviceId: 3,
+  receivedAt: new Date('2026-09-22T00:00:01Z'),
+};
 
 function result(status: AddonImportNewResultDto['status']) {
   return {
@@ -66,6 +71,10 @@ describe('WowLedgerlinkHandler — registration shape', () => {
     expect(h.versions).toEqual([1]);
     expect(h.sources).toEqual(['device']);
     expect('latestWins' in h).toBe(false);
+  });
+
+  it('runs after the ingest tx commits (Codex P1: one pooled connection)', () => {
+    expect(handlerWith(jest.fn()).afterCommit).toBe(true);
   });
 });
 
@@ -137,6 +146,15 @@ describe('WowLedgerlinkHandler — reject mapping (§6.2)', () => {
     expect(JSON.stringify(got.body)).not.toContain(held.body.message);
   });
 
+  it('a non-import error passes through unchanged', async () => {
+    const boom = new Error('connection reset');
+    expect(companionErrorForImport(boom)).toBe(boom);
+    const importNew = jest.fn().mockRejectedValue(boom);
+    await expect(handlerWith(importNew).handle(ctx, msg)).rejects.toBe(boom);
+  });
+});
+
+describe('WowLedgerlinkHandler — blank export (Codex P2)', () => {
   it.each([' ', '  \n\t  '])(
     'a blank/whitespace-only export %j → 400 invalid_payload INVALID_PAYLOAD, never imported',
     async (exportString) => {
@@ -148,17 +166,12 @@ describe('WowLedgerlinkHandler — reject mapping (§6.2)', () => {
         body: {
           code: 'invalid_payload',
           message: WOW_LEDGERLINK_REJECT_MESSAGES.invalid_payload,
-          issues: [{ path: WOW_LEDGERLINK_EXPORT_PATH, code: 'INVALID_PAYLOAD' }],
+          issues: [
+            { path: WOW_LEDGERLINK_EXPORT_PATH, code: 'INVALID_PAYLOAD' },
+          ],
         },
       });
       expect(importNew).not.toHaveBeenCalled();
     },
   );
-
-  it('a non-import error passes through unchanged', async () => {
-    const boom = new Error('connection reset');
-    expect(companionErrorForImport(boom)).toBe(boom);
-    const importNew = jest.fn().mockRejectedValue(boom);
-    await expect(handlerWith(importNew).handle(ctx, msg)).rejects.toBe(boom);
-  });
 });

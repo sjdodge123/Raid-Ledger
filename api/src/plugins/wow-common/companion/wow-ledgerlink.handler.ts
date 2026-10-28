@@ -5,11 +5,12 @@
  * `POST /plugins/wow/characters/addon-import` (`importNew`), as the device
  * token's user, applied with no preview (D2: `dryRun: false`, no `confirm`).
  *
- * D1 (Lead, accepted): the import runs on its OWN db connection, not
- * `ctx.tx` — it owns its transaction, advisory locks, post-tx audit row and
- * gear enqueue. No `latestWins`: the import's per-section noop (same sha) /
- * stale (older export) logic is authoritative, so the ingest tx holds only
- * the device row. Every import outcome (applied / noop / stale) acks
+ * D1 (Lead, accepted): the import owns its transaction, advisory locks,
+ * post-tx audit row and gear enqueue, so the handler runs in AFTER-COMMIT
+ * mode (Codex P1): the ingest tx revalidates the device and commits first,
+ * then the import runs — one pooled connection at a time, and a device revoke
+ * never waits on an import. No `latestWins`: the import's per-section noop
+ * (same sha) / stale (older export) logic is authoritative. Every import outcome (applied / noop / stale) acks
  * `accepted`; a reject throws a companion error and the ingest rolls back.
  */
 import { Injectable, Logger } from '@nestjs/common';
@@ -18,8 +19,8 @@ import type {
   WowLedgerlinkMessage,
 } from '@raid-ledger/contract';
 import type {
-  CompanionContractHandler,
-  CompanionHandlerContext,
+  CompanionAfterCommitContext,
+  CompanionAfterCommitHandler,
 } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
 import { AddonImportCreateService } from '../addon-import/addon-import-create.service';
@@ -37,18 +38,20 @@ export function describeImportOutcome(res: AddonImportNewResultDto): string {
 }
 
 @Injectable()
-export class WowLedgerlinkHandler implements CompanionContractHandler<WowLedgerlinkMessage> {
+export class WowLedgerlinkHandler implements CompanionAfterCommitHandler<WowLedgerlinkMessage> {
   /** A literal: the ownership guard's scan reads it (`WOW_LEDGERLINK_CONTRACT_ID`). */
   readonly contract = 'wow-ledgerlink';
   readonly versions: readonly number[] = [1];
   /** Device tokens only — the browser already has the paste dialog. */
   readonly sources: readonly CompanionIngestVia[] = ['device'];
+  /** Runs after the ingest tx commits — the import opens its own tx. */
+  readonly afterCommit = true;
   private readonly logger = new Logger(WowLedgerlinkHandler.name);
 
   constructor(private readonly imports: AddonImportCreateService) {}
 
   async handle(
-    ctx: CompanionHandlerContext,
+    ctx: CompanionAfterCommitContext,
     msg: WowLedgerlinkMessage,
   ): Promise<void> {
     const who = `user=${ctx.userId} device=${ctx.deviceId ?? '-'}`;
