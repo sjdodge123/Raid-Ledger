@@ -53,15 +53,15 @@ describe('checkBenchPick (ROK-2025)', () => {
   });
 
   it('refuses a duplicate id with the duplicate copy', () => {
-    expect(badRequestMessage(() => checkBenchPick([11, 11], CANDIDATES, 2))).toBe(
-      'Each person can only be picked for the bench once.',
-    );
+    expect(
+      badRequestMessage(() => checkBenchPick([11, 11], CANDIDATES, 2)),
+    ).toBe('Each person can only be picked for the bench once.');
   });
 
   it('refuses a non-candidate (creator / non-voter / other slot)', () => {
-    expect(badRequestMessage(() => checkBenchPick([11, 99], CANDIDATES, 2))).toBe(
-      'Only people who voted yes for this time can go to the bench.',
-    );
+    expect(
+      badRequestMessage(() => checkBenchPick([11, 99], CANDIDATES, 2)),
+    ).toBe('Only people who voted yes for this time can go to the bench.');
   });
 
   it('refuses one too few with the exact-count copy', () => {
