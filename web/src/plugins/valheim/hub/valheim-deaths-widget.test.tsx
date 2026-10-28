@@ -48,15 +48,39 @@ describe('ValheimDeathsWidget', () => {
         expect(values).toEqual(['100', '50', '25']);
     });
 
-    it('links a bar with a character to its death pins on the Map tab; a bar without one is plain text', async () => {
+    it('ROK-2029: the name opens the character page; the count + pin opens their death pins on the Map tab', async () => {
         server.use(valheimDeathsHandler());
         renderWithProviders(<Widget />);
-        const link = await screen.findByRole('link', { name: 'Ragnhild, 12 deaths — show on map' });
-        expect(link.getAttribute('href')).toBe('/?pins=death&vc=11#map');
-        const unlinked = rows()[2];
-        expect(unlinked).toBeDefined();
-        expect(within(unlinked as HTMLElement).queryByRole('link')).toBeNull();
-        expect(within(unlinked as HTMLElement).getByText('Left-the-hub')).toBeTruthy();
+        const name = await screen.findByRole('link', { name: "Open Ragnhild's character page" });
+        expect(name.getAttribute('href')).toBe('/valheim/characters/11');
+        expect(name.textContent).toBe('Ragnhild');
+        const map = screen.getByRole('link', { name: "Show Ragnhild's 12 deaths on the map" });
+        expect(map.getAttribute('href')).toBe('/?pins=death&vc=11#map');
+        expect(map.textContent).toBe('12');
+        // Two separate links per claimed row, neither inside the other.
+        const row = rows()[0] as HTMLElement;
+        expect(within(row).getAllByRole('link')).toHaveLength(2);
+        expect(name.contains(map) || map.contains(name)).toBe(false);
+    });
+
+    it('ROK-2029: both links are 44px touch targets', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        const name = await screen.findByRole('link', { name: "Open Hrafn's character page" });
+        const map = screen.getByRole('link', { name: "Show Hrafn's 6 deaths on the map" });
+        expect(name.className).toContain('min-h-[44px]');
+        expect(map.className).toContain('min-h-[44px]');
+        expect(map.className).toContain('min-w-[44px]');
+    });
+
+    it('ROK-2029: a row without a character has no links — plain name and count', async () => {
+        server.use(valheimDeathsHandler());
+        renderWithProviders(<Widget />);
+        await waitFor(() => expect(rows()).toHaveLength(3));
+        const unlinked = rows()[2] as HTMLElement;
+        expect(within(unlinked).queryByRole('link')).toBeNull();
+        expect(within(unlinked).getByText('Left-the-hub')).toBeTruthy();
+        expect(within(unlinked).getByText('3')).toBeTruthy();
     });
 
     it('shows at most 8 bars', async () => {
