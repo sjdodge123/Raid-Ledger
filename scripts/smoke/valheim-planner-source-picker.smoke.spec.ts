@@ -122,7 +122,7 @@ test.describe("Valheim hub — Planner source picker (ROK-1860)", () => {
       await expect(
         dialog.getByRole("radio", { name: /Use the default/ }),
       ).toBeChecked();
-      await expect(dialog.getByText("Best guess")).toBeVisible();
+      await expect(dialog.getByText("Best guess", { exact: true })).toBeVisible();
       await p.keyboard.press("Escape");
       await expect(p.getByRole("dialog", { name: PICKER })).toHaveCount(0);
 
