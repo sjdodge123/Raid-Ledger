@@ -7,6 +7,11 @@ import type {
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
 import { titleCaseClass } from './addon-import.binding-name';
+import {
+  insertDings,
+  levelUps,
+  loadPriorLevels,
+} from './addon-import-guild.dings';
 import { AddonImportError } from './addon-import.errors';
 import {
   assertMayReplaceRoster,
@@ -271,6 +276,21 @@ async function upsertMembers(
   return result.filter((r) => r.inserted).length;
 }
 
+/** ROK-1919: upsert members, logging any level rise against prior rows. */
+async function upsertMembersLoggingDings(
+  ctx: AddonApplyContext,
+  guildId: number,
+  payload: AddonGuildExport,
+  seenAt: Date,
+): Promise<number> {
+  const members = dedupeMembers(payload.data.members);
+  const guids = members.map((m) => m.guid);
+  const prior = await loadPriorLevels(ctx, guildId, guids);
+  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
+  await insertDings(ctx, guildId, levelUps(prior, members), seenAt);
+  return inserted;
+}
+
 /**
  * Apply: NOT_IN_GUILD / guard → reject; stale → nothing written; else upsert
  * all, stamped with ONE received instant (guild + members must match for
@@ -291,7 +311,12 @@ export async function applyGuild(
     const stale = await previewGuild(ctx, payload, pages);
     return { status: 'stale', summary: stale.summary };
   }
-  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
+  const inserted = await upsertMembersLoggingDings(
+    ctx,
+    guildId,
+    payload,
+    seenAt,
+  );
   const members = payload.data.members.length;
   await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {

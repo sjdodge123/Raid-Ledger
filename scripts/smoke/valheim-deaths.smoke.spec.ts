@@ -10,7 +10,8 @@
  * a hub member and a signed-in non-member visitor. The slot is the worker's
  * `parallelIndex`, so projects never share a server.
  *
- * Deep links (D13): a bar opens `?pins=death&vc=<characterId>#map`; the card's
+ * Deep links (D13): a row's count + pin opens `?pins=death&vc=<characterId>#map`
+ * (ROK-2029: its name opens `/valheim/characters/<id>`); the card's
  * "Show all" opens `?pins=death&players=all#map` (every player's Death pins on
  * the world, each named "<label> · <character>" — ROK-1943 D14). ROK-1943
  * retired the Layers "Death pins only" switch: the Map pin filter (Filters
@@ -49,7 +50,7 @@ async function openOverview(page: Page, f: Fixture): Promise<void> {
 }
 
 test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
-  test("member: bars sorted desc, a bar opens that character's Death pins, the switch clears them", async ({
+  test("member: bars sorted desc, the name opens the character page, the count opens their Death pins, the switch clears them", async ({
     page,
   }, testInfo) => {
     const f = await seed(testInfo.parallelIndex);
@@ -71,9 +72,23 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     // The name-only player has no character → plain text, not a link.
     await expect(rows.nth(2).getByRole("link")).toHaveCount(0);
 
-    await page
+    // ROK-2029: the name opens the character page …
+    await rows
+      .nth(0)
+      .getByRole("link", { name: `Open ${top.name}'s character page` })
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/valheim/characters/${top.id}$`));
+    await expect(
+      page.getByRole("heading", { level: 1, name: top.name }),
+    ).toBeVisible({ timeout: 15_000 });
+    await page.goBack();
+    await expect(deathsList(page)).toBeVisible({ timeout: 15_000 });
+
+    // … and the separate count + pin link opens their Death pins on the Map tab.
+    await rows
+      .nth(0)
       .getByRole("link", {
-        name: `${top.name}, ${deathWord(top.deaths)} — show on map`,
+        name: `Show ${top.name}'s ${deathWord(top.deaths)} on the map`,
       })
       .click();
     await expect(page).toHaveURL(/[?&]pins=death(&|#|$)/);

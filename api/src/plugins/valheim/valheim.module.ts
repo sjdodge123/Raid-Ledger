@@ -50,6 +50,8 @@ import { ValheimServerPortalsController } from './armory/read/valheim-server-por
 import { ValheimServerPortalsService } from './armory/read/valheim-server-portals.service';
 import { ValheimDeathPinsRepository } from './armory/read/valheim-deaths-pins.repository';
 import { ValheimDeathsPicturesRepository } from './armory/read/valheim-deaths-pictures.repository';
+import { ValheimDeathsGallerySubject } from './armory/read/valheim-deaths-gallery-subject';
+import { HubMediaModule } from '../../hub-media/hub-media.module';
 import { ValheimServerPinsController } from './armory/read/valheim-server-pins.controller';
 import { ValheimServerPinsService } from './armory/read/valheim-server-pins.service';
 import { ValheimServerPinsRepository } from './armory/read/valheim-server-pins.repository';
@@ -83,6 +85,8 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
     ValheimDeathsModule,
     // ROK-1941: the screenshot mod's classifier on the hub media port.
     ValheimScreenshotsModule,
+    // ROK-2027: the Gallery's `valheim-death:<bar key>` subject registry.
+    HubMediaModule,
     // ROK-1930 L2: GuildAccessService for the Deaths widget's D6 check.
     GuildsCoreModule,
     forwardRef(() => DiscordBotModule),
@@ -140,6 +144,8 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
     ValheimDeathPinsRepository,
     // ROK-1941 D13 death pictures on the Deaths bars.
     ValheimDeathsPicturesRepository,
+    // ROK-2027 "+N" → the Gallery scoped to one Deaths bar.
+    ValheimDeathsGallerySubject,
     // ROK-1943 Map tab cross-player pin layer.
     ValheimServerPinsService,
     ValheimServerPinsRepository,

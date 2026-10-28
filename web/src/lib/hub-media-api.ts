@@ -12,14 +12,17 @@ export interface HubMediaFetchQuery {
     filter: HubMediaFilter;
     limit: number;
     cursor?: string;
+    /** ROK-2027 — a plugin-resolved scope (`HUB_MEDIA_SUBJECT_RE`, e.g. `valheim-death:c42`). */
+    subject?: string;
 }
 
-/** The list route path: `kind` only when a chip narrows it (`screenshot` also matches `image`, L2). */
-export function hubMediaListPath(guildId: number, { filter, limit, cursor }: HubMediaFetchQuery): string {
+/** The list route path: `kind` only when a chip narrows it (`screenshot` also matches `image`, L2), `subject` only when set. */
+export function hubMediaListPath(guildId: number, { filter, limit, cursor, subject }: HubMediaFetchQuery): string {
     const params = new URLSearchParams({ limit: String(limit) });
     const kind = kindForFilter(filter);
     if (kind !== undefined) params.set('kind', kind);
     if (cursor !== undefined) params.set('cursor', cursor);
+    if (subject !== undefined) params.set('subject', subject);
     return `/hubs/${encodePathSegment(String(guildId))}/media?${params.toString()}`;
 }
 

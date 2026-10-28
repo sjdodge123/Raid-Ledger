@@ -9,8 +9,13 @@
  * pictures (authorName = the character's name) to the `top` character's
  * deaths and answers `{ mediaIds }` newest first. The Deaths read is polled until the bar carries them before the
  * browser opens. Waits are response- or expect-driven only.
+ *
+ * ROK-2027: the same seed with `{ secondCount, screenshot }` also gives the
+ * `second` character its own death pictures and adds one non-death picture
+ * (so the Gallery draws its kind chips); "+N" on a bar opens the Gallery
+ * scoped to that player, and Remove on the chip returns to every death.
  */
-import type { Page, TestInfo } from "@playwright/test";
+import type { Page, Response, TestInfo } from "@playwright/test";
 import { test, expect } from "./base";
 import {
   apiGet,
@@ -26,6 +31,14 @@ import {
 } from "./valheim-pin-filter-helpers";
 
 const PICTURES = 5;
+/** ROK-2027: the `second` character's pictures (3 thumbs + "+1"). */
+const SECOND_PICTURES = 4;
+
+interface SeedBody {
+  mediaIds?: number[];
+  secondCharacterName?: string;
+  secondMediaIds?: number[];
+}
 
 interface DeathsBody {
   players: {
@@ -37,19 +50,22 @@ interface DeathsBody {
 
 async function seed(
   testInfo: TestInfo,
-): Promise<{ f: Fixture; newest: number }> {
+  extra: { secondCount?: number; screenshot?: boolean } = {},
+): Promise<{ f: Fixture; newest: number; res: SeedBody }> {
   const f = await seedDeathsFixture(testInfo.parallelIndex);
   const token = await getAdminToken();
   const res = (await apiPost(token, "/admin/test/valheim/death-pictures", {
     worker: testInfo.parallelIndex,
     count: PICTURES,
-  })) as { mediaIds?: number[] };
+    ...extra,
+  })) as SeedBody;
   const newest = res.mediaIds?.[0];
   if (newest === undefined) {
     throw new Error(
       `death-pictures seed returned no mediaIds: ${JSON.stringify(res)}`,
     );
   }
+  const secondNewest = res.secondMediaIds?.[0];
   await pollForCondition(
     async () => {
       const body = (await apiGet(
@@ -57,11 +73,29 @@ async function seed(
         `/plugins/valheim/armory/servers/${f.serverId}/deaths`,
       )) as DeathsBody | null;
       const bar = body?.players.find((p) => p.name === f.characters.top.name);
-      return bar?.pictures?.[0]?.mediaId === newest ? bar : null;
+      const other = body?.players.find(
+        (p) => p.name === f.characters.second.name,
+      );
+      const secondReady =
+        secondNewest === undefined ||
+        other?.pictures?.[0]?.mediaId === secondNewest;
+      return bar?.pictures?.[0]?.mediaId === newest && secondReady ? bar : null;
     },
-    { description: "death pictures on the top bar", timeoutMs: 15_000 },
+    { description: "death pictures on the seeded bars", timeoutMs: 15_000 },
   );
-  return { f, newest };
+  return { f, newest, res };
+}
+
+/** The Gallery list read scoped to a subject (`?subject=` set). */
+function scopedMediaRead(page: Page, guildId: number): Promise<Response> {
+  return page.waitForResponse(
+    (r) => {
+      const url = new URL(r.url());
+      if (!url.pathname.endsWith(`/hubs/${guildId}/media`)) return false;
+      return url.searchParams.has("subject");
+    },
+    { timeout: 15_000 },
+  );
 }
 
 const strip = (page: Page, name: string) =>
@@ -90,11 +124,16 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
       name: `${PICTURES - 3} more death pictures. Open the gallery`,
     });
     await expect(more).toHaveText(`+${PICTURES - 3}`);
-    // The row text stays the map link and never contains a thumb (Q1 = A).
-    const link = page.getByRole("link", {
-      name: new RegExp(`^${top.name}, \\d+ deaths — show on map$`),
-    });
-    await expect(link.getByRole("button")).toHaveCount(0);
+    // Neither row link (ROK-2029: name + map) ever contains a thumb (Q1 = A).
+    for (const link of [
+      page.getByRole("link", { name: `Open ${top.name}'s character page` }),
+      page.getByRole("link", {
+        name: new RegExp(`^Show ${top.name}'s \\d+ deaths on the map$`),
+      }),
+    ]) {
+      await expect(link).toHaveCount(1);
+      await expect(link.getByRole("button")).toHaveCount(0);
+    }
 
     const media = responseTo(page, `/hubs/${f.guildId}/media`);
     await group.getByTestId("valheim-death-thumb").first().click();
@@ -127,6 +166,83 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
         '[data-testid="hub-gallery-tile"]:not([data-kind="death"])',
       ),
     ).toHaveCount(0);
+  });
+
+  test('ROK-2027: "+N" scopes the Gallery to that player; Remove returns to every death', async ({
+    page,
+  }, testInfo) => {
+    const { f, res } = await seed(testInfo, {
+      secondCount: SECOND_PICTURES,
+      screenshot: true,
+    });
+    const { top, second } = f.characters;
+    // The fixture's second character must be the bar we drive.
+    expect(res.secondCharacterName).toBe(second.name);
+    expect(res.secondMediaIds).toHaveLength(SECOND_PICTURES);
+    await signInContextAs(page.context(), f.users.member.id);
+    await openOverview(page, f);
+
+    const group = strip(page, second.name);
+    await expect(group.getByTestId("valheim-death-thumb")).toHaveCount(3, {
+      timeout: 15_000,
+    });
+    const more = group.getByTestId("valheim-death-thumbs-more");
+    await expect(more).toHaveText(`+${SECOND_PICTURES - 3}`);
+
+    const scoped = scopedMediaRead(page, f.guildId);
+    await more.click();
+    const scopedRes = await scoped;
+    expect(scopedRes.status()).toBe(200);
+    expect(new URL(scopedRes.url()).searchParams.get("subject")).toMatch(
+      /^valheim-death:/,
+    );
+    const dialog = page.getByRole("dialog", { name: "Gallery" });
+    const chip = dialog.getByTestId("hub-gallery-subject-chip");
+    await expect(chip).toContainText(`${second.name}'s deaths`);
+    // A subject replaces the kind chips.
+    await expect(dialog.getByTestId("hub-gallery-chip-death")).toHaveCount(0);
+    await expect(
+      dialog.getByText(`${SECOND_PICTURES} pictures`, { exact: true }),
+    ).toBeVisible();
+    const tiles = dialog.getByTestId("hub-gallery-tile");
+    await expect(tiles).toHaveCount(SECOND_PICTURES);
+    // Every tile is the second player's death; none is the top player's.
+    for (const label of await tiles.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("aria-label") ?? ""),
+    )) {
+      expect(label).toMatch(new RegExp(`^Death — ${second.name},`));
+    }
+    await expect(
+      dialog.locator(
+        '[data-testid="hub-gallery-tile"]:not([data-kind="death"])',
+      ),
+    ).toHaveCount(0);
+
+    // The unscoped Deaths list may already be cached, so no response wait here.
+    await dialog
+      .getByRole("button", { name: `Remove ${second.name}'s deaths` })
+      .click();
+    await expect(chip).toHaveCount(0);
+    await expect(dialog.getByTestId("hub-gallery-chip-death")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const total = PICTURES + SECOND_PICTURES;
+    await expect(
+      dialog.getByText(`${total} pictures`, { exact: true }),
+    ).toBeVisible();
+    await expect(tiles).toHaveCount(total);
+    // Back to the Deaths filter: both players' deaths, never the screenshot.
+    await expect(
+      dialog.locator(
+        '[data-testid="hub-gallery-tile"]:not([data-kind="death"])',
+      ),
+    ).toHaveCount(0);
+    for (const name of [top.name, second.name]) {
+      await expect(
+        dialog.getByRole("button", { name: new RegExp(`^Death — ${name},`) }),
+      ).not.toHaveCount(0);
+    }
   });
 
   test("visitor: no Deaths card, so no strip", async ({ page }, testInfo) => {

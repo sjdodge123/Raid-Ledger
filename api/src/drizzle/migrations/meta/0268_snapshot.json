@@ -1,5 +1,5 @@
 {
-  "id": "30135bf7-1bb0-4a4c-a53d-d61ddd6f1d8e",
+  "id": "bff72158-0424-4645-830b-1e1be74b51e0",
   "prevId": "39f0937d-5414-40f3-9c64-3af51b367780",
   "version": "7",
   "dialect": "postgresql",
@@ -11740,6 +11740,132 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.guild_member_level_events": {
+      "name": "guild_member_level_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "guild_member_id": {
+          "name": "guild_member_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_level": {
+          "name": "from_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_level": {
+          "name": "to_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_guild_member_level_events_member_to_level": {
+          "name": "idx_guild_member_level_events_member_to_level",
+          "columns": [
+            {
+              "expression": "guild_member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "to_level",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guild_member_level_events_guild_occurred": {
+          "name": "idx_guild_member_level_events_guild_occurred",
+          "columns": [
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "guild_member_level_events_guild_id_guilds_id_fk": {
+          "name": "guild_member_level_events_guild_id_guilds_id_fk",
+          "tableFrom": "guild_member_level_events",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "guild_member_level_events_guild_member_id_guild_members_id_fk": {
+          "name": "guild_member_level_events_guild_member_id_guild_members_id_fk",
+          "tableFrom": "guild_member_level_events",
+          "tableTo": "guild_members",
+          "columnsFrom": [
+            "guild_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.guild_editors": {
       "name": "guild_editors",
       "schema": "",
@@ -18604,859 +18730,6 @@
         "valheim_player_deaths_log_ts_check": {
           "name": "valheim_player_deaths_log_ts_check",
           "value": "\"valheim_player_deaths\".\"source\" <> 'log' OR \"valheim_player_deaths\".\"logged_at\" IS NOT NULL"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.bg3_campaign_keys": {
-      "name": "bg3_campaign_keys",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "campaign_key": {
-          "name": "campaign_key",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bg3_campaign_keys_campaign_id_idx": {
-          "name": "bg3_campaign_keys_campaign_id_idx",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_campaign_keys_user_id_users_id_fk": {
-          "name": "bg3_campaign_keys_user_id_users_id_fk",
-          "tableFrom": "bg3_campaign_keys",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_campaign_keys_campaign_id_bg3_campaigns_id_fk": {
-          "name": "bg3_campaign_keys_campaign_id_bg3_campaigns_id_fk",
-          "tableFrom": "bg3_campaign_keys",
-          "tableTo": "bg3_campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "bg3_campaign_keys_user_id_campaign_key_pk": {
-          "name": "bg3_campaign_keys_user_id_campaign_key_pk",
-          "columns": [
-            "user_id",
-            "campaign_key"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "bg3_campaign_keys_key_chk": {
-          "name": "bg3_campaign_keys_key_chk",
-          "value": "\"bg3_campaign_keys\".\"campaign_key\" ~ '^[0-9a-f]{64}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.bg3_campaigns": {
-      "name": "bg3_campaigns",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "host_user_id": {
-          "name": "host_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bg3_campaigns_guild_id_idx": {
-          "name": "bg3_campaigns_guild_id_idx",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_campaigns_host_user_id_idx": {
-          "name": "bg3_campaigns_host_user_id_idx",
-          "columns": [
-            {
-              "expression": "host_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_campaigns_created_by_user_id_idx": {
-          "name": "bg3_campaigns_created_by_user_id_idx",
-          "columns": [
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_campaigns_guild_id_guilds_id_fk": {
-          "name": "bg3_campaigns_guild_id_guilds_id_fk",
-          "tableFrom": "bg3_campaigns",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_campaigns_host_user_id_users_id_fk": {
-          "name": "bg3_campaigns_host_user_id_users_id_fk",
-          "tableFrom": "bg3_campaigns",
-          "tableTo": "users",
-          "columnsFrom": [
-            "host_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "bg3_campaigns_created_by_user_id_users_id_fk": {
-          "name": "bg3_campaigns_created_by_user_id_users_id_fk",
-          "tableFrom": "bg3_campaigns",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bg3_hub_settings": {
-      "name": "bg3_hub_settings",
-      "schema": "",
-      "columns": {
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "hide_location_and_screenshots": {
-          "name": "hide_location_and_screenshots",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "active_campaign_id": {
-          "name": "active_campaign_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_by_user_id": {
-          "name": "updated_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bg3_hub_settings_active_campaign_id_idx": {
-          "name": "bg3_hub_settings_active_campaign_id_idx",
-          "columns": [
-            {
-              "expression": "active_campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_hub_settings_updated_by_user_id_idx": {
-          "name": "bg3_hub_settings_updated_by_user_id_idx",
-          "columns": [
-            {
-              "expression": "updated_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_hub_settings_guild_id_guilds_id_fk": {
-          "name": "bg3_hub_settings_guild_id_guilds_id_fk",
-          "tableFrom": "bg3_hub_settings",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_hub_settings_active_campaign_id_bg3_campaigns_id_fk": {
-          "name": "bg3_hub_settings_active_campaign_id_bg3_campaigns_id_fk",
-          "tableFrom": "bg3_hub_settings",
-          "tableTo": "bg3_campaigns",
-          "columnsFrom": [
-            "active_campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "bg3_hub_settings_updated_by_user_id_users_id_fk": {
-          "name": "bg3_hub_settings_updated_by_user_id_users_id_fk",
-          "tableFrom": "bg3_hub_settings",
-          "tableTo": "users",
-          "columnsFrom": [
-            "updated_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bg3_party_claims": {
-      "name": "bg3_party_claims",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slot_key": {
-          "name": "slot_key",
-          "type": "varchar(160)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bg3_party_claims_campaign_slot_uq": {
-          "name": "bg3_party_claims_campaign_slot_uq",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "slot_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_party_claims_campaign_user_uq": {
-          "name": "bg3_party_claims_campaign_user_uq",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_party_claims_user_id_idx": {
-          "name": "bg3_party_claims_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_party_claims_campaign_id_bg3_campaigns_id_fk": {
-          "name": "bg3_party_claims_campaign_id_bg3_campaigns_id_fk",
-          "tableFrom": "bg3_party_claims",
-          "tableTo": "bg3_campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_party_claims_user_id_users_id_fk": {
-          "name": "bg3_party_claims_user_id_users_id_fk",
-          "tableFrom": "bg3_party_claims",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bg3_user_defaults": {
-      "name": "bg3_user_defaults",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bg3_user_defaults_campaign_id_idx": {
-          "name": "bg3_user_defaults_campaign_id_idx",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_user_defaults_user_id_users_id_fk": {
-          "name": "bg3_user_defaults_user_id_users_id_fk",
-          "tableFrom": "bg3_user_defaults",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_user_defaults_campaign_id_bg3_campaigns_id_fk": {
-          "name": "bg3_user_defaults_campaign_id_bg3_campaigns_id_fk",
-          "tableFrom": "bg3_user_defaults",
-          "tableTo": "bg3_campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bg3_saves": {
-      "name": "bg3_saves",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "uploader_user_id": {
-          "name": "uploader_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "campaign_id": {
-          "name": "campaign_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "campaign_key": {
-          "name": "campaign_key",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "campaign_key_source": {
-          "name": "campaign_key_source",
-          "type": "varchar(12)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "save_name": {
-          "name": "save_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "saved_at": {
-          "name": "saved_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "captured_at": {
-          "name": "captured_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "game_version": {
-          "name": "game_version",
-          "type": "varchar(40)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "platform": {
-          "name": "platform",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "current_level": {
-          "name": "current_level",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "difficulty": {
-          "name": "difficulty",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ruleset": {
-          "name": "ruleset",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "party": {
-          "name": "party",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "party_max_level": {
-          "name": "party_max_level",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thumbnail_sha256": {
-          "name": "thumbnail_sha256",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thumbnail_width": {
-          "name": "thumbnail_width",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thumbnail_height": {
-          "name": "thumbnail_height",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "session_first_saved_at": {
-          "name": "session_first_saved_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "session_save_count": {
-          "name": "session_save_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "bg3_saves_uploader_key_saved_at_uq": {
-          "name": "bg3_saves_uploader_key_saved_at_uq",
-          "columns": [
-            {
-              "expression": "uploader_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "campaign_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "saved_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_saves_campaign_saved_at_idx": {
-          "name": "bg3_saves_campaign_saved_at_idx",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "saved_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_saves_device_id_idx": {
-          "name": "bg3_saves_device_id_idx",
-          "columns": [
-            {
-              "expression": "device_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bg3_saves_uploader_thumbnail_idx": {
-          "name": "bg3_saves_uploader_thumbnail_idx",
-          "columns": [
-            {
-              "expression": "uploader_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "thumbnail_sha256",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bg3_saves_uploader_user_id_users_id_fk": {
-          "name": "bg3_saves_uploader_user_id_users_id_fk",
-          "tableFrom": "bg3_saves",
-          "tableTo": "users",
-          "columnsFrom": [
-            "uploader_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bg3_saves_device_id_companion_devices_id_fk": {
-          "name": "bg3_saves_device_id_companion_devices_id_fk",
-          "tableFrom": "bg3_saves",
-          "tableTo": "companion_devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "bg3_saves_campaign_id_bg3_campaigns_id_fk": {
-          "name": "bg3_saves_campaign_id_bg3_campaigns_id_fk",
-          "tableFrom": "bg3_saves",
-          "tableTo": "bg3_campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "bg3_saves_key_chk": {
-          "name": "bg3_saves_key_chk",
-          "value": "\"bg3_saves\".\"campaign_key\" ~ '^[0-9a-f]{64}$'"
-        },
-        "bg3_saves_key_source_chk": {
-          "name": "bg3_saves_key_source_chk",
-          "value": "\"bg3_saves\".\"campaign_key_source\" IN ('save-folder', 'game-id')"
-        },
-        "bg3_saves_thumbnail_sha_chk": {
-          "name": "bg3_saves_thumbnail_sha_chk",
-          "value": "\"bg3_saves\".\"thumbnail_sha256\" IS NULL OR \"bg3_saves\".\"thumbnail_sha256\" ~ '^[0-9a-f]{64}$'"
         }
       },
       "isRLSEnabled": false

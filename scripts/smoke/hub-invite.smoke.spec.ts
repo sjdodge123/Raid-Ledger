@@ -21,11 +21,13 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import type { TestWorld } from './test-world';
 import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
     gameId: number;
     hubIds: { crew: number; solo: number; archived: number };
+    hubNames: HubSeedNames;
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
@@ -38,7 +40,10 @@ interface PromptRow { id: number; kind: string; hubId: number; source: string; s
 const PROJECT_SLOT: Record<string, number> = { desktop: 0, mobile: 1, tablet: 2 };
 /** Past community-hubs (0–2) and hubs-nav (3–5) so no other spec reseeds this game. */
 const GAME_INDEX_BASE = 6;
-const HUB = 'Seed Crew';
+/** The invite dialog of the hub named `hubName` (the seed's `hubNames.crew`). */
+function inviteDialog(page: Page, hubName: string): Locator {
+    return page.getByRole('dialog', { name: `Invite people to ${hubName}`, exact: true });
+}
 
 /** Fail loudly on a missing element (strict flags: no `!`). */
 function must<T>(value: T | undefined | null, label: string): T {
@@ -64,7 +69,7 @@ async function projectGameId(token: string, testInfo: TestInfo): Promise<number>
 async function seedHubs(testInfo: TestInfo): Promise<Seed> {
     const token = await getAdminToken();
     const gameId = await projectGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as Partial<Seed> | null;
+    const body = (await seedCommunityHubs(token, testInfo, 'hub-invite', { gameId })) as Partial<Seed> | null;
     if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds)) {
         throw new Error(`[hub-invite] seed: ${JSON.stringify(body)}`);
     }
@@ -108,17 +113,17 @@ async function eventPrompts(jwt: string, eventId: number): Promise<PromptRow[]> 
 }
 
 /** Open the Members tab's "Invite people" dialog (Modal ≥1024px, BottomSheet below — both named dialogs). */
-async function openInviteDialog(page: Page, hubId: number): Promise<Locator> {
+async function openInviteDialog(page: Page, hubId: number, hubName: string): Promise<Locator> {
     await page.goto(`/hubs/${hubId}#members`);
     await page.getByTestId('hub-invite-open').click({ timeout: 20_000 });
-    const dialog = page.getByRole('dialog', { name: `Invite people to ${HUB}` });
+    const dialog = inviteDialog(page, hubName);
     await expect(dialog).toBeVisible();
     return dialog;
 }
 
 /** Create a link in the dialog; returns the API row once it is there. */
-async function createLink(page: Page, jwt: string, hubId: number): Promise<{ invite: InviteRow; token: string }> {
-    const dialog = await openInviteDialog(page, hubId);
+async function createLink(page: Page, jwt: string, hubId: number, hubName: string): Promise<{ invite: InviteRow; token: string }> {
+    const dialog = await openInviteDialog(page, hubId, hubName);
     await dialog.getByTestId('hub-invite-create').click();
     await expect.poll(async () => (await invites(jwt, hubId)).length, { message: 'the new link must reach the API' }).toBe(1);
     const invite = must((await invites(jwt, hubId))[0], 'the created invite');
@@ -179,12 +184,12 @@ test.describe('hub invite links', () => {
     test('a member creates a link; an outsider in the Discord server joins through /h/<token>', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const inviterJwt = await signInOnboardedMember(page, inviterId(seed, testInfo));
-        const { token } = await createLink(page, inviterJwt, seed.hubIds.crew);
+        const { token } = await createLink(page, inviterJwt, seed.hubIds.crew, seed.hubNames.crew);
 
         const joinerJwt = await signInOnboardedMember(page, await outsiderId(seed));
         expect(await viewerOf(joinerJwt, seed.gameId, seed.hubIds.crew), 'the outsider starts outside the hub').toBe('not-member');
         await page.goto(`/h/${token}`);
-        await expect(page.getByRole('heading', { name: HUB })).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByRole('heading', { name: seed.hubNames.crew, exact: true })).toBeVisible({ timeout: 20_000 });
         await page.getByTestId('hub-invite-join').click();
         await expect(page).toHaveURL(new RegExp(`/hubs/${seed.hubIds.crew}(?:[?#]|$)`), { timeout: 15_000 });
         await expect.poll(() => viewerOf(joinerJwt, seed.gameId, seed.hubIds.crew), {
@@ -198,10 +203,10 @@ test.describe('hub invite links', () => {
     test('a revoked link shows the revoked state on the landing page', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, inviterId(seed, testInfo));
-        const { token } = await createLink(page, jwt, seed.hubIds.crew);
+        const { token } = await createLink(page, jwt, seed.hubIds.crew, seed.hubNames.crew);
         expect(await previewState(token), 'the link is live before Revoke').toBe('ok');
 
-        await page.getByRole('dialog', { name: `Invite people to ${HUB}` }).getByTestId('hub-invite-revoke').click();
+        await inviteDialog(page, seed.hubNames.crew).getByTestId('hub-invite-revoke').click();
         await expect.poll(() => previewState(token), { message: 'the revoke must reach the API' }).toBe('revoked');
 
         await page.goto(`/h/${token}`);
@@ -227,7 +232,7 @@ test.describe('hub auto-membership', () => {
         const jwt = await signUpOutsider(page, seed, eventId, 'suggest');
         await page.goto(`/events/${eventId}`);
         const prompt = page.getByTestId('hub-join-prompt');
-        await expect(prompt.getByText(`Join ${HUB}?`)).toBeVisible({ timeout: 20_000 });
+        await expect(prompt.getByText(`Join ${seed.hubNames.crew}?`)).toBeVisible({ timeout: 20_000 });
 
         await prompt.getByRole('button', { name: 'Not now' }).click();
         await expect.poll(async () => (await eventPrompts(jwt, eventId)).length, { message: 'Not now must reach the API' }).toBe(0);
@@ -254,7 +259,7 @@ test.describe('hub auto-membership', () => {
         }).toBe('member');
         await page.goto(`/events/${eventId}`);
         const notice = page.getByTestId('hub-auto-joined');
-        await expect(notice).toContainText(`You joined ${HUB}`, { timeout: 20_000 });
-        await expect(notice.getByRole('link', { name: HUB })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
+        await expect(notice).toContainText(`You joined ${seed.hubNames.crew}`, { timeout: 20_000 });
+        await expect(notice.getByRole('link', { name: seed.hubNames.crew, exact: true })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
     });
 });

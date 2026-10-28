@@ -72,6 +72,7 @@ export * from './schema/addon-import-audit';
 export * from './schema/wow-item-meta';
 export * from './schema/guilds';
 export * from './schema/guild-members';
+export * from './schema/guild-member-level-events';
 export * from './schema/guild-editors';
 export * from './schema/guild-profiles';
 export * from './schema/hub-posts';

@@ -1874,8 +1874,15 @@
     {
       "idx": 268,
       "version": "7",
-      "when": 1793162848157,
-      "tag": "0268_bg3_plugin",
+      "when": 1793162395338,
+      "tag": "0268_guild_member_level_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1793180632075,
+      "tag": "0269_bg3_plugin",
       "breakpoints": true
     }
   ]

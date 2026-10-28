@@ -7,11 +7,15 @@
  *   `hub_community_members` rows (bans live there too) and the seed users'
  *   `hub_proposal_*` notices about it. Scoped to the game, so parallel smoke
  *   projects seeding other games never clear each other.
+ * - ROK-2030: with a `tag`, ONLY that tag's hubs (by tagged name, or by a
+ *   blurb carrying the tag after a rename) and their hub events are cleared,
+ *   so concurrent specs sharing a game never clear each other; untagged, the
+ *   sweep above skips every tagged hub.
  * - seed users are reused, never recreated or deactivated (live sessions
  *   survive), and their Discord DMs are muted: a synthetic snowflake DM fails
  *   with 10013 and the DM classifier would deactivate the user.
  */
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, like, notLike, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import {
@@ -21,10 +25,17 @@ import {
 } from '../drizzle/schema/notification-preferences';
 import { hubNameKey } from '../guilds/community/community-proposals.queries';
 import {
+  HUB_EVENT_PREFIX,
   SEED_HUB_NAMES,
   SEED_USERNAMES,
   ensureSeedUser,
 } from './demo-test-community-hubs.helpers';
+import {
+  TAGGED_BLURB_LIKE,
+  TAGGED_NAME_LIKE,
+  seedHubNames,
+  taggedBlurbLike,
+} from './demo-test-community-hubs.tag';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -64,15 +75,54 @@ export async function muteSeedDiscordDms(
     .onConflictDoUpdate({ target: t.userId, set: { channelPrefs } });
 }
 
-/** Community hubs on the game that belong to the seed fixture. */
+const g = schema.guilds;
+
+/** Hubs no tagged seed created (plain name, no tagged blurb). */
+const untaggedOnly = () =>
+  and(
+    notLike(g.name, TAGGED_NAME_LIKE),
+    or(isNull(g.blurb), notLike(g.blurb, TAGGED_BLURB_LIKE)),
+  );
+
+/** `tag`'s community hubs on the game: by tagged name or tagged blurb. */
+async function findTaggedHubs(
+  db: Db,
+  gameId: number,
+  tag: string,
+): Promise<number[]> {
+  const n = seedHubNames(tag);
+  const keys = [n.crew, n.solo, n.proposed, n.archived].map(hubNameKey);
+  const rows = await db
+    .select({ id: g.id })
+    .from(g)
+    .where(
+      and(
+        eq(g.kind, 'game_community'),
+        eq(g.gameId, gameId),
+        or(inArray(g.nameKey, keys), like(g.blurb, taggedBlurbLike(tag))),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Community hubs on the game that belong to the seed fixture: `tag`'s hubs
+ * only when tagged, else every untagged hub named like a seed hub, proposed
+ * or led by a seed user.
+ */
 export async function findSeedFixtureHubs(
   db: Db,
   gameId: number,
   userIds: number[],
+  tag?: string,
 ): Promise<number[]> {
-  const g = schema.guilds;
+  if (tag !== undefined) return findTaggedHubs(db, gameId, tag);
   const m = schema.hubCommunityMembers;
-  const onGame = and(eq(g.kind, 'game_community'), eq(g.gameId, gameId));
+  const onGame = and(
+    eq(g.kind, 'game_community'),
+    eq(g.gameId, gameId),
+    untaggedOnly(),
+  );
   const keys = Object.values(SEED_HUB_NAMES).map(hubNameKey);
   const owned = await db
     .select({ id: g.id })
@@ -88,14 +138,26 @@ export async function findSeedFixtureHubs(
   return [...new Set([...owned, ...led].map((r) => r.id))];
 }
 
+/** A tagged reset's hub events (an untagged seed sweeps orphans instead). */
+async function deleteHubEvents(db: Db, hubIds: number[]): Promise<void> {
+  const ev = schema.events;
+  await db
+    .delete(ev)
+    .where(
+      and(inArray(ev.guildId, hubIds), like(ev.title, `${HUB_EVENT_PREFIX}%`)),
+    );
+}
+
 /** Delete the fixture hubs + their members, bans and notices; returns ids. */
 export async function resetSeedFixture(
   db: Db,
   gameId: number,
   userIds: number[],
+  tag?: string,
 ): Promise<number[]> {
-  const ids = await findSeedFixtureHubs(db, gameId, userIds);
+  const ids = await findSeedFixtureHubs(db, gameId, userIds, tag);
   if (ids.length === 0) return ids;
+  if (tag !== undefined) await deleteHubEvents(db, ids);
   const n = schema.notifications;
   const hubOf = sql<number>`(${n.payload}->>'guildId')::int`;
   await db

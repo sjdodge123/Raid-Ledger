@@ -3,7 +3,10 @@
  * Deaths-fixture hub (ROK-1930), the `top` character gets `count` fresh
  * log deaths, each linked to a generated `death` picture stored through the
  * real `HubMediaService.ingest` (stub downloader, never a real image), plus
- * optionally one hidden and one removed picture. A re-run deletes the
+ * optionally one hidden and one removed picture. ROK-2027: `secondCount`
+ * more pictures go to the `second` character (interleaved in time) and
+ * `screenshot` adds one non-death picture so the Gallery draws its kind
+ * chips. A re-run deletes the
  * previous run's pictures (rows + files) and their deaths first, so the
  * state per worker is the same after every call.
  */
@@ -17,7 +20,10 @@ import { unlinkMediaFiles } from '../../../hub-media/hub-media.files';
 import type { HubMediaService } from '../../../hub-media/hub-media.service';
 import { solidPng } from '../../../hub-media/hub-media.testing';
 import { VALHEIM_LINK_FIXTURE_SLOTS } from '../link/valheim-link-demo-seed.helpers';
-import { DEATHS_FIXTURE_CHARACTERS } from './valheim-deaths-demo-seed.data';
+import {
+  DEATHS_FIXTURE_CHARACTERS,
+  DEATHS_FIXTURE_UNLINKED_NAME,
+} from './valheim-deaths-demo-seed.data';
 import {
   deathsSteamId,
   ensureDeathsUsers,
@@ -41,6 +47,8 @@ const BodySchema = z
     count: z.number().int().min(1).max(MAX_COUNT).default(5),
     hidden: z.boolean().default(false),
     removed: z.boolean().default(false),
+    secondCount: z.number().int().min(0).max(MAX_COUNT).default(0),
+    screenshot: z.boolean().default(false),
   })
   .strict();
 
@@ -57,6 +65,11 @@ export interface DeathPicturesFixture {
   mediaIds: number[];
   hiddenMediaId: number | null;
   removedMediaId: number | null;
+  /** ROK-2027: the `second` character and its pictures, newest first. */
+  secondCharacterName: string;
+  secondMediaIds: number[];
+  /** ROK-2027: the one non-death (`screenshot`) picture, when asked for. */
+  screenshotMediaId: number | null;
   users: DeathsFixture['users'];
 }
 
@@ -65,7 +78,7 @@ export function parseDeathPicturesBody(body: unknown): DeathPicturesRequest {
   const parsed = BodySchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, count?: 1..${MAX_COUNT}, hidden?: boolean, removed?: boolean }`,
+      `Expected { worker?: 0..${VALHEIM_LINK_FIXTURE_SLOTS - 1}, count?: 1..${MAX_COUNT}, hidden?: boolean, removed?: boolean, secondCount?: 0..${MAX_COUNT}, screenshot?: boolean }`,
     );
   }
   return parsed.data;
@@ -87,6 +100,19 @@ export function topCharacter(worker: number): {
   const plan = DEATHS_FIXTURE_CHARACTERS[0];
   if (!plan) throw new Error('death pictures: cast plan incomplete');
   return { name: plan.name, steamId: deathsSteamId(worker, 0) };
+}
+
+/** ROK-2027 — the worker's `second` character (deaths resolved by name). */
+export function secondCharacter(worker: number): {
+  name: string;
+  steamId: string | null;
+} {
+  const plan = DEATHS_FIXTURE_CHARACTERS[1];
+  if (!plan) throw new Error('death pictures: cast plan incomplete');
+  return {
+    name: plan.name,
+    steamId: plan.steamAttributed ? deathsSteamId(worker, 1) : null,
+  };
 }
 
 /** Whether the server already carries the worker's `top` character. */
@@ -135,32 +161,53 @@ export async function clearDemoDeathPictures(
   for (const r of old) await unlinkMediaFiles(guildId, r.storageName);
 }
 
+/** Whose pictures: key tag, colour base and time offset keep runs distinct. */
+interface PictureAuthor {
+  name: string;
+  steamId: string | null;
+  tag: string;
+  colour: number;
+  offsetMs: number;
+}
+
 interface PictureCtx {
   db: Db;
   store: HubMediaService;
   serverId: number;
   guildId: number;
-  character: { name: string; steamId: string };
+  character: PictureAuthor;
   now: Date;
 }
 
-/** Ingest picture `i` (i minutes before `now`) and log its linked death. */
-async function seedPicture(ctx: PictureCtx, i: number): Promise<number> {
-  const capturedAt = new Date(ctx.now.getTime() - i * 60_000);
+/** Ingest one picture of `kind` by the ctx character, i minutes back. */
+async function ingestPicture(
+  ctx: PictureCtx,
+  i: number,
+  kind: 'death' | 'screenshot',
+): Promise<{ mediaId: number; capturedAt: Date }> {
+  const c = ctx.character;
+  const capturedAt = new Date(ctx.now.getTime() - i * 60_000 - c.offsetMs);
   const result = await ctx.store.ingest({
     guildId: ctx.guildId,
     source: 'discord',
-    kind: 'death',
-    provenanceKey: `${DEMO_DEATH_PREFIX}${i}`,
-    sourceUrl: `https://cdn.discordapp.com/attachments/demo-death/${i}.png`,
-    authorName: ctx.character.name,
-    caption: `Died to a Troll #${i + 1}`,
+    kind,
+    provenanceKey: `${DEMO_DEATH_PREFIX}${c.tag}${i}`,
+    sourceUrl: `https://cdn.discordapp.com/attachments/demo-death/${c.colour + i}.png`,
+    authorName: c.name,
+    caption: kind === 'death' ? `Died to a Troll #${i + 1}` : 'Longhouse view',
     capturedAt,
     discord: null,
   });
   if (result.status !== 'stored') {
-    throw new Error(`death pictures: ingest ${i} → ${result.status}`);
+    throw new Error(`death pictures: ingest ${c.tag}${i} → ${result.status}`);
   }
+  return { mediaId: result.mediaId, capturedAt };
+}
+
+/** Ingest death picture `i` and log its linked death. */
+async function seedPicture(ctx: PictureCtx, i: number): Promise<number> {
+  const result = await ingestPicture(ctx, i, 'death');
+  const { capturedAt } = result;
   await ctx.db.insert(schema.valheimPlayerDeaths).values({
     pelicanServerId: ctx.serverId,
     characterName: ctx.character.name,
@@ -206,6 +253,50 @@ async function seedModeratedPictures(
   return { hiddenMediaId, removedMediaId };
 }
 
+/** `count` death pictures by the ctx character, newest first. */
+async function seedPictures(ctx: PictureCtx, count: number): Promise<number[]> {
+  const ids: number[] = [];
+  for (let i = 0; i < count; i += 1) ids.push(await seedPicture(ctx, i));
+  return ids;
+}
+
+/** ROK-2027 — the non-death picture's author: the name-only player. */
+const SCREENSHOT_AUTHOR: PictureAuthor = {
+  name: DEATHS_FIXTURE_UNLINKED_NAME,
+  steamId: null,
+  tag: 'screenshot:',
+  colour: 90,
+  offsetMs: 15_000,
+};
+
+/** ROK-2027 — the `second` character's pictures + the optional screenshot. */
+async function seedOtherPictures(
+  ctx: PictureCtx,
+  worker: number,
+  want: { secondCount: number; screenshot: boolean },
+): Promise<
+  Pick<
+    DeathPicturesFixture,
+    'secondCharacterName' | 'secondMediaIds' | 'screenshotMediaId'
+  >
+> {
+  const second = secondCharacter(worker);
+  const sCtx: PictureCtx = {
+    ...ctx,
+    character: { ...second, tag: 'second:', colour: 50, offsetMs: 30_000 },
+  };
+  const secondMediaIds = await seedPictures(sCtx, want.secondCount);
+  const shotCtx: PictureCtx = { ...ctx, character: SCREENSHOT_AUTHOR };
+  const screenshotMediaId = want.screenshot
+    ? (await ingestPicture(shotCtx, 0, 'screenshot')).mediaId
+    : null;
+  return {
+    secondCharacterName: second.name,
+    secondMediaIds,
+    screenshotMediaId,
+  };
+}
+
 /** Replace the worker's demo death pictures on its Deaths-fixture hub. */
 export async function seedDeathPictures(
   db: Db,
@@ -214,25 +305,26 @@ export async function seedDeathPictures(
 ): Promise<DeathPicturesFixture> {
   const { serverId, guildId, worker, count } = input;
   await clearDemoDeathPictures(db, serverId, guildId);
-  const character = topCharacter(worker);
+  const author = { ...topCharacter(worker), tag: '', colour: 0, offsetMs: 0 };
   const ctx: PictureCtx = {
     db,
     store,
     serverId,
     guildId,
-    character,
     now: new Date(),
+    character: author,
   };
-  const mediaIds: number[] = [];
-  for (let i = 0; i < count; i += 1) mediaIds.push(await seedPicture(ctx, i));
+  const mediaIds = await seedPictures(ctx, count);
   const moderated = await seedModeratedPictures(ctx, count, input);
+  const others = await seedOtherPictures(ctx, worker, input);
   const users = await ensureDeathsUsers(db, worker, guildId);
   return {
     serverId,
     guildId,
-    characterName: character.name,
+    characterName: author.name,
     mediaIds,
     ...moderated,
+    ...others,
     users,
   };
 }

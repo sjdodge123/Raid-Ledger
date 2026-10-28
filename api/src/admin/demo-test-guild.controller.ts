@@ -16,6 +16,8 @@
  *   - with `withContent: true` (ROK-1786), the guild page content too: GM
  *     post, rules, links and two recommended addons (see
  *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
+ *   - with `withDings: true` (ROK-1919), three level-up events for the
+ *     "Recent dings" widget (`demo-test-guild-dings.helpers.ts`).
  *   - with `withLockouts: true` (ROK-1914), LedgerLink lockout snapshots on
  *     the three linked characters for the Who's saved widget (see
  *     `demo-test-guild-lockouts.helpers.ts`). Re-seeding restores them.
@@ -71,6 +73,10 @@ import {
   seedGuildLockouts,
   type SeededGuildLockouts,
 } from './demo-test-guild-lockouts.helpers';
+import {
+  seedGuildDings,
+  type SeededGuildDings,
+} from './demo-test-guild-dings.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -107,6 +113,8 @@ export interface SeedGuildResponse {
   content?: SeedGuildContent;
   /** Present only when the body sent `withLockouts: true`. */
   lockouts?: SeededGuildLockouts;
+  /** Present only when the body sent `withDings: true` (ROK-1919). */
+  dings?: SeededGuildDings;
 }
 
 interface SeededRoster {
@@ -138,7 +146,7 @@ export class DemoTestGuildController {
     const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
     const raids = await this.seedRaids(ctx, users);
-    const extras = await this.seedOptional(input, ctx, users);
+    const extras = await this.seedOptional(input, ctx, { users, unlinked });
     return {
       guildId,
       gameId,
@@ -152,12 +160,12 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914). */
+  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919). */
   private async seedOptional(
-    input: { withContent: boolean; withLockouts: boolean },
+    input: { withContent: boolean; withLockouts: boolean; withDings: boolean },
     ctx: RosterCtx,
-    users: Record<SeedGuildRole, SeedGuildUser>,
-  ): Promise<Pick<SeedGuildResponse, 'content' | 'lockouts'>> {
+    { users, unlinked }: SeededRoster,
+  ): Promise<Pick<SeedGuildResponse, 'content' | 'lockouts' | 'dings'>> {
     const gm = users.gm.userId;
     const content = input.withContent
       ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
@@ -165,9 +173,13 @@ export class DemoTestGuildController {
     const lockouts = input.withLockouts
       ? await this.seedLockouts(users, ctx)
       : null;
+    const dings = input.withDings
+      ? await this.seedDings(users, unlinked, ctx)
+      : null;
     return {
       ...(content ? { content } : {}),
       ...(lockouts ? { lockouts } : {}),
+      ...(dings ? { dings } : {}),
     };
   }
 
@@ -191,6 +203,20 @@ export class DemoTestGuildController {
       .get(RosterInsightsCache, { strict: false })
       .invalidateGuild(ctx.guildId);
     return seeded;
+  }
+
+  /** ROK-1919 — three level-up events: GM (linked), an unlinked row, member (31 days old). */
+  private seedDings(
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    unlinked: number[],
+    ctx: RosterCtx,
+  ): Promise<SeededGuildDings> {
+    const members = {
+      linked: defined(users.gm.memberId ?? undefined, 'seeded gm member'),
+      unlinked: defined(unlinked[0], 'seeded unlinked member'),
+      old: defined(users.member.memberId ?? undefined, 'seeded member member'),
+    };
+    return seedGuildDings(this.db, ctx.guildId, members, ctx.now);
   }
 
   /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */
