@@ -262,12 +262,14 @@ const openLockInPostsEventCreated: SmokeTest = {
 /**
  * Fire two lock-ins of the same match at once (ROK-2032). Exactly one must
  * answer 200 and the other 409 — the claim-first loser. Returns the winner's
- * event id.
+ * event id. Every event a lock-in created is pushed to `created` BEFORE the
+ * check, so a regression (two winners) still gets both cleaned up.
  */
 async function raceLockIns(
   ctx: TestContext,
   lp: LineupPoll,
   slot: Slot & { iso: string },
+  created: number[],
 ): Promise<number> {
   const results = await Promise.allSettled(
     ['a', 'b'].map((tag) =>
@@ -275,6 +277,7 @@ async function raceLockIns(
     ),
   );
   const won = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  created.push(...won);
   const lost = results.flatMap((r) => (r.status === 'rejected' ? [String(r.reason)] : []));
   const winner = won[0];
   if (won.length !== 1 || winner === undefined || lost.length !== 1 || !/→ 409\b/.test(lost[0] ?? '')) {
@@ -323,7 +326,7 @@ const racingLockInsPostOneEventCreated: SmokeTest = {
   async run(ctx: TestContext) {
     await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     let lp: LineupPoll | undefined;
-    let eventId: number | undefined;
+    const created: number[] = [];
     try {
       lp = await buildGroupLineupPoll(ctx);
       const slot = await suggestSlot(ctx, lp, 13);
@@ -332,7 +335,7 @@ const racingLockInsPostOneEventCreated: SmokeTest = {
 
       const channelId = await resolveLineupChannelId(ctx.api, ctx.defaultChannelId);
       const ghostIds = await snapshotMessageIds(channelId);
-      eventId = await raceLockIns(ctx, lp, slot);
+      const eventId = await raceLockIns(ctx, lp, slot, created);
       await awaitProcessing(ctx.api);
       await assertMatchScheduled(ctx, lp, eventId);
 
@@ -341,7 +344,7 @@ const racingLockInsPostOneEventCreated: SmokeTest = {
       // ... and it must be the only one for this slot.
       await assertSingleEventCard(ctx, channelId, ghostIds, eventId, slot);
     } finally {
-      if (eventId !== undefined) await deleteEvent(ctx.api, eventId);
+      for (const id of created) await deleteEvent(ctx.api, id);
       if (lp) await deleteLineup(ctx.api, lp.lineupId);
     }
   },
