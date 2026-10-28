@@ -11,7 +11,8 @@
  * share ONE seed: it runs under a cross-worker file lock and is reused while
  * the API still reports the seeded shape (two concurrent seeds would delete and
  * re-insert the same users' rows under each other). The "game not enabled"
- * hub is a community-hubs seed on a configured non-BG3 game picked by
+ * hub is a tagged community-hubs seed (its own crew users, ROK-2030; the test
+ * signs in as one of them) on a configured non-BG3 game picked by
  * `9 + testInfo.parallelIndex` (community-hubs takes indexes 0–2, hubs-nav
  * 3–5, hub-invite/hub-poll 6–8), so each worker owns its game.
  */
@@ -131,8 +132,12 @@ function steamSeed(): Promise<SteamSeed> {
     return seedPromise;
 }
 
-/** A configured non-BG3 game this worker owns; its "Seed Crew" has B as a member. */
-async function nonEnabledHub(bg3GameId: number, testInfo: TestInfo): Promise<number> {
+/**
+ * A configured non-BG3 game this worker owns, its tagged "Seed Crew" and one of that crew's plain members.
+ * ROK-2030: a tagged seed's crew is the tag's OWN `community-member-N-<tag>` users, not the Steam seed's
+ * shared `community-member-2` (B), so the member signed in here is the crew's, not B.
+ */
+async function nonEnabledHub(bg3GameId: number, testInfo: TestInfo): Promise<{ hubId: number; memberId: number }> {
     const admin = await getAdminToken();
     const body = (await apiGet(admin, '/games/configured')) as { data?: unknown } | unknown[] | null;
     const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
@@ -142,13 +147,17 @@ async function nonEnabledHub(bg3GameId: number, testInfo: TestInfo): Promise<num
         .sort((a, b) => a - b);
     if (ids.length === 0) throw new Error('[hub-steam-stats] no configured non-BG3 game');
     const gameId = must(ids[(NON_ENABLED_GAME_OFFSET + testInfo.parallelIndex) % ids.length], 'non-enabled game');
-    const seed = (await seedCommunityHubs(admin, testInfo, 'hub-steam-stats', { gameId })) as { hubIds?: { crew?: number } } | null;
+    const seed = (await seedCommunityHubs(admin, testInfo, 'hub-steam-stats', { gameId })) as
+        | { hubIds?: { crew?: number }; memberUserIds?: number[] }
+        | null;
     const hubId = must(seed?.hubIds?.crew, `non-enabled seed: ${JSON.stringify(seed)}`);
+    // memberUserIds is [officer, member-1..4]; a plain member, as the test title says.
+    const memberId = must(seed?.memberUserIds?.[1], `non-enabled seed member: ${JSON.stringify(seed)}`);
     await pollForCondition(() => hubStats(admin, hubId).then((s) => (s?.available === false ? true : null)), {
         timeoutMs: 30_000,
         description: `GET /hubs/${hubId}/steam-stats answers { available: false }`,
     });
-    return hubId;
+    return { hubId, memberId };
 }
 
 /** Sign in as `role`, open the hub and wait for both cards' bodies (the cells mount only once visible). */
@@ -233,8 +242,8 @@ test.describe('hub Steam cards — hidden', () => {
 
     test('a hub whose game is not enabled shows neither card to a member', async ({ page }, testInfo) => {
         const seed = await steamSeed();
-        const hubId = await nonEnabledHub(seed.gameId, testInfo);
-        await signInOnboardedMember(page, seed.users.b.userId);
+        const { hubId, memberId } = await nonEnabledHub(seed.gameId, testInfo);
+        await signInOnboardedMember(page, memberId);
         // The member Overview always fires the probe (D9), so wait for its answer before asserting absence.
         const probe = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith(`/hubs/${hubId}/steam-stats`), {
             timeout: 20_000,
@@ -242,7 +251,7 @@ test.describe('hub Steam cards — hidden', () => {
         await page.goto(`/hubs/${hubId}`);
         expect(await (await probe).json(), 'the probe reports the game as not enabled').toEqual({ available: false });
         await expect(page.getByTestId('community-hub-kind'), 'the hub page renders').toBeVisible({ timeout: 20_000 });
-        await expect(page.getByTestId('community-hub-leave'), 'B is a member of this hub').toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('community-hub-leave'), 'the crew member is a member of this hub').toBeVisible({ timeout: 15_000 });
         await expect(page.locator('[id^="hub-widget-core-steam-"]'), 'no Core Steam cell on a non-enabled game').toHaveCount(0);
     });
 });
