@@ -8,6 +8,9 @@ import { BG3_MANIFEST } from './bg3.manifest';
 import { Bg3CampaignsController } from './campaigns/bg3-campaigns.controller';
 import { Bg3CampaignsRepository } from './campaigns/bg3-campaigns.repository';
 import { Bg3CampaignsService } from './campaigns/bg3-campaigns.service';
+import { Bg3ClaimsController } from './claims/bg3-claims.controller';
+import { Bg3ClaimsRepository } from './claims/bg3-claims.repository';
+import { Bg3ClaimsService } from './claims/bg3-claims.service';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
 import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
 
@@ -20,12 +23,14 @@ import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
  */
 @Module({
   imports: [CompanionIngestModule, GuildsCoreModule],
-  controllers: [Bg3CampaignsController],
+  controllers: [Bg3CampaignsController, Bg3ClaimsController],
   providers: [
     Bg3SaveHandler,
     Bg3SavesWriteRepository,
     Bg3CampaignsRepository,
     Bg3CampaignsService,
+    Bg3ClaimsRepository,
+    Bg3ClaimsService,
   ],
 })
 export class Bg3Module implements OnModuleInit {
