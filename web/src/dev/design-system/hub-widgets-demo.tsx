@@ -18,6 +18,7 @@ import { LazySteamAchievementsWidget } from '../../components/hub/steam-stats/st
 import { LazySteamPlaytimeWidget } from '../../components/hub/steam-stats/steam-playtime-widget-lazy';
 import { hubSteamStatsKey } from '../../components/hub/steam-stats/use-hub-steam-stats';
 import { DEMO_STEAM_STATS } from './hub-steam-stats-demo-data';
+import { Bg3PartyDemoBody, Bg3SessionsDemoBody } from './hub-bg3-demo';
 
 const DEMO = 'ds-demo';
 const ACTIVE: ReadonlySet<string> = new Set([DEMO]);
@@ -48,6 +49,9 @@ addHubGameWidget(DEMO, { ...BASE, id: 'broken', title: 'Contained error', order:
 // ROK-1953 — the real Core Steam card bodies over a seeded cache entry (masked hidden-achievement row).
 addHubGameWidget(DEMO, { ...BASE, id: 'steam-achievements', title: 'Achievement race', order: 4, component: LazySteamAchievementsWidget });
 addHubGameWidget(DEMO, { ...BASE, id: 'steam-playtime', title: 'Playtime', order: 5, component: LazySteamPlaytimeWidget });
+// ROK-1958 — BG3 party slot tile + coverage strip, and the session timeline rail (real components, demo data).
+addHubGameWidget(DEMO, { ...BASE, id: 'bg3-party', title: 'Party (BG3)', order: 6, span: 2, component: lazyOf(Bg3PartyDemoBody) });
+addHubGameWidget(DEMO, { ...BASE, id: 'bg3-sessions', title: 'Session history (BG3)', order: 7, component: lazyOf(Bg3SessionsDemoBody) });
 
 const PAGE: GuildPage = {
     guild: { id: -1, gameId: 0, kind: 'wow_guild', name: 'Demo hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 12, lastSnapshotAt: null, gameSlug: DEMO },
