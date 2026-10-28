@@ -21,6 +21,7 @@ import {
   computeLockouts,
   countLockoutReporters,
 } from './roster-insights.lockouts';
+import { computeLastSeen } from './roster-insights.last-seen';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
@@ -77,6 +78,8 @@ export class RosterInsightsService {
             professions: computeProfessions(rows),
             lockouts: computeLockouts(rows, Date.now()),
             lockoutReporters: countLockoutReporters(rows),
+            // Presence is per character: the full roster, never mainsOnly (D4).
+            lastSeen: computeLastSeen(all),
           }
         : {}),
       freshness: computeFreshness(rows),
@@ -110,6 +113,8 @@ export class RosterInsightsService {
           userId: r.userId,
           isMain: r.isMain ?? false,
           rankIndex: r.rankIndex,
+          onlineAtExport: r.onlineAtExport,
+          lastOnlineDays: r.lastOnlineDays,
           facts: resolved,
         },
       ];

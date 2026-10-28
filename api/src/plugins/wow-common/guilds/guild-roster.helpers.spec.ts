@@ -20,6 +20,8 @@ function row(over: Partial<RawRosterRow>): RawRosterRow {
     role: null,
     roleOverride: null,
     isMain: null,
+    onlineAtExport: null,
+    lastOnlineDays: null,
     ...over,
   };
 }

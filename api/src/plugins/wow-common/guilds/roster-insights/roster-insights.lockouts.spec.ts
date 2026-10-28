@@ -45,6 +45,8 @@ function row(
     userId: characterId === null ? null : 1,
     isMain: true,
     rankIndex: 0,
+    onlineAtExport: null,
+    lastOnlineDays: null,
     facts: {
       ...EMPTY,
       lockouts:
