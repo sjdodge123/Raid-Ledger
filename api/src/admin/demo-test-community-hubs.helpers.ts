@@ -8,7 +8,7 @@
  * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
 import { NotFoundException } from '@nestjs/common';
-import { and, asc, eq, like } from 'drizzle-orm';
+import { and, asc, eq, isNull, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
@@ -23,6 +23,11 @@ export const CommunityHubsSeedSchema = z
     gameId: z.number().int().positive().optional(),
     /** ROK-1893 P4: also seed the crew hub's tagged event (`hubEvent`). */
     withEvent: z.boolean().optional(),
+    /** ROK-2030: scope the fixture to this tag (see the `.tag` module). */
+    tag: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
+      .optional(),
   })
   .strict();
 
@@ -42,6 +47,15 @@ export interface CommunityHubsSeedResult {
   memberUserIds: number[];
   bannedUserId: number;
   proposalId: number;
+  /** ROK-2030: each hub's seeded name (`<base> #<tag>` when tagged). */
+  hubNames: {
+    crew: string;
+    solo: string;
+    proposed: string;
+    archived: string;
+    server: string;
+    guild: string;
+  };
   /** ROK-1893 P4: the event tagged to the crew hub (only with `withEvent`). */
   hubEvent?: SeedHubEvent;
 }
@@ -214,11 +228,15 @@ export async function seedProposal(
   db: Db,
   gameId: number,
   proposerId: number,
+  name: string = SEED_HUB_NAMES.proposed,
 ): Promise<number> {
+  const plain = name === SEED_HUB_NAMES.proposed;
   const hub = await insertCommunityHub(db, {
     gameId,
-    name: SEED_HUB_NAMES.proposed,
-    blurb: 'A seeded proposal waiting for review.',
+    name,
+    blurb: plain
+      ? 'A seeded proposal waiting for review.'
+      : `${name} — a seeded proposal waiting for review.`,
     status: 'proposed',
     proposedBy: proposerId,
     reviewedBy: null,
@@ -231,16 +249,21 @@ export async function seedArchivedHub(
   db: Db,
   gameId: number,
   leaderId: number,
+  name: string = SEED_HUB_NAMES.archived,
 ): Promise<number> {
-  const id = await seedActiveHub(db, gameId, SEED_HUB_NAMES.archived, leaderId);
+  const id = await seedActiveHub(db, gameId, name, leaderId);
   await archiveHub(db, id, 'admin');
   return id;
 }
 
 const HOUR_MS = 3_600_000;
-const HUB_EVENT_PREFIX = 'Hub calendar night #';
+export const HUB_EVENT_PREFIX = 'Hub calendar night #';
 
-/** The fixture's earlier hub events by `creatorId` on the game. */
+/**
+ * The fixture's earlier hub events by `creatorId` on the game whose hub is
+ * gone (`guild_id` nulled) — a live hub's event belongs to another tag's
+ * fixture; a tagged reset deletes its own events with its hubs.
+ */
 async function deleteOldHubEvents(
   db: Db,
   gameId: number,
@@ -253,6 +276,7 @@ async function deleteOldHubEvents(
       and(
         eq(ev.creatorId, creatorId),
         eq(ev.gameId, gameId),
+        isNull(ev.guildId),
         like(ev.title, `${HUB_EVENT_PREFIX}%`),
       ),
     );

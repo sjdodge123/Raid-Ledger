@@ -1,6 +1,6 @@
 /**
  * DemoTestCommunityHubsController (ROK-1870 §2.6) —
- * `POST /admin/test/community-hubs/seed`, body `{ gameId? }`. Seeds the
+ * `POST /admin/test/community-hubs/seed`, body `{ gameId?, withEvent?, tag? }`. Seeds the
  * community-hub fixture set (see the helpers) and returns its ids for the
  * smoke specs + fleet test plan. DEMO_MODE-only, JWT + admin guarded.
  */
@@ -28,7 +28,6 @@ import { DemoModeGuard } from './demo-mode.guard';
 import { parseDemoBody } from './demo-test.utils';
 import {
   CommunityHubsSeedSchema,
-  SEED_HUB_NAMES,
   ensureSeedUser,
   resolveSeedGame,
   seedActiveHub,
@@ -44,6 +43,10 @@ import {
   resetSeedFixture,
 } from './demo-test-community-hubs.reset';
 import { seedOtherKindHubs } from './demo-test-community-hubs.other-kinds';
+import {
+  seedHubNames,
+  type SeedHubNames,
+} from './demo-test-community-hubs.tag';
 
 const CREW = ['officer', 'member-1', 'member-2', 'member-3', 'member-4'];
 
@@ -64,28 +67,50 @@ export class DemoTestCommunityHubsController {
     const gameId = await resolveSeedGame(this.db, input.gameId);
     const seedUsers = await ensureSeedUsers(this.db);
     await muteSeedDiscordDms(this.db, seedUsers);
-    await resetSeedFixture(this.db, gameId, seedUsers);
-    const main = await this.seedCrewHub(gameId);
-    const soloLeader = await ensureSeedUser(this.db, 'community-solo');
-    const solo = await seedActiveHub(
+    await resetSeedFixture(this.db, gameId, seedUsers, input.tag);
+    const hubNames = seedHubNames(input.tag);
+    const main = await this.seedCrewHub(gameId, hubNames.crew);
+    const { crew, ...rest } = main;
+    await refreshMemberCount(this.db, crew);
+    const others = await this.seedOtherHubs(gameId, hubNames, rest);
+    const { server, guild } = await seedOtherKindHubs(
       this.db,
       gameId,
-      SEED_HUB_NAMES.solo,
-      soloLeader,
+      hubNames,
     );
-    const archived = await seedArchivedHub(this.db, gameId, main.leaderUserId);
-    const proposer = await ensureSeedUser(this.db, 'demo-member');
-    const proposalId = await seedProposal(this.db, gameId, proposer);
-    for (const id of [main.crew, solo, archived]) {
-      await refreshMemberCount(this.db, id);
-    }
-    const { server, guild } = await seedOtherKindHubs(this.db, gameId);
-    const { crew, ...rest } = main;
+    const { solo, archived, proposalId } = others;
     const hubIds = { crew, solo, archived, server, guild };
     const event = input.withEvent
       ? await this.hubEvent(gameId, crew, rest.leaderUserId)
       : {};
-    return { gameId, hubIds, ...rest, proposalId, ...event };
+    return { gameId, hubIds, hubNames, ...rest, proposalId, ...event };
+  }
+
+  /** "Seed Solo", "Seed Old Guard" (archived) and the proposal. */
+  private async seedOtherHubs(
+    gameId: number,
+    names: SeedHubNames,
+    main: { leaderUserId: number },
+  ): Promise<{ solo: number; archived: number; proposalId: number }> {
+    const soloLeader = await ensureSeedUser(this.db, 'community-solo');
+    const solo = await seedActiveHub(this.db, gameId, names.solo, soloLeader);
+    const archived = await seedArchivedHub(
+      this.db,
+      gameId,
+      main.leaderUserId,
+      names.archived,
+    );
+    const proposer = await ensureSeedUser(this.db, 'demo-member');
+    const proposalId = await seedProposal(
+      this.db,
+      gameId,
+      proposer,
+      names.proposed,
+    );
+    for (const id of [solo, archived]) {
+      await refreshMemberCount(this.db, id);
+    }
+    return { solo, archived, proposalId };
   }
 
   /** ROK-1893 P4: the crew hub's tagged event, only when requested. */
@@ -100,19 +125,17 @@ export class DemoTestCommunityHubsController {
   }
 
   /** "Seed Crew": leader + officer + 4 members live, one banned user. */
-  private async seedCrewHub(gameId: number): Promise<{
+  private async seedCrewHub(
+    gameId: number,
+    name: string,
+  ): Promise<{
     crew: number;
     leaderUserId: number;
     memberUserIds: number[];
     bannedUserId: number;
   }> {
     const leaderUserId = await ensureSeedUser(this.db, 'community-leader');
-    const crew = await seedActiveHub(
-      this.db,
-      gameId,
-      SEED_HUB_NAMES.crew,
-      leaderUserId,
-    );
+    const crew = await seedActiveHub(this.db, gameId, name, leaderUserId);
     const memberUserIds = await this.seedCrew(crew);
     const bannedUserId = await ensureSeedUser(this.db, 'community-banned');
     await ban(this.db, {
