@@ -27,6 +27,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { nonEmpty } from '../../common/testing/narrow';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -380,5 +381,34 @@ describe('ROK-2025 (e) the poll page lists slot votes in vote order', () => {
       lock.b,
       lock.c,
     ]);
+  });
+});
+
+describe('ROK-2025 (f) the fan-out re-checks the pick against its own voters', () => {
+  it('keeps the pick while the voters are the ones it was validated on', async () => {
+    const lock = await seedLock('standalone');
+    const voters = [lock.creator, lock.a, lock.b, lock.c];
+    const pick = new Set([lock.a, lock.b]);
+    const kept = await revalidateBenchPick(
+      testApp.db,
+      lock.eventId,
+      voters,
+      pick,
+    );
+    expect(kept ? [...kept] : 'dropped').toEqual([lock.a, lock.b]);
+  });
+
+  it('drops the pick (server default) once a non-picked voter withdrew', async () => {
+    const lock = await seedLock('standalone');
+    // C withdrew after validation: 2 candidates, 1 open spot → overflow 1.
+    const voters = [lock.creator, lock.a, lock.b];
+    const pick = new Set([lock.a, lock.b]);
+    const kept = await revalidateBenchPick(
+      testApp.db,
+      lock.eventId,
+      voters,
+      pick,
+    );
+    expect(kept ? [...kept] : 'dropped').toBe('dropped');
   });
 });

@@ -135,15 +135,61 @@ export async function assertBenchPick(
     return undefined;
   }
   const voters = await slotYesVoterIds(db, matchId, startTime);
+  const { candidates, overflow } = await benchCandidates(db, eventId, voters);
+  return checkBenchPick(benchUserIds, candidates, overflow);
+}
+
+/** The voters not yet on the event, and how many of them do not fit. */
+async function benchCandidates(
+  db: Db,
+  eventId: number,
+  voterIds: readonly number[],
+): Promise<{ candidates: ReadonlySet<number>; overflow: number }> {
   const roster = await eventRoster(db, eventId);
   // POST /events signed the creator up, so they are never a candidate.
-  const candidates = new Set(voters.filter((id) => !roster.signedUp.has(id)));
+  const candidates = new Set(voterIds.filter((id) => !roster.signedUp.has(id)));
   const overflow = benchPickOverflow(
     roster.capacity,
     roster.occupied,
     candidates.size,
   );
-  return checkBenchPick(benchUserIds, candidates, overflow);
+  return { candidates, overflow };
+}
+
+/** True when `picked` is still exactly the overflow, all of them candidates. */
+export function benchPickStillFits(
+  picked: ReadonlySet<number>,
+  candidates: ReadonlySet<number>,
+  overflow: number,
+): boolean {
+  return (
+    picked.size === overflow && [...picked].every((id) => candidates.has(id))
+  );
+}
+
+/**
+ * Re-check a pick `assertBenchPick` accepted against the voters the lock-in
+ * fan-out actually signs up — votes can change between the two reads (a
+ * non-picked voter withdraws). A pick that no longer fits is dropped, so the
+ * server default (latest yes-voters benched) applies. Never throws: it runs
+ * on the fire-and-forget path, where a failed read also means the default.
+ */
+export async function revalidateBenchPick(
+  db: Db,
+  eventId: number,
+  voterIds: readonly number[],
+  picked: ReadonlySet<number> | undefined,
+): Promise<ReadonlySet<number> | undefined> {
+  if (!picked) return undefined;
+  try {
+    const unique = [...new Set(voterIds)];
+    const { candidates, overflow } = await benchCandidates(db, eventId, unique);
+    return benchPickStillFits(picked, candidates, overflow)
+      ? picked
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

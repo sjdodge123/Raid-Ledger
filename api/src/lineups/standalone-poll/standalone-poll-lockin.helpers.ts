@@ -25,6 +25,7 @@ import {
   heartPollGameForVoters,
 } from './standalone-poll-voter.helpers';
 import { matchHubPayload } from './poll-hub-payload.helpers';
+import { revalidateBenchPick } from './standalone-poll-bench-pick.helpers';
 
 /** Everything the lock-in fan-out reaches. */
 export interface LockInFanoutDeps {
@@ -97,6 +98,48 @@ async function pickSlotVoters(
 }
 
 /**
+ * ROK-2025: the organizer's pick, re-checked against the SAME voters the
+ * signup uses; a pick the votes outgrew is dropped (logged) for the default.
+ */
+async function benchPickForVoters(
+  deps: LockInFanoutDeps,
+  lockIn: LockIn,
+  voters: readonly { userId: number }[],
+): Promise<ReadonlySet<number> | undefined> {
+  if (!lockIn.benchUserIds) return undefined;
+  const ids = voters.map((v) => v.userId);
+  const pick = await revalidateBenchPick(
+    deps.db,
+    lockIn.eventId,
+    ids,
+    lockIn.benchUserIds,
+  );
+  if (!pick) {
+    deps.logger.warn(
+      `Bench pick for match ${lockIn.matchId} no longer fits the slot voters; benching the latest yes-voters`,
+    );
+  }
+  return pick;
+}
+
+/** Sign the slot voters up, benching the re-checked pick; the benched ids. */
+async function signUpWithPick(
+  deps: LockInFanoutDeps,
+  lockIn: LockIn,
+  voters: { userId: number }[],
+): Promise<number[]> {
+  const benchUserIds = await benchPickForVoters(deps, lockIn, voters);
+  const { benchedUserIds } = await autoSignupSlotVoters({
+    eventId: lockIn.eventId,
+    creatorId: lockIn.creatorId ?? -1,
+    voters,
+    signupsService: deps.signupsService,
+    ...(benchUserIds ? { benchUserIds } : {}),
+  });
+  return benchedUserIds;
+}
+
+/**
  * Auto-signup + auto-heart + DMs for the winning slot's voters (ROK-1031).
  * Returns the users sent "Auto-signed up" / "On the bench" (ROK-2024).
  */
@@ -110,13 +153,7 @@ async function signUpSlotVoters(
     matchId,
     startTime,
   );
-  const { benchedUserIds } = await autoSignupSlotVoters({
-    eventId,
-    creatorId: lockIn.creatorId ?? -1,
-    voters: selectedVoters,
-    signupsService: deps.signupsService,
-    ...(lockIn.benchUserIds ? { benchUserIds: lockIn.benchUserIds } : {}),
-  });
+  const benchedUserIds = await signUpWithPick(deps, lockIn, selectedVoters);
   // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
   // name the DMs below announce.
   const gameName = await heartPollGameForVoters(deps.db, matchId, allVoters);

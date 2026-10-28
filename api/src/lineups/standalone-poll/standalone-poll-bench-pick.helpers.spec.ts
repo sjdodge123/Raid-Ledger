@@ -8,6 +8,7 @@ import { BadRequestException } from '@nestjs/common';
 import {
   benchPickCountMessage,
   benchPickOverflow,
+  benchPickStillFits,
   checkBenchPick,
 } from './standalone-poll-bench-pick.helpers';
 
@@ -90,5 +91,22 @@ describe('benchPickCountMessage (ROK-2025)', () => {
     expect(benchPickCountMessage(3)).toBe(
       'The votes changed while you were choosing. Pick exactly 3 for the bench.',
     );
+  });
+});
+
+describe('benchPickStillFits (ROK-2025 Codex P2 — re-check at fan-out)', () => {
+  it('keeps a pick that is still exactly the overflow of the voters', () => {
+    expect(benchPickStillFits(new Set([11, 12]), CANDIDATES, 2)).toBe(true);
+  });
+
+  it('drops the pick when a non-picked voter withdrew and the overflow shrank', () => {
+    // Validated against A/B/C (overflow 2, pick A+B); C withdrew → overflow 1.
+    const left: ReadonlySet<number> = new Set([11, 12]);
+    expect(benchPickStillFits(new Set([11, 12]), left, 1)).toBe(false);
+  });
+
+  it('drops the pick when a picked voter is no longer a voter', () => {
+    const left: ReadonlySet<number> = new Set([12, 13, 14]);
+    expect(benchPickStillFits(new Set([11, 12]), left, 2)).toBe(false);
   });
 });
