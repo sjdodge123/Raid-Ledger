@@ -97,6 +97,8 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       identity,
       { kind: 'wow_guild' } as never,
+      {} as never,
+      {} as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const identityCalls = registerAdapter.mock.calls.filter(
@@ -124,6 +126,8 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       { gameSlugs: [] } as never,
       { kind: 'wow_guild' } as never,
+      {} as never,
+      {} as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const taggerCalls = registerAdapter.mock.calls.filter(
@@ -148,6 +152,8 @@ describe('WowCommonModule hub-kind registration (ROK-1830)', () => {
       {} as never,
       { gameSlugs: [] } as never,
       hubKind as never,
+      {} as never,
+      {} as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const hubCalls = registerAdapter.mock.calls.filter(
