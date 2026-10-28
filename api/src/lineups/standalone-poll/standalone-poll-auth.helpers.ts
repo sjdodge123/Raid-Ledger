@@ -23,6 +23,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { assertCallerMayViewPoll } from '../scheduling/scheduling-guard.helpers';
+import { assertSlotIsFuture } from '../scheduling/scheduling-lock-in.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -236,4 +237,38 @@ export async function assertCanCompletePoll(
     await assertIsPollSlot(db, matchId, target.startTime);
     if (eventStart) assertSlotIsEventStart(eventStart, target.startTime);
   }
+}
+
+/** What a claim-first lock-in (ROK-2032) is checked against. */
+export interface LockInPollTarget {
+  /** The start time of the event the lock-in is about to create. */
+  eventStart: string;
+  /** The winning slot; absent for a close-only lock-in (D4). */
+  startTime?: string | undefined;
+}
+
+/**
+ * ROK-2032 — the poll-level twin of `assertCanCompletePoll` for a lock-in
+ * that has no event yet: owner/staff only (403/404), never a reschedule poll
+ * (400: that one moves its event in place), and the slot must be one of the
+ * poll's, equal the new event's start and lie in the future (400).
+ */
+export async function assertCanLockInPoll(
+  db: Db,
+  matchId: number,
+  caller: Caller,
+  target: LockInPollTarget,
+): Promise<void> {
+  const ctx = await fetchPollContext(db, matchId);
+  if (!ctx) throw new NotFoundException('Poll not found');
+  await assertMayCompletePoll(db, ctx, caller);
+  if (ctx.linkedEventId !== null) {
+    throw new BadRequestException(
+      'A reschedule poll is locked in by moving its event',
+    );
+  }
+  if (target.startTime === undefined) return;
+  await assertIsPollSlot(db, matchId, target.startTime);
+  assertSlotIsEventStart(new Date(target.eventStart), target.startTime);
+  assertSlotIsFuture(target.startTime);
 }
