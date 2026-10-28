@@ -3,12 +3,21 @@
  * the legacy `POST …/complete` (after `POST /events`) and the claim-first
  * `POST …/lock-in`, which creates the event only after claiming the match.
  */
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+} from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  CreateEventDto,
-  LockInSchedulingPollDto,
-  LockInSchedulingPollResponseDto,
+import {
+  SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE,
+  type CreateEventDto,
+  type LockInSchedulingPollDto,
+  type LockInSchedulingPollResponseDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -80,7 +89,7 @@ export class StandalonePollLockInService {
     const created = await createLockedInPollEvent(
       this.createDeps(user, caller.isAdmin),
       { matchId, caller, body },
-    );
+    ).catch((err: unknown) => this.asLoserConflict(matchId, err));
     this.schedulingPollEmbed.fireUpdateEmbed(matchId);
     // D4: no start time → no slot voters to sign up, nothing to announce.
     // Always `announce: true`: this path refuses reschedule polls.
@@ -140,6 +149,25 @@ export class StandalonePollLockInService {
         });
       },
     };
+  }
+
+  /**
+   * A lock-in that loses the race BEFORE the claim fails a pre-claim check
+   * instead (the provenance check's 400 "no longer open", or the reschedule
+   * guard once the winner linked). It is the same loser as one that loses
+   * the claim itself: 409, so the form shows the Q3 copy either way.
+   */
+  private async asLoserConflict(matchId: number, err: unknown): Promise<never> {
+    if (!(err instanceof BadRequestException)) throw err;
+    const [row] = await this.db
+      .select({ status: schema.communityLineupMatches.status })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, matchId))
+      .limit(1);
+    if (row?.status === 'scheduled') {
+      throw new ConflictException(SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE);
+    }
+    throw err;
   }
 
   /** Sign up the slot voters (awaited), then fire DMs + announce. */
