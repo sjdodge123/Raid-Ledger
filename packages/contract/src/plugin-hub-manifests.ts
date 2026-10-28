@@ -15,6 +15,12 @@ import {
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
 import {
+  BG3_GAME_SLUG,
+  BG3_INGEST_SOURCE_ID,
+  BG3_RETENTION_JOB_NAME,
+} from './bg3-hub.schema.js';
+import {
+  BG3_SETUP,
   BLIZZARD_SETUP,
   CORE_SETUP,
   PELICAN_SETUP,
@@ -108,6 +114,23 @@ const blizzard = {
   // `gameSlugs` (every WoW variant) is separate and unchanged.
   gameSlugs: ['world-of-warcraft-forever'],
   setup: BLIZZARD_SETUP,
+} satisfies PluginHubManifest;
+
+/**
+ * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of `BG3_GAME_SLUG`).
+ * Widgets come with ROK-1958. NOT yet a `HUB_PLUGIN_MANIFESTS` key: the api
+ * guard needs the `bg3` api manifest plus both registrations first, so the
+ * lane that adds them adds `[BG3_PLUGIN_ID]: BG3_HUB_MANIFEST` below.
+ */
+export const BG3_HUB_MANIFEST = {
+  widgets: [],
+  tabs: [],
+  behaviours: [
+    { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
+    { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
+  ],
+  gameSlugs: [BG3_GAME_SLUG],
+  setup: BG3_SETUP,
 } satisfies PluginHubManifest;
 
 /** Every plugin's hub declaration, keyed by plugin slug. */

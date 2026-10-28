@@ -253,6 +253,8 @@ export * from './companion-bg3-save-normalise.js';
 export * from './companion-registry.js';
 export * from './companion-bg3-display.js';
 export * from './companion-json-schema.js';
+// BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).
+export * from './bg3-hub.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';

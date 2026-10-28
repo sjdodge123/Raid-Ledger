@@ -141,3 +141,31 @@ export const BLIZZARD_SETUP = {
     },
   ],
 } satisfies PluginSetup;
+
+/**
+ * ROK-1957 D-17 — both per hub, so no `check` (setupStatus is plugin-wide).
+ * Companion / drag-and-drop links are added when ROK-1960/1961 ship (Q-7:
+ * `required: true` stays meanwhile).
+ */
+export const BG3_SETUP = {
+  requirements: [
+    {
+      id: 'upload-saves',
+      kind: 'companion_app',
+      title: 'Players upload their BG3 saves',
+      instructions:
+        'Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.',
+      required: true,
+      appliesTo: ['game_community'],
+    },
+    {
+      id: 'bind-campaign',
+      kind: 'other',
+      title: 'Bind a campaign to the hub',
+      instructions:
+        "1. A member creates a campaign on the Baldur's Gate 3 hub.\n2. Each player binds their saves to it, or sets it as their default campaign. Saves that are not bound stay private to their uploader.",
+      required: true,
+      appliesTo: ['game_community'],
+    },
+  ],
+} satisfies PluginSetup;
