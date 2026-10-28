@@ -8,6 +8,7 @@
  */
 import { useState, type JSX } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { MapPinIcon } from '@heroicons/react/24/outline';
 import type { ValheimDeathPlayer } from '@raid-ledger/contract';
 import { GuildMeter } from '../../components/hub/events/guild-meter';
 import { FOCUS_RING } from '../../components/ui/form-classes';
@@ -31,17 +32,23 @@ function picture(i: number): Blob {
     return new Blob([svg], { type: 'image/svg+xml' });
 }
 
+/** ROK-2029 row shape: the name and the count + pin are two separate links over the meter. */
 function DemoRow(): JSX.Element {
-    const frame = 'flex min-h-[44px] flex-col justify-center gap-1 rounded-md px-2 py-1';
+    const link = `inline-flex min-h-[44px] items-center rounded-sm px-2 text-sm text-foreground hover:underline ${FOCUS_RING}`;
     return (
-        <a href="#hub-widgets" aria-label="Jasz, 7 deaths — show on map" data-testid="ds-deaths-strip-row"
-            className={`${frame} transition-colors hover:bg-overlay ${FOCUS_RING}`}>
-            <span className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate text-sm text-foreground">{PLAYER.name}</span>
-                <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{PLAYER.deaths}</span>
-            </span>
-            <GuildMeter pct={100} label="Jasz: 7 deaths" />
-        </a>
+        <div data-testid="ds-deaths-strip-row">
+            <div className="flex min-h-[44px] items-center justify-between gap-3">
+                <a href="#hub-widgets" aria-label="Open Jasz's character page" className={`${link} min-w-[44px]`}>
+                    <span className="truncate">{PLAYER.name}</span>
+                </a>
+                <a href="#hub-widgets" aria-label="Show Jasz's 7 deaths on the map"
+                    className={`${link} min-w-[44px] shrink-0 justify-end gap-1 font-medium tabular-nums`}>
+                    {PLAYER.deaths}
+                    <MapPinIcon aria-hidden="true" className="h-4 w-4 text-muted" />
+                </a>
+            </div>
+            <div className="px-2 pb-1"><GuildMeter pct={100} label="Jasz: 7 deaths" /></div>
+        </div>
     );
 }
 

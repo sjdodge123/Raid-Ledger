@@ -14,6 +14,7 @@ import {
     CLAIM_FILTER_PARAM,
     withUnclaimedParam,
 } from './valheim-claim-banner.helpers';
+import { charactersTabHubPath } from './valheim-hub-paths';
 
 function Quiet({ children, role }: { children: string; role?: 'alert' }) {
     return (
@@ -156,7 +157,7 @@ export function ValheimCharactersTab({
             {showClaimBanner && <ValheimClaimBanner serverId={serverId} />}
             {query.isSuccess && (unclaimedOnly || query.rows.length > 0) && <UnclaimedToggle on={unclaimedOnly} onToggle={toggleUnclaimed} />}
             <TabStates pages={query} unclaimedOnly={unclaimedOnly} />
-            <RowList rows={query.rows} hubPath={`${pathname}${search}#characters`} />
+            <RowList rows={query.rows} hubPath={charactersTabHubPath(pathname, search)} />
             <LoadMore pages={query} />
         </section>
     );
