@@ -18,6 +18,7 @@ import { toast } from '../../../lib/toast';
 import type { HubCtx } from '../../hub-module';
 import { Bg3CampaignTab } from './bg3-campaign-tab';
 import { BG3_CAMPAIGN_ARCHIVED_TOAST } from './bg3-campaign-toast';
+import { BG3_OTHER_HUB_CAMPAIGN_LABEL } from './bg3-campaign-picker';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -103,6 +104,19 @@ describe('V-9 add my saves', () => {
         await waitFor(() => expect(calls).toEqual(['key', 'key', 'default']));
         expect(bodies['key']).toEqual([BG3_SAVE_KEY, 'b'.repeat(64)]);
         expect(bodies['default']).toEqual([{ campaignId: BG3_CAMPAIGN_ID }]);
+    });
+});
+
+describe('New saves go to (default in another hub)', () => {
+    it('shows a default from another hub as set, and "No campaign" clears it', async () => {
+        server.use(bg3MySavesHandler(buildBg3MySavesResponse({ defaultCampaignId: 999 })));
+        const user = userEvent.setup();
+        renderTab();
+        const select = await screen.findByLabelText(/New saves go to/);
+        await waitFor(() => expect(select).toBeEnabled());
+        expect(select).toHaveDisplayValue(BG3_OTHER_HUB_CAMPAIGN_LABEL);
+        await user.selectOptions(select, 'No campaign');
+        await waitFor(() => expect(bodies['default']).toEqual([{ campaignId: null }]));
     });
 });
 
