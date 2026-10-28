@@ -47,6 +47,28 @@ decoder, exactly as for a paste — a string the decoder rejects is a terminal
 `invalid_payload`. One outbox entry = one message (spec D4), so one bad
 entry never blocks the others.
 
+### 2.1 Import outcomes
+
+The server applies the export as the device's user with no preview (spec D2:
+`dryRun: false`, no confirm). An applied, unchanged (same export again) or
+stale (older than what is stored) import all ack `202 { "status": "accepted" }`.
+A rejected import writes nothing and answers with fixed copy plus **one**
+`issues` entry `{ "path": "payload.exportString", "code": <LedgerLink import
+code> }` — the code (`BAD_HEADER`, `RULESET_REQUIRED`, `ROSTER_HELD`, …),
+never the import's message text or the string:
+
+| Status | `code` | Retry? | When |
+|---|---|---|---|
+| 400 | `invalid_payload` | no (terminal) | every import reject except the two below |
+| 429 | `rate_limited` | yes, later | the user's import rate limit (`RATE_LIMITED`) |
+| 413 | `payload_too_large` | no | the decoded export is over the import limit (`TOO_LARGE`) |
+
+A **new** character is created automatically when its export carries a
+ruleset, or when its realm is in the admin realm→ruleset map. A **Hardcore**
+mapping is never used as that fallback: a Hardcore character without a
+ruleset in its export is rejected with `RULESET_REQUIRED` — create it by a
+paste first, after which uploads update it.
+
 ## 3. Size cap (spec D3)
 
 | Constant | Value | Applies to |
