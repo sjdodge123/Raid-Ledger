@@ -13,6 +13,10 @@ import {
   ensureSeedUser,
   seedDiscordId,
 } from './demo-test-community-hubs.helpers';
+import {
+  crewUsernames,
+  isTaggedCrewUsername,
+} from './demo-test-community-hubs.crew';
 
 let db: MockDb;
 const typed = (): PostgresJsDatabase<typeof schema> => {
@@ -42,6 +46,57 @@ describe('seedDiscordId', () => {
 
   it('refuses a username outside the seed set', () => {
     expect(() => seedDiscordId('someone-else')).toThrow();
+  });
+});
+
+describe('tagged crew users (ROK-2030)', () => {
+  it('keeps the shared crew untagged and gives each tag its own users', () => {
+    expect(crewUsernames(undefined)).toEqual([
+      'community-officer',
+      'community-member-1',
+      'community-member-2',
+      'community-member-3',
+      'community-member-4',
+    ]);
+    expect(crewUsernames('hubs-nav-tablet-w00')).toEqual([
+      'community-officer-hubs-nav-tablet-w00',
+      'community-member-1-hubs-nav-tablet-w00',
+      'community-member-2-hubs-nav-tablet-w00',
+      'community-member-3-hubs-nav-tablet-w00',
+      'community-member-4-hubs-nav-tablet-w00',
+    ]);
+  });
+
+  it('recognises only tag-suffixed crew usernames', () => {
+    expect(crewUsernames('t-1').map(isTaggedCrewUsername)).toEqual(
+      Array(5).fill(true),
+    );
+    expect(crewUsernames(undefined).map(isTaggedCrewUsername)).toEqual(
+      Array(5).fill(false),
+    );
+    expect(isTaggedCrewUsername('community-leader-t-1')).toBe(false);
+    expect(isTaggedCrewUsername('community-member-5-t-1')).toBe(false);
+  });
+
+  it('gives tagged crew users deterministic, distinct, A2-passing snowflakes', () => {
+    const a = crewUsernames('spec-a').map(seedDiscordId);
+    const b = crewUsernames('spec-b').map(seedDiscordId);
+    const shared = SEED_USERNAMES.map(seedDiscordId);
+    expect(crewUsernames('spec-a').map(seedDiscordId)).toEqual(a);
+    expect(new Set([...a, ...b, ...shared]).size).toBe(10 + shared.length);
+    for (const id of [...a, ...b]) {
+      expect(id).toMatch(/^98\d{16}$/);
+      const user = {
+        discordId: id,
+        guildMemberSeenAt: new Date(),
+        deactivatedAt: null,
+      };
+      expect(isInDiscordGuild(user)).toBe(true);
+    }
+  });
+
+  it('still refuses a tagged leader (the leader stays shared)', () => {
+    expect(() => seedDiscordId('community-leader-spec-a')).toThrow();
   });
 });
 

@@ -7,6 +7,7 @@
  * ROK-1893 P4: with `withEvent: true`, plus one event tagged (`guild_id`) to
  * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
+import { createHash } from 'node:crypto';
 import { NotFoundException } from '@nestjs/common';
 import { and, asc, eq, isNull, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -15,6 +16,7 @@ import * as schema from '../drizzle/schema';
 import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
 import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
+import { isTaggedCrewUsername } from './demo-test-community-hubs.crew';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -47,6 +49,8 @@ export interface CommunityHubsSeedResult {
   leaderUserId: number;
   /** Crew's live non-leaders: `[officer, member×4]`. */
   memberUserIds: number[];
+  /** ROK-2030: their usernames (tag-suffixed when tagged, `crewUsernames`). */
+  memberUsernames: string[];
   bannedUserId: number;
   proposalId: number;
   /** ROK-2030: each hub's seeded name (`<base> #<tag>` when tagged). */
@@ -120,8 +124,22 @@ const SEED_SNOWFLAKE_BASE = 1870_000;
  */
 export function seedDiscordId(username: string): string {
   const index = SEED_USERNAMES.indexOf(username);
-  if (index < 0) throw new Error(`${username} is not a seed user`);
-  return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  if (index >= 0) {
+    return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  }
+  if (isTaggedCrewUsername(username)) return taggedCrewDiscordId(username);
+  throw new Error(`${username} is not a seed user`);
+}
+
+/**
+ * ROK-2030: a tag's crew user's snowflake — `98` + 16 digits hashed from the
+ * username (52 bits of sha256), deterministic so parallel first-run seeds of
+ * one tag collide on it like the shared users do, and clear of the shared
+ * users' `90…` and the integration specs' `91…`.
+ */
+function taggedCrewDiscordId(username: string): string {
+  const hex = createHash('sha256').update(username).digest('hex');
+  return `98${String(parseInt(hex.slice(0, 13), 16)).padStart(16, '0')}`;
 }
 
 /** Re-arm an existing user: seen now, active, a placeholder id replaced. */

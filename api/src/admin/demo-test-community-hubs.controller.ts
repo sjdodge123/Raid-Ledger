@@ -43,12 +43,11 @@ import {
 } from './demo-test-community-hubs.reset';
 import { seedOtherKindHubs } from './demo-test-community-hubs.other-kinds';
 import { seedGameFor } from './demo-test-community-hubs.game';
+import { crewUsernames } from './demo-test-community-hubs.crew';
 import {
   seedHubNames,
   type SeedHubNames,
 } from './demo-test-community-hubs.tag';
-
-const CREW = ['officer', 'member-1', 'member-2', 'member-3', 'member-4'];
 
 @Controller('admin/test/community-hubs')
 @SkipThrottle()
@@ -69,7 +68,7 @@ export class DemoTestCommunityHubsController {
     await muteSeedDiscordDms(this.db, seedUsers);
     await resetSeedFixture(this.db, gameId, seedUsers, input.tag);
     const hubNames = seedHubNames(input.tag);
-    const main = await this.seedCrewHub(gameId, hubNames.crew);
+    const main = await this.seedCrewHub(gameId, hubNames.crew, input.tag);
     const { crew, ...rest } = main;
     await refreshMemberCount(this.db, crew);
     const others = await this.seedOtherHubs(gameId, hubNames, rest);
@@ -128,15 +127,18 @@ export class DemoTestCommunityHubsController {
   private async seedCrewHub(
     gameId: number,
     name: string,
+    tag: string | undefined,
   ): Promise<{
     crew: number;
     leaderUserId: number;
     memberUserIds: number[];
+    memberUsernames: string[];
     bannedUserId: number;
   }> {
     const leaderUserId = await ensureSeedUser(this.db, 'community-leader');
     const crew = await seedActiveHub(this.db, gameId, name, leaderUserId);
-    const memberUserIds = await this.seedCrew(crew);
+    const memberUsernames = crewUsernames(tag);
+    const memberUserIds = await this.seedCrew(crew, memberUsernames);
     const bannedUserId = await ensureSeedUser(this.db, 'community-banned');
     await ban(this.db, {
       guildId: crew,
@@ -144,16 +146,21 @@ export class DemoTestCommunityHubsController {
       bannedBy: leaderUserId,
       reason: 'Seeded ban',
     });
-    return { crew, leaderUserId, memberUserIds, bannedUserId };
+    return { crew, leaderUserId, memberUserIds, memberUsernames, bannedUserId };
   }
 
-  private async seedCrew(hubId: number): Promise<number[]> {
+  /** Join `usernames` (officer first) to the crew; a tag's own users get their DMs muted too. */
+  private async seedCrew(
+    hubId: number,
+    usernames: string[],
+  ): Promise<number[]> {
     const ids: number[] = [];
-    for (const [i, name] of CREW.entries()) {
-      const userId = await ensureSeedUser(this.db, `community-${name}`);
+    for (const [i, username] of usernames.entries()) {
+      const userId = await ensureSeedUser(this.db, username);
       await upsertJoin(this.db, hubId, userId, i === 0 ? 'officer' : 'member');
       ids.push(userId);
     }
+    await muteSeedDiscordDms(this.db, ids);
     return ids;
   }
 }

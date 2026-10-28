@@ -18,6 +18,8 @@ interface SeedBody {
   hubIds: Record<'crew' | 'solo' | 'archived' | 'server' | 'guild', number>;
   hubNames: Record<string, string>;
   proposalId: number;
+  memberUserIds: number[];
+  memberUsernames: string[];
   hubEvent?: { id: number };
 }
 
@@ -111,6 +113,35 @@ describe('community-hubs seed tag scoping (ROK-2030)', () => {
       .from(schema.events)
       .where(eq(schema.events.id, eventId));
     expect(ev).toEqual([{ guildId: b.hubIds.crew }]);
+  });
+
+  /** Every hub `userId` holds a membership row in. */
+  async function hubsOf(userId: number): Promise<number[]> {
+    const m = schema.hubCommunityMembers;
+    const rows = await testApp.db
+      .select({ guildId: m.guildId })
+      .from(m)
+      .where(eq(m.userId, userId));
+    return rows.map((r) => r.guildId);
+  }
+
+  it("each tag's crew is its own users, so no tag inflates another's", async () => {
+    const a1 = await seed({ tag: 'spec-a-tablet-w00' });
+    const b = await seed({ tag: 'spec-b-tablet-w00' });
+    const plain = await seed({});
+    const a2 = await seed({ tag: 'spec-a-tablet-w00' });
+    expect(a2.memberUsernames[0]).toBe('community-officer-spec-a-tablet-w00');
+    expect(b.memberUsernames[4]).toBe('community-member-4-spec-b-tablet-w00');
+    expect(plain.memberUsernames[0]).toBe('community-officer');
+    expect(a2.memberUserIds).toEqual(a1.memberUserIds);
+    const ids = [
+      ...a2.memberUserIds,
+      ...b.memberUserIds,
+      ...plain.memberUserIds,
+    ];
+    expect(new Set(ids).size).toBe(15);
+    expect(await hubsOf(a2.memberUserIds[0] ?? -1)).toEqual([a2.hubIds.crew]);
+    expect(await hubsOf(b.memberUserIds[0] ?? -1)).toEqual([b.hubIds.crew]);
   });
 
   it('an untagged seed keeps tagged hubs and still resets itself', async () => {

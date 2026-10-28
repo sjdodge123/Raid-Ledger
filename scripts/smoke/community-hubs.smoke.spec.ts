@@ -31,6 +31,8 @@ interface Seed {
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
+    /** Their usernames: the tag's own `community-<role>-<tag>` users (ROK-2030). */
+    memberUsernames: string[];
     bannedUserId: number;
     proposalId: number;
 }
@@ -77,10 +79,10 @@ function actorId(seed: Seed, testInfo: TestInfo): number {
 async function seedHubs(testInfo: TestInfo): Promise<Seed> {
     const token = await getAdminToken();
     // The tag's own game (ROK-2030): the game card shows the viewer's hubs first
-    // and caps the rest (`pickShownHubs`), and every tagged crew holds the actor,
-    // so on a game shared with other specs the unjoined Solo hub is never listed.
+    // and caps the rest (`pickShownHubs`), so on a game shared with other specs'
+    // hubs the unjoined Solo hub can fall past the cap.
     const body = (await seedCommunityHubs(token, testInfo, 'community-hubs', { dedicatedGame: true })) as Partial<Seed> | null;
-    if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds)) {
+    if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds) || !Array.isArray(body.memberUsernames)) {
         throw new Error(`[community-hubs] seed: ${JSON.stringify(body)}`);
     }
     return body as Seed;
@@ -154,11 +156,9 @@ async function memberAction(page: Page, username: string, actionTestId: string):
     await expect(menu, 'picking an action closes the menu / sheet').toHaveCount(0);
 }
 
-/** The seed's usernames for `memberUserIds` (demo-test-community-hubs.controller `CREW`). */
-const CREW_USERNAMES = ['community-officer', 'community-member-1', 'community-member-2', 'community-member-3', 'community-member-4'];
-
-function crewUsername(index: number): string {
-    return must(CREW_USERNAMES[index], `crew username ${index}`);
+/** The seed's username for `memberUserIds[index]` (tag-suffixed, demo-test-community-hubs.crew). */
+function crewUsername(seed: Seed, index: number): string {
+    return must(seed.memberUsernames[index], `crew username ${index}`);
 }
 
 test.describe('community hubs — member', () => {
@@ -239,7 +239,7 @@ test.describe('community hubs — member', () => {
     test('hub page: Join, the Members tab lists the joiner, Leave', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
-        const username = crewUsername(1 + slotOf(testInfo));
+        const username = crewUsername(seed, 1 + slotOf(testInfo));
         await page.goto(`/hubs/${seed.hubIds.solo}`);
         await expect(page.getByTestId('community-hub-kind')).toBeVisible({ timeout: 20_000 });
 
@@ -304,7 +304,7 @@ test.describe('community hubs — leader', () => {
     test('Manage menu: promote a member to officer, then remove them', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
-        const target = crewUsername(4);
+        const target = crewUsername(seed, 4);
         await signInOnboardedMember(page, seed.leaderUserId);
         await page.goto(`/hubs/${seed.hubIds.crew}#members`);
         const row = memberRow(page, target);
