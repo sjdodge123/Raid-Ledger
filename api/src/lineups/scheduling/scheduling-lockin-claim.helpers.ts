@@ -14,9 +14,13 @@
  *    concurrent lock-ins would exhaust a pool of N — Codex P1). A second
  *    expired-path caller finds the row no longer `suggested`/`scheduling` and
  *    409s with no event made; so does an open-path `complete`, whose flip
- *    requires `status = 'scheduling'`.
+ *    requires `status = 'scheduling'`. A cancel cannot move the claimed row
+ *    either: it archives only `scheduling`/`suggested`, so a cancel during
+ *    the claim window is a no-op that still returns success, and the poll
+ *    locks in anyway (`scheduling-cancel.helpers`).
  * 2. `linkClaimedMatch` — after the create, a single compare-and-set writes
- *    the event id onto the row we claimed.
+ *    the event id onto the row we claimed. Since nothing else writes a
+ *    `scheduled` + unlinked row, its `false` branch is defensive.
  * 3. `releaseMatchClaim` — when the create throws, put the prior status back.
  *
  * `scheduled` with a null `linked_event_id` is already a legal state (the
@@ -68,7 +72,10 @@ export async function claimMatchForLockIn(
   return prior;
 }
 
-/** Write the event onto the match this lock-in claimed. False when it moved. */
+/**
+ * Write the event onto the match this lock-in claimed. False when it moved
+ * (defensive: see step 2 above).
+ */
 export async function linkClaimedMatch(
   db: Db,
   matchId: number,

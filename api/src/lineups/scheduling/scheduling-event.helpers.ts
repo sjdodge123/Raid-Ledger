@@ -187,9 +187,14 @@ async function discardEvents(
  * The claim commits BEFORE the create (see `scheduling-lockin-claim.helpers`),
  * so no pooled connection is held while `EventsService.create` takes its own.
  * A concurrent lock-in — expired or open path — 409s before creating anything.
- * If the claimed row still moves before the link write (a cancel), every
- * instance this call made is deleted (their DELETED listeners remove any
- * Discord post) before the 409, instead of being left behind as orphans.
+ * Nothing else can move the claimed row before the link write: a cancel needs
+ * `scheduling`/`suggested`, so a cancel during the claim window archives
+ * nothing and still returns success, and the poll locks in anyway (the same
+ * "lock-in finished first" ordering as a cancel that arrives after it). The
+ * lost-link branch below is therefore defensive: every instance this call made
+ * is deleted (their DELETED listeners remove any Discord post) before the 409.
+ * If the link write itself throws, the instances are deleted the same way and
+ * the claim is released before the error is rethrown.
  *
  * @returns The linked event's id.
  */
@@ -201,8 +206,17 @@ async function claimAndCreateEvent(
 ): Promise<number> {
   const prior = await claimMatchForLockIn(deps.db, matchId);
   const event = await createOrRelease(deps, matchId, userId, dto, prior);
-  if (await linkClaimedMatch(deps.db, matchId, event.id)) return event.id;
-  await discardEvents(deps, event.allEventIds ?? [event.id], userId);
+  const eventIds = event.allEventIds ?? [event.id];
+  let linked: boolean;
+  try {
+    linked = await linkClaimedMatch(deps.db, matchId, event.id);
+  } catch (err: unknown) {
+    await discardEvents(deps, eventIds, userId);
+    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    throw err;
+  }
+  if (linked) return event.id;
+  await discardEvents(deps, eventIds, userId);
   throw new ConflictException('This poll has already been locked in');
 }
 

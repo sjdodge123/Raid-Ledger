@@ -143,4 +143,16 @@ describe('createLockedInEvent — claim, create, link (ROK-2024 F2)', () => {
     expect(db.set).toHaveBeenLastCalledWith({ status: 'scheduling' });
     expect(deps.eventsService.delete).not.toHaveBeenCalled();
   });
+
+  it('discards every instance and releases the claim when the link write throws', async () => {
+    const { db, pool } = singleConnectionDb([{ status: 'scheduling' }], []);
+    db.returning.mockRejectedValueOnce(new Error('link failed'));
+    const deps = buildDeps(db, pool, { id: 55, allEventIds: [55, 56] });
+    await expect(lockIn(deps, true)).rejects.toThrow('link failed');
+    expect((deps.eventsService.delete as jest.Mock).mock.calls).toEqual([
+      [55, 10, false],
+      [56, 10, false],
+    ]);
+    expect(db.set).toHaveBeenLastCalledWith({ status: 'scheduling' });
+  });
 });
