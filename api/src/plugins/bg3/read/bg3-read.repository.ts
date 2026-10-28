@@ -20,6 +20,13 @@ const c = schema.bg3Campaigns;
 const s = schema.bg3Saves;
 const h = schema.bg3HubSettings;
 
+/**
+ * Newest-first order of a campaign's saves (D-8; index `(campaign_id,
+ * saved_at DESC, id DESC)`). The snapshot and the claim slot check both use
+ * it, so a savedAt tie picks the same party in both.
+ */
+export const BG3_NEWEST_FIRST = [desc(s.savedAt), desc(s.id)] as const;
+
 /** A save as session clustering + `pickCanonical` need it (no party). */
 export interface Bg3SaveLiteRow extends Bg3RetentionRow {
   uploaderUserId: number;
@@ -145,7 +152,7 @@ export class Bg3ReadRepository {
       .select(SNAPSHOT_COLS)
       .from(s)
       .where(eq(s.campaignId, campaignId))
-      .orderBy(desc(s.savedAt), desc(s.id))
+      .orderBy(...BG3_NEWEST_FIRST)
       .limit(limit);
   }
 

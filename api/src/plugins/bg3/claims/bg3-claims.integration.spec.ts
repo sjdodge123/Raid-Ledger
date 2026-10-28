@@ -371,6 +371,32 @@ describe('POST plugins/bg3/campaigns/:id/claims — slot validation', () => {
     expect(messageOf(nonHostSlot)).toBe('unknown_slot');
     expect((await claim('member', campaignId, HUMAN)).status).toBe(204);
   });
+  it('two keys tied on the newest savedAt → claim slots match the snapshot party (higher id wins)', async () => {
+    const { hubId, campaignId } = await seedCampaign();
+    const at = new Date(T0.getTime() + 60_000);
+    const human = PARTY[2];
+    const duergar = PARTY[3];
+    if (!human || !duergar) throw new Error('fixture party too short');
+    // Same uploader + savedAt, different campaign keys: both are canonical, so
+    // only the shared newest-first order (savedAt DESC, id DESC) picks one.
+    await insertSave(campaignId, {
+      campaignKey: 'cd'.repeat(32),
+      savedAt: at,
+      party: [duergar],
+    });
+    await insertSave(campaignId, { savedAt: at, party: [human] });
+
+    const snap = await api('member2').get(
+      `/plugins/bg3/hubs/${hubId}/snapshot`,
+    );
+    expect(snap.status).toBe(200);
+    const party = Bg3SnapshotSchema.parse(snap.body).party;
+    expect(party.map((s) => s.slotKey)).toEqual([HUMAN]);
+    const lowerId = await claim('member', campaignId, DUERGAR);
+    expect(lowerId.status).toBe(400);
+    expect(messageOf(lowerId)).toBe('unknown_slot');
+    expect((await claim('member', campaignId, HUMAN)).status).toBe(204);
+  });
 });
 
 describe('POST plugins/bg3/campaigns/:id/claims — refusals', () => {

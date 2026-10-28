@@ -3,10 +3,11 @@
  * (no surrounding tx), so a unique violation on a lost race is safe to map.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, or } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { BG3_NEWEST_FIRST } from '../read/bg3-read.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const p = schema.bg3PartyClaims;
@@ -24,7 +25,8 @@ export interface Bg3ClaimRow {
 export class Bg3ClaimsRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
-  /** The campaign's newest rows (party only), for `pickCanonical`. */
+  /** The campaign's newest rows (party only), for `pickCanonical` — the
+   *  snapshot's order, so both pick the same newest save. */
   newestSaves(campaignId: number) {
     return this.db
       .select({
@@ -36,7 +38,7 @@ export class Bg3ClaimsRepository {
       })
       .from(s)
       .where(eq(s.campaignId, campaignId))
-      .orderBy(desc(s.savedAt), asc(s.id))
+      .orderBy(...BG3_NEWEST_FIRST)
       .limit(NEWEST_ROWS);
   }
 
