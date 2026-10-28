@@ -3,10 +3,10 @@
  *
  * Seeds (DEMO_MODE, admin JWT):
  *  - community: `POST /admin/test/community-hubs/seed {gameId}` on a configured
- *    game no other hub spec seeds (index 9 + project slot; community-hubs takes
- *    0–2, hubs-nav 3–5, hub-invite/hub-poll/calendar-hub 6–8). Every re-seed
- *    deletes the hubs a seed user leads, so a renamed "Seed Crew" never
- *    survives into the next run.
+ *    game (index 9 + project slot) with this spec × project × worker's tag
+ *    (`./hub-seed`, ROK-2030): every hub is named `<base> #<tag>` and its blurb
+ *    carries the tag, so a re-seed with the same tag deletes this caller's hubs
+ *    — a renamed one too (found by its blurb) — and never another tag's.
  *  - server: `POST /admin/test/pelican/server-hub {slot}` on this worker's slot
  *    (`1 + parallelIndex`, the server-hub.smoke pattern). A re-seed puts the hub
  *    back on its server's name and clears the override, so a run that dies
@@ -186,7 +186,7 @@ test.describe('hub rename — community hub (ROK-1950)', () => {
         const gameName = await adminGameName(admin, seed.hubIds.solo);
 
         const dialog = await openAdminRename(page, seed.hubNames.solo, gameName);
-        await dialog.getByTestId('admin-hub-rename-input').fill('seed crew');
+        await dialog.getByTestId('admin-hub-rename-input').fill(seed.hubNames.crew.toLowerCase());
         await dialog.getByRole('button', { name: 'Save name' }).click();
         await expect(dialog.getByRole('alert'), 'the nameTaken copy renders inline').toHaveText(NAME_TAKEN, { timeout: 15_000 });
         await expect(dialog, 'a refused rename keeps the dialog open').toBeVisible();

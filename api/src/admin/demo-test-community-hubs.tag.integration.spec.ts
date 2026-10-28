@@ -75,13 +75,34 @@ describe('community-hubs seed tag scoping (ROK-2030)', () => {
     proposal: true,
   };
 
+  const gone = {
+    crew: false,
+    solo: false,
+    archived: false,
+    server: false,
+    guild: false,
+    proposal: false,
+  };
+
+  it('a renamed tagged hub is still found by its blurb and cleared on re-seed', async () => {
+    const b = await seed({ tag: 'spec-b-desktop-w00' });
+    const a1 = await seed({ tag: 'spec-a-desktop-w00' });
+    await testApp.db
+      .update(schema.guilds)
+      .set({ name: 'Renamed Crew', nameKey: 'renamed crew' })
+      .where(eq(schema.guilds.id, a1.hubIds.crew));
+    await seed({ tag: 'spec-a-desktop-w00' });
+    expect(await hubExists(a1.hubIds.crew)).toBe(false);
+    expect(await survivors(b)).toEqual(kept);
+  });
+
   it("re-seeding tag A leaves tag B's hubs and hub event intact", async () => {
     const b = await seed({ tag: 'spec-b-desktop-w00', withEvent: true });
     const a1 = await seed({ tag: 'spec-a-desktop-w00' });
     const a2 = await seed({ tag: 'spec-a-desktop-w00' });
     expect(b.hubNames.crew).toBe('Seed Crew #spec-b-desktop-w00');
     expect(await survivors(b)).toEqual(kept);
-    expect(await hubExists(a1.hubIds.crew)).toBe(false);
+    expect(await survivors(a1)).toEqual(gone);
     expect(await survivors(a2)).toEqual(kept);
     const eventId = b.hubEvent?.id ?? -1;
     const ev = await testApp.db

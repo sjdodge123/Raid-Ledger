@@ -10,9 +10,9 @@
  *    bottom, slot 0 is the fleet test plan's). Re-seeding resets the slot. Its
  *    `outsider` is in no hub at all — the no-hubs viewer (signed in on its own).
  *  - community hubs: `POST /admin/test/community-hubs/seed { gameId }` on a
- *    configured game the community-hubs spec does not seed (index 3 + project
- *    slot; that spec takes indexes 0–2) → "Seed Crew" (the actor is in it) and
- *    "Seed Solo" (the actor is not).
+ *    configured game (index 3 + project slot) with this spec's tag (`./hub-seed`,
+ *    ROK-2030) → `Seed Crew #<tag>` (the actor is in it) and `Seed Solo #<tag>`
+ *    (the actor is not); other tags' hubs may share the game.
  *  - the actor: that seed's officer, made a server-hub member through
  *    `POST /admin/test/hub-member { guildId, userId }` → hubs of two kinds.
  * Every write is confirmed by polling `GET /guilds/mine` with the actor's own

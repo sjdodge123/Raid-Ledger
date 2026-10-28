@@ -2,15 +2,15 @@
  * Game community hubs smoke (ROK-1870 §4) — desktop, tablet AND mobile.
  *
  * Every test re-seeds through the DEMO_MODE fixture
- * `POST /admin/test/community-hubs/seed {gameId}` (§2.6): on its game it
- * resets its own fixture (seed-named hubs, hubs proposed/led by a seed user,
- * their members, bans and notices; seed users are reused, never recreated, and
- * their Discord DMs muted) and recreates "Seed Crew" (leader + officer
- * + 4 members + a ban), "Seed Solo" (its leader only), "Seed Hopefuls"
- * (`proposed` by `demo-member`) and "Seed Old Guard" (archived). The projects
- * run in parallel, so each one seeds a DIFFERENT configured game (the seed
- * clears by game) and acts through a different crew member (proposal limits
- * are per user across games, D12). The seeded users are A2-eligible (Discord id
+ * `POST /admin/test/community-hubs/seed {gameId, tag}` (§2.6, ROK-2030 tag via
+ * `./hub-seed`): it resets only this spec × project × worker's tagged fixture
+ * (its hubs, their members, bans and notices; seed users are reused, never
+ * recreated, and their Discord DMs muted) and recreates `Seed Crew #<tag>`
+ * (leader + officer + 4 members + a ban), `Seed Solo #<tag>` (its leader only),
+ * `Seed Hopefuls #<tag>` (`proposed` by `demo-member`) and `Seed Old Guard
+ * #<tag>` (archived). Other specs' tagged hubs may share the game, so every
+ * assertion names the seed's `hubNames`. Each project acts through a different
+ * crew member (proposal limits are per user across games, D12). The seeded users are A2-eligible (Discord id
  * + `guild_member_seen_at`); each signs in with its own session and its own JWT
  * drives the API reads. Every write is confirmed by polling the API — the first
  * render is never trusted (memory `feedback_smoke_polling_for_async_writes`).
