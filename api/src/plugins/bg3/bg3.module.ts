@@ -19,6 +19,8 @@ import { Bg3HistoryRetentionCron } from './history/bg3-retention.cron';
 import { Bg3RetentionRepository } from './history/bg3-retention.repository';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
 import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
+import { Bg3MyDataController } from './me-data/bg3-my-data.controller';
+import { Bg3MyDataRepository } from './me-data/bg3-my-data.repository';
 import { Bg3MySavesService } from './read/bg3-my-saves.service';
 import { Bg3ReadController } from './read/bg3-read.controller';
 import { Bg3ReadRepository } from './read/bg3-read.repository';
@@ -43,6 +45,7 @@ import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
     Bg3CampaignsController,
     Bg3ClaimsController,
     Bg3MeController,
+    Bg3MyDataController,
     Bg3ReadController,
   ],
   providers: [
@@ -58,6 +61,7 @@ import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
     Bg3SavesReadRepository,
     Bg3ReadService,
     Bg3MySavesService,
+    Bg3MyDataRepository,
     Bg3GalleryFeed,
   ],
   exports: [Bg3GalleryFeed],
