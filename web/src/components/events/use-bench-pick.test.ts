@@ -48,6 +48,18 @@ describe('useBenchPick', () => {
         expect(result.current.mismatch).toBe(-2);
     });
 
+    it('forgets a touched mark whose voter left, so it is not re-marked when they vote again', () => {
+        const { result, rerender } = renderHook(({ o }) => useBenchPick(o), { initialProps: { o: overflow([2, 3, 4, 5], 2) } });
+        act(() => result.current.toggle(5));
+        act(() => result.current.toggle(3));
+        expect(result.current.picked).toEqual([4, 3]);
+        rerender({ o: overflow([2, 4, 5], 1) });
+        expect(result.current.picked).toEqual([4]);
+        rerender({ o: overflow([2, 3, 4, 5], 2) });
+        expect(result.current.picked).toEqual([4]);
+        expect(result.current.benchUserIds).toEqual([4]);
+    });
+
     it('caps the pick at the voters when the organizer is benched too (0-spot roster)', () => {
         const { result } = renderHook(() => useBenchPick(overflow([2, 3], 3)));
         expect(result.current.need).toBe(2);

@@ -44,6 +44,9 @@ export function useBenchPick(overflow: SchedulingOverflow | null): BenchPick {
     const need = overflow ? Math.min(overflow.benched, people.length) : 0;
     const present = new Set(people.map((p) => p.userId));
     const fallback = defaultBenchPick(people, need);
+    // Codex P2: prune a mark whose voter left the list, so it never comes back
+    // (and is never sent) if they vote yes again. Skipped while no overflow is loaded.
+    if (overflow && touched?.some((id) => !present.has(id))) setTouched(touched.filter((id) => present.has(id)));
     const picked = touched === null ? fallback : touched.filter((id) => present.has(id));
     const toggle = (userId: number) => setTouched((prev) => {
         const base = prev === null ? fallback : prev.filter((id) => present.has(id));
