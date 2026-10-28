@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { API_BASE, apiGet, apiPost, getAdminToken, getInviteeFixture, pollForCondition } from './api-helpers';
+import { seedCommunityHubs } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
 type Role = 'a' | 'b' | 'c' | 'd';
@@ -141,7 +142,7 @@ async function nonEnabledHub(bg3GameId: number, testInfo: TestInfo): Promise<num
         .sort((a, b) => a - b);
     if (ids.length === 0) throw new Error('[hub-steam-stats] no configured non-BG3 game');
     const gameId = must(ids[(NON_ENABLED_GAME_OFFSET + testInfo.parallelIndex) % ids.length], 'non-enabled game');
-    const seed = (await apiPost(admin, '/admin/test/community-hubs/seed', { gameId })) as { hubIds?: { crew?: number } } | null;
+    const seed = (await seedCommunityHubs(admin, testInfo, 'hub-steam-stats', { gameId })) as { hubIds?: { crew?: number } } | null;
     const hubId = must(seed?.hubIds?.crew, `non-enabled seed: ${JSON.stringify(seed)}`);
     await pollForCondition(() => hubStats(admin, hubId).then((s) => (s?.available === false ? true : null)), {
         timeoutMs: 30_000,

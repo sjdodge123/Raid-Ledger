@@ -21,13 +21,14 @@
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { isDesktop } from './helpers';
 
 interface ServerHub { guildId: number; userIds: { outsider: number } }
-interface CommunitySeed { gameId: number; hubIds: { crew: number; solo: number }; memberUserIds: number[] }
+interface CommunitySeed { gameId: number; hubIds: { crew: number; solo: number }; hubNames: HubSeedNames; memberUserIds: number[] }
 interface MyHub { id: number; name: string; kind: string }
-interface Seed { serverHubId: number; serverHubName: string; crewId: number; gameId: number; actorId: number }
+interface Seed { serverHubId: number; serverHubName: string; crewId: number; hubNames: HubSeedNames; gameId: number; actorId: number }
 
 /** Header `md:` — from 768px the header carries the Hubs item; below it the More drawer. */
 const HEADER_HUBS_MIN_WIDTH = 768;
@@ -71,7 +72,7 @@ async function seedServerHub(token: string, testInfo: TestInfo): Promise<ServerH
 
 async function seedCommunity(token: string, testInfo: TestInfo): Promise<CommunitySeed> {
     const gameId = await communityGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as Partial<CommunitySeed> | null;
+    const body = (await seedCommunityHubs(token, testInfo, 'hubs-nav', { gameId })) as Partial<CommunitySeed> | null;
     if (!body?.hubIds || typeof body.gameId !== 'number' || !Array.isArray(body.memberUserIds)) {
         throw new Error(`[hubs-nav] community seed: ${JSON.stringify(body)}`);
     }
@@ -97,7 +98,7 @@ async function seedMember(page: Page, testInfo: TestInfo): Promise<Seed> {
         return ids.includes(server.guildId) && ids.includes(community.hubIds.crew) ? mine : null;
     }, { timeoutMs: 15_000, description: `user ${actorId} lists server hub ${server.guildId} + Seed Crew ${community.hubIds.crew}` });
     const serverHubName = must(hubs.find((h) => h.id === server.guildId)?.name, 'server hub name');
-    return { serverHubId: server.guildId, serverHubName, crewId: community.hubIds.crew, gameId: community.gameId, actorId };
+    return { serverHubId: server.guildId, serverHubName, crewId: community.hubIds.crew, hubNames: community.hubNames, gameId: community.gameId, actorId };
 }
 
 function rowFor(scope: Locator | Page, hubId: number): Locator {
@@ -262,9 +263,9 @@ test.describe('Hubs nav (ROK-1875)', () => {
         const seed = await seedMember(page, test.info());
         const cards = page.getByTestId('hub-directory-card');
         await page.goto(`/hubs?game=${seed.gameId}&kind=community`);
-        const solo = cards.filter({ hasText: 'Seed Solo' });
+        const solo = cards.filter({ hasText: seed.hubNames.solo });
         await expect(solo.getByTestId('hub-kind-chip'), 'the community card reads "Community"').toContainText('Community', { timeout: 20_000 });
-        await expect(solo.getByRole('button', { name: 'Join Seed Solo' }), 'a community card keeps Join').toBeVisible();
+        await expect(solo.getByRole('button', { name: `Join ${seed.hubNames.solo}` }), 'a community card keeps Join').toBeVisible();
 
         await page.goto(`/hubs?kind=server&q=${encodeURIComponent(seed.serverHubName)}`);
         const server = cards.filter({ has: rowFor(page, seed.serverHubId) });

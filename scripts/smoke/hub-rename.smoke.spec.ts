@@ -22,11 +22,13 @@
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
 interface CommunitySeed {
     gameId: number;
     hubIds: { crew: number; solo: number };
+    hubNames: HubSeedNames;
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
@@ -75,7 +77,7 @@ async function projectGameId(token: string, testInfo: TestInfo): Promise<number>
 
 async function seedCommunity(token: string, testInfo: TestInfo): Promise<CommunitySeed> {
     const gameId = await projectGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as Partial<CommunitySeed> | null;
+    const body = (await seedCommunityHubs(token, testInfo, 'hub-rename', { gameId })) as Partial<CommunitySeed> | null;
     if (!body?.hubIds || typeof body.leaderUserId !== 'number' || !Array.isArray(body.memberUserIds)) {
         throw new Error(`[hub-rename] community seed: ${JSON.stringify(body)}`);
     }
@@ -162,7 +164,7 @@ test.describe('hub rename — community hub (ROK-1950)', () => {
         const gameName = await adminGameName(admin, seed.hubIds.crew);
         const next = uniqueName(testInfo, 'Renamed');
 
-        const dialog = await openAdminRename(page, 'Seed Crew', gameName);
+        const dialog = await openAdminRename(page, seed.hubNames.crew, gameName);
         await dialog.getByTestId('admin-hub-rename-input').fill(next);
         await dialog.getByRole('button', { name: 'Save name' }).click();
         await expect(dialog, 'the dialog closes only on a successful rename').toBeHidden({ timeout: 20_000 });
@@ -183,12 +185,12 @@ test.describe('hub rename — community hub (ROK-1950)', () => {
         const seed = await seedCommunity(admin, testInfo);
         const gameName = await adminGameName(admin, seed.hubIds.solo);
 
-        const dialog = await openAdminRename(page, 'Seed Solo', gameName);
+        const dialog = await openAdminRename(page, seed.hubNames.solo, gameName);
         await dialog.getByTestId('admin-hub-rename-input').fill('seed crew');
         await dialog.getByRole('button', { name: 'Save name' }).click();
         await expect(dialog.getByRole('alert'), 'the nameTaken copy renders inline').toHaveText(NAME_TAKEN, { timeout: 15_000 });
         await expect(dialog, 'a refused rename keeps the dialog open').toBeVisible();
-        expect((await hubName(admin, seed.hubIds.solo)).name, 'a refused rename writes nothing').toBe('Seed Solo');
+        expect((await hubName(admin, seed.hubIds.solo)).name, 'a refused rename writes nothing').toBe(seed.hubNames.solo);
     });
 
     test('Leader: settings → Hub name → Save updates the hero without a reload', async ({ page }, testInfo) => {
