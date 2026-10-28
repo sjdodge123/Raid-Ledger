@@ -28,6 +28,8 @@ export const CommunityHubsSeedSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,32}$/)
       .optional(),
+    /** ROK-2030: seed on the tag's own disabled game (see the `.game` module). */
+    dedicatedGame: z.boolean().optional(),
   })
   .strict();
 

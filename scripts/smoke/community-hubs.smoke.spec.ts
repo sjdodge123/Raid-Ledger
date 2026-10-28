@@ -8,8 +8,10 @@
  * recreated, and their Discord DMs muted) and recreates `Seed Crew #<tag>`
  * (leader + officer + 4 members + a ban), `Seed Solo #<tag>` (its leader only),
  * `Seed Hopefuls #<tag>` (`proposed` by `demo-member`) and `Seed Old Guard
- * #<tag>` (archived). Other specs' tagged hubs may share the game, so every
- * assertion names the seed's `hubNames`. Each project acts through a different
+ * #<tag>` (archived), on a disabled game of the tag's own (`dedicatedGame`:
+ * never in `/games/configured`, so no other spec's crews — which also hold the
+ * actor — crowd the game card's capped list). Every assertion still names the
+ * seed's `hubNames`. Each project acts through a different
  * crew member (proposal limits are per user across games, D12). The seeded users are A2-eligible (Discord id
  * + `guild_member_seen_at`); each signs in with its own session and its own JWT
  * drives the API reads. Every write is confirmed by polling the API — the first
@@ -72,22 +74,12 @@ function actorId(seed: Seed, testInfo: TestInfo): number {
     return must(seed.memberUserIds[1 + slotOf(testInfo)], 'actor member id');
 }
 
-/** One configured game per project, so parallel seeds never clear each other. */
-async function projectGameId(token: string, testInfo: TestInfo): Promise<number> {
-    const body = (await apiGet(token, '/games/configured')) as { data?: unknown } | unknown[] | null;
-    const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
-    const ids = raw
-        .map((g) => (g as { id?: unknown }).id)
-        .filter((id): id is number => typeof id === 'number')
-        .sort((a, b) => a - b);
-    if (ids.length === 0) throw new Error('[community-hubs] GET /games/configured returned no games');
-    return must(ids[slotOf(testInfo) % ids.length], 'project game id');
-}
-
 async function seedHubs(testInfo: TestInfo): Promise<Seed> {
     const token = await getAdminToken();
-    const gameId = await projectGameId(token, testInfo);
-    const body = (await seedCommunityHubs(token, testInfo, 'community-hubs', { gameId })) as Partial<Seed> | null;
+    // The tag's own game (ROK-2030): the game card shows the viewer's hubs first
+    // and caps the rest (`pickShownHubs`), and every tagged crew holds the actor,
+    // so on a game shared with other specs the unjoined Solo hub is never listed.
+    const body = (await seedCommunityHubs(token, testInfo, 'community-hubs', { dedicatedGame: true })) as Partial<Seed> | null;
     if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds)) {
         throw new Error(`[community-hubs] seed: ${JSON.stringify(body)}`);
     }

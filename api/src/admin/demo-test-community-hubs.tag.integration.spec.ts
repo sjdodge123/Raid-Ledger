@@ -14,6 +14,7 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 
 interface SeedBody {
+  gameId: number;
   hubIds: Record<'crew' | 'solo' | 'archived' | 'server' | 'guild', number>;
   hubNames: Record<string, string>;
   proposalId: number;
@@ -129,5 +130,53 @@ describe('community-hubs seed tag scoping (ROK-2030)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ tag: 'Bad_Tag%' });
     expect(res.status).toBe(400);
+  });
+
+  it("dedicatedGame seeds on the tag's own disabled game, reused on re-seed", async () => {
+    const a1 = await seed({
+      gameId: undefined,
+      tag: 'own-a',
+      dedicatedGame: true,
+    });
+    const a2 = await seed({
+      gameId: undefined,
+      tag: 'own-a',
+      dedicatedGame: true,
+    });
+    const b = await seed({
+      gameId: undefined,
+      tag: 'own-b',
+      dedicatedGame: true,
+    });
+    expect(a2.gameId).toBe(a1.gameId);
+    expect(new Set([a1.gameId, b.gameId, testApp.seed.game.id]).size).toBe(3);
+    const rows = await testApp.db
+      .select({ id: schema.games.id, enabled: schema.games.enabled })
+      .from(schema.games)
+      .where(eq(schema.games.id, a1.gameId));
+    expect(rows).toEqual([{ id: a1.gameId, enabled: false }]);
+    const configured = await testApp.request
+      .get('/games/configured')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(configured.status).toBe(200);
+    const listed = JSON.stringify(configured.body).match(/"id":\d+/g) ?? [];
+    expect(listed).not.toContain(`"id":${a1.gameId}`);
+    expect(await hubExists(a1.hubIds.crew)).toBe(false);
+    expect(await survivors(a2)).toEqual(kept);
+  });
+
+  it('rejects dedicatedGame without a tag or with a gameId', async () => {
+    process.env.DEMO_MODE = 'true';
+    await testApp.app.get(SettingsService).setDemoMode(true);
+    for (const body of [
+      { dedicatedGame: true },
+      { dedicatedGame: true, tag: 'own-c', gameId: testApp.seed.game.id },
+    ]) {
+      const res = await testApp.request
+        .post('/admin/test/community-hubs/seed')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(body);
+      expect({ body, status: res.status }).toEqual({ body, status: 400 });
+    }
   });
 });

@@ -1,6 +1,6 @@
 /**
  * DemoTestCommunityHubsController (ROK-1870 §2.6) —
- * `POST /admin/test/community-hubs/seed`, body `{ gameId?, withEvent?, tag? }`. Seeds the
+ * `POST /admin/test/community-hubs/seed`, body `{ gameId?, withEvent?, tag?, dedicatedGame? }`. Seeds the
  * community-hub fixture set (see the helpers) and returns its ids for the
  * smoke specs + fleet test plan. DEMO_MODE-only, JWT + admin guarded.
  */
@@ -29,7 +29,6 @@ import { parseDemoBody } from './demo-test.utils';
 import {
   CommunityHubsSeedSchema,
   ensureSeedUser,
-  resolveSeedGame,
   seedActiveHub,
   seedArchivedHub,
   seedHubEvent,
@@ -43,6 +42,7 @@ import {
   resetSeedFixture,
 } from './demo-test-community-hubs.reset';
 import { seedOtherKindHubs } from './demo-test-community-hubs.other-kinds';
+import { seedGameFor } from './demo-test-community-hubs.game';
 import {
   seedHubNames,
   type SeedHubNames,
@@ -64,7 +64,7 @@ export class DemoTestCommunityHubsController {
   @HttpCode(HttpStatus.OK)
   async seed(@Body() body: unknown): Promise<CommunityHubsSeedResult> {
     const input = parseDemoBody(CommunityHubsSeedSchema, body ?? {});
-    const gameId = await resolveSeedGame(this.db, input.gameId);
+    const gameId = await seedGameFor(this.db, input);
     const seedUsers = await ensureSeedUsers(this.db);
     await muteSeedDiscordDms(this.db, seedUsers);
     await resetSeedFixture(this.db, gameId, seedUsers, input.tag);

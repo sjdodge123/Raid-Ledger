@@ -29,12 +29,13 @@ export function hubSeedTag(slug: string, testInfo: Pick<TestInfo, 'project' | 'p
     return tag;
 }
 
-/** Seed this caller's tagged community-hubs fixture on `body.gameId`. */
+/** Seed this caller's tagged community-hubs fixture on `body.gameId` or the tag's own game. */
 export async function seedCommunityHubs(
     token: string,
     testInfo: Pick<TestInfo, 'project' | 'parallelIndex'>,
     slug: string,
-    body: { gameId: number; withEvent?: boolean },
+    /** `dedicatedGame`: the API seeds on this tag's own disabled game (ROK-2030). */
+    body: { gameId: number; withEvent?: boolean } | { dedicatedGame: true; withEvent?: boolean },
 ): Promise<unknown> {
     return apiPost(token, '/admin/test/community-hubs/seed', { ...body, tag: hubSeedTag(slug, testInfo) });
 }

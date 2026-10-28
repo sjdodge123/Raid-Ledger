@@ -112,6 +112,12 @@ describe('CommunityHubsSeedSchema (ROK-1893 P4)', () => {
     });
   });
 
+  it('accepts dedicatedGame with a tag (ROK-2030)', () => {
+    expect(
+      CommunityHubsSeedSchema.parse({ dedicatedGame: true, tag: 'own-a' }),
+    ).toEqual({ dedicatedGame: true, tag: 'own-a' });
+  });
+
   it('rejects a non-boolean withEvent', () => {
     const res = CommunityHubsSeedSchema.safeParse({ withEvent: 'yes' });
     expect(res.success).toBe(false);
