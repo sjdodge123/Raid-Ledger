@@ -124,15 +124,7 @@ export class DemoTestBg3Controller {
   > {
     const shape = variantShape(variant);
     const campaignKey = bg3SeedCampaignKey(tag);
-    const campaignId = shape.campaign
-      ? await seedBg3Campaign(
-          this.db,
-          hubId,
-          ids.host,
-          BG3_SEED_CAMPAIGN_NAME,
-          shape.spoilers,
-        )
-      : null;
+    const campaignId = await this.campaignFor(hubId, ids.host, shape);
     const assignTo = shape.assignSaves ? campaignId : null;
     if (assignTo !== null)
       await bindBg3Key(this.db, ids.host, campaignKey, assignTo);
@@ -154,6 +146,21 @@ export class DemoTestBg3Controller {
       sessionCount: sessions,
       claimedSlotKey: claimed ? BG3_SEED_CLAIMED_SLOT : null,
     };
+  }
+
+  private async campaignFor(
+    hubId: number,
+    hostId: number,
+    shape: { campaign: boolean; spoilers: boolean },
+  ): Promise<number | null> {
+    if (!shape.campaign) return null;
+    return seedBg3Campaign(
+      this.db,
+      hubId,
+      hostId,
+      BG3_SEED_CAMPAIGN_NAME,
+      shape.spoilers,
+    );
   }
 }
 
