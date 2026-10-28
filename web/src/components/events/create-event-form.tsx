@@ -38,14 +38,17 @@ function useCreateEventMutation(isEditMode: boolean, editEventId: number | undef
             // poll may sign its voters up to this event and no other.
             return createEvent({ ...(dto as CreateEventDto), ...(schedulingMatchId ? { schedulingMatchId } : {}) });
         },
-        onSuccess: (event) => {
+        // Codex P2: snapshot the pick at submit time — `benchUserIds` is read from
+        // the latest render, so a pick changed while the request ran must not leak in.
+        onMutate: () => ({ benchAtSubmit: benchUserIds }),
+        onSuccess: (event, _dto, submitted) => {
             toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
             queryClient.invalidateQueries({ queryKey: ['events'] });
             if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
             if (schedulingMatchId) {
                 // ROK-1844: signups need the winning slot — without one just close the poll.
                 const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeLockIn(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined, benchUserIds).then(() => invalidateHubPolls(queryClient), () => {
+                completeLockIn(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined, submitted?.benchAtSubmit).then(() => invalidateHubPolls(queryClient), () => {
                     toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
                 });
             }
