@@ -1,7 +1,8 @@
 /**
  * ROK-1957 D-18 — "Delete my BG3 data". ONE transaction removes every BG3
  * row the caller owns (claims, key bindings, default, uploaded saves —
- * the saves ARE the history) and then releases the deleted saves'
+ * the saves ARE the history — and their `bg3-save` latest-wins markers)
+ * and then releases the deleted saves'
  * `bg3-save` thumbnail refs in one statement. Campaigns they created or
  * host stay: they belong to the hub (host is nulled only when the user
  * row itself is deleted). Every statement is scoped to the caller and
@@ -63,6 +64,17 @@ async function deleteOwned(
   };
 }
 
+/**
+ * The caller's `bg3-save` latest-wins markers. Left behind, a re-upload of
+ * a deleted save would be acked `stale` and never stored again.
+ */
+async function clearLatestMarkers(tx: Tx, userId: number): Promise<void> {
+  const m = schema.companionIngestLatest;
+  await tx
+    .delete(m)
+    .where(and(eq(m.userId, userId), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
+}
+
 @Injectable()
 export class Bg3MyDataRepository {
   constructor(
@@ -82,6 +94,7 @@ export class Bg3MyDataRepository {
     return this.db.transaction(async (tx) => {
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
+      await clearLatestMarkers(tx, userId);
       const thumbnailRefs = await this.blobs.releaseUnusedRefsIn(tx, {
         userId,
         contract: BG3_SAVE_CONTRACT_ID,

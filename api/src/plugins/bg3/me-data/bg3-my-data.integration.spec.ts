@@ -4,7 +4,8 @@
  * JWT, 200 with bg3 INACTIVE, caller-only deletes while user B shares a sha
  * and the campaign, A's refs for other contracts (and never-bound blobs)
  * intact, a ref refreshed after the cutoff survives, a second call is all
- * zeros, and hosted campaigns survive.
+ * zeros, hosted campaigns survive, and the caller's bg3-save latest-wins
+ * markers are cleared so a re-upload is accepted, not stale.
  * Every test makes its own users + hub. No afterAll DB work: the shared setup
  * closes the pool.
  */
@@ -14,6 +15,7 @@ import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import * as schema from '../../../drizzle/schema';
+import { CompanionIngestLatestRepository } from '../../../companion/ingest/companion-ingest-latest.repository';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
 import {
@@ -349,5 +351,29 @@ describe('Bg3MyDataRepository.deleteAllFor — ref cutoff', () => {
       .from(r)
       .where(and(eq(r.userId, a.id), eq(r.contract, BG3_SAVE_CONTRACT_ID)));
     expect(left).toEqual([{ sha: SHA_FRESH }]);
+  });
+});
+
+describe('DELETE plugins/bg3/me/data — latest-wins markers', () => {
+  it('a re-upload of a deleted save is accepted, not stale', async () => {
+    const a = await makeUser('mark-a');
+    const b = await makeUser('mark-b');
+    const latest = testApp.app.get(CompanionIngestLatestRepository);
+    const advance = (userId: number, contract: string) =>
+      latest.transaction((tx) =>
+        latest.advance(tx, { userId, contract, key: KEY, at: T0 }),
+      );
+    expect(await advance(a.id, BG3_SAVE_CONTRACT_ID)).toBe(true);
+    expect(await advance(a.id, OTHER_CONTRACT)).toBe(true);
+    expect(await advance(b.id, BG3_SAVE_CONTRACT_ID)).toBe(true);
+    // Before the delete, the same save is a replay → stale.
+    expect(await advance(a.id, BG3_SAVE_CONTRACT_ID)).toBe(false);
+
+    expect((await del(a.token)).status).toBe(200);
+
+    expect(await advance(a.id, BG3_SAVE_CONTRACT_ID)).toBe(true);
+    // Another contract's marker and another user's marker are untouched.
+    expect(await advance(a.id, OTHER_CONTRACT)).toBe(false);
+    expect(await advance(b.id, BG3_SAVE_CONTRACT_ID)).toBe(false);
   });
 });

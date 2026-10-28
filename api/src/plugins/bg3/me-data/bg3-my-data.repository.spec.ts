@@ -1,7 +1,8 @@
 /**
  * ROK-1957 D-18 — "Delete my BG3 data" removes only the caller's claims,
  * key bindings, default and saves in one transaction, then releases the
- * deleted saves' distinct thumbnail shas with a NOT-NULL `stillUsed` guard.
+ * deleted saves' distinct thumbnail shas with a NOT-NULL `stillUsed` guard,
+ * and clears the caller's `bg3-save` latest-wins markers.
  */
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { getTableName, type SQL, type Table } from 'drizzle-orm';
@@ -64,7 +65,19 @@ describe('Bg3MyDataRepository.deleteAllFor', () => {
     const { db, repo, wheres } = build([SHA_A]);
     await repo.deleteAllFor(ME, STARTED);
     expect(db.transaction).toHaveBeenCalledTimes(1);
-    expect([...wheres.keys()].sort()).toEqual(TABLES.map(([t]) => t).sort());
+    expect([...wheres.keys()].sort()).toEqual(
+      [...TABLES.map(([t]) => t), 'companion_ingest_latest'].sort(),
+    );
+  });
+
+  it("clears the caller's bg3-save latest-wins markers (a re-upload is not stale)", async () => {
+    const { repo, wheres } = build([SHA_A]);
+    await repo.deleteAllFor(ME, STARTED);
+    const q = rendered(wheres.get('companion_ingest_latest'));
+    expect(q.sql).toBe(
+      '("companion_ingest_latest"."user_id" = $1 and "companion_ingest_latest"."contract" = $2)',
+    );
+    expect(q.params).toEqual([ME, BG3_SAVE_CONTRACT_ID]);
   });
 
   it("releases the caller's distinct non-null shas, cut off at the start", async () => {
