@@ -37,6 +37,7 @@ import {
 } from '../../../pages/scheduling/threshold';
 import { resolvePollStatus } from './scheduling-poll-status';
 import { invalidateHubPolls } from '../../hub/events/hub-polls-api';
+import { refreshLockedInEvent } from '../../events/use-bench-pick';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
@@ -149,7 +150,11 @@ function useLockCommit(
           onSuccess: () => {
             // startTime must be the same instant as slot.proposedTime — the
             // backend matches it to a slot by Date-getTime equality (ROK-1031).
-            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => invalidateHubPolls(qc));
+            // ROK-2031: complete resolves after the re-roster — refetch the event.
+            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => {
+              invalidateHubPolls(qc);
+              refreshLockedInEvent(qc, eventId);
+            });
             toast.success('Event rescheduled');
           },
           onError: (err) =>
