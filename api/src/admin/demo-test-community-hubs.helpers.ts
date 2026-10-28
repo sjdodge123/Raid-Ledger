@@ -9,9 +9,10 @@
  */
 import { createHash } from 'node:crypto';
 import { NotFoundException } from '@nestjs/common';
-import { and, asc, eq, isNull, like } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
+import { BG3_GAME_SLUGS, BG3_IGDB_ID } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
@@ -79,19 +80,44 @@ export const SEED_HUB_NAMES = {
   archived: 'Seed Old Guard',
 } as const;
 
-const BG3_SLUG = 'baldurs-gate-3';
+/**
+ * BG3's row (ROK-2038): by IGDB id first, then any known BG3 slug — the boot
+ * seed writes `baldurs-gate-iii`, never the old guess `baldurs-gate-3`.
+ */
+export async function findBg3GameId(db: Db): Promise<number | null> {
+  const gm = schema.games;
+  const [hit] = await db
+    .select({ id: gm.id })
+    .from(gm)
+    .where(
+      or(eq(gm.igdbId, BG3_IGDB_ID), inArray(gm.slug, [...BG3_GAME_SLUGS])),
+    )
+    .orderBy(sql`(${gm.igdbId} = ${BG3_IGDB_ID}) desc nulls last`, asc(gm.id))
+    .limit(1);
+  return hit?.id ?? null;
+}
 
-/** The body's game, else BG3, else the lowest-id game; 404 when none. */
+/**
+ * The body's game, else BG3, else (only when no BG3 row exists at all, e.g.
+ * a truncated test DB) the lowest-id game; 404 when none.
+ */
 export async function resolveSeedGame(
   db: Db,
   gameId?: number,
 ): Promise<number> {
   const gm = schema.games;
-  const where =
-    gameId === undefined ? eq(gm.slug, BG3_SLUG) : eq(gm.id, gameId);
-  const [hit] = await db.select({ id: gm.id }).from(gm).where(where).limit(1);
-  if (hit) return hit.id;
-  if (gameId !== undefined) throw new NotFoundException('Game not found');
+  if (gameId === undefined) {
+    const bg3 = await findBg3GameId(db);
+    if (bg3 !== null) return bg3;
+  } else {
+    const [hit] = await db
+      .select({ id: gm.id })
+      .from(gm)
+      .where(eq(gm.id, gameId))
+      .limit(1);
+    if (hit) return hit.id;
+    throw new NotFoundException('Game not found');
+  }
   const [any] = await db
     .select({ id: gm.id })
     .from(gm)

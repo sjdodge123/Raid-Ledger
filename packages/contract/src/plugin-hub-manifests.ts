@@ -15,7 +15,7 @@ import {
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
 import {
-  BG3_GAME_SLUG,
+  BG3_GAME_SLUGS,
   BG3_INGEST_SOURCE_ID,
   BG3_PLUGIN_ID,
   BG3_RETENTION_JOB_NAME,
@@ -122,7 +122,7 @@ const blizzard = {
 } satisfies PluginHubManifest;
 
 /**
- * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of `BG3_GAME_SLUG`).
+ * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of a `BG3_GAME_SLUGS` game).
  * Widgets come with ROK-1958. Mapped below as `bg3`.
  */
 export const BG3_HUB_MANIFEST = {
@@ -132,7 +132,7 @@ export const BG3_HUB_MANIFEST = {
     { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
     { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
   ],
-  gameSlugs: [BG3_GAME_SLUG],
+  gameSlugs: [...BG3_GAME_SLUGS],
   setup: BG3_SETUP,
 } satisfies PluginHubManifest;
 

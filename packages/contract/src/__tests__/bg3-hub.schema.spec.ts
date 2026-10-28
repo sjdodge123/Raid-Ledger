@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BG3_CAMPAIGN_NAME_MAX,
   BG3_GAME_SLUG,
+  BG3_GAME_SLUGS,
   Bg3ClaimBodySchema,
   Bg3CreateCampaignBodySchema,
   Bg3DefaultCampaignBodySchema,
@@ -15,6 +16,7 @@ import {
   Bg3SlotKeySchema,
   Bg3SnapshotResponseSchema,
   Bg3UpdateCampaignBodySchema,
+  isBg3GameSlug,
 } from '../bg3-hub.schema.js';
 import { PluginHubManifestSchema } from '../plugin-hub-manifest.schema.js';
 import { BG3_HUB_MANIFEST, hubManifestProblems } from '../plugin-hub-manifests.js';
@@ -67,7 +69,13 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
       'scheduled-job/Bg3HistoryRetentionCron_prune',
     ]);
     expect([BG3_HUB_MANIFEST.widgets, BG3_HUB_MANIFEST.tabs]).toEqual([[], []]);
-    expect(BG3_HUB_MANIFEST.gameSlugs).toEqual([BG3_GAME_SLUG]);
+    expect(BG3_HUB_MANIFEST.gameSlugs).toEqual([...BG3_GAME_SLUGS]);
+  });
+
+  it('ROK-2038: the canonical slug is the seeded one; both known slugs match', () => {
+    expect(BG3_GAME_SLUG).toBe('baldurs-gate-iii');
+    expect(['baldurs-gate-iii', 'baldurs-gate-3'].map(isBg3GameSlug)).toEqual([true, true]);
+    expect(['valheim', '', null, undefined].map(isBg3GameSlug)).toEqual([false, false, false, false]);
   });
 
   it('setup: two required per-hub requirements on community hubs, without a check', () => {
