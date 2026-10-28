@@ -116,7 +116,7 @@ test.describe("Valheim hub — Planner source picker (ROK-1860)", () => {
       await expect(treeRow(p, "Copper")).toContainText(/Need 2\b/);
       await expect(treeRow(p, "Tin")).toContainText(/Need 1\b/);
       await expect(bronzeChip(p)).toHaveAttribute("aria-haspopup", "dialog");
-      const before = await tinOreGather(p).innerText();
+      const before = await tinOreGather(p).getByRole("cell").allTextContents();
 
       const dialog = await openPicker(p);
       await expect(
@@ -129,7 +129,7 @@ test.describe("Valheim hub — Planner source picker (ROK-1860)", () => {
       await pickWay(p, /Forge · lvl 2/);
       await expect(treeRow(p, "Copper")).toContainText(/Need 8\b/);
       await expect(treeRow(p, "Tin")).toContainText(/Need 3\b/);
-      await expect(tinOreGather(p)).not.toHaveText(before);
+      await expect(tinOreGather(p).getByRole("cell")).not.toHaveText(before);
       await expect(tinOreGather(p)).toContainText(String(tinOrePicked));
 
       // Kept per browser: a reload restores the pick, shown selected.
@@ -147,7 +147,7 @@ test.describe("Valheim hub — Planner source picker (ROK-1860)", () => {
       await pickWay(p, /Use the default/);
       await expect(treeRow(p, "Copper")).toContainText(/Need 2\b/);
       await expect(treeRow(p, "Tin")).toContainText(/Need 1\b/);
-      await expect(tinOreGather(p)).toHaveText(before);
+      await expect(tinOreGather(p).getByRole("cell")).toHaveText(before);
     } finally {
       await member.context.close();
     }
