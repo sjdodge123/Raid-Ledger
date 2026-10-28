@@ -50,12 +50,15 @@ describe('ValheimDeathsWidget — picture strip', () => {
         expect(within(group).getByText('+2')).toBeTruthy();
     });
 
-    it('sits outside the row map link (no nested interactive) and keeps the link as the row text', async () => {
+    it('sits outside both row links — name and map (no nested interactive)', async () => {
         renderWithProviders(<Widget />);
-        const link = await screen.findByRole('link', { name: 'Ragnhild, 12 deaths — show on map' });
+        const map = await screen.findByRole('link', { name: "Show Ragnhild's 12 deaths on the map" });
+        const name = screen.getByRole('link', { name: "Open Ragnhild's character page" });
         await waitFor(() => expect(strip('Ragnhild')).toBeTruthy());
-        expect(link.contains(strip('Ragnhild'))).toBe(false);
-        expect(within(link).queryByRole('button')).toBeNull();
+        for (const link of [map, name]) {
+            expect(link.contains(strip('Ragnhild'))).toBe(false);
+            expect(within(link).queryByRole('button')).toBeNull();
+        }
         expect(rowOf('c11').contains(strip('Ragnhild'))).toBe(true);
     });
 

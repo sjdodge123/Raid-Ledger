@@ -27,6 +27,7 @@ import {
     keyToAction,
     pinchActions,
     viewportReducer,
+    type Bounds,
     type PinchGeometry,
     type Point,
     type ViewportAction,
@@ -233,7 +234,11 @@ function useViewportCommands(dispatch: Dispatch<ViewportAction>) {
         (point: Point) => dispatch({ type: 'centre', point }),
         [dispatch],
     );
-    return { zoomIn, zoomOut, fit, centreOn };
+    const frameTo = useCallback(
+        (frame: Bounds | null) => dispatch({ type: 'frame', frame }),
+        [dispatch],
+    );
+    return { zoomIn, zoomOut, fit, centreOn, frameTo };
 }
 
 /**
@@ -271,6 +276,8 @@ export interface MapViewportApi {
     zoomOut: () => void;
     fit: () => void;
     centreOn: (point: Point) => void;
+    /** ROK-2028: set what Fit frames (re-frames unless the user moved the map). */
+    frameTo: (frame: Bounds | null) => void;
 }
 
 /** Viewport state for a `contentSize`² texture (the grid's `textureSize`); key the caller on it — a new size needs a remount. */
@@ -284,7 +291,7 @@ export function useMapViewport(contentSize: number): MapViewportApi {
     useViewportSize(ref, dispatch);
     useWheelZoom(ref, dispatch);
     const handlers = usePointerHandlers(dispatch);
-    const { zoomIn, zoomOut, fit, centreOn } = useViewportCommands(dispatch);
+    const { zoomIn, zoomOut, fit, centreOn, frameTo } = useViewportCommands(dispatch);
     const { scale, x, y } = state.vp;
     const transform = `translate(${x}px, ${y}px) scale(${scale})`;
     return {
@@ -297,5 +304,6 @@ export function useMapViewport(contentSize: number): MapViewportApi {
         zoomOut,
         fit,
         centreOn,
+        frameTo,
     };
 }

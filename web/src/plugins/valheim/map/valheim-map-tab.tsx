@@ -3,7 +3,7 @@
  * world pickers above the map; the selection lives in the query string
  * (D2: `?vc=<characterId>&vm=<mapId>`), the tab in the hash (`useHashTab`).
  */
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
     ValheimCharacterMapRef,
@@ -69,10 +69,11 @@ interface PickerProps {
 
 function Picker({ id, label, value, options, onPick }: PickerProps) {
     return (
-        <label htmlFor={id} className="grid gap-1 text-sm text-foreground">
+        <label htmlFor={id} className="flex items-center gap-2 text-sm text-foreground">
             {label}
             <Select
                 id={id}
+                wrapperClassName="w-auto min-w-40"
                 value={String(value)}
                 onChange={(e) => onPick(Number(e.target.value))}
             >
@@ -104,7 +105,7 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
         label: r.name,
     }));
     return (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3" data-testid="map-pickers">
             <Picker
                 id={`${idBase}-character`}
                 label="Character"
@@ -125,35 +126,22 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
     );
 }
 
-/** The map, a detail-fetch error with Retry, or the no-map empty state. */
-function CharacterMapBody({
-    serverId,
-    characterId,
-    mapId,
-    detail,
-}: {
+interface CharacterMapBodyProps {
     serverId: number;
     characterId: number;
     mapId: number | null;
     detail: ReturnType<typeof useValheimCharacterMaps>;
-}) {
+    /** ROK-2028: the toolbar row's slot the map's filter summary + trigger portal into. */
+    toolbarSlot: HTMLElement | null;
+}
+
+/** The map, a detail-fetch error with Retry, or the no-map empty state. */
+function CharacterMapBody({ serverId, characterId, mapId, detail, toolbarSlot }: CharacterMapBodyProps) {
     if (mapId !== null)
-        return (
-            <ValheimMapView
-                serverId={serverId}
-                characterId={characterId}
-                mapId={mapId}
-            />
-        );
+        return <ValheimMapView serverId={serverId} characterId={characterId} mapId={mapId} toolbarSlot={toolbarSlot} />;
     if (detail.error)
-        return (
-            <MapError
-                text="This character's maps could not be loaded."
-                onRetry={() => void detail.refetch()}
-            />
-        );
-    if (detail.isSuccess)
-        return <Empty text="This character has no map uploaded yet." />;
+        return <MapError text="This character's maps could not be loaded." onRetry={() => void detail.refetch()} />;
+    if (detail.isSuccess) return <Empty text="This character has no map uploaded yet." />;
     return null;
 }
 
@@ -165,25 +153,26 @@ interface CharacterMapProps {
     param: string | null;
 }
 
+/**
+ * ROK-2028: the tab owns the one toolbar row so the pickers keep ONE tree
+ * position through pending / loading / ready (a pick never remounts the
+ * `<select>` or drops focus); the map portals its filter summary + trigger
+ * into the row's `contents` slot.
+ */
 function CharacterMap(props: CharacterMapProps) {
     const { serverId, rows, characterId, param } = props;
+    const [slot, setSlot] = useState<HTMLElement | null>(null);
     const detail = useValheimCharacterMaps(characterId);
     const maps = detail.data?.id === characterId ? detail.data.maps : [];
     const mapId = pickMapId(maps, param);
     return (
         <div className="grid gap-3">
-            <Pickers
-                rows={rows}
-                characterId={characterId}
-                maps={maps}
-                mapId={mapId}
-            />
-            <CharacterMapBody
-                serverId={serverId}
-                characterId={characterId}
-                mapId={mapId}
-                detail={detail}
-            />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" data-testid="map-filter-toolbar">
+                <Pickers rows={rows} characterId={characterId} maps={maps} mapId={mapId} />
+                <div ref={setSlot} className="contents" />
+            </div>
+            <CharacterMapBody serverId={serverId} characterId={characterId} mapId={mapId}
+                detail={detail} toolbarSlot={slot} />
         </div>
     );
 }
