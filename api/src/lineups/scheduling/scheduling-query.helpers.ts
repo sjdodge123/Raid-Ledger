@@ -87,13 +87,17 @@ export function findScheduleSlots(db: Db, matchId: number) {
 }
 
 /**
- * Find all votes for given slot IDs with user display names.
- *
- * ROK-2025: in vote order, earliest first. `updated_at` is stamped only by a
+ * ROK-2025: vote order, earliest first. `updated_at` is stamped only by a
  * stance flip, so on a yes row COALESCE(updated_at, created_at) is when the
  * member said yes; `id` breaks `created_at` ties. The lock-in's default bench
  * (and the lock form's pre-marked pick) is the LAST yes-voters of this order.
  */
+const VOTE_ORDER = [
+  sql`coalesce(${schema.communityLineupScheduleVotes.updatedAt}, ${schema.communityLineupScheduleVotes.createdAt})`,
+  schema.communityLineupScheduleVotes.id,
+];
+
+/** Find all votes for given slot IDs with user display names, in vote order. */
 export function findScheduleVotes(
   db: Db,
   slotIds: number[],
@@ -120,10 +124,7 @@ export function findScheduleVotes(
       eq(schema.communityLineupScheduleVotes.userId, schema.users.id),
     )
     .where(inArray(schema.communityLineupScheduleVotes.slotId, slotIds))
-    .orderBy(
-      sql`coalesce(${schema.communityLineupScheduleVotes.updatedAt}, ${schema.communityLineupScheduleVotes.createdAt})`,
-      schema.communityLineupScheduleVotes.id,
-    );
+    .orderBy(...VOTE_ORDER);
 }
 
 /** Insert a new schedule slot and return the inserted row. */

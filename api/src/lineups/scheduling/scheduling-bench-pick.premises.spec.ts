@@ -30,8 +30,10 @@ function createMockTx() {
     }),
     insert: jest.fn().mockReturnValue({ values }),
     update: jest.fn(),
-    transaction: jest.fn((cb: (sp: unknown) => unknown) => cb(tx)),
+    transaction: jest.fn(),
   };
+  // Roster inserts run in a SAVEPOINT (ROK-1345): run the callback on tx.
+  tx.transaction.mockImplementation((cb: (sp: unknown) => unknown) => cb(tx));
   return { tx, values };
 }
 
@@ -49,7 +51,12 @@ describe('ROK-2025 premise (a): explicit bench signup on a generic event', () =>
     const { tx } = createMockTx();
     const eventRow = { maxAttendees: 2, slotConfig: null };
 
-    const autoBench = await checkAutoBench(tx as never, eventRow as never, 1, BENCH_DTO);
+    const autoBench = await checkAutoBench(
+      tx as never,
+      eventRow as never,
+      1,
+      BENCH_DTO,
+    );
 
     expect(autoBench).toBe(false);
     expect(tx.select).not.toHaveBeenCalled();
@@ -59,8 +66,12 @@ describe('ROK-2025 premise (a): explicit bench signup on a generic event', () =>
     const generic = { slotConfig: null };
     const mmo = { slotConfig: { type: 'mmo' } };
 
-    expect(shouldUseAutoAllocationNew(generic as never, BENCH_DTO, false)).toBe(false);
-    expect(shouldUseAutoAllocationNew(mmo as never, BENCH_DTO, false)).toBe(false);
+    expect(shouldUseAutoAllocationNew(generic as never, BENCH_DTO, false)).toBe(
+      false,
+    );
+    expect(shouldUseAutoAllocationNew(mmo as never, BENCH_DTO, false)).toBe(
+      false,
+    );
   });
 
   it('writes a bench roster row and does not confirm the signup', async () => {
