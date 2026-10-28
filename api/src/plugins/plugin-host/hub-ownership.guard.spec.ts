@@ -165,6 +165,7 @@ describe('ROK-1969 A3 — declared ↔ registered, exact (source scan)', () => {
         'blizzard/hub-kind/wow_guild',
         'core/ingest-source/hub-media.upload',
         'bg3/ingest-source/bg3-save',
+        'bg3/scheduled-job/Bg3HistoryRetentionCron_prune',
       ]),
     );
   });
