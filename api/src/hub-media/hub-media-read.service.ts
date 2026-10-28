@@ -30,6 +30,7 @@ import {
   kindsForFilter,
 } from './hub-media.cursor';
 import { HubMediaDecoratorRegistry } from './hub-media.decorators';
+import { HubMediaSubjectRegistry } from './hub-media.subjects';
 import { unlinkMediaFiles } from './hub-media.files';
 import { toHubMediaItem } from './hub-media.mappers';
 import { mediaFilePath } from './hub-media.paths';
@@ -60,30 +61,50 @@ export class HubMediaReadService {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly access: GuildAccessService,
     private readonly decorators: HubMediaDecoratorRegistry,
+    private readonly subjects: HubMediaSubjectRegistry,
   ) {}
 
+  /**
+   * One Gallery page. ROK-2027: `subject` (after the D7 404 gate) narrows to
+   * a plugin-resolved id set; an empty set is an empty page (D5).
+   */
   async list(
     actor: GuildActor,
     guildId: number,
     query: HubMediaListQuery,
   ): Promise<HubMediaListResponse> {
     const viewer = await this.viewer(actor, guildId);
-    const { scope } = viewer;
+    const ids = query.subject
+      ? await this.subjects.resolve(guildId, query.subject)
+      : null;
+    const present = new Set(await kindsPresent(this.db, viewer.scope));
+    const kinds = HUB_MEDIA_KINDS.filter((k) => present.has(k));
+    if (ids?.length === 0) {
+      return { items: [], nextCursor: null, total: 0, kinds };
+    }
+    return { ...(await this.page(viewer, query, ids)), kinds };
+  }
+
+  /** The rows, cursor and total of one page (kind + optional subject ids). */
+  private async page(
+    viewer: HubMediaViewer,
+    query: HubMediaListQuery,
+    ids: number[] | null,
+  ): Promise<Omit<HubMediaListResponse, 'kinds'>> {
     const kinds = kindsForFilter(query.kind);
     const cursor = query.cursor ? decodeHubMediaCursor(query.cursor) : null;
     const limit = query.limit ?? DEFAULT_LIMIT;
-    const rows = await listPage(this.db, scope, { kinds, cursor, limit });
+    const q = { kinds, ids, cursor, limit };
+    const rows = await listPage(this.db, viewer.scope, q);
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
-    const present = new Set(await kindsPresent(this.db, scope));
     return {
       items: page.map((r) => this.toItem(r, viewer)),
       nextCursor:
         rows.length > limit && last
           ? encodeHubMediaCursor({ capturedAt: last.capturedAt, id: last.id })
           : null,
-      total: await countVisible(this.db, scope, kinds),
-      kinds: HUB_MEDIA_KINDS.filter((k) => present.has(k)),
+      total: await countVisible(this.db, viewer.scope, kinds, ids),
     };
   }
 
