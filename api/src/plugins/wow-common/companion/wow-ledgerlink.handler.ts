@@ -10,8 +10,10 @@
  * mode (Codex P1): the ingest tx revalidates the device and commits first,
  * then the import runs — one pooled connection at a time, and a device revoke
  * never waits on an import. No `latestWins`: the import's per-section noop
- * (same sha) / stale (older export) logic is authoritative. Every import outcome (applied / noop / stale) acks
- * `accepted`; a reject throws a companion error and the ingest rolls back.
+ * (same sha) / stale (older export) logic is authoritative. Every import
+ * outcome (applied / noop / stale) acks `accepted`; a reject throws a
+ * companion error after the (empty) ingest tx has committed, so nothing is
+ * kept and a retry is a fresh attempt.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import type {
