@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeSourceOption, ValheimRecipeSourceRef } from '@raid-ledger/contract';
 import { RecipeTreeRow, type SourceChooser } from './recipe-tree-row';
 import { SourcePicker } from './source-picker';
@@ -88,7 +88,7 @@ const node = (over: Partial<ValheimPlanNode> = {}): ValheimPlanNode => ({
     ...over,
 });
 
-function chooser(options: readonly ValheimRecipeSourceOption[], choose = vi.fn()): SourceChooser {
+function chooser(options: readonly ValheimRecipeSourceOption[], choose: SourceChooser['choose'] = vi.fn()): SourceChooser {
     return { optionsOf: (p, kind) => (p === 'Bronze' && kind === 'item' ? options : undefined), choose };
 }
 

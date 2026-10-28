@@ -29,17 +29,19 @@ function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResp
     );
 }
 
+const PLAN_TREE_LABEL = 'What your list needs';
+
 type PlanPaneProps = Pick<PlannerState, 'plan' | 'names'> & { catalog: ValheimRecipeCatalogResponse };
 
 /** The idle detail column: what the list needs (ROK-1860: sources pickable), its error with a Retry, or the idle prompt. */
 function PlanPane({ plan, names, catalog }: PlanPaneProps): JSX.Element {
     const rootKinds = useMemo(() => plan.data?.targets.map((t) => t.kind) ?? [], [plan.data]);
-    const { chooser, picker } = useSourceChooser(catalog, names);
+    const { chooser, picker } = useSourceChooser(catalog, names, PLAN_TREE_LABEL);
     if (plan.data !== undefined)
         return (
             <div className="space-y-2">
                 {plan.data.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds}
+                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label={PLAN_TREE_LABEL} rootKinds={rootKinds}
                     stationBuilds={plan.data.stationBuilds} onChooseSource={chooser} />
                 {picker}
             </div>

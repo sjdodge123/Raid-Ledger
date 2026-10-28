@@ -68,8 +68,8 @@ function CostLine({ option, names }: { option: ValheimRecipeSourceOption; names:
 function OptionLabel({ option, names }: { option: ValheimRecipeSourceOption; names: PlannerNames }): JSX.Element {
     return (
         <span className="flex flex-wrap items-center gap-2">
-            <StatusChip tone="neutral" className="whitespace-normal!">{stationLine(option, names)}</StatusChip>
-            {option.default && <StatusChip tone="success">{SOURCE_BEST_GUESS_COPY}</StatusChip>}
+            <StatusChip tone="neutral" title={stationLine(option, names)} className="whitespace-normal!">{stationLine(option, names)}</StatusChip>
+            {option.default && <StatusChip tone="success" title={SOURCE_BEST_GUESS_COPY}>{SOURCE_BEST_GUESS_COPY}</StatusChip>}
             {option.discovered === false && <DiscoveryChip />}
         </span>
     );

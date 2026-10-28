@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe('source overrides storage', () => {
     it('round-trips both ref kinds under the per-server sources key', () => {
-        const picks: SourceOverrides = new Map([['Coal', KILN], ['Bronze', RECIPE]]);
+        const picks: SourceOverrides = new Map<string, ValheimRecipeSourceRef>([['Coal', KILN], ['Bronze', RECIPE]]);
         saveSourceOverrides(7, picks);
         expect(plannerSourcesKey(7)).toBe('rl.valheim.planner.7.sources');
         expect(JSON.parse(window.localStorage.getItem('rl.valheim.planner.7.sources') ?? 'null')).toEqual([

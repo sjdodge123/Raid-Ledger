@@ -22,7 +22,8 @@ interface BranchProps {
 
 function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds, onChooseSource }: BranchProps): JSX.Element {
     return (
-        <ul aria-label={label} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
+        // tabIndex -1 on the labelled root: the AC9 focus fallback after a source pick (source-picker-focus.ts).
+        <ul aria-label={label} tabIndex={label === undefined ? undefined : -1} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
             {entries.map(({ node, children }) => {
                 const expanded = !collapsed.has(node.id);
                 return (

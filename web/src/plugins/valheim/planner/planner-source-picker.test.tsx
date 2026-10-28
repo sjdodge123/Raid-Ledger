@@ -48,7 +48,10 @@ const planHandler = (hits: string[]) =>
         const url = new URL(request.url);
         hits.push(url.search);
         const plan = recipePlanFixture(parseTargetsParam(url.searchParams.get('targets') ?? ''));
-        return HttpResponse.json({ ...plan, nodes: plan.nodes.map((n) => (n.prefab === 'SwordIron' ? { ...n, alternatives: 1 } : n)) });
+        // A picked source re-plans with new node ids (as the resolver does), so the tree remounts its rows.
+        const shift = url.searchParams.has('sources') ? 100 : 0;
+        const nodes = plan.nodes.map((n) => ({ ...n, id: n.id + shift, parentId: n.parentId === null ? null : n.parentId + shift }));
+        return HttpResponse.json({ ...plan, nodes: nodes.map((n) => (n.prefab === 'SwordIron' ? { ...n, alternatives: 1 } : n)) });
     });
 
 let planHits: string[];
@@ -95,5 +98,18 @@ describe('Planner source picker (ROK-1860)', () => {
         const tree = await screen.findByRole('list', { name: 'What Iron sword needs' });
         await pickByHand(user, tree);
         await waitFor(() => expect(planHits.some((h) => h.includes('targets=SwordIron%3A1%3A1%3A0%3Aitem') && h.includes(PICKED))).toBe(true));
+    });
+
+    it('after a pick re-plans with new node ids, focus returns to the (remounted) chip (AC9)', async () => {
+        localStorage.setItem(plannerStorageKey(7), JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, amount: 1 }]));
+        const user = userEvent.setup();
+        renderWithProviders(<ValheimPlannerTab serverId={7} />);
+        const tree = await screen.findByRole('list', { name: 'What your list needs' });
+        const opener = within(tree).getByRole('button', { name: /Choose how to make Iron sword/ });
+        await pickByHand(user, tree);
+        await waitFor(() => expect(planHits.at(-1)).toContain(PICKED));
+        await waitFor(() => expect(opener.isConnected, 'the chip should have remounted under new node ids').toBe(false));
+        const chip = await within(screen.getByRole('list', { name: 'What your list needs' })).findByRole('button', { name: /Choose how to make Iron sword/ });
+        await waitFor(() => expect(document.activeElement, 'focus should be back on the Iron sword chip').toBe(chip));
     });
 });

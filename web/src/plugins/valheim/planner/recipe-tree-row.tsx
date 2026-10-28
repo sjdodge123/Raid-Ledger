@@ -64,10 +64,10 @@ function Counts({ node }: { node: ValheimPlanNode }): JSX.Element {
     );
 }
 
-function OtherWaysButton({ name, ways, onChoose }: { name: string; ways: number; onChoose: () => void }): JSX.Element {
+function OtherWaysButton({ name, prefab, ways, onChoose }: { name: string; prefab: string; ways: number; onChoose: () => void }): JSX.Element {
     return (
         <Button variant="ghost" size="sm" aria-haspopup="dialog" aria-label={`Choose how to make ${name} (${ways} other ways)`}
-            data-testid="valheim-planner-other-ways" onClick={onChoose}>
+            data-testid="valheim-planner-other-ways" data-prefab={prefab} onClick={onChoose}>
             +{ways} other ways
         </Button>
     );
@@ -94,7 +94,7 @@ function ViaChips({ node, names, name, onChoose }: ViaChipsProps): JSX.Element {
                     {chip}
                 </StatusChip>
             ))}
-            {button && <OtherWaysButton name={name} ways={ways} onChoose={onChoose} />}
+            {button && <OtherWaysButton name={name} prefab={node.prefab} ways={ways} onChoose={onChoose} />}
         </div>
     );
 }

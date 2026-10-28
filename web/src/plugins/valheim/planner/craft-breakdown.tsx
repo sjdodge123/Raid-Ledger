@@ -65,11 +65,12 @@ function BreakdownBody({ props, q }: { props: CraftBreakdownProps; q: BreakdownQ
     const { serverId, catalog, entry } = props;
     const names = usePlannerNames(serverId, catalog, q.data, undefined, 'plan');
     const kinds = useMemo(() => [entry.kind], [entry.kind]);
-    const { chooser, picker } = useSourceChooser(catalog, names);
+    const label = `What ${entry.name} needs`;
+    const { chooser, picker } = useSourceChooser(catalog, names, label);
     if (q.data !== undefined)
         return (
             <>
-                <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds}
+                <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={label} rootKinds={kinds}
                     stationBuilds={q.data.stationBuilds} onChooseSource={chooser} />
                 {picker}
             </>
