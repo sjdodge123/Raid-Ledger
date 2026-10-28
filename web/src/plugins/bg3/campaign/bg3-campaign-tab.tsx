@@ -31,7 +31,9 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
     );
 }
 
-function unassignedLine(n: number): string {
+/** `capped`: the page walk hit its safety stop, so `n` is a floor ("2000+"), not an exact count. */
+function unassignedLine(n: number, capped: boolean): string {
+    if (capped) return `${n}+ of your saves aren’t in a campaign.`;
     if (n === 0) return 'All your saves are in a campaign.';
     return n === 1 ? '1 of your saves isn’t in a campaign.' : `${n} of your saves aren’t in a campaign.`;
 }
@@ -45,7 +47,7 @@ function YourSaves({ hubId, data, onAddSaves, onStart }: YourSavesProps): JSX.El
     const hasActive = data.settings.activeCampaignId !== null;
     return (
         <Section title="Your saves">
-            <p className="text-sm text-secondary">{unassignedLine(unassigned)}</p>
+            <p className="text-sm text-secondary">{unassignedLine(unassigned, (mine.data?.nextCursor ?? null) !== null)}</p>
             <div><Button variant="secondary" size="sm" onClick={onAddSaves} disabled={!hasActive || unassigned === 0}>Add my saves</Button></div>
             <label className="flex flex-col gap-1 text-sm text-secondary">
                 New saves go to:

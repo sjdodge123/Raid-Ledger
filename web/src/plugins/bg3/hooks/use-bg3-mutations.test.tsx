@@ -92,7 +92,7 @@ describe('use-bg3-mutations', () => {
         );
         const { result } = renderHook(() => useCreateBg3Campaign(BG3_HUB_ID), { wrapper });
         act(() => result.current.mutate({ name: 'The Long Rest', makeDefault: true }));
-        await waitFor(() => expect(result.current.isPending).toBe(false));
+        await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
         expect(result.current.status).toBe('success');
         expect(result.current.data?.id).toBe(12);
         expect(creates).toBe(1);

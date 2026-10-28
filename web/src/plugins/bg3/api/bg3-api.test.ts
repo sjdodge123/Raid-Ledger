@@ -18,7 +18,7 @@ import {
     buildBg3Snapshot,
 } from '../../../test/factories/bg3';
 import {
-    fetchBg3Campaigns, fetchBg3MyUnassignedSaves, fetchBg3Sessions, fetchBg3Snapshot, isBg3AccessDenied, updateBg3Campaign,
+    BG3_MY_SAVES_MAX_PAGES, fetchBg3Campaigns, fetchBg3MyUnassignedSaves, fetchBg3Sessions, fetchBg3Snapshot, isBg3AccessDenied, updateBg3Campaign,
 } from './bg3-api';
 
 describe('bg3-api', () => {
@@ -80,5 +80,24 @@ describe('bg3-api', () => {
         expect(all.saves.at(-1)?.saveName).toBe('Oldest');
         expect(all).toMatchObject({ nextCursor: null, defaultCampaignId: 77 });
         expect(urls).toEqual(['?unassigned=true', '?unassigned=true&cursor=p2']);
+    });
+});
+
+describe('bg3-api — unassigned saves page cap', () => {
+    it('stops at the page cap when the cursor never ends and reports the cut with a non-null nextCursor', async () => {
+        let requests = 0;
+        const page = buildBg3MySavesResponse({
+            saves: Array.from({ length: 50 }, (_, i) => buildBg3MySave({ id: 1000 + i })),
+            nextCursor: 'x',
+        });
+        server.use(http.get(BG3_MY_SAVES_URL, () => {
+            requests += 1;
+            return HttpResponse.json(page);
+        }));
+        const all = await fetchBg3MyUnassignedSaves();
+        expect(BG3_MY_SAVES_MAX_PAGES).toBe(40);
+        expect(requests).toBe(40);
+        expect(all.saves).toHaveLength(2000);
+        expect(all.nextCursor).toBe('x');
     });
 });
