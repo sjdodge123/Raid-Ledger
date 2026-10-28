@@ -28,9 +28,7 @@ const h = schema.bg3HubSettings;
  */
 /** `ok`, or the 400 message a refused active campaign answers with. */
 export type Bg3SettingsWrite =
-  | 'ok'
-  | 'campaign_not_in_hub'
-  | 'campaign_archived';
+  'ok' | 'campaign_not_in_hub' | 'campaign_archived';
 
 export const BG3_NEWEST_FIRST = [desc(s.savedAt), desc(s.id)] as const;
 

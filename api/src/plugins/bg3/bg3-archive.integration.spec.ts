@@ -22,6 +22,7 @@ import {
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
+import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
 import * as schema from '../../drizzle/schema';
 import {
   bearer,
@@ -80,7 +81,12 @@ async function ingest(token: string, msg: Bg3SaveMessage): Promise<void> {
   expect([res.status, res.body]).toEqual([202, { status: 'accepted' }]);
 }
 
-async function insertHub(): Promise<number> {
+async function bg3GameId(): Promise<number> {
+  const [found] = await testApp.db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.slug, BG3_GAME_SLUG));
+  if (found) return found.id;
   const [game] = nonEmpty(
     await testApp.db
       .insert(schema.games)
@@ -88,16 +94,21 @@ async function insertHub(): Promise<number> {
       .returning({ id: schema.games.id }),
     'bg3 game',
   );
+  return game.id;
+}
+
+async function insertHub(name = 'BG3 Crew'): Promise<number> {
+  const gameId = await bg3GameId();
   const [hub] = nonEmpty(
     await testApp.db
       .insert(schema.guilds)
       .values({
-        gameId: game.id,
+        gameId,
         kind: 'game_community',
         region: 'community',
         source: 'community',
-        name: 'BG3 Crew',
-        nameKey: 'bg3 crew',
+        name,
+        nameKey: name.toLowerCase(),
         status: 'active',
       })
       .returning({ id: schema.guilds.id }),
@@ -136,6 +147,38 @@ async function world() {
   await joinHub(hubId, editor.id, 'officer');
   const campaignId = await createCampaign(host.token, hubId, 'Act Two');
   return { hubId, host, mate, editor, campaignId };
+}
+
+/** An admin who never joined the hub (staff, D-11 / ROK-1957 D-15). */
+async function makeStaff(username: string) {
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'admin',
+      })
+      .returning({ id: schema.users.id }),
+    `staff ${username}`,
+  );
+  const token = await signTestAccessToken(testApp, {
+    sub: user.id,
+    username,
+    role: 'admin',
+  });
+  return { id: user.id, token };
+}
+
+async function archivedAtOf(campaignId: number): Promise<Date | null> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ archivedAt: schema.bg3Campaigns.archivedAt })
+      .from(schema.bg3Campaigns)
+      .where(eq(schema.bg3Campaigns.id, campaignId)),
+    `campaign ${campaignId}`,
+  );
+  return row.archivedAt;
 }
 
 function patch(token: string, campaignId: number, body: object) {
@@ -209,6 +252,27 @@ describe('D-11 who may archive', () => {
     const res = await archive(w.editor.token, w.campaignId);
     expect(res.archivedAt).not.toBeNull();
   });
+
+  it('lets non-member staff archive and unarchive (host / editor / staff)', async () => {
+    const w = await world();
+    const staff = await makeStaff('bg3-admin');
+    const archived = await archive(staff.token, w.campaignId);
+    expect(archived.archivedAt).not.toBeNull();
+    expect(await archivedAtOf(w.campaignId)).not.toBeNull();
+    const restored = await archive(staff.token, w.campaignId, false);
+    expect(restored.archivedAt).toBeNull();
+  });
+
+  it("403s an editor of hub A archiving hub B's campaign; B's campaign stays live", async () => {
+    const w = await world();
+    const hubB = await insertHub('BG3 Other Crew');
+    const hostB = await makeUser(testApp, 'bg3-host-b');
+    await joinHub(hubB, hostB.id);
+    const campaignB = await createCampaign(hostB.token, hubB, 'Elsewhere');
+    const res = await patch(w.editor.token, campaignB, { archived: true });
+    expect(res.status).toBe(403);
+    expect(await archivedAtOf(campaignB)).toBeNull();
+  });
 });
 
 describe('D-11 the active campaign', () => {
@@ -242,6 +306,9 @@ describe('D-11 the active campaign', () => {
       400,
       'campaign_archived',
     ]);
+    // The refused write left the settings row untouched (check + write are atomic).
+    const after = await hubCampaigns(w.editor.token, w.hubId);
+    expect(after.settings.activeCampaignId).toBeNull();
 
     await archive(w.host.token, w.campaignId, false);
     const ok = await put(w.editor.token, path, {
@@ -275,6 +342,11 @@ describe('D-11 defaults and bindings', () => {
       campaignId: w.campaignId,
     });
     expect([res.status, res.body.message]).toEqual([400, 'campaign_archived']);
+    const defaults = await testApp.db
+      .select()
+      .from(schema.bg3UserDefaults)
+      .where(eq(schema.bg3UserDefaults.userId, w.mate.id));
+    expect(defaults).toEqual([]);
   });
 
   it('a key binding still routes new saves into an archived campaign', async () => {
