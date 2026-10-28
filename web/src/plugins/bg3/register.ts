@@ -3,13 +3,14 @@
  * api manifest id `bg3` (ROK-1957 D-1); every registration is declared in
  * `HUB_PLUGIN_MANIFESTS.bg3` (ROK-1969 ownership guards).
  *
- * Three Overview cards on `game_community` hubs of the BG3 game — Where we are
+ * Three Overview cards on `game_community` hubs of a BG3 game (any slug in
+ * `BG3_GAME_SLUGS`, ROK-2038) — Where we are
  * (41, span 1) + Party (42, span 2) share a desktop row, Session history (46,
  * span 2) sits before Gallery (47). `audience: 'everyone'` plus a
  * members-or-staff `useVisible` probe, because the api lets non-member staff
  * read (ROK-1957 D-15; precedent `wow/hub-widgets/dungeon-quests.register.ts`).
  */
-import { BG3_GAME_SLUG } from '@raid-ledger/contract';
+import { BG3_GAME_SLUGS } from '@raid-ledger/contract';
 import type { HubCtx } from '../hub-module';
 import { registerPlugin } from '../plugin-registry';
 import { getCachedUser, isOperatorOrAdmin } from '../../hooks/use-auth';
@@ -28,7 +29,7 @@ const bg3 = registerPlugin('bg3', {
 });
 
 const CARD = {
-    games: [BG3_GAME_SLUG],
+    games: [...BG3_GAME_SLUGS],
     kinds: ['game_community'],
     defaultOn: true,
     audience: 'everyone',
@@ -75,7 +76,7 @@ const memberOrStaff = ({ page }: HubCtx): boolean =>
     page.viewer.role !== 'visitor' || isOperatorOrAdmin(getCachedUser());
 
 // D-3 — campaigns, your saves, history and the editor settings (no hub-settings slot for game plugins).
-bg3.registerHubGameTab([BG3_GAME_SLUG], {
+bg3.registerHubGameTab([...BG3_GAME_SLUGS], {
     id: 'campaign',
     label: 'Campaign',
     order: 40,
