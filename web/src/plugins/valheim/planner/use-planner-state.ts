@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { ValheimRecipeCatalogResponse, ValheimRecipePlanResponse, ValheimRecipeSourceRef } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_SOURCES_MAX, type ValheimRecipeCatalogResponse, type ValheimRecipePlanResponse, type ValheimRecipeSourceRef } from '@raid-ledger/contract';
 import { useValheimMaterials } from '../hooks/use-valheim-materials';
 import { useValheimRecipePlan } from '../hooks/use-valheim-recipes';
 import { loadPlannerTargets, savePlannerTargets } from './planner-storage';
@@ -38,8 +38,11 @@ export interface PlannerState {
     /** ROK-1860 — the viewer's per-prefab source picks (D9), sent as `sources=`. */
     sources: SourceOverrides;
     /** Picks `ref` for `prefab`; null = "Use the default" (removes the pick). */
-    setSource: (prefab: string, ref: ValheimRecipeSourceRef | null) => void;
+    setSource: SetSource;
 }
+
+/** False when a NEW prefab is refused at `VALHEIM_PLAN_SOURCES_MAX` picks (nothing stored changes). */
+export type SetSource = (prefab: string, ref: ValheimRecipeSourceRef | null) => boolean;
 
 /** The stored shopping list for `serverId` (D12) and a setter that persists it. */
 export function usePlannerTargets(serverId: number): [PlannerTarget[], (next: PlannerTarget[]) => void] {
@@ -58,14 +61,17 @@ export function usePlannerTargets(serverId: number): [PlannerTarget[], (next: Pl
 export function usePlannerSources(
     serverId: number,
     catalog: Pick<ValheimRecipeCatalogResponse, 'entries'>,
-): [SourceOverrides, (prefab: string, ref: ValheimRecipeSourceRef | null) => void] {
+): [SourceOverrides, SetSource] {
     const [sources, setSources] = useState(() => pruneSourceOverrides(loadSourceOverrides(serverId), catalog));
-    const setSource = (prefab: string, ref: ValheimRecipeSourceRef | null): void => {
+    const setSource: SetSource = (prefab, ref) => {
+        // The api 400s past VALHEIM_PLAN_SOURCES_MAX and storage rejects the whole list, so a new prefab is refused there.
+        if (ref !== null && !sources.has(prefab) && sources.size >= VALHEIM_PLAN_SOURCES_MAX) return false;
         const next: SourceOverrides = new Map(sources);
         if (ref === null) next.delete(prefab);
         else next.set(prefab, ref);
         setSources(next);
         saveSourceOverrides(serverId, next);
+        return true;
     };
     return [sources, setSource];
 }

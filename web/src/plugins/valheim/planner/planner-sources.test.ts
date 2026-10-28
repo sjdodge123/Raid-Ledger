@@ -1,6 +1,7 @@
 /** ROK-1860 D9 / AC7 — source picks: storage round trip, corrupt data, pruning against the catalogue. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ValheimRecipeCatalogEntry, ValheimRecipeSourceOption, ValheimRecipeSourceRef } from '@raid-ledger/contract';
+import { act, renderHook } from '@testing-library/react';
+import { VALHEIM_PLAN_SOURCES_MAX, type ValheimRecipeCatalogEntry, type ValheimRecipeSourceOption, type ValheimRecipeSourceRef } from '@raid-ledger/contract';
 import {
     loadSourceOverrides,
     plannerSourcesKey,
@@ -8,6 +9,7 @@ import {
     saveSourceOverrides,
     type SourceOverrides,
 } from './planner-sources';
+import { usePlannerSources } from './use-planner-state';
 
 const KILN: ValheimRecipeSourceRef = { type: 'process', processor: 'charcoal_kiln', index: 0 };
 const RECIPE: ValheimRecipeSourceRef = { type: 'recipe', recipeId: 'Recipe_Coal' };
@@ -78,5 +80,26 @@ describe('pruneSourceOverrides', () => {
         ]);
         expect([...pruneSourceOverrides(picks, catalog)]).toEqual([['Coal', KILN]]);
         expect(pruneSourceOverrides(new Map([['Coal', { ...KILN, index: 1 }]]), catalog).size).toBe(0);
+    });
+});
+
+describe('usePlannerSources cap (ROK-1860 review #2 / Codex P2)', () => {
+    const recipeRef = (i: number): ValheimRecipeSourceRef => ({ type: 'recipe', recipeId: `Recipe_P${i}` });
+    const prefabs = Array.from({ length: VALHEIM_PLAN_SOURCES_MAX + 1 }, (_, i) => `P${i}`);
+    const catalog = { entries: prefabs.map((p, i) => entry(p, 'item', [recipeRef(i), RECIPE])) };
+
+    it(`refuses a new prefab past ${VALHEIM_PLAN_SOURCES_MAX} picks, still re-picks a stored one, and every pick survives a reload`, () => {
+        const { result, unmount } = renderHook(() => usePlannerSources(7, catalog));
+        prefabs.slice(0, VALHEIM_PLAN_SOURCES_MAX).forEach((p, i) => act(() => { result.current[1](p, recipeRef(i)); }));
+        let refused = true;
+        act(() => { refused = result.current[1](`P${VALHEIM_PLAN_SOURCES_MAX}`, RECIPE); });
+        expect({ refused, size: result.current[0].size }).toEqual({ refused: false, size: VALHEIM_PLAN_SOURCES_MAX });
+        let repicked = false;
+        act(() => { repicked = result.current[1]('P0', RECIPE); });
+        expect({ repicked, p0: result.current[0].get('P0') }).toEqual({ repicked: true, p0: RECIPE });
+        unmount();
+        const reloaded = renderHook(() => usePlannerSources(7, catalog)).result.current[0];
+        expect({ size: reloaded.size, p0: reloaded.get('P0'), last: reloaded.has(`P${VALHEIM_PLAN_SOURCES_MAX}`) })
+            .toEqual({ size: VALHEIM_PLAN_SOURCES_MAX, p0: RECIPE, last: false });
     });
 });
