@@ -2,7 +2,8 @@
  * ROK-1919 — `GET /plugins/wow/guilds/:id/recent-dings` against a real DB:
  * contract parse, visitor-visible (D7), the 30-day read window (a 31-day-old
  * row is excluded but kept — the log is never pruned), newest-first order,
- * the 20-row limit, the character link, and the hidden-hub 404.
+ * the 20-row limit, the character link (stable when a GUID is on two
+ * characters), departed members' dings, and the hidden-hub 404.
  */
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
@@ -20,6 +21,7 @@ const ago = (days: number) => new Date(Date.now() - days * DAY);
 let testApp: TestApp;
 const tokens = {} as Record<Who, string>;
 let memberCharId = '';
+let memberUserId = 0;
 
 async function insertGuild(name: string): Promise<number> {
   const [g] = nonEmpty(
@@ -109,7 +111,28 @@ async function seedUser(who: Who, guid: string): Promise<string> {
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
   tokens[who] = res.body.access_token as string;
+  if (who === 'member') memberUserId = user.id;
   return char.id;
+}
+
+/** A second character on the member's account carrying `guid`. */
+async function insertChar(guid: string, name: string, region: string | null) {
+  const [c] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: memberUserId,
+        gameId: testApp.seed.game.id,
+        name,
+        region,
+        addonGuid: guid,
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+      })
+      .returning(),
+    'character',
+  );
+  return c.id;
 }
 
 const dings = (who: Who, gid: number) =>
@@ -176,7 +199,39 @@ describe('GET recent-dings (real DB)', () => {
     expect(dto.dings[0]?.toLevel).toBe(RECENT_DINGS_LIMIT + 6);
     expect(dto.dings.at(-1)?.toLevel).toBe(7);
   });
+});
 
+describe('GET recent-dings links and departures (real DB)', () => {
+  it('a GUID on two characters links the region-matched one, every read', async () => {
+    const gid = await insertGuild('Dings Tiebreak');
+    await insertChar('Player-9-dtie', 'TieUnknown', null);
+    const matched = await insertChar('Player-9-dtie', 'TieUs', 'us');
+    const m = await insertMember(gid, 'Player-9-dtie', 'Tie');
+    await insertDing(gid, m, 15, ago(1));
+    for (let i = 0; i < 3; i++) {
+      const dto = WowRecentDingsSchema.parse((await dings('member', gid)).body);
+      expect(dto.dings.map((d) => d.characterId)).toEqual([matched]);
+    }
+  });
+
+  it('dings of a member who has since left the guild still show', async () => {
+    const gid = await insertGuild('Dings Departed');
+    const gone = await insertMember(gid, 'Player-9-dgone', 'Gone');
+    // Re-import never deletes a departed member: its row just stops being
+    // seen, so lastSeenAt falls behind the guild's latest snapshot.
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ lastSeenAt: ago(5) })
+      .where(eq(schema.guildMembers.id, gone));
+    await insertDing(gid, gone, 33, ago(6));
+    const dto = WowRecentDingsSchema.parse((await dings('visitor', gid)).body);
+    expect(dto.dings).toEqual([
+      expect.objectContaining({ name: 'Gone', fromLevel: 32, toLevel: 33 }),
+    ]);
+  });
+});
+
+describe('GET recent-dings empty (real DB)', () => {
   it('an empty guild returns an empty list', async () => {
     const gid = await insertGuild('Dings Empty');
     expect((await dings('visitor', gid)).body).toEqual({ dings: [] });
