@@ -14,6 +14,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { Bg3RetentionRow } from '../history/bg3-retention.helpers';
+import { toBg3CampaignSummary } from './bg3-read.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const c = schema.bg3Campaigns;
@@ -91,6 +92,7 @@ export class Bg3ReadRepository {
         activeId: h.activeCampaignId,
         lastSavedAt: max(s.savedAt),
         saveCount: count(s.id),
+        archivedAt: c.archivedAt,
       })
       .from(c)
       .leftJoin(h, eq(h.guildId, c.guildId))
@@ -98,11 +100,7 @@ export class Bg3ReadRepository {
       .where(eq(c.guildId, guildId))
       .groupBy(c.id, h.activeCampaignId)
       .orderBy(asc(c.id));
-    return rows.map(({ activeId, lastSavedAt, ...rest }) => ({
-      ...rest,
-      isActive: activeId === rest.id,
-      lastSavedAt: lastSavedAt ? lastSavedAt.toISOString() : null,
-    }));
+    return rows.map(toBg3CampaignSummary);
   }
 
   async settings(guildId: number): Promise<Bg3HubSettings> {
@@ -131,7 +129,7 @@ export class Bg3ReadRepository {
 
   async campaignInHub(campaignId: number, guildId: number) {
     const [row] = await this.db
-      .select({ id: c.id, hostUserId: c.hostUserId })
+      .select({ id: c.id, hostUserId: c.hostUserId, archivedAt: c.archivedAt })
       .from(c)
       .where(and(eq(c.id, campaignId), eq(c.guildId, guildId)))
       .limit(1);

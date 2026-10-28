@@ -4,7 +4,7 @@
  * message back), never on the outer db.
  */
 import { Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
@@ -43,7 +43,8 @@ export class Bg3SavesWriteRepository {
       .select({ id: c.id, guildId: c.guildId })
       .from(d)
       .innerJoin(c, eq(c.id, d.campaignId))
-      .where(eq(d.userId, userId))
+      // D-11: an archived default resolves as "no default" (save unassigned).
+      .where(and(eq(d.userId, userId), isNull(c.archivedAt)))
       .limit(1);
     return fallback ?? null;
   }

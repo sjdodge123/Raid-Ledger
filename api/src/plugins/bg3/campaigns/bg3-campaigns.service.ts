@@ -45,7 +45,10 @@ export class Bg3CampaignsService {
     return this.summaryOf(id);
   }
 
-  /** Live host, hub editor or staff; a new host must be a hub member (400). */
+  /**
+   * Live host, hub editor or staff; a new host must be a hub member (400).
+   * `archived` soft-archives / restores (D-11).
+   */
   async update(
     campaignId: number,
     actor: GuildActor,
@@ -56,7 +59,7 @@ export class Bg3CampaignsService {
     const isHost = await isCurrentHost(this.access, campaign, actor);
     if (!isHost && !(await this.access.canEdit(actor, campaign.guildId)))
       throw new ForbiddenException('Only the host or a hub editor');
-    const { name, hostUserId } = body;
+    const { name, hostUserId, archived } = body;
     if (
       hostUserId !== undefined &&
       !(await this.access.isMember(hostUserId, campaign.guildId))
@@ -65,6 +68,7 @@ export class Bg3CampaignsService {
     await this.repo.updateCampaign(campaignId, {
       ...(name !== undefined ? { name } : {}),
       ...(hostUserId !== undefined ? { hostUserId } : {}),
+      ...(archived !== undefined ? { archived } : {}),
     });
     return this.summaryOf(campaignId);
   }
@@ -80,9 +84,14 @@ export class Bg3CampaignsService {
     await this.repo.unbindKey(actor.id, key);
   }
 
-  /** Set (member of that hub) or clear the caller's default campaign. */
+  /** Set (member of that hub, live campaign) or clear the caller's default. */
   async setDefault(actor: GuildActor, campaignId: number | null) {
-    if (campaignId !== null) await this.memberCampaign(campaignId, actor);
+    if (campaignId !== null) {
+      const campaign = await this.memberCampaign(campaignId, actor);
+      // D-11: an archived campaign cannot become anyone's default.
+      if (campaign.archivedAt)
+        throw new BadRequestException('campaign_archived');
+    }
     await this.repo.setDefault(actor.id, campaignId);
   }
 

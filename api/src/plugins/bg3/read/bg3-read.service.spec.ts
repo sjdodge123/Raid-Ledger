@@ -58,6 +58,7 @@ function setup(
     canEdit?: boolean;
     settings?: Partial<Bg3HubSettings>;
     inHub?: boolean;
+    archived?: boolean;
     rows?: Bg3SnapshotRow[];
   } = {},
 ) {
@@ -70,9 +71,15 @@ function setup(
     hubCampaigns: jest.fn().mockResolvedValue([]),
     settings: jest.fn().mockResolvedValue(settings),
     upsertSettings: jest.fn().mockResolvedValue(undefined),
-    campaignInHub: jest
-      .fn()
-      .mockResolvedValue(o.inHub === false ? null : { id: 11, hostUserId: 2 }),
+    campaignInHub: jest.fn().mockResolvedValue(
+      o.inHub === false
+        ? null
+        : {
+            id: 11,
+            hostUserId: 2,
+            archivedAt: o.archived ? new Date() : null,
+          },
+    ),
     sessionRows: jest.fn().mockResolvedValue(o.rows ?? []),
     snapshotRows: jest.fn().mockResolvedValue(o.rows ?? [snapRow(1, 7)]),
     claims: jest.fn().mockResolvedValue([
@@ -238,6 +245,14 @@ describe('Bg3ReadService', () => {
     await expect(
       svc.updateSettings(5, me, { activeCampaignId: 99 }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.upsertSettings).not.toHaveBeenCalled();
+  });
+
+  it('400s an archived campaign as the active one (D-11)', async () => {
+    const { svc, repo } = setup({ canEdit: true, archived: true });
+    await expect(
+      svc.updateSettings(5, me, { activeCampaignId: 11 }),
+    ).rejects.toThrow('campaign_archived');
     expect(repo.upsertSettings).not.toHaveBeenCalled();
   });
 

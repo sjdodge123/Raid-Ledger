@@ -9,6 +9,7 @@ import type { Bg3CampaignSummary } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { Bg3HubLookup, Bg3HubRow } from '../read/bg3-hub-access.helpers';
+import { toBg3CampaignSummary } from '../read/bg3-read.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -16,11 +17,14 @@ export interface Bg3CampaignRow {
   id: number;
   guildId: number;
   hostUserId: number | null;
+  archivedAt: Date | null;
 }
 
 export interface Bg3CampaignPatch {
   name?: string;
   hostUserId?: number;
+  /** D-11 soft archive: `true` stamps `archived_at`, `false` clears it. */
+  archived?: boolean;
 }
 
 const c = schema.bg3Campaigns;
@@ -59,7 +63,12 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
 
   async findCampaign(id: number): Promise<Bg3CampaignRow | null> {
     const [row] = await this.db
-      .select({ id: c.id, guildId: c.guildId, hostUserId: c.hostUserId })
+      .select({
+        id: c.id,
+        guildId: c.guildId,
+        hostUserId: c.hostUserId,
+        archivedAt: c.archivedAt,
+      })
       .from(c)
       .where(eq(c.id, id))
       .limit(1);
@@ -86,11 +95,27 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
     });
   }
 
+  /** Archiving the hub's active campaign also clears `activeCampaignId` (D-11). */
   async updateCampaign(id: number, patch: Bg3CampaignPatch): Promise<void> {
-    await this.db
-      .update(c)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(eq(c.id, id));
+    const { archived, ...fields } = patch;
+    const now = new Date();
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(c)
+        .set({
+          ...fields,
+          ...(archived !== undefined
+            ? { archivedAt: archived ? now : null }
+            : {}),
+          updatedAt: now,
+        })
+        .where(eq(c.id, id));
+      if (archived !== true) return;
+      await tx
+        .update(h)
+        .set({ activeCampaignId: null, updatedAt: now })
+        .where(eq(h.activeCampaignId, id));
+    });
   }
 
   async summary(id: number): Promise<Bg3CampaignSummary | null> {
@@ -102,19 +127,14 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         activeId: h.activeCampaignId,
         lastSavedAt: max(s.savedAt),
         saveCount: count(s.id),
+        archivedAt: c.archivedAt,
       })
       .from(c)
       .leftJoin(h, eq(h.guildId, c.guildId))
       .leftJoin(s, eq(s.campaignId, c.id))
       .where(eq(c.id, id))
       .groupBy(c.id, h.activeCampaignId);
-    if (!row) return null;
-    const { activeId, lastSavedAt, ...rest } = row;
-    return {
-      ...rest,
-      isActive: activeId === row.id,
-      lastSavedAt: lastSavedAt ? lastSavedAt.toISOString() : null,
-    };
+    return row ? toBg3CampaignSummary(row) : null;
   }
 
   async bindKey(userId: number, key: string, campaignId: number) {
