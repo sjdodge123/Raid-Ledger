@@ -44,10 +44,10 @@ function insights(lastSeen: WowRosterLastSeenDto | undefined): WowRosterInsights
     return createBareRosterInsights(lastSeen === undefined ? {} : { lastSeen });
 }
 
-function ctx(): Pick<HubWidgetCtx, 'page'> {
+function ctx(lastSnapshotAt: string | null = null): Pick<HubWidgetCtx, 'page'> {
     const page: GuildPage = {
         guild: { id: 7, gameId: 3, kind: 'wow_guild', name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null,
-            memberCount: 42, lastSnapshotAt: null, gameSlug: 'world-of-warcraft-forever' },
+            memberCount: 42, lastSnapshotAt, gameSlug: 'world-of-warcraft-forever' },
         importedBy: null,
         viewer: { role: 'member', canEdit: false, canManageEditors: false },
         ranks: [],
@@ -56,9 +56,9 @@ function ctx(): Pick<HubWidgetCtx, 'page'> {
     return { page };
 }
 
-async function renderWith(lastSeen: WowRosterLastSeenDto | undefined): Promise<void> {
+async function renderWith(lastSeen: WowRosterLastSeenDto | undefined, lastSnapshotAt: string | null = null): Promise<void> {
     server.use(rosterInsightsHandler({ all: insights(lastSeen) }));
-    renderWithProviders(<LastSeenWidget {...ctx()} />);
+    renderWithProviders(<LastSeenWidget {...ctx(lastSnapshotAt)} />);
     await screen.findByTestId('forever-freshness');
 }
 
@@ -120,6 +120,23 @@ describe('LastSeenWidget', () => {
         expect(empty).toHaveTextContent('No online data yet.');
         expect(empty).toHaveTextContent('Shows up when an officer exports the roster from LedgerLink.');
         expect(screen.queryByTestId('last-seen-headline')).toBeNull();
+    });
+});
+
+describe('LastSeenWidget footer', () => {
+    it('dates the footer by the guild snapshot time, not the roster fact freshness', async () => {
+        // Roster facts are fresh ("just now"); the presence export is 20 days old.
+        const snapshot = new Date(Date.now() - 20 * 86_400_000).toISOString();
+        await renderWith(POPULATED, snapshot);
+        const footer = screen.getByTestId('forever-freshness');
+        expect(footer).toHaveTextContent('via LedgerLink · as of 20 days ago');
+        expect(footer).toHaveAttribute('data-stale', 'true');
+        expect(footer).toHaveAttribute('title', `Roster exported ${new Date(snapshot).toLocaleString()}`);
+    });
+
+    it('shows no date in the footer before any guild snapshot, even with fresh roster facts', async () => {
+        await renderWith(POPULATED, null);
+        expect(screen.getByTestId('forever-freshness')).toHaveTextContent(/^via LedgerLink$/);
     });
 });
 

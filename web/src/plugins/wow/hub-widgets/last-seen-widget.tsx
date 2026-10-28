@@ -5,12 +5,13 @@
  * online names, then the five longest away. `reported === 0` (no
  * presence-bearing export yet, or one imported before this shipped) shows the
  * quiet no-export state; nobody online with no day counts is one quiet line
- * (no bare "0" headline). The shared `FreshnessFooter` dates the export; its
- * tooltip carries the absolute time (Q4). Core draws the `WidgetCard` chrome;
+ * (no bare "0" headline). The shared `FreshnessFooter` dates the export from
+ * the guild's LedgerLink snapshot time (`page.guild.lastSnapshotAt`) — not the
+ * roster's level/class fact freshness; its tooltip carries the absolute time (Q4). Core draws the `WidgetCard` chrome;
  * the registration (`last-seen.register.ts`) gates it to members + staff.
  */
 import type { JSX } from 'react';
-import type { HubFactFreshness, WowRosterLastSeenDto } from '@raid-ledger/contract';
+import type { WowRosterLastSeenDto } from '@raid-ledger/contract';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { FreshnessFooter } from './freshness-footer';
 import { AwaySection, OnlineSection } from './last-seen-rows';
@@ -21,7 +22,7 @@ export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JS
     const { data, isPending, isError } = useRosterInsights(page.guild.id, false);
     if (isPending) return <div className="h-24 animate-pulse rounded-md bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
-    const footer = <Footer freshness={data.freshness.roster} />;
+    const footer = <Footer asOf={page.guild.lastSnapshotAt} />;
     const lastSeen = data.lastSeen;
     if (lastSeen === undefined || lastSeen.reported === 0) return <NoExport footer={footer} />;
     if (lastSeen.onlineCount === 0 && lastSeen.away.length === 0) {
@@ -65,9 +66,9 @@ function Headline({ lastSeen }: { lastSeen: WowRosterLastSeenDto }): JSX.Element
     );
 }
 
-/** `FreshnessFooter` with the export's absolute time as its tooltip. */
-function Footer({ freshness }: { freshness: HubFactFreshness | null }): JSX.Element {
-    const asOf = freshness?.asOf ?? null;
-    const title = asOf === null ? undefined : `Roster exported ${new Date(asOf).toLocaleString()}`;
-    return <FreshnessFooter freshness={freshness} {...(title === undefined ? {} : { title })} />;
+/** `FreshnessFooter` dated by the guild snapshot (LedgerLink export), with its absolute time as the tooltip. */
+function Footer({ asOf }: { asOf: string | null }): JSX.Element {
+    if (asOf === null) return <FreshnessFooter freshness={null} />;
+    const title = `Roster exported ${new Date(asOf).toLocaleString()}`;
+    return <FreshnessFooter freshness={{ source: 'roster', asOf }} title={title} />;
 }
