@@ -43,13 +43,13 @@ function catalogWithSources() {
 }
 
 /** The fixture plan, with "+1 other ways" on the Iron sword root. */
-const planHandler = (hits: string[]) =>
+const planHandler = (hits: string[], shiftIds = true) =>
     http.get(VALHEIM_RECIPE_PLAN_URL, ({ request }) => {
         const url = new URL(request.url);
         hits.push(url.search);
         const plan = recipePlanFixture(parseTargetsParam(url.searchParams.get('targets') ?? ''));
         // A picked source re-plans with new node ids (as the resolver does), so the tree remounts its rows.
-        const shift = url.searchParams.has('sources') ? 100 : 0;
+        const shift = shiftIds && url.searchParams.has('sources') ? 100 : 0;
         const nodes = plan.nodes.map((n) => ({ ...n, id: n.id + shift, parentId: n.parentId === null ? null : n.parentId + shift }));
         return HttpResponse.json({ ...plan, nodes: nodes.map((n) => (n.prefab === 'SwordIron' ? { ...n, alternatives: 1 } : n)) });
     });
@@ -124,5 +124,23 @@ describe('Planner source picker (ROK-1860)', () => {
         await waitFor(() => expect(opener.isConnected, 'the chip should have remounted under new node ids').toBe(false));
         const chip = await within(screen.getByRole('list', { name: 'What your list needs' })).findByRole('button', { name: /Choose how to make Iron sword/ });
         await waitFor(() => expect(document.activeElement, 'focus should be back on the Iron sword chip').toBe(chip));
+    });
+});
+
+describe('Planner source picker refocus (ROK-1860 AC9, FIXLIST #3)', () => {
+    it('after a pick that keeps the node ids, a later re-render does not pull focus back once the user clicked away (AC9)', async () => {
+        server.use(planHandler(planHits, false));
+        localStorage.setItem(plannerStorageKey(7), JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, amount: 1 }]));
+        const user = userEvent.setup();
+        const { rerender } = renderWithProviders(<ValheimPlannerTab serverId={7} />);
+        const tree = await screen.findByRole('list', { name: 'What your list needs' });
+        const chip = within(tree).getByRole('button', { name: /Choose how to make Iron sword/ });
+        await pickByHand(user, tree);
+        await waitFor(() => expect(planHits.at(-1)).toContain(PICKED));
+        await waitFor(() => expect(document.activeElement, 'focus should be back on the Iron sword chip').toBe(chip));
+        await user.click(document.body);
+        expect(document.activeElement, 'clicking the page background should leave focus on <body>').toBe(document.body);
+        rerender(<ValheimPlannerTab serverId={7} />);
+        expect(document.activeElement, 'a later re-render must not yank focus back to the chip').toBe(document.body);
     });
 });

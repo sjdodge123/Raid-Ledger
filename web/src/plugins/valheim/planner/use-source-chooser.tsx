@@ -4,7 +4,7 @@
  * viewer's picks through `PlannerSourcesContext`; without a provider the
  * trees keep their static "+N other ways" chips.
  */
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { ValheimRecipeCatalogEntry, ValheimRecipeCatalogResponse, ValheimRecipeSourceRef } from '@raid-ledger/contract';
 import type { SourceOverrides } from './planner-sources';
 import type { SourceChooser } from './recipe-tree-row';
@@ -33,15 +33,30 @@ interface SourceChooserState {
  * that opened the picker can unmount and drop focus to <body>. Until focus lands
  * somewhere, put it back on the first chip for that prefab in the tree labelled
  * `treeLabel` (else the tree itself). Runs after every render of the host.
+ * The user's next pointerdown anywhere drops the pending refocus: when the ids
+ * did not change the chip keeps focus ('wait'), and a click away must not be
+ * undone by a later re-render. Not `focusin` — the picker's own focus restore to
+ * the chip fires that before the remount.
  */
 function useRefocusAfterPick(treeLabel: string): (prefab: string) => void {
     // A ref, not state: the pick and each plan refetch already re-render the host.
     const pending = useRef<string | null>(null);
+    const listener = useRef<AbortController | null>(null);
+    const clear = useCallback((): void => {
+        pending.current = null;
+        listener.current?.abort();
+        listener.current = null;
+    }, []);
     useEffect(() => {
-        if (pending.current !== null && refocusAfterPick(treeLabel, pending.current) === 'done') pending.current = null;
+        if (pending.current !== null && refocusAfterPick(treeLabel, pending.current) === 'done') clear();
     });
+    useEffect(() => clear, [clear]);
     return (prefab) => {
+        clear();
         pending.current = prefab;
+        const controller = new AbortController();
+        listener.current = controller;
+        document.addEventListener('pointerdown', clear, { capture: true, once: true, signal: controller.signal });
     };
 }
 
