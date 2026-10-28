@@ -14,6 +14,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-lock';
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
 
@@ -85,13 +86,17 @@ export class Bg3MyDataRepository {
   /**
    * Deletes everything BG3 holds for `userId`. `startedAt` is the ref
    * cutoff: a save ingested concurrently refreshes its ref after it, so
-   * that ref survives (the new row is not ours to delete yet).
+   * that ref survives (the new row is not ours to delete yet). The blob
+   * lock is taken FIRST, before any row lock — the order ingest and
+   * retention use — so the three cannot deadlock; the re-take inside
+   * `releaseUnusedRefsIn` is re-entrant.
    */
   deleteAllFor(
     userId: number,
     startedAt = new Date(),
   ): Promise<Bg3MyDataDeleted> {
     return this.db.transaction(async (tx) => {
+      await lockCompanionUserBlobs(tx, userId);
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
       await clearLatestMarkers(tx, userId);

@@ -107,6 +107,20 @@ describe('Bg3MyDataRepository.deleteAllFor', () => {
     expect(q.params).toEqual([ME]);
   });
 
+  it('takes the caller’s blob lock before any row delete (same order as ingest + retention)', async () => {
+    const { db, repo } = build([SHA_A]);
+    await repo.deleteAllFor(ME, STARTED);
+    expect(db.execute).toHaveBeenCalled();
+    const lock = rendered(db.execute.mock.calls[0]?.[0]);
+    expect([lock.sql, lock.params]).toEqual([
+      'select pg_advisory_xact_lock(hashtext($1))',
+      [`companion-blobs:${ME}`],
+    ]);
+    const lockOrder = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const firstDelete = Math.min(...db.delete.mock.invocationCallOrder);
+    expect(lockOrder).toBeLessThan(firstDelete);
+  });
+
   it('returns the per-table counts', async () => {
     const { repo } = build([SHA_A, SHA_B, null], 1);
     await expect(repo.deleteAllFor(ME, STARTED)).resolves.toEqual({
