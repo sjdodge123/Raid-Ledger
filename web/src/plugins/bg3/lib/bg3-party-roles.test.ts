@@ -29,7 +29,7 @@ describe('party roles (Q4)', () => {
     });
 
     it('reports gaps and ignores summons', () => {
-        const party = [member([{ main: 'Fighter', sub: null }]), member([], true)];
+        const party = [member([{ main: 'Fighter', sub: null }]), member([{ main: 'Wizard', sub: null }], true)];
         expect(coveredRoles(party)).toEqual(['tank']);
     });
 });

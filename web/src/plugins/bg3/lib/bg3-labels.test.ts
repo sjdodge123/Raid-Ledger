@@ -31,6 +31,7 @@ describe('bg3-labels (D-7)', () => {
             { main: 'Rogue', sub: 'Thief' },
         ])).toBe('Ranger (Gloom Stalker) + Rogue (Thief)');
         expect(bg3ClassesLabel([{ main: 'Wizard', sub: 'NecromancySchool' }])).toBe('Wizard (Necromancy)');
+        expect(bg3ClassesLabel([{ main: 'Barbarian', sub: 'BerserkerPath' }])).toBe('Barbarian (Berserker)');
         expect(bg3ClassesLabel([{ main: 'Cleric', sub: null }])).toBe('Cleric');
     });
 

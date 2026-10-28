@@ -24,7 +24,7 @@ describe('bg3-api', () => {
 
     it('maps the no_campaign 404 to null', async () => {
         server.use(bg3SnapshotHandler('no-campaign'));
-        expect(await fetchBg3Snapshot(BG3_HUB_ID)).toBeNull();
+        await expect(fetchBg3Snapshot(BG3_HUB_ID)).resolves.toBeNull();
     });
 
     it('throws an access denial for a hidden-hub 404', async () => {
