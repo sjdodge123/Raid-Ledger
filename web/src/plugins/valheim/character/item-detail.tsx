@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom';
 import type { ValheimItemStack } from '@raid-ledger/contract';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
-import { useAnchoredPopup } from '../../../components/ui/use-anchored-popup';
+import { placeTop, useAnchoredPopup } from '../../../components/ui/use-anchored-popup';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { useEscapeLayer } from '../../../hooks/use-escape-layer';
 import { useTabTrap } from '../../../hooks/use-focus-trap';
@@ -177,7 +177,10 @@ function applyClamp(
         viewport: { width: window.innerWidth, height: window.innerHeight },
     });
     el.style.left = `${at.left - (a.left - pos.left)}px`;
-    el.style.top = `${at.top - (a.bottom + 4 - pos.top)}px`;
+    // `pos.top` is `placeTop`'s viewport top minus the containing-block origin
+    // (useAnchoredPopup now flips too, so it is not always `a.bottom + 4`).
+    const placed = placeTop(a, el.getBoundingClientRect().height, window.innerHeight);
+    el.style.top = `${at.top - (placed - pos.top)}px`;
 }
 
 /**

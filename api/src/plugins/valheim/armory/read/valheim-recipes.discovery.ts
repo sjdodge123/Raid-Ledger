@@ -113,7 +113,29 @@ export function nodeDiscovered(
   return itemKnown(graph, node.prefab, known);
 }
 
-/** Every entry with `discovered` set (null when unknown). */
+/**
+ * ROK-1860 D11: recipe options use the recipe-node rule (own id, else the item
+ * rule); process options and no usable list leave them untouched.
+ */
+function optionsDiscovery(
+  graph: RecipeGraph,
+  e: ValheimRecipeCatalogEntry,
+  known: ReadonlySet<string> | null,
+): Pick<ValheimRecipeCatalogEntry, 'sourceOptions'> {
+  if (!e.sourceOptions || known === null) return {};
+  const sourceOptions = e.sourceOptions.map((o) =>
+    o.ref.type === 'recipe'
+      ? {
+          ...o,
+          discovered:
+            known.has(o.ref.recipeId) || itemKnown(graph, e.prefab, known),
+        }
+      : o,
+  );
+  return { sourceOptions };
+}
+
+/** Every entry (and its recipe options) with `discovered` set (null when unknown). */
 export function withEntryDiscovery(
   entries: readonly ValheimRecipeCatalogEntry[],
   graph: RecipeGraph,
@@ -122,6 +144,7 @@ export function withEntryDiscovery(
   return entries.map((e) => ({
     ...e,
     discovered: entryDiscovered(graph, e, k.known),
+    ...optionsDiscovery(graph, e, k.known),
   }));
 }
 

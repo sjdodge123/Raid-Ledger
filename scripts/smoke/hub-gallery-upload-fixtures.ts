@@ -17,7 +17,8 @@ import { randomBytes } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import type { TestInfo } from '@playwright/test';
 import { HUB_MEDIA_PAGE_MAX } from '@raid-ledger/contract';
-import { API_BASE, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { API_BASE, apiGet, getAdminToken, pollForCondition } from './api-helpers';
+import { seedCommunityHubs } from './hub-seed';
 
 const GAME_INDEX_BASE = 12;
 const PROJECT_SLOT: Record<string, number> = { desktop: 0, mobile: 1, tablet: 2 };
@@ -63,7 +64,7 @@ async function projectGameId(token: string, testInfo: TestInfo): Promise<number>
 export async function seedUploadHub(testInfo: TestInfo): Promise<UploadHub> {
     const token = await getAdminToken();
     const gameId = await projectGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as {
+    const body = (await seedCommunityHubs(token, testInfo, 'hub-gallery-upload', { gameId })) as {
         hubIds?: { crew?: number };
         leaderUserId?: number;
         memberUserIds?: number[];

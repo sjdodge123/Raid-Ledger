@@ -7,8 +7,11 @@
  *
  *   SwordBronze (forge) ← Bronze 8 (+4/level) + Wood 2 + LeatherScraps 3
  *   Bronze (forge)      ← Copper 2 + Tin 1
+ *   Bronze ×5 (forge 2) ← Copper 8 + Tin 3 (ROK-1860: a second recipe the
+ *                        source picker offers; D9 keeps `Recipe_Bronze`)
  *   Copper / Tin        ← smelter: CopperOre / TinOre, fuel Coal ×2 per bar
- *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood
+ *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood, or
+ *                        (ROK-1860: second process, index 1) RoundLog
  *   CookedMeat          ← piece_cookingstation (fuel-less `cooking`): RawMeat
  *   Cultivator (workbench) ← Bronze 5 + Wood 5 (ROK-1948: a Workbench recipe
  *                        needing Bronze, so the `early` spoilers preset shows
@@ -156,6 +159,14 @@ export const RECIPES_DEMO_MESSAGE: ValheimRecipesMessage = {
       res('Copper', 2),
       res('Tin', 1),
     ]),
+    {
+      ...recipe('Recipe_Bronze5', 'Bronze', 'forge', [
+        res('Copper', 8),
+        res('Tin', 3),
+      ]),
+      amount: 5,
+      minStationLevel: 2,
+    },
     recipe('Recipe_SwordBronze', 'SwordBronze', 'forge', [
       res('Bronze', 8, 4),
       res('Wood', 2),
@@ -173,6 +184,7 @@ export const RECIPES_DEMO_MESSAGE: ValheimRecipesMessage = {
   ],
   processes: [
     smelt('charcoal_kiln', 'Wood', 'Coal', 15),
+    smelt('charcoal_kiln', 'RoundLog', 'Coal', 15),
     ...RECIPES_VANILLA.processes,
     smelt('smelter', 'CopperOre', 'Copper', 30),
     smelt('smelter', 'TinOre', 'Tin', 30),
@@ -205,6 +217,8 @@ export const RECIPES_DEMO_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
   CopperOre: item('Copper ore', 1),
   TinOre: item('Tin ore', 0),
   Coal: item('Coal', 3),
+  /** ROK-1860: the kiln's second Coal input. */
+  RoundLog: item('Core wood', 0),
   LeatherScraps: item('Leather scraps', 2),
   Iron: item('Iron', 0),
   IronScrap: item('Scrap iron', 0),

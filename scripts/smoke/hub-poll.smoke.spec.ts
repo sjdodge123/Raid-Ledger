@@ -23,12 +23,14 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPost, getAdminToken } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { dismissGameTimeCheck } from './helpers';
 
 interface Seed {
     gameId: number;
     hubIds: { crew: number; solo: number; archived: number };
+    hubNames: HubSeedNames;
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
@@ -78,7 +80,7 @@ async function projectGame(token: string, testInfo: TestInfo): Promise<Game> {
 async function seedHubs(testInfo: TestInfo): Promise<{ seed: Seed; game: Game; admin: string }> {
     const admin = await getAdminToken();
     const game = await projectGame(admin, testInfo);
-    const body = (await apiPost(admin, '/admin/test/community-hubs/seed', { gameId: game.id })) as Partial<Seed> | null;
+    const body = (await seedCommunityHubs(admin, testInfo, 'hub-poll', { gameId: game.id })) as Partial<Seed> | null;
     if (!body || !body.hubIds || !Array.isArray(body.memberUserIds) || typeof body.gameId !== 'number') {
         throw new Error(`[hub-poll] seed: ${JSON.stringify(body)}`);
     }
@@ -143,7 +145,7 @@ test.describe('hub polls', () => {
         const dialog = page.getByRole('dialog', { name: 'Schedule a Game' });
         await expect(dialog).toBeVisible({ timeout: 15_000 });
         const hubLine = dialog.getByTestId('create-poll-hub-line');
-        await expect(hubLine, 'the modal is tagged to the hub').toContainText('Tagged to Seed Crew');
+        await expect(hubLine, 'the modal is tagged to the hub').toContainText(`Tagged to ${seed.hubNames.crew}`);
         await expect(hubLine, 'the game is locked to the hub game').toContainText(game.name);
         await dialog.getByRole('button', { name: 'Create Poll' }).click();
 
@@ -196,7 +198,7 @@ test.describe('hub polls', () => {
         await dismissGameTimeCheck(page);
         const panel = page.getByTestId('scheduling-hub-panel');
         await expect(panel, 'a hub-tagged poll renders its hub block').toBeVisible({ timeout: 20_000 });
-        await expect(panel.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
+        await expect(panel.getByRole('link', { name: seed.hubNames.crew })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
         const chip = panel.getByTestId('scheduling-hub-voters').getByRole('listitem').filter({ hasText: voter.displayName });
         await expect(chip, 'the member voter is listed once').toHaveCount(1, { timeout: 15_000 });
         await expect(chip.getByText('Member', { exact: true }), 'the member voter carries the Member mark').toBeVisible();
@@ -214,7 +216,7 @@ test.describe('hub polls', () => {
         // The never-confirmed actor gets the game-time check (modal / phone sheet), which covers the page.
         await dismissGameTimeCheck(page);
         const panel = page.getByTestId('scheduling-hub-panel');
-        await expect(panel.getByRole('link', { name: 'Seed Solo' })).toBeVisible({ timeout: 20_000 });
+        await expect(panel.getByRole('link', { name: seed.hubNames.solo })).toBeVisible({ timeout: 20_000 });
         const card = panel.getByTestId('scheduling-hub-join');
         await expect(card, 'a signed-in non-member is offered Join hub').toBeVisible();
         await card.getByRole('button', { name: 'Join hub' }).click();

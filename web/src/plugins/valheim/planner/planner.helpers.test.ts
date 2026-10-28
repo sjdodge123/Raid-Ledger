@@ -19,6 +19,8 @@ import {
     viaChips,
     stepLabel,
     hidesUndiscovered,
+    otherWaysCount,
+    serializeSources,
 } from './planner.helpers';
 
 const station = (p: string) => (p === 'forge' ? 'Forge' : p);
@@ -175,5 +177,26 @@ describe('stepLabel (ROK-1861)', () => {
             label: 'Quality 2 · By hand',
             chip: null,
         });
+    });
+});
+
+describe('serializeSources (ROK-1860 D3)', () => {
+    it('is empty with no picks', () => {
+        expect(serializeSources(new Map())).toBe('');
+    });
+    it('writes recipe and process tokens sorted by prefab', () => {
+        const picks = new Map([
+            ['Coal', { type: 'process', processor: 'charcoal_kiln', index: 1 } as const],
+            ['Bronze', { type: 'recipe', recipeId: 'Recipe_Bronze5' } as const],
+        ]);
+        expect(serializeSources(picks)).toBe('Bronze:r:Recipe_Bronze5,Coal:p:charcoal_kiln:1');
+    });
+});
+
+describe('otherWaysCount (ROK-1860)', () => {
+    it('is the node alternatives, 0 for a withheld node', () => {
+        expect(otherWaysCount(node({ alternatives: 2 }))).toBe(2);
+        expect(otherWaysCount(node({}))).toBe(0);
+        expect(otherWaysCount(node({ alternatives: 3, via: { type: 'undiscovered' } }))).toBe(0);
     });
 });

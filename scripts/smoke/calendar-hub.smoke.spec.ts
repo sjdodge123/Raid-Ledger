@@ -23,18 +23,19 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { apiGet, getAdminToken, pollForCondition } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { isDesktop, isTablet } from './helpers';
 
 interface HubSeed {
     gameId: number;
     hubIds: { crew: number };
+    hubNames: HubSeedNames;
     leaderUserId: number;
     hubEvent: { id: number; title: string; startTime: string };
 }
 
-const HUB_NAME = 'Seed Crew';
 const PROJECT_SLOT: Record<string, number> = { desktop: 0, mobile: 1, tablet: 2 };
 
 /** Fail loudly on a missing element (strict flags: no `!`). */
@@ -58,7 +59,7 @@ async function projectGameId(token: string, testInfo: TestInfo): Promise<number>
 
 const isHubSeed = (b: unknown): b is HubSeed => {
     const s = b as Partial<HubSeed> | null;
-    return typeof s?.leaderUserId === 'number' && typeof s.hubIds?.crew === 'number'
+    return typeof s?.leaderUserId === 'number' && typeof s.hubIds?.crew === 'number' && typeof s.hubNames?.crew === 'string'
         && typeof s.hubEvent?.id === 'number' && typeof s.hubEvent.title === 'string';
 };
 
@@ -66,7 +67,7 @@ const isHubSeed = (b: unknown): b is HubSeed => {
 async function seedHubEvent(testInfo: TestInfo): Promise<HubSeed> {
     const token = await getAdminToken();
     const gameId = await projectGameId(token, testInfo);
-    const body: unknown = await apiPost(token, '/admin/test/community-hubs/seed', { gameId, withEvent: true });
+    const body: unknown = await seedCommunityHubs(token, testInfo, 'calendar-hub', { gameId, withEvent: true });
     if (!isHubSeed(body)) throw new Error(`[calendar-hub] seed: ${JSON.stringify(body)}`);
     await pollForCondition(async () => {
         const ev = (await apiGet(token, `/events/${body.hubEvent.id}`)) as { hub?: { id?: number } | null } | null;
@@ -128,7 +129,7 @@ test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
 
         const entry = entryOf(page, testInfo, seed);
         await expect(entry).toHaveCount(1, { timeout: 15_000 });
-        await expect(entry.getByTestId('event-hub-label')).toHaveText(`· ${HUB_NAME}`);
+        await expect(entry.getByTestId('event-hub-label')).toHaveText(`· ${seed.hubNames.crew}`);
 
         const panel = await openFilters(page, testInfo);
         const hubBox = panel.getByTestId(`calendar-hub-toggle-${seed.hubIds.crew}`);
@@ -147,7 +148,7 @@ test.describe('calendar — hub provenance (ROK-1893 P4)', () => {
         const link = page.getByTestId('event-banner-hub').filter({ visible: true }).first();
         await expect(link).toBeVisible({ timeout: 15_000 });
         await expect(link).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
-        await expect(link).toContainText(`${HUB_NAME} hub`);
+        await expect(link).toContainText(`${seed.hubNames.crew} hub`);
         await link.click();
         await expect(page).toHaveURL(new RegExp(`/hubs/${seed.hubIds.crew}(?:[/?#]|$)`), { timeout: 15_000 });
     });
