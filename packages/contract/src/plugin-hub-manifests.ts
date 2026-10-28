@@ -112,6 +112,8 @@ const blizzard = {
   behaviours: [
     { id: 'wow_guild', kind: 'hub-kind', label: 'World of Warcraft guild hubs' },
     { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
+    // ROK-1964: the `wow-ledgerlink` companion contract handler.
+    { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
   ],
   // Hub-widget game scope only (web guard W4) — the api manifest's own
   // `gameSlugs` (every WoW variant) is separate and unchanged.

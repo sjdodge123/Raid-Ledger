@@ -1,0 +1,34 @@
+{
+  "envelope-unknown-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "payload-unknown-key": {
+    "path": "payload",
+    "code": "unrecognized_keys"
+  },
+  "export-missing": {
+    "path": "payload.exportString",
+    "code": "invalid_type"
+  },
+  "export-empty": {
+    "path": "payload.exportString",
+    "code": "too_small"
+  },
+  "export-over-cap": {
+    "path": "payload.exportString",
+    "code": "too_big"
+  },
+  "export-not-string": {
+    "path": "payload.exportString",
+    "code": "invalid_type"
+  },
+  "contract-version-2": {
+    "path": "contractVersion",
+    "code": "invalid_value"
+  },
+  "contract-bg3-save": {
+    "path": "contract",
+    "code": "invalid_value"
+  }
+}

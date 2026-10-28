@@ -18,6 +18,9 @@
  * its filename prefix names, D2 every invalid fixture is rejected at its
  * pinned path + code, D3 one `$defs` entry per wire message; its drift guard
  * sits in C7.
+ * ROK-1964 adds `wow-ledgerlink` v1 (wraps an unchanged LedgerLink v1 export
+ * string): W1 its golden fixtures parse and each wraps its LedgerLink fixture
+ * verbatim, its invalid set joins C3 and its schema.json joins C7.
  * Lives in the api (like `valheim-link-contract.spec.ts`) because the
  * contract workspace has no Node types for reading fixture files.
  */
@@ -37,6 +40,8 @@ import {
   serializeBg3SaveJsonSchema,
   serializeCompanionDeviceLinkJsonSchema,
   serializeCompanionEnvelopeJsonSchema,
+  serializeWowLedgerlinkJsonSchema,
+  WowLedgerlinkMessageSchema,
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
 
@@ -44,6 +49,9 @@ const ROOT = join(__dirname, '../../../packages/contract/companion');
 const ENV_V1 = join(ROOT, 'envelope', 'v1');
 const BG3_V1 = join(ROOT, 'bg3-save', 'v1');
 const LINK_V1 = join(ROOT, 'device-link', 'v1');
+const WOW_V1 = join(ROOT, 'wow-ledgerlink', 'v1');
+const WOW_FIX = join(WOW_V1, 'fixtures');
+const LEDGERLINK_FIX = join(ROOT, '..', 'ledgerlink', 'v1', 'fixtures');
 const LINK_FIX = join(LINK_V1, 'fixtures');
 const ENV_FIX = join(ENV_V1, 'fixtures');
 const BG3_FIX = join(BG3_V1, 'fixtures');
@@ -122,6 +130,11 @@ const SchemaCases: ReadonlyArray<{
     dir: join(BG3_FIX, 'invalid'),
     schema: Bg3SaveMessageSchema,
   },
+  {
+    label: 'wow-ledgerlink',
+    dir: join(WOW_FIX, 'invalid'),
+    schema: WowLedgerlinkMessageSchema,
+  },
 ];
 
 describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
@@ -180,6 +193,44 @@ describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
       lookupCompanionContract(env.contract, env.contractVersion).kind,
     ).toBe('unknown_contract');
   });
+});
+
+describe('Companion wow-ledgerlink v1 golden fixtures (W1)', () => {
+  it('ships the agreed cases', () => {
+    expect(namesIn(WOW_FIX)).toEqual([
+      'char-normal',
+      'guild-3-pages',
+      'guild-8-pages-2000-members',
+      'mixed-char-guild3-raid-shuffled',
+    ]);
+  });
+
+  it.each(namesIn(WOW_FIX))(
+    '%s parses as message + envelope and resolves to wow-ledgerlink v1',
+    (name) => {
+      const body = readJson(WOW_FIX, `${name}.json`);
+      expect(
+        WowLedgerlinkMessageSchema.safeParse(body).error?.issues,
+      ).toBeUndefined();
+      const env = CompanionEnvelopeSchema.parse(body);
+      const hit = lookupCompanionContract(env.contract, env.contractVersion);
+      expect(hit.kind === 'ok' && hit.spec.schema).toBe(
+        WowLedgerlinkMessageSchema,
+      );
+    },
+  );
+
+  it.each(namesIn(WOW_FIX))(
+    '%s wraps its LedgerLink v1 fixture string verbatim',
+    (name) => {
+      const msg = WowLedgerlinkMessageSchema.parse(
+        readJson(WOW_FIX, `${name}.json`),
+      );
+      expect(msg.payload.exportString).toBe(
+        read(LEDGERLINK_FIX, `${name}.txt`),
+      );
+    },
+  );
 });
 
 describe.each(SchemaCases)(
@@ -373,6 +424,12 @@ describe('Companion v1 schema.json drift guards (C7)', () => {
 
   it('bg3-save schema.json matches a fresh generation', () => {
     expect(read(BG3_V1, 'schema.json')).toBe(serializeBg3SaveJsonSchema());
+  });
+
+  it('wow-ledgerlink schema.json matches a fresh generation', () => {
+    expect(read(WOW_V1, 'schema.json')).toBe(
+      serializeWowLedgerlinkJsonSchema(),
+    );
   });
 
   it('device-link schema.json matches a fresh generation', () => {
