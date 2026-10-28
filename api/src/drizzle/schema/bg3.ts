@@ -2,12 +2,9 @@ import {
   pgTable,
   serial,
   integer,
-  smallint,
   varchar,
   char,
-  text,
   boolean,
-  jsonb,
   timestamp,
   index,
   uniqueIndex,
@@ -15,16 +12,14 @@ import {
   check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { Bg3PartyMember } from '@raid-ledger/contract';
 import { users } from './users';
 import { guilds } from './guilds';
-import { companionDevices } from './companion-devices';
 
 /**
- * ROK-1957 (C4) — the `bg3` plugin's storage. Spec §4 / D-3: there is no
- * snapshot table; the hub snapshot is the newest canonical `bg3_saves` row of
- * a campaign. Hub deletion cascades through `bg3_campaigns`; user deletion
- * ("Delete my BG3 data", D-18) cascades through every `user_id` FK.
+ * ROK-1957 (C4) — the `bg3` plugin's campaigns, bindings and claims (spec
+ * §4); save history lives in `bg3-saves.ts`. Hub deletion cascades through
+ * `bg3_campaigns`; user deletion ("Delete my BG3 data", D-18) cascades
+ * through every `user_id` FK.
  */
 
 const tsz = (name: string) => timestamp(name, { withTimezone: true });
@@ -36,9 +31,6 @@ const userCascade = (name: string) =>
   integer(name)
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' });
-
-/** Where a save's `campaignKey` came from (`bg3-save/v1`). */
-export type Bg3CampaignKeySourceRow = 'save-folder' | 'game-id';
 
 /** A BG3 campaign, owned by one `game_community` hub. */
 export const bg3Campaigns = pgTable(
@@ -123,75 +115,6 @@ export const bg3UserDefaults = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('bg3_user_defaults_campaign_id_idx').on(t.campaignId)],
-);
-
-/**
- * Save history. `campaign_id` NULL = unassigned (kept under the same
- * retention, Q-12). Retention collapses an old session to its last row and
- * stamps `session_first_saved_at` + `session_save_count` (D-9).
- */
-export const bg3Saves = pgTable(
-  'bg3_saves',
-  {
-    id: serial('id').primaryKey(),
-    uploaderUserId: userCascade('uploader_user_id'),
-    deviceId: integer('device_id').references(() => companionDevices.id, {
-      onDelete: 'set null',
-    }),
-    campaignId: integer('campaign_id').references(() => bg3Campaigns.id, {
-      onDelete: 'set null',
-    }),
-    campaignKey: char('campaign_key', { length: 64 }).notNull(),
-    campaignKeySource: varchar('campaign_key_source', { length: 12 })
-      .$type<Bg3CampaignKeySourceRow>()
-      .notNull(),
-    saveName: text('save_name').notNull(),
-    savedAt: tsz('saved_at').notNull(),
-    capturedAt: tsz('captured_at').notNull(),
-    receivedAt: tsz('received_at').notNull().defaultNow(),
-    gameVersion: varchar('game_version', { length: 40 }).notNull(),
-    platform: varchar('platform', { length: 32 }).notNull(),
-    currentLevel: varchar('current_level', { length: 64 }).notNull(),
-    difficulty: varchar('difficulty', { length: 64 }).notNull(),
-    ruleset: varchar('ruleset', { length: 64 }),
-    /** Validated contract array; reads re-parse and skip a bad row. */
-    party: jsonb('party').$type<Bg3PartyMember[]>().notNull(),
-    partyMaxLevel: smallint('party_max_level').notNull(),
-    thumbnailSha256: char('thumbnail_sha256', { length: 64 }),
-    thumbnailWidth: integer('thumbnail_width'),
-    thumbnailHeight: integer('thumbnail_height'),
-    sessionFirstSavedAt: tsz('session_first_saved_at'),
-    sessionSaveCount: integer('session_save_count'),
-  },
-  (t) => [
-    // D-4 ingest belt (ON CONFLICT DO NOTHING); covers the uploader FK.
-    uniqueIndex('bg3_saves_uploader_key_saved_at_uq').on(
-      t.uploaderUserId,
-      t.campaignKey,
-      t.savedAt,
-    ),
-    // Snapshot + sessions reads; covers the campaign FK.
-    index('bg3_saves_campaign_saved_at_idx').on(
-      t.campaignId,
-      t.savedAt.desc(),
-      t.id.desc(),
-    ),
-    index('bg3_saves_device_id_idx').on(t.deviceId),
-    // D-11 "does any remaining row of this user still use the sha?".
-    index('bg3_saves_uploader_thumbnail_idx').on(
-      t.uploaderUserId,
-      t.thumbnailSha256,
-    ),
-    check('bg3_saves_key_chk', sql`${t.campaignKey} ~ '^[0-9a-f]{64}$'`),
-    check(
-      'bg3_saves_key_source_chk',
-      sql`${t.campaignKeySource} IN ('save-folder', 'game-id')`,
-    ),
-    check(
-      'bg3_saves_thumbnail_sha_chk',
-      sql`${t.thumbnailSha256} IS NULL OR ${t.thumbnailSha256} ~ '^[0-9a-f]{64}$'`,
-    ),
-  ],
 );
 
 /** "That's me" party claims (D-10): one slot per user per campaign. */
