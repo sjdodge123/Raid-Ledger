@@ -23,7 +23,7 @@ import { isUpgraderStation } from './valheim-recipes.station-steps';
 const QUALITY_MAX = 10;
 
 /** Fresh `{prefab, amount}` lines with zero amounts dropped (the cost schema needs ≥1). */
-function positive(lines: readonly InputLine[]): InputLine[] {
+export function positive(lines: readonly InputLine[]): InputLine[] {
   return lines
     .filter((l) => l.amount >= 1)
     .map(({ prefab, amount }) => ({ prefab, amount }));

@@ -214,12 +214,8 @@ export class ValheimRecipesService {
     const q = kind === 'piece' ? 1 : Math.min(ask.quality, maxQ(prefab));
     const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
     const opts = { maxQuality: maxQ, sources: ask.sources };
-    const res = resolveTree(
-      graph,
-      kind ? { ...target, kind } : target,
-      null,
-      opts,
-    );
+    const t = kind ? { ...target, kind } : target;
+    const res = resolveTree(graph, t, null, opts);
     return {
       target: { prefab, quality: q },
       ...pickTree(res, graph, k),
