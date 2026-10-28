@@ -19,6 +19,7 @@ const HUB = {
   id: 5,
   kind: 'game_community',
   gameSlug: BG3_GAME_SLUG,
+  gameIgdbId: null,
   hidden: false,
 };
 const at = new Date('2026-10-01T00:00:00Z');

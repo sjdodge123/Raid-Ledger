@@ -6,19 +6,21 @@
  * (L6) routes.
  */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { isBg3GameSlug } from '@raid-ledger/contract';
 import {
   isStaff,
   type GuildAccessService,
   type GuildActor,
 } from '../../../guilds/guild-access.service';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
+import { isBg3Game } from '../bg3-game-match.helpers';
 
 /** A hub as `findHub` resolves it; `hidden` = hidden_at set or not active. */
 export interface Bg3HubRow {
   id: number;
   kind: string;
   gameSlug: string | null;
+  /** The hub game's IGDB id — BG3 by `BG3_IGDB_ID` when the slug is unknown. */
+  gameIgdbId: number | null;
   hidden: boolean;
 }
 
@@ -31,7 +33,11 @@ export function refuseNonBg3Hub(
   hub: Bg3HubRow | null,
   actor: GuildActor,
 ): Bg3HubRow {
-  if (!hub || hub.kind !== 'game_community' || !isBg3GameSlug(hub.gameSlug))
+  if (
+    !hub ||
+    hub.kind !== 'game_community' ||
+    !isBg3Game(hub.gameSlug, hub.gameIgdbId)
+  )
     throw new NotFoundException(HUB_NOT_FOUND);
   if (hub.hidden && !isStaff(actor)) throw new NotFoundException(HUB_NOT_FOUND);
   return hub;

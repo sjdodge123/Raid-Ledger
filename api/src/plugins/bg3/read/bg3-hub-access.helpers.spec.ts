@@ -1,5 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { BG3_GAME_SLUG } from '@raid-ledger/contract';
+import { BG3_GAME_SLUG, BG3_IGDB_ID } from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../auth/types';
 import {
   assertBg3HubReader,
@@ -16,6 +16,7 @@ const hub = (over: Partial<Bg3HubRow> = {}): Bg3HubRow => ({
   id: 5,
   kind: 'game_community',
   gameSlug: BG3_GAME_SLUG,
+  gameIgdbId: null,
   hidden: false,
   ...over,
 });
@@ -32,6 +33,7 @@ describe('refuseNonBg3Hub (D-2, D-15)', () => {
     ['not a community hub', hub({ kind: 'game_server' })],
     ['another game', hub({ gameSlug: 'valheim' })],
     ['no game', hub({ gameSlug: null })],
+    ['unknown slug, other IGDB id', hub({ gameSlug: 'bg3', gameIgdbId: 1 })],
     ['hidden', hub({ hidden: true })],
   ])('404s a %s hub for a member', (_label, row) => {
     expect(() => refuseNonBg3Hub(row, member)).toThrow(NotFoundException);
@@ -45,6 +47,14 @@ describe('refuseNonBg3Hub (D-2, D-15)', () => {
       );
     },
   );
+
+  it('ROK-2038: admits a hub whose game has an unknown slug but the BG3 IGDB id', () => {
+    const row = hub({
+      gameSlug: 'baldurs-gate-3-remix',
+      gameIgdbId: BG3_IGDB_ID,
+    });
+    expect(refuseNonBg3Hub(row, member)).toEqual(row);
+  });
 
   it('lets staff see a hidden BG3 hub', () => {
     expect(refuseNonBg3Hub(hub({ hidden: true }), staff)).toEqual(

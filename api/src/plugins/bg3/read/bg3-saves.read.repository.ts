@@ -3,12 +3,12 @@
  * routes, the uploader's own list (`me/saves`) and the ROK-1959 gallery feed.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNull, lt, or, type SQL } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { BG3_GAME_SLUGS, BG3_IGDB_ID } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { HubMediaCursor } from '../../../hub-media/hub-media.cursor';
+import { bg3GameCondition } from '../bg3-game-match.helpers';
 import { pickCanonical } from '../history/bg3-canonical.helpers';
 import { BG3_NEWEST_FIRST } from './bg3-read.repository';
 
@@ -142,10 +142,7 @@ export class Bg3SavesReadRepository {
         and(
           isNull(c.archivedAt),
           eq(g.kind, 'game_community'),
-          or(
-            inArray(schema.games.slug, [...BG3_GAME_SLUGS]),
-            eq(schema.games.igdbId, BG3_IGDB_ID),
-          ),
+          bg3GameCondition(),
         ),
       );
     return rows.map((r) => r.id);

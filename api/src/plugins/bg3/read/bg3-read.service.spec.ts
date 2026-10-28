@@ -17,6 +17,7 @@ const HUB: Bg3HubRow = {
   id: 5,
   kind: 'game_community',
   gameSlug: BG3_GAME_SLUG,
+  gameIgdbId: null,
   hidden: false,
 };
 const at = (h: number) => new Date(Date.UTC(2026, 9, 1, h));
