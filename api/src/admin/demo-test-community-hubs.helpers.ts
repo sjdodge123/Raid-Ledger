@@ -7,14 +7,16 @@
  * ROK-1893 P4: with `withEvent: true`, plus one event tagged (`guild_id`) to
  * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
+import { createHash } from 'node:crypto';
 import { NotFoundException } from '@nestjs/common';
-import { and, asc, eq, like } from 'drizzle-orm';
+import { and, asc, eq, isNull, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
 import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
 import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
+import { isTaggedCrewUsername } from './demo-test-community-hubs.crew';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -23,6 +25,13 @@ export const CommunityHubsSeedSchema = z
     gameId: z.number().int().positive().optional(),
     /** ROK-1893 P4: also seed the crew hub's tagged event (`hubEvent`). */
     withEvent: z.boolean().optional(),
+    /** ROK-2030: scope the fixture to this tag (see the `.tag` module). */
+    tag: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
+      .optional(),
+    /** ROK-2030: seed on the tag's own disabled game (see the `.game` module). */
+    dedicatedGame: z.boolean().optional(),
   })
   .strict();
 
@@ -40,8 +49,19 @@ export interface CommunityHubsSeedResult {
   leaderUserId: number;
   /** Crew's live non-leaders: `[officer, member×4]`. */
   memberUserIds: number[];
+  /** ROK-2030: their usernames (tag-suffixed when tagged, `crewUsernames`). */
+  memberUsernames: string[];
   bannedUserId: number;
   proposalId: number;
+  /** ROK-2030: each hub's seeded name (`<base> #<tag>` when tagged). */
+  hubNames: {
+    crew: string;
+    solo: string;
+    proposed: string;
+    archived: string;
+    server: string;
+    guild: string;
+  };
   /** ROK-1893 P4: the event tagged to the crew hub (only with `withEvent`). */
   hubEvent?: SeedHubEvent;
 }
@@ -104,8 +124,22 @@ const SEED_SNOWFLAKE_BASE = 1870_000;
  */
 export function seedDiscordId(username: string): string {
   const index = SEED_USERNAMES.indexOf(username);
-  if (index < 0) throw new Error(`${username} is not a seed user`);
-  return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  if (index >= 0) {
+    return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  }
+  if (isTaggedCrewUsername(username)) return taggedCrewDiscordId(username);
+  throw new Error(`${username} is not a seed user`);
+}
+
+/**
+ * ROK-2030: a tag's crew user's snowflake — `98` + 16 digits hashed from the
+ * username (52 bits of sha256), deterministic so parallel first-run seeds of
+ * one tag collide on it like the shared users do, and clear of the shared
+ * users' `90…` and the integration specs' `91…`.
+ */
+function taggedCrewDiscordId(username: string): string {
+  const hex = createHash('sha256').update(username).digest('hex');
+  return `98${String(parseInt(hex.slice(0, 13), 16)).padStart(16, '0')}`;
 }
 
 /** Re-arm an existing user: seen now, active, a placeholder id replaced. */
@@ -214,11 +248,15 @@ export async function seedProposal(
   db: Db,
   gameId: number,
   proposerId: number,
+  name: string = SEED_HUB_NAMES.proposed,
 ): Promise<number> {
+  const plain = name === SEED_HUB_NAMES.proposed;
   const hub = await insertCommunityHub(db, {
     gameId,
-    name: SEED_HUB_NAMES.proposed,
-    blurb: 'A seeded proposal waiting for review.',
+    name,
+    blurb: plain
+      ? 'A seeded proposal waiting for review.'
+      : `${name} — a seeded proposal waiting for review.`,
     status: 'proposed',
     proposedBy: proposerId,
     reviewedBy: null,
@@ -231,16 +269,21 @@ export async function seedArchivedHub(
   db: Db,
   gameId: number,
   leaderId: number,
+  name: string = SEED_HUB_NAMES.archived,
 ): Promise<number> {
-  const id = await seedActiveHub(db, gameId, SEED_HUB_NAMES.archived, leaderId);
+  const id = await seedActiveHub(db, gameId, name, leaderId);
   await archiveHub(db, id, 'admin');
   return id;
 }
 
 const HOUR_MS = 3_600_000;
-const HUB_EVENT_PREFIX = 'Hub calendar night #';
+export const HUB_EVENT_PREFIX = 'Hub calendar night #';
 
-/** The fixture's earlier hub events by `creatorId` on the game. */
+/**
+ * The fixture's earlier hub events by `creatorId` on the game whose hub is
+ * gone (`guild_id` nulled) — a live hub's event belongs to another tag's
+ * fixture; a tagged reset deletes its own events with its hubs.
+ */
 async function deleteOldHubEvents(
   db: Db,
   gameId: number,
@@ -253,6 +296,7 @@ async function deleteOldHubEvents(
       and(
         eq(ev.creatorId, creatorId),
         eq(ev.gameId, gameId),
+        isNull(ev.guildId),
         like(ev.title, `${HUB_EVENT_PREFIX}%`),
       ),
     );

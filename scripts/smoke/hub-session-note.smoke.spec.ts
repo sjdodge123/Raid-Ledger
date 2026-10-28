@@ -22,7 +22,8 @@
  */
 import type { Locator, Page, Response, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiGet, apiPost, apiPut, getAdminToken } from './api-helpers';
+import { apiGet, apiPut, getAdminToken } from './api-helpers';
+import { seedCommunityHubs } from './hub-seed';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
 import { editorTextbox } from './hub-post-editor';
 
@@ -75,7 +76,7 @@ async function projectGameId(token: string, testInfo: TestInfo): Promise<number>
 async function seedHub(testInfo: TestInfo): Promise<{ seed: Seed; admin: string }> {
     const admin = await getAdminToken();
     const gameId = await projectGameId(admin, testInfo);
-    const body = (await apiPost(admin, '/admin/test/community-hubs/seed', { gameId, withEvent: true })) as Partial<Seed> | null;
+    const body = (await seedCommunityHubs(admin, testInfo, 'hub-session-note', { gameId, withEvent: true })) as Partial<Seed> | null;
     if (!body?.hubIds || !Array.isArray(body.memberUserIds) || typeof body.hubEvent?.id !== 'number') {
         throw new Error(`[hub-session-note] seed: ${JSON.stringify(body)}`);
     }

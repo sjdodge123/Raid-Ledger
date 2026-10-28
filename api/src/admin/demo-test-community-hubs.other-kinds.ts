@@ -3,7 +3,8 @@
  * one Hubs card shows every kind: a HIDDEN `game_server` hub (staff see it
  * flagged "Hidden"; members never do) and a `wow_guild` hub (members + staff
  * only). Plain `guilds` rows with no members; re-seeding deletes the previous
- * pair by name on the same game first (children cascade).
+ * pair by name on the same game first (children cascade). ROK-2030: the
+ * names come from the caller (tagged `<base> #<tag>` for a tagged seed).
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -19,13 +20,16 @@ export const SEED_OTHER_KIND_NAMES = {
 
 const KINDS = ['game_server', 'wow_guild'] as const;
 
+type OtherKindNames = { server: string; guild: string };
+
 /** Delete a previous run's seeded server + guild hubs on the game. */
 export async function resetOtherKindHubs(
   db: Db,
   gameId: number,
+  names: OtherKindNames = SEED_OTHER_KIND_NAMES,
 ): Promise<void> {
   const g = schema.guilds;
-  const keys = Object.values(SEED_OTHER_KIND_NAMES).map(hubNameKey);
+  const keys = [names.server, names.guild].map(hubNameKey);
   await db
     .delete(g)
     .where(
@@ -53,9 +57,10 @@ async function insertHub(
 export async function seedOtherKindHubs(
   db: Db,
   gameId: number,
+  names: OtherKindNames = SEED_OTHER_KIND_NAMES,
 ): Promise<{ server: number; guild: number }> {
-  await resetOtherKindHubs(db, gameId);
-  const { server: s, guild: w } = SEED_OTHER_KIND_NAMES;
+  await resetOtherKindHubs(db, gameId, names);
+  const { server: s, guild: w } = names;
   const server = await insertHub(db, {
     gameId,
     kind: 'game_server',
