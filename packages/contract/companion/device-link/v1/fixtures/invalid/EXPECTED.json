@@ -11,6 +11,10 @@
     "path": "device.name",
     "code": "invalid_format"
   },
+  "start-request-name-lone-surrogate": {
+    "path": "device.name",
+    "code": "invalid_format"
+  },
   "start-request-app-version-text": {
     "path": "device.appVersion",
     "code": "invalid_format"

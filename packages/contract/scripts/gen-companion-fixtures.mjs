@@ -69,6 +69,7 @@ const BG3_INVALID = [
     ['saved-after-captured', (m) => { m.payload.savedAt = '2026-10-24T12:00:06Z'; }, 'payload.savedAt', 'custom'],
     ['party-empty', (m) => { m.payload.party = []; }, 'payload.party', 'too_small'],
     ['save-name-control-char', (m) => { m.payload.saveName = 'QuickSave_1\u0000'; }, 'payload.saveName', 'invalid_format'],
+    ['save-name-lone-surrogate', (m) => { m.payload.saveName = 'QuickSave_\ud800'; }, 'payload.saveName', 'invalid_format'],
     ['campaign-key-raw-folder', (m) => { m.payload.campaignKey = 'Tav-123__QuickSave'; }, 'payload.campaignKey', 'invalid_format'],
 ];
 

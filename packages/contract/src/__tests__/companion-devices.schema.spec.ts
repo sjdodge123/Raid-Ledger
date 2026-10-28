@@ -8,6 +8,7 @@
  * (`npm test -w @raid-ledger/contract`).
  */
 import { describe, it, expect } from "vitest";
+import { serializeCompanionDeviceLinkJsonSchema } from "../companion-json-schema.js";
 import {
   COMPANION_DEVICE_TOKEN_PATTERN,
   COMPANION_USER_CODE_ALPHABET,
@@ -300,5 +301,22 @@ describe("CompanionLinkPreviewRequestSchema (code in the body, not the path)", (
       CompanionLinkPreviewRequestSchema.safeParse({ userCode: "BCDFGHJK", x: 1 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("device-link schema.json is Rust-regex-safe (ROK-2034)", () => {
+  it("publishes no \\p{Cs}; lone surrogates are still rejected", () => {
+    const json = serializeCompanionDeviceLinkJsonSchema();
+    const classes = [
+      ...new Set([...json.matchAll(/\\\\p\{(\w+)\}/g)].map((m) => m[1])),
+    ];
+    expect(classes).toEqual(["Cc"]);
+    const result = CompanionDeviceInfoSchema.safeParse({
+      ...info,
+      osVersion: "10.0\uDC00",
+    });
+    expect(result.error?.issues.map((i) => [i.path.join("."), i.code])).toEqual(
+      [["osVersion", "invalid_format"]],
+    );
   });
 });
