@@ -142,8 +142,12 @@ them apart. 30 failed auths per minute per IP (a default, env-configurable) →
 `device.name` and `device.osVersion` are shown to the approver, so they reject
 C0/C1 control characters (including line breaks), U+2028/U+2029, lone
 surrogates, bidi overrides and isolates (U+202A–U+202E, U+2066–U+2069) and
-whitespace-only text. The `schema.json` pattern uses `\p{…}` classes, so a
-validator must compile it in Unicode mode.
+whitespace-only text. The `schema.json` pattern uses the `\p{Cc}` class, so a
+validator must compile it in Unicode mode. Lone surrogates are rejected by the
+Raid Ledger server (Zod refinement, issue `invalid_format`) but are **not** in
+the pattern: Rust's `regex` cannot compile `\p{Cs}`, and a Rust/UTF-8 string
+cannot hold one anyway (fixture `invalid/start-request-name-lone-surrogate`;
+ROK-2034).
 
 ## 7. Fixtures
 

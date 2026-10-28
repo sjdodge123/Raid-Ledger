@@ -5,6 +5,16 @@ Newest first. Every entry states **additive** or **breaking** (see
 Display-table edits (`src/companion-bg3-display.ts`) are not wire and get no
 entry.
 
+## v1 — 2026-10-28 (additive) — `\p{Cs}` dropped from the `saveName` pattern
+
+- **Additive** (stays v1, ROK-2034). The published `saveName` pattern no longer
+  contains `\p{Cs}`, which Rust's `regex` crate (rl-companion) cannot compile.
+  Only a JS string can hold a lone surrogate, so no valid Rust payload changes
+  meaning.
+- The server still rejects lone surrogates, now via a Zod refinement on
+  `companionDisplayTextSchema` (same `invalid_format` issue at
+  `payload.saveName`). New invalid fixture `save-name-lone-surrogate`.
+
 ## v1 — 2026-10-25 (additive) — initial contract
 
 - **Additive.** New folder `packages/contract/companion/bg3-save/v1/` and

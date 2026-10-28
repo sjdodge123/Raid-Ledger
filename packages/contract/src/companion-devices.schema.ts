@@ -8,7 +8,10 @@
  * Field names are camelCase (repo convention); RFC 8628 uses snake_case.
  */
 import { z } from "zod";
-import { COMPANION_DISPLAY_TEXT_RE } from "./companion-common.schema.js";
+import {
+  COMPANION_DISPLAY_TEXT_RE,
+  rejectLoneSurrogates,
+} from "./companion-common.schema.js";
 
 /** Raw device token: `rlcd_` + 43 base64url chars (32 random bytes). */
 export const COMPANION_DEVICE_TOKEN_PATTERN = /^rlcd_[A-Za-z0-9_-]{43}$/;
@@ -56,7 +59,8 @@ export const CompanionDeviceNameSchema = z
   .trim()
   .min(1)
   .max(64)
-  .regex(COMPANION_DISPLAY_TEXT_RE);
+  .regex(COMPANION_DISPLAY_TEXT_RE)
+  .superRefine(rejectLoneSurrogates);
 
 export const CompanionDeviceOsSchema = z.enum([
   "windows",
@@ -75,6 +79,7 @@ export const CompanionDeviceInfoSchema = z
       .string()
       .max(32)
       .regex(COMPANION_DISPLAY_TEXT_RE)
+      .superRefine(rejectLoneSurrogates)
       .optional(),
     appVersion: z.string().max(32).regex(APP_VERSION_PATTERN),
   })

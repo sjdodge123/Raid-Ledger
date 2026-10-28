@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COMPANION_WEBP_MAX_BYTES } from '../companion-common.schema.js';
+import { COMPANION_DISPLAY_TEXT_RE, COMPANION_WEBP_MAX_BYTES } from '../companion-common.schema.js';
+import { serializeBg3SaveJsonSchema } from '../companion-json-schema.js';
 import { BG3_PARTY_MAX, Bg3SaveMessageSchema } from '../companion-bg3-save.schema.js';
 
 /** ROK-1954 — `bg3-save` v1 (B1–B9): strict keys at every level, refinements, bounds. */
@@ -123,5 +124,15 @@ describe('Bg3SaveMessageSchema (ROK-1954)', () => {
     it('B9: ruleset may be null', () => {
         expect(ok(withPayload({ ruleset: null }))).toBe(true);
         expect(issue(withPayload({ ruleset: 'Ruleset Larian' }), 'payload.ruleset', 'invalid_format')).toBe(true);
+    });
+    it('B11 (ROK-2034): the published pattern is Rust-regex-safe; lone surrogates are still rejected by the refine', () => {
+        const json = serializeBg3SaveJsonSchema();
+        const classes = [...new Set([...json.matchAll(/\\\\p\{(\w+)\}/g)].map((m) => m[1]))];
+        expect(classes).toEqual(['Cc']);
+        expect(COMPANION_DISPLAY_TEXT_RE.test('lone \ud800')).toBe(true);
+        for (const name of ['lone \ud800', 'trail \udfff', '\udc00lead']) {
+            expect({ name, rejected: issue(withPayload({ saveName: name }), 'payload.saveName', 'invalid_format') })
+                .toEqual({ name, rejected: true });
+        }
     });
 });
