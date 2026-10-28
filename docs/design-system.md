@@ -1598,8 +1598,10 @@ owning `HubModule.overviewWidgets`.
 
 **Adopters.** Valheim (`web/src/plugins/valheim/register.ts`): the claim banner (`chrome: 'none'`, order 5,
 ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked `<ol>` of at most 8 rows, each a
-44px `Link` row (name + `tabular-nums` count over a §3.2 `GuildMeter` scaled to the top row) when it has a
-target and plain text when not, a "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
+name + `tabular-nums` count line over a §3.2 `GuildMeter` scaled to the top row. ROK-2029: when the row has a
+target, the **name** and the **count + `MapPinIcon`** are two separate 44px `Link`s (`hover:underline`, distinct
+accessible names — "Open <name>'s character page" / "Show <name>'s N deaths on the map"), never one row-wide link;
+plain text when not. A "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
 since <date>", viewer timezone). Copy this shape for any future ranked-count widget; `useVisible` hides it when
 the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
 CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` shows it to every hub
@@ -1784,7 +1786,7 @@ member" shows only the uploader's Remove, and a states row renders Add picture /
 
 **New pattern: thumbnail strip in a meter row (ROK-1941, operator Q1 = A)** — `ValheimDeathsPictures`
 (`plugins/valheim/hub/valheim-deaths-pictures.tsx`). Nothing else in the inventory puts image thumbs in a
-list row. A second line under a `GuildMeter` row, a SIBLING of the row's `<Link>` (never nested): up to three
+list row. A second line under a `GuildMeter` row, a SIBLING of the row's `<Link>`s (never nested): up to three
 `Button variant="bare"` 44px targets (`p-0.5`), each a 40px `rounded-md border-edge bg-panel` tile with the
 `object-cover` thumb (`group-hover:border-edge-strong`, `brightness-110`), then "+N" in the same tile
 (`text-secondary` → `text-foreground` on hover). `role="group"` named "<name>'s death pictures"; a thumb is
