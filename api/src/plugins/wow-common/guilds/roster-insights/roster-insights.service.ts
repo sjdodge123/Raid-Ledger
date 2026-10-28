@@ -68,10 +68,12 @@ export class RosterInsightsService {
     audience: InsightsAudience,
     onlyMains: boolean,
   ): Promise<WowRosterInsightsDto> {
-    const all = await this.loadRows(guildId);
-    const rows = onlyMains ? mainsOnly(all) : all;
+    // Snapshot time first: if an import lands between the two reads, the
+    // footer shows presence as older than it is, never newer.
     const snapshotAt =
       audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
+    const all = await this.loadRows(guildId);
+    const rows = onlyMains ? mainsOnly(all) : all;
     return {
       classes: computeClasses(rows),
       levels: computeLevels(rows),
