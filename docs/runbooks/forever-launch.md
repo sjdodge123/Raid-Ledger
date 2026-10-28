@@ -58,7 +58,7 @@ The Companion auto-creates characters only when the realm's ruleset is known. Th
 
 1. Log in to Forever, then log out. LedgerLink exports on logout and the Companion uploads it.
 2. If the Companion does not pick it up, paste by hand. The route is `POST /api/plugins/wow/characters/addon-import` (`api/src/plugins/wow-common/addon-import/addon-import.controller.ts:35,44`).
-3. **Hardcore characters need one manual paste first.** After that the Companion keeps them in sync. **UNVERIFIED:** the reason lives in the ROK-1961 / ROK-1964 specs, not in code on main.
+3. **Hardcore characters can't be imported yet**, by paste or by the Companion. Creating a character with the `hardcore` ruleset is refused ("Hardcore characters can't be added from an import yet.", `assertCreatable` in `api/src/plugins/wow-common/addon-import/addon-import-create.helpers.ts`; ruling A1: refuse until Hardcore opens). If Hardcore realms are live on launch day, that refusal has to be lifted by a code change first. Until then, mark Hardcore as **off** in the go/no-go table.
 4. Check the character page shows class, level and realm.
 
 ### 3.4 Import a real guild string — Officer (Operator stands in if no officer is ready)
@@ -172,7 +172,7 @@ Paste into `rl_test_plan_create` on a main-built env. Seed **after** the fleet g
 |---|---|---|---|---|
 | 1 | Open the seeded Forever guild hub Overview. | Class breakdown and Level progression show the seeded roster. | `member` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 2 | Check Role breakdown and Guild professions on the same hub. | Roles show tanks/healers/DPS. Professions shows its manual state with no error. | `member` | `https://slot-N.gamernight.net/hubs/<guildId>` |
-| 3 | Check Who's saved and Recent dings. | Who's saved lists the seeded lockouts. Recent dings lists the three seeded dings. | `member` | `https://slot-N.gamernight.net/hubs/<guildId>` |
+| 3 | Check Who's saved and Recent dings. | Who's saved lists the seeded lockouts. Recent dings lists two rows (Aldren and Corvin). Dainel's ding is seeded 31 days ago, outside the 30-day feed, so it must NOT show. | `member` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 4 | Check Dungeon quests. | Shows for the seeded content event, or stays hidden with no error if none is upcoming. | `officer` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 5 | Visitor view. | Dungeon quests is hidden for the visitor. Nothing errors. | `outsider` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 6 | Arrange mode: hide Recent dings, then show it again. | The card disappears and comes back. **reset_hint:** show the widget again. | `gm` | `https://slot-N.gamernight.net/hubs/<guildId>` |
