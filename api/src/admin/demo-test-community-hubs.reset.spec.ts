@@ -13,6 +13,17 @@ import {
   resetSeedFixture,
   seedChannelPrefs,
 } from './demo-test-community-hubs.reset';
+import { seedHubNames, taggedBlurbLike } from './demo-test-community-hubs.tag';
+import { hubNameKey } from '../guilds/community/community-proposals.queries';
+
+/** SQL `LIKE` (no escapes; tags are `[a-z0-9-]`) as a RegExp. */
+const likeToRegExp = (pattern: string): RegExp =>
+  new RegExp(
+    `^${pattern
+      .split('%')
+      .map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*')}$`,
+  );
 
 let db: MockDb;
 const typed = (): PostgresJsDatabase<typeof schema> => {
@@ -35,7 +46,61 @@ describe('findSeedFixtureHubs', () => {
   });
 });
 
+describe('findSeedFixtureHubs with a tag (ROK-2030)', () => {
+  it('selects only by the tag, never by seed proposer or leader', async () => {
+    // A second (led-by-a-seed-user) query would add another tag's hub 9.
+    db.where
+      .mockResolvedValueOnce([{ id: 8 }])
+      .mockResolvedValueOnce([{ id: 9 }]);
+    expect(await findSeedFixtureHubs(typed(), 7, [10, 11], 'a-d-w00')).toEqual([
+      8,
+    ]);
+    expect(db.select).toHaveBeenCalledTimes(1);
+    expect(db.innerJoin).not.toHaveBeenCalled();
+  });
+
+  it("tag A's match never reaches tag B's hubs, renamed or not", () => {
+    const a = seedHubNames('hub-poll-desktop-w01');
+    const b = seedHubNames('hub-poll-desktop-w011');
+    const bKeys = Object.values(b).map(hubNameKey);
+    for (const name of Object.values(a)) {
+      expect({ name, inB: bKeys.includes(hubNameKey(name)) }).toEqual({
+        name,
+        inB: false,
+      });
+    }
+    const aBlurb = likeToRegExp(taggedBlurbLike('hub-poll-desktop-w01'));
+    expect(aBlurb.test(`${b.crew} — a seeded community hub.`)).toBe(false);
+    expect(aBlurb.test(`${a.crew} — a seeded community hub.`)).toBe(true);
+  });
+
+  it('untagged names stay the plain seed names', () => {
+    expect(seedHubNames(undefined)).toEqual({
+      crew: 'Seed Crew',
+      solo: 'Seed Solo',
+      proposed: 'Seed Hopefuls',
+      archived: 'Seed Old Guard',
+      server: 'Seed Server',
+      guild: 'Seed Guild',
+    });
+    expect(seedHubNames('x-1').crew).toBe('Seed Crew #x-1');
+  });
+});
+
 describe('resetSeedFixture', () => {
+  it("a tagged reset also deletes its hubs' events first", async () => {
+    db.where
+      .mockResolvedValueOnce([{ id: 4 }])
+      .mockResolvedValueOnce([{ id: 5 }]);
+    expect(await resetSeedFixture(typed(), 7, [10], 't-1')).toEqual([4]);
+    expect(deletedTables()).toEqual([
+      schema.events,
+      schema.notifications,
+      schema.hubCommunityMembers,
+      schema.guilds,
+    ]);
+  });
+
   it('deletes the hub notices, memberships + bans, then the hubs', async () => {
     db.where
       .mockResolvedValueOnce([{ id: 4 }])
