@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import type { Response } from 'supertest';
 import { z } from 'zod';
 import {
+  BG3_PLUGIN_ID,
   BG3_SAVE_CONTRACT_ID,
   Bg3SaveMessageSchema,
   COMPANION_BG3_SAVE_MAX_BYTES,
@@ -28,7 +29,7 @@ import { signTestAccessToken } from '../../common/testing/sign-test-access-token
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { shadowBg3SaveHandler } from './testing/shadow-bg3-save-handler';
 import {
   bearer,
   expireLimiterWindows,
@@ -46,7 +47,8 @@ import type { CompanionIngestVia } from './companion-ingest-request';
 import { CompanionIngestService } from './companion-ingest.service';
 
 const MESSAGES = '/companion/v1/messages';
-const OWNER = PELICAN_PLUGIN_ID;
+/** The real `bg3-save` v1 owner; its handler is shadowed by `handler`. */
+const OWNER = BG3_PLUGIN_ID;
 const FIXTURES = join(__dirname, '../../../../packages/contract/companion');
 const BG3_FIXTURES = join(FIXTURES, 'bg3-save/v1/fixtures');
 
@@ -69,6 +71,7 @@ const KEY_B =
   'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
 
 let testApp: TestApp;
+let restoreHandler: (() => void) | undefined;
 
 const handle = jest.fn<
   Promise<void>,
@@ -91,7 +94,7 @@ const handler: CompanionContractHandler<Bg3SaveMessage> = {
 
 beforeAll(async () => {
   testApp = await getTestApp();
-  testApp.app.get(CompanionHandlerRegistry).register(OWNER, handler);
+  restoreHandler = shadowBg3SaveHandler(testApp.app, handler);
 });
 
 beforeEach(async () => {
@@ -107,6 +110,10 @@ beforeEach(async () => {
 afterEach(async () => {
   jest.restoreAllMocks();
   testApp.seed = await truncateAllTables(testApp.db);
+});
+
+afterAll(() => {
+  restoreHandler?.();
 });
 
 /** A bg3 message built from the act2 fixture. */

@@ -15,6 +15,13 @@ import {
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
 import {
+  BG3_GAME_SLUG,
+  BG3_INGEST_SOURCE_ID,
+  BG3_PLUGIN_ID,
+  BG3_RETENTION_JOB_NAME,
+} from './bg3-hub.schema.js';
+import {
+  BG3_SETUP,
   BLIZZARD_SETUP,
   CORE_SETUP,
   PELICAN_SETUP,
@@ -112,12 +119,28 @@ const blizzard = {
   setup: BLIZZARD_SETUP,
 } satisfies PluginHubManifest;
 
+/**
+ * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of `BG3_GAME_SLUG`).
+ * Widgets come with ROK-1958. Mapped below as `bg3`.
+ */
+export const BG3_HUB_MANIFEST = {
+  widgets: [],
+  tabs: [],
+  behaviours: [
+    { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
+    { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
+  ],
+  gameSlugs: [BG3_GAME_SLUG],
+  setup: BG3_SETUP,
+} satisfies PluginHubManifest;
+
 /** Every plugin's hub declaration, keyed by plugin slug. */
 export const HUB_PLUGIN_MANIFESTS = {
   [CORE_PLUGIN_ID]: core,
   valheim,
   pelican,
   blizzard,
+  [BG3_PLUGIN_ID]: BG3_HUB_MANIFEST,
 } as const satisfies Readonly<Record<string, PluginHubManifest>>;
 
 /** A plugin slug that has a hub declaration. */
