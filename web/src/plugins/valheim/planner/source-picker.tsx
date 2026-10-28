@@ -37,7 +37,7 @@ export interface SourcePickerProps {
 }
 
 /** A radio value per source ref (stable across renders). */
-export function sourceRefKey(ref: ValheimRecipeSourceRef): string {
+function sourceRefKey(ref: ValheimRecipeSourceRef): string {
     return ref.type === 'recipe' ? `r:${ref.recipeId}` : `p:${ref.processor}:${ref.index}`;
 }
 
@@ -69,7 +69,7 @@ function OptionLabel({ option, names }: { option: ValheimRecipeSourceOption; nam
     return (
         <span className="flex flex-wrap items-center gap-2">
             <StatusChip tone="neutral" className="whitespace-normal!">{stationLine(option, names)}</StatusChip>
-            {option.default && <StatusChip tone="info">{SOURCE_BEST_GUESS_COPY}</StatusChip>}
+            {option.default && <StatusChip tone="success">{SOURCE_BEST_GUESS_COPY}</StatusChip>}
             {option.discovered === false && <DiscoveryChip />}
         </span>
     );

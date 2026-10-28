@@ -4,7 +4,7 @@
  * "Gathered", "Loops back"…). Rows with children carry a disclosure button.
  */
 import type { JSX } from 'react';
-import type { ValheimPlanNode, ValheimStationBuilds } from '@raid-ledger/contract';
+import type { ValheimPlanNode, ValheimRecipeSourceOption, ValheimStationBuilds } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ItemIcon } from '../character/item-icon';
@@ -12,9 +12,16 @@ import { resolveItem } from '../character/item-icon.helpers';
 import { DiscoveryChip } from './discovery-chip';
 import { HaveNeedBar } from './have-need-bar';
 import { RecipeSteps } from './recipe-steps';
-import { formatAmount, viaChips, type PlannerKind } from './planner.helpers';
+import { formatAmount, otherWaysCount, viaChips, type PlannerKind } from './planner.helpers';
 import { isUndiscoveredNode, UNDISCOVERED_NODE_COPY } from './spoilers.helpers';
 import type { PlannerNames } from './use-planner-names';
+
+/** ROK-1860 — lets a multi-source row open the source picker (D7). */
+export interface SourceChooser {
+    /** The catalogue's `sourceOptions` for this prefab (items only). */
+    optionsOf: (prefab: string, kind: PlannerKind) => readonly ValheimRecipeSourceOption[] | undefined;
+    choose: (prefab: string) => void;
+}
 
 interface RowProps {
     node: ValheimPlanNode;
@@ -25,6 +32,8 @@ interface RowProps {
     onToggle: () => void;
     /** ROK-1861: upgrade-station build costs from the response (display only). */
     stationBuilds?: ValheimStationBuilds | undefined;
+    /** ROK-1860: the "+N other ways" chip becomes a picker button where the catalogue offers ≥2 sources. */
+    onChooseSource?: SourceChooser | undefined;
 }
 
 function Disclosure({ name, expanded, onToggle }: { name: string; expanded: boolean; onToggle: () => void }): JSX.Element {
@@ -55,18 +64,45 @@ function Counts({ node }: { node: ValheimPlanNode }): JSX.Element {
     );
 }
 
-function ViaChips({ node, names }: { node: ValheimPlanNode; names: PlannerNames }): JSX.Element {
+function OtherWaysButton({ name, ways, onChoose }: { name: string; ways: number; onChoose: () => void }): JSX.Element {
     return (
-        <div className="flex flex-wrap gap-1">
-            {viaChips(node, names.stationName).map((chip) => (
+        <Button variant="ghost" size="sm" aria-haspopup="dialog" aria-label={`Choose how to make ${name} (${ways} other ways)`}
+            data-testid="valheim-planner-other-ways" onClick={onChoose}>
+            +{ways} other ways
+        </Button>
+    );
+}
+
+interface ViaChipsProps {
+    node: ValheimPlanNode;
+    names: PlannerNames;
+    name: string;
+    onChoose: (() => void) | undefined;
+}
+
+function ViaChips({ node, names, name, onChoose }: ViaChipsProps): JSX.Element {
+    const chips = viaChips(node, names.stationName);
+    const ways = otherWaysCount(node);
+    const button = onChoose !== undefined && ways > 0;
+    // viaChips appends "+N other ways" last whenever ways > 0; the button replaces that chip.
+    return (
+        <div className="flex flex-wrap items-center gap-1">
+            {(button ? chips.slice(0, -1) : chips).map((chip) => (
                 // `whitespace-normal!`: StatusChip's own `whitespace-nowrap` sorts later in Tailwind 4's CSS, so a plain
                 // override is a no-op. Lets "Armor upgrader · Upgrade station · lvl 3" wrap at 375px, not clip "lvl 3".
                 <StatusChip key={chip} tone="neutral" title={chip} className="whitespace-normal!">
                     {chip}
                 </StatusChip>
             ))}
+            {button && <OtherWaysButton name={name} ways={ways} onChoose={onChoose} />}
         </div>
     );
+}
+
+/** D7: only an item the catalogue offers ≥2 sources for gets a picker (anyOneOf nodes keep the static chip). */
+function chooseHandler(node: ValheimPlanNode, kind: PlannerKind, chooser: SourceChooser | undefined): (() => void) | undefined {
+    if (chooser === undefined || (chooser.optionsOf(node.prefab, kind)?.length ?? 0) < 2) return undefined;
+    return () => chooser.choose(node.prefab);
 }
 
 /**
@@ -97,7 +133,7 @@ function UndiscoveredRow({ node, kind, names }: Pick<RowProps, 'node' | 'kind' |
     );
 }
 
-export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onToggle, stationBuilds }: RowProps): JSX.Element {
+export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onToggle, stationBuilds, onChooseSource }: RowProps): JSX.Element {
     if (isUndiscoveredNode(node)) return <UndiscoveredRow node={node} kind={kind} names={names} />;
     const name = names.nameOf(node.prefab, kind);
     const ctx = names.ctxFor(node.prefab, kind);
@@ -119,7 +155,7 @@ export function RecipeTreeRow({ node, kind, names, hasChildren, expanded, onTogg
                     {node.discovered === false && <DiscoveryChip />}
                 </div>
                 <HaveNeedBar have={node.have} need={node.quantity} name={name} />
-                <ViaChips node={node} names={names} />
+                <ViaChips node={node} names={names} name={name} onChoose={chooseHandler(node, kind, onChooseSource)} />
                 {node.via.type === 'recipe' && node.via.steps !== undefined && (
                     <RecipeSteps steps={node.via.steps} builds={stationBuilds} names={names} />
                 )}

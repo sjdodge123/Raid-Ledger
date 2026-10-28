@@ -11,9 +11,10 @@ import type { ValheimPlanNode, ValheimRecipeCatalogEntry, ValheimRecipeCatalogRe
 import { MapError } from '../map/map-error';
 import { useValheimRecipePlan } from '../hooks/use-valheim-recipes';
 import type { CraftMode } from './crafting.helpers';
-import { serializeTargets, type PlannerTarget } from './planner.helpers';
+import { serializeSources, serializeTargets, type PlannerTarget } from './planner.helpers';
 import { RecipeTree } from './recipe-tree';
 import { usePlannerNames, type PlannerNameSource } from './use-planner-names';
+import { usePlannerSourcesContext, useSourceChooser } from './use-source-chooser';
 
 /** Which chests the plan route counts (mirrors the window's filters). */
 export interface BreakdownStockScope {
@@ -53,7 +54,10 @@ function breakdownTarget({ entry, mode, quality, amount }: CraftBreakdownProps):
 
 function useBreakdownQuery(props: CraftBreakdownProps): BreakdownQuery {
     const targets = serializeTargets([breakdownTarget(props)]);
-    const q = useValheimRecipePlan(props.serverId, targets, props.stock.personal, props.stock.vehicles);
+    // ROK-1860 D10: the breakdown honours the viewer's source picks (the card cost stays D9).
+    const picks = usePlannerSourcesContext();
+    const sources = picks === null ? '' : serializeSources(picks.sources);
+    const q = useValheimRecipePlan(props.serverId, targets, props.stock.personal, props.stock.vehicles, sources);
     return { data: q.data, isError: q.isError, refetch: q.refetch };
 }
 
@@ -61,8 +65,15 @@ function BreakdownBody({ props, q }: { props: CraftBreakdownProps; q: BreakdownQ
     const { serverId, catalog, entry } = props;
     const names = usePlannerNames(serverId, catalog, q.data, undefined, 'plan');
     const kinds = useMemo(() => [entry.kind], [entry.kind]);
+    const { chooser, picker } = useSourceChooser(catalog, names);
     if (q.data !== undefined)
-        return <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds} stationBuilds={q.data.stationBuilds} />;
+        return (
+            <>
+                <RecipeTree nodes={q.data.nodes} truncated={q.data.truncated} names={names} label={`What ${entry.name} needs`} rootKinds={kinds}
+                    stationBuilds={q.data.stationBuilds} onChooseSource={chooser} />
+                {picker}
+            </>
+        );
     if (q.isError) return <MapError text={`Couldn’t load what ${entry.name} needs.`} onRetry={() => void q.refetch()} />;
     return <p className="text-sm text-muted">Loading the breakdown…</p>;
 }
