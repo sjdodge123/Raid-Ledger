@@ -1,0 +1,65 @@
+/**
+ * ROK-1916 (W9) — WoW: Forever "Last seen" Overview card body. Presence as of
+ * the latest LedgerLink guild export — never "online now": the headline
+ * "N online at last export" (+ "of M members in the export"), up to five
+ * online names, then the five longest away. `reported === 0` (no
+ * presence-bearing export yet, or one imported before this shipped) shows the
+ * quiet no-export state. The shared `FreshnessFooter` dates the export; its
+ * tooltip carries the absolute time (Q4). Core draws the `WidgetCard` chrome;
+ * the registration (`last-seen.register.ts`) gates it to members + staff.
+ */
+import type { JSX } from 'react';
+import type { HubFactFreshness, WowRosterLastSeenDto } from '@raid-ledger/contract';
+import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { FreshnessFooter } from './freshness-footer';
+import { AwaySection, OnlineSection } from './last-seen-rows';
+import { useRosterInsights } from './use-roster-insights';
+
+/** The Last seen widget body (lazy-loaded). */
+export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JSX.Element {
+    const { data, isPending, isError } = useRosterInsights(page.guild.id, false);
+    if (isPending) return <div className="h-24 animate-pulse rounded-md bg-panel" />;
+    if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
+    const footer = <Footer freshness={data.freshness.roster} />;
+    const lastSeen = data.lastSeen;
+    if (lastSeen === undefined || lastSeen.reported === 0) {
+        return (
+            <div data-testid="last-seen-empty" className="flex flex-col gap-1">
+                <p className="text-sm text-muted">No online data yet.</p>
+                <p className="text-xs text-dim">Shows up when an officer exports the roster from LedgerLink.</p>
+                {footer}
+            </div>
+        );
+    }
+    return (
+        <div data-testid="last-seen" className="flex flex-col">
+            <Headline lastSeen={lastSeen} />
+            <OnlineSection lastSeen={lastSeen} />
+            <AwaySection away={lastSeen.away} />
+            {footer}
+        </div>
+    );
+}
+
+function Headline({ lastSeen }: { lastSeen: WowRosterLastSeenDto }): JSX.Element {
+    return (
+        <>
+            <p data-testid="last-seen-headline" className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-bold leading-none text-foreground">{lastSeen.onlineCount}</span>
+                <span className="text-sm text-muted">online at last export</span>
+            </p>
+            <p className="mt-0.5 text-xs text-dim">of {lastSeen.reported} members in the export</p>
+        </>
+    );
+}
+
+/** `FreshnessFooter` with the export's absolute time as its tooltip. */
+function Footer({ freshness }: { freshness: HubFactFreshness | null }): JSX.Element {
+    const asOf = freshness?.asOf ?? null;
+    const title = asOf === null ? undefined : `Roster exported ${new Date(asOf).toLocaleString()}`;
+    return (
+        <div {...(title === undefined ? {} : { title })}>
+            <FreshnessFooter freshness={freshness} />
+        </div>
+    );
+}
