@@ -366,9 +366,16 @@ describe('auth and plugin gating', () => {
   it('blizzard inactive → 404 unknown_contract, nothing written or audited', async () => {
     const a = await member('ll-inactive');
     await plugins().deactivate('blizzard');
-    const res = await post(a.token, companionFixture('char-normal'));
-    expectError(res, 404, 'unknown_contract');
-    expect(await written()).toEqual(NOTHING);
-    expect(await auditResults()).toEqual([]);
+    try {
+      const res = await post(a.token, companionFixture('char-normal'));
+      expectError(res, 404, 'unknown_contract');
+      expect(await written()).toEqual(NOTHING);
+      expect(await auditResults()).toEqual([]);
+    } finally {
+      // deactivate() drops the Forever identity provider (ROK-1733); only
+      // activate() re-registers it. Without this, a later test's Forever
+      // create 400s under --randomize.
+      await plugins().activate('blizzard');
+    }
   });
 });
