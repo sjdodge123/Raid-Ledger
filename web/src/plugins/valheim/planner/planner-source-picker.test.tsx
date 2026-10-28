@@ -100,6 +100,19 @@ describe('Planner source picker (ROK-1860)', () => {
         await waitFor(() => expect(planHits.some((h) => h.includes('targets=SwordIron%3A1%3A1%3A0%3Aitem') && h.includes(PICKED))).toBe(true));
     });
 
+    it('Escape in the breakdown picker closes only the picker, not the selected recipe (Codex P2)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ValheimPlannerTab serverId={7} />);
+        const list = await screen.findByRole('list', { name: 'Forge recipes' });
+        await user.click(within(list).getByRole('button', { name: /^Iron sword/ }));
+        const tree = await screen.findByRole('list', { name: 'What Iron sword needs' });
+        await user.click(within(tree).getByRole('button', { name: /Choose how to make Iron sword/ }));
+        await screen.findByRole('dialog', { name: 'How to make Iron sword' });
+        await user.keyboard('{Escape}');
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(screen.queryByRole('list', { name: 'What Iron sword needs' }), 'the Iron sword detail should still be selected').not.toBeNull();
+    });
+
     it('after a pick re-plans with new node ids, focus returns to the (remounted) chip (AC9)', async () => {
         localStorage.setItem(plannerStorageKey(7), JSON.stringify([{ prefab: 'SwordIron', kind: 'item', quality: 1, amount: 1 }]));
         const user = userEvent.setup();

@@ -16,6 +16,7 @@ import { Button } from '../../../components/ui/button';
 import { FilterEntry, FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { SearchInput } from '../../../components/ui/search-input';
 import { useMediaQuery } from '../../../hooks/use-media-query';
+import { hasOpenEscapeLayer } from '../../../hooks/use-escape-layer';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { MapError } from '../map/map-error';
 import { useValheimRecipeStock } from '../hooks/use-valheim-recipes';
@@ -159,7 +160,7 @@ function useWindow(props: CraftingWindowProps, desktop: boolean) {
  * Desktop deselect: `onBack` clears the selection and focuses the list's tab
  * stop (the row last focused, else the first; the search box when nothing is
  * listed, so focus never drops to <body>); `onEscape` does the same for an
- * Escape nobody else handled while a row is selected.
+ * Escape nobody else handled while a row is selected and no overlay is open.
  */
 function useDeselect(vm: WindowModel, desktop: boolean): { listRef: RefObject<HTMLDivElement | null>; onBack: () => void; onEscape: KeyHandler } {
     const listRef = useRef<HTMLDivElement>(null);
@@ -172,6 +173,8 @@ function useDeselect(vm: WindowModel, desktop: boolean): { listRef: RefObject<HT
     }, [deselect]);
     const onEscape = useCallback((e: KeyboardEvent<HTMLElement>) => {
         if (e.key !== 'Escape' || e.defaultPrevented || !desktop || selected === null) return;
+        // An overlay opened from the pane (the source picker) bubbles its Escape here through the React portal: it is the overlay's.
+        if (hasOpenEscapeLayer()) return;
         e.preventDefault();
         onBack();
     }, [desktop, selected, onBack]);
