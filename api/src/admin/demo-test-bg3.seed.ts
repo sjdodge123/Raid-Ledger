@@ -11,7 +11,6 @@ import { NotFoundException } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { BG3_GAME_SLUG } from '../plugins/bg3/bg3.constants';
 import { toBg3SaveRow } from '../plugins/bg3/ingest/bg3-save.handler';
 import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { upsertJoin } from '../guilds/community/community-membership.queries';
@@ -20,19 +19,18 @@ import {
   planSeedSaves,
   seedSaveMessage,
 } from './demo-test-bg3.helpers';
+import { findBg3GameId } from './demo-test-community-hubs.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** The BG3 game's id; 404 when the env has no `baldurs-gate-3` row. */
+/**
+ * The BG3 game's id (ROK-2038: by IGDB id, then any `BG3_GAME_SLUGS` slug);
+ * 404 only when the env has no BG3 row at all.
+ */
 export async function findBg3Game(db: Db): Promise<number> {
-  const gm = schema.games;
-  const [row] = await db
-    .select({ id: gm.id })
-    .from(gm)
-    .where(eq(gm.slug, BG3_GAME_SLUG))
-    .limit(1);
-  if (!row) throw new NotFoundException(`Game ${BG3_GAME_SLUG} not found`);
-  return row.id;
+  const id = await findBg3GameId(db);
+  if (id === null) throw new NotFoundException("Baldur's Gate 3 game not found");
+  return id;
 }
 
 async function findUserId(db: Db, username: string): Promise<number | null> {
