@@ -116,6 +116,10 @@ afterEach(async () => {
   if (registry().isActive(BG3_PLUGIN_ID)) {
     await registry().deactivate(BG3_PLUGIN_ID);
   }
+  // Users persist across cases (seeded once in beforeAll), so every case's
+  // saves share (host, KEY, T0…) — clear them or the next case's seed hits
+  // bg3_saves_uploader_key_saved_at_uq. Nothing references bg3_saves.
+  await testApp.db.delete(schema.bg3Saves);
 });
 
 // ── seeding ────────────────────────────────────────────────────────────────
