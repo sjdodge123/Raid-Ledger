@@ -19,7 +19,17 @@ export interface AutoSignupParams {
   /** Only `userId` is read, so an LFG member list fits too (ROK-1573). */
   voters: Pick<ScheduleVoteRow, 'userId'>[];
   signupsService: Pick<SignupsService, 'signup'>;
+  /**
+   * ROK-2025: the organizer's bench pick. When set, every other voter is
+   * signed up first (vote order, no dto, as before), then each picked voter
+   * explicitly onto the bench. An id that is not a voter, or is the creator,
+   * is ignored: the caller has already validated the pick. Absent: signup
+   * order alone decides, so the latest voters are auto-benched.
+   */
+  benchUserIds?: ReadonlySet<number>;
 }
+
+type SignupFn = Pick<SignupsService, 'signup'>;
 
 /**
  * Auto-sign up poll voters for a newly created event.
@@ -36,18 +46,41 @@ export async function autoSignupSlotVoters(
   params: AutoSignupParams,
 ): Promise<{ benchedUserIds: number[] }> {
   const { eventId, creatorId, voters, signupsService } = params;
+  const picked = params.benchUserIds ?? new Set<number>();
   const uniqueUserIds = [...new Set(voters.map((v) => v.userId))].filter(
     (uid) => uid !== creatorId,
   );
+  const signupOrder = [
+    ...uniqueUserIds.filter((uid) => !picked.has(uid)),
+    ...uniqueUserIds.filter((uid) => picked.has(uid)),
+  ];
 
   const benchedUserIds: number[] = [];
-  for (const userId of uniqueUserIds) {
-    try {
-      const result = await signupsService.signup(eventId, userId);
-      if (result.assignedSlot === 'bench') benchedUserIds.push(userId);
-    } catch {
-      // Individual signup failures are swallowed intentionally
+  for (const userId of signupOrder) {
+    const toBench = picked.has(userId);
+    if (await signUpOne(signupsService, eventId, userId, toBench)) {
+      benchedUserIds.push(userId);
     }
   }
   return { benchedUserIds };
+}
+
+/**
+ * Sign one voter up; true when the signup landed on the bench. A failure is
+ * swallowed (one voter must not block the rest) and is not counted as benched.
+ */
+async function signUpOne(
+  signupsService: SignupFn,
+  eventId: number,
+  userId: number,
+  toBench: boolean,
+): Promise<boolean> {
+  try {
+    const result = toBench
+      ? await signupsService.signup(eventId, userId, { slotRole: 'bench' })
+      : await signupsService.signup(eventId, userId);
+    return result.assignedSlot === 'bench';
+  } catch {
+    return false;
+  }
 }
