@@ -17,6 +17,7 @@ import {
 } from '../../events/signups-signup.helpers';
 import { findScheduleVotes } from '../scheduling/scheduling-query.helpers';
 import { yesVotesOnly } from '../scheduling/scheduling-stance.helpers';
+import { assertCanCompletePoll } from './standalone-poll-auth.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -143,4 +144,19 @@ export async function assertBenchPick(
     candidates.size,
   );
   return checkBenchPick(benchUserIds, candidates, overflow);
+}
+
+/**
+ * The pre-flip checks of `complete()`: ROK-1844 authz/target validation, then
+ * the ROK-2025 bench pick. Both run before the CAS flip, so a refusal leaves
+ * the match `scheduling`. Returns the validated pick (undefined = none sent).
+ */
+export async function assertCanCompleteWithBench(
+  db: Db,
+  caller: { id: number; isAdmin: boolean },
+  target: BenchPickTarget,
+): Promise<ReadonlySet<number> | undefined> {
+  const { matchId, eventId, startTime } = target;
+  await assertCanCompletePoll(db, matchId, caller, { eventId, startTime });
+  return assertBenchPick(db, target);
 }

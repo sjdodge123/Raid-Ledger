@@ -44,6 +44,8 @@ export interface LockIn {
   creatorId?: number | undefined;
   /** False for a reschedule poll — its event was announced long ago. */
   announce: boolean;
+  /** ROK-2025: the organizer's validated bench pick; absent = latest voters. */
+  benchUserIds?: ReadonlySet<number> | undefined;
 }
 
 /**
@@ -102,10 +104,9 @@ async function signUpSlotVoters(
   deps: LockInFanoutDeps,
   lockIn: LockIn,
 ): Promise<ReadonlySet<number>> {
-  const { db } = deps;
   const { matchId, eventId, startTime } = lockIn;
   const { allVoters, selectedVoters, otherVoters } = await pickSlotVoters(
-    db,
+    deps.db,
     matchId,
     startTime,
   );
@@ -114,10 +115,11 @@ async function signUpSlotVoters(
     creatorId: lockIn.creatorId ?? -1,
     voters: selectedVoters,
     signupsService: deps.signupsService,
+    ...(lockIn.benchUserIds ? { benchUserIds: lockIn.benchUserIds } : {}),
   });
   // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
   // name the DMs below announce.
-  const gameName = await heartPollGameForVoters(db, matchId, allVoters);
+  const gameName = await heartPollGameForVoters(deps.db, matchId, allVoters);
   await notifyPollVoters(
     deps,
     selectedVoters,
@@ -126,7 +128,7 @@ async function signUpSlotVoters(
     startTime,
     eventId,
     gameName ?? 'Game Night',
-    await matchHubPayload(db, matchId),
+    await matchHubPayload(deps.db, matchId),
   );
   return new Set(selectedVoters.map((v) => v.userId));
 }
