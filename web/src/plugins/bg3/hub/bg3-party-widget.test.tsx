@@ -236,3 +236,24 @@ describe('Bg3PartyWidget — empty and error states (V-4)', () => {
         await waitFor(() => expect(calls).toBeGreaterThan(before));
     });
 });
+
+describe('Bg3PartyWidget — empty-state dialogs (D-4 / D-5)', () => {
+    it('"Start a campaign" opens the start dialog with its name field', async () => {
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        const user = userEvent.setup();
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(screen.queryByLabelText(/Campaign name/)).not.toBeInTheDocument();
+        await user.click(await screen.findByRole('button', { name: 'Start a campaign' }));
+        expect(await screen.findByLabelText(/Campaign name/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Start campaign' })).toBeInTheDocument();
+    });
+
+    it('"Add my saves" opens the add-saves sheet for the active campaign', async () => {
+        serve(undefined, { empty: true, campaignId: BG3_CAMPAIGN_ID } as never);
+        const user = userEvent.setup();
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(screen.queryByText('Add my saves to Tactician run')).not.toBeInTheDocument();
+        await user.click(await screen.findByRole('button', { name: 'Add my saves' }));
+        expect(await screen.findByText('Add my saves to Tactician run')).toBeInTheDocument();
+    });
+});
