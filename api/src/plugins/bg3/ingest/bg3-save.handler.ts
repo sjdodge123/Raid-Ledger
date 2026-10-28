@@ -6,7 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Bg3SaveMessage, CompanionWebpRef } from '@raid-ledger/contract';
 import type {
-  CompanionContractHandler,
+  CompanionInTxHandler,
   CompanionHandlerContext,
 } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
@@ -55,7 +55,7 @@ export function toBg3SaveRow(
 }
 
 @Injectable()
-export class Bg3SaveHandler implements CompanionContractHandler<Bg3SaveMessage> {
+export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
   /** A literal: the ownership guard's scan reads it (`BG3_SAVE_CONTRACT_ID`). */
   readonly contract = 'bg3-save';
   readonly versions: readonly number[] = [1];

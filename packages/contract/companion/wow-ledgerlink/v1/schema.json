@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "envelopeVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "contract": {
+      "type": "string",
+      "const": "wow-ledgerlink"
+    },
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "maxLength": 24,
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "collectorVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "exportString": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260096
+        }
+      },
+      "required": [
+        "exportString"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "envelopeVersion",
+    "contract",
+    "contractVersion",
+    "capturedAt",
+    "appVersion",
+    "collectorVersion",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raid.gamernight.net/contracts/companion/wow-ledgerlink/v1/schema.json",
+  "title": "RL Companion wow-ledgerlink message v1",
+  "description": "GENERATED from WowLedgerlinkMessageSchema (packages/contract/src/companion-wow-ledgerlink.schema.ts) — do not edit by hand. payload.exportString is an unchanged LedgerLink v1 export string (packages/contract/ledgerlink/v1/); its inner format is checked by the server's LedgerLink decoder, not here. The server alone checks the clock; see CONTRACT.md."
+}

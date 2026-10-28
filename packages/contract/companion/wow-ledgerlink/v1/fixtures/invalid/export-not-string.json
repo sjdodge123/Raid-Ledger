@@ -1,0 +1,13 @@
+{
+  "envelopeVersion": 1,
+  "contract": "wow-ledgerlink",
+  "contractVersion": 1,
+  "capturedAt": "2026-10-28T12:00:05Z",
+  "appVersion": "0.1.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "exportString": [
+      "!RL1!char!eJx"
+    ]
+  }
+}

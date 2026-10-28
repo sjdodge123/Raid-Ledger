@@ -96,7 +96,7 @@ describe('declared setup (§3.5)', () => {
       'pelican-server', 'link-mod', 'link-token', 'item-catalogue-admin', 'player-steam-link',
     ]);
     expect(setupIds('pelican')).toEqual(['panel-connection', 'server-hub']);
-    expect(setupIds('blizzard')).toEqual(['battle-net-api', 'ledgerlink-addon']);
+    expect(setupIds('blizzard')).toEqual(['battle-net-api', 'ledgerlink-addon', 'ledgerlink-companion']);
   });
 
   it('never ships a secret value: every server secret points at a place, not a value', () => {

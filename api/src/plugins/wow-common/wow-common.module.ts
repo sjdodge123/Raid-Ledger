@@ -59,9 +59,17 @@ import { WowFactsService } from './facts/wow-facts.service';
 import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
 import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
 import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
+import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
+import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
+import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
 
 @Module({
-  imports: [SettingsModule, CharactersModule, GuildsCoreModule],
+  imports: [
+    SettingsModule,
+    CharactersModule,
+    GuildsCoreModule,
+    CompanionIngestModule,
+  ],
   controllers: [
     BlizzardController,
     ForeverConfigController,
@@ -120,6 +128,8 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
     RosterInsightsService,
     // ROK-1919: Recent dings feed.
     RecentDingsService,
+    // ROK-1964: the `wow-ledgerlink` companion contract handler.
+    WowLedgerlinkHandler,
   ],
   exports: [
     BlizzardService,
@@ -148,9 +158,15 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly bossEncountersService: BossEncountersService,
     private readonly identityProvider: WowForeverIdentityProvider,
     private readonly hubKindAdapter: WowHubKindAdapter,
+    private readonly companionRegistry: CompanionHandlerRegistry,
+    private readonly ledgerlink: WowLedgerlinkHandler,
   ) {}
 
   async onModuleInit(): Promise<void> {
+    // ROK-1964: outside bestEffortInit — a bad registration is a boot error,
+    // and a failed seed must not leave the contract unhandled. The registry
+    // resolves it only while `blizzard` is active.
+    this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.ledgerlink);
     await bestEffortInit('WowCommonModule.init', this.logger, async () => {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);

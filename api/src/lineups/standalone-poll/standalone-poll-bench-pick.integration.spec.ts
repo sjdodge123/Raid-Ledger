@@ -14,8 +14,9 @@
  *   default bench (no pick)            = { B, C }
  *   created_at-only bench (wrong key)  = { A, B }
  *
- * The auto-signup + DM chain is fire-and-forget after /complete; every
- * roster assertion first waits until every voter's poll DM has landed.
+ * Since ROK-2031 /complete awaits the auto-signups; the DM chain is still
+ * fire-and-forget, so the ROK-2025 roster assertions first wait until every
+ * voter's poll DM has landed.
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -410,5 +411,39 @@ describe('ROK-2025 (f) the fan-out re-checks the pick against its own voters', (
       pick,
     );
     expect(kept ? [...kept] : 'dropped').toBe('dropped');
+  });
+});
+
+/**
+ * ROK-2031 — `complete` awaits the signup step, so the roster is read with
+ * NO `waitFor` straight after the 200. Only the DMs stay asynchronous: they
+ * are drained behind `waitFor` afterwards so the tail never races the
+ * afterEach truncate.
+ */
+describe('ROK-2031 — complete returns with the roster populated', () => {
+  async function expectRosterOnResponse(
+    lock: Lock,
+    bench: number[],
+  ): Promise<void> {
+    const voters = [lock.creator, lock.a, lock.b, lock.c];
+    await lockIn(lock, bench);
+    expect({
+      signedUp: await signedUpUserIds(lock.eventId),
+      benched: await benchedUserIds(lock.eventId),
+    }).toEqual({
+      signedUp: [...voters].sort(),
+      benched: [...bench].sort(),
+    });
+    await pollDmTitles(voters);
+  }
+
+  it('standalone poll: every slot voter is signed up and the pick benched on the 200', async () => {
+    const lock = await seedLock('standalone');
+    await expectRosterOnResponse(lock, [lock.a, lock.b]);
+  });
+
+  it('open lineup lock (ROK-2024): every slot voter is signed up and the pick benched on the 200', async () => {
+    const lock = await seedLock('lineup');
+    await expectRosterOnResponse(lock, [lock.a, lock.c]);
   });
 });

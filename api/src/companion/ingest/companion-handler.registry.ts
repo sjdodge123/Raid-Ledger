@@ -36,8 +36,14 @@ export interface CompanionHandlerContext {
   receivedAt: Date;
 }
 
-/** One plugin's handler for one contract id (one or more versions). */
-export interface CompanionContractHandler<M = unknown> {
+/**
+ * What an after-commit handler gets: the ingest transaction has already
+ * committed, so there is no `tx` — the handler owns its own db work.
+ */
+export type CompanionAfterCommitContext = Omit<CompanionHandlerContext, 'tx'>;
+
+/** The fields every handler shares, whichever mode it runs in. */
+interface CompanionHandlerBase<M> {
   /** A `COMPANION_CONTRACTS` id. */
   contract: string;
   /** Each listed for that id with status ≠ `retired`. */
@@ -46,10 +52,38 @@ export interface CompanionContractHandler<M = unknown> {
   sources?: readonly CompanionIngestVia[];
   /** Default 120 s; surfaced in `/config`. */
   cadence?: { minIntervalSec: number };
+  /** In-tx handlers only (an after-commit one is refused at register). */
   latestWins?(msg: M): { key: string; at: Date } | null;
+  /** In-tx handlers only (an after-commit one is refused at register). */
   blobRefs?(msg: M): readonly CompanionWebpRef[];
+}
+
+/** Default mode: `handle` runs INSIDE the ingest transaction (step 11). */
+export interface CompanionInTxHandler<
+  M = unknown,
+> extends CompanionHandlerBase<M> {
+  afterCommit?: false;
   handle(ctx: CompanionHandlerContext, msg: M): Promise<void>;
 }
+
+/**
+ * ROK-1964 — after-commit mode: the ingest tx only revalidates the device and
+ * commits; `handle` then runs OUTSIDE it, for a handler that opens its own
+ * transaction (one pooled connection at a time, and a device revoke never
+ * waits on the handler). The ingest tx then writes nothing, so no
+ * `latestWins` / `blobRefs` (the registry refuses them). A throw is the
+ * request's error; a rolled-back tx never reaches `handle`.
+ */
+export interface CompanionAfterCommitHandler<
+  M = unknown,
+> extends CompanionHandlerBase<M> {
+  afterCommit: true;
+  handle(ctx: CompanionAfterCommitContext, msg: M): Promise<void>;
+}
+
+/** One plugin's handler for one contract id (one or more versions). */
+export type CompanionContractHandler<M = unknown> =
+  CompanionInTxHandler<M> | CompanionAfterCommitHandler<M>;
 
 /** One registration as `/config` reports it. */
 export interface CompanionHandlerListing {
@@ -94,6 +128,14 @@ function assertRegistrable(
   }
   for (const v of handler.versions) assertVersion(name, versions, v);
   if (handler.sources?.length === 0) throw new Error(`${name}: empty sources`);
+  if (
+    handler.afterCommit === true &&
+    (handler.latestWins || handler.blobRefs)
+  ) {
+    throw new Error(
+      `${name}: an after-commit handler has no latestWins/blobRefs`,
+    );
+  }
   const interval = handler.cadence?.minIntervalSec;
   if (interval !== undefined && !(Number.isInteger(interval) && interval > 0)) {
     throw new Error(`${name}: cadence must be a positive integer`);

@@ -4,9 +4,9 @@
  * `CharacterLink` when they own a Raid Ledger character, plain text
  * otherwise) · "hit 41" · when it was seen ("2 h ago", the shared
  * `syncedAgo` wording). The time is when the roster export arrived, not the
- * real ding (unknown), so its `title` says so (spec Q3). Members who have
- * since left the guild still show: a ding is history. Core draws the
- * `WidgetCard` chrome; every hub viewer sees it (spec D7).
+ * real ding (unknown), so its `title` says so (spec Q3). Only current
+ * members show (ROK-2035: the server drops dings of members who have left).
+ * Core draws the `WidgetCard` chrome; every hub viewer sees it (spec D7).
  */
 import type { JSX } from 'react';
 import type { WowRecentDingsDto } from '@raid-ledger/contract';
