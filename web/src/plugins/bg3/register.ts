@@ -71,9 +71,14 @@ bg3.registerHubWidget({
     useVisible: useBg3SnapshotVisible,
 });
 
-/** `visible` is not a hook, so staff come from the cached user (the read routes enforce access anyway). */
-const memberOrStaff = ({ page }: HubCtx): boolean =>
-    page.viewer.role !== 'visitor' || isOperatorOrAdmin(getCachedUser());
+/**
+ * Community hubs only — the api refuses every campaign route on other kinds
+ * (`refuseNonBg3Hub`), and `registerHubGameTab` matches the game on every kind.
+ * `visible` is not a hook, so staff come from the cached user (the read routes enforce access anyway).
+ */
+const campaignTabVisible = ({ page }: HubCtx): boolean =>
+    page.guild.kind === 'game_community'
+    && (page.viewer.role !== 'visitor' || isOperatorOrAdmin(getCachedUser()));
 
 // D-3 — campaigns, your saves, history and the editor settings (no hub-settings slot for game plugins).
 bg3.registerHubGameTab([...BG3_GAME_SLUGS], {
@@ -81,5 +86,5 @@ bg3.registerHubGameTab([...BG3_GAME_SLUGS], {
     label: 'Campaign',
     order: 40,
     component: LazyBg3CampaignTab,
-    visible: memberOrStaff,
+    visible: campaignTabVisible,
 });
