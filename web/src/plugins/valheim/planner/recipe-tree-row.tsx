@@ -99,7 +99,7 @@ function ViaChips({ node, names, name, onChoose }: ViaChipsProps): JSX.Element {
     );
 }
 
-/** D7: only an item the catalogue offers ≥2 sources for gets a picker (anyOneOf nodes keep the static chip). */
+/** D7: only an item the catalogue offers ≥2 sources for gets a picker (anyOneOf ingredients get no chooser from `RecipeTree`). */
 function chooseHandler(node: ValheimPlanNode, kind: PlannerKind, chooser: SourceChooser | undefined): (() => void) | undefined {
     if (chooser === undefined || (chooser.optionsOf(node.prefab, kind)?.length ?? 0) < 2) return undefined;
     return () => chooser.choose(node.prefab);

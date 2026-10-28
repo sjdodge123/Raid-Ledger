@@ -18,9 +18,13 @@ interface BranchProps {
     label?: string;
     stationBuilds: ValheimStationBuilds | undefined;
     onChooseSource: SourceChooser | undefined;
+    /** AC8: these are the ingredients of an anyOneOf recipe — their `alternatives` count stand-ins, so no picker. */
+    underAnyOneOf?: boolean;
 }
 
-function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds, onChooseSource }: BranchProps): JSX.Element {
+const isAnyOneOf = (node: ValheimPlanNode): boolean => node.via.type === 'recipe' && node.via.anyOneOf;
+
+function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBuilds, onChooseSource, underAnyOneOf = false }: BranchProps): JSX.Element {
     return (
         // tabIndex -1 on the labelled root: the AC9 focus fallback after a source pick (source-picker-focus.ts).
         <ul aria-label={label} tabIndex={label === undefined ? undefined : -1} className={label === undefined ? 'ml-5 border-l border-edge pl-2' : ''}>
@@ -36,10 +40,11 @@ function Branch({ entries, names, kindOf, collapsed, onToggle, label, stationBui
                             expanded={expanded}
                             onToggle={() => onToggle(node.id)}
                             stationBuilds={stationBuilds}
-                            onChooseSource={onChooseSource}
+                            onChooseSource={underAnyOneOf ? undefined : onChooseSource}
                         />
                         {children.length > 0 && expanded && (
-                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} stationBuilds={stationBuilds} onChooseSource={onChooseSource} />
+                            <Branch entries={children} names={names} kindOf={kindOf} collapsed={collapsed} onToggle={onToggle} stationBuilds={stationBuilds} onChooseSource={onChooseSource}
+                                underAnyOneOf={isAnyOneOf(node)} />
                         )}
                     </li>
                 );
