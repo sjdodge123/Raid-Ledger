@@ -158,15 +158,10 @@ export class Bg3ReadService {
     await assertBg3HubReader(this.hubs, this.access, hubId, actor);
     if (!(await this.access.canEdit(actor, hubId)))
       throw new ForbiddenException('Hub editors only');
-    const active = body.activeCampaignId;
-    if (active != null) {
-      const campaign = await this.repo.campaignInHub(active, hubId);
-      if (!campaign) throw new BadRequestException('campaign_not_in_hub');
-      // D-11: archived campaigns leave the active switch.
-      if (campaign.archivedAt)
-        throw new BadRequestException('campaign_archived');
-    }
-    await this.repo.upsertSettings(hubId, body, actor.id);
+    // D-11: archived campaigns leave the active switch — checked and written
+    // atomically in the repository.
+    const write = await this.repo.upsertSettings(hubId, body, actor.id);
+    if (write !== 'ok') throw new BadRequestException(write);
     return this.repo.settings(hubId);
   }
 

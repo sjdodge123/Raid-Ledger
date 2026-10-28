@@ -161,14 +161,26 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
     });
   }
 
-  /** Upsert (and assign the caller's unassigned rows) or delete. */
+  /**
+   * Upsert (and assign the caller's unassigned rows) or delete. Returns
+   * `false` — writing nothing — when the campaign is archived (D-11); the
+   * row is locked `FOR UPDATE` so a concurrent archive cannot slip between
+   * the check and the write.
+   */
   async setDefault(userId: number, campaignId: number | null) {
     const d = schema.bg3UserDefaults;
     if (campaignId === null) {
       await this.db.delete(d).where(eq(d.userId, userId));
-      return;
+      return true;
     }
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ archivedAt: c.archivedAt })
+        .from(c)
+        .where(eq(c.id, campaignId))
+        .limit(1)
+        .for('update');
+      if (!row || row.archivedAt) return false;
       await tx
         .insert(d)
         .values({ userId, campaignId })
@@ -180,6 +192,7 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         .update(s)
         .set({ campaignId })
         .where(and(eq(s.uploaderUserId, userId), isNull(s.campaignId)));
+      return true;
     });
   }
 }

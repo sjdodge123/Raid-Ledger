@@ -36,6 +36,7 @@ function setup(opts: {
   hostUserId?: number | null;
   campaign?: boolean;
   archivedAt?: Date | null;
+  defaultWritten?: boolean;
 }) {
   const repo = {
     findHub: jest
@@ -56,7 +57,7 @@ function setup(opts: {
     summary: jest.fn().mockResolvedValue(SUMMARY),
     bindKey: jest.fn().mockResolvedValue(undefined),
     unbindKey: jest.fn().mockResolvedValue(undefined),
-    setDefault: jest.fn().mockResolvedValue(undefined),
+    setDefault: jest.fn().mockResolvedValue(opts.defaultWritten ?? true),
   };
   const access = {
     isMember: jest.fn().mockResolvedValue(opts.member ?? true),
@@ -198,9 +199,15 @@ describe('Bg3CampaignsService binding (D-6)', () => {
     expect(repo.setDefault).not.toHaveBeenCalled();
   });
 
-  it('400s an archived campaign as the default (D-11)', async () => {
-    const { repo, svc } = setup({ archivedAt: new Date() });
+  it('400s when the repo refuses an archived default (D-11, atomic)', async () => {
+    const { repo, svc } = setup({ defaultWritten: false });
     await expect(svc.setDefault(me, 11)).rejects.toThrow('campaign_archived');
-    expect(repo.setDefault).not.toHaveBeenCalled();
+    expect(repo.setDefault).toHaveBeenCalledWith(7, 11);
+  });
+
+  it('sets a live campaign as the default', async () => {
+    const { repo, svc } = setup({});
+    await expect(svc.setDefault(me, 11)).resolves.toBeUndefined();
+    expect(repo.setDefault).toHaveBeenCalledWith(7, 11);
   });
 });

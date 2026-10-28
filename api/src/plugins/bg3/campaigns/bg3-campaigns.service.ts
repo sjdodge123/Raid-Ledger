@@ -86,13 +86,11 @@ export class Bg3CampaignsService {
 
   /** Set (member of that hub, live campaign) or clear the caller's default. */
   async setDefault(actor: GuildActor, campaignId: number | null) {
-    if (campaignId !== null) {
-      const campaign = await this.memberCampaign(campaignId, actor);
-      // D-11: an archived campaign cannot become anyone's default.
-      if (campaign.archivedAt)
-        throw new BadRequestException('campaign_archived');
-    }
-    await this.repo.setDefault(actor.id, campaignId);
+    if (campaignId !== null) await this.memberCampaign(campaignId, actor);
+    // D-11: an archived campaign cannot become anyone's default — checked
+    // under a row lock in the same transaction as the write.
+    if (!(await this.repo.setDefault(actor.id, campaignId)))
+      throw new BadRequestException('campaign_archived');
   }
 
   /** The campaign, its hub a BG3 hub the actor is a member of. */
