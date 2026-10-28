@@ -57,7 +57,7 @@ function seed(qc: QueryClient): void {
     for (const filter of ['all', 'death', 'screenshot'] as const) {
         const items = ITEMS.filter((it) => matches(it, filter));
         const page: HubMediaListResponse = { items, nextCursor: null, total: items.length, kinds: [...KINDS, 'upload'] };
-        qc.setQueryData([...hubMediaKeys.all(HUB), 'pages', filter], { pages: [page], pageParams: [null] });
+        qc.setQueryData([...hubMediaKeys.all(HUB), 'pages', filter, null], { pages: [page], pageParams: [null] });
     }
 }
 

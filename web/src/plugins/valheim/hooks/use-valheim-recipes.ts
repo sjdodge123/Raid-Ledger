@@ -50,6 +50,8 @@ export const valheimRecipesKeys = {
         targets: string,
         personal: boolean,
         vehicles: boolean,
+        // ROK-1860 AC1 — present only when set, so a plan with no picks keeps its old key.
+        sources = '',
     ) =>
         [
             ...valheimRecipesKeys.all,
@@ -59,6 +61,7 @@ export const valheimRecipesKeys = {
             targets,
             personal,
             vehicles,
+            ...(sources === '' ? [] : [sources]),
         ] as const,
     stock: (scope: Scope, serverId: number, personal: boolean, vehicles: boolean) =>
         [...valheimRecipesKeys.all, scope, serverId, 'stock', personal, vehicles] as const,
@@ -106,12 +109,16 @@ export function useValheimRecipeTree(
     });
 }
 
-/** `GET …/recipes/plan?targets&includePersonal&includeVehicles` — idle with no targets. */
+/**
+ * `GET …/recipes/plan?targets&includePersonal&includeVehicles[&sources]` — idle
+ * with no targets. `sources` is `serializeSources(...)`; '' sends no param (AC1).
+ */
 export function useValheimRecipePlan(
     serverId: number,
     targets: string,
     includePersonal: boolean,
     includeVehicles: boolean,
+    sources = '',
 ): UseQueryResult<ValheimRecipePlanResponse> {
     const scope = useViewerCacheScope();
     const q = new URLSearchParams({
@@ -119,8 +126,9 @@ export function useValheimRecipePlan(
         includePersonal: String(includePersonal),
         includeVehicles: String(includeVehicles),
     });
+    if (sources !== '') q.set('sources', sources);
     return useQuery({
-        queryKey: valheimRecipesKeys.plan(scope, serverId, targets, includePersonal, includeVehicles),
+        queryKey: valheimRecipesKeys.plan(scope, serverId, targets, includePersonal, includeVehicles, sources),
         queryFn: () =>
             fetchApi(recipesPath(serverId, '/plan', q), {}, ValheimRecipePlanResponseSchema),
         enabled: targets !== '',

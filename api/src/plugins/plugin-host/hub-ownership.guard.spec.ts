@@ -212,6 +212,35 @@ describe('ROK-1969 A3 — mutation probes (each must go red)', () => {
   });
 });
 
+describe('ROK-2027 — media subject registrations (each must go red)', () => {
+  it('fails on a media subject nobody declared, keyed by its namespace (ROK-2027)', () => {
+    const subject: ScanSource = {
+      file: 'plugins/valheim/deaths-subject.ts',
+      text: "HubMediaSubjectRegistry; this.s.register(VALHEIM_PLUGIN_ID, 'valheim-stray', fn);",
+    };
+    const keys = scanHubRegistrations([...SOURCES, subject], CTX).keys;
+    expect(keys).toContain('valheim/media-subject/valheim-stray');
+    expect(keys.filter((k) => k.includes('/media-decorator/'))).toEqual(
+      scanHubRegistrations(SOURCES, CTX).keys.filter((k) =>
+        k.includes('/media-decorator/'),
+      ),
+    );
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toContain(
+      'valheim/media-subject/valheim-stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    );
+  });
+
+  it('reports a media subject whose owner or namespace is unresolvable (ROK-2027)', () => {
+    const bad: ScanSource = {
+      file: 'plugins/x/x-subject.ts',
+      text: 'HubMediaSubjectRegistry; this.s.register(SOME_OWNER, NS, fn);',
+    };
+    expect(scanHubRegistrations([bad], CTX).problems).toEqual([
+      'plugins/x/x-subject.ts: media subject owner "SOME_OWNER" / namespace "NS" is unresolvable',
+    ]);
+  });
+});
+
 describe('ROK-1969 A2 — every live owner is a real plugin manifest', () => {
   const manifestIds = [
     CORE_MANIFEST.id,

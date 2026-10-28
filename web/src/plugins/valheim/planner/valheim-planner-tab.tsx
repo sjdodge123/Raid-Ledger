@@ -17,6 +17,7 @@ import { isHiddenTarget, SPOILERS_EMPTY_COPY } from './spoilers.helpers';
 import { ShoppingList } from './shopping-list';
 import { usePlannerNames } from './use-planner-names';
 import { usePlannerState, usePlannerTargets, type PlannerState } from './use-planner-state';
+import { PlannerSourcesContext, useSourceChooser } from './use-source-chooser';
 
 function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResponse; capturedAt: string | null }): JSX.Element {
     const now = useNow();
@@ -28,14 +29,21 @@ function HeaderLine({ catalog, capturedAt }: { catalog: ValheimRecipeCatalogResp
     );
 }
 
-/** The idle detail column: what the list needs, its error with a Retry, or the idle prompt. */
-function PlanPane({ plan, names }: Pick<PlannerState, 'plan' | 'names'>): JSX.Element {
+const PLAN_TREE_LABEL = 'What your list needs';
+
+type PlanPaneProps = Pick<PlannerState, 'plan' | 'names'> & { catalog: ValheimRecipeCatalogResponse };
+
+/** The idle detail column: what the list needs (ROK-1860: sources pickable), its error with a Retry, or the idle prompt. */
+function PlanPane({ plan, names, catalog }: PlanPaneProps): JSX.Element {
     const rootKinds = useMemo(() => plan.data?.targets.map((t) => t.kind) ?? [], [plan.data]);
+    const { chooser, picker } = useSourceChooser(catalog, names, PLAN_TREE_LABEL);
     if (plan.data !== undefined)
         return (
             <div className="space-y-2">
                 {plan.data.stock === 'none' && <p role="status" className="text-sm text-muted">{PLANNER_NO_STOCK_COPY}</p>}
-                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label="What your list needs" rootKinds={rootKinds} stationBuilds={plan.data.stationBuilds} />
+                <RecipeTree nodes={plan.data.nodes} truncated={plan.data.truncated} names={names} label={PLAN_TREE_LABEL} rootKinds={rootKinds}
+                    stationBuilds={plan.data.stationBuilds} onChooseSource={chooser} />
+                {picker}
             </div>
         );
     if (plan.isError) return <MapError text="Couldn’t load your list’s plan." onRetry={() => void plan.refetch()} />;
@@ -44,13 +52,16 @@ function PlanPane({ plan, names }: Pick<PlannerState, 'plan' | 'names'>): JSX.El
 
 function PlannerBody({ serverId, catalog }: { serverId: number; catalog: ValheimRecipeCatalogResponse }): JSX.Element {
     const s = usePlannerState(serverId, catalog);
+    const sources = useMemo(() => ({ sources: s.sources, setSource: s.setSource }), [s.sources, s.setSource]);
     return (
+        <PlannerSourcesContext.Provider value={sources}>
         <div className="space-y-4">
             <HeaderLine catalog={catalog} capturedAt={s.plan.data?.stock === 'scan' ? s.plan.data.capturedAt : null} />
             <CraftingWindow serverId={serverId} catalog={catalog} filters={s.filters} onFilters={s.setFilters} hasPersonal={s.hasPersonal}
-                names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} />} />
+                names={s.names} onAdd={s.onAdd} atCap={s.atCap} idle={<PlanPane plan={s.plan} names={s.names} catalog={catalog} />} />
             <ShoppingList targets={s.targets} plan={s.plan.data} names={s.names} onRemove={s.onRemove} isHidden={s.isHidden} />
         </div>
+        </PlannerSourcesContext.Provider>
     );
 }
 

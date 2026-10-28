@@ -5,6 +5,8 @@ import type {
   ValheimProcess,
   ValheimRecipe,
   ValheimRecipeCatalogEntry,
+  ValheimRecipeSourceOption,
+  ValheimRecipeSourceRef,
 } from '@raid-ledger/contract';
 import { ARMORY_KNOWN_LIST_MAX } from '../valheim-armory.mappers';
 import { buildRecipeGraph } from './valheim-recipes.graph';
@@ -362,5 +364,42 @@ describe('withEntryDiscovery / withNodeDiscovery', () => {
       k,
     );
     expect(out.map((n) => n.discovered)).toEqual([true, false]);
+  });
+});
+
+describe('withEntryDiscovery sourceOptions (ROK-1860 D11)', () => {
+  it('stamps recipe source options; process options stay unflagged (ROK-1860 D11)', () => {
+    const opt = (ref: ValheimRecipeSourceRef): ValheimRecipeSourceOption => ({
+      ref,
+      station: null,
+      stationLevel: 0,
+      outputAmount: 1,
+      upgradeOnly: false,
+      resources: [],
+      default: false,
+    });
+    const processRef: ValheimRecipeSourceRef = {
+      type: 'process',
+      processor: 'smelter',
+      index: 0,
+    };
+    const withOpts = (prefab: string, recipeId: string) => ({
+      ...entry(prefab),
+      sourceOptions: [opt({ type: 'recipe', recipeId }), opt(processRef)],
+    });
+    const out = withEntryDiscovery(
+      [
+        withOpts('Club', 'Recipe_Club'),
+        withOpts('SwordBronze', 'Recipe_SwordBronze'),
+      ],
+      graph,
+      toKnownSet([['Recipe_Club']]),
+    );
+    const flags = out.map((e) => e.sourceOptions?.map((o) => o.discovered));
+    expect(flags).toEqual([
+      [true, undefined],
+      [false, undefined],
+    ]);
+    expect(out[0]?.sourceOptions?.[1]).not.toHaveProperty('discovered');
   });
 });

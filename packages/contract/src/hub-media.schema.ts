@@ -98,17 +98,27 @@ export const HubMediaItemSchema = z
     .strict();
 export type HubMediaItem = z.infer<typeof HubMediaItemSchema>;
 
+/**
+ * ROK-2027 — a plugin-resolved Gallery scope, `<namespace>:<payload>` (e.g.
+ * `valheim-death:c42`). The payload is the owning plugin's opaque key; it
+ * may hold inner spaces (a character name) but never edge whitespace or a
+ * line break.
+ */
+export const HUB_MEDIA_SUBJECT_RE = /^[a-z][a-z0-9-]{0,31}:\S(?:.{0,98}\S)?$/;
+
 export const HubMediaListQuerySchema = z.object({
     kind: HubMediaKindSchema.optional(),
     cursor: z.string().max(200).optional(),
     limit: z.coerce.number().int().min(1).max(HUB_MEDIA_PAGE_MAX).optional(),
+    /** ROK-2027 — narrow to one plugin-resolved subject (`HUB_MEDIA_SUBJECT_RE`). */
+    subject: z.string().max(140).regex(HUB_MEDIA_SUBJECT_RE).optional(),
 });
 export type HubMediaListQuery = z.infer<typeof HubMediaListQuerySchema>;
 
 export const HubMediaListResponseSchema = z.object({
     items: z.array(HubMediaItemSchema),
     nextCursor: z.string().nullable(),
-    /** Visible pictures matching the request's `kind` filter. */
+    /** Visible pictures matching the request's `kind` AND `subject` filters. */
     total: z.number().int().nonnegative(),
     /** Kinds present on this hub (for this viewer), for the filter chips. */
     kinds: z.array(HubMediaKindSchema),

@@ -10,9 +10,10 @@ import {
     STOCK,
     VALHEIM_RECIPE_STOCK_URL,
     recipeStockFixture,
+    valheimRecipePlanHandler,
     valheimRecipeStockHandler,
 } from '../../../test/mocks/valheim-recipes-handlers';
-import { useValheimRecipeStock, valheimRecipesKeys } from './use-valheim-recipes';
+import { useValheimRecipePlan, useValheimRecipeStock, valheimRecipesKeys } from './use-valheim-recipes';
 
 const auth = vi.hoisted(() => ({ scope: 1 as number | 'anon' }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -59,5 +60,26 @@ describe('useValheimRecipeStock', () => {
         auth.scope = 2;
         rerender({ vehicles: false });
         expect(result.current.data).toBeUndefined();
+    });
+});
+
+describe('useValheimRecipePlan sources (ROK-1860 AC1)', () => {
+    it('keeps the old key with no picks and appends the picks otherwise', () => {
+        expect(valheimRecipesKeys.plan(1, 7, 'Bronze:1:1:0:item', false, true)).toEqual(['valheim', 'recipes', 1, 7, 'plan', 'Bronze:1:1:0:item', false, true]);
+        expect(valheimRecipesKeys.plan(1, 7, 'Bronze:1:1:0:item', false, true, 'Coal:p:charcoal_kiln:0'))
+            .toEqual(['valheim', 'recipes', 1, 7, 'plan', 'Bronze:1:1:0:item', false, true, 'Coal:p:charcoal_kiln:0']);
+    });
+
+    it('sends sources= only when picks exist', async () => {
+        const hits: string[] = [];
+        server.use(valheimRecipePlanHandler(hits));
+        const none = renderHook(() => useValheimRecipePlan(7, 'Bronze:1:1:0:item', false, true, ''), { wrapper });
+        await waitFor(() => expect(none.result.current.isSuccess).toBe(true));
+        const picked = renderHook(() => useValheimRecipePlan(7, 'Bronze:1:1:0:item', false, true, 'Coal:p:charcoal_kiln:0'), { wrapper });
+        await waitFor(() => expect(picked.result.current.isSuccess).toBe(true));
+        expect(hits).toEqual([
+            '?targets=Bronze%3A1%3A1%3A0%3Aitem&includePersonal=false&includeVehicles=true',
+            '?targets=Bronze%3A1%3A1%3A0%3Aitem&includePersonal=false&includeVehicles=true&sources=Coal%3Ap%3Acharcoal_kiln%3A0',
+        ]);
     });
 });

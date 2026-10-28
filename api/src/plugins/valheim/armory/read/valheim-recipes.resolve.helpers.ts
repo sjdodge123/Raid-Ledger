@@ -1,7 +1,7 @@
 /**
  * ROK-1854 L3 — the pure pieces of the resolver: the §1.2 per-quality
- * formula, D9 source choice, and the node builder that owns the stock
- * ledger, the node cap and the leaf roll-ups.
+ * formula and the node builder that owns the stock ledger, the node cap and
+ * the leaf roll-ups. D9 source choice lives in `source-pick.ts` (re-exported).
  */
 import {
   VALHEIM_PLAN_QUANTITY_MAX,
@@ -10,16 +10,15 @@ import {
   type ValheimPlanVia,
   type ValheimProcess,
   type ValheimProcessor,
-  type ValheimProcessorType,
   type ValheimRecipe,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeSourceRef,
 } from '@raid-ledger/contract';
 import { amountAt, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import {
   isUpgraderStation,
-  shownRecipes,
   stationAt,
   stationLevelAt,
 } from './valheim-recipes.station-steps';
@@ -37,6 +36,8 @@ export interface ResolveOptions {
   maxQuality?: (prefab: string) => number;
   maxNodes?: number;
   maxDepth?: number;
+  /** ROK-1860 D1: per-prefab source override; honoured only when it is a candidate (D4). */
+  sources?: ReadonlyMap<string, ValheimRecipeSourceRef>;
 }
 
 export interface ResolveResult {
@@ -135,73 +136,16 @@ export function recipeSteps(
   return { crafts, totals, surplus };
 }
 
-export interface ProcessSource {
-  process: ValheimProcess;
-  processor: ValheimProcessor;
-}
-
-export type PlanSource =
-  | { type: 'recipe'; recipe: ValheimRecipe }
-  | ({ type: 'process' } & ProcessSource);
-
-/** D9: the obliterator (`incinerator`) is never auto-picked. */
-const AUTO_PROCESSORS: ReadonlySet<ValheimProcessorType> = new Set([
-  'smelter',
-  'fermenter',
-  'cooking',
-]);
-
-/** D9 rank: crafting recipe > upgrade-only recipe > process. */
-export function sourceRank(s: PlanSource): number {
-  if (s.type === 'process') return 2;
-  return s.recipe.upgradeOnly ? 1 : 0;
-}
-
-/** ROK-1948 R6: recipes at a hidden per-quality station are dropped BEFORE D9 ranks. */
-function candidates(
-  graph: RecipeGraph,
-  prefab: string,
-  startStep: number,
-  quality: number,
-): { list: PlanSource[]; hidden: boolean } {
-  const valid = (graph.recipesByResult.get(prefab) ?? []).filter(
-    (r) => r.enabled && (!r.upgradeOnly || startStep >= 2),
-  );
-  const { shown, hidden } = shownRecipes(graph, valid, startStep, quality);
-  const list = shown.map((recipe): PlanSource => ({ type: 'recipe', recipe }));
-  if (quality > 1) return { list, hidden };
-  for (const process of graph.processesByOutput.get(prefab) ?? []) {
-    const processor = graph.processors.get(process.processor);
-    if (processor && AUTO_PROCESSORS.has(processor.type))
-      list.push({ type: 'process', process, processor });
-  }
-  return { list, hidden };
-}
-
-export interface SourcePick {
-  source: PlanSource | null;
-  alternatives: number;
-  /** ROK-1948 R6: a recipe was dropped because a step's station is hidden. */
-  hidden: boolean;
-}
-
-/** First source by D9 rank; ties keep the graph's `id` / processor-prefab order. */
-export function pickSource(
-  graph: RecipeGraph,
-  prefab: string,
-  startStep: number,
-  quality: number,
-): SourcePick {
-  const { list, hidden } = candidates(graph, prefab, startStep, quality);
-  const ranked = list
-    .map((source, i) => ({ source, i }))
-    .sort((a, b) => sourceRank(a.source) - sourceRank(b.source) || a.i - b.i);
-  return {
-    source: ranked[0]?.source ?? null,
-    alternatives: Math.max(0, list.length - 1),
-    hidden,
-  };
-}
+export {
+  AUTO_PROCESSORS,
+  candidates,
+  pickSource,
+  sameSource,
+  sourceRank,
+  type PlanSource,
+  type ProcessSource,
+  type SourcePick,
+} from './valheim-recipes.source-pick';
 
 type NodeInput = Omit<ValheimPlanNode, 'id'>;
 

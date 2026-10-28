@@ -9,6 +9,7 @@ import {
   ValheimPrefabIdSchema,
 } from "./valheim-link-common.schema.js";
 import { ValheimProcessorTypeSchema } from "./valheim-link-recipes-processing.schema.js";
+import { ValheimRecipeSourceOptionsSchema } from "./valheim-recipes-sources.schema.js";
 
 /**
  * Member-facing recipe DTOs (ROK-1854): the planner catalogue, a single
@@ -103,6 +104,8 @@ export const ValheimRecipeCatalogEntrySchema = z
     upgrades: z.array(ValheimRecipeUpgradeSchema).max(9),
     /** ROK-1862: the viewer's character knows it; null = not gated or unknown. */
     discovered: z.boolean().nullable().optional(),
+    /** ROK-1860: every offered source, only for items with ≥2 of them. */
+    sourceOptions: ValheimRecipeSourceOptionsSchema.optional(),
   })
   .strict();
 export type ValheimRecipeCatalogEntry = z.infer<

@@ -169,6 +169,38 @@ describe('POST /admin/test/valheim/death-pictures (ROK-1941 L6)', () => {
     expect((await topBar(f, f.users.member))?.pictureCount).toBe(2);
   });
 
+  it('ROK-2027: secondCount pictures go to the second bar; screenshot adds one non-death picture', async () => {
+    const f = await seed({
+      worker: 5,
+      count: 2,
+      secondCount: 3,
+      screenshot: true,
+    });
+    expect(f.secondMediaIds).toHaveLength(3);
+    expect(f.screenshotMediaId).not.toBeNull();
+    const { media, linked } = await demoRows(f);
+    const kinds = media.map((m) => m.kind).sort();
+    expect(kinds).toEqual([
+      'death',
+      'death',
+      'death',
+      'death',
+      'death',
+      'screenshot',
+    ]);
+    expect(linked.filter((d) => d.name === f.secondCharacterName)).toHaveLength(
+      3,
+    );
+    const res = await testApp.request
+      .get(`/plugins/valheim/armory/servers/${f.serverId}/deaths`)
+      .set(bearer(await tokenFor(f.users.member)));
+    const players = ValheimDeathsResponseSchema.parse(res.body).players;
+    const second = players.find((p) => p.name === f.secondCharacterName);
+    expect(second?.pictureCount).toBe(3);
+    expect(second?.pictures?.map((p) => p.mediaId)).toEqual(f.secondMediaIds);
+    expect((await topBar(f, f.users.member))?.pictureCount).toBe(2);
+  });
+
   it('400s on a bad body; 403s a non-admin and without DEMO_MODE', async () => {
     expect((await post({ worker: 1, count: 0 })).status).toBe(400);
     expect((await post({ worker: 1, nope: true })).status).toBe(400);

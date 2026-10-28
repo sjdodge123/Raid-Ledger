@@ -28,7 +28,28 @@ export interface ViewportState {
     vp: Viewport;
     /** ROK-1889: a centre requested before the surface was measured. */
     pending?: Point;
+    /** ROK-2028: what Fit frames — absent = the whole world, `null` = nothing explored. */
+    frame?: Bounds | null;
+    /** ROK-2028: the user panned/zoomed (or a chest centred) — a late frame keeps their view. */
+    moved?: boolean;
 }
+
+/** ROK-2028: a texture-px box in canvas space (y down, north up); max is exclusive. */
+export interface Bounds {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+}
+
+/** ROK-2028: padding on every side of the framed box, as a fraction of its span. */
+export const FRAME_PADDING = 0.15;
+/** ROK-2028: smallest framed span (texture px) — a few explored pixels never zoom to max. */
+export const FRAME_MIN_SPAN = 128;
+/** ROK-2028: framing never zooms past this scale (screen px per texture px). */
+export const FRAME_MAX_SCALE = 3;
+/** ROK-2028: nothing explored → this multiple of the fit scale, centred on the world. */
+export const FRAME_EMPTY_FIT_MULTIPLE = 2;
 
 /** ROK-1889: a chest focus zooms to this multiple of the fit scale. */
 export const CENTRE_FIT_MULTIPLE = 4;
@@ -39,7 +60,8 @@ export type ViewportAction =
     | { type: 'zoomBy'; factor: number; anchor?: Point }
     | { type: 'pinch'; before: PinchGeometry; after: PinchGeometry }
     | { type: 'fit' }
-    | { type: 'centre'; point: Point };
+    | { type: 'centre'; point: Point }
+    | { type: 'frame'; frame: Bounds | null };
 
 export function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
@@ -127,15 +149,16 @@ function zoomBy(
 const SCALE_EPSILON = 1e-6;
 
 /**
- * A resize refits only when the map was at fit scale (or not yet measured);
+ * A resize re-frames while the user has not moved the map (ROK-2028) and
+ * refits when it was at fit scale (or not yet measured);
  * otherwise it keeps the user's zoom and the texture point at the centre —
  * a phone's `dvh` frame resizes whenever the URL bar shows or hides.
  */
 function resizeVp(state: ViewportState, next: Size): Viewport {
-    const { vp, view, content } = state;
+    const { vp, view, content, frame } = state;
+    if (!state.moved || !measured(view)) return frameViewport(next, content, frame);
     const atFit = Math.abs(vp.scale - fitScale(view, content)) < SCALE_EPSILON;
-    if (view.width <= 0 || view.height <= 0 || atFit)
-        return fitViewport(next, content);
+    if (atFit) return fitViewport(next, content);
     const dx = (next.width - view.width) / 2;
     const dy = (next.height - view.height) / 2;
     return clampViewport({ ...vp, x: vp.x + dx, y: vp.y + dy }, next, content);
@@ -180,21 +203,44 @@ export function pinchActions(
     return [{ type: 'pinch', before, after }];
 }
 
-/** Texture point `p` at the view's centre, zoomed in (clamped like every move). */
-export function centreVp(state: ViewportState, p: Point): Viewport {
-    const { view, content } = state;
+/** Texture point `p` at the view's centre at `scale` (clamped like every move). */
+function scaledAbout(view: Size, content: number, scale: number, p: Point): Viewport {
     const min = fitScale(view, content);
-    const max = Math.max(min, MAX_NATIVE_SCALE);
-    const scale = clamp(min * CENTRE_FIT_MULTIPLE, min, max);
-    const vp = {
-        scale,
-        x: view.width / 2 - p.x * scale,
-        y: view.height / 2 - p.y * scale,
-    };
+    const s = clamp(scale, min, Math.max(min, MAX_NATIVE_SCALE));
+    const vp = { scale: s, x: view.width / 2 - p.x * s, y: view.height / 2 - p.y * s };
     return clampViewport(vp, view, content);
 }
 
+/** Texture point `p` at the view's centre, zoomed in (clamped like every move). */
+export function centreVp(state: ViewportState, p: Point): Viewport {
+    const { view, content } = state;
+    return scaledAbout(view, content, fitScale(view, content) * CENTRE_FIT_MULTIPLE, p);
+}
+
 const measured = (v: Size): boolean => v.width > 0 && v.height > 0;
+
+const paddedSpan = (lo: number, hi: number): number =>
+    Math.max(hi - lo, FRAME_MIN_SPAN) * (1 + 2 * FRAME_PADDING);
+
+/**
+ * ROK-2028: the view Fit returns to. `undefined` → the whole world (as
+ * before); `null` (nothing explored) → a moderate zoom on the world's centre;
+ * a box → it fills the view with {@link FRAME_PADDING}, never past
+ * {@link FRAME_MAX_SCALE}, never below the world-fit scale.
+ */
+export function frameViewport(view: Size, content: number, frame: Bounds | null | undefined): Viewport {
+    if (frame === undefined || !measured(view)) return fitViewport(view, content);
+    const world = { x: content / 2, y: content / 2 };
+    if (frame === null)
+        return scaledAbout(view, content, fitScale(view, content) * FRAME_EMPTY_FIT_MULTIPLE, world);
+    const scale = Math.min(
+        view.width / paddedSpan(frame.minX, frame.maxX),
+        view.height / paddedSpan(frame.minY, frame.maxY),
+        FRAME_MAX_SCALE,
+    );
+    const centre = { x: (frame.minX + frame.maxX) / 2, y: (frame.minY + frame.maxY) / 2 };
+    return scaledAbout(view, content, scale, centre);
+}
 
 function resizeState(state: ViewportState, view: Size): ViewportState {
     const { pending, ...rest } = state;
@@ -202,6 +248,12 @@ function resizeState(state: ViewportState, view: Size): ViewportState {
     if (pending === undefined) return next;
     if (!measured(view)) return { ...next, pending };
     return { ...next, vp: centreVp(next, pending) };
+}
+
+/** ROK-2028: store what Fit frames; re-frame now unless the user already moved the map. */
+function frameState(state: ViewportState, frame: Bounds | null): ViewportState {
+    if (state.moved) return { ...state, frame };
+    return { ...state, frame, vp: frameViewport(state.view, state.content, frame) };
 }
 
 export function viewportReducer(
@@ -213,22 +265,18 @@ export function viewportReducer(
         case 'resize':
             return resizeState(state, action.view);
         case 'centre':
-            if (!measured(view)) return { ...state, pending: action.point };
-            return { ...state, vp: centreVp(state, action.point) };
+            if (!measured(view)) return { ...state, moved: true, pending: action.point };
+            return { ...state, moved: true, vp: centreVp(state, action.point) };
         case 'fit':
-            return { ...state, vp: fitViewport(view, content) };
+            return { ...state, moved: false, vp: frameViewport(view, content, state.frame) };
+        case 'frame':
+            return frameState(state, action.frame);
         case 'pan':
-            return { ...state, vp: panBy(state, action.dx, action.dy) };
+            return { ...state, moved: true, vp: panBy(state, action.dx, action.dy) };
         case 'zoomBy':
-            return {
-                ...state,
-                vp: zoomBy(state, action.factor, action.anchor),
-            };
+            return { ...state, moved: true, vp: zoomBy(state, action.factor, action.anchor) };
         case 'pinch':
-            return {
-                ...state,
-                vp: pinchVp(state, action.before, action.after),
-            };
+            return { ...state, moved: true, vp: pinchVp(state, action.before, action.after) };
     }
 }
 
@@ -239,7 +287,7 @@ export function initViewport(
     return { view, content, vp: fitViewport(view, content) };
 }
 
-/** Keyboard (D9): arrows pan, `+`/`=` and `-` zoom about the centre, `0` fits. */
+/** Keyboard (D9): arrows pan, `+`/`=` and `-` zoom about the centre, `0` fits (re-frames). */
 export function keyToAction(key: string): ViewportAction | null {
     switch (key) {
         case '+':

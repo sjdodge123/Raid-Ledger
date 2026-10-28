@@ -236,6 +236,8 @@ export * from './valheim-link-admin.schema.js';
 export * from './valheim-armory.schema.js';
 export * from './valheim-materials.schema.js';
 export * from './valheim-recipes.schema.js';
+// Planner source picker (ROK-1860).
+export * from './valheim-recipes-sources.schema.js';
 // Hub Deaths widget + death-pin layer (ROK-1930).
 export * from './valheim-deaths.schema.js';
 // Map tab cross-player pin layer (ROK-1943).
