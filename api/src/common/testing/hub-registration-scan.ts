@@ -63,6 +63,20 @@ function splitArgs(text: string): string[] {
   return out;
 }
 
+/** `this.<field>` → the literal `readonly <prop> = '<x>'` of the field's class. */
+function resolveFieldProp(
+  field: string,
+  prop: string,
+  src: ScanSource,
+  all: readonly ScanSource[],
+): string | undefined {
+  const cls = new RegExp(`\\b${field}\\??:\\s*(\\w+)`).exec(src.text)?.[1];
+  if (cls === undefined) return undefined;
+  const def = all.find((s) => new RegExp(`class ${cls}\\b`).test(s.text));
+  const re = new RegExp(`readonly ${prop}(?::\\s*\\w+)?\\s*=\\s*'([^']+)'`);
+  return re.exec(def?.text ?? '')?.[1];
+}
+
 /** `this.<field>.kind` → the `readonly kind = '<x>'` of the field's class. */
 function resolveAdapterKind(
   expr: string,
@@ -70,11 +84,9 @@ function resolveAdapterKind(
   all: readonly ScanSource[],
 ): string | undefined {
   const field = /^this\.(\w+)\.kind$/.exec(expr)?.[1];
-  if (field === undefined) return undefined;
-  const cls = new RegExp(`\\b${field}\\??:\\s*(\\w+)`).exec(src.text)?.[1];
-  if (cls === undefined) return undefined;
-  const def = all.find((s) => new RegExp(`class ${cls}\\b`).test(s.text));
-  return /readonly kind(?::\s*\w+)?\s*=\s*'([^']+)'/.exec(def?.text ?? '')?.[1];
+  return field === undefined
+    ? undefined
+    : resolveFieldProp(field, 'kind', src, all);
 }
 
 /** A key/owner expression → its value: a literal, a known constant, or an adapter kind. */
@@ -268,6 +280,41 @@ function ingestSources(all: readonly ScanSource[], ctx: ScanContext): Found[] {
   );
 }
 
+/**
+ * ROK-1957 D-16 — every `CompanionHandlerRegistry` registration outside
+ * `companion/` (which defines it): `.register(owner, this.<handler>)` →
+ * `owner/ingest-source/<contract>`, the contract read from the handler
+ * class's literal `readonly contract = '<id>'`.
+ */
+function companionHandlers(
+  all: readonly ScanSource[],
+  ctx: ScanContext,
+): Found[] {
+  const re = /\.register\(\s*([\w.']+)\s*,\s*([^)]*?)\s*\)/g;
+  return all
+    .filter(
+      (s) =>
+        s.text.includes('CompanionHandlerRegistry') &&
+        !s.file.startsWith('companion/'),
+    )
+    .flatMap((src) =>
+      [...src.text.matchAll(re)].map((m): Found => {
+        const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
+        const field = /^this\.(\w+)$/.exec(m[2] ?? '')?.[1];
+        const contract =
+          field === undefined
+            ? undefined
+            : resolveFieldProp(field, 'contract', src, all);
+        if (owner === undefined || contract === undefined) {
+          return {
+            problem: `${src.file}: companion handler "${m[2] ?? ''}" — cannot resolve owner "${m[1] ?? ''}" / contract`,
+          };
+        }
+        return { key: `${owner}/ingest-source/${contract}` };
+      }),
+    );
+}
+
 /** Every live hub registration in `sources`, as `owner/kind/id` keys. */
 export function scanHubRegistrations(
   sources: readonly ScanSource[],
@@ -278,6 +325,7 @@ export function scanHubRegistrations(
     ...bareCrons(sources, ctx),
     ...mediaDecorators(sources, ctx),
     ...ingestSources(sources, ctx),
+    ...companionHandlers(sources, ctx),
   ];
   return {
     keys: found.flatMap((f) => (f.key === undefined ? [] : [f.key])),

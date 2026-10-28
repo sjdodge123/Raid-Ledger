@@ -17,6 +17,7 @@ import {
 import {
   BG3_GAME_SLUG,
   BG3_INGEST_SOURCE_ID,
+  BG3_PLUGIN_ID,
   BG3_RETENTION_JOB_NAME,
 } from './bg3-hub.schema.js';
 import {
@@ -118,9 +119,8 @@ const blizzard = {
 
 /**
  * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of `BG3_GAME_SLUG`).
- * Widgets come with ROK-1958. NOT yet a `HUB_PLUGIN_MANIFESTS` key: the api
- * guard needs the `bg3` api manifest plus both registrations first, so the
- * lane that adds them adds `[BG3_PLUGIN_ID]: BG3_HUB_MANIFEST` below.
+ * Widgets come with ROK-1958. Mapped below as `bg3`, minus the retention
+ * job until it registers (ROK-1957 L7 drops that filter).
  */
 export const BG3_HUB_MANIFEST = {
   widgets: [],
@@ -139,6 +139,14 @@ export const HUB_PLUGIN_MANIFESTS = {
   valheim,
   pelican,
   blizzard,
+  // ROK-1957 L3: the ingest source is registered; the retention cron
+  // (`BG3_RETENTION_JOB_NAME`) is not yet — L7 maps the full BG3_HUB_MANIFEST.
+  [BG3_PLUGIN_ID]: {
+    ...BG3_HUB_MANIFEST,
+    behaviours: BG3_HUB_MANIFEST.behaviours.filter(
+      (b) => b.kind !== 'scheduled-job',
+    ),
+  },
 } as const satisfies Readonly<Record<string, PluginHubManifest>>;
 
 /** A plugin slug that has a hub declaration. */
