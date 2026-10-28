@@ -3,7 +3,7 @@
  * world pickers above the map; the selection lives in the query string
  * (D2: `?vc=<characterId>&vm=<mapId>`), the tab in the hash (`useHashTab`).
  */
-import { useId, type JSX } from 'react';
+import { useId, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
     ValheimCharacterMapRef,
@@ -73,7 +73,7 @@ function Picker({ id, label, value, options, onPick }: PickerProps) {
             {label}
             <Select
                 id={id}
-                wrapperClassName="w-auto min-w-[10rem]"
+                wrapperClassName="w-auto min-w-40"
                 value={String(value)}
                 onChange={(e) => onPick(Number(e.target.value))}
             >
@@ -131,24 +131,18 @@ interface CharacterMapBodyProps {
     characterId: number;
     mapId: number | null;
     detail: ReturnType<typeof useValheimCharacterMaps>;
-    /** ROK-2028: the pickers — inside the map's toolbar row when there is a map. */
-    pickers: JSX.Element;
+    /** ROK-2028: the toolbar row's slot the map's filter summary + trigger portal into. */
+    toolbarSlot: HTMLElement | null;
 }
 
 /** The map, a detail-fetch error with Retry, or the no-map empty state. */
-function CharacterMapBody({ serverId, characterId, mapId, detail, pickers }: CharacterMapBodyProps) {
+function CharacterMapBody({ serverId, characterId, mapId, detail, toolbarSlot }: CharacterMapBodyProps) {
     if (mapId !== null)
-        return <ValheimMapView serverId={serverId} characterId={characterId} mapId={mapId} toolbarStart={pickers} />;
+        return <ValheimMapView serverId={serverId} characterId={characterId} mapId={mapId} toolbarSlot={toolbarSlot} />;
     if (detail.error)
-        return (
-            <>
-                {pickers}
-                <MapError text="This character's maps could not be loaded." onRetry={() => void detail.refetch()} />
-            </>
-        );
-    if (detail.isSuccess)
-        return <>{pickers}<Empty text="This character has no map uploaded yet." /></>;
-    return pickers;
+        return <MapError text="This character's maps could not be loaded." onRetry={() => void detail.refetch()} />;
+    if (detail.isSuccess) return <Empty text="This character has no map uploaded yet." />;
+    return null;
 }
 
 /** The selected character's world picker + map, once the character list is in. */
@@ -159,22 +153,26 @@ interface CharacterMapProps {
     param: string | null;
 }
 
+/**
+ * ROK-2028: the tab owns the one toolbar row so the pickers keep ONE tree
+ * position through pending / loading / ready (a pick never remounts the
+ * `<select>` or drops focus); the map portals its filter summary + trigger
+ * into the row's `contents` slot.
+ */
 function CharacterMap(props: CharacterMapProps) {
     const { serverId, rows, characterId, param } = props;
+    const [slot, setSlot] = useState<HTMLElement | null>(null);
     const detail = useValheimCharacterMaps(characterId);
     const maps = detail.data?.id === characterId ? detail.data.maps : [];
     const mapId = pickMapId(maps, param);
     return (
         <div className="grid gap-3">
-            <CharacterMapBody
-                serverId={serverId}
-                characterId={characterId}
-                mapId={mapId}
-                detail={detail}
-                pickers={
-                    <Pickers rows={rows} characterId={characterId} maps={maps} mapId={mapId} />
-                }
-            />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" data-testid="map-filter-toolbar">
+                <Pickers rows={rows} characterId={characterId} maps={maps} mapId={mapId} />
+                <div ref={setSlot} className="contents" />
+            </div>
+            <CharacterMapBody serverId={serverId} characterId={characterId} mapId={mapId}
+                detail={detail} toolbarSlot={slot} />
         </div>
     );
 }

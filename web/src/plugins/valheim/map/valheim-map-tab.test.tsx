@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
@@ -16,9 +16,9 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => ({ user: { id: 7 } }),
 }));
 vi.mock('./valheim-map-view', () => ({
-    ValheimMapView: (p: { characterId: number; mapId: number; toolbarStart?: ReactNode }) => (
+    ValheimMapView: (p: { characterId: number; mapId: number; toolbarSlot?: HTMLElement | null }) => (
         <>
-            <div data-testid="map-toolbar">{p.toolbarStart}</div>
+            {p.toolbarSlot && createPortal(<span data-testid="map-filters" />, p.toolbarSlot)}
             <div data-testid="map-view">{`${p.characterId}:${p.mapId}`}</div>
         </>
     ),
@@ -107,10 +107,10 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             '1',
         );
         expect(screen.queryByRole('combobox', { name: 'World' })).toBeNull();
-        // ROK-2028: the pickers ride in the map's toolbar row, not a row of their own.
-        expect(
-            within(screen.getByTestId('map-toolbar')).getByRole('combobox', { name: 'Character' }),
-        ).toBeInTheDocument();
+        // ROK-2028: the pickers and the map's filters share the tab's one toolbar row.
+        const toolbar = screen.getByTestId('map-filter-toolbar');
+        expect(within(toolbar).getByRole('combobox', { name: 'Character' })).toBeInTheDocument();
+        expect(within(toolbar).getByTestId('map-filters')).toBeInTheDocument();
     });
 
     it('reads ?vc&vm and shows the world picker for a multi-map character', async () => {
@@ -154,6 +154,21 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             await screen.findByText('This character has no map uploaded yet.'),
         ).toBeInTheDocument();
         expect(screen.queryByTestId('map-view')).toBeNull();
+    });
+});
+
+describe('ValheimMapTab focus (ROK-2028 review)', () => {
+    it('ROK-2028: picking a character keeps keyboard focus on the Character select', async () => {
+        serve(ROWS, { 1: [11], 3: [31, 32] });
+        tab();
+        await screen.findByTestId('map-view');
+        const select = screen.getByRole('combobox', { name: 'Character' });
+        select.focus();
+        fireEvent.change(select, { target: { value: '3' } });
+        // Pending detail, then the new character's map: the select must stay mounted.
+        await waitFor(() => expect(screen.getByTestId('map-view')).toHaveTextContent('3:32'));
+        expect(document.activeElement, 'focus left the Character select after a pick').toBe(select);
+        expect(screen.getByRole('combobox', { name: 'Character' })).toBe(select);
     });
 });
 

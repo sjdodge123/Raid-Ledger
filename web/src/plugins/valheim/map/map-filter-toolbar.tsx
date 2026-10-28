@@ -1,11 +1,12 @@
 /**
- * ROK-1943 D12/D15 — the row above the map: the Map tab's pickers (ROK-2028,
- * `leading`), then the filter summary (`flex-1`,
- * `role="status"`) and the §4.1 funnel trigger (right, ≥1024px only), with the
+ * ROK-1943 D12/D15 — the row above the map: the filter summary (`flex-1`,
+ * `role="status"`) and the §4.1 funnel trigger (right, ≥1024px only) — portalled
+ * into the Map tab's row after its pickers when given a `toolbarSlot` (ROK-2028) — with the
  * filter body under it (`PinFilterPanel`). Below 1024px the trigger renders
  * nothing and the Filters FAB opens the same body in a BottomSheet.
  */
 import { useState, type JSX, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { FilterEntryTrigger } from '../../../components/ui/filter-entry';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { Button } from '../../../components/ui/button';
@@ -79,12 +80,25 @@ export function PinSummaryLine({ summary, onClear }: { summary: PinFilterSummary
 export interface MapPinFiltersProps {
     filter: Pick<PinFilterView, 'panel' | 'summary'>;
     serverId?: number | undefined;
-    /** ROK-2028: the Map tab's pickers, at the row's start so picker and Filters share one line. */
-    leading?: ReactNode;
+    /**
+     * ROK-2028: the Map tab's toolbar row slot (after its pickers). Given, the
+     * summary + trigger portal into it (`null` = slot not mounted yet, render
+     * nothing); omitted, they get a row of their own.
+     */
+    toolbarSlot?: HTMLElement | null | undefined;
+}
+
+const ROW_CLASS = 'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2';
+
+/** The row's items: into the tab's slot, or in a standalone row. */
+function ToolbarRow({ slot, children }: { slot: HTMLElement | null | undefined; children: ReactNode }): ReactNode {
+    if (slot === undefined)
+        return <div className={ROW_CLASS} data-testid="map-filter-toolbar">{children}</div>;
+    return slot ? createPortal(children, slot) : null;
 }
 
 /** Owns the panel's open state and reset key; renders the toolbar row + the filter body. */
-export function MapPinFilters({ filter, serverId, leading }: MapPinFiltersProps): JSX.Element {
+export function MapPinFilters({ filter, serverId, toolbarSlot }: MapPinFiltersProps): JSX.Element {
     const [isOpen, setOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [clearing, setClearing] = useState(false);
@@ -101,11 +115,10 @@ export function MapPinFilters({ filter, serverId, leading }: MapPinFiltersProps)
     };
     return (
         <>
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" data-testid="map-filter-toolbar">
-                {leading}
+            <ToolbarRow slot={toolbarSlot}>
                 <PinSummaryLine summary={summary} onClear={clear} />
                 <FilterEntryTrigger activeCount={panel.activeCount} isOpen={isOpen} onOpenChange={setOpen} />
-            </div>
+            </ToolbarRow>
             <PinFilterPanel panel={panel} serverId={serverId} isOpen={isOpen} onOpenChange={setOpen}
                 resetKey={resetKey} onClearAll={clear} />
         </>

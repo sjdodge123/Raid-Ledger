@@ -4,7 +4,7 @@
  * composes MapViewport → base <img> + FogCanvas + PinLayer, and owns the layer
  * switches. Exported so ROK-1836's character page can embed it (spec Q3).
  */
-import { useContext, useMemo, useState, type ReactNode } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import type { ValheimContainerSummary, ValheimMapMeta, ValheimMapPin } from '@raid-ledger/contract';
 import {
     MapBytesError,
@@ -33,8 +33,11 @@ export interface ValheimMapViewProps {
     className?: string;
     /** The hub's Pelican server — enables the ROK-1943 players pin layer. */
     serverId?: number | undefined;
-    /** ROK-2028: rendered at the start of the toolbar row (the Map tab's pickers). */
-    toolbarStart?: ReactNode;
+    /**
+     * ROK-2028: the Map tab's toolbar row slot — the filter summary + trigger
+     * portal into it (pickers and Filters share one row). Omitted: own row.
+     */
+    toolbarSlot?: HTMLElement | null | undefined;
 }
 
 const FRAME =
@@ -269,20 +272,14 @@ function MapFrame({ className, layers, controls, status }: MapFrameProps) {
     );
 }
 
-function MapReady(props: ReadyProps & { className?: string | undefined; toolbarStart?: ReactNode }) {
+function MapReady(props: ReadyProps & { className?: string | undefined; toolbarSlot?: HTMLElement | null | undefined }) {
     const { layers, controls, personal, status, pinFilter } =
         useMapReadyState(props);
-    if (personal.error) {
-        return (
-            <>
-                {props.toolbarStart}
-                <MapError text="The explored area could not be loaded." onRetry={() => void personal.refetch()} />
-            </>
-        );
-    }
+    if (personal.error)
+        return <MapError text="The explored area could not be loaded." onRetry={() => void personal.refetch()} />;
     return (
         <>
-            <MapPinFilters filter={pinFilter} serverId={props.serverId} leading={props.toolbarStart} />
+            <MapPinFilters filter={pinFilter} serverId={props.serverId} toolbarSlot={props.toolbarSlot} />
             <MapFrame
                 className={props.className}
                 layers={layers}
@@ -312,17 +309,12 @@ export function ValheimMapView({
     mapId,
     className,
     serverId,
-    toolbarStart,
+    toolbarSlot,
 }: ValheimMapViewProps) {
     const meta = useValheimMapMeta(characterId, mapId);
-    if (meta.isPending) return <>{toolbarStart}<MapLoading /></>;
+    if (meta.isPending) return <MapLoading />;
     if (meta.error)
-        return (
-            <>
-                {toolbarStart}
-                <MapError text="The map could not be loaded." onRetry={() => void meta.refetch()} />
-            </>
-        );
+        return <MapError text="The map could not be loaded." onRetry={() => void meta.refetch()} />;
     return (
         <MapReady
             key={`${characterId}:${mapId}`}
@@ -331,7 +323,7 @@ export function ValheimMapView({
             meta={meta.data}
             className={className}
             serverId={serverId}
-            toolbarStart={toolbarStart}
+            toolbarSlot={toolbarSlot}
         />
     );
 }
