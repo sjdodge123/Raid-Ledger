@@ -75,7 +75,10 @@ export class Bg3MyDataRepository {
    * cutoff: a save ingested concurrently refreshes its ref after it, so
    * that ref survives (the new row is not ours to delete yet).
    */
-  deleteAllFor(userId: number, startedAt = new Date()): Promise<Bg3MyDataDeleted> {
+  deleteAllFor(
+    userId: number,
+    startedAt = new Date(),
+  ): Promise<Bg3MyDataDeleted> {
     return this.db.transaction(async (tx) => {
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
@@ -88,7 +91,9 @@ export class Bg3MyDataRepository {
         stillUsed: tx
           .select({ sha: s.thumbnailSha256 })
           .from(s)
-          .where(and(eq(s.uploaderUserId, userId), isNotNull(s.thumbnailSha256))),
+          .where(
+            and(eq(s.uploaderUserId, userId), isNotNull(s.thumbnailSha256)),
+          ),
       });
       return { ...owned, saves: saves.count, thumbnailRefs };
     });
