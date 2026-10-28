@@ -2,7 +2,7 @@
  * ROK-1958 D-3 / §4.3 — the BG3 "Campaign" game tab: Campaigns, Your saves,
  * Hub settings (editors/staff). Members start campaigns and file their own
  * saves; editors switch the active campaign and the spoiler setting. History
- * (§4.3 (3)) is W3's session list — W5 slots it in after "Your saves".
+ * (§4.3 (3)) lists the active campaign's sessions after "Your saves".
  */
 import { useState, type JSX, type ReactNode } from 'react';
 import type { Bg3CampaignSummary, Bg3HubCampaignsResponse } from '@raid-ledger/contract';
@@ -18,6 +18,7 @@ import { Bg3StartCampaignDialog } from './bg3-start-campaign-dialog';
 import { Bg3AddSavesSheet } from './bg3-add-saves-sheet';
 import { Bg3ArchiveConfirm } from './bg3-archive-confirm';
 import { toastBg3CampaignError } from './bg3-campaign-toast';
+import { Bg3CampaignHistory } from './bg3-campaign-history';
 
 function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
     return (
@@ -74,6 +75,7 @@ export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
                     onArchive={setArchiving} onStart={() => setDialog('start')} />
             </Section>
             <YourSaves hubId={hubId} data={data} onAddSaves={() => setDialog('add-saves')} onStart={() => setDialog('start')} />
+            {active && <Section title="History"><Bg3CampaignHistory hubId={hubId} campaignId={active.id} /></Section>}
             {data.canEdit && <div className="rounded-lg border border-edge bg-surface p-4"><Bg3EditorSection hubId={hubId} data={data} /></div>}
             <Bg3StartCampaignDialog isOpen={dialog === 'start'} hubId={hubId} onClose={close} />
             {active && <Bg3AddSavesSheet isOpen={dialog === 'add-saves'} hubId={hubId} campaignId={active.id}

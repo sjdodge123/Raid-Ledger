@@ -8,11 +8,11 @@ import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     BG3_CAMPAIGNS_URL, bg3BindKeyHandler, bg3CreateCampaignHandler, bg3DefaultCampaignHandler, bg3Error,
-    bg3HubSettingsHandler, bg3MySavesHandler, bg3UpdateCampaignHandler, BG3_SETTINGS_URL,
+    bg3HubSettingsHandler, bg3MySavesHandler, bg3SessionsHandler, bg3UpdateCampaignHandler, BG3_SETTINGS_URL,
 } from '../../../test/mocks/bg3-handlers';
 import {
     BG3_CAMPAIGN_ID, BG3_HUB_ID, BG3_SAVE_KEY, buildBg3CampaignSummary, buildBg3CampaignsResponse, buildBg3MySave,
-    buildBg3MySavesResponse,
+    buildBg3MySavesResponse, buildBg3Session, buildBg3SessionsResponse,
 } from '../../../test/factories/bg3';
 import { toast } from '../../../lib/toast';
 import type { HubCtx } from '../../hub-module';
@@ -152,5 +152,33 @@ describe('V-10 editor section and archive', () => {
         await user.click(within(archivedList).getByRole('button', { name: 'Unarchive' }));
         await waitFor(() => expect(bodies['patch']).toEqual([{ archived: true }, { archived: false }]));
         expect(await screen.findByRole('list', { name: 'Campaigns' })).toBeInTheDocument();
+    });
+});
+
+describe('History section (D-9)', () => {
+    it('lists the active campaign\'s sessions and pages with "Show more" via nextCursor', async () => {
+        const cursors: (string | null)[] = [];
+        server.use(bg3SessionsHandler({
+            '': buildBg3SessionsResponse({ nextCursor: 'page-2' }),
+            'page-2': buildBg3SessionsResponse({
+                sessions: [buildBg3Session({ startedAt: '2026-10-20T19:00:00.000Z', endedAt: '2026-10-20T21:00:00.000Z', lastSaveId: 200 })],
+                nextCursor: null,
+            }),
+        }, (url) => cursors.push(url.searchParams.get('cursor'))));
+        const user = userEvent.setup();
+        renderTab();
+        const history = await screen.findByTestId('bg3-history');
+        await waitFor(() => expect(within(history).getAllByRole('listitem')).toHaveLength(2));
+        await user.click(screen.getByRole('button', { name: 'Show more' }));
+        await waitFor(() => expect(within(history).getAllByRole('listitem')).toHaveLength(3));
+        expect(cursors).toEqual([null, 'page-2']);
+        expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+    });
+
+    it('has no History section without an active campaign', async () => {
+        campaigns = buildBg3CampaignsResponse({ settings: { hideLocationAndScreenshots: false, activeCampaignId: null } });
+        renderTab();
+        expect(await screen.findByTestId('bg3-campaign-tab')).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
     });
 });
