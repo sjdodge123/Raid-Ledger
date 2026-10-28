@@ -21,8 +21,10 @@
  * so the in-app `notifications` row (read via the DEMO_MODE
  * `/admin/test/notifications` endpoint) is the canonical proof of dispatch —
  * the same tier as `scheduling-unanimous-dm.test.ts`. Rows are scoped to THIS
- * run by `payload.eventId`, so a reused fixture slot cannot leak an earlier
- * run's DM into the count.
+ * run by `payload.eventId` AND by a snapshot of each voter's notification ids
+ * taken before the lock-in: `reset-to-seed` TRUNCATEs `events` with RESTART
+ * IDENTITY but keeps `notifications`, so every run re-mints the same event ids
+ * and an eventId filter alone counts earlier runs' DMs (ROK-2025 RCA).
  *
  * Deterministic waits only — `pollForCondition` + `awaitProcessing`, never a
  * fixed timer (`npm run lint:no-sleep`).
@@ -56,7 +58,7 @@ interface CreatePollResponse {
 }
 
 interface TestNotification {
-  id: number;
+  id: string;
   title?: string;
   message?: string;
   payload?: { subtype?: string; eventId?: number } | null;
@@ -77,19 +79,45 @@ async function resolveGameId(ctx: TestContext): Promise<number> {
   return id;
 }
 
-/** `userId`'s community_lineup notifications for THIS event only. */
-async function notesForEvent(
+/** Notification ids each voter already held before this run's lock-in. */
+type NoteBaseline = Map<number, ReadonlySet<string>>;
+
+/** `userId`'s latest community_lineup notifications (newest first). */
+async function latestNotes(
   api: ApiClient,
   userId: number,
-  eventId: number,
 ): Promise<TestNotification[]> {
   const res = await api
     .get<TestNotification[]>(
       `/admin/test/notifications?userId=${userId}&type=community_lineup&limit=50`,
     )
     .catch(() => [] as TestNotification[]);
-  const list = Array.isArray(res) ? res : [];
-  return list.filter((n) => Number(n.payload?.eventId) === eventId);
+  return Array.isArray(res) ? res : [];
+}
+
+/** Snapshot every voter's existing notification ids, before the lock-in. */
+async function snapshotNotes(
+  api: ApiClient,
+  userIds: number[],
+): Promise<NoteBaseline> {
+  const baseline: NoteBaseline = new Map();
+  for (const uid of userIds) {
+    baseline.set(uid, new Set((await latestNotes(api, uid)).map((n) => n.id)));
+  }
+  return baseline;
+}
+
+/** `userId`'s notifications for THIS event, created after the baseline. */
+async function notesForEvent(
+  api: ApiClient,
+  userId: number,
+  eventId: number,
+  baseline: NoteBaseline,
+): Promise<TestNotification[]> {
+  const old = baseline.get(userId) ?? new Set<string>();
+  return (await latestNotes(api, userId)).filter(
+    (n) => Number(n.payload?.eventId) === eventId && !old.has(n.id),
+  );
 }
 
 /** Vote YES on `slotId` as `member`, asserting the toggle landed ON. */
@@ -114,10 +142,11 @@ async function readNotes(
   ctx: TestContext,
   userIds: number[],
   eventId: number,
+  baseline: NoteBaseline,
 ): Promise<Map<number, TestNotification[]>> {
   const seen = new Map<number, TestNotification[]>();
   for (const uid of userIds) {
-    seen.set(uid, await notesForEvent(ctx.api, uid, eventId));
+    seen.set(uid, await notesForEvent(ctx.api, uid, eventId, baseline));
   }
   return seen;
 }
@@ -133,11 +162,12 @@ async function waitForStableNotes(
   ctx: TestContext,
   userIds: number[],
   eventId: number,
+  baseline: NoteBaseline,
 ): Promise<Map<number, TestNotification[]>> {
   let lastTotal = -1;
   return pollForCondition(
     async () => {
-      const notes = await readNotes(ctx, userIds, eventId);
+      const notes = await readNotes(ctx, userIds, eventId, baseline);
       const prev = lastTotal;
       lastTotal = totalNotes(notes);
       return lastTotal === prev ? notes : null;
@@ -152,11 +182,12 @@ async function waitForEveryoneNotified(
   ctx: TestContext,
   userIds: number[],
   eventId: number,
+  baseline: NoteBaseline,
 ): Promise<Map<number, TestNotification[]>> {
   let seen = new Map<number, TestNotification[]>();
   return pollForCondition(
     async () => {
-      seen = await readNotes(ctx, userIds, eventId);
+      seen = await readNotes(ctx, userIds, eventId, baseline);
       const all = [...seen.values()].every((notes) => notes.length > 0);
       return all ? seen : null;
     },
@@ -309,13 +340,15 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
 
     const pick = which === 'pick-earlier' ? [memberA.userId] : undefined;
     const expectedId = which === 'pick-earlier' ? memberA.userId : memberB.userId;
-    eventId = await lockIn(ctx.api, gameId, poll.id, start, pick);
-
     const memberIds = [memberA.userId, memberB.userId];
     const voterIds = [ctx.testUserId, ...memberIds];
-    await waitForEveryoneNotified(ctx, voterIds, eventId);
+    // Before the lock-in: event ids repeat across runs (see header).
+    const baseline = await snapshotNotes(ctx.api, voterIds);
+    eventId = await lockIn(ctx.api, gameId, poll.id, start, pick);
+
+    await waitForEveryoneNotified(ctx, voterIds, eventId, baseline);
     // No voter gets both DMs: assert one each only once the total settles.
-    const notes = await waitForStableNotes(ctx, voterIds, eventId);
+    const notes = await waitForStableNotes(ctx, voterIds, eventId, baseline);
     assertBenchSplit(notes, ctx.testUserId, memberIds, expectedId);
 
     // The DM must agree with the roster: the benched voter IS on the bench.
