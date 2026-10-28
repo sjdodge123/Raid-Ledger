@@ -94,6 +94,15 @@ describe('Bg3CampaignsService.update', () => {
     expect(repo.updateCampaign).toHaveBeenCalledWith(11, { name: 'New' });
   });
 
+  it('403s a host who is no longer a hub member (kicked)', async () => {
+    const { repo, access, svc } = setup({ hostUserId: 7, member: false });
+    await expect(svc.update(11, me, { name: 'New' })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(access.isMember).toHaveBeenCalledWith(7, 5);
+    expect(repo.updateCampaign).not.toHaveBeenCalled();
+  });
+
   it('lets a hub editor (or staff, via canEdit) rename', async () => {
     const { repo, svc } = setup({ canEdit: true });
     await svc.update(11, staff, { name: 'New' });
@@ -110,7 +119,9 @@ describe('Bg3CampaignsService.update', () => {
 
   it('400s a new host who is not a hub member', async () => {
     const { repo, access, svc } = setup({ hostUserId: 7 });
-    access.isMember.mockResolvedValue(false);
+    access.isMember.mockImplementation((userId: number) =>
+      Promise.resolve(userId !== 8),
+    );
     await expect(svc.update(11, me, { hostUserId: 8 })).rejects.toThrow(
       BadRequestException,
     );

@@ -1,7 +1,7 @@
 /**
  * ROK-1957 D-10 / §5.5 — "that's me" party claims. Claim: self only, hub
  * member, slot in the newest canonical save. Clear: claimant, campaign
- * host, hub editor or staff (`canEdit` covers staff).
+ * host (still a hub member), hub editor or staff (`canEdit` covers staff).
  */
 import {
   BadRequestException,
@@ -17,7 +17,10 @@ import {
   GuildAccessService,
   type GuildActor,
 } from '../../../guilds/guild-access.service';
-import { refuseNonBg3Hub } from '../read/bg3-hub-access.helpers';
+import {
+  isCurrentHost,
+  refuseNonBg3Hub,
+} from '../read/bg3-hub-access.helpers';
 import type { Bg3CampaignRow } from '../campaigns/bg3-campaigns.repository';
 import { Bg3CampaignsRepository } from '../campaigns/bg3-campaigns.repository';
 import { Bg3CampaignsService } from '../campaigns/bg3-campaigns.service';
@@ -68,7 +71,7 @@ export class Bg3ClaimsService {
     if (!claim) throw new NotFoundException('No claim on that slot');
     const mayClear =
       claim.userId === actor.id ||
-      campaign.hostUserId === actor.id ||
+      (await isCurrentHost(this.access, campaign, actor)) ||
       (await this.access.canEdit(actor, campaign.guildId));
     if (!mayClear) throw new ForbiddenException('Not your claim');
     await this.repo.delete(campaignId, slotKey);

@@ -48,3 +48,16 @@ export async function assertBg3HubReader(
   if (isStaff(actor) || (await access.isMember(actor.id, hubId))) return hub;
   throw new ForbiddenException('Hub members only');
 }
+
+/**
+ * Host powers need the host to still be a hub member: a host kicked from the
+ * hub keeps `host_user_id` but loses rename / host change / claim clearing.
+ */
+export async function isCurrentHost(
+  access: Pick<GuildAccessService, 'isMember'>,
+  campaign: { guildId: number; hostUserId: number | null },
+  actor: GuildActor,
+): Promise<boolean> {
+  if (campaign.hostUserId !== actor.id) return false;
+  return access.isMember(actor.id, campaign.guildId);
+}

@@ -38,6 +38,7 @@ function setup(
     claim?: { slotKey: string; userId: number } | null;
     conflicts?: { slotKey: string; userId: number }[];
     canEdit?: boolean;
+    member?: boolean;
     party?: unknown;
   } = {},
 ) {
@@ -67,7 +68,10 @@ function setup(
     findCampaign: jest.fn().mockResolvedValue(CAMPAIGN),
     findHub: jest.fn().mockResolvedValue(HUB),
   };
-  const access = { canEdit: jest.fn().mockResolvedValue(o.canEdit ?? false) };
+  const access = {
+    canEdit: jest.fn().mockResolvedValue(o.canEdit ?? false),
+    isMember: jest.fn().mockResolvedValue(o.member ?? true),
+  };
   const svc = new Bg3ClaimsService(
     repo as unknown as Bg3ClaimsRepository,
     campaigns as unknown as Bg3CampaignsService,
@@ -161,6 +165,15 @@ describe('Bg3ClaimsService.clear (U-6)', () => {
     await expect(svc.clear(11, me, 'Generic:Human:1')).rejects.toThrow(
       ForbiddenException,
     );
+    expect(repo.delete).not.toHaveBeenCalled();
+  });
+
+  it('403s a campaign host who is no longer a hub member (kicked)', async () => {
+    const { repo, access, svc } = setup({ member: false });
+    await expect(
+      svc.clear(11, { id: HOST, role: 'member' }, 'Generic:Human:1'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(access.isMember).toHaveBeenCalledWith(HOST, 5);
     expect(repo.delete).not.toHaveBeenCalled();
   });
 

@@ -19,6 +19,7 @@ import {
 } from '../../../guilds/guild-access.service';
 import {
   assertBg3HubReader,
+  isCurrentHost,
   refuseNonBg3Hub,
 } from '../read/bg3-hub-access.helpers';
 import {
@@ -44,7 +45,7 @@ export class Bg3CampaignsService {
     return this.summaryOf(id);
   }
 
-  /** Host, hub editor or staff; a new host must be a hub member (400). */
+  /** Live host, hub editor or staff; a new host must be a hub member (400). */
   async update(
     campaignId: number,
     actor: GuildActor,
@@ -52,7 +53,7 @@ export class Bg3CampaignsService {
   ): Promise<Bg3CampaignSummary> {
     const campaign = await this.findCampaign(campaignId);
     refuseNonBg3Hub(await this.repo.findHub(campaign.guildId), actor);
-    const isHost = campaign.hostUserId === actor.id;
+    const isHost = await isCurrentHost(this.access, campaign, actor);
     if (!isHost && !(await this.access.canEdit(actor, campaign.guildId)))
       throw new ForbiddenException('Only the host or a hub editor');
     const { name, hostUserId } = body;
