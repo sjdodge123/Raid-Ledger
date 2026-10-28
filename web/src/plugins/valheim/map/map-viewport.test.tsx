@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 import { MapViewport, type MapViewportCommands } from './map-viewport';
 import { VIEWPORT_STYLE, surfaceClass } from './use-map-viewport';
+import { FRAME_MIN_SPAN, FRAME_PADDING } from './map-viewport.math';
 
 const VIEW = { width: 400, height: 300 };
 
@@ -128,6 +129,37 @@ describe('MapViewport gestures (ROK-1837 D10)', () => {
         expect(layer.style.transform).not.toBe(fitT);
         act(() => c.fit());
         expect(layer.style.transform).toBe(fitT);
+    });
+});
+
+describe('MapViewport frame prop (ROK-2028)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        restore = stubSize();
+    });
+    afterEach(() => restore());
+
+    const framed = (frame: { minX: number; maxX: number; minY: number; maxY: number }) => (
+        <MapViewport contentSize={256} label="Valheim map" frame={frame}>
+            {(vp) => <span data-testid="child-scale">{vp.scale}</span>}
+        </MapViewport>
+    );
+    const scale = () => Number(screen.getByTestId('child-scale').textContent);
+
+    it('opens on the frame, and a re-sent frame never overrides a user zoom', () => {
+        const box = { minX: 100, maxX: 140, minY: 100, maxY: 140 };
+        const { rerender } = render(framed(box));
+        // A 40-texel box widens to the 128-texel minimum span, padded: well past the world fit.
+        const opened = VIEW.height / (FRAME_MIN_SPAN * (1 + 2 * FRAME_PADDING));
+        expect(scale()).toBeCloseTo(opened);
+        expect(opened).toBeGreaterThan(VIEW.height / 256);
+        const app = screen.getByRole('application', { name: 'Valheim map' });
+        const layer = screen.getByTestId('map-texture-layer');
+        fireEvent.wheel(app, { deltaY: 200, clientX: 200, clientY: 150 });
+        const zoomed = layer.style.transform;
+        expect(scale()).toBeLessThan(opened);
+        rerender(framed({ ...box }));
+        expect(layer.style.transform).toBe(zoomed);
     });
 });
 

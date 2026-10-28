@@ -31,6 +31,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 4. **On Go**, before spawning anything:
    - Write the memory `project_overnight_YYYY_MM_DD.md` (type project): the operator's go in their words, timestamp, wake time, the plan path, and the standing rules below. This file is the authorisation the night (and every relayed Lead) acts on.
    - `mcp__ccd_host__request_keep_awake` for the window (the laptop runs the MCP servers and Mutagen; sleep kills gates).
+   - The 10 standby relay Leads (Phase B → **Standby chain**) must already be started, on this operator turn at the latest, with their ids in NIGHT-PLAN §6.
    - Then start wave 1.
 
 ## Standing rules for the night (operator ruling 2026-10-26)
@@ -56,10 +57,19 @@ Measure, don't guess: sum `usage` from this session's transcript under `~/.claud
 
 1. Finish the turn's bookkeeping. **Do not spawn new lanes.** Wait for running lanes to report (they report to this session). A long fleet task may keep going: note its task id; the next Lead reads it with `rl_task_status`.
 2. Write `planning-artifacts/LEAD-HANDOVER-YYYY-MM-DD-overnight-N.md` (≤60 lines: in flight with task ids, worktrees, slots/envs, what is next in the plan, traps hit tonight) and update NIGHT-PLAN §6/§7 and `CURRENT-STATE.md`.
-3. Load `mcp__ccd_session__start_session` (ToolSearch) and start ONE fresh session: `initiation: "user_asked"` (the operator authorised relays in their /overnight go; quote it from the memory file in the brief), `context: "fresh"`, in the main checkout, brief = `/overnight --resume planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md` plus the handover path. Confirm the tool result says it started.
-4. Append `HH:MMZ — relayed to <session link>` to §6 and stop: no further tool calls in this session.
+3. `SendMessage` the next unused standby in the chain (see **Standby chain** below), `to: "local_…"` (its session id from §6): `RELAY: you are relay N — run /overnight --resume planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md, handover planning-artifacts/LEAD-HANDOVER-YYYY-MM-DD-overnight-N.md`. Confirm the send succeeded.
+4. Append `HH:MMZ — relayed to standby N (<session link>)` to §6 and stop: no further tool calls in this session except acknowledging lanes that were already running.
 
-A relay that fails to start: retry once; if it fails again, keep going in this session up to ~450k, then write the handover and stop.
+A send that fails: retry once, then try the next standby. If the chain is used up, keep going in this session up to ~450k, then write the handover and stop.
+
+### Standby chain (workaround until the app lets a Lead start a session on its own turn)
+
+The app refuses `start_session` on an agent-driven turn, so a Lead cannot start its own successor at 3 AM (2026-10-27: every self-started relay was refused). Workaround (operator, 2026-10-27 with 6, raised to **10** on 2026-10-28):
+
+- **In Phase A, on the operator's turn** (any turn the operator's message started, before or at Go), start **10 standby Lead sessions** with `start_session`: `initiation: "user_asked"`, `context: "fresh"`, `cwd` = the main checkout, `use_worktree: false`, name `overnight-standby-1…10`, the Lead's own model (omit `model`). Brief: reply `standby N ready` and end the turn with no tool calls; on a `RELAY:` message, run `/overnight --resume <plan>` with the named handover; relay onward by `SendMessage` to the next standby, never by `start_session`; the last standby runs frugally to ~450k and stops. Background names the plan path and the `project_overnight_*` memory as the authorisation.
+- Record every standby's `local_…` id in NIGHT-PLAN §6 (and in each handover) so any relay can find the next one.
+- A relay reads the chain from §6, sends to the lowest unused standby, and logs it. Standbys never used by morning are left idle; the morning Lead offers to archive them (only on the operator's yes).
+- Remove this section once the app lets an overnight Lead start its successor itself.
 
 ### Wind-down (wake − 45 min)
 

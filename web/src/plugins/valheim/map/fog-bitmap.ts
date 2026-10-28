@@ -9,6 +9,7 @@
  */
 import { valheimLinkBitmapBytes } from '@raid-ledger/contract';
 import { bitIndex, isBitSet, textureRowFor } from './valheim-grid';
+import type { Bounds } from './map-viewport.math';
 
 /** Unexplored fog opacity (D7). Fully opaque: no terrain may show through (ROK-1949). */
 export const FOG_ALPHA_UNEXPLORED = 1;
@@ -134,4 +135,59 @@ export function buildFogPixels(
         }
     }
     return out;
+}
+
+/** The first set bit in `[from, to)`, or -1; whole zero bytes are skipped. */
+function firstSetBit(bits: Uint8Array, from: number, to: number): number {
+    for (let i = from; i < to; ) {
+        const v = bits[i >> 3] ?? 0;
+        if (v === 0) i = (i | 7) + 1;
+        else if (((v >> (i & 7)) & 1) === 1) return i;
+        else i++;
+    }
+    return -1;
+}
+
+/** The last set bit in `[from, to)`, or -1; whole zero bytes are skipped. */
+function lastSetBit(bits: Uint8Array, from: number, to: number): number {
+    for (let i = to - 1; i >= from; ) {
+        const v = bits[i >> 3] ?? 0;
+        if (v === 0) i = (i & ~7) - 1;
+        else if (((v >> (i & 7)) & 1) === 1) return i;
+        else i--;
+    }
+    return -1;
+}
+
+const rowHasBit = (bits: Uint8Array, size: number, py: number): boolean =>
+    firstSetBit(bits, py * size, (py + 1) * size) >= 0;
+
+/**
+ * ROK-2028 — the bounding box of the set bits of a fog bitset (`size²` bits,
+ * LSB first, `py = 0` south), flipped to canvas rows so it lines up with the
+ * texture layer (max exclusive); null when nothing is explored. Row-scanning
+ * (it runs in render): the first/last non-empty row, then per row only the
+ * bits outside the box found so far, zero bytes skipped — never every set bit.
+ */
+export function exploredBounds(size: number, bits: Uint8Array): Bounds | null {
+    let minPy = 0;
+    while (minPy < size && !rowHasBit(bits, size, minPy)) minPy++;
+    if (minPy >= size) return null;
+    let maxPy = size - 1;
+    while (maxPy > minPy && !rowHasBit(bits, size, maxPy)) maxPy--;
+    let minPx = size;
+    let maxPx = -1;
+    for (let py = minPy; py <= maxPy; py++) {
+        const row = py * size;
+        const first = firstSetBit(bits, row, row + minPx);
+        if (first >= 0) minPx = first - row;
+        const last = lastSetBit(bits, row + maxPx + 1, row + size);
+        if (last >= 0) maxPx = last - row;
+    }
+    return {
+        minX: minPx,
+        maxX: maxPx + 1,
+        minY: textureRowFor(size, maxPy),
+        maxY: textureRowFor(size, minPy) + 1,
+    };
 }
