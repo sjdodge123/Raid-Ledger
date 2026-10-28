@@ -5,6 +5,9 @@ import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from './bg3.constants';
 import { BG3_MANIFEST } from './bg3.manifest';
+import { Bg3CampaignsController } from './campaigns/bg3-campaigns.controller';
+import { Bg3CampaignsRepository } from './campaigns/bg3-campaigns.repository';
+import { Bg3CampaignsService } from './campaigns/bg3-campaigns.service';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
 import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
 
@@ -17,7 +20,13 @@ import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
  */
 @Module({
   imports: [CompanionIngestModule, GuildsCoreModule],
-  providers: [Bg3SaveHandler, Bg3SavesWriteRepository],
+  controllers: [Bg3CampaignsController],
+  providers: [
+    Bg3SaveHandler,
+    Bg3SavesWriteRepository,
+    Bg3CampaignsRepository,
+    Bg3CampaignsService,
+  ],
 })
 export class Bg3Module implements OnModuleInit {
   constructor(
