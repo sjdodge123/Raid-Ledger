@@ -39,9 +39,9 @@ export default function RecentDingsWidget({ page }: Pick<HubWidgetCtx, 'page'>):
 
 function DingRow({ ding }: { ding: Ding }): JSX.Element {
     return (
-        <li data-testid="recent-ding" className="flex min-h-11 items-center justify-between gap-2 py-1.5 text-sm">
-            <span className="flex min-w-0 items-baseline gap-2">
-                <CharacterLink name={ding.name} characterId={ding.characterId} className="min-w-0 truncate font-medium text-foreground" />
+        <li data-testid="recent-ding" className="flex min-h-11 items-center justify-between gap-2 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+                <CharacterLink name={ding.name} characterId={ding.characterId} className="inline-block min-w-0 max-w-full truncate py-3 align-middle font-medium leading-5 text-foreground" />
                 <span className="shrink-0 text-muted">hit {ding.toLevel}</span>
             </span>
             <time data-testid="recent-ding-time" dateTime={ding.at}
