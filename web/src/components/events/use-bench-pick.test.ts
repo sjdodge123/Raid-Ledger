@@ -120,7 +120,7 @@ describe('completeLockIn', () => {
         ['a 409', withHttpStatus(new Error('Already completed'), 409)],
         ['a 500', withHttpStatus(new Error('Internal error'), 500)],
     ])('does NOT retry or claim the votes changed on %s', async (_label, failure) => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
+        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(failure);
         await expect(completeLockIn(5, 77, 'T', [4])).rejects.toBe(failure);
         expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, 'T', [4]]]);
         expect(toast.warning).not.toHaveBeenCalled();

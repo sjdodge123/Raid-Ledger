@@ -114,7 +114,8 @@ function useTemplateActions(form: FormState) {
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
-    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null) {
+    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null,
+    isBlocked: () => boolean = () => false) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const [firstErrorKey] = Object.keys(validationErrors);
@@ -123,6 +124,8 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
+    // ROK-2025: the bench pick is checked after the fields, so every field error shows with it.
+    if (isBlocked()) return;
     mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId, pollHubId));
 }
 
@@ -175,7 +178,7 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     const pollHubId = schedulingMatchId != null ? initialGuildId ?? null : null;
 
     return (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); if (!guardBenchPick(s.bench, s.setErrors)) submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId, () => guardBenchPick(s.bench)); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
                 registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} pollHubId={pollHubId} />

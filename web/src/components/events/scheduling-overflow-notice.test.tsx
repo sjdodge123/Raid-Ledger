@@ -14,6 +14,7 @@ import { toast } from '../../lib/toast';
 import { useAuth } from '../../hooks/use-auth';
 import { partialResult } from '../../test/partial-result';
 import { createMockEvent } from '../../test/factories';
+import { withHttpStatus } from '../../lib/api/api-error';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -238,6 +239,18 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
         await expectSubmitBlocked();
     });
 
+    it('shows every field error alongside a wrong pick, not just the pick (validateForm runs first)', async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        fireEvent.click(box(5));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Event Title' }), { target: { value: '   ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(screen.queryByText('Title is required')).toBeInTheDocument();
+        expect(screen.getByTestId('bench-pick-error')).toHaveTextContent('Pick 1 more for the bench.');
+        expect(createEvent).not.toHaveBeenCalled();
+    });
+
     it("sends the organizer's pick on lock-in", async () => {
         renderForm([1, 2, 3, 4, 5]);
         await screen.findByTestId('scheduling-bench-picker');
@@ -249,7 +262,7 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
     });
 
     it('retries once without the pick when the server refuses it, and says so (D6)', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(new Error('The votes changed')).mockResolvedValueOnce(undefined);
+        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockResolvedValueOnce(undefined);
         renderForm([1, 2, 3, 4, 5]);
         await screen.findByTestId('scheduling-bench-picker');
         submit();
