@@ -55,13 +55,22 @@ export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>
  * slot's instant. A completion that signs voters up (`eventId`) must name the
  * slot — the server 400s a `startTime` that is not one of the poll's slots
  * and signs up only that slot's yes-voters. An empty body just closes the poll.
+ * ROK-2025: `benchUserIds` is the organizer's pick of who goes to the bench.
  */
 export const CompleteSchedulingPollSchema = z.object({
     eventId: z.number().int().positive().optional(),
     startTime: z.string().datetime({ offset: true }).optional(),
+    /** ROK-2025: the organizer's bench pick: exactly the overflow, all of them
+     *  yes-voters of `startTime`'s slot. Absent = the server benches the latest
+     *  yes-voters (vote order). Requires `eventId`. Duplicates and membership
+     *  are checked by the API, so the error copy lives in one place. */
+    benchUserIds: z.array(z.number().int().positive()).max(200).optional(),
 }).strict().refine((d) => d.eventId === undefined || d.startTime !== undefined, {
     message: 'startTime is required when eventId is supplied',
     path: ['startTime'],
+}).refine((d) => d.benchUserIds === undefined || d.eventId !== undefined, {
+    message: 'benchUserIds needs eventId',
+    path: ['benchUserIds'],
 });
 
 export type CompleteSchedulingPollDto = z.infer<typeof CompleteSchedulingPollSchema>;

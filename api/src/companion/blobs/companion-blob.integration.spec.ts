@@ -23,6 +23,7 @@ import { and, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import type { Response } from 'supertest';
 import {
+  BG3_PLUGIN_ID,
   BG3_SAVE_CONTRACT_ID,
   Bg3SaveMessageSchema,
   COMPANION_WEBP_MAX_BYTES,
@@ -37,7 +38,7 @@ import { signTestAccessToken } from '../../common/testing/sign-test-access-token
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { shadowBg3SaveHandler } from '../ingest/testing/shadow-bg3-save-handler';
 import {
   bearer,
   expireLimiterWindows,
@@ -46,7 +47,6 @@ import {
   withEnv,
 } from '../devices/testing/companion-link.helpers';
 import {
-  CompanionHandlerRegistry,
   type CompanionContractHandler,
   type CompanionHandlerContext,
 } from '../ingest/companion-handler.registry';
@@ -55,7 +55,8 @@ import { CompanionBlobsRepository } from './companion-blobs.repository';
 
 const BLOBS = '/companion/v1/blobs';
 const MESSAGES = '/companion/v1/messages';
-const OWNER = PELICAN_PLUGIN_ID;
+/** The real `bg3-save` v1 owner; its handler is shadowed by `handler`. */
+const OWNER = BG3_PLUGIN_ID;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const ACT2: Bg3SaveMessage = Bg3SaveMessageSchema.parse(
@@ -71,6 +72,7 @@ const ACT2: Bg3SaveMessage = Bg3SaveMessageSchema.parse(
 );
 
 let testApp: TestApp;
+let restoreHandler: (() => void) | undefined;
 let root = '';
 const priorDir = process.env.COMPANION_BLOB_DIR;
 
@@ -93,7 +95,7 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'rl-companion-blobs-'));
   process.env.COMPANION_BLOB_DIR = root;
   testApp = await getTestApp();
-  testApp.app.get(CompanionHandlerRegistry).register(OWNER, handler);
+  restoreHandler = shadowBg3SaveHandler(testApp.app, handler);
 });
 
 beforeEach(async () => {
@@ -115,6 +117,7 @@ afterEach(async () => {
 });
 
 afterAll(() => {
+  restoreHandler?.();
   if (priorDir === undefined) delete process.env.COMPANION_BLOB_DIR;
   else process.env.COMPANION_BLOB_DIR = priorDir;
   rmSync(root, { recursive: true, force: true });

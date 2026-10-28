@@ -216,6 +216,57 @@ describe('autoSignupSlotVoters', () => {
     expect(user10Calls).toBe(1);
     expect(mockSignupsService.signup).toHaveBeenCalledTimes(2);
   });
+  describe('the organizer bench pick (ROK-2025)', () => {
+    const signupCalls = () =>
+      mockSignupsService.signup.mock.calls.map((c: unknown[]) => c.slice(1));
+
+    it('signs the others up first in vote order, then the picks onto the bench', async () => {
+      await autoSignupSlotVoters({
+        eventId: EVENT_ID,
+        creatorId: CREATOR_ID,
+        voters: makeVoters(4),
+        signupsService: mockSignupsService,
+        benchUserIds: new Set([10, 12]),
+      });
+
+      expect(mockSignupsService.signup).toHaveBeenCalledTimes(4);
+      expect(signupCalls()).toEqual([
+        [11],
+        [13],
+        [10, { slotRole: 'bench' }],
+        [12, { slotRole: 'bench' }],
+      ]);
+    });
+
+    it('reports who actually landed on the bench, not who was picked', async () => {
+      mockSignupsService.signup
+        .mockResolvedValueOnce({ assignedSlot: 'bench' })
+        .mockResolvedValueOnce({ assignedSlot: 'bench' })
+        .mockResolvedValueOnce({ assignedSlot: 'player' });
+
+      const result = await autoSignupSlotVoters({
+        eventId: EVENT_ID,
+        creatorId: CREATOR_ID,
+        voters: makeVoters(3),
+        signupsService: mockSignupsService,
+        benchUserIds: new Set([10, 12]),
+      });
+
+      expect(result).toEqual({ benchedUserIds: [11, 10] });
+    });
+
+    it('never signs up the creator or a picked id that is not a voter', async () => {
+      await autoSignupSlotVoters({
+        eventId: EVENT_ID,
+        creatorId: CREATOR_ID,
+        voters: makeVoters(2),
+        signupsService: mockSignupsService,
+        benchUserIds: new Set([CREATOR_ID, 11, 99]),
+      });
+
+      expect(signupCalls()).toEqual([[10], [11, { slotRole: 'bench' }]]);
+    });
+  });
 });
 
 // ─── insertPollInterests ───────────────────────────────────────────────────

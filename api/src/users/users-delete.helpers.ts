@@ -213,6 +213,13 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.steamUserAchievements,
     column: schema.steamUserAchievements.userId,
   },
+  // ROK-1957: BG3 rows the user owns (CASCADE) — the same set D-18 "Delete
+  // my BG3 data" removes. Their `bg3-save` thumbnail refs, blobs and
+  // latest-wins markers go with the companion rows above (all contracts).
+  { table: schema.bg3PartyClaims, column: schema.bg3PartyClaims.userId },
+  { table: schema.bg3CampaignKeys, column: schema.bg3CampaignKeys.userId },
+  { table: schema.bg3UserDefaults, column: schema.bg3UserDefaults.userId },
+  { table: schema.bg3Saves, column: schema.bg3Saves.uploaderUserId },
 ];
 
 /**
@@ -302,6 +309,12 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // the note and its checklist belong to the hub, not to the last editor/ticker.
   schema.hubSessionNotes,
   schema.hubSessionNoteItems,
+  // ROK-1957: `bg3_campaigns.host_user_id` / `created_by_user_id` and
+  // `bg3_hub_settings.updated_by_user_id` are SET NULL — a campaign belongs
+  // to the hub (D-18 keeps it too); a hard delete leaves it hostless and a
+  // hub editor can pick a new host.
+  schema.bg3Campaigns,
+  schema.bg3HubSettings,
 ];
 
 /**

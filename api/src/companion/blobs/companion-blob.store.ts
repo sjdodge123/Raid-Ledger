@@ -12,7 +12,9 @@ import { CompanionSha256Schema } from '@raid-ledger/contract';
 import { companionBlobAbsolutePath, fsErrorCode } from './companion-blob.paths';
 import {
   CompanionBlobsRepository,
+  releaseUnusedRefsIn,
   type CompanionBlobDims,
+  type CompanionRefRelease,
 } from './companion-blobs.repository';
 
 /** An opened blob: its verified metadata plus a read stream of the raw bytes. */
@@ -67,5 +69,13 @@ export class CompanionBlobStore {
     shas: readonly string[],
   ): Promise<number> {
     return this.repo.releaseRefs(userId, contract, shas);
+  }
+
+  /** D-11 tx variant of `releaseRefs` for a plugin's prune transaction. */
+  releaseUnusedRefsIn(
+    tx: Parameters<typeof releaseUnusedRefsIn>[0],
+    release: CompanionRefRelease,
+  ): Promise<number> {
+    return releaseUnusedRefsIn(tx, release);
   }
 }

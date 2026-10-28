@@ -2,15 +2,21 @@
  * ROK-1874: §4.7 `warning` status banner on the create form opened from
  * "Lock this time" — the slot's yes-voters overflow the roster, so some will
  * be benched. Not dismissible: it goes away when the numbers stop
- * overflowing. It never names who is benched (the bench order is not
- * deterministic yet).
+ * overflowing.
+ *
+ * ROK-2025: it names who is benched. A fieldset of inventory `Checkbox` rows
+ * lists every yes-voter (vote order) with the latest marked by default; the
+ * organizer changes the marks, and a wrong count shows inline and blocks the
+ * submit (`guardBenchPick`). Controlled: the form owns the `useBenchPick` state.
  */
-import { useSchedulingOverflow, type SchedulingOverflowParams } from './use-scheduling-overflow';
+import { Checkbox } from '../ui/checkbox';
+import { BENCH_PICKER_ID, benchPickError, type BenchPick } from './use-bench-pick';
+import type { BenchCandidate } from './use-scheduling-overflow';
 
-export function SchedulingOverflowNotice(props: SchedulingOverflowParams) {
-    const overflow = useSchedulingOverflow(props);
+export function SchedulingOverflowNotice({ bench }: { bench: BenchPick }) {
+    const { overflow } = bench;
     if (!overflow) return null;
-    const { rostered, cap, benched, voters, creatorVoted } = overflow;
+    const { rostered, cap, benched, people, creatorVoted } = overflow;
     return (
         <div role="status" data-testid="scheduling-overflow-notice"
             className="rounded-lg border border-warning/30 bg-warning/10 p-4 space-y-2">
@@ -21,14 +27,29 @@ export function SchedulingOverflowNotice(props: SchedulingOverflowParams) {
             {!creatorVoted && (
                 <p className="text-foreground">That count includes you — the organizer is always signed up.</p>
             )}
-            {voters.length > 0 && (
-                <p className="text-secondary break-words" data-testid="scheduling-overflow-voters">
-                    {`Voted yes: ${voters.join(', ')}`}
-                </p>
-            )}
+            {people.length > 0 && <BenchPicker people={people} bench={bench} />}
             <p className="text-secondary">
-                Who goes to the bench depends on signup order. Raise the player count, or ask voters to change their vote before you create the event.
+                Or raise the player count, or ask voters to change their vote, before you create the event.
             </p>
         </div>
+    );
+}
+
+function BenchPicker({ people, bench }: { people: BenchCandidate[]; bench: BenchPick }) {
+    const { picked, need, mismatch, toggle } = bench;
+    const error = benchPickError(mismatch, need);
+    return (
+        <fieldset id={BENCH_PICKER_ID} data-testid="scheduling-bench-picker" className="min-w-0 break-words space-y-1">
+            <legend className="text-foreground font-semibold">Who goes to the bench</legend>
+            <p className="text-secondary">The latest yes-votes are marked. Earlier voters keep their spot. Change it if you like.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                {people.map((p) => (
+                    <Checkbox key={p.userId} label={p.displayName} checked={picked.includes(p.userId)}
+                        onChange={() => toggle(p.userId)} data-testid={`bench-pick-${p.userId}`} />
+                ))}
+            </div>
+            <p className="text-secondary" data-testid="bench-pick-count">{`${picked.length} of ${need} picked`}</p>
+            {error !== undefined && <p role="alert" className="text-danger" data-testid="bench-pick-error">{error}</p>}
+        </fieldset>
     );
 }

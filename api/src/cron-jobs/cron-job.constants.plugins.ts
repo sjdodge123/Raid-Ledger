@@ -18,4 +18,10 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Refreshes Steam achievements for members of game hubs whose game has Steam stats enabled, nightly at 04:30',
     category: 'Data Sync',
   },
+  // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
+  Bg3HistoryRetentionCron_prune: {
+    description:
+      'Thins Baldur’s Gate 3 save history older than 90 days to one save per play session, nightly at 05:15',
+    category: 'Maintenance',
+  },
 };
