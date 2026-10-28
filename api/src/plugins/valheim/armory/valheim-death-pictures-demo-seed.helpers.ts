@@ -305,8 +305,7 @@ export async function seedDeathPictures(
 ): Promise<DeathPicturesFixture> {
   const { serverId, guildId, worker, count } = input;
   await clearDemoDeathPictures(db, serverId, guildId);
-  const character = topCharacter(worker);
-  const author = { ...character, tag: '', colour: 0, offsetMs: 0 };
+  const author = { ...topCharacter(worker), tag: '', colour: 0, offsetMs: 0 };
   const ctx: PictureCtx = {
     db,
     store,
@@ -322,7 +321,7 @@ export async function seedDeathPictures(
   return {
     serverId,
     guildId,
-    characterName: character.name,
+    characterName: author.name,
     mediaIds,
     ...moderated,
     ...others,
