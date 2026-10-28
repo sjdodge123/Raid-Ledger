@@ -16,7 +16,7 @@
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { API_BASE, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 import { hubSeedTag } from './hub-seed';
 
@@ -43,6 +43,20 @@ interface SnapshotSlot {
 }
 
 type Snapshot = { empty: true } | { empty: false; party: SnapshotSlot[]; spoilersHidden: boolean };
+
+/**
+ * The bg3 plugin is not active on a fresh env and nothing auto-installs it; the
+ * hub widgets, the Campaign tab and the bg3 api all require it. A failed install
+ * (already installed, or a sibling worker won the race) falls through to
+ * activate, which must succeed.
+ */
+async function ensurePluginActive(token: string, pluginId: string): Promise<void> {
+    const init = { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
+    const install = await fetch(`${API_BASE}/admin/plugins/${pluginId}/install`, init);
+    if (install.ok) return;
+    const activate = await fetch(`${API_BASE}/admin/plugins/${pluginId}/activate`, init);
+    if (!activate.ok) throw new Error(`failed to enable the ${pluginId} plugin: install ${install.status}, activate ${activate.status}`);
+}
 
 async function seedHub(testInfo: TestInfo, variant: Variant): Promise<Seed> {
     const token = await getAdminToken();
@@ -87,6 +101,7 @@ test.describe('BG3 hub widgets (ROK-1958)', () => {
     test.beforeAll(async () => {
         // Fail loudly, never skip: a silent skip hid the slug bug (ROK-2038).
         const token = await getAdminToken();
+        await ensurePluginActive(token, 'bg3');
         const ids: number[] = [];
         for (const slug of GAME_SLUGS) {
             const game = (await apiGet(token, `/games/slug/${slug}`)) as { id?: number } | null;
