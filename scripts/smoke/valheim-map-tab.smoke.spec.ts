@@ -86,7 +86,6 @@ async function seedMap(worker: number): Promise<MapFixture> {
   };
 }
 
-
 /** Open the switches: inline ≥1024px, the Layers sheet below it. Returns their scope. */
 async function openLayers(page: Page, wide: boolean): Promise<Locator> {
   if (wide) return page.locator("body");
@@ -311,7 +310,10 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     page,
   }, testInfo) => {
     const fixture = await seedMap(testInfo.parallelIndex);
-    expect(fixture.guildId, "map-fixture must return the hub id").not.toBeNull();
+    expect(
+      fixture.guildId,
+      "map-fixture must return the hub id",
+    ).not.toBeNull();
     await page.goto(
       `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
     );
@@ -323,25 +325,38 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     const picker = toolbar.getByRole("combobox", { name: "Character" });
     await expect(picker).toBeVisible();
     if (isDesktop(testInfo)) {
-      const trigger = toolbar.getByRole("button", { name: "Filters", exact: true });
+      const trigger = toolbar.getByRole("button", {
+        name: "Filters",
+        exact: true,
+      });
       await expect(trigger).toBeVisible();
-      const [p, t] = await Promise.all([picker.boundingBox(), trigger.boundingBox()]);
-      if (!p || !t) throw new Error("picker or Filters trigger has no bounding box");
+      const [p, t] = await Promise.all([
+        picker.boundingBox(),
+        trigger.boundingBox(),
+      ]);
+      if (!p || !t)
+        throw new Error("picker or Filters trigger has no bounding box");
       const pMid = p.y + p.height / 2;
       const tMid = t.y + t.height / 2;
       expect(
         Math.abs(pMid - tMid),
         `picker centre y=${pMid} vs Filters centre y=${tMid} — not one row`,
       ).toBeLessThanOrEqual(4);
-      expect(t.x, "Filters must sit right of the picker").toBeGreaterThan(p.x + p.width);
+      expect(t.x, "Filters must sit right of the picker").toBeGreaterThan(
+        p.x + p.width,
+      );
     }
 
     // Framing: once the fog decodes the view is well above the whole-world fit
     // (the fixture explores a 240px square of a 2048px world).
     const worldFit = await map.evaluate((el) => {
-      const layer = el.querySelector<HTMLElement>('[data-testid="map-texture-layer"]');
+      const layer = el.querySelector<HTMLElement>(
+        '[data-testid="map-texture-layer"]',
+      );
       const size = layer ? layer.offsetWidth : 0;
-      return size > 0 ? Math.min(el.clientWidth, el.clientHeight) / size : Number.NaN;
+      return size > 0
+        ? Math.min(el.clientWidth, el.clientHeight) / size
+        : Number.NaN;
     });
     expect(worldFit, "world-fit scale must be measurable").toBeGreaterThan(0);
     const stack = map.locator("[data-zoom]");
