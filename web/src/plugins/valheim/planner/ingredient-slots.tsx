@@ -81,14 +81,16 @@ function Slot({ line, names, state }: { line: SlotLine; names: PlannerNames; sta
     );
 }
 
-function StarSlot({ stationLabel, level }: { stationLabel: string; level: number }): JSX.Element {
-    // A processor (level 0) has no level to show (ROK-1934).
+function StarSlot({ stationLabel, level, upgrader }: { stationLabel: string; level: number; upgrader: boolean }): JSX.Element {
+    // A processor (level 0) has no level to show (ROK-1934); ROK-1861 D8 names an upgrade station.
+    const named = upgrader ? `${stationLabel}, upgrade station` : stationLabel;
     return (
-        <li aria-label={level === 0 ? stationLabel : `${stationLabel}, level ${level}`} data-testid="valheim-craft-star-slot" className={`${SLOT} border-edge-subtle`}>
+        <li aria-label={level === 0 ? named : `${named}, level ${level}`} data-testid="valheim-craft-star-slot" className={`${SLOT} border-edge-subtle`}>
             <span aria-hidden="true" className="flex h-10 items-center text-2xl text-success">
                 ★
             </span>
             <span className="font-medium text-foreground">{stationLabel}</span>
+            {upgrader && <span className="text-muted">Upgrade station</span>}
             {level > 0 && <span className="text-muted">lvl {level}</span>}
         </li>
     );
@@ -102,7 +104,7 @@ export function IngredientSlots({ cost, totals, stockState, names, stationLabel 
         <div className="space-y-1.5">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</h4>
             <ul aria-label={title} className="flex flex-wrap gap-2">
-                <StarSlot stationLabel={stationLabel} level={cost.stationLevel} />
+                <StarSlot stationLabel={stationLabel} level={cost.stationLevel} upgrader={'upgraderStation' in cost && cost.upgraderStation === true} />
                 {lines.map((l) => (
                     <Slot key={l.prefab} line={l} names={names} state={stockState} />
                 ))}

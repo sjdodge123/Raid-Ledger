@@ -39,6 +39,10 @@ import {
   seedRecipesDemoScout,
   type RecipesSpoilersPreset,
 } from './valheim-armory-recipes-demo-spoilers';
+import {
+  seedRecipesDemoUpgrader,
+  stripRecipesDemoUpgrader,
+} from './valheim-armory-recipes-demo-upgrader';
 
 /** What the seed returns (DEMO_MODE only — not a contract type). */
 export interface RecipesFixtureResponse extends ContainersFixtureResponse {
@@ -49,7 +53,11 @@ export interface RecipesFixtureResponse extends ContainersFixtureResponse {
 }
 
 const RequestSchema = z
-  .object({ worker: z.number().int(), spoilers: RecipesSpoilersPresetSchema })
+  .object({
+    worker: z.number().int(),
+    spoilers: RecipesSpoilersPresetSchema,
+    upgrader: z.boolean(),
+  })
   .partial()
   .strict();
 
@@ -58,18 +66,20 @@ function parseBody(body: unknown): {
   base: { worker?: number };
   spoilers: RecipesSpoilersPreset;
   worker: number;
+  upgrader: boolean;
 } {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      'Expected { worker?, spoilers?: "all" | "early" | "none" }',
+      'Expected { worker?, spoilers?: "all" | "early" | "none", upgrader?: boolean }',
     );
   }
-  const { worker, spoilers = 'all' } = parsed.data;
+  const { worker, spoilers = 'all', upgrader = false } = parsed.data;
   return {
     base: worker === undefined ? {} : { worker },
     spoilers,
     worker: worker ?? 0,
+    upgrader,
   };
 }
 
@@ -112,7 +122,7 @@ export class ValheimArmoryRecipesDemoSeedController {
     @Body() body: unknown,
     @Request() req: AuthenticatedRequest,
   ): Promise<RecipesFixtureResponse> {
-    const { base: baseBody, spoilers, worker } = parseBody(body);
+    const { base: baseBody, spoilers, worker, upgrader } = parseBody(body);
     const base = await this.containers.seed(baseBody, req);
     await mergeRecipesDemoCatalog(this.db, base.serverId);
     await importRecipesDemoStock(this.db, base.serverId);
@@ -122,7 +132,12 @@ export class ValheimArmoryRecipesDemoSeedController {
       base.serverId,
       base.ownerUserId,
     );
-    await seedRecipesDemoScout(this.db, base.serverId, worker);
+    const scoutId = await seedRecipesDemoScout(this.db, base.serverId, worker);
+    // ROK-1861: `upgrader: true` adds a 1.0.20 set with the Bronze cuirass at
+    // an upgrade station; the plain seed deletes that set again.
+    if (upgrader)
+      await seedRecipesDemoUpgrader(this.db, base.serverId, scoutId);
+    else await stripRecipesDemoUpgrader(this.db, base.serverId);
     await applyRecipesSpoilersPreset(this.db, base.serverId, spoilers);
     return {
       ...base,

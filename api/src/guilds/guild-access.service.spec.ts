@@ -5,6 +5,7 @@
  * `plugins/wow-common/guilds/wow-hub-kind.adapter.spec.ts`; the SQL semantics
  * stay in `guild-access.integration.spec.ts`.
  */
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -55,7 +56,9 @@ function build(adapter: HubKindAdapter | null): void {
   const typedDb = asDb as PostgresJsDatabase<typeof schema>;
   const plugins = new PluginRegistryService(typedDb, new EventEmitter2());
   if (adapter) {
-    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
+    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
+      ownerPluginId: CORE_PLUGIN_ID,
+    });
   }
   service = new GuildAccessService(
     typedDb,

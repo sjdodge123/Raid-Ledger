@@ -26,7 +26,7 @@ import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch } from './scheduling-rally.helpers';
 import { at, nonEmpty } from '../../common/testing/narrow';
-import { resolveEventRosterNames } from '../lineup-notification-event-roster.helpers';
+import { resolveEventRosterCard } from '../lineup-notification-event-roster.helpers';
 import { findMatchMemberUsers } from '../lineup-notification-targets.helpers';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
@@ -209,6 +209,33 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     }
   });
 
+  // ROK-2024: the link is a compare-and-set now — it must still accept a
+  // `suggested` match, which `assertSchedulable` lets this path lock in.
+  it('locks in a match still on `suggested` and links the event', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'suggested' })
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const slotId = at(poll.slotIds, 0);
+    await seedVote(slotId, testApp.seed.adminUser.id);
+
+    const res = await lockIn(poll, slotId, adminToken);
+
+    expect(res.status).toBe(201);
+    const [match] = await testApp.db
+      .select({
+        status: schema.communityLineupMatches.status,
+        linkedEventId: schema.communityLineupMatches.linkedEventId,
+      })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    expect(match).toEqual({
+      status: 'scheduled',
+      linkedEventId: res.body.eventId as number,
+    });
+  });
+
   // ROK-1624 AC3: the EVENT CREATED card's Players list, read against the real
   // event this path just created — a group of 4 where only 2 voted for the
   // locked slot must name exactly those 2, not the group.
@@ -230,7 +257,11 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     const eventId = res.body.eventId as number;
 
     const group = await findMatchMemberUsers(testApp.db, poll.matchId);
-    const names = await resolveEventRosterNames(testApp.db, eventId, group);
+    const { names, groupSubtext } = await resolveEventRosterCard(
+      testApp.db,
+      eventId,
+      group,
+    );
     const [admin] = nonEmpty(
       await testApp.db
         .select({
@@ -246,6 +277,10 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     );
     expect(names).not.toContain('lockin-card-elsewhere');
     expect(names).not.toContain('lockin-card-silent');
+    // ROK-1863: the group is the admin (seedExpiredPoll always adds them as a
+    // member) + 3 members = 4; rostered from it: admin + voter = 2.
+    expect(group).toHaveLength(4);
+    expect(groupSubtext).toBe('2 of 4 from the group signed up');
   });
 
   it('moves the poll to its locked-in terminal state', async () => {

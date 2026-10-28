@@ -7,6 +7,8 @@
  * ROK-1909: plugin game widgets (`registerHubWidget`) join the same sort.
  * ROK-1918: cells come from `layout/hub-widget-catalog`, ordered and filtered
  * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
+ * ROK-1941 D14: the Gallery dialog is mounted here once, so a widget can open
+ * it even when the Gallery card is hidden.
  */
 import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
@@ -15,6 +17,7 @@ import { usePluginStore } from '../../stores/plugin-store';
 import { canInvite } from './community/community-invite-access';
 import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-catalog';
 import { resolveHubLayout } from './layout/resolve-hub-layout';
+import { HubGalleryDialogMount } from './gallery/hub-gallery-dialog-mount';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -90,7 +93,8 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </div>
     );
-    if (!page.viewer.canEdit) return grid;
+    const gallery = <HubGalleryDialogMount guildId={page.guild.id} canEdit={page.viewer.canEdit} />;
+    if (!page.viewer.canEdit) return <>{grid}{gallery}</>;
     return (
         <>
             <Suspense fallback={null}>
@@ -98,6 +102,7 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
                     raidsUnavailable={ctx.raids.data === undefined} arranging={arranging} onArrange={(on) => setArrangingFor(on ? page.guild.id : 0)} />
             </Suspense>
             {grid}
+            {gallery}
         </>
     );
 }

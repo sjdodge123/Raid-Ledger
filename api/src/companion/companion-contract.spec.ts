@@ -13,6 +13,11 @@
  *   `npm run build -w packages/contract && node
  *   packages/contract/scripts/gen-companion-schemas.mjs`); C8 the bg3 schema
  *   keeps `additionalProperties: false` on every object.
+ * ROK-1955 adds `device-link` v1 (the HTTP link/poll bodies, not an
+ * envelope message): D1 every valid fixture parses with the message schema
+ * its filename prefix names, D2 every invalid fixture is rejected at its
+ * pinned path + code, D3 one `$defs` entry per wire message; its drift guard
+ * sits in C7.
  * Lives in the api (like `valheim-link-contract.spec.ts`) because the
  * contract workspace has no Node types for reading fixture files.
  */
@@ -24,10 +29,13 @@ import { z } from 'zod';
 import {
   Bg3SaveInfoRawSchema,
   Bg3SaveMessageSchema,
+  COMPANION_DEVICE_LINK_MESSAGES,
   CompanionEnvelopeSchema,
+  buildCompanionDeviceLinkJsonSchema,
   lookupCompanionContract,
   normaliseBg3SaveInfo,
   serializeBg3SaveJsonSchema,
+  serializeCompanionDeviceLinkJsonSchema,
   serializeCompanionEnvelopeJsonSchema,
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
@@ -35,6 +43,8 @@ import {
 const ROOT = join(__dirname, '../../../packages/contract/companion');
 const ENV_V1 = join(ROOT, 'envelope', 'v1');
 const BG3_V1 = join(ROOT, 'bg3-save', 'v1');
+const LINK_V1 = join(ROOT, 'device-link', 'v1');
+const LINK_FIX = join(LINK_V1, 'fixtures');
 const ENV_FIX = join(ENV_V1, 'fixtures');
 const BG3_FIX = join(BG3_V1, 'fixtures');
 const SAVEINFO = join(BG3_FIX, 'saveinfo');
@@ -54,6 +64,14 @@ const rawNames = (): string[] =>
     .filter((f) => f.endsWith(RAW_SUFFIX))
     .map((f) => f.slice(0, -RAW_SUFFIX.length))
     .sort();
+/** The device-link message schema whose prefix starts `name`; fails loudly when none does. */
+function deviceLinkSchemaFor(name: string): z.ZodType {
+  const hit = Object.entries(COMPANION_DEVICE_LINK_MESSAGES).find(([prefix]) =>
+    name.startsWith(prefix),
+  );
+  if (hit === undefined) throw new Error(`fixture ${name} has no known prefix`);
+  return hit[1];
+}
 const bg3Fixture = (name: string): Bg3SaveMessage =>
   Bg3SaveMessageSchema.parse(readJson(BG3_FIX, `${name}.json`));
 
@@ -207,6 +225,57 @@ describe.each(SchemaCases)(
   },
 );
 
+describe('Companion device-link v1 fixtures (D1, D2, D3)', () => {
+  const valid = namesIn(LINK_FIX);
+  const invalidDir = join(LINK_FIX, 'invalid');
+  const invalid = namesIn(invalidDir);
+  const expected = z
+    .record(
+      z.string(),
+      z.object({ path: z.string(), code: z.string() }).strict(),
+    )
+    .parse(readJson(invalidDir, 'EXPECTED.json'));
+  const issuesOf = (dir: string, name: string) => {
+    const res = deviceLinkSchemaFor(name).safeParse(
+      readJson(dir, `${name}.json`),
+    );
+    return res.success
+      ? []
+      : res.error.issues.map((i) => ({
+          path: i.path.map(String).join('.'),
+          code: i.code,
+        }));
+  };
+
+  it('has at least one valid fixture per wire message', () => {
+    const missing = Object.keys(COMPANION_DEVICE_LINK_MESSAGES).filter(
+      (prefix) => !valid.some((f) => f.startsWith(prefix)),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it.each(valid)('D1 valid fixture %s parses', (name) => {
+    expect(issuesOf(LINK_FIX, name)).toEqual([]);
+  });
+
+  it('D2 EXPECTED.json lists exactly the invalid fixtures', () => {
+    expect(Object.keys(expected).sort()).toEqual(invalid);
+  });
+
+  it.each(invalid)('D2 %s is rejected at its pinned path + code', (name) => {
+    expect(issuesOf(invalidDir, name)).toContainEqual(expected[name]);
+  });
+
+  it('D3 defines one $defs entry per wire message', () => {
+    const defs = z
+      .record(z.string(), z.unknown())
+      .parse(buildCompanionDeviceLinkJsonSchema()['$defs']);
+    expect(Object.keys(defs).sort()).toEqual(
+      Object.keys(COMPANION_DEVICE_LINK_MESSAGES).sort(),
+    );
+  });
+});
+
 describe('bg3-save v1 raw SaveInfo round-trip (C4)', () => {
   it('ships a raw twin for every golden message', () => {
     expect(rawNames()).toEqual(namesIn(BG3_FIX));
@@ -304,6 +373,12 @@ describe('Companion v1 schema.json drift guards (C7)', () => {
 
   it('bg3-save schema.json matches a fresh generation', () => {
     expect(read(BG3_V1, 'schema.json')).toBe(serializeBg3SaveJsonSchema());
+  });
+
+  it('device-link schema.json matches a fresh generation', () => {
+    expect(read(LINK_V1, 'schema.json')).toBe(
+      serializeCompanionDeviceLinkJsonSchema(),
+    );
   });
 });
 

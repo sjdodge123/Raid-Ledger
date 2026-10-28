@@ -220,7 +220,10 @@ export function fireSchedulingOpen(
     .catch(logError(logger, 'scheduling-open'));
 }
 
-/** Fire event-created channel embed + DMs. */
+/**
+ * Fire event-created channel embed + DMs. `skipDmUserIds` (ROK-2024) names
+ * users who already got a DM for this lock-in; the EVENT CREATED DM skips them.
+ */
 export function fireEventCreated(
   svc: LineupNotificationService,
   logger: Logger,
@@ -228,6 +231,7 @@ export function fireEventCreated(
   matchId: number,
   eventDate: Date,
   eventId?: number,
+  skipDmUserIds?: ReadonlySet<number>,
 ): void {
   loadSingleMatch(db, matchId)
     .then(async (match) => {
@@ -238,6 +242,7 @@ export function fireEventCreated(
         eventDate,
         eventId,
         lineup ?? undefined,
+        skipDmUserIds,
       );
     })
     .catch(logError(logger, 'event-created'));

@@ -225,13 +225,21 @@ describe('scheduling-query.helpers', () => {
 
   describe('updateMatchLinkedEvent', () => {
     it('calls update/set/where to link event to match', async () => {
-      mockDb.where.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
 
-      await updateMatchLinkedEvent(mockDb as never, 10, 200);
+      expect(await updateMatchLinkedEvent(mockDb as never, 10, 200)).toBe(true);
 
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalled();
       expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    it('reports false when the match was already locked in (ROK-2024 CAS)', async () => {
+      mockDb.returning.mockResolvedValueOnce([]);
+
+      expect(await updateMatchLinkedEvent(mockDb as never, 10, 200)).toBe(
+        false,
+      );
     });
   });
 });

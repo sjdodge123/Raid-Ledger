@@ -19,6 +19,7 @@ import {
 import type { RecipeGraph } from './valheim-recipes.graph';
 import type { RecipesReader } from './valheim-recipes.read.repository';
 import type { ResolveResult } from './valheim-recipes.resolve';
+import { isUpgraderStation } from './valheim-recipes.station-steps';
 
 /** D4: the viewer's merged `known_recipes` on `serverId` (one read). */
 export async function knownFor(
@@ -49,14 +50,50 @@ export function nameAndIconOnly(
   );
 }
 
-/** Catalogue subset for every prefab the resolved nodes reference. */
+/**
+ * Every prefab a response names: the nodes, ROK-1861 step resources and the
+ * upgrade-station builds (station + its piece cost). All come from the
+ * spoiler-pruned graph, so none names an undiscovered station. Sorted.
+ */
+export function responsePrefabs(res: ResolveResult): string[] {
+  const out = new Set(res.nodes.map((n) => n.prefab));
+  for (const { via } of res.nodes) {
+    if (via.type !== 'recipe') continue;
+    for (const s of via.steps ?? [])
+      for (const r of s.resources) out.add(r.prefab);
+  }
+  for (const [station, lines] of res.stationBuilds) {
+    out.add(station);
+    for (const l of lines) out.add(l.prefab);
+  }
+  return [...out].sort();
+}
+
+/** ROK-1861 D5: `stationBuilds` for a response, omitted when there are none. */
+export function buildsOf(res: ResolveResult) {
+  if (res.stationBuilds.size === 0) return {};
+  return { stationBuilds: Object.fromEntries(res.stationBuilds) };
+}
+
+/**
+ * ROK-1861: catalogue-read roots — `roots` plus every upgrade station the
+ * (pruned) graph can build, so a build's materials get names and icons.
+ */
+export function catalogRoots(graph: RecipeGraph, roots: string[]): string[] {
+  const builds = [...graph.stations.values()]
+    .filter((s) => isUpgraderStation(graph, s.prefab))
+    .filter((s) => graph.pieces.has(s.prefab))
+    .map((s) => s.prefab);
+  return [...roots, ...builds];
+}
+
+/** Catalogue subset for every prefab the resolved response references. */
 export function nodeCatalog(
   res: ResolveResult,
   cat: Parameters<typeof projectCatalog>[1],
   graph: RecipeGraph,
 ) {
-  const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
-  const { items, atlas } = projectCatalog(prefabs, cat);
+  const { items, atlas } = projectCatalog(responsePrefabs(res), cat);
   return { items: nameAndIconOnly(items, graph), itemAtlas: atlas };
 }
 
@@ -87,7 +124,7 @@ export async function catalogFor(
   const cat = await r.materials.findCatalog(
     set.pelicanServerId,
     set.gameVersion,
-    reachablePrefabs(graph, roots),
+    reachablePrefabs(graph, catalogRoots(graph, roots)),
   );
   return { cat, maxQ: maxQualityLookup(graph, cat?.items ?? null) };
 }

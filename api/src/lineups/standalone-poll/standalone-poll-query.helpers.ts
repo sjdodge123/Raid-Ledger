@@ -6,7 +6,11 @@ import { NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { selectCompletionTarget } from './standalone-poll-complete.helpers';
+import {
+  selectCompletionTarget,
+  flipLineupMatch,
+  assertLineupLockIn,
+} from './standalone-poll-complete.helpers';
 import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
@@ -216,6 +220,8 @@ export async function clearReschedulingPollId(
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
+  eventId?: number,
+  startTime?: string,
 ): Promise<{
   ok: boolean;
   /** ROK-1844: the poll was no longer `scheduling` — already completed. */
@@ -225,7 +231,16 @@ export async function completeStandalonePoll(
 }> {
   const match = await selectCompletionTarget(db, matchId);
   if (!match) return { ok: false };
-  if (!(await flipAndArchive(db, match))) return { ok: false, conflict: true };
+  // ROK-2024: a regular lineup match links the event and keeps its lineup;
+  // it is refused (400) before the flip without an event or on a past slot.
+  const flipped = match.standalone
+    ? await flipAndArchive(db, match)
+    : await flipLineupMatch(
+        db,
+        match.id,
+        assertLineupLockIn(eventId, startTime),
+      );
+  if (!flipped) return { ok: false, conflict: true };
   return {
     ok: true,
     ...(match.linkedEventId != null

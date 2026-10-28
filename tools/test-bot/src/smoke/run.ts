@@ -43,6 +43,8 @@ import { reschedulePollLockInTests } from "./tests/reschedule-poll-lockin.test.j
 import { schedulingPollEmbedLifecycleTests } from "./tests/scheduling-poll-embed-lifecycle.test.js";
 import { schedulingUnanimousDmTests } from "./tests/scheduling-unanimous-dm.test.js";
 import { standalonePollBenchDmTests } from "./tests/standalone-poll-bench-dm.test.js";
+import { eventCreatedGroupCountTests } from "./tests/event-created-group-count.test.js";
+import { eventCreatedOpenLockInTests } from "./tests/event-created-open-lockin.test.js";
 import { publicShareLinkTests } from "./tests/public-share-link.test.js";
 import { lineupPrivateDmTests } from "./tests/lineup-private-dm.test.js";
 import { lineupDeadlineVotingDmTests } from "./tests/lineup-deadline-voting-dm.test.js";
@@ -74,6 +76,7 @@ import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 import { valheimClaimDmTests } from "./tests/valheim-claim-dm.test.js";
 import { valheimHubWelcomeTests } from "./tests/valheim-hub-welcome.test.js";
+import { hubMediaIngestTests } from "./tests/hub-media-ingest.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
 // to keep the bundle clean; the test file is kept for local runs + re-registration.
 
@@ -207,6 +210,8 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...schedulingPollEmbedLifecycleTests,
     ...schedulingUnanimousDmTests,
     ...standalonePollBenchDmTests,
+    ...eventCreatedGroupCountTests,
+    ...eventCreatedOpenLockInTests,
     ...publicShareLinkTests,
     ...lineupPrivateDmTests,
     ...lineupDeadlineVotingDmTests,
@@ -238,6 +243,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...hubProposalNotificationsTests,
     ...valheimClaimDmTests,
     ...valheimHubWelcomeTests,
+    ...hubMediaIngestTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests
     // (green on CI); the smoke's failure is a CI-seed recipient-eligibility

@@ -10,9 +10,6 @@ import { useClaimBannerWidgetVisible } from './hooks/use-valheim-claim-banner';
 import { LazyValheimDeathsWidget } from './hub/valheim-deaths-widget-lazy';
 import { ValheimDeathsShowAll } from './hub/valheim-deaths-show-all';
 import { useDeathsWidgetVisible } from './hooks/use-valheim-deaths-visible';
-import { LazyHubGalleryWidget } from '../../components/hub/gallery/hub-gallery-widget-lazy';
-import { HubGallerySeeAll } from '../../components/hub/gallery/hub-gallery-see-all';
-import { useGalleryWidgetVisible } from '../../components/hub/gallery/use-hub-gallery-visible';
 
 /** Valheim plugin (ROK-1833) — the slug matches the api manifest id `valheim`. Neutral registry colour. */
 const valheim = registerPlugin('valheim', {
@@ -94,21 +91,4 @@ valheim.registerHubWidget({
     component: LazyValheimDeathsWidget,
     action: ValheimDeathsShowAll,
     useVisible: useDeathsWidgetVisible,
-});
-
-// ROK-1942 D10 — the core Gallery card (pictures from the server's Discord), right after Deaths;
-// members + staff (the route 404s visitors, D7). Members never see it empty (D12); editors get a hint.
-valheim.registerHubWidget({
-    id: 'gallery',
-    title: 'Gallery',
-    description: 'Recent pictures from this hub — death posts and screenshots.',
-    games: ['valheim'],
-    kinds: ['game_server'],
-    order: 47,
-    span: 2,
-    audience: 'members',
-    defaultOn: true,
-    component: LazyHubGalleryWidget,
-    action: HubGallerySeeAll,
-    useVisible: useGalleryWidgetVisible,
 });

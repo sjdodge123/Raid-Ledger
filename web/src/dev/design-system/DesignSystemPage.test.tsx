@@ -3,7 +3,7 @@
  * section. A section silently disappearing is how a reference page rots into
  * a lie, so each heading is asserted by name.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -43,6 +43,15 @@ function demoMode(enabled: boolean): void {
     mockUseSystemStatus.mockReturnValue({ data: { demoMode: enabled }, isLoading: false });
 }
 
+/**
+ * Load the lazy sample chunks (ROK-1893 P4) before any test waits on them. On a
+ * loaded CI coverage shard their cold import took >5s and was billed to whichever
+ * heading case first awaited the boundary (PR #1820); here it gets the hook's budget.
+ */
+beforeAll(async () => {
+    await Promise.all([import('./calendar-layer-section'), import('./calendar-hub-section'), import('./meter-histogram-section')]);
+}, 30_000);
+
 describe('DesignSystemPage', () => {
     beforeEach(() => {
         mockUseSystemStatus.mockReset();
@@ -67,13 +76,17 @@ describe('DesignSystemPage', () => {
         'Pattern — server-schedule layer (plugin calendar layers)',
         'Pattern — hub suffix on event game lines',
         'Forms — the form primitives',
-        'Pattern — skill trend chip',
+        'Pattern — Valheim trend chip',
         'Pattern — plugin hub widgets',
+        'Pattern — meter tones and CSS histogram',
     ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        // findByRole: the calendar layer + hub samples are lazy chunks (ROK-1893 P4).
-        expect(await screen.findByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+        // findByRole: the calendar layer + hub samples are lazy (preloaded above); the
+        // lazy wrapper still resolves a tick after the first render.
+        expect(
+            await screen.findByRole('heading', { name: heading, level: 2 }, { timeout: 5000 }),
+        ).toBeInTheDocument();
     });
 
 });
@@ -711,6 +724,17 @@ describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
         expect(within(demo).getByTestId('hub-widget-loading')).toHaveAttribute('aria-busy', 'true');
         expect(await within(demo).findByRole('alert')).toHaveTextContent("Couldn't load this widget.");
         expect(document.getElementById('hub-widget-ds-demo-classes')).not.toBeNull();
+    });
+
+    it('renders every GuildMeter tone and the CSS histogram (§3.2 / §4.30)', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const meters = await screen.findByTestId('ds-guild-meter', undefined, { timeout: 5000 });
+        expect(within(meters).getAllByRole('meter').map((m) => m.getAttribute('aria-label')))
+            .toEqual(['success meter 80%', 'warning meter 45%', 'neutral meter 62%']);
+        const histogram = screen.getByTestId('ds-css-histogram');
+        expect(within(histogram).getByRole('link', { name: 'Levels 50–60: 14 members' })).toBeInTheDocument();
+        expect(within(histogram).getAllByRole('link')).toHaveLength(6);
     });
 
     it('renders the arrange list (§4.28) through the real ArrangeRow: arrows reorder and announce', async () => {

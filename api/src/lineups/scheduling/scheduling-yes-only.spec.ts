@@ -7,14 +7,17 @@
  * highest-consequence consumers: the lock-in roster, the lock-in guard, and the
  * standalone poll's auto-signup/DM split.
  */
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { yesVotesOnly } from './scheduling-stance.helpers';
 import { assertSlotHasVoters } from './scheduling-lock-in.helpers';
 import { createLockedInEvent } from './scheduling-event.helpers';
 import type { LockInEventDeps } from './scheduling-event.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
-import { findScheduleVotes } from './scheduling-query.helpers';
+import {
+  findScheduleVotes,
+  updateMatchLinkedEvent,
+} from './scheduling-query.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
 import {
   splitYesVotersBySlot,
@@ -30,6 +33,9 @@ jest.mock('../lineups-notify-hooks.helpers');
 
 const mockFindVotes = findScheduleVotes as jest.MockedFunction<
   typeof findScheduleVotes
+>;
+const mockLinkEvent = updateMatchLinkedEvent as jest.MockedFunction<
+  typeof updateMatchLinkedEvent
 >;
 const mockAutoSignup = autoSignupSlotVoters as jest.MockedFunction<
   typeof autoSignupSlotVoters
@@ -85,6 +91,9 @@ describe('assertSlotHasVoters — anti-votes are not voters (BLOCKER-3)', () => 
 });
 
 describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', () => {
+  // The match-link compare-and-set wins unless a test says otherwise.
+  beforeEach(() => mockLinkEvent.mockResolvedValue(true));
+
   function buildDeps(): LockInEventDeps {
     const db = createDrizzleMock();
     db.limit.mockResolvedValue([]);
@@ -135,6 +144,24 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     const create = deps.eventsService.create as jest.Mock;
     const dto = at(create.mock.calls, 0)[1] as { schedulingMatchId?: number };
     expect(dto.schedulingMatchId).toBe(3);
+  });
+
+  it('409s before any signup or announcement when another lock-in won the match (ROK-2024)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    mockLinkEvent.mockResolvedValue(false);
+    const deps = buildDeps();
+    await expect(
+      createLockedInEvent(
+        deps,
+        { id: 3, gameId: 7 },
+        { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+        10,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockAutoSignup).not.toHaveBeenCalled();
+    expect(mockAutoHeart).not.toHaveBeenCalled();
+    expect(deps.pollEmbed.fireUpdateEmbed).not.toHaveBeenCalled();
   });
 });
 

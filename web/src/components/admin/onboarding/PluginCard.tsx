@@ -1,4 +1,5 @@
 import type { PluginInfoDto } from '@raid-ledger/contract';
+import { Button } from '../../ui/button';
 
 const STATUS_CONFIG = {
     not_installed: { label: 'Not Installed', className: 'bg-surface/50 text-muted border border-edge/50' },
@@ -16,18 +17,12 @@ interface PluginCardProps {
 function PluginActionButton({ plugin, isPending, onInstall, onActivate }: PluginCardProps) {
     if (plugin.status === 'not_installed') {
         return (
-            <button onClick={() => onInstall(plugin.slug)} disabled={isPending}
-                className="px-4 py-2.5 min-h-[44px] text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
-                Install
-            </button>
+            <Button size="sm" onClick={() => onInstall(plugin.slug)} disabled={isPending}>Install</Button>
         );
     }
     if (plugin.status === 'inactive') {
         return (
-            <button onClick={() => onActivate(plugin.slug)} disabled={isPending}
-                className="px-4 py-2.5 min-h-[44px] text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
-                Activate
-            </button>
+            <Button size="sm" onClick={() => onActivate(plugin.slug)} disabled={isPending}>Activate</Button>
         );
     }
     return (

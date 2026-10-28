@@ -71,6 +71,10 @@ export * from './blizzard.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
+// Plugin-owned hub widgets/tabs/behaviours + the Core plugin (ROK-1969).
+export * from './plugin-hub-manifest.schema.js';
+export * from './plugin-hub-manifests.js';
+export * from './plugin-setup.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 export * from './pelican-servers.schema.js';
@@ -135,6 +139,7 @@ export * from './event-analytics.schema.js';
 
 // Steam Integration (ROK-417)
 export * from './steam.schema.js';
+export * from './steam-app-stats.schema.js';
 
 // ITAD Integration (ROK-772)
 export * from './itad.schema.js';
@@ -241,6 +246,7 @@ export * from './valheim-server-portals.schema.js';
 // Companion desktop app push messages — envelope + bg3-save v1 (ROK-1954).
 export * from './companion-common.schema.js';
 export * from './companion-envelope.schema.js';
+export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
@@ -268,6 +274,7 @@ export * from './discord-join-post.schema.js';
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
 export * from './hub-posts.schema.js';
+export * from './hub-session-note.schema.js';
 export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';
 
@@ -277,6 +284,7 @@ export * from './hub-onboarding.schema.js';
 export * from './hub-server.schema.js';
 // Hub media store + Gallery widget — pictures with a source kind (ROK-1942).
 export * from './hub-media.schema.js';
+export * from './hub-media-channel.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';
@@ -285,3 +293,5 @@ export * from './game-notification-mutes.schema.js';
 export * from './hub-notification-mutes.schema.js';
 // Hub Overview arrange mode — saved widget layout (ROK-1918).
 export * from './hub-widget-prefs.schema.js';
+// Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
+export * from './companion-devices.schema.js';

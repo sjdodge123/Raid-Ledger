@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   HubDirectoryEntry,
@@ -14,6 +14,7 @@ import {
   type DirectoryCursor,
 } from './community-directory.cursor';
 import { escapeLike, pageOf } from './community-directory.params';
+import { hubNameKey, storedNameKey } from './community-proposals.queries';
 import { viewerStateOf } from './community-ladder.helpers';
 import {
   joinedPredicate,
@@ -43,9 +44,22 @@ const LEADER_NAME = sql<string | null>`(
     AND lm.banned_at IS NULL AND lu.deactivated_at IS NULL
   LIMIT 1)`;
 
+/** ROK-2015 D7: a WoW guild renamed in Raid Ledger (its key stays in-game). */
+const WOW_RENAMED = sql`(${g.kind} = 'wow_guild' AND ${g.nameOverridden})`;
+
+/** The shown `name` keyed like {@link hubNameKey} (joiners out, NFC, lower). */
+const SHOWN_NAME = sql<string>`lower(btrim(normalize(regexp_replace(${g.name}, ${'[\u200C\u200D\uFE0F]'}, '', 'g'), NFC)))`;
+
+/**
+ * The `name` sort key: a renamed WoW guild sorts by its shown name; every
+ * other row keeps its raw `name_key` (non-WoW order is byte-identical).
+ */
+// ELSE arm: every non-renamed row keeps the raw `name_key` sort, byte-identical to before ROK-2015.
+const SORT_NAME = sql<string>`CASE WHEN ${WOW_RENAMED} THEN ${SHOWN_NAME} ELSE ${g.nameKey} END`;
+
 const ORDER: Record<HubDirectoryQuery['sort'], SQL[]> = {
   members: [desc(g.memberCount), desc(g.id)],
-  name: [asc(g.nameKey), asc(g.id)],
+  name: [asc(SORT_NAME), asc(g.id)],
   newest: [desc(g.createdAt), desc(g.id)],
 };
 
@@ -54,7 +68,11 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
   const conds: SQL[] = [visibleKinds(scope)];
   if (query.gameId !== undefined) conds.push(eq(g.gameId, query.gameId));
   if (query.q) {
-    conds.push(ilike(g.nameKey, `%${escapeLike(query.q.toLowerCase())}%`));
+    const pat = `%${escapeLike(hubNameKey(query.q))}%`;
+    const byKey = ilike(storedNameKey(g.nameKey), pat);
+    // ROK-2015 D7: a renamed WoW guild is also found by its shown name.
+    const byShown = and(WOW_RENAMED, ilike(SHOWN_NAME, pat));
+    conds.push(or(byKey, byShown) ?? byKey);
   }
   const joined = joinedPredicate(scope);
   if (query.membership === 'joined') conds.push(joined);
@@ -69,7 +87,7 @@ function afterCursor(c: DirectoryCursor): SQL {
     return sql`(${g.memberCount}, ${g.id}) < (${n}::int, ${c.id}::int)`;
   }
   if (c.s === 'name') {
-    return sql`(${g.nameKey}, ${g.id}) > (${c.v}::text, ${c.id}::int)`;
+    return sql`(${SORT_NAME}, ${g.id}) > (${c.v}::text, ${c.id}::int)`;
   }
   if (Number.isNaN(Date.parse(c.v))) {
     throw new BadRequestException('Invalid cursor');
@@ -89,7 +107,7 @@ function selectRows(db: Db, viewerId: number, where: SQL[], order: SQL[]) {
       blurb: g.blurb,
       memberCount: g.memberCount,
       hiddenAt: g.hiddenAt,
-      nameKey: g.nameKey,
+      sortName: SORT_NAME,
       createdKey: CREATED_KEY,
       leaderName: LEADER_NAME,
       vRole: viewerRow.role,
@@ -144,7 +162,7 @@ function keyOf(sort: HubDirectoryQuery['sort'], r: DirectoryRow) {
     sort === 'members'
       ? String(r.memberCount)
       : sort === 'name'
-        ? r.nameKey
+        ? r.sortName
         : r.createdKey;
   return { s: sort, v, id: r.id };
 }

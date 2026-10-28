@@ -166,6 +166,23 @@ export async function addPollMembers(
 }
 
 /**
+ * Remove a participant from a scheduling poll (ROK-2020). Creator / admin /
+ * operator only; deletes the member row and every vote they cast on this
+ * poll. 400 = poll closed or target is the creator, 403 = not allowed,
+ * 404 = not on this poll.
+ */
+export async function removePollMember(
+  lineupId: number,
+  matchId: number,
+  userId: number,
+): Promise<{ removedVotes: number; memberCount: number }> {
+  return fetchApi(
+    `/lineups/${lineupId}/schedule/${matchId}/members/${userId}`,
+    { method: 'DELETE' },
+  );
+}
+
+/**
  * Fetch heatmap availability data for a match.
  *
  * ROK-1570: the aggregate subtracts each member's signups and absences for a

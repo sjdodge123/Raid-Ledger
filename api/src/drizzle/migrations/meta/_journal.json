@@ -1800,6 +1800,76 @@
       "when": 1792915273990,
       "tag": "0257_guild_name_overridden",
       "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1792915373990,
+      "tag": "0258_valheim_death_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1792915473990,
+      "tag": "0259_companion_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1793044707006,
+      "tag": "0260_guild_source_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1793044708294,
+      "tag": "0261_backfill_guild_source_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1793065605760,
+      "tag": "0262_companion_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1793065613804,
+      "tag": "0263_companion_blob_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "7",
+      "when": 1793065713804,
+      "tag": "0264_steam_app_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1793075223285,
+      "tag": "0265_valheim_container_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1793075323285,
+      "tag": "0266_lucky_lester",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1793075423285,
+      "tag": "0267_hub_session_notes",
+      "breakpoints": true
     }
   ]
 }

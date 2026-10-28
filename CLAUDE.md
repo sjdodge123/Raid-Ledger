@@ -59,6 +59,16 @@ The WoW: Forever addon **LedgerLink** lives in its own repo (`github.com/sjdodge
 
 Operator ruling 2026-10-22: every design, mockup, prototype or product ruling that waits on the operator goes in **`planning-artifacts/pending-approval/`** in the MAIN checkout, never only in chat. Use one folder per item, `ROK-XXXX-<slug>/` (`mockup.html` and/or screenshots plus `ITEM.md` with the numbered questions and a recommendation for each), and add a row to `INDEX.md`. When the operator asks "what's pending?", answer from `INDEX.md`. Once ruled, move the folder to `_approved/` (or `_rejected/`), record the ruling in the story's spec and in Linear, and move the row to "Decided". Worktree sessions write it via Bash `cp` (memory `reference_worktree_session_main_planning_writes_via_bash`). The fleet dashboard's "Pending approval" page (ROK-1900) replaces this folder once it ships.
 
+## Hub widgets and behaviours belong to a plugin (STRICT — applies to ALL agents)
+
+Operator ruling 2026-10-25 (ROK-1969). Every hub widget, tab and behaviour (hub kind, event tagger, log parser, scheduled job, ingest source, media classifier/decorator) is owned by exactly ONE plugin. Shared ones belong to the built-in **Core** plugin (`core`, always on, cannot be deactivated); game-specific ones to that game's plugin (`valheim`, `bg3`, `enshrouded`, …). A behaviour of an inactive plugin must not run — but cleanup of data a user withdrew (unlink, delete) runs regardless.
+
+- **Web:** register only through `registerPlugin(slug, badge)`'s `PluginHandle` (`registerHubWidget` / `registerHubGameTab` / `registerHubModule`); import each plugin's `register.ts` in `App.tsx`.
+- **Api:** `registerAdapter(…, { ownerPluginId })`, `HubMediaDecoratorRegistry.register(owner, fn)`, or a named `@Cron` inside `api/src/plugins/<folder>/`.
+- **Declare** each one in `HUB_PLUGIN_MANIFESTS` (`packages/contract/src/plugin-hub-manifests.ts`), including the plugin's required **`setup`** section: every server mod, server secret (where it goes — never its value), Pelican egg/variable, companion app, Steam link or admin setting a hub needs, with plain instructions. The plugin install sheet renders it as a checklist.
+- **Guards:** `web/src/plugins/hub-plugin-ownership.guard.test.ts` and `api/src/plugins/plugin-host/hub-ownership.guard.spec.ts` (scanner `api/src/common/testing/hub-registration-scan.ts`) fail on an unowned, undeclared or orphaned registration. Never weaken them; declare the new thing instead.
+- Never rename a placed widget id without a `LEGACY_HUB_WIDGET_IDS` alias (`plugin:<slug>:<id>`).
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**.) The operator regularly approves simplified-flow targets, wireframes or design specs ahead of implementation — follow-up work should be **implementing the approved target, not redesigning it**.

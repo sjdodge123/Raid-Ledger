@@ -13,6 +13,8 @@ interface AdminPluginCardProps {
     onMouseEnter?: () => void;
     actions?: ReactNode;
     children?: ReactNode;
+    /** `data-testid` on the card root (ROK-1969: `plugin-card-<slug>`). */
+    testId?: string | undefined;
 }
 
 const STATUS_STYLES = {
@@ -51,9 +53,9 @@ function PluginCardHeader({ title, version, description, status, badge, pluginBa
     );
 }
 
-export function AdminPluginSection({ title, version, description, status, badge, pluginBadge, onMouseEnter, actions, children }: AdminPluginCardProps) {
+export function AdminPluginSection({ title, version, description, status, badge, pluginBadge, onMouseEnter, actions, children, testId }: AdminPluginCardProps) {
     return (
-        <div className="backdrop-blur-sm rounded-xl overflow-hidden border bg-panel/50 border-edge/50" onMouseEnter={onMouseEnter}>
+        <div data-testid={testId} className="backdrop-blur-sm rounded-xl overflow-hidden border bg-panel/50 border-edge/50" onMouseEnter={onMouseEnter}>
             <PluginCardHeader title={title} version={version} description={description} status={status} badge={badge} pluginBadge={pluginBadge} actions={actions} />
             {children && <div className="px-5 pb-5 pt-1 space-y-4 border-t mt-2 border-edge/50">{children}</div>}
         </div>

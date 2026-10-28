@@ -4,6 +4,8 @@ import { toast } from '../../lib/toast';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 import { PluginCard } from './plugins/PluginCard';
+import { PluginsHubNote } from './plugins/plugins-hub-note';
+import { sortCoreFirst } from './plugins/plugin-order';
 import { UninstallConfirmModal } from '../admin-settings/UninstallConfirmModal';
 
 /**
@@ -67,8 +69,9 @@ function PluginsPanelLayout({ plugins, isPending, handleAction, handleUninstallR
                 <h2 className="text-xl font-semibold text-foreground">Manage Plugins</h2>
                 <p className="text-sm text-muted mt-1">Install and configure plugins to extend functionality.</p>
             </div>
+            <PluginsHubNote />
             <PluginsListLoading isLoading={plugins.isLoading} />
-            {plugins.data?.map((plugin) => (
+            {sortCoreFirst(plugins.data ?? []).map((plugin) => (
                 <PluginCard key={plugin.slug} plugin={plugin} isPending={isPending}
                     onInstall={(s) => handleAction('install', s)}
                     onActivate={(s) => handleAction('activate', s)}

@@ -19,6 +19,7 @@ import {
     type AppleConnectInput,
     type CalendarConnection,
     type CalendarOAuthIntent,
+    type CalendarOAuthReturn,
     type CalendarsOverview,
     type EventCalendarCopy,
     type UpdateCalendarConnection,
@@ -52,15 +53,26 @@ function goToProvider(url: string): void {
     window.location.assign(url);
 }
 
+/** The `/start` query: `intent` unless it is the default `connect`, plus the signed return target (ROK-2022). */
+function oauthStartQuery(intent: CalendarOAuthIntent, returnTarget?: CalendarOAuthReturn): string {
+    const params = new URLSearchParams();
+    if (intent !== 'connect') params.set('intent', intent);
+    if (returnTarget) params.set('return', returnTarget);
+    const query = params.toString();
+    return query ? `?${query}` : '';
+}
+
 /**
  * GET the signed Google consent URL, then send the browser there.
  * `primary` asks for the extra `calendar.events` scope (ROK-1596 D8);
- * `connect` sends no query, which the server reads as `connect`.
+ * `connect` sends no intent, which the server reads as `connect`.
+ * `returnTarget: 'onboarding'` makes the callback land on
+ * `/onboarding?resume=calendar` instead of Profile → Integrations (ROK-2022).
  */
-export function useStartOAuth(intent: CalendarOAuthIntent = 'connect') {
+export function useStartOAuth(intent: CalendarOAuthIntent = 'connect', returnTarget?: CalendarOAuthReturn) {
     return useMutation<string, Error, void>({
         mutationFn: async () => {
-            const query = intent === 'connect' ? '' : `?intent=${intent}`;
+            const query = oauthStartQuery(intent, returnTarget);
             const res = await fetchApi(`${BASE}/oauth/google/start${query}`, {}, OAuthStartResponseSchema);
             return res.url;
         },
@@ -68,9 +80,9 @@ export function useStartOAuth(intent: CalendarOAuthIntent = 'connect') {
     });
 }
 
-/** K1 "Connect": the plain sign-in. */
-export function useStartGoogleConnect() {
-    return useStartOAuth('connect');
+/** K1 "Connect": the plain sign-in; the wizard passes `'onboarding'`. */
+export function useStartGoogleConnect(returnTarget?: CalendarOAuthReturn) {
+    return useStartOAuth('connect', returnTarget);
 }
 
 /** Why an Apple connect was refused: the server's code, the route throttle, or no answer at all. */

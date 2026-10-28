@@ -17,14 +17,19 @@ import {
   mainsOnly,
 } from './roster-insights.helpers';
 import { computeClasses, computeLevels } from './roster-insights.levels';
+import {
+  computeLockouts,
+  countLockoutReporters,
+} from './roster-insights.lockouts';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
 /**
  * ROK-1913 (H5) — `GET plugins/wow/guilds/:id/roster-insights`. One roster
  * query + one `WowFactsService` resolve (one batched query per source),
- * aggregated in TS and cached 5 minutes per guild + audience. Professions are
- * members/staff only and OMITTED (not empty) for visitors.
+ * aggregated in TS and cached 5 minutes per guild + audience. Professions and
+ * lockouts (ROK-1914) are members/staff only and OMITTED (not empty) for
+ * visitors.
  */
 @Injectable()
 export class RosterInsightsService {
@@ -68,7 +73,11 @@ export class RosterInsightsService {
       levels: computeLevels(rows),
       roles: computeRoles(rows),
       ...(audience === 'member'
-        ? { professions: computeProfessions(rows) }
+        ? {
+            professions: computeProfessions(rows),
+            lockouts: computeLockouts(rows, Date.now()),
+            lockoutReporters: countLockoutReporters(rows),
+          }
         : {}),
       freshness: computeFreshness(rows),
     };

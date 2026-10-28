@@ -21,7 +21,8 @@ export function costRuleFor(
  * (operator in-game check 2026-10-25: an Iron mace does not take an Iron
  * battle idol, although the live `GetAmount(1)` reports 1) and `amount` at
  * every upgrade step; any other resource `amount` at q1, then
- * `amountPerLevel · 2^(q − 2)`.
+ * `amountPerLevel · 2^(q − 2)`. CONTRACT §5b's `consumed(r, q)` is this
+ * function: there is no separate `consumedAt` (the q1 = 0 case lives here).
  */
 export function amountAt(
   r: ValheimRecipeResource,

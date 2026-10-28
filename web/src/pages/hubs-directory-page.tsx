@@ -110,7 +110,7 @@ export function HubsDirectoryPage(): JSX.Element {
     const filtered = directoryActiveCount(params) > 0 || Boolean(params.q);
     const clear = (): void => { setText(''); update({ membership: 'all', sort: params.sort }); };
     return (
-        <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 pb-24">
+        <div className="mx-auto max-w-6xl space-y-4 px-4 py-6 pb-[max(6rem,var(--filter-fab-clearance))]">
             <PageHeader />
             <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">

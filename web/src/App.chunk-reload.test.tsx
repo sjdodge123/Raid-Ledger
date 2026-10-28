@@ -15,6 +15,7 @@ const { passthrough } = vi.hoisted(() => ({
     passthrough: ({ children }: { children?: ReactNode }) => children,
 }));
 vi.mock('./app-routes', () => ({ AppRoutes: () => null }));
+vi.mock('./idle-prefetch', () => ({ prefetchDeferredChunksOnIdle: () => {} }));
 vi.mock('./components/layout', () => ({ Layout: passthrough }));
 vi.mock('./components/ui/StartupGate', () => ({ StartupGate: passthrough }));
 vi.mock('./components/ui/ConnectivityBanner', () => ({ ConnectivityBanner: () => null }));

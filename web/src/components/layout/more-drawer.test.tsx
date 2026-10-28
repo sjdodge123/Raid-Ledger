@@ -178,35 +178,38 @@ describe('MoreDrawer — part 2', () => {
 
     // Profile accordion tests
 
-    it('expands profile submenu on toggle click', () => {
+    it('expands profile submenu on toggle click', async () => {
         renderDrawer();
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
         fireEvent.click(screen.getByTestId('more-drawer-profile-toggle'));
-        expect(screen.getByTestId('profile-submenu')).toBeInTheDocument();
+        expect(await screen.findByTestId('profile-submenu')).toBeInTheDocument();
     });
 
-    it('collapses profile submenu on second toggle click', () => {
+    it('collapses profile submenu on second toggle click', async () => {
         renderDrawer();
         const toggle = screen.getByTestId('more-drawer-profile-toggle');
         fireEvent.click(toggle);
-        expect(screen.getByTestId('profile-submenu')).toBeInTheDocument();
+        expect(await screen.findByTestId('profile-submenu')).toBeInTheDocument();
         fireEvent.click(toggle);
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
     });
 
-    it('auto-expands profile submenu when on a profile page', () => {
+    it('auto-expands profile submenu when on a profile page', async () => {
         renderDrawer(true, '/profile/identity');
-        expect(screen.getByTestId('profile-submenu')).toBeInTheDocument();
+        expect(await screen.findByTestId('profile-submenu')).toBeInTheDocument();
     });
 
     it('does not auto-expand profile submenu on non-profile pages', () => {
         renderDrawer(true, '/events');
+        // The submenu is a lazy chunk (ROK-1901): pin the collapsed state too, so
+        // this cannot pass just because the chunk has not resolved yet.
+        expect(screen.getByTestId('more-drawer-profile-toggle')).toHaveAttribute('aria-expanded', 'false');
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
     });
 
-    it('shows Re-run Setup Wizard in profile submenu', () => {
+    it('shows Re-run Setup Wizard in profile submenu', async () => {
         renderDrawer(true, '/profile/identity');
-        expect(screen.getByText('Re-run Setup Wizard')).toBeInTheDocument();
+        expect(await screen.findByText('Re-run Setup Wizard')).toBeInTheDocument();
     });
 
 });
@@ -229,53 +232,53 @@ describe('MoreDrawer — the Game Time row (ROK-1584 §3)', () => {
         };
     });
 
-    it('summarises the saved week and how fresh it is', () => {
+    it('summarises the saved week and how fresh it is', async () => {
         renderDrawer(true, '/profile/identity');
-        const row = screen.getByTestId('more-drawer-game-time');
+        const row = await screen.findByTestId('more-drawer-game-time');
         expect(row).toHaveTextContent('Game Time');
         expect(row).toHaveTextContent('Tue, Thu 7–10 PM');
         expect(row).toHaveTextContent('confirmed 2 days ago');
     });
 
-    it('says so when nothing is saved yet', () => {
+    it('says so when nothing is saved yet', async () => {
         gameTime = { slots: [], gameTimeAgeDays: null };
         renderDrawer(true, '/profile/identity');
-        expect(screen.getByTestId('more-drawer-game-time')).toHaveTextContent('nothing saved yet');
+        expect(await screen.findByTestId('more-drawer-game-time')).toHaveTextContent('nothing saved yet');
     });
 
-    it('is a button, not a link — the drawer opens in place', () => {
+    it('is a button, not a link — the drawer opens in place', async () => {
         renderDrawer(true, '/profile/identity');
-        const row = screen.getByTestId('more-drawer-game-time');
+        const row = await screen.findByTestId('more-drawer-game-time');
         expect(row.tagName).toBe('BUTTON');
         expect(row.closest('a')).toBeNull();
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    it('closes the More drawer and opens the editor on tap', () => {
+    it('closes the More drawer and opens the editor on tap', async () => {
         const { onClose } = renderDrawer(true, '/profile/identity');
         expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByTestId('more-drawer-game-time'));
+        fireEvent.click(await screen.findByTestId('more-drawer-game-time'));
 
         expect(onClose).toHaveBeenCalled();
         expect(mockNavigate).not.toHaveBeenCalled();
-        expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
+        expect(await screen.findByTestId('game-time-check-sheet')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'My game time' })).toBeInTheDocument();
         expect(screen.getByTestId('phone-week-check')).toHaveAttribute('data-variant', 'profile');
     });
 
-    it('closes the editor again on ×, without navigating', () => {
+    it('closes the editor again on ×, without navigating', async () => {
         renderDrawer(true, '/profile/identity');
-        fireEvent.click(screen.getByTestId('more-drawer-game-time'));
-        fireEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
+        fireEvent.click(await screen.findByTestId('more-drawer-game-time'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Close sheet' }));
 
         expect(screen.queryByTestId('game-time-check-sheet')).not.toBeInTheDocument();
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    it('keeps the other profile children as plain links', () => {
+    it('keeps the other profile children as plain links', async () => {
         renderDrawer(true, '/profile/identity');
-        expect(screen.getByText('Characters').closest('a')).toHaveAttribute('href', '/profile/gaming/characters');
+        expect((await screen.findByText('Characters')).closest('a')).toHaveAttribute('href', '/profile/gaming/characters');
     });
 });
 
@@ -316,16 +319,16 @@ describe('MoreDrawer (admin user)', () => {
         expect(screen.getByText('Admin Settings')).toBeInTheDocument();
     });
 
-    it('expands admin submenu on toggle click', () => {
+    it('expands admin submenu on toggle click', async () => {
         renderDrawer();
         expect(screen.queryByTestId('admin-submenu')).not.toBeInTheDocument();
         fireEvent.click(screen.getByTestId('more-drawer-admin-toggle'));
-        expect(screen.getByTestId('admin-submenu')).toBeInTheDocument();
+        expect(await screen.findByTestId('admin-submenu')).toBeInTheDocument();
     });
 
-    it('auto-expands admin submenu when on admin settings page', () => {
+    it('auto-expands admin submenu when on admin settings page', async () => {
         renderDrawer(true, '/admin/settings/general');
-        expect(screen.getByTestId('admin-submenu')).toBeInTheDocument();
+        expect(await screen.findByTestId('admin-submenu')).toBeInTheDocument();
     });
 
     it('admin toggle has aria-expanded attribute', () => {

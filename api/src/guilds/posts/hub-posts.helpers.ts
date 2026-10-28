@@ -97,7 +97,7 @@ export function personAvatarUrl(row: HubPostPersonRow): string | null {
   return `https://cdn.discordapp.com/avatars/${row.discordId}/${row.avatar}.png`;
 }
 
-function toPerson(row: HubPostPersonRow | null): HubPostPerson {
+export function toPerson(row: HubPostPersonRow | null): HubPostPerson {
   if (!row) return { userId: null, displayName: null, avatarUrl: null };
   return {
     userId: row.userId,

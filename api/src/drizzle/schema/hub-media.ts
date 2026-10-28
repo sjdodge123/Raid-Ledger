@@ -53,6 +53,14 @@ export const hubMedia = pgTable(
       onDelete: 'set null',
     }),
     removedAt: tsz('removed_at'),
+    /**
+     * ROK-1965: the member who uploaded it (`source = 'upload'`); null for
+     * Discord rows and after the uploader's account is deleted (D18). Set in
+     * code at insert — no CHECK, since SET NULL would violate one.
+     */
+    uploadedBy: integer('uploaded_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: tsz('created_at').notNull().defaultNow(),
   },
   (t) => [
@@ -66,10 +74,11 @@ export const hubMedia = pgTable(
       .on(t.guildId, t.kind, t.capturedAt.desc(), t.id.desc())
       .where(sql`${t.removedAt} IS NULL`),
     index('hub_media_hidden_by_idx').on(t.hiddenBy),
-    check('hub_media_source_check', sql`${t.source} IN ('discord')`),
+    index('hub_media_uploaded_by_idx').on(t.uploadedBy),
+    check('hub_media_source_check', sql`${t.source} IN ('discord', 'upload')`),
     check(
       'hub_media_kind_check',
-      sql`${t.kind} IN ('death', 'screenshot', 'image')`,
+      sql`${t.kind} IN ('death', 'screenshot', 'image', 'upload')`,
     ),
   ],
 );

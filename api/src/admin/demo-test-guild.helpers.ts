@@ -30,6 +30,8 @@ export interface SeedGuildInput {
   gameSlug: string;
   /** ROK-1786: also seed the GM post, rules, links and two addons. */
   withContent: boolean;
+  /** ROK-1914: also seed LedgerLink lockout snapshots (Who's saved). */
+  withLockouts: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -64,6 +66,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
     name?: unknown;
     gameSlug?: unknown;
     withContent?: unknown;
+    withLockouts?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -78,7 +81,11 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof withContent !== 'boolean') {
     throw new BadRequestException('withContent must be a boolean');
   }
-  return { name: raw.name, gameSlug, withContent };
+  const withLockouts = raw.withLockouts ?? false;
+  if (typeof withLockouts !== 'boolean') {
+    throw new BadRequestException('withLockouts must be a boolean');
+  }
+  return { name: raw.name, gameSlug, withContent, withLockouts };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */
@@ -112,7 +119,8 @@ export async function upsertGuild(
     lastSnapshotAt: now,
     updatedAt: now,
   };
-  const values = { gameId, region: SEED_GUILD_REGION, name, ...set };
+  const region = SEED_GUILD_REGION;
+  const values = { gameId, region, name, sourceName: name, ...set };
   const [row] = await db
     .insert(schema.guilds)
     .values({ ...values, nameKey: name.toLowerCase(), source: 'addon_import' })

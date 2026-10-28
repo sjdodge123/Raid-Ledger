@@ -79,7 +79,9 @@ describe('Plugin Registry (integration)', () => {
 
       // Find one that's either active or not_installed — we'll use it for lifecycle tests
       const candidate = plugins.find(
-        (p) => p.status === 'active' || p.status === 'not_installed',
+        // ROK-1969: a built-in plugin (Core) refuses deactivate/uninstall.
+        (p) =>
+          !p.builtIn && (p.status === 'active' || p.status === 'not_installed'),
       );
       testPluginSlug = candidate?.slug ?? null;
     });
@@ -173,7 +175,9 @@ describe('Plugin Registry (integration)', () => {
     it('should reflect DB state in list endpoint after deactivate/activate cycle', async () => {
       const registry = testApp.app.get(PluginRegistryService);
       const plugins = await registry.listPlugins();
-      const activePlugin = plugins.find((p) => p.status === 'active');
+      const activePlugin = plugins.find(
+        (p) => p.status === 'active' && !p.builtIn,
+      );
 
       if (!activePlugin) {
         return; // No active plugins in test env

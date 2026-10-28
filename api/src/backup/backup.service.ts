@@ -23,13 +23,29 @@ import {
   seedGameData,
   dropSchemas,
   cleanupPartialFile,
+  formatBackupTimestamp,
+  isSafeBackupFilename,
 } from './backup.helpers';
-import { rotateDailyDir, rotateMigrationDir } from './backup-rotation.helpers';
+import {
+  rotateDailyDir,
+  rotateMigrationDir,
+  rotateUploadsArchives,
+} from './backup-rotation.helpers';
+import {
+  uploadsArchiveFailure,
+  type UploadsArchiveResult,
+} from './backup-uploads.helpers';
+import {
+  archiveUploadsForDump,
+  deleteUploadsArchiveOf,
+} from './backup-uploads.wiring';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
 /** ROK-1663: newest pre_migration_*.dump snapshots kept (one is written per boot). */
 const MIGRATION_SNAPSHOT_KEEP = 10;
+/** ROK-2023 (spec D10b): newest daily uploads archives kept. */
+const UPLOADS_ARCHIVE_KEEP = 7;
 const DEFAULT_DB_CONTAINER = 'raid-ledger-db';
 
 // ROK-1279: tables whose ROW DATA is excluded from every dump produced by this
@@ -42,15 +58,6 @@ const SANITIZED_EXCLUDED_TABLES = [
   'sessions',
   'consumed_intent_tokens',
 ] as const;
-
-// Traversal-only filename guard: block path separators and '..' but accept any
-// other character (spaces, '+', …) — listBackups only filters on '.dump', so a
-// stricter charset would make listed files impossible to download/delete/restore.
-const isSafeBackupFilename = (filename: string): boolean =>
-  filename.length > 0 &&
-  !filename.includes('/') &&
-  !filename.includes('\\') &&
-  !filename.includes('..');
 
 @Injectable()
 export class BackupService implements OnModuleInit {
@@ -98,36 +105,60 @@ export class BackupService implements OnModuleInit {
     }
   }
 
-  /** Daily scheduled backup at 2 AM. */
+  /**
+   * Daily scheduled backup at 2 AM. ROK-2023 (spec D9): every rotation runs
+   * even when the uploads archive failed (a full disk must still free up);
+   * only then does a failed archive fail the tracked run.
+   */
   @Cron('10 0 2 * * *', { name: 'BackupService_dailyBackup' })
   async handleDailyBackup(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'BackupService_dailyBackup',
       async () => {
-        await this.createDailyBackup();
+        const { archive } = await this.createDailyBackupWithArchive();
         this.rotateDailyBackups();
         this.rotateMigrationSnapshots();
+        this.rotateUploadsArchives();
+        const failure = uploadsArchiveFailure(archive);
+        if (failure) throw new Error(failure);
       },
     );
   }
 
-  /** Create a daily pg_dump backup. */
+  /**
+   * Create a daily pg_dump backup plus its companion uploads archive. A failed
+   * archive never loses the dump (it is logged; the cron run reports it).
+   */
   async createDailyBackup(): Promise<string> {
-    const timestamp = this.formatTimestamp(new Date());
-    const filename = `raid_ledger_${timestamp}.dump`;
-    const filepath = path.join(this.dailyDir, filename);
+    const { dumpPath } = await this.createDailyBackupWithArchive();
+    return dumpPath;
+  }
+
+  /** Dump FIRST, then archive (spec D3): every dumped row has its file on disk. */
+  private async createDailyBackupWithArchive(): Promise<{
+    dumpPath: string;
+    archive: UploadsArchiveResult;
+  }> {
+    const filename = `raid_ledger_${formatBackupTimestamp(new Date())}.dump`;
+    const dumpPath = path.join(this.dailyDir, filename);
     this.logger.log(`Starting daily backup: ${filename}`);
-    await this.runPgDump(filepath);
-    const stats = fs.statSync(filepath);
+    await this.runPgDump(dumpPath);
+    const stats = fs.statSync(dumpPath);
     this.logger.log(
       `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
     );
-    return filepath;
+    const archive = await archiveUploadsForDump(
+      this.dailyDir,
+      filename,
+      this.logger,
+      UPLOADS_ARCHIVE_KEEP,
+    );
+    return { dumpPath, archive };
   }
 
   /** Create a pre-migration snapshot. */
   async createMigrationSnapshot(migrationLabel: string): Promise<string> {
-    const timestamp = this.formatTimestamp(new Date());
+    const timestamp = formatBackupTimestamp(new Date());
     const safeName = migrationLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `pre_${safeName}_${timestamp}.dump`;
     const filepath = path.join(this.migrationDir, filename);
@@ -158,6 +189,17 @@ export class BackupService implements OnModuleInit {
     );
     if (removed > 0)
       this.logger.log(`Pruned ${removed} pre-migration snapshot(s)`);
+    return removed;
+  }
+
+  /** Keep the newest UPLOADS_ARCHIVE_KEEP uploads archives (warns, never throws). */
+  rotateUploadsArchives(): number {
+    const removed = rotateUploadsArchives(
+      this.dailyDir,
+      UPLOADS_ARCHIVE_KEEP,
+      (m) => this.logger.warn(m),
+    );
+    if (removed > 0) this.logger.log(`Pruned ${removed} uploads archive(s)`);
     return removed;
   }
 
@@ -206,11 +248,13 @@ export class BackupService implements OnModuleInit {
     return resolved;
   }
 
-  /** Delete a specific backup file. */
+  /** Delete a specific backup file (a daily dump takes its uploads archive with it). */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
     const filepath = this.getBackupFilePath(type, filename);
     fs.unlinkSync(filepath);
     this.logger.log(`Deleted backup: ${type}/${filename}`);
+    if (type === 'daily' && filename.endsWith('.dump'))
+      deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
   }
 
   /** Restore the database from a backup file. */
@@ -218,6 +262,9 @@ export class BackupService implements OnModuleInit {
     type: 'daily' | 'migration',
     filename: string,
   ): Promise<void> {
+    // Only pg_dump files restore; a sibling .uploads.tar must 404 (ROK-2023).
+    if (!filename.endsWith('.dump'))
+      throw new NotFoundException(`Backup file not found: ${type}/${filename}`);
     const filepath = this.getBackupFilePath(type, filename);
     await this.createMigrationSnapshot('restore');
     this.logger.warn(`Starting database restore from: ${type}/${filename}`);
@@ -315,16 +362,5 @@ export class BackupService implements OnModuleInit {
       cleanupPartialFile(outputPath);
       throw new Error(`pg_dump failed: ${msg}`, { cause: err });
     }
-  }
-
-  /** Format a Date as YYYY-MM-DD_HHMMSS. */
-  private formatTimestamp(date: Date): string {
-    const y = date.getFullYear();
-    const mo = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${y}-${mo}-${d}_${h}${mi}${s}`;
   }
 }

@@ -52,4 +52,23 @@ test.describe('Admin plugins panel', () => {
         // Verify the panel actually rendered (not just a blank page)
         await expect(page.getByRole('heading', { name: 'Manage Plugins' })).toBeVisible({ timeout: 10_000 });
     });
+
+    // ROK-1969 §8: Core is built in (Always on, no lifecycle buttons), the hub note shows,
+    // and each card lists what it adds to hubs from its manifest.
+    test('Core card is always on, the hub note shows, and Valheim lists its Map tab', async ({ page }) => {
+        await page.goto('/admin/settings/plugins');
+        await expect(page.getByTestId('plugins-hub-note')).toBeVisible({ timeout: 10_000 });
+        const core = page.getByTestId('plugin-card-core');
+        await expect(core.getByText('Always on', { exact: true })).toBeVisible({ timeout: 15_000 });
+        await expect(core.getByRole('button', { name: /^(Install|Activate|Deactivate|Uninstall)$/ })).toHaveCount(0);
+        // Each item is "<name> <description>" (Core widgets carry descriptions), so an
+        // exact getByText('Gallery') never matches in Playwright — match the item's start
+        // (no \b: textContent is "GalleryPictures from this hub…", the span adds no space).
+        await expect(
+            core.getByRole('list', { name: 'Widgets' }).getByRole('listitem').filter({ hasText: /^Gallery/ }),
+        ).toBeVisible();
+        const valheim = page.getByTestId('plugin-card-valheim');
+        await expect(valheim.getByRole('list', { name: 'Tabs' }).getByText('Map', { exact: true })).toBeVisible();
+        await expect(valheim.getByTestId('plugin-setup')).toBeVisible();
+    });
 });

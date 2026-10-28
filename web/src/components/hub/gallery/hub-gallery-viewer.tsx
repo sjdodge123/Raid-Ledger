@@ -21,6 +21,11 @@ export interface HubGalleryViewerProps {
 
 const WHEN = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } as const;
 
+/** ROK-1965 ruling 7: an upload's caption says "Uploaded"; a Discord post says "From Discord". */
+function sourceLine(item: HubMediaItem): string {
+    return item.source.type === 'upload' ? 'Uploaded' : `From ${item.source.label ?? ''}`;
+}
+
 function Caption({ item }: { item: HubMediaItem }): JSX.Element {
     const badge = item.kind === 'death' ? 'border-danger' : 'border-edge-strong';
     return (
@@ -33,7 +38,7 @@ function Caption({ item }: { item: HubMediaItem }): JSX.Element {
                 <time dateTime={item.capturedAt}>{new Date(item.capturedAt).toLocaleString(undefined, WHEN)}</time>
                 {` · ${syncedAgo(item.capturedAt)}`}
             </span>
-            {item.source.label !== null && <span className="text-muted">From {item.source.label}</span>}
+            {item.source.label !== null && <span className="text-muted">{sourceLine(item)}</span>}
             {item.hidden && <span className="text-muted">Hidden from members</span>}
             {item.caption !== null && <p className="w-full text-secondary">{item.caption}</p>}
             {item.link !== null && <a href={item.link.href} className="font-medium text-success hover:underline">{item.link.label}</a>}
@@ -66,7 +71,8 @@ export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubG
         if (el !== null && !el.contains(document.activeElement)) el.focus();
     }, []);
     return (
-        <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer">
+        <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer"
+            data-media-id={item.id}>
             <p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>
             <div data-testid="hub-gallery-stage"
                 className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video">

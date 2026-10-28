@@ -5,7 +5,8 @@ import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
 import { HUB_MEDIA_KINDS, type HubMediaItem, type HubMediaListResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import type { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { HUB_MEDIA_LIST_URL, hubMediaFileHandler, hubMediaItem } from '../../../test/mocks/hub-media-handlers';
 import { HubGalleryDialog } from './hub-gallery-dialog';
 import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
@@ -39,12 +40,15 @@ function setDesktop(desktop: boolean): void {
     })) as typeof window.matchMedia;
 }
 
-function Harness({ canEdit = false, canRemove = false }: { canEdit?: boolean; canRemove?: boolean }): JSX.Element | null {
+function Harness({ canEdit = false }: { canEdit?: boolean }): JSX.Element | null {
     const request = useHubGalleryStore((s) => s.request);
-    return request === null ? null : <HubGalleryDialog request={request} canEdit={canEdit} canRemove={canRemove} />;
+    return request === null ? null : <HubGalleryDialog request={request} canEdit={canEdit} />;
 }
 
-function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: boolean; canRemove?: boolean } = {}) {
+/** ROK-1965: Remove rights ride on each item (`canRemove`, computed server-side per viewer). */
+const removable = (items: HubMediaItem[]): HubMediaItem[] => items.map((i) => ({ ...i, canRemove: true }));
+
+function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: boolean } = {}, queryClient?: QueryClient) {
     const trigger = document.createElement('button');
     trigger.textContent = 'tile';
     document.body.appendChild(trigger);
@@ -52,7 +56,7 @@ function open(over: Partial<HubGalleryOpenRequest> = {}, roles: { canEdit?: bool
     useHubGalleryStore.setState({
         filters: {}, request: { guildId: 5, mode: 'viewer', filter: 'all', index: 0, returnFocus: trigger, ...over },
     });
-    renderWithProviders(<Harness {...roles} />);
+    renderWithProviders(<Harness {...roles} />, queryClient === undefined ? {} : { queryClient });
     return trigger;
 }
 
@@ -146,13 +150,39 @@ describe('HubGalleryDialog — viewer', () => {
         expect(await caption()).toMatch(who(4));
     });
 
+    it('opens a picture beyond the first loaded page: pages in until its id is loaded, never showing another one first', async () => {
+        open({ index: 0, mediaId: 28 });
+        expect(await caption()).toMatch(who(28));
+        expect(counter()).toBe('28 of 30');
+    });
+
+    it('a fresh upload opened from the strip resolves against the refetched list, not a stale cached one (ROK-1965)', async () => {
+        // The dialog's pages query is cached from an earlier open: page 1 of the OLD list, more to load.
+        const queryClient = createTestQueryClient();
+        const stale: HubMediaListResponse = { items: ITEMS.slice(0, 24), nextCursor: '24', total: 30, kinds: ['death', 'screenshot', 'image'] };
+        queryClient.setQueryData(['hub-media', 5, 'pages', 'all'], { pages: [stale], pageParams: [null] });
+        await queryClient.invalidateQueries({ queryKey: ['hub-media', 5] });
+        server.use(pagedHandler([hubMediaItem(99, 'upload'), ...ITEMS]));
+        open({ index: 0, mediaId: 99 }, {}, queryClient);
+        await waitFor(() => expect(counter()).toBe('1 of 31'));
+        expect(await caption()).toMatch(who(99));
+    });
+
+    it('an id in no page falls back to the requested index once every page is loaded', async () => {
+        const calls: string[] = [];
+        server.use(pagedHandler(ITEMS, calls));
+        open({ index: 2, mediaId: 999 });
+        expect(await caption()).toMatch(who(3));
+        expect(calls).toHaveLength(2);
+    });
+
     it('removing the last picture of the selected kind falls the dialog filter back to All', async () => {
-        const items = [hubMediaItem(1, 'death'), hubMediaItem(2, 'screenshot')];
+        const items = removable([hubMediaItem(1, 'death'), hubMediaItem(2, 'screenshot')]);
         server.use(pagedHandler(items), http.delete('http://localhost:3000/hubs/:guildId/media/:id', ({ params }) => {
             items.splice(items.findIndex((i) => String(i.id) === params.id), 1);
             return new HttpResponse(null, { status: 204 });
         }));
-        open({ filter: 'death', index: 0 }, { canRemove: true });
+        open({ filter: 'death', index: 0 });
         expect(await caption()).toMatch(who(1));
         fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
         fireEvent.click(screen.getByRole('button', { name: 'Remove for good' }));
@@ -206,19 +236,52 @@ describe('HubGalleryDialog — roles', () => {
         expect(screen.getByRole('button', { name: 'Unhide' })).toBeInTheDocument();
     });
 
-    it('staff Remove asks inline, then DELETEs', async () => {
+    it('Remove (item.canRemove) asks inline, then DELETEs', async () => {
         const deleted: string[] = [];
-        server.use(http.delete('http://localhost:3000/hubs/:guildId/media/:id', ({ params }) => {
+        server.use(pagedHandler(removable(ITEMS)), http.delete('http://localhost:3000/hubs/:guildId/media/:id', ({ params }) => {
             deleted.push(String(params.id));
             return new HttpResponse(null, { status: 204 });
         }));
-        open({}, { canRemove: true });
+        open();
         await caption();
         expect(screen.queryByRole('button', { name: 'Hide' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
         expect(deleted).toEqual([]);
         fireEvent.click(screen.getByRole('button', { name: 'Remove for good' }));
         await waitFor(() => expect(deleted).toEqual(['1']));
+    });
+});
+
+describe('HubGalleryDialog — uploads (ROK-1965)', () => {
+    it('shows Remove exactly on the pictures whose item says canRemove', async () => {
+        server.use(pagedHandler([hubMediaItem(1, 'upload', { canRemove: true }), hubMediaItem(2, 'upload')]));
+        open();
+        expect(await caption()).toMatch(who(1));
+        expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+        fireEvent.keyDown(dialog(), { key: 'ArrowRight' });
+        expect(await caption()).toMatch(who(2));
+        expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+    });
+
+    it('an upload\'s caption says "Uploaded", a Discord post "From Discord"', async () => {
+        server.use(pagedHandler([
+            hubMediaItem(1, 'upload', { source: { type: 'upload', label: 'Uploaded' } }), hubMediaItem(2, 'screenshot'),
+        ]));
+        open();
+        const first = await caption();
+        expect(first).toContain('Uploaded');
+        expect(first).not.toContain('From');
+        fireEvent.keyDown(dialog(), { key: 'ArrowRight' });
+        await waitFor(() => expect(screen.getByTestId('hub-gallery-caption').textContent).toContain('From Discord'));
+    });
+
+    it('the grid footer offers Add picture even with nothing more to load', async () => {
+        server.use(pagedHandler(ITEMS.slice(0, 3)));
+        open({ mode: 'grid' });
+        await waitFor(() => expect(screen.getAllByTestId('hub-gallery-tile')).toHaveLength(3));
+        expect(screen.getByRole('button', { name: 'Add picture' })).toBeInTheDocument();
+        expect(screen.getByTestId('hub-gallery-grid-add-picture-input').getAttribute('accept')).toBe('image/png,image/jpeg,image/webp');
+        expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
     });
 });
 

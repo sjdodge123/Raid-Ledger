@@ -16,10 +16,11 @@ import { ValheimDeathsShowAll } from './valheim-deaths-show-all';
 
 function ctx(): HubWidgetCtx {
     const page = {
+        guild: { id: 5 },
         server: { pelicanServerId: 7, gameSlug: 'valheim', gameIconUrl: null, state: 'running', viewerJoined: false },
         viewer: { role: 'member', canEdit: false, canManageEditors: false },
     } as GuildPage;
-    // The widget reads only `page.server`; the rest of the hub ctx is never touched (register.test idiom).
+    // The widget reads only `page.guild.id` and `page.server`; the rest of the hub ctx is never touched (register.test idiom).
     return { page, gameSlug: 'valheim' } as HubWidgetCtx;
 }
 

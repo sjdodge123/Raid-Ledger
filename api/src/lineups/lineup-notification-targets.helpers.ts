@@ -7,6 +7,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
 import { activeUsersFilter } from '../users/users-active.helpers';
+import { resolveUserTimezones } from '../notifications/timezone.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -123,4 +124,24 @@ export async function findDiscordMembersByUserIds(
       ),
     );
   return rows as DiscordMember[];
+}
+
+/**
+ * Private-lineup invitees + creator, minus `skip` (ROK-2024), with each one's
+ * timezone (ROK-1112: pref → guild default → UTC).
+ */
+export async function findInviteeRecipients(
+  db: Db,
+  lineupId: number,
+  defaultTimezone: string,
+  skip?: ReadonlySet<number>,
+): Promise<{ members: DiscordMember[]; tzByUser: Map<number, string> }> {
+  const all = await findInviteeDiscordMembers(db, lineupId);
+  const members = skip ? all.filter((m) => !skip.has(m.userId)) : all;
+  const tzByUser = await resolveUserTimezones(
+    db,
+    members.map((m) => m.userId),
+    defaultTimezone,
+  );
+  return { members, tzByUser };
 }

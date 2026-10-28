@@ -8,14 +8,12 @@ import { RootRedirect } from './components/RootRedirect';
 import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
 import { LegacyHubRedirect } from './components/routing/legacy-hub-redirect';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
-import { EventsPage } from './pages/events-page';
-import { EventDetailPage } from './pages/event-detail-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
   JoinPage, InvitePage, PollSharePage, HubInvitePage, PrivacyPage,
-  CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
+  CalendarPage, EventsPage, EventDetailPage, CreateEventPage, PlanEventPage, EditEventPage,
   GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage, GuildPage,
   PlayersPage, EventMetricsPage,
   InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
@@ -37,6 +35,7 @@ import {
   DesignSystemPage,
   SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
+  CompanionLinkPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -163,6 +162,8 @@ export function AppRoutes() {
         <Route path="/hubs/:id" element={<GuildPage />} />
         <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
         <Route path="/players" element={<PlayersPage />} />
+        {/* ROK-1955: Companion device approval; `#code=` may pre-fill it. */}
+        <Route path="/link" element={<CompanionLinkPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/event-metrics" element={<Navigate to="/insights/events" replace />} />
         <Route path="/insights" element={<InsightsHubPage />}>

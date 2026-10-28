@@ -7,7 +7,7 @@
  */
 import type { HubMediaKind, HubMediaListResponse } from '@raid-ledger/contract';
 
-/** The Overview card / dialog chip filter. `screenshot` covers `screenshot` + `image` (server-side). */
+/** The Overview card / dialog chip filter. `screenshot` covers `screenshot` + `image` + `upload` (server-side). */
 export type HubMediaFilter = 'all' | 'death' | 'screenshot';
 
 /** Overview strip size: 8 tiles ≥1024px, 6 below (the request always asks for 8). */
@@ -23,11 +23,11 @@ export function kindForFilter(filter: HubMediaFilter): HubMediaKind | undefined 
     return filter === 'all' ? undefined : filter;
 }
 
-/** The chips a hub's `kinds` justify: Deaths when it has deaths, Screenshots for screenshot OR image. */
+/** The chips a hub's `kinds` justify: Deaths when it has deaths, Screenshots for screenshot, image OR upload (ROK-1965). */
 export function availableFilters(kinds: readonly HubMediaKind[]): HubMediaFilter[] {
     const out: HubMediaFilter[] = ['all'];
     if (kinds.includes('death')) out.push('death');
-    if (kinds.includes('screenshot') || kinds.includes('image')) out.push('screenshot');
+    if (kinds.includes('screenshot') || kinds.includes('image') || kinds.includes('upload')) out.push('screenshot');
     return out;
 }
 

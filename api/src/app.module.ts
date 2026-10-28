@@ -26,6 +26,7 @@ import { GuildsCoreModule } from './guilds/guilds-core.module';
 import { CommunityProposalsModule } from './guilds/community/community-proposals.module';
 import { CommunityHubsModule } from './guilds/community/community-hubs.module';
 import { DiscordModule } from './plugins/discord';
+import { CorePluginModule } from './plugins/core';
 import { PelicanModule } from './plugins/pelican';
 import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
 import { ValheimModule } from './plugins/valheim';
@@ -61,8 +62,10 @@ import { CommunityInsightsModule } from './community-insights/community-insights
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 import { HubMediaModule } from './hub-media/hub-media.module';
+import { HubMediaChannelModule } from './discord-bot/hub-media-channel/hub-media-channel.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
+import { CompanionModule } from './companion/companion.module';
 import { API_ENV_FILE } from './sentry/telemetry-policy';
 
 @Module({
@@ -94,6 +97,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     CommunityProposalsModule,
     CommunityHubsModule,
     WowCommonModule,
+    CorePluginModule,
     DiscordModule,
     RelayModule,
     FeedbackModule,
@@ -129,6 +133,8 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     GamesLookupModule,
     CalendarSyncModule,
     HubMediaModule,
+    CompanionModule,
+    HubMediaChannelModule,
   ],
   controllers: [AppController],
   providers: [

@@ -187,9 +187,31 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
+  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
+  // ban+wipe must revoke them. Links the user decided go first: their
+  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
+  {
+    table: schema.companionDeviceLinks,
+    column: schema.companionDeviceLinks.decidedBy,
+  },
+  { table: schema.companionDevices, column: schema.companionDevices.userId },
+  // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
+  // the user's own uploaded data. Refs carry no FK to blobs; order is free.
+  {
+    table: schema.companionIngestLatest,
+    column: schema.companionIngestLatest.userId,
+  },
+  { table: schema.companionBlobRefs, column: schema.companionBlobRefs.userId },
+  { table: schema.companionBlobs, column: schema.companionBlobs.userId },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,
+  },
+  // ROK-1953: cached Steam stats + unlocks are the user's own data (CASCADE).
+  { table: schema.steamUserAppStats, column: schema.steamUserAppStats.userId },
+  {
+    table: schema.steamUserAchievements,
+    column: schema.steamUserAchievements.userId,
   },
 ];
 
@@ -242,6 +264,7 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildEditors,
   // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
   // are SET NULL audit columns; the guild's content outlives its editor.
+  // ROK-1941: `media_channel_set_by` is the same kind of SET NULL audit.
   schema.guildProfiles,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).
@@ -271,7 +294,14 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1942: `hub_media.hidden_by` is SET NULL moderation audit; a Gallery
   // picture belongs to the hub (posted in its Discord channel), not to the
   // editor who hid it.
+  // ROK-1965: `hub_media.uploaded_by` is SET NULL too — a member's upload
+  // stays on the hub (the leader can remove it).
   schema.hubMedia,
+  // ROK-1968: `hub_session_notes.updated_by` / `hub_session_note_items.done_by`
+  // are SET NULL attributions on the hub's shared "Before next session" note;
+  // the note and its checklist belong to the hub, not to the last editor/ticker.
+  schema.hubSessionNotes,
+  schema.hubSessionNoteItems,
 ];
 
 /**

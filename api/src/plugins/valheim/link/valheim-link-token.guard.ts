@@ -86,8 +86,8 @@ export class ValheimLinkBearerGuard implements CanActivate {
     key: string,
     limit: number,
   ): void {
-    if (this.limiter.reserve(key, limit, WINDOW_MS)) return;
-    const retry = String(this.limiter.retryAfter(key, WINDOW_MS));
+    if (this.limiter.reserve(key, limit)) return;
+    const retry = String(this.limiter.retryAfter(key));
     http.getResponse<HeaderSink>()?.setHeader?.('Retry-After', retry);
     throw rateLimited('Too many failed token attempts');
   }
