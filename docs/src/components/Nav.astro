@@ -1,0 +1,33 @@
+---
+import { LINKS } from '../data/site';
+import GitHubIcon from './GitHubIcon.astro';
+
+const links = [
+  ['#how', 'How it works'],
+  ['#features', 'Features'],
+  ['#games', 'Games'],
+  ['#self-host', 'Self-host'],
+  ['#faq', 'FAQ'],
+] as const;
+---
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Raid Ledger home"
+      ><span class="brand-mark" aria-hidden="true">RL</span><span class="brand-text">Raid Ledger</span></a
+    >
+    <nav class="nav-links" aria-label="Primary">
+      {links.map(([href, label]) => <a href={href}>{label}</a>)}
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost nav-gh" href={LINKS.repo}><GitHubIcon /> GitHub</a>
+      <a class="btn btn-primary" href="#self-host">Get started</a>
+      <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    {links.map(([href, label]) => <a href={href}>{label}</a>)}
+    <a href={LINKS.repo}>GitHub</a>
+  </div>
+</header>

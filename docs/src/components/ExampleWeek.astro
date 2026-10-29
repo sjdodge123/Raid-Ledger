@@ -1,0 +1,34 @@
+---
+// "A week at Hearthside Gaming" (ruling Q9): a labelled fictional example in
+// place of testimonials, then the stat tiles.
+const WEEK = [
+  ['Mon', 'A poll picks raid night.', 'Officer Brannoc asks "When can we raid this week?". Thursday wins with 27 votes by the deadline; the event is created and posted to #raids.'],
+  ['Tue', 'A new member finds their way in.', 'Kestrel joins the Discord, taps the pinned sign-in button, sets the evenings they play and joins the Emberfall guild hub from an invite link.'],
+  ['Wed', 'The Valheim server fills up.', 'Three people are on Stonewake, so Quick Play pings the Valheim role. Two more hop on. One dies to a troll, and the screenshot lands in the hub Gallery.'],
+  ['Thu', 'Raid night runs itself.', 'Reminders go out at 7, #mc-thursday opens at 7:45, and Saffi flags she is ten minutes late. Attendance comes from voice: 38 of 40.'],
+  ['Fri', 'The lineup picks the game.', 'Twelve people vote. The game most of them already own wins, and game night is on the calendar before the argument starts.'],
+  ['Sun', 'The digest wraps up the week.', "What everyone played, Kestrel's first raid, what's coming up, and a sale on a game half the server has wishlisted."],
+] as const;
+
+const STATS = [
+  ['200k+', 'games in the library'],
+  ['1', 'container runs it all'],
+  ['15', 'themes, light and dark'],
+  ['$0', 'MIT licensed'],
+] as const;
+---
+<section class="section" id="week">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow">What it looks like</span>
+      <h2>A week at Hearthside Gaming</h2>
+      <p class="lede">An example community: one Discord server with a WoW guild, a Valheim server and a Friday game-night crowd.</p>
+    </div>
+    <div class="timeline">
+      {WEEK.map(([day, head, body]) => <div class="tl reveal"><time>{day}</time><div><b>{head}</b><p>{body}</p></div></div>)}
+    </div>
+    <div class="stats">
+      {STATS.map(([n, label]) => <div class="stat reveal"><b>{n}</b><span>{label}</span></div>)}
+    </div>
+  </div>
+</section>

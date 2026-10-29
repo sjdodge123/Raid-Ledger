@@ -1,0 +1,32 @@
+---
+// HTML replica of the bot's event embed (ruling Q10). The buttons are live:
+// scripts/site.ts updates the healer count and the footer line.
+const roles = [
+  { name: 'Tanks', have: 2, of: 2 },
+  { name: 'Healers', have: 5, of: 8, key: 'heal' },
+  { name: 'DPS', have: 24, of: 30 },
+];
+const pct = (have: number, of: number) => `width:${Math.round((have / of) * 100)}%`;
+---
+<div class="embed" id="embed">
+  <div class="embed-head">
+    <span class="bot-ava" aria-hidden="true"></span><b class="embed-name">Raid Ledger</b><span class="bot-tag">APP</span><span>Today at 6:02 PM</span>
+  </div>
+  <h4>Molten Core: Thursday Raid</h4>
+  <p class="meta">Thu 8:00 PM · 3h · voice opens 7:45 in <b class="embed-name">#mc-thursday</b></p>
+  <div class="roles">
+    {roles.map((r) => (
+      <div class="role">
+        {r.name}
+        <b><span data-count={r.key}>{r.have}</span>/{r.of}</b>
+        <div class="bar"><i data-bar={r.key} style={pct(r.have, r.of)}></i></div>
+      </div>
+    ))}
+  </div>
+  <div class="embed-btns">
+    <button class="dbtn go" type="button" data-act="in" aria-pressed="false">Sign up</button>
+    <button class="dbtn" type="button" data-act="maybe" aria-pressed="false">Tentative</button>
+    <button class="dbtn" type="button" data-act="out" aria-pressed="false">Can't make it</button>
+  </div>
+  <p class="embed-foot" id="embedFoot" aria-live="polite">31 of 40 signed up · reminder DMs go out 1 hour before</p>
+</div>

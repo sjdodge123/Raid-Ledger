@@ -1,0 +1,32 @@
+---
+// One chapter of the growth story: copy + feature list beside its screenshot slots.
+import type { Chapter } from '../data/chapters';
+import ScreenshotFrame from './ScreenshotFrame.astro';
+
+interface Props {
+  chapter: Chapter;
+  index: number;
+}
+
+const { chapter, index } = Astro.props;
+---
+<article class:list={['chapter', { first: index === 0, flip: chapter.flip }]}>
+  <div class="ch-copy reveal">
+    <span class="ch-num"><b>{index + 1}</b> {chapter.name}</span>
+    <h3>{chapter.title}</h3>
+    <p>{chapter.intro}</p>
+    <ul class="feats">
+      {chapter.features.map((f) => (
+        <li>
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d={f.icon}></path></svg>
+          </span>
+          <div><b>{f.title}</b><span>{f.body}</span></div>
+        </li>
+      ))}
+    </ul>
+  </div>
+  <div class:list={['ch-media', 'reveal', { duo: chapter.duo }]}>
+    {chapter.shots.map((id) => <ScreenshotFrame id={id} />)}
+  </div>
+</article>

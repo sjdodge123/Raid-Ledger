@@ -1,0 +1,50 @@
+---
+// Game plugins grid (ruling Q7). COMING_NEXT names upcoming hubs only once a
+// spike is approved; empty it to fall back to the generic "Your game next?" card.
+import { LINKS } from '../data/site';
+
+const PLUGINS = [
+  { c: 'core', ic: 'C', name: 'Core', via: 'Built in · every game', body: 'Events, polls, lineups, hubs, the Gallery, and Steam achievements and playtime for any game your community plays.', chips: ['Steam sync', 'Deal prices', 'Game library'] },
+  { c: 'wow', ic: 'W', name: 'World of Warcraft', via: 'Classic and Forever · LedgerLink addon', body: 'Guild hubs with the roster by rank, class and profession, who is saved to which raid, recent level-ups, and gear and quests from the LedgerLink addon.', chips: ['Guild roster', 'Lockouts', 'Characters'] },
+  { c: 'valheim', ic: 'V', name: 'Valheim', via: 'Dedicated server · ValheimLink mod', body: 'A server hub with the explored map, portals, deaths, characters, chest contents and a crafting planner that knows what your server has found.', chips: ['Map', 'Deaths', 'Planner'] },
+  { c: 'bg3', ic: 'B', name: "Baldur's Gate 3", via: 'Campaign saves · Companion app', body: 'A campaign hub with the party, where you left off, session history and a save picture for every session you close.', chips: ['Party', 'Sessions', 'Saves'] },
+  { c: 'servers', ic: 'S', name: 'Game servers', via: 'Pelican panel', body: "Server hours on the calendar, a live status chip on events, and who's online feeding Quick Play, so a quiet server fills up.", chips: ['Schedules', 'Live status', 'Quick Play'] },
+];
+
+const COMING_NEXT: string[] = ['Enshrouded', 'Satisfactory', 'Halo: MCC'];
+const comingBody = COMING_NEXT.length
+  ? `Hubs for ${COMING_NEXT.slice(0, -1).join(', ')} and ${COMING_NEXT.at(-1)} are being designed now. Is your community built around another game?`
+  : 'Is your community built around a game we do not cover yet?';
+---
+<section class="section section-band" id="games">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow">Game plugins</span>
+      <h2>Works with any game. Goes deeper with yours.</h2>
+      <p class="lede">
+        The core works for any of the 200,000+ games in the library. Plugins connect to the game itself, so a hub
+        shows what happened in game, not only in Discord.
+      </p>
+    </div>
+    <div class="plugins">
+      {PLUGINS.map((p) => (
+        <div class="plug reveal" data-c={p.c}>
+          <div class="plug-top">
+            <span class="plug-ic" aria-hidden="true">{p.ic}</span>
+            <div><h3>{p.name}</h3><span class="via">{p.via}</span></div>
+          </div>
+          <p>{p.body}</p>
+          <div class="chips">{p.chips.map((chip) => <span class="chip">{chip}</span>)}</div>
+        </div>
+      ))}
+      <div class="plug soon reveal">
+        <div class="plug-top">
+          <span class="plug-ic" aria-hidden="true">+</span>
+          <div><h3>{COMING_NEXT.length ? 'Coming next' : 'Your game next?'}</h3><span class="via">{COMING_NEXT.length ? 'In design' : 'Tell us'}</span></div>
+        </div>
+        <p>{comingBody} <a href={LINKS.issues}>Open an issue</a>.</p>
+        {COMING_NEXT.length > 0 && <div class="chips">{COMING_NEXT.map((g) => <span class="chip">{g}</span>)}</div>}
+      </div>
+    </div>
+  </div>
+</section>

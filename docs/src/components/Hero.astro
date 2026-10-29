@@ -1,0 +1,38 @@
+---
+// Hero: headline + CTAs, and the interactive Discord embed over the S1 hub frame.
+import Check from './Check.astro';
+import DiscordEmbed from './DiscordEmbed.astro';
+import ScreenshotFrame from './ScreenshotFrame.astro';
+
+const trust = ['Free and open source', 'Sign in with Discord', 'Your server, your data'];
+---
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="reveal">
+      <span class="pill"><b>New</b> A hub for every guild, server and campaign</span>
+      <h1>Grow a Discord gaming community that <span class="hl">actually shows up.</span></h1>
+      <p class="lede">
+        Raid Ledger takes the busywork out of running a gaming community, right inside Discord. Members join
+        events in one click, reminders land in their DMs, attendance comes from voice, and polls settle when you
+        play and what. You get game night back, and your community keeps growing.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#self-host">
+          Start your community
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </a>
+        <a class="btn btn-ghost" href="#features">See what it does</a>
+      </div>
+      <div class="trust">
+        {trust.map((t) => <span><Check />{t}</span>)}
+      </div>
+    </div>
+
+    <div class="stage reveal" role="group" aria-label="Example: an event posted in Discord by the Raid Ledger bot">
+      <div class="app-frame float">
+        <ScreenshotFrame id="S1" priority />
+      </div>
+      <DiscordEmbed />
+    </div>
+  </div>
+</section>
