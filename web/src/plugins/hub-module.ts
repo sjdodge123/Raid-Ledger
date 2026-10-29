@@ -8,7 +8,7 @@
  * reads the module for the hub's `kind` through `useHubModule`, which (like
  * slots and calendar layers) returns nothing while the owning plugin is off.
  */
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { CreateGuildEditorInput, GuildEditor, GuildKind, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
@@ -121,6 +121,38 @@ export interface HubMemberColumn {
     groupBy?: (row: HubMemberRow) => HubMemberGrouping;
 }
 
+/**
+ * ROK-1173 — one "Sort by" option of the Members list. `compare` orders two
+ * rows; core breaks ties by name, so a sort never reshuffles equal rows. Core
+ * always offers the module's own row order first (id `rank`, the default) and
+ * Name A–Z / Z–A; `HubModule.memberSorts` appends the rest.
+ */
+export interface HubMemberSort {
+    id: string;
+    label: string;
+    /** Omitted = the module's row order (only the default option does this). */
+    compare?: (a: HubMemberRow, b: HubMemberRow) => number;
+}
+
+/**
+ * ROK-1173 — what a module's `useMemberFilters` hook hands the Members frame.
+ * Core owns the opener (funnel at 1024px and up, Filters FAB + sheet below),
+ * the search box, the sort and the flat/grouped switch; the module owns the
+ * filter state and these values.
+ */
+export interface HubMemberFilters {
+    /** Active filter groups (values differing from the defaults) — the funnel/FAB badge. 0 = no filters. */
+    activeCount: number;
+    /** True when the row passes every active filter (AND across groups, OR within one). */
+    matches: (row: HubMemberRow) => boolean;
+    /** "Clear all" — resets the filters only (not the search or the sort). */
+    clearAll: () => void;
+    /** The filter controls, rendered inside `FilterEntry` (inline panel or bottom sheet). */
+    controls: ReactNode;
+    /** Optional block between the toolbar and the list (WoW: the profession coverage strip). */
+    lead?: ReactNode;
+}
+
 export interface HubModule {
     kind: HubKind;
     tabs: readonly HubTab[];
@@ -131,6 +163,14 @@ export interface HubModule {
     heroPills: readonly ComponentType<HubCtx>[];
     /** Every member of the hub, in the order the module wants them listed. */
     memberRows: (page: GuildPage) => readonly HubMemberRow[];
+    /** ROK-1173: extra "Sort by" options after core's default order + Name A–Z / Z–A (see `MEMBER_SORT_PRESETS`). */
+    memberSorts?: readonly HubMemberSort[];
+    /**
+     * ROK-1173: the Members filter state, as a React hook. Core calls it once
+     * per render of the Members frame with every row the module listed (the
+     * frame remounts when the module changes, so the hook order is stable).
+     */
+    useMemberFilters?: (ctx: HubCtx, rows: readonly HubMemberRow[]) => HubMemberFilters;
     /** Text the Members search box matches a row against. Default: the row's name. */
     memberSearch?: (row: HubMemberRow) => string;
     /** Band above the groups in the Members frame (WoW: role counts). */

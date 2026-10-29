@@ -5,7 +5,7 @@
  */
 import type { GuildPage } from '@raid-ledger/contract';
 import type { HubMemberColumn, HubMemberGrouping, HubMemberRow } from '../../hub-module';
-import { FactsCell, MainCell, NameCell, RankCell, RoleCell } from './wow-members';
+import { FactsCell, MainCell, NameCell, ProfessionsCell, RankCell, RoleCell } from './wow-members';
 import { ROLE_META, rankLabel } from './wow-guild.helpers';
 
 export const WOW_MEMBERS_EMPTY = 'No members yet. Import a LedgerLink guild export to fill the roster.';
@@ -40,4 +40,6 @@ export const WOW_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
     { id: 'rank', header: 'Rank', cell: RankCell, groupBy: wowRankGroup },
     { id: 'main', header: 'Main', cell: MainCell },
     { id: 'role', header: 'Raid role', cell: RoleCell },
+    // ROK-1173 AC8 — last, so on phone cards a clipped line loses professions first.
+    { id: 'professions', header: 'Professions', cell: ProfessionsCell },
 ];
