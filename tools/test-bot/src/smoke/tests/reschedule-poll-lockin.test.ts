@@ -7,7 +7,8 @@
  *
  *   1. Poll start → the linked event's channel embed flips to the amber
  *      RESCHEDULING card AND its Discord Scheduled Event is torn down.
- *   2. Lock-in (reschedule in place → complete the poll) → the embed refreshes
+ *   2. Lock-in (ROK-2040: one claim-first `POST …/reschedule-lock-in` at a
+ *      seeded slot moves the event and closes the poll) → the embed refreshes
  *      back to the live POSTED card at the new time AND the Scheduled Event is
  *      recreated.
  *   3. The whole cycle repeats — a second poll+lock-in works identically.
@@ -29,7 +30,6 @@ import {
 } from "../../helpers/polling.js";
 import {
   createEvent,
-  rescheduleEvent,
   deleteEvent,
   awaitProcessing,
   flushEmbedQueue,
@@ -96,18 +96,40 @@ function openReschedulePoll(
   });
 }
 
-/** Lock the poll in: move the event in place, then complete the poll. */
+/** Seed a slot `minutesFromNow` out; returns its stored `proposedTime`. */
+async function seedSlot(
+  api: ApiClient,
+  poll: CreatePollResponse,
+  minutesFromNow: number,
+): Promise<string> {
+  const base = `/lineups/${poll.lineupId}/schedule/${poll.id}`;
+  const { id } = await api.post<{ id: number }>(`${base}/suggest`, {
+    proposedTime: new Date(Date.now() + minutesFromNow * 60_000).toISOString(),
+  });
+  const page = await api.get<{ slots: { id: number; proposedTime: string }[] }>(
+    base,
+  );
+  const slot = (page.slots ?? []).find((s) => s.id === id);
+  if (!slot)
+    throw new Error(`Suggested slot ${id} missing from poll ${poll.id}`);
+  return slot.proposedTime;
+}
+
+/**
+ * Lock the poll in the way the web does (ROK-2040): one claim-first request
+ * at a poll slot moves the event in place and closes the poll.
+ */
 async function lockIn(
   ctx: TestContext,
-  eventId: number,
-  matchId: number,
+  poll: CreatePollResponse,
   minutesFromNow: number,
 ): Promise<void> {
-  await rescheduleEvent(ctx.api, eventId, minutesFromNow);
-  await awaitProcessing(ctx.api);
-  // ROK-1844: an `eventId` now needs the winning slot's `startTime`; this
-  // test asserts the embed refresh, which the linked poll re-emits anyway.
-  await ctx.api.post(`/scheduling-polls/${matchId}/complete`, {});
+  const startTime = await seedSlot(ctx.api, poll, minutesFromNow);
+  const endTime = new Date(Date.parse(startTime) + 60 * 60_000).toISOString();
+  await ctx.api.post(`/scheduling-polls/${poll.id}/reschedule-lock-in`, {
+    startTime,
+    endTime,
+  });
   await awaitProcessing(ctx.api);
   await flushEmbedQueue(ctx.api);
 }
@@ -245,7 +267,7 @@ const lockInRestoresEventRepeatably: SmokeTest = {
         );
 
         const expectedStartMs = Date.now() + minutes * 60_000;
-        await lockIn(ctx, ev.id, poll.id, minutes);
+        await lockIn(ctx, poll, minutes);
 
         // Embed back to the live card and the Scheduled Event recreated AT
         // THE NEW TIME — presence alone would false-pass on a stale-time SE
@@ -263,7 +285,7 @@ const lockInRestoresEventRepeatably: SmokeTest = {
             const se = await findScheduledEventByTitle(ev.title);
             if (!se || se.startsAtMs === null) return null;
             // ±3 min tolerance: expectedStartMs is stamped just before the
-            // reschedule PATCH, so only seconds of processing skew apply.
+            // slot is seeded, so only seconds of processing skew apply.
             return Math.abs(se.startsAtMs - expectedStartMs) < 3 * 60_000
               ? se
               : null;

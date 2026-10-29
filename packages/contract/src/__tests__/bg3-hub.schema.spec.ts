@@ -41,6 +41,7 @@ const snapshot = {
   savedAt: '2026-10-27T21:00:00Z',
   receivedAt: '2026-10-27T21:00:05Z',
   uploaderUserId: 7,
+  uploader: { userId: 7, displayName: 'Tav' },
   area: 'SCL_Main_A',
   difficulty: 'DifficultyHard',
   ruleset: null,
@@ -63,12 +64,15 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     expect(hubManifestProblems({ bg3: BG3_HUB_MANIFEST })).toEqual([]);
   });
 
-  it('declares the ingest source and the retention job, no widgets or tabs, scoped to BG3', () => {
+  it('declares the ingest source, the retention job, the three ROK-1958 widgets and the Campaign tab, scoped to BG3', () => {
     expect(BG3_HUB_MANIFEST.behaviours.map((b) => `${b.kind}/${b.id}`)).toEqual([
       'ingest-source/bg3-save',
       'scheduled-job/Bg3HistoryRetentionCron_prune',
     ]);
-    expect([BG3_HUB_MANIFEST.widgets, BG3_HUB_MANIFEST.tabs]).toEqual([[], []]);
+    expect(BG3_HUB_MANIFEST.widgets.map((w) => `${w.layoutKey}/${w.id}`)).toEqual([
+      'plugin/where-we-are', 'plugin/party', 'plugin/session-history',
+    ]);
+    expect(BG3_HUB_MANIFEST.tabs).toEqual([{ id: 'campaign', label: 'Campaign' }]);
     expect(BG3_HUB_MANIFEST.gameSlugs).toEqual([...BG3_GAME_SLUGS]);
   });
 

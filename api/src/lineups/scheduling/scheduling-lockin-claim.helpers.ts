@@ -47,17 +47,31 @@ export type ClaimedFromStatus = (typeof CLAIMABLE)[number];
 const m = schema.communityLineupMatches;
 
 /**
+ * The link the claimed row must carry: none for a lock-in that will create
+ * its event, the poll's own event for a reschedule lock-in (ROK-2040).
+ */
+function linkIs(linkedEventId: number | null) {
+  return linkedEventId === null
+    ? isNull(m.linkedEventId)
+    : eq(m.linkedEventId, linkedEventId);
+}
+
+/**
  * Claim the match for this lock-in, or 409 when it is already locked in (or
  * being locked in). Commits before returning; holds nothing afterwards.
  *
  * @param claimable - The statuses this door may claim from. The expired path
  *   keeps the default (`suggested` + `scheduling`); the create-form lock-in
  *   (ROK-2032 D2) passes `['scheduling']` only.
+ * @param linkedEventId - ROK-2040: a reschedule poll is already linked to the
+ *   event it moves; pass that id so the claim matches the linked row. The
+ *   default (`null`) claims only an unlinked match.
  */
 export async function claimMatchForLockIn(
   db: Db,
   matchId: number,
   claimable: readonly ClaimedFromStatus[] = CLAIMABLE,
+  linkedEventId: number | null = null,
 ): Promise<ClaimedFromStatus> {
   const prior = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -67,7 +81,7 @@ export async function claimMatchForLockIn(
         and(
           eq(m.id, matchId),
           inArray(m.status, [...claimable]),
-          isNull(m.linkedEventId),
+          linkIs(linkedEventId),
         ),
       )
       .for('update');
@@ -107,12 +121,14 @@ export async function linkClaimedMatch(
 /**
  * Undo a claim whose event was never created. Never throws: the caller is
  * already failing with the create's own error, which must reach the client.
+ * `linkedEventId` is the same value the claim was made with (ROK-2040).
  */
 export async function releaseMatchClaim(
   db: Db,
   matchId: number,
   prior: ClaimedFromStatus,
   logger: Pick<Logger, 'error'>,
+  linkedEventId: number | null = null,
 ): Promise<void> {
   try {
     await db
@@ -122,7 +138,7 @@ export async function releaseMatchClaim(
         and(
           eq(m.id, matchId),
           eq(m.status, 'scheduled'),
-          isNull(m.linkedEventId),
+          linkIs(linkedEventId),
         ),
       );
   } catch (err: unknown) {

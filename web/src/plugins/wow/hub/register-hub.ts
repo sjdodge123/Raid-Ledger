@@ -7,7 +7,7 @@
 import { lazy } from 'react';
 import type { HubModule } from '../../hub-module';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
-import { WowFactionPill, WowWhereFact } from './wow-hero';
+import { WowFactionPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
 import { wowHeroNote } from './wow-hero.helpers';
 import { WowRoleSummaryBand } from './wow-members';
 import {
@@ -43,7 +43,7 @@ export const wowHubModule: HubModule = {
         { id: 'members-summary', order: 60, component: WowMembersSummary },
     ],
     memberColumns: WOW_MEMBER_COLUMNS,
-    heroPills: [WowWhereFact, WowFactionPill],
+    heroPills: [WowWhereFact, WowFactionPill, WowViewerRolePills],
     memberRows: wowMemberRows,
     memberSearch: wowMemberSearch,
     membersSummary: WowRoleSummaryBand,

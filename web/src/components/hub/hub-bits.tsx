@@ -5,18 +5,29 @@
  */
 import type { JSX, ReactNode } from 'react';
 
-type PillTone = 'neutral' | 'success' | 'warning';
+type PillTone = 'neutral' | 'success' | 'warning' | 'faction-alliance' | 'faction-horde';
 
 const PILL_TONE: Record<PillTone, string> = {
     neutral: 'border-edge bg-panel text-secondary',
     success: 'border-success/30 bg-success/10 text-success',
     warning: 'border-warning/30 bg-warning/10 text-warning',
+    /** ROK-1815 — categorical faction hues, not a status; the label always names the faction. */
+    'faction-alliance': 'border-faction-alliance/30 bg-faction-alliance/10 text-faction-alliance',
+    'faction-horde': 'border-faction-horde/30 bg-faction-horde/10 text-faction-horde',
 };
 
+interface PillProps {
+    tone?: PillTone;
+    /** Optional tooltip, e.g. what the pill describes ("Your role in this guild"). */
+    title?: string;
+    children: ReactNode;
+}
+
 /** Read-only status pill, design-system §4.3. */
-export function Pill({ tone = 'neutral', children }: { tone?: PillTone; children: ReactNode }): JSX.Element {
+export function Pill({ tone = 'neutral', title, children }: PillProps): JSX.Element {
     return (
-        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`}>
+        <span data-tone={tone} title={title}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`}>
             {children}
         </span>
     );

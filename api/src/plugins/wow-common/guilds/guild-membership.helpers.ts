@@ -93,6 +93,16 @@ export async function findLinkedMemberRows(
     .where(and(eq(characters.userId, userId), liveLinkedMember(), scope));
 }
 
+/**
+ * ROK-1815: whether any of the viewer's live rows is rank 0 (the GM) in the
+ * latest snapshot — the hero's "Guild Master" label. Display only.
+ */
+export function holdsGuildMasterRank(
+  rows: Pick<LinkedMemberRow, 'rankIndex'>[],
+): boolean {
+  return rows.some((r) => r.rankIndex === 0);
+}
+
 /** SQL predicate shared by every linked-member read: active + latest snapshot. */
 function liveLinkedMember(): SQL | undefined {
   return and(isNull(users.deactivatedAt), inLatestSnapshot());
