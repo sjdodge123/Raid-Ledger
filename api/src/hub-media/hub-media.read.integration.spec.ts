@@ -27,6 +27,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { HUB_NOT_FOUND } from '../guilds/hub-hidden.helpers';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { BG3_PLUGIN_ID } from '../plugins/bg3/bg3.constants';
 import { PELICAN_PLUGIN_ID } from '../plugins/pelican/pelican.constants';
 import { fakeServer } from '../plugins/pelican/testing/pelican-fixtures';
 import { ensureFixtureHubId } from '../plugins/valheim/armory/valheim-armory-map-hub.helpers';
@@ -365,6 +366,12 @@ describe('source gates (ROK-1959 D-5)', () => {
       .get(HubMediaSourceGateRegistry)
       .register(CORE_PLUGIN_ID, 'bg3-save', () => Promise.resolve(hideSaves));
   });
+  /** The real bg3 gate (ROK-1959 L3) fails closed while bg3 is off, so turn it on (truncate resets plugins). */
+  beforeEach(async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.ensureInstalled(BG3_PLUGIN_ID);
+    await registry.activate(BG3_PLUGIN_ID);
+  });
   afterEach(() => {
     hideSaves = false;
   });
@@ -414,6 +421,17 @@ describe('source gates (ROK-1959 D-5)', () => {
       paths.map(async (p) => (await get(p, 'operator')).status),
     );
     expect(statuses).toEqual([404, 404]);
+  });
+
+  it('bg3 inactive hides its save pictures (fail closed, D-5)', async () => {
+    await picture('shot', 'screenshot', 1);
+    await save();
+    await testApp.app.get(PluginRegistryService).deactivate(BG3_PLUGIN_ID);
+    expect(shape(await listOf('operator'))).toEqual({
+      captions: ['shot'],
+      total: 1,
+      kinds: ['screenshot'],
+    });
   });
 });
 
