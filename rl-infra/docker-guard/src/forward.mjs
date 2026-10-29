@@ -23,6 +23,7 @@ export function wantsUpgrade(headers) {
  * Pipe req → daemon → res. `body` replaces the request body:
  * { buf: Buffer } (a rewritten JSON body) or { stream, length } (a spooled build context).
  * `path` replaces the request-target (c6: /events gets a rebuilt query).
+ * c9: response headers are flushed the moment the daemon sends them.
  * c7: `pipe()` never propagates closure, so a runner that goes away (cancelled
  * build, dropped /events or /logs follow) explicitly tears the upstream request
  * and response down — the daemon stops the build / subscription with it.
@@ -39,6 +40,11 @@ export function forward(socketPath, req, res, body, onError, path = req.url) {
     upRes = r;
     if (res.destroyed) return r.destroy();
     res.writeHead(r.statusCode ?? 502, stripHop(r.headers));
+    // c9: writeHead only queues the headers until the first body byte. A
+    // long-poll (`wait?condition=next-exit`) or an attach stream sends its
+    // headers at once and its body only when the container exits — and
+    // `docker run` waits for those headers BEFORE it starts the container.
+    res.flushHeaders();
     pipeline(r, res, () => {});
   });
   const teardown = () => {
