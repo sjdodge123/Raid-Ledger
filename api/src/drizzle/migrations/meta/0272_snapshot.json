@@ -1,5 +1,5 @@
 {
-  "id": "c241aca4-0d02-44ad-8e95-78ce535e54d8",
+  "id": "0714e265-c8eb-4fd3-94ff-a3cd638b613c",
   "prevId": "6d767017-d605-42c9-b4c8-70d4fc51908f",
   "version": "7",
   "dialect": "postgresql",
@@ -13070,11 +13070,11 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord', 'upload')"
+          "value": "\"hub_media\".\"source\" IN ('discord', 'upload', 'bg3-save')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
-          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload')"
+          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload', 'save')"
         }
       },
       "isRLSEnabled": false
