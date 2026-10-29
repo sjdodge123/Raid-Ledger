@@ -22,6 +22,11 @@ export interface ReminderDedupClaim {
  * (written via `toISOString()`), so the loaded JS Date is converted to a UTC
  * `timestamp` (independent of the session TimeZone) and the stored start is
  * truncated to milliseconds — the precision of the JS Date it was read into.
+ *
+ * `FOR SHARE` closes the overlap with a delay: a claim that meets the delay's
+ * uncommitted UPDATE waits for it, then re-checks the new start (and refuses);
+ * a claim that locks first commits before the UPDATE, so the delay's dedup
+ * DELETE that follows removes it and the window re-arms.
  */
 export async function claimReminderDedup(
   db: PostgresJsDatabase<typeof schema>,
@@ -36,6 +41,7 @@ export async function claimReminderDedup(
       WHERE ${schema.events.id} = ${input.eventId}::int
         AND date_trunc('milliseconds', lower(${schema.events.duration}))
           = (${loadedStart}::timestamptz AT TIME ZONE 'UTC')
+      FOR SHARE
     )
     ON CONFLICT (event_id, user_id, reminder_type) DO NOTHING
     RETURNING id
