@@ -23,17 +23,6 @@ function makeSelectFromWhere(resolvedValue: unknown[]) {
   };
 }
 
-/** Build a dedup insert chain that always succeeds (no conflict). */
-function makeInsertChain(rows: unknown[] = [{ id: 1 }]) {
-  return {
-    values: jest.fn().mockReturnValue({
-      onConflictDoNothing: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue(rows),
-      }),
-    }),
-  };
-}
-
 /** Shared event starting soon (10 min from now). */
 function makeSoonEvent() {
   const now = new Date();
@@ -53,7 +42,7 @@ function makeSoonEvent() {
 
 /** Wire up mockDb for a full handleReminders() run with two signed-up users. */
 function wireHandleRemindersDb(
-  mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>,
+  mockDb: Record<'delete' | 'execute' | 'select', jest.Mock>,
   options: {
     users: { id: number; discordId: string | null }[];
     eventId?: number;
@@ -128,7 +117,7 @@ async function buildModule(opts: {
 }
 
 describe('EventReminderService — voice suppression (ROK-842)', () => {
-  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
+  let mockDb: Record<'delete' | 'execute' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
@@ -136,7 +125,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
   };
 
   beforeEach(() => {
-    mockDb = { select: jest.fn(), insert: jest.fn(), delete: jest.fn() };
+    mockDb = { select: jest.fn(), execute: jest.fn(), delete: jest.fn() };
 
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
@@ -163,7 +152,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       wireHandleRemindersDb(mockDb, {
         users: [{ id: 1, discordId: 'discord-1' }],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain());
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -204,7 +193,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       wireHandleRemindersDb(mockDb, {
         users: [{ id: 2, discordId: 'discord-2' }],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -238,7 +227,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
           { id: 11, discordId: 'discord-not-in-voice' },
         ],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -285,7 +274,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
           { id: 11, discordId: 'discord-11' },
         ],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -307,7 +296,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       wireHandleRemindersDb(mockDb, {
         users: [{ id: 3, discordId: 'discord-3' }],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -330,7 +319,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
           { id: 21, discordId: 'discord-21' },
         ],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -352,7 +341,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       wireHandleRemindersDb(mockDb, {
         users: [{ id: 5, discordId: null }],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -374,7 +363,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       wireHandleRemindersDb(mockDb, {
         users: [{ id: 6, discordId: null }],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 
@@ -395,7 +384,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
           { id: 31, discordId: null },
         ],
       });
-      mockDb.insert.mockReturnValue(makeInsertChain([{ id: 1 }]));
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
 
       await service.handleReminders();
 

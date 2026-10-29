@@ -22,6 +22,7 @@ import {
   buildReminderPayload,
   buildReminderStrings,
 } from './event-reminder.helpers';
+import { claimReminderDedup } from './event-reminder-dedup.helpers';
 
 type CharsByUserMap = Map<
   number,
@@ -272,7 +273,11 @@ export class EventReminderService {
     });
   }
 
-  /** Send a single reminder notification with duplicate prevention. */
+  /**
+   * Send a single reminder notification with duplicate prevention. The dedup
+   * claim only succeeds while the event still starts at `input.startTime`
+   * (ROK-2042), so a pass holding a stale start sends nothing.
+   */
   async sendReminder(input: {
     eventId: number;
     userId: number;
@@ -288,7 +293,7 @@ export class EventReminderService {
     voiceChannelId?: string | null;
     gameId?: number | null;
   }): Promise<boolean> {
-    if (!(await this.insertReminderDedup(input))) return false;
+    if (!(await claimReminderDedup(this.db, input))) return false;
     const { messageText, titleTimeLabel } = buildReminderStrings(input);
     await this.notificationService.create({
       userId: input.userId,
@@ -298,30 +303,6 @@ export class EventReminderService {
       payload: buildReminderPayload(input),
     });
     return true;
-  }
-
-  /** Insert dedup record — returns true if this is the first send. */
-  private async insertReminderDedup(input: {
-    eventId: number;
-    userId: number;
-    windowType: string;
-  }): Promise<boolean> {
-    const result = await this.db
-      .insert(schema.eventRemindersSent)
-      .values({
-        eventId: input.eventId,
-        userId: input.userId,
-        reminderType: input.windowType,
-      })
-      .onConflictDoNothing({
-        target: [
-          schema.eventRemindersSent.eventId,
-          schema.eventRemindersSent.userId,
-          schema.eventRemindersSent.reminderType,
-        ],
-      })
-      .returning();
-    return result.length > 0;
   }
 
   /** Fetch user timezones (public for test access). */
