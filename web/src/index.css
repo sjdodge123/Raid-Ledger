@@ -56,6 +56,12 @@
     /* violet-500 — committed elsewhere (ROK-1584) */
     --color-slot: #22d3ee;
     /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
+    /* ROK-1815: WoW faction hues (categorical, not a status) — the guild hero's faction pill.
+       Two blocks only, like busy/slot; semantic-tokens.guard.test.ts measures them on every scheme. */
+    --color-faction-alliance: #60a5fa;
+    /* blue-400 — Alliance */
+    --color-faction-horde: #f87171;
+    /* red-400 — Horde */
 
     /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
        MEANING, not the hue. Dark family values match the Tailwind shades these
@@ -122,6 +128,10 @@ html {
     --color-muted: #475569;
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
+    --color-faction-alliance: #1e40af;
+    /* blue-800 — Alliance on light (ROK-1815) */
+    --color-faction-horde: #991b1b;
+    /* red-800 — Horde on light (ROK-1815); red-700 fails AA on the celestial / quest-log tints */
     /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
        semantic-tokens.guard.test.ts, which recomputes them from these values — warning
        and danger are ALSO asserted on the panel, the JourneyHero card and their own

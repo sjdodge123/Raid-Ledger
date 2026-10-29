@@ -3,20 +3,33 @@
  * show the event on one of their guild pages. Lists only guilds of the chosen
  * game that the viewer can edit; renders nothing when there are none (plain
  * members and non-WoW games never see it). The server re-checks edit rights.
+ *
+ * ROK-1817: on create (`dropUnlisted`), a preselected guild the viewer cannot
+ * edit (a crafted `?guildId=` link) is cleared once the list settles — the
+ * picker could never show it, so it would ride along unseen and 403 on submit.
+ * Edit mode keeps an unchanged tag (`guildIdForSubmit` omits it).
  */
-import type { ChangeEvent, JSX } from 'react';
+import { useEffect, type ChangeEvent, type JSX } from 'react';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
-import { useGameGuilds } from './guild-queries';
+import { useGameGuildsQuery } from './guild-queries';
 
 interface EventCreateGuildFieldProps {
     gameId: number | null;
     guildId: number | null;
     onGuildChange: (guildId: number | null) => void;
+    /** Create mode: clear a `guildId` that is not one of the viewer's editable guilds. */
+    dropUnlisted?: boolean;
 }
 
-export function EventCreateGuildField({ gameId, guildId, onGuildChange }: EventCreateGuildFieldProps): JSX.Element | null {
-    const guilds = useGameGuilds(gameId ?? undefined).filter((g) => g.canEdit);
+export function EventCreateGuildField({ gameId, guildId, onGuildChange, dropUnlisted = false }: EventCreateGuildFieldProps): JSX.Element | null {
+    const q = useGameGuildsQuery(gameId ?? undefined);
+    const guilds = (q.data?.guilds ?? []).filter((g) => g.canEdit);
+    // Only a successful lookup can prove the guild is absent; a failed one keeps the pick (Codex P2).
+    const unseen = dropUnlisted && q.isSuccess && guildId !== null && !guilds.some((g) => g.id === guildId);
+    useEffect(() => {
+        if (unseen) onGuildChange(null);
+    }, [unseen, onGuildChange]);
     if (guilds.length === 0) return null;
     const onChange = (e: ChangeEvent<HTMLSelectElement>): void => {
         const next = Number(e.target.value);

@@ -48,7 +48,8 @@ Reviewers treat a missing update as a MINOR finding. See CLAUDE.md "Reference de
    `index.css:106` (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:199` `sky`, `:251` `dawn`,
    `:303` `holy`, `:355` `celestial`: those four re-declare the surface/text/edge set, so a surface token
    added only to the shared block is unthemed in them. **Scheme-agnostic accents are the exception** —
-   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger` live in exactly
+   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger` and the two
+   `--color-faction-*` hues (ROK-1815) live in exactly
    two blocks, `@theme` and the shared light block, and inherit into the four per-scheme blocks (ROK-1586
    OQ-1). The dark defaults live on `@theme` (`:32`) and `html` (`:96`) — the root only, which is §6.8.
 
@@ -87,6 +88,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
 | `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
+| `--color-faction-alliance` | `bg-faction-alliance/10` `border-faction-alliance/30` `text-faction-alliance` | `#60a5fa` | `#1e40af` | WoW Alliance — categorical, not a status: the guild hero's faction pill (`Pill tone="faction-alliance"`, ROK-1815). The label always names the faction |
+| `--color-faction-horde` | `bg-faction-horde/10` `border-faction-horde/30` `text-faction-horde` | `#f87171` | `#991b1b` | WoW Horde — same rules (ROK-1815). Light is red-800 so it clears AA on every light scheme's /10 tint (red-700 fails on celestial / quest-log). Any other faction (Neutral) stays a neutral pill |
 | `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#065f46` | Free / confirmed / "on" / primary state (ROK-1586). Light is emerald-800 (TDB:1793, operator ruling D:1714): 7.68 surface / 7.01 panel / 6.02 own /10 tint, and AA on every tinted light scheme's own panel and tint (worst celestial 5.69 / 4.91) — `semantic-tokens.guard.test.ts` |
 | `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
 | `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#f87171` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586). Dark is red-400 so it reads as text: 5.29 panel / 6.45 surface (TDB:1770 ruling 2026-10-08; red-500 `#ef4444` was 3.89 on panel); white on a solid dark fill is 2.77:1, so a solid `bg-danger` label takes `--color-status-solid-label`. celestial and quest-log declare their own light danger, red-800 `#991b1b` — 5.25 / 5.58 on their own /10 tint (shared `#b91c1c` was 4.12 / 4.39 there; TDB:1770) |

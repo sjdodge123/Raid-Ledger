@@ -20,7 +20,7 @@ export type PluginSlotName =
     | 'character-create:import-form'
     | 'character-create:inline-import'
     | 'event-create:content-browser'
-    /** Guild picker for guild editors (ROK-1787); context `{ gameId, guildId, onGuildChange }`. */
+    /** Guild picker for guild editors (ROK-1787); context `{ gameId, guildId, onGuildChange, dropUnlisted }`. */
     | 'event-create:guild-field'
     | 'event-detail:content-sections'
     | 'event-detail:signup-warnings'
