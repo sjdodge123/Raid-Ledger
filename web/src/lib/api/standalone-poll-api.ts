@@ -5,12 +5,14 @@
 import type {
   ActiveStandalonePollDto,
   CreateSchedulingPollDto,
+  EventResponseDto,
   LockInSchedulingPollDto,
   LockInSchedulingPollResponseDto,
   SchedulingPollResponseDto,
   PollSharePreviewDto,
   PollShareJoinResponseDto,
   PollShareTokenResponseDto,
+  RescheduleEventDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { encodePathSegment } from './path-segment';
@@ -43,6 +45,19 @@ export async function lockInSchedulingPoll(
   body: LockInSchedulingPollDto,
 ): Promise<LockInSchedulingPollResponseDto> {
   return fetchApi(`/scheduling-polls/${matchId}/lock-in`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** ROK-2040: lock a reschedule poll in claim-first — the server claims the
+ *  match, then moves its linked event and re-rosters the slot's voters. A
+ *  losing racer gets a 409 and the event is not moved. */
+export async function rescheduleLockInSchedulingPoll(
+  matchId: number,
+  body: RescheduleEventDto,
+): Promise<EventResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/reschedule-lock-in`, {
     method: 'POST',
     body: JSON.stringify(body),
   });

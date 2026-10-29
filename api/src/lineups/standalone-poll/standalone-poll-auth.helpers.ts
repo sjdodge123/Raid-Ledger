@@ -211,6 +211,8 @@ async function assertIsPollSlot(
 /** What a completion signs voters up to: the event and the winning slot. */
 export interface CompletionTarget {
   eventId?: number | undefined;
+  /** ROK-2040: the event is about to MOVE to `startTime`, so skip start-equality. */
+  eventMovesToSlot?: boolean | undefined;
   startTime?: string | undefined;
 }
 
@@ -235,7 +237,9 @@ export async function assertCanCompletePoll(
       : await assertMayUseEvent(db, ctx, target.eventId, caller);
   if (target.startTime !== undefined) {
     await assertIsPollSlot(db, matchId, target.startTime);
-    if (eventStart) assertSlotIsEventStart(eventStart, target.startTime);
+    if (eventStart && !target.eventMovesToSlot) {
+      assertSlotIsEventStart(eventStart, target.startTime);
+    }
   }
 }
 
