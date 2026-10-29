@@ -6,9 +6,11 @@
  * (per-project, per-worker, per-run name). The seed roster is five Level 60
  * Warriors — Aldren (GM, rank 0, linked), Brisa (officer, 1, linked), Corvin (2,
  * unlinked), Dainel (member, 3, linked), Elowen (4, unlinked) — so the class /
- * level filters do not narrow on their own; the "Linked to an RL account only"
- * switch does (3 of 5). Level sort ties are broken by name (AC4), which the
- * sort step pins. Seeded users are deleted in `finally`.
+ * level filters do not narrow on their own (the step only proves they compose
+ * with a filter that does); the "Linked to an RL account only" switch narrows
+ * 5 → 3. Rank, name and level order all coincide on that seed, so the sort
+ * step uses Name Z–A — the one order that differs from rank order. Seeded
+ * users are deleted in `finally`.
  *
  * Filters open from the inline funnel at 1024px and up, from the Filters FAB +
  * BottomSheet below (the funnel standard, design-system §4.1).
@@ -57,7 +59,7 @@ function memberRow(page: Page, index: number) {
     return page.getByTestId('guild-member-row').nth(index);
 }
 
-test('Members: filter narrows the count, Level sort orders flat rows, Clear all + Rank restores the bands', async ({ page }, testInfo) => {
+test('Members: filter narrows the count, Name Z–A reorders flat rows, Clear all + Rank restores the bands', async ({ page }, testInfo) => {
     const token = await getAdminToken();
     const guild = await seedGuild(token, testInfo);
     try {
@@ -77,14 +79,14 @@ test('Members: filter narrows the count, Level sort orders flat rows, Clear all 
         await page.getByLabel('Min level').fill('60');
         await page.getByTestId('wow-filter-linked').click();
         await closeFilters(page);
-        await expect(page.getByTestId('guild-members-count'), 'Warrior + Lv ≥60 + linked only = the three linked members')
+        await expect(page.getByTestId('guild-members-count'), 'the linked switch narrows 5 → 3; Warrior and Min level 60 match every seeded member, so they only prove the groups AND together')
             .toHaveText('3 of 5 members');
         await expect(page.getByTestId('guild-rank-0'), 'an active filter flattens the list (D5)').toHaveCount(0);
 
-        await page.getByRole('combobox', { name: 'Sort by' }).selectOption({ label: 'Level high→low' });
-        await expect(memberRow(page, 0), 'every seeded member is Lv 60, so the name tie-break orders them').toContainText('Aldren');
-        await expect(memberRow(page, 1)).toContainText('Brisa');
-        await expect(memberRow(page, 2)).toContainText('Dainel');
+        await page.getByRole('combobox', { name: 'Sort by' }).selectOption({ label: 'Name Z–A' });
+        await expect(memberRow(page, 0), 'Name Z–A puts Dainel first (rank order would put Aldren first)').toContainText('Dainel');
+        await expect(memberRow(page, 1), 'Name Z–A: Brisa second').toContainText('Brisa');
+        await expect(memberRow(page, 2), 'Name Z–A: Aldren last').toContainText('Aldren');
 
         await openFilters(page);
         await page.getByRole('button', { name: 'Clear all' }).click();
