@@ -17,7 +17,8 @@ const ENDPOINT_MAY_SET = new Set(['Aliases', 'DNSNames', 'NetworkID']);
 const LOG_TYPES = new Set(['', 'json-file', 'local']);
 const LOG_OPTS = new Set(['max-size', 'max-file', 'compress']);
 // The guard's own network: a runner child there could reach the guard's upstream peers.
-const FORBIDDEN_NET = /^(host|none:|container:)|docker-guard/i;
+// A name fast path only: network-refs.mjs resolves IDs and prefixes (ROK-1846 r11).
+export const FORBIDDEN_NET = /^(host|none:|container:)|docker-guard/i;
 
 const isObj = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 

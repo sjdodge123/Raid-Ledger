@@ -18,6 +18,7 @@ import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
 import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
 import { namedVolumeRefs } from './volume-refs.mjs';
+import { connectNetworkRefs, containerCreateNetworkRefs, forbiddenNetworkReason } from './network-refs.mjs';
 import { reservedVolumeReason } from './volume-reserve.mjs';
 import { scopedEventsUrl } from './events-scope.mjs';
 
@@ -79,6 +80,10 @@ async function authorize(req, plan) {
   if (!verdict.ok) return { reason: verdict.reason };
   const target = bodyOwnedContainer(plan.body, parsed);
   if (target !== null && !(await owns('container', target, owner))) return { reason: `container ${target} is not owned by ${owner.owner}` };
+  const nets = plan.body === 'container-create' ? containerCreateNetworkRefs(verdict.body)
+    : plan.body === 'network-connect' ? connectNetworkRefs(plan.owned?.id, verdict.body) : [];
+  const netReason = await forbiddenNetworkReason(SOCKET, nets);
+  if (netReason) return { reason: netReason };
   if (plan.body === 'container-create') {
     for (const name of namedVolumeRefs(verdict.body)) {
       const reserved = reservedVolumeReason(name);

@@ -137,9 +137,27 @@ function withReservedOverrides(labels) {
     [COMPOSE_PROJECT_LABEL]: base[COMPOSE_PROJECT_LABEL] ?? '', [COMPOSE_SERVICE_LABEL]: base[COMPOSE_SERVICE_LABEL] ?? '' };
 }
 
+// ROK-1846 r11: the guard names its caller by source IP on a shared bridge, so
+// nothing a runner starts may forge frames there. Docker grants CAP_NET_RAW by
+// default; every child drops it (CapAdd is refused outright above). Docker
+// normalises cap names case-insensitively, with or without CAP_.
+const DROPS_NET_RAW = /^(CAP_)?(ALL|NET_RAW)$/i;
+
+function capDropReason(hc) {
+  const v = hc.CapDrop;
+  if (v === undefined || v === null || typeof v === 'string') return null;
+  return Array.isArray(v) && v.every((c) => typeof c === 'string') ? null : 'HostConfig.CapDrop is not a list of strings';
+}
+
+function withNetRawDropped(hc) {
+  const cur = hc.CapDrop === undefined || hc.CapDrop === null ? [] : [].concat(hc.CapDrop);
+  return { ...hc, CapDrop: cur.some((c) => DROPS_NET_RAW.test(c)) ? cur : [...cur, 'NET_RAW'] };
+}
+
 /** POST /containers/create */
 export function checkContainerCreate(body, { allow, owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
+  if (body.HostConfig !== undefined && body.HostConfig !== null && !isObj(body.HostConfig)) return deny('HostConfig is not an object');
   const hc = isObj(body.HostConfig) ? body.HostConfig : {};
   const mounts = Array.isArray(hc.Mounts) ? hc.Mounts : [];
   const reason = foldReason(body, ['HostConfig', 'Labels', 'Image', 'NetworkingConfig'], 'body') ?? foldReason(hc, [...HC_FIELDS, ...HC_MAY_SET], 'HostConfig')
@@ -148,9 +166,9 @@ export function checkContainerCreate(body, { allow, owner }) {
     ?? foldEach(mounts, MOUNT_FIELDS, 'Mounts[]')
     ?? foldEach(mounts.map((m) => (isObj(m) ? m.VolumeOptions : null)), ['DriverConfig'], 'VolumeOptions')
     ?? checkPrivileges(hc) ?? checkNamespaces(hc) ?? checkBinds(hc.Binds, allow)
-    ?? checkMounts(hc.Mounts, allow) ?? checkLabels(body.Labels);
+    ?? checkMounts(hc.Mounts, allow) ?? capDropReason(hc) ?? checkLabels(body.Labels);
   if (reason) return deny(reason);
-  return { ok: true, body: { ...body, Labels: withOwner(withReservedOverrides(body.Labels), owner) } };
+  return { ok: true, body: { ...body, HostConfig: withNetRawDropped(hc), Labels: withOwner(withReservedOverrides(body.Labels), owner) } };
 }
 
 /** POST /containers/{id}/exec */
