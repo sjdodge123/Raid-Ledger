@@ -16,6 +16,12 @@ import {
 import { findGuildKind } from './guild-core.queries';
 
 /**
+ * ROK-2044: the machine code on the plugin-off 403, so the web can tell "this
+ * hub's plugin is off" apart from "you're not a member" (both are 403s).
+ */
+export const HUB_PLUGIN_INACTIVE = 'HUB_PLUGIN_INACTIVE';
+
+/**
  * ROK-1830: core's view of the per-kind hub adapters (`EXTENSION_POINTS.HUB_KIND`).
  * A kind whose owning plugin is inactive is refused with the same 403 that
  * `PluginActiveGuard` gives today, so "plugin off ⇒ no hub" still holds.
@@ -45,7 +51,12 @@ export class HubKindRegistry {
       kind,
     );
     if (owner) {
-      throw new ForbiddenException(`Plugin "${owner.pluginId}" is not active`);
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: HUB_PLUGIN_INACTIVE,
+        message: `Plugin "${owner.pluginId}" is not active`,
+        pluginSlug: owner.pluginId,
+      });
     }
     throw new NotFoundException(`No hub module for kind "${kind}"`);
   }
