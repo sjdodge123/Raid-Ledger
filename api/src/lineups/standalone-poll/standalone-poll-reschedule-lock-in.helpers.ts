@@ -25,6 +25,7 @@ import type { EventsService } from '../../events/events.service';
 import {
   claimMatchForLockIn,
   releaseMatchClaim,
+  type ClaimedFromStatus,
 } from '../scheduling/scheduling-lockin-claim.helpers';
 import { assertSlotIsFuture } from '../scheduling/scheduling-lock-in.helpers';
 import {
@@ -87,24 +88,40 @@ export async function rescheduleLockedInPoll(
     ['scheduling'],
     target.eventId,
   );
-  let event: EventResponseDto;
-  try {
-    event = await deps.eventsService.reschedule(
-      target.eventId,
-      caller.id,
-      caller.isAdmin,
-      dto,
-    );
-  } catch (err: unknown) {
-    await releaseMatchClaim(db, matchId, prior, deps.logger, target.eventId);
-    throw err;
-  }
+  const event = await moveOrRelease(deps, input, target, prior);
   await archiveAndRelease(db, target);
   return {
     event,
     eventId: target.eventId,
     eventCancelled: target.eventCancelled,
   };
+}
+
+/** Move the claimed poll's event; a throw puts the claim back first. */
+async function moveOrRelease(
+  deps: RescheduleLockInDeps,
+  input: RescheduleLockInInput,
+  target: RescheduleTarget,
+  prior: ClaimedFromStatus,
+): Promise<EventResponseDto> {
+  const { matchId, caller, dto } = input;
+  try {
+    return await deps.eventsService.reschedule(
+      target.eventId,
+      caller.id,
+      caller.isAdmin,
+      dto,
+    );
+  } catch (err: unknown) {
+    await releaseMatchClaim(
+      deps.db,
+      matchId,
+      prior,
+      deps.logger,
+      target.eventId,
+    );
+    throw err;
+  }
 }
 
 /** The poll's lineup and linked event; 404 unknown, 400 not a reschedule poll. */
