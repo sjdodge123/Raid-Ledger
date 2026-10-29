@@ -13,19 +13,20 @@
  * users are deleted in `finally`.
  *
  * Filters open from the inline funnel at 1024px and up, from the Filters FAB +
- * BottomSheet below (the funnel standard, design-system §4.1).
+ * BottomSheet below (the funnel standard, design-system §4.1); the opener /
+ * surface locators are the shared ones in `games-filters.ts`.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
+import { filtersOpener, filtersSurface, hasFilterFunnel } from './games-filters';
 
 interface SeededGuild {
     guildId: number;
     users: Record<string, { userId: number }>;
 }
 
-const DESKTOP_MIN_WIDTH = 1024;
 const RANK_BANDS = ['0', '1', '2', '3', '4'] as const;
 
 function guildName(testInfo: TestInfo): string {
@@ -38,21 +39,35 @@ async function seedGuild(token: string, testInfo: TestInfo): Promise<SeededGuild
     return { guildId: body.guildId, users: body.users };
 }
 
-function isDesktop(page: Page): boolean {
-    return (page.viewportSize()?.width ?? 0) >= DESKTOP_MIN_WIDTH;
-}
-
-/** Funnel trigger at ≥1024px, Filters FAB below; both toggle the same FilterEntry. */
+/**
+ * Funnel trigger at ≥1024px, Filters FAB below; both toggle the same FilterEntry.
+ * Neither closed surface unmounts — the collapsed inline panel and the closed
+ * sheet body stay mounted `inert` + `aria-hidden` — so open/closed is read from
+ * the opener's `aria-expanded` and the surface's `aria-hidden`, never from
+ * whether a control inside it is mounted or "visible" (opacity-0 still counts).
+ */
 async function openFilters(page: Page): Promise<void> {
-    await page.getByTestId(isDesktop(page) ? 'filter-panel-trigger' : 'filter-fab').click();
-    await expect(page.getByTestId('wow-filter-class')).toBeVisible();
+    const opener = filtersOpener(page);
+    await expect(opener).toBeVisible();
+    if ((await opener.getAttribute('aria-expanded')) !== 'true') await opener.click();
+    await expect(opener, 'the Filters opener reports the entry open').toHaveAttribute('aria-expanded', 'true');
+    const surface = filtersSurface(page);
+    await expect(surface).toBeVisible();
+    await expect(surface, 'the open filter surface is in the a11y tree').not.toHaveAttribute('aria-hidden', 'true');
+    await expect(surface.getByTestId('wow-filter-class')).toBeVisible();
 }
 
-/** The phone BottomSheet covers the toolbar; the desktop panel is inline and stays. */
+/** Desktop collapses the inline panel from the funnel; the phone sheet closes from its Close button. */
 async function closeFilters(page: Page): Promise<void> {
-    if (isDesktop(page)) return;
-    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByTestId('wow-filter-class')).toHaveCount(0);
+    const opener = filtersOpener(page);
+    if (hasFilterFunnel(page)) {
+        await opener.click();
+        await expect(page.getByTestId('filter-panel'), 'the collapsed inline panel leaves the a11y tree').toHaveAttribute('aria-hidden', 'true');
+    } else {
+        await page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'Close' }).click();
+        await expect(page.getByRole('dialog', { name: 'Filters' }), 'the Filters sheet is closed').toBeHidden();
+    }
+    await expect(opener, 'the Filters opener reports the entry closed').toHaveAttribute('aria-expanded', 'false');
 }
 
 function memberRow(page: Page, index: number) {
@@ -89,7 +104,7 @@ test('Members: filter narrows the count, Name Z–A reorders flat rows, Clear al
         await expect(memberRow(page, 2), 'Name Z–A: Aldren last').toContainText('Aldren');
 
         await openFilters(page);
-        await page.getByRole('button', { name: 'Clear all' }).click();
+        await filtersSurface(page).getByRole('button', { name: 'Clear all' }).click();
         await closeFilters(page);
         await expect(page.getByTestId('guild-members-count'), 'Clear all resets filters only').toHaveText('5 members');
         await expect(page.getByTestId('guild-rank-0'), 'a non-default sort keeps the list flat').toHaveCount(0);
