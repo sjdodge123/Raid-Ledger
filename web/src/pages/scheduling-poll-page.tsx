@@ -8,7 +8,8 @@
  * the game-ref banner, group-availability heatmap, deadline, operator Cancel,
  * suggested-times list, and sticky-toolbar submit. The page is now a thin
  * fetch/skeleton/not-found wrapper that also handles the scheduled (completed)
- * terminal state and the other-polls section.
+ * terminal state — including an admin's stalled-lock-in banner (ROK-2033) —
+ * and the other-polls section.
  */
 import type { JSX } from 'react';
 import { useParams, Link } from 'react-router-dom';
@@ -19,6 +20,7 @@ import { useGameTime } from '../hooks/use-game-time';
 import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
 import { SchedulingTerminalBanner } from '../components/lineups/cycle-4/SchedulingTerminalBanner';
+import { SchedulingReopenLockInAction } from '../components/lineups/cycle-4/SchedulingReopenLockInAction';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
 import { PollPrivateBar } from './scheduling/PollPrivateBar';
 
@@ -46,20 +48,18 @@ function SchedulePollNotFound(): JSX.Element {
 }
 
 /**
- * Completed poll state — shown when the match is scheduled and has a linked event.
+ * Outcome card for a finished lock-in.
  *
- * ROK-1545: this branch IS the `locked_in` ending (`pollStatusFromMatch` maps
- * `matchStatus === 'scheduled'` to it), so the terminal banner renders here —
- * otherwise its locked-in body would be unreachable in the app. The existing
- * "Poll Complete" card stays: shipped smoke specs resolve `match-status-badge`.
+ * ROK-1545: `pollStatusFromMatch` maps `matchStatus === 'scheduled'` to
+ * `locked_in`, so the terminal banner renders here — otherwise its locked-in
+ * body would be unreachable in the app. The "Poll Complete" card stays: shipped
+ * smoke specs resolve `match-status-badge`. ROK-2033: with no linked event the
+ * copy no longer claims one was created — a stalled claim never made one.
  */
-function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
+function CompletedOutcome({ poll }: { poll: SchedulePollPageResponseDto }): JSX.Element {
   const eventId = poll.match.linkedEventId;
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-12 space-y-6">
-      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
-      <PollPrivateBar poll={poll} />
-      <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
+    <>
       <SchedulingTerminalBanner
         pollStatus="locked_in"
         lockedInTime={poll.lockedInTime ?? null}
@@ -72,7 +72,7 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
           Poll Complete
         </div>
         <p className="text-sm text-success">
-          {eventId ? 'The event has been rescheduled.' : 'An event has been created from this poll.'}
+          {eventId ? 'The event has been rescheduled.' : 'This poll has been locked in.'}
         </p>
         {eventId && (
           <Link to={`/events/${eventId}`}
@@ -81,6 +81,28 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
           </Link>
         )}
       </div>
+    </>
+  );
+}
+
+/**
+ * Scheduled-match state. ROK-2033: a lock-in that claimed the match but never
+ * linked an event is flagged `lockInRecoverable` for admins only — they get the
+ * warning banner + "Reopen lock-in" INSTEAD of the success outcome (it did not
+ * succeed). Everyone else keeps the locked-in view (spec Q6: no "stalled" copy
+ * for non-admins; the cron recovers it within 15 minutes).
+ */
+function CompletedPollState({ matchId, poll }: {
+  matchId: number; poll: SchedulePollPageResponseDto;
+}): JSX.Element {
+  const stalled = poll.lockInRecoverable === true;
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-12 space-y-6">
+      <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+      <PollPrivateBar poll={poll} />
+      <SchedulingReopenLockInAction matchId={matchId} recoverable={poll.lockInRecoverable} />
+      <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
+      {!stalled && <CompletedOutcome poll={poll} />}
     </div>
   );
 }
@@ -104,7 +126,7 @@ function PollSections({ lineupId, matchId, poll }: {
   lineupId: number; matchId: number; poll: SchedulePollPageResponseDto;
 }): JSX.Element {
   if (poll.match.status === 'scheduled') {
-    return <CompletedPollState poll={poll} />;
+    return <CompletedPollState matchId={matchId} poll={poll} />;
   }
   return <ActivePollSections lineupId={lineupId} matchId={matchId} poll={poll} />;
 }

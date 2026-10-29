@@ -5,6 +5,7 @@ import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import { memorySwr, type MemoryCacheEntry } from '../../../../common/swr-cache';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
+import { liveMemberPredicate } from '../../../../guilds/community/community-membership.queries';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
 export const ROSTER_INSIGHTS_TTL_MS = 5 * 60 * 1000;
@@ -71,17 +72,28 @@ export class RosterInsightsCache {
 
   /**
    * After an applied addon import of `characterId`: invalidate each guild
-   * whose roster carries the character's GUID. Best effort — a failed lookup
-   * leaves the 5-minute TTL as the bound.
+   * whose roster carries the character's GUID, and (ROK-1925 Q4) each
+   * community hub its owner is a live member of. Best effort — a failed
+   * lookup leaves the 5-minute TTL as the bound.
    */
   async invalidateForCharacter(characterId: string): Promise<void> {
-    const { characters, guildMembers } = schema;
-    const rows = await this.db
-      .selectDistinct({ guildId: guildMembers.guildId })
-      .from(guildMembers)
-      .innerJoin(characters, eq(characters.addonGuid, guildMembers.guid))
-      .where(and(eq(characters.id, characterId), isNotNull(guildMembers.guid)));
-    for (const { guildId } of rows) this.invalidateGuild(guildId);
+    const { characters, guildMembers, hubCommunityMembers: m } = schema;
+    const [guildRows, hubRows] = await Promise.all([
+      this.db
+        .selectDistinct({ guildId: guildMembers.guildId })
+        .from(guildMembers)
+        .innerJoin(characters, eq(characters.addonGuid, guildMembers.guid))
+        .where(
+          and(eq(characters.id, characterId), isNotNull(guildMembers.guid)),
+        ),
+      this.db
+        .selectDistinct({ guildId: m.guildId })
+        .from(m)
+        .innerJoin(characters, eq(characters.userId, m.userId))
+        .where(and(eq(characters.id, characterId), liveMemberPredicate())),
+    ]);
+    for (const { guildId } of [...guildRows, ...hubRows])
+      this.invalidateGuild(guildId);
   }
 }
 

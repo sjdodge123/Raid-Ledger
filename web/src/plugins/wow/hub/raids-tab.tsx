@@ -7,16 +7,14 @@
  *
  * ROK-1817 — guild editors (`viewer.canEdit`: delegated members, admin,
  * operator) get a "Schedule for guild" link above the tab body, in every
- * query state. Plain members never see it.
+ * query state. Plain members never see it. ROK-2050 puts the same link on
+ * the core Events tab via the module's `eventsLead` (`schedule-for-guild.tsx`).
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
-import { CalendarDaysIcon } from '@heroicons/react/24/outline';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
-import { buttonClass } from '../../../components/ui/button-classes';
 import { GuildRoleComposition } from './role-composition';
-import { scheduleForGuildUrl } from './raids-tab.helpers';
+import { ScheduleForGuildRow } from './schedule-for-guild';
 
 interface GuildRaidsTabProps {
     query: UseQueryResult<GuildRaidsDto, Error>;
@@ -28,22 +26,6 @@ export function GuildRaidsTab({ query, page }: GuildRaidsTabProps): JSX.Element 
         <div className="space-y-4">
             {page.viewer.canEdit && <ScheduleForGuildRow guild={page.guild} />}
             <RaidsBody query={query} />
-        </div>
-    );
-}
-
-/** Right-aligned at >=1024px; a full-width 44px target below. */
-function ScheduleForGuildRow({ guild }: { guild: GuildPage['guild'] }): JSX.Element {
-    return (
-        <div className="flex justify-end">
-            <Link
-                to={scheduleForGuildUrl(guild)}
-                data-testid="guild-schedule-for-guild"
-                className={buttonClass({ variant: 'secondary', size: 'sm', className: 'w-full lg:w-auto' })}
-            >
-                <CalendarDaysIcon className="h-4 w-4" aria-hidden="true" />
-                Schedule for guild
-            </Link>
         </div>
     );
 }

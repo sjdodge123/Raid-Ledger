@@ -22,7 +22,7 @@ import {
   claimMatchForLockIn,
   linkClaimedMatch,
   releaseMatchClaim,
-  type ClaimedFromStatus,
+  type LockInClaim,
 } from './scheduling-lockin-claim.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
@@ -146,7 +146,7 @@ async function createOrRelease(
   matchId: number,
   userId: number,
   dto: CreateEventDto,
-  prior: ClaimedFromStatus,
+  claim: LockInClaim,
 ): Promise<{ id: number; allEventIds?: number[] }> {
   try {
     // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
@@ -156,7 +156,7 @@ async function createOrRelease(
       schedulingMatchId: matchId,
     });
   } catch (err: unknown) {
-    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    await releaseMatchClaim(deps.db, matchId, claim, deps.logger);
     throw err;
   }
 }
@@ -187,12 +187,13 @@ async function discardEvents(
  * The claim commits BEFORE the create (see `scheduling-lockin-claim.helpers`),
  * so no pooled connection is held while `EventsService.create` takes its own.
  * A concurrent lock-in — expired or open path — 409s before creating anything.
- * Nothing else can move the claimed row before the link write: a cancel needs
- * `scheduling`/`suggested`, so a cancel during the claim window archives
- * nothing and still returns success, and the poll locks in anyway (the same
- * "lock-in finished first" ordering as a cancel that arrives after it). The
- * lost-link branch below is therefore defensive: every instance this call made
- * is deleted (their DELETED listeners remove any Discord post) before the 409.
+ * A cancel needs `scheduling`/`suggested`, so a cancel during the claim window
+ * archives nothing and still returns success, and the poll locks in anyway
+ * (the same "lock-in finished first" ordering as a cancel that arrives after
+ * it). Only lock-in recovery (ROK-2033: the stale-claim cron or an admin
+ * reopen) can move the claimed row before the link write; the link then fails
+ * its token and the lost-link branch below deletes every instance this call
+ * made (their DELETED listeners remove any Discord post) before the 409.
  * If the link write itself throws, the instances are deleted the same way and
  * the claim is released before the error is rethrown.
  *
@@ -204,15 +205,20 @@ async function claimAndCreateEvent(
   userId: number,
   dto: CreateEventDto,
 ): Promise<number> {
-  const prior = await claimMatchForLockIn(deps.db, matchId);
-  const event = await createOrRelease(deps, matchId, userId, dto, prior);
+  const claim = await claimMatchForLockIn(deps.db, matchId);
+  const event = await createOrRelease(deps, matchId, userId, dto, claim);
   const eventIds = event.allEventIds ?? [event.id];
   let linked: boolean;
   try {
-    linked = await linkClaimedMatch(deps.db, matchId, event.id);
+    linked = await linkClaimedMatch(
+      deps.db,
+      matchId,
+      event.id,
+      claim.claimedAt,
+    );
   } catch (err: unknown) {
     await discardEvents(deps, eventIds, userId);
-    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    await releaseMatchClaim(deps.db, matchId, claim, deps.logger);
     throw err;
   }
   if (linked) return event.id;

@@ -384,6 +384,71 @@ describe('deactivated users', () => {
   });
 });
 
+interface RosterMember {
+  name: string;
+  isViewer?: boolean;
+  presence?: { online: boolean | null; lastOnlineDays: number | null };
+  avatarUrl?: string | null;
+}
+
+/** Every member row of the page, keyed by name. */
+async function rosterAs(
+  who: Who | 'admin',
+): Promise<Map<string, RosterMember>> {
+  const res = await get(`/${guildId}`, who);
+  expect(res.status).toBe(200);
+  const ranks = res.body.ranks as { members: RosterMember[] }[];
+  return new Map(ranks.flatMap((r) => r.members).map((m) => [m.name, m]));
+}
+
+describe('ROK-1173 — roster row extras', () => {
+  it('flags isViewer on the viewer own row only; staff non-members see none', async () => {
+    const asPlain = await rosterAs('plain');
+    expect(asPlain.get('plain')?.isViewer).toBe(true);
+    const othersAsPlain = [...asPlain.values()].filter(
+      (m) => m.name !== 'plain' && 'isViewer' in m,
+    );
+    expect(othersAsPlain.map((m) => m.name)).toEqual([]);
+    const asGm = await rosterAs('gm');
+    expect(asGm.get('gm')?.isViewer).toBe(true);
+    expect(asGm.get('plain')).not.toHaveProperty('isViewer');
+    const asAdmin = await rosterAs('admin');
+    const flagged = [...asAdmin.values()].filter((m) => 'isViewer' in m);
+    expect(flagged.map((m) => m.name)).toEqual([]);
+  });
+
+  it('carries export presence and the linked avatar; omits both when absent', async () => {
+    const avatar = 'https://render.example/plain.jpg';
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ onlineAtExport: false, lastOnlineDays: 2 })
+      .where(eq(schema.guildMembers.id, memberIds.plain));
+    await testApp.db
+      .update(schema.characters)
+      .set({ avatarUrl: avatar })
+      .where(eq(schema.characters.id, charIds.plain));
+    try {
+      const roster = await rosterAs('officer');
+      expect(roster.get('plain')).toMatchObject({
+        presence: { online: false, lastOnlineDays: 2 },
+        avatarUrl: avatar,
+      });
+      expect(roster.get('gm')).not.toHaveProperty('presence');
+      expect(roster.get('gm')).not.toHaveProperty('avatarUrl');
+      expect(roster.get('Unlinked')).not.toHaveProperty('avatarUrl');
+    } finally {
+      await testApp.db
+        .update(schema.guildMembers)
+        .set({ onlineAtExport: null, lastOnlineDays: null })
+        .where(eq(schema.guildMembers.id, memberIds.plain));
+      await testApp.db
+        .update(schema.characters)
+        .set({ avatarUrl: null })
+        .where(eq(schema.characters.id, charIds.plain));
+    }
+  });
+});
+
 describe('editors endpoints — cross-guild delete', () => {
   it("a manager of another guild cannot delete this guild's editor; the row survives", async () => {
     const [grant] = nonEmpty(

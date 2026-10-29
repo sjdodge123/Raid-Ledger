@@ -20,7 +20,10 @@ import {
 } from './wow-members.helpers';
 import { WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
 import { WowEditorDelegation } from './editor-delegation';
+import { WowEventsLead } from './schedule-for-guild';
 import { useWowAddonsVisible } from './wow-resources.helpers';
+import { WOW_MEMBER_SORTS } from './wow-member-filters.helpers';
+import { useWowMemberFilters } from './use-wow-member-filters';
 
 /**
  * `register.ts` is a boot-time side-effect import, so the addon panel (form,
@@ -46,11 +49,17 @@ export const wowHubModule: HubModule = {
     heroPills: [WowWhereFact, WowFactionPill, WowViewerRolePills],
     memberRows: wowMemberRows,
     memberSearch: wowMemberSearch,
+    /** ROK-1173: Level high→low / low→high and Last seen after core's Rank + Name sorts. */
+    memberSorts: WOW_MEMBER_SORTS,
+    /** ROK-1173: Class / Role / Rank / Level / Linked / Profession filters + the profession coverage strip. */
+    useMemberFilters: useWowMemberFilters,
     membersSummary: WowRoleSummaryBand,
     membersBlurb: wowMembersBlurb,
     membersEmpty: WOW_MEMBERS_EMPTY,
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
+    /** ROK-2050: "Schedule for guild" for editors, on the core Events tab too. */
+    eventsLead: WowEventsLead,
     eventsJumpTab: 'raids',
     editorDelegation: WowEditorDelegation,
     modSources: [{ id: 'wow-addons', label: 'World of Warcraft addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],

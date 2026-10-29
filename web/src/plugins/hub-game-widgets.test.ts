@@ -3,6 +3,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { lazy, type ComponentType } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
 import { clearRegistry, registerPlugin } from './plugin-registry';
+import { registerClassLevelWidgets } from './wow/hub-widgets/class-level.register';
+import { registerRolesWidget } from './wow/hub-widgets/roles.register';
 import {
     audienceAllows, getHubGameWidgetRegistrations, gatedHubGameWidgets, type HubGameWidget, type HubWidgetCtx,
 } from './hub-game-widgets';
@@ -29,6 +31,7 @@ function page(over: { gameSlug?: string; kind?: GuildPage['guild']['kind']; role
 }
 
 const ACTIVE = new Set(['wow']);
+const FOREVER_W1_W3 = ['forever-class-breakdown', 'forever-level-progression', 'forever-roles'];
 
 beforeEach(() => clearRegistry());
 
@@ -116,5 +119,23 @@ describe('audienceAllows', () => {
     it('editors: canEdit only', () => {
         expect(audienceAllows('editors', page({ role: 'member' }).viewer)).toBe(false);
         expect(audienceAllows('editors', page({ role: 'officer', canEdit: true }).viewer)).toBe(true);
+    });
+});
+
+describe('Forever W1-W3 on community hubs (ROK-1925)', () => {
+    const forever = (p: GuildPage): string[] => gatedHubGameWidgets(p, new Set(['blizzard'])).map((r) => r.widget.id);
+
+    beforeEach(() => {
+        const blizzard = registerPlugin('blizzard', { icon: '/x.png', color: 'blue', label: 'WoW' });
+        registerClassLevelWidgets(blizzard);
+        registerRolesWidget(blizzard);
+    });
+
+    it('shows Class breakdown, Level progression and Role breakdown on a WoW: Forever community hub', () => {
+        expect(forever(page({ gameSlug: 'world-of-warcraft-forever', kind: 'game_community' }))).toEqual(FOREVER_W1_W3);
+    });
+
+    it('shows none of them on a BG3 community hub', () => {
+        expect(forever(page({ gameSlug: 'baldurs-gate-3', kind: 'game_community' }))).toEqual([]);
     });
 });

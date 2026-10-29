@@ -30,7 +30,10 @@ jest.mock('./scheduling-auto-heart.helpers');
 jest.mock('../lineups-notify-hooks.helpers');
 // The claim itself is covered by its own spec; here it always succeeds.
 jest.mock('./scheduling-lockin-claim.helpers', () => ({
-  claimMatchForLockIn: jest.fn().mockResolvedValue('scheduling'),
+  claimMatchForLockIn: jest.fn().mockResolvedValue({
+    prior: 'scheduling',
+    claimedAt: new Date('2026-10-29T05:00:00.000Z'),
+  }),
   linkClaimedMatch: jest.fn(),
   releaseMatchClaim: jest.fn(),
 }));

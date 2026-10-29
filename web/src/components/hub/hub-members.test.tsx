@@ -3,16 +3,22 @@
  * columns, the search box, the "Group by rank" toggle and the count line.
  * Driven through `GuildPage` so the real WoW hub module is the one under test.
  */
+import { useState, type JSX } from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
-import type { GuildMemberRow, GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import { useQuery } from '@tanstack/react-query';
+import type { GuildMemberRow, GuildPage as GuildPageDto, GuildRaidsDto } from '@raid-ledger/contract';
+import type { HubMemberFilters, HubMemberRow, HubModule } from '../../plugins/hub-module';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
+import { Checkbox } from '../ui/checkbox';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { GuildPage } from './hub-page';
+import { HubMembers } from './hub-members';
 
 const BASE = 'http://localhost:3000/guilds/7';
 
@@ -84,5 +90,131 @@ describe('Members tab (ROK-1830 S3b)', () => {
         await userEvent.click(toggle);
         await waitFor(() => expect(screen.queryByTestId('guild-rank-2'), 'ungrouping must remove the rank bands').toBeNull());
         expect(listedNames()).toEqual(['Grimtusk', 'Stormcall', 'Nolina']);
+    });
+});
+
+describe('Members tab — D5 flat/grouped (ROK-1173)', () => {
+    it('goes flat while searching and brings the rank bands back when the search clears', async () => {
+        renderMembers();
+        await screen.findByTestId('guild-members');
+        const search = screen.getByRole('searchbox', { name: 'Search members' });
+        await userEvent.type(search, 'r');
+        await waitFor(() => expect(screen.queryByTestId('guild-rank-2'), 'a search must flatten the bands').toBeNull());
+        expect(screen.queryByRole('checkbox', { name: 'Group by rank' }), 'the toggle hides while flat').toBeNull();
+        await userEvent.clear(search);
+        await waitFor(() => expect(within(screen.getByTestId('guild-rank-2')).getByText('Raider · 2')).toBeInTheDocument());
+        expect(listedNames()).toEqual(['Grimtusk', 'Stormcall', 'Nolina']);
+    });
+
+    it('sorts flat by name and restores the rank order when the sort goes back to Rank', async () => {
+        renderMembers();
+        await screen.findByTestId('guild-members');
+        const sort = screen.getByRole('combobox', { name: 'Sort by' });
+        await userEvent.selectOptions(sort, 'name-asc');
+        await waitFor(() => expect(listedNames(), 'Name A–Z must reorder across ranks').toEqual(['Grimtusk', 'Nolina', 'Stormcall']));
+        expect(screen.queryByTestId('guild-rank-0')).toBeNull();
+        await userEvent.selectOptions(sort, 'rank');
+        await waitFor(() => expect(screen.getByTestId('guild-rank-0')).toBeInTheDocument());
+        expect(listedNames()).toEqual(['Grimtusk', 'Stormcall', 'Nolina']);
+    });
+});
+
+/* A stand-in module with two filters ("Warriors only", "Mages only" — PAGE has no Mage), driving `HubMembers` directly. */
+function useWarriorFilter(): HubMemberFilters {
+    const [on, setOn] = useState(false);
+    const [mages, setMages] = useState(false);
+    return {
+        activeCount: (on ? 1 : 0) + (mages ? 1 : 0),
+        matches: (r: HubMemberRow) => (!on || r.class === 'Warrior') && (!mages || r.class === 'Mage'),
+        clearAll: () => { setOn(false); setMages(false); },
+        controls: (
+            <>
+                <Checkbox label="Warriors only" checked={on} onChange={(e) => setOn(e.target.checked)} />
+                <Checkbox label="Mages only" checked={mages} onChange={(e) => setMages(e.target.checked)} />
+            </>
+        ),
+        lead: <p data-testid="fake-members-lead">Coverage</p>,
+    };
+}
+
+const FAKE_MODULE: HubModule = {
+    kind: 'wow_guild', tabs: [], overviewWidgets: [], heroPills: [],
+    memberColumns: [
+        { id: 'name', header: 'Name', cell: ({ row: r }) => <span>{r.name}</span> },
+        { id: 'rank', header: 'Rank', cell: ({ row: r }) => <span>{r.rankName}</span>,
+            groupBy: (r) => ({ key: String(r.rankIndex), label: r.rankName ?? '', testId: `guild-rank-${r.rankIndex}` }) },
+    ],
+    memberRows: (page) => page.ranks.flatMap((rank) => rank.members),
+    memberSearch: (r) => `${r.name} ${r.class ?? ''}`,
+    useMemberFilters: useWarriorFilter,
+};
+
+function Harness({ page = PAGE }: { page?: GuildPageDto }): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['fake-raids'], queryFn: () => Promise.reject(new Error('unused')), enabled: false });
+    return <HubMembers ctx={{ page, raids }} module={FAKE_MODULE} />;
+}
+
+/** A visitor's view of a members-first hub: no rows at all. */
+const EMPTY_PAGE: GuildPageDto = { ...PAGE, guild: { ...PAGE.guild, memberCount: 0 }, ranks: [] };
+
+const originalMatchMedia = window.matchMedia;
+function mockDesktop(): void {
+    window.matchMedia = (query: string) => ({
+        matches: query === DESKTOP_MQ, media: query, onchange: null,
+        addListener: () => undefined, removeListener: () => undefined,
+        addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+    });
+}
+
+describe('Members filters — the funnel standard (ROK-1173 AC3/AC10)', () => {
+    afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+    it('puts the funnel beside the search from 1024px, filters flat, and Clear all restores the bands', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness />);
+        await userEvent.click(await screen.findByTestId('filter-panel-trigger'));
+        expect(screen.queryByTestId('filter-fab'), 'no FAB at desktop width').toBeNull();
+        expect(screen.getByTestId('fake-members-lead')).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Warriors only' }));
+        await waitFor(() => expect(listedNames()).toEqual(['Grimtusk', 'Nolina']));
+        expect(screen.getByTestId('guild-members-count')).toHaveTextContent('2 of 3 members');
+        expect(screen.queryByTestId('guild-rank-0'), 'an active filter must flatten the bands').toBeNull();
+        await userEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+        await waitFor(() => expect(screen.getByTestId('guild-rank-0')).toBeInTheDocument());
+        expect(screen.getByTestId('guild-members-count')).toHaveTextContent('3 members');
+    });
+
+    it('uses the Filters FAB below 1024px, with no toolbar funnel', async () => {
+        renderWithProviders(<Harness />);
+        expect(await screen.findByTestId('filter-fab')).toBeInTheDocument();
+        expect(screen.queryByTestId('filter-panel-trigger'), 'no toolbar funnel below 1024px').toBeNull();
+    });
+
+    it('says no member matches these filters when a filter alone empties the list (AC10)', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness />);
+        await userEvent.click(await screen.findByTestId('filter-panel-trigger'));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Mages only' }));
+        await waitFor(() => expect(screen.getByTestId('guild-members-no-match')).toHaveTextContent('No members match these filters.'));
+        expect(screen.queryAllByTestId('guild-member-row')).toHaveLength(0);
+    });
+
+    it('offers no funnel or Filters FAB when there are no rows to filter', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness page={EMPTY_PAGE} />);
+        expect(await screen.findByTestId('guild-members-empty')).toBeInTheDocument();
+        expect(screen.queryByTestId('filter-panel-trigger'), 'no funnel with nothing to narrow').toBeNull();
+        expect(screen.queryByTestId('filter-fab'), 'no Filters FAB with nothing to narrow').toBeNull();
+    });
+
+    it('names the search, not the filters, when a search empties a filtered list', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness />);
+        await userEvent.click(await screen.findByTestId('filter-panel-trigger'));
+        await userEvent.type(screen.getByRole('searchbox', { name: 'Search members' }), 'storm');
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Warriors only' }));
+        await waitFor(() => expect(screen.getByTestId('guild-members-no-match')).toHaveTextContent('No members match “storm”.'));
+        await userEvent.clear(screen.getByRole('searchbox', { name: 'Search members' }));
+        expect(screen.getByTestId('guild-members-count')).toHaveTextContent('2 of 3 members');
     });
 });
