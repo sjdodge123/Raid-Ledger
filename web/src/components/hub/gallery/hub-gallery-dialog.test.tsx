@@ -168,6 +168,25 @@ describe('HubGalleryDialog — viewer', () => {
         expect(await caption()).toMatch(who(99));
     });
 
+    it('a seek whose page-in an invalidate cancels asks again once the refetch lands, never "Loading…" forever', async () => {
+        const queryClient = createTestQueryClient();
+        let release = (): void => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        let pageIns = 0;
+        // The seek's first page-in hangs until released; later ones fall through to the paged handler.
+        server.use(http.get(HUB_MEDIA_LIST_URL, async ({ request }) => {
+            if (new URL(request.url).searchParams.get('cursor') !== null && pageIns++ === 0) await gate;
+            return undefined;
+        }));
+        open({ index: 0, mediaId: 28 }, {}, queryClient);
+        await waitFor(() => expect(pageIns).toBe(1));
+        await act(() => queryClient.invalidateQueries({ queryKey: ['hub-media', 5] }));
+        release();
+        await waitFor(() => expect(screen.queryByText('Loading picture…')).not.toBeInTheDocument());
+        expect(await caption()).toMatch(who(28));
+        expect(counter()).toBe('28 of 30');
+    });
+
     it('an id in no page falls back to the requested index once every page is loaded', async () => {
         const calls: string[] = [];
         server.use(pagedHandler(ITEMS, calls));
