@@ -2,7 +2,7 @@
  * ROK-1173 — the WoW Members row decorations: the "You" pill (AC9), the lazy
  * avatar (AC11), the class dot (AC12) and the professions join (AC8).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildMemberRow, WowRosterInsightsDto } from '@raid-ledger/contract';
@@ -11,6 +11,13 @@ import { server } from '../../../test/mocks/server';
 import { MOCK_CHAR_IDS, PROFESSIONS_FIXTURE, rosterInsightsHandler } from '../../../test/handlers/forever-hub-widgets';
 import { FactsCell, NameCell, ProfessionsCell } from './wow-members';
 import { classDotClass, professionIndex, rowProfessions } from './wow-member-professions';
+
+// useRosterInsights is `enabled: isAuthenticated` — without a signed-in viewer
+// the professions query never fires and ProfessionsCell stays empty.
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
+    useAuth: () => ({ user: { id: 1, role: 'member' }, isAuthenticated: true }),
+}));
 
 function row(over: Partial<GuildMemberRow> = {}): GuildMemberRow {
     return { memberId: 1, name: 'Aldren', class: 'Hunter', level: 60, rankIndex: 0, rankName: 'Guild Master', effectiveRole: null, characterId: null, isMain: false, ...over };
