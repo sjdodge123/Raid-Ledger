@@ -56,7 +56,7 @@ const DING_TOO_OLD = 'Dainel';
 const ONLINE_AT_EXPORT = 2;
 const LONGEST_AWAY = 'Elowen';
 const LONGEST_AWAY_DAYS = '34 d';
-/** seed-guild `withGear` (`demo-test-guild-lockouts.helpers.ts`): one cap main below the 55 floor, missing Wrist + Feet. */
+/** seed-guild `withGear` (`demo-test-guild-gear.helpers.ts`): one cap main below the 55 floor, missing Wrist + Feet. */
 const MISSING_SLOT = 'Wrist';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';

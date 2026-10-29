@@ -20,6 +20,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import GearReadinessWidget from './gear-readiness-widget';
 import { gearReadinessWidget, useGearReadinessVisible } from './gear-readiness.register';
 import { MembersSeeAll } from './see-all-actions';
+import { useRosterInsights } from './use-roster-insights';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -153,11 +154,15 @@ describe('useGearReadinessVisible', () => {
     }
 
     it('hides the card for a visitor payload (no gear key)', async () => {
-        let served = false;
-        server.use(rosterInsightsHandler({ all: VISITOR_FIXTURE, onRequest: () => { served = true; } }));
-        const { result } = renderHook(() => useGearReadinessVisible(ctx()), { wrapper });
-        await waitFor(() => expect(served).toBe(true));
-        await waitFor(() => expect(result.current).toBe(false));
+        server.use(rosterInsightsHandler({ all: VISITOR_FIXTURE }));
+        // Probe the same query on the same render: `visible` is false while
+        // pending too, so it only means something once the data has landed.
+        const { result } = renderHook(() => ({
+            visible: useGearReadinessVisible(ctx()),
+            data: useRosterInsights(ctx().page.guild.id, false).data,
+        }), { wrapper });
+        await waitFor(() => expect(result.current.data).toBeDefined());
+        expect(result.current.visible).toBe(false);
     });
 
     it('shows the card for a member payload, even before any gear is reported', async () => {

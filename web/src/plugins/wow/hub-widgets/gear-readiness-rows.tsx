@@ -51,7 +51,7 @@ export function GearHistogram({ buckets }: { buckets: Ilvl['buckets'] }): JSX.El
 interface DisclosureProps {
     testId: string;
     label: string;
-    count: string;
+    count?: string;
     children: ReactNode;
 }
 
@@ -66,7 +66,7 @@ function Disclosure({ testId, label, count, children }: DisclosureProps): JSX.El
                 className="min-h-11 justify-start rounded-sm text-left text-sm hover:opacity-80 [&>[data-button-label]]:w-full">
                 <span className="flex w-full items-center justify-between gap-2">
                     <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
-                    <span className="shrink-0 text-xs text-muted">{count} <span aria-hidden="true">{open ? '▴' : '▾'}</span></span>
+                    <span className="shrink-0 text-xs text-muted">{count === undefined ? '' : `${count} `}<span aria-hidden="true">{open ? '▴' : '▾'}</span></span>
                 </span>
             </Button>
             {open && <div id={listId}>{children}</div>}
@@ -104,7 +104,7 @@ export function MissingEnchantsSection({ enchants }: { enchants: Enchants }): JS
         return <p className="text-sm text-muted">No missing enchants among {enchants.checked} checked mains.</p>;
     }
     return (
-        <Disclosure testId="gear-missing-enchants" label={`${enchants.missingCount} of ${enchants.checked} checked mains`} count="">
+        <Disclosure testId="gear-missing-enchants" label={`${enchants.missingCount} of ${enchants.checked} checked mains`}>
             <ul aria-label="Mains missing enchants" className="divide-y divide-edge pl-3">
                 {enchants.missing.map((m) => (
                     <li key={m.characterId} data-testid="gear-missing-row" className={ROW_CLASS}>
