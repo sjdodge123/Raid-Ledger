@@ -1,5 +1,5 @@
 {
-  "id": "c241aca4-0d02-44ad-8e95-78ce535e54d8",
+  "id": "6d767017-d605-42c9-b4c8-70d4fc51908f",
   "prevId": "083db22c-96d2-4ec1-ae6c-b20c183aa916",
   "version": "7",
   "dialect": "postgresql",
@@ -7830,12 +7830,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "lock_in_claimed_at": {
-          "name": "lock_in_claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -13070,11 +13064,11 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord', 'upload')"
+          "value": "\"hub_media\".\"source\" IN ('discord', 'upload', 'bg3-save')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
-          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload')"
+          "value": "\"hub_media\".\"kind\" IN ('death', 'screenshot', 'image', 'upload', 'save')"
         }
       },
       "isRLSEnabled": false
