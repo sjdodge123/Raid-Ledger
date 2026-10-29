@@ -1597,6 +1597,7 @@ renders its own card or heading.
 - **Layout.** Merged into the bento by `order` with the core cells (10/20/30/40/70) and the module's
   `overviewWidgets`, then re-ordered / hidden / added per hub by the leader's saved `widgetPrefs` (ROK-1918, §4.28). `span` 1/2/3 at ≥1024px; 3 clamps to 2
   at ≥768px; phone is one column. A hidden widget renders nothing, so it leaves no empty grid item.
+  From 768px the bento is masonry-packed (§4.31, ROK-2043): a short card no longer leaves a row-tall hole.
 
 **DO** — use `registerHubWidget` for a game-specific glanceable card (≤ ~8 rows or one chart) with an
 `action` that links to the full view. Keep kind-structural cards (role composition, recent arrivals) in the
@@ -1847,3 +1848,31 @@ viewer. **Light / Dark** — tokens only (`border-edge`, `bg-panel`, `text-secon
 **DO** — use it for ≤ ~10 buckets of one count. **DON'T** — add per-bar colours, use it for a single proportion
 (that is a `GuildMeter`), or reach for a chart library inside a hub widget. Sample: `/dev/design-system` → "Pattern — meter
 tones and CSS histogram" (`meter-histogram-section.tsx`, static data); live on a Forever guild hub Overview.
+
+### 4.31 Masonry-packed card grid (hub Overview bento, ROK-2043)
+
+**New pattern** — a CSS grid row is as tall as its tallest cell, so a short card left a hole below it.
+`useMasonryRows(ref)` (`web/src/components/hub/layout/use-masonry-rows.ts`, maths in `masonry-pack.ts`)
+packs the grid's direct children: each card keeps the column its arranged order gives it in a plain
+row-by-row layout and its own `col-span`, and starts one gap below the card(s) above it.
+
+- **Grid classes.** The usual `grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3` plus
+  `MASONRY_GRID_CLASS` (`md:auto-rows-[2px] md:gap-y-0 md:items-start`): 2px row tracks, no row gap (the
+  gap is reserved inside each card's `grid-row-end: span N`, N = ceil((height + gap) / 2)), cells at their
+  own height. Spans stay on the cells as classes (`md:col-span-2`, `lg:col-span-3`); the hook writes only
+  `grid-column-start` / `grid-row-start` / `grid-row-end` inline.
+- **Phone stays a plain stack.** The hook applies only when the grid resolves to ≥ 2 px column tracks and a
+  px `grid-auto-rows`, so below 768px (one column), a `hidden` grid, or a test env without ResizeObserver it
+  writes nothing.
+- **One ResizeObserver per grid**, on the children only (never the grid — its own height changes in the
+  callback). The callback reads every size, then writes every placement. A MutationObserver hands it new
+  children (a lazy card resolving inside a Suspense). Unmount clears the inline styles.
+
+**DON'T** — add `grid-flow-dense` (later cards jump into earlier holes and scramble the arranged order),
+use CSS `masonry` / `grid-template-rows: masonry` (not shipped everywhere), or give a grid cell `h-full`
+(its height would follow the span the hook just set and grow every frame). The arrange list (§4.28) is a
+list, not this grid.
+
+Sample: `/dev/design-system` → "Pattern — masonry-packed card grid" (`masonry-grid-section.tsx` + lazy
+`masonry-grid-demo.tsx`: the real hook over mixed-height span-1 / span-2 cards, in both colour families via the
+side-by-side view); live on every hub Overview.
