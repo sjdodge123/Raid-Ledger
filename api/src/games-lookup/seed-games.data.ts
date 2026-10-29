@@ -246,6 +246,17 @@ export const GAMES_SEED = [
     ],
   },
   {
+    // ROK-1958: Baldur's Gate 3 — the bg3 plugin's game. Identity only: the
+    // prod row comes from the IGDB boot seed (api/seeds/games-seed.json), and
+    // the slug-branch upsert skips undefined columns, so on an existing row
+    // this re-asserts only igdb_id (same id) and the name. No config columns,
+    // no event types — nothing users see changes. A fresh DB (CI) gets the row.
+    igdbId: 119171,
+    slug: 'baldurs-gate-iii',
+    name: "Baldur's Gate 3",
+    eventTypes: [],
+  },
+  {
     slug: 'generic',
     name: 'Generic',
     shortName: null,

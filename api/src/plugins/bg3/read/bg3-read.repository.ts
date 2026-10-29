@@ -14,6 +14,7 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { Bg3RetentionRow } from '../history/bg3-retention.helpers';
+import { toBg3CampaignSummary } from './bg3-read.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const c = schema.bg3Campaigns;
@@ -25,6 +26,10 @@ const h = schema.bg3HubSettings;
  * saved_at DESC, id DESC)`). The snapshot and the claim slot check both use
  * it, so a savedAt tie picks the same party in both.
  */
+/** `ok`, or the 400 message a refused active campaign answers with. */
+export type Bg3SettingsWrite =
+  'ok' | 'campaign_not_in_hub' | 'campaign_archived';
+
 export const BG3_NEWEST_FIRST = [desc(s.savedAt), desc(s.id)] as const;
 
 /** A save as session clustering + `pickCanonical` need it (no party). */
@@ -41,6 +46,8 @@ export interface Bg3SnapshotRow extends Bg3SaveLiteRow {
   gameVersion: string;
   platform: string;
   party: unknown;
+  /** `display_name ?? username` of the uploader (D-8); null is defensive, unreachable while `uploader_user_id` cascades on delete. */
+  uploaderDisplayName: string | null;
 }
 
 export interface Bg3ClaimView {
@@ -91,6 +98,7 @@ export class Bg3ReadRepository {
         activeId: h.activeCampaignId,
         lastSavedAt: max(s.savedAt),
         saveCount: count(s.id),
+        archivedAt: c.archivedAt,
       })
       .from(c)
       .leftJoin(h, eq(h.guildId, c.guildId))
@@ -98,11 +106,7 @@ export class Bg3ReadRepository {
       .where(eq(c.guildId, guildId))
       .groupBy(c.id, h.activeCampaignId)
       .orderBy(asc(c.id));
-    return rows.map(({ activeId, lastSavedAt, ...rest }) => ({
-      ...rest,
-      isActive: activeId === rest.id,
-      lastSavedAt: lastSavedAt ? lastSavedAt.toISOString() : null,
-    }));
+    return rows.map(toBg3CampaignSummary);
   }
 
   async settings(guildId: number): Promise<Bg3HubSettings> {
@@ -117,21 +121,42 @@ export class Bg3ReadRepository {
     return row ?? DEFAULT_SETTINGS;
   }
 
+  /**
+   * D-11: the active campaign is checked and written in ONE transaction. The
+   * campaign row is locked `FOR UPDATE`, so a concurrent archive (which
+   * updates that row first, then clears `activeCampaignId`) either commits
+   * before the check (→ `campaign_archived`) or waits and then clears what we
+   * wrote. A pre-check, never catch-and-retry (a failed statement poisons the tx).
+   */
   async upsertSettings(
     guildId: number,
     patch: Bg3HubSettingsBody,
     userId: number,
-  ): Promise<void> {
+  ): Promise<Bg3SettingsWrite> {
     const set = { ...patch, updatedByUserId: userId, updatedAt: new Date() };
-    await this.db
-      .insert(h)
-      .values({ guildId, ...set })
-      .onConflictDoUpdate({ target: h.guildId, set });
+    return this.db.transaction(async (tx) => {
+      const active = patch.activeCampaignId;
+      if (active != null) {
+        const [row] = await tx
+          .select({ archivedAt: c.archivedAt })
+          .from(c)
+          .where(and(eq(c.id, active), eq(c.guildId, guildId)))
+          .limit(1)
+          .for('update');
+        if (!row) return 'campaign_not_in_hub';
+        if (row.archivedAt) return 'campaign_archived';
+      }
+      await tx
+        .insert(h)
+        .values({ guildId, ...set })
+        .onConflictDoUpdate({ target: h.guildId, set });
+      return 'ok';
+    });
   }
 
   async campaignInHub(campaignId: number, guildId: number) {
     const [row] = await this.db
-      .select({ id: c.id, hostUserId: c.hostUserId })
+      .select({ id: c.id, hostUserId: c.hostUserId, archivedAt: c.archivedAt })
       .from(c)
       .where(and(eq(c.id, campaignId), eq(c.guildId, guildId)))
       .limit(1);
@@ -147,13 +172,26 @@ export class Bg3ReadRepository {
   }
 
   /** The newest `limit` rows, newest first, with party. */
-  snapshotRows(campaignId: number, limit: number): Promise<Bg3SnapshotRow[]> {
-    return this.db
-      .select(SNAPSHOT_COLS)
+  async snapshotRows(
+    campaignId: number,
+    limit: number,
+  ): Promise<Bg3SnapshotRow[]> {
+    const u = schema.users;
+    const rows = await this.db
+      .select({
+        ...SNAPSHOT_COLS,
+        displayName: u.displayName,
+        username: u.username,
+      })
       .from(s)
+      .leftJoin(u, eq(u.id, s.uploaderUserId))
       .where(eq(s.campaignId, campaignId))
       .orderBy(...BG3_NEWEST_FIRST)
       .limit(limit);
+    return rows.map(({ displayName, username, ...rest }) => ({
+      ...rest,
+      uploaderDisplayName: displayName ?? username,
+    }));
   }
 
   async claims(campaignId: number): Promise<Bg3ClaimView[]> {

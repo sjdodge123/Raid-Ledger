@@ -3,6 +3,7 @@
  * `area`, `areas` and `thumbnailUrl` are null for everyone on hub routes.
  */
 import type {
+  Bg3CampaignSummary,
   Bg3PartyMember,
   Bg3PartySlot,
   Bg3Session,
@@ -56,6 +57,10 @@ export function toSnapshot(
     savedAt: row.savedAt.toISOString(),
     receivedAt: row.receivedAt.toISOString(),
     uploaderUserId: row.uploaderUserId,
+    uploader:
+      row.uploaderDisplayName === null
+        ? null
+        : { userId: row.uploaderUserId, displayName: row.uploaderDisplayName },
     area: ctx.hidden ? null : row.currentLevel,
     difficulty: row.difficulty,
     ruleset: row.ruleset,
@@ -104,5 +109,24 @@ export function pageSessions(
   return {
     page,
     next: more ? { capturedAt: last.endedAt, id: last.lastSaveId } : null,
+  };
+}
+
+/** Grouped campaign row → contract summary (shared with the hub list read). */
+export function toBg3CampaignSummary(row: {
+  id: number;
+  name: string;
+  hostUserId: number | null;
+  activeId: number | null;
+  lastSavedAt: Date | null;
+  saveCount: number;
+  archivedAt: Date | null;
+}): Bg3CampaignSummary {
+  const { activeId, lastSavedAt, archivedAt, ...rest } = row;
+  return {
+    ...rest,
+    isActive: activeId === row.id,
+    lastSavedAt: lastSavedAt ? lastSavedAt.toISOString() : null,
+    archivedAt: archivedAt ? archivedAt.toISOString() : null,
   };
 }

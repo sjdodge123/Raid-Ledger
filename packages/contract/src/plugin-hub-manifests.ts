@@ -124,11 +124,15 @@ const blizzard = {
 
 /**
  * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of a `BG3_GAME_SLUGS` game).
- * Widgets come with ROK-1958. Mapped below as `bg3`.
+ * Widgets + the Campaign tab: ROK-1958. Mapped below as `bg3`.
  */
 export const BG3_HUB_MANIFEST = {
-  widgets: [],
-  tabs: [],
+  widgets: [
+    { id: 'where-we-are', title: 'Where we are', description: "The party's latest save: area, screenshot and when it was saved.", layoutKey: 'plugin' },
+    { id: 'party', title: 'Party', description: 'Who plays which character, their levels and the roles the party covers.', layoutKey: 'plugin' },
+    { id: 'session-history', title: 'Session history', description: 'Recent play sessions: when, how long, levels gained and areas visited.', layoutKey: 'plugin' },
+  ],
+  tabs: [{ id: 'campaign', label: 'Campaign' }],
   behaviours: [
     { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
     { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },

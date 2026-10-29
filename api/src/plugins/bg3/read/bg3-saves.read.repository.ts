@@ -112,10 +112,12 @@ export class Bg3SavesReadRepository {
 
   async defaultCampaignId(userId: number): Promise<number | null> {
     const d = schema.bg3UserDefaults;
+    // D-11: an archived default resolves as "no default".
     const [row] = await this.db
       .select({ campaignId: d.campaignId })
       .from(d)
-      .where(eq(d.userId, userId))
+      .innerJoin(c, eq(c.id, d.campaignId))
+      .where(and(eq(d.userId, userId), isNull(c.archivedAt)))
       .limit(1);
     return row?.campaignId ?? null;
   }
