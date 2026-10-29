@@ -359,7 +359,9 @@ _install_slot_env_shim() {
 case "\$1" in
     ps)
         if [[ "\$*" == *"rl.slot=1"* && "\$*" == *"rl.role=env"* ]]; then
-            printf 'pinned-a c1\nunpinned-a c2\nenv-b c3\n'
+            # Third field = container name; the ROK-1846 forged-label guard
+            # only reaps through the env's own rl-env-<slug>-allinone name.
+            printf 'pinned-a c1 rl-env-pinned-a-allinone\nunpinned-a c2 rl-env-unpinned-a-allinone\nenv-b c3 rl-env-env-b-allinone\n'
         fi ;;
     rm|volume) echo "docker \$*" >> "$RL_STATE_DIR/reap.log" ;;
 esac
