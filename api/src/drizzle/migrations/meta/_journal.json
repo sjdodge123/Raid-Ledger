@@ -1884,6 +1884,13 @@
       "when": 1793180632075,
       "tag": "0269_bg3_plugin",
       "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1793212926134,
+      "tag": "0270_guild_member_presence",
+      "breakpoints": true
     }
   ]
 }

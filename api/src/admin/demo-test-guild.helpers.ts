@@ -34,6 +34,8 @@ export interface SeedGuildInput {
   withLockouts: boolean;
   /** ROK-1919: also seed three level-up events (Recent dings). */
   withDings: boolean;
+  /** ROK-1916: also seed guild-export presence (Last seen). */
+  withPresence: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -71,14 +73,30 @@ function boolFlag(value: unknown, name: string): boolean {
   return flag;
 }
 
+interface RawSeedFlags {
+  withContent?: unknown;
+  withLockouts?: unknown;
+  withDings?: unknown;
+  withPresence?: unknown;
+}
+
+/** The opt-in boolean flags; 400 on a non-boolean. */
+function parseSeedFlags(
+  raw: RawSeedFlags,
+): Omit<SeedGuildInput, 'name' | 'gameSlug'> {
+  return {
+    withContent: boolFlag(raw.withContent, 'withContent'),
+    withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),
+    withDings: boolFlag(raw.withDings, 'withDings'),
+    withPresence: boolFlag(raw.withPresence, 'withPresence'),
+  };
+}
+
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {
-  const raw = (body ?? {}) as {
+  const raw = (body ?? {}) as RawSeedFlags & {
     name?: unknown;
     gameSlug?: unknown;
-    withContent?: unknown;
-    withLockouts?: unknown;
-    withDings?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -89,10 +107,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof gameSlug !== 'string' || !ALL_WOW_GAME_SLUGS.includes(gameSlug)) {
     throw new BadRequestException('gameSlug must be a WoW game slug');
   }
-  const withContent = boolFlag(raw.withContent, 'withContent');
-  const withLockouts = boolFlag(raw.withLockouts, 'withLockouts');
-  const withDings = boolFlag(raw.withDings, 'withDings');
-  return { name: raw.name, gameSlug, withContent, withLockouts, withDings };
+  return { name: raw.name, gameSlug, ...parseSeedFlags(raw) };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */
