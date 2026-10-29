@@ -38,6 +38,7 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         id: g.id,
         kind: g.kind,
         gameSlug: schema.games.slug,
+        gameIgdbId: schema.games.igdbId,
         hiddenAt: g.hiddenAt,
         status: g.status,
       })
@@ -47,7 +48,13 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
       .limit(1);
     if (!row) return null;
     const hidden = row.hiddenAt !== null || row.status !== 'active';
-    return { id: row.id, kind: row.kind, gameSlug: row.gameSlug, hidden };
+    return {
+      id: row.id,
+      kind: row.kind,
+      gameSlug: row.gameSlug,
+      gameIgdbId: row.gameIgdbId,
+      hidden,
+    };
   }
 
   async findCampaign(id: number): Promise<Bg3CampaignRow | null> {

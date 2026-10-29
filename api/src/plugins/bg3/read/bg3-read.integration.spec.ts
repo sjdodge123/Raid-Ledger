@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import {
   BG3_GAME_SLUG,
+  BG3_IGDB_ID,
   BG3_PLUGIN_ID,
   Bg3HubCampaignsResponseSchema,
   Bg3SaveMessageSchema,
@@ -27,6 +28,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { upsertSeedGames } from '../../../../scripts/seed-igdb-games';
 
 const PARTY: Bg3PartyMember[] = Bg3SaveMessageSchema.parse(
   JSON.parse(
@@ -300,6 +302,64 @@ describe('BG3 hub routes — access matrix (D-15)', () => {
       officer: await canEdit(officer),
       member: await canEdit(guest),
     }).toEqual({ admin: true, officer: true, member: false });
+  });
+});
+
+/** BG3's entry of the real boot seed (`api/seeds/games-seed.json`). */
+function bootSeedBg3(): { igdbId: number; name: string; slug: string } {
+  const file = join(__dirname, '../../../../seeds/games-seed.json');
+  const raw: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  const games: unknown[] =
+    typeof raw === 'object' &&
+    raw !== null &&
+    'games' in raw &&
+    Array.isArray(raw.games)
+      ? raw.games
+      : [];
+  for (const g of games) {
+    if (typeof g !== 'object' || g === null) continue;
+    if (!('igdbId' in g) || g.igdbId !== BG3_IGDB_ID) continue;
+    if (
+      'name' in g &&
+      'slug' in g &&
+      typeof g.name === 'string' &&
+      typeof g.slug === 'string'
+    )
+      return { igdbId: BG3_IGDB_ID, name: g.name, slug: g.slug };
+  }
+  throw new Error('games-seed.json has no BG3 entry');
+}
+
+describe('ROK-2038 — BG3 hub on the game row the boot seed writes', () => {
+  async function hubGameSlug(): Promise<string | undefined> {
+    const [row] = await testApp.db
+      .select({ slug: schema.games.slug })
+      .from(schema.games)
+      .innerJoin(schema.guilds, eq(schema.guilds.gameId, schema.games.id))
+      .where(eq(schema.guilds.id, hub));
+    return row?.slug;
+  }
+
+  async function readStatuses(): Promise<number[]> {
+    const r = routes(hub);
+    const res = [
+      await r.campaigns(host),
+      await r.snapshot(host),
+      await r.sessions(host),
+    ];
+    return res.map((x) => x.status);
+  }
+
+  it('serves the hub after the seed converges the row, and on the legacy slug', async () => {
+    const seed = bootSeedBg3();
+    await testApp.db
+      .update(schema.games)
+      .set({ name: seed.name, slug: 'baldurs-gate-3' })
+      .where(eq(schema.games.slug, BG3_GAME_SLUG));
+    expect(await readStatuses()).toEqual([200, 200, 200]);
+    await upsertSeedGames(testApp.db, [{ ...seed, coverUrl: null }]);
+    expect(await hubGameSlug()).toBe(seed.slug);
+    expect(await readStatuses()).toEqual([200, 200, 200]);
   });
 });
 

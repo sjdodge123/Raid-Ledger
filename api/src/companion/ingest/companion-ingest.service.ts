@@ -3,7 +3,8 @@
  * steps (3–10), then step 11 in one transaction (device revalidation →
  * stored-blob ref check → latest-wins compare-and-set → ref upsert →
  * handler). A stale message commits nothing
- * and never reaches the handler (Q3). Logs ids, contract, version and the
+ * and never reaches the handler (Q3). An after-commit handler (ROK-1964) runs
+ * once that transaction has committed, never inside it. Logs ids, contract, version and the
  * result only — never the body or payload values.
  */
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
@@ -66,6 +67,8 @@ export class CompanionIngestService {
     const status = await this.repo.transaction((tx) =>
       this.commit(tx, auth, msg, marker, now),
     );
+    // After-commit mode: only reached once the tx above has committed.
+    if (status === 'accepted') await this.runAfterCommit(auth, msg, now);
     this.logger.log(
       `companion ingest user=${auth.userId} device=${auth.deviceId ?? '-'} contract=${msg.contract} v=${msg.version} bytes=${body.length} result=${status}`,
     );
@@ -87,12 +90,29 @@ export class CompanionIngestService {
       if (!(await this.repo.advance(tx, row))) return 'stale';
     }
     await this.repo.recordBlobRefs(tx, auth.userId, msg.contract, refs);
-    const { userId, via, deviceId } = auth;
-    await msg.handler.handle(
-      { tx, userId, via, deviceId, receivedAt },
-      msg.message,
-    );
+    const { handler } = msg;
+    if (handler.afterCommit !== true) {
+      const { userId, via, deviceId } = auth;
+      const ctx = { tx, userId, via, deviceId, receivedAt };
+      await handler.handle(ctx, msg.message);
+    }
     return 'accepted';
+  }
+
+  /**
+   * ROK-1964 — an after-commit handler runs here, OUTSIDE the ingest tx (its
+   * own transaction never waits for a second pooled connection). An in-tx
+   * handler already ran inside {@link commit}.
+   */
+  private async runAfterCommit(
+    auth: CompanionIngestAuth,
+    msg: ValidatedCompanionMessage,
+    receivedAt: Date,
+  ): Promise<void> {
+    const { handler } = msg;
+    if (handler.afterCommit !== true) return;
+    const { userId, via, deviceId } = auth;
+    await handler.handle({ userId, via, deviceId, receivedAt }, msg.message);
   }
 
   /** Step 11b: the message's refs must agree with any blob already stored. */

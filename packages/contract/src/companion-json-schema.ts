@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { COMPANION_ENVELOPE_VERSION } from './companion-common.schema.js';
 import { CompanionEnvelopeSchema } from './companion-envelope.schema.js';
 import { BG3_SAVE_CONTRACT_VERSION, Bg3SaveMessageSchema } from './companion-bg3-save.schema.js';
+import { WOW_LEDGERLINK_CONTRACT_VERSION, WowLedgerlinkMessageSchema } from './companion-wow-ledgerlink.schema.js';
 import {
     CompanionDeviceSelfSchema,
     CompanionLinkPollErrorSchema,
@@ -27,6 +28,10 @@ export const COMPANION_ENVELOPE_SCHEMA_ID =
 /** `$id` of the `bg3-save` message JSON Schema. */
 export const BG3_SAVE_SCHEMA_ID =
     `https://raid.gamernight.net/contracts/companion/bg3-save/v${BG3_SAVE_CONTRACT_VERSION}/schema.json`;
+
+/** `$id` of the `wow-ledgerlink` message JSON Schema (ROK-1964). */
+export const WOW_LEDGERLINK_SCHEMA_ID =
+    `https://raid.gamernight.net/contracts/companion/wow-ledgerlink/v${WOW_LEDGERLINK_CONTRACT_VERSION}/schema.json`;
 
 /** Draft-2020-12 INPUT-mode conversion (what the server ACCEPTS); throws on anything unrepresentable. */
 function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
@@ -58,6 +63,22 @@ export function buildBg3SaveJsonSchema(): Record<string, unknown> {
         description:
             'GENERATED from Bg3SaveMessageSchema (packages/contract/src/companion-bg3-save.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: a party member\'s xpLevel ≤ xpTotal; isSummon ⇒ classes is empty; !isSummon ⇒ at least one class; payload.savedAt ≤ capturedAt. The server alone checks the clock; see CONTRACT.md.',
     };
+}
+
+/** The JSON Schema object for one `wow-ledgerlink` v1 message (ROK-1964). */
+export function buildWowLedgerlinkJsonSchema(): Record<string, unknown> {
+    return {
+        ...toInputJsonSchema(WowLedgerlinkMessageSchema),
+        $id: WOW_LEDGERLINK_SCHEMA_ID,
+        title: `RL Companion wow-ledgerlink message v${WOW_LEDGERLINK_CONTRACT_VERSION}`,
+        description:
+            'GENERATED from WowLedgerlinkMessageSchema (packages/contract/src/companion-wow-ledgerlink.schema.ts) — do not edit by hand. payload.exportString is an unchanged LedgerLink v1 export string (packages/contract/ledgerlink/v1/); its inner format is checked by the server\'s LedgerLink decoder, not here. The server alone checks the clock; see CONTRACT.md.',
+    };
+}
+
+/** Exact file contents of `companion/wow-ledgerlink/v1/schema.json` (2-space indent, trailing newline). */
+export function serializeWowLedgerlinkJsonSchema(): string {
+    return `${JSON.stringify(buildWowLedgerlinkJsonSchema(), null, 2)}\n`;
 }
 
 /** Exact file contents of `companion/envelope/v1/schema.json` (2-space indent, trailing newline). */

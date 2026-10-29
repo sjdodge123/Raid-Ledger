@@ -188,6 +188,21 @@ describe('useSchedulingLock — commit', () => {
         expect(navigate).not.toHaveBeenCalled();
     });
 
+    it('linked-event lock refetches the event once complete resolves (ROK-2031)', async () => {
+        const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+        rescheduleMutate.mockImplementationOnce((_vars, opts) =>
+            opts?.onSuccess?.(),
+        );
+        const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
+
+        await act(() => result.current.requestLock(buildSlot()));
+
+        // complete's `.then` runs on the next microtask; flush it, then assert.
+        await act(async () => {});
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['events', 77] });
+        invalidate.mockRestore();
+    });
+
     it('does not complete the poll until reschedule succeeds', async () => {
         const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
 
