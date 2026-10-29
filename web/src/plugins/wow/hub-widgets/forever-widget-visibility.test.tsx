@@ -14,7 +14,7 @@ import { GuildRaidsSchema, type GuildPage, type GuildRaidsDto, type WowRosterIns
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
-    PROFESSIONS_FIXTURE, VISITOR_FIXTURE, contentEvent, guildRaidsHandler, questReadinessHandler, readinessFixture,
+    PROFESSIONS_FIXTURE, ROLES_FIXTURE, VISITOR_FIXTURE, contentEvent, createBareRosterInsights, createMockRosterInsights, guildRaidsHandler, questReadinessHandler, readinessFixture,
     rosterInsightsHandler,
 } from '../../../test/handlers/forever-hub-widgets';
 import { fetchApi } from '../../../lib/api-client';
@@ -22,6 +22,8 @@ import { clearRegistry, registerPlugin } from '../../plugin-registry';
 import { gameWidgetCells } from '../../../components/hub/hub-widget-cells';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { registerDungeonQuestsWidget } from './dungeon-quests.register';
+import { registerClassLevelWidgets } from './class-level.register';
+import { registerRolesWidget } from './roles.register';
 import { professionsWidget } from './professions.register';
 import { whosSavedWidget } from './whos-saved.register';
 import { useRosterInsights } from './use-roster-insights';
@@ -36,9 +38,11 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 type ViewerRole = GuildPage['viewer']['role'];
 
-function page(role: ViewerRole): GuildPage {
+type HubKind = GuildPage['guild']['kind'];
+
+function page(role: ViewerRole, kind: HubKind = 'wow_guild'): GuildPage {
     return {
-        guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 5, lastSnapshotAt: null, gameSlug: WOW_FOREVER_GAME_SLUG },
+        guild: { id: 7, gameId: 1, kind, name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 5, lastSnapshotAt: null, gameSlug: WOW_FOREVER_GAME_SLUG },
         importedBy: null,
         viewer: { role, canEdit: false, canManageEditors: false },
         ranks: [],
@@ -47,13 +51,13 @@ function page(role: ViewerRole): GuildPage {
 }
 
 /** The Overview cells plus a marker once both queries the probes read have settled. */
-function Overview({ role }: { role: ViewerRole }): JSX.Element {
+function Overview({ role, kind }: { role: ViewerRole; kind: HubKind }): JSX.Element {
     const raids = useQuery<GuildRaidsDto, Error>({
         queryKey: ['visibility-raids'],
         queryFn: () => fetchApi('/guilds/7/raids', {}, GuildRaidsSchema),
     });
     const insights = useRosterInsights(7);
-    const cells = gameWidgetCells({ page: page(role), raids }, new Set(['blizzard']));
+    const cells = gameWidgetCells({ page: page(role, kind), raids }, new Set(['blizzard']));
     return (
         <div>
             {raids.isSuccess && insights.isSuccess && <span data-testid="queries-ready" />}
@@ -63,14 +67,14 @@ function Overview({ role }: { role: ViewerRole }): JSX.Element {
 }
 
 /** One viewer: their user role, their guild role, and the roster payload the API sends them. */
-async function renderAs(userRole: string, guildRole: ViewerRole, insights: WowRosterInsightsDto): Promise<void> {
+async function renderAs(userRole: string, guildRole: ViewerRole, insights: WowRosterInsightsDto, kind: HubKind = 'wow_guild'): Promise<void> {
     auth.role = userRole;
     server.use(
         rosterInsightsHandler({ all: insights }),
         guildRaidsHandler([contentEvent(101, '2099-01-01T20:00:00.000Z')]),
         questReadinessHandler({ 101: readinessFixture }),
     );
-    renderWithProviders(<Overview role={guildRole} />);
+    renderWithProviders(<Overview role={guildRole} kind={kind} />);
     await screen.findByTestId('queries-ready');
 }
 
@@ -107,5 +111,29 @@ describe('Forever members-only widgets — visibility by viewer', () => {
     it('an operator who is not in the guild sees Dungeon quests', async () => {
         await renderAs('operator', 'visitor', PROFESSIONS_FIXTURE);
         expect(await screen.findByRole('heading', { name: 'Dungeon quests' })).toBeInTheDocument();
+    });
+});
+
+describe('Forever class / level / role widgets on a community hub (ROK-1925)', () => {
+    const MEMBER_PAYLOAD: WowRosterInsightsDto = createMockRosterInsights({ roles: ROLES_FIXTURE.roles });
+
+    beforeEach(() => {
+        const blizzard = registerPlugin('blizzard', { icon: '/x.png', color: 'blue', label: 'WoW' });
+        registerClassLevelWidgets(blizzard);
+        registerRolesWidget(blizzard);
+    });
+
+    it('a member of a Forever community hub sees Class breakdown, Level progression and Role breakdown', async () => {
+        await renderAs('member', 'member', MEMBER_PAYLOAD, 'game_community');
+        expect(await screen.findByRole('heading', { name: 'Class breakdown' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Level progression' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Role breakdown' })).toBeInTheDocument();
+    });
+
+    it('a visitor (the API sends an empty payload) sees none of the three', async () => {
+        await renderAs('member', 'visitor', createBareRosterInsights({}, null), 'game_community');
+        expect(screen.queryByRole('heading', { name: 'Class breakdown' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Level progression' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Role breakdown' })).toBeNull();
     });
 });

@@ -8,9 +8,10 @@ import {
   GuildAccessService,
   type GuildActor,
 } from '../../../../guilds/guild-access.service';
+import { HubKindRegistry } from '../../../../guilds/hub-kind.registry';
+import type { HubKindAdapter } from '../../../plugin-host/extension-points';
 import { WowFactsService } from '../../facts/wow-facts.service';
 import type { RosterCharRef } from '../../facts/wow-fact.types';
-import { dedupeByMember, loadRosterRows } from '../guild-roster.helpers';
 import {
   computeFreshness,
   computeProfessions,
@@ -24,6 +25,11 @@ import {
 } from './roster-insights.lockouts';
 import { computeLastSeen } from './roster-insights.last-seen';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
+import {
+  emptyInsights,
+  loadInsightRawRows,
+  toInsightRow,
+} from './roster-insights.refs';
 import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
 /**
@@ -31,7 +37,9 @@ import type { InsightRow, InsightsAudience } from './roster-insights.types';
  * query + one `WowFactsService` resolve (one batched query per source),
  * aggregated in TS and cached 5 minutes per guild + audience. Professions and
  * lockouts (ROK-1914) are members/staff only and OMITTED (not empty) for
- * visitors.
+ * visitors. ROK-1925: the roster comes from the hub kind (guild roster or
+ * community members' Forever characters); a community VISITOR gets
+ * `emptyInsights()` (Q1 = A) — community membership is RL-private.
  */
 @Injectable()
 export class RosterInsightsService {
@@ -43,6 +51,7 @@ export class RosterInsightsService {
     private readonly facts: WowFactsService,
     private readonly access: GuildAccessService,
     private readonly cache: RosterInsightsCache,
+    private readonly hubKinds: HubKindRegistry,
   ) {}
 
   /** The viewer's insights (the hub view guard already ran). */
@@ -68,11 +77,15 @@ export class RosterInsightsService {
     audience: InsightsAudience,
     onlyMains: boolean,
   ): Promise<WowRosterInsightsDto> {
+    const adapter = await this.hubKinds.forGuild(guildId);
+    // Q1 = A: never load a community roster for a non-member.
+    if (audience === 'visitor' && adapter?.kind === 'game_community')
+      return emptyInsights();
     // Snapshot time first: if an import lands between the two reads, the
     // footer shows presence as older than it is, never newer.
     const snapshotAt =
       audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
-    const all = await this.loadRows(guildId);
+    const all = await this.loadRows(adapter, guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
     return {
       classes: computeClasses(rows),
@@ -101,11 +114,14 @@ export class RosterInsightsService {
     return g?.at ? g.at.toISOString() : null;
   }
 
-  /** Roster rows (one per member) joined to their resolved facts. */
-  private async loadRows(guildId: number): Promise<InsightRow[]> {
-    const raw = dedupeByMember(await loadRosterRows(this.db, guildId));
+  /** Roster rows (one per member / community character) with their facts. */
+  private async loadRows(
+    adapter: HubKindAdapter | undefined,
+    guildId: number,
+  ): Promise<InsightRow[]> {
+    const raw = await loadInsightRawRows(this.db, adapter, guildId);
     const refs: RosterCharRef[] = raw.map((r) => ({
-      key: `m${r.memberId}`,
+      key: r.key,
       memberId: r.memberId,
       characterId: r.characterId,
     }));
@@ -119,20 +135,8 @@ export class RosterInsightsService {
     }
     // Rows past the resolver cap have no facts and are left out.
     return raw.flatMap((r) => {
-      const resolved = facts.get(`m${r.memberId}`);
-      if (!resolved) return [];
-      return [
-        {
-          name: r.name,
-          characterId: r.characterId,
-          userId: r.userId,
-          isMain: r.isMain ?? false,
-          rankIndex: r.rankIndex,
-          onlineAtExport: r.onlineAtExport,
-          lastOnlineDays: r.lastOnlineDays,
-          facts: resolved,
-        },
-      ];
+      const resolved = facts.get(r.key);
+      return resolved ? [toInsightRow(r, resolved)] : [];
     });
   }
 }

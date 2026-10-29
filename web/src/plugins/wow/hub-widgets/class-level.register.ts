@@ -1,8 +1,10 @@
 /**
  * ROK-1921 (epic ROK-1905 H6) — registers the WoW: Forever Class breakdown (W1)
- * and Level progression (W2) widgets on Forever guild hubs. Bodies are lazy so
- * `register.ts` stays light; both hide themselves on an empty roster. Class and
- * level are public (operator ruling Q2), so the audience is everyone.
+ * and Level progression (W2) widgets on Forever guild hubs and (ROK-1925) Forever
+ * community hubs. Bodies are lazy so `register.ts` stays light; both hide
+ * themselves on an empty roster, which is what a non-member of a community hub
+ * receives (the API returns an empty payload). Class and level are public
+ * (operator ruling Q2), so the audience is everyone.
  */
 import { lazy } from 'react';
 import type { PluginHandle } from '../../plugin-registry';
@@ -19,7 +21,7 @@ function useHasRoster(ctx: HubWidgetCtx): boolean {
 
 /** Adds W1 (order 45, span 1) and W2 (order 46, span 2) to the plugin's hub widgets. */
 export function registerClassLevelWidgets(handle: PluginHandle): void {
-    const base = { games: [WOW_FOREVER_GAME_SLUG], kinds: ['wow_guild'] as const, audience: 'everyone' as const, useVisible: useHasRoster };
+    const base = { games: [WOW_FOREVER_GAME_SLUG], kinds: ['wow_guild', 'game_community'] as const, audience: 'everyone' as const, useVisible: useHasRoster };
     handle.registerHubWidget({
         ...base, id: 'forever-class-breakdown', title: 'Class breakdown', order: 45, span: 1,
         description: 'How many members play each class.',
