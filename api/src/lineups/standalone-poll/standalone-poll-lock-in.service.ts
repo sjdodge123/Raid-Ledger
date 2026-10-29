@@ -32,6 +32,7 @@ import {
 import { rescheduleLockedInPoll } from './standalone-poll-reschedule-lock-in.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
+import { NotificationService } from '../../notifications/notification.service';
 
 /** No-op rejection swallower for fire-and-forget emits. */
 const noop = (): void => {};
@@ -67,6 +68,7 @@ export class StandalonePollLockInService {
     @Inject(forwardRef(() => EmbedSyncQueueService))
     private readonly embedSyncQueue: EmbedSyncQueueService,
     private readonly guildTag: EventGuildTagService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -114,7 +116,12 @@ export class StandalonePollLockInService {
   ): Promise<EventResponseDto> {
     const caller = { id: user.id, isAdmin: isOperatorOrAdmin(user.role) };
     const moved = await rescheduleLockedInPoll(
-      { db: this.db, eventsService: this.eventsService, logger: this.logger },
+      {
+        db: this.db,
+        eventsService: this.eventsService,
+        notificationService: this.notificationService,
+        logger: this.logger,
+      },
       { matchId, caller, dto },
     );
     await this.afterComplete(

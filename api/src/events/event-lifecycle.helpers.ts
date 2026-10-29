@@ -229,7 +229,7 @@ async function buildFullReschedulePayload(
 }
 
 /** Sends reschedule notifications to signed-up users (excluding the rescheduler). */
-async function notifyReschedule(
+export async function notifyReschedule(
   db: PostgresJsDatabase<typeof schema>,
   notificationService: NotificationService,
   eventId: number,

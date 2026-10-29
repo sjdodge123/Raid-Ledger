@@ -350,6 +350,7 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       events as never,
       { enqueue: jest.fn().mockResolvedValue(undefined) } as never,
       { assertCreate: jest.fn() } as never,
+      { createMany: jest.fn() } as never,
     );
     const service = new StandalonePollService(
       db as never,

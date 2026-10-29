@@ -30,6 +30,7 @@ import { EventsService } from '../../events/events.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { createMemberAndLogin } from '../../events/signups.integration.spec-helpers';
 import * as queryHelpers from './standalone-poll-query.helpers';
+import { NotificationService } from '../../notifications/notification.service';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -230,5 +231,68 @@ describe('reschedule lock-in failure paths (ROK-2040)', () => {
     expect(moves).not.toHaveBeenCalled();
     expect(await matchStatus(poll.matchId)).toBe('scheduling');
     expect((await rescheduleLockIn(poll.matchId, SLOT_A)).status).toBe(200);
+  });
+
+  it('a linked event whose game changed gets 400 before the claim; the poll stays claimable', async () => {
+    const poll = await seedReschedulePoll();
+    await testApp.db
+      .update(schema.events)
+      .set({ gameId: null })
+      .where(eq(schema.events.id, poll.eventId));
+    const moves = jest.spyOn(testApp.app.get(EventsService), 'reschedule');
+
+    const denied = await rescheduleLockIn(poll.matchId, SLOT_A);
+
+    expect(denied.status).toBe(400);
+    expect(denied.body.message).toBe(
+      "The event's game no longer matches the poll",
+    );
+    expect(moves).not.toHaveBeenCalled();
+    expect(await matchStatus(poll.matchId)).toBe('scheduling');
+    await testApp.db
+      .update(schema.events)
+      .set({ gameId: testApp.seed.game.id })
+      .where(eq(schema.events.id, poll.eventId));
+    expect((await rescheduleLockIn(poll.matchId, SLOT_A)).status).toBe(200);
+  });
+
+  it('a notification failure after the move is retried once: confirmations reset, one reschedule notification', async () => {
+    const poll = await seedReschedulePoll();
+    const member = await createMemberAndLogin(
+      testApp,
+      'resched-signed-up',
+      'resched-signed-up@test.local',
+    );
+    await testApp.db.insert(schema.eventSignups).values({
+      eventId: poll.eventId,
+      userId: member.userId,
+      status: 'signed_up',
+      confirmationStatus: 'confirmed',
+    });
+    const moves = jest.spyOn(testApp.app.get(EventsService), 'reschedule');
+    // `notifyReschedule` → `createMany` runs after the duration UPDATE.
+    jest
+      .spyOn(testApp.app.get(NotificationService), 'createMany')
+      .mockRejectedValueOnce(new Error('notification insert failed'));
+
+    const res = await rescheduleLockIn(poll.matchId, SLOT_A);
+
+    expect(res.status).toBe(200);
+    expect(moves).toHaveBeenCalledTimes(1);
+    const [signup] = await testApp.db
+      .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, poll.eventId));
+    expect(signup?.confirmationStatus).toBe('pending');
+    const sent = await testApp.db
+      .select({ payload: schema.notifications.payload })
+      .from(schema.notifications)
+      .where(eq(schema.notifications.userId, member.userId));
+    const rescheduled = sent.filter(
+      (n) =>
+        (n.payload as { newStartTime?: string } | null)?.newStartTime ===
+        SLOT_A.toISOString(),
+    );
+    expect(rescheduled).toHaveLength(1);
   });
 });

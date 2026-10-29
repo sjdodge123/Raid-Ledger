@@ -23,6 +23,8 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { EventsService } from '../../events/events.service';
+import { findExistingOrThrow } from '../../events/event-lifecycle.helpers';
+import type { NotificationService } from '../../notifications/notification.service';
 import {
   claimMatchForLockIn,
   releaseMatchClaim,
@@ -34,6 +36,7 @@ import {
   type Caller,
 } from './standalone-poll-auth.helpers';
 import { clearReschedulingPollId } from './standalone-poll-query.helpers';
+import { finishMovedReschedule } from './standalone-poll-reschedule-recovery.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -41,6 +44,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 export interface RescheduleLockInDeps {
   db: Db;
   eventsService: Pick<EventsService, 'reschedule' | 'findOne'>;
+  notificationService: NotificationService;
   logger: Pick<Logger, 'error'>;
 }
 
@@ -82,8 +86,11 @@ export async function rescheduleLockedInPoll(
   const { db } = deps;
   const { matchId, caller, dto } = input;
   const target = await loadRescheduleTarget(db, matchId);
+  // `eventId` runs the event's game check (400 when it no longer matches).
   await assertCanCompletePoll(db, matchId, caller, {
+    eventId: target.eventId,
     startTime: dto.startTime,
+    eventMovesToSlot: true,
   });
   assertMayMoveEvent(target, caller);
   assertSlotIsFuture(dto.startTime);
@@ -112,8 +119,8 @@ function assertMayMoveEvent(target: RescheduleTarget, caller: Caller): void {
 /**
  * Move the claimed poll's event. A throw before the move commits puts the
  * claim back and rethrows; a throw after it (activity log, re-read) keeps the
- * claim and returns null — releasing would let a retry move the event again
- * and notify everyone twice.
+ * claim, re-runs the side effects that may not have run, and returns null —
+ * releasing would let a retry move the event again and notify everyone twice.
  */
 async function moveOrRelease(
   deps: RescheduleLockInDeps,
@@ -122,6 +129,7 @@ async function moveOrRelease(
   prior: ClaimedFromStatus,
 ): Promise<EventResponseDto | null> {
   const { matchId, caller, dto } = input;
+  const before = await findExistingOrThrow(deps.db, target.eventId);
   try {
     return await deps.eventsService.reschedule(
       target.eventId,
@@ -130,7 +138,15 @@ async function moveOrRelease(
       dto,
     );
   } catch (err: unknown) {
-    if (await movedAnyway(deps, input, target.eventId, err)) return null;
+    if (await movedAnyway(deps, input, target.eventId, err)) {
+      await finishMovedReschedule(deps, {
+        eventId: target.eventId,
+        caller,
+        before,
+        dto,
+      });
+      return null;
+    }
     await releaseMatchClaim(
       deps.db,
       matchId,
@@ -196,7 +212,7 @@ async function archiveOrLog(
     // Not rethrown: the event moved and the claim holds, so a retry can only
     // 409; `afterComplete` must still re-emit. The stale lock is ROK-2033's.
     deps.logger.error(
-      `Reschedule lock-in ${matchId}: archive/release failed: ${String(err)}`,
+      `Reschedule lock-in ${matchId}: archive/release failed; lineup ${target.lineupId} is still open and event ${target.eventId} still marked rescheduling (embed stays RESCHEDULING) — archive the lineup to heal: ${String(err)}`,
     );
   }
 }
