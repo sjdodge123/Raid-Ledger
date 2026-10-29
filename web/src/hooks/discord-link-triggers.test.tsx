@@ -31,7 +31,7 @@ vi.mock('./use-system-status', () => ({
 // ROK-1780: the integrations panel now renders Calendars behind this kill switch; off here.
 vi.mock('./use-calendar-sync', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./use-calendar-sync')>()),
-    useCalendarSyncEnabled: () => false,
+    useCalendarSyncOff: () => true,
 }));
 vi.mock('./use-onboarding', () => ({
     useOnboarding: () => ({ changePassword: { mutate: vi.fn(), isPending: false } }),

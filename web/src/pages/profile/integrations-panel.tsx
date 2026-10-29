@@ -13,7 +13,7 @@ import { useSteamLink } from '../../hooks/use-steam-link';
 import { isDiscordLinked, buildDiscordAvatarUrl } from '../../lib/avatar';
 import { DiscordLinkCta, SteamSection } from './identity-sections';
 import { useSteamRedirectFeedback } from './identity-hooks';
-import { useCalendarSyncEnabled } from '../../hooks/use-calendar-sync';
+import { useCalendarSyncOff } from '../../hooks/use-calendar-sync';
 import { CalendarsPage } from '../../components/features/calendar-sync/CalendarsPage';
 import { CompanionDevicesSection } from './companion-devices-section';
 
@@ -36,10 +36,9 @@ function DiscordLinkedStatus({ user }: {
     );
 }
 
-/** Calendars section — rendered only while the admin kill switch is on (ROK-1780). */
+/** Calendars section — hidden only once the overview says the admin kill switch is off (ROK-1780). */
 function CalendarsSection(): JSX.Element | null {
-    const enabled = useCalendarSyncEnabled();
-    return enabled ? <CalendarsPage /> : null;
+    return useCalendarSyncOff() ? null : <CalendarsPage />;
 }
 
 /** Integrations panel with Discord and Steam, then Companion devices (ROK-1955, the /link "Manage devices" target), then Calendars. */

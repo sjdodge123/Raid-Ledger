@@ -42,10 +42,14 @@ export function useCalendarsOverview() {
     });
 }
 
-/** True only once the overview loaded AND says the switch is on. */
-export function useCalendarSyncEnabled(): boolean {
+/**
+ * True only once the overview loaded AND says the switch is off. Loading or a
+ * failed fetch is NOT "off": the caller still renders CalendarsPage, which
+ * shows its own load error and keeps the OAuth callback feedback mounted.
+ */
+export function useCalendarSyncOff(): boolean {
     const { data } = useCalendarsOverview();
-    return data?.enabled === true;
+    return data?.enabled === false;
 }
 
 /** Leaves the app for the provider's consent screen. */
