@@ -119,14 +119,20 @@ describe('Members tab — D5 flat/grouped (ROK-1173)', () => {
     });
 });
 
-/* A stand-in module with one filter ("Warriors only"), driving `HubMembers` directly. */
+/* A stand-in module with two filters ("Warriors only", "Mages only" — PAGE has no Mage), driving `HubMembers` directly. */
 function useWarriorFilter(): HubMemberFilters {
     const [on, setOn] = useState(false);
+    const [mages, setMages] = useState(false);
     return {
-        activeCount: on ? 1 : 0,
-        matches: (r: HubMemberRow) => !on || r.class === 'Warrior',
-        clearAll: () => setOn(false),
-        controls: <Checkbox label="Warriors only" checked={on} onChange={(e) => setOn(e.target.checked)} />,
+        activeCount: (on ? 1 : 0) + (mages ? 1 : 0),
+        matches: (r: HubMemberRow) => (!on || r.class === 'Warrior') && (!mages || r.class === 'Mage'),
+        clearAll: () => { setOn(false); setMages(false); },
+        controls: (
+            <>
+                <Checkbox label="Warriors only" checked={on} onChange={(e) => setOn(e.target.checked)} />
+                <Checkbox label="Mages only" checked={mages} onChange={(e) => setMages(e.target.checked)} />
+            </>
+        ),
         lead: <p data-testid="fake-members-lead">Coverage</p>,
     };
 }
@@ -143,10 +149,13 @@ const FAKE_MODULE: HubModule = {
     useMemberFilters: useWarriorFilter,
 };
 
-function Harness(): JSX.Element {
+function Harness({ page = PAGE }: { page?: GuildPageDto }): JSX.Element {
     const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['fake-raids'], queryFn: () => Promise.reject(new Error('unused')), enabled: false });
-    return <HubMembers ctx={{ page: PAGE, raids }} module={FAKE_MODULE} />;
+    return <HubMembers ctx={{ page, raids }} module={FAKE_MODULE} />;
 }
+
+/** A visitor's view of a members-first hub: no rows at all. */
+const EMPTY_PAGE: GuildPageDto = { ...PAGE, guild: { ...PAGE.guild, memberCount: 0 }, ranks: [] };
 
 const originalMatchMedia = window.matchMedia;
 function mockDesktop(): void {
@@ -181,7 +190,24 @@ describe('Members filters — the funnel standard (ROK-1173 AC3/AC10)', () => {
         expect(screen.queryByTestId('filter-panel-trigger'), 'no toolbar funnel below 1024px').toBeNull();
     });
 
-    it('says no member matches the filters when a filter empties the list', async () => {
+    it('says no member matches these filters when a filter alone empties the list (AC10)', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness />);
+        await userEvent.click(await screen.findByTestId('filter-panel-trigger'));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Mages only' }));
+        await waitFor(() => expect(screen.getByTestId('guild-members-no-match')).toHaveTextContent('No members match these filters.'));
+        expect(screen.queryAllByTestId('guild-member-row')).toHaveLength(0);
+    });
+
+    it('offers no funnel or Filters FAB when there are no rows to filter', async () => {
+        mockDesktop();
+        renderWithProviders(<Harness page={EMPTY_PAGE} />);
+        expect(await screen.findByTestId('guild-members-empty')).toBeInTheDocument();
+        expect(screen.queryByTestId('filter-panel-trigger'), 'no funnel with nothing to narrow').toBeNull();
+        expect(screen.queryByTestId('filter-fab'), 'no Filters FAB with nothing to narrow').toBeNull();
+    });
+
+    it('names the search, not the filters, when a search empties a filtered list', async () => {
         mockDesktop();
         renderWithProviders(<Harness />);
         await userEvent.click(await screen.findByTestId('filter-panel-trigger'));

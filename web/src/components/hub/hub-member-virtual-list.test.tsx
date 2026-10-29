@@ -54,6 +54,33 @@ describe('HubMemberVirtualList (ROK-1173 AC6)', () => {
         expect(scroller).toHaveAttribute('tabindex', '0');
         expect(screen.getAllByTestId('guild-member-row')[0]).not.toHaveAttribute('tabindex');
     });
+
+    it('scrolls back to the top when the list changes (a new sort, filter or search)', () => {
+        const { rerender } = render(<HubMemberVirtualList bands={bandMembers(ROWS, undefined)} columns={COLUMNS} rowClass={undefined} desktop />);
+        fireEvent.scroll(screen.getByTestId('guild-members-scroller'), { target: { scrollTop: 1000 * TABLE_METRICS.row } });
+        expect(mounted()).not.toContain('Member 0');
+        rerender(<HubMemberVirtualList bands={bandMembers([...ROWS].reverse(), undefined)} columns={COLUMNS} rowClass={undefined} desktop />);
+        expect(mounted()[0], 'a re-sorted list must start at its first row, not mid-list').toBe('Member 1999');
+    });
+
+    it('tells assistive tech the full row count and each mounted row’s position', () => {
+        render(<HubMemberVirtualList bands={bandMembers(ROWS, undefined)} columns={COLUMNS} rowClass={undefined} desktop />);
+        fireEvent.scroll(screen.getByTestId('guild-members-scroller'), { target: { scrollTop: 1000 * TABLE_METRICS.row } });
+        expect(screen.getByRole('table')).toHaveAttribute('aria-rowcount', '2001');
+        const row1000 = screen.getAllByTestId('guild-member-row').find((el) => el.textContent === 'Member 1000');
+        expect(row1000, 'row 1000 is mounted').toBeDefined();
+        expect(row1000).toHaveAttribute('aria-rowindex', '1002');
+    });
+
+    it('moves focus to the list box when scrolling unmounts the focused row', () => {
+        const linked: HubMemberColumn[] = [{ id: 'name', header: 'Name', cell: ({ row: r }) => <button type="button">{r.name}</button> }];
+        render(<HubMemberVirtualList bands={bandMembers(ROWS, undefined)} columns={linked} rowClass={undefined} desktop />);
+        screen.getByRole('button', { name: 'Member 0' }).focus();
+        const scroller = screen.getByTestId('guild-members-scroller');
+        fireEvent.scroll(scroller, { target: { scrollTop: 1000 * TABLE_METRICS.row } });
+        expect(screen.queryByRole('button', { name: 'Member 0' })).toBeNull();
+        expect(document.activeElement, 'focus must not drop to <body>').toBe(scroller);
+    });
 });
 
 describe('virtualSlice', () => {
