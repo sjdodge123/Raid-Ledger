@@ -28,11 +28,8 @@ export function CreateEventPage() {
     const rawLineupId = searchParams.get('lineupId');
     const parsedLineupId = rawLineupId ? parseInt(rawLineupId, 10) : NaN;
     const schedulingLineupId = Number.isFinite(parsedLineupId) ? parsedLineupId : null;
-    // ROK-1893 P3: a hub poll's lock-in preselects the hub in the guild field.
-    // ROK-1817: a `gameId` that resolves to no game hides the Guild field, so the
-    // tag would ride along unseen — drop it (a poll keeps its InheritedHubLine).
-    const parsedGuildId = parsePositiveInt(searchParams.get('guildId'));
-    const initialGuildId = searchParams.get('gameId') && !initialGame && schedulingMatchId === null ? null : parsedGuildId;
+    // ROK-1893 P3 / ROK-1817: the hub preselected in the guild field.
+    const initialGuildId = initialGuildFor(searchParams, initialGame !== null);
     // ROK-1371: post-event follow-up deep-link — links the new event back to the
     // ended event so the server fans out quick-sign-up DMs to its attendees.
     const followupForEventId = searchParams.get('followupForEventId') ? parseInt(searchParams.get('followupForEventId')!, 10) : null;
@@ -67,6 +64,18 @@ export function CreateEventPage() {
             </div>
         </div>
     );
+}
+
+/**
+ * `?guildId=` as the form's initial guild (a poll lock-in, or "Schedule for
+ * guild"). ROK-1817: a `gameId` that resolves to no game hides the Guild field,
+ * so the tag would ride along unseen — drop it. A poll keeps its hub (shown by
+ * InheritedHubLine, submitted by the server from the poll).
+ */
+function initialGuildFor(params: URLSearchParams, gameResolved: boolean): number | null {
+    const guildId = parsePositiveInt(params.get('guildId'));
+    if (params.get('gameId') && !gameResolved && !params.get('matchId')) return null;
+    return guildId;
 }
 
 /** A positive integer query param, else null. */
