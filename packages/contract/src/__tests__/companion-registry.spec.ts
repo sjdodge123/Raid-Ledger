@@ -29,9 +29,10 @@ describe('lookupCompanionContract (ROK-1954)', () => {
         expect(res.spec.schema).toBe(Bg3SaveMessageSchema);
         expect(res.spec).toEqual({ schema: Bg3SaveMessageSchema, maxBytes: COMPANION_BG3_SAVE_MAX_BYTES, blobSlots: ['thumbnail'], status: 'current' });
     });
-    it('R1: the shipped table holds exactly bg3-save v1', () => {
-        expect(Object.keys(COMPANION_CONTRACTS)).toEqual(['bg3-save']);
+    it('R1: the shipped table holds exactly bg3-save v1 and wow-ledgerlink v1 (ROK-1964)', () => {
+        expect(Object.keys(COMPANION_CONTRACTS)).toEqual(['bg3-save', 'wow-ledgerlink']);
         expect(Object.keys(COMPANION_CONTRACTS['bg3-save'] ?? {})).toEqual(['1']);
+        expect(Object.keys(COMPANION_CONTRACTS['wow-ledgerlink'] ?? {})).toEqual(['1']);
     });
     it('R2: an unknown version of a known contract names the current one', () => {
         expect(lookupCompanionContract('bg3-save', 2)).toEqual({ kind: 'unknown_contract_version', current: 1 });
