@@ -29,7 +29,10 @@ export function CreateEventPage() {
     const parsedLineupId = rawLineupId ? parseInt(rawLineupId, 10) : NaN;
     const schedulingLineupId = Number.isFinite(parsedLineupId) ? parsedLineupId : null;
     // ROK-1893 P3: a hub poll's lock-in preselects the hub in the guild field.
-    const initialGuildId = parsePositiveInt(searchParams.get('guildId'));
+    // ROK-1817: a `gameId` that resolves to no game hides the Guild field, so the
+    // tag would ride along unseen — drop it (a poll keeps its InheritedHubLine).
+    const parsedGuildId = parsePositiveInt(searchParams.get('guildId'));
+    const initialGuildId = searchParams.get('gameId') && !initialGame && schedulingMatchId === null ? null : parsedGuildId;
     // ROK-1371: post-event follow-up deep-link — links the new event back to the
     // ended event so the server fans out quick-sign-up DMs to its attendees.
     const followupForEventId = searchParams.get('followupForEventId') ? parseInt(searchParams.get('followupForEventId')!, 10) : null;
