@@ -44,6 +44,11 @@ jest.mock('./standalone-poll-auth.helpers', () => ({
 const claim = jest.mocked(claimMatchForLockIn);
 const link = jest.mocked(linkClaimedMatch);
 const release = jest.mocked(releaseMatchClaim);
+/** ROK-2033: the claim carries its fencing token. */
+const CLAIM = {
+  prior: 'scheduling' as const,
+  claimedAt: new Date('2026-10-29T05:00:00.000Z'),
+};
 const benchPick = jest.mocked(assertBenchPick);
 const target = jest.mocked(selectCompletionTarget);
 const canLockIn = jest.mocked(assertCanLockInPoll);
@@ -113,7 +118,7 @@ beforeEach(() => {
     standalone: true,
   });
   canLockIn.mockResolvedValue(undefined);
-  claim.mockResolvedValue('scheduling');
+  claim.mockResolvedValue(CLAIM);
   link.mockResolvedValue(true);
   release.mockResolvedValue(undefined);
   benchPick.mockResolvedValue(new Set([11]));
@@ -149,7 +154,7 @@ describe('createLockedInPollEvent', () => {
     const { deps } = buildDeps(log);
     claim.mockImplementation(() => {
       log.push('claim');
-      return Promise.resolve('scheduling');
+      return Promise.resolve(CLAIM);
     });
     link.mockImplementation(() => {
       log.push('link');
@@ -209,12 +214,7 @@ describe('createLockedInPollEvent', () => {
     const boom = new Error('create failed');
     create.mockRejectedValueOnce(boom);
     await expect(run(asDeps(deps))).rejects.toBe(boom);
-    expect(release).toHaveBeenCalledWith(
-      deps.db,
-      MATCH_ID,
-      'scheduling',
-      deps.logger,
-    );
+    expect(release).toHaveBeenCalledWith(deps.db, MATCH_ID, CLAIM, deps.logger);
     expect(link).not.toHaveBeenCalled();
   });
 
@@ -240,12 +240,7 @@ describe('createLockedInPollEvent', () => {
     link.mockRejectedValue(new Error('link failed'));
     await expect(run(asDeps(deps))).rejects.toThrow('link failed');
     expect(deps.eventsService.delete).toHaveBeenCalledTimes(2);
-    expect(release).toHaveBeenCalledWith(
-      deps.db,
-      MATCH_ID,
-      'scheduling',
-      deps.logger,
-    );
+    expect(release).toHaveBeenCalledWith(deps.db, MATCH_ID, CLAIM, deps.logger);
   });
 
   it('a regular lineup match is linked but its lineup is not archived', async () => {
@@ -258,7 +253,12 @@ describe('createLockedInPollEvent', () => {
       standalone: false,
     });
     const result = await run(asDeps(deps));
-    expect(link).toHaveBeenCalledWith(expect.anything(), MATCH_ID, 900);
+    expect(link).toHaveBeenCalledWith(
+      expect.anything(),
+      MATCH_ID,
+      900,
+      CLAIM.claimedAt,
+    );
     expect(archiveWhere).not.toHaveBeenCalled();
     expect(result.standalone).toBe(false);
   });
@@ -329,12 +329,7 @@ describe('createLockedInPollEvent: cleanup and 409 mapping', () => {
     const del = deps.eventsService.delete;
     expect(del).toHaveBeenCalledWith(900, caller.id, false);
     expect(del).toHaveBeenCalledWith(901, caller.id, false);
-    expect(release).toHaveBeenCalledWith(
-      deps.db,
-      MATCH_ID,
-      'scheduling',
-      deps.logger,
-    );
+    expect(release).toHaveBeenCalledWith(deps.db, MATCH_ID, CLAIM, deps.logger);
     const lastDelete = Math.max(...del.mock.invocationCallOrder);
     expect(lastDelete).toBeLessThan(release.mock.invocationCallOrder[0] ?? 0);
     expect(link).not.toHaveBeenCalled();

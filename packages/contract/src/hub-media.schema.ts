@@ -8,14 +8,18 @@ import { z } from 'zod';
  * All · Deaths · Screenshots chips filter on it, and the list response says
  * which kinds a hub actually has so the web never offers an empty chip.
  * ROK-1965 adds `upload` — a picture a member added from the Gallery; it
- * sits under the Screenshots chip.
+ * sits under the Screenshots chip. ROK-1959 adds `save` — a game-save
+ * picture a plugin copied in (its own "Saves" chip).
  */
-export const HUB_MEDIA_KINDS = ['death', 'screenshot', 'image', 'upload'] as const;
+export const HUB_MEDIA_KINDS = ['death', 'screenshot', 'image', 'upload', 'save'] as const;
 export const HubMediaKindSchema = z.enum(HUB_MEDIA_KINDS);
 export type HubMediaKind = z.infer<typeof HubMediaKindSchema>;
 
-/** Where a picture came from: a Discord post, or a member upload (ROK-1965). */
-export const HUB_MEDIA_SOURCES = ['discord', 'upload'] as const;
+/**
+ * Where a picture came from: a Discord post, a member upload (ROK-1965), or
+ * a Baldur's Gate 3 save thumbnail the `bg3` plugin copied in (ROK-1959).
+ */
+export const HUB_MEDIA_SOURCES = ['discord', 'upload', 'bg3-save'] as const;
 export const HubMediaSourceSchema = z.enum(HUB_MEDIA_SOURCES);
 export type HubMediaSource = z.infer<typeof HubMediaSourceSchema>;
 

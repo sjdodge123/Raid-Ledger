@@ -28,7 +28,7 @@ import type { NotificationService } from '../../notifications/notification.servi
 import {
   claimMatchForLockIn,
   releaseMatchClaim,
-  type ClaimedFromStatus,
+  type LockInClaim,
 } from '../scheduling/scheduling-lockin-claim.helpers';
 import { assertSlotIsFuture } from '../scheduling/scheduling-lock-in.helpers';
 import {
@@ -95,13 +95,13 @@ export async function rescheduleLockedInPoll(
   });
   assertMayMoveEvent(target, caller);
   assertSlotIsFuture(dto.startTime);
-  const prior = await claimMatchForLockIn(
+  const claim = await claimMatchForLockIn(
     db,
     matchId,
     ['scheduling'],
     target.eventId,
   );
-  const moved = await moveOrRelease(deps, input, target, prior);
+  const moved = await moveOrRelease(deps, input, target, claim);
   await archiveOrLog(deps, matchId, target);
   const event = moved ?? (await deps.eventsService.findOne(target.eventId));
   return {
@@ -127,7 +127,7 @@ async function moveOrRelease(
   deps: RescheduleLockInDeps,
   input: RescheduleLockInInput,
   target: RescheduleTarget,
-  prior: ClaimedFromStatus,
+  claim: LockInClaim,
 ): Promise<EventResponseDto | null> {
   const { matchId, caller, dto } = input;
   let before: EventRow | null = null;
@@ -145,7 +145,7 @@ async function moveOrRelease(
     await releaseMatchClaim(
       deps.db,
       matchId,
-      prior,
+      claim,
       deps.logger,
       target.eventId,
     );

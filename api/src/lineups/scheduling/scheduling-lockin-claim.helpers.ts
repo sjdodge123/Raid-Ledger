@@ -19,9 +19,17 @@
  *    the claim window is a no-op that still returns success, and the poll
  *    locks in anyway (`scheduling-cancel.helpers`).
  * 2. `linkClaimedMatch` — after the create, a single compare-and-set writes
- *    the event id onto the row we claimed. Since nothing else writes a
- *    `scheduled` + unlinked row, its `false` branch is defensive.
+ *    the event id onto the row we claimed. Its `false` branch fires when the
+ *    claim was recovered (ROK-2033) while this request was still running.
  * 3. `releaseMatchClaim` — when the create throws, put the prior status back.
+ *
+ * ROK-2033: the claim also stamps `lock_in_claimed_at` (an app-side `Date`,
+ * returned in the `LockInClaim`); the link write clears it in the same
+ * statement that sets `linked_event_id`, and both link and release are fenced
+ * on it. So a stamped row is a claim that never linked (a crash orphan the
+ * recovery sweep may release), a deliberately deleted event leaves the stamp
+ * NULL (never reopened), and a stale request can never link or release a
+ * later claim. A reschedule claim (ROK-2040, already linked) is not stamped.
  *
  * `scheduled` with a null `linked_event_id` is already a legal state (the
  * link FK is `ON DELETE SET NULL`), so a reader that sees the claim mid-flight
@@ -44,6 +52,16 @@ const CLAIMABLE = ['suggested', 'scheduling'] as const;
 /** The status the match had before the claim (restored on a failed create). */
 export type ClaimedFromStatus = (typeof CLAIMABLE)[number];
 
+/**
+ * A committed claim (ROK-2033). `claimedAt` is the fencing token written to
+ * `lock_in_claimed_at`; `null` for a reschedule claim, which is not stamped.
+ * Pass the whole value back to `releaseMatchClaim` / `linkClaimedMatch`.
+ */
+export interface LockInClaim {
+  prior: ClaimedFromStatus;
+  claimedAt: Date | null;
+}
+
 const m = schema.communityLineupMatches;
 
 /**
@@ -54,6 +72,13 @@ function linkIs(linkedEventId: number | null) {
   return linkedEventId === null
     ? isNull(m.linkedEventId)
     : eq(m.linkedEventId, linkedEventId);
+}
+
+/** The row still carries this claim's token (ROK-2033 fence). */
+function tokenIs(claimedAt: Date | null) {
+  return claimedAt === null
+    ? isNull(m.lockInClaimedAt)
+    : eq(m.lockInClaimedAt, claimedAt);
 }
 
 /**
@@ -72,7 +97,10 @@ export async function claimMatchForLockIn(
   matchId: number,
   claimable: readonly ClaimedFromStatus[] = CLAIMABLE,
   linkedEventId: number | null = null,
-): Promise<ClaimedFromStatus> {
+): Promise<LockInClaim> {
+  // App-side Date, not SQL now(): postgres.js round-trips milliseconds only,
+  // so a µs-precision now() stamp would never equal the token we compare on.
+  const claimedAt = linkedEventId === null ? new Date() : null;
   const prior = await db.transaction(async (tx) => {
     const [row] = await tx
       .select({ status: m.status })
@@ -86,32 +114,40 @@ export async function claimMatchForLockIn(
       )
       .for('update');
     if (!row) return null;
-    await tx.update(m).set({ status: 'scheduled' }).where(eq(m.id, matchId));
+    await tx
+      .update(m)
+      .set({ status: 'scheduled', lockInClaimedAt: claimedAt })
+      .where(eq(m.id, matchId));
     return row.status;
   });
   if (prior !== 'suggested' && prior !== 'scheduling') {
     throw new ConflictException(SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE);
   }
-  return prior;
+  return { prior, claimedAt };
 }
 
 /**
- * Write the event onto the match this lock-in claimed. False when it moved
- * (defensive: see step 2 above).
+ * Write the event onto the match this lock-in claimed and clear the claim
+ * stamp in the same statement (ROK-2033). False when the row moved or now
+ * carries another claim's token — e.g. recovery released it and a second
+ * lock-in reclaimed it — so a late link can never land on someone else's
+ * claim; the caller discards its events and 409s.
  */
 export async function linkClaimedMatch(
   db: Writer,
   matchId: number,
   eventId: number,
+  claimedAt: Date | null,
 ): Promise<boolean> {
   const linked = await db
     .update(m)
-    .set({ linkedEventId: eventId })
+    .set({ linkedEventId: eventId, lockInClaimedAt: null })
     .where(
       and(
         eq(m.id, matchId),
         eq(m.status, 'scheduled'),
         isNull(m.linkedEventId),
+        tokenIs(claimedAt),
       ),
     )
     .returning({ id: m.id });
@@ -122,23 +158,26 @@ export async function linkClaimedMatch(
  * Undo a claim whose event was never created. Never throws: the caller is
  * already failing with the create's own error, which must reach the client.
  * `linkedEventId` is the same value the claim was made with (ROK-2040).
+ * Fenced on the claim's token and clears it (ROK-2033), so a request whose
+ * claim was already recovered cannot release a newer claim.
  */
 export async function releaseMatchClaim(
   db: Db,
   matchId: number,
-  prior: ClaimedFromStatus,
+  claim: LockInClaim,
   logger: Pick<Logger, 'error'>,
   linkedEventId: number | null = null,
 ): Promise<void> {
   try {
     await db
       .update(m)
-      .set({ status: prior })
+      .set({ status: claim.prior, lockInClaimedAt: null })
       .where(
         and(
           eq(m.id, matchId),
           eq(m.status, 'scheduled'),
           linkIs(linkedEventId),
+          tokenIs(claim.claimedAt),
         ),
       );
   } catch (err: unknown) {

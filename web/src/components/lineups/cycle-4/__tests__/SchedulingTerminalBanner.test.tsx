@@ -60,6 +60,22 @@ describe('SchedulingTerminalBanner (ROK-1545)', () => {
     );
   });
 
+  it('tints the event link with a class the light schemes repaint', () => {
+    renderWithProviders(
+      <SchedulingTerminalBanner
+        pollStatus="locked_in"
+        lockedInTime={LOCKED_TIME}
+        cancelReason={null}
+        linkedEventId={314}
+      />,
+    );
+    // index.css repaints text-cyan-300 to cyan-800 on light schemes; the old
+    // text-cyan-200 was not repainted and read near-invisible in default-light.
+    const link = screen.getByTestId('terminal-event-link');
+    expect(link).toHaveClass('text-cyan-300');
+    expect(link).not.toHaveClass('text-cyan-200');
+  });
+
   it('AC1 — locked in with no linked event still names the time, without a link', () => {
     renderWithProviders(
       <SchedulingTerminalBanner

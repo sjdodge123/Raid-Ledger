@@ -348,9 +348,28 @@ export const SchedulePollPageResponseSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * ROK-2033: true only for an ADMIN viewer when the poll holds a lock-in
+   * claim that never linked an event (a crashed or in-flight lock-in). Drives
+   * the "Reopen this poll" admin action. Omitted for everyone else.
+   */
+  lockInRecoverable: z.boolean().optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;
+
+/**
+ * ROK-2033: `POST /scheduling-polls/:matchId/reopen-lock-in` (admin) — the
+ * claim was released back to `scheduling` and the events it orphaned were
+ * deleted.
+ */
+export const ReopenLockInResponseSchema = z.object({
+  matchId: z.number().int(),
+  status: z.literal('scheduling'),
+  discardedEventIds: z.array(z.number().int()),
+});
+
+export type ReopenLockInResponseDto = z.infer<typeof ReopenLockInResponseSchema>;
 
 /** Lightweight banner for the events page. */
 export const SchedulingBannerSchema = z.object({

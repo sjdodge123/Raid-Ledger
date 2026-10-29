@@ -36,14 +36,16 @@ function writeStoredOpen(storageKey: string | undefined, open: boolean): void {
   }
 }
 
-/** Vertical line connecting timeline dots. left: half of w-8 (32px) minus half of line width. */
+/**
+ * Vertical line connecting timeline dots. left: half of w-8 (32px) minus half of line width.
+ * The colour comes from the `bg-edge` token (className below) so light schemes repaint it.
+ */
 const connectorStyle: React.CSSProperties = {
   position: 'absolute',
   left: 15,
   top: 32,
   bottom: 0,
   width: 2,
-  background: '#334155',
 };
 
 function TimelineEntry({ entry, isLast }: { entry: ActivityEntryDto; isLast: boolean }) {
@@ -53,7 +55,7 @@ function TimelineEntry({ entry, isLast }: { entry: ActivityEntryDto; isLast: boo
 
   return (
     <div className="relative pb-5">
-      {!isLast && <div style={connectorStyle} />}
+      {!isLast && <div data-testid="timeline-connector" aria-hidden="true" className="bg-edge" style={connectorStyle} />}
       <div className="flex items-start gap-3">
         <div
           className={`w-8 h-8 rounded-full ${display.bgColor} border ${display.borderColor} flex items-center justify-center flex-shrink-0`}

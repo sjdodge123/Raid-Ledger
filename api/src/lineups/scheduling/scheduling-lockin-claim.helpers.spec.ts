@@ -92,13 +92,31 @@ describe('claimMatchForLockIn (ROK-2024 F2)', () => {
     expect(db.update).not.toHaveBeenCalled();
   });
 
-  it('locks the row, marks it scheduled and returns the prior status', async () => {
+  it('locks the row, marks it scheduled, stamps the claim and returns its token (ROK-2033)', async () => {
     const { db } = singleConnectionDb([{ status: 'suggested' }], []);
-    await expect(claimMatchForLockIn(db as unknown as Db, 3)).resolves.toBe(
-      'suggested',
-    );
+    const claim = await claimMatchForLockIn(db as unknown as Db, 3);
+    expect(claim.prior).toBe('suggested');
+    expect(claim.claimedAt).toBeInstanceOf(Date);
     expect(db.for).toHaveBeenCalledWith('update');
-    expect(db.set).toHaveBeenCalledWith({ status: 'scheduled' });
+    expect(db.set).toHaveBeenCalledWith({
+      status: 'scheduled',
+      lockInClaimedAt: claim.claimedAt,
+    });
+  });
+
+  it('does not stamp a reschedule claim (already linked, ROK-2040)', async () => {
+    const { db } = singleConnectionDb([{ status: 'scheduling' }], []);
+    const claim = await claimMatchForLockIn(
+      db as unknown as Db,
+      3,
+      ['scheduling'],
+      77,
+    );
+    expect(claim).toEqual({ prior: 'scheduling', claimedAt: null });
+    expect(db.set).toHaveBeenCalledWith({
+      status: 'scheduled',
+      lockInClaimedAt: null,
+    });
   });
 });
 
@@ -140,7 +158,10 @@ describe('createLockedInEvent — claim, create, link (ROK-2024 F2)', () => {
       new Error('insert failed'),
     );
     await expect(lockIn(deps)).rejects.toThrow('insert failed');
-    expect(db.set).toHaveBeenLastCalledWith({ status: 'scheduling' });
+    expect(db.set).toHaveBeenLastCalledWith({
+      status: 'scheduling',
+      lockInClaimedAt: null,
+    });
     expect(deps.eventsService.delete).not.toHaveBeenCalled();
   });
 
@@ -153,6 +174,9 @@ describe('createLockedInEvent — claim, create, link (ROK-2024 F2)', () => {
       [55, 10, false],
       [56, 10, false],
     ]);
-    expect(db.set).toHaveBeenLastCalledWith({ status: 'scheduling' });
+    expect(db.set).toHaveBeenLastCalledWith({
+      status: 'scheduling',
+      lockInClaimedAt: null,
+    });
   });
 });

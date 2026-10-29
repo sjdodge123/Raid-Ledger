@@ -25,6 +25,8 @@ export interface HubGalleryPages {
     refreshing: boolean;
     hasMore: boolean;
     loadingMore: boolean;
+    /** When the loaded pages last changed (`dataUpdatedAt`): a refetch bumps it even if the length is unchanged. */
+    version: number;
     loadMore: () => Promise<unknown>;
 }
 
@@ -58,6 +60,7 @@ export function useHubGalleryPages(guildId: number, filter: HubMediaFilter, subj
         refreshing: q.isFetching && !q.isPending && !q.isFetchingNextPage,
         hasMore: q.hasNextPage,
         loadingMore: q.isFetchingNextPage,
+        version: q.dataUpdatedAt,
         loadMore: () => q.fetchNextPage(),
     };
 }

@@ -36,6 +36,7 @@ import {
   linkClaimedMatch,
   releaseMatchClaim,
   type ClaimedFromStatus,
+  type LockInClaim,
 } from '../scheduling/scheduling-lockin-claim.helpers';
 import { assertBenchPick } from './standalone-poll-bench-pick.helpers';
 import { selectCompletionTarget } from './standalone-poll-complete.helpers';
@@ -216,13 +217,13 @@ async function createOrRelease(
   match: LockInMatch,
   userId: number,
   dto: CreateEventDto,
-  prior: ClaimedFromStatus,
+  claim: LockInClaim,
 ): Promise<CreatedEvent> {
   let event: CreatedEvent;
   try {
     event = await deps.eventsService.create(userId, dto);
   } catch (err: unknown) {
-    await releaseMatchClaim(deps.db, match.id, prior, deps.logger);
+    await releaseMatchClaim(deps.db, match.id, claim, deps.logger);
     throw err;
   }
   const eventIds = event.allEventIds ?? [event.id];
@@ -235,7 +236,7 @@ async function createOrRelease(
     }
   } catch (err: unknown) {
     await discardEvents(deps, eventIds, userId);
-    await releaseMatchClaim(deps.db, match.id, prior, deps.logger);
+    await releaseMatchClaim(deps.db, match.id, claim, deps.logger);
     throw err;
   }
   return event;
@@ -246,9 +247,10 @@ function linkAndArchive(
   db: Db,
   match: LockInMatch,
   eventId: number,
+  claimedAt: Date | null,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const linked = await linkClaimedMatch(tx, match.id, eventId);
+    const linked = await linkClaimedMatch(tx, match.id, eventId, claimedAt);
     if (linked && match.standalone) {
       await tx
         .update(schema.communityLineups)
@@ -269,16 +271,16 @@ async function claimCreateAndLink(
   userId: number,
   dto: CreateEventDto,
 ): Promise<EventResponseDto> {
-  const prior = await claimMatchForLockIn(deps.db, match.id, FORM_CLAIMABLE);
-  const created = await createOrRelease(deps, match, userId, dto, prior);
+  const claim = await claimMatchForLockIn(deps.db, match.id, FORM_CLAIMABLE);
+  const created = await createOrRelease(deps, match, userId, dto, claim);
   const { allEventIds, ...event } = created;
   const eventIds = allEventIds ?? [event.id];
   let linked: boolean;
   try {
-    linked = await linkAndArchive(deps.db, match, event.id);
+    linked = await linkAndArchive(deps.db, match, event.id, claim.claimedAt);
   } catch (err: unknown) {
     await discardEvents(deps, eventIds, userId);
-    await releaseMatchClaim(deps.db, match.id, prior, deps.logger);
+    await releaseMatchClaim(deps.db, match.id, claim, deps.logger);
     throw err;
   }
   if (linked) return event;

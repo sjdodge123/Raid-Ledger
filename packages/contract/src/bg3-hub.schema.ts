@@ -31,6 +31,10 @@ export function isBg3GameSlug(slug: string | null | undefined): boolean {
 /** Hub behaviour ids (D-16): the ingest source and the retention job name. */
 export const BG3_INGEST_SOURCE_ID = BG3_SAVE_CONTRACT_ID;
 export const BG3_RETENTION_JOB_NAME = 'Bg3HistoryRetentionCron_prune' as const;
+/** ROK-1959 D-3/D-12 — the cron that copies one save picture per closed session into the Gallery. */
+export const BG3_GALLERY_SYNC_JOB_NAME = 'Bg3GalleryCron_sync' as const;
+/** ROK-1959 D-12 — the Gallery ingest-source id (distinct from `BG3_INGEST_SOURCE_ID`). */
+export const BG3_GALLERY_SOURCE_ID = 'bg3-save.gallery' as const;
 export const BG3_CAMPAIGN_NAME_MAX = 64;
 
 /**
