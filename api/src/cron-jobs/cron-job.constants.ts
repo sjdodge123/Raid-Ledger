@@ -270,6 +270,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes",
     category: 'Notifications',
   },
+  SchedulingLockInRecoveryService_runSweep: {
+    description:
+      'Reopens scheduling polls whose lock-in claim never linked an event for 10+ minutes (a crashed lock-in), deleting the events it orphaned, every 5 minutes',
+    category: 'Events',
+  },
   QuickPlayHealthService_checkQuickPlayHealth: {
     description:
       'Reports Quick Play health: ad-hoc events spawned in the last 7 days, inert bindings, and the ad-hoc kill-switch state.',

@@ -26,6 +26,8 @@ import {
 import { SchedulingPollEmbedProcessor } from './scheduling-poll-embed.processor';
 import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
+import { SchedulingLockInRecoveryService } from './scheduling-lockin-recovery.service';
+import { SchedulingLockInRecoveryController } from './scheduling-lockin-recovery.controller';
 
 @Module({
   imports: [
@@ -40,7 +42,12 @@ import { SchedulingUnanimousService } from './scheduling-unanimous.service';
     // ROK-1549: debounced, retried poll-card re-render.
     BullModule.registerQueue({ name: SCHEDULING_POLL_EMBED_QUEUE }),
   ],
-  controllers: [SchedulingController, SchedulingBannerController],
+  controllers: [
+    SchedulingController,
+    SchedulingBannerController,
+    // ROK-2033: admin "reopen a stalled lock-in" (POST /scheduling-polls/...).
+    SchedulingLockInRecoveryController,
+  ],
   providers: [
     SchedulingService,
     SchedulingPollEmbedService,
@@ -55,6 +62,8 @@ import { SchedulingUnanimousService } from './scheduling-unanimous.service';
     SchedulingPollExpiryService,
     // ROK-1632 AC3: DM the creator when one time has everyone's yes.
     SchedulingUnanimousService,
+    // ROK-2033: reopen polls whose lock-in claim never linked an event.
+    SchedulingLockInRecoveryService,
   ],
   // ROK-1604: SchedulingPollExpiryService is exported for the DEMO_MODE
   // run-now hook in AdminModule's DemoTestStandalonePollController.
