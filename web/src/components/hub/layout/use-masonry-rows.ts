@@ -3,7 +3,7 @@
  * grid (see `masonry-pack.ts`). One ResizeObserver per grid watches every
  * child; its callback (already batched per frame, after layout, before paint)
  * reads every size first, then writes every placement. A MutationObserver
- * only hands new children to that observer.
+ * hands new children to that observer and re-packs when one is removed.
  *
  * The CSS decides when it applies: the grid must resolve to ≥ 2 px column
  * tracks and a px `grid-auto-rows` (the md+ classes in `MASONRY_GRID_CLASS`).
@@ -46,9 +46,20 @@ function measureItem(el: HTMLElement): MasonryItem {
     return { height: el.getBoundingClientRect().height, span: match?.[1] ? Number(match[1]) : 1 };
 }
 
-/** Reads every child, then writes every placement — one read phase, one write phase. */
+/** Sets `prop` only when it changed — an unchanged placement costs no style invalidation. */
+function setIfChanged(el: HTMLElement, prop: string, value: string): void {
+    if (el.style.getPropertyValue(prop) !== value) el.style.setProperty(prop, value);
+}
+
+/**
+ * Reads every child, then writes every placement — one read phase, one write phase.
+ * Each cell's inline `grid-column-start` is dropped BEFORE the grid is read: a stale
+ * `grid-column-start: 3` left over from lg would keep an implicit third track alive at md,
+ * and the computed `grid-template-columns` (which lists implicit tracks) would still say 3.
+ */
 export function layoutMasonry(grid: HTMLElement): void {
     const cells = Array.from(grid.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    for (const el of cells) el.style.removeProperty('grid-column-start');
     const metrics = readMetrics(grid);
     if (metrics === null) {
         cells.forEach(clearPlacement);
@@ -59,8 +70,8 @@ export function layoutMasonry(grid: HTMLElement): void {
         const p = placed[i];
         if (p === undefined) return;
         el.style.setProperty('grid-column-start', String(p.column));
-        el.style.setProperty('grid-row-start', String(p.row));
-        el.style.setProperty('grid-row-end', `span ${p.rowSpan}`);
+        setIfChanged(el, 'grid-row-start', String(p.row));
+        setIfChanged(el, 'grid-row-end', `span ${p.rowSpan}`);
     });
 }
 
@@ -70,17 +81,22 @@ export function useMasonryRows(ref: RefObject<HTMLElement | null>): void {
         const grid = ref.current;
         if (grid === null || typeof ResizeObserver === 'undefined') return undefined;
         const resize = new ResizeObserver(() => layoutMasonry(grid));
-        const observeChildren = (): void => {
-            for (const child of Array.from(grid.children)) resize.observe(child);
-        };
-        const mutation = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => {
-            observeChildren();
-            layoutMasonry(grid);
+        // Additions only need observing: the RO's initial notification for the new child packs it.
+        // A removal resizes nothing that is still observed, so it re-packs here.
+        const mutation = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
+            let removed = false;
+            for (const record of records) {
+                record.addedNodes.forEach((n) => { if (n instanceof Element) resize.observe(n); });
+                record.removedNodes.forEach((n) => { if (n instanceof Element) { resize.unobserve(n); removed = true; } });
+            }
+            if (removed) layoutMasonry(grid);
         });
-        // Children only, never the grid: the grid's own height changes inside the callback, and a
-        // shallower target resized there would raise "ResizeObserver loop completed with undelivered
-        // notifications". A breakpoint change resizes every child anyway.
-        observeChildren();
+        // Children only, never the grid: the grid's own height changes inside the callback. A
+        // breakpoint change resizes every child anyway. One "ResizeObserver loop completed with
+        // undelivered notifications" can still fire: the first pack grows the page, a classic
+        // (non-overlay) scrollbar appears and narrows every column inside the same frame. It
+        // settles on the next frame, and Sentry's default inbound filter drops the message.
+        for (const child of Array.from(grid.children)) resize.observe(child);
         mutation?.observe(grid, { childList: true });
         return () => {
             resize.disconnect();
