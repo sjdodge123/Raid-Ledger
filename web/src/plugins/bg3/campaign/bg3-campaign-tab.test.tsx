@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { Bg3HubCampaignsResponse, GuildPage } from '@raid-ledger/contract';
+import type { Bg3HubCampaignsResponse, Bg3MySavesResponse, GuildPage } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
-    BG3_CAMPAIGNS_URL, bg3BindKeyHandler, bg3CreateCampaignHandler, bg3DefaultCampaignHandler, bg3Error,
+    BG3_CAMPAIGNS_URL, BG3_MY_SAVES_URL, bg3BindKeyHandler, bg3CreateCampaignHandler, bg3DefaultCampaignHandler, bg3Error,
     bg3HubSettingsHandler, bg3MySavesHandler, bg3SessionsHandler, bg3UpdateCampaignHandler, BG3_SETTINGS_URL,
 } from '../../../test/mocks/bg3-handlers';
 import {
@@ -19,6 +19,7 @@ import type { HubCtx } from '../../hub-module';
 import { Bg3CampaignTab } from './bg3-campaign-tab';
 import { BG3_CAMPAIGN_ARCHIVED_TOAST } from './bg3-campaign-toast';
 import { BG3_OTHER_HUB_CAMPAIGN_LABEL } from './bg3-campaign-picker';
+import { BG3_ADD_SAVES_CAPPED_NOTE } from './bg3-add-saves-sheet';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -27,6 +28,23 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 const MOVE_NOTE = 'Saves from this playthrough already in another campaign move here too.';
+const MOVE_NOTE_MANY = 'Saves from these playthroughs already in another campaign move here too.';
+const A_KEY = 'a'.repeat(64);
+const C_KEY = 'c'.repeat(64);
+
+/** Serves `pages[cursor ?? '']` from the unassigned-saves route. */
+function pagedSavesHandler(pages: Record<string, Bg3MySavesResponse>) {
+    return http.get(BG3_MY_SAVES_URL, ({ request }) => {
+        const body = pages[new URL(request.url).searchParams.get('cursor') ?? ''];
+        return body ? HttpResponse.json(body) : new HttpResponse(null, { status: 404 });
+    });
+}
+
+async function openSheet(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+    renderTab();
+    await user.click(await screen.findByRole('button', { name: 'Add my saves' }));
+    return screen.findByTestId('bg3-add-saves');
+}
 let campaigns: Bg3HubCampaignsResponse;
 const calls: string[] = [];
 const bodies: Record<string, unknown[]> = {};
@@ -94,7 +112,7 @@ describe('V-9 add my saves', () => {
         })));
         const user = userEvent.setup();
         renderTab();
-        expect(await screen.findByText('2 of your saves aren’t in a campaign.')).toBeInTheDocument();
+        expect(await screen.findByText("2 of your saves aren't in a campaign.")).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: 'Add my saves' }));
         const sheet = await screen.findByTestId('bg3-add-saves');
         expect(within(sheet).queryByText('Filed_1')).not.toBeInTheDocument();
@@ -120,7 +138,7 @@ describe('V-9 add my saves', () => {
         renderTab();
         await user.click(await screen.findByRole('button', { name: 'Add my saves' }));
         const sheet = await screen.findByTestId('bg3-add-saves');
-        const list = await within(sheet).findByRole('list', { name: 'Your playthroughs that aren’t in a campaign' });
+        const list = await within(sheet).findByRole('list', { name: "Your playthroughs that aren't in a campaign" });
         expect(within(list).getAllByRole('checkbox')).toHaveLength(2);
         expect(within(list).queryByRole('checkbox', { name: /QuickSave_1/ })).not.toBeInTheDocument();
         expect(within(sheet).getByText(/^3 saves · /)).toBeInTheDocument();
@@ -130,6 +148,55 @@ describe('V-9 add my saves', () => {
         await user.click(screen.getByRole('button', { name: 'Add 1 playthrough · 3 saves' }));
         await waitFor(() => expect(calls).toEqual(['key']));
         expect(bodies['key']).toEqual([BG3_SAVE_KEY]);
+    });
+});
+
+describe('V-9 add my saves — every page, honest counts, unique labels', () => {
+    it('groups across pages: a playthrough only on page 2 is listed, one spanning both sums its saves', async () => {
+        server.use(pagedSavesHandler({
+            '': buildBg3MySavesResponse({ nextCursor: 'p2', saves: [
+                buildBg3MySave({ id: 1, campaignKey: A_KEY, saveName: 'QuickSave_5', savedAt: '2026-10-26T20:00:00.000Z' }),
+                buildBg3MySave({ id: 2, campaignKey: A_KEY, saveName: 'QuickSave_4', savedAt: '2026-10-25T20:00:00.000Z' }),
+            ] }),
+            p2: buildBg3MySavesResponse({ nextCursor: null, saves: [
+                buildBg3MySave({ id: 3, campaignKey: A_KEY, saveName: 'QuickSave_3', savedAt: '2026-10-24T20:00:00.000Z' }),
+                buildBg3MySave({ id: 4, campaignKey: C_KEY, saveName: 'Honour_1', savedAt: '2026-10-20T20:00:00.000Z' }),
+            ] }),
+        }));
+        const user = userEvent.setup();
+        const sheet = await openSheet(user);
+        const list = await within(sheet).findByRole('list', { name: "Your playthroughs that aren't in a campaign" });
+        expect(within(list).getAllByRole('checkbox')).toHaveLength(2);
+        await user.click(within(list).getByRole('checkbox', { name: /QuickSave_5/ }));
+        await user.click(within(list).getByRole('checkbox', { name: /Honour_1/ }));
+        expect(within(sheet).getByText(MOVE_NOTE_MANY)).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Add 2 playthroughs · 4 saves' }));
+        await waitFor(() => expect(bodies['key']).toEqual([A_KEY, C_KEY]));
+    });
+
+    it('reads "N+ saves" and says more are not shown when the page walk hit its safety stop', async () => {
+        server.use(bg3MySavesHandler(buildBg3MySavesResponse({
+            nextCursor: 'more', saves: [buildBg3MySave({ id: 1, campaignKey: A_KEY, saveName: 'QuickSave_9' })],
+        })));
+        const user = userEvent.setup();
+        const sheet = await openSheet(user);
+        await user.click(await within(sheet).findByRole('checkbox', { name: /QuickSave_9/ }));
+        expect(within(sheet).getByText(/^40\+ saves · /)).toBeInTheDocument();
+        expect(within(sheet).getByText(BG3_ADD_SAVES_CAPPED_NOTE)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add 1 playthrough · 40+ saves' })).toBeEnabled();
+    });
+
+    it('gives two playthroughs with the same newest save name distinct labels', async () => {
+        server.use(bg3MySavesHandler(buildBg3MySavesResponse({ saves: [
+            buildBg3MySave({ id: 1, campaignKey: A_KEY, saveName: 'QuickSave', savedAt: '2026-10-26T20:00:00.000Z' }),
+            buildBg3MySave({ id: 2, campaignKey: C_KEY, saveName: 'QuickSave', savedAt: '2026-10-25T20:00:00.000Z' }),
+        ] })));
+        const user = userEvent.setup();
+        const sheet = await openSheet(user);
+        const boxes = await within(sheet).findAllByRole('checkbox', { name: /^QuickSave/ });
+        const names = boxes.map((b) => document.getElementById(b.getAttribute('aria-labelledby') ?? '')?.textContent ?? '');
+        expect(boxes).toHaveLength(2);
+        expect(new Set(names).size).toBe(2);
     });
 });
 

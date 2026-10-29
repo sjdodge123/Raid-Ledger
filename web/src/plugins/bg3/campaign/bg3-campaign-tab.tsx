@@ -33,9 +33,9 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
 
 /** `capped`: the page walk hit its safety stop, so `n` is a floor ("2000+"), not an exact count. */
 function unassignedLine(n: number, capped: boolean): string {
-    if (capped) return `${n}+ of your saves aren’t in a campaign.`;
+    if (capped) return `${n}+ of your saves aren't in a campaign.`;
     if (n === 0) return 'All your saves are in a campaign.';
-    return n === 1 ? '1 of your saves isn’t in a campaign.' : `${n} of your saves aren’t in a campaign.`;
+    return n === 1 ? "1 of your saves isn't in a campaign." : `${n} of your saves aren't in a campaign.`;
 }
 
 interface YourSavesProps { hubId: number; data: Bg3HubCampaignsResponse; onAddSaves: () => void; onStart: () => void }
@@ -68,7 +68,7 @@ export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
     const [dialog, setDialog] = useState<Dialog>(null);
     const [archiving, setArchiving] = useState<Bg3CampaignSummary | null>(null);
     if (campaigns.isLoading) return null;
-    if (!campaigns.data) return <p className="py-12 text-center text-sm text-muted">Couldn’t load this hub’s campaigns.</p>;
+    if (!campaigns.data) return <p className="py-12 text-center text-sm text-muted">Couldn't load this hub's campaigns.</p>;
     const data = campaigns.data;
     const active = data.campaigns.find((c) => c.id === data.settings.activeCampaignId) ?? null;
     const close = (): void => setDialog(null);
