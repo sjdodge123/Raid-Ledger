@@ -242,6 +242,18 @@ describe('V-10 editor section and archive', () => {
         expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
     });
 
+    it('mounts no archive confirm (or any closed campaign sheet) for a member on a phone', async () => {
+        // jsdom's matchMedia misses DESKTOP_MQ, so these overlays take the BottomSheet path. A closed
+        // BottomSheet stays mounted off-screen; on slot-3 one showed at a member's screen bottom.
+        campaigns = buildBg3CampaignsResponse({ campaigns: [buildBg3CampaignSummary({ hostUserId: 21 })] });
+        renderTab();
+        expect(within(await screen.findByRole('list', { name: 'Campaigns' })).getByText('Tactician run')).toBeInTheDocument();
+        expect(document.querySelector('[data-testid="bg3-archive-confirm"]')).toBeNull();
+        expect(screen.queryByRole('heading', { name: /^Archive .*\?$/, hidden: true })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Start a campaign', hidden: true })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /^Add my saves to /, hidden: true })).not.toBeInTheDocument();
+    });
+
     it('lets an editor flip the spoiler switch', async () => {
         campaigns = buildBg3CampaignsResponse({ canEdit: true });
         server.use(bg3HubSettingsHandler(undefined, spyAs('settings')));

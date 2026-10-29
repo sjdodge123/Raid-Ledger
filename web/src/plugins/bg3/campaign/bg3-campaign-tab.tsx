@@ -82,10 +82,12 @@ export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
             {member && <YourSaves hubId={hubId} data={data} onAddSaves={() => setDialog('add-saves')} onStart={() => setDialog('start')} />}
             {active && <Section title="History"><Bg3CampaignHistory hubId={hubId} campaignId={active.id} /></Section>}
             {data.canEdit && <div className="rounded-lg border border-edge bg-surface p-4"><Bg3EditorSection hubId={hubId} data={data} /></div>}
-            <Bg3StartCampaignDialog isOpen={dialog === 'start'} hubId={hubId} onClose={close} />
-            {active && <Bg3AddSavesSheet isOpen={dialog === 'add-saves'} hubId={hubId} campaignId={active.id}
+            {/* Mounted only while open (the `removing !== null && <Confirm/>` idiom): a closed
+                BottomSheet stays in the DOM off-screen, and one showed at a member's screen bottom. */}
+            {dialog === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={close} />}
+            {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={active.id}
                 campaignName={active.name} onClose={close} />}
-            <Bg3ArchiveConfirm hubId={hubId} campaign={archiving} onClose={() => setArchiving(null)} />
+            {archiving && <Bg3ArchiveConfirm hubId={hubId} campaign={archiving} onClose={() => setArchiving(null)} />}
         </div>
     );
 }

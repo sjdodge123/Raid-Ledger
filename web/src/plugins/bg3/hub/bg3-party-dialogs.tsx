@@ -21,9 +21,10 @@ export interface Bg3PartyDialogsProps {
 export function Bg3PartyDialogs({ open, onClose, hubId, campaignId, campaignName }: Bg3PartyDialogsProps): JSX.Element {
     return (
         <>
-            <Bg3StartCampaignDialog isOpen={open === 'start'} hubId={hubId} onClose={onClose} />
-            {campaignId !== null && campaignName !== null && (
-                <Bg3AddSavesSheet isOpen={open === 'add-saves'} hubId={hubId} campaignId={campaignId}
+            {/* Mounted only while open: a closed BottomSheet stays in the DOM off-screen (see bg3-campaign-tab). */}
+            {open === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={onClose} />}
+            {open === 'add-saves' && campaignId !== null && campaignName !== null && (
+                <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={campaignId}
                     campaignName={campaignName} onClose={onClose} />
             )}
         </>
