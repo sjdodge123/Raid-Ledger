@@ -75,6 +75,7 @@ function buildStalledPoll(recoverable: boolean): SchedulePollPageResponseDto {
 }
 
 const FALSE_CLAIM = /an event has been created/i;
+const LOCKED_IN_COPY = 'This poll has been locked in.';
 
 describe('SchedulingPollPage — stalled lock-in (ROK-2033)', () => {
     beforeEach(() => {
@@ -112,6 +113,19 @@ describe('SchedulingPollPage — stalled lock-in (ROK-2033)', () => {
         expect(screen.getByTestId('match-status-badge')).toBeInTheDocument();
         expect(
             screen.queryByRole('button', { name: 'Reopen lock-in' }),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByText(FALSE_CLAIM)).not.toBeInTheDocument();
+        expect(screen.getByText(LOCKED_IN_COPY)).toBeInTheDocument();
+    });
+
+    it('admin + no recoverable flag (deleted event / legacy row) → completed card, locked-in copy, no banner', () => {
+        renderPage(buildStalledPoll(false));
+        expect(screen.getByTestId('match-status-badge')).toHaveTextContent(
+            /poll complete/i,
+        );
+        expect(screen.getByText(LOCKED_IN_COPY)).toBeInTheDocument();
+        expect(
+            screen.queryByTestId('scheduling-reopen-lock-in'),
         ).not.toBeInTheDocument();
         expect(screen.queryByText(FALSE_CLAIM)).not.toBeInTheDocument();
     });
