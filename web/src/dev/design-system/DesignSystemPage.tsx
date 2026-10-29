@@ -24,6 +24,7 @@ import { FormsSection } from './forms-section';
 import { HubWidgetsSection } from './hub-widgets-section';
 import { ArrangeListSection } from './arrange-list-section';
 import { MasonryGridSection } from './masonry-grid-section';
+import { MemberListSection } from './member-list-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -121,6 +122,7 @@ function Sections(): JSX.Element {
             </Suspense>
             <ArrangeListSection />
             <MasonryGridSection />
+            <MemberListSection />
         </>
     );
 }
