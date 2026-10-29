@@ -69,6 +69,15 @@ describe('validateSnapshotPayload', () => {
     });
   });
 
+  it('accepts a portals payload: importable since ROK-1946', () => {
+    expect(
+      validateSnapshotPayload(snapshotOf('portals-vanilla')),
+    ).toMatchObject({
+      ok: true,
+      message: { kind: 'portals' },
+    });
+  });
+
   it('fails when a key column disagrees with the payload identity', () => {
     const snap = { ...snapshotOf('map-personal'), playerId: '1' };
     expect(validateSnapshotPayload(snap)).toEqual({

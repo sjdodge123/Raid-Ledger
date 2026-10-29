@@ -4,7 +4,7 @@
  */
 import { lazy } from 'react';
 import type { ComponentType } from 'react';
-import { claimChunkReload, isChunkLoadError } from './lib/chunk-error';
+import { reloadOnChunkError } from './lib/chunk-error';
 
 export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
 
@@ -16,15 +16,7 @@ export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
 export function lazyWithRetry<
     T extends ComponentType<Record<string, never>>,
 >(importFn: () => Promise<{ default: T }>) {
-    return lazy(() =>
-        importFn().catch((error: unknown) => {
-            if (isChunkLoadError(error) && claimChunkReload()) {
-                window.location.reload();
-                return new Promise<{ default: T }>(() => {});
-            }
-            throw error;
-        }),
-    );
+    return lazy(() => reloadOnChunkError(importFn()));
 }
 
 // -- Lazy loaded public pages --
@@ -34,6 +26,10 @@ export const JoinPage = lazyWithRetry(() =>
 /** ROK-1750: private poll share link landing (`/p/poll/:token`). */
 export const PollSharePage = lazyWithRetry(() =>
     import('./pages/poll-share-page').then((m) => ({ default: m.PollSharePage })),
+);
+/** ROK-1893: community-hub invite link landing (`/h/:token`). */
+export const HubInvitePage = lazyWithRetry(() =>
+    import('./pages/hub-invite-page').then((m) => ({ default: m.HubInvitePage })),
 );
 /** ROK-1778: public privacy policy (`/privacy`), linked from Google's consent screen. */
 export const PrivacyPage = lazyWithRetry(() =>
@@ -47,6 +43,26 @@ export const InvitePage = lazyWithRetry(() =>
 export const CalendarPage = lazyWithRetry(() =>
     import('./pages/calendar-page').then((m) => ({ default: m.CalendarPage })),
 );
+/**
+ * ROK-1901: `/events` and `/events/:id` left the app-entry chunk (−45 KB gz).
+ * `prefetchEventRoutes()` warms both once the first route is up and the shell
+ * is idle (`idle-prefetch.ts`), so following an event link rarely shows the
+ * route spinner.
+ */
+const loadEventsPage = () => import('./pages/events-page');
+const loadEventDetailPage = () => import('./pages/event-detail-page');
+export const EventsPage = lazyWithRetry(() =>
+    loadEventsPage().then((m) => ({ default: m.EventsPage })),
+);
+export const EventDetailPage = lazyWithRetry(() =>
+    loadEventDetailPage().then((m) => ({ default: m.EventDetailPage })),
+);
+
+/** Warm the event route chunks; a failure is ignored (the route retries on navigation). */
+export function prefetchEventRoutes(): void {
+    loadEventsPage().catch(() => undefined);
+    loadEventDetailPage().catch(() => undefined);
+}
 export const CreateEventPage = lazyWithRetry(() =>
     import('./pages/create-event-page').then((m) => ({ default: m.CreateEventPage })),
 );
@@ -77,6 +93,10 @@ export const CharacterDetailPage = lazyWithRetry(() =>
 /** ROK-1836: Valheim character page — a plugin page on a core lazy route (no plugin route seam exists). */
 export const ValheimCharacterPage = lazyWithRetry(() =>
     import('./plugins/valheim/pages/valheim-character-page').then((m) => ({ default: m.ValheimCharacterPage })),
+);
+/** ROK-1955: `/link` — approve a Raid Ledger Companion computer. */
+export const CompanionLinkPage = lazyWithRetry(() =>
+    import('./pages/companion-link-page').then((m) => ({ default: m.CompanionLinkPage })),
 );
 /** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
 export const GuildPage = lazyWithRetry(() =>

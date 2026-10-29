@@ -2,7 +2,7 @@
  * Drizzle query helpers for scheduling poll data (ROK-965).
  * Pure functions — no NestJS dependencies.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   ScheduleVoteSource,
@@ -70,6 +70,8 @@ export function findLineupPollMeta(db: Db, lineupId: number) {
       phaseDeadline: schema.communityLineups.phaseDeadline,
       includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,
       phaseDurationOverride: schema.communityLineups.phaseDurationOverride,
+      // ROK-1893 P3: the hub the poll is tagged to (poll page `hub`).
+      guildId: schema.communityLineups.guildId,
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
@@ -84,7 +86,18 @@ export function findScheduleSlots(db: Db, matchId: number) {
     .where(eq(schema.communityLineupScheduleSlots.matchId, matchId));
 }
 
-/** Find all votes for given slot IDs with user display names. */
+/**
+ * ROK-2025: vote order, earliest first. `updated_at` is stamped only by a
+ * stance flip, so on a yes row COALESCE(updated_at, created_at) is when the
+ * member said yes; `id` breaks `created_at` ties. The lock-in's default bench
+ * (and the lock form's pre-marked pick) is the LAST yes-voters of this order.
+ */
+const VOTE_ORDER = [
+  sql`coalesce(${schema.communityLineupScheduleVotes.updatedAt}, ${schema.communityLineupScheduleVotes.createdAt})`,
+  schema.communityLineupScheduleVotes.id,
+];
+
+/** Find all votes for given slot IDs with user display names, in vote order. */
 export function findScheduleVotes(
   db: Db,
   slotIds: number[],
@@ -110,7 +123,8 @@ export function findScheduleVotes(
       schema.users,
       eq(schema.communityLineupScheduleVotes.userId, schema.users.id),
     )
-    .where(inArray(schema.communityLineupScheduleVotes.slotId, slotIds));
+    .where(inArray(schema.communityLineupScheduleVotes.slotId, slotIds))
+    .orderBy(...VOTE_ORDER);
 }
 
 /** Insert a new schedule slot and return the inserted row. */
@@ -149,6 +163,7 @@ export function insertScheduleVote(
   stance: ScheduleVoteStance = 'yes',
   source: ScheduleVoteSource = 'web',
 ) {
+  // TODO(ROK-1893 P3): once hub polls carry guild_id, raise a 'vote' hub join prompt via HubAutoMembershipService.
   return db
     .insert(schema.communityLineupScheduleVotes)
     .values({ slotId, userId, stance, source })
@@ -227,16 +242,34 @@ export function findVoteBySlotAndUser(db: Db, slotId: number, userId: number) {
     .limit(1);
 }
 
-/** Update match status and linked event ID after event creation. */
-export function updateMatchLinkedEvent(
+/**
+ * Link the just-created event and flip the match to `scheduled` — a
+ * compare-and-set on a still-schedulable (`suggested` or `scheduling`),
+ * unlinked match (ROK-2024: an open `complete` may have locked it in since the
+ * caller's read).
+ *
+ * @returns False when another lock-in won; nothing was written.
+ */
+export async function updateMatchLinkedEvent(
   db: Db,
   matchId: number,
   eventId: number,
-) {
-  return db
+): Promise<boolean> {
+  const linked = await db
     .update(schema.communityLineupMatches)
     .set({ status: 'scheduled', linkedEventId: eventId })
-    .where(eq(schema.communityLineupMatches.id, matchId));
+    .where(
+      and(
+        eq(schema.communityLineupMatches.id, matchId),
+        inArray(schema.communityLineupMatches.status, [
+          'suggested',
+          'scheduling',
+        ]),
+        isNull(schema.communityLineupMatches.linkedEventId),
+      ),
+    )
+    .returning({ id: schema.communityLineupMatches.id });
+  return linked.length !== 0;
 }
 
 /** Delete all votes by a user on slots belonging to a given match. */

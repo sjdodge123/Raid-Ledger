@@ -7,8 +7,18 @@
  *
  *   SwordBronze (forge) ← Bronze 8 (+4/level) + Wood 2 + LeatherScraps 3
  *   Bronze (forge)      ← Copper 2 + Tin 1
+ *   Bronze ×5 (forge 2) ← Copper 8 + Tin 3 (ROK-1860: a second recipe the
+ *                        source picker offers; D9 keeps `Recipe_Bronze`)
  *   Copper / Tin        ← smelter: CopperOre / TinOre, fuel Coal ×2 per bar
- *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood
+ *   Coal                ← charcoal_kiln (a fuel-less `smelter`): Wood, or
+ *                        (ROK-1860: second process, index 1) RoundLog
+ *   CookedMeat          ← piece_cookingstation (fuel-less `cooking`): RawMeat
+ *   Cultivator (workbench) ← Bronze 5 + Wood 5 (ROK-1948: a Workbench recipe
+ *                        needing Bronze, so the `early` spoilers preset shows
+ *                        the generic "nobody on the server has found it" line)
+ *
+ * The processors get no `pieces[]` entry, so the web falls back to its own
+ * processor labels (ROK-1934 D3/D9).
  *
  * Plus the catalogue names those prefabs need, and one public chest holding
  * 40 Copper (and no Tin) so a plan shows Copper covered and Tin short.
@@ -81,6 +91,16 @@ const SMELTER: ValheimProcessor = {
   defaultResult: null,
 };
 
+/** As in `recipes-processing.json`: a fuel-less cooking processor (ROK-1934). */
+const COOKING_STATION: ValheimProcessor = {
+  ...SMELTER,
+  prefab: 'piece_cookingstation',
+  type: 'cooking',
+  fuel: null,
+  fuelPerProduct: null,
+  maxInput: 2,
+};
+
 /** `recipes-vanilla.json` verbatim (pinned by the integration spec). */
 export const RECIPES_VANILLA: ValheimRecipesMessage = {
   schemaVersion: 1,
@@ -139,21 +159,36 @@ export const RECIPES_DEMO_MESSAGE: ValheimRecipesMessage = {
       res('Copper', 2),
       res('Tin', 1),
     ]),
+    {
+      ...recipe('Recipe_Bronze5', 'Bronze', 'forge', [
+        res('Copper', 8),
+        res('Tin', 3),
+      ]),
+      amount: 5,
+      minStationLevel: 2,
+    },
     recipe('Recipe_SwordBronze', 'SwordBronze', 'forge', [
       res('Bronze', 8, 4),
       res('Wood', 2),
       res('LeatherScraps', 3),
     ]),
+    recipe('Recipe_Cultivator', 'Cultivator', 'piece_workbench', [
+      res('Bronze', 5),
+      res('Wood', 5),
+    ]),
   ],
   processors: [
     { ...SMELTER, prefab: 'charcoal_kiln', fuel: null, fuelPerProduct: null },
     SMELTER,
+    COOKING_STATION,
   ],
   processes: [
     smelt('charcoal_kiln', 'Wood', 'Coal', 15),
+    smelt('charcoal_kiln', 'RoundLog', 'Coal', 15),
     ...RECIPES_VANILLA.processes,
     smelt('smelter', 'CopperOre', 'Copper', 30),
     smelt('smelter', 'TinOre', 'Tin', 30),
+    smelt('piece_cookingstation', 'RawMeat', 'CookedMeat', 25),
   ],
 };
 
@@ -174,15 +209,24 @@ const item = (
 /** Merged into the armory fixture catalogue (same 256×64 atlas, 4 cells). */
 export const RECIPES_DEMO_ITEMS: Record<string, ValheimItemCatalogEntryRow> = {
   SwordBronze: item('Bronze sword', 1, 4, 'OneHandedWeapon'),
+  /** ROK-1899: an affordable (Wood) row that also upgrades (q2 Wood 3, q3 Wood 6). */
+  Club: item('Club', 2, 3, 'OneHandedWeapon'),
   Bronze: item('Bronze', 1),
   Copper: item('Copper', 1),
   Tin: item('Tin', 0),
   CopperOre: item('Copper ore', 1),
   TinOre: item('Tin ore', 0),
   Coal: item('Coal', 3),
+  /** ROK-1860: the kiln's second Coal input. */
+  RoundLog: item('Core wood', 0),
   LeatherScraps: item('Leather scraps', 2),
   Iron: item('Iron', 0),
   IronScrap: item('Scrap iron', 0),
+  /** ROK-1934: cooked food, reachable through the Planner's search only. */
+  RawMeat: item('Raw meat', 2),
+  CookedMeat: item('Cooked meat', 3, 1, 'Consumable'),
+  /** ROK-1948: the Workbench recipe that needs Bronze. */
+  Cultivator: item('Cultivator', 2, 1, 'Tool'),
 };
 
 /** The one chest the planner fixture adds to the containers scan. */

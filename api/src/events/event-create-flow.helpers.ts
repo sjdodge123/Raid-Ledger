@@ -18,6 +18,7 @@ import {
   insertRecurringEvents,
   insertSingleEvent,
   buildBaseValues,
+  inheritPollHub,
   resolveRecurrenceGroupId,
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
@@ -163,8 +164,9 @@ export async function runCreateEvent(
   deps: CreateFlowDeps,
   activityLog: Pick<ActivityLogService, 'log'>,
   creatorId: number,
-  dto: CreateEventDto,
+  rawDto: CreateEventDto,
 ): Promise<EventResponseDto & { allEventIds?: number[] }> {
+  const dto = await inheritPollHub(deps.db, rawDto, creatorId);
   const startTime = new Date(dto.startTime);
   const endTime = new Date(dto.endTime);
   const durationMs = endTime.getTime() - startTime.getTime();
@@ -200,9 +202,14 @@ export async function runCreateEvent(
     creatorId,
     dto.followupForEventId ?? null,
   );
-  await activityLog.log('event', result.id, 'event_created', creatorId, {
-    title: dto.title,
-  });
+  // The event is already announced: a log failure must not fail the create,
+  // or a lock-in retry announces a second event (ROK-2032). Awaited so the
+  // entry exists when the response returns.
+  await activityLog
+    .log('event', result.id, 'event_created', creatorId, { title: dto.title })
+    .catch(
+      warnWithStack(deps.logger, `Activity log failed for event ${result.id}`),
+    );
   maybeTriggerFollowupFanout(deps, dto, result.id, creatorId);
   return result;
 }

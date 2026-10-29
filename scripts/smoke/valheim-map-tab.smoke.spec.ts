@@ -18,10 +18,14 @@
  * application (the zoom/layer controls sit outside it). Phones and tablets
  * (<1024px) reach the switches through the "Layers" BottomSheet.
  */
+import { gunzipSync } from "node:zlib";
 import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "./base";
 import { API_BASE, apiPost, getAdminToken } from "./api-helpers";
 import { isDesktop } from "./helpers";
+import { findTexel } from "./valheim-map-bits";
+// Character + shared pins only: the Scanned-portal and Chest layers (ROK-1946, ROK-1859) are other specs' subject.
+import { pins } from "./valheim-pin-filter-helpers";
 
 const FIXTURE = "/admin/test/valheim/map-fixture";
 const SHARED = "Show cartography table";
@@ -82,11 +86,6 @@ async function seedMap(worker: number): Promise<MapFixture> {
   };
 }
 
-/** Pins are the only buttons inside the map application. */
-function pins(map: Locator): Locator {
-  return map.getByRole("button");
-}
-
 /** Open the switches: inline ≥1024px, the Layers sheet below it. Returns their scope. */
 async function openLayers(page: Page, wide: boolean): Promise<Locator> {
   if (wide) return page.locator("body");
@@ -104,6 +103,68 @@ async function closeLayers(page: Page, wide: boolean): Promise<void> {
   await expect(sheet).toBeHidden();
 }
 
+/** Bound on every direct API call and page wait in the ROK-1949 case. */
+const IO_TIMEOUT_MS = 15_000;
+
+const MAP_API = (c: number, m: number): string =>
+  `${API_BASE}/plugins/valheim/armory/characters/${c}/maps/${m}`;
+
+/** One stored fog layer, inflated (bit `py·n + px`, LSB-first, `py = 0` = south). */
+async function fetchFogBits(
+  token: string,
+  f: MapFixture,
+  layer: "personal" | "shared",
+): Promise<Uint8Array> {
+  const res = await fetch(
+    `${MAP_API(f.characterId, f.mapId)}/fog?layer=${layer}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(IO_TIMEOUT_MS),
+    },
+  );
+  expect(res.status, `fog layer ${layer} must be readable`).toBe(200);
+  return gunzipSync(Buffer.from(await res.arrayBuffer()));
+}
+
+/**
+ * RGBA of each `[x, y]` PNG pixel, decoded once in the page (createImageBitmap
+ * + canvas) — the multi-MB base64 crosses the CDP bridge one time only.
+ */
+async function pngPixels(
+  page: Page,
+  b64: string,
+  points: readonly (readonly [number, number])[],
+): Promise<number[][]> {
+  const decode = page.evaluate(
+    async ([data, pts]) => {
+      const bytes = Uint8Array.from(atob(data as string), (c) =>
+        c.charCodeAt(0),
+      );
+      const bmp = await createImageBitmap(
+        new Blob([bytes], { type: "image/png" }),
+      );
+      const cv = new OffscreenCanvas(bmp.width, bmp.height);
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      if (!ctx) throw new Error("no 2d context");
+      ctx.drawImage(bmp, 0, 0);
+      return pts.map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
+    },
+    [b64, points] as const,
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bound = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`PNG decode exceeded ${IO_TIMEOUT_MS} ms`)),
+      IO_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([decode, bound]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 test.describe("Valheim hub — Map tab (ROK-1837)", () => {
   test("renders the map, zooms and fits, and the shared layer adds the cartography pin", async ({
     page,
@@ -116,7 +177,7 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
     const wide = isDesktop(testInfo);
 
     await page.goto(
-      `/guilds/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
+      `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
     );
     const map = page.getByRole("application", { name: "Valheim map" });
     await expect(map).toBeVisible({ timeout: 15_000 });
@@ -156,5 +217,154 @@ test.describe("Valheim hub — Map tab (ROK-1837)", () => {
         name: /\(.+, cartography table(, checked)?\)$/,
       }),
     ).toHaveCount(1);
+  });
+
+  test("ROK-1949: the base map is masked server-side and unexplored fog is opaque", async ({
+    page,
+  }, testInfo) => {
+    const fixture = await seedMap(testInfo.parallelIndex);
+    expect(
+      fixture.guildId,
+      "map-fixture must return the hub id",
+    ).not.toBeNull();
+    const baseMap = page.waitForResponse(
+      (r) => r.url().includes("/base-map") && r.status() === 200,
+      { timeout: IO_TIMEOUT_MS },
+    );
+    await page.goto(
+      `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
+    );
+    const res = await baseMap;
+    expect(
+      res.headers()["etag"] ?? "",
+      "base-map ETag must be the masked m1- format, not the unmasked sha256",
+    ).toMatch(/^"m1-[0-9a-f]{40}"$/);
+    // Re-fetch the same URL ourselves: the page's response body can be empty when
+    // the browser revalidates a cached copy (the tablet project reruns the page).
+    const token = await getAdminToken();
+    const direct = await fetch(res.url(), {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(IO_TIMEOUT_MS),
+    });
+    expect(
+      direct.status,
+      "base-map re-fetch must return the masked bytes",
+    ).toBe(200);
+    expect(
+      direct.headers.get("etag") ?? "",
+      "re-fetched base-map ETag must be the masked m1- format",
+    ).toMatch(/^"m1-[0-9a-f]{40}"$/);
+    const png = Buffer.from(await direct.arrayBuffer());
+    expect(png.length, "base-map body must be a PNG").toBeGreaterThan(33);
+    const n = png.readUInt32BE(16); // IHDR width of a square texture
+    const personal = await fetchFogBits(token, fixture, "personal");
+    const shared = await fetchFogBits(token, fixture, "shared");
+    expect(personal.length, "personal bitset is ⌈n²/8⌉ bytes").toBe(
+      Math.ceil((n * n) / 8),
+    );
+    expect(shared.length, "shared bitset is ⌈n²/8⌉ bytes").toBe(
+      Math.ceil((n * n) / 8),
+    );
+    const dark = findTexel(n, personal, shared, false);
+    const lit = findTexel(n, personal, shared, true);
+    expect(dark, "fixture must leave some texel unexplored").not.toBeNull();
+    expect(lit, "fixture must explore some texel").not.toBeNull();
+    const b64 = png.toString("base64");
+    // PNG row 0 = north, bitset py 0 = south.
+    const { px: dx, py: dy } = dark ?? { px: 0, py: 0 };
+    const { px: lx, py: ly } = lit ?? { px: 0, py: 0 };
+    const [darkPx, litPx] = await pngPixels(page, b64, [
+      [dx, n - 1 - dy],
+      [lx, n - 1 - ly],
+    ]);
+    expect(
+      darkPx,
+      `base-map pixel (${dx},${n - 1 - dy}) is unexplored and must be rgba(0,0,0,0)`,
+    ).toEqual([0, 0, 0, 0]);
+    expect(
+      litPx?.[3],
+      `base-map pixel (${lx},${n - 1 - ly}) is explored and must keep its terrain (alpha 255)`,
+    ).toBe(255);
+
+    await expect(page.getByTestId("map-fog-pending")).toBeHidden({
+      timeout: 15_000,
+    });
+    const fogAlpha = await page
+      .getByRole("application", { name: "Valheim map" })
+      .locator("canvas")
+      .evaluate(
+        (cv, [x, y]) =>
+          (cv as HTMLCanvasElement)
+            .getContext("2d")
+            ?.getImageData(x as number, y as number, 1, 1).data[3],
+        [dx, n - 1 - dy],
+        { timeout: IO_TIMEOUT_MS },
+      );
+    expect(
+      fogAlpha,
+      "unexplored fog canvas alpha must be fully opaque (255)",
+    ).toBe(255);
+  });
+
+  test("ROK-2028: picker and Filters share one toolbar row; the map opens framed on the explored area", async ({
+    page,
+  }, testInfo) => {
+    const fixture = await seedMap(testInfo.parallelIndex);
+    expect(
+      fixture.guildId,
+      "map-fixture must return the hub id",
+    ).not.toBeNull();
+    await page.goto(
+      `/hubs/${fixture.guildId}?vc=${fixture.characterId}&vm=${fixture.mapId}#map`,
+    );
+    const map = page.getByRole("application", { name: "Valheim map" });
+    await expect(map).toBeVisible({ timeout: 15_000 });
+
+    // No orphan row: the Character picker lives inside the map's toolbar row.
+    const toolbar = page.getByTestId("map-filter-toolbar");
+    const picker = toolbar.getByRole("combobox", { name: "Character" });
+    await expect(picker).toBeVisible();
+    if (isDesktop(testInfo)) {
+      const trigger = toolbar.getByRole("button", {
+        name: "Filters",
+        exact: true,
+      });
+      await expect(trigger).toBeVisible();
+      const [p, t] = await Promise.all([
+        picker.boundingBox(),
+        trigger.boundingBox(),
+      ]);
+      if (!p || !t)
+        throw new Error("picker or Filters trigger has no bounding box");
+      const pMid = p.y + p.height / 2;
+      const tMid = t.y + t.height / 2;
+      expect(
+        Math.abs(pMid - tMid),
+        `picker centre y=${pMid} vs Filters centre y=${tMid} — not one row`,
+      ).toBeLessThanOrEqual(4);
+      expect(t.x, "Filters must sit right of the picker").toBeGreaterThan(
+        p.x + p.width,
+      );
+    }
+
+    // Framing: once the fog decodes the view is well above the whole-world fit
+    // (the fixture explores a 240px square of a 2048px world).
+    const worldFit = await map.evaluate((el) => {
+      const layer = el.querySelector<HTMLElement>(
+        '[data-testid="map-texture-layer"]',
+      );
+      const size = layer ? layer.offsetWidth : 0;
+      return size > 0
+        ? Math.min(el.clientWidth, el.clientHeight) / size
+        : Number.NaN;
+    });
+    expect(worldFit, "world-fit scale must be measurable").toBeGreaterThan(0);
+    const stack = map.locator("[data-zoom]");
+    await expect
+      .poll(async () => Number(await stack.getAttribute("data-zoom")), {
+        message: `initial zoom must exceed 2x the world-fit scale (${worldFit.toFixed(2)})`,
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(worldFit * 2);
   });
 });

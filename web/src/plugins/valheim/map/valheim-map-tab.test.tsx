@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { createPortal } from 'react-dom';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
 import type {
@@ -15,8 +16,11 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => ({ user: { id: 7 } }),
 }));
 vi.mock('./valheim-map-view', () => ({
-    ValheimMapView: (p: { characterId: number; mapId: number }) => (
-        <div data-testid="map-view">{`${p.characterId}:${p.mapId}`}</div>
+    ValheimMapView: (p: { characterId: number; mapId: number; toolbarSlot?: HTMLElement | null }) => (
+        <>
+            {p.toolbarSlot && createPortal(<span data-testid="map-filters" />, p.toolbarSlot)}
+            <div data-testid="map-view">{`${p.characterId}:${p.mapId}`}</div>
+        </>
     ),
 }));
 
@@ -83,7 +87,7 @@ function Where() {
     return <output data-testid="where">{`${l.search}${l.hash}`}</output>;
 }
 
-const tab = (entry = '/guilds/1#map') =>
+const tab = (entry = '/hubs/1#map') =>
     renderWithProviders(
         <>
             <ValheimMapTab serverId={3} />
@@ -103,11 +107,15 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             '1',
         );
         expect(screen.queryByRole('combobox', { name: 'World' })).toBeNull();
+        // ROK-2028: the pickers and the map's filters share the tab's one toolbar row.
+        const toolbar = screen.getByTestId('map-filter-toolbar');
+        expect(within(toolbar).getByRole('combobox', { name: 'Character' })).toBeInTheDocument();
+        expect(within(toolbar).getByTestId('map-filters')).toBeInTheDocument();
     });
 
     it('reads ?vc&vm and shows the world picker for a multi-map character', async () => {
         serve(ROWS, { 2: [21, 22] });
-        tab('/guilds/1?vc=2&vm=21#map');
+        tab('/hubs/1?vc=2&vm=21#map');
         expect(await screen.findByTestId('map-view')).toHaveTextContent('2:21');
         expect(screen.getByRole('combobox', { name: 'World' })).toHaveValue(
             '21',
@@ -146,6 +154,21 @@ describe('ValheimMapTab (ROK-1837 T6)', () => {
             await screen.findByText('This character has no map uploaded yet.'),
         ).toBeInTheDocument();
         expect(screen.queryByTestId('map-view')).toBeNull();
+    });
+});
+
+describe('ValheimMapTab focus (ROK-2028 review)', () => {
+    it('ROK-2028: picking a character keeps keyboard focus on the Character select', async () => {
+        serve(ROWS, { 1: [11], 3: [31, 32] });
+        tab();
+        await screen.findByTestId('map-view');
+        const select = screen.getByRole('combobox', { name: 'Character' });
+        select.focus();
+        fireEvent.change(select, { target: { value: '3' } });
+        // Pending detail, then the new character's map: the select must stay mounted.
+        await waitFor(() => expect(screen.getByTestId('map-view')).toHaveTextContent('3:32'));
+        expect(document.activeElement, 'focus left the Character select after a pick').toBe(select);
+        expect(screen.getByRole('combobox', { name: 'Character' })).toBe(select);
     });
 });
 

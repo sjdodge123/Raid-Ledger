@@ -1,3 +1,4 @@
+import { HUB_PLUGIN_MANIFESTS } from '@raid-ledger/contract';
 import type { PluginManifest } from '../plugin-host/plugin-manifest.interface';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import {
@@ -26,6 +27,7 @@ export const PELICAN_MANIFEST: PluginManifest = {
   author: { name: 'Raid Ledger' },
   gameSlugs: [],
   capabilities: ['game-server-provider', 'cron-registrar'],
+  hub: HUB_PLUGIN_MANIFESTS.pelican,
   settingKeys: [],
   integrations: [
     {

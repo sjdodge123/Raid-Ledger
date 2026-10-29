@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
+  VALHEIM_PLAN_SOURCES_MAX,
   VALHEIM_PLAN_TARGETS_MAX,
   type ValheimPiece,
   type ValheimRecipe,
@@ -12,6 +13,7 @@ import {
   hasTreeTarget,
   parseIncludePersonal,
   parsePlanTargets,
+  parseSourceOverrides,
   parseTreeQuality,
   toStockMap,
 } from './valheim-recipes.read.mappers';
@@ -218,6 +220,71 @@ describe('stock input', () => {
     expect(parseIncludePersonal('true')).toBe(true);
     expect(badRequest(() => parseIncludePersonal('yes'))).toBe(
       'Invalid includePersonal',
+    );
+  });
+});
+
+describe('parseSourceOverrides (ROK-1860 D3)', () => {
+  it('absent or empty → no overrides', () => {
+    expect([...parseSourceOverrides(undefined)]).toEqual([]);
+    expect([...parseSourceOverrides('')]).toEqual([]);
+  });
+
+  it('parses recipe and process refs per prefab', () => {
+    expect([
+      ...parseSourceOverrides('Bronze:r:Recipe_Bronze5,Coal:p:charcoal_kiln:1'),
+    ]).toEqual([
+      ['Bronze', { type: 'recipe', recipeId: 'Recipe_Bronze5' }],
+      ['Coal', { type: 'process', processor: 'charcoal_kiln', index: 1 }],
+    ]);
+  });
+
+  it('a repeated prefab: the last one wins', () => {
+    expect([
+      ...parseSourceOverrides('Bronze:r:Recipe_A,Bronze:p:smelter:0'),
+    ]).toEqual([
+      ['Bronze', { type: 'process', processor: 'smelter', index: 0 }],
+    ]);
+  });
+
+  it(`accepts exactly ${VALHEIM_PLAN_SOURCES_MAX} entries`, () => {
+    const raw = Array.from(
+      { length: VALHEIM_PLAN_SOURCES_MAX },
+      (_, i) => `P${i}:r:R${i}`,
+    ).join(',');
+    expect(parseSourceOverrides(raw).size).toBe(VALHEIM_PLAN_SOURCES_MAX);
+  });
+
+  it.each([
+    ['bad type letter', 'Bronze:x:Recipe_Bronze'],
+    ['missing recipe id', 'Bronze:r'],
+    ['empty recipe id', 'Bronze:r:'],
+    ['extra recipe part', 'Bronze:r:Recipe_Bronze:1'],
+    ['missing process index', 'Bronze:p:smelter'],
+    ['non-numeric index', 'Bronze:p:smelter:x'],
+    ['negative index', 'Bronze:p:smelter:-1'],
+    ['index over 63', 'Bronze:p:smelter:64'],
+    ['empty prefab', ':r:Recipe_Bronze'],
+    ['prefab outside the id charset', 'Bro nze:r:Recipe_Bronze'],
+    ['recipe id outside the id charset', 'Bronze:r:Recipe$Bronze'],
+    ['processor outside the id charset', 'Bronze:p:smel/ter:0'],
+    ['an empty entry', 'Bronze:r:Recipe_Bronze,'],
+    [
+      'more than the cap',
+      Array.from(
+        { length: VALHEIM_PLAN_SOURCES_MAX + 1 },
+        (_, i) => `P${i}:r:R${i}`,
+      ).join(','),
+    ],
+  ])('400 Invalid sources: %s', (_label, raw) => {
+    expect(() => parseSourceOverrides(raw)).toThrow(
+      new BadRequestException('Invalid sources'),
+    );
+  });
+
+  it('400 when repeated as an array', () => {
+    expect(() => parseSourceOverrides(['Bronze:r:A', 'Coal:r:B'])).toThrow(
+      new BadRequestException('Invalid sources'),
     );
   });
 });

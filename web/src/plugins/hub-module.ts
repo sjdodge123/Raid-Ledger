@@ -1,7 +1,7 @@
 /**
  * ROK-1830 — the hub module host API.
  *
- * `/guilds/:id` is a game-agnostic shell (`web/src/components/hub/`). Each game
+ * `/hubs/:id` is a game-agnostic shell (`web/src/components/hub/`). Each game
  * plugin contributes the parts only it can know — extra tabs, Overview
  * widgets, member rows/columns and hero pills — by handing a `HubModule` to
  * `PluginHandle.registerHubModule`. Core never imports a plugin's code; it
@@ -32,7 +32,7 @@ export interface HubCtx {
 export interface HubTab {
     id: string;
     label: string;
-    /** Within the module band only — core pins Overview/Members first and Resources last (D7-A). */
+    /** Within the module band only — core pins Overview/Members/Events/Resources first (ROK-1876). */
     order: number;
     component: ComponentType<HubCtx>;
     /** Omitted = always shown. A hidden tab keeps its slot in the frame but is not rendered. */
@@ -44,7 +44,13 @@ export type CoreWidgetId = 'gm-post' | 'discord' | 'schedule' | 'events' | 'atte
 
 export interface HubWidget {
     id: string;
-    /** Merged with the core Overview widgets and sorted — core ids sit on 10/20/30/40/70. */
+    /** ROK-1918 — the widget's name in arrange mode. Omitted = the humanised id. */
+    title?: string;
+    /** ROK-1918 — one line for the arrange list and the Add picker. */
+    description?: string;
+    /** ROK-1918 — `false` = opt-in (hidden until an editor adds it). Default `true`. */
+    defaultOn?: boolean;
+    /** Default slot among the core Overview widgets (10/20/30/40/70); a hub's saved layout overrides it. */
     order: number;
     span?: 1 | 2;
     component: ComponentType<HubCtx>;
@@ -129,6 +135,8 @@ export interface HubModule {
     memberSearch?: (row: HubMemberRow) => string;
     /** Band above the groups in the Members frame (WoW: role counts). */
     membersSummary?: ComponentType<HubCtx>;
+    /** Block above the core Events tab widgets (ROK-1893 P3, community hubs: Open polls). Lives in the module's own chunk. */
+    eventsLead?: ComponentType<HubCtx>;
     /** Sub-title under the Members heading. */
     membersBlurb?: (page: GuildPage) => string;
     /** Shown instead of the groups when there are none (a function can read the page, e.g. visitor vs member). */

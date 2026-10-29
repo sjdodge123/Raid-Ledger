@@ -33,6 +33,17 @@ const CHEST = {
   stackCount: 1,
 };
 
+/** The chest as the base-inputs query returns it (ROK-1859). */
+const INPUT = {
+  key: KEY,
+  prefab: 'piece_chest',
+  x: 1,
+  y: 2,
+  z: 3,
+  vehicle: false,
+  shared: true,
+};
+
 const USER: AuthenticatedUser = {
   id: 2,
   username: 'member',
@@ -84,7 +95,7 @@ const READ_ONLY_RR = {
 };
 
 describe('ValheimMaterialsService — one read-only transaction per request', () => {
-  it('materials: scan lookup + four totals/counts + catalog on the tx handle', async () => {
+  it('materials: scan lookup + four totals/counts + base inputs/sums + trend days + catalog on the tx handle', async () => {
     const { db, tx, service } = harness([[SCAN]]);
     await service.materials(7, USER, false);
     expect(db.transaction).toHaveBeenCalledTimes(1);
@@ -93,28 +104,33 @@ describe('ValheimMaterialsService — one read-only transaction per request', ()
       READ_ONLY_RR,
     );
     expect(db.select).not.toHaveBeenCalled();
-    expect(tx.select).toHaveBeenCalledTimes(6);
+    expect(tx.select).toHaveBeenCalledTimes(9);
   });
 
-  it('containers: scan lookup + list + catalog on the tx handle', async () => {
-    const { db, tx, service } = harness([[SCAN], [CHEST]]);
+  it('containers: scan lookup + list + base inputs + catalog on the tx handle', async () => {
+    const { db, tx, service } = harness([[SCAN], [CHEST], [INPUT]]);
     await service.containers(7, USER, false);
     expect(db.transaction).toHaveBeenCalledWith(
       expect.any(Function),
       READ_ONLY_RR,
     );
     expect(db.select).not.toHaveBeenCalled();
-    expect(tx.select).toHaveBeenCalledTimes(3);
+    expect(tx.select).toHaveBeenCalledTimes(4);
   });
 
-  it('container: scan lookup + chest + stacks on the tx handle', async () => {
-    const { db, tx, service } = harness([[SCAN], [{ ...CHEST, id: 4 }], []]);
+  it('container: scan lookup + chest + stacks + base inputs on the tx handle', async () => {
+    const { db, tx, service } = harness([
+      [SCAN],
+      [{ ...CHEST, id: 4 }],
+      [],
+      [INPUT],
+    ]);
     await service.container(7, KEY, USER, false);
     expect(db.transaction).toHaveBeenCalledWith(
       expect.any(Function),
       READ_ONLY_RR,
     );
     expect(db.select).not.toHaveBeenCalled();
-    expect(tx.select).toHaveBeenCalledTimes(3);
+    expect(tx.select).toHaveBeenCalledTimes(4);
   });
 });

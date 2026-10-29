@@ -31,6 +31,10 @@ import {
   recordPasteFacts,
   type AttemptOutcome,
 } from './addon-import.finish';
+import {
+  RosterInsightsCache,
+  invalidateRosterInsights,
+} from '../guilds/roster-insights/roster-insights.cache';
 import { pasteSections } from './addon-import.paste-run';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
@@ -61,6 +65,7 @@ export class AddonImportCreateService {
     private readonly audit: AddonImportAuditService,
     private readonly itemMeta: WowItemMetaService,
     private readonly realmRulesets: ForeverRealmRulesetsService,
+    private readonly insightsCache: RosterInsightsCache,
   ) {}
 
   async importNew(
@@ -80,6 +85,9 @@ export class AddonImportCreateService {
       outcome.result = res.status;
       outcome.perSection = (res.sections ?? []).map((s) => s.status);
       outcome.characterId = res.target.characterId;
+      // ROK-1913: AFTER the tx committed, with the created/updated id (a
+      // create's id only exists once `attempt` resolved).
+      if (!facts.dryRun) await this.afterApply(res.target.characterId);
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
@@ -124,6 +132,15 @@ export class AddonImportCreateService {
       enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
     }
     return res;
+  }
+
+  /** ROK-1913: the imported character's guilds' roster insights are stale. */
+  private afterApply(characterId: string | null): Promise<void> {
+    return invalidateRosterInsights(
+      this.insightsCache,
+      characterId,
+      this.logger,
+    );
   }
 
   /** Region, name and GUID from the AUTHORITATIVE section (ruling Q7). */

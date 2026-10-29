@@ -3,7 +3,12 @@
  * Extracted from scheduling.service.ts to stay within the 300-line limit.
  */
 import { eq } from 'drizzle-orm';
-import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -13,7 +18,12 @@ import {
   findVoteBySlotAndUser,
 } from './scheduling-query.helpers';
 import { resolvePlayerCap } from '../lineups-match-response.helpers';
-import { updateMatchLinkedEvent } from './scheduling-query.helpers';
+import {
+  claimMatchForLockIn,
+  linkClaimedMatch,
+  releaseMatchClaim,
+  type ClaimedFromStatus,
+} from './scheduling-lockin-claim.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { yesVotesOnly } from './scheduling-stance.helpers';
@@ -123,11 +133,91 @@ export function buildCreateEventDto(
 /** Everything `createLockedInEvent` reaches outside the database. */
 export interface LockInEventDeps {
   db: Db;
-  eventsService: { create: EventsService['create'] };
+  eventsService: Pick<EventsService, 'create' | 'delete'>;
   signupsService: Pick<SignupsService, 'signup'>;
   lineupNotifications: LineupNotificationService;
   pollEmbed: { fireUpdateEmbed: (matchId: number) => void };
   logger: Logger;
+}
+
+/** Create the event; on a throw, release the claim before re-throwing. */
+async function createOrRelease(
+  deps: LockInEventDeps,
+  matchId: number,
+  userId: number,
+  dto: CreateEventDto,
+  prior: ClaimedFromStatus,
+): Promise<{ id: number; allEventIds?: number[] }> {
+  try {
+    // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
+    // the event with the poll's hub (creator-membership rule included).
+    return await deps.eventsService.create(userId, {
+      ...dto,
+      schedulingMatchId: matchId,
+    });
+  } catch (err: unknown) {
+    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    throw err;
+  }
+}
+
+/**
+ * Delete every instance this lock-in created (a recurring lock-in makes ~5).
+ * A failed delete is logged and skipped so the caller still gets its 409.
+ */
+async function discardEvents(
+  deps: LockInEventDeps,
+  eventIds: number[],
+  userId: number,
+): Promise<void> {
+  for (const id of eventIds) {
+    try {
+      await deps.eventsService.delete(id, userId, false);
+    } catch (err: unknown) {
+      deps.logger.error(
+        `Lost lock-in: event ${id} not deleted: ${String(err)}`,
+      );
+    }
+  }
+}
+
+/**
+ * Claim the match, create its event and link it (ROK-2024 follow-up F2).
+ *
+ * The claim commits BEFORE the create (see `scheduling-lockin-claim.helpers`),
+ * so no pooled connection is held while `EventsService.create` takes its own.
+ * A concurrent lock-in — expired or open path — 409s before creating anything.
+ * Nothing else can move the claimed row before the link write: a cancel needs
+ * `scheduling`/`suggested`, so a cancel during the claim window archives
+ * nothing and still returns success, and the poll locks in anyway (the same
+ * "lock-in finished first" ordering as a cancel that arrives after it). The
+ * lost-link branch below is therefore defensive: every instance this call made
+ * is deleted (their DELETED listeners remove any Discord post) before the 409.
+ * If the link write itself throws, the instances are deleted the same way and
+ * the claim is released before the error is rethrown.
+ *
+ * @returns The linked event's id.
+ */
+async function claimAndCreateEvent(
+  deps: LockInEventDeps,
+  matchId: number,
+  userId: number,
+  dto: CreateEventDto,
+): Promise<number> {
+  const prior = await claimMatchForLockIn(deps.db, matchId);
+  const event = await createOrRelease(deps, matchId, userId, dto, prior);
+  const eventIds = event.allEventIds ?? [event.id];
+  let linked: boolean;
+  try {
+    linked = await linkClaimedMatch(deps.db, matchId, event.id);
+  } catch (err: unknown) {
+    await discardEvents(deps, eventIds, userId);
+    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    throw err;
+  }
+  if (linked) return event.id;
+  await discardEvents(deps, eventIds, userId);
+  throw new ConflictException('This poll has already been locked in');
 }
 
 /**
@@ -161,8 +251,7 @@ export async function createLockedInEvent(
     recurring,
     playerCap,
   );
-  const event = await deps.eventsService.create(userId, dto);
-  await updateMatchLinkedEvent(db, matchId, event.id);
+  const eventId = await claimAndCreateEvent(deps, matchId, userId, dto);
   // ROK-1617: YES voters only. A member who answered "that time does not work"
   // must not be rostered onto — or auto-hearted for — exactly that time.
   const voters = yesVotesOnly(await findScheduleVotes(db, [slot.id]));
@@ -171,7 +260,7 @@ export async function createLockedInEvent(
   // the signup (and the roster slot) too. An organiser who did NOT vote for
   // this slot is absent from `voters` and stays off the event (ROK-1610).
   await autoSignupSlotVoters({
-    eventId: event.id,
+    eventId,
     creatorId: null,
     voters,
     signupsService: deps.signupsService,
@@ -186,7 +275,7 @@ export async function createLockedInEvent(
     db,
     matchId,
     slot.proposedTime,
-    event.id,
+    eventId,
   );
-  return event.id;
+  return eventId;
 }

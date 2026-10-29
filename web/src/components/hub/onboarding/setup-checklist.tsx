@@ -14,7 +14,7 @@
  * a description line and a button-styled action, and the footer says the
  * hiding is remembered on the account rather than in this browser.
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import type { GuildKind } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { buttonClass } from '../../ui/button-classes';
@@ -31,19 +31,42 @@ const MARK = 'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-f
 // the prototype's rows are buttons, and a tab step is still a hash link.
 const ROW_LINK = buttonClass({ variant: 'secondary', size: 'sm' });
 
-function StepAction({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element | null {
+/** ROK-1891: #1742's invite-link dialog, lazy so it stays out of the checklist chunk until opened. */
+const HubInviteDialog = lazy(() => import('../community/community-invites-section').then((m) => ({ default: m.HubInviteDialog })));
+
+/** The overlays a step can open; `null` = this viewer has none, so the row shows no button. */
+interface StepHandlers {
+    onPickChannel: (() => void) | null;
+    onInvite: (() => void) | null;
+}
+
+/** ROK-1891: the Invite step's opener (null = no invite rights) and the dialog it mounts. */
+function useInviteDialog(hubId: number, hubName: string | undefined, canInvite: boolean): { onInvite: (() => void) | null; dialog: JSX.Element | null } {
+    const [open, setOpen] = useState(false);
+    const dialog = open ? (
+        <Suspense fallback={null}>
+            <HubInviteDialog hubId={hubId} title={`Invite people to ${hubName?.trim() || 'this hub'}`} onClose={() => setOpen(false)} />
+        </Suspense>
+    ) : null;
+    return { onInvite: canInvite ? () => setOpen(true) : null, dialog };
+}
+
+function OverlayButton({ step, onClick }: { step: SetupStep; onClick: (() => void) | null }): JSX.Element | null {
+    if (!onClick) return null;
+    return <Button variant="secondary" size="sm" onClick={onClick} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</Button>;
+}
+
+function StepAction({ step, handlers }: { step: SetupStep; handlers: StepHandlers }): JSX.Element | null {
     if (step.done) return <span className="text-xs font-medium text-success">Done</span>;
     // A blocked step has no action — its reason is a wrapping line under the
     // label (see StepRow), never a `shrink-0` cell in the row's action slot.
     if (step.action.kind === 'blocked') return null;
-    if (step.action.kind === 'channel') {
-        if (!onPickChannel) return null;
-        return <Button variant="secondary" size="sm" onClick={onPickChannel} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</Button>;
-    }
+    if (step.action.kind === 'channel') return <OverlayButton step={step} onClick={handlers.onPickChannel} />;
+    if (step.action.kind === 'invite') return <OverlayButton step={step} onClick={handlers.onInvite} />;
     return <a href={step.action.hash} className={ROW_LINK} data-testid={`setup-step-action-${step.id}`}>{step.actionLabel}</a>;
 }
 
-function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element {
+function StepRow({ step, handlers }: { step: SetupStep; handlers: StepHandlers }): JSX.Element {
     return (
         <li
             className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-edge-subtle py-2 last:border-b-0"
@@ -62,7 +85,7 @@ function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() 
             </span>
             {/* A done row already carries a visible "Done" chip — a second sr-only "done" reads it twice. */}
             {!step.done && <span className="sr-only">not done yet</span>}
-            <span className="ml-auto shrink-0"><StepAction step={step} onPickChannel={onPickChannel} /></span>
+            <span className="ml-auto shrink-0"><StepAction step={step} handlers={handlers} /></span>
         </li>
     );
 }
@@ -98,6 +121,8 @@ export interface HubSetupChecklistProps {
     hasModSources: boolean;
     /** ROK-1831: the hub kind — picks the step set and copy. */
     kind?: GuildKind | undefined;
+    /** ROK-1891: this viewer may make invite links (#1742's `canInvite`) — gates the Invite step's button. */
+    canInvite?: boolean | undefined;
 }
 
 /** The grid cell is a Fragment, so the card owns its own two-column span. */
@@ -105,13 +130,13 @@ const SPAN = 'md:col-span-2';
 
 export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | null {
     const { guildId, canEdit, guildName, memberCount, nextRaid, modsConfigured, hasModSources, kind } = props;
+    const invite = useInviteDialog(guildId, guildName, props.canInvite === true);
     const prompt = useHubOnboarding('hub-setup-checklist', guildId);
     const profile = useGuildProfile(guildId, canEdit);
     const discord = useGuildDiscord(guildId);
     const { openChannelPicker } = useHubSettings();
     const steps = setupSteps({
-        profile: profile.data, discord: discord.data, memberCount,
-        hasNextRaid: nextRaid !== null && nextRaid !== undefined,
+        profile: profile.data, discord: discord.data, memberCount, hasNextRaid: nextRaid !== null && nextRaid !== undefined,
         modsConfigured, hasModSources, canPickChannel: openChannelPicker !== null, kind,
     });
     const progress = setupProgress(steps);
@@ -119,18 +144,18 @@ export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | 
     // an empty one, so an unsettled page would show every step as "not done".
     const settled = profile.data !== undefined && discord.data !== undefined && nextRaid !== undefined;
     if (!canEdit || !prompt.visible || !settled || progress.complete) return null;
-    const title = guildName?.trim() ? `Set up ${guildName.trim()}` : 'Finish setting up';
     return (
         <div className={SPAN}><WidgetCard
             id="setup-checklist"
-            title={title}
+            title={guildName?.trim() ? `Set up ${guildName.trim()}` : 'Finish setting up'}
             action={<Button variant="ghost" size="sm" onClick={() => { prompt.dismiss(); }} data-testid="setup-checklist-dismiss">Hide checklist</Button>}
         >
             <ProgressRow label={progress.label} pct={progress.pct} />
             {prompt.failed && <p role="alert" data-testid="setup-checklist-error" className="mb-2 text-sm text-danger">We couldn&apos;t dismiss that just now. Try again in a moment.</p>}
             <ul className="flex flex-col" data-testid="setup-checklist">
-                {steps.map((s) => <StepRow key={s.id} step={s} onPickChannel={openChannelPicker} />)}
+                {steps.map((s) => <StepRow key={s.id} step={s} handlers={{ onPickChannel: openChannelPicker, onInvite: invite.onInvite }} />)}
             </ul>
+            {invite.dialog}
             <ChecklistFooter />
         </WidgetCard></div>
     );

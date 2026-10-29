@@ -3,11 +3,18 @@
  * hub's Pelican server id; `charactersHubTab` in `register.ts` adapts it to
  * the ROK-1831 `HubTab` seam once that lands.
  */
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { ValheimCharacterSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { useValheimCharacterPages } from '../hooks/use-valheim-characters';
 import { ValheimCharacterRow } from './valheim-character-row';
+import { ValheimClaimBanner } from './valheim-claim-banner';
+import {
+    CLAIM_BANNER_COPY,
+    CLAIM_FILTER_PARAM,
+    withUnclaimedParam,
+} from './valheim-claim-banner.helpers';
+import { charactersTabHubPath } from './valheim-hub-paths';
 
 function Quiet({ children, role }: { children: string; role?: 'alert' }) {
     return (
@@ -83,32 +90,74 @@ function LoadMore({
     );
 }
 
-export function ValheimCharactersTab({ serverId }: { serverId: number }) {
+function TabStates({ pages, unclaimedOnly }: { pages: ReturnType<typeof useValheimCharacterPages>; unclaimedOnly: boolean }) {
+    if (pages.isError) {
+        return <Quiet role="alert">Couldn't load characters. Try again in a moment.</Quiet>;
+    }
+    if (!pages.isSuccess || pages.rows.length > 0) return null;
+    if (unclaimedOnly) return <Quiet>Every character here is claimed.</Quiet>;
+    return (
+        <Quiet>
+            No characters yet. They appear after a player joins with the
+            Valheim Link mod.
+        </Quiet>
+    );
+}
+
+function countLabel(pages: ReturnType<typeof useValheimCharacterPages>): string {
+    if (pages.total !== null) return String(pages.total);
+    return `${pages.rows.length}${pages.hasMore ? '+' : ''}`;
+}
+
+/** ROK-1933: the "Unclaimed only" toggle; the banner's Pick jumps here with it on. */
+/**
+ * The `?unclaimed=1` filter. The hash is passed through explicitly:
+ * `setSearchParams` navigates to a bare `?…`, which drops `#characters` and
+ * sends the hub (its tab lives in the hash) back to Overview (ROK-1933 B1).
+ */
+function useUnclaimedFilter(): [boolean, () => void] {
+    const { search, hash } = useLocation();
+    const navigate = useNavigate();
+    const on = new URLSearchParams(search).get(CLAIM_FILTER_PARAM) === '1';
+    const toggle = (): void => {
+        navigate({ search: withUnclaimedParam(search, !on), hash }, { replace: true });
+    };
+    return [on, toggle];
+}
+
+function UnclaimedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+    return (
+        <div className="mb-3 flex">
+            <Button variant={on ? 'primary' : 'secondary'} size="sm" aria-pressed={on} onClick={onToggle}>
+                {CLAIM_BANNER_COPY.unclaimedFilter}
+            </Button>
+        </div>
+    );
+}
+
+export function ValheimCharactersTab({
+    serverId,
+    showClaimBanner = true,
+}: {
+    serverId: number;
+    /** ROK-1933: false for hub visitors — they never see the claim banner. */
+    showClaimBanner?: boolean;
+}) {
     const { pathname, search } = useLocation();
-    const query = useValheimCharacterPages(serverId);
-    const { rows } = query;
-    const count =
-        query.total !== null
-            ? String(query.total)
-            : `${rows.length}${query.hasMore ? '+' : ''}`;
+    const [unclaimedOnly, toggleUnclaimed] = useUnclaimedFilter();
+    // ROK-1933: filtered server-side, so "Load more" pages stay full and correct.
+    const query = useValheimCharacterPages(serverId, unclaimedOnly);
+    const count = countLabel(query);
     return (
         <section
             aria-labelledby="valheim-characters-h"
             aria-busy={query.isPending}
         >
             <TabHeading count={query.isSuccess ? count : null} />
-            {query.isError && (
-                <Quiet role="alert">
-                    Couldn't load characters. Try again in a moment.
-                </Quiet>
-            )}
-            {query.isSuccess && rows.length === 0 && (
-                <Quiet>
-                    No characters yet. They appear after a player joins with the
-                    Valheim Link mod.
-                </Quiet>
-            )}
-            <RowList rows={rows} hubPath={`${pathname}${search}#characters`} />
+            {showClaimBanner && <ValheimClaimBanner serverId={serverId} />}
+            {query.isSuccess && (unclaimedOnly || query.rows.length > 0) && <UnclaimedToggle on={unclaimedOnly} onToggle={toggleUnclaimed} />}
+            <TabStates pages={query} unclaimedOnly={unclaimedOnly} />
+            <RowList rows={query.rows} hubPath={charactersTabHubPath(pathname, search)} />
             <LoadMore pages={query} />
         </section>
     );

@@ -7,7 +7,10 @@ import {
   type GameMetadata,
   type UserGameSignal,
 } from '../taste-vector.helpers';
-import { deriveArchetype } from '../archetype.helpers';
+import {
+  loadPresenceUserIds,
+  retitleFromIntensity,
+} from '../archetype-retitle.helpers';
 import { computeSignalHash } from '../signal-hash.helpers';
 import {
   groupBy,
@@ -34,6 +37,8 @@ interface BatchedInputs {
   signupsByUser: Map<number, number[]>;
   voiceByUser: Map<number, number[]>;
   hashByUser: Map<number, string>;
+  /** Users with presence data (ROK-1935 — see `loadPresenceUserIds`). */
+  presenceUserIds: Set<number>;
 }
 
 type IntensityMetrics = {
@@ -89,9 +94,14 @@ async function upsertVector(
     breadth: 0,
     consistency: 0,
   };
-  // ROK-1083: deriveArchetype now returns a composed ArchetypeDto. The
-  // jsonb column persists it as-is (Drizzle handles jsonb serialization).
-  const archetype = deriveArchetype({ intensityMetrics, dimensions });
+  // ROK-1935: metrics + archetype come from the shared re-title helper and
+  // are written in the same upsert. The jsonb column persists the composed
+  // ArchetypeDto as-is (ROK-1083).
+  const { archetype } = retitleFromIntensity(
+    intensityMetrics,
+    dimensions,
+    batch.presenceUserIds.has(userId),
+  );
 
   await db
     .insert(schema.playerTasteVectors)
@@ -126,6 +136,7 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
     events,
     existingVectors,
     hashComponents,
+    presenceUserIds,
   ] = await Promise.all([
     db.select().from(schema.gameInterests),
     db
@@ -156,6 +167,7 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
       .from(schema.events),
     db.select().from(schema.playerTasteVectors),
     loadSignalHashComponents(db),
+    loadPresenceUserIds(db),
   ]);
 
   const interestsByUser = groupBy(interests, (i) => i.userId);
@@ -199,6 +211,7 @@ async function loadBatch(db: Db): Promise<BatchedInputs> {
     signupsByUser,
     voiceByUser,
     hashByUser,
+    presenceUserIds,
   };
 }
 

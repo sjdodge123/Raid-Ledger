@@ -140,6 +140,30 @@ export const ValheimCatalogEntrySchema = z
 export type ValheimCatalogEntry = z.infer<typeof ValheimCatalogEntrySchema>;
 
 /**
+ * ROK-1882 — a skill id: `Skills.SkillType.ToString()` (a vanilla name such as
+ * `Swords`, or a signed integer string for a modded skill). Same pattern as
+ * `ValheimSkillSchema.id` in the valheim-link wire contract.
+ */
+export const ValheimSkillIdSchema = z.string().regex(/^-?[A-Za-z0-9_]{1,64}$/);
+
+/** ROK-1882 — one play day's net skill gain, effective levels (level + progress fraction). */
+export const ValheimSkillTrendDaySchema = z
+  .object({
+    /** The bucket date in the game server's timezone — no time, no zone. */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    /** skillId → end − start; only |gain| ≥ 0.05. Negative = a net loss (death). */
+    gains: z.record(ValheimSkillIdSchema, z.number()),
+  })
+  .strict();
+export type ValheimSkillTrendDay = z.infer<typeof ValheimSkillTrendDaySchema>;
+
+/** ROK-1882 — the character's last 3 play days (days actually played), newest first. */
+export const ValheimSkillTrendSchema = z
+  .object({ days: z.array(ValheimSkillTrendDaySchema).max(3) })
+  .strict();
+export type ValheimSkillTrend = z.infer<typeof ValheimSkillTrendSchema>;
+
+/**
  * `GET /plugins/valheim/armory/characters/:id` — summary plus the full sheet.
  * ROK-1836 (additive): `items` carries the catalogue subset for ONLY the
  * prefabs this sheet references (equipment + inventory + trophies) and
@@ -158,6 +182,8 @@ export const ValheimCharacterDetailSchema =
     atlas: ValheimMapBaseMapSchema.nullable().optional(),
     /** ROK-1836 follow-up (additive): the server's community hub (ROK-1831), null when the server is not a hub. */
     hubId: Id.nullable().optional(),
+    /** ROK-1882 (additive): skill gains over the last 3 play days; the API always sends it (`days: []` when none). */
+    skillTrend: ValheimSkillTrendSchema.optional(),
   }).strict();
 export type ValheimCharacterDetail = z.infer<
   typeof ValheimCharacterDetailSchema
@@ -223,3 +249,24 @@ export const ValheimClaimEventListResponseSchema = z
 export type ValheimClaimEventListResponse = z.infer<
   typeof ValheimClaimEventListResponseSchema
 >;
+
+/**
+ * ROK-1889 — `GET …/servers/:id/chest-focus`: one visible chest found by
+ * prefab + position (the Map tab's `focus=chest:<prefab>@x,z` deep link).
+ * Display fields only — never a row id or creatorPlayerId; a hidden personal
+ * chest is a 404 exactly like a missing one.
+ */
+export const ValheimChestFocusSchema = z
+  .object({
+    prefab: z.string(),
+    x: z.number(),
+    y: z.number(),
+    z: z.number(),
+    privacy: z.enum(['shared', 'personal']),
+    vehicle: z.boolean(),
+    slots: z.number().int(),
+    usedSlots: z.number().int(),
+    held: z.object({ prefab: z.string(), count: z.number().int() }).strict().nullable(),
+  })
+  .strict();
+export type ValheimChestFocus = z.infer<typeof ValheimChestFocusSchema>;

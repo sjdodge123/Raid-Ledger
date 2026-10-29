@@ -55,8 +55,16 @@ describe('bottom-nav clearance (ROK-1875)', () => {
         'components/features/game-time/SelectedBlockInspector.tsx',
         'components/features/game-time/phone/DayBlockEditor.tsx',
         'components/hub/hub-page.tsx',
+        'components/hub/arrange/arrange-footer.tsx',
     ])('%s docks above the circle via --bottom-nav-clearance', (path) => {
         expect(source(path)).toContain('var(--bottom-nav-clearance)');
+    });
+
+    it('the hub page also pads past a tab\'s Filters FAB (ROK-1889)', () => {
+        const css = readFileSync(join(WEB_SRC, 'index.css'), 'utf8');
+        expect(css).toContain(':root:has([data-filter-fab]) { --filter-fab-clearance: 9rem; }');
+        expect(css).toContain(':root:has([data-filter-fab]) { --filter-fab-clearance: 9.75rem; }');
+        expect(source('components/hub/hub-page.tsx')).toContain('var(--filter-fab-clearance)');
     });
 
     it('no shipped file docks or pads against the flat bar height', () => {

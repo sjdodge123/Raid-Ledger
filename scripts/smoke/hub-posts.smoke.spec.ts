@@ -1,5 +1,5 @@
 /**
- * Hub leader posts smoke (ROK-1868 §4 S1–S6) — every project (desktop, tablet
+ * Hub leader posts smoke (ROK-1868 §4 S1–S6; ROK-1898 S7 headings) — every project (desktop, tablet
  * and mobile; S6 is mobile-only).
  *
  * Each test seeds its OWN guild through the DEMO_MODE fixture
@@ -10,11 +10,12 @@
  * (−9 d). No Discord channel is bound, so the relay switch is disabled and
  * nothing is ever sent to Discord from this spec.
  */
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { isPhoneLayout } from './helpers';
+import { expectActiveHubTab } from './hub-tabs';
 import {
-    editorTextbox, insertLinkViaRow, openGuildAs, tool, typeBoldLine, withContentGuild,
+    editorTextbox, heading, insertLinkViaRow, openGuildAs, tool, typeBoldLine, withContentGuild,
 } from './hub-post-editor';
 
 const NEWEST_HEADLINE = 'Raid night is Tuesday 8pm server time.';
@@ -31,9 +32,9 @@ function feedItems(page: Page): Locator {
     return page.getByTestId('hub-posts-tab').getByTestId('hub-post-item');
 }
 
-async function expectPostsTab(page: Page): Promise<void> {
-    const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-    await expect(tabs.locator('a[href="#posts"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+/** Posts may fold into the More menu below desktop width (ROK-1876), so assert it through the shared helper. */
+async function expectPostsTab(page: Page, testInfo: TestInfo): Promise<void> {
+    await expectActiveHubTab(page, testInfo, 'Posts', 'posts');
     await expect(page.getByTestId('hub-posts-tab')).toBeVisible();
 }
 
@@ -53,7 +54,7 @@ test('S1 member: Overview renders the newest post with its formatting; Previous 
         await expect(body.locator('a[href^="https://"]')).toHaveAttribute('href', NEWEST_LINK);
         await expect(page.getByTestId('hub-post-new'), 'a plain member cannot post').toHaveCount(0);
         await page.getByTestId('hub-posts-previous').click();
-        await expectPostsTab(page);
+        await expectPostsTab(page, testInfo);
         const items = feedItems(page);
         await expect(items).toHaveCount(3);
         await expect(items.nth(0)).toContainText('Repair gold');
@@ -118,7 +119,7 @@ test('S3 officer edits the GM\'s latest post: prefilled with formatting, adds it
 test('S4 officer deletes a post through the confirm (Modal on desktop, bottom sheet below 1024px)', async ({ page }, testInfo) => {
     await withContentGuild('Posts', testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer', '#posts');
-        await expectPostsTab(page);
+        await expectPostsTab(page, testInfo);
         const items = feedItems(page);
         await expect(items).toHaveCount(3);
         await items.filter({ hasText: LEGACY_LINE }).getByRole('button', { name: 'Delete' }).click();
@@ -140,7 +141,7 @@ test('S5 member: a ?post deep link opens the Posts tab with that post expanded a
         const oldest = guild.postIds[2];
         if (oldest === undefined) throw new Error('seed-guild: no oldest post id');
         await openGuildAs(page, guild, 'member', `?post=${oldest}#posts`);
-        await expectPostsTab(page);
+        await expectPostsTab(page, testInfo);
         const linked = page.locator(`article#post-${oldest}`);
         await expect(linked).toHaveAttribute('aria-current', 'true', { timeout: 15_000 });
         await expect(linked).toContainText(LEGACY_LINE);
@@ -148,6 +149,53 @@ test('S5 member: a ?post deep link opens the Posts tab with that post expanded a
         // (ROK-1868 review MAJOR — a short deep-linked post must not show "Show less").
         await expect(linked.getByRole('button', { name: /^Show (less|more)$/ }), 'a short deep-linked post opens in full, with no toggle').toHaveCount(0);
         await expect(page.locator('article[aria-current="true"]'), 'only the linked post is highlighted').toHaveCount(1);
+    });
+});
+
+const H1_TEXT = 'Raid plan';
+const H2_TEXT = 'Loot rules';
+
+/** ROK-1898: the composed headings render as h3 (`#`) + h4 (`##`) with their levels, and no literal `#` survives. */
+async function expectComposedHeadings(scope: Locator, what: string): Promise<void> {
+    await expect(heading(scope, 1), `${what}: the toolbar H1 line is a level-1 heading (h3)`).toHaveText(H1_TEXT, { timeout: 15_000 });
+    await expect(heading(scope, 2), `${what}: the "## " line is a level-2 heading (h4)`).toHaveText(H2_TEXT);
+    await expect(scope.locator('[data-md-heading]'), `${what}: exactly the two composed headings`).toHaveCount(2);
+    await expect(scope, `${what}: the paragraph survives`).toContainText('Bring flasks.');
+    await expect(scope, `${what}: no markdown # leaks into the rendered text`).not.toContainText('#');
+}
+
+test('S7 officer: H1 from the toolbar + "## " input rule render as card headings and round-trip into the editor', async ({ page }, testInfo) => {
+    await withContentGuild('Posts', testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'officer');
+        await page.getByTestId('hub-post-new').click({ timeout: 15_000 });
+        const composer = page.getByTestId('hub-post-composer');
+        const frame = composer.getByTestId('hub-post-body');
+        const box = await editorTextbox(page, frame);
+        await box.click();
+        await tool(frame, 'h1').click();
+        await expect(tool(frame, 'h1'), 'the caret line is now a level-1 heading').toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.type(H1_TEXT);
+        await page.keyboard.press('Enter'); // Enter at the end of a heading starts a paragraph
+        await expect(tool(frame, 'h1'), 'the new line is a paragraph').toHaveAttribute('aria-pressed', 'false');
+        await page.keyboard.type('Bring flasks.');
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('## ');
+        await expect(tool(frame, 'h2'), 'the "## " input rule converted the line').toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.type(H2_TEXT);
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('Need before greed.');
+        await expectComposedHeadings(box, 'editor before publish');
+        const created = page.waitForResponse((res) => res.request().method() === 'POST'
+            && new URL(res.url()).pathname.endsWith(`/guilds/${guild.guildId}/posts`));
+        await composer.getByTestId('hub-post-submit').click();
+        expect((await created).status(), 'POST /guilds/:id/posts succeeds').toBeLessThan(300);
+        await expect(composer).toHaveCount(0);
+        await expectComposedHeadings(overviewBody(page), 'Overview card');
+        await page.reload();
+        await expectComposedHeadings(overviewBody(page), 'Overview card after reload');
+        await page.getByTestId('hub-post-edit').click({ timeout: 15_000 });
+        const editFrame = page.getByTestId('hub-post-editor').getByTestId('hub-post-edit-body');
+        await expectComposedHeadings(await editorTextbox(page, editFrame), 're-opened editor');
     });
 });
 

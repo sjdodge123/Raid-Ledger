@@ -38,6 +38,8 @@ import { DemoTestGuildDiscordController } from './demo-test-guild-discord.contro
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
 import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
+import { DemoTestBg3Controller } from './demo-test-bg3.controller';
+import { DemoTestSteamAppStatsController } from './demo-test-steam-app-stats.controller';
 import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
 import { DemoTestJoinPostController } from './demo-test-join-post.controller';
@@ -149,6 +151,8 @@ import { UsersModule } from '../users/users.module';
     DemoTestHubMemberController,
     DemoTestChannelLifecycleController,
     DemoTestCommunityHubsController,
+    DemoTestBg3Controller,
+    DemoTestSteamAppStatsController,
     DemoTestGameRolesController,
     DemoTestJoinPostController,
     AiChatTestController,

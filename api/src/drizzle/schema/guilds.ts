@@ -3,6 +3,7 @@ import {
   serial,
   integer,
   bigint,
+  boolean,
   varchar,
   timestamp,
   index,
@@ -42,8 +43,22 @@ export const guilds = pgTable(
       .notNull(),
     region: varchar('region', { length: 10 }).notNull(),
     name: varchar('name', { length: 64 }).notNull(),
-    /** lower(name) — the realm-less identity key. */
+    /**
+     * lower(in-game name) — the realm-less WoW identity key. A Raid Ledger
+     * rename never changes it on `wow_guild` (ROK-2015).
+     */
     nameKey: varchar('name_key', { length: 64 }).notNull(),
+    /**
+     * ROK-1950: a Raid Ledger rename — syncs (Pelican `syncServerHub`) leave
+     * `name` alone while true. Never true on community hubs.
+     */
+    nameOverridden: boolean('name_overridden').default(false).notNull(),
+    /**
+     * ROK-2015: the in-game name the addon last reported (`wow_guild` only).
+     * What a rename reset restores. `name_key` stays this name's key, so it
+     * is the import identity.
+     */
+    sourceName: varchar('source_name', { length: 64 }),
     realmSlug: varchar('realm_slug', { length: 100 }),
     guildSlug: varchar('guild_slug', { length: 100 }),
     blizzardGuildId: bigint('blizzard_guild_id', { mode: 'number' }),
@@ -86,6 +101,20 @@ export const guilds = pgTable(
     }),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /**
+     * ROK-1893 P1 (M3, spec §8d): what a signup/vote by a non-member does —
+     * `off` nothing, `suggest` asks them to join, `auto` joins them and tells
+     * them. Community hubs only (`guilds_auto_membership_kind_check`). The DB
+     * default keeps existing hubs `off`.
+     * New community hubs are inserted with `suggest` explicitly by
+     * `insertCommunityHub` (community-proposals.queries.ts), not via this default.
+     */
+    autoMembership: varchar('auto_membership', {
+      length: 8,
+      enum: ['off', 'suggest', 'auto'],
+    })
+      .default('off')
+      .notNull(),
     /** ROK-1870: admin | leader | empty (D13 auto-archive). */
     archivedReason: varchar('archived_reason', {
       length: 10,
@@ -143,6 +172,18 @@ export const guilds = pgTable(
     check(
       'guilds_community_server_check',
       sql`${table.kind} <> 'game_community' OR ${table.pelicanServerId} IS NULL`,
+    ),
+    check(
+      'guilds_auto_membership_check',
+      sql`${table.autoMembership} IN ('off', 'suggest', 'auto')`,
+    ),
+    check(
+      'guilds_auto_membership_kind_check',
+      sql`${table.kind} = 'game_community' OR ${table.autoMembership} = 'off'`,
+    ),
+    check(
+      'guilds_name_override_kind_check',
+      sql`${table.nameOverridden} = false OR ${table.kind} <> 'game_community'`,
     ),
   ],
 );

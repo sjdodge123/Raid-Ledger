@@ -8,9 +8,11 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
     ValheimRecipeCatalogResponseSchema,
     ValheimRecipePlanResponseSchema,
+    ValheimRecipeStockResponseSchema,
     ValheimRecipeTreeResponseSchema,
     type ValheimRecipeCatalogResponse,
     type ValheimRecipePlanResponse,
+    type ValheimRecipeStockResponse,
     type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
@@ -48,6 +50,8 @@ export const valheimRecipesKeys = {
         targets: string,
         personal: boolean,
         vehicles: boolean,
+        // ROK-1860 AC1 — present only when set, so a plan with no picks keeps its old key.
+        sources = '',
     ) =>
         [
             ...valheimRecipesKeys.all,
@@ -57,7 +61,10 @@ export const valheimRecipesKeys = {
             targets,
             personal,
             vehicles,
+            ...(sources === '' ? [] : [sources]),
         ] as const,
+    stock: (scope: Scope, serverId: number, personal: boolean, vehicles: boolean) =>
+        [...valheimRecipesKeys.all, scope, serverId, 'stock', personal, vehicles] as const,
 };
 
 function recipesPath(serverId: number, rest: string, q?: URLSearchParams): string {
@@ -102,12 +109,16 @@ export function useValheimRecipeTree(
     });
 }
 
-/** `GET …/recipes/plan?targets&includePersonal&includeVehicles` — idle with no targets. */
+/**
+ * `GET …/recipes/plan?targets&includePersonal&includeVehicles[&sources]` — idle
+ * with no targets. `sources` is `serializeSources(...)`; '' sends no param (AC1).
+ */
 export function useValheimRecipePlan(
     serverId: number,
     targets: string,
     includePersonal: boolean,
     includeVehicles: boolean,
+    sources = '',
 ): UseQueryResult<ValheimRecipePlanResponse> {
     const scope = useViewerCacheScope();
     const q = new URLSearchParams({
@@ -115,14 +126,40 @@ export function useValheimRecipePlan(
         includePersonal: String(includePersonal),
         includeVehicles: String(includeVehicles),
     });
+    if (sources !== '') q.set('sources', sources);
     return useQuery({
-        queryKey: valheimRecipesKeys.plan(scope, serverId, targets, includePersonal, includeVehicles),
+        queryKey: valheimRecipesKeys.plan(scope, serverId, targets, includePersonal, includeVehicles, sources),
         queryFn: () =>
             fetchApi(recipesPath(serverId, '/plan', q), {}, ValheimRecipePlanResponseSchema),
         enabled: targets !== '',
         // An emptied list keeps no placeholder: the deleted plan must not linger.
         placeholderData: (prev, prevQuery) =>
             targets === '' ? undefined : sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
+        retry: false,
+    });
+}
+
+/**
+ * ROK-1899 `GET …/recipes/stock?includePersonal&includeVehicles` — the
+ * viewer's netted chest totals (same scope as `/plan`) the crafting window
+ * greys rows against. Pass `includePersonal && hasPersonal`.
+ */
+export function useValheimRecipeStock(
+    serverId: number,
+    includePersonal: boolean,
+    includeVehicles: boolean,
+): UseQueryResult<ValheimRecipeStockResponse> {
+    const scope = useViewerCacheScope();
+    const q = new URLSearchParams({
+        includePersonal: String(includePersonal),
+        includeVehicles: String(includeVehicles),
+    });
+    return useQuery({
+        queryKey: valheimRecipesKeys.stock(scope, serverId, includePersonal, includeVehicles),
+        queryFn: () =>
+            fetchApi(recipesPath(serverId, '/stock', q), {}, ValheimRecipeStockResponseSchema),
+        placeholderData: (prev, prevQuery) =>
+            sameViewerPlaceholder(scope, prev, prevQuery?.queryKey),
         retry: false,
     });
 }

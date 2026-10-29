@@ -96,7 +96,7 @@ function EmptyPost({ canEdit, copy, onCompose }: { canEdit: boolean; copy: HubCo
     if (!canEdit) return <p className="text-sm text-muted" data-testid="guild-gm-post-empty">{copy.leaderPostEmpty}</p>;
     return (
         <div className="flex flex-col items-start gap-2" data-testid="guild-gm-post-prompt">
-            <p className="text-sm text-muted">Share news, plans or a welcome with everyone here.</p>
+            <p className="text-sm text-muted">{copy.leaderPostPrompt}</p>
             <Button variant="secondary" size="sm" onClick={onCompose}>Add a post</Button>
         </div>
     );

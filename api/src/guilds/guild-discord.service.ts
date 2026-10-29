@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   GuildDiscordChannelListDto,
@@ -38,6 +39,7 @@ import {
   saveBinding,
 } from './guild-discord.queries';
 import { findGuild } from './guild-core.queries';
+import { HUB_CHANNEL_EVENTS, emitHubChannelEvent } from './hub-channel.events';
 import { findManagedForChannel } from '../discord-bot/channel-lifecycle/hub-channel-link.queries';
 
 /**
@@ -54,6 +56,7 @@ export class GuildDiscordService {
     private readonly access: GuildAccessService,
     private readonly mirror: ChannelMirrorService,
     private readonly client: DiscordBotClientService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /** The card's state; `unset` when no channel is bound. Never a 5xx. */
@@ -96,6 +99,11 @@ export class GuildDiscordService {
       setAt: new Date(),
     });
     this.clearCache(previous, channel.id);
+    emitHubChannelEvent(this.events, HUB_CHANNEL_EVENTS.LINKED, {
+      guildId,
+      channelId: channel.id,
+      previousChannelId: previous,
+    });
     return this.read(guildId);
   }
 
@@ -105,6 +113,10 @@ export class GuildDiscordService {
     const previous = await findBoundChannelId(this.db, guildId);
     await clearBinding(this.db, guildId);
     this.clearCache(previous, null);
+    emitHubChannelEvent(this.events, HUB_CHANNEL_EVENTS.CLEARED, {
+      guildId,
+      previousChannelId: previous,
+    });
   }
 
   /**

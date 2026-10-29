@@ -3,7 +3,7 @@
  * world pickers above the map; the selection lives in the query string
  * (D2: `?vc=<characterId>&vm=<mapId>`), the tab in the hash (`useHashTab`).
  */
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type {
     ValheimCharacterMapRef,
@@ -24,7 +24,10 @@ import {
     worldLabel,
 } from './map-selection';
 import { ValheimMapView } from './valheim-map-view';
+import { writeSelection } from './pin-filter';
 import { MapError } from './map-error';
+import { ChestFocusCard } from './chest-focus-card';
+import { ChestFocusContext, useChestFocus } from './use-chest-focus';
 
 export interface ValheimMapTabProps {
     /** The hub's Pelican server id. */
@@ -39,15 +42,16 @@ function Empty({ text }: { text: string }) {
     );
 }
 
-/** Write the selection to the query string, keeping the `#map` hash. */
+/** Write the selection to the query string, keeping the `#map` hash and the pin scope. */
 function useSelectionWriter() {
     const location = useLocation();
     const navigate = useNavigate();
-    return (characterId: number, mapId: number | null) => {
-        const params = new URLSearchParams(location.search);
-        params.set(CHARACTER_PARAM, String(characterId));
-        if (mapId === null) params.delete(MAP_PARAM);
-        else params.set(MAP_PARAM, String(mapId));
+    return (characterId: number, mapId: number | null, world: boolean) => {
+        const params = writeSelection(new URLSearchParams(location.search), {
+            characterId,
+            mapId,
+            world,
+        });
         navigate(
             { search: `?${params.toString()}`, hash: location.hash },
             { replace: true },
@@ -65,10 +69,11 @@ interface PickerProps {
 
 function Picker({ id, label, value, options, onPick }: PickerProps) {
     return (
-        <label htmlFor={id} className="grid gap-1 text-sm text-foreground">
+        <label htmlFor={id} className="flex items-center gap-2 text-sm text-foreground">
             {label}
             <Select
                 id={id}
+                wrapperClassName="w-auto min-w-40"
                 value={String(value)}
                 onChange={(e) => onPick(Number(e.target.value))}
             >
@@ -100,13 +105,13 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
         label: r.name,
     }));
     return (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3" data-testid="map-pickers">
             <Picker
                 id={`${idBase}-character`}
                 label="Character"
                 value={characterId}
                 options={characters}
-                onPick={(id) => write(id, null)}
+                onPick={(id) => write(id, null, false)}
             />
             {maps.length > 1 && mapId !== null && (
                 <Picker
@@ -114,72 +119,71 @@ function Pickers({ rows, characterId, maps, mapId }: PickersProps) {
                     label="World"
                     value={mapId}
                     options={worldOptions(maps)}
-                    onPick={(id) => write(characterId, id)}
+                    onPick={(id) => write(characterId, id, true)}
                 />
             )}
         </div>
     );
 }
 
-/** The map, a detail-fetch error with Retry, or the no-map empty state. */
-function CharacterMapBody({
-    characterId,
-    mapId,
-    detail,
-}: {
+interface CharacterMapBodyProps {
+    serverId: number;
     characterId: number;
     mapId: number | null;
     detail: ReturnType<typeof useValheimCharacterMaps>;
-}) {
+    /** ROK-2028: the toolbar row's slot the map's filter summary + trigger portal into. */
+    toolbarSlot: HTMLElement | null;
+}
+
+/** The map, a detail-fetch error with Retry, or the no-map empty state. */
+function CharacterMapBody({ serverId, characterId, mapId, detail, toolbarSlot }: CharacterMapBodyProps) {
     if (mapId !== null)
-        return <ValheimMapView characterId={characterId} mapId={mapId} />;
+        return <ValheimMapView serverId={serverId} characterId={characterId} mapId={mapId} toolbarSlot={toolbarSlot} />;
     if (detail.error)
-        return (
-            <MapError
-                text="This character's maps could not be loaded."
-                onRetry={() => void detail.refetch()}
-            />
-        );
-    if (detail.isSuccess)
-        return <Empty text="This character has no map uploaded yet." />;
+        return <MapError text="This character's maps could not be loaded." onRetry={() => void detail.refetch()} />;
+    if (detail.isSuccess) return <Empty text="This character has no map uploaded yet." />;
     return null;
 }
 
 /** The selected character's world picker + map, once the character list is in. */
-function CharacterMap({
-    rows,
-    characterId,
-    param,
-}: {
+interface CharacterMapProps {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     characterId: number;
     param: string | null;
-}) {
+}
+
+/**
+ * ROK-2028: the tab owns the one toolbar row so the pickers keep ONE tree
+ * position through pending / loading / ready (a pick never remounts the
+ * `<select>` or drops focus); the map portals its filter summary + trigger
+ * into the row's `contents` slot.
+ */
+function CharacterMap(props: CharacterMapProps) {
+    const { serverId, rows, characterId, param } = props;
+    const [slot, setSlot] = useState<HTMLElement | null>(null);
     const detail = useValheimCharacterMaps(characterId);
     const maps = detail.data?.id === characterId ? detail.data.maps : [];
     const mapId = pickMapId(maps, param);
     return (
         <div className="grid gap-3">
-            <Pickers
-                rows={rows}
-                characterId={characterId}
-                maps={maps}
-                mapId={mapId}
-            />
-            <CharacterMapBody
-                characterId={characterId}
-                mapId={mapId}
-                detail={detail}
-            />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2" data-testid="map-filter-toolbar">
+                <Pickers rows={rows} characterId={characterId} maps={maps} mapId={mapId} />
+                <div ref={setSlot} className="contents" />
+            </div>
+            <CharacterMapBody serverId={serverId} characterId={characterId} mapId={mapId}
+                detail={detail} toolbarSlot={slot} />
         </div>
     );
 }
 
 /** The character list is in: pick the selected character (query, own, first). */
 function ServerCharacters({
+    serverId,
     rows,
     params,
 }: {
+    serverId: number;
     rows: ValheimCharacterSummary[];
     params: URLSearchParams;
 }) {
@@ -196,6 +200,7 @@ function ServerCharacters({
     }
     return (
         <CharacterMap
+            serverId={serverId}
             rows={rows}
             characterId={characterId}
             param={params.get(MAP_PARAM)}
@@ -203,7 +208,20 @@ function ServerCharacters({
     );
 }
 
+/** ROK-1889: the chest focus card above the map; the marker reads the context. */
 export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
+    const focus = useChestFocus(serverId);
+    return (
+        <ChestFocusContext.Provider value={focus.query.data ?? null}>
+            <div className="grid gap-3">
+                <ChestFocusCard target={focus.target} query={focus.query} />
+                <MapTabBody serverId={serverId} />
+            </div>
+        </ChestFocusContext.Provider>
+    );
+}
+
+function MapTabBody({ serverId }: ValheimMapTabProps) {
     const params = new URLSearchParams(useLocation().search);
     const characters = useValheimServerCharacters(serverId);
     if (characters.isPending)
@@ -218,7 +236,13 @@ export function ValheimMapTab({ serverId }: ValheimMapTabProps) {
         return (
             <Empty text="Characters could not be loaded. Try again later." />
         );
-    return <ServerCharacters rows={characters.data} params={params} />;
+    return (
+        <ServerCharacters
+            serverId={serverId}
+            rows={characters.data}
+            params={params}
+        />
+    );
 }
 
 export default ValheimMapTab;

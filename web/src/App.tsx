@@ -12,6 +12,7 @@ import { getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { getAuthMethod } from './lib/api/silent-reauth';
 import { startBootSession, awaitBootSession } from './lib/api/boot-session';
 import { installCrossTabAuth } from './lib/api/cross-tab-auth';
+import { installResumeRefresh } from './lib/api/resume-refresh';
 import { Layout } from './components/layout';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
@@ -20,6 +21,7 @@ import { ThemeParticles } from './components/ui/ThemeParticles';
 import { takeCapturedMagicLinkToken } from './lib/magic-link-capture';
 import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
+import { prefetchDeferredChunksOnIdle } from './idle-prefetch';
 
 // ROK-657/1366: the single-use magic-link token was already taken from the URL
 // fragment and stripped by lib/magic-link-capture — main.tsx's first import,
@@ -41,11 +43,14 @@ if (_cachedUser && getAuthMethod() && !_magicLinkToken) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
 
+// ROK-1969 — the built-in Core plugin registers first, before every game plugin.
+import './plugins/core/register';
 import './plugins/wow/register';
 import './plugins/discord/register';
 import './plugins/ai/register';
 import './plugins/pelican/register';
 import './plugins/valheim/register';
+import './plugins/bg3/register';
 import './App.css';
 
 /** Scroll to top on PUSH navigations */
@@ -62,6 +67,15 @@ function ScrollToTop() {
   return null;
 }
 
+/**
+ * ROK-1901: inside the route Suspense, so its effect runs only once the first
+ * route has committed (after StartupGate opened and the route chunk landed).
+ */
+function PrefetchAfterFirstRoute() {
+  useEffect(() => prefetchDeferredChunksOnIdle(), []);
+  return null;
+}
+
 function useAppBootstrap() {
   const startPolling = useConnectivityStore((s) => s.startPolling);
 
@@ -69,6 +83,11 @@ function useAppBootstrap() {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  // ROK-1947: a resumed tab (bfcache restore, back online) re-mints an expired in-memory
+  // token, and any successful refresh refetches 401'd queries. An effect with cleanup, so
+  // HMR / StrictMode never stack the listeners.
+  useEffect(() => installResumeRefresh(queryClient), []);
 
   useEffect(() => {
     if (getAuthMethod() || isMagicLinkRedeemPending()) {
@@ -100,6 +119,7 @@ function App() {
         <Layout>
           <Suspense fallback={<LoadingSpinner />}>
             <AppRoutes />
+            <PrefetchAfterFirstRoute />
           </Suspense>
         </Layout>
       </BrowserRouter>

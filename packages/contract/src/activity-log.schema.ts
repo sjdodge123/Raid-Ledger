@@ -40,12 +40,15 @@ export const ActivityActionSchema = z.enum([
     'event_cancelled',
     'event_rescheduled',
     'signup_reconfirmed',
+    // Hub actions (ROK-1918) — Overview arrange mode saved or reset.
+    'hub_widget_layout_updated',
+    'hub_renamed', // ROK-1950
 ]);
 
 export type ActivityActionDto = z.infer<typeof ActivityActionSchema>;
 
 /** Entity types that can have activity timelines. */
-export const ActivityEntityTypeSchema = z.enum(['lineup', 'event']);
+export const ActivityEntityTypeSchema = z.enum(['lineup', 'event', 'hub']);
 
 export type ActivityEntityTypeDto = z.infer<typeof ActivityEntityTypeSchema>;
 

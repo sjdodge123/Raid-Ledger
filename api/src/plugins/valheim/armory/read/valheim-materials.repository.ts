@@ -6,13 +6,18 @@
  * import committing mid-request cannot mix old and new totals (review M2).
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import type { ValheimLinkTx } from '../../link/valheim-link-token-lock';
 import { findLatestContainerScan } from '../valheim-containers.repository';
 import type { ArmoryCatalogReadRow } from './valheim-armory-catalog.helpers';
+import {
+  COORD_TOLERANCE,
+  type ChestFocusQuery,
+  type ChestFocusRow,
+} from './valheim-chest-focus.helpers';
 import { atlasReady, itemsSubset } from './valheim-armory-read.repository';
 import {
   toCountsRow,
@@ -20,6 +25,17 @@ import {
   type MaterialsCountsRow,
   type MaterialsTotalRow,
 } from './valheim-materials.mappers';
+import {
+  selectBaseInputs,
+  selectStackSums,
+  type BaseInputRow,
+  type StackSumRow,
+} from './valheim-materials-bases.queries';
+import type { MaterialsViewer } from './valheim-materials.privacy';
+import {
+  selectTrendInputs,
+  type TrendInputs,
+} from './valheim-materials-trend.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Exec = Db | ValheimLinkTx;
@@ -59,6 +75,18 @@ const summaryCols = {
   stackCount,
 };
 
+/** ROK-1889 chest focus: no key, no row id, no creator. */
+const focusCols = {
+  prefab: c.prefab,
+  x: c.x,
+  y: c.y,
+  z: c.z,
+  privacy: c.privacy,
+  vehicle: c.vehicle,
+  slots: c.slots,
+  usedSlots: c.usedSlots,
+};
+
 /** One consistent snapshot: every statement sees the same committed state. */
 export const MATERIALS_READ_TX = {
   isolationLevel: 'repeatable read',
@@ -85,6 +113,32 @@ export class MaterialsReader {
   /** D4: the server's newest scan, or null before the first import. */
   latestScan(serverId: number): Promise<schema.ValheimContainerScan | null> {
     return findLatestContainerScan(this.db, serverId);
+  }
+
+  /** ROK-1859: every chest in the scope — base clusters + chest numbering. */
+  baseInputs(scanId: number, scope: ContainerScope): Promise<BaseInputRow[]> {
+    return selectBaseInputs(this.db, scanId, scope);
+  }
+
+  /** ROK-1859: per-chest stack sums — per-base totals. */
+  stackSums(scanId: number, scope: ContainerScope): Promise<StackSumRow[]> {
+    return selectStackSums(this.db, scanId, scope);
+  }
+
+  /** ROK-2014: the world's newest play days + their in-scope sums. */
+  trendInputs(
+    serverId: number,
+    worldUid: string,
+    viewer: MaterialsViewer,
+    includeVehicles: boolean,
+  ): Promise<TrendInputs> {
+    return selectTrendInputs(
+      this.db,
+      serverId,
+      worldUid,
+      viewer,
+      includeVehicles,
+    );
   }
 
   /** SUM(stack) per (prefab, quality) over the scope's containers. */
@@ -157,6 +211,40 @@ export class MaterialsReader {
       .orderBy(asc(st.prefab), asc(st.quality));
     // `toContainerSummary` copies named fields only: `id` never leaves.
     return { summary: row, stacks };
+  }
+
+  /**
+   * ROK-1889: the scope's chest at (prefab, x, z[, y]) — positions are 0.1 m,
+   * the lowest of stacked chests first; `held` sums the filtered item.
+   */
+  async findContainerAt(
+    scanId: number,
+    scope: ContainerScope,
+    q: ChestFocusQuery,
+  ): Promise<ChestFocusRow | null> {
+    const near = (col: AnyColumn, v: number) =>
+      sql`abs(${col} - ${v}) < ${COORD_TOLERANCE}`;
+    const held =
+      q.item === null
+        ? sql<null>`NULL`
+        : sql<string>`(SELECT coalesce(sum(s.stack), 0)::bigint FROM ${st} s
+            WHERE s.container_id = ${c.id} AND s.prefab = ${q.item})`;
+    const [row] = await this.db
+      .select({ ...focusCols, held })
+      .from(c)
+      .where(
+        and(
+          eq(c.scanId, scanId),
+          scope,
+          eq(c.prefab, q.prefab),
+          near(c.x, q.x),
+          near(c.z, q.z),
+          q.y === null ? undefined : near(c.y, q.y),
+        ),
+      )
+      .orderBy(asc(c.y), asc(c.publicKey))
+      .limit(1);
+    return row ?? null;
   }
 
   /**

@@ -4,6 +4,10 @@ import * as schema from '../../drizzle/schema';
 import type { PelicanTx } from './pelican-plugin-lock.helpers';
 import { applyCommunityHub } from './hub/server-hub-toggle.helpers';
 import { refreshMemberCount } from './hub/server-hub-membership.queries';
+import {
+  hubServerSchedules,
+  type HubScheduleSet,
+} from './pelican-demo-seed-schedules.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const DAY_MS = 86_400_000;
@@ -120,7 +124,12 @@ async function upsertUsers(
   return { online, recent, joined, lapsed, outsider };
 }
 
-function serverValues(slot: number, gameId: number, now: Date) {
+function serverValues(
+  slot: number,
+  gameId: number,
+  now: Date,
+  withSchedules: boolean,
+) {
   return {
     identifier: `hubfix${slot}`,
     name: `Demo Valheim Hub ${slot}`,
@@ -129,7 +138,7 @@ function serverValues(slot: number, gameId: number, now: Date) {
     statusCheckedAt: now,
     lastSyncedAt: now,
     presenceTracking: false,
-    showOnCalendar: false,
+    showOnCalendar: withSchedules,
     isSuspended: false,
     missingSince: null,
   };
@@ -141,8 +150,9 @@ async function upsertServer(
   slot: number,
   gameId: number,
   now: Date,
+  withSchedules: boolean,
 ) {
-  const set = serverValues(slot, gameId, now);
+  const set = serverValues(slot, gameId, now, withSchedules);
   const [row] = await tx
     .insert(schema.pelicanServers)
     .values({ ...set, panelUuid: hubFixtureUuid(slot) })
@@ -155,6 +165,19 @@ async function upsertServer(
   return row;
 }
 
+/** Replace the server's schedules: none, or one demo set (ROK-1877). */
+async function resetSchedules(
+  tx: PelicanTx,
+  serverId: number,
+  schedules: HubScheduleSet | null,
+  now: Date,
+): Promise<void> {
+  const s = schema.pelicanSchedules;
+  await tx.delete(s).where(eq(s.serverId, serverId));
+  if (schedules !== null)
+    await tx.insert(s).values(hubServerSchedules(schedules, serverId, now));
+}
+
 async function hubGuildId(tx: PelicanTx, serverId: number): Promise<number> {
   const g = schema.guilds;
   const [row] = await tx
@@ -164,6 +187,19 @@ async function hubGuildId(tx: PelicanTx, serverId: number): Promise<number> {
     .limit(1);
   if (!row) throw new Error('server-hub toggle created no guild');
   return row.id;
+}
+
+/** Undo a ROK-1950 rename: the hub follows its server's name again. */
+async function resetHubName(
+  tx: PelicanTx,
+  guildId: number,
+  serverName: string,
+): Promise<void> {
+  const name = serverName.slice(0, 64);
+  await tx
+    .update(schema.guilds)
+    .set({ name, nameKey: name.toLowerCase(), nameOverridden: false })
+    .where(eq(schema.guilds.id, guildId));
 }
 
 /** Replace every member row with the cast's initial state. */
@@ -262,17 +298,21 @@ export async function findValheimGameId(db: Db): Promise<number | null> {
 /**
  * Reset the slot's server hub (re-run = same server, guild and users): the
  * hub on and visible, members online / seen 10 d / joined-never-played /
- * seen 100 d (not a member), an outsider, one past Quick Play session.
+ * seen 100 d (not a member), an outsider, one past Quick Play session;
+ * `schedules` adds a calendar-visible schedule set (ROK-1876/1877; else none).
  */
 export async function seedServerHub(
   db: Db,
   slot: number,
   gameId: number,
   now: Date,
+  schedules: HubScheduleSet | null = null,
 ): Promise<ServerHubFixture> {
   return db.transaction(async (tx) => {
     const userIds = await upsertUsers(tx, slot);
-    const server = await upsertServer(tx, slot, gameId, now);
+    const onCalendar = schedules !== null;
+    const server = await upsertServer(tx, slot, gameId, now, onCalendar);
+    await resetSchedules(tx, server.id, schedules, now);
     await applyCommunityHub(
       tx,
       { id: server.id, name: server.name, gameId },
@@ -280,6 +320,7 @@ export async function seedServerHub(
       now,
     );
     const guildId = await hubGuildId(tx, server.id);
+    await resetHubName(tx, guildId, server.name);
     const quickPlay = {
       serverId: server.id,
       gameId,

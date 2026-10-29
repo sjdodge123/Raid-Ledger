@@ -197,6 +197,9 @@
     } catch { stickyPlanId = null; }
     if (planId) {
       stickyPlanId = planId;
+      // ROK-1847 — keep the shared link's `?k=` for this plan before anything
+      // can navigate away from it.
+      if (typeof NS.rememberTesterKey === 'function') NS.rememberTesterKey(slug, planId);
       try { localStorage.setItem(NS.stickyKey(slug), planId); } catch { /* private mode */ }
     }
     try {

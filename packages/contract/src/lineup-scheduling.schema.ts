@@ -227,6 +227,8 @@ export const ScheduleVoteVoterSchema = z.object({
   avatar: z.string().nullable(),
   discordId: z.string().nullable(),
   customAvatarUrl: z.string().nullable(),
+  /** ROK-1893 P3: on a hub-tagged poll, whether this voter is a live hub member. */
+  isHubMember: z.boolean().optional(),
 });
 
 /** Enriched slot with voter details. */
@@ -235,6 +237,9 @@ export const ScheduleSlotWithVotesSchema = LineupScheduleSlotSchema.extend({
    * YES votes only — unchanged meaning (ROK-1617). Every surface that counts
    * `votes.length` as "how many want this time" stays correct; the `no`s live
    * in their own array rather than inflating this one.
+   * ROK-2025: in vote order, earliest yes first. The lock form's bench pick
+   * pre-marks the LAST entries (the latest yes-voters), so this order is part
+   * of the contract.
    */
   votes: z.array(ScheduleVoteVoterSchema),
   /** ROK-1617: members who said this time does NOT work. */
@@ -330,6 +335,19 @@ export const SchedulePollPageResponseSchema = z.object({
    * participate (creator / invitee / admin) on a private poll.
    */
   shareToken: z.string().nullable().optional(),
+  /**
+   * ROK-1893 P3: the hub the poll is tagged to — null when untagged or the hub
+   * is hidden/archived. `viewerIsMember` drives the "Join hub" button.
+   */
+  hub: z
+    .object({
+      id: z.number().int(),
+      name: z.string(),
+      memberCount: z.number().int().nonnegative(),
+      viewerIsMember: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;

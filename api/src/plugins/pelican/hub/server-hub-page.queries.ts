@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildPageServer } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
@@ -50,6 +50,7 @@ export async function loadServerBlock(
   const g = schema.games;
   const [row] = await db
     .select({
+      serverName: s.name,
       currentState: s.currentState,
       isSuspended: s.isSuspended,
       statusCheckedAt: s.statusCheckedAt,
@@ -66,5 +67,30 @@ export async function loadServerBlock(
     gameSlug: row.gameSlug,
     gameIconUrl: row.gameIconUrl,
     state: toGameServerState(row, now),
+    serverName: row.serverName.slice(0, 64),
   };
+}
+
+/**
+ * ROK-1932: which of `online` have a Valheim character on this server claimed
+ * by ANY Raid Ledger user (hub member or not) — one query for the whole roster.
+ */
+export async function claimedOnlineSteamIds(
+  db: Db,
+  pelicanServerId: number | null,
+  online: ReadonlySet<string>,
+): Promise<Set<string>> {
+  if (pelicanServerId === null || online.size === 0) return new Set();
+  const p = schema.valheimProfiles;
+  const rows = await db
+    .selectDistinct({ steamId: p.steamId })
+    .from(p)
+    .where(
+      and(
+        eq(p.pelicanServerId, pelicanServerId),
+        inArray(p.steamId, [...online]),
+        isNotNull(p.claimedBy),
+      ),
+    );
+  return new Set(rows.map((r) => r.steamId));
 }

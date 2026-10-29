@@ -20,6 +20,9 @@ jest.mock('./event-create.helpers', () => ({
   insertSingleEvent: jest.fn(),
   buildBaseValues: jest.fn(() => ({})),
   resolveRecurrenceGroupId: jest.fn(() => null),
+  inheritPollHub: jest.fn((_db: unknown, dto: CreateEventDto) =>
+    Promise.resolve(dto),
+  ),
 }));
 jest.mock('./event-response.helpers', () => ({
   buildLifecyclePayload: jest.fn(() => ({})),
@@ -89,6 +92,20 @@ describe('runCreateEvent side-effect failures', () => {
     );
     expect(deps.logger.warn).toHaveBeenCalledWith(
       'Activity log failed for event 12',
+      boom.stack,
+    );
+  });
+
+  it('a failed single-event activity-log write never fails the announced create (ROK-2032)', async () => {
+    const deps = makeDeps();
+    const boom = new Error('activity log down');
+    insertSingle.mockResolvedValue({ id: 100 } as never);
+    const activityLog = { log: jest.fn().mockRejectedValue(boom) };
+    await expect(
+      runCreateEvent(deps, activityLog, 1, BASE_DTO),
+    ).resolves.toEqual(expect.objectContaining({ id: 100 }));
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      'Activity log failed for event 100',
       boom.stack,
     );
   });

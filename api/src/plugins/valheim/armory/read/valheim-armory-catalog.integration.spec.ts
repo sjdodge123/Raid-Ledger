@@ -22,7 +22,11 @@ import { fakeServer } from '../../../pelican/testing/pelican-fixtures';
 import { memberToken } from '../../../pelican/testing/pelican-integration.helpers';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../../valheim.constants';
 import { blobRelativePath } from '../../link/blobs/valheim-link-blob.store';
-import { fakePng, sha256Of } from '../../link/blobs/valheim-link-blob.testing';
+import {
+  fakePng,
+  referenceBlobAsAsset,
+  sha256Of,
+} from '../../link/blobs/valheim-link-blob.testing';
 import { loadValheimFixture } from '../../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../../link/ingest/valheim-link-snapshot.helpers';
 import { ValheimArmoryImportService } from '../valheim-armory-import.service';
@@ -225,6 +229,7 @@ describe('GET plugins/valheim/armory/servers/:serverId/blobs/:sha256 (D5)', () =
     const serverId = await makeServer(10);
     const bytes = fakePng(8, 8, 64);
     const sha = await storeBlob(serverId, bytes, `${serverId}/opaque-name.bin`);
+    await referenceBlobAsAsset(testApp.db, serverId, sha);
     const res = await getBlob(blobUrl(serverId, sha));
     expect(res.status).toBe(200);
     expect(Buffer.compare(res.body as Buffer, bytes)).toBe(0);
@@ -249,6 +254,7 @@ describe('GET plugins/valheim/armory/servers/:serverId/blobs/:sha256 (D5)', () =
     const a = await makeServer(12);
     const b = await makeServer(13);
     const sha = await storeBlob(a, fakePng(8, 8, 8), `${a}/kept.png`);
+    await referenceBlobAsAsset(testApp.db, a, sha);
     const gone = sha256Of(fakePng(8, 8, 9));
     await testApp.db.insert(schema.valheimLinkBlobs).values({
       pelicanServerId: a,

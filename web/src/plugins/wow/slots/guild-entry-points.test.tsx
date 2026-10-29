@@ -14,7 +14,6 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { PluginSlot } from '../../plugin-slot';
 import { PlayersGuildCard } from './players-guild-card';
-import { GameDetailGuilds } from './game-detail-guilds';
 import { CharacterGuildBadge } from './character-guild-badge';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -59,7 +58,7 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         const card = await screen.findByTestId('players-guild-card');
         expect(card).toHaveTextContent('Iron Vanguard');
         expect(screen.getByTestId('players-guild-member-count')).toHaveTextContent('12 members');
-        expect(screen.getByTestId('players-guild-open')).toHaveAttribute('href', '/guilds/11');
+        expect(screen.getByTestId('players-guild-open')).toHaveAttribute('href', '/hubs/11');
     });
 
     it('two guilds → two cards', async () => {
@@ -121,37 +120,13 @@ describe('PlayersGuildCard (players:header-cards)', () => {
     });
 });
 
-describe('GameDetailGuilds (game-detail:sections)', () => {
-    it('one guild → a "Guilds" list with a View link', async () => {
-        serve(ONE);
-        renderWithProviders(<GameDetailGuilds gameId={7} gameSlug="wow" />);
-        const section = await screen.findByTestId('game-detail-guilds');
-        expect(section).toHaveTextContent('Guilds');
-        expect(screen.getByRole('link', { name: 'View' })).toHaveAttribute('href', '/guilds/11');
-    });
-
-    it('two guilds → two rows, asked for this game', async () => {
-        let asked = '';
-        server.use(http.get(API, ({ request }) => { asked = new URL(request.url).search; return HttpResponse.json({ guilds: TWO }); }));
-        renderWithProviders(<GameDetailGuilds gameId={7} gameSlug="wow" />);
-        await waitFor(() => expect(screen.getAllByTestId('game-guild-row')).toHaveLength(2));
-        expect(asked).toBe('?gameId=7');
-    });
-
-    it('no guilds → nothing', async () => {
-        serve([]);
-        const { container } = renderWithProviders(<GameDetailGuilds gameId={7} gameSlug="wow" />);
-        await expectEmpty(container, '/plugins/wow/guilds?gameId=7');
-    });
-});
-
 describe('CharacterGuildBadge (character-detail:header-badges)', () => {
     it('in a guild → crest + name + rank, linking to the guild', async () => {
         server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
             HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined, gmPostHeadline: undefined }, rankName: 'Officer', viewerCanOpen: true } })));
         renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
         const badge = await screen.findByTestId('character-guild-badge');
-        expect(badge).toHaveAttribute('href', '/guilds/11');
+        expect(badge).toHaveAttribute('href', '/hubs/11');
         expect(badge).toHaveTextContent('Iron Vanguard');
         expect(badge).toHaveTextContent('Officer');
     });
@@ -179,10 +154,19 @@ describe('generic slots', () => {
     it('the WoW plugin fills its slots', async () => {
         activateWowPlugin();
         serve(ONE);
-        renderWithProviders(<><PluginSlot name="players:header-cards" /><PluginSlot name="game-detail:sections" context={{ gameId: 7, gameSlug: 'wow' }} /></>);
-        for (const id of ['players-guild-card', 'game-detail-guilds']) {
-            expect(await screen.findByTestId(id)).toBeInTheDocument();
-        }
+        renderWithProviders(<PluginSlot name="players:header-cards" />);
+        expect(await screen.findByTestId('players-guild-card')).toBeInTheDocument();
+    });
+
+    // ROK-1883: the game page's core Hubs card lists WoW guilds now; a second
+    // "Guilds" card from the plugin would show the same hub twice.
+    it('the WoW plugin no longer fills game-detail:sections (no Guilds card on the game page)', async () => {
+        activateWowPlugin();
+        serve(ONE);
+        const { container } = renderWithProviders(<PluginSlot name="game-detail:sections" context={{ gameId: 7, gameSlug: 'wow' }} />);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(screen.queryByTestId('game-detail-guilds')).toBeNull();
+        expect(container.innerHTML).toBe('');
     });
 
     it.each([

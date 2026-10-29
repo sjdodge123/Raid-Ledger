@@ -58,6 +58,8 @@ export const UserReliabilitySchema = z.object({
   attended: z.number(),
   noShow: z.number(),
   excused: z.number(),
+  /** Attended signups whose voice session was classified `late` (subset of `attended`). Optional so older servers stay valid. ROK-1938 */
+  lateCount: z.number().optional(),
   attendanceRate: z.number(),
 });
 export type UserReliabilityDto = z.infer<typeof UserReliabilitySchema>;
@@ -77,6 +79,8 @@ export const GameAttendanceSchema = z.object({
   totalEvents: z.number(),
   avgAttendanceRate: z.number(),
   avgNoShowRate: z.number(),
+  /** Late signups / marked signups, 0–1 fraction like avgAttendanceRate (late is inside attendance). Optional, additive. ROK-1938 */
+  avgLateRate: z.number().optional(),
   totalSignups: z.number(),
 });
 export type GameAttendanceDto = z.infer<typeof GameAttendanceSchema>;

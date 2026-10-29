@@ -1,0 +1,33 @@
+{
+  "Active Party": {
+    "Characters": [
+      {
+        "Classes": [
+          {
+            "Main": "Cleric",
+            "Sub": ""
+          }
+        ],
+        "Experience Points (Current level)": 120,
+        "Experience Points (Total)": 420,
+        "Level": 2,
+        "Origin": "Generic",
+        "Position": [
+          0,
+          0,
+          0
+        ],
+        "Race": "Human",
+        "Subregion": ""
+      }
+    ]
+  },
+  "Current Level": "WLD_Main_A",
+  "Difficulty": [
+    "DifficultyHard",
+    "RulesetLarian"
+  ],
+  "Game Version": "4.1.1.7631656",
+  "Platform": "Steam",
+  "Save Name": "QuickSave_2"
+}

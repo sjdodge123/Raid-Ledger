@@ -20,8 +20,12 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useGuildDiscord } from '../discord/use-guild-discord';
 import { HubEditorsSection } from './settings-editors';
+import { HubNameSection } from './hub-name-section';
 import { SettingsSection } from './settings-rows';
 import { HideHubRow } from './hide-hub-row';
+import { HubWelcomeRepost } from './hub-welcome-repost';
+import { HubMediaChannelSection } from './hub-media-channel-row';
+import { isWelcomeHub } from './hub-welcome.helpers';
 import { hubCopy } from '../hub-copy';
 
 function channelLine(mirror: GuildDiscordMirrorDto): string {
@@ -46,7 +50,8 @@ function ChannelLine({ query }: { query: ReturnType<typeof useGuildDiscord> }): 
     return <p className="text-sm text-secondary" data-testid="guild-settings-channel">{channelLine(query.data)}</p>;
 }
 
-function DiscordSection({ guildId, onChangeChannel }: { guildId: number; onChangeChannel: () => void }): JSX.Element {
+/** `welcomeHub` — a Valheim server hub, whose bound channel carries the ROK-1933 welcome embed. */
+function DiscordSection({ guildId, welcomeHub, onChangeChannel }: { guildId: number; welcomeHub: boolean; onChangeChannel: () => void }): JSX.Element {
     const query = useGuildDiscord(guildId);
     const mirror = query.data;
     const bound = mirror !== undefined && mirror.state !== 'unset';
@@ -54,10 +59,11 @@ function DiscordSection({ guildId, onChangeChannel }: { guildId: number; onChang
         <SettingsSection title="Discord channel" testId="guild-settings-discord"
             blurb="The channel mirrored read-only on the Overview tab.">
             <ChannelLine query={query} />
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" size="sm" onClick={onChangeChannel} data-testid="guild-settings-choose-channel">
                     {bound ? 'Change channel' : 'Choose channel'}
                 </Button>
+                {welcomeHub && bound && <HubWelcomeRepost guildId={guildId} />}
             </div>
         </SettingsSection>
     );
@@ -79,9 +85,11 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsS
     const isCommunity = ctx.page.community !== undefined;
     return (
         <>
-            <DiscordSection guildId={ctx.page.guild.id} onChangeChannel={onChangeChannel} />
+            <HubNameSection ctx={ctx} />
+            <DiscordSection guildId={ctx.page.guild.id} welcomeHub={isWelcomeHub(ctx.page.guild)} onChangeChannel={onChangeChannel} />
+            {ctx.page.guild.kind === 'game_server' && <HubMediaChannelSection guildId={ctx.page.guild.id} />}
             {!isCommunity && <>
-            <SettingsSection title="Page editors" blurb="Who can edit this guild’s page." testId="guild-settings-editors">
+            <SettingsSection title="Page editors" blurb={`Who can edit this ${hubCopy(ctx.page.guild.kind).noun}’s page.`} testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
             </SettingsSection>
             <SettingsSection title="Visibility" testId="guild-settings-visibility">

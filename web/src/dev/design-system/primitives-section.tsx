@@ -9,23 +9,20 @@
  * page is the early warning.
  */
 import { useState, type JSX } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/button';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { NewBadge } from '../../components/ui/new-badge';
 import { RoleBadge } from '../../components/ui/role-badge';
 import { StatusChip } from '../../components/ui/status-chip';
+import { FilterChip } from '../../components/ui/filter-chip';
+import { RemovableChip } from '../../components/ui/removable-chip';
+import { FILTER_CHIP_BASE } from '../../components/ui/filter-chip-classes';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
+import { HubRowBitsDemo } from './hub-row-bits-demo';
 
-/** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
-const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
-const CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
-const CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';
-/** Removable selection chip per §4.3 — the class string of event-create-content-browser.tsx::SelectedChips (ROK-1654). */
-const REMOVABLE_CHIP = 'inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success';
 const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
 
 function BadgeStates(): JSX.Element {
@@ -51,21 +48,28 @@ function BadgeStates(): JSX.Element {
     );
 }
 
-/** A span pill, not a button: its only control is the real 44px ghost iconOnly Button named 'Remove <name>'. */
+/** The real `RemovableChip` (§4.3, components/ui/removable-chip.tsx — promoted by ROK-2027): a span pill whose only control is the 44px Remove button. */
 function RemovableChipDemo(): JSX.Element {
     const [picks, setPicks] = useState(DEMO_PICKS);
     return (
-        <StateFrame label="Removable chip — selection" note="success tokens; no aria-pressed; the flush Remove button is the only control. Remove both to see Reset.">
+        <StateFrame label="Removable chip — selection" note="RemovableChip: success tokens; no aria-pressed; the flush Remove button is the only control. Remove both to see Reset.">
             {picks.map((pick) => (
-                <span key={pick.name} className={REMOVABLE_CHIP}>
-                    {pick.name}
-                    <span className="text-xs text-muted">{pick.levels}</span>
-                    <Button variant="ghost" iconOnly aria-label={`Remove ${pick.name}`} onClick={() => setPicks((p) => p.filter((x) => x.name !== pick.name))}>
-                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
-                    </Button>
-                </span>
+                <RemovableChip key={pick.name} label={pick.name} detail={pick.levels} removeLabel={`Remove ${pick.name}`}
+                    onRemove={() => setPicks((p) => p.filter((x) => x.name !== pick.name))} />
             ))}
             {picks.length === 0 && <Button variant="secondary" size="sm" onClick={() => setPicks(DEMO_PICKS)}>Reset</Button>}
+        </StateFrame>
+    );
+}
+
+/** The real `FilterChip` (§4.3, components/ui/filter-chip.tsx — promoted by ROK-1943), live toggles. */
+function FilterChipDemo(): JSX.Element {
+    const [four, setFour] = useState(false);
+    const [three, setThree] = useState(true);
+    return (
+        <StateFrame label="Filter chip — off / on" note="FilterChip: aria-pressed on a <button type='button'>; 44px target; ON label text-amber-400. Click to toggle.">
+            <FilterChip label="4 players" pressed={four} onPressedChange={setFour} />
+            <FilterChip label="3 players" pressed={three} onPressedChange={setThree} />
         </StateFrame>
     );
 }
@@ -73,15 +77,12 @@ function RemovableChipDemo(): JSX.Element {
 function ChipStates(): JSX.Element {
     return (
         <>
-            <StateFrame label="Filter chip — off / on" note="aria-pressed on a <button type='button'>; 44px target.">
-                <button type="button" aria-pressed={false} className={`${CHIP_BASE} ${CHIP_OFF}`}>4 players</button>
-                <button type="button" aria-pressed className={`${CHIP_BASE} ${CHIP_ON}`}>3 players</button>
-            </StateFrame>
+            <FilterChipDemo />
             <StateFrame label="Filter chip — disabled">
-                <button type="button" disabled className={`${CHIP_BASE} ${CHIP_OFF} opacity-50 cursor-not-allowed`}>2 own</button>
+                <FilterChip label="2 own" pressed={false} onPressedChange={() => undefined} disabled />
             </StateFrame>
             <StateFrame label="Filter chip — hover" note="Hover the live chips above; hover is a token swap, not a shadow.">
-                <span className={`${CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
+                <span className={`${FILTER_CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
             </StateFrame>
             <RemovableChipDemo />
         </>
@@ -94,6 +95,7 @@ function StatusChipStates(): JSX.Element {
         <StateFrame label="Status chip — read-only tones" note="StatusChip (§4.21): title required; event page adds 'checked N min ago'.">
             <StatusChip tone="success" title="Valheim Main: Online">Server online</StatusChip>
             <StatusChip tone="warning" title="Valheim Main: Starting">Server starting</StatusChip>
+            <StatusChip tone="neutral" size="md" title="Server hub">Server · md</StatusChip>
             <StatusChip tone="danger" title="Alpha: Online, Beta: Offline">1 of 2 servers offline</StatusChip>
             <StatusChip tone="neutral" title="Valheim Main: Unknown">Server status unknown</StatusChip>
         </StateFrame>
@@ -185,6 +187,7 @@ export function PrimitivesSection(): JSX.Element {
                 <InputStates />
                 <EmptyAndLoading />
                 <TabRowDemo />
+                <HubRowBitsDemo />
             </StateGrid>
         </Section>
     );

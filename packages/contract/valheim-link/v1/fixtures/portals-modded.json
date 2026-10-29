@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:25:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "portals",
+  "worldUid": "1234567890123",
+  "omitted": 2,
+  "portals": [
+    {
+      "prefab": "portal_wood",
+      "x": -12.5,
+      "y": 33.25,
+      "z": 48,
+      "tag": "home"
+    },
+    {
+      "prefab": "portal_blackmarble",
+      "x": 5020,
+      "y": 120,
+      "z": -4400.5,
+      "tag": "mistlands"
+    },
+    {
+      "prefab": "portal_xportal_fixture",
+      "x": 900,
+      "y": null,
+      "z": 900,
+      "tag": "Hub Gate"
+    }
+  ]
+}

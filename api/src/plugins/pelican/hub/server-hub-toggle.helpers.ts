@@ -41,10 +41,11 @@ export async function applyCommunityHub(
 }
 
 /**
- * ROK-1831 ruling "the hub name follows the server": copy the server's name
- * and game onto its hub. A cleared mapping hides the hub instead (no game to
- * authorise event tagging against); `communityHub: true` re-enables it once a
- * game is mapped again. No-op when the server has no hub.
+ * ROK-1831 ruling "the hub name follows the server": copy the server's game
+ * onto its hub, and its name too unless the hub was renamed in Raid Ledger
+ * (`name_overridden`, ROK-1950). A cleared mapping hides the hub instead (no
+ * game to authorise event tagging against); `communityHub: true` re-enables
+ * it once a game is mapped again. No-op when the server has no hub.
  */
 export async function syncServerHub(
   tx: PelicanTx,
@@ -59,11 +60,15 @@ export async function syncServerHub(
       .where(and(eq(g.pelicanServerId, server.id), isNull(g.hiddenAt)));
     return;
   }
+  await tx
+    .update(g)
+    .set({ gameId: server.gameId })
+    .where(eq(g.pelicanServerId, server.id));
   const name = server.name.slice(0, 64);
   await tx
     .update(g)
-    .set({ name, nameKey: name.toLowerCase(), gameId: server.gameId })
-    .where(eq(g.pelicanServerId, server.id));
+    .set({ name, nameKey: name.toLowerCase() })
+    .where(and(eq(g.pelicanServerId, server.id), eq(g.nameOverridden, false)));
 }
 
 /** Server deleted / missing from the panel → hide its hub, keep the data. */

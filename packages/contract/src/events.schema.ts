@@ -2,6 +2,7 @@ import { z } from "zod";
 import { SignupUserSchema, EventRosterSchema } from "./signups.schema.js";
 import { RosterWithAssignmentsSchema } from "./roster.schema.js";
 import { PugSlotResponseSchema } from "./pug.schema.js";
+import { GuildKindSchema } from "./guilds.schema.js";
 
 // ============================================================
 // Slot Configuration Schema
@@ -69,8 +70,10 @@ export const CreateEventSchema = z
     lfgGameId: z.number().int().positive().optional(),
     /** ROK-1787: tag the event (and every recurring instance) to a guild.
      *  Only an editor of that guild (or an admin) may set it; the guild must
-     *  belong to the event's game, so a gameId is required. */
-    guildId: z.number().int().positive().optional(),
+     *  belong to the event's game, so a gameId is required.
+     *  ROK-1893 P3: `null` = explicitly untagged — an event created from a hub
+     *  poll then does NOT inherit the poll's hub (absent = inherit). */
+    guildId: z.number().int().positive().nullable().optional(),
     /** ROK-1844: the standalone scheduling poll (match id) this event is
      *  created from (`/events/new?matchId=`). Persisted as
      *  `events.created_from_poll_id`; completing that poll may sign its
@@ -85,7 +88,7 @@ export const CreateEventSchema = z
     message: "lfgGameId must match gameId",
     path: ["lfgGameId"],
   })
-  .refine((d) => d.guildId === undefined || d.gameId !== undefined, {
+  .refine((d) => d.guildId == null || d.gameId !== undefined, {
     message: "guildId requires gameId",
     path: ["guildId"],
   });
@@ -172,6 +175,17 @@ export const ConflictingEventSchema = z.object({
 
 export type ConflictingEventDto = z.infer<typeof ConflictingEventSchema>;
 
+/**
+ * ROK-1893 P4: the hub an event is tagged to, for calendar provenance.
+ * Present only when `guildId` points at a hub that is active and not hidden.
+ */
+export const EventHubRefSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  kind: GuildKindSchema,
+});
+export type EventHubRef = z.infer<typeof EventHubRefSchema>;
+
 /** Single event response */
 export const EventResponseSchema = z.object({
   id: z.number(),
@@ -230,6 +244,8 @@ export const EventResponseSchema = z.object({
   privateVoice: z.boolean().nullable().optional(),
   /** ROK-1787: guild this event is tagged to (null = untagged). */
   guildId: z.number().int().nullable().optional(),
+  /** ROK-1893 P4: the tagged hub when visible (null = untagged or hidden hub). */
+  hub: EventHubRefSchema.nullable().optional(),
   /** ROK-1725: organiser-pasted log report URL (allow-listed on write). */
   reportUrl: z.string().nullable().optional(),
   createdAt: z.string().datetime(),

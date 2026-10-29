@@ -27,6 +27,7 @@ export function toAdminServerRowDto(
     gameName: row.gameName,
     showOnCalendar: row.showOnCalendar,
     presenceTracking: row.presenceTracking,
+    timezone: row.timezone,
     presenceSupported,
     ...(presencePluginInactive === undefined ? {} : { presencePluginInactive }),
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,

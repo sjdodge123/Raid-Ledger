@@ -24,6 +24,7 @@ import {
   findAdminUser,
   countAllUsers,
 } from './users-query.helpers';
+import { escapeLikePattern } from '../common/search.util';
 import { linkDiscordFields } from './users-link-discord.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
@@ -265,12 +266,13 @@ export class UsersService {
     displayName: string,
     excludeUserId?: number,
   ): Promise<boolean> {
+    const pattern = escapeLikePattern(displayName);
     const conditions = excludeUserId
       ? and(
-          ilike(schema.users.displayName, displayName),
+          ilike(schema.users.displayName, pattern),
           ne(schema.users.id, excludeUserId),
         )
-      : ilike(schema.users.displayName, displayName);
+      : ilike(schema.users.displayName, pattern);
     const [result] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)

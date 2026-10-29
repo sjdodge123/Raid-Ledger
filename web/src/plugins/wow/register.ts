@@ -16,9 +16,16 @@ import { CharacterDetailOwnerActions } from './slots/character-detail-owner-acti
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
 import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
 import { PlayersGuildCard } from './slots/players-guild-card';
-import { GameDetailGuilds } from './slots/game-detail-guilds';
 import { foreverIdentityProvider } from './forever-identity-provider';
 import { wowHubModule } from './hub/register-hub';
+import { supportsEventReportLinks } from './lib/report-links';
+import { registerClassLevelWidgets } from './hub-widgets/class-level.register';
+import { registerRolesWidget } from './hub-widgets/roles.register';
+import { professionsWidget } from './hub-widgets/professions.register';
+import { whosSavedWidget } from './hub-widgets/whos-saved.register';
+import { registerDungeonQuestsWidget } from './hub-widgets/dungeon-quests.register';
+import { recentDingsWidget } from './hub-widgets/recent-dings.register';
+import { lastSeenWidget } from './hub-widgets/last-seen.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -44,6 +51,13 @@ blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
 blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
 blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
 blizzard.registerSlot('players:header-cards', PlayersGuildCard);
-blizzard.registerSlot('game-detail:sections', GameDetailGuilds);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);
+blizzard.registerEventReportLinks(supportsEventReportLinks);
+registerClassLevelWidgets(blizzard);
+registerRolesWidget(blizzard);
+blizzard.registerHubWidget(professionsWidget);
+blizzard.registerHubWidget(whosSavedWidget);
+registerDungeonQuestsWidget(blizzard);
+blizzard.registerHubWidget(recentDingsWidget);
+blizzard.registerHubWidget(lastSeenWidget);

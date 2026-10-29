@@ -9,11 +9,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { SQL } from 'drizzle-orm';
 import {
   ValheimRecipeCatalogResponseSchema,
+  VALHEIM_PLAN_QUANTITY_MAX,
   ValheimRecipePlanResponseSchema,
+  ValheimRecipeStockResponseSchema,
   ValheimRecipeTreeResponseSchema,
   type ValheimRecipeCatalogResponse,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeSourceRef,
+  type ValheimRecipeStockResponse,
   type ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../../auth/types';
@@ -24,12 +28,10 @@ import { assertServerHubVisible } from './valheim-hub-guard.helpers';
 import { toMinuteIso } from './valheim-materials.mappers';
 import {
   catalogueEntries,
-  catalogueStations,
-  maxQualityLookup,
-  producedPrefabs,
-  reachablePrefabs,
+  catalogueReadPrefabs,
+  ingredientPrefabs,
 } from './valheim-recipes.catalog.helpers';
-import { RecipeGraphCache, type RecipeGraph } from './valheim-recipes.graph';
+import { RecipeGraphCache } from './valheim-recipes.graph';
 import { toRecipeGraphRows } from './valheim-recipes.graph-rows';
 import {
   clampTargets,
@@ -46,16 +48,57 @@ import {
   ValheimRecipesReadRepository,
   type RecipesReader,
 } from './valheim-recipes.read.repository';
+import { resolvePlan, resolveTree } from './valheim-recipes.resolve';
 import {
-  resolvePlan,
-  resolveTree,
-  type ResolveResult,
-} from './valheim-recipes.resolve';
+  withEntryDiscovery,
+  type KnownRecipes,
+} from './valheim-recipes.discovery';
+import {
+  buildsOf,
+  catalogFor,
+  knownFor,
+  nameAndIconOnly,
+  nodeCatalog,
+  pickTree,
+} from './valheim-recipes.service.helpers';
+import {
+  serverSpoilers,
+  shownStations,
+  VisibleGraphCache,
+  visibleRecipes,
+  type VisibleRecipes,
+} from './valheim-recipes.spoilers.cache';
+
+/** ROK-1860 D3: per-prefab source overrides (`sources=`). */
+type SourcePicks = ReadonlyMap<string, ValheimRecipeSourceRef>;
+
+interface TreeAsk {
+  prefab: string;
+  quality: number;
+  kind: RecipeKind | undefined;
+  sources: SourcePicks;
+}
+
+interface PlanAsk {
+  targets: ValheimRecipePlanTarget[];
+  sources: SourcePicks;
+}
+
+/** D8: while protected, hidden targets are dropped (and not echoed). */
+function shownTargets(
+  vis: VisibleRecipes,
+  targets: ValheimRecipePlanTarget[],
+): ValheimRecipePlanTarget[] {
+  if (vis.spoilers !== 'protected') return targets;
+  return targets.filter((t) => hasTreeTarget(vis.graph, t.prefab, t.kind));
+}
 
 @Injectable()
 export class ValheimRecipesService {
   /** D5: one LRU per API process (the service is a Nest singleton). */
   private readonly graphs = new RecipeGraphCache();
+  /** ROK-1948 D5: the spoiler-pruned copy, per server per scan. */
+  private readonly visibleGraphs = new VisibleGraphCache();
 
   constructor(
     private readonly hubs: ValheimArmoryReadRepository,
@@ -69,26 +112,70 @@ export class ValheimRecipesService {
   ): Promise<ValheimRecipeCatalogResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
     const body = await this.repo.read(async (r) => {
+      const k = await knownFor(r, serverId, user);
       const set = await r.latestSet(serverId);
-      if (!set) return emptyCatalogue();
-      const graph = await this.graph(r, set);
-      const prefabs = producedPrefabs(graph);
-      const cat = await r.materials.findCatalog(
-        serverId,
-        set.gameVersion,
-        prefabs,
-      );
-      return {
-        gameVersion: set.gameVersion,
-        capturedAt: toMinuteIso(set.capturedAt),
-        catalogFallback: cat !== null && !cat.exact,
-        entries: catalogueEntries(graph, cat?.items ?? null),
-        stations: catalogueStations(graph),
-        itemAtlas: projectCatalog([], cat).atlas,
-        recipeAtlas: await r.recipeAtlas(set),
-      };
+      if (!set) {
+        const spoilers = await serverSpoilers(r, serverId);
+        return { ...emptyCatalogue(), discovery: k.status, spoilers };
+      }
+      return this.catalogueIn(r, set, k);
     });
     return ValheimRecipeCatalogResponseSchema.parse(body);
+  }
+
+  /** One items read names the entries AND their ingredients (ROK-1899). */
+  private async catalogueIn(
+    r: RecipesReader,
+    set: ValheimRecipeSetRow,
+    k: KnownRecipes,
+  ): Promise<ValheimRecipeCatalogResponse> {
+    const { graph, spoilers } = await this.visible(r, set);
+    const cat = await r.materials.findCatalog(
+      set.pelicanServerId,
+      set.gameVersion,
+      catalogueReadPrefabs(graph),
+    );
+    const entries = catalogueEntries(graph, cat?.items ?? null);
+    const { items, atlas } = projectCatalog(ingredientPrefabs(entries), cat);
+    const ingredients = nameAndIconOnly(items, graph);
+    return {
+      gameVersion: set.gameVersion,
+      capturedAt: toMinuteIso(set.capturedAt),
+      catalogFallback: cat !== null && !cat.exact,
+      entries: withEntryDiscovery(entries, graph, k),
+      discovery: k.status,
+      stations: shownStations(graph, entries, spoilers),
+      spoilers,
+      ingredients,
+      itemAtlas: atlas,
+      recipeAtlas: await r.recipeAtlas(set),
+    };
+  }
+
+  /**
+   * `GET …/recipes/stock` (ROK-1899) — the viewer's chest totals in the SAME
+   * scope `/plan` nets against (D7), summed over qualities; no scan → `none`.
+   */
+  async stock(
+    serverId: number,
+    opts: PlanStockOptions,
+    user: AuthenticatedUser,
+  ): Promise<ValheimRecipeStockResponse> {
+    await assertServerHubVisible(this.hubs, serverId, user);
+    const scope = stockScope(user, opts);
+    const body = await this.repo.read(async (r) => {
+      const { scan, stock } = await loadStock(r, serverId, scope);
+      const totals = [...(stock ?? [])].map(
+        ([prefab, n]) =>
+          [prefab, Math.min(n, VALHEIM_PLAN_QUANTITY_MAX)] as const,
+      );
+      return {
+        stock: scan ? ('scan' as const) : ('none' as const),
+        capturedAt: scan ? toMinuteIso(scan.capturedAt) : null,
+        totals: Object.fromEntries(totals),
+      };
+    });
+    return ValheimRecipeStockResponseSchema.parse(body);
   }
 
   /** `GET …/recipes/:prefab/tree` — 404 when nothing builds the prefab. */
@@ -98,27 +185,45 @@ export class ValheimRecipesService {
     quality: number,
     kind: RecipeKind | undefined,
     user: AuthenticatedUser,
+    sources: SourcePicks = new Map(),
   ): Promise<ValheimRecipeTreeResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
-    const body = await this.repo.read(async (r) => {
-      const set = await r.latestSet(serverId);
-      const graph = set ? await this.graph(r, set) : null;
-      if (!set || !graph || !hasTreeTarget(graph, prefab, kind)) {
-        throw new NotFoundException(RECIPE_NOT_FOUND);
-      }
-      const { cat, maxQ } = await this.catalogFor(r, set, graph, [prefab]);
-      const q = kind === 'piece' ? 1 : Math.min(quality, maxQ(prefab));
-      const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
-      const asked = kind ? { ...target, kind } : target;
-      const res = resolveTree(graph, asked, null, { maxQuality: maxQ });
-      return {
-        target: { prefab, quality: q },
-        ...pickTree(res),
-        ...nodeCatalog(res, cat),
-        recipeAtlas: await r.recipeAtlas(set),
-      };
-    });
+    const ask = { prefab, quality, kind, sources };
+    const body = await this.repo.read((r) =>
+      this.treeIn(r, serverId, ask, user),
+    );
     return ValheimRecipeTreeResponseSchema.parse(body);
+  }
+
+  private async treeIn(
+    r: RecipesReader,
+    serverId: number,
+    ask: TreeAsk,
+    user: AuthenticatedUser,
+  ) {
+    const { prefab, kind } = ask;
+    const set = await r.latestSet(serverId);
+    const vis = set ? await this.visible(r, set) : null;
+    // D8: a hidden prefab 404s exactly like one that does not exist.
+    if (!set || !vis || !hasTreeTarget(vis.graph, prefab, kind)) {
+      throw new NotFoundException(RECIPE_NOT_FOUND);
+    }
+    const { graph, spoilers } = vis;
+    const k = await knownFor(r, serverId, user);
+    const { cat, maxQ } = await catalogFor(r, set, graph, [prefab]);
+    const q = kind === 'piece' ? 1 : Math.min(ask.quality, maxQ(prefab));
+    const target = { prefab, quality: q, amount: 1, fromQuality: 0 };
+    const opts = { maxQuality: maxQ, sources: ask.sources };
+    const t = kind ? { ...target, kind } : target;
+    const res = resolveTree(graph, t, null, opts);
+    return {
+      target: { prefab, quality: q },
+      ...pickTree(res, graph, k),
+      ...nodeCatalog(res, cat, graph),
+      recipeAtlas: await r.recipeAtlas(set),
+      spoilers,
+      ...buildsOf(res),
+    };
   }
 
   /** `GET …/recipes/plan` — stock from the newest scan in the viewer's scope. */
@@ -127,12 +232,18 @@ export class ValheimRecipesService {
     targets: ValheimRecipePlanTarget[],
     opts: PlanStockOptions,
     user: AuthenticatedUser,
+    sources: SourcePicks = new Map(),
   ): Promise<ValheimRecipePlanResponse> {
     await assertServerHubVisible(this.hubs, serverId, user);
     const scope = stockScope(user, opts);
     const body = await this.repo.read(async (r) => {
+      const k = await knownFor(r, serverId, user);
       const set = await r.latestSet(serverId);
-      return set ? this.planIn(r, set, targets, scope) : emptyPlan(targets);
+      if (!set) {
+        const spoilers = await serverSpoilers(r, serverId);
+        return { ...emptyPlan(targets), discovery: k.status, spoilers };
+      }
+      return this.planIn(r, set, { targets, sources }, scope, k);
     });
     return ValheimRecipePlanResponseSchema.parse(body);
   }
@@ -140,19 +251,22 @@ export class ValheimRecipesService {
   private async planIn(
     r: RecipesReader,
     set: ValheimRecipeSetRow,
-    targets: ValheimRecipePlanTarget[],
+    ask: PlanAsk,
     scope: SQL,
+    k: KnownRecipes,
   ): Promise<ValheimRecipePlanResponse> {
-    const graph = await this.graph(r, set);
+    const { graph, spoilers } = await this.visible(r, set);
     const { scan, stock } = await loadStock(r, set.pelicanServerId, scope);
-    const ids = targets.map((t) => t.prefab);
-    const { cat, maxQ } = await this.catalogFor(r, set, graph, ids);
-    const planned = clampTargets(targets, maxQ);
-    const res = resolvePlan(graph, planned, stock, { maxQuality: maxQ });
-    const { items, itemAtlas } = nodeCatalog(res, cat);
+    const shown = shownTargets({ graph, spoilers }, ask.targets);
+    const ids = shown.map((t) => t.prefab);
+    const { cat, maxQ } = await catalogFor(r, set, graph, ids);
+    const planned = clampTargets(shown, maxQ);
+    const opts = { maxQuality: maxQ, sources: ask.sources };
+    const res = resolvePlan(graph, planned, stock, opts);
+    const { items, itemAtlas } = nodeCatalog(res, cat, graph);
     return {
       targets: planned,
-      ...pickTree(res),
+      ...pickTree(res, graph, k),
       stock: scan ? 'scan' : 'none',
       capturedAt: scan ? toMinuteIso(scan.capturedAt) : null,
       shoppingList: res.shoppingList,
@@ -160,7 +274,18 @@ export class ValheimRecipesService {
       items,
       itemAtlas,
       recipeAtlas: await r.recipeAtlas(set),
+      spoilers,
+      ...buildsOf(res),
     };
+  }
+
+  /** ROK-1948 D1: the pruned graph every response is built from. */
+  private async visible(
+    r: RecipesReader,
+    set: ValheimRecipeSetRow,
+  ): Promise<VisibleRecipes> {
+    const full = await this.graph(r, set);
+    return visibleRecipes(this.visibleGraphs, r, set, full);
   }
 
   /** D5: keyed on `imported_at`, which every re-import bumps. */
@@ -174,37 +299,4 @@ export class ValheimRecipesService {
       }),
     );
   }
-
-  /**
-   * ONE items-catalogue read (D6 choice) for everything reachable from
-   * `roots`: the targets' `maxQuality` and, after resolving, the nodes'
-   * names + icons.
-   */
-  private async catalogFor(
-    r: RecipesReader,
-    set: ValheimRecipeSetRow,
-    graph: RecipeGraph,
-    roots: string[],
-  ) {
-    const cat = await r.materials.findCatalog(
-      set.pelicanServerId,
-      set.gameVersion,
-      reachablePrefabs(graph, roots),
-    );
-    return { cat, maxQ: maxQualityLookup(graph, cat?.items ?? null) };
-  }
-}
-
-/** Catalogue subset for every prefab the resolved nodes reference. */
-function nodeCatalog(
-  res: ResolveResult,
-  cat: Parameters<typeof projectCatalog>[1],
-) {
-  const prefabs = [...new Set(res.nodes.map((n) => n.prefab))].sort();
-  const { items, atlas } = projectCatalog(prefabs, cat);
-  return { items, itemAtlas: atlas };
-}
-
-function pickTree(res: ResolveResult) {
-  return { nodes: res.nodes, truncated: res.truncated };
 }

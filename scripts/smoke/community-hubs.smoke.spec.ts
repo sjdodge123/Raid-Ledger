@@ -2,30 +2,37 @@
  * Game community hubs smoke (ROK-1870 §4) — desktop, tablet AND mobile.
  *
  * Every test re-seeds through the DEMO_MODE fixture
- * `POST /admin/test/community-hubs/seed {gameId}` (§2.6): on its game it
- * resets its own fixture (seed-named hubs, hubs proposed/led by a seed user,
- * their members, bans and notices; seed users are reused, never recreated, and
- * their Discord DMs muted) and recreates "Seed Crew" (leader + officer
- * + 4 members + a ban), "Seed Solo" (its leader only), "Seed Hopefuls"
- * (`proposed` by `demo-member`) and "Seed Old Guard" (archived). The projects
- * run in parallel, so each one seeds a DIFFERENT configured game (the seed
- * clears by game) and acts through a different crew member (proposal limits
- * are per user across games, D12). The seeded users are A2-eligible (Discord id
+ * `POST /admin/test/community-hubs/seed {gameId, tag}` (§2.6, ROK-2030 tag via
+ * `./hub-seed`): it resets only this spec × project × worker's tagged fixture
+ * (its hubs, their members, bans and notices; seed users are reused, never
+ * recreated, and their Discord DMs muted) and recreates `Seed Crew #<tag>`
+ * (leader + officer + 4 members + a ban), `Seed Solo #<tag>` (its leader only),
+ * `Seed Hopefuls #<tag>` (`proposed` by `demo-member`) and `Seed Old Guard
+ * #<tag>` (archived), on a disabled game of the tag's own (`dedicatedGame`:
+ * never in `/games/configured`, so no other spec's crews — which also hold the
+ * actor — crowd the game card's capped list). Every assertion still names the
+ * seed's `hubNames`. Each project acts through a different
+ * crew member (proposal limits are per user across games, D12). The seeded users are A2-eligible (Discord id
  * + `guild_member_seen_at`); each signs in with its own session and its own JWT
  * drives the API reads. Every write is confirmed by polling the API — the first
  * render is never trusted (memory `feedback_smoke_polling_for_async_writes`).
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { API_BASE, apiDelete, apiGet, apiPatch, getAdminToken, pollForCondition } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
 interface Seed {
     gameId: number;
-    hubIds: { crew: number; solo: number; archived: number };
+    /** ROK-1883: `server` is a HIDDEN game-server hub, `guild` a member-less WoW guild hub. */
+    hubIds: { crew: number; solo: number; archived: number; server: number; guild: number };
+    hubNames: HubSeedNames;
     leaderUserId: number;
     /** `[officer, member-1, member-2, member-3, member-4]`. */
     memberUserIds: number[];
+    /** Their usernames: the tag's own `community-<role>-<tag>` users (ROK-2030). */
+    memberUsernames: string[];
     bannedUserId: number;
     proposalId: number;
 }
@@ -69,26 +76,32 @@ function actorId(seed: Seed, testInfo: TestInfo): number {
     return must(seed.memberUserIds[1 + slotOf(testInfo)], 'actor member id');
 }
 
-/** One configured game per project, so parallel seeds never clear each other. */
-async function projectGameId(token: string, testInfo: TestInfo): Promise<number> {
-    const body = (await apiGet(token, '/games/configured')) as { data?: unknown } | unknown[] | null;
-    const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
-    const ids = raw
-        .map((g) => (g as { id?: unknown }).id)
-        .filter((id): id is number => typeof id === 'number')
-        .sort((a, b) => a - b);
-    if (ids.length === 0) throw new Error('[community-hubs] GET /games/configured returned no games');
-    return must(ids[slotOf(testInfo) % ids.length], 'project game id');
-}
-
 async function seedHubs(testInfo: TestInfo): Promise<Seed> {
     const token = await getAdminToken();
-    const gameId = await projectGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as Partial<Seed> | null;
-    if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds)) {
+    // The tag's own game (ROK-2030): the game card shows the viewer's hubs first
+    // and caps the rest (`pickShownHubs`), so on a game shared with other specs'
+    // hubs the unjoined Solo hub can fall past the cap.
+    const body = (await seedCommunityHubs(token, testInfo, 'community-hubs', { dedicatedGame: true })) as Partial<Seed> | null;
+    if (!body || typeof body.proposalId !== 'number' || !body.hubIds || !Array.isArray(body.memberUserIds) || !Array.isArray(body.memberUsernames)) {
         throw new Error(`[community-hubs] seed: ${JSON.stringify(body)}`);
     }
     return body as Seed;
+}
+
+/**
+ * Install + activate a plugin through the real admin plugin API (the
+ * `pelican-quick-play-switch.smoke.spec.ts` pattern). `game_server` hubs are
+ * listed only while their owner, Pelican, is active (`HubKindRegistry.active`),
+ * and nothing auto-installs it, so a run of this spec alone never lists the
+ * seeded server hub without this. A failed install (already installed, or a
+ * sibling worker won the race) falls through to activate, which must succeed.
+ */
+async function ensurePluginActive(token: string, pluginId: string): Promise<void> {
+    const init = { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
+    const install = await fetch(`${API_BASE}/admin/plugins/${pluginId}/install`, init);
+    if (install.ok) return;
+    const activate = await fetch(`${API_BASE}/admin/plugins/${pluginId}/activate`, init);
+    if (!activate.ok) throw new Error(`failed to enable the ${pluginId} plugin: install ${install.status}, activate ${activate.status}`);
 }
 
 async function gameHubs(jwt: string, gameId: number): Promise<GameHubsBody> {
@@ -112,8 +125,10 @@ async function withdrawAll(jwt: string): Promise<void> {
 
 async function openGamePage(page: Page, gameId: number): Promise<Locator> {
     await page.goto(`/games/${gameId}`);
-    const card = page.locator('section[aria-labelledby="community-hubs-heading"]');
-    await expect(card, 'the game page renders the Community hubs card').toBeVisible({ timeout: 20_000 });
+    const card = page.locator('section[aria-labelledby="game-hubs-heading"]');
+    await expect(card, 'the game page renders the one Hubs card').toBeVisible({ timeout: 20_000 });
+    await expect(card, 'exactly one Hubs card (ROK-1883)').toHaveCount(1);
+    await expect(page.getByTestId('game-detail-guilds'), 'the WoW "Guilds" card is gone (ROK-1883)').toHaveCount(0);
     return card;
 }
 
@@ -141,11 +156,9 @@ async function memberAction(page: Page, username: string, actionTestId: string):
     await expect(menu, 'picking an action closes the menu / sheet').toHaveCount(0);
 }
 
-/** The seed's usernames for `memberUserIds` (demo-test-community-hubs.controller `CREW`). */
-const CREW_USERNAMES = ['community-officer', 'community-member-1', 'community-member-2', 'community-member-3', 'community-member-4'];
-
-function crewUsername(index: number): string {
-    return must(CREW_USERNAMES[index], `crew username ${index}`);
+/** The seed's username for `memberUserIds[index]` (tag-suffixed, demo-test-community-hubs.crew). */
+function crewUsername(seed: Seed, index: number): string {
+    return must(seed.memberUsernames[index], `crew username ${index}`);
 }
 
 test.describe('community hubs — member', () => {
@@ -153,17 +166,20 @@ test.describe('community hubs — member', () => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
         const card = await openGamePage(page, seed.gameId);
-        await expect(card.getByRole('link', { name: 'Seed Crew' })).toHaveAttribute('href', `/guilds/${seed.hubIds.crew}`);
-        await expect(card.getByRole('link', { name: 'Seed Old Guard' }), 'archived hubs are not listed').toHaveCount(0);
-        await expect(card.getByRole('link', { name: 'Seed Hopefuls' }), 'proposed hubs are not listed').toHaveCount(0);
+        await expect(card.getByRole('link', { name: seed.hubNames.crew })).toHaveAttribute('href', `/hubs/${seed.hubIds.crew}`);
+        await expect(card.getByRole('link', { name: seed.hubNames.archived }), 'archived hubs are not listed').toHaveCount(0);
+        await expect(card.getByRole('link', { name: seed.hubNames.proposed }), 'proposed hubs are not listed').toHaveCount(0);
+        await expect(card.getByRole('link', { name: seed.hubNames.server, exact: true }), 'a member never sees a hidden server hub').toHaveCount(0);
+        await expect(card.getByRole('link', { name: seed.hubNames.guild, exact: true }), 'a non-member never sees a WoW guild hub').toHaveCount(0);
+        await expect(card.getByText('Hidden', { exact: true }), 'non-staff never see the Hidden chip').toHaveCount(0);
 
-        await card.getByRole('button', { name: 'Join Seed Solo' }).click();
+        await card.getByRole('button', { name: `Join ${seed.hubNames.solo}` }).click();
         await expect.poll(() => viewerOf(jwt, seed.gameId, seed.hubIds.solo), {
             message: 'the card Join must reach the API',
         }).toBe('member');
-        const soloRow = card.locator('li', { has: page.getByRole('link', { name: 'Seed Solo' }) });
+        const soloRow = card.locator('li', { has: page.getByRole('link', { name: seed.hubNames.solo }) });
         await expect(soloRow.getByText('Joined')).toBeVisible();
-        await expect(card.getByRole('button', { name: 'Join Seed Solo' })).toHaveCount(0);
+        await expect(card.getByRole('button', { name: `Join ${seed.hubNames.solo}` })).toHaveCount(0);
     });
 
     test('propose a hub: the form lands in "Your proposals" as Pending review; Withdraw removes it', async ({ page }, testInfo) => {
@@ -202,19 +218,19 @@ test.describe('community hubs — member', () => {
         await page.goto(`/hubs?game=${seed.gameId}&membership=not-joined`);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 20_000 });
         const cards = page.getByTestId('hub-directory-card');
-        await expect(cards.filter({ hasText: 'Seed Solo' }), 'not-joined lists the hub the actor is outside').toHaveCount(1, {
+        await expect(cards.filter({ hasText: seed.hubNames.solo }), 'not-joined lists the hub the actor is outside').toHaveCount(1, {
             timeout: 15_000,
         });
-        await expect(cards.filter({ hasText: 'Seed Crew' }), 'not-joined hides the crew the actor is in').toHaveCount(0);
+        await expect(cards.filter({ hasText: seed.hubNames.crew }), 'not-joined hides the crew the actor is in').toHaveCount(0);
 
         await page.goto(`/hubs?game=${seed.gameId}`);
-        await page.getByLabel('Search hubs').fill('Seed Crew');
+        await page.getByLabel('Search hubs').fill(seed.hubNames.crew);
         await expect(page).toHaveURL(/[?&]q=Seed(\+|%20)Crew/, { timeout: 15_000 });
-        await expect(cards.filter({ hasText: 'Seed Solo' }), 'search narrows the list').toHaveCount(0, { timeout: 15_000 });
-        await expect(cards.filter({ hasText: 'Seed Crew' })).toHaveCount(1);
+        await expect(cards.filter({ hasText: seed.hubNames.solo }), 'search narrows the list').toHaveCount(0, { timeout: 15_000 });
+        await expect(cards.filter({ hasText: seed.hubNames.crew })).toHaveCount(1);
 
         await page.goto(`/hubs?game=${seed.gameId}&q=Seed%20Solo`);
-        await cards.filter({ hasText: 'Seed Solo' }).getByRole('button', { name: 'Join Seed Solo' }).click();
+        await cards.filter({ hasText: seed.hubNames.solo }).getByRole('button', { name: `Join ${seed.hubNames.solo}` }).click();
         await expect.poll(() => viewerOf(jwt, seed.gameId, seed.hubIds.solo), {
             message: 'the directory Join must reach the API',
         }).toBe('member');
@@ -223,15 +239,15 @@ test.describe('community hubs — member', () => {
     test('hub page: Join, the Members tab lists the joiner, Leave', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, actorId(seed, testInfo));
-        const username = crewUsername(1 + slotOf(testInfo));
-        await page.goto(`/guilds/${seed.hubIds.solo}`);
+        const username = crewUsername(seed, 1 + slotOf(testInfo));
+        await page.goto(`/hubs/${seed.hubIds.solo}`);
         await expect(page.getByTestId('community-hub-kind')).toBeVisible({ timeout: 20_000 });
 
         await page.getByTestId('community-hub-join').click();
         await expect.poll(() => viewerOf(jwt, seed.gameId, seed.hubIds.solo), { message: 'Join must reach the API' }).toBe('member');
         await expect(page.getByTestId('community-hub-leave')).toBeVisible({ timeout: 15_000 });
 
-        await page.goto(`/guilds/${seed.hubIds.solo}#members`);
+        await page.goto(`/hubs/${seed.hubIds.solo}#members`);
         await expect(memberRow(page, username), 'the Members tab lists the new member').toHaveCount(1, { timeout: 15_000 });
 
         await page.getByTestId('community-hub-leave').click();
@@ -242,10 +258,13 @@ test.describe('community hubs — member', () => {
         await expect(page.getByTestId('community-hub-join')).toBeVisible({ timeout: 15_000 });
     });
 
-    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the More drawer (phone)', async ({ page }, testInfo) => {
+    test('nav: a hub member reaches /hubs via the header Hubs menu (≥768px) or the bottom Hubs sheet (phone)', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         await signInOnboardedMember(page, actorId(seed, testInfo));
-        await page.goto('/calendar');
+        // Not /calendar: on phones it smooth-scrolls to today after mount, so useScrollDirection slides the
+        // bottom bar off-screen and the trigger click times out "outside of the viewport". /players never
+        // scrolls itself (same fix as hubs-nav.smoke.spec.ts NAV_START).
+        await page.goto('/players');
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) {
             // ROK-1875: the actor is in Seed Crew, so the header Hubs item is a menu (not a plain link).
@@ -256,10 +275,13 @@ test.describe('community hubs — member', () => {
             await expect(browse, '"Browse all hubs" closes the Hubs menu').toBeVisible({ timeout: 15_000 });
             await browse.click();
         } else {
-            await page.getByRole('button', { name: 'Open menu' }).click();
-            const row = page.getByTestId('more-drawer-panel').getByTestId('drawer-hubs-link');
-            await expect(row, 'phone: the Hubs row in the More drawer').toBeVisible({ timeout: 15_000 });
-            await row.click();
+            // ROK-1890: the More drawer no longer lists hubs; the bottom bar's Hubs sheet is the phone entry.
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'phone: a hub member gets the bottom Hubs sheet trigger').toBeVisible({ timeout: 15_000 });
+            await trigger.click();
+            const browse = page.getByRole('dialog', { name: 'Your hubs' }).getByTestId('bottom-hubs-browse-all');
+            await expect(browse, 'phone: "Browse all hubs" in the bottom Hubs sheet').toBeVisible({ timeout: 15_000 });
+            await browse.click();
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
@@ -273,7 +295,8 @@ test.describe('community hubs — signed out', () => {
         await page.goto('/');
         await expect(page.locator('body')).toBeVisible();
         await expect(page.getByRole('link', { name: 'Hubs', exact: true }), 'no Hubs link without a session').toHaveCount(0);
-        await expect(page.getByTestId('drawer-hubs-link')).toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-link'), 'no bottom Hubs link without a session').toHaveCount(0);
+        await expect(page.getByTestId('bottom-hubs-trigger'), 'no bottom Hubs sheet without a session').toHaveCount(0);
     });
 });
 
@@ -281,9 +304,9 @@ test.describe('community hubs — leader', () => {
     test('Manage menu: promote a member to officer, then remove them', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
-        const target = crewUsername(4);
+        const target = crewUsername(seed, 4);
         await signInOnboardedMember(page, seed.leaderUserId);
-        await page.goto(`/guilds/${seed.hubIds.crew}#members`);
+        await page.goto(`/hubs/${seed.hubIds.crew}#members`);
         const row = memberRow(page, target);
         await expect(row).toHaveCount(1, { timeout: 20_000 });
 
@@ -306,12 +329,23 @@ test.describe('community hubs — leader', () => {
         await expect(memberRow(page, target), 'the removed member is gone after a reload').toHaveCount(0, { timeout: 15_000 });
     });
 
+    // ROK-1891: the leader's Overview checklist talks about a hub, never a WoW guild.
+    test('Overview setup checklist has an invite step and no guild or raid wording', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        await signInOnboardedMember(page, seed.leaderUserId);
+        await page.goto(`/hubs/${seed.hubIds.crew}`);
+        const checklist = page.getByTestId('setup-checklist');
+        await expect(checklist, 'the leader sees the setup checklist').toBeVisible({ timeout: 20_000 });
+        await expect(checklist.getByTestId('setup-step-invite')).toContainText('Invite players to the hub');
+        await expect(checklist, 'no WoW wording on a community hub checklist').not.toContainText(/guild|raid|roster/i);
+    });
+
     test('settings: save the blurb, then Archive the hub', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
         const blurb = `Smoke blurb ${testInfo.project.name} ${Date.now().toString(36)}`;
         await signInOnboardedMember(page, seed.leaderUserId);
-        await page.goto(`/guilds/${seed.hubIds.crew}`);
+        await page.goto(`/hubs/${seed.hubIds.crew}`);
         await page.getByTestId('guild-settings-trigger').click({ timeout: 20_000 });
         const sheet = page.getByTestId('guild-settings-sheet');
         await expect(sheet).toBeVisible();
@@ -331,7 +365,74 @@ test.describe('community hubs — leader', () => {
     });
 });
 
+/** Each rendered Hubs-card row's hub id — ROK-1883 AC3: no id twice. */
+async function cardRowIds(card: Locator): Promise<string[]> {
+    return card.getByTestId('game-hub-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-hub-id') ?? ''));
+}
+
+/** The `/hubs` directory card whose name link is exactly `name`. */
+function directoryCard(page: Page, name: string): Locator {
+    return page.getByTestId('hub-directory-card').filter({ has: page.getByRole('link', { name, exact: true }) });
+}
+
 test.describe('community hubs — admin', () => {
+    test('one Hubs card lists every kind once; staff see the hidden server hub marked Hidden (ROK-1883)', async ({ page }, testInfo) => {
+        const admin = await getAdminToken();
+        await ensurePluginActive(admin, 'pelican');
+        const seed = await seedHubs(testInfo);
+        const body = (await apiGet(admin, `/hubs/by-game/${seed.gameId}`)) as { hubs?: Array<DirectoryEntry & { kind?: string; hidden?: boolean }> } | null;
+        const hubs = must(body?.hubs, 'admin by-game hubs');
+        const byId = (id: number): (DirectoryEntry & { kind?: string; hidden?: boolean }) | undefined => hubs.find((h) => h.id === id);
+        expect(new Set(hubs.map((h) => h.id)).size, 'by-game lists each hub once').toBe(hubs.length);
+        expect(byId(seed.hubIds.server), 'staff get the hidden server hub').toMatchObject({ kind: 'game_server', hidden: true });
+        expect(byId(seed.hubIds.guild), 'staff get the WoW guild hub').toMatchObject({ kind: 'wow_guild', hidden: false });
+        expect(byId(seed.hubIds.crew), 'the community hub is listed').toMatchObject({ kind: 'game_community', hidden: false });
+
+        const card = await openGamePage(page, seed.gameId);
+        const ids = await cardRowIds(card);
+        expect(ids.length, 'the card renders rows').toBeGreaterThan(0);
+        expect(new Set(ids).size, 'no hub renders twice on the game page').toBe(ids.length);
+        await card.getByRole('link', { name: `See all ${hubs.length} hubs` }).click();
+        await expect(page).toHaveURL(new RegExp(`/hubs\\?game=${seed.gameId}`));
+
+        const kinds: Array<[string, string]> = [[seed.hubNames.server, 'Server'], [seed.hubNames.guild, 'Guild'], [seed.hubNames.crew, 'Community']];
+        for (const [name, kind] of kinds) {
+            const dirCard = directoryCard(page, name);
+            await expect(dirCard, `${name} is listed once on /hubs`).toHaveCount(1, { timeout: 20_000 });
+            await expect(dirCard.getByTestId('hub-kind-chip')).toHaveText(kind);
+        }
+        await expect(directoryCard(page, seed.hubNames.server).getByText('Hidden', { exact: true }), 'the hidden server hub is marked').toBeVisible();
+        await expect(directoryCard(page, seed.hubNames.crew).getByText('Hidden', { exact: true }), 'a visible hub is not marked').toHaveCount(0);
+    });
+
+    test('ROK-1892: an admin proposal skips review and lands on the live hub', async ({ page }, testInfo) => {
+        const seed = await seedHubs(testInfo);
+        const admin = await getAdminToken();
+        // Unique per project AND per run (D11); archived below so the game's card stays clean.
+        const name = `Staff Hub ${testInfo.project.name} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const card = await openGamePage(page, seed.gameId);
+
+        await card.getByRole('button', { name: 'Start a community hub' }).click();
+        const dialog = page.getByRole('dialog', { name: 'Start a community hub' });
+        await expect(dialog.getByText(/skips review and goes live right away/)).toBeVisible();
+        await dialog.getByLabel('Hub name').fill(name);
+        await dialog.getByLabel('Short description').fill('A staff smoke-test hub.');
+        await page.getByRole('button', { name: 'Create hub' }).click();
+
+        await expect(page, 'a staff proposer lands on the new hub').toHaveURL(/\/hubs\/\d+$/, { timeout: 20_000 });
+        const hubId = Number(must(/\/hubs\/(\d+)$/.exec(page.url())?.[1], 'hub id in the URL'));
+        try {
+            await expect.poll(async () => (await hubEntry(admin, seed.gameId, hubId))?.name, {
+                message: 'the hub is listed as active on its game',
+            }).toBe(name);
+            const queue = (await apiGet(admin, '/admin/hubs/proposals')) as { items?: Array<{ id: number }> } | null;
+            expect((queue?.items ?? []).map((p) => p.id), 'no review-queue entry').not.toContain(hubId);
+            await expect(page.getByRole('heading', { name, level: 1 }), 'the hub page renders').toBeVisible({ timeout: 15_000 });
+        } finally {
+            await apiPatch(admin, `/hubs/${hubId}/status`, { status: 'archived' }).catch(() => undefined);
+        }
+    });
+
     test('Admin → Hubs approves the seeded proposal; the proposer gets the notification', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const admin = await getAdminToken();
@@ -369,8 +470,14 @@ test.describe('community hubs — admin', () => {
             return rows.find((n) => n.type === 'hub_proposal_reviewed' && n.payload?.guildId === seed.proposalId) ?? null;
         }, { timeoutMs: 30_000, description: `hub_proposal_reviewed for hub ${seed.proposalId} reaches the proposer` });
 
-        await page.goto('/calendar');
-        await page.getByRole('button', { name: 'Notifications' }).first().click();
+        // The API already has the notice (polled above), so a fresh page load's bell
+        // query sees it. Open the bell on `/players`, NOT `/calendar`: on phones the
+        // Schedule view smooth-scrolls to today just after mount, and the bell's
+        // close-on-scroll-down shut the dropdown under the assertion (the [mobile] flake).
+        await page.goto('/players');
+        const bell = page.getByRole('button', { name: 'Notifications' }).first();
+        await expect(bell, 'the header bell renders').toBeVisible({ timeout: 15_000 });
+        await bell.click();
         await expect(page.getByText(`Your hub "${hubName}" is live`).first(), 'the bell lists the approval').toBeVisible({
             timeout: 15_000,
         });

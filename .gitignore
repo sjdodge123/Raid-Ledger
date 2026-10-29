@@ -39,6 +39,14 @@ scripts/*
 !scripts/check-migration-merge-order.spec.mjs
 !scripts/check-migration-snapshot-chain.mjs
 !scripts/check-migration-snapshot-chain.spec.mjs
+!scripts/scoped-gate-plan.mjs
+!scripts/scoped-gate-plan.spec.mjs
+!scripts/scoped-gate-changed-files.spec.mjs
+# Renumber a branch's migrations after origin/main + the index-collision guard.
+!scripts/renumber-branch-migrations.sh
+!scripts/renumber-branch-migrations.mjs
+!scripts/renumber-branch-migrations.spec.mjs
+!scripts/check-migration-index-collision.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs
@@ -68,11 +76,15 @@ scripts/*
 !scripts/restore-drill-corruption.spec.mjs
 !scripts/restore-drill-journal.mjs
 !scripts/restore-drill-journal.spec.mjs
+!scripts/restore-drill-uploads.mjs
+!scripts/restore-drill-uploads.spec.mjs
 !scripts/validate-ci-discord-env.spec.mjs
 !scripts/validate-ci-smoke-ci-parity.spec.mjs
 # ROK-1566: the diff-keyed push sentinel (surface hash + push gate specs).
 !scripts/surface-hash.spec.mjs
 !scripts/push-gate.spec.mjs
+# 2026-10-22: smoke specs must not silently depend on a connected Discord bot.
+!scripts/smoke-discord-bot-guard.spec.mjs
 # ROK-1565: the scoped-Playwright / E2E_SCOPE gate spec. `scripts/*` ignores the
 # whole directory, so a new script or spec here is INVISIBLE to `git add -A`
 # until it is un-ignored — this one shipped untracked for four commits.

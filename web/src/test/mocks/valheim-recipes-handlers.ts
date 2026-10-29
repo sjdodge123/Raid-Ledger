@@ -12,8 +12,11 @@ import type {
     ValheimPlanNode,
     ValheimRecipeCatalogResponse,
     ValheimRecipePlanResponse,
+    ValheimRecipeCraft,
     ValheimRecipePlanTarget,
+    ValheimRecipeStockResponse,
     ValheimRecipeTreeResponse,
+    ValheimRecipeUpgrade,
 } from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
@@ -21,9 +24,10 @@ const RECIPES = `${API_BASE}/plugins/valheim/armory/servers/:serverId/recipes`;
 export const VALHEIM_RECIPES_URL = RECIPES;
 export const VALHEIM_RECIPE_TREE_URL = `${RECIPES}/:prefab/tree`;
 export const VALHEIM_RECIPE_PLAN_URL = `${RECIPES}/plan`;
+export const VALHEIM_RECIPE_STOCK_URL = `${RECIPES}/stock`;
 
 interface Res { prefab: string; amount: number; amountPerLevel?: number }
-interface FixtureRecipe { id: string; result: string; station: string | null; minStationLevel: number; resources: Res[] }
+interface FixtureRecipe { id: string; result: string; amount?: number; station: string | null; minStationLevel: number; resources: Res[] }
 interface FixtureProcess { processor: string; inputs: Res[]; output: Res; seconds: number }
 interface RecipesFixture {
     capturedAt: string;
@@ -52,32 +56,64 @@ export const nameOf = (prefab: string): string => NAMES[prefab] ?? prefab;
 
 const entry = (prefab: string, category: string) => ({ name: nameOf(prefab), category, icon: null });
 
-export function recipeCatalogFixture(
-    over: Partial<ValheimRecipeCatalogResponse> = {},
-): ValheimRecipeCatalogResponse {
+/** One step's direct cost; zero-amount resources (no per-level cost) drop out. */
+const cost = (station: string | null, stationLevel: number, rs: readonly Res[], amountOf: (r: Res) => number) => ({
+    station, stationLevel, anyOneOf: false,
+    resources: rs.map((r) => ({ prefab: r.prefab, amount: amountOf(r) })).filter((r) => r.amount > 0),
+});
+
+/** Mirrors the API's `craftOf`: q1 at `max(1, minStationLevel)`, output amount per craft. */
+const recipeCraft = (r: FixtureRecipe): ValheimRecipeCraft => ({
+    ...cost(r.station, Math.max(1, r.minStationLevel), r.resources, (x) => x.amount), via: 'recipe', amount: r.amount ?? 1,
+});
+
+/** Mirrors `upgradesOf`: step q costs `amountPerLevel × (q - 1)` at level `max(1, min) + q - 1`. */
+const recipeUpgrades = (r: FixtureRecipe, maxQuality: number): ValheimRecipeUpgrade[] =>
+    Array.from({ length: maxQuality - 1 }, (_, i) => ({
+        ...cost(r.station, Math.max(1, r.minStationLevel) + i + 1, r.resources, (x) => (x.amountPerLevel ?? 0) * (i + 1)),
+        quality: i + 2, upgraderStation: false,
+    }));
+
+function catalogEntries(): ValheimRecipeCatalogResponse['entries'] {
     const f = recipesVanilla;
     const crafted = f.recipes.map((r) => ({
         prefab: r.result, kind: 'item' as const, name: nameOf(r.result), category: 'Weapon',
-        icon: null, maxQuality: 4, sources: { recipes: 1, processes: 0 },
+        icon: null, maxQuality: 4, sources: { recipes: 1, processes: 0 }, craft: recipeCraft(r), upgrades: recipeUpgrades(r, 4),
     }));
     const smelted = f.processes.map((p) => ({
         prefab: p.output.prefab, kind: 'item' as const, name: nameOf(p.output.prefab),
         category: 'Material', icon: null, maxQuality: 1, sources: { recipes: 0, processes: 1 },
+        craft: { ...cost(p.processor, 0, p.inputs, (x) => x.amount), via: 'process' as const, amount: p.output.amount }, upgrades: [],
     }));
     const pieces = f.pieces.map((p) => ({
         prefab: p.prefab, kind: 'piece' as const, name: p.name, category: p.category,
         icon: null, maxQuality: 1, sources: { recipes: 1, processes: 0 },
+        craft: { ...cost(p.station, 1, p.resources, (x) => x.amount), via: 'piece' as const, amount: 1 }, upgrades: [],
     }));
+    return [...crafted, ...smelted, ...pieces];
+}
+
+/** Names + icons for every prefab any entry's craft/upgrade step consumes. */
+function catalogIngredients(entries: ValheimRecipeCatalogResponse['entries']): ValheimRecipeCatalogResponse['ingredients'] {
+    const prefabs = new Set(entries.flatMap((e) => [...(e.craft?.resources ?? []), ...e.upgrades.flatMap((u) => u.resources)].map((r) => r.prefab)));
+    return Object.fromEntries([...prefabs].sort().map((p) => [p, entry(p, 'Material')]));
+}
+
+/** Iron sword (forge, q1..4), Club (workbench), Iron (smelted), Chest (piece). */
+export function recipeCatalogFixture(
+    over: Partial<ValheimRecipeCatalogResponse> = {},
+): ValheimRecipeCatalogResponse {
+    const f = recipesVanilla;
+    const entries = catalogEntries();
     return {
-        gameVersion: f.gameVersion, capturedAt: f.capturedAt, catalogFallback: false,
-        entries: [...crafted, ...smelted, ...pieces],
+        gameVersion: f.gameVersion, capturedAt: f.capturedAt, catalogFallback: false, entries,
         stations: f.stations.map((s) => ({ prefab: s.prefab, name: s.name, maxLevel: s.maxLevel, upgrader: false, icon: null })),
-        itemAtlas: null, recipeAtlas: null, ...over,
+        ingredients: catalogIngredients(entries), itemAtlas: null, recipeAtlas: null, ...over,
     };
 }
 
 export const recipeCatalogEmpty: ValheimRecipeCatalogResponse = {
-    ...recipeCatalogFixture(), gameVersion: null, capturedAt: null, entries: [], stations: [],
+    ...recipeCatalogFixture(), gameVersion: null, capturedAt: null, entries: [], stations: [], ingredients: {},
 };
 
 type Stock = Record<string, number> | null;
@@ -157,3 +193,34 @@ export const valheimRecipePlanHandler = (hits: string[] = [], stock: Stock = STO
         hits.push(url.search);
         return HttpResponse.json(recipePlanFixture(parseTargetsParam(url.searchParams.get('targets') ?? ''), stock));
     });
+
+/** The viewer's netted totals; `null` stock = no chest scan. */
+export function recipeStockFixture(stock: Stock = STOCK): ValheimRecipeStockResponse {
+    if (stock === null) return { stock: 'none', capturedAt: null, totals: {} };
+    return { stock: 'scan', capturedAt: new Date(Date.now() - 7 * 60_000).toISOString(), totals: { ...stock } };
+}
+
+/** `hits` collects the search string of each stock request (`includePersonal&includeVehicles`). */
+export const valheimRecipeStockHandler = (hits: string[] = [], stock: Stock = STOCK) =>
+    http.get(VALHEIM_RECIPE_STOCK_URL, ({ request }) => {
+        hits.push(new URL(request.url).search);
+        return HttpResponse.json(recipeStockFixture(stock));
+    });
+
+/** ROK-1948 — a protected catalogue: the Forge and everything made there (Iron sword) withheld. */
+export function recipeCatalogProtectedFixture(over: Partial<ValheimRecipeCatalogResponse> = {}): ValheimRecipeCatalogResponse {
+    const full = recipeCatalogFixture();
+    const entries = full.entries.filter((e) => e.craft?.station !== 'forge');
+    return { ...full, entries, stations: full.stations.filter((s) => s.prefab !== 'forge'), ingredients: catalogIngredients(entries), spoilers: 'protected', ...over };
+}
+
+/** ROK-1948 D7 — the plan with one withheld ingredient (`Bronze`, unnamed in `items`) under the first root. */
+export function recipePlanUndiscoveredFixture(targets: ValheimRecipePlanTarget[]): ValheimRecipePlanResponse {
+    const plan = recipePlanFixture(targets);
+    const hidden: ValheimPlanNode = {
+        id: plan.nodes.length, parentId: 0, prefab: 'Bronze', quantity: 2, alternatives: 0, crafts: 0, have: 0, short: 2, via: { type: 'undiscovered' },
+    };
+    // Operator ruling 2026-10-24: a withheld ingredient is named (name + icon only), never broken down.
+    const items = { ...plan.items, Bronze: { name: 'Bronze', category: '', icon: null } };
+    return { ...plan, spoilers: 'protected', nodes: [...plan.nodes, hidden], items };
+}

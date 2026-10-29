@@ -126,11 +126,12 @@ export async function importRecipesDemoStock(
 export async function importRecipesDemoSet(
   db: Db,
   serverId: number,
+  msg: ValheimRecipesMessage = RECIPES,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const key = `demo-recipes:${RECIPES.gameVersion}`;
-    const snap = await storeSnapshot(tx, serverId, RECIPES, key);
-    if (!(await importRecipes(tx, snap, RECIPES))) {
+    const key = `demo-recipes:${msg.gameVersion}`;
+    const snap = await storeSnapshot(tx, serverId, msg, key);
+    if (!(await importRecipes(tx, snap, msg))) {
       throw new Error('recipes fixture: a newer recipe set is stored');
     }
   });
@@ -140,12 +141,13 @@ export async function importRecipesDemoSet(
 export async function mergeRecipesDemoCatalog(
   db: Db,
   serverId: number,
+  items: Record<string, schema.ValheimItemCatalogEntryRow> = RECIPES_DEMO_ITEMS,
 ): Promise<void> {
   const C = schema.valheimItemCatalogs;
   const rows = await db
     .update(C)
     .set({
-      items: sql`${C.items} || ${JSON.stringify(RECIPES_DEMO_ITEMS)}::jsonb`,
+      items: sql`${C.items} || ${JSON.stringify(items)}::jsonb`,
     })
     .where(
       and(
@@ -155,4 +157,55 @@ export async function mergeRecipesDemoCatalog(
     )
     .returning({ id: C.id });
   if (rows.length === 0) throw new Error('recipes fixture: no catalogue row');
+}
+
+/**
+ * Every prefab the demo set lists: recipe results, pieces, stations and
+ * processors (contract form). ROK-1948: the unclaimed scout knows all of it,
+ * so under server-wide spoiler protection nothing is hidden by default.
+ */
+export const RECIPES_DEMO_ALL_KNOWN: readonly string[] = [
+  ...new Set([
+    ...RECIPES.recipes.map((r) => r.result),
+    ...RECIPES.pieces.map((p) => p.prefab),
+    ...RECIPES.stations.map((s) => s.prefab),
+    ...RECIPES.processors.map((p) => p.prefab),
+  ]),
+];
+
+/**
+ * Every item the demo set's processes consume (ores, scrap, Wood, raw meat).
+ * ROK-1948 R4 shows a processor's output only when its input is a known item
+ * or a discovered recipe uses the output — Cooked meat needs Raw meat here.
+ */
+export const RECIPES_DEMO_ALL_KNOWN_ITEMS: readonly string[] = [
+  ...new Set(RECIPES.processes.flatMap((p) => p.inputs.map((i) => i.prefab))),
+];
+
+/**
+ * ROK-1862 — what the owner's claimed character (`c1`) has learned: every
+ * prefab the demo set lists EXCEPT Bronze sword (contract form: result
+ * prefabs), so the Planner shows Club known and Bronze sword "Not discovered
+ * yet". The unclaimed member stays the "no character" case.
+ */
+export const RECIPES_DEMO_UNDISCOVERED = 'SwordBronze';
+export const RECIPES_DEMO_OWNER_KNOWN: readonly string[] =
+  RECIPES_DEMO_ALL_KNOWN.filter((p) => p !== RECIPES_DEMO_UNDISCOVERED);
+
+/** Write the owner's known list onto every profile it claims on the server. */
+export async function setRecipesDemoOwnerKnowledge(
+  db: Db,
+  serverId: number,
+  ownerUserId: number,
+): Promise<void> {
+  const P = schema.valheimProfiles;
+  const rows = await db
+    .update(P)
+    .set({
+      knownRecipes: [...RECIPES_DEMO_OWNER_KNOWN],
+      importedAt: sql`now()`,
+    })
+    .where(and(eq(P.pelicanServerId, serverId), eq(P.claimedBy, ownerUserId)))
+    .returning({ id: P.id });
+  if (rows.length === 0) throw new Error('recipes fixture: no owner profile');
 }

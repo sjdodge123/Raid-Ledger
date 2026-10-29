@@ -38,6 +38,11 @@
     --color-panel: #1e293b;
     /* slate-800 */
     --color-overlay: #334155;
+    /* ROK-1942: the photo / video stage (Gallery viewer). Near-black in EVERY scheme by design —
+       declared once here and never remapped by a scheme block, so light themes inherit it. */
+    --color-media-well: #05070b;
+    /* Readable copy ON the media well ("Loading picture…"): 12.9:1 on --color-media-well. */
+    --color-media-well-foreground: #cbd5e1;
     /* slate-700 */
 
     /* Neutral scale — dual-purpose (text & bg) */
@@ -51,6 +56,12 @@
     /* violet-500 — committed elsewhere (ROK-1584) */
     --color-slot: #22d3ee;
     /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
+    /* ROK-1815: WoW faction hues (categorical, not a status) — the guild hero's faction pill.
+       Two blocks only, like busy/slot; semantic-tokens.guard.test.ts measures them on every scheme. */
+    --color-faction-alliance: #60a5fa;
+    /* blue-400 — Alliance */
+    --color-faction-horde: #f87171;
+    /* red-400 — Horde */
 
     /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
        MEANING, not the hue. Dark family values match the Tailwind shades these
@@ -117,6 +128,10 @@ html {
     --color-muted: #475569;
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
+    --color-faction-alliance: #1e40af;
+    /* blue-800 — Alliance on light (ROK-1815) */
+    --color-faction-horde: #991b1b;
+    /* red-800 — Horde on light (ROK-1815); red-700 fails AA on the celestial / quest-log tints */
     /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
        semantic-tokens.guard.test.ts, which recomputes them from these values — warning
        and danger are ALSO asserted on the panel, the JourneyHero card and their own
@@ -488,6 +503,19 @@ html {
     --bottom-nav-height: 3.5rem;
     --bottom-nav-raise: 1.5rem;
     --bottom-nav-clearance: calc(var(--bottom-nav-height) + var(--bottom-nav-raise) + env(safe-area-inset-bottom));
+
+    /* Filters FAB (ROK-1889): its top edge + a 16px gap while one is mounted
+       (FilterFab renders [data-filter-fab]; pure CSS via :has, no JS) — 0 otherwise.
+       Pages hosting a FilterEntry pad max(their own bottom, this). */
+    --filter-fab-clearance: 0px;
+}
+
+@media (max-width: 767.98px) {
+    :root:has([data-filter-fab]) { --filter-fab-clearance: 9rem; } /* 72 + 56 + 16 */
+}
+
+@media (min-width: 768px) and (max-width: 1023.98px) {
+    :root:has([data-filter-fab]) { --filter-fab-clearance: 9.75rem; } /* 84 + 56 + 16 */
 }
 
 /* ============================================
@@ -1836,4 +1864,87 @@ body {
     0%, 80% { transform: rotate(0deg); }
     90% { transform: rotate(360deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* --- Shared .btn classes (ROK-1901) ---
+ * Global, so they live in the eager stylesheet: /join, /i/:code, the invite
+ * flow, the roster builder and the profile page all use them. They used to sit
+ * in event-detail-page.css, which left with the lazy event-detail chunk and
+ * rendered those buttons unstyled until the prefetch landed (never, under Data
+ * Saver). Unlayered on purpose — same cascade as before the move.
+ * styles/global-buttons.guard.test.ts keeps them here. */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.btn-sm {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    min-height: 44px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4d4d8;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.btn-warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.btn-warning:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .btn-secondary {
+    background: rgba(0, 0, 0, 0.05);
+    color: #475569;
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.08);
 }

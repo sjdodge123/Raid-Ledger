@@ -27,6 +27,10 @@ import {
   resolvePollTerminalState,
   type PollLineupContext,
 } from './scheduling-poll-state.helpers';
+import {
+  loadPollHubView,
+  stampHubMembers,
+} from './scheduling-poll-hub.helpers';
 import { shareFieldsForViewer } from '../standalone-poll/standalone-poll-share.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -85,6 +89,7 @@ export async function assembleSchedulePollResponse(
       | (PollLineupContext & {
           phaseDurationOverride?: unknown;
           shareToken?: string | null;
+          guildId?: number | null;
         })
       | undefined;
     members: Parameters<typeof buildPollResponse>[1];
@@ -98,21 +103,31 @@ export async function assembleSchedulePollResponse(
   // TDB:1443: the viewer's conflict lookup is independent of the votes ->
   // terminal-state chain (terminal state needs `votes`), so overlap the two.
   const viewer = userId ? { id: userId, role: callerRole } : null;
-  const [slotConflicts, { votes, terminal }] = await Promise.all([
+  const [slotConflicts, { votes, terminal }, hubView] = await Promise.all([
     userId ? findSlotConflicts(db, userId, slots) : undefined,
     loadVotesAndTerminalState(db, pollMatch, lineup, slots, viewer),
+    loadPollHubView(
+      db,
+      lineup?.guildId ?? null,
+      userId,
+      slots.map((s) => s.id),
+    ),
   ]);
+  const base = buildPollResponse(
+    pollMatch,
+    members,
+    slots,
+    votes,
+    userId,
+    lineup?.status ?? 'decided',
+    deriveIsStandalone(lineup?.phaseDurationOverride),
+  );
   return {
     ...terminal,
-    ...buildPollResponse(
-      pollMatch,
-      members,
-      slots,
-      votes,
-      userId,
-      lineup?.status ?? 'decided',
-      deriveIsStandalone(lineup?.phaseDurationOverride),
-    ),
+    ...base,
+    // ROK-1893 P3: hub header + per-voter member flags (null when no visible hub).
+    slots: stampHubMembers(base.slots, hubView.memberIds),
+    hub: hubView.hub,
     uniqueVoterCount: voterCount,
     conflictingSlotIds: slotConflicts?.map((c) => c.slotId),
     slotConflicts,

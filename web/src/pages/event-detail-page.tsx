@@ -42,6 +42,7 @@ import { SchemaValidationError } from '../lib/api/fetch-api';
 import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
 import { EventCalendarLine } from '../components/features/calendar-sync/EventCalendarLine';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
+import { HubJoinPromptsLazy } from '../components/hub/community/hub-join-prompt-lazy';
 import './event-detail-page.css';
 
 function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string } | null {
@@ -177,26 +178,35 @@ function useModalState() {
 type PageState = ReturnType<typeof useEventDetailPageState>;
 type VoiceState = ReturnType<typeof useEventDetailVoice>;
 
+/** The viewer's overlapping signups for this event's time, if any. */
+function EventConflictsNotice({ conflicts }: { conflicts: EventResponseDto['myConflicts'] }) {
+    if (!conflicts || conflicts.length === 0) return null;
+    return (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
+            <p className="text-sm text-warning">
+                {conflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
+            </p>
+        </div>
+    );
+}
+
 function EventDetailBodySections({ page, voice, derived, handlers }: {
     page: PageState & { event: EventResponseDto }; voice: VoiceState; derived: EventDetailDerived; handlers: EventDetailHandlers;
 }) {
+    // ROK-1893 P1: the hub join prompt sits with the signup state (roster header, or the fallback Join button).
+    const hubPrompt = <HubJoinPromptsLazy eventId={page.eventId} enabled={page.isAuthenticated} hubTagged={page.event.guildId != null} />;
     return (
         <>
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
             <EventReportLinkCard event={page.event} canManage={derived.canManageRoster} isCancelled={derived.isCancelled} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
-            {page.event.myConflicts && page.event.myConflicts.length > 0 && (
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-warning">
-                        {page.event.myConflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
-                    </p>
-                </div>
-            )}
+            <EventConflictsNotice conflicts={page.event.myConflicts} />
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
-                canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
+                canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} hubPrompt={hubPrompt} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
+            {!derived.rosterAssignments && hubPrompt}
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
@@ -222,7 +232,7 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
             <div ref={bannerRef}>
                 <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
                     description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null}
-                    recurrenceGroupId={page.event.recurrenceGroupId} />
+                    recurrenceGroupId={page.event.recurrenceGroupId} hub={page.event.hub} />
             </div>
             {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}
             <EventDetailBodySections page={page} voice={voice} derived={derived} handlers={handlers} />

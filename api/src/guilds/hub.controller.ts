@@ -20,14 +20,19 @@ import {
   type GuildPage,
   type GuildProfile,
   type GuildRaidsDto,
+  type GuildSummary,
+  type HubWidgetPrefsResponse,
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import type { AuthenticatedRequest } from '../auth/types';
+import { CommunityLeaderGuard } from './community/community-leader.guard';
 import { GuildEditorGuard } from './guild-editor.guard';
 import { GuildEditorsService } from './guild-editors.service';
 import { GuildProfileService } from './guild-profile.service';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
+import { HubRenameService } from './hub-rename.service';
 import { HubVisibleGuard } from './hub-visible.guard';
+import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubService } from './hub.service';
 
 const jwt = AuthGuard('jwt');
@@ -46,6 +51,8 @@ export class HubController {
     private readonly hubs: HubService,
     private readonly profiles: GuildProfileService,
     private readonly editors: GuildEditorsService,
+    private readonly widgetPrefs: HubWidgetPrefsService,
+    private readonly renames: HubRenameService,
   ) {}
 
   @Get()
@@ -83,6 +90,37 @@ export class HubController {
     @Body() body: unknown,
   ): Promise<GuildProfile> {
     return this.profiles.update(req.user, id, body);
+  }
+
+  /**
+   * ROK-1918 — save the Overview layout (full prefs) or `{ reset: true }`.
+   * Leaders, officers and staff (GuildEditorGuard); members/visitors → 403.
+   */
+  @Patch('widget-prefs')
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  updateWidgetPrefs(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+  ): Promise<HubWidgetPrefsResponse> {
+    return this.widgetPrefs.update(req.user, id, body);
+  }
+
+  /**
+   * ROK-1950 — rename the hub (`{ name }`), or `{ name: null }` to reset a
+   * server hub to its server name. A Core hub behaviour for every kind (the
+   * ROK-1969 rule: core owns it, plugins only answer `sourceName`), so it is
+   * not in any plugin manifest. Leader only (staff, or a community hub's
+   * leader); officers get 403. Returns the hub's new `GuildSummary`.
+   */
+  @Patch('name')
+  @UseGuards(jwt, HubVisibleGuard, CommunityLeaderGuard)
+  rename(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: unknown,
+  ): Promise<GuildSummary> {
+    return this.renames.rename(req.user, id, body);
   }
 
   @Get('editors')

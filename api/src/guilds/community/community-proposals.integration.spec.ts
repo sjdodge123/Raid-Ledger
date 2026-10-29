@@ -22,6 +22,9 @@ import { signTestAccessToken } from '../../common/testing/sign-test-access-token
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import * as schema from '../../drizzle/schema';
 import { wipeUserData } from '../../users/users-delete.helpers';
+import { isUniqueViolation } from './community-db-errors';
+import { restoreHub } from './community-hub.lookup';
+import { insertCommunityHub } from './community-proposals.queries';
 import { PROPOSAL_ERRORS } from './community-proposals.service';
 
 type UserRow = typeof schema.users.$inferSelect;
@@ -252,6 +255,19 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
     expect(other.body.gameId).toBe(gameH);
   });
 
+  it('P3b a legacy stored key that still holds a ZWJ clashes with the joiner-free name (ROK-2016 review)', async () => {
+    // seedHub keys with trim+lowercase only, so this is the pre-ROK-2016 key 'iron\u200dwolves'.
+    await seedHub(gameG(), 'Iron\u200DWolves', 'active');
+    const proposer = await seedUser('p3b-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'IronWolves',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+
   it('P4 an archived "BG3 Crew" on G frees the name: 201', async () => {
     await seedHub(gameG(), 'BG3 Crew', 'archived');
     const proposer = await seedUser('p4-proposer');
@@ -287,6 +303,57 @@ describe('POST /hubs/proposals — D11 names + D12 limits', () => {
       .set(proposer.auth);
     expect(mine.status).toBe(200);
     expect(mine.body.items).toHaveLength(2);
+  });
+});
+
+describe('POST /hubs/proposals — legacy stored keys (ROK-2016 review)', () => {
+  it('P3c a legacy key with a ZWJ before U+0301 clashes with the composed name (stored keys NFC, ROK-2016 review)', async () => {
+    // Pre-ROK-2016 key 'cafe\u200d\u0301 club': only NFC after the joiner strip composes it.
+    await seedHub(gameG(), 'Cafe\u200D\u0301 Club', 'active');
+    const proposer = await seedUser('p3c-proposer');
+
+    const clash = await propose(proposer, {
+      gameId: gameG(),
+      name: 'Caf\u00e9 Club',
+    });
+    expect(clash.status).toBe(409);
+    expect(clash.body.message).toBe(PROPOSAL_ERRORS.nameTaken);
+  });
+
+  it('P3d restoring an archived hub with a legacy VS16 key re-keys it, so the unique index catches a racing create (ROK-2015 Codex P2)', async () => {
+    // Pre-ROK-2016 key '❤️ raiders' (VS16 was never \p{Cf}, so it was allowed).
+    const id = await seedHub(gameG(), '❤️ Raiders', 'archived');
+    const [hub] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, id)),
+      'archived hub',
+    );
+
+    await restoreHub(testApp.db, hub);
+
+    const [after] = nonEmpty(
+      await testApp.db
+        .select({ nameKey: schema.guilds.nameKey })
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, id)),
+      'restored hub',
+    );
+    expect(after.nameKey).toBe('❤ raiders');
+    // A create whose clash pre-check ran before the restore landed.
+    const err = await insertCommunityHub(testApp.db, {
+      gameId: gameG(),
+      name: '❤ Raiders',
+      blurb: 'Racing create',
+      status: 'active',
+      proposedBy: null,
+      reviewedBy: null,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(isUniqueViolation(err)).toBe(true);
   });
 });
 
@@ -340,6 +407,62 @@ describe('operator review (prod 2026-10-21: notices reach operators)', () => {
   });
 });
 
+describe('ROK-1892 staff proposals skip review', () => {
+  it.each(['admin', 'operator'] as const)(
+    'P16 a %s proposal lands active, self-reviewed, led by them — no queue, no notices',
+    async (role) => {
+      const staff = await seedUser(`p16-${role}`, { role });
+      const peer = await seedUser(`p16-peer-${role}`, { role: 'operator' });
+      const res = await propose(staff, { gameId: gameG(), name: 'P16 Crew' });
+      expect(res.status).toBe(201);
+      const id = res.body.id as number;
+      expect(res.body).toEqual(
+        expect.objectContaining({
+          name: 'P16 Crew',
+          status: 'active',
+          proposedBy: expect.objectContaining({ userId: staff.user.id }),
+        }),
+      );
+
+      const row = await hubRow(id);
+      expect(row?.status).toBe('active');
+      expect(row?.proposedBy).toBe(staff.user.id);
+      expect(row?.reviewedBy).toBe(staff.user.id);
+      expect(row?.reviewedAt).not.toBeNull();
+      expect(row?.memberCount).toBe(1);
+      const members = await membersOf(id);
+      expect(members.map((m) => [m.userId, m.role])).toEqual([
+        [staff.user.id, 'leader'],
+      ]);
+
+      const queue = await testApp.request
+        .get('/admin/hubs/proposals')
+        .set(peer.auth);
+      expect(queue.body.items).toEqual([]);
+      for (const userId of [
+        testApp.seed.adminUser.id,
+        peer.user.id,
+        staff.user.id,
+      ]) {
+        expect(await noticesFor(userId, 'hub_proposal_submitted')).toEqual([]);
+        expect(await noticesFor(userId, 'hub_proposal_reviewed')).toEqual([]);
+      }
+    },
+  );
+
+  it('P17 a member proposal is still proposed with no reviewer', async () => {
+    const proposer = await seedUser('p17-proposer');
+    const res = await propose(proposer, { gameId: gameG(), name: 'P17 Crew' });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('proposed');
+    const id = res.body.id as number;
+    const row = await hubRow(id);
+    expect(row?.status).toBe('proposed');
+    expect(row?.reviewedBy).toBeNull();
+    expect(await membersOf(id)).toHaveLength(0);
+  });
+});
+
 describe('POST /admin/hubs/proposals/:id/approve|reject', () => {
   it('P7 approve with rename: 200, active, proposer is leader, member_count 1, proposer notified', async () => {
     const proposer = await seedUser('p7-proposer');
@@ -381,7 +504,7 @@ describe('POST /admin/hubs/proposals/:id/approve|reject', () => {
         proposalId: id,
         hubName: 'P7 Final Crew',
         guildId: id,
-        url: `/guilds/${id}`,
+        url: `/hubs/${id}`,
       }),
     );
   });

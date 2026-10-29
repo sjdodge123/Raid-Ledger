@@ -5,7 +5,7 @@
  * The doc is the reference an agent reads; this page is the one it looks at.
  * When they disagree, the running app is right and BOTH should be corrected.
  */
-import { useState, type JSX } from 'react';
+import { lazy, Suspense, useState, type JSX } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { TokensSection } from './tokens-section';
@@ -18,12 +18,31 @@ import { HeroSection } from './hero-section';
 import { WeekStripSection } from './week-strip-section';
 import { GroupMarksSection } from './group-marks-section';
 import { CalendarBusySection } from './calendar-busy-section';
-import { CalendarLayerSection } from './calendar-layer-section';
 import { MapViewportSection } from './map-viewport-section';
+import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
+import { HubWidgetsSection } from './hub-widgets-section';
+import { ArrangeListSection } from './arrange-list-section';
+import { MasonryGridSection } from './masonry-grid-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
+
+/**
+ * Lazy so these two samples stay out of this chunk's gzip budget (ROK-1893 P4).
+ * Both import only shared chunks, so the split is a net saving.
+ */
+const CalendarLayerSection = lazy(() => import('./calendar-layer-section')
+    .then((m) => ({ default: m.CalendarLayerSection })));
+const CalendarHubSection = lazy(() => import('./calendar-hub-section')
+    .then((m) => ({ default: m.CalendarHubSection })));
+
+const MeterHistogramSection = lazy(() => import('./meter-histogram-section')
+    .then((m) => ({ default: m.MeterHistogramSection })));
+
+function SamplesLoading(): JSX.Element {
+    return <p className="text-sm text-muted">Loading samples…</p>;
+}
 
 const NAV = [
     { id: 'tokens', label: 'Tokens' },
@@ -37,7 +56,10 @@ const NAV = [
     { id: 'week-strip', label: 'Week strip' },
     { id: 'group-marks', label: 'Group marks' },
     { id: 'calendar-busy', label: 'Own busy band' },
+    { id: 'calendar-hub', label: 'Hub suffix' },
     { id: 'map-viewport', label: 'Map viewport' },
+    { id: 'hub-widgets', label: 'Hub widgets' },
+    { id: 'meter-histogram', label: 'Meter + histogram' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -82,8 +104,23 @@ function Sections(): JSX.Element {
             <WeekStripSection />
             <GroupMarksSection />
             <CalendarBusySection />
-            <CalendarLayerSection />
+            {/* One boundary per lazy section: under a shared boundary React 19 stops at the
+                first child that suspends, so the second chunk's import only started on a later
+                render — a load waterfall that hid BOTH sections until it finished (PR #1820 CI). */}
+            <Suspense fallback={<SamplesLoading />}>
+                <CalendarLayerSection />
+            </Suspense>
+            <Suspense fallback={<SamplesLoading />}>
+                <CalendarHubSection />
+            </Suspense>
             <MapViewportSection />
+            <SkillTrendSection />
+            <HubWidgetsSection />
+            <Suspense fallback={<SamplesLoading />}>
+                <MeterHistogramSection />
+            </Suspense>
+            <ArrangeListSection />
+            <MasonryGridSection />
         </>
     );
 }

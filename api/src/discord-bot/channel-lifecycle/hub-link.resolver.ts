@@ -1,18 +1,22 @@
 /**
- * Resolve the game-hub link an embed shows — ROK-1872 (ROK-1428 §2.8, D15).
+ * Resolve the game-hub link an embed shows — ROK-1872 / ROK-1873 (ROK-1428
+ * §2.8, D15).
  *
- * Precedence: the event's tagged hub (if visible) → the game's single visible
- * hub → ≥ 2 hubs → the OLDEST one (lowest id; deterministic, and the first
- * hub a game got) → none → null. Only kinds in {@link HUB_LINK_KINDS} count.
- * TODO(ROK-1873): link the `/hubs?game=<id>` directory for ≥ 2 hubs once
- * ROK-1870's route ships (L11) — until then that URL would be a 404 (D15).
+ * Precedence: the event's tagged hub (if visible; the link then carries its
+ * name — ROK-1895) → the game's single visible community hub → the game's
+ * single server hub → ≥ 2 hubs → the `/hubs?game=<id>` directory ("Hubs")
+ * → none → null. An explicit tag always wins over the game-level rule. Only
+ * kinds in {@link HUB_LINK_KINDS} count. ROK-1896: one hub's page is
+ * `/hubs/<id>` (canonical since ROK-1891; `/guilds/<id>` only redirects).
  */
+import { hubPath } from '../../guilds/hub-path';
 import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   HUB_LINK_LABEL,
+  HUBS_LINK_LABEL,
   type HubLink,
 } from '../embeds/hub-link-button.helpers';
 
@@ -27,10 +31,13 @@ type GuildKind = schema.GuildSelect['kind'];
 const LINKABLE_STATUS: schema.GuildSelect['status'] = 'active';
 
 /**
- * Hub kinds an embed may link to. ROK-1870 / L11 appends `game_community`
- * (with its `status = 'active'` predicate) once that kind exists.
+ * Hub kinds an embed (and the channel auto-link) may link to. L11 / ROK-1873
+ * added `game_community`; {@link linkableHub} keeps it to `active` hubs.
  */
-export const HUB_LINK_KINDS: readonly GuildKind[] = ['game_server'];
+export const HUB_LINK_KINDS: readonly GuildKind[] = [
+  'game_server',
+  'game_community',
+];
 
 /** The kinds whose hub adapter is live (owning plugin active). */
 export type ActiveHubKindsSource = () => readonly GuildKind[];
@@ -116,19 +123,45 @@ function candidateWhere(
   return and(linkableHub(), liveKindWhere(), scope);
 }
 
-/** Apply the D15 precedence to the visible candidate hub ids. */
-function pickHubLink(
-  ids: number[],
+/** One visible candidate hub. `name` is selected only where a tag can win. */
+export interface HubCandidate {
+  id: number;
+  kind: GuildKind;
+  name?: string;
+}
+
+/** The single hub of `kind`, or undefined when there are 0 or ≥ 2. */
+function onlyOf(hubs: HubCandidate[], kind: GuildKind): number | undefined {
+  const ofKind = hubs.filter((h) => h.kind === kind);
+  return ofKind.length === 1 ? ofKind[0]?.id : undefined;
+}
+
+/**
+ * Apply the D15 precedence to the visible candidate hubs. ROK-1895: when the
+ * link targets the event's explicit tag, it carries the hub's name so the
+ * card body can say which hub the event belongs to.
+ */
+export function pickHubLink(
+  hubs: HubCandidate[],
   tagged: number | null,
   gameId: number,
   base: string,
 ): HubLink | null {
-  const oldest = ids.length > 0 ? Math.min(...ids) : undefined;
-  const target = tagged !== null && ids.includes(tagged) ? tagged : oldest;
-  if (target === undefined) return null;
-  // TODO(ROK-1873): ids.length >= 2 → `${base}/hubs?game=${gameId}` (HUBS_LINK_LABEL).
-  void gameId;
-  return { url: `${base}/guilds/${target}`, label: HUB_LINK_LABEL };
+  const hubUrl = (id: number): HubLink => ({
+    url: `${base}${hubPath(id)}`,
+    label: HUB_LINK_LABEL,
+  });
+  const taggedHub = hubs.find((h) => tagged !== null && h.id === tagged);
+  if (taggedHub) {
+    const { name } = taggedHub;
+    return { ...hubUrl(taggedHub.id), ...(name ? { hubName: name } : {}) };
+  }
+  const community = onlyOf(hubs, 'game_community');
+  if (community !== undefined) return hubUrl(community);
+  if (hubs.length === 1 && hubs[0]) return hubUrl(hubs[0].id);
+  if (hubs.length >= 2)
+    return { url: `${base}/hubs?game=${gameId}`, label: HUBS_LINK_LABEL };
+  return null;
 }
 
 /**
@@ -144,11 +177,14 @@ export async function resolveGameHubLink(
   if (!clientUrl || gameId === null || gameId === undefined) return null;
   const tagged = input.taggedGuildId ?? null;
   const rows = await db
-    .select({ id: schema.guilds.id })
+    .select({
+      id: schema.guilds.id,
+      kind: schema.guilds.kind,
+      name: schema.guilds.name,
+    })
     .from(schema.guilds)
     .where(candidateWhere(gameId, tagged));
-  const ids = rows.map((r) => r.id);
-  return pickHubLink(ids, tagged, gameId, trimBase(clientUrl));
+  return pickHubLink(rows, tagged, gameId, trimBase(clientUrl));
 }
 
 /**
@@ -186,14 +222,18 @@ export async function resolveGameHubLinks(
   if (!clientUrl || unique.length === 0) return links;
   if (linkableHubKinds().length === 0) return links;
   const rows = await db
-    .select({ id: schema.guilds.id, gameId: schema.guilds.gameId })
+    .select({
+      id: schema.guilds.id,
+      gameId: schema.guilds.gameId,
+      kind: schema.guilds.kind,
+    })
     .from(schema.guilds)
     .where(and(linkableHub(), gameHubsWhere(unique)));
-  const byGame = new Map<number, number[]>();
+  const byGame = new Map<number, HubCandidate[]>();
   for (const r of rows)
-    byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r.id]);
-  for (const [gameId, ids] of byGame) {
-    const link = pickHubLink(ids, null, gameId, trimBase(clientUrl));
+    byGame.set(r.gameId, [...(byGame.get(r.gameId) ?? []), r]);
+  for (const [gameId, hubs] of byGame) {
+    const link = pickHubLink(hubs, null, gameId, trimBase(clientUrl));
     if (link) links.set(gameId, link);
   }
   return links;

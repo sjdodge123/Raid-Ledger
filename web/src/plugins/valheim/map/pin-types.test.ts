@@ -132,3 +132,13 @@ describe('pinAccessibleName (prototype naming)', () => {
         ).toBe('Camp (Bed, cartography table, checked)');
     });
 });
+
+describe('scanned portal style (ROK-1946 D9)', () => {
+    it('the reserved type is "Scanned portal" with the ring; the player Portal is unchanged', () => {
+        const scanned = pinStyleFor('rl:scanned-portal');
+        expect([scanned.typeLabel, scanned.iconName, scanned.toneClass, scanned.ring])
+            .toEqual(['Scanned portal', 'arrows-right-left', 'text-success', true]);
+        const player = pinStyleFor('Icon4');
+        expect([player.typeLabel, player.iconName, player.ring]).toEqual(['Portal', 'sparkles', undefined]);
+    });
+});

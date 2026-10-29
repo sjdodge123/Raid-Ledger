@@ -4,7 +4,19 @@
  * only and dropped by `toSummary` everywhere else.
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  isNull,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -15,6 +27,7 @@ import type {
   ArmoryMapRefRow,
   ArmoryProfileReadRow,
 } from './valheim-armory-read.mappers';
+import type { SkillTrendDayRow } from './valheim-skill-trend.mappers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const {
@@ -24,8 +37,10 @@ const {
   users: u,
 } = schema;
 const blobs = schema.valheimLinkBlobs;
+const recipeSets = schema.valheimRecipeSets;
 const hubs = schema.guilds;
 const cat = schema.valheimItemCatalogs;
+const skillDays = schema.valheimProfileSkillDays;
 
 /** List filters + page window. */
 export interface ArmoryListFilter {
@@ -125,6 +140,30 @@ export class ValheimArmoryReadRepository {
     return row?.n ?? 0;
   }
 
+  /**
+   * ROK-1933 claim banner: one scan of the server's profiles — how many are
+   * unclaimed, and whether `viewerId` claimed any of them.
+   */
+  async claimStatus(
+    serverId: number,
+    viewerId: number,
+  ): Promise<{ viewerHasClaim: boolean; unclaimedCount: number }> {
+    const [row] = await this.db
+      .select({
+        unclaimedCount:
+          sql<number>`count(*) FILTER (WHERE ${p.claimedBy} IS NULL)`.mapWith(
+            Number,
+          ),
+        viewerHasClaim: sql<boolean>`COALESCE(bool_or(${p.claimedBy} = ${viewerId}), false)`,
+      })
+      .from(p)
+      .where(eq(p.pelicanServerId, serverId));
+    return {
+      viewerHasClaim: row?.viewerHasClaim === true,
+      unclaimedCount: row?.unclaimedCount ?? 0,
+    };
+  }
+
   /** The ROK-1831 community hub keyed to a Pelican server, or null. */
   async findServerHub(
     serverId: number,
@@ -177,6 +216,20 @@ export class ValheimArmoryReadRepository {
       .orderBy(asc(m.worldUid), asc(m.id));
   }
 
+  /** ROK-1882: the character's newest `limit` play days, newest first. */
+  listSkillDays(profileId: number, limit: number): Promise<SkillTrendDayRow[]> {
+    return this.db
+      .select({
+        playDate: skillDays.playDate,
+        startSkills: skillDays.startSkills,
+        endSkills: skillDays.endSkills,
+      })
+      .from(skillDays)
+      .where(eq(skillDays.profileId, profileId))
+      .orderBy(desc(skillDays.playDate))
+      .limit(limit);
+  }
+
   /** A map that belongs to the character, or null. */
   async findMap(
     profileId: number,
@@ -227,7 +280,13 @@ export class ValheimArmoryReadRepository {
     return row ?? null;
   }
 
-  /** A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6). */
+  /**
+   * A stored PNG's `storage_path`, by `(server, sha256)` only (D5, R6) —
+   * never a base map of that server (ROK-1949 D8: those are served masked).
+   * Allowlist: only a sha the server currently references as an item or
+   * recipe atlas, or as an item file icon, is served — a rotated, orphaned
+   * or re-imported base map is never one of those.
+   */
   async findBlobPath(serverId: number, sha256: string): Promise<string | null> {
     const [row] = await this.db
       .select({ storagePath: blobs.storagePath })
@@ -237,9 +296,45 @@ export class ValheimArmoryReadRepository {
           eq(blobs.pelicanServerId, serverId),
           eq(blobs.sha256, sha256),
           eq(blobs.contentType, 'image/png'),
+          notExists(
+            this.db
+              .select({ one: sql`1` })
+              .from(m)
+              .where(
+                and(
+                  eq(m.pelicanServerId, serverId),
+                  eq(m.baseMapSha256, sha256),
+                ),
+              ),
+          ),
+          this.referencedAsAsset(serverId, sha256),
         ),
       )
       .limit(1);
     return row?.storagePath ?? null;
+  }
+
+  /** `sha256` is a current item/recipe atlas or item file icon of `serverId`. */
+  private referencedAsAsset(serverId: number, sha256: string): SQL {
+    const fileIcon = sql`exists (select 1 from jsonb_each(${cat.items}) e where e.value->'icon'->>'kind' = 'file' and e.value->'icon'->>'sha256' = ${sha256})`;
+    const items = this.db
+      .select({ one: sql`1` })
+      .from(cat)
+      .where(
+        and(
+          eq(cat.pelicanServerId, serverId),
+          or(eq(cat.atlasSha256, sha256), fileIcon),
+        ),
+      );
+    const recipes = this.db
+      .select({ one: sql`1` })
+      .from(recipeSets)
+      .where(
+        and(
+          eq(recipeSets.pelicanServerId, serverId),
+          eq(recipeSets.atlasSha256, sha256),
+        ),
+      );
+    return or(exists(items), exists(recipes)) ?? sql`false`;
   }
 }

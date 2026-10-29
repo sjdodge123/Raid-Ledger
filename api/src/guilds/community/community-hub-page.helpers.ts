@@ -3,6 +3,7 @@ import type {
   GuildPage,
   GuildPageCommunity,
   GuildSummary,
+  HubJoinSource,
   HubStatus,
   LadderRole,
 } from '@raid-ledger/contract';
@@ -24,6 +25,8 @@ export interface CommunityMemberRecord {
   displayName: string | null;
   avatar: string | null;
   deactivatedAt: Date | null;
+  /** ROK-1893: how the row joined; null on rows that predate it. */
+  joinSource?: HubJoinSource | null;
 }
 
 /** Inputs of `buildCommunityHubPage`. */
@@ -61,6 +64,7 @@ function toRow(r: CommunityMemberRecord): GuildMemberRow {
       userId: r.userId,
       role: r.role,
       joinedAt: r.joinedAt.toISOString(),
+      ...(r.joinSource !== undefined ? { joinSource: r.joinSource } : {}),
     },
   };
 }

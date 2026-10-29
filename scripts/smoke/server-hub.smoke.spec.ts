@@ -10,12 +10,15 @@
  *
  * "N online" reads the in-memory presence roster, which no fixture can fill
  * (the demo panel is unreachable), so the pill is checked against the API's
- * own `onlineNow` count rather than a hardcoded 1.
+ * own `server.onlineCount` / `unlinkedOnlineCount` rather than hardcoded
+ * numbers (ROK-1932). With no presence the seed yields "0 online" and no
+ * nudge; the nudge's link branch is covered by `server-hero.test.tsx`.
  */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInAsAdmin, signInOnboardedMember } from './browser-session';
+import { tabOrder } from './hub-tabs';
 
 type Role = 'online' | 'recent' | 'joined' | 'lapsed' | 'outsider';
 
@@ -28,7 +31,10 @@ interface Hub {
 }
 
 interface PageMember { name: string; server?: { onlineNow: boolean } }
-interface HubPage { ranks: { members: PageMember[] }[] }
+interface HubPage {
+    ranks: { members: PageMember[] }[];
+    server?: { onlineCount?: number; unlinkedOnlineCount?: number };
+}
 
 const ADMIN_PELICAN = '/admin/settings/integrations/plugin/pelican/pelican-panel';
 
@@ -37,9 +43,13 @@ function userName(slot: number, role: Role): string {
     return `Hub ${slot} ${role[0]?.toUpperCase() ?? ''}${role.slice(1)}`;
 }
 
-async function seedHub(token: string): Promise<Hub> {
+/** ROK-1877 schedule sets: `true` = the running set (ROK-1876's `withSchedules`). */
+type ScheduleSet = boolean | 'start_only' | 'outside_hours';
+
+async function seedHub(token: string, schedules: ScheduleSet = false): Promise<Hub> {
     const slot = 1 + (test.info().parallelIndex % 15);
-    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot })) as Partial<Hub> | null;
+    const set = typeof schedules === 'string' ? { schedules } : { withSchedules: schedules };
+    const body = (await apiPost(token, '/admin/test/pelican/server-hub', { slot, ...set })) as Partial<Hub> | null;
     if (typeof body?.guildId !== 'number' || typeof body.serverId !== 'number' || !body.userIds) {
         throw new Error(`server-hub seed failed: ${JSON.stringify(body)}`);
     }
@@ -49,6 +59,14 @@ async function seedHub(token: string): Promise<Hub> {
 async function members(token: string, guildId: number): Promise<PageMember[]> {
     const body = (await apiGet(token, `/guilds/${guildId}`)) as HubPage | null;
     return (body?.ranks ?? []).flatMap((g) => g.members);
+}
+
+/** The hero's numbers as the API sends them (ROK-1932); a missing `onlineCount` fails the spec. */
+async function heroCounts(token: string, guildId: number): Promise<{ online: number; unlinked: number }> {
+    const body = (await apiGet(token, `/guilds/${guildId}`)) as HubPage | null;
+    const online = body?.server?.onlineCount;
+    if (typeof online !== 'number') throw new Error(`hub ${guildId}: server.onlineCount missing from the API`);
+    return { online, unlinked: body?.server?.unlinkedOnlineCount ?? 0 };
 }
 
 /** Poll the API roster until `name` is (or is no longer) a member. */
@@ -67,12 +85,19 @@ test.describe('Server community hub (ROK-1831)', () => {
     test('hub page: status pill, online count, Members columns; the 100-day player is absent', async ({ page }) => {
         const token = await getAdminToken();
         const hub = await seedHub(token);
-        const online = (await members(token, hub.guildId)).filter((m) => m.server?.onlineNow === true).length;
-        await page.goto(`/guilds/${hub.guildId}`);
+        const counts = await heroCounts(token, hub.guildId);
+        await page.goto(`/hubs/${hub.guildId}`);
         await expect(page.getByTestId('server-hub-status')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('server-hub-online')).toHaveText(`${online} online`);
+        await expect(page.getByTestId('server-hub-online')).toHaveText(`${counts.online} online`);
+        const nudge = page.getByTestId('server-hub-unlinked');
+        if (counts.unlinked > 0) {
+            await expect(nudge).toHaveText(`${counts.unlinked} not linked yet`);
+            await expect(nudge).toHaveAttribute('href', '#characters');
+        } else {
+            await expect(nudge, 'no nudge when every online player is linked').toHaveCount(0);
+        }
 
-        await page.goto(`/guilds/${hub.guildId}#members`);
+        await page.goto(`/hubs/${hub.guildId}#members`);
         await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         const a = memberRow(page, userName(hub.slot, 'online'));
         await expect(a.getByTestId('server-member-character')).toHaveText('Bjorn');
@@ -89,7 +114,7 @@ test.describe('Server community hub (ROK-1831)', () => {
         const hub = await seedHub(token);
         const name = userName(hub.slot, 'outsider');
         await signInOnboardedMember(page, hub.userIds.outsider);
-        await page.goto(`/guilds/${hub.guildId}`);
+        await page.goto(`/hubs/${hub.guildId}`);
         await page.getByTestId('server-hub-join').click({ timeout: 15_000 });
         await waitForMember(token, hub, name, true);
         await expect(page.getByTestId('server-hub-leave')).toBeVisible();
@@ -103,7 +128,7 @@ test.describe('Server community hub (ROK-1831)', () => {
 
     test('Quick Play tab lists the seeded session', async ({ page }) => {
         const hub = await seedHub(await getAdminToken());
-        await page.goto(`/guilds/${hub.guildId}#quick-play`);
+        await page.goto(`/hubs/${hub.guildId}#quick-play`);
         await expect(page.getByTestId('server-hub-quick-play')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('server-hub-quick-play-row')).toHaveCount(1);
     });
@@ -117,10 +142,10 @@ test.describe('Server community hub (ROK-1831)', () => {
             await setHubSwitch(page, hub, false);
             await expect(page.getByTestId(`pelican-server-${hub.serverId}-hub-hidden`).filter({ visible: true })).toBeVisible();
 
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('server-hub-status'), 'staff still sees a hidden hub').toBeVisible({ timeout: 15_000 });
             await signInOnboardedMember(page, hub.userIds.outsider);
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('guild-not-found')).toBeVisible({ timeout: 15_000 });
 
             await signInAsAdmin(page.context());
@@ -128,11 +153,137 @@ test.describe('Server community hub (ROK-1831)', () => {
             await setHubSwitch(page, hub, true);
             await expect(page.getByTestId(`pelican-server-${hub.serverId}-hub-open`).filter({ visible: true })).toBeVisible();
             await signInOnboardedMember(page, hub.userIds.outsider);
-            await page.goto(`/guilds/${hub.guildId}`);
+            await page.goto(`/hubs/${hub.guildId}`);
             await expect(page.getByTestId('server-hub-join')).toBeVisible({ timeout: 15_000 });
         } finally {
             await apiPatch(token, servers, { communityHub: true }).catch(() => undefined);
         }
+    });
+});
+
+/** A phone viewport, set per test so both projects run the phone cases (the bottom bar is CSS `md:hidden`). */
+const PHONE = { width: 375, height: 812 };
+
+const DAY = '(Mon|Tue|Wed|Thu|Fri|Sat|Sun)';
+/** A D2 merged-week label: "Every day", "Mon–Fri", "Fri, Sat" or one day. */
+const DAY_LABEL = new RegExp(`^(Every day|${DAY}((–|, )${DAY})?)$`);
+
+/**
+ * The seeded daily windows collapse to at most three week rows: one in a
+ * fixed-offset zone, up to three when a DST change splits the week (ROK-1877 D2).
+ */
+async function expectMergedWeek(card: Locator): Promise<void> {
+    const rows = card.getByTestId('server-hub-hours-row');
+    await expect(rows.first()).toBeVisible({ timeout: 15_000 });
+    const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-day-label') ?? ''));
+    expect(labels.length, `seven daily windows merge: ${labels.join(' | ')}`).toBeLessThanOrEqual(3);
+    for (const label of labels) expect(label, 'a merged-week day label').toMatch(DAY_LABEL);
+}
+
+function must<T>(value: T | undefined | null, label: string): T {
+    if (value === undefined || value === null) throw new Error(`missing: ${label}`);
+    return value;
+}
+
+/** The top of the bottom bar including the raised Hubs circle: the smallest top of the bar and everything in it. */
+async function barTop(page: Page): Promise<number> {
+    return page.getByTestId('bottom-tab-bar').evaluate((bar) =>
+        Math.min(...[bar, ...Array.from(bar.querySelectorAll('*'))].map((el) => el.getBoundingClientRect().top)));
+}
+
+test.describe('Server hub phone UX (ROK-1876)', () => {
+    test('phone: hidden tabs sit in More; choosing one navigates and the trigger shows its name as active', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.setViewportSize(PHONE);
+        await page.goto(`/hubs/${hub.guildId}`);
+        const trigger = page.getByTestId('tab-row-more-trigger');
+        await expect(trigger, 'a phone row overflows into More').toBeVisible({ timeout: 15_000 });
+        await expect(trigger).toContainText('More');
+        await expect(trigger).not.toHaveAttribute('data-active', 'true');
+
+        await trigger.click();
+        const menu = page.getByTestId('tab-row-more-menu');
+        await expect(menu).toBeVisible();
+        const item = menu.locator('a').first();
+        const id = must(await item.getAttribute('href'), 'first More item href').replace(/^#/, '');
+        const label = (await item.innerText()).trim();
+        await expect(page.getByTestId('tab-row-scroller').locator(`a[href="#${id}"]`), 'a More item is not also in the row').toHaveCount(0);
+
+        await page.getByTestId(`tab-row-more-item-${id}`).click();
+        await expect(page).toHaveURL(new RegExp(`#${id}$`));
+        await expect(menu, 'picking an item closes the menu').toHaveCount(0);
+        await expect(trigger).toHaveAttribute('data-active', 'true');
+        await expect(trigger).toContainText(label);
+    });
+
+    test('Resources comes right after Events in the tab order', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.goto(`/hubs/${hub.guildId}`);
+        await expect(page.getByTestId('tab-row-scroller')).toBeVisible({ timeout: 15_000 });
+        const order = await tabOrder(page);
+        expect(order.slice(0, 4), `tab order: ${order.join(', ')}`).toEqual(['overview', 'members', 'events', 'resources']);
+    });
+
+    test('Server hours: seeded schedules show day rows and the restart; no schedules shows "No set hours"', async ({ page }) => {
+        const token = await getAdminToken();
+        const hub = await seedHub(token, true);
+        await page.goto(`/hubs/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-row').first(), 'withSchedules gives the card a window').toBeVisible({ timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-restart')).toBeVisible();
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
+        // ROK-1877: running inside 18:00–02:00 / 13:00–13:40 UTC or outside them — wall clock decides which.
+        await expect(card.getByTestId('server-hub-hours-now')).toHaveText(/^Online now · (until .+|outside its usual hours)$/);
+        await expectMergedWeek(card);
+
+        await seedHub(token);
+        await page.goto(`/hubs/${hub.guildId}`);
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveText('No set hours', { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
+    });
+
+    test('Server hours (ROK-1877): a manual start outside the hours says so and names the next window', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken(), 'outside_hours');
+        await page.goto(`/hubs/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-now'), 'running, window 3 h ahead = S3')
+            .toHaveText('Online now · outside its usual hours', { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-sub')).toHaveText(/^Next scheduled: (\S+ )?\d{1,2}:\d{2} [AP]M$/);
+        await expect(card.getByTestId('server-hub-hours-dot')).toHaveAttribute('data-tone', 'online');
+        await expectMergedWeek(card);
+    });
+
+    test('Server hours (ROK-1877): a start-only schedule shows a Starts line, no rows and no "No set hours"', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken(), 'start_only');
+        await page.goto(`/hubs/${hub.guildId}`);
+        const card = page.locator('#server-hub-hours');
+        await expect(card.getByTestId('server-hub-hours-start'), 'a 14:00 UTC start with no stop = S7')
+            .toHaveText(/^Starts · (daily|Today|Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} [AP]M$/, { timeout: 15_000 });
+        await expect(card.getByTestId('server-hub-hours-now')).toHaveText('Online now');
+        await expect(card.getByTestId('server-hub-hours-row')).toHaveCount(0);
+        await expect(card.getByTestId('server-hub-hours-empty')).toHaveCount(0);
+        await expect(card.getByTestId('server-hub-hours-stop')).toHaveCount(0);
+    });
+
+    test('phone: the last Members card ends 16px above the bottom bar and its raised Hubs circle', async ({ page }) => {
+        const hub = await seedHub(await getAdminToken());
+        await page.setViewportSize(PHONE);
+        await page.goto(`/hubs/${hub.guildId}#members`);
+        const last = page.getByTestId('guild-members').getByTestId('guild-member-row').filter({ visible: true }).last();
+        await expect(last).toBeVisible({ timeout: 15_000 });
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        // Let the rAF-throttled scroll listener see the downward scroll before the 1px up-scroll.
+        await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+        // Scroll up 1px so the hide-on-scroll bar is shown, then wait for it to settle on screen.
+        await page.evaluate(() => window.scrollBy(0, -1));
+        const bar = page.getByTestId('bottom-tab-bar');
+        await expect(bar).toBeVisible();
+        await expect.poll(async () => { const b = must(await bar.boundingBox(), 'bar box'); return b.y + b.height; },
+            { message: 'the bottom bar is shown (not translated off screen)' }).toBeLessThanOrEqual(PHONE.height + 1);
+        const card = must(await last.boundingBox(), 'last member card box');
+        const top = await barTop(page);
+        expect(card.y + card.height, `last card bottom (${card.y + card.height}) vs bar + circle top (${top}) — ROK-1876 AC1`)
+            .toBeLessThanOrEqual(top - 16);
     });
 });
 

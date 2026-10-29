@@ -1,35 +1,23 @@
 /**
- * ROK-1831 — the per-game seam of the server hub. A game plugin (Valheim:
- * ROK-1835/1836) calls `registerServerHubGameTab(gameSlug, tab)` at import time
- * to add a tab to every server hub running that game; `pelicanHubModule` reads
- * them through `serverHubGameTabs`, gated per page by `page.server.gameSlug`
- * AND by the registering plugin being active (its endpoints sit behind
- * `PluginActiveGuard`, so an inactive plugin's tab could only ever error).
+ * ROK-1831 — the original per-game seam of the server hub, now a thin alias of
+ * the every-kind registry `PluginHandle.registerHubGameTab` (ROK-1912). A tab
+ * registered here shows on any hub whose `page.guild.gameSlug` matches, while
+ * `pluginSlug` is active. Core merges the tabs into every hub's frame, so the
+ * Pelican module no longer appends them itself.
  */
 import type { HubTab } from '../../hub-module';
-import { usePluginStore } from '../../../stores/plugin-store';
-
-const gameTabs: { gameSlug: string; pluginSlug: string; tab: HubTab }[] = [];
+import { addHubGameTab, hubGameTabs } from '../../hub-game-tabs';
 
 /**
- * Add a tab to server hubs of one game; it shows only where `page.server.gameSlug`
- * matches and while `pluginSlug` (default: the game slug) is an active plugin.
+ * @deprecated Use `PluginHandle.registerHubGameTab([gameSlug], tab)`. Adds a tab
+ * to hubs of one game, visible while `pluginSlug` is active. The owner is required
+ * (ROK-1969 D4) — it used to default to the game slug, i.e. no real plugin.
  */
-export function registerServerHubGameTab(gameSlug: string, tab: HubTab, pluginSlug: string = gameSlug): void {
-    gameTabs.push({ gameSlug, pluginSlug, tab });
+export function registerServerHubGameTab(gameSlug: string, tab: HubTab, pluginSlug: string): void {
+    addHubGameTab(pluginSlug, [gameSlug], tab);
 }
 
-/**
- * Every registered per-game tab, each wrapped so it is visible only on its own
- * game's hubs while its plugin is active. The store is read at call time: the
- * hub page re-renders on `activeSlugs` changes through `useHubModule`.
- */
+/** @deprecated Alias of `hubGameTabs` — every registered game tab, gated per page. */
 export function serverHubGameTabs(): HubTab[] {
-    return gameTabs.map(({ gameSlug, pluginSlug, tab }) => ({
-        ...tab,
-        visible: (ctx) =>
-            ctx.page.server?.gameSlug === gameSlug &&
-            usePluginStore.getState().activeSlugs.has(pluginSlug) &&
-            (tab.visible?.(ctx) ?? true),
-    }));
+    return hubGameTabs();
 }

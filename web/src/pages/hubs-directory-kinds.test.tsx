@@ -55,7 +55,7 @@ describe('HubsDirectoryPage — kind chips and card actions', () => {
         server.use(...communityHubHandlers({ directory: MIXED }));
         renderPage();
         const card = await cardFor('Valheim — Gamernight');
-        expect(within(card).getByRole('link', { name: 'View Valheim — Gamernight' })).toHaveAttribute('href', '/guilds/310');
+        expect(within(card).getByRole('link', { name: 'View Valheim — Gamernight' })).toHaveAttribute('href', '/hubs/310');
         expect(within(card).queryByRole('button', { name: /Join/ })).toBeNull();
         expect(within(card).getByText('12 members')).toBeInTheDocument();
     });
@@ -64,7 +64,7 @@ describe('HubsDirectoryPage — kind chips and card actions', () => {
         server.use(...communityHubHandlers({ directory: MIXED }));
         renderPage();
         const guild = await cardFor('Iron Vanguard');
-        expect(within(guild).getByRole('link', { name: 'View Iron Vanguard' })).toHaveAttribute('href', '/guilds/3');
+        expect(within(guild).getByRole('link', { name: 'View Iron Vanguard' })).toHaveAttribute('href', '/hubs/3');
         expect(within(guild).queryByText('Joined')).toBeNull();
         const community = await cardFor('BG3 Crew');
         expect(within(community).getByRole('button', { name: 'Join BG3 Crew' })).toBeInTheDocument();
@@ -184,5 +184,25 @@ describe('HubsDirectoryPage — a pick is checked before the router transition c
         expect(checkedAfterUrgentFlush, 'Server must read checked once the click\'s urgent render lands, not only after the URL transition').toBe(true);
         await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/hubs?membership=joined&kind=server'));
         expect(screen.getByRole('radio', { name: 'Server' })).toBeChecked();
+    });
+});
+
+describe('HubsDirectoryPage — staff Hidden chip (ROK-1883 AC19/AC23)', () => {
+    it('a staff payload marks the hidden hub with a warning "Hidden" chip, and only that card', async () => {
+        const items = [{ ...SERVER, hidden: true }, { ...COMMUNITY, hidden: false }, { ...GUILD, hidden: false }];
+        server.use(...communityHubHandlers({ directory: createMockHubDirectoryPage({ items }) }));
+        renderPage();
+        const card = await cardFor('Valheim — Gamernight');
+        const chip = within(card).getByText('Hidden');
+        expect(chip).toHaveAttribute('data-tone', 'warning');
+        expect(chip).toHaveAttribute('title', 'Hidden — only admins and operators can see this hub');
+        expect(screen.getAllByText('Hidden')).toHaveLength(1);
+    });
+
+    it('a non-staff payload (no hidden key) shows no Hidden chip', async () => {
+        server.use(...communityHubHandlers({ directory: MIXED }));
+        renderPage();
+        await cardFor('Valheim — Gamernight');
+        expect(screen.queryByText('Hidden')).toBeNull();
     });
 });

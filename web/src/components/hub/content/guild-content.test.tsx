@@ -76,7 +76,7 @@ function serve(canEdit: boolean, profile: GuildProfile = EMPTY_PROFILE, addons: 
 
 function renderPage(hash = ''): void {
     window.location.hash = hash;
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 async function tabLabels(): Promise<(string | null)[]> {
@@ -155,13 +155,13 @@ describe('Resources tab visibility', () => {
     it('shows for a viewer once there is content', async () => {
         serve(false, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Resources', 'Raids']));
     });
 
     it('shows for an editor even when empty', async () => {
         serve(true);
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Resources', 'Raids']));
     });
 });
 
@@ -343,15 +343,15 @@ describe('Resources tab visibility on a warm cache', () => {
         const onPaint = (labels: (string | null)[]): void => { painted.push(labels); };
         const page = (
             <Routes>
-                <Route path="/guilds/:id" element={<><GuildPage /><PaintSpy onPaint={onPaint} /></>} />
+                <Route path="/hubs/:id" element={<><GuildPage /><PaintSpy onPaint={onPaint} /></>} />
             </Routes>
         );
-        const warm = renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        const warm = renderWithProviders(page, { initialEntries: ['/hubs/7'], queryClient });
         await waitFor(async () => expect(await tabLabels()).toContain('Resources'));
         warm.unmount();
         painted.length = 0;
 
-        renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        renderWithProviders(page, { initialEntries: ['/hubs/7'], queryClient });
         await waitFor(() => expect(painted.length).toBeGreaterThan(0));
         const first = painted[0];
         expect(first, 'the spy must have observed the first commit that renders the tab nav').toBeDefined();
@@ -419,8 +419,8 @@ describe('the hub frame and an asynchronous plugin list', () => {
         const queryClient = createTestQueryClient();
         try {
             renderWithProviders(
-                <><HydrationHost /><Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes></>,
-                { initialEntries: ['/guilds/7'], queryClient },
+                <><HydrationHost /><Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes></>,
+                { initialEntries: ['/hubs/7'], queryClient },
             );
             // The guild payload is COMMITTED to the cache — a served request is
             // not yet data the page could have drawn, so counting handler calls

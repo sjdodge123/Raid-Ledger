@@ -48,7 +48,7 @@ import {
 import {
   findExistingEvent,
   assertCanUpdate,
-  buildUpdateData,
+  persistEventUpdate,
 } from './event-update.helpers';
 import { inviteMemberToEvent } from './event-invite.helpers';
 import { setEventReportLink } from './event-report-link.helpers';
@@ -143,11 +143,7 @@ export class EventsService {
   ): Promise<EventResponseDto> {
     const existing = await findExistingEvent(this.db, id);
     assertCanUpdate(existing, userId, isAdmin);
-    const updateData = buildUpdateData(dto, existing);
-    await this.db
-      .update(schema.events)
-      .set(updateData)
-      .where(eq(schema.events.id, id));
+    await persistEventUpdate(this.db, existing, dto);
     const res = await this.postMutate(
       id,
       userId,

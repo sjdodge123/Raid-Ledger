@@ -7,7 +7,10 @@
  * DemoModeGuard's own spec.)
  */
 import { eq } from 'drizzle-orm';
-import { GuildPageSchema } from '@raid-ledger/contract';
+import {
+  GameServerCalendarResponseSchema,
+  GuildPageSchema,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -47,8 +50,8 @@ function post(path: string, body: object = {}) {
     .send(body);
 }
 
-async function seed(slot = 2): Promise<ServerHubFixture> {
-  const res = await post(ROUTE, { slot });
+async function seed(slot = 2, extra: object = {}): Promise<ServerHubFixture> {
+  const res = await post(ROUTE, { slot, ...extra });
   expect(res.status).toBe(200);
   return res.body as ServerHubFixture;
 }
@@ -61,6 +64,20 @@ async function memberNames(guildId: number): Promise<string[]> {
   expect(res.status).toBe(200);
   const page = GuildPageSchema.parse(res.body);
   return page.ranks.flatMap((g) => g.members.map((m) => m.name));
+}
+
+/** The calendar's `kind:effect` items for one server over the next 7 days. */
+async function calendarItems(serverId: number): Promise<string[]> {
+  const from = new Date();
+  const to = new Date(from.getTime() + 7 * 86_400_000);
+  const q = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+  const res = await testApp.request
+    .get(`/game-servers/calendar?${q}`)
+    .set('Authorization', `Bearer ${adminToken}`);
+  expect(res.status).toBe(200);
+  return GameServerCalendarResponseSchema.parse(res.body)
+    .data.filter((i) => i.serverKey === String(serverId))
+    .map((i) => (i.kind === 'window' ? 'window' : `marker:${i.effect}`));
 }
 
 beforeAll(async () => {
@@ -140,6 +157,33 @@ describe('POST /admin/test/pelican/server-hub (ROK-1831)', () => {
     );
   });
 
+  it('a re-run puts a renamed hub back on the server name (ROK-1950)', async () => {
+    const hub = await seed();
+    await testApp.db
+      .update(schema.guilds)
+      .set({
+        name: 'Renamed Hub',
+        nameKey: 'renamed hub',
+        nameOverridden: true,
+      })
+      .where(eq(schema.guilds.id, hub.guildId));
+
+    await seed();
+    const [guild] = await testApp.db
+      .select({
+        name: schema.guilds.name,
+        nameKey: schema.guilds.nameKey,
+        nameOverridden: schema.guilds.nameOverridden,
+      })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, hub.guildId));
+    expect(guild).toEqual({
+      name: 'Demo Valheim Hub 2',
+      nameKey: 'demo valheim hub 2',
+      nameOverridden: false,
+    });
+  });
+
   it('survives a seed-servers reset and keeps slots apart', async () => {
     const a = await seed(2);
     const b = await seed(3);
@@ -155,6 +199,26 @@ describe('POST /admin/test/pelican/server-hub (ROK-1831)', () => {
     );
   });
 
+  it('has no schedules and stays off the calendar by default', async () => {
+    const hub = await seed();
+    expect(await calendarItems(hub.serverId)).toEqual([]);
+  });
+
+  it('withSchedules (ROK-1876): calendar windows and a restart for the hub server; a plain re-run clears them', async () => {
+    const hub = await seed(2, { withSchedules: true });
+    const items = await calendarItems(hub.serverId);
+    expect(items.filter((i) => i === 'window').length).toBeGreaterThan(0);
+    expect(items).toContain('marker:restart');
+
+    expect(await seed(2)).toEqual(hub);
+    expect(await calendarItems(hub.serverId)).toEqual([]);
+    const rows = await testApp.db
+      .select({ id: schema.pelicanSchedules.id })
+      .from(schema.pelicanSchedules)
+      .where(eq(schema.pelicanSchedules.serverId, hub.serverId));
+    expect(rows).toEqual([]);
+  });
+
   it('rejects an unknown slot with 400', async () => {
     const results = await Promise.all(
       [{ slot: 99 }, { slot: -1 }, { slot: 1.5 }, { slot: 'x' }].map((b) =>
@@ -162,5 +226,10 @@ describe('POST /admin/test/pelican/server-hub (ROK-1831)', () => {
       ),
     );
     expect(results.map((r) => r.status)).toEqual([400, 400, 400, 400]);
+  });
+
+  it('rejects an unknown schedules set with 400 instead of seeding none (ROK-1877)', async () => {
+    const res = await post(ROUTE, { schedules: 'start-only' });
+    expect(res.status).toBe(400);
   });
 });

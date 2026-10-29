@@ -100,6 +100,7 @@ export const E2E_SPEC_PATTERN = /^scripts\/smoke\/[\w./-]+\.smoke\.spec\.ts$/;
  */
 const SPECS_CONFLICTING_FLAGS = [
   '--static',
+  '--scoped',
   '--no-e2e',
   '--only-unit',
   '--only-integration',

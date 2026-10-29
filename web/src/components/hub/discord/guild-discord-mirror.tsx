@@ -11,36 +11,55 @@
  * in-context shortcut and only renders it when `onChangeChannel` is given, so
  * an Officer (who can still edit content) sees none.
  */
-import type { JSX, ReactNode } from 'react';
+import { useMemo, type JSX, type ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import type {
+    GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, GuildKind, ThreadMessageMentionDto,
+} from '@raid-ledger/contract';
 import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
+import { DiscordMarkup } from '../../discord/DiscordMarkup';
+import type { DiscordChannelName } from '../../discord/discord-markup.parse';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle } from '../hub-bits';
+import { privateTagTitle } from '../hub-copy';
 import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
 import { httpStatusOf } from '../../../lib/api/api-error';
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
-function EmbedBlock({ embed }: { embed: GuildDiscordEmbedDto }): JSX.Element {
+/** ROK-1878: every Discord text field renders through `DiscordMarkup`, never raw. */
+interface MarkupCtx { mentions: ThreadMessageMentionDto[]; channels: DiscordChannelName[] }
+
+function EmbedBlock({ embed, ctx }: { embed: GuildDiscordEmbedDto; ctx: MarkupCtx }): JSX.Element {
     return (
         <div data-testid="guild-discord-embed" className="mt-2 rounded-md border border-edge border-l-4 border-l-success bg-panel px-3 py-2">
-            {embed.title && <p className="text-sm font-semibold text-foreground">{embed.title}</p>}
-            {embed.description && <p className="whitespace-pre-line break-words text-xs text-muted">{embed.description}</p>}
+            {embed.title && <p className="break-words text-sm font-semibold text-foreground"><DiscordMarkup text={embed.title} {...ctx} /></p>}
+            {embed.description && <p className="whitespace-pre-line break-words text-xs text-muted"><DiscordMarkup text={embed.description} {...ctx} /></p>}
         </div>
     );
 }
 
-function MessageList({ messages, name }: { messages: GuildDiscordMessageDto[]; name: string }): JSX.Element {
+function MessageItem({ message, channels }: { message: GuildDiscordMessageDto; channels: DiscordChannelName[] }): JSX.Element {
+    const ctx: MarkupCtx = { mentions: message.mentions, channels };
+    const body = (
+        <div data-testid="discord-text" className="whitespace-pre-wrap break-words text-sm text-foreground">
+            <DiscordMarkup text={message.content} {...ctx} />
+        </div>
+    );
     return (
-        <ul aria-label={`Latest messages in #${name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
-            {messages.map((m) => (
-                <ThreadMessageRow key={m.messageId} message={m}>
-                    {m.embed && <EmbedBlock embed={m.embed} />}
-                </ThreadMessageRow>
-            ))}
+        <ThreadMessageRow message={message} body={body}>
+            {message.embed && <EmbedBlock embed={message.embed} ctx={ctx} />}
+        </ThreadMessageRow>
+    );
+}
+
+function MessageList({ messages, channel }: { messages: GuildDiscordMessageDto[]; channel: OkMirror['channel'] }): JSX.Element {
+    const channels = useMemo((): DiscordChannelName[] => [{ id: channel.id, name: channel.name }], [channel.id, channel.name]);
+    return (
+        <ul aria-label={`Latest messages in #${channel.name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
+            {messages.map((m) => <MessageItem key={m.messageId} message={m} channels={channels} />)}
         </ul>
     );
 }
@@ -64,7 +83,7 @@ function OkBody({ mirror }: { mirror: OkMirror }): JSX.Element {
     return (
         <>
             {shown.length > 0
-                ? <MessageList messages={shown} name={mirror.channel.name} />
+                ? <MessageList messages={shown} channel={mirror.channel} />
                 : <p className="py-6 text-center text-sm text-muted" data-testid="guild-discord-state-empty">No messages in #{mirror.channel.name} yet.</p>}
             <MirrorFooter url={mirror.channel.url} />
         </>
@@ -103,21 +122,27 @@ function MirrorError(): JSX.Element {
 }
 
 /** Spec D8/§UI: a private bound channel carries a "Private" tag on the card itself, for every viewer. */
-function PrivateTag(): JSX.Element {
+function PrivateTag({ kind }: { kind: GuildKind | undefined }): JSX.Element {
     return (
-        <span data-testid="guild-discord-private" title="Private Discord channel — everyone who can open this guild page sees it here">
+        <span data-testid="guild-discord-private" title={privateTagTitle(kind)}>
             <Pill><LockClosedIcon className="h-3 w-3" aria-hidden="true" /> Private</Pill>
         </span>
     );
 }
 
-function headerAction({ mirror, onChange }: { mirror: GuildDiscordMirrorDto | undefined; onChange: (() => void) | null }): JSX.Element | undefined {
+interface HeaderActionArgs {
+    mirror: GuildDiscordMirrorDto | undefined;
+    onChange: (() => void) | null;
+    kind: GuildKind | undefined;
+}
+
+function headerAction({ mirror, onChange, kind }: HeaderActionArgs): JSX.Element | undefined {
     const isPrivate = mirror?.state === 'ok' && mirror.channel.visibility === 'private';
     const change = onChange && mirror && mirror.state !== 'unset'
         ? <Button variant="ghost" size="sm" onClick={onChange} data-testid="guild-discord-change">Change channel</Button>
         : null;
     if (!isPrivate && !change) return undefined;
-    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag />}{change}</div>;
+    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag kind={kind} />}{change}</div>;
 }
 
 interface MirrorProps {
@@ -126,10 +151,12 @@ interface MirrorProps {
     canEdit: boolean;
     /** Opens the picker behind the settings sheet; `null` for a viewer who may not pick (D10/Q4). */
     onChangeChannel?: (() => void) | null;
+    /** ROK-1891 — picks the blurb's fallback phrase ("the server's Discord" on a server hub). */
+    kind?: GuildKind | undefined;
 }
 
 /** Hidden while loading (no layout jump) and, while nothing is bound, for anyone who cannot pick. */
-export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }: MirrorProps): JSX.Element | null {
+export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null, kind }: MirrorProps): JSX.Element | null {
     const query = useGuildDiscord(guildId);
     const mirror = query.data;
     // Gated on the affordance, not on `canEdit`: an Officer may edit content
@@ -138,12 +165,12 @@ export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }:
     // ROK-1831: a 403 (a visitor on a members-first hub) hides the card — never a red error.
     if (httpStatusOf(query.error) === 403) return null;
     const open = onChangeChannel;
-    const action = headerAction({ mirror, onChange: open });
+    const action = headerAction({ mirror, onChange: open, kind });
     return (
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
-                blurb={mirrorBlurb(mirror)} action={action} />
+                blurb={mirrorBlurb(mirror, kind)} action={action} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
         </section>
     );

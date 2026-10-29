@@ -16,7 +16,7 @@ jest.mock('./hub-link.resolver', () => ({
 }));
 
 const BASE = 'https://raid.example.com';
-const HUB = { url: `${BASE}/guilds/7`, label: 'Hub' as const };
+const HUB = { url: `${BASE}/hubs/7`, label: 'Hub' as const };
 const safe = jest.mocked(resolveGameHubLinkSafe);
 
 function asDb(mock: MockDb): PostgresJsDatabase<typeof schema> {

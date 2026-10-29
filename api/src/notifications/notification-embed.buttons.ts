@@ -1,16 +1,48 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildHubProposalButton } from './notification-embed.hub-proposal';
+import { buildPollHubButton } from './notification-embed.poll-hub';
 import {
-  RESCHEDULE_BUTTON_IDS,
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
-  SIGNUP_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { toStr } from './notification-embed.helpers';
 import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
+import {
+  buildRescheduleRow,
+  buildSignupRow,
+} from './notification-embed.event-rows';
 import { VOICE_ACCESS_LOST_SUBTYPE } from './voice-access-lost.helpers';
 import { postDeepLink } from '../guilds/posts/hub-posts.helpers';
+import { hubPath } from '../guilds/hub-path';
+import {
+  buildValheimClaimRow,
+  buildValheimOpenHubButton,
+} from './notification-embed.valheim-claim';
+
+type Payload = Record<string, unknown> | undefined;
+
+/**
+ * Rows built from the payload alone, with no eventId. ROK-1455 D12: an invite
+ * payload carries a gameId, not an eventId, so these MUST be checked above
+ * the eventId guard — below it, they are dead code.
+ */
+const PAYLOAD_ROWS: Partial<
+  Record<
+    NotificationType,
+    (p: Payload) => ActionRowBuilder<ButtonBuilder> | null | undefined
+  >
+> = {
+  lfg_player_invite: buildLfgPlayerInviteRow,
+  valheim_claim_suggestion: buildValheimClaimRow,
+};
+
+/** One optional row as a rows array (undefined when there is none). */
+function asRows(
+  row: ActionRowBuilder<ButtonBuilder> | null | undefined,
+): ActionRowBuilder<ButtonBuilder>[] | undefined {
+  return row ? [row] : undefined;
+}
 
 /** Build extra action rows for specific notification types (ROK-378, ROK-536). */
 export function buildExtraRows(
@@ -18,12 +50,8 @@ export function buildExtraRows(
   payload: Record<string, unknown> | undefined,
   clientUrl: string,
 ): ActionRowBuilder<ButtonBuilder>[] | undefined {
-  // ROK-1455 D12: an invite payload carries a gameId, not an eventId, so this
-  // branch MUST sit above the eventId guard — below it, it is dead code.
-  if (type === 'lfg_player_invite') {
-    const row = buildLfgPlayerInviteRow(payload);
-    return row ? [row] : undefined;
-  }
+  const byPayload = PAYLOAD_ROWS[type];
+  if (byPayload) return asRows(byPayload(payload));
   const eventId = payload?.eventId;
   if (eventId == null) return undefined;
   const eid = toStr(eventId);
@@ -50,40 +78,6 @@ export function buildExtraRows(
   // ROK-1371 event path: the DM carries the NEW follow-up event's signup row.
   if (type === 'post_event_followup') return [buildSignupRow(eid)];
   return undefined;
-}
-
-function buildRescheduleRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${RESCHEDULE_BUTTON_IDS.CONFIRM}:${eventId}`)
-      .setLabel('Confirm')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${RESCHEDULE_BUTTON_IDS.TENTATIVE}:${eventId}`)
-      .setLabel('Tentative')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`${RESCHEDULE_BUTTON_IDS.DECLINE}:${eventId}`)
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
-  );
-}
-
-function buildSignupRow(eventId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${SIGNUP_BUTTON_IDS.SIGNUP}:${eventId}`)
-      .setLabel('Sign Up')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`${SIGNUP_BUTTON_IDS.TENTATIVE}:${eventId}`)
-      .setLabel('Tentative')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`${SIGNUP_BUTTON_IDS.DECLINE}:${eventId}`)
-      .setLabel('Decline')
-      .setStyle(ButtonStyle.Danger),
-  );
 }
 
 function buildRoleGapExtraRows(
@@ -129,6 +123,23 @@ const ROSTER_BUTTON_TYPES = new Set<NotificationType>([
   'tentative_displaced',
 ]);
 
+/**
+ * Primary buttons built from the payload alone, checked before the eventId
+ * gate: ROK-1371's poll payload carries {lineupId, matchId} ("Vote on a
+ * Time"), ROK-1832's leader post a guildId — neither has an eventId (which
+ * would otherwise short-circuit to null).
+ */
+const PAYLOAD_BUTTONS: Partial<
+  Record<NotificationType, (p: Payload, url: string) => ButtonBuilder | null>
+> = {
+  community_lineup: buildLineupButton,
+  post_event_followup: buildLineupButton,
+  hub_leader_post: buildGroupButton,
+  valheim_claim_suggestion: buildValheimOpenHubButton,
+  hub_proposal_submitted: buildHubProposalButton,
+  hub_proposal_reviewed: buildHubProposalButton,
+};
+
 /** Build the primary action button for a notification. */
 export function buildPrimaryButton(
   type: NotificationType,
@@ -142,19 +153,8 @@ export function buildPrimaryButton(
       .setStyle(ButtonStyle.Link)
       .setURL(`${clientUrl}/profile/integrations`);
   }
-  if (type === 'community_lineup') {
-    return buildLineupButton(payload, clientUrl);
-  }
-  // ROK-1371 poll path: payload carries {lineupId, matchId} → "Vote on a Time"
-  // deep-link. Placed before the eventId gate because the poll payload has no
-  // eventId (which would otherwise short-circuit to null).
-  if (type === 'post_event_followup') {
-    return buildLineupButton(payload, clientUrl);
-  }
-  // ROK-1832: a leader post carries a guildId, not an eventId.
-  if (type === 'hub_leader_post') return buildGroupButton(payload, clientUrl);
-  if (type === 'hub_proposal_submitted' || type === 'hub_proposal_reviewed')
-    return buildHubProposalButton(payload, clientUrl);
+  const byPayload = PAYLOAD_BUTTONS[type];
+  if (byPayload) return byPayload(payload, clientUrl);
   const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
   if (!eventId) return null;
   if (
@@ -303,20 +303,30 @@ export function buildInlineButtons(
     return [viewLineupButton(clientUrl, lineupId)];
   }
   if (type === 'community_lineup') {
-    const sub = payload?.subtype as string | undefined;
-    const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
-    if (!lineupId) return [];
-    const openPoll = buildOpenPollButton(payload, clientUrl);
-    if (openPoll) return [openPoll];
-    // Only add View Lineup inline when primary button goes elsewhere
-    const needsInline =
-      sub === 'lineup_match_member' ||
-      sub === 'lineup_event_created' ||
-      sub === 'lineup_scheduling_open';
-    if (!needsInline) return [];
-    return [viewLineupButton(clientUrl, lineupId)];
+    // ROK-1896 D7: the poll's Hub link sits after the inline links.
+    const inline = lineupInlineButtons(payload, clientUrl);
+    const hub = buildPollHubButton(payload, clientUrl);
+    return hub ? [...inline, hub] : inline;
   }
   return [];
+}
+
+/** Open Poll (lock DMs) or View Lineup (primary goes elsewhere), if any. */
+function lineupInlineButtons(
+  payload: Payload,
+  clientUrl: string,
+): ButtonBuilder[] {
+  const sub = payload?.subtype as string | undefined;
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  if (!lineupId) return [];
+  const openPoll = buildOpenPollButton(payload, clientUrl);
+  if (openPoll) return [openPoll];
+  // Only add View Lineup inline when primary button goes elsewhere
+  const needsInline =
+    sub === 'lineup_match_member' ||
+    sub === 'lineup_event_created' ||
+    sub === 'lineup_scheduling_open';
+  return needsInline ? [viewLineupButton(clientUrl, lineupId)] : [];
 }
 
 /**
@@ -334,7 +344,7 @@ function buildGroupButton(
   const url =
     typeof postId === 'number'
       ? postDeepLink(clientUrl, guildId, postId)
-      : `${clientUrl}/guilds/${guildId}`;
+      : `${clientUrl}${hubPath(guildId)}`;
   return new ButtonBuilder()
     .setLabel('View group')
     .setStyle(ButtonStyle.Link)

@@ -94,6 +94,35 @@ describe('ValheimLinkIngestService (ROK-1833)', () => {
     });
   });
 
+  it('stores a valid portals message pending on its worldUid key (ROK-1946)', async () => {
+    const { repo, service } = setup();
+    for (const name of ['portals-vanilla', 'portals-modded']) {
+      const msg = buf(loadValheimFixture(name));
+      const res = await service.ingest(req, 'portals', msg, NOW);
+      expect(res).toEqual({ status: 'accepted', missingBlobs: [] });
+    }
+    expect(repo.upsertLatest).toHaveBeenCalledTimes(2);
+    expect(repo.upsertLatest.mock.calls[0]?.[0]).toMatchObject({
+      pelicanServerId: 7,
+      kind: 'portals',
+      snapshotKey: '1234567890123',
+      worldUid: '1234567890123',
+      status: 'pending',
+    });
+  });
+
+  it('validates portals: 400 schema_invalid, 403 server_mismatch (ROK-1944)', async () => {
+    const { repo, service } = setup();
+    const msg = loadValheimFixture('portals-vanilla');
+    const extra = buf({ ...msg, pairs: [] });
+    const bad = await rejection(service.ingest(req, 'portals', extra, NOW));
+    expect(bad).toMatchObject({ status: 400, body: code('schema_invalid') });
+    const other = buf({ ...msg, serverId: 'srv_other' });
+    const wrong = await rejection(service.ingest(req, 'portals', other, NOW));
+    expect(wrong).toMatchObject({ status: 403 });
+    expect(repo.upsertLatest).not.toHaveBeenCalled();
+  });
+
   it('403 server_mismatch when the body serverId is not the token’s', async () => {
     const { repo, service } = setup();
     const msg = {

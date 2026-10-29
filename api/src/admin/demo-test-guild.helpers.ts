@@ -30,6 +30,12 @@ export interface SeedGuildInput {
   gameSlug: string;
   /** ROK-1786: also seed the GM post, rules, links and two addons. */
   withContent: boolean;
+  /** ROK-1914: also seed LedgerLink lockout snapshots (Who's saved). */
+  withLockouts: boolean;
+  /** ROK-1919: also seed three level-up events (Recent dings). */
+  withDings: boolean;
+  /** ROK-1916: also seed guild-export presence (Last seen). */
+  withPresence: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -58,12 +64,39 @@ export const SEED_GUILD_EDITOR_RANK = 1;
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{2,47}$/;
 
+/** An optional boolean body flag (absent = false). */
+function boolFlag(value: unknown, name: string): boolean {
+  const flag = value ?? false;
+  if (typeof flag !== 'boolean') {
+    throw new BadRequestException(`${name} must be a boolean`);
+  }
+  return flag;
+}
+
+interface RawSeedFlags {
+  withContent?: unknown;
+  withLockouts?: unknown;
+  withDings?: unknown;
+  withPresence?: unknown;
+}
+
+/** The opt-in boolean flags; 400 on a non-boolean. */
+function parseSeedFlags(
+  raw: RawSeedFlags,
+): Omit<SeedGuildInput, 'name' | 'gameSlug'> {
+  return {
+    withContent: boolFlag(raw.withContent, 'withContent'),
+    withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),
+    withDings: boolFlag(raw.withDings, 'withDings'),
+    withPresence: boolFlag(raw.withPresence, 'withPresence'),
+  };
+}
+
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {
-  const raw = (body ?? {}) as {
+  const raw = (body ?? {}) as RawSeedFlags & {
     name?: unknown;
     gameSlug?: unknown;
-    withContent?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -74,11 +107,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof gameSlug !== 'string' || !ALL_WOW_GAME_SLUGS.includes(gameSlug)) {
     throw new BadRequestException('gameSlug must be a WoW game slug');
   }
-  const withContent = raw.withContent ?? false;
-  if (typeof withContent !== 'boolean') {
-    throw new BadRequestException('withContent must be a boolean');
-  }
-  return { name: raw.name, gameSlug, withContent };
+  return { name: raw.name, gameSlug, ...parseSeedFlags(raw) };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */
@@ -112,7 +141,8 @@ export async function upsertGuild(
     lastSnapshotAt: now,
     updatedAt: now,
   };
-  const values = { gameId, region: SEED_GUILD_REGION, name, ...set };
+  const region = SEED_GUILD_REGION;
+  const values = { gameId, region, name, sourceName: name, ...set };
   const [row] = await db
     .insert(schema.guilds)
     .values({ ...values, nameKey: name.toLowerCase(), source: 'addon_import' })

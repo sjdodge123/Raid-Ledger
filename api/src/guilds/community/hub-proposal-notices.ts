@@ -1,4 +1,5 @@
 import type { CreateNotificationInput } from '../../notifications/notification.types';
+import { hubPath } from '../hub-path';
 
 /**
  * ROK-1870 L2b — the `hub_proposal_submitted` / `hub_proposal_reviewed`
@@ -27,7 +28,8 @@ export function submittedNotice(
     type: 'hub_proposal_submitted',
     title: `New hub proposal: ${facts.hubName}`,
     message: `${proposerName} proposed "${facts.hubName}" for ${facts.gameName}.`,
-    payload: { ...facts, url: HUB_PROPOSALS_ADMIN_URL },
+    // `proposerName` lets the Discord DM escape it (notification-embed.hub-proposal).
+    payload: { ...facts, proposerName, url: HUB_PROPOSALS_ADMIN_URL },
   };
 }
 
@@ -45,7 +47,7 @@ export function approvedNotice(
       ...facts,
       outcome: 'approved',
       guildId: facts.proposalId,
-      url: `/guilds/${facts.proposalId}`,
+      url: hubPath(facts.proposalId),
     },
   };
 }

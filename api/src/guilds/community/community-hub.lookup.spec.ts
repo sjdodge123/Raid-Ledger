@@ -13,6 +13,8 @@ const HUB: schema.GuildSelect = {
   region: 'community',
   name: 'Crew',
   nameKey: 'crew',
+  nameOverridden: false,
+  sourceName: null,
   realmSlug: null,
   guildSlug: null,
   faction: null,
@@ -30,6 +32,7 @@ const HUB: schema.GuildSelect = {
   reviewedAt: null,
   archivedAt: AT,
   archivedReason: 'leader',
+  autoMembership: 'off',
   createdAt: AT,
   updatedAt: AT,
 };

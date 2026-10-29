@@ -55,7 +55,7 @@ export async function withContentGuild(
 
 export async function openGuildAs(page: Page, guild: SeededGuild, role: Role, suffix = ''): Promise<void> {
     await signInOnboardedMember(page, guild.users[role].userId);
-    await page.goto(`/guilds/${guild.guildId}${suffix}`);
+    await page.goto(`/hubs/${guild.guildId}${suffix}`);
 }
 
 /** Wait for the lazy editor chunk inside `frame`; return its contenteditable. */
@@ -66,8 +66,18 @@ export async function editorTextbox(page: Page, frame: Locator): Promise<Locator
     return box;
 }
 
-export function tool(frame: Locator, key: 'bold' | 'italic' | 'strike' | 'code' | 'link' | 'bullets' | 'numbers'): Locator {
+export type ToolKey = 'bold' | 'italic' | 'strike' | 'code' | 'link' | 'bullets' | 'numbers' | 'h1' | 'h2' | 'h3';
+
+export function tool(frame: Locator, key: ToolKey): Locator {
     return frame.getByTestId(`md-tool-${key}`);
+}
+
+/**
+ * ROK-1898 — the editor's rendering of one heading: `#`→h3, `##`→h4, `###`→h5 (MD_HEADING_TAG),
+ * each carrying `data-md-heading` = its markdown level. The card (MarkdownBlock) renders the same.
+ */
+export function heading(scope: Locator, level: 1 | 2 | 3): Locator {
+    return scope.locator(`h${level + 2}[data-md-heading="${level}"]`);
 }
 
 /** Type `text` and make it bold with the toolbar, leaving the cursor after it with bold OFF. */

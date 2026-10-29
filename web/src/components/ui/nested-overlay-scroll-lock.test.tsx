@@ -21,7 +21,7 @@ vi.mock('../../hooks/use-auth', () => ({
     isAdmin: () => false,
     isOperatorOrAdmin: () => false,
     getAuthToken: () => 'mock-token',
-    // ROK-1870: the More drawer's "Your hubs" block (now core) scopes its query by viewer.
+    // ROK-1870: hub-aware nav entries scope their query by viewer (the More drawer has none since ROK-1890).
     useViewerCacheScope: () => 1,
 }));
 vi.mock('../../stores/theme-store', () => ({
@@ -92,12 +92,13 @@ describe('nested overlays share one body scroll lock', () => {
         expect(document.body.style.overflow).toBe('');
     });
 
-    it('the More drawer closing under an open game-time sheet keeps the body locked; closing the sheet unlocks it', () => {
+    it('the More drawer closing under an open game-time sheet keeps the body locked; closing the sheet unlocks it', async () => {
         const { closeMore } = renderMoreDrawer();
         expect(document.body.style.overflow).toBe('hidden');
 
-        fireEvent.click(screen.getByTestId('more-drawer-game-time'));
-        expect(screen.getByTestId('game-time-check-sheet')).toBeInTheDocument();
+        // ROK-1901: the submenu row and the sheet are lazy chunks — await both.
+        fireEvent.click(await screen.findByTestId('more-drawer-game-time'));
+        expect(await screen.findByTestId('game-time-check-sheet')).toBeInTheDocument();
 
         closeMore();
         expect(document.body.style.overflow, 'game-time sheet still open, so the body must stay locked').toBe('hidden');

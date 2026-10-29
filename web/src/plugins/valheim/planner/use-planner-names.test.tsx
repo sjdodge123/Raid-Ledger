@@ -5,7 +5,7 @@ import type { JSX } from 'react';
 import type { ValheimCatalogIcon, ValheimMapBaseMap, ValheimPlanNode } from '@raid-ledger/contract';
 import { recipeCatalogFixture } from '../../../test/mocks/valheim-recipes-handlers';
 import { RecipeTreeRow } from './recipe-tree-row';
-import { usePlannerNames, type PlannerNameSource } from './use-planner-names';
+import { usePlannerNames, type PlannerNameSource, type PlannerNames } from './use-planner-names';
 
 vi.mock('../hooks/use-valheim-characters', () => ({
     useValheimBlobUrl: (_serverId: number, sha: string | null) => (sha === null ? null : `blob:${sha}`),
@@ -22,7 +22,7 @@ const catalog = {
     itemAtlas: atlas(SHA_A),
     entries: [
         ...base.entries,
-        { prefab: 'IronScrap', kind: 'item' as const, name: 'Iron scrap', category: 'Material', icon: at(0), maxQuality: 1, sources: { recipes: 0, processes: 0 } },
+        { prefab: 'IronScrap', kind: 'item' as const, name: 'Iron scrap', category: 'Material', icon: at(0), maxQuality: 1, sources: { recipes: 0, processes: 0 }, craft: null, upgrades: [] },
     ],
 };
 const tree: PlannerNameSource = {
@@ -51,5 +51,29 @@ describe('usePlannerNames icon pairing', () => {
         expect(sprite?.style.backgroundImage).toBe(`url("blob:${SHA_B}")`);
         // (64,0) on a 64px cell scaled to the 32px tile → −32px; the catalogue's (0,0) would be 0px.
         expect(sprite?.style.backgroundPosition).toBe('-32px 0px');
+    });
+});
+
+describe('usePlannerNames stationName (ROK-1934)', () => {
+    function namesFor(c: typeof catalog): PlannerNames {
+        const seen: PlannerNames[] = [];
+        function Probe(): null {
+            seen.push(usePlannerNames(7, c, undefined, undefined, 'tree'));
+            return null;
+        }
+        render(<Probe />);
+        const last = seen.at(-1);
+        if (last === undefined) throw new Error('usePlannerNames never rendered');
+        return last;
+    }
+    it('a processor with no catalogue piece falls back to its label, then to the raw prefab', () => {
+        const names = namesFor(catalog);
+        expect(names.stationName('smelter')).toBe('Smelter');
+        expect(names.stationName('piece_cookingstation')).toBe('Cooking station');
+        expect(names.stationName('mystery_press')).toBe('mystery_press');
+    });
+    it('a piece named by the export wins over the fallback label', () => {
+        const smeltery = { prefab: 'smelter', kind: 'piece' as const, name: 'Smeltery', category: 'Crafting', icon: null, maxQuality: 1, sources: { recipes: 1, processes: 0 }, craft: null, upgrades: [] };
+        expect(namesFor({ ...catalog, entries: [...catalog.entries, smeltery] }).stationName('smelter')).toBe('Smeltery');
     });
 });

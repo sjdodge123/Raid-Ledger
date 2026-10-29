@@ -16,6 +16,14 @@
  *   - with `withContent: true` (ROK-1786), the guild page content too: GM
  *     post, rules, links and two recommended addons (see
  *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
+ *   - with `withDings: true` (ROK-1919), three level-up events for the
+ *     "Recent dings" widget (`demo-test-guild-dings.helpers.ts`).
+ *   - with `withPresence: true` (ROK-1916), guild-export presence on the
+ *     five roster rows for the "Last seen" widget: 2 online, 3 away
+ *     (`demo-test-guild-presence.helpers.ts`).
+ *   - with `withLockouts: true` (ROK-1914), LedgerLink lockout snapshots on
+ *     the three linked characters for the Who's saved widget (see
+ *     `demo-test-guild-lockouts.helpers.ts`). Re-seeding restores them.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -30,6 +38,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -39,6 +48,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { WOW_COMMON_MANIFEST } from '../plugins/wow-common/manifest';
+import { RosterInsightsCache } from '../plugins/wow-common/guilds/roster-insights/roster-insights.cache';
 import { defined } from '../common/defined.helpers';
 import {
   SEED_GUILD_EDITOR_RANK,
@@ -51,6 +61,7 @@ import {
   upsertGuild,
   upsertMember,
   upsertSeedUser,
+  type SeedGuildInput,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
 import {
@@ -62,6 +73,18 @@ import {
   seedGuildContent,
   type SeedGuildContent,
 } from './demo-test-guild-content.helpers';
+import {
+  seedGuildLockouts,
+  type SeededGuildLockouts,
+} from './demo-test-guild-lockouts.helpers';
+import {
+  seedGuildDings,
+  type SeededGuildDings,
+} from './demo-test-guild-dings.helpers';
+import {
+  seedGuildPresence,
+  type SeededGuildPresence,
+} from './demo-test-guild-presence.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -96,6 +119,12 @@ export interface SeedGuildResponse {
   raids: SeededGuildRaids;
   /** Present only when the body sent `withContent: true`. */
   content?: SeedGuildContent;
+  /** Present only when the body sent `withLockouts: true`. */
+  lockouts?: SeededGuildLockouts;
+  /** Present only when the body sent `withDings: true` (ROK-1919). */
+  dings?: SeededGuildDings;
+  /** Present only when the body sent `withPresence: true` (ROK-1916). */
+  presence?: SeededGuildPresence;
 }
 
 interface SeededRoster {
@@ -110,6 +139,7 @@ export class DemoTestGuildController {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly plugins: PluginRegistryService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** Idempotent per guild name; see the file header for the cast. */
@@ -126,9 +156,7 @@ export class DemoTestGuildController {
     const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
     const raids = await this.seedRaids(ctx, users);
-    const content = input.withContent
-      ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
-      : null;
+    const extras = await this.seedOptional(input, ctx, { users, unlinked });
     return {
       guildId,
       gameId,
@@ -138,8 +166,99 @@ export class DemoTestGuildController {
       users,
       unlinkedMemberIds: unlinked,
       raids,
-      ...(content ? { content } : {}),
+      ...extras,
     };
+  }
+
+  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916). */
+  private async seedOptional(
+    input: Omit<SeedGuildInput, 'name' | 'gameSlug'>,
+    ctx: RosterCtx,
+    roster: SeededRoster,
+  ): Promise<
+    Pick<SeedGuildResponse, 'content' | 'lockouts' | 'dings' | 'presence'>
+  > {
+    const { users, unlinked } = roster;
+    const gm = users.gm.userId;
+    const content = input.withContent
+      ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
+      : null;
+    const lockouts = input.withLockouts
+      ? await this.seedLockouts(users, ctx)
+      : null;
+    const dings = input.withDings
+      ? await this.seedDings(users, unlinked, ctx)
+      : null;
+    const presence = input.withPresence
+      ? await this.seedPresence(roster, ctx.guildId)
+      : null;
+    return {
+      ...(content ? { content } : {}),
+      ...(lockouts ? { lockouts } : {}),
+      ...(dings ? { dings } : {}),
+      ...(presence ? { presence } : {}),
+    };
+  }
+
+  /**
+   * ROK-1914 — lockout snapshots on the three linked characters, then drop
+   * the guild's 5-minute roster-insights cache so a re-seed of the same guild
+   * name serves the fresh saves at once (WowCommonModule owns the cache).
+   */
+  private async seedLockouts(
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    ctx: RosterCtx,
+  ): Promise<SeededGuildLockouts> {
+    const owners = (['gm', 'officer', 'member'] as const).map((owner) => {
+      const characterId = users[owner].characterId;
+      if (characterId === null)
+        throw new Error(`seeded ${owner} has no character`);
+      return { owner, characterId };
+    });
+    const seeded = await seedGuildLockouts(this.db, owners, ctx.now);
+    this.invalidateInsights(ctx.guildId);
+    return seeded;
+  }
+
+  /** ROK-1916 — presence on the five roster rows, then a fresh insights cache. */
+  private async seedPresence(
+    { users, unlinked }: SeededRoster,
+    guildId: number,
+  ): Promise<SeededGuildPresence> {
+    const memberOf = (role: SeedGuildRole): number =>
+      defined(users[role].memberId ?? undefined, `seeded ${role} member`);
+    const seeded = await seedGuildPresence(this.db, {
+      gm: memberOf('gm'),
+      officer: memberOf('officer'),
+      member: memberOf('member'),
+      unlinked: [
+        defined(unlinked[0], 'seeded unlinked member'),
+        defined(unlinked[1], 'seeded second unlinked member'),
+      ],
+    });
+    this.invalidateInsights(guildId);
+    return seeded;
+  }
+
+  /** Drops the guild's 5-minute roster-insights cache (WowCommonModule owns it). */
+  private invalidateInsights(guildId: number): void {
+    this.moduleRef
+      .get(RosterInsightsCache, { strict: false })
+      .invalidateGuild(guildId);
+  }
+
+  /** ROK-1919 — three level-up events: GM (linked), an unlinked row, member (31 days old). */
+  private seedDings(
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    unlinked: number[],
+    ctx: RosterCtx,
+  ): Promise<SeededGuildDings> {
+    const members = {
+      linked: defined(users.gm.memberId ?? undefined, 'seeded gm member'),
+      unlinked: defined(unlinked[0], 'seeded unlinked member'),
+      old: defined(users.member.memberId ?? undefined, 'seeded member member'),
+    };
+    return seedGuildDings(this.db, ctx.guildId, members, ctx.now);
   }
 
   /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */

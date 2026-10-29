@@ -1,0 +1,1 @@
+ALTER TABLE "guild_profiles" ADD COLUMN "widget_prefs" jsonb;

@@ -12,8 +12,19 @@ import { NotificationService } from '../../notifications/notification.service';
 // Shared mocks
 // ---------------------------------------------------------------------------
 
+/**
+ * `execute` serves the recipient + creator queries; the `select()...limit()`
+ * chain serves the ROK-1896 hub lookups (default `[]` = untagged poll).
+ */
 function makeMockDb() {
-  return { execute: jest.fn().mockResolvedValue([]) };
+  const limit = jest.fn().mockResolvedValue([]);
+  const where = jest.fn(() => ({ limit }));
+  const from = jest.fn(() => ({ where }));
+  return {
+    execute: jest.fn().mockResolvedValue([]),
+    select: jest.fn(() => ({ from })),
+    limit,
+  };
 }
 
 function makeMockNotificationService() {
@@ -348,5 +359,96 @@ describe('StandalonePollNotificationService.notifyAutoBenched (ROK-1874)', () =>
         "You voted for **Sun, May 3, 9:00 PM** — you've been signed up for **Elden Ring**, but the roster was full, so you're on the bench for now.",
       payload: { subtype: 'lineup_event_created', eventId: 77 },
     });
+  });
+});
+
+describe('StandalonePollNotificationService hub payload (ROK-1896)', () => {
+  const HUB = { id: 9, name: 'Tarnished Hub', gameId: GAME_ID, memberCount: 3 };
+
+  async function notifyOne(
+    lineupRows: unknown[],
+    hubRows: unknown[],
+  ): Promise<Record<string, unknown>> {
+    const { service, mockDb, mockNotificationService } =
+      await createTestModule();
+    mockDb.execute.mockResolvedValueOnce([{ id: 20 }]);
+    mockDb.execute.mockResolvedValueOnce([
+      { displayName: 'Roknua', username: 'roknua' },
+    ]);
+    mockDb.limit.mockResolvedValueOnce(lineupRows);
+    mockDb.limit.mockResolvedValueOnce(hubRows);
+    await service.notifyInterestedUsers(
+      GAME_ID,
+      GAME_NAME,
+      LINEUP_ID,
+      MATCH_ID,
+      CREATOR_ID,
+    );
+    expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    const [input] = mockNotificationService.create.mock.calls[0];
+    return input.payload;
+  }
+
+  it('a poll tied to a visible hub carries hubId + hubName', async () => {
+    const payload = await notifyOne([{ guildId: 9 }], [HUB]);
+    expect(payload).toEqual(
+      expect.objectContaining({ hubId: 9, hubName: 'Tarnished Hub' }),
+    );
+  });
+
+  it('a poll tied to a hidden / archived hub omits both keys', async () => {
+    const payload = await notifyOne([{ guildId: 9 }], []);
+    expect(payload).not.toHaveProperty('hubId');
+    expect(payload).not.toHaveProperty('hubName');
+  });
+
+  it('an untagged poll omits both keys', async () => {
+    const payload = await notifyOne([{ guildId: null }], []);
+    expect(payload).not.toHaveProperty('hubId');
+    expect(payload).not.toHaveProperty('hubName');
+  });
+
+  it('notifyPickedMembers carries the hub too', async () => {
+    const { service, mockDb, mockNotificationService } =
+      await createTestModule();
+    mockDb.execute.mockResolvedValueOnce([{ displayName: 'R', username: 'r' }]);
+    mockDb.limit.mockResolvedValueOnce([{ guildId: 9 }]);
+    mockDb.limit.mockResolvedValueOnce([HUB]);
+    await service.notifyPickedMembers([20], GAME_NAME, {
+      lineupId: LINEUP_ID,
+      matchId: MATCH_ID,
+      creatorId: CREATOR_ID,
+    });
+    const [input] = mockNotificationService.create.mock.calls[0];
+    expect(input.payload).toEqual(
+      expect.objectContaining({ hubId: 9, hubName: 'Tarnished Hub' }),
+    );
+  });
+
+  it('notifyAutoBenched spreads a passed hub into the payload', async () => {
+    const { service, mockNotificationService } = await createTestModule();
+    await service.notifyAutoBenched(20, GAME_NAME, 'Sun 9 PM', 77, {
+      hubId: 9,
+      hubName: 'Tarnished Hub',
+    });
+    const [input] = mockNotificationService.create.mock.calls[0];
+    expect(input.payload).toStrictEqual({
+      subtype: 'lineup_event_created',
+      eventId: 77,
+      hubId: 9,
+      hubName: 'Tarnished Hub',
+    });
+  });
+
+  it('notifyAutoSignup / notifyPollOutcome without a hub keep the old payload', async () => {
+    const { service, mockNotificationService } = await createTestModule();
+    await service.notifyAutoSignup(20, GAME_NAME, 'Sun 9 PM', 77);
+    await service.notifyPollOutcome(21, 'Sun 9 PM', 77);
+    for (const [input] of mockNotificationService.create.mock.calls) {
+      expect(input.payload).toStrictEqual({
+        subtype: 'lineup_event_created',
+        eventId: 77,
+      });
+    }
   });
 });

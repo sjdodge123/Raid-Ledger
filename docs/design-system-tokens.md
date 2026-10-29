@@ -33,6 +33,8 @@ every utility and every opacity modifier follows. Declared in `@theme` (`:50-66`
 | `text-white` on a solid `bg-success` / `bg-warning` / `bg-danger` | `--color-status-solid-label` `#0f172a`, 7.04 / 8.31 / 6.45:1 (white 2.54 / 2.15 / 2.77) | `#ffffff`, 7.68 / 7.09 / 6.47:1 | `:66` / `:130`, rule `:858-869` |
 | `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:118` |
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:119` |
+| `bg-faction-alliance/10` / `text-faction-alliance` (ROK-1815) | `#60a5fa` blue-400 | `#1e40af` blue-800 | `@theme` / shared light block |
+| `bg-faction-horde/10` / `text-faction-horde` (ROK-1815) | `#f87171` red-400 | `#991b1b` red-800 (AA on every light scheme's /10 tint) | `@theme` / shared light block |
 
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
@@ -265,3 +267,15 @@ Frequency in `web/src/components`, with the page-level scale beside it (design-s
 | `text-xl` | 21 | Sub-page and card-group titles (43 uses in `pages/`) |
 | `text-2xl` | 17 | Hero numbers (11 in `pages/`) |
 | `text-3xl` | 0 | **Page `<h1>` only** — 14 uses, all in `web/src/pages/` |
+
+---
+
+## Fixed-dark tokens (one value in every scheme)
+
+| Token | Utility | Every scheme | Role |
+|---|---|---|---|
+| `--color-media-well` | `bg-media-well` | `#05070b` | The photo / video stage (hub Gallery viewer, §4.29). Declared once in `@theme`; no scheme block remaps it, so the light family inherits the dark stage (ROK-1942 operator ruling). |
+| `--color-media-well-foreground` | `text-media-well-foreground` | `#cbd5e1`, 12.9:1 on the well | Copy on the well ("Loading picture…"). Never `text-muted` there — light-family muted is dark-on-dark. |
+
+`web/src/styles/media-well.guard.test.ts` fails if either is redeclared or the pair drops below AA.
+

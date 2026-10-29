@@ -10,7 +10,7 @@ import type {
     ValheimPlanNode,
     ValheimRecipeCatalogResponse,
 } from '@raid-ledger/contract';
-import type { PlannerKind } from './planner.helpers';
+import { processorLabel, type PlannerKind } from './planner.helpers';
 import {
     useItemIconsFor,
     type ItemIconContext,
@@ -56,6 +56,8 @@ function splitCatalog(catalog: ValheimRecipeCatalogResponse): {
         const target = e.kind === 'piece' ? pieces : items;
         target[e.prefab] = { name: e.name, category: e.category, icon: e.icon };
     }
+    // ROK-1899: gathered/smelted ingredients outside the entries (a catalogue row only; else the prefab).
+    for (const [p, e] of Object.entries(catalog.ingredients)) items[p] ??= e;
     for (const s of catalog.stations)
         pieces[s.prefab] = { name: s.name, category: 'Station', icon: s.icon };
     return { items, pieces };
@@ -115,7 +117,7 @@ export function usePlannerNames(
         return {
             nameOf: (p, kind) =>
                 (kind === 'piece' ? (pieces[p] ?? allItems[p]) : (allItems[p] ?? pieces[p]))?.name ?? p,
-            stationName: (p) => pieces[p]?.name ?? p,
+            stationName: (p) => pieces[p]?.name ?? processorLabel(p) ?? p,
             ctxFor: (p, kind) => {
                 const piece = kind === 'piece' ? pieces[p] !== undefined : allItems[p] === undefined && pieces[p] !== undefined;
                 return piece ? pieceCtx : (pickItemCtx(p, itemCtxs) ?? fallback);

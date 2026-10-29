@@ -41,26 +41,27 @@ describe('seed-fixture-user slots (ROK-1454)', () => {
   });
 });
 
+/** The controller over a drizzle mock whose upsert returns user 7. */
+function buildController() {
+  const db = createDrizzleMock();
+  db.returning.mockResolvedValue([
+    { id: 7, username: 'smoke-invitee-fixture', role: 'member' },
+  ]);
+  const settings = { getDemoMode: jest.fn().mockResolvedValue(true) };
+  const auth = { login: jest.fn().mockReturnValue({ access_token: 'jwt' }) };
+  const controller = new DemoTestFixtureUserController(
+    db as unknown as PostgresJsDatabase<typeof schema>,
+    settings as unknown as SettingsService,
+    auth as unknown as AuthService,
+  );
+  return { db, controller };
+}
+
 describe('seed-fixture-user upsert (concurrent calls must not race)', () => {
   const originalDemoMode = process.env.DEMO_MODE;
   afterEach(() => {
     process.env.DEMO_MODE = originalDemoMode;
   });
-
-  function buildController() {
-    const db = createDrizzleMock();
-    db.returning.mockResolvedValue([
-      { id: 7, username: 'smoke-invitee-fixture', role: 'member' },
-    ]);
-    const settings = { getDemoMode: jest.fn().mockResolvedValue(true) };
-    const auth = { login: jest.fn().mockReturnValue({ access_token: 'jwt' }) };
-    const controller = new DemoTestFixtureUserController(
-      db as unknown as PostgresJsDatabase<typeof schema>,
-      settings as unknown as SettingsService,
-      auth as unknown as AuthService,
-    );
-    return { db, controller };
-  }
 
   it('writes ONE insert ... on conflict (discord_id) do update — no read-then-insert window', async () => {
     process.env.DEMO_MODE = 'true';
@@ -78,5 +79,38 @@ describe('seed-fixture-user upsert (concurrent calls must not race)', () => {
       discordId: 'smoke-invitee-fixture-001',
       jwt: 'jwt',
     });
+  });
+
+  it('guildMember: true stamps guild_member_seen_at on insert AND on conflict (ROK-1892)', async () => {
+    process.env.DEMO_MODE = 'true';
+    const { db, controller } = buildController();
+
+    await controller.seedFixtureUser({ slot: 9, guildMember: true });
+
+    expect(db.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        discordId: 'smoke-invitee-fixture-009',
+        guildMemberSeenAt: expect.any(Date),
+      }),
+    );
+    expect(db.onConflictDoUpdate).toHaveBeenCalledWith({
+      target: schema.users.discordId,
+      set: {
+        onboardingCompletedAt: expect.any(Date),
+        deactivatedAt: null,
+        guildMemberSeenAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('without guildMember the row is NOT stamped (older smokes keep their shape)', async () => {
+    process.env.DEMO_MODE = 'true';
+    const { db, controller } = buildController();
+
+    await controller.seedFixtureUser({ slot: 2 });
+
+    expect(db.values).toHaveBeenCalledWith(
+      expect.not.objectContaining({ guildMemberSeenAt: expect.anything() }),
+    );
   });
 });

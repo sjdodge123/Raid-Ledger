@@ -1,7 +1,7 @@
 /**
  * ROK-1870 — one Join / Leave / member command changes what four surfaces
  * show: the nav's "your hubs" (`/guilds/mine`), the hub page itself, every
- * game page "Community hubs" card and every `/hubs` directory listing (any
+ * game page Hubs card (ROK-1883) and every `/hubs` directory listing (any
  * filter set — a `membership=not-joined` list must drop a joined hub).
  */
 import type { QueryClient } from '@tanstack/react-query';
@@ -15,6 +15,21 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
         qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
         qc.invalidateQueries({ queryKey: ['game-hubs'] }),
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
+    ]);
+}
+
+/**
+ * ROK-1950 (D9) — a rename changes the hub's name everywhere it shows: the
+ * membership surfaces above, Admin → Hubs, and the calendar / event hub chips
+ * (event lists join `guilds.name` at read time, all under `['events', …]`).
+ * `'admin-hubs'` is `ADMIN_HUBS_KEY` (`pages/admin/use-admin-hubs.ts`), inlined
+ * because that module imports this one.
+ */
+export async function invalidateHubName(qc: QueryClient, hubId: number): Promise<void> {
+    await Promise.all([
+        invalidateHubMembership(qc, hubId),
+        qc.invalidateQueries({ queryKey: ['admin-hubs'] }),
+        qc.invalidateQueries({ queryKey: ['events'] }),
     ]);
 }
 

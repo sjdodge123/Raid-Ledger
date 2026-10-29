@@ -11,6 +11,7 @@ import * as schema from '../../drizzle/schema';
 import * as q from './community-proposals.queries';
 import * as users from './community-proposals.users';
 import * as members from './community-membership.queries';
+import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 
 jest.mock('./community-proposals.queries', () => ({
   ...jest.requireActual('./community-proposals.queries'),
@@ -44,6 +45,8 @@ const hubRow: schema.GuildSelect = {
   region: 'community',
   name: 'BG3 Crew',
   nameKey: 'bg3 crew',
+  nameOverridden: false,
+  sourceName: null,
   realmSlug: null,
   guildSlug: null,
   faction: null,
@@ -61,6 +64,7 @@ const hubRow: schema.GuildSelect = {
   reviewedAt: null,
   archivedAt: null,
   archivedReason: null,
+  autoMembership: 'off',
   createdAt: SEEN,
   updatedAt: SEEN,
 };
@@ -78,6 +82,8 @@ const proposal = {
 
 const mocked = <T extends (...a: never[]) => unknown>(fn: T) => jest.mocked(fn);
 const create = jest.fn();
+/** ROK-1873 (D8): the channel-lifecycle nudge approve / createDirect fire. */
+const touch = jest.fn();
 const tx = {};
 let svc: CommunityProposalsService;
 
@@ -92,6 +98,7 @@ beforeEach(async () => {
         useValue: { transaction: (fn: (t: object) => unknown) => fn(tx) },
       },
       { provide: NotificationService, useValue: { create } },
+      { provide: GameActivityNudge, useValue: { touch } },
     ],
   }).compile();
   svc = mod.get(CommunityProposalsService);
@@ -103,6 +110,13 @@ beforeEach(async () => {
   mocked(q.insertCommunityHub).mockResolvedValue(proposedRow);
   mocked(q.listProposals).mockResolvedValue([proposal]);
 });
+
+/** The D8 reads/writes a staff proposal runs inside its insert tx. */
+function stageAutoApprove(): void {
+  mocked(q.lockProposal).mockResolvedValue(proposedRow);
+  mocked(q.activateProposal).mockResolvedValue(hubRow);
+  mocked(members.refreshMemberCount).mockResolvedValue(1);
+}
 
 describe('propose', () => {
   it('403 when the user is not in the Discord guild', async () => {
@@ -118,6 +132,7 @@ describe('propose', () => {
       ...inGuild,
       discordId: null,
     });
+    stageAutoApprove();
     await expect(svc.propose({ id: 5, role: 'admin' }, dto)).resolves.toEqual(
       proposal,
     );
@@ -264,5 +279,85 @@ describe('approve / reject / withdraw / createDirect', () => {
     await expect(
       svc.createDirect(1, { ...dto, leaderUserId: 5 }),
     ).rejects.toThrow(ConflictException);
+  });
+});
+
+describe('ROK-1892 staff proposals skip review', () => {
+  it.each(['admin', 'operator'] as const)(
+    'ROK-1892: a %s proposal is approved in-tx by themselves — no notices',
+    async (role) => {
+      stageAutoApprove();
+      await svc.propose({ id: 5, role }, dto);
+      expect(q.insertCommunityHub).toHaveBeenCalledTimes(1);
+      expect(q.activateProposal).toHaveBeenCalledTimes(1);
+      expect(q.activateProposal).toHaveBeenCalledWith(tx, 40, {
+        reviewedBy: 5,
+      });
+      expect(members.upsertJoin).toHaveBeenCalledTimes(1);
+      expect(members.upsertJoin).toHaveBeenCalledWith(tx, 40, 5, 'leader');
+      expect(members.refreshMemberCount).toHaveBeenCalledTimes(1);
+      expect(q.listProposals).toHaveBeenCalledWith(expect.anything(), {
+        ids: [40],
+        status: 'active',
+      });
+      expect(create).not.toHaveBeenCalled();
+      // ROK-1873 (D8): the auto-approved hub nudges its game's channel.
+      expect(touch).toHaveBeenCalledTimes(1);
+      expect(touch).toHaveBeenCalledWith(9);
+    },
+  );
+
+  it('ROK-1892: a member proposal is never auto-approved', async () => {
+    await svc.propose(member, dto);
+    expect(q.lockProposal).not.toHaveBeenCalled();
+    expect(q.activateProposal).not.toHaveBeenCalled();
+    expect(members.upsertJoin).not.toHaveBeenCalled();
+    expect(q.listProposals).toHaveBeenCalledWith(expect.anything(), {
+      ids: [40],
+      status: 'proposed',
+    });
+    expect(touch).not.toHaveBeenCalled();
+  });
+});
+
+describe('channel-lifecycle nudges (ROK-1873 D8)', () => {
+  it('approve nudges the hub game so its channel is created + held', async () => {
+    mocked(q.lockProposal).mockResolvedValue(proposedRow);
+    mocked(q.activateProposal).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    await svc.approve(1, 40, {});
+    expect(touch).toHaveBeenCalledTimes(1);
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('a refused approve (404) never nudges', async () => {
+    mocked(q.lockProposal).mockResolvedValue(null);
+    await expect(svc.approve(1, 40, {})).rejects.toThrow(NotFoundException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('createDirect nudges the new active hub game', async () => {
+    mocked(q.insertCommunityHub).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    await svc.createDirect(1, { ...dto, leaderUserId: 5 });
+    expect(touch).toHaveBeenCalledWith(9);
+  });
+
+  it('a name-clash createDirect (409) never nudges', async () => {
+    mocked(q.hasNameClash).mockResolvedValue(true);
+    await expect(
+      svc.createDirect(1, { ...dto, leaderUserId: 5 }),
+    ).rejects.toThrow(ConflictException);
+    expect(touch).not.toHaveBeenCalled();
+  });
+
+  it('a throwing nudge never fails the approve', async () => {
+    mocked(q.lockProposal).mockResolvedValue(proposedRow);
+    mocked(q.activateProposal).mockResolvedValue(hubRow);
+    mocked(members.refreshMemberCount).mockResolvedValue(1);
+    touch.mockImplementationOnce(() => {
+      throw new Error('queue down');
+    });
+    await expect(svc.approve(1, 40, {})).resolves.toMatchObject({ id: 40 });
   });
 });

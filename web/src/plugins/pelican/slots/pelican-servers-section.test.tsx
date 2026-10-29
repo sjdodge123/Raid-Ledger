@@ -101,12 +101,12 @@ describe('PelicanServersSection — layout', () => {
         expect(row.getByRole('combobox', { name: 'Game' })).toBeInTheDocument();
     });
 
-    it.each([true, false])('no timezone control, column or panel-default hint (ROK-1795; desktop: %s)', async (desktop) => {
+    it.each([true, false])('one Timezone select (Community default) beside the Game picker, no panel-default hint (ROK-1882/ROK-1795; desktop: %s)', async (desktop) => {
         setViewport(desktop);
         await renderSection([pelicanServerFixture]);
-        expect(screen.getAllByRole('combobox')).toHaveLength(1);
+        expect(screen.getAllByRole('combobox')).toHaveLength(2);
         expect(screen.getByRole('combobox', { name: 'Game' })).toBeInTheDocument();
-        expect(screen.queryByText(/timezone/i)).toBeNull();
+        expect(screen.getByRole('combobox', { name: 'Timezone' })).toHaveValue('');
         expect(screen.queryByText(/panel default/i)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
     });

@@ -1,5 +1,5 @@
 /**
- * ROK-1785/ROK-1830 — `/guilds/:id`: the game-agnostic hub shell — hero +
+ * ROK-1785/ROK-1830 — `/hubs/:id` (was `/guilds/:id`, ROK-1891): the game-agnostic hub shell — hero +
  * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
  * hero pills come from the hub module registered for `guild.kind`
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
@@ -7,11 +7,12 @@
  * it, or a module section reports content of its own (ROK-1830 — core asks
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
- * A 403 (not a member) is a friendly empty state.
+ * A 403 (not a member, or ROK-2044 the hub's plugin is off) is a friendly empty state; a 401 that survived the
+ * refresh re-checks the session — sign in only once it is rejected (ROK-1947).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import type { GuildKind, GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
@@ -22,7 +23,7 @@ import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
 import { postIdFromSearch } from './posts/post-link';
-import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubModuleTabs, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
@@ -31,10 +32,14 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { hubCopy } from './hub-copy';
+import { hubCopy, hubSectionsLabel, loadFailedLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
+import { useSignInAgain } from './use-sign-in-again';
+import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
+import { isHubPluginInactive } from './hub-plugin-inactive.helpers';
+import { HubPluginInactiveCopy } from './hub-plugin-inactive';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -42,8 +47,12 @@ const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m)
 const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
-/** Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876). */
-const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-8';
+/**
+ * Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876).
+ * Below 1024px a tab's Filters FAB (Materials, Planner) floats higher still, so pad past it too (ROK-1889).
+ */
+const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] '
+    + 'md:pb-[max(2rem,var(--filter-fab-clearance))]';
 
 /** Stable identity so the source list doesn't churn while a module is absent. */
 const NO_SECTIONS: readonly HubModSource[] = [];
@@ -52,18 +61,54 @@ function Notice({ testId, children }: { testId: string; children: ReactNode }): 
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
 }
 
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }): JSX.Element {
+/** ROK-1947: the session is over — Sign in ends it and returns here after. */
+function SignInPrompt(): JSX.Element {
+    const signIn = useSignInAgain();
+    return (
+        <Notice testId="guild-session-expired">
+            <p className="mb-4 text-sm text-muted">Your session expired. Sign in again to see this hub.</p>
+            <Button onClick={signIn}>Sign in</Button>
+        </Notice>
+    );
+}
+
+/**
+ * ROK-1947: a 401 that outlived the transparent refresh. Re-check the session
+ * first — only a REJECTED refresh offers a sign-in; a blip offers a retry.
+ */
+function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryResult> }): JSX.Element {
+    const { state, retry } = useSessionRecheck(onRecovered);
+    if (state === 'checking') return <LoadingState />;
+    if (state === 'rejected') return <SignInPrompt />;
+    return (
+        <Notice testId="guild-session-unreachable">
+            <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
+            <Button variant="secondary" onClick={retry}>Try again</Button>
+        </Notice>
+    );
+}
+
+interface ErrorStateProps {
+    error: Error;
+    onRetry: () => unknown;
+    /** The hub kind when known (a module load failure); a page 403/5xx has none and reads as a WoW guild. */
+    kind?: GuildKind | undefined;
+}
+
+/** The hub page's failure notices — plugin off or not-a-member (403), not-found (404), or a retryable load failure. */
+export function ErrorState({ error, onRetry, kind }: ErrorStateProps): JSX.Element {
     const status = httpStatusOf(error);
+    if (isHubPluginInactive(error)) return <Notice testId="guild-plugin-inactive"><HubPluginInactiveCopy /></Notice>;
     if (status === 403) {
-        return <Notice testId="guild-not-member"><p className="text-sm text-muted">You&apos;re not a member of this guild. Link a character in the guild to see its page.</p></Notice>;
+        return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
     }
     if (status === 404) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     return (
         <Notice testId="guild-error">
-            <p className="mb-4 text-sm text-muted">We couldn&apos;t load this guild. Try again in a moment.</p>
-            <Button variant="secondary" onClick={onRetry}>Try again</Button>
+            <p className="mb-4 text-sm text-muted">{loadFailedLabel(kind)}</p>
+            <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
 }
@@ -89,7 +134,10 @@ interface PanelProps {
 function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
-    if (active === 'events') return <HubEventsTab query={ctx.raids} kind={ctx.page.guild.kind} />;
+    if (active === 'events') {
+        const Lead = mod?.eventsLead;
+        return <HubEventsTab query={ctx.raids} kind={page.guild.kind} lead={Lead && <Lead {...ctx} />} />;
+    }
     if (active === 'posts') {
         return (
             <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
@@ -97,8 +145,8 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
             </Suspense>
         );
     }
-    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
-    const tab = mod?.tabs.find((t) => t.id === active);
+    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} kind={page.guild.kind} />;
+    const tab = hubModuleTabs(mod).find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
     return <HubOverview ctx={ctx} module={mod} mods={mods} />;
 }
@@ -136,7 +184,7 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
     return (
         <Suspense fallback={null}>
             {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
-            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={onClose} />}
+            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} onClose={onClose} />}
         </Suspense>
     );
 }
@@ -184,7 +232,7 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
                             {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
-                <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
+                <TabRow tabs={tabs} activeId={active} label={hubSectionsLabel(ctx.page.guild.kind)} className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
             </div>
@@ -215,6 +263,41 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     );
 }
 
+type RecoveryLatch = { guildId: number; dataUpdatedAt: number; errorUpdatedAt: number };
+type GuildPageQuery = ReturnType<typeof useGuildPage>;
+
+/**
+ * Whether the query moved past the latch: another hub, a success, or a newer
+ * error that is NOT a 401 (a 403/404/5xx). A still-401 refetch — the
+ * recovery's own, or a resume refresh's — and an in-flight refetch (which
+ * clears an uncached query's `error`) keep the hold, so Sign in is final.
+ */
+function latchReleased(latch: RecoveryLatch, query: GuildPageQuery, guildId: number): boolean {
+    if (latch.guildId !== guildId || latch.dataUpdatedAt !== query.dataUpdatedAt) return true;
+    return query.error != null && query.errorUpdatedAt !== latch.errorUpdatedAt && httpStatusOf(query.error) !== 401;
+}
+
+/**
+ * ROK-1947: the recovery refetch clears an uncached query's error, so the
+ * re-check screen is held until it lands, or the next 401 would remount it
+ * and loop. Once released (see {@link latchReleased}) the latch is dropped, so
+ * a later in-flight refetch cannot revive a stale Sign in.
+ */
+function useRecoveryLatch(query: GuildPageQuery, guildId: number) {
+    const [latch, setLatch] = useState<RecoveryLatch | null>(null);
+    const released = latch !== null && latchReleased(latch, query, guildId);
+    // Dropped during render (React's adjust-state-on-change pattern): the next pass has no latch.
+    if (released) setLatch(null);
+    const recovering = latch !== null && !released;
+    const recoverPage = async () => {
+        setLatch({ guildId, dataUpdatedAt: query.dataUpdatedAt, errorUpdatedAt: query.errorUpdatedAt });
+        const result = await query.refetch({ cancelRefetch: false });
+        if (result.status === 'success') setLatch(null);
+        return result;
+    };
+    return { recovering, recoverPage };
+}
+
 export function GuildPage(): JSX.Element {
     const { id } = useParams<{ id: string }>();
     const guildId = Number(id);
@@ -226,11 +309,15 @@ export function GuildPage(): JSX.Element {
     // A community hub's module is its own lazy chunk — hold the skeleton until it lands.
     const modulePending = useHubModulePending(query.data?.guild.kind);
     const moduleError = useHubModuleLoadError(query.data?.guild.kind);
+    const { recovering, recoverPage } = useRecoveryLatch(query, guildId);
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
-    if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} />;
+    const refetchPage = () => query.refetch({ cancelRefetch: false });
+    if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
+    // Cached data (a refetch error) still knows the kind; with none it falls back to WoW copy.
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} />;
+    if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} kind={query.data?.guild.kind} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

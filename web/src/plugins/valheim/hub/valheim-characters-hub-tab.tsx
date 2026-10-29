@@ -6,11 +6,17 @@
 import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
 import { ValheimCharactersTab } from './valheim-characters-tab';
+import { isClaimBannerViewer } from './valheim-claim-banner.helpers';
 
 export default function ValheimCharactersHubTab({
     page,
 }: HubCtx): JSX.Element | null {
     const serverId = page.server?.pelicanServerId;
     if (serverId === undefined) return null;
-    return <ValheimCharactersTab serverId={serverId} />;
+    return (
+        <ValheimCharactersTab
+            serverId={serverId}
+            showClaimBanner={isClaimBannerViewer(page.viewer)}
+        />
+    );
 }

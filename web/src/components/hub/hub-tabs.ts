@@ -1,11 +1,16 @@
 /**
- * ROK-1830 — the hub's tab frame. Core pins Overview, Members and Events
- * first and Resources last (D7-A); a module's tabs sit between them, ordered
- * by their own `order`. A module cannot take the first or the last slot.
- * ROK-1868 A5 — core's Posts tab follows Events once the hub has a post, for
- * every hub kind (`#posts`, deep link `?post=<id>#posts`).
+ * ROK-1830 — the hub's tab frame. Core pins the band Overview, Members,
+ * Events, Resources first; a module's tabs follow it, ordered by their own
+ * `order`. A module cannot take the first slot or break up the core band.
+ * ROK-1876 (operator ruling 2026-10-21) moved Resources from last (D7-A) to
+ * right after Events on every hub kind, so a long module band never pushes
+ * it several swipes away on a phone.
+ * ROK-1868 A5 — core's Posts tab joins the core band once the hub has a post,
+ * for every hub kind (`#posts`, deep link `?post=<id>#posts`); it follows
+ * Resources so Resources keeps its slot right after Events (ROK-1876).
  */
-import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import type { HubCtx, HubModule, HubTab } from '../../plugins/hub-module';
+import { hubGameTabs } from '../../plugins/hub-game-tabs';
 import { hubCopy } from './hub-copy';
 
 export interface HubTabEntry {
@@ -23,18 +28,42 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
     return ctx.page.viewer.role !== 'visitor';
 }
 
+/** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. Declared under `core` (ROK-1969). */
+export const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
+
+/**
+ * The module band: the kind module's own tabs plus every plugin's game tabs
+ * (ROK-1912 `registerHubGameTab`), each game tab gated on `page.guild.gameSlug`.
+ * A game tab whose id core, the module or an earlier game tab already uses is
+ * dropped (dev warning) — a duplicate id would mean a duplicate React key and
+ * the wrong panel behind the `#<id>` hash.
+ */
+export function hubModuleTabs(mod: HubModule | undefined): HubTab[] {
+    const own = mod?.tabs ?? [];
+    const taken = new Set([...CORE_TAB_IDS, ...own.map((t) => t.id)]);
+    const games = hubGameTabs().filter((t) => {
+        if (!taken.has(t.id)) {
+            taken.add(t.id);
+            return true;
+        }
+        if (import.meta.env.DEV) console.warn(`[hub] game tab "${t.id}" collides with an existing hub tab id; dropped`);
+        return false;
+    });
+    return [...own, ...games];
+}
+
 /** Resources joins once it has content, or straight away for an editor; Posts once there is a post and the viewer may open it. */
 export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: boolean, hasPosts = false): HubTabEntry[] {
-    const moduleTabs = [...(mod?.tabs ?? [])]
+    const moduleTabs = hubModuleTabs(mod)
         .sort((a, b) => a.order - b.order)
         .map((t) => ({ id: t.id, label: t.label, hidden: t.visible ? !t.visible(ctx) : false }));
     return [
         { id: 'overview', label: 'Overview', hidden: false },
         { id: 'members', label: 'Members', hidden: false },
         { id: 'events', label: 'Events', hidden: false },
+        { id: 'resources', label: 'Resources', hidden: !showResources },
         { id: 'posts', label: hubCopy(ctx.page.guild.kind).postsTab, hidden: !hasPosts || !canOpenHubPosts(ctx) },
         ...moduleTabs,
-        { id: 'resources', label: 'Resources', hidden: !showResources },
     ];
 }
 

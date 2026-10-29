@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   ADDON_CHAR_SNAPSHOT_SCHEMA,
   type AddonGuildExport,
+  type AddonGuildMember,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
@@ -291,7 +292,31 @@ describe('guild rows', () => {
       memberValues(without, 9, CTX, at(EXPORTED_AT)).publicNote,
     ).toBeNull();
   });
+});
 
+describe('guild rows — presence (ROK-1916)', () => {
+  it('member row: presence stored verbatim, absent days → null', () => {
+    const members = fixture<AddonGuildExport>('guild-1-page').data.members;
+    const offline = at0(members, 2);
+    expect(memberValues(offline, 9, CTX, at(EXPORTED_AT))).toMatchObject({
+      onlineAtExport: false,
+      lastOnlineDays: 2,
+    });
+    const online: AddonGuildMember = { ...offline, online: true };
+    delete online.lastOnlineDays;
+    expect(memberValues(online, 9, CTX, at(EXPORTED_AT))).toMatchObject({
+      onlineAtExport: true,
+      lastOnlineDays: null,
+    });
+    const back = { ...offline, lastOnlineDays: 0 };
+    expect(memberValues(back, 9, CTX, at(EXPORTED_AT))).toMatchObject({
+      onlineAtExport: false,
+      lastOnlineDays: 0,
+    });
+  });
+});
+
+describe('guild rows (continued)', () => {
   it('dedupeMembers keeps one row per GUID (last wins)', () => {
     const members = fixture<AddonGuildExport>('guild-1-page').data.members;
     const a = at0(members, 0);
@@ -306,6 +331,7 @@ describe('guild rows', () => {
   it('guild columns come from the snapshot', () => {
     expect(guildSet(guildWithExporter())).toMatchObject({
       name: 'Night Shift',
+      sourceName: 'Night Shift',
       memberCount: 40,
       lastSnapshotAt: at(EXPORTED_AT),
     });

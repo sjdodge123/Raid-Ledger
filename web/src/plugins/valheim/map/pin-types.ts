@@ -11,6 +11,7 @@ import type { ComponentType, SVGProps } from 'react';
 import type { ValheimMapPin } from '@raid-ledger/contract';
 import {
     ArchiveBoxIcon,
+    ArrowsRightLeftIcon,
     CubeIcon,
     FireIcon,
     HomeIcon,
@@ -31,7 +32,8 @@ export type PinIconName =
     | 'wrench'
     | 'cube'
     | 'sparkles'
-    | 'archive-box';
+    | 'archive-box'
+    | 'arrows-right-left';
 
 export interface PinStyle {
     Icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -40,6 +42,10 @@ export interface PinStyle {
     toneClass: string;
     /** Human name for the type — the accessible name when the label is empty. */
     typeLabel: string;
+    /** ROK-1946 D9: a 2px `border-success` ring — server data, not a hand-placed pin. */
+    ring?: boolean;
+    /** ROK-1859: the ring's border-colour token utility (default `border-success`). */
+    ringTone?: string;
 }
 
 /** The disc every pin icon sits on. */
@@ -100,6 +106,24 @@ const KNOWN: Readonly<Record<string, PinStyle>> = {
     Hildir1: HILDIR_CHEST,
     Hildir2: HILDIR_CHEST,
     Hildir3: HILDIR_CHEST,
+    // ROK-1946 D14: the reserved portal-scan type (`portal-pins.ts`); the colon
+    // keeps it apart from every game or modded type.
+    'rl:scanned-portal': {
+        Icon: ArrowsRightLeftIcon,
+        iconName: 'arrows-right-left',
+        toneClass: 'text-success',
+        typeLabel: 'Scanned portal',
+        ring: true,
+    },
+    // ROK-1859 D12: the reserved container-scan type (`chest-pins.ts`).
+    'rl:chest': {
+        Icon: ArchiveBoxIcon,
+        iconName: 'archive-box',
+        toneClass: 'text-warning',
+        typeLabel: 'Chest',
+        ring: true,
+        ringTone: 'border-warning',
+    },
 };
 
 /** Style for a pin type; anything unknown (modded, numeric) gets the generic pin. */

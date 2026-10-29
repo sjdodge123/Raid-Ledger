@@ -7,6 +7,11 @@ import type {
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
 import { titleCaseClass } from './addon-import.binding-name';
+import {
+  insertDings,
+  levelUps,
+  loadPriorLevels,
+} from './addon-import-guild.dings';
 import { AddonImportError } from './addon-import.errors';
 import {
   assertMayReplaceRoster,
@@ -89,6 +94,9 @@ export function memberValues(
     publicNote: m.note ?? null,
     source: 'addon_import',
     lastSeenAt: seenAt,
+    // ROK-1916 D2/D3: presence verbatim; the read path normalises.
+    onlineAtExport: m.online,
+    lastOnlineDays: m.lastOnlineDays ?? null,
     capturedByUserId: ctx.userId,
     updatedAt: new Date(),
   };
@@ -167,10 +175,6 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
   return [...new Map(members.map((m) => [m.guid, m])).values()];
 }
 
-/**
- * Upsert the realm-less guild — only when this snapshot is not older than
- * the stored one (`setWhere`, atomic). No row back = stale, nothing written.
- */
 /** Guild columns an addon snapshot owns (insert + conflict update). */
 export function guildSet(
   payload: AddonGuildExport,
@@ -178,6 +182,7 @@ export function guildSet(
 ) {
   return {
     name: payload.data.name,
+    sourceName: payload.data.name,
     memberCount: payload.data.members.length,
     lastSnapshotAt: seenAt,
     rawRealm: payload.data.rawRealm ?? null,
@@ -186,6 +191,23 @@ export function guildSet(
   };
 }
 
+/**
+ * ROK-2015 D2: the conflict update keeps a Raid Ledger rename — `name` only
+ * follows the game while `name_overridden` is false. `source_name` (and every
+ * other snapshot column) always tracks the import.
+ */
+export function guildConflictSet(set: ReturnType<typeof guildSet>) {
+  return {
+    ...set,
+    name: sql<string>`CASE WHEN ${guilds.nameOverridden} THEN ${guilds.name} ELSE excluded.name END`,
+  };
+}
+
+/**
+ * Upsert the realm-less guild — only when this snapshot is not older than
+ * the stored one (`setWhere`, atomic). No row back = stale, nothing written.
+ * The lookup / conflict target stays `name_key` = the in-game key (D1).
+ */
 async function upsertGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
@@ -204,7 +226,7 @@ async function upsertGuild(
     .onConflictDoUpdate({
       target: [guilds.gameId, guilds.region, guilds.nameKey],
       targetWhere: sql`${guilds.realmSlug} IS NULL AND ${guilds.kind} = 'wow_guild'`,
-      set,
+      set: guildConflictSet(set),
       // Compare against `excluded`, never a bound JS Date: drizzle's
       // postgres.js driver does not serialize a Date inside raw `sql`
       // (ERR_INVALID_ARG_TYPE → 500).
@@ -225,6 +247,9 @@ const EXCLUDED_MEMBER_COLUMNS = [
   'last_seen_at',
   'captured_by_user_id',
   'updated_at',
+  // ROK-1916 D2: overwrite with excluded.* (NULL included) — clears stale days.
+  'online_at_export',
+  'last_online_days',
 ] as const;
 
 const camel = (c: string) =>
@@ -257,6 +282,21 @@ async function upsertMembers(
   return result.filter((r) => r.inserted).length;
 }
 
+/** ROK-1919: upsert members, logging any level rise against prior rows. */
+async function upsertMembersLoggingDings(
+  ctx: AddonApplyContext,
+  guildId: number,
+  payload: AddonGuildExport,
+  seenAt: Date,
+): Promise<number> {
+  const members = dedupeMembers(payload.data.members);
+  const guids = members.map((m) => m.guid);
+  const prior = await loadPriorLevels(ctx, guildId, guids);
+  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
+  await insertDings(ctx, guildId, levelUps(prior, members), seenAt);
+  return inserted;
+}
+
 /**
  * Apply: NOT_IN_GUILD / guard → reject; stale → nothing written; else upsert
  * all, stamped with ONE received instant (guild + members must match for
@@ -277,7 +317,12 @@ export async function applyGuild(
     const stale = await previewGuild(ctx, payload, pages);
     return { status: 'stale', summary: stale.summary };
   }
-  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
+  const inserted = await upsertMembersLoggingDings(
+    ctx,
+    guildId,
+    payload,
+    seenAt,
+  );
   const members = payload.data.members.length;
   await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {

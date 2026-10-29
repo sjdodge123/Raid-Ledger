@@ -55,6 +55,20 @@ The WoW: Forever addon **LedgerLink** lives in its own repo (`github.com/sjdodge
 - **LedgerLink agents never change the format on their own.** They request a change through a Raid Ledger story; the addon pins a copy of `vN/` and validates against it in its own CI.
 - Real beta strings become fixtures only after anonymisation (no real names, GUIDs or guild names).
 
+## Pending operator approval lives in one place (STRICT — applies to ALL agents)
+
+Operator ruling 2026-10-22: every design, mockup, prototype or product ruling that waits on the operator goes in **`planning-artifacts/pending-approval/`** in the MAIN checkout, never only in chat. Use one folder per item, `ROK-XXXX-<slug>/` (`mockup.html` and/or screenshots plus `ITEM.md` with the numbered questions and a recommendation for each), and add a row to `INDEX.md`. When the operator asks "what's pending?", answer from `INDEX.md`. Once ruled, move the folder to `_approved/` (or `_rejected/`), record the ruling in the story's spec and in Linear, and move the row to "Decided". Worktree sessions write it via Bash `cp` (memory `reference_worktree_session_main_planning_writes_via_bash`). The fleet dashboard's "Pending approval" page (ROK-1900) replaces this folder once it ships.
+
+## Hub widgets and behaviours belong to a plugin (STRICT — applies to ALL agents)
+
+Operator ruling 2026-10-25 (ROK-1969). Every hub widget, tab and behaviour (hub kind, event tagger, log parser, scheduled job, ingest source, media classifier/decorator) is owned by exactly ONE plugin. Shared ones belong to the built-in **Core** plugin (`core`, always on, cannot be deactivated); game-specific ones to that game's plugin (`valheim`, `bg3`, `enshrouded`, …). A behaviour of an inactive plugin must not run — but cleanup of data a user withdrew (unlink, delete) runs regardless.
+
+- **Web:** register only through `registerPlugin(slug, badge)`'s `PluginHandle` (`registerHubWidget` / `registerHubGameTab` / `registerHubModule`); import each plugin's `register.ts` in `App.tsx`.
+- **Api:** `registerAdapter(…, { ownerPluginId })`, `HubMediaDecoratorRegistry.register(owner, fn)`, or a named `@Cron` inside `api/src/plugins/<folder>/`.
+- **Declare** each one in `HUB_PLUGIN_MANIFESTS` (`packages/contract/src/plugin-hub-manifests.ts`), including the plugin's required **`setup`** section: every server mod, server secret (where it goes — never its value), Pelican egg/variable, companion app, Steam link or admin setting a hub needs, with plain instructions. The plugin install sheet renders it as a checklist.
+- **Guards:** `web/src/plugins/hub-plugin-ownership.guard.test.ts` and `api/src/plugins/plugin-host/hub-ownership.guard.spec.ts` (scanner `api/src/common/testing/hub-registration-scan.ts`) fail on an unowned, undeclared or orphaned registration. Never weaken them; declare the new thing instead.
+- Never rename a placed widget id without a `LEGACY_HUB_WIDGET_IDS` alias (`plugin:<slug>:<id>`).
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**.) The operator regularly approves simplified-flow targets, wireframes or design specs ahead of implementation — follow-up work should be **implementing the approved target, not redesigning it**.
@@ -152,6 +166,7 @@ The gotchas that bite:
 
 - **Always enable auto-merge (squash)** after creating or pushing to a PR: `gh pr merge <branch> --auto --squash`
 - This is safe to run whether the PR was just created or already existed — it's a no-op if already enabled.
+- **Never merge `main` into a PR while it is under review (operator ruling 2026-10-22).** Bring a branch up to date only once it is merge-ready (reviewed, gated, operator steps ruled) — the rebase bot (`dependabot-rebase-on-main.yml`) does that. A main merge mid-review moves the code under the reviewer and forces extra review/gate rounds. Exception: a conflict that blocks the review itself is fixed by hand.
 
 ## Operator Config Files (STRICT — applies to ALL agents)
 
@@ -227,6 +242,7 @@ The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared reso
 ### Migration Generation Rules
 
 - **Always run `./scripts/fix-migration-order.sh --check`** after generating a migration — concurrent branches produce out-of-order journal timestamps that Drizzle silently skips.
+- **Two PRs claimed the same migration number?** `git fetch origin && ./scripts/renumber-branch-migrations.sh` renumbers the branch's new migrations after `origin/main` (files, journal, snapshot `prevId` chain; never the SQL). The index-collision guard in CI and `validate-ci.sh` names it. Runbook: `docs/runbooks/migrations-and-backups.md`.
 - **Validate against a real Postgres before pushing:** `./scripts/validate-migrations.sh` (also run automatically by `validate-ci.sh` when migration files appear in the diff).
 - **Never hand-edit migration SQL** unless fixing a known Drizzle codegen bug. If you must, document the edit in the commit message.
 - **One migration per schema change.** Do not combine unrelated schema changes into one file.
@@ -261,7 +277,9 @@ For ANY fix to a flaky/intermittent integration test, FIRST reproduce in isolati
 
 ### Local CI — lite gate by default (STRICT)
 
-**For most stories, run `./scripts/validate-ci.sh --static` before pushing.** It runs build + typecheck + lint plus conditional migration/container checks (~3–4 min) and **defers unit, integration, Playwright and Discord smoke to GitHub CI**, which runs them sharded + randomized on every PR. GitHub is the real gate — auto-merge-squash blocks the merge until it's green. A `--static` run showing `Unit/Integration/Playwright: DEFERRED` is the gate working as intended — do NOT treat deferred checks as a skipped step to "fix."
+**Pick the lightest tier that covers the diff (operator ruling 2026-10-22):** `--scoped` is the default pre-push gate for a **single-workspace** diff, `--static` for a **cross-workspace** one, `--full` unchanged (below). `--scoped` (2026-10-22) builds, typechecks and lints only what the diff touches (`scripts/scoped-gate-plan.mjs`: `api/**` → api, `web/**` → web, `scripts/smoke/**`/`playwright.config.*` → the smoke tsconfig only, `tools/<x>/**` → that tool, `scripts/bundle-budget.config.mjs`/`check-bundle-size.mjs` → web, other `scripts/**` and `.github/workflows/**` → shell parse + `scripts/*.spec.mjs`, `docs/**`/`planning-artifacts/**`/`.claude/**`/`*.md` → nothing), runs at fleet weight `light` (`--static` is `medium`), and refuses (exit 2, naming `--static` or `--full`) on `packages/contract/**`, migrations, `package*.json`, `Dockerfile*`/`nginx/**`/`docker-entrypoint*`, root shared config, an unknown path, or an api+web diff. `--scoped` never replaces a tier it refuses — rerun with the one it names.
+
+**`--static`** runs build + typecheck + lint plus conditional migration/container checks (~3–4 min) and **defers unit, integration, Playwright and Discord smoke to GitHub CI**, which runs them sharded + randomized on every PR. GitHub is the real gate — auto-merge-squash blocks the merge until it's green. A `--static` run showing `Unit/Integration/Playwright: DEFERRED` is the gate working as intended — do NOT treat deferred checks as a skipped step to "fix."
 
 **Escalate to `--full`** (the complete local suite) only when:
 - The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius.
@@ -271,15 +289,15 @@ For ANY fix to a flaky/intermittent integration test, FIRST reproduce in isolati
 
 **Additive contract changes run `--static` (operator ruling 2026-10-07)** — new schemas, new optional fields, new exports. GitHub's path filter maps `packages/contract/**` to the `api`, `web`, `contract` and `smoke_tests` jobs (`.github/workflows/ci.yml`), so unit, integration, the contract specs and Playwright all run before auto-merge; a local `--full` only moves discovery ~45 min earlier. Pair the `--static` gate with the story's own NEW integration spec(s) run alone on the fleet via `rl_run_on_runner` (~2–3 min; needs the Redis sidecar — memory `reference_rl_runner_no_redis`), because a wrong new spec is the most common miss. A breaking change stays `--full`: neither gate catches old stored JSON failing a tightened schema, so it needs the full local run plus a test that seeds old-shape data.
 
-Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self-escalate on those signals. CI-job mapping, conditional-step path lists, the full flag inventory and the `SKIP_BACKUP_INTEGRATION` gating: `docs/runbooks/local-ci-gate.md`.
+Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--scoped`/`--static` (whichever the selector allows) and self-escalate on those signals. CI-job mapping, conditional-step path lists, the full flag inventory and the `SKIP_BACKUP_INTEGRATION` gating: `docs/runbooks/local-ci-gate.md`.
 
 ### Smoke Test Verification (STRICT)
 
-**A green fleet run satisfies the pre-push gate (operator ruling 2026-09-12).** The `git push` hook denies the push unless a sentinel keyed to the branch's **web surface** exists and is younger than 24h. `rl_validate_ci` writes it when the task is observed TERMINAL: a `--static` run that is `succeeded` with Build/TypeScript/Lint PASS and **no `FAIL` row anywhere** is enough (`gate_tier: static`); a Playwright PASS writes `gate_tier: playwright`. A **FAILED** tier (or any `FAIL` row) writes nothing — **fix it or stop, do not hand off.** A SKIPPED tier does not block it; GitHub runs the full suite before merge.
+**A green fleet run satisfies the pre-push gate (operator ruling 2026-09-12).** The `git push` hook denies the push unless a sentinel keyed to the branch's **web surface** exists and is younger than 24h. `rl_validate_ci` writes it when the task is observed TERMINAL: a `--scoped` run (`rl_validate_ci({args:["--scoped"]})`, the default for a single-workspace diff) that is `succeeded` with its `Scoped plan` row PASS, Build/TypeScript/Lint each PASS or SKIPPED with at least one PASS, and **no `FAIL` row** writes `gate_tier: scoped`; a `--static` run that is `succeeded` with Build/TypeScript/Lint PASS and **no `FAIL` row anywhere** writes `gate_tier: static`; a Playwright PASS writes `gate_tier: playwright`. A **FAILED** tier (or any `FAIL` row) writes nothing — **fix it or stop, do not hand off.** A SKIPPED tier does not block it; GitHub runs the full suite before merge.
 
 **Agents push web branches themselves** after that green run — "push-ready for the operator" is NOT a valid terminal state for a web branch, because a hand-push skips the gate entirely.
 
-**The fleet never runs the full Playwright suite (operator ruling 2026-10-14).** The fleet gate is `--static` plus **only the Playwright specs the branch adds or changes** (a `--static` run, then `rl_validate_ci({args:["--only-e2e"], e2e_specs:["scripts/smoke/<name>.spec.ts", …], against_env_slug, base_url:"https://slot-N.gamernight.net"})` — ≤20 paths, forwarded as `E2E_SPECS`, desktop + mobile, a PASS writes the playwright-tier sentinel; ROK-1792; ~15–20 min). This holds even when `scripts/smoke/scope-specs.sh` prints `ALL`. **GitHub CI is the full gate:** it runs every spec, sharded, before auto-merge. A full fleet run (`fleet:true e2e_scope:all`, ~60 min) happens only when the operator asks, or when a GitHub run fails on a spec the branch didn't touch and you need to reproduce it. Why: a one-route change on ROK-1774 cost two hour-long full gates that duplicated what GitHub CI runs anyway.
+**The fleet never runs the full Playwright suite (operator ruling 2026-10-14).** The fleet gate is `--scoped`/`--static` (whichever the selector allows) plus **only the Playwright specs the branch adds or changes** (a `--scoped`/`--static` run, then `rl_validate_ci({args:["--only-e2e"], e2e_specs:["scripts/smoke/<name>.spec.ts", …], against_env_slug, base_url:"https://slot-N.gamernight.net"})` — ≤20 paths, forwarded as `E2E_SPECS`, desktop + mobile, a PASS writes the playwright-tier sentinel; ROK-1792; ~15–20 min). This holds even when `scripts/smoke/scope-specs.sh` prints `ALL`. **GitHub CI is the full gate:** it runs every spec, sharded, before auto-merge. A full fleet run (`fleet:true e2e_scope:all`, ~60 min) happens only when the operator asks, or when a GitHub run fails on a spec the branch didn't touch and you need to reproduce it. Why: a one-route change on ROK-1774 cost two hour-long full gates that duplicated what GitHub CI runs anyway.
 
 **When you do run it, run BOTH projects.** CI runs desktop AND mobile; **never narrow with `--project=desktop`** — use bare `npx playwright test`, `npx playwright test $(bash scripts/smoke/scope-specs.sh)`, or preferably `./scripts/validate-ci.sh --only-e2e`. New components on shared pages break selectors in OTHER spec files. If a test fails, fix it BEFORE pushing — do NOT use CI as a debugger. **NEVER re-run CI hoping it passes.**
 

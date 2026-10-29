@@ -48,3 +48,33 @@ export function buildDemoData(
   console.log(`  ${demoUserIds.length} demo users available for roster tests`);
   return { games, demoUserIds };
 }
+
+/**
+ * Usernames the ROK-1933 claim-drive fixture (`POST /admin/test/valheim/
+ * claim-drive-fixture`) gives its users A and B: `cdA` / `cdB` + the
+ * `fixtureTag` (worker digits, base36 clock, random base36). Mirrors
+ * `insertClaimDriveUsers` / `fixtureTag` in
+ * api/src/plugins/valheim/armory/valheim-claim-drive-demo-seed.helpers.ts.
+ */
+const CLAIM_DRIVE_USERNAME = /^cd[AB]\d{1,2}[0-9a-z]{9,}$/;
+
+/**
+ * Usernames the community-hubs fixture (`POST /admin/test/community-hubs/
+ * seed`) creates with synthetic Discord ids — mirrors `SEED_USERNAMES` in
+ * api/src/admin/demo-test-community-hubs.helpers.ts. ROK-1896: the hub-poll
+ * smoke seeds them in the DM step, `reset-to-seed` keeps users, and they sort
+ * first in `/users`, so the voice step's ROK-943 roster picked one up.
+ */
+const HUB_SEED_USERNAME = /^(community-[a-z0-9-]+|demo-member)$/;
+
+/**
+ * Drop users seeded by test fixtures. ROK-1933: `reset-to-seed` keeps users,
+ * so claim-drive users an earlier smoke group left behind (synthetic Discord
+ * ids) were picked as the operator / roster users; a DM 10013'd, the user was
+ * deactivated and the lineup grace test 404'd (`Unknown user id(s)`).
+ */
+export function withoutFixtureUsers<T extends DemoUser>(allUsers: T[]): T[] {
+  return allUsers.filter(
+    (u) => !CLAIM_DRIVE_USERNAME.test(u.username) && !HUB_SEED_USERNAME.test(u.username),
+  );
+}

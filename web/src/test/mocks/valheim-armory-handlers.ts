@@ -6,13 +6,16 @@ import { http, HttpResponse } from 'msw';
 import type {
     ValheimCharacterDetail,
     ValheimCharacterSummary,
+    ValheimClaimStatusResponse,
     ValheimClaimEvent,
     ValheimItemStack,
+    ValheimSkillTrend,
 } from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
 export const VALHEIM_CHARACTERS_URL = `${API_BASE}/plugins/valheim/armory/characters`;
 export const VALHEIM_CHARACTER_URL = `${VALHEIM_CHARACTERS_URL}/:id`;
+export const VALHEIM_CLAIM_STATUS_URL = `${API_BASE}/plugins/valheim/armory/servers/:serverId/claim-status`;
 
 export const valheimCharacterUnclaimed: ValheimCharacterSummary = {
     id: 11,
@@ -57,10 +60,19 @@ export function valheimCharacterDetail(
     };
 }
 
+/** The list route; honours `unclaimed=1` like the API (ROK-1933). */
 export function valheimCharactersHandler(rows: ValheimCharacterSummary[]) {
-    return http.get(VALHEIM_CHARACTERS_URL, () =>
-        HttpResponse.json({ data: rows }),
-    );
+    return http.get(VALHEIM_CHARACTERS_URL, ({ request }) => {
+        const unclaimed = new URL(request.url).searchParams.get('unclaimed') === '1';
+        return HttpResponse.json({ data: unclaimed ? rows.filter((r) => r.claimedBy === null) : rows });
+    });
+}
+
+/** ROK-1933 — `…/claim-status`; a plain record lets a spec send an off-contract body. */
+export function valheimClaimStatusHandler(
+    status: ValheimClaimStatusResponse | Record<string, unknown>,
+) {
+    return http.get(VALHEIM_CLAIM_STATUS_URL, () => HttpResponse.json(status));
 }
 
 /** `null` answers 404; a plain record lets a spec send an off-contract body. */
@@ -147,6 +159,20 @@ function sheetInventory(
         ],
     };
 }
+
+/**
+ * ROK-1882 — the character's last 3 play days, newest first (the API shape:
+ * gains only, |gain| ≥ 0.05). Swords climbs +2.0 / +1.6 / +0.5 = "+4.1 over 3
+ * sessions"; Run idles on Oct 18 (a hollow dot, "no change"); the modded skill
+ * nets a death-penalty loss (−1.2, danger chip).
+ */
+export const valheimSkillTrend: ValheimSkillTrend = {
+    days: [
+        { date: '2026-10-20', gains: { Swords: 2.0, Run: 0.75, '-1287461328': -1.5 } },
+        { date: '2026-10-18', gains: { Swords: 1.6, '-1287461328': 0.3 } },
+        { date: '2026-10-15', gains: { Swords: 0.5, Run: 0.25 } },
+    ],
+};
 
 /** A full sheet: 8×7 EAQS grid (2 equipment rows + 1 quick-slot row), one unknown prefab. */
 export function valheimSheetFixture(

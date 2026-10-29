@@ -31,10 +31,16 @@ vi.mock('./use-system-status', () => ({
 // ROK-1780: the integrations panel now renders Calendars behind this kill switch; off here.
 vi.mock('./use-calendar-sync', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./use-calendar-sync')>()),
-    useCalendarSyncEnabled: () => false,
+    useCalendarsSectionShown: () => false,
 }));
 vi.mock('./use-onboarding', () => ({
     useOnboarding: () => ({ changePassword: { mutate: vi.fn(), isPending: false } }),
+}));
+// ROK-1955: the integrations panel now renders the Companion devices card.
+vi.mock('./use-companion-devices', () => ({
+    useCompanionDevices: () => ({ data: [], isPending: false, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+    useRenameCompanionDevice: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+    useRevokeCompanionDevice: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('./use-steam-link', () => ({
     useSteamLink: () => ({

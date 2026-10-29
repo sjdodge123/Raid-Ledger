@@ -3,7 +3,7 @@
  * section. A section silently disappearing is how a reference page rots into
  * a lie, so each heading is asserted by name.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -43,6 +43,15 @@ function demoMode(enabled: boolean): void {
     mockUseSystemStatus.mockReturnValue({ data: { demoMode: enabled }, isLoading: false });
 }
 
+/**
+ * Load the lazy sample chunks (ROK-1893 P4) before any test waits on them. On a
+ * loaded CI coverage shard their cold import took >5s and was billed to whichever
+ * heading case first awaited the boundary (PR #1820); here it gets the hook's budget.
+ */
+beforeAll(async () => {
+    await Promise.all([import('./calendar-layer-section'), import('./calendar-hub-section'), import('./meter-histogram-section')]);
+}, 30_000);
+
 describe('DesignSystemPage', () => {
     beforeEach(() => {
         mockUseSystemStatus.mockReset();
@@ -65,11 +74,20 @@ describe('DesignSystemPage', () => {
         'Pattern — group marks and legend',
         'Pattern — own-calendar busy band and radio cards',
         'Pattern — server-schedule layer (plugin calendar layers)',
+        'Pattern — hub suffix on event game lines',
         'Forms — the form primitives',
-    ])('renders the "%s" section heading', (heading) => {
+        'Pattern — Valheim trend chip',
+        'Pattern — plugin hub widgets',
+        'Pattern — meter tones and CSS histogram',
+        'Pattern — masonry-packed card grid',
+    ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
-        expect(screen.getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+        // findByRole: the calendar layer + hub samples are lazy (preloaded above); the
+        // lazy wrapper still resolves a tick after the first render.
+        expect(
+            await screen.findByRole('heading', { name: heading, level: 2 }, { timeout: 5000 }),
+        ).toBeInTheDocument();
     });
 
 });
@@ -373,6 +391,13 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         for (const name of ['warning', 'danger', 'busy', 'slot']) {
             expect(screen.getByTestId(`ds-semantic-${name}`)).toBeInTheDocument();
         }
+        // ROK-1815: the faction pair paints via its own token classes, both hexes shown.
+        const horde = screen.getByTestId('ds-semantic-faction-horde');
+        expect(within(horde).getByTitle('bg-faction-horde/10')).toHaveClass('bg-faction-horde/10');
+        expect(within(horde).getByText('#991b1b')).toBeInTheDocument();
+        const alliance = screen.getByTestId('ds-semantic-faction-alliance');
+        expect(within(alliance).getByTitle('text-faction-alliance')).toHaveClass('text-faction-alliance');
+        expect(within(alliance).getByText('#1e40af')).toBeInTheDocument();
         // D-6: the solid button fill stays raw, shown beside the token it must not become.
         expect(screen.getByTestId('ds-button-raw')).toHaveClass('bg-emerald-600');
         expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success', 'text-white');
@@ -640,6 +665,15 @@ describe('DesignSystemPage — TabRow demo (ROK-1785)', () => {
         expect(within(nav).queryByRole('link', { name: 'Loot' })).toBeNull();
         expect(within(demo).getByRole('region', { name: 'Overview' })).toHaveAttribute('id', 'ds-tab-overview');
     });
+
+    it('shows the TabRow More menu demo (ROK-1876) with both phone rows', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-tab-row-more');
+        expect(within(demo).getByRole('navigation', { name: 'Demo page sections, phone' })).toBeInTheDocument();
+        const pinned = within(demo).getByRole('navigation', { name: 'Demo page sections, Resources active' });
+        expect(within(pinned).getAllByRole('link').length, 'jsdom has no layout, so every shown tab (Loot is hidden) stays in the row').toBe(5);
+    });
 });
 
 describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
@@ -662,5 +696,62 @@ describe('DesignSystemPage — ROK-1868 markdown (Forms, V13)', () => {
         const toolbar = await within(forms).findByRole('toolbar', { name: 'Formatting' }, { timeout: 5000 });
         expect(within(toolbar).getByRole('button', { name: 'Bold' })).toBeInTheDocument();
         expect(within(forms).getByTestId('ds-md-editor')).toHaveAttribute('data-md-editor');
+    });
+});
+
+describe('DesignSystemPage — hub row bits demo (ROK-1883)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('mounts the real HubViewerAction in View / Join / Joined / Leader / Banned, plus the Hidden chip', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-hub-row-bits');
+        expect(within(demo).getByRole('link', { name: 'View Valheim Dedicated' })).toHaveAttribute('href', '/hubs/310');
+        expect(within(demo).getByRole('button', { name: 'Join Tavern Regulars' })).toBeEnabled();
+        expect(within(demo).getByText('Joined')).toHaveAttribute('data-tone', 'success');
+        expect(within(demo).getByText('Leader')).toHaveAttribute('data-tone', 'success');
+        expect(within(demo).getByText('Banned')).toHaveAttribute('data-tone', 'danger');
+        expect(within(demo).getByText('Hidden')).toHaveAttribute('data-tone', 'warning');
+    });
+});
+
+describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('renders a sample HubGameWidget through the real cell builder: ready, skeleton and contained error', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-hub-widgets');
+        expect(await within(demo).findByTestId('ds-hub-widget-body')).toBeInTheDocument();
+        expect(within(demo).getByRole('heading', { name: 'Class breakdown' })).toBeInTheDocument();
+        expect(within(demo).getByTestId('hub-widget-loading')).toHaveAttribute('aria-busy', 'true');
+        expect(await within(demo).findByRole('alert')).toHaveTextContent("Couldn't load this widget.");
+        expect(document.getElementById('hub-widget-ds-demo-classes')).not.toBeNull();
+    });
+
+    it('renders every GuildMeter tone and the CSS histogram (§3.2 / §4.30)', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const meters = await screen.findByTestId('ds-guild-meter', undefined, { timeout: 5000 });
+        expect(within(meters).getAllByRole('meter').map((m) => m.getAttribute('aria-label')))
+            .toEqual(['success meter 80%', 'warning meter 45%', 'neutral meter 62%']);
+        const histogram = screen.getByTestId('ds-css-histogram');
+        expect(within(histogram).getByRole('link', { name: 'Levels 50–60: 14 members' })).toBeInTheDocument();
+        expect(within(histogram).getAllByRole('link')).toHaveLength(6);
+    });
+
+    it('renders the arrange list (§4.28) through the real ArrangeRow: arrows reorder and announce', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-arrange-list');
+        fireEvent.click(await within(demo).findByRole('button', { name: 'Move Latest post down' }));
+        expect(within(demo).getAllByRole('listitem')[1]).toHaveAttribute('data-testid', 'arrange-row-gm-post');
+        expect(within(demo).getByTestId('ds-arrange-live')).toHaveTextContent('Latest post moved to position 2 of 4.');
+        expect(within(demo).getByTestId('arrange-row-discord')).toHaveAttribute('data-hidden', 'true');
     });
 });

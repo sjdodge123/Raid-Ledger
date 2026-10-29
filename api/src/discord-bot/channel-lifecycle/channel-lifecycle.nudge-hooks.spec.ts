@@ -99,6 +99,7 @@ describe('standalone poll create fan-out nudge', () => {
       notifications: {
         notifyInterestedUsers: jest.fn().mockResolvedValue(undefined),
         notifyPickedMembers: jest.fn().mockResolvedValue(undefined),
+        notifyRosterReschedule: jest.fn().mockResolvedValue([]),
       },
       pollEmbed: { firePostInitialEmbed: jest.fn() },
       nudge,

@@ -229,6 +229,7 @@ export {
     remindVoters,
     rallyNonVoters,
     addPollMembers,
+    removePollMember,
 } from './api/scheduling-api';
 
 // Standalone Scheduling Polls (ROK-977)
@@ -236,6 +237,8 @@ export {
     createSchedulingPoll,
     getActiveStandalonePolls,
     completeStandalonePoll,
+    lockInSchedulingPoll,
+    rescheduleLockInSchedulingPoll,
     getPollSharePreview,
     joinPollShare,
     resetPollShareToken,

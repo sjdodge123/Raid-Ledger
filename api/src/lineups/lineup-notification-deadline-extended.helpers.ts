@@ -33,6 +33,8 @@ export interface DeadlineExtendedLineup {
   title?: string;
   description?: string | null;
   channelOverrideId: string | null;
+  /** ROK-1528: a private lineup never posts channel embeds. */
+  visibility?: string;
 }
 
 /** Copy for the shortfall line — `0` and `1` are the only counts that reach here. */
@@ -71,6 +73,7 @@ export function buildDeadlineExtendedEmbed(
  * Post the deadline-extended channel embed. Honors the lineup channel
  * override, falling back to the bound default; silently skips if no channel
  * resolves. Dedup key is per lineup — the window is only ever extended once.
+ * Private lineups post nothing (ROK-1528 — no channel embeds, ever).
  */
 export async function notifyDeadlineExtended(
   deps: DispatchDeps,
@@ -78,6 +81,7 @@ export async function notifyDeadlineExtended(
   newDeadline: Date,
   nominationCount: number,
 ): Promise<void> {
+  if (lineup.visibility === 'private') return;
   const ctx = await resolveEmbedCtx(deps, lineup.id, 'nominations', {
     ...(lineup.title !== undefined ? { title: lineup.title } : {}),
     ...(lineup.description != null ? { description: lineup.description } : {}),

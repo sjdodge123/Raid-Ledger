@@ -7,7 +7,7 @@
  * highest-consequence consumers: the lock-in roster, the lock-in guard, and the
  * standalone poll's auto-signup/DM split.
  */
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { yesVotesOnly } from './scheduling-stance.helpers';
 import { assertSlotHasVoters } from './scheduling-lock-in.helpers';
 import { createLockedInEvent } from './scheduling-event.helpers';
@@ -15,6 +15,7 @@ import type { LockInEventDeps } from './scheduling-event.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
 import { findScheduleVotes } from './scheduling-query.helpers';
+import { linkClaimedMatch } from './scheduling-lockin-claim.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
 import {
   splitYesVotersBySlot,
@@ -27,9 +28,18 @@ jest.mock('./scheduling-query.helpers');
 jest.mock('./scheduling-auto-signup.helpers');
 jest.mock('./scheduling-auto-heart.helpers');
 jest.mock('../lineups-notify-hooks.helpers');
+// The claim itself is covered by its own spec; here it always succeeds.
+jest.mock('./scheduling-lockin-claim.helpers', () => ({
+  claimMatchForLockIn: jest.fn().mockResolvedValue('scheduling'),
+  linkClaimedMatch: jest.fn(),
+  releaseMatchClaim: jest.fn(),
+}));
 
 const mockFindVotes = findScheduleVotes as jest.MockedFunction<
   typeof findScheduleVotes
+>;
+const mockLinkEvent = linkClaimedMatch as jest.MockedFunction<
+  typeof linkClaimedMatch
 >;
 const mockAutoSignup = autoSignupSlotVoters as jest.MockedFunction<
   typeof autoSignupSlotVoters
@@ -85,12 +95,18 @@ describe('assertSlotHasVoters — anti-votes are not voters (BLOCKER-3)', () => 
 });
 
 describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', () => {
+  // The match-link compare-and-set wins unless a test says otherwise.
+  beforeEach(() => mockLinkEvent.mockResolvedValue(true));
+
   function buildDeps(): LockInEventDeps {
     const db = createDrizzleMock();
     db.limit.mockResolvedValue([]);
     return {
       db: db as unknown as LockInEventDeps['db'],
-      eventsService: { create: jest.fn().mockResolvedValue({ id: 55 }) },
+      eventsService: {
+        create: jest.fn().mockResolvedValue({ id: 55 }),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
       signupsService: { signup: jest.fn() },
       lineupNotifications: {} as LockInEventDeps['lineupNotifications'],
       pollEmbed: { fireUpdateEmbed: jest.fn() },
@@ -120,6 +136,54 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
     expect(signedUp.map((v) => v.userId)).toEqual([10, 12]);
     const hearted = at(mockAutoHeart.mock.calls, 0)[2];
     expect(hearted.map((v) => v.userId)).toEqual([10, 12]);
+  });
+
+  it('passes the match id as schedulingMatchId so the event inherits the poll hub (ROK-1893 P3)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    const deps = buildDeps();
+    await createLockedInEvent(
+      deps,
+      { id: 3, gameId: 7 },
+      { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+      10,
+      false,
+    );
+    const create = deps.eventsService.create as jest.Mock;
+    const dto = at(create.mock.calls, 0)[1] as { schedulingMatchId?: number };
+    expect(dto.schedulingMatchId).toBe(3);
+  });
+
+  it('409s before any signup or announcement when another lock-in won the match (ROK-2024)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    mockLinkEvent.mockResolvedValue(false);
+    const deps = buildDeps();
+    await expect(
+      createLockedInEvent(
+        deps,
+        { id: 3, gameId: 7 },
+        { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+        10,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockAutoSignup).not.toHaveBeenCalled();
+    expect(mockAutoHeart).not.toHaveBeenCalled();
+    expect(deps.pollEmbed.fireUpdateEmbed).not.toHaveBeenCalled();
+    // ROK-2024 F2: the losing event is deleted, not left as an orphan.
+    expect(deps.eventsService.delete).toHaveBeenCalledWith(55, 10, false);
+  });
+
+  it('deletes nothing when the link write wins (ROK-2024 F2)', async () => {
+    mockFindVotes.mockResolvedValue([row(10, 'yes')]);
+    const deps = buildDeps();
+    await createLockedInEvent(
+      deps,
+      { id: 3, gameId: 7 },
+      { id: 1, proposedTime: new Date('2026-10-01T20:00:00.000Z') },
+      10,
+      false,
+    );
+    expect(deps.eventsService.delete).not.toHaveBeenCalled();
   });
 });
 

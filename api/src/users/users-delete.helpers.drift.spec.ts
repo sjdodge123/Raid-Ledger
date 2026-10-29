@@ -85,9 +85,44 @@ describe('user-FK wipe manifest drift guard (ROK-313 §9.6)', () => {
     );
   });
 
+  // ROK-1968: the session note's `updated_by` and an item's `done_by` are SET
+  // NULL attributions on shared hub content — KEEP, never wiped with the user.
+  it('keeps the ROK-1968 hub session-note tables (SET NULL attribution)', () => {
+    const keep = KEEP_TABLES.map(tableName);
+    expect(keep).toEqual(
+      expect.arrayContaining(['hub_session_notes', 'hub_session_note_items']),
+    );
+    const wipe = [
+      ...WIPE_BY_COLUMN.map((w) => tableName(w.table)),
+      ...WIPE_SPECIAL_TABLES.map(tableName),
+    ];
+    expect(wipe).not.toContain('hub_session_notes');
+    expect(wipe).not.toContain('hub_session_note_items');
+  });
+
   it('sanity: the manifest is non-trivial and the users table is excluded', () => {
     expect(referencing.size).toBeGreaterThan(20);
     expect(classifiedSet.has('users')).toBe(false);
     expect(classifiedSet.has('admin_actions')).toBe(true);
+  });
+});
+
+describe('user-FK wipe manifest — BG3 plugin tables (ROK-1957)', () => {
+  // ROK-1957: the user's own BG3 rows (CASCADE) are wiped, matching D-18
+  // "Delete my BG3 data"; campaigns and hub settings (SET NULL) stay on the hub.
+  it('classifies the ROK-1957 BG3 tables by FK ownership', () => {
+    const wipe = WIPE_BY_COLUMN.map((w) => tableName(w.table));
+    const keep = KEEP_TABLES.map(tableName);
+    expect(wipe).toEqual(
+      expect.arrayContaining([
+        'bg3_party_claims',
+        'bg3_campaign_keys',
+        'bg3_user_defaults',
+        'bg3_saves',
+      ]),
+    );
+    expect(keep).toEqual(
+      expect.arrayContaining(['bg3_campaigns', 'bg3_hub_settings']),
+    );
   });
 });

@@ -27,6 +27,7 @@ import {
 } from './channel-lifecycle.decide';
 import type {
   ApplyContext,
+  HubLinkResult,
   ItemOutcome,
   PlannedGame,
 } from './channel-lifecycle.types';
@@ -70,11 +71,17 @@ export async function linkHubs(
   ctx: ApplyContext,
   game: PlannedGame,
   channel: { id: string; autoManaged: boolean },
-): Promise<number> {
+): Promise<HubLinkResult> {
   const { gameId } = game.row;
-  const n = await ctx.hubLinker.linkHubsForGame(gameId, channel.id, ctx.db);
-  if (n > 0 && channel.autoManaged) await refreshTopic(ctx, game, channel.id);
-  return n;
+  const linked = await ctx.hubLinker.linkHubsForGame(
+    gameId,
+    channel.id,
+    ctx.db,
+  );
+  if (linked.guildIds.length > 0 && channel.autoManaged) {
+    await refreshTopic(ctx, game, channel.id);
+  }
+  return linked;
 }
 
 /** The Games parent for a create; a full category overflows (D5 / §2.13). */
@@ -327,9 +334,10 @@ async function applyLinkHub(
   const planned = { channelId: binding.channelId, gameId: game.row.gameId };
   const stale = staleLinkDetail(planned, current);
   if (stale !== null) return { outcome: 'deferred', detail: stale };
-  const n = await linkHubs(ctx, game, {
+  const linked = await linkHubs(ctx, game, {
     id: binding.channelId,
     autoManaged: current?.autoManaged === true,
   });
-  return { outcome: 'done', detail: game.reason, linkedHubs: n };
+  const linkedHubs = linked.guildIds.length;
+  return { outcome: 'done', detail: game.reason, linkedHubs, linked };
 }

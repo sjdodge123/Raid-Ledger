@@ -8,12 +8,19 @@ import {
     formatSeconds,
     havePct,
     parseStoredTargets,
+    processorLabel,
     serializeTargets,
+    DEFAULT_PLANNER_FILTERS,
+    activePlannerFilters,
     addPlannerTarget,
     PLANNER_TARGETS_MAX,
     shoppingListText,
     stockAgeLabel,
     viaChips,
+    stepLabel,
+    hidesUndiscovered,
+    otherWaysCount,
+    serializeSources,
 } from './planner.helpers';
 
 const station = (p: string) => (p === 'forge' ? 'Forge' : p);
@@ -36,14 +43,15 @@ describe('foldNodes', () => {
 });
 
 describe('formatting', () => {
-    it('serialises targets as prefab:quality:amount:0:kind', () => {
+    it('serialises targets as prefab:quality:amount:fromQuality:kind', () => {
         expect(serializeTargets([
-            { prefab: 'SwordIron', kind: 'item', quality: 2, amount: 3 },
-            { prefab: 'piece_chest', kind: 'piece', quality: 1, amount: 1 },
-        ])).toBe('SwordIron:2:3:0:item,piece_chest:1:1:0:piece');
+            { prefab: 'SwordIron', kind: 'item', quality: 2, fromQuality: 0, amount: 3 },
+            { prefab: 'SwordIron', kind: 'item', quality: 3, fromQuality: 2, amount: 1 },
+            { prefab: 'piece_chest', kind: 'piece', quality: 1, fromQuality: 0, amount: 1 },
+        ])).toBe('SwordIron:2:3:0:item,SwordIron:3:1:2:item,piece_chest:1:1:0:piece');
     });
-    it('merges a target only on the same prefab + kind + quality; refuses a new one at the cap', () => {
-        const item = { prefab: 'Shared', kind: 'item', quality: 1, amount: 2 } as const;
+    it('merges a target only on the same prefab + kind + quality + fromQuality; refuses a new one at the cap', () => {
+        const item = { prefab: 'Shared', kind: 'item', quality: 1, fromQuality: 0, amount: 2 } as const;
         const piece = { ...item, kind: 'piece' } as const;
         const both = addPlannerTarget([item], piece);
         expect(both).toEqual([item, piece]);
@@ -51,6 +59,12 @@ describe('formatting', () => {
         const full = Array.from({ length: PLANNER_TARGETS_MAX }, (_, i) => ({ ...item, prefab: `P${i}` }));
         expect(addPlannerTarget(full, piece)).toBeNull();
         expect(addPlannerTarget(full, { ...item, prefab: 'P0' })?.length).toBe(PLANNER_TARGETS_MAX);
+    });
+    it('keeps an upgrade step apart from a from-scratch craft of the same quality', () => {
+        const scratch = { prefab: 'SwordIron', kind: 'item', quality: 3, fromQuality: 0, amount: 1 } as const;
+        const upgrade = { ...scratch, fromQuality: 2 } as const;
+        expect(addPlannerTarget([scratch], upgrade)).toEqual([scratch, upgrade]);
+        expect(addPlannerTarget([scratch, upgrade], { ...upgrade, amount: 2 })).toEqual([scratch, { ...upgrade, amount: 3 }]);
     });
     it('renders null as an em dash and groups thousands', () => {
         expect(formatAmount(null)).toBe('—');
@@ -75,7 +89,12 @@ describe('formatting', () => {
 describe('viaChips', () => {
     it('names the station and level, upgrade station and custom formula', () => {
         const via = { type: 'recipe', recipeId: 'r', station: 'forge', stationLevel: 3, quality: 3, upgradeOnly: false, formula: 'custom', anyOneOf: false, upgraderStation: true } as const;
-        expect(viaChips(node({ via, alternatives: 2 }), station)).toEqual(['Forge · lvl 3', 'Upgrade station', 'Cost may differ in game', '+2 other ways']);
+        // ROK-1861 Q3: one chip names the station, the upgrade-station flag and the level.
+        expect(viaChips(node({ via, alternatives: 2 }), station)).toEqual(['Forge · Upgrade station · lvl 3', 'Cost may differ in game', '+2 other ways']);
+    });
+    it('keeps the plain station chip when the station is not an upgrade station', () => {
+        const via = { type: 'recipe', recipeId: 'r', station: 'forge', stationLevel: 2, quality: 2, upgradeOnly: false, formula: 'vanilla', anyOneOf: false, upgraderStation: false } as const;
+        expect(viaChips(node({ via }), station)).toEqual(['Forge · lvl 2']);
     });
     it('labels processes, cycles and gathered leaves', () => {
         const proc = { type: 'process', processor: 'fermenter', processorType: 'fermenter', seconds: 2400, windPowered: false, fuel: null } as const;
@@ -85,14 +104,99 @@ describe('viaChips', () => {
     });
 });
 
+describe('processorLabel (ROK-1934)', () => {
+    it('names known processor prefabs; unknown → null so the caller can fall back', () => {
+        expect(processorLabel('smelter')).toBe('Smelter');
+        expect(processorLabel('charcoal_kiln')).toBe('Charcoal kiln');
+        expect(processorLabel('piece_cookingstation')).toBe('Cooking station');
+        expect(processorLabel('fermenter')).toBe('Fermenter');
+        expect(processorLabel('mystery_press')).toBeNull();
+        expect(processorLabel('constructor'), 'own keys only, never an inherited member').toBeNull();
+    });
+});
+
 describe('parseStoredTargets', () => {
     it('reads a valid list', () => {
-        const list = [{ prefab: 'Club', kind: 'item', quality: 2, amount: 4 }];
+        const list = [{ prefab: 'Club', kind: 'item', quality: 3, fromQuality: 2, amount: 4 }];
         expect(parseStoredTargets(JSON.stringify(list))).toEqual(list);
+    });
+    it('reads a list stored before fromQuality existed as from-scratch crafts', () => {
+        const old = [{ prefab: 'Club', kind: 'item', quality: 2, amount: 4 }];
+        expect(parseStoredTargets(JSON.stringify(old))).toEqual([{ ...old[0], fromQuality: 0 }]);
     });
     it('drops unparseable or off-schema storage', () => {
         expect(parseStoredTargets(null)).toEqual([]);
         expect(parseStoredTargets('{nope')).toEqual([]);
         expect(parseStoredTargets(JSON.stringify([{ prefab: 'Club', kind: 'item', quality: 11, amount: 1 }]))).toEqual([]);
+        expect(parseStoredTargets(JSON.stringify([{ prefab: 'Club', kind: 'item', quality: 2, fromQuality: 2, amount: 1 }]))).toEqual([]);
+    });
+});
+
+describe('planner filters', () => {
+    it('defaults Kind to Items and counts only changes from the defaults', () => {
+        expect(DEFAULT_PLANNER_FILTERS.kind).toBe('item');
+        expect(activePlannerFilters(DEFAULT_PLANNER_FILTERS)).toBe(0);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'both' })).toBe(1);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, kind: 'piece', category: 'Weapon', includePersonal: true, includeVehicles: false })).toBe(4);
+    });
+});
+
+describe('undiscovered filter (ROK-1862)', () => {
+    it('counts "Hide undiscovered" in the funnel badge; off by default', () => {
+        expect(DEFAULT_PLANNER_FILTERS.hideUndiscovered).toBe(false);
+        expect(activePlannerFilters({ ...DEFAULT_PLANNER_FILTERS, hideUndiscovered: true })).toBe(1);
+    });
+    it('applies only when the server could read the known list', () => {
+        const on = { hideUndiscovered: true };
+        expect(hidesUndiscovered(on, 'known')).toBe(true);
+        expect(hidesUndiscovered(on, 'no-character')).toBe(false);
+        expect(hidesUndiscovered(on, 'truncated')).toBe(false);
+        expect(hidesUndiscovered(on, 'outdated')).toBe(false);
+        expect(hidesUndiscovered(on, undefined)).toBe(false);
+        expect(hidesUndiscovered({ hideUndiscovered: false }, 'known')).toBe(false);
+    });
+});
+
+describe('stepLabel (ROK-1861)', () => {
+    const step = (over: { station: string | null; stationLevel: number; upgraderStation: boolean }) =>
+        ({ quality: 2, anyOneOf: false, resources: [], ...over });
+    it('an upgrade-station step names the station and puts the level on the chip', () => {
+        expect(stepLabel(step({ station: 'forge', stationLevel: 3, upgraderStation: true }), station)).toEqual({
+            label: 'Quality 2 · Forge',
+            chip: 'Upgrade station · lvl 3',
+        });
+    });
+    it('a plain station step carries its level in the label and has no chip', () => {
+        expect(stepLabel(step({ station: 'forge', stationLevel: 3, upgraderStation: false }), station)).toEqual({
+            label: 'Quality 2 · Forge · lvl 3',
+            chip: null,
+        });
+    });
+    it('a stationless step reads "By hand"', () => {
+        expect(stepLabel(step({ station: null, stationLevel: 0, upgraderStation: false }), station)).toEqual({
+            label: 'Quality 2 · By hand',
+            chip: null,
+        });
+    });
+});
+
+describe('serializeSources (ROK-1860 D3)', () => {
+    it('is empty with no picks', () => {
+        expect(serializeSources(new Map())).toBe('');
+    });
+    it('writes recipe and process tokens sorted by prefab', () => {
+        const picks = new Map([
+            ['Coal', { type: 'process', processor: 'charcoal_kiln', index: 1 } as const],
+            ['Bronze', { type: 'recipe', recipeId: 'Recipe_Bronze5' } as const],
+        ]);
+        expect(serializeSources(picks)).toBe('Bronze:r:Recipe_Bronze5,Coal:p:charcoal_kiln:1');
+    });
+});
+
+describe('otherWaysCount (ROK-1860)', () => {
+    it('is the node alternatives, 0 for a withheld node', () => {
+        expect(otherWaysCount(node({ alternatives: 2 }))).toBe(2);
+        expect(otherWaysCount(node({}))).toBe(0);
+        expect(otherWaysCount(node({ alternatives: 3, via: { type: 'undiscovered' } }))).toBe(0);
     });
 });

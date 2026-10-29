@@ -32,7 +32,9 @@ jest.mock('./lineup-decision-reason.helpers', () => ({
   loadDecisionReason: jest.fn(() => Promise.resolve(null)),
 }));
 jest.mock('./lineup-notification-event-roster.helpers', () => ({
-  resolveEventRosterNames: jest.fn(() => Promise.resolve([])),
+  resolveEventRosterCard: jest.fn(() =>
+    Promise.resolve({ names: [], groupSubtext: null }),
+  ),
 }));
 jest.mock('./lineup-notification-routing.helpers', () => ({
   routeMatchesFoundIfPrivate: jest.fn(() => Promise.resolve(false)),

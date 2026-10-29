@@ -1,6 +1,6 @@
 /**
  * ROK-1872 (ROK-1428 §2.8, §2.9, AC) — real DB: an event card posted through
- * EmbedPosterService carries the game's Hub link button (`/guilds/<id>`);
+ * EmbedPosterService carries the game's Hub link button (`/hubs/<id>`);
  * with no hub the card has no Hub button and is otherwise unchanged.
  *
  * Discord is mocked the way sibling integration specs do it: `jest.spyOn` on
@@ -18,6 +18,7 @@ import { EmbedPosterService } from '../services/embed-poster.service';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { insertCommunityHub } from '../../guilds/community/community-proposals.queries';
 
 const GUILD = 'guild-1872';
 const BASE = 'https://raid.example.com';
@@ -86,6 +87,19 @@ async function seedHub(gameId: number): Promise<number> {
   return hub.id;
 }
 
+/** An active `game_community` hub (ROK-1873 — a core kind, no plugin). */
+async function seedCommunityHub(gameId: number, name: string): Promise<number> {
+  const hub = await insertCommunityHub(testApp.db, {
+    gameId,
+    name,
+    blurb: '',
+    status: 'active',
+    proposedBy: testApp.seed.adminUser.id,
+    reviewedBy: testApp.seed.adminUser.id,
+  });
+  return hub.id;
+}
+
 async function postCard(eventId: number, gameId: number): Promise<void> {
   const start = new Date(Date.now() + 86_400_000).toISOString();
   const end = new Date(Date.now() + 90_000_000).toISOString();
@@ -135,7 +149,7 @@ describe('event card hub link (ROK-1872, integration)', () => {
     const hubId = await seedHub(gameId);
     await postCard(eventId, gameId);
     expect(postedButtons()).toContainEqual(
-      expect.objectContaining({ label: 'Hub', url: `${BASE}/guilds/${hubId}` }),
+      expect.objectContaining({ label: 'Hub', url: `${BASE}/hubs/${hubId}` }),
     );
   });
 
@@ -151,5 +165,35 @@ describe('event card hub link (ROK-1872, integration)', () => {
     await postCard(eventId, gameId);
     const withHub = postedButtons().filter((b) => b.label !== 'Hub');
     expect(withHub).toEqual(without);
+  });
+});
+
+describe('community hubs on the card (ROK-1873, D15 / H8)', () => {
+  it('H8: two community hubs link the /hubs?game= directory "Hubs"', async () => {
+    const { eventId, gameId } = await seedEvent();
+    await seedCommunityHub(gameId, 'Crew A 1873');
+    await seedCommunityHub(gameId, 'Crew B 1873');
+    await postCard(eventId, gameId);
+    const buttons = postedButtons();
+    expect(buttons).toContainEqual(
+      expect.objectContaining({
+        label: 'Hubs',
+        url: `${BASE}/hubs?game=${gameId}`,
+      }),
+    );
+    expect(buttons.some((b) => b.label === 'Hub')).toBe(false);
+  });
+
+  it('D15: a single community hub wins over a server hub', async () => {
+    const { eventId, gameId } = await seedEvent();
+    await seedHub(gameId);
+    const crewId = await seedCommunityHub(gameId, 'Crew 1873');
+    await postCard(eventId, gameId);
+    expect(postedButtons()).toContainEqual(
+      expect.objectContaining({
+        label: 'Hub',
+        url: `${BASE}/hubs/${crewId}`,
+      }),
+    );
   });
 });

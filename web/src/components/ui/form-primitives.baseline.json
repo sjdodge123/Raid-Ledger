@@ -1,10 +1,8 @@
 {
     "components/ErrorFallback.tsx": 1,
     "components/admin/DemoDataCard.tsx": 2,
-    "components/admin/PluginCard.tsx": 4,
     "components/admin/UpdateBanner.tsx": 1,
     "components/admin/admin-settings-layout.tsx": 1,
-    "components/admin/onboarding/PluginCard.tsx": 2,
     "components/admin/onboarding/connect-plugins-step.tsx": 5,
     "components/admin/onboarding/done-step.tsx": 2,
     "components/analytics/attendance-trends-chart.tsx": 1,
@@ -149,7 +147,6 @@
     "pages/admin/discord-connection-page.tsx": 1,
     "pages/admin/discord-overview-page.tsx": 2,
     "pages/admin/logs-panel.tsx": 4,
-    "pages/admin/plugins/PluginCard.tsx": 4,
     "pages/calendar/CalendarGameFilter.tsx": 1,
     "pages/character-detail-page.tsx": 5,
     "pages/create-event-page.tsx": 1,

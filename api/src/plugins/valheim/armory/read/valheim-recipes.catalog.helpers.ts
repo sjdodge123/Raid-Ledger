@@ -10,7 +10,13 @@ import type {
 } from '@raid-ledger/contract';
 import type { ValheimItemCatalogEntryRow } from '../../../../drizzle/schema';
 import { toCatalogIcon } from './valheim-armory-catalog.helpers';
+import {
+  craftOf,
+  directInputs,
+  upgradesOf,
+} from './valheim-recipes.craft.helpers';
 import type { RecipeGraph } from './valheim-recipes.graph';
+import { sourceOptionsOf } from './valheim-recipes.source-options';
 
 type CatalogItems = Record<string, ValheimItemCatalogEntryRow>;
 
@@ -61,19 +67,24 @@ function itemEntry(
   const e = ownEntry(items, prefab);
   const recipes = graph.recipesByResult.get(prefab) ?? [];
   const processes = graph.processesByOutput.get(prefab) ?? [];
+  const maxQuality = clampQuality(e?.maxQuality);
+  const sourceOptions = sourceOptionsOf(graph, prefab);
   return {
     prefab,
     kind: 'item',
     name: e?.name ?? prefab,
     category: e?.category ?? '',
     icon: e ? toCatalogIcon(e.icon) : null,
-    maxQuality: clampQuality(e?.maxQuality),
+    maxQuality,
+    craft: craftOf(graph, prefab),
+    upgrades: upgradesOf(graph, prefab, maxQuality),
     sources: {
       recipes: recipes.filter((r) => r.enabled).length,
       processes: processes.filter(
         (p) => graph.processors.get(p.processor)?.type !== 'incinerator',
       ).length,
     },
+    ...(sourceOptions ? { sourceOptions } : {}),
   };
 }
 
@@ -96,9 +107,36 @@ export function catalogueEntries(
       maxQuality: 1,
       // A piece has exactly one build requirement list.
       sources: { recipes: 1, processes: 0 },
+      craft: craftOf(graph, p),
+      upgrades: [],
     });
   }
   return out;
+}
+
+/**
+ * ROK-1899: the catalogue's ONE items read — every produced prefab plus the
+ * direct inputs of every item and piece (the window's ingredient names). Sorted.
+ */
+export function catalogueReadPrefabs(graph: RecipeGraph): string[] {
+  const produced = producedPrefabs(graph);
+  const inputs = directInputs(graph, [...produced, ...graph.pieces.keys()]);
+  return [...new Set([...produced, ...inputs])].sort();
+}
+
+/** Sorted prefabs named in any entry's `craft` / `upgrades` / `sourceOptions` resources. */
+export function ingredientPrefabs(
+  entries: readonly ValheimRecipeCatalogEntry[],
+): string[] {
+  const set = new Set<string>();
+  for (const e of entries) {
+    for (const r of e.craft?.resources ?? []) set.add(r.prefab);
+    for (const u of e.upgrades) for (const r of u.resources) set.add(r.prefab);
+    for (const o of e.sourceOptions ?? []) {
+      for (const r of o.resources) set.add(r.prefab);
+    }
+  }
+  return [...set].sort();
 }
 
 /** Crafting stations, sorted by prefab. */

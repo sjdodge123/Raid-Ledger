@@ -8,19 +8,26 @@ import { useState, type JSX } from 'react';
 import type {
     ValheimContainerListResponse,
     ValheimContainerSummary,
+    ValheimMaterialsBase,
 } from '@raid-ledger/contract';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Button } from '../../../components/ui/button';
 import type { ItemIconContext } from '../character/use-item-icons';
 import { ChestDetail } from './chest-detail';
 import { ChestList } from './chest-list';
+import { chestsInBase } from './materials-bases.helpers';
 
 interface ChestsSectionProps {
     serverId: number;
     includeVehicles: boolean;
     chests: UseQueryResult<ValheimContainerListResponse>;
+    /** ROK-1859: every base (for chest names) and the selected one (null = all). */
+    bases: readonly ValheimMaterialsBase[];
+    base: ValheimMaterialsBase | null;
     /** The selected item's display name, or null for every chest. */
     holdingLabel: string | null;
+    /** ROK-1889: the selected item's prefab, for the chest map links. */
+    holding?: string | null;
     onClear: () => void;
     ctx: ItemIconContext;
 }
@@ -51,12 +58,14 @@ function HoldingLine({
 
 function ChestsBody({
     chests,
+    bases,
+    base,
     ctx,
     onOpen,
-}: {
-    chests: ChestsSectionProps['chests'];
-    ctx: ItemIconContext;
+    holding,
+}: Pick<ChestsSectionProps, 'chests' | 'bases' | 'base' | 'ctx'> & {
     onOpen: (chest: ValheimContainerSummary) => void;
+    holding: string | null;
 }): JSX.Element {
     // Placeholder rows belong to the previous filter (another item, or the
     // vehicles toggle): never present them as the answer to this one.
@@ -73,9 +82,11 @@ function ChestsBody({
         );
     return (
         <ChestList
-            containers={chests.data.containers}
+            containers={chestsInBase(chests.data.containers, base)}
+            bases={bases}
             ctx={ctx}
             onOpen={onOpen}
+            holding={holding}
         />
     );
 }
@@ -84,7 +95,10 @@ export function ChestsSection({
     serverId,
     includeVehicles,
     chests,
+    bases,
+    base,
     holdingLabel,
+    holding = null,
     onClear,
     ctx,
 }: ChestsSectionProps): JSX.Element {
@@ -100,11 +114,19 @@ export function ChestsSection({
             {holdingLabel !== null && (
                 <HoldingLine label={holdingLabel} onClear={onClear} />
             )}
-            <ChestsBody chests={chests} ctx={ctx} onOpen={setOpen} />
+            <ChestsBody
+                chests={chests}
+                bases={bases}
+                base={base}
+                ctx={ctx}
+                onOpen={setOpen}
+                holding={holding}
+            />
             <ChestDetail
                 serverId={serverId}
                 includeVehicles={includeVehicles}
                 chest={open}
+                bases={bases}
                 ctx={ctx}
                 onClose={() => setOpen(null)}
             />

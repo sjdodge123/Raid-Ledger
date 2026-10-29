@@ -28,6 +28,8 @@ const mockPreferences = {
         tentative_displaced: { inApp: false, push: true, discord: true },
         // ROK-1455 R1 default (opt-OUT): on for in-app + Discord, off for push.
         lfg_player_invite: { inApp: true, push: false, discord: true },
+        // ROK-1933 default: Discord on, in-app and push off.
+        valheim_claim_suggestion: { inApp: false, push: false, discord: true },
     },
 };
 
@@ -203,6 +205,24 @@ it('renders description for each notification type', () => {
             fireEvent.click(screen.getByLabelText('Disable LFG player invites discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { lfg_player_invite: { discord: false } },
+            });
+        });
+    });
+
+    describe('Character claim suggestions row (ROK-1933)', () => {
+        it('renders the row under its #notif- anchor with the shared copy', () => {
+            renderSection();
+            const row = document.getElementById('notif-valheim_claim_suggestion');
+            expect(row, 'the DM footer deep-links #notif-valheim_claim_suggestion').not.toBeNull();
+            expect(row).toHaveTextContent('Character claim suggestions');
+            expect(row).toHaveTextContent('A Discord DM when a Valheim character on a server looks like yours');
+        });
+
+        it('opting out of the Discord DM sends the valheim_claim_suggestion type', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Disable Character claim suggestions discord notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { valheim_claim_suggestion: { discord: false } },
             });
         });
     });

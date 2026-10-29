@@ -24,11 +24,11 @@ export function makeRegistryGame(slug: string, name: string, id = 1) {
 }
 
 /** Render the CalendarPage with required providers. Returns render result and the QueryClient. */
-export function renderPage(CalendarPage: React.ComponentType) {
+export function renderPage(CalendarPage: React.ComponentType, initialEntries: string[] = ['/calendar']) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const result = render(
         <QueryClientProvider client={queryClient}>
-            <MemoryRouter>
+            <MemoryRouter initialEntries={initialEntries}>
                 <CalendarPage />
             </MemoryRouter>
         </QueryClientProvider>,

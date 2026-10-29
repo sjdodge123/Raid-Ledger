@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import type { GuildDiscordMirrorDto, GuildKind } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { PRIVATE_CHANNEL, discordMessage, okMirror } from '../../../test/mocks/guild-discord-handlers';
@@ -26,8 +26,8 @@ function serve(mirror: GuildDiscordMirrorDto): { served: () => boolean } {
  * `canEdit`. The old editor ⇒ can-change pairing is reproduced here so every
  * assertion below still reads the same behaviour.
  */
-function renderCard(canEdit: boolean, onChangeChannel: (() => void) | null = canEdit ? (): void => undefined : null): void {
-    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} onChangeChannel={onChangeChannel} />);
+function renderCard(canEdit: boolean, onChangeChannel: (() => void) | null = canEdit ? (): void => undefined : null, kind?: GuildKind): void {
+    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} onChangeChannel={onChangeChannel} kind={kind} />);
 }
 
 describe('GuildDiscordMirror — ok', () => {
@@ -73,11 +73,49 @@ describe('GuildDiscordMirror — ok', () => {
         expect(screen.getByTestId('thread-message-row')).toContainElement(embed);
     });
 
+    it('ROK-1878: renders Discord markup in the embed and the content — never raw', async () => {
+        const description = '**Wrennarök** · **pariah\\_\\_\\_**\n[Open event ↗](https://raid.gamernight.net/events/281)\n📆 <t:1792890900:f> (<t:1792890900:R>) · 3h\n🔊 <#1509358710139387985> <#111111111111111111>';
+        serve(okMirror([discordMessage(1, { content: '**roknua** __u__', embed: { title: '**Raid** <t:1792890900:R>', description } })]));
+        renderCard(false);
+        const embed = await screen.findByTestId('guild-discord-embed');
+        expect([...embed.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(['Raid', 'Wrennarök', 'pariah___']);
+        expect(within(embed).getByRole('link', { name: 'Open event ↗' })).toHaveAttribute('href', 'https://raid.gamernight.net/events/281');
+        expect(embed.querySelectorAll('time')).toHaveLength(3);
+        expect(embed).toHaveTextContent('🔊 #channel #announcements');
+        const row = screen.getByTestId('thread-message-row');
+        expect(row.querySelector('strong')?.textContent).toBe('roknua');
+        expect(row.querySelector('u')?.textContent).toBe('u');
+        expect(row.textContent).not.toMatch(/\*\*|<t:|<#|\\_|\d{17,20}/);
+    });
+
     it('shows an in-card empty state when the channel has no messages', async () => {
         serve(okMirror([]));
         renderCard(false);
         expect(await screen.findByTestId('guild-discord-state-empty')).toHaveTextContent('No messages in #announcements yet.');
         expect(screen.getByTestId('guild-discord-open')).toBeInTheDocument();
+    });
+});
+
+describe('GuildDiscordMirror — blurb per hub kind', () => {
+    it.each([['wow_guild'], ['game_community']] as const)('keeps "the community Discord" fallback on a %s hub', async (kind) => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, kind);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
+    });
+
+    it('falls back to "the server\'s Discord" on a server hub (ROK-1891 ruling)', async () => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe("Latest from the server's Discord");
+    });
+
+    it('still names the bot\'s server on a server hub when the name is known', async () => {
+        serve(okMirror([discordMessage(1)], undefined, 'Keepers HQ'));
+        renderCard(false, null, 'game_server');
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the Keepers HQ Discord');
     });
 });
 
@@ -143,6 +181,17 @@ describe('GuildDiscordMirror — private tag (spec: Pill/StatusChip on a private
         await screen.findByRole('heading', { name: '#officers' });
         const tag = screen.queryByTestId('guild-discord-private');
         expect(tag?.textContent?.trim(), 'a private bound channel must show a "Private" tag on the card').toBe('Private');
+    });
+
+    it.each([
+        ['wow_guild', 'guild'], ['game_server', 'server'], ['game_community', 'hub'],
+    ] as const)('the Private tag tooltip on a %s hub names the %s page', async (kind, noun) => {
+        serve(okMirror([discordMessage(1)], PRIVATE_CHANNEL));
+        renderCard(false, null, kind);
+        await screen.findByRole('heading', { name: '#officers' });
+        expect(screen.getByTestId('guild-discord-private')).toHaveAttribute(
+            'title', `Private Discord channel — everyone who can open this ${noun} page sees it here`,
+        );
     });
 
     it('shows no Private tag on a public bound channel', async () => {

@@ -12,7 +12,7 @@
  * of the composite.
  */
 import { test, expect } from './base';
-import { signInAsAdmin, signInContextWithJwt } from './browser-session';
+import { signInContextWithJwt } from './browser-session';
 import { devices, type Locator, type Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isMobile, isPhoneLayout } from './helpers';
@@ -29,11 +29,14 @@ import {
 } from './api-helpers';
 import {
     expectUnanswered,
+    manageItem,
     nonLeadingRow,
+    openManage,
     openPollPage,
     openRowMenu,
     rowMenuTrigger,
     seedNonLeadingRowPoll,
+    seedFixtureVoter,
     seedPollWithTwoSlots,
     slotDateLabel,
     slotRowById,
@@ -1845,36 +1848,6 @@ function heroCard(page: Page): Locator {
         .first();
 }
 
-/**
- * Open the poll's "Manage poll ⋯" control on EVERY project.
- *
- * Below 1024px it is the ROK-1584 bottom sheet (`scheduling-manage-sheet`);
- * from 1024px up ROK-1585 collapsed the three inline hero buttons into a 232px
- * `role="menu"` popover (`scheduling-manage-menu`) under the same trigger id.
- * The action components, gates and accessible names are the same in both.
- */
-async function openManage(page: Page): Promise<void> {
-    const manage = page.getByTestId('scheduling-manage');
-    await expect(
-        manage,
-        'the hero must offer "Manage poll ⋯" to a creator/operator (ROK-1584/1585)',
-    ).toBeVisible({ timeout: 15_000 });
-    if ((await manage.getAttribute('aria-expanded')) !== 'true') await manage.click();
-    await expect(
-        page.getByTestId(isPhoneLayout(test.info()) ? 'scheduling-manage-sheet' : 'scheduling-manage-menu'),
-    ).toBeVisible({ timeout: 10_000 });
-}
-
-/**
- * One Manage action by accessible name: a `button` row in the phone sheet, a
- * `menuitem` scoped to the desktop popover (ROK-1585).
- */
-function manageItem(page: Page, name: RegExp): Locator {
-    return isPhoneLayout(test.info())
-        ? page.getByRole('button', { name })
-        : page.getByTestId('scheduling-manage-menu').getByRole('menuitem', { name });
-}
-
 /** Inner (padding-box minus padding) width of the hero card. */
 async function heroInnerWidth(card: Locator): Promise<number> {
     return card.evaluate((el: HTMLElement) => {
@@ -1935,6 +1908,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         await expect(page.getByTestId('scheduling-manage-sheet')).toBeVisible();
         const rows = [
             sheet.getByTestId('add-poll-members-button'),
+            sheet.getByTestId('remove-poll-member-button'),
             sheet.getByRole('button', { name: /^remind voters$/i }),
             sheet.getByRole('button', { name: /^cancel poll$/i }),
         ];
@@ -1950,7 +1924,7 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         }
     });
 
-    test('desktop: the three actions live in the "Manage poll ⋯" dropdown (ROK-1585)', async ({
+    test('desktop: the four actions live in the "Manage poll ⋯" dropdown (ROK-1585, ROK-2020)', async ({
         page,
     }) => {
         test.skip(
@@ -1979,10 +1953,12 @@ test.describe('Scheduling poll hero action sizing (ROK-1582)', () => {
         const mBox = (await menu.boundingBox())!;
         expect(Math.abs(mBox.width - 232), 'the Manage popover is 232px wide').toBeLessThanOrEqual(1);
         expect(mBox.y, 'the popover opens under its trigger').toBeGreaterThanOrEqual(tBox.y + tBox.height - 1);
+        // ROK-2020 added "Remove Participant" as the second item — exactly four.
         await expect(menu.getByRole('menuitem')).toHaveText([
-            /add participants/i,
-            /remind voters/i,
-            /cancel poll/i,
+            /^add participants$/i,
+            /^remove participant$/i,
+            /^remind voters$/i,
+            /^cancel poll$/i,
         ]);
         await expect(menu.getByRole('separator')).toHaveCount(1);
 
@@ -3151,12 +3127,20 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     let checkLineupId: number;
     let checkMatchId: number;
 
-    /** Re-stamped in afterAll so sibling describes see a FRESH admin again. */
-    const RESTORE_SLOTS = [
-        { dayOfWeek: 2, hour: 19 },
-        { dayOfWeek: 2, hour: 20 },
-        { dayOfWeek: 4, hour: 20 },
-    ];
+    /**
+     * The STALE viewer, one per project. The desktop, mobile and tablet
+     * projects run this describe at the same time; when they shared admin@local
+     * a sibling project's game-time PUT re-stamped the confirmation between this
+     * project's clear and its navigation, and the check never opened. Slots
+     * 7-9 are only ever used elsewhere as API voters (leader-floor) or magic-link
+     * sign-ins — nothing else writes their game time.
+     */
+    const CHECKER_SLOT_BY_PROJECT: Readonly<Record<string, number>> = {
+        desktop: 7,
+        mobile: 8,
+        tablet: 9,
+    };
+    let checker: { userId: number; jwt: string };
 
     /**
      * The "Save my week" test's OWN baseline.
@@ -3201,19 +3185,19 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     const PROMPT_RE =
         /^(Your game time is \d+ days old\. Anything changed\?|Your game time hasn't been confirmed yet\. Anything changed\?|You haven't set a game time yet\. Anything to add\?)$/;
 
-    /** Read the server's freshness verdict for the authenticated admin. */
+    /** Read the server's freshness verdict for this project's checker. */
     async function readGameTimeStale(): Promise<boolean | undefined> {
-        const res = await apiGet(adminToken, '/users/me/game-time');
+        const res = await apiGet(checker.jwt, '/users/me/game-time');
         return (res?.data ?? res)?.gameTimeStale;
     }
 
     /**
-     * Read the admin's SAVED week from the same endpoint. The phone "Save my
+     * Read the checker's SAVED week from the same endpoint. The phone "Save my
      * week" test asserts the write landed server-side before it trusts
      * anything the collapsed drawer left on screen.
      */
     async function readGameTimeDays(): Promise<number[]> {
-        const res = await apiGet(adminToken, '/users/me/game-time');
+        const res = await apiGet(checker.jwt, '/users/me/game-time');
         const slots = (res?.data ?? res)?.slots ?? [];
         return (slots as { dayOfWeek: number }[]).map((s) => s.dayOfWeek);
     }
@@ -3232,6 +3216,17 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     }
 
     test.beforeAll(async () => {
+        const project = test.info().project.name;
+        const slot = CHECKER_SLOT_BY_PROJECT[project];
+        if (slot === undefined) {
+            throw new Error(`no checker slot for project "${project}": add one to CHECKER_SLOT_BY_PROJECT`);
+        }
+        checker = await seedFixtureVoter(adminToken, slot);
+        // Give the checker a week, as the shared admin had from the file-level
+        // PUT: the "Same as last week" cases confirm an EXISTING week. The PUT
+        // stamps the confirmation; beforeEach clears it.
+        await apiPut(checker.jwt, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
+
         // This describe OWNS its poll: sibling describes archive/advance their
         // lineups, and a standalone poll is its own lineup + match.
         const [gameId] = await fetchGameIds(adminToken, 1);
@@ -3255,11 +3250,18 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         // drawer reveals the page's ladder, and that the ladder is ONE ballot
         // and not two — would have had no row at all to land on.
         //
-        // The decoy is earlier and keeps the suggester's auto-YES, so it holds
-        // the card whether or not a case toggles the row's own vote.
+        // The decoy is earlier and must hold the card whether or not a case
+        // toggles the row's own vote. The admin suggests BOTH times, so each
+        // starts on one auto-YES. When the admin was the viewer, its toggle
+        // only ever took the row from 1 to 0. The checker is not the
+        // suggester, so its toggle takes the row from 1 to 2, which out-votes
+        // a 1-vote decoy (`sortSlots`: votes desc, then time asc). The lead
+        // then moves, and the ladder's one row becomes the decoy, which the
+        // checker never voted on. So the checker backs the decoy too. That
+        // leaves 2 to 1, at worst a 2-2 tie, and the earlier decoy wins a tie.
         const decoyTime = new Date(Date.now() + 86_400_000);
         decoyTime.setHours(20, 0, 0, 0);
-        await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
+        const decoySlotId = await seedDecoyLeader(checkLineupId, checkMatchId, decoyTime);
         const when = new Date(Date.now() + 2 * 86_400_000);
         when.setHours(20, 0, 0, 0);
         await apiPost(
@@ -3268,26 +3270,47 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             { proposedTime: when.toISOString() },
         );
         await pollSchedulingPollHasSlot(adminToken, checkLineupId, checkMatchId);
-    });
-
-    test.beforeEach(async () => {
-        // Make the admin STALE. The beforeAll PUT above (and every sibling
-        // describe's) stamps the confirmation, so this must run per-test and
-        // AFTER any game-time write. Confirm the server agrees before any
-        // navigation — the page reads this same endpoint.
-        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await apiPost(
+            checker.jwt,
+            `/lineups/${checkLineupId}/schedule/${checkMatchId}/vote`,
+            { slotId: decoySlotId, stance: 'yes' },
+        );
         await expect
-            .poll(readGameTimeStale, {
-                timeout: 15_000,
-                message: 'admin never became stale after clearing confirmation',
-            })
+            .poll(
+                async () => {
+                    const res = await apiGet(
+                        checker.jwt,
+                        `/lineups/${checkLineupId}/schedule/${checkMatchId}`,
+                    );
+                    const slots = ((res?.data ?? res)?.slots ?? []) as {
+                        id: number;
+                        votes: { userId: number }[];
+                    }[];
+                    return slots
+                        .find((s) => s.id === decoySlotId)
+                        ?.votes.some((v) => v.userId === checker.userId);
+                },
+                { timeout: 15_000, message: 'the checker\'s YES on the decoy never landed' },
+            )
             .toBe(true);
     });
 
-    test.afterAll(async () => {
-        // Leave the shared admin fresh: other smoke files use the same user and
-        // only dismiss the overlay defensively.
-        await apiPut(adminToken, '/users/me/game-time', { slots: RESTORE_SLOTS });
+    test.beforeEach(async ({ page }) => {
+        // Make this project's checker STALE. A confirm or week save in the
+        // previous test stamps the confirmation, so this must run per-test.
+        // Confirm the server agrees before any navigation — the page reads
+        // this same endpoint. The admin is never touched, so sibling describes
+        // and files keep their FRESH admin.
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {
+            userId: checker.userId,
+        });
+        await expect
+            .poll(readGameTimeStale, {
+                timeout: 15_000,
+                message: `checker ${checker.userId} never became stale after clearing confirmation`,
+            })
+            .toBe(true);
+        await signInContextWithJwt(page.context(), checker.jwt);
     });
 
     test('a stale viewer is asked ONE question — no week grid inside the dialog', async ({
@@ -3304,8 +3327,8 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await expect(dialog).toBeVisible({ timeout: 10_000 });
 
         // The one question. Age is null here (the confirmation was cleared, so
-        // the server reports `gameTimeAgeDays: null`) and the admin HAS slots
-        // from the file-level PUT → the "hasn't been confirmed yet" copy; a
+        // the server reports `gameTimeAgeDays: null`) and the checker HAS slots
+        // from the beforeAll PUT → the "hasn't been confirmed yet" copy; a
         // seeded age reads "... N days old. Anything changed?", and a member
         // with no slots at all reads "You haven't set a game time yet".
         await expect(page.getByTestId('game-time-check-prompt')).toHaveText(PROMPT_RE);
@@ -3525,7 +3548,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await expect(checkBody(page)).toBeHidden({ timeout: 10_000 });
 
         // Skip persists to sessionStorage, so a reload in the SAME tab must not
-        // re-open it even though the admin is still stale server-side. Waiting
+        // re-open it even though the checker is still stale server-side. Waiting
         // on the game-time GET keeps the assertion from passing vacuously
         // against a page whose query hasn't resolved yet.
         const gameTimeFetch = page.waitForResponse(
@@ -3621,7 +3644,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         ).toBeEnabled({ timeout: 10_000 });
 
         // Skip persists to sessionStorage, so a reload in the SAME tab must not
-        // re-open the check even though the admin is still stale server-side.
+        // re-open the check even though the checker is still stale server-side.
         const gameTimeFetch = page.waitForResponse(
             (r) =>
                 r.url().includes('/users/me/game-time') &&
@@ -3637,15 +3660,15 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
         await expect(page.getByTestId('game-time-check-sheet')).toHaveCount(0);
 
         // ...and the skip really is SESSION-scoped, not a permanent dismissal:
-        // the admin is STILL stale server-side (Skip answers nothing), so a
-        // brand-new context — fresh sessionStorage, same stored login — is
+        // the checker is STILL stale server-side (Skip answers nothing), so a
+        // brand-new context — fresh sessionStorage, same login — is
         // asked again. Without this, a check that had been silenced forever
         // would satisfy the reload assertion above just as well.
         const fresh = await browser.newContext({
             ...devices['Pixel 5'],
             storageState: STORAGE_STATE_PATH,
         });
-        await signInAsAdmin(fresh); // ROK-1754: own rl_rt family, storageState holds no token
+        await signInContextWithJwt(fresh, checker.jwt); // ROK-1754: own rl_rt family, storageState holds no token
         try {
             const freshPage = await fresh.newPage();
             await freshPage.goto(
@@ -3663,24 +3686,26 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
     }) => {
         test.skip(!isMobile(test.info()), 'Phone-only — ROK-1569 week editor');
 
-        // OWN the week this test edits. Sibling describes in THIS file PUT the
-        // admin's template (Tuesday 19–21, Thursday 20), so a test that assumed
-        // an empty Tuesday tapped an existing block: one block before, one
-        // after, nothing dirty, Save still disabled.
+        // OWN the week this test edits. A test that assumed an empty Tuesday
+        // once tapped an existing block (sibling describes PUT the shared
+        // admin's template): one block before, one after, nothing dirty, Save
+        // still disabled. The checker's week is reset here for the same reason.
         expect(
             SAVE_WEEK_SLOTS.some((s) => s.dayOfWeek === 6),
             'the baseline must leave Saturday empty — this test taps it',
         ).toBe(false);
-        await apiPut(adminToken, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
+        await apiPut(checker.jwt, '/users/me/game-time', { slots: SAVE_WEEK_SLOTS });
 
         // A template save stamps `game_time_confirmed_at`, so that PUT just
         // undid `beforeEach`'s clear. Clear it again and wait for the server to
         // agree, or the check never opens and there is nothing to save.
-        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {});
+        await apiPost(adminToken, '/admin/test/clear-game-time-confirmation', {
+            userId: checker.userId,
+        });
         await expect
             .poll(readGameTimeStale, {
                 timeout: 15_000,
-                message: 'admin never became stale after re-clearing the confirmation',
+                message: 'checker never became stale after re-clearing the confirmation',
             })
             .toBe(true);
 

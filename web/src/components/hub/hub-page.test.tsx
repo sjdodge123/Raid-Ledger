@@ -1,5 +1,5 @@
 /**
- * ROK-1785: `/guilds/:id` — members grouped by rank, the hidden tabs, the
+ * ROK-1785: `/hubs/:id` — members grouped by rank, the hidden tabs, the
  * friendly 403 state, and (ROK-1830 S4) the Guild settings sheet — the single
  * entry point for editors, the Discord picker and hub visibility, shown only
  * to `viewer.canManageEditors`.
@@ -13,7 +13,8 @@ import type { GuildEditor, GuildMemberRow, GuildPage as GuildPageDto } from '@ra
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
-import { GuildPage } from './hub-page';
+import { ErrorState, GuildPage } from './hub-page';
+import { withHttpStatus } from '../../lib/api/api-error';
 
 const BASE = 'http://localhost:3000/guilds/7';
 const LINKED_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
@@ -55,7 +56,7 @@ function serve(page: GuildPageDto | null, status = 200, editors: GuildEditor[] =
 }
 
 function renderPage() {
-    return renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    return renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
@@ -119,6 +120,21 @@ describe('GuildPage (ROK-1785)', () => {
         expect(screen.queryByTestId('guild-error'), 'a 403 must not render the generic error state').toBeNull();
         expect(screen.getByTestId('guild-not-member')).toHaveTextContent("You're not a member of this guild.");
         expect(screen.queryByTestId('guild-hero')).toBeNull();
+    });
+});
+
+describe('GuildPage — kind-aware error notices', () => {
+    it.each([
+        ['wow_guild', "You're not a member of this guild. Link a character in the guild to see its page.", "We couldn't load this guild. Try again in a moment."],
+        ['game_server', "You're not a member of this server.", "We couldn't load this server. Try again in a moment."],
+        ['game_community', "You're not a member of this hub.", "We couldn't load this hub. Try again in a moment."],
+    ] as const)('the %s error notices name the hub kind', (kind, notMember, loadFailed) => {
+        const forbidden = withHttpStatus(new Error('Not a member'), 403);
+        const { unmount } = renderWithProviders(<ErrorState error={forbidden} onRetry={() => undefined} kind={kind} />);
+        expect(screen.getByTestId('guild-not-member')).toHaveTextContent(notMember);
+        unmount();
+        renderWithProviders(<ErrorState error={new Error('boom')} onRetry={() => undefined} kind={kind} />);
+        expect(screen.getByTestId('guild-error')).toHaveTextContent(loadFailed);
     });
 
 });
@@ -320,7 +336,7 @@ describe('GuildPage — deep link to a deleted last post (ROK-1868 AC3)', () => 
             http.get(`${BASE}/posts`, () => HttpResponse.json({ posts: [], nextCursor: null })),
             http.get(`${BASE}/posts/99`, () => HttpResponse.json({ message: 'gone' }, { status: 404 })),
         );
-        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7?post=99#posts'] });
+        renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7?post=99#posts'] });
         await waitFor(() => expect(screen.queryByTestId('hub-post-removed')?.textContent ?? null,
             'a ?post= link on an empty hub must reach the removed notice, not fall back to Overview').toBe('This post was removed.'), { timeout: 3000 });
     });
@@ -356,7 +372,7 @@ describe('GuildPage — overview-only visitors never see the member-only Posts t
     it('a visitor following ?post=<id>#posts lands on the Overview, not a 403 screen', async () => {
         window.location.hash = '#posts';
         serveVisitor();
-        renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7?post=3#posts'] });
+        renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7?post=3#posts'] });
         expect(await tabLabels(), 'a ?post= link must not surface Posts for a visitor').toEqual(['Overview', 'Members', 'Events', 'Raids']);
         expect(screen.queryByTestId('hub-posts-tab'), 'the Posts panel must not open for a visitor').toBeNull();
         expect(await screen.findByTestId('guild-gm-post-body')).toHaveTextContent('Raid night is Thursday.');

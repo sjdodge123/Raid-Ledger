@@ -183,12 +183,43 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.hubCommunityMembers,
     column: schema.hubCommunityMembers.userId,
   },
+  // ROK-1893: hub join prompts are personal UI state (CASCADE).
+  { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
   // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
   { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
+  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
+  // ban+wipe must revoke them. Links the user decided go first: their
+  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
+  {
+    table: schema.companionDeviceLinks,
+    column: schema.companionDeviceLinks.decidedBy,
+  },
+  { table: schema.companionDevices, column: schema.companionDevices.userId },
+  // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
+  // the user's own uploaded data. Refs carry no FK to blobs; order is free.
+  {
+    table: schema.companionIngestLatest,
+    column: schema.companionIngestLatest.userId,
+  },
+  { table: schema.companionBlobRefs, column: schema.companionBlobRefs.userId },
+  { table: schema.companionBlobs, column: schema.companionBlobs.userId },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,
   },
+  // ROK-1953: cached Steam stats + unlocks are the user's own data (CASCADE).
+  { table: schema.steamUserAppStats, column: schema.steamUserAppStats.userId },
+  {
+    table: schema.steamUserAchievements,
+    column: schema.steamUserAchievements.userId,
+  },
+  // ROK-1957: BG3 rows the user owns (CASCADE) — the same set D-18 "Delete
+  // my BG3 data" removes. Their `bg3-save` thumbnail refs, blobs and
+  // latest-wins markers go with the companion rows above (all contracts).
+  { table: schema.bg3PartyClaims, column: schema.bg3PartyClaims.userId },
+  { table: schema.bg3CampaignKeys, column: schema.bg3CampaignKeys.userId },
+  { table: schema.bg3UserDefaults, column: schema.bg3UserDefaults.userId },
+  { table: schema.bg3Saves, column: schema.bg3Saves.uploaderUserId },
 ];
 
 /**
@@ -240,6 +271,7 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.guildEditors,
   // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
   // are SET NULL audit columns; the guild's content outlives its editor.
+  // ROK-1941: `media_channel_set_by` is the same kind of SET NULL audit.
   schema.guildProfiles,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).
@@ -262,6 +294,27 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // row, so the claim stays pointed at the banned user there.
   schema.valheimProfiles,
   schema.valheimProfileClaimEvents,
+  // ROK-1893: `hub_invites.created_by` is SET NULL; the row stays as the
+  // hub's history, but the community wipe (community-user-wipe.helpers)
+  // revokes every open link the user made first, so none keeps working.
+  schema.hubInvites,
+  // ROK-1942: `hub_media.hidden_by` is SET NULL moderation audit; a Gallery
+  // picture belongs to the hub (posted in its Discord channel), not to the
+  // editor who hid it.
+  // ROK-1965: `hub_media.uploaded_by` is SET NULL too — a member's upload
+  // stays on the hub (the leader can remove it).
+  schema.hubMedia,
+  // ROK-1968: `hub_session_notes.updated_by` / `hub_session_note_items.done_by`
+  // are SET NULL attributions on the hub's shared "Before next session" note;
+  // the note and its checklist belong to the hub, not to the last editor/ticker.
+  schema.hubSessionNotes,
+  schema.hubSessionNoteItems,
+  // ROK-1957: `bg3_campaigns.host_user_id` / `created_by_user_id` and
+  // `bg3_hub_settings.updated_by_user_id` are SET NULL — a campaign belongs
+  // to the hub (D-18 keeps it too); a hard delete leaves it hostless and a
+  // hub editor can pick a new host.
+  schema.bg3Campaigns,
+  schema.bg3HubSettings,
 ];
 
 /**

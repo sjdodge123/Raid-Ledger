@@ -1,7 +1,7 @@
 /**
  * ROK-1854 L3 — the pure pieces of the resolver: the §1.2 per-quality
- * formula, D9 source choice, and the node builder that owns the stock
- * ledger, the node cap and the leaf roll-ups.
+ * formula and the node builder that owns the stock ledger, the node cap and
+ * the leaf roll-ups. D9 source choice lives in `source-pick.ts` (re-exported).
  */
 import {
   VALHEIM_PLAN_QUANTITY_MAX,
@@ -10,26 +10,23 @@ import {
   type ValheimPlanVia,
   type ValheimProcess,
   type ValheimProcessor,
-  type ValheimProcessorType,
   type ValheimRecipe,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeSourceRef,
 } from '@raid-ledger/contract';
 import { amountAt, type ValheimCostRule } from './valheim-recipes.cost-rule';
 import type { RecipeGraph } from './valheim-recipes.graph';
+import {
+  isUpgraderStation,
+  stationAt,
+  stationLevelAt,
+} from './valheim-recipes.station-steps';
 
 export type ShoppingLine = ValheimRecipePlanResponse['shoppingList'][number];
 export type FuelEstimate = ValheimRecipePlanResponse['fuelEstimates'][number];
 
-/** §1.2 `stationLevel(R, q)`. */
-export function stationLevelAt(recipe: ValheimRecipe, q: number): number {
-  return Math.max(1, recipe.minStationLevel) + (q - 1);
-}
-
-/** §1.2 `station(R, q)`. */
-export function stationAt(recipe: ValheimRecipe, q: number): string | null {
-  return recipe.station ?? (q > 1 ? recipe.repairStation : null);
-}
+export { stationAt, stationLevelAt } from './valheim-recipes.station-steps';
 
 /** `kind` omitted → `piece` when no recipe or process makes the prefab but a piece builds it, else `item`. */
 export type ResolveTarget = ValheimRecipePlanTarget;
@@ -39,6 +36,8 @@ export interface ResolveOptions {
   maxQuality?: (prefab: string) => number;
   maxNodes?: number;
   maxDepth?: number;
+  /** ROK-1860 D1: per-prefab source override; honoured only when it is a candidate (D4). */
+  sources?: ReadonlyMap<string, ValheimRecipeSourceRef>;
 }
 
 export interface ResolveResult {
@@ -46,6 +45,8 @@ export interface ResolveResult {
   truncated: boolean;
   shoppingList: ShoppingLine[];
   fuelEstimates: FuelEstimate[];
+  /** ROK-1861 D5: upgrader station prefab → its piece cost (never netted). */
+  stationBuilds: Map<string, InputLine[]>;
 }
 
 export interface Need {
@@ -135,67 +136,16 @@ export function recipeSteps(
   return { crafts, totals, surplus };
 }
 
-export interface ProcessSource {
-  process: ValheimProcess;
-  processor: ValheimProcessor;
-}
-
-export type PlanSource =
-  | { type: 'recipe'; recipe: ValheimRecipe }
-  | ({ type: 'process' } & ProcessSource);
-
-/** D9: the obliterator (`incinerator`) is never auto-picked. */
-const AUTO_PROCESSORS: ReadonlySet<ValheimProcessorType> = new Set([
-  'smelter',
-  'fermenter',
-  'cooking',
-]);
-
-/** D9 rank: crafting recipe > upgrade-only recipe > process. */
-export function sourceRank(s: PlanSource): number {
-  if (s.type === 'process') return 2;
-  return s.recipe.upgradeOnly ? 1 : 0;
-}
-
-function candidates(
-  graph: RecipeGraph,
-  prefab: string,
-  startStep: number,
-  quality: number,
-): PlanSource[] {
-  const out: PlanSource[] = (graph.recipesByResult.get(prefab) ?? [])
-    .filter((r) => r.enabled && (!r.upgradeOnly || startStep >= 2))
-    .map((recipe) => ({ type: 'recipe', recipe }));
-  if (quality > 1) return out;
-  for (const process of graph.processesByOutput.get(prefab) ?? []) {
-    const processor = graph.processors.get(process.processor);
-    if (processor && AUTO_PROCESSORS.has(processor.type))
-      out.push({ type: 'process', process, processor });
-  }
-  return out;
-}
-
-export interface SourcePick {
-  source: PlanSource | null;
-  alternatives: number;
-}
-
-/** First source by D9 rank; ties keep the graph's `id` / processor-prefab order. */
-export function pickSource(
-  graph: RecipeGraph,
-  prefab: string,
-  startStep: number,
-  quality: number,
-): SourcePick {
-  const list = candidates(graph, prefab, startStep, quality);
-  const ranked = list
-    .map((source, i) => ({ source, i }))
-    .sort((a, b) => sourceRank(a.source) - sourceRank(b.source) || a.i - b.i);
-  return {
-    source: ranked[0]?.source ?? null,
-    alternatives: Math.max(0, list.length - 1),
-  };
-}
+export {
+  AUTO_PROCESSORS,
+  candidates,
+  pickSource,
+  sameSource,
+  sourceRank,
+  type PlanSource,
+  type ProcessSource,
+  type SourcePick,
+} from './valheim-recipes.source-pick';
 
 type NodeInput = Omit<ValheimPlanNode, 'id'>;
 
@@ -339,10 +289,7 @@ export function recipeVia(
     upgradeOnly: recipe.upgradeOnly,
     formula: recipe.formula,
     anyOneOf: recipe.anyOneOf,
-    upgraderStation:
-      station === null
-        ? false
-        : (graph.stations.get(station)?.upgrader ?? false),
+    upgraderStation: isUpgraderStation(graph, station),
   };
 }
 

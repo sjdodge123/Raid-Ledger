@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raid.gamernight.net/contracts/companion/device-link/v1/schema.json",
+  "title": "RL Companion device-link v1",
+  "description": "GENERATED from packages/contract/src/companion-devices.schema.ts — do not edit by hand. One $defs entry per HTTP body the companion app sends or receives while linking (start, poll) and checking its token (device-self); the root accepts none of them on purpose. Server-only rules (expiry, slow_down, rate limits, device cap, token handling) are in CONTRACT.md.",
+  "$defs": {
+    "start-request": {
+      "type": "object",
+      "properties": {
+        "device": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+            },
+            "os": {
+              "type": "string",
+              "enum": [
+                "windows",
+                "macos",
+                "linux",
+                "other"
+              ]
+            },
+            "osVersion": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+            },
+            "appVersion": {
+              "type": "string",
+              "maxLength": 32,
+              "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.+-]+)?$"
+            }
+          },
+          "required": [
+            "name",
+            "os",
+            "appVersion"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "device"
+      ],
+      "additionalProperties": false
+    },
+    "start-response": {
+      "type": "object",
+      "properties": {
+        "deviceCode": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "userCode": {
+          "type": "string",
+          "pattern": "^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$"
+        },
+        "verificationUri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "verificationUriComplete": {
+          "type": "string",
+          "format": "uri"
+        },
+        "expiresIn": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "interval": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "deviceCode",
+        "userCode",
+        "verificationUri",
+        "verificationUriComplete",
+        "expiresIn",
+        "interval"
+      ],
+      "additionalProperties": false
+    },
+    "poll-request": {
+      "type": "object",
+      "properties": {
+        "deviceCode": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      },
+      "required": [
+        "deviceCode"
+      ],
+      "additionalProperties": false
+    },
+    "poll-success": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "pattern": "^rlcd_[A-Za-z0-9_-]{43}$"
+        },
+        "tokenType": {
+          "type": "string",
+          "const": "Bearer"
+        },
+        "device": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "name": {
+              "type": "string"
+            },
+            "os": {
+              "type": "string",
+              "enum": [
+                "windows",
+                "macos",
+                "linux",
+                "other"
+              ]
+            },
+            "osVersion": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "appVersion": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tokenHint": {
+              "type": "string",
+              "minLength": 4,
+              "maxLength": 4
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "lastUsedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lastUsedNetwork": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revokedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "active",
+                "revoked"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "os",
+            "osVersion",
+            "appVersion",
+            "tokenHint",
+            "createdAt",
+            "lastUsedAt",
+            "lastUsedNetwork",
+            "revokedAt",
+            "state"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "token",
+        "tokenType",
+        "device"
+      ],
+      "additionalProperties": false
+    },
+    "poll-error": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string",
+          "enum": [
+            "authorization_pending",
+            "slow_down",
+            "access_denied",
+            "expired_token",
+            "invalid_grant"
+          ]
+        },
+        "interval": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "device-self": {
+      "type": "object",
+      "properties": {
+        "deviceId": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "name": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "deviceId",
+        "name",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "not": {}
+}

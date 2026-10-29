@@ -47,14 +47,15 @@ export interface SimilarPlayerRow {
  * Default archetype for users without a computed taste vector (or whose
  * jsonb archetype is still NULL immediately after the 0127 migration).
  * Matches the composed `ArchetypeDto` shape with no vector titles so the
- * UI renders an intensity-only badge ("Casual Player").
+ * UI renders an intensity-only badge. ROK-1935: with no vector there is no
+ * presence data, so the tier is `Newcomer`, not `Casual`.
  */
 function emptyArchetype(): ArchetypeDto {
   return {
-    intensityTier: 'Casual',
+    intensityTier: 'Newcomer',
     vectorTitles: [],
     descriptions: {
-      tier: TIER_DESCRIPTIONS.Casual,
+      tier: TIER_DESCRIPTIONS.Newcomer,
       titles: [],
     },
   };
@@ -146,7 +147,7 @@ export async function findSimilarPlayers(
     userId: r.user_id,
     username: r.username,
     avatar: r.avatar,
-    intensityTier: r.intensity_tier ?? 'Casual',
+    intensityTier: r.intensity_tier ?? 'Newcomer',
     similarity: Math.max(0, 1 - Number(r.distance)),
   }));
 }

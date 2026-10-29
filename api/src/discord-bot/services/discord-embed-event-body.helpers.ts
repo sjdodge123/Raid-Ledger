@@ -8,6 +8,7 @@
  * `View Event` link button, so both would be duplication). Grammar table:
  * `planning-artifacts/specs/ROK-1460.md` §Grammar per state.
  */
+import { escapeMarkdown } from 'discord.js';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import { formatDurationMs } from '../utils/format-duration';
 import {
@@ -81,6 +82,34 @@ export interface EventBodyOptions {
    * button is the same destination) — see `buildEventEmbed`.
    */
   eventLink: boolean;
+  /**
+   * ROK-1895: the name of the visible hub the event is explicitly tagged to
+   * (`events.guild_id`). Absent ⇒ no hub line (a game-derived hub is linked
+   * by the row's Hub button only, unnamed).
+   */
+  hubName?: string | null;
+}
+
+/**
+ * A hub name made safe for any Discord embed text — markdown-escaped (masked
+ * links, headings and lists too: hub names are user-proposed, so
+ * `[Free](https://…)` must not render as a link in the bot's card), and `@`
+ * broken with a zero-width space so a hub named `@everyone` can never resolve
+ * as a mention. ROK-1896: shared by the card line and the poll DM `Hub` field.
+ */
+export function escapeHubName(name: string): string {
+  const escaped = escapeMarkdown(name, {
+    maskedLink: true,
+    heading: true,
+    bulletedList: true,
+    numberedList: true,
+  });
+  return escaped.replace(/@/g, '@\u200b');
+}
+
+/** `Hub: **<name>**`, with the name passed through {@link escapeHubName}. */
+export function hubLine(name: string): string {
+  return `Hub: **${escapeHubName(name)}**`;
 }
 
 /**
@@ -110,6 +139,7 @@ function stateLines(event: EmbedEventData, options: EventBodyOptions): string {
   const lines: string[] = [];
   if (TIMING_STATES.includes(state)) lines.push(timingLine(event));
   if (event.voiceChannelId) lines.push(`${SPEAKER} <#${event.voiceChannelId}>`);
+  if (options.hubName) lines.push(hubLine(options.hubName));
   if (roster) pushBlock(lines, roster);
   if (state === EMBED_STATES.COMPLETED) {
     pushBlock(lines, signedUpLine(event));

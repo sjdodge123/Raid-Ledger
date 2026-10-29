@@ -31,6 +31,25 @@ const TIER_COLORS: Record<string, string> = {
     Casual: '#38bdf8',
 };
 
+/** Last resort when no tier (or a tier this build does not know) comes back. */
+const UNKNOWN_TIER_COLOR = '#a855f7';
+
+/**
+ * ROK-1935: Newcomer nodes take the quiet neutral token so they read as "no
+ * data yet", not as a fifth tier. The canvas cannot paint `var()`, so the
+ * token is resolved once per graph build (empty outside a browser → fallback).
+ */
+function newcomerColor(): string {
+    if (typeof document === 'undefined') return UNKNOWN_TIER_COLOR;
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--color-dim').trim();
+    return value === '' ? UNKNOWN_TIER_COLOR : value;
+}
+
+function tierColor(tier: string, newcomer: string): string {
+    if (tier === 'Newcomer') return newcomer;
+    return TIER_COLORS[tier] ?? UNKNOWN_TIER_COLOR;
+}
+
 const CANVAS_HEIGHT = 520;
 const CHARGE_STRENGTH = -1100;
 const LINK_DISTANCE = 170;
@@ -40,11 +59,12 @@ const FIT_ANIM_MS = 400;
 const FIT_PADDING_PX = 80;
 
 function buildGraphData(data: CommunitySocialGraphResponseDto): GraphData {
+    const newcomer = newcomerColor();
     return {
         nodes: data.nodes.map((n) => ({
             id: n.userId,
             label: n.username,
-            color: TIER_COLORS[n.intensityTier] ?? '#a855f7',
+            color: tierColor(n.intensityTier, newcomer),
             degree: Math.max(1, n.degree),
             clique: n.cliqueId,
         })),

@@ -1,6 +1,6 @@
 /**
  * ROK-1875 — one "Hubs" nav item (header menu from 768px; the bottom bar's
- * raised centre Hubs circle + the More drawer below it) + the all-kinds `/hubs` directory smoke
+ * raised centre Hubs circle below it; the More drawer lists no hubs since ROK-1890) + the all-kinds `/hubs` directory smoke
  * (desktop, mobile AND tablet).
  *
  * Seed, per project (the projects run in parallel; tests in a file run in
@@ -10,9 +10,9 @@
  *    bottom, slot 0 is the fleet test plan's). Re-seeding resets the slot. Its
  *    `outsider` is in no hub at all — the no-hubs viewer (signed in on its own).
  *  - community hubs: `POST /admin/test/community-hubs/seed { gameId }` on a
- *    configured game the community-hubs spec does not seed (index 3 + project
- *    slot; that spec takes indexes 0–2) → "Seed Crew" (the actor is in it) and
- *    "Seed Solo" (the actor is not).
+ *    configured game (index 3 + project slot) with this spec's tag (`./hub-seed`,
+ *    ROK-2030) → `Seed Crew #<tag>` (the actor is in it) and `Seed Solo #<tag>`
+ *    (the actor is not); other tags' hubs may share the game.
  *  - the actor: that seed's officer, made a server-hub member through
  *    `POST /admin/test/hub-member { guildId, userId }` → hubs of two kinds.
  * Every write is confirmed by polling `GET /guilds/mine` with the actor's own
@@ -21,13 +21,14 @@
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { seedCommunityHubs, type HubSeedNames } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { isDesktop } from './helpers';
 
 interface ServerHub { guildId: number; userIds: { outsider: number } }
-interface CommunitySeed { gameId: number; hubIds: { crew: number; solo: number }; memberUserIds: number[] }
+interface CommunitySeed { gameId: number; hubIds: { crew: number; solo: number }; hubNames: HubSeedNames; memberUserIds: number[] }
 interface MyHub { id: number; name: string; kind: string }
-interface Seed { serverHubId: number; serverHubName: string; crewId: number; gameId: number; actorId: number }
+interface Seed { serverHubId: number; serverHubName: string; crewId: number; hubNames: HubSeedNames; gameId: number; actorId: number }
 
 /** Header `md:` — from 768px the header carries the Hubs item; below it the More drawer. */
 const HEADER_HUBS_MIN_WIDTH = 768;
@@ -71,7 +72,7 @@ async function seedServerHub(token: string, testInfo: TestInfo): Promise<ServerH
 
 async function seedCommunity(token: string, testInfo: TestInfo): Promise<CommunitySeed> {
     const gameId = await communityGameId(token, testInfo);
-    const body = (await apiPost(token, '/admin/test/community-hubs/seed', { gameId })) as Partial<CommunitySeed> | null;
+    const body = (await seedCommunityHubs(token, testInfo, 'hubs-nav', { gameId })) as Partial<CommunitySeed> | null;
     if (!body?.hubIds || typeof body.gameId !== 'number' || !Array.isArray(body.memberUserIds)) {
         throw new Error(`[hubs-nav] community seed: ${JSON.stringify(body)}`);
     }
@@ -97,11 +98,11 @@ async function seedMember(page: Page, testInfo: TestInfo): Promise<Seed> {
         return ids.includes(server.guildId) && ids.includes(community.hubIds.crew) ? mine : null;
     }, { timeoutMs: 15_000, description: `user ${actorId} lists server hub ${server.guildId} + Seed Crew ${community.hubIds.crew}` });
     const serverHubName = must(hubs.find((h) => h.id === server.guildId)?.name, 'server hub name');
-    return { serverHubId: server.guildId, serverHubName, crewId: community.hubIds.crew, gameId: community.gameId, actorId };
+    return { serverHubId: server.guildId, serverHubName, crewId: community.hubIds.crew, hubNames: community.hubNames, gameId: community.gameId, actorId };
 }
 
 function rowFor(scope: Locator | Page, hubId: number): Locator {
-    return scope.locator(`a[href="/guilds/${hubId}"]`);
+    return scope.locator(`a[href="/hubs/${hubId}"]`);
 }
 
 async function openDrawer(page: Page): Promise<Locator> {
@@ -157,15 +158,21 @@ async function expectBottomHubs(page: Page, seed: Seed): Promise<void> {
     await expect(trigger, 'Browse closes the sheet').toHaveAttribute('aria-expanded', 'false');
 }
 
-async function expectDrawerHubs(page: Page, seed: Seed): Promise<void> {
+/**
+ * ROK-1890: the phone More drawer lists NO hubs — no "Your hubs" block, no hub rows, no "Browse all
+ * hubs" row; the bottom Hubs button owns them. Waits for the bottom button to settle first (the
+ * sheet trigger for a member, the plain link otherwise) so the hubs query has answered before
+ * the absence is checked. Closes the drawer again.
+ */
+async function expectDrawerHasNoHubs(page: Page, settled: Locator): Promise<void> {
+    await expect(settled, 'the hubs query settled before the drawer check').toBeVisible({ timeout: 15_000 });
     const panel = await openDrawer(page);
-    const block = panel.getByTestId('drawer-your-guild');
-    await expect(block, 'the drawer opens with "Your hubs"').toContainText('Your hubs', { timeout: 15_000 });
-    await expect(rowFor(block, seed.serverHubId).getByTestId('hub-kind-chip')).toContainText('Server');
-    await expect(rowFor(block, seed.crewId).getByTestId('hub-kind-chip')).toContainText('Community');
-    const browse = panel.getByTestId('drawer-hubs-link');
-    await expect(browse).toContainText('Browse all hubs');
-    await browse.click();
+    await expect(panel.getByTestId('more-drawer-logout'), 'the drawer body rendered').toBeVisible({ timeout: 15_000 });
+    await expect(panel.getByTestId('drawer-your-guild'), 'ROK-1890: no "Your hubs" block in the drawer').toHaveCount(0);
+    await expect(panel.getByTestId('guild-entry-row'), 'ROK-1890: no hub rows in the drawer').toHaveCount(0);
+    await expect(panel.getByTestId('drawer-hubs-link'), 'ROK-1890: no "Browse all hubs" row in the drawer').toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(panel, 'Escape closes the drawer').toBeHidden({ timeout: 15_000 });
 }
 
 /** Tablet / landscape-phone widths where the full header row shows but `lg:` labels are collapsed. */
@@ -185,17 +192,15 @@ async function expectHeaderFits(page: Page, viewport: { width: number; height: n
 }
 
 test.describe('Hubs nav (ROK-1875)', () => {
-    test('a member of a server + a community hub: Hubs menu (≥768px) / bottom Hubs sheet + More drawer (phone) list both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
+    test('a member of a server + a community hub: Hubs menu (≥768px) / bottom Hubs sheet (phone; the More drawer lists none) list both with kind chips, then Browse all hubs', async ({ page }, testInfo) => {
         const seed = await seedMember(page, testInfo);
         await page.goto(NAV_START);
         const width = page.viewportSize()?.width ?? 0;
         if (width >= HEADER_HUBS_MIN_WIDTH) await expectHeaderMenu(page, seed);
         else {
+            // ROK-1890: the bottom button's sheet replaced the More drawer's "Your hubs" block.
+            await expectDrawerHasNoHubs(page, page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger'));
             await expectBottomHubs(page, seed);
-            await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
-            // The More drawer keeps its "Your hubs" block (discoverability) beside the bottom button.
-            await page.goto(NAV_START);
-            await expectDrawerHubs(page, seed);
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
         await expect(page.getByRole('heading', { name: 'Hubs', level: 1 })).toBeVisible({ timeout: 15_000 });
@@ -248,10 +253,8 @@ test.describe('Hubs nav (ROK-1875)', () => {
             const bottom = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-link');
             await expect(bottom, 'no hubs → the bottom Hubs circle is a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
             await expect(page.getByTestId('bottom-hubs-trigger'), 'no hubs → no sheet trigger').toHaveCount(0);
-            const panel = await openDrawer(page);
-            await expect(panel.getByTestId('drawer-hubs-link')).toBeVisible({ timeout: 15_000 });
-            await expect(panel.getByTestId('drawer-your-guild'), 'no hubs → no "Your hubs" block').toHaveCount(0);
-            await panel.getByTestId('drawer-hubs-link').click();
+            await expectDrawerHasNoHubs(page, bottom);
+            await bottom.click();
         }
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
     });
@@ -260,16 +263,16 @@ test.describe('Hubs nav (ROK-1875)', () => {
         const seed = await seedMember(page, test.info());
         const cards = page.getByTestId('hub-directory-card');
         await page.goto(`/hubs?game=${seed.gameId}&kind=community`);
-        const solo = cards.filter({ hasText: 'Seed Solo' });
+        const solo = cards.filter({ hasText: seed.hubNames.solo });
         await expect(solo.getByTestId('hub-kind-chip'), 'the community card reads "Community"').toContainText('Community', { timeout: 20_000 });
-        await expect(solo.getByRole('button', { name: 'Join Seed Solo' }), 'a community card keeps Join').toBeVisible();
+        await expect(solo.getByRole('button', { name: `Join ${seed.hubNames.solo}` }), 'a community card keeps Join').toBeVisible();
 
         await page.goto(`/hubs?kind=server&q=${encodeURIComponent(seed.serverHubName)}`);
         const server = cards.filter({ has: rowFor(page, seed.serverHubId) });
         await expect(server.getByTestId('hub-kind-chip'), 'the server card reads "Server"').toContainText('Server', { timeout: 20_000 });
         await expect(server.getByRole('button', { name: /^Join / }), 'a server card has no Join').toHaveCount(0);
         await server.getByRole('link', { name: `View ${seed.serverHubName}` }).click();
-        await expect(page).toHaveURL(new RegExp(`/guilds/${seed.serverHubId}(?:[?#]|$)`));
+        await expect(page).toHaveURL(new RegExp(`/hubs/${seed.serverHubId}(?:[?#]|$)`));
         await expect(page.getByTestId('server-hub-status'), 'View opens the server hub page').toBeVisible({ timeout: 15_000 });
     });
 

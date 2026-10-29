@@ -1,0 +1,62 @@
+{
+  "envelope-unknown-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "payload-unknown-key": {
+    "path": "payload",
+    "code": "unrecognized_keys"
+  },
+  "party-position-key": {
+    "path": "payload.party.0",
+    "code": "unrecognized_keys"
+  },
+  "summon-with-classes": {
+    "path": "payload.party.1",
+    "code": "custom"
+  },
+  "xp-level-gt-total": {
+    "path": "payload.party.0",
+    "code": "custom"
+  },
+  "thumbnail-png": {
+    "path": "payload.thumbnail.contentType",
+    "code": "invalid_value"
+  },
+  "thumbnail-too-large": {
+    "path": "payload.thumbnail.byteLength",
+    "code": "too_big"
+  },
+  "contract-version-2": {
+    "path": "contractVersion",
+    "code": "invalid_value"
+  },
+  "game-version-text": {
+    "path": "payload.gameVersion",
+    "code": "invalid_format"
+  },
+  "captured-at-offset": {
+    "path": "capturedAt",
+    "code": "invalid_format"
+  },
+  "saved-after-captured": {
+    "path": "payload.savedAt",
+    "code": "custom"
+  },
+  "party-empty": {
+    "path": "payload.party",
+    "code": "too_small"
+  },
+  "save-name-control-char": {
+    "path": "payload.saveName",
+    "code": "invalid_format"
+  },
+  "save-name-lone-surrogate": {
+    "path": "payload.saveName",
+    "code": "invalid_format"
+  },
+  "campaign-key-raw-folder": {
+    "path": "payload.campaignKey",
+    "code": "invalid_format"
+  }
+}

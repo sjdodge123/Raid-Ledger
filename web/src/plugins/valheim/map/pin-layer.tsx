@@ -4,6 +4,9 @@
  * label, hover/focus shows it (Escape hides it until focus/hover leaves), and
  * from 2× zoom every label shows. Pins from
  * a cartography table (`shared`) render only while that layer is on.
+ *
+ * ROK-1859 D14: with `onOpen`, a tap/Enter opens the pin's detail instead of
+ * toggling its label (hover/focus/Escape unchanged).
  */
 import { useState } from 'react';
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
@@ -27,13 +30,13 @@ const LABEL_CLASS =
     'pointer-events-none absolute bottom-[calc(100%-4px)] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-edge bg-surface px-1.5 py-0.5 text-xs font-medium text-foreground';
 
 function PinDisc({ pin }: { pin: ValheimMapPin }) {
-    const { Icon, toneClass } = pinStyleFor(pin.type);
+    const { Icon, toneClass, ring, ringTone = 'border-success' } = pinStyleFor(pin.type);
     const edge = pin.shared
-        ? 'border-dashed border-slot'
-        : 'border-edge-strong';
+        ? 'border border-dashed border-slot'
+        : 'border border-edge-strong';
     return (
         <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full border ${edge} ${PIN_DISC_CLASS}`}
+            className={`flex h-7 w-7 items-center justify-center rounded-full ${ring === true ? `border-2 ${ringTone}` : edge} ${PIN_DISC_CLASS}`}
         >
             <Icon aria-hidden="true" className={`h-4 w-4 ${toneClass}`} />
         </span>
@@ -117,17 +120,19 @@ interface PinButtonProps {
     dismissed: boolean;
     labels: boolean;
     callbacks: PinCallbacks;
+    /** Opens a dialog (D14) — `aria-haspopup`, not a label disclosure. */
+    opensDetail: boolean;
 }
 
 function PinButton(props: PinButtonProps) {
-    const { pin, grid, scale, open, dismissed, labels, callbacks } = props;
+    const { pin, grid, scale, open, dismissed, labels, callbacks, opensDetail } = props;
     const text = pinDisplayLabel(pin.label, pin.type);
     return (
         <Button
             variant="bare"
             type="button"
             aria-label={pinAccessibleName(pin)}
-            aria-expanded={open}
+            {...(opensDetail ? { 'aria-haspopup': 'dialog' as const } : { 'aria-expanded': open })}
             data-checked={pin.checked}
             {...pinPlacement(pin, grid, scale)}
             {...pinHandlers(callbacks)}
@@ -169,10 +174,12 @@ export interface PinLayerProps {
     showShared: boolean;
     /** The "Pin labels" switch (D9): every label shown at any zoom. */
     labels?: boolean;
+    /** ROK-1859 D14: a tap/Enter opens pin `index` (of `pins`) instead of toggling its label. */
+    onOpen?: ((index: number) => void) | undefined;
 }
 
 export function PinLayer(props: PinLayerProps) {
-    const { grid, pins, scale, showShared, labels = false } = props;
+    const { grid, pins, scale, showShared, labels = false, onOpen } = props;
     const { openKey, dismissedKey, callbacksFor } = usePinLabelState();
     const size = grid.textureSize;
     return (
@@ -183,6 +190,7 @@ export function PinLayer(props: PinLayerProps) {
             {pins.map((pin, i) => {
                 if (pin.shared && !showShared) return null;
                 const key = `${i}:${pin.type}:${pin.x}:${pin.z}`;
+                const callbacks = callbacksFor(key);
                 return (
                     <PinButton
                         key={key}
@@ -192,7 +200,8 @@ export function PinLayer(props: PinLayerProps) {
                         open={openKey === key}
                         dismissed={dismissedKey === key}
                         labels={labels}
-                        callbacks={callbacksFor(key)}
+                        callbacks={onOpen ? { ...callbacks, onToggle: () => onOpen(i) } : callbacks}
+                        opensDetail={onOpen !== undefined}
                     />
                 );
             })}

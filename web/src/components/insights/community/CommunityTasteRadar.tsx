@@ -2,6 +2,7 @@ import type { CommunityRadarResponseDto } from '@raid-ledger/contract';
 import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
 } from 'recharts';
+import { chartPolarGridProps, chartPolarTick } from '../../ui/chart-chrome';
 import type { TasteProfilePoolAxis } from '@raid-ledger/contract';
 import { axisLabel } from '../../taste-profile/taste-profile-helpers';
 
@@ -30,8 +31,8 @@ export function CommunityTasteRadar({ axes }: Props) {
         <div className="h-72 w-full" role="img" aria-label="Community taste radar">
             <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={data} outerRadius="75%">
-                    <PolarGrid stroke="rgba(255,255,255,0.15)" />
-                    <PolarAngleAxis dataKey="axis" tick={{ fill: '#a1a1aa', fontSize: 12 }} />
+                    <PolarGrid {...chartPolarGridProps} />
+                    <PolarAngleAxis dataKey="axis" tick={{ ...chartPolarTick, fontSize: 12 }} />
                     <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
                     <Radar dataKey="value" stroke="#a855f7" strokeWidth={2}
                         fill="#a855f7" fillOpacity={0.35} isAnimationActive={false} />

@@ -22,9 +22,13 @@ import {
 } from '../../../guilds/guild-access.service';
 import {
   findLinkedMemberRows,
+  holdsGuildMasterRank,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
-import { findGuild, hubSummaryFor } from '../../../guilds/guild-core.queries';
+import {
+  findHubGuild,
+  hubSummaryFor,
+} from '../../../guilds/guild-core.queries';
 import {
   findCharacterGuild,
   findImportedBy,
@@ -113,21 +117,26 @@ export class GuildPageService {
     if (!(await this.access.canView(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
-    const guild = await findGuild(this.db, guildId);
-    if (!guild) throw new NotFoundException('Guild not found');
-    const [rows, importedBy, role] = await Promise.all([
+    const hub = await findHubGuild(this.db, guildId);
+    if (!hub) throw new NotFoundException('Guild not found');
+    const [rows, importedBy, role, ownRows] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),
       this.access.resolveLadder(actor, guildId),
+      findLinkedMemberRows(this.db, actor.id, guildId),
     ]);
     // ROK-1794 (review): who a row links to is STAFF-ONLY — the grant basis.
     const links = isStaff(actor)
       ? await loadRosterLinks(this.db, rows)
       : undefined;
     return {
-      guild: hubSummaryFor(guild, isStaff(actor)),
+      guild: hubSummaryFor(hub, isStaff(actor)),
       importedBy,
-      viewer: viewerAccess(role),
+      viewer: {
+        ...viewerAccess(role),
+        // ROK-1815: a hero label only; rank 0 grants nothing (ROK-1794).
+        ...(holdsGuildMasterRank(ownRows) ? { isGuildMaster: true } : {}),
+      },
       ranks: groupRoster(rows, links),
       roleCounts: computeRoleCounts(rows),
     };
@@ -146,11 +155,17 @@ export class GuildPageService {
     return { data: { ...found, viewerCanOpen } };
   }
 
-  /** Guilds of a game the viewer can open: staff all, members theirs. */
+  /**
+   * WoW guilds of a game the viewer can open: staff all, members theirs.
+   * ROK-1883: `wow_guild` only — the event-create guild picker must never
+   * offer a server or community hub (`mine` spans every hub kind).
+   */
   async listForGame(actor: GuildActor, gameId: number): Promise<MyGuilds> {
     const mine = await this.mine(actor);
     if (!isStaff(actor)) {
-      return { guilds: mine.guilds.filter((g) => g.gameId === gameId) };
+      const ofGame = (g: MyGuild) =>
+        g.gameId === gameId && g.kind === 'wow_guild';
+      return { guilds: mine.guilds.filter(ofGame) };
     }
     const own = new Map(mine.guilds.map((g) => [g.id, g]));
     const all = await listGuildsOfGame(this.db, gameId); // staff: hidden included

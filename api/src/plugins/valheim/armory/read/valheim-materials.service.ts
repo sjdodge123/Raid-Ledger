@@ -16,6 +16,11 @@ import type {
 import type { AuthenticatedUser } from '../../../../auth/types';
 import type { ValheimContainerScan } from '../../../../drizzle/schema';
 import { projectCatalog } from './valheim-armory-catalog.helpers';
+import {
+  toChestFocus,
+  type ChestFocusQuery,
+  type ValheimChestFocus,
+} from './valheim-chest-focus.helpers';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { assertServerHubVisible } from './valheim-hub-guard.helpers';
 import {
@@ -36,6 +41,12 @@ import {
   ValheimMaterialsRepository,
   type MaterialsReader,
 } from './valheim-materials.repository';
+import {
+  materialsBases,
+  placeOf,
+  toBaseView,
+  withMaterialsTrend,
+} from './valheim-materials-bases.service-helpers';
 
 /** Identical body for "missing" and "personal chest you may not see". */
 export const CONTAINER_NOT_FOUND = 'Container not found';
@@ -73,37 +84,54 @@ export class ValheimMaterialsService {
     const veh = vehicleSql(includeVehicles);
     const shared = both(sharedSql, veh);
     const personal = both(personalVisibleSql(viewer), veh);
-    const [sTotals, sCounts, pTotals, pCounts] = await Promise.all([
-      r.totals(scan.id, shared),
-      r.counts(scan.id, shared),
-      r.totals(scan.id, personal),
-      r.counts(scan.id, personal),
-    ]);
+    // ROK-1859: bases + per-chest sums over everything this viewer may see.
+    const visible = both(visibleSql(viewer), veh);
+    const [sTotals, sCounts, pTotals, pCounts, inputs, sums, trend] =
+      await Promise.all([
+        r.totals(scan.id, shared),
+        r.counts(scan.id, shared),
+        r.totals(scan.id, personal),
+        r.counts(scan.id, personal),
+        r.baseInputs(scan.id, visible),
+        r.stackSums(scan.id, visible),
+        // ROK-2014: play-day trend of the scan's world, same viewer rules.
+        r.trendInputs(serverId, scan.worldUid, viewer, includeVehicles),
+      ]);
     const prefabs = distinctPrefabs(sTotals, pTotals);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
     const hasPersonal = viewer.isAdmin || pCounts.chestCount > 0;
-    return {
-      ...scanHeader(scan),
-      gameVersion: scan.gameVersion,
-      catalogFallback: catalog !== null && !catalog.exact,
-      shared: {
-        totals: sTotals.map(toMaterialStack),
-        chestCount: sCounts.chestCount,
-        warnings: {
-          unreadable: sCounts.unreadable,
-          omittedEntries: sCounts.omittedEntries,
-          omittedShared: scan.omittedShared,
-        },
-      },
-      personal: hasPersonal
-        ? {
-            totals: pTotals.map(toMaterialStack),
-            chestCount: pCounts.chestCount,
-            omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
-          }
-        : null,
-      ...projectCatalog(prefabs, catalog),
+    const order = {
+      shared: sTotals.map(toMaterialStack),
+      personal: pTotals.map(toMaterialStack),
     };
+    const { bases, byBase } = materialsBases(toBaseView(inputs), sums, order);
+    return withMaterialsTrend(
+      {
+        ...scanHeader(scan),
+        gameVersion: scan.gameVersion,
+        catalogFallback: catalog !== null && !catalog.exact,
+        bases,
+        shared: {
+          totals: order.shared,
+          chestCount: sCounts.chestCount,
+          warnings: {
+            unreadable: sCounts.unreadable,
+            omittedEntries: sCounts.omittedEntries,
+            omittedShared: scan.omittedShared,
+          },
+        },
+        personal: hasPersonal
+          ? {
+              totals: order.personal,
+              chestCount: pCounts.chestCount,
+              byBase,
+              omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
+            }
+          : null,
+        ...projectCatalog(prefabs, catalog),
+      },
+      trend,
+    );
   }
 
   /**
@@ -130,21 +158,20 @@ export class ValheimMaterialsService {
     holding: string | null,
   ): Promise<ValheimContainerListResponse> {
     const scan = await r.latestScan(serverId);
-    if (!scan) {
-      return {
-        worldUid: null,
-        capturedAt: null,
-        containers: [],
-        items: {},
-        atlas: null,
-      };
-    }
-    const rows = await r.listContainers(scan.id, scope, holding);
+    if (!scan) return emptyContainerList();
+    // Numbering reads the whole scope, never `holding`-filtered (D5).
+    const [rows, inputs] = await Promise.all([
+      r.listContainers(scan.id, scope, holding),
+      r.baseInputs(scan.id, scope),
+    ]);
+    const view = toBaseView(inputs);
     const prefabs = distinctPrefabs(rows);
     const catalog = await r.findCatalog(serverId, scan.gameVersion, prefabs);
     return {
       ...scanHeader(scan),
-      containers: rows.map(toContainerSummary),
+      containers: rows.map((row) =>
+        toContainerSummary(row, placeOf(view, row.key)),
+      ),
       ...projectCatalog(prefabs, catalog),
     };
   }
@@ -160,10 +187,33 @@ export class ValheimMaterialsService {
     const scope = this.scope(user, includeVehicles);
     const found = await this.repo.read(async (r) => {
       const scan = await r.latestScan(serverId);
-      return scan ? r.findContainer(scan.id, key, scope) : null;
+      const hit = scan ? await r.findContainer(scan.id, key, scope) : null;
+      if (!scan || !hit) return null;
+      const view = toBaseView(await r.baseInputs(scan.id, scope));
+      return { ...hit, place: placeOf(view, key) };
     });
     if (!found) throw new NotFoundException(CONTAINER_NOT_FOUND);
-    return { ...toContainerSummary(found.summary), stacks: found.stacks };
+    const summary = toContainerSummary(found.summary, found.place);
+    return { ...summary, stacks: found.stacks };
+  }
+
+  /**
+   * ROK-1889 `GET …/chest-focus` — the Map tab's chest marker, through the
+   * list's visibility rules (vehicles included): gone OR hidden → the same 404.
+   */
+  async chestAt(
+    serverId: number,
+    user: AuthenticatedUser,
+    q: ChestFocusQuery,
+  ): Promise<ValheimChestFocus> {
+    await this.assertHub(serverId, user);
+    const scope = this.scope(user, true);
+    const row = await this.repo.read(async (r) => {
+      const scan = await r.latestScan(serverId);
+      return scan ? r.findContainerAt(scan.id, scope, q) : null;
+    });
+    if (!row) throw new NotFoundException(CONTAINER_NOT_FOUND);
+    return toChestFocus(row, q.item);
   }
 
   private scope(user: AuthenticatedUser, includeVehicles: boolean): SQL {
@@ -175,6 +225,16 @@ export class ValheimMaterialsService {
   private assertHub(serverId: number, user: AuthenticatedUser): Promise<void> {
     return assertServerHubVisible(this.hubs, serverId, user);
   }
+}
+
+function emptyContainerList(): ValheimContainerListResponse {
+  return {
+    worldUid: null,
+    capturedAt: null,
+    containers: [],
+    items: {},
+    atlas: null,
+  };
 }
 
 function scanHeader(scan: ValheimContainerScan) {

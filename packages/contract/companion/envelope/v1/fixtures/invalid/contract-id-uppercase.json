@@ -1,0 +1,97 @@
+{
+  "envelopeVersion": 1,
+  "contract": "BG3-Save",
+  "contractVersion": 1,
+  "capturedAt": "2026-10-24T12:00:05Z",
+  "appVersion": "0.1.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "saveName": "QuickSave_1",
+    "savedAt": "2026-10-24T12:00:00Z",
+    "campaignKey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "campaignKeySource": "save-folder",
+    "gameVersion": "4.1.1.7631656",
+    "platform": "Steam",
+    "currentLevel": "SCL_Main_A",
+    "difficulty": "DifficultyHard",
+    "ruleset": "RulesetLarian",
+    "party": [
+      {
+        "origin": "Generic",
+        "race": "Elf_WoodElf",
+        "level": 8,
+        "xpLevel": 5630,
+        "xpTotal": 35630,
+        "classes": [
+          {
+            "main": "Barbarian",
+            "sub": "BerserkerPath"
+          }
+        ],
+        "isSummon": false
+      },
+      {
+        "origin": "DogFamiliar_Scratch_Summon",
+        "race": "Beast",
+        "level": 1,
+        "xpLevel": 0,
+        "xpTotal": 0,
+        "classes": [],
+        "isSummon": true
+      },
+      {
+        "origin": "Generic",
+        "race": "Human",
+        "level": 8,
+        "xpLevel": 5590,
+        "xpTotal": 35590,
+        "classes": [
+          {
+            "main": "Wizard",
+            "sub": "NecromancySchool"
+          }
+        ],
+        "isSummon": false
+      },
+      {
+        "origin": "Generic",
+        "race": "Duergar",
+        "level": 8,
+        "xpLevel": 5390,
+        "xpTotal": 35390,
+        "classes": [
+          {
+            "main": "Ranger",
+            "sub": "GloomStalker"
+          },
+          {
+            "main": "Rogue",
+            "sub": "Thief"
+          }
+        ],
+        "isSummon": false
+      },
+      {
+        "origin": "Generic",
+        "race": "Tiefling_Asmodeus",
+        "level": 8,
+        "xpLevel": 5630,
+        "xpTotal": 35630,
+        "classes": [
+          {
+            "main": "Paladin",
+            "sub": "Vengeance"
+          }
+        ],
+        "isSummon": false
+      }
+    ],
+    "thumbnail": {
+      "sha256": "8d6272fcaf63cbc49f2eb9be3a83bba29d6464592d55fdfb49a41f1c4af7b9f7",
+      "byteLength": 1698,
+      "contentType": "image/webp",
+      "width": 1280,
+      "height": 720
+    }
+  }
+}

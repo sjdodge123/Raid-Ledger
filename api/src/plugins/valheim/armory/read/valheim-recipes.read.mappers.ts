@@ -5,12 +5,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { sql, type SQL } from 'drizzle-orm';
 import {
+  VALHEIM_PLAN_SOURCES_MAX,
   VALHEIM_PLAN_TARGETS_MAX,
   ValheimPrefabIdSchema,
   ValheimRecipePlanTargetSchema,
+  ValheimRecipeSourceRefSchema,
   type ValheimRecipeCatalogResponse,
   type ValheimRecipePlanResponse,
   type ValheimRecipePlanTarget,
+  type ValheimRecipeSourceRef,
 } from '@raid-ledger/contract';
 import type { AuthenticatedUser } from '../../../../auth/types';
 import type { ValheimContainerScan } from '../../../../drizzle/schema';
@@ -106,6 +109,41 @@ export function parsePlanTargets(raw: unknown): ValheimRecipePlanTarget[] {
   return parts.map(parseTarget);
 }
 
+const INVALID_SOURCES = 'Invalid sources';
+
+/** `<prefab>:r:<recipeId>` or `<prefab>:p:<processor>:<index>` (D3). */
+function parseSource(part: string): [string, ValheimRecipeSourceRef] {
+  const bits = part.split(':');
+  const [prefab, type, id, index] = bits;
+  let ref: unknown = null;
+  if (type === 'r' && bits.length === 3) ref = { type: 'recipe', recipeId: id };
+  if (type === 'p' && bits.length === 4) {
+    ref = { type: 'process', processor: id, index: toInt(index) };
+  }
+  const p = ValheimPrefabIdSchema.safeParse(prefab);
+  const r = ValheimRecipeSourceRefSchema.safeParse(ref);
+  if (!p.success || !r.success) throw new BadRequestException(INVALID_SOURCES);
+  return [p.data, r.data];
+}
+
+/**
+ * ROK-1860 D3: `sources=<ref>,…` — per-prefab source overrides, at most
+ * `VALHEIM_PLAN_SOURCES_MAX`; absent/empty → none; a repeated prefab → the
+ * last one wins; anything malformed → 400. Whether a ref is a candidate of
+ * the node is the resolver's call (D4: silent D9 fallback, never a 400).
+ */
+export function parseSourceOverrides(
+  raw: unknown,
+): Map<string, ValheimRecipeSourceRef> {
+  if (raw === undefined || raw === '') return new Map();
+  if (typeof raw !== 'string') throw new BadRequestException(INVALID_SOURCES);
+  const parts = raw.split(',');
+  if (parts.length > VALHEIM_PLAN_SOURCES_MAX) {
+    throw new BadRequestException(INVALID_SOURCES);
+  }
+  return new Map(parts.map(parseSource));
+}
+
 /** 404 rule for `/tree`: the prefab has a source of the asked kind. */
 export function hasTreeTarget(
   graph: RecipeGraph,
@@ -188,6 +226,7 @@ export function emptyCatalogue(): ValheimRecipeCatalogResponse {
     catalogFallback: false,
     entries: [],
     stations: [],
+    ingredients: {},
     itemAtlas: null,
     recipeAtlas: null,
   };

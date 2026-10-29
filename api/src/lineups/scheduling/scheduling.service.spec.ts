@@ -22,9 +22,15 @@ import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SignupsService } from '../../events/signups.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
+import { lockMatchMember } from './scheduling-member-lock.helpers';
 
 jest.mock('../lineups-notify-hooks.helpers', () => ({
   fireEventCreated: jest.fn(),
+}));
+// ROK-2020: the roster lock is its own `execute`; mocked so the stamp-count
+// cases below keep counting only the stamp, and asserted on directly.
+jest.mock('./scheduling-member-lock.helpers', () => ({
+  lockMatchMember: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('./scheduling-auto-signup.helpers', () => ({
   autoSignupSlotVoters: jest.fn().mockResolvedValue(undefined),
@@ -248,6 +254,24 @@ describe('SchedulingService', () => {
         expect(mockNudge.touch).not.toHaveBeenCalled();
       });
 
+      // ROK-2020: the auto-vote enrols the suggester, so it must serialise
+      // with a concurrent participant removal exactly like toggleVote does.
+      it('takes the (match, user) roster lock before the auto-vote write', async () => {
+        jest.mocked(lockMatchMember).mockClear();
+        mockSuggestSlotFlow(true);
+        voteSpy.mockResolvedValueOnce([{ id: 1 }]);
+        await service.suggestSlot(10, SLOT_TIME, 7);
+        expect(lockMatchMember).toHaveBeenCalledWith(
+          mockDb,
+          SCHEDULING_MATCH.id,
+          7,
+        );
+        const lockOrder =
+          jest.mocked(lockMatchMember).mock.invocationCallOrder[0] ?? Infinity;
+        const voteOrder = voteSpy.mock.invocationCallOrder[0] ?? -1;
+        expect(lockOrder).toBeLessThan(voteOrder);
+      });
+
       it('does not call insertScheduleVote when userId is undefined', async () => {
         mockSuggestSlotFlow();
         await service.suggestSlot(10, SLOT_TIME);
@@ -375,6 +399,26 @@ describe('SchedulingService', () => {
       return seen;
     }
 
+    it('takes the (match, user) roster lock inside the tx, before the vote write (ROK-2020)', async () => {
+      jest.mocked(lockMatchMember).mockClear();
+      primeNewVote();
+      const seen = { locks: -1 };
+      mockDb.transaction.mockImplementationOnce(
+        async (cb: (tx: MockDb) => Promise<unknown>) => {
+          const result = await cb(mockDb);
+          seen.locks = jest.mocked(lockMatchMember).mock.calls.length;
+          return result;
+        },
+      );
+      await service.toggleVote(5, 10, 10);
+      expect(seen.locks).toBe(1);
+      expect(lockMatchMember).toHaveBeenCalledWith(mockDb, 10, 10);
+      const lockOrder =
+        jest.mocked(lockMatchMember).mock.invocationCallOrder[0] ?? Infinity;
+      const insertOrder = mockDb.insert.mock.invocationCallOrder[0] ?? -1;
+      expect(lockOrder).toBeLessThan(insertOrder);
+    });
+
     it('stamps scheduling_submitted_at INSIDE the vote transaction', async () => {
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
       mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
@@ -473,7 +517,9 @@ describe('SchedulingService', () => {
       ]);
       // 4. resolveGameName → resolveGameInfo
       mockDb.limit.mockResolvedValueOnce([GAME_ROW]);
-      // 5. eventsService.create
+      // 5. the lock-in claim's FOR UPDATE read (ROK-2024 F2): still unclaimed
+      mockDb.for.mockResolvedValueOnce([{ status: 'scheduling' }]);
+      // 6. eventsService.create
       mockEventsService.create.mockResolvedValueOnce({ id: 100 });
     }
 

@@ -8,6 +8,7 @@ import {
   findHubPostMarkdownViolation,
   isSafeMarkdownHref,
   markdownToPlainText,
+  parseHubPostHeading,
 } from '../hub-post-markdown.js';
 
 describe('findHubPostMarkdownViolation', () => {
@@ -90,7 +91,55 @@ describe('markdownToPlainText', () => {
     ['\\*literal\\* stars', '*literal* stars'],
     ['go to <https://x.y/a>', 'go to https://x.y/a'],
     ['snake_case_name stays', 'snake_case_name stays'],
+    ['# Raid **night**\n## Time\n### Loot', 'Raid night\nTime\nLoot'],
+    ['#### four\n#nospace', '#### four\n#nospace'],
+    ['- # in a list', '• # in a list'],
+    ['#  two spaces', 'two spaces'],
+    // Codex P2: heading text is literal — no list-prefix pass on it.
+    ['# + 20% XP', '+ 20% XP'],
+    ['# - item', '- item'],
+    ['## * star', '* star'],
+    ['# 1. x', '1. x'],
+    ['# - a\n- b\n+ c', '- a\n• b\n• c'],
   ])('%j → %j', (body, plain) => {
     expect(markdownToPlainText(body)).toBe(plain);
+  });
+});
+
+describe('parseHubPostHeading (ROK-1898)', () => {
+  it.each([
+    ['# Raid', 1, 2, 'Raid'],
+    ['## Raid **night**', 2, 3, 'Raid **night**'],
+    ['### Loot  ', 3, 4, 'Loot  '],
+    ['# #tag', 1, 2, '#tag'],
+    ['#  Raid', 1, 3, 'Raid'],
+    ['##   Raid', 2, 5, 'Raid'],
+  ] as const)('%j → level %i', (line, level, markerLength, text) => {
+    expect(parseHubPostHeading(line)).toEqual({ level, markerLength, text });
+  });
+
+  it.each([
+    ['#### four is plain text', '#### four'],
+    ['no space after the marker', '#nospace'],
+    ['an empty heading', '# '],
+    ['a bare marker', '###'],
+    ['an indented marker', ' # Raid'],
+    ['a tab instead of a space', '#\tRaid'],
+    ['a heading inside a list item', '- # Raid'],
+    ['a heading in a numbered item', '1. ## Raid'],
+    ['an escaped marker', '\\# Raid'],
+  ])('%s → null', (_label, line) => {
+    expect(parseHubPostHeading(line)).toBeNull();
+  });
+
+  it('headings are legal subset text, not violations', () => {
+    expect(findHubPostMarkdownViolation('# A\n## B\n### C\n#### D')).toBeNull();
+  });
+
+  // Bounded loops, no regex: correctness only — a wall-clock bound here would flake under CI load.
+  it('a 4000-char run of # and 1000 heading lines parse correctly', () => {
+    expect(parseHubPostHeading('#'.repeat(4000))).toBeNull();
+    expect(parseHubPostHeading(`#${' '.repeat(4000)}`)).toBeNull();
+    expect(markdownToPlainText('# x\n'.repeat(1000))).toBe('x\n'.repeat(1000));
   });
 });

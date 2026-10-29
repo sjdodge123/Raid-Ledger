@@ -42,6 +42,10 @@ import {
   seedServerHub,
   type ServerHubFixture,
 } from './pelican-demo-seed-hub.helpers';
+import {
+  hasUnknownHubScheduleSet,
+  parseHubScheduleSet,
+} from './pelican-demo-seed-schedules.helpers';
 
 /**
  * Pelican fixture endpoint — DEMO_MODE only (ROK-1094 fleet UI test plan).
@@ -102,17 +106,22 @@ export class PelicanDemoSeedController {
    * ROK-1831 server-hub fixture: the slot's Valheim-mapped server with its
    * community hub on, four member rows (online, seen 10 d, joined never
    * played, seen 100 d = not a member), an outsider and one past Quick Play
-   * session. Body `{ slot? }` (default 0). Idempotent — re-run to reset.
+   * session. Body `{ slot?, withSchedules?, schedules? }` (default 0, none;
+   * ROK-1876 `withSchedules: true` = the running set; ROK-1877 `schedules`
+   * picks `running` / `start_only` / `outside_hours`). Idempotent — re-run.
    */
   @Post('pelican/server-hub')
   @HttpCode(HttpStatus.OK)
   async seedServerHub(@Body() body: unknown): Promise<ServerHubFixture> {
     const slot = parseServerHubSlot(body);
     if (slot === null) throw new BadRequestException('Unknown slot');
+    if (hasUnknownHubScheduleSet(body))
+      throw new BadRequestException('Unknown schedules set');
     const gameId = await findValheimGameId(this.db);
     if (gameId === null) throw new NotFoundException('No Valheim game');
     await this.ensureDemoPelican();
-    return seedServerHub(this.db, slot, gameId, new Date());
+    const schedules = parseHubScheduleSet(body);
+    return seedServerHub(this.db, slot, gameId, new Date(), schedules);
   }
 
   private async ensureDemoPelican(): Promise<void> {

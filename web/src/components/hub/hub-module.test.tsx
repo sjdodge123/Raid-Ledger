@@ -2,8 +2,8 @@
  * ROK-1830 AC2 — a second hub kind plugs into the shell with ZERO core edits.
  *
  * A throwaway plugin registers a `game_server` hub module with one tab and one
- * Overview widget. The core `/guilds/:id` shell must offer the tab in the
- * frame's module band (after Overview/Members, before Resources), render its
+ * Overview widget. The core `/hubs/:id` shell must offer the tab in the
+ * frame's module band (after the Overview/Members/Events/Resources core band), render its
  * panel when selected, and draw the widget in the Overview bento — none of
  * which this file teaches core about.
  */
@@ -12,7 +12,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
-import type { JSX } from 'react';
+import { lazy, type JSX } from 'react';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { clearRegistry, registerPlugin } from '../../plugins/plugin-registry';
@@ -50,7 +50,7 @@ const testModule: HubModule = {
 };
 
 function renderPage(): void {
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+    renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
 beforeEach(() => {
@@ -69,7 +69,7 @@ afterEach(() => {
 describe('hub module extension point (ROK-1830 AC2)', () => {
     it('puts the module tab between the core frame tabs and renders its panel', async () => {
         renderPage();
-        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
         expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events', 'World']);
 
         await userEvent.click(within(nav).getByRole('link', { name: 'World' }));
@@ -86,8 +86,21 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
     it('drops the whole module while its plugin is inactive', async () => {
         usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
         renderPage();
-        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
         expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events']);
         expect(screen.queryByTestId('module-widget')).not.toBeInTheDocument();
+    });
+
+    it('draws a game widget from a plugin that does not own the kind (ROK-1909)', async () => {
+        const Materials = lazy(() => Promise.resolve({ default: () => <p data-testid="plugin-game-widget">Materials</p> }));
+        registerPlugin('valheim', { icon: '/x.png', color: 'blue', label: 'Valheim' }).registerHubWidget({
+            id: 'materials', title: 'Server materials', games: ['valheim'], kinds: ['game_server'], order: 80, audience: 'members', component: Materials,
+        });
+        usePluginStore.setState({ activeSlugs: new Set([SLUG, 'valheim']), initialized: true });
+        server.use(http.get(BASE, () => HttpResponse.json({ ...PAGE, guild: { ...PAGE.guild, gameSlug: 'valheim' } })));
+        renderPage();
+        const overview = await screen.findByTestId('guild-overview');
+        expect(await within(overview).findByTestId('plugin-game-widget')).toHaveTextContent('Materials');
+        expect(within(overview).getByRole('heading', { name: 'Server materials' })).toBeInTheDocument();
     });
 });

@@ -15,6 +15,7 @@ import {
   type DbOrTx,
   type HubCommunityMemberRow,
 } from './community-membership.queries';
+import { hubNameKey, storedNameKey } from './community-proposals.queries';
 
 /** ROK-1870 L3 — hub lookups + status writes shared by the L3 services. */
 
@@ -78,7 +79,10 @@ export async function archiveHub(
     .where(eq(g.id, id));
 }
 
-/** D11: another non-archived hub on the game holds this hub's name. */
+/**
+ * D11: another non-archived hub on the game holds this hub's name. Both keys
+ * may predate ROK-2016's joiner stripping, so both sides are normalised.
+ */
 async function hasRestoreClash(
   db: DbOrTx,
   hub: schema.GuildSelect,
@@ -90,7 +94,7 @@ async function hasRestoreClash(
       and(
         eq(g.kind, 'game_community'),
         eq(g.gameId, hub.gameId),
-        eq(g.nameKey, hub.nameKey),
+        eq(storedNameKey(g.nameKey), hubNameKey(hub.nameKey)),
         ne(g.status, 'archived'),
         ne(g.id, hub.id),
       ),
@@ -114,11 +118,15 @@ export async function restoreHub(
   // A concurrent restore can pass the pre-check too; the partial unique index
   // then rejects this UPDATE — surface it as the same 409 (Codex r3). Nothing
   // runs after the failed statement, so a poisoned tx is never reused.
+  // The key is re-canonicalised (ROK-2015 Codex P2): a pre-ROK-2016 key may
+  // hold a VS16, and kept as-is the unique index would miss a concurrent
+  // create of the same shown name (whose key has it stripped).
   await conflictOnUnique(
     () =>
       db
         .update(g)
         .set({
+          nameKey: hubNameKey(hub.nameKey),
           status: 'active',
           archivedAt: null,
           archivedReason: null,

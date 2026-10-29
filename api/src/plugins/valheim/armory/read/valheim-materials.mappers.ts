@@ -120,6 +120,7 @@ export function toMaterialStack(row: MaterialsTotalRow): ValheimMaterialStack {
 /** Explicit field list: an extra selected column can never leak. */
 export function toContainerSummary(
   row: MaterialsContainerRow,
+  place: { base: string | null; index: number },
 ): ValheimContainerSummary {
   return {
     key: row.key,
@@ -134,6 +135,8 @@ export function toContainerSummary(
     unreadable: row.unreadable,
     omittedEntries: row.omittedEntries,
     stackCount: toCount(row.stackCount),
+    base: place.base,
+    index: place.index,
   };
 }
 
@@ -158,6 +161,7 @@ export function emptyMaterials(): ValheimMaterialsResponse {
       chestCount: 0,
       warnings: { unreadable: 0, omittedEntries: 0, omittedShared: 0 },
     },
+    bases: [],
     personal: null,
     items: {},
     atlas: null,

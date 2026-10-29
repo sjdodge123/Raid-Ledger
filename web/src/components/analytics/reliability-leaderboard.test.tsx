@@ -18,6 +18,7 @@ const mockUsers = [
         noShow: 1,
         excused: 0,
         attendanceRate: 0.9,
+        lateCount: 1,
     },
     {
         userId: 2,
@@ -28,6 +29,7 @@ const mockUsers = [
         noShow: 3,
         excused: 1,
         attendanceRate: 0.5,
+        lateCount: 0,
     },
     {
         userId: 3,
@@ -38,6 +40,7 @@ const mockUsers = [
         noShow: 2,
         excused: 1,
         attendanceRate: 0.4,
+        lateCount: 2,
     },
 ];
 
@@ -63,6 +66,7 @@ describe('ReliabilityLeaderboard — part 1', () => {
             expect(screen.getByText('Player')).toBeInTheDocument();
             expect(screen.getByText('Events')).toBeInTheDocument();
             expect(screen.getByText('Attendance %')).toBeInTheDocument();
+            expect(screen.getByText('Late')).toBeInTheDocument();
             expect(screen.getByText('No-Shows')).toBeInTheDocument();
         });
     });
@@ -220,4 +224,90 @@ describe('ReliabilityLeaderboard — part 3', () => {
         expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
+});
+
+const FOOTNOTE =
+    "Attendance % includes late arrivals. Late counts players who joined the event's voice channel after the start and stayed for at least a fifth of it.";
+
+function headerLabels() {
+    return screen.getAllByRole('columnheader').map((h) => h.textContent?.replace(/[\u2191\u2193]/g, '').trim());
+}
+
+/** Late is the 5th cell: # · Player · Events · Attendance % · Late · No-Shows. */
+function must<T>(value: T | null | undefined, label: string): T {
+    if (value === null || value === undefined) throw new Error(`missing: ${label}`);
+    return value;
+}
+
+function lateCellFor(username: string) {
+    const row = must(screen.getAllByRole('row').find((r) => r.textContent?.includes(username)), `row for ${username}`);
+    return must(row.querySelectorAll('td')[4], `Late cell for ${username}`).textContent;
+}
+
+function usernameOrder() {
+    return screen.getAllByRole('row').slice(1).map((r, i) => must(r.querySelectorAll('td')[1], `Player cell in row ${i + 1}`).textContent);
+}
+
+describe('ReliabilityLeaderboard — Late column (ROK-1938)', () => {
+    beforeEach(() => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: mockUsers, totalUsers: 3 }),
+            ),
+        );
+    });
+
+    it('puts the Late header between Attendance % and No-Shows', async () => {
+        renderWithProviders(<ReliabilityLeaderboard />);
+        await waitFor(() => screen.getByText('Alice'));
+        expect(headerLabels()).toEqual(['#', 'Player', 'Events', 'Attendance %', 'Late', 'No-Shows']);
+    });
+
+    it('renders each player\'s late count in the Late cell', async () => {
+        renderWithProviders(<ReliabilityLeaderboard />);
+        await waitFor(() => screen.getByText('Alice'));
+        expect([lateCellFor('Alice'), lateCellFor('Bob'), lateCellFor('Carol')]).toEqual(['1', '0', '2']);
+    });
+
+    it('renders 0 when the server omits lateCount', async () => {
+        const legacy = Object.fromEntries(Object.entries(mockUsers[0] ?? {}).filter(([k]) => k !== 'lateCount'));
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: [legacy], totalUsers: 1 }),
+            ),
+        );
+        renderWithProviders(<ReliabilityLeaderboard />);
+        await waitFor(() => screen.getByText('Alice'));
+        expect(lateCellFor('Alice')).toBe('0');
+    });
+
+    it('clicking Late sorts desc by lateCount, again sorts asc', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ReliabilityLeaderboard />);
+        await waitFor(() => screen.getByText('Alice'));
+
+        await user.click(screen.getByText('Late'));
+        await waitFor(() => expect(usernameOrder()).toEqual(['Carol', 'Alice', 'Bob']));
+
+        await user.click(screen.getByText('Late'));
+        await waitFor(() => expect(usernameOrder()).toEqual(['Bob', 'Alice', 'Carol']));
+    });
+
+    it('shows the late footnote with data', async () => {
+        renderWithProviders(<ReliabilityLeaderboard />);
+        const footnote = await screen.findByText(FOOTNOTE);
+        expect(footnote).toBeInTheDocument();
+        expect(footnote.closest('.overflow-x-auto')).toBeNull();
+    });
+
+    it('omits the late footnote in the empty state', async () => {
+        server.use(
+            http.get(`${API_BASE}/analytics/attendance/users`, () =>
+                HttpResponse.json({ users: [], totalUsers: 0 }),
+            ),
+        );
+        renderWithProviders(<ReliabilityLeaderboard />);
+        await waitFor(() => screen.getByText('No attendance data recorded yet.'));
+        expect(screen.queryByText(FOOTNOTE)).not.toBeInTheDocument();
+    });
 });

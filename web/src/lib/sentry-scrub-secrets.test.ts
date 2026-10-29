@@ -325,3 +325,34 @@ describe('scrubFeedbackPayload', () => {
         expect('clientLogs' in scrubbed).toBe(false);
     });
 });
+
+describe('ROK-1955: companion device-link codes', () => {
+    it('filters the user code on the /link page URL', () => {
+        expect(scrubSecretsFromText('https://raid.example.test/link?code=BCDF-GHJK')).toBe(
+            'https://raid.example.test/link?code=[Filtered]',
+        );
+    });
+
+    it.each([
+        ['{"deviceCode":"abc123"}', '{"deviceCode":"[Filtered]"}'],
+        ['device_code=abc123', 'device_code=[Filtered]'],
+        ['{"userCode":"BCDF-GHJK"}', '{"userCode":"[Filtered]"}'],
+        ['user-code: BCDFGHJK', 'user-code:[Filtered]'],
+    ])('filters a keyed device/user code: %s', (input, expected) => {
+        expect(scrubSecretsFromText(input)).toBe(expected);
+        expect(scrubSecretsFromText(expected)).toBe(expected);
+    });
+
+    it('treats deviceCode / user_code as secret keys but not lookalikes', () => {
+        expect(isSecretKey('deviceCode')).toBe(true);
+        expect(isSecretKey('user_code')).toBe(true);
+        expect(isSecretKey('deviceCodeLength')).toBe(false);
+        expect(isSecretKey('code')).toBe(false);
+    });
+
+    it('filters an rlcd_ token in free text', () => {
+        expect(scrubSecretsFromText(`saved rlcd_${'a'.repeat(43)} to keychain`)).toBe(
+            'saved [Filtered] to keychain',
+        );
+    });
+});

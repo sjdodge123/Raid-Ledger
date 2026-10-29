@@ -2,6 +2,7 @@ import type { PluginInfoDto } from '@raid-ledger/contract';
 import { getPluginBadge } from '../../plugins/plugin-registry';
 import { PluginBadge } from '../ui/plugin-badge';
 import { safeHttpUrl } from '../../lib/safe-http-url';
+import { PluginLifecycleActions } from './plugin-lifecycle-actions';
 
 interface PluginCardProps {
     plugin: PluginInfoDto;
@@ -95,25 +96,12 @@ function IntegrationHealth({ integrations }: { integrations: PluginInfoDto['inte
     );
 }
 
-function PluginActions({ plugin, onInstall, onUninstall, onActivate, onDeactivate, isPending }: PluginCardProps) {
+/** The card's lifecycle buttons — the shared design-system set, laid out in a wrapping row. */
+function PluginActions(props: PluginCardProps) {
+    if (props.plugin.builtIn) return null;
     return (
-        <div className="flex gap-2 pt-1">
-            {plugin.status === 'not_installed' && (
-                <button onClick={() => onInstall(plugin.slug)} disabled={isPending}
-                    className="px-3 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Install</button>
-            )}
-            {plugin.status === 'active' && (
-                <button onClick={() => onDeactivate(plugin.slug)} disabled={isPending}
-                    className="px-3 py-2.5 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Deactivate</button>
-            )}
-            {plugin.status === 'inactive' && (
-                <>
-                    <button onClick={() => onActivate(plugin.slug)} disabled={isPending}
-                        className="px-3 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Activate</button>
-                    <button onClick={() => onUninstall(plugin.slug)} disabled={isPending}
-                        className="px-3 py-2.5 text-sm bg-danger/10 hover:bg-danger/15 text-danger font-medium rounded-lg transition-colors border border-danger/50">Uninstall</button>
-                </>
-            )}
+        <div className="flex flex-wrap gap-2 pt-1">
+            <PluginLifecycleActions {...props} />
         </div>
     );
 }

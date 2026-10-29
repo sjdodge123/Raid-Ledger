@@ -2,14 +2,20 @@
  * Database query helpers for standalone scheduling polls (ROK-977).
  * Keeps the service layer thin by extracting all DB operations here.
  */
+import { NotFoundException } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import { selectCompletionTarget } from './standalone-poll-complete.helpers';
+import {
+  selectCompletionTarget,
+  flipLineupMatch,
+  assertLineupLockIn,
+} from './standalone-poll-complete.helpers';
 import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
-import { votableStandalonePollSql } from './standalone-poll-votable.helpers';
+// ROK-1893 P3: moved to its own module (hub join); re-exported for callers.
+export { findActiveStandalonePolls } from './standalone-poll-active.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -53,6 +59,16 @@ export async function filterValidUserIds(
   return rows.map((r) => r.id);
 }
 
+/** The poll's game, or 404 (moved out of the service for its line cap). */
+export async function requirePollGame(
+  db: Db,
+  gameId: number,
+): Promise<{ id: number; name: string; coverUrl: string | null }> {
+  const game = await findGameById(db, gameId);
+  if (!game) throw new NotFoundException('Game not found');
+  return game;
+}
+
 /**
  * Insert a lineup in 'decided' status.
  * Uses direct db.insert() to bypass the active lineup conflict check.
@@ -66,6 +82,7 @@ export async function insertDecidedLineup(
     visibility: 'public',
     shareToken: null,
   },
+  guildId: number | null = null,
 ): Promise<{ id: number }> {
   // ROK-1067: standalone polls are not user-shareable, but `public_slug` is
   // NOT NULL — generate a slug and disable share so the URL never resolves.
@@ -92,6 +109,8 @@ export async function insertDecidedLineup(
         // ROK-1750: private polls carry a share-link token; public ones null.
         visibility: share.visibility,
         shareToken: share.shareToken,
+        // ROK-1893 P3: the hub the poll is tagged to (validated by the caller).
+        guildId,
       })
       .returning({ id: schema.communityLineups.id });
     return defined(row, 'inserted standalone lineup row');
@@ -201,6 +220,8 @@ export async function clearReschedulingPollId(
 export async function completeStandalonePoll(
   db: Db,
   matchId: number,
+  eventId?: number,
+  startTime?: string,
 ): Promise<{
   ok: boolean;
   /** ROK-1844: the poll was no longer `scheduling` — already completed. */
@@ -210,7 +231,16 @@ export async function completeStandalonePoll(
 }> {
   const match = await selectCompletionTarget(db, matchId);
   if (!match) return { ok: false };
-  if (!(await flipAndArchive(db, match))) return { ok: false, conflict: true };
+  // ROK-2024: a regular lineup match links the event and keeps its lineup;
+  // it is refused (400) before the flip without an event or on a past slot.
+  const flipped = match.standalone
+    ? await flipAndArchive(db, match)
+    : await flipLineupMatch(
+        db,
+        match.id,
+        assertLineupLockIn(eventId, startTime),
+      );
+  if (!flipped) return { ok: false, conflict: true };
   return {
     ok: true,
     ...(match.linkedEventId != null
@@ -252,61 +282,6 @@ function flipAndArchive(
       await clearReschedulingPollId(tx, match.linkedEventId);
     return true;
   });
-}
-
-/**
- * Find all ACTIVE standalone polls — the events-page banner's list.
- *
- * ROK-1609: listed only while genuinely votable — see
- * `votableStandalonePollSql` (shared with the weekly digest, ROK-1771) — and
- * visible to the caller (public, admin, creator or invitee; ROK-1750).
- */
-export async function findActiveStandalonePolls(
-  db: Db,
-  caller: { id: number; isAdmin: boolean },
-): Promise<
-  {
-    matchId: number;
-    visibility: 'public' | 'private';
-    lineupId: number;
-    gameName: string;
-    gameCoverUrl: string | null;
-    memberCount: number;
-    slotCount: number;
-  }[]
-> {
-  const rows = await db.execute<{
-    matchId: number;
-    visibility: 'public' | 'private';
-    lineupId: number;
-    gameName: string;
-    gameCoverUrl: string | null;
-    memberCount: number;
-    slotCount: number;
-  }>(sql`
-    SELECT m.id AS "matchId", m.lineup_id AS "lineupId",
-           l.visibility AS "visibility",
-           g.name AS "gameName", g.cover_url AS "gameCoverUrl",
-           COALESCE(mem.cnt, 0)::int AS "memberCount",
-           COALESCE(sl.cnt, 0)::int AS "slotCount"
-    FROM community_lineup_matches m
-    JOIN community_lineups l ON l.id = m.lineup_id
-    JOIN games g ON g.id = m.game_id
-    LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_match_members GROUP BY match_id) mem ON mem.match_id = m.id
-    LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_schedule_slots GROUP BY match_id) sl ON sl.match_id = m.id
-    WHERE ${votableStandalonePollSql()}
-      AND (
-        l.visibility = 'public'
-        OR ${caller.isAdmin}::boolean
-        OR l.created_by = ${caller.id}
-        OR EXISTS (
-          SELECT 1 FROM community_lineup_invitees i
-          WHERE i.lineup_id = l.id AND i.user_id = ${caller.id}
-        )
-      )
-    ORDER BY m.created_at DESC
-  `);
-  return [...rows];
 }
 
 /**

@@ -299,6 +299,13 @@ export const CommunityTemporalResponseSchema = z.object({
   snapshotDate: z.string(),
   heatmap: z.array(TemporalHeatmapCellSchema),
   peakHours: z.array(PeakHourEntrySchema),
+  /**
+   * IANA zone the heatmap + peak-hour buckets were computed in — the
+   * community default timezone, or `UTC` when unset/invalid (ROK-1936).
+   * Optional so snapshots stored before ROK-1936 (UTC buckets, no field)
+   * still parse.
+   */
+  timezone: z.string().optional(),
 });
 
 export type CommunityTemporalResponseDto = z.infer<

@@ -7,9 +7,7 @@ import {
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
   ConflictException,
-  forwardRef,
   Optional,
 } from '@nestjs/common';
 import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
@@ -25,7 +23,7 @@ import { scheduleTransitionBestEffort } from '../queue/lineup-phase-schedule.hel
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { SchedulingPollEmbedService } from '../scheduling/scheduling-poll-embed.service';
 import {
-  findGameById,
+  requirePollGame,
   filterValidUserIds,
   insertDecidedLineup,
   insertSchedulingMatch,
@@ -36,31 +34,18 @@ import {
   completeStandalonePoll,
   stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
-import {
-  assertCanRescheduleEvent,
-  assertCanCompletePoll,
-} from './standalone-poll-auth.helpers';
-import {
-  findScheduleSlots,
-  findScheduleVotes,
-} from '../scheduling/scheduling-query.helpers';
-import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
-import { SignupsService } from '../../events/signups.service';
+import { assertCanRescheduleEvent } from './standalone-poll-auth.helpers';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
-import {
-  splitYesVotersBySlot,
-  notifyPollVoters,
-  heartPollGameForVoters,
-} from './standalone-poll-voter.helpers';
-import { SettingsService } from '../../settings/settings.service';
 import {
   assertVisibilityAllowed,
   buildShareSettings,
 } from './standalone-poll-share.helpers';
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
-import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
+import { resolvePollHubId } from './standalone-poll-hub.helpers';
+import { assertCanCompleteWithBench } from './standalone-poll-bench-pick.helpers';
+import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -73,6 +58,7 @@ export interface CreatePollInput {
   memberUserIds?: number[];
   /** Minimum unique voters before organizer is notified (ROK-1015). */
   minVoteThreshold?: number;
+  hubId?: number; // ROK-1893 P3: hub tag (exclusive with linkedEventId)
   /**
    * ROK-1371: user IDs to EXCLUDE from the game-interest broadcast because they
    * are already receiving the targeted post-event follow-up DM. Internal-only
@@ -111,11 +97,8 @@ export class StandalonePollService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
-    private readonly signupsService: SignupsService,
-    private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
-    @Inject(forwardRef(() => EmbedSyncQueueService))
-    private readonly embedSyncQueue: EmbedSyncQueueService,
+    private readonly lockIn: StandalonePollLockInService,
     @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
@@ -124,110 +107,49 @@ export class StandalonePollService {
     return findActiveStandalonePolls(this.db, caller);
   }
 
-  /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
-   *  When eventId is provided, auto-signup slot voters and auto-heart the game (ROK-1031). */
+  /** Mark a poll as completed (match -> scheduled; a standalone lineup ->
+   *  archived, a regular lineup match -> linked to the event — ROK-2024).
+   *  When eventId is provided, resolves only after the slot voters' signups
+   *  (ROK-1031/2031); heart, DMs and EVENT CREATED (skipped for a reschedule)
+   *  follow without being awaited.
+   *  ROK-2025: `benchUserIds` = the organizer's bench pick, checked before
+   *  the flip so a 400 leaves the poll open for a retry. */
   async complete(
     matchId: number,
     eventId?: number,
     startTime?: string,
     creatorId?: number,
     isAdmin = false,
+    benchUserIds?: number[],
   ): Promise<boolean> {
     // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
     // SE recreated) — restrict it to the poll/event owner or an admin.
     // ROK-1844: every completion is owner/staff-only, and `eventId` must be
     // the caller's and come from this poll — checked before anything changes.
-    await assertCanCompletePoll(
+    const bench = await assertCanCompleteWithBench(
+      this.db,
+      { id: creatorId ?? -1, isAdmin },
+      { matchId, eventId, startTime, benchUserIds },
+    );
+    const result = await completeStandalonePoll(
       this.db,
       matchId,
-      { id: creatorId ?? -1, isAdmin },
-      { eventId, startTime },
+      eventId,
+      startTime,
     );
-    const result = await completeStandalonePoll(this.db, matchId);
     if (result.conflict) {
       throw new ConflictException('This poll has already been completed');
     }
-    // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
-    // embed so its author line and colour follow.
-    if (result.ok) this.schedulingPollEmbed.fireUpdateEmbed(matchId);
-    // The contract requires `startTime` with `eventId`; only that slot's
-    // yes-voters are signed up (ROK-1844), never every yes-voter.
-    if (result.ok && eventId && startTime) {
-      this.fireAutoSignup(matchId, eventId, startTime, creatorId).catch(
-        (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.warn(`Auto-signup failed for match ${matchId}: ${msg}`);
-        },
-      );
-    }
-    if (result.ok && result.linkedEventId && !result.linkedEventCancelled) {
-      await this.reemitLinkedEvent(result.linkedEventId);
+    if (result.ok) {
+      await this.lockIn.afterComplete(result, {
+        matchId,
+        eventId,
+        startTime,
+        creatorId,
+        benchUserIds: bench,
+      });
     }
     return result.ok;
-  }
-
-  /**
-   * ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
-   * embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
-   * at the (already-moved) winning time. The caller skips an event cancelled
-   * mid-poll: the re-emit would recreate a Discord SE for a dead event.
-   */
-  private async reemitLinkedEvent(linkedEventId: number): Promise<void> {
-    this.eventsService
-      .emitLifecycleEvent(linkedEventId, APP_EVENT_EVENTS.UPDATED)
-      .catch(noop);
-    // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
-    // embed re-render is fire-and-forget — on a quiet server nothing else
-    // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
-    // until unrelated traffic heals it. completeStandalonePoll has already
-    // cleared reschedulingPollId, so enqueue an explicit level-triggered
-    // sync now: the processor reads the (cleared) flag and restores the live
-    // embed deterministically. Symmetric to the poll-start RESCHEDULING
-    // teardown's updateEmbedState.
-    await this.embedSyncQueue.enqueue(linkedEventId, 'reschedule-poll-lockin');
-  }
-
-  /** Fire-and-forget auto-signup + auto-heart for poll voters (ROK-1031). */
-  private async fireAutoSignup(
-    matchId: number,
-    eventId: number,
-    startTime: string,
-    creatorId?: number,
-  ): Promise<void> {
-    const slots = await findScheduleSlots(this.db, matchId);
-    const allVoters = await findScheduleVotes(
-      this.db,
-      slots.map((s) => s.id),
-    );
-    // ROK-1617: yes-votes only on both sides of the split — see
-    // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
-    const { selectedVoters, otherVoters } = splitYesVotersBySlot(
-      slots,
-      allVoters,
-      startTime,
-    );
-    const { benchedUserIds } = await autoSignupSlotVoters({
-      eventId,
-      creatorId: creatorId ?? -1,
-      voters: selectedVoters,
-      signupsService: this.signupsService,
-    });
-    // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
-    // name the DMs below announce.
-    const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
-    await notifyPollVoters(
-      {
-        db: this.db,
-        settingsService: this.settingsService,
-        notifications: this.notifications,
-      },
-      selectedVoters,
-      otherVoters,
-      benchedUserIds,
-      startTime,
-      eventId,
-      gameName ?? 'Game Night',
-    );
   }
 
   /**
@@ -242,7 +164,7 @@ export class StandalonePollService {
   ): Promise<SchedulingPollResponseDto> {
     assertVisibilityAllowed(input.visibility, input.linkedEventId);
     const share = buildShareSettings(input.visibility);
-    const game = await this.validateGame(input.gameId);
+    const game = await requirePollGame(this.db, input.gameId);
     if (input.linkedEventId) {
       // ROK-1370 (P1): opening a poll linked to an event is destructive — only
       // the event owner or an admin may do it (404 preserved when missing).
@@ -253,6 +175,7 @@ export class StandalonePollService {
         isAdmin,
       );
     }
+    const hubId = await resolvePollHubId(this.db, input, userId, isAdmin);
     const phaseDeadline = this.computeDeadline(input.durationHours);
     const lineup = await insertDecidedLineup(
       this.db,
@@ -260,6 +183,7 @@ export class StandalonePollService {
       input.linkedEventId,
       phaseDeadline,
       share,
+      hubId,
     );
     const match = await insertSchedulingMatch(
       this.db,
@@ -303,6 +227,7 @@ export class StandalonePollService {
       input,
       pickedIds,
       share.visibility,
+      hubId,
     );
     const memberCount = await countMatchMembers(this.db, match.id);
     return this.buildResponse(match.id, lineup.id, game, memberCount, share);
@@ -323,15 +248,6 @@ export class StandalonePollService {
     }
     const count = await countActiveEventSignups(this.db, input.linkedEventId);
     return count > 0 ? count : undefined;
-  }
-
-  /** Validate game exists, throw 404 if not. */
-  private async validateGame(
-    gameId: number,
-  ): Promise<{ id: number; name: string; coverUrl: string | null }> {
-    const game = await findGameById(this.db, gameId);
-    if (!game) throw new NotFoundException('Game not found');
-    return game;
   }
 
   /** Compute phase deadline from durationHours, defaulting to 2 weeks. */

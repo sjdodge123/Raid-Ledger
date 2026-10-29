@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type {
   ValheimRecipeCatalogResponse,
   ValheimRecipePlanResponse,
+  ValheimRecipeStockResponse,
   ValheimRecipeTreeResponse,
 } from '@raid-ledger/contract';
 import type { AuthenticatedExpressRequest } from '../../../../auth/types';
@@ -25,6 +26,7 @@ import {
   parseIncludePersonal,
   parsePlanTargets,
   parseRecipePrefab,
+  parseSourceOverrides,
   parseTreeKind,
   parseTreeQuality,
 } from './valheim-recipes.read.mappers';
@@ -55,7 +57,10 @@ export class ValheimRecipesController {
     return this.recipes.catalogue(serverId, req.user);
   }
 
-  /** GET — `targets=<prefab>:<q>:<n>[:<fromQ>],…` netted against stock. */
+  /**
+   * GET — `targets=<prefab>:<q>:<n>[:<fromQ>],…` netted against stock;
+   * ROK-1860 `sources=` overrides how a prefab is made (D3).
+   */
   @Get(`${BASE}/plan`)
   @Header('Cache-Control', NO_STORE)
   plan(
@@ -63,14 +68,36 @@ export class ValheimRecipesController {
     @Query('targets') targets: unknown,
     @Query('includePersonal') includePersonal: unknown,
     @Query('includeVehicles') includeVehicles: unknown,
+    @Query('sources') sources: unknown,
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimRecipePlanResponse> {
     const list = parsePlanTargets(targets);
+    const picks = parseSourceOverrides(sources);
     const opts = {
       includePersonal: parseIncludePersonal(includePersonal),
       includeVehicles: parseIncludeVehicles(includeVehicles),
     };
-    return this.recipes.plan(serverId, list, opts, req.user);
+    return this.recipes.plan(serverId, list, opts, req.user, picks);
+  }
+
+  /**
+   * GET — ROK-1899: the viewer's stock totals in `/plan`'s scope (the
+   * crafting window greys what they cannot afford). Static path, so it is
+   * declared before `/:prefab/tree`.
+   */
+  @Get(`${BASE}/stock`)
+  @Header('Cache-Control', NO_STORE)
+  stock(
+    @Param('serverId', armoryIdPipe) serverId: number,
+    @Query('includePersonal') includePersonal: unknown,
+    @Query('includeVehicles') includeVehicles: unknown,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<ValheimRecipeStockResponse> {
+    const opts = {
+      includePersonal: parseIncludePersonal(includePersonal),
+      includeVehicles: parseIncludeVehicles(includeVehicles),
+    };
+    return this.recipes.stock(serverId, opts, req.user);
   }
 
   /** GET — one target's craft tree (`have`/`short` always null). */
@@ -81,11 +108,13 @@ export class ValheimRecipesController {
     @Param('prefab') prefab: string,
     @Query('quality') quality: unknown,
     @Query('kind') kind: unknown,
+    @Query('sources') sources: unknown,
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<ValheimRecipeTreeResponse> {
     const p = parseRecipePrefab(prefab);
     const q = parseTreeQuality(quality);
     const k = parseTreeKind(kind);
-    return this.recipes.tree(serverId, p, q, k, req.user);
+    const picks = parseSourceOverrides(sources);
+    return this.recipes.tree(serverId, p, q, k, req.user, picks);
   }
 }

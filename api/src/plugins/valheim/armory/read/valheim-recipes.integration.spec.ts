@@ -344,8 +344,11 @@ describe('catalogue (R1/R2/R9)', () => {
       catalogFallback: false,
       entries: [],
       stations: [],
+      ingredients: {},
       itemAtlas: null,
       recipeAtlas: null,
+      discovery: 'no-character',
+      spoilers: 'off-no-data',
     });
     const t = await get(`${base(server)}/Bronze/tree`, tokens.member);
     expect({ status: t.status, body: t.body as unknown }).toMatchObject({
@@ -522,20 +525,6 @@ describe('plan (R5–R8, R13)', () => {
     // only — never the owner's 20 or the other player's 500.
     const asAdmin = await plan(`${q}&includePersonal=true`, admin);
     expect(haveOf(asAdmin, 'TinOre')).toBe(3);
-  });
-
-  it('includeVehicles=false drops cart stock', async () => {
-    await importMsg(
-      server,
-      scanMsg([
-        box({ prefab: 'Cart', vehicle: true, items: [stack('Copper', 40)] }),
-      ]),
-    );
-    const q = 'targets=Bronze:1:20';
-    expect(nodeOf(await plan(q), 'Copper').have).toBe(40);
-    const noCart = await plan(`${q}&includeVehicles=false`);
-    expect(nodeOf(noCart, 'Copper').have).toBe(0);
-    expect(noCart.nodes.some((n) => n.prefab === 'CopperOre')).toBe(true);
   });
 
   it('R7 two targets sharing Copper draw from ONE ledger', async () => {

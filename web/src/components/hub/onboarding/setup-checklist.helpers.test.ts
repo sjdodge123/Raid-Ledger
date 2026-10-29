@@ -74,28 +74,36 @@ describe('setupSteps', () => {
 });
 
 describe('setupProgress', () => {
-    it('counts only actionable steps, so a finished hub reads 7 of 7 and complete', () => {
+    // ROK-1891 ruling 2026-10-23: the total counts every listed row, blocked
+    // ones included; `complete` still only needs the actionable ones.
+    it('counts blocked rows in the total, yet a hub with every actionable step done is complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL, discord: BOUND, modsConfigured: true, hasNextRaid: true })));
-        expect(progress).toEqual({ done: 7, total: 7, pct: 100, complete: true, label: '7 of 7' });
+        expect(progress).toEqual({ done: 7, total: 9, pct: 78, complete: true, label: '7 of 9' });
     });
 
     it('a half-set-up hub is not complete', () => {
         const progress = setupProgress(setupSteps(input({ profile: FULL })));
-        expect(progress.label).toBe('4 of 7');
-        expect(progress.pct).toBe(57);
+        expect(progress.label).toBe('4 of 9');
+        expect(progress.pct).toBe(44);
         expect(progress.complete).toBe(false);
+    });
+
+    it('a fresh server hub reads 0 of 6 — the blocked Leader row is counted (ROK-1891 ruling)', () => {
+        const steps = setupSteps(input({ kind: 'game_server', hasModSources: false }));
+        expect(steps).toHaveLength(6);
+        expect(setupProgress(steps)).toEqual({ done: 0, total: 6, pct: 0, complete: false, label: '0 of 6' });
     });
 
     // Lead ruling 1: the blocked channel row must not pin the card open — an
     // Officer who has done everything else still sees it finish.
-    it('an Officer reaches 6 of 6 — the blocked channel row is not counted', () => {
-        // Countable for an Officer: roster, leader-post, rules, links, mods,
+    it('an Officer finishes at 6 of 9 — blocked rows are counted but never pin the card', () => {
+        // Actionable for an Officer: roster, leader-post, rules, links, mods,
         // next-raid. `leader` and `publish` are blocked for everyone; `discord`
-        // is blocked only here, so the total drops from 7 to 6, not the done.
+        // is blocked only here — all three count in the total, none in `complete`.
         const progress = setupProgress(setupSteps(input({
             profile: FULL, discord: UNSET, modsConfigured: true, hasNextRaid: true, canPickChannel: false,
         })));
-        expect(progress).toEqual({ done: 6, total: 6, pct: 100, complete: true, label: '6 of 6' });
+        expect(progress).toEqual({ done: 6, total: 9, pct: 67, complete: true, label: '6 of 9' });
     });
 });
 
@@ -121,5 +129,40 @@ describe('setupSteps — game_community hubs (ROK-1870)', () => {
     it('drops "Assign a Leader": the approved proposer already leads', () => {
         expect(ids({ kind: 'game_community' })).not.toContain('leader');
         expect(ids({})).toContain('leader');
+    });
+
+    it('swaps the roster import for an invite step and drops Publish (ROK-1891)', () => {
+        expect(ids({ kind: 'game_community', hasModSources: false })).toEqual(['invite', 'leader-post', 'rules', 'links', 'discord', 'next-raid']);
+        const invite = setupSteps(input({ kind: 'game_community', memberCount: 1 })).find((s) => s.id === 'invite');
+        expect(invite?.label).toBe('Invite players to the hub');
+        // Approved string (pending-approval/_approved/ROK-1891-hub-copy STRINGS.md); the action opens #1742's invite dialog.
+        expect(invite?.description).toBe('Share the hub link so players can find it and join.');
+        expect(invite?.actionLabel).toBe('Invite');
+        expect(invite?.action).toEqual({ kind: 'invite' });
+        expect(invite?.done).toBe(false);
+        expect(setupSteps(input({ kind: 'game_community', memberCount: 2 })).find((s) => s.id === 'invite')?.done).toBe(true);
+    });
+});
+
+describe('setupSteps — no WoW wording off WoW hubs (ROK-1891)', () => {
+    const wording = (kind: 'game_server' | 'game_community'): string => setupSteps(input({ kind, hasModSources: false }))
+        .map((s) => [s.label, s.description, s.actionLabel, s.action.kind === 'blocked' ? s.action.reason : ''].join(' '))
+        .join(' | ');
+
+    it.each(['game_server', 'game_community'] as const)('%s steps never say guild, raid, roster or guildmates', (kind) => {
+        expect(wording(kind)).not.toMatch(/guild|raid|roster/i);
+    });
+
+    it('a server hub links its Discord channel and adds server info', () => {
+        const steps = setupSteps(input({ kind: 'game_server', hasModSources: false }));
+        expect(steps.find((s) => s.id === 'discord')?.label).toBe('Link your Discord channel');
+        expect(steps.find((s) => s.id === 'links')?.label).toBe('Add your server info');
+    });
+
+    it('a WoW guild keeps its guild wording', () => {
+        const steps = setupSteps(input({ kind: 'wow_guild' }));
+        expect(steps.find((s) => s.id === 'roster')?.label).toBe('Import your roster');
+        expect(steps.find((s) => s.id === 'rules')?.label).toBe('Add your guild rules');
+        expect(steps.find((s) => s.id === 'next-raid')?.label).toBe('Tag your next raid');
     });
 });

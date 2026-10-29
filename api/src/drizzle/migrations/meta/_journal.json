@@ -1723,6 +1723,181 @@
       "when": 1792533918301,
       "tag": "0246_hub_posts_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1792644701916,
+      "tag": "0247_hub_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1792644776709,
+      "tag": "0248_hub_auto_membership_join_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1792735496129,
+      "tag": "0249_material_marvel_zombies",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "7",
+      "when": 1792735596129,
+      "tag": "0250_hub_welcome_message",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1792735696129,
+      "tag": "0251_valheim_claim_suggestion_notification_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1792735796129,
+      "tag": "0252_community_lineups_guild_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1792770660749,
+      "tag": "0253_valheim_player_deaths",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "7",
+      "when": 1792792660620,
+      "tag": "0254_guild_profiles_widget_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1792818120933,
+      "tag": "0255_valheim_portals",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1792853930019,
+      "tag": "0256_hub_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "7",
+      "when": 1792915273990,
+      "tag": "0257_guild_name_overridden",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "7",
+      "when": 1792915373990,
+      "tag": "0258_valheim_death_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "7",
+      "when": 1792915473990,
+      "tag": "0259_companion_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "7",
+      "when": 1793044707006,
+      "tag": "0260_guild_source_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "7",
+      "when": 1793044708294,
+      "tag": "0261_backfill_guild_source_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "7",
+      "when": 1793065605760,
+      "tag": "0262_companion_ingest",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1793065613804,
+      "tag": "0263_companion_blob_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "7",
+      "when": 1793065713804,
+      "tag": "0264_steam_app_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "7",
+      "when": 1793075223285,
+      "tag": "0265_valheim_container_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1793075323285,
+      "tag": "0266_lucky_lester",
+      "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1793075423285,
+      "tag": "0267_hub_session_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1793162395338,
+      "tag": "0268_guild_member_level_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1793180632075,
+      "tag": "0269_bg3_plugin",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1793212926134,
+      "tag": "0270_guild_member_presence",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1793248528469,
+      "tag": "0271_eminent_synch",
+      "breakpoints": true
     }
   ]
 }

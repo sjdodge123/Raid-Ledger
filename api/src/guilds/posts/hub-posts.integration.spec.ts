@@ -394,7 +394,7 @@ describe('P24–P25 — accepted bodies', () => {
   it.each([
     ['a bare less-than', 'I <3 raids, a < b'],
     ['HTML inside a code span', '`<div>`'],
-    ['heading syntax', '# not a heading'],
+    ['heading syntax (ROK-1898)', '# A heading\n#### four hashes'],
   ])('P24: %s → 201, stored verbatim', async (_l, body) => {
     const g = await newHub(ctx);
     const res = await createPost(ctx, g, body);

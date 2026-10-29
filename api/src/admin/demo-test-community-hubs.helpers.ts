@@ -4,31 +4,73 @@
  * member), one `proposed` by `demo-member`, one archived. Idempotent: the
  * previous fixture is reset first (demo-test-community-hubs.reset.ts). No `games`
  * INSERT — an existing game is reused, so the name-dedup guard is moot.
+ * ROK-1893 P4: with `withEvent: true`, plus one event tagged (`guild_id`) to
+ * "Seed Crew" (`hubEvent`); omitted, the seed creates no events.
  */
+import { createHash } from 'node:crypto';
 import { NotFoundException } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
+import { BG3_GAME_SLUGS, BG3_IGDB_ID } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { insertCommunityHub } from '../guilds/community/community-proposals.queries';
 import { archiveHub } from '../guilds/community/community-hub.lookup';
 import { isLinkedDiscordId } from '../guilds/community/discord-guild-member.helpers';
+import { isTaggedCrewUsername } from './demo-test-community-hubs.crew';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 export const CommunityHubsSeedSchema = z
-  .object({ gameId: z.number().int().positive().optional() })
+  .object({
+    gameId: z.number().int().positive().optional(),
+    /** ROK-1893 P4: also seed the crew hub's tagged event (`hubEvent`). */
+    withEvent: z.boolean().optional(),
+    /** ROK-2030: scope the fixture to this tag (see the `.tag` module). */
+    tag: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
+      .optional(),
+    /** ROK-2030: seed on the tag's own disabled game (see the `.game` module). */
+    dedicatedGame: z.boolean().optional(),
+  })
   .strict();
 
 /** The seed's ids for smoke specs + the fleet plan. */
 export interface CommunityHubsSeedResult {
   gameId: number;
-  hubIds: { crew: number; solo: number; archived: number };
+  /** ROK-1883: `server` is a HIDDEN game_server hub, `guild` a wow_guild. */
+  hubIds: {
+    crew: number;
+    solo: number;
+    archived: number;
+    server: number;
+    guild: number;
+  };
   leaderUserId: number;
   /** Crew's live non-leaders: `[officer, member×4]`. */
   memberUserIds: number[];
+  /** ROK-2030: their usernames (tag-suffixed when tagged, `crewUsernames`). */
+  memberUsernames: string[];
   bannedUserId: number;
   proposalId: number;
+  /** ROK-2030: each hub's seeded name (`<base> #<tag>` when tagged). */
+  hubNames: {
+    crew: string;
+    solo: string;
+    proposed: string;
+    archived: string;
+    server: string;
+    guild: string;
+  };
+  /** ROK-1893 P4: the event tagged to the crew hub (only with `withEvent`). */
+  hubEvent?: SeedHubEvent;
+}
+
+export interface SeedHubEvent {
+  id: number;
+  title: string;
+  startTime: string;
 }
 
 export const SEED_HUB_NAMES = {
@@ -38,19 +80,44 @@ export const SEED_HUB_NAMES = {
   archived: 'Seed Old Guard',
 } as const;
 
-const BG3_SLUG = 'baldurs-gate-3';
+/**
+ * BG3's row (ROK-2038): by IGDB id first, then any known BG3 slug — the boot
+ * seed writes `baldurs-gate-iii`, never the old guess `baldurs-gate-3`.
+ */
+export async function findBg3GameId(db: Db): Promise<number | null> {
+  const gm = schema.games;
+  const [hit] = await db
+    .select({ id: gm.id })
+    .from(gm)
+    .where(
+      or(eq(gm.igdbId, BG3_IGDB_ID), inArray(gm.slug, [...BG3_GAME_SLUGS])),
+    )
+    .orderBy(sql`(${gm.igdbId} = ${BG3_IGDB_ID}) desc nulls last`, asc(gm.id))
+    .limit(1);
+  return hit?.id ?? null;
+}
 
-/** The body's game, else BG3, else the lowest-id game; 404 when none. */
+/**
+ * The body's game, else BG3, else (only when no BG3 row exists at all, e.g.
+ * a truncated test DB) the lowest-id game; 404 when none.
+ */
 export async function resolveSeedGame(
   db: Db,
   gameId?: number,
 ): Promise<number> {
   const gm = schema.games;
-  const where =
-    gameId === undefined ? eq(gm.slug, BG3_SLUG) : eq(gm.id, gameId);
-  const [hit] = await db.select({ id: gm.id }).from(gm).where(where).limit(1);
-  if (hit) return hit.id;
-  if (gameId !== undefined) throw new NotFoundException('Game not found');
+  if (gameId === undefined) {
+    const bg3 = await findBg3GameId(db);
+    if (bg3 !== null) return bg3;
+  } else {
+    const [hit] = await db
+      .select({ id: gm.id })
+      .from(gm)
+      .where(eq(gm.id, gameId))
+      .limit(1);
+    if (hit) return hit.id;
+    throw new NotFoundException('Game not found');
+  }
   const [any] = await db
     .select({ id: gm.id })
     .from(gm)
@@ -83,8 +150,22 @@ const SEED_SNOWFLAKE_BASE = 1870_000;
  */
 export function seedDiscordId(username: string): string {
   const index = SEED_USERNAMES.indexOf(username);
-  if (index < 0) throw new Error(`${username} is not a seed user`);
-  return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  if (index >= 0) {
+    return `9${String(SEED_SNOWFLAKE_BASE + index).padStart(17, '0')}`;
+  }
+  if (isTaggedCrewUsername(username)) return taggedCrewDiscordId(username);
+  throw new Error(`${username} is not a seed user`);
+}
+
+/**
+ * ROK-2030: a tag's crew user's snowflake — `98` + 16 digits hashed from the
+ * username (52 bits of sha256), deterministic so parallel first-run seeds of
+ * one tag collide on it like the shared users do, and clear of the shared
+ * users' `90…` and the integration specs' `91…`.
+ */
+function taggedCrewDiscordId(username: string): string {
+  const hex = createHash('sha256').update(username).digest('hex');
+  return `98${String(parseInt(hex.slice(0, 13), 16)).padStart(16, '0')}`;
 }
 
 /** Re-arm an existing user: seen now, active, a placeholder id replaced. */
@@ -104,24 +185,31 @@ async function refreshSeedUser(
     .where(eq(schema.users.id, hit.id));
 }
 
-/**
- * A user by username, created A2-eligible (synthetic snowflake, seen in the
- * Discord guild) if absent; an existing user keeps its role and real link.
- */
-export async function ensureSeedUser(
+/** The seed user's `{id, discordId}` by username, if present. */
+async function findSeedUser(
   db: Db,
   username: string,
-): Promise<number> {
+): Promise<{ id: number; discordId: string | null } | undefined> {
   const u = schema.users;
   const [hit] = await db
     .select({ id: u.id, discordId: u.discordId })
     .from(u)
     .where(eq(u.username, username))
     .limit(1);
-  if (hit) {
-    await refreshSeedUser(db, hit, username);
-    return hit.id;
-  }
+  return hit;
+}
+
+/**
+ * Insert the seed user; `undefined` when a concurrent seed won the race. The
+ * snowflake is deterministic per username, so two parallel first-run seeds
+ * (Playwright's desktop/mobile/tablet projects on a freshly reset env DB)
+ * collide on `users_discord_id_unique` — DO NOTHING instead of a 500.
+ */
+async function insertSeedUser(
+  db: Db,
+  username: string,
+): Promise<number | undefined> {
+  const u = schema.users;
   const [row] = await db
     .insert(u)
     .values({
@@ -130,9 +218,34 @@ export async function ensureSeedUser(
       role: 'member',
       guildMemberSeenAt: new Date(),
     })
+    .onConflictDoNothing({ target: u.discordId })
     .returning({ id: u.id });
-  if (!row) throw new Error(`seed user ${username} insert returned no row`);
-  return row.id;
+  return row?.id;
+}
+
+/**
+ * A user by username, created A2-eligible (synthetic snowflake, seen in the
+ * Discord guild) if absent; an existing user keeps its role and real link.
+ * Safe under concurrent seeds: a lost insert race re-reads the winner's row.
+ */
+export async function ensureSeedUser(
+  db: Db,
+  username: string,
+): Promise<number> {
+  const hit = await findSeedUser(db, username);
+  if (hit) {
+    await refreshSeedUser(db, hit, username);
+    return hit.id;
+  }
+  const created = await insertSeedUser(db, username);
+  if (created !== undefined) return created;
+  const winner = await findSeedUser(db, username);
+  if (!winner) {
+    throw new Error(
+      `seed user ${username}: its snowflake is taken by another user`,
+    );
+  }
+  return winner.id;
 }
 
 /** Insert an active hub led by `leaderId`. */
@@ -161,11 +274,15 @@ export async function seedProposal(
   db: Db,
   gameId: number,
   proposerId: number,
+  name: string = SEED_HUB_NAMES.proposed,
 ): Promise<number> {
+  const plain = name === SEED_HUB_NAMES.proposed;
   const hub = await insertCommunityHub(db, {
     gameId,
-    name: SEED_HUB_NAMES.proposed,
-    blurb: 'A seeded proposal waiting for review.',
+    name,
+    blurb: plain
+      ? 'A seeded proposal waiting for review.'
+      : `${name} — a seeded proposal waiting for review.`,
     status: 'proposed',
     proposedBy: proposerId,
     reviewedBy: null,
@@ -178,8 +295,83 @@ export async function seedArchivedHub(
   db: Db,
   gameId: number,
   leaderId: number,
+  name: string = SEED_HUB_NAMES.archived,
 ): Promise<number> {
-  const id = await seedActiveHub(db, gameId, SEED_HUB_NAMES.archived, leaderId);
+  const id = await seedActiveHub(db, gameId, name, leaderId);
   await archiveHub(db, id, 'admin');
   return id;
+}
+
+const HOUR_MS = 3_600_000;
+export const HUB_EVENT_PREFIX = 'Hub calendar night #';
+
+/**
+ * The fixture's earlier hub events by `creatorId` on the game whose hub is
+ * gone (`guild_id` nulled) — a live hub's event belongs to another tag's
+ * fixture; a tagged reset deletes its own events with its hubs.
+ */
+async function deleteOldHubEvents(
+  db: Db,
+  gameId: number,
+  creatorId: number,
+): Promise<void> {
+  const ev = schema.events;
+  await db
+    .delete(ev)
+    .where(
+      and(
+        eq(ev.creatorId, creatorId),
+        eq(ev.gameId, gameId),
+        isNull(ev.guildId),
+        like(ev.title, `${HUB_EVENT_PREFIX}%`),
+      ),
+    );
+}
+
+const HUB_EVENT_HOURS = 3;
+
+/**
+ * A whole hour 1–2h from now, or 18:00 UTC tomorrow when that would run past
+ * UTC midnight (a day-crossing event leaves the Week grid's timed column).
+ */
+export function hubEventStart(nowMs: number): Date {
+  const start = new Date((Math.floor(nowMs / HOUR_MS) + 2) * HOUR_MS);
+  if (start.getUTCHours() + HUB_EVENT_HOURS <= 24) return start;
+  start.setUTCDate(start.getUTCDate() + 1);
+  start.setUTCHours(18);
+  return start;
+}
+
+/**
+ * ROK-1893 P4: one 3h event (the Week card's `compact` tier, which shows the
+ * hub) tagged to `hubId`, at `hubEventStart` — the current calendar week
+ * except late on a Saturday, so smoke specs deep-link `?date=` from
+ * `startTime`. The title carries the hub
+ * id, so it is unique per seed. Earlier fixture events by `creatorId` on the
+ * game are deleted first: the reset deletes their hub, which only nulls
+ * `guild_id`, so they would linger as untagged duplicates.
+ */
+export async function seedHubEvent(
+  db: Db,
+  gameId: number,
+  hubId: number,
+  creatorId: number,
+): Promise<SeedHubEvent> {
+  await deleteOldHubEvents(db, gameId, creatorId);
+  const ev = schema.events;
+  const start = hubEventStart(Date.now());
+  const end = new Date(start.getTime() + HUB_EVENT_HOURS * HOUR_MS);
+  const title = `${HUB_EVENT_PREFIX}${hubId}`;
+  const [row] = await db
+    .insert(ev)
+    .values({
+      title,
+      gameId,
+      creatorId,
+      duration: [start, end],
+      guildId: hubId,
+    })
+    .returning({ id: ev.id });
+  if (!row) throw new Error(`seed hub event for hub ${hubId} returned no row`);
+  return { id: row.id, title, startTime: start.toISOString() };
 }

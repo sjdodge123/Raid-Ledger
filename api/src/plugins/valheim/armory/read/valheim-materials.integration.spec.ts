@@ -288,13 +288,18 @@ describe('materials visibility (R1/R2/R4/R5/R6/R12)', () => {
   it('R2 owner (auto claim): personal = own private chests only', async () => {
     const r = await materials(tokens.owner);
     expect(totalsOf(r.shared)).toEqual(SHARED_TOTALS);
+    const totals = [
+      { prefab: 'Gold', quality: 1, total: 3, chests: 1 },
+      { prefab: 'Wood', quality: 1, total: 100, chests: 1 },
+    ];
+    // ROK-1859: one base (every shared chest is within 64 m); both private
+    // chests attach to it.
+    expect(r.bases).toHaveLength(1);
     expect(r.personal).toEqual({
-      totals: [
-        { prefab: 'Gold', quality: 1, total: 3, chests: 1 },
-        { prefab: 'Wood', quality: 1, total: 100, chests: 1 },
-      ],
+      totals,
       chestCount: 2,
       omittedPrivate: null,
+      byBase: [{ base: r.bases?.[0]?.key, chestCount: 2, totals }],
     });
   });
 
@@ -676,5 +681,59 @@ describe('hub + scan states (R14/R15/R16/R18/R19)', () => {
     expect(r.catalogFallback).toBe(true);
     expect(Object.keys(r.items)).toEqual(['Wood']);
     expect(totalsOf(r.shared)).toContain('Stone:1=20/1');
+  });
+});
+
+describe('chest focus (ROK-1889)', () => {
+  beforeEach(() => importMsg(server, world()));
+  const focus = (t: string, q: string) =>
+    get(`${base(server)}/chest-focus?${q}`, t);
+
+  it('a shared chest by prefab + position: display fields + item count, no ids', async () => {
+    const res = await focus(
+      tokens.member,
+      'prefab=piece_chest&x=0.0&z=0&item=Wood',
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      prefab: 'piece_chest',
+      x: 0,
+      y: 30,
+      z: 0,
+      privacy: 'shared',
+      vehicle: false,
+      slots: 30,
+      usedSlots: 1,
+      held: { prefab: 'Wood', count: 50 },
+    });
+  });
+
+  it('a personal chest: its owner sees it, a member gets the missing-chest 404', async () => {
+    const q = 'prefab=piece_chest_private&x=5&z=5&item=Gold';
+    const mine = await focus(tokens.owner, q);
+    expect(mine.status).toBe(200);
+    expect(mine.body).toMatchObject({
+      privacy: 'personal',
+      held: { prefab: 'Gold', count: 3 },
+    });
+    const hidden = await focus(tokens.member, q);
+    const missing = await focus(
+      tokens.member,
+      'prefab=piece_chest_private&x=50&z=5&item=Gold',
+    );
+    expect(hidden.status).toBe(404);
+    expect(hidden.body).toEqual(missing.body);
+  });
+
+  it('a cart that moved is a 404; a malformed position is a 400', async () => {
+    expect((await focus(tokens.member, 'prefab=Cart&x=9&z=0')).status).toBe(
+      200,
+    );
+    expect((await focus(tokens.member, 'prefab=Cart&x=9.5&z=0')).status).toBe(
+      404,
+    );
+    expect((await focus(tokens.member, 'prefab=Cart&x=abc&z=0')).status).toBe(
+      400,
+    );
   });
 });

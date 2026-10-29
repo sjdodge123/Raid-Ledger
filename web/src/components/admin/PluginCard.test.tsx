@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PluginCard } from './PluginCard';
-import type { PluginInfoDto } from '@raid-ledger/contract';
+import { emptyPluginHubManifest, type PluginInfoDto } from '@raid-ledger/contract';
 
 const basePlugin: PluginInfoDto = {
     slug: 'blizzard',
@@ -9,6 +9,8 @@ const basePlugin: PluginInfoDto = {
     version: '1.2.0',
     description: 'Adds WoW character import and realm data',
     author: { name: 'Raid Ledger Team' },
+    builtIn: false,
+    hub: emptyPluginHubManifest(),
     gameSlugs: ['world-of-warcraft', 'world-of-warcraft-classic'],
     capabilities: ['character-sync', 'content-provider'],
     integrations: [

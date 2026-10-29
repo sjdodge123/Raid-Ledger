@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   HubDirectoryEntry,
@@ -10,9 +10,11 @@ import type {
 import * as schema from '../../drizzle/schema';
 import {
   decodeCursor,
+  parseMembersKey,
   type DirectoryCursor,
 } from './community-directory.cursor';
 import { escapeLike, pageOf } from './community-directory.params';
+import { hubNameKey, storedNameKey } from './community-proposals.queries';
 import { viewerStateOf } from './community-ladder.helpers';
 import {
   joinedPredicate,
@@ -42,9 +44,22 @@ const LEADER_NAME = sql<string | null>`(
     AND lm.banned_at IS NULL AND lu.deactivated_at IS NULL
   LIMIT 1)`;
 
+/** ROK-2015 D7: a WoW guild renamed in Raid Ledger (its key stays in-game). */
+const WOW_RENAMED = sql`(${g.kind} = 'wow_guild' AND ${g.nameOverridden})`;
+
+/** The shown `name` keyed like {@link hubNameKey} (joiners out, NFC, lower). */
+const SHOWN_NAME = sql<string>`lower(btrim(normalize(regexp_replace(${g.name}, ${'[\u200C\u200D\uFE0F]'}, '', 'g'), NFC)))`;
+
+/**
+ * The `name` sort key: a renamed WoW guild sorts by its shown name; every
+ * other row keeps its raw `name_key` (non-WoW order is byte-identical).
+ */
+// ELSE arm: every non-renamed row keeps the raw `name_key` sort, byte-identical to before ROK-2015.
+const SORT_NAME = sql<string>`CASE WHEN ${WOW_RENAMED} THEN ${SHOWN_NAME} ELSE ${g.nameKey} END`;
+
 const ORDER: Record<HubDirectoryQuery['sort'], SQL[]> = {
   members: [desc(g.memberCount), desc(g.id)],
-  name: [asc(g.nameKey), asc(g.id)],
+  name: [asc(SORT_NAME), asc(g.id)],
   newest: [desc(g.createdAt), desc(g.id)],
 };
 
@@ -53,7 +68,11 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
   const conds: SQL[] = [visibleKinds(scope)];
   if (query.gameId !== undefined) conds.push(eq(g.gameId, query.gameId));
   if (query.q) {
-    conds.push(ilike(g.nameKey, `%${escapeLike(query.q.toLowerCase())}%`));
+    const pat = `%${escapeLike(hubNameKey(query.q))}%`;
+    const byKey = ilike(storedNameKey(g.nameKey), pat);
+    // ROK-2015 D7: a renamed WoW guild is also found by its shown name.
+    const byShown = and(WOW_RENAMED, ilike(SHOWN_NAME, pat));
+    conds.push(or(byKey, byShown) ?? byKey);
   }
   const joined = joinedPredicate(scope);
   if (query.membership === 'joined') conds.push(joined);
@@ -64,12 +83,11 @@ function filtersOf(query: HubDirectoryQuery, scope: DirectoryScope): SQL[] {
 /** Rows strictly after the cursor in the sort's order; 400 on a bad key. */
 function afterCursor(c: DirectoryCursor): SQL {
   if (c.s === 'members') {
-    const n = Number(c.v);
-    if (!Number.isInteger(n)) throw new BadRequestException('Invalid cursor');
+    const n = parseMembersKey(c.v);
     return sql`(${g.memberCount}, ${g.id}) < (${n}::int, ${c.id}::int)`;
   }
   if (c.s === 'name') {
-    return sql`(${g.nameKey}, ${g.id}) > (${c.v}::text, ${c.id}::int)`;
+    return sql`(${SORT_NAME}, ${g.id}) > (${c.v}::text, ${c.id}::int)`;
   }
   if (Number.isNaN(Date.parse(c.v))) {
     throw new BadRequestException('Invalid cursor');
@@ -88,7 +106,8 @@ function selectRows(db: Db, viewerId: number, where: SQL[], order: SQL[]) {
       name: g.name,
       blurb: g.blurb,
       memberCount: g.memberCount,
-      nameKey: g.nameKey,
+      hiddenAt: g.hiddenAt,
+      sortName: SORT_NAME,
       createdKey: CREATED_KEY,
       leaderName: LEADER_NAME,
       vRole: viewerRow.role,
@@ -120,7 +139,8 @@ function viewerOf(r: DirectoryRow, memberIds: number[]): HubViewerState {
   return viewerStateOf(own);
 }
 
-function toEntry(r: DirectoryRow, memberIds: number[]): HubDirectoryEntry {
+/** ROK-1883: `hidden` only for staff viewers — non-staff never get the key. */
+function toEntry(r: DirectoryRow, scope: DirectoryScope): HubDirectoryEntry {
   const community = r.kind === 'game_community';
   return {
     id: r.id,
@@ -132,7 +152,8 @@ function toEntry(r: DirectoryRow, memberIds: number[]): HubDirectoryEntry {
     blurb: r.blurb,
     memberCount: r.memberCount,
     leaderName: community ? r.leaderName : null,
-    viewer: viewerOf(r, memberIds),
+    viewer: viewerOf(r, scope.memberIds),
+    ...(scope.staff ? { hidden: r.hiddenAt !== null } : {}),
   };
 }
 
@@ -141,7 +162,7 @@ function keyOf(sort: HubDirectoryQuery['sort'], r: DirectoryRow) {
     sort === 'members'
       ? String(r.memberCount)
       : sort === 'name'
-        ? r.nameKey
+        ? r.sortName
         : r.createdKey;
   return { s: sort, v, id: r.id };
 }
@@ -159,21 +180,41 @@ async function countRows(db: Db, viewerId: number, where: SQL[]) {
 /** A directory page before the service adds the live `kinds`. */
 export type DirectoryResult = Omit<HubDirectoryPage, 'kinds'>;
 
+/** Options for callers that never page (the game card). */
+export interface DirectoryOptions {
+  /** ROK-1883: the viewer's hubs before the rest (no cursor on this path). */
+  joinedFirst?: boolean;
+}
+
+/** The sort's order, optionally led by "joined first". */
+function orderOf(
+  query: HubDirectoryQuery,
+  scope: DirectoryScope,
+  opts: DirectoryOptions,
+): SQL[] {
+  const base = ORDER[query.sort];
+  if (opts.joinedFirst !== true) return base;
+  const joined = joinedPredicate(scope);
+  return [sql`CASE WHEN ${joined} THEN 0 ELSE 1 END`, ...base];
+}
+
 /** One directory page for `viewerId` within `scope` (cursor 400s per M12). */
 export async function listDirectory(
   db: Db,
   viewerId: number,
   query: HubDirectoryQuery,
   scope: DirectoryScope,
+  opts: DirectoryOptions = {},
 ): Promise<DirectoryResult> {
   const cursor = decodeCursor(query.cursor, query.sort);
   const where = filtersOf(query, scope);
   const paged = cursor === null ? where : [...where, afterCursor(cursor)];
+  const order = orderOf(query, scope, opts);
   const [rows, total] = await Promise.all([
-    selectRows(db, viewerId, paged, ORDER[query.sort]).limit(query.limit + 1),
+    selectRows(db, viewerId, paged, order).limit(query.limit + 1),
     countRows(db, viewerId, where),
   ]);
   const page = pageOf(rows, query.limit, (r) => keyOf(query.sort, r));
-  const items = page.items.map((r) => toEntry(r, scope.memberIds));
+  const items = page.items.map((r) => toEntry(r, scope));
   return { items, nextCursor: page.nextCursor, total };
 }

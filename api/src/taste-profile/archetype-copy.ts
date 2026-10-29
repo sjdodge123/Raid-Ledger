@@ -29,6 +29,7 @@ export const TIER_DESCRIPTIONS: Record<IntensityTier, string> = {
   Dedicated: 'Shows up several times a week',
   Regular: 'A few sessions a week',
   Casual: 'Drops in once or twice a week',
+  Newcomer: 'New here — no play sessions seen yet',
 } as const;
 
 /**

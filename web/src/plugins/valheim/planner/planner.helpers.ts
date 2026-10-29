@@ -4,7 +4,8 @@
  * chips, and (de)serialise the stored shopping list behind a schema guard.
  */
 import { z } from 'zod';
-import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanVia } from '@raid-ledger/contract';
+import { VALHEIM_PLAN_TARGETS_MAX, type ValheimPlanNode, type ValheimPlanStep, type ValheimPlanVia, type ValheimRecipeDiscovery, type ValheimRecipeSourceRef } from '@raid-ledger/contract';
+import { isUndiscoveredNode } from './spoilers.helpers';
 
 export type PlannerKind = 'item' | 'piece';
 
@@ -12,6 +13,8 @@ export interface PlannerTarget {
     prefab: string;
     kind: PlannerKind;
     quality: number;
+    /** 0 = craft from scratch; q ≥ 1 = upgrade from that quality (ROK-1899 UPGRADE tab). */
+    fromQuality: number;
     amount: number;
 }
 
@@ -25,24 +28,47 @@ export interface PlannerFilters {
     category: string | null;
     includePersonal: boolean;
     includeVehicles: boolean;
+    /** ROK-1862 — hide rows the viewer's character has not learned; honoured only when discovery is `known`. */
+    hideUndiscovered: boolean;
 }
 
+/** Kind defaults to Items (ROK-1899): the crafting window opens on what you carry. */
 export const DEFAULT_PLANNER_FILTERS: PlannerFilters = {
-    kind: 'both',
+    kind: 'item',
     category: null,
     includePersonal: false,
     includeVehicles: true,
+    hideUndiscovered: false,
 };
 
+/** How many filters differ from DEFAULT_PLANNER_FILTERS (the funnel's badge). */
 export const activePlannerFilters = (f: PlannerFilters): number =>
-    (f.kind === 'both' ? 0 : 1) +
+    (f.kind === DEFAULT_PLANNER_FILTERS.kind ? 0 : 1) +
     (f.category === null ? 0 : 1) +
     (f.includePersonal ? 1 : 0) +
-    (f.includeVehicles ? 0 : 1);
+    (f.includeVehicles ? 0 : 1) +
+    (f.hideUndiscovered ? 1 : 0);
+
+/** ROK-1862 copy (spec §5). */
+export const DISCOVERY_CHIP_COPY = 'Not discovered yet';
+export const DISCOVERY_CHIP_TITLE = 'Your character hasn’t learned this recipe yet';
+export const DISCOVERY_FILTER_LABEL = 'Hide undiscovered';
+export const DISCOVERY_HINT: Record<Exclude<ValheimRecipeDiscovery, 'known'>, string> = {
+    'no-character': 'Claim your character on this server to use this filter.',
+    truncated: 'Your character knows too many recipes to check.',
+    outdated: 'Update the RL Valheim Link mod (0.4.2+) and log in once to use this filter.',
+};
+
+/** The filter only narrows when the server could read the viewer's known list. */
+export const hidesUndiscovered = (f: Pick<PlannerFilters, 'hideUndiscovered'>, discovery: ValheimRecipeDiscovery | undefined): boolean =>
+    f.hideUndiscovered && discovery === 'known';
 
 export const PLANNER_AMOUNT_MAX = 10_000;
 export const PLANNER_NO_SET_COPY =
     'Recipes arrive when an admin with the mod joins the server.';
+/** The crafting window's `stock:'none'` status line (ROK-1899 §3.4). */
+export const CRAFT_NO_SCAN_COPY =
+    'No chests scanned yet — every recipe is shown. Scan a chest in game to see what you can craft.';
 export const PLANNER_NO_STOCK_COPY =
     'No chest data yet — showing what each recipe costs.';
 
@@ -62,20 +88,36 @@ export function foldNodes(nodes: readonly ValheimPlanNode[]): PlanTreeNode[] {
     return roots;
 }
 
-/** `prefab:quality:amount:0:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
+/** `prefab:quality:amount:fromQuality:kind` joined by commas — the plan route's `targets=` (kind kept end to end). */
 export function serializeTargets(targets: readonly PlannerTarget[]): string {
-    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:0:${t.kind}`).join(',');
+    return targets.map((t) => `${t.prefab}:${t.quality}:${t.amount}:${t.fromQuality}:${t.kind}`).join(',');
+}
+
+/** ROK-1860 D3 — one override on the wire: `<prefab>:r:<recipeId>` or `<prefab>:p:<processor>:<index>`. */
+function sourceToken(prefab: string, ref: ValheimRecipeSourceRef): string {
+    return ref.type === 'recipe' ? `${prefab}:r:${ref.recipeId}` : `${prefab}:p:${ref.processor}:${ref.index}`;
+}
+
+/** ROK-1860 D3 — the `sources=` value: tokens sorted by prefab, comma-joined; '' when there are none. */
+export function serializeSources(sources: ReadonlyMap<string, ValheimRecipeSourceRef>): string {
+    return [...sources.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([prefab, ref]) => sourceToken(prefab, ref))
+        .join(',');
 }
 
 /** The plan route's target cap — the list never grows past it. */
 export const PLANNER_TARGETS_MAX = VALHEIM_PLAN_TARGETS_MAX;
 
 /**
- * Adds `add` to the list: the same prefab + kind + quality merges amounts
- * (capped); a new target past PLANNER_TARGETS_MAX returns null (refused).
+ * Adds `add` to the list: the same prefab + kind + quality + fromQuality
+ * merges amounts (capped); a new target past PLANNER_TARGETS_MAX returns
+ * null (refused).
  */
 export function addPlannerTarget(list: readonly PlannerTarget[], add: PlannerTarget): PlannerTarget[] | null {
-    const i = list.findIndex((t) => t.prefab === add.prefab && t.kind === add.kind && t.quality === add.quality);
+    const i = list.findIndex(
+        (t) => t.prefab === add.prefab && t.kind === add.kind && t.quality === add.quality && t.fromQuality === add.fromQuality,
+    );
     if (i >= 0) return list.map((t, j) => (j === i ? { ...t, amount: Math.min(PLANNER_AMOUNT_MAX, t.amount + add.amount) } : t));
     return list.length >= PLANNER_TARGETS_MAX ? null : [...list, add];
 }
@@ -108,7 +150,18 @@ const PROCESSOR_LABEL: Record<string, string> = {
     piece_spinningwheel: 'Spinning wheel',
     fermenter: 'Fermenter',
     incinerator: 'Obliterator',
+    // ROK-1934 — UNVERIFIED in-game ids past the cooking station (spec OQ4); exports name them via pieces[].
+    piece_cookingstation: 'Cooking station',
+    piece_cookingstation_iron: 'Iron cooking station',
+    piece_oven: 'Stone oven',
+    eitrrefinery: 'Eitr refinery',
 };
+
+/** A processor's display name when the export does not name it; null when unknown (own keys only). */
+export function processorLabel(prefab: string): string | null {
+    return Object.hasOwn(PROCESSOR_LABEL, prefab) ? (PROCESSOR_LABEL[prefab] ?? null) : null;
+}
+
 const PROCESSOR_TYPE_LABEL: Record<string, string> = {
     smelter: 'Smelter',
     fermenter: 'Fermenter',
@@ -118,7 +171,7 @@ const PROCESSOR_TYPE_LABEL: Record<string, string> = {
 
 function processChip(via: Extract<ValheimPlanVia, { type: 'process' }>): string {
     const name =
-        PROCESSOR_LABEL[via.processor] ??
+        processorLabel(via.processor) ??
         PROCESSOR_TYPE_LABEL[via.processorType] ??
         via.processor;
     return via.seconds === null ? name : `${name} · ${formatSeconds(via.seconds)}`;
@@ -129,18 +182,34 @@ function recipeChips(
     stationName: (prefab: string) => string,
 ): string[] {
     const chips: string[] = [];
+    // ROK-1861 Q3: an upgrade station is one chip — "Forge · Upgrade station · lvl 3".
     if (via.station !== null)
-        chips.push(`${stationName(via.station)} · lvl ${via.stationLevel}`);
-    if (via.upgraderStation) chips.push('Upgrade station');
+        chips.push(`${stationName(via.station)}${via.upgraderStation ? ' · Upgrade station' : ''} · lvl ${via.stationLevel}`);
     if (via.formula === 'custom') chips.push('Cost may differ in game');
     return chips;
 }
 
-/** The row's via-chips, plus "+N other ways" when alternatives exist. */
+/** ROK-1861 — a quality step's label ("Quality 2 · Forge · lvl 3"); an upgrade-station step moves the level onto its chip. */
+export function stepLabel(
+    step: Pick<ValheimPlanStep, 'quality' | 'station' | 'stationLevel' | 'upgraderStation'>,
+    stationName: (prefab: string) => string,
+): { label: string; chip: string | null } {
+    const at = `Quality ${step.quality} · ${step.station === null ? 'By hand' : stationName(step.station)}`;
+    if (step.upgraderStation) return { label: at, chip: `Upgrade station · lvl ${step.stationLevel}` };
+    return { label: step.station === null ? at : `${at} · lvl ${step.stationLevel}`, chip: null };
+}
+
+/** "Bronze 3 · Upgrade item 1" — a step's (or a station build's) cost on one line. */
+export function costLine(lines: readonly { prefab: string; amount: number }[], nameOf: (prefab: string) => string): string {
+    return lines.map((l) => `${nameOf(l.prefab)} ${formatAmount(l.amount)}`).join(' · ');
+}
+
+/** The row's via-chips, plus "+N other ways" when alternatives exist; none for a withheld node (ROK-1948). */
 export function viaChips(
     node: ValheimPlanNode,
     stationName: (prefab: string) => string,
 ): string[] {
+    if (isUndiscoveredNode(node)) return [];
     const { via } = node;
     const chips =
         via.type === 'recipe'
@@ -156,6 +225,11 @@ export function viaChips(
     return chips;
 }
 
+/** ROK-1860 — how many other ways the row's source picker offers; 0 for a withheld node (ROK-1948), as in viaChips. */
+export function otherWaysCount(node: Pick<ValheimPlanNode, 'via' | 'alternatives'>): number {
+    return isUndiscoveredNode(node) ? 0 : node.alternatives;
+}
+
 /** Fill ratio for the have/need meter, 0–100. */
 export function havePct(have: number, need: number): number {
     if (need <= 0) return 100;
@@ -168,8 +242,10 @@ const StoredTargetsSchema = z
             prefab: z.string().min(1).max(128),
             kind: z.enum(['item', 'piece']),
             quality: z.number().int().min(1).max(10),
+            // Lists stored before ROK-1899 carry no fromQuality: from scratch.
+            fromQuality: z.number().int().min(0).max(9).default(0),
             amount: z.number().int().min(1).max(PLANNER_AMOUNT_MAX),
-        }),
+        }).refine((t) => t.fromQuality < t.quality),
     )
     .max(VALHEIM_PLAN_TARGETS_MAX);
 

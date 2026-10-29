@@ -35,7 +35,7 @@ function kindOf(raw: string): ValheimLinkMessageKind {
 }
 
 /**
- * `POST /plugins/valheim/link/messages/:kind` (character | map | items) —
+ * `POST /plugins/valheim/link/messages/:kind` (character | map | items | containers | recipes | portals) —
  * RL Valheim Link pushes one message per request (CONTRACT §1). The global
  * JSON parser is bypassed for this path (`valheim-link-body-bypass.ts`); the
  * body is read here, after the guards, under the kind's §7 cap.

@@ -1,0 +1,50 @@
+{
+  "start-request-unknown-key": {
+    "path": "device",
+    "code": "unrecognized_keys"
+  },
+  "start-request-os-android": {
+    "path": "device.os",
+    "code": "invalid_value"
+  },
+  "start-request-name-bidi-override": {
+    "path": "device.name",
+    "code": "invalid_format"
+  },
+  "start-request-name-lone-surrogate": {
+    "path": "device.name",
+    "code": "invalid_format"
+  },
+  "start-request-app-version-text": {
+    "path": "device.appVersion",
+    "code": "invalid_format"
+  },
+  "start-response-user-code-vowel": {
+    "path": "userCode",
+    "code": "invalid_format"
+  },
+  "poll-request-device-code-short": {
+    "path": "deviceCode",
+    "code": "invalid_format"
+  },
+  "poll-success-valheim-token": {
+    "path": "token",
+    "code": "invalid_format"
+  },
+  "poll-success-device-token-hash": {
+    "path": "device",
+    "code": "unrecognized_keys"
+  },
+  "poll-error-invalid-client": {
+    "path": "error",
+    "code": "invalid_value"
+  },
+  "poll-error-slow-down-interval-zero": {
+    "path": "interval",
+    "code": "too_small"
+  },
+  "device-self-user-id": {
+    "path": "",
+    "code": "unrecognized_keys"
+  }
+}

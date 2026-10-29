@@ -8,9 +8,14 @@ import {
   timestamp,
   index,
   check,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { GuildLinkGroup, GuildRuleSection } from '@raid-ledger/contract';
+import type {
+  GuildLinkGroup,
+  GuildRuleSection,
+  HubWidgetPrefs,
+} from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
 
@@ -58,8 +63,32 @@ export const guildProfiles = pgTable(
     discordChannelSource: varchar('discord_channel_source', {
       length: 6,
     }).$type<'auto' | 'manual'>(),
+    /**
+     * ROK-1933 (D10): where the hub welcome embed was last posted, and its
+     * message id — so a re-link or re-post EDITS the pinned message instead
+     * of duplicating it. NULL = never posted (or cleared with the channel).
+     */
+    welcomeChannelId: text('welcome_channel_id'),
+    welcomeMessageId: text('welcome_message_id'),
     /** ROK-1868 A4: the composer's "Also post to Discord" default (last choice). */
     postRelayDefault: boolean('post_relay_default').default(false).notNull(),
+    /**
+     * ROK-1918: the hub Overview layout (arrange mode) — order, hidden,
+     * added and per-widget config. NULL = registry default (Reset writes it).
+     */
+    widgetPrefs: jsonb('widget_prefs').$type<HubWidgetPrefs>(),
+    /**
+     * ROK-1941 (D1): the Discord channel whose screenshot-mod posts feed the
+     * hub gallery (+ death links). Leader-set; one channel feeds one hub.
+     */
+    mediaChannelId: varchar('media_channel_id', { length: 32 }),
+    mediaChannelSetBy: integer('media_channel_set_by').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
+    mediaChannelSetAt: timestamp('media_channel_set_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -80,6 +109,13 @@ export const guildProfiles = pgTable(
     index('idx_guild_profiles_gm_post_updated_by').on(table.gmPostUpdatedBy),
     index('idx_guild_profiles_discord_channel_set_by').on(
       table.discordChannelSetBy,
+    ),
+    // ROK-1941 (D1): one media channel feeds exactly one hub.
+    uniqueIndex('guild_profiles_media_channel_uq')
+      .on(table.mediaChannelId)
+      .where(sql`${table.mediaChannelId} IS NOT NULL`),
+    index('idx_guild_profiles_media_channel_set_by').on(
+      table.mediaChannelSetBy,
     ),
   ],
 );

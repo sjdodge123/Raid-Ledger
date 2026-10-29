@@ -3,6 +3,7 @@
  * core resolves it by kind, with zero core edits. A kind whose owning plugin
  * is inactive is refused with `PluginActiveGuard`'s 403; unknown ⇒ 404.
  */
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -14,7 +15,7 @@ import {
   EXTENSION_POINTS,
   type HubKindAdapter,
 } from '../plugins/plugin-host/extension-points';
-import { HubKindRegistry } from './hub-kind.registry';
+import { HUB_PLUGIN_INACTIVE, HubKindRegistry } from './hub-kind.registry';
 
 const TEST_PLUGIN = 'test-hub-plugin';
 
@@ -44,7 +45,9 @@ describe('HubKindRegistry (ROK-1830)', () => {
   it('resolves a test hub kind registered through HUB_KIND', async () => {
     const { plugins, hubs } = build();
     const adapter = testHubKind('member');
-    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
+    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
+      ownerPluginId: CORE_PLUGIN_ID,
+    });
 
     const resolved = hubs.require('game_server');
     expect(resolved).toBe(adapter);
@@ -57,7 +60,9 @@ describe('HubKindRegistry (ROK-1830)', () => {
   it('does not answer for a kind nobody registered', () => {
     const { plugins, hubs } = build();
     const adapter = testHubKind('member');
-    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
+    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
+      ownerPluginId: CORE_PLUGIN_ID,
+    });
 
     expect(hubs.resolve('wow_guild')).toBeUndefined();
     expect(() => hubs.require('wow_guild')).toThrow(
@@ -76,5 +81,30 @@ describe('HubKindRegistry (ROK-1830)', () => {
     expect(() => hubs.require('game_server')).toThrow(
       new ForbiddenException(`Plugin "${TEST_PLUGIN}" is not active`),
     );
+  });
+
+  it('marks the plugin-off 403 with HUB_PLUGIN_INACTIVE and the plugin slug (ROK-2044)', () => {
+    const { plugins, hubs } = build();
+    const adapter = testHubKind('officer');
+    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter, {
+      ownerPluginId: TEST_PLUGIN,
+    });
+
+    let thrown: unknown;
+    try {
+      hubs.require('game_server');
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(ForbiddenException);
+    const body =
+      thrown instanceof ForbiddenException ? thrown.getResponse() : undefined;
+    expect(body).toEqual({
+      statusCode: 403,
+      error: 'Forbidden',
+      code: HUB_PLUGIN_INACTIVE,
+      message: `Plugin "${TEST_PLUGIN}" is not active`,
+      pluginSlug: TEST_PLUGIN,
+    });
   });
 });
