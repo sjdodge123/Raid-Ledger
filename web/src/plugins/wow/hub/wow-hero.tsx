@@ -27,7 +27,11 @@ export function WowFactionPill({ page }: HubCtx): JSX.Element | null {
     return <Pill tone={`faction-${key}`}>{FACTION_LABEL[key]}</Pill>;
 }
 
-/** ROK-1815 — "Your role": Guild Master / Editor / Member (see `heroRoleBadges`). */
+/**
+ * ROK-1815 — "Your role": Guild Master / Editor / Member (see `heroRoleBadges`).
+ * The "Your role:" label is visible at every width — a phone has no hover, and a
+ * bare "Guild Master" pill reads as a guild fact rather than the viewer's role.
+ */
 export function WowViewerRolePills({ page }: HubCtx): JSX.Element | null {
     const badges = heroRoleBadges(page.viewer);
     if (badges.length === 0) return null;
@@ -35,7 +39,7 @@ export function WowViewerRolePills({ page }: HubCtx): JSX.Element | null {
         <>
             {badges.map((badge) => (
                 <Pill key={badge} tone={badge === 'Member' ? 'neutral' : 'success'} title="Your role in this guild">
-                    <span className="sr-only">Your role: </span>{badge}
+                    <span data-testid="role-chip-label" className="font-normal opacity-80">Your role: </span>{badge}
                 </Pill>
             ))}
         </>

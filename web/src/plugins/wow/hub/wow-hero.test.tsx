@@ -50,6 +50,14 @@ describe('WowViewerRolePills', () => {
         expect(chips.map((c) => c.getAttribute('data-tone'))).toEqual(['success', 'success']);
     });
 
+    it('shows the "Your role:" label visibly, not only to screen readers or on hover (phones)', () => {
+        render(<WowViewerRolePills {...ctx(GM)} />);
+        const label = screen.getByTestId('role-chip-label');
+        expect(label).toHaveTextContent('Your role:');
+        expect(label, 'the label must be visible on a phone, not sr-only').not.toHaveClass('sr-only');
+        expect(label.className, 'no breakpoint may hide the label on narrow screens').not.toMatch(/(^|\s)(hidden|sr-only)(\s|$)/);
+    });
+
     it('renders a neutral Member chip for a plain member', () => {
         render(<WowViewerRolePills {...ctx(PLAIN)} />);
         expect(screen.getByTitle('Your role in this guild')).toHaveAttribute('data-tone', 'neutral');
