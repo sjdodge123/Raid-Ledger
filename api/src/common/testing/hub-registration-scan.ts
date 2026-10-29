@@ -13,7 +13,7 @@ import type {
   HubBehaviourKind,
   PluginHubManifest,
 } from '@raid-ledger/contract';
-import { mediaSourceGates } from './hub-registration-scan.media';
+import { mediaSourceGates, mediaSubjects } from './hub-registration-scan.media';
 
 /** One comment-stripped source file, path relative to `api/src`. */
 export interface ScanSource {
@@ -264,29 +264,6 @@ function mediaDecorators(
           return { key: `${owner}/media-decorator/#${counts.get(owner) ?? 0}` };
         },
       ),
-    );
-}
-
-/** ROK-2027 — every `HubMediaSubjectRegistry` `.register(owner, 'namespace', fn)` call. */
-function mediaSubjects(all: readonly ScanSource[], ctx: ScanContext): Found[] {
-  const re = /\.register\(\s*([\w.']+)\s*,\s*([\w.'-]+)\s*,/g;
-  return all
-    .filter(
-      (s) =>
-        s.text.includes('HubMediaSubjectRegistry') &&
-        !s.file.startsWith('hub-media/hub-media.subjects'),
-    )
-    .flatMap((src) =>
-      [...src.text.matchAll(re)].map((m): Found => {
-        const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
-        const ns = resolveExpr(m[2] ?? '', src, all, ctx.constants);
-        if (owner === undefined || ns === undefined) {
-          return {
-            problem: `${src.file}: media subject owner "${m[1] ?? ''}" / namespace "${m[2] ?? ''}" is unresolvable`,
-          };
-        }
-        return { key: `${owner}/media-subject/${ns}` };
-      }),
     );
 }
 

@@ -1,6 +1,7 @@
 /**
- * ROK-1959 D-6 — the `media-gate` scanner for the hub-ownership guard
- * (split out of `hub-registration-scan.ts`, which is at its size limit).
+ * The media-registry scanners for the hub-ownership guard, split out of
+ * `hub-registration-scan.ts` (at its size limit): ROK-2027 `media-subject`
+ * and ROK-1959 D-6 `media-gate`. For the gate scan:
  * Every `this.<field>.register(owner, source, gate)` on a field typed
  * `HubMediaSourceGateRegistry` → `owner/media-gate/<source>`. Matching the
  * receiver (not any `.register(`) keeps a file that also registers a media
@@ -58,4 +59,30 @@ export function mediaSourceGates(
         !s.file.startsWith('hub-media/hub-media.source-gates'),
     )
     .flatMap((src) => gatesIn(src, all, ctx));
+}
+
+/** ROK-2027 — every `HubMediaSubjectRegistry` `.register(owner, 'namespace', fn)` call. */
+export function mediaSubjects(
+  all: readonly ScanSource[],
+  ctx: ScanContext,
+): Found[] {
+  const re = /\.register\(\s*([\w.']+)\s*,\s*([\w.'-]+)\s*,/g;
+  return all
+    .filter(
+      (s) =>
+        s.text.includes('HubMediaSubjectRegistry') &&
+        !s.file.startsWith('hub-media/hub-media.subjects'),
+    )
+    .flatMap((src) =>
+      [...src.text.matchAll(re)].map((m): Found => {
+        const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
+        const ns = resolveExpr(m[2] ?? '', src, all, ctx.constants);
+        if (owner === undefined || ns === undefined) {
+          return {
+            problem: `${src.file}: media subject owner "${m[1] ?? ''}" / namespace "${m[2] ?? ''}" is unresolvable`,
+          };
+        }
+        return { key: `${owner}/media-subject/${ns}` };
+      }),
+    );
 }
