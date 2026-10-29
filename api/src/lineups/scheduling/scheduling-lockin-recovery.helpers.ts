@@ -19,7 +19,7 @@
  * The prior status is not stored: recovery restores `scheduling`.
  */
 import type { Logger } from '@nestjs/common';
-import { and, eq, gte, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -53,15 +53,6 @@ export interface LockInRecoveryResult {
 export interface PendingLockInClaim {
   matchId: number;
   claimedAt: Date;
-}
-
-/** True once a claim is at least `thresholdMs` old (a future stamp is not). */
-export function isClaimStale(
-  claimedAt: Date,
-  now: Date,
-  thresholdMs: number = LOCK_IN_CLAIM_STALE_MS,
-): boolean {
-  return now.getTime() - claimedAt.getTime() >= thresholdMs;
 }
 
 /** The "claimed and never linked" predicate (see file header). */
@@ -107,11 +98,15 @@ function toPending(
   return out;
 }
 
-/** Token-fenced release back to `scheduling`. False when the claim moved. */
+/**
+ * Token-fenced release back to `scheduling`. Returns the release's DB time as
+ * a raw `timestamp` string (the type and session zone of `events.created_at`,
+ * which the driver hands back unparsed), or null when the claim moved.
+ */
 async function releaseRecoveredClaim(
   db: Db,
   claim: PendingLockInClaim,
-): Promise<boolean> {
+): Promise<string | null> {
   const rows = await db
     .update(m)
     .set({ status: 'scheduling', lockInClaimedAt: null })
@@ -123,19 +118,33 @@ async function releaseRecoveredClaim(
         eq(m.lockInClaimedAt, claim.claimedAt),
       ),
     )
-    .returning({ id: m.id });
-  return rows.length !== 0;
+    .returning({ releasedAt: sql<string>`now()::timestamp` });
+  return rows[0]?.releasedAt ?? null;
 }
 
 /**
- * Events the dead claim created: from this poll, at or after the claim. While
- * a claim is held no other door can create from the poll (provenance needs
- * `scheduling`), so these all belong to it. Recurring instances share
- * `created_from_poll_id` via the base insert values.
+ * Events the dead claim created: from this poll, created between the claim
+ * and the release. Recurring instances share `created_from_poll_id` via the
+ * base insert values.
+ *
+ * Upper bound: once the release commits the poll is `scheduling` again, so a
+ * fresh lock-in (whose claim commits before its create) or `POST /events` may
+ * create from it before this lookup runs; `created_at <= releasedAt` keeps
+ * those out (ROK-2033 review MINOR 1).
+ *
+ * Accepted race (pre-existing, review MINOR 2): provenance is a
+ * read-then-write, so a `POST /events` + `schedulingMatchId` that passed its
+ * `scheduling` check just BEFORE the claim but inserts just after it falls
+ * inside the window and is discarded with the claim's events if that lock-in
+ * then dies. Telling it apart would need the claim's event ids recorded.
+ *
+ * The lower bound compares an app-clock stamp with the DB clock and assumes
+ * a UTC session (codebase-wide); the claim → create gap dwarfs any skew.
  */
 async function findClaimEvents(
   db: Db,
   claim: PendingLockInClaim,
+  releasedAt: string,
 ): Promise<{ id: number; creatorId: number }[]> {
   return db
     .select({ id: e.id, creatorId: e.creatorId })
@@ -144,6 +153,7 @@ async function findClaimEvents(
       and(
         eq(e.createdFromPollId, claim.matchId),
         gte(e.createdAt, claim.claimedAt),
+        sql`${e.createdAt} <= ${releasedAt}::timestamp`,
       ),
     );
 }
@@ -152,15 +162,16 @@ async function findClaimEvents(
 async function discardClaimEvents(
   deps: LockInRecoveryDeps,
   claim: PendingLockInClaim,
+  releasedAt: string,
 ): Promise<number[]> {
   const discarded: number[] = [];
-  for (const ev of await findClaimEvents(deps.db, claim)) {
+  for (const ev of await findClaimEvents(deps.db, claim, releasedAt)) {
     try {
       await deps.eventsService.delete(ev.id, ev.creatorId, true);
       discarded.push(ev.id);
     } catch (err: unknown) {
       deps.logger.error(
-        `Lock-in recovery on match ${claim.matchId}: event ${ev.id} not deleted: ${String(err)}`,
+        `Lock-in recovery on match ${claim.matchId}: event ${ev.id} not deleted (manual cleanup needed): ${String(err)}`,
       );
     }
   }
@@ -181,10 +192,11 @@ export async function recoverClaim(
   claim: PendingLockInClaim,
   actor: LockInRecoveryActor,
 ): Promise<LockInRecoveryResult> {
-  if (!(await releaseRecoveredClaim(deps.db, claim))) {
+  const releasedAt = await releaseRecoveredClaim(deps.db, claim);
+  if (releasedAt === null) {
     return { recovered: false, discardedEventIds: [] };
   }
-  const discardedEventIds = await discardClaimEvents(deps, claim);
+  const discardedEventIds = await discardClaimEvents(deps, claim, releasedAt);
   deps.pollEmbed.fireUpdateEmbed(claim.matchId);
   deps.logger.warn(
     `Recovered lock-in claim on match ${claim.matchId} (claimed ${claim.claimedAt.toISOString()}, by ${describeActor(actor)}), discarded events [${discardedEventIds.join(', ')}]`,
