@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import type { CalendarsOverview } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { createTestQueryClient } from '../../test/render-helpers';
-import { calendarsOverviewVariants, userCalendarHandlers } from '../../test/mocks/calendar-sync-handlers';
+import { CALENDARS_OVERVIEW_URL, calendarsOverviewVariants, userCalendarHandlers } from '../../test/mocks/calendar-sync-handlers';
 import { CALENDARS_OVERVIEW_KEY } from '../../hooks/use-calendar-sync';
 import { setAccessToken, clearAccessToken } from '../../lib/api/access-token-store';
 import { CALENDARS_COPY as C } from '../../components/features/calendar-sync/calendar-sync.copy';
@@ -115,6 +115,19 @@ describe('IntegrationsPanel — inline Calendars section (ROK-1780)', () => {
         expect(screen.queryByTestId('calendars-page')).toBeNull();
         expect(screen.queryByTestId('calendars-unavailable')).toBeNull();
         expect(screen.queryByRole('heading', { name: C.title })).toBeNull();
+    });
+
+    it('keeps the Calendars section (with its load error) when the overview fetch fails', async () => {
+        server.use(http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const client = createTestQueryClient();
+        render(
+            <QueryClientProvider client={client}>
+                <MemoryRouter initialEntries={['/profile/integrations']}><IntegrationsPanel /></MemoryRouter>
+            </QueryClientProvider>,
+        );
+        await waitFor(() => expect(client.getQueryState([...CALENDARS_OVERVIEW_KEY])?.status).toBe('error'));
+        expect(screen.queryByTestId('calendars-page'), 'a failed overview must not read as "kill switch off"').not.toBeNull();
+        expect(screen.getByText(C.loadError)).toBeInTheDocument();
     });
 
     it('the OAuth callback landing (?connected=google) toasts success on My Integrations', async () => {
