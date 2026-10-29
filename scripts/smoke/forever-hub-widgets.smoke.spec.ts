@@ -23,6 +23,11 @@
  * Recent dings card as the member: two rows, a link vs plain text, and the
  * out-of-window ding absent.
  *
+ * ROK-1916: a third case seeds `withPresence: true` — Aldren + Brisa online at
+ * the export, Corvin / Dainel / Elowen away 1 / 9 / 34 days — and asserts the
+ * Last seen card as the member: "2 online at last export" and Elowen first
+ * under "Longest away" with "34 d".
+ *
  * Nothing depends on an IGDB-rewritable name: the game is resolved by slug and
  * the cards by their registered titles. Seeded users are deleted in `finally`
  * (their characters go with them); the guild row stays, as in guild-page.
@@ -47,6 +52,10 @@ const LINKED_COUNT = 3;
 const DING_LINKED = 'Aldren';
 const DING_UNLINKED = 'Corvin';
 const DING_TOO_OLD = 'Dainel';
+/** seed-guild `withPresence` (`demo-test-guild-presence.helpers.ts`). */
+const ONLINE_AT_EXPORT = 2;
+const LONGEST_AWAY = 'Elowen';
+const LONGEST_AWAY_DAYS = '34 d';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -232,6 +241,33 @@ async function expectRecentDings(page: Page, names: string[]): Promise<void> {
     await expect(region.getByText(DING_TOO_OLD), 'a ding older than 30 days is never listed').toHaveCount(0);
 }
 
+async function waitForLastSeen(jwt: string, guildId: number): Promise<{ onlineCount: number; away: { name: string }[] }> {
+    return pollForCondition(
+        async () => {
+            const data = (await apiGet(jwt, `/plugins/wow/guilds/${guildId}/roster-insights`)) as
+                { lastSeen?: { reported: number; onlineCount: number; away: { name: string }[] } } | null;
+            const seen = data?.lastSeen;
+            return seen !== undefined && seen.reported >= SEEDED_ROSTER_SIZE ? seen : null;
+        },
+        { timeoutMs: 15_000, description: `roster-insights for guild ${guildId} carries the seeded presence` },
+    );
+}
+
+async function expectLastSeen(page: Page, seen: { onlineCount: number; away: { name: string }[] }): Promise<void> {
+    expect(seen.onlineCount, 'the API counts the two seeded online members').toBe(ONLINE_AT_EXPORT);
+    expect(seen.away[0]?.name, 'the API puts the longest-away member first').toBe(LONGEST_AWAY);
+    const region = card(page, 'Last seen');
+    await expect(region, 'the Last seen card renders for a member on a Forever guild Overview').toBeVisible({ timeout: 20_000 });
+    const headline = region.getByTestId('last-seen-headline');
+    await expect(headline, 'the headline counts who was online at the export').toContainText(String(ONLINE_AT_EXPORT));
+    await expect(headline).toContainText('online at last export');
+    const away = region.getByRole('list', { name: 'Longest away' }).getByRole('listitem');
+    await expect(away, 'all three away members are listed').toHaveCount(3);
+    await expect(away.first(), 'the longest away is first').toContainText(LONGEST_AWAY);
+    await expect(away.first(), 'with its day count before the export').toContainText(LONGEST_AWAY_DAYS);
+    await expect(region.getByText(/online now|\blive\b/i), 'presence is never called live').toHaveCount(0);
+}
+
 test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
     test.beforeAll(async () => {
         const token = await getAdminToken();
@@ -273,6 +309,20 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
             await page.goto(`/hubs/${guild.guildId}`);
             await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
             await expectRecentDings(page, names);
+        } finally {
+            await removeUsers(token, guild);
+        }
+    });
+
+    test('Overview: Last seen shows presence at the last export (ROK-1916)', async ({ page }, testInfo) => {
+        const token = await getAdminToken();
+        const guild = await seedGuild(token, testInfo, { withPresence: true });
+        try {
+            const memberJwt = await signInOnboardedMember(page, guild.users.member.userId);
+            const seen = await waitForLastSeen(memberJwt, guild.guildId);
+            await page.goto(`/hubs/${guild.guildId}`);
+            await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+            await expectLastSeen(page, seen);
         } finally {
             await removeUsers(token, guild);
         }

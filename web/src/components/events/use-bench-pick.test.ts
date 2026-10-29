@@ -1,19 +1,13 @@
 /**
  * ROK-2025: the organizer's bench pick — defaults to the latest yes-voters,
- * follows live votes until touched (D7), and the lock-in retries without the
- * pick when the server refuses it (D6).
+ * follows live votes until touched (D7). ROK-2032: the client-side 400 retry
+ * (D6) is gone — the lock-in endpoint falls back on the server (D3).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { completeStandalonePoll } from '../../lib/api-client';
-import { toast } from '../../lib/toast';
 import { QueryClient } from '@tanstack/react-query';
-import { BENCH_PICKER_ID, benchPickError, completeLockIn, guardBenchPick, refreshLockedInEvent, useBenchPick, type BenchPick } from './use-bench-pick';
+import { BENCH_PICKER_ID, FALLBACK_TOAST, benchPickError, guardBenchPick, refreshLockedInEvent, useBenchPick, type BenchPick } from './use-bench-pick';
 import type { SchedulingOverflow } from './use-scheduling-overflow';
-import { withHttpStatus } from '../../lib/api/api-error';
-
-vi.mock('../../lib/api-client', () => ({ completeStandalonePoll: vi.fn() }));
-vi.mock('../../lib/toast', () => ({ toast: { warning: vi.fn() } }));
 
 function overflow(ids: number[], benched: number): SchedulingOverflow {
     const people = ids.map((userId) => ({ userId, displayName: `User ${userId}` }));
@@ -23,6 +17,12 @@ function overflow(ids: number[], benched: number): SchedulingOverflow {
 const FALLBACK = "Event created, but the votes changed while you were choosing. The latest yes-voters went to the bench. You can move people on the event's roster.";
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('FALLBACK_TOAST', () => {
+    it('keeps the ROK-2025 D6 copy the lock-in shows when the pick was dropped', () => {
+        expect(FALLBACK_TOAST).toBe(FALLBACK);
+    });
+});
 
 describe('useBenchPick', () => {
     it('pre-marks the latest yes-voters and reports no mismatch', () => {
@@ -103,46 +103,6 @@ describe('guardBenchPick', () => {
         expect(guardBenchPick(bench(0))).toBe(false);
         expect(el.scrollIntoView).not.toHaveBeenCalled();
         el.remove();
-    });
-});
-
-describe('completeLockIn', () => {
-    it('sends the pick with the event and slot', async () => {
-        vi.mocked(completeStandalonePoll).mockResolvedValue(undefined);
-        await completeLockIn(5, 77, 'T', [4, 5]);
-        expect(completeStandalonePoll).toHaveBeenCalledTimes(1);
-        expect(completeStandalonePoll).toHaveBeenCalledWith(5, 77, 'T', [4, 5]);
-        expect(toast.warning).not.toHaveBeenCalled();
-    });
-
-    it('retries once WITHOUT the pick when the server refuses it (HTTP 400), then warns (D6)', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockResolvedValueOnce(undefined);
-        await completeLockIn(5, 77, 'T', [4]);
-        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, 'T', [4]], [5, 77, 'T']]);
-        expect(toast.warning).toHaveBeenCalledWith(FALLBACK);
-    });
-
-    it('rejects when the retry fails too, with no fallback toast', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockRejectedValueOnce(new Error('gone'));
-        await expect(completeLockIn(5, 77, 'T', [4])).rejects.toThrow('gone');
-        expect(toast.warning).not.toHaveBeenCalled();
-    });
-
-    it.each([
-        ['a network failure (no HTTP status)', new TypeError('Failed to fetch')],
-        ['a 409', withHttpStatus(new Error('Already completed'), 409)],
-        ['a 500', withHttpStatus(new Error('Internal error'), 500)],
-    ])('does NOT retry or claim the votes changed on %s', async (_label, failure) => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(failure);
-        await expect(completeLockIn(5, 77, 'T', [4])).rejects.toBe(failure);
-        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, 'T', [4]]]);
-        expect(toast.warning).not.toHaveBeenCalled();
-    });
-
-    it('never sends a pick without an event, and never retries', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValue(new Error('x'));
-        await expect(completeLockIn(5, undefined, undefined, [4])).rejects.toThrow('x');
-        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, undefined, undefined]]);
     });
 });
 

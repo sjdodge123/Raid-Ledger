@@ -7,7 +7,7 @@
  * linked + snapshotted rows so the character/snapshot fact queries run.
  */
 import * as bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { WowRosterInsightsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -173,6 +173,74 @@ async function seedUser(
   tokens[who] = res.body.access_token as string;
 }
 
+/**
+ * ROK-1916 — export presence: lead online, healer online WITH a day count
+ * (D3: still online), crafter never reported, two pugs away 40 and 2 days.
+ */
+async function seedPresence(): Promise<void> {
+  const presence: [string, boolean | null, number | null][] = [
+    ['lead', true, null],
+    ['healer', true, 3],
+    ['Pugone', false, 40],
+    ['Pugtwo', false, 2],
+  ];
+  for (const [name, onlineAtExport, lastOnlineDays] of presence)
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ onlineAtExport, lastOnlineDays })
+      .where(
+        and(
+          eq(schema.guildMembers.guildId, guildId),
+          eq(schema.guildMembers.characterName, name),
+        ),
+      );
+}
+
+/**
+ * ROK-1916 (D4) — a second guild where lead's MAIN was away 5 days and lead's
+ * ALT was online. `mainsOnly` drops the alt from the breakdowns, but presence
+ * is per character, so `lastSeen` must still count it.
+ */
+async function seedAltPresenceGuild(): Promise<{ gid: number; altId: string }> {
+  const gid = await insertGuild('Forever Alt Presence');
+  const [main] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, charIds.lead)),
+    'lead main',
+  );
+  const [alt] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: main.userId,
+        gameId: testApp.seed.game.id,
+        name: 'Leadalt',
+        class: 'Rogue',
+        level: 30,
+        addonGuid: 'Player-7-leadalt',
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+        isMain: false,
+      })
+      .returning(),
+    'lead alt',
+  );
+  await testApp.db.insert(schema.guildMembers).values([
+    {
+      ...memberRow(gid, 'Player-7-lead', 'lead', 60, 'Warrior'),
+      onlineAtExport: false,
+      lastOnlineDays: 5,
+    },
+    {
+      ...memberRow(gid, 'Player-7-leadalt', 'Leadalt', 30, 'Rogue'),
+      onlineAtExport: true,
+    },
+  ]);
+  return { gid, altId: alt.id };
+}
+
 const insights = (who: Who, gid = guildId) =>
   testApp.request
     .get(`/plugins/wow/guilds/${gid}/roster-insights`)
@@ -188,12 +256,17 @@ beforeAll(async () => {
   await seedUser('healer', 45, 'Priest', { role: 'healer' });
   await seedUser('crafter', 22, 'Mage', { professions: PROFESSIONS });
   await seedUser('outsider', 60, 'Rogue', {});
-  await testApp.db
-    .insert(schema.guildMembers)
-    .values([
-      memberRow(guildId, 'Player-7-pug1', 'Pugone', 8, 'Mage'),
-      memberRow(guildId, 'Player-7-pug2', 'Pugtwo', 60, 'Hunter'),
-    ]);
+  await testApp.db.insert(schema.guildMembers).values([
+    memberRow(guildId, 'Player-7-pug1', 'Pugone', 8, 'Mage'),
+    memberRow(guildId, 'Player-7-pug2', 'Pugtwo', 60, 'Hunter'),
+    // ROK-1916 — left the guild before the latest snapshot: never shown.
+    {
+      ...memberRow(guildId, 'Player-7-gone', 'Gone', 60, 'Rogue'),
+      lastSeenAt: new Date(SNAP.getTime() - 86400_000),
+      onlineAtExport: true,
+    },
+  ]);
+  await seedPresence();
   await testApp.db.insert(schema.characterAddonSnapshots).values({
     characterId: charIds.lead,
     section: 'char',
@@ -258,6 +331,42 @@ describe('GET roster-insights (real DB)', () => {
     ]);
   });
 
+  it('a member gets lastSeen from the latest-snapshot roster (ROK-1916)', async () => {
+    const dto = WowRosterInsightsSchema.parse((await insights('lead')).body);
+    expect(dto.lastSeen).toEqual({
+      reported: 4,
+      onlineCount: 2,
+      online: [
+        { name: 'healer', characterId: charIds.healer },
+        { name: 'lead', characterId: charIds.lead },
+      ],
+      away: [
+        { name: 'Pugone', characterId: null, days: 40 },
+        { name: 'Pugtwo', characterId: null, days: 2 },
+      ],
+      snapshotAt: SNAP.toISOString(),
+    });
+  });
+
+  it('lastSeen uses the full roster even with ?mainsOnly=true (ROK-1916 D4)', async () => {
+    const { gid, altId } = await seedAltPresenceGuild();
+    const res = await testApp.request
+      .get(`/plugins/wow/guilds/${gid}/roster-insights?mainsOnly=true`)
+      .set('Authorization', `Bearer ${tokens.lead}`);
+    expect(res.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(res.body);
+    // mainsOnly took effect: the alt's Rogue is gone from the breakdown...
+    expect(dto.classes.map((c) => c.class)).toEqual(['Warrior']);
+    // ...but the online alt still counts and is listed.
+    expect(dto.lastSeen).toEqual({
+      reported: 2,
+      onlineCount: 1,
+      online: [{ name: 'Leadalt', characterId: altId }],
+      away: [{ name: 'lead', characterId: charIds.lead, days: 5 }],
+      snapshotAt: SNAP.toISOString(),
+    });
+  });
+
   it('a visitor sees class/level/role but NO professions or lockouts key', async () => {
     const res = await insights('outsider');
     expect(res.status).toBe(200);
@@ -266,6 +375,7 @@ describe('GET roster-insights (real DB)', () => {
     expect('professions' in res.body).toBe(false);
     expect('lockouts' in res.body).toBe(false);
     expect('lockoutReporters' in res.body).toBe(false);
+    expect('lastSeen' in res.body).toBe(false);
   });
 
   it('serves the cached payload until an import of a guild character invalidates it', async () => {

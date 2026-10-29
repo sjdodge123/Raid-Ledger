@@ -112,6 +112,52 @@ export type WowRosterLockoutDto = z.infer<typeof WowRosterLockoutSchema>;
 /** Cap on `lockouts[]` (one entry per instance save). */
 export const MAX_ROSTER_LOCKOUTS = 200;
 
+/** Caps on `lastSeen` (the widget shows at most 5 + 5). */
+export const MAX_LAST_SEEN_ONLINE = 25;
+export const MAX_LAST_SEEN_AWAY = 10;
+
+/**
+ * ROK-1916 (W9 "Last seen") — presence at the latest LedgerLink guild export,
+ * never "online now". `reported` = roster rows whose export carried presence
+ * (0 = no presence-bearing export yet). `online` is in roster order (rank,
+ * then name); `away` = offline rows with a day count, most days first.
+ * `days` = whole days offline before the export (0 = under a day).
+ */
+export const WowRosterLastSeenSchema = z
+  .object({
+    reported: z.number().int().nonnegative(),
+    onlineCount: z.number().int().nonnegative(),
+    online: z
+      .array(
+        z
+          .object({
+            name: z.string().max(64),
+            characterId: characterId.nullable(),
+          })
+          .strict(),
+      )
+      .max(MAX_LAST_SEEN_ONLINE),
+    away: z
+      .array(
+        z
+          .object({
+            name: z.string().max(64),
+            characterId: characterId.nullable(),
+            days: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
+      .max(MAX_LAST_SEEN_AWAY),
+    /**
+     * The guild's latest LedgerLink snapshot time — the export these presence
+     * values come from (null before any snapshot). Travels in the same payload
+     * so the widget never dates new presence with an older cached export time.
+     */
+    snapshotAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  })
+  .strict();
+export type WowRosterLastSeenDto = z.infer<typeof WowRosterLastSeenSchema>;
+
 export const WowRosterInsightsSchema = z
   .object({
     classes: z.array(WowRosterClassSchema).max(40),
@@ -132,6 +178,8 @@ export const WowRosterInsightsSchema = z
      * beside `lockouts`; the "Who's saved" reporting line.
      */
     lockoutReporters: z.number().int().nonnegative().optional(),
+    /** ROK-1916 — members and staff only; absent for visitors. */
+    lastSeen: WowRosterLastSeenSchema.optional(),
     freshness: z
       .object({
         roster: HubFactFreshnessSchema.nullable(),

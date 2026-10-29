@@ -1645,7 +1645,12 @@ hub viewer — no new pattern; **Guild professions**
 (`forever-whos-saved`, order 86, ROK-1914) — the same 44px disclosure row per `(instance, difficulty)` save (name +
 "N saved" / difficulty · `formatResetIn` "Resets in …") that expands `CharacterLink` + `font-mono` `killed/total`
 (`text-success` when cleared), one `useNowTick` clock dropping expired saves, a quiet empty line and a `text-xs
-text-dim` "Based on N members' addon exports" line instead of `FreshnessFooter` — no new pattern. The four roster cards share
+text-dim` "Based on N members' addon exports" line instead of `FreshnessFooter` — no new pattern. **Last seen**
+(`forever-last-seen`, order 87, ROK-1916) — presence at the last LedgerLink export, never "online now": a `text-3xl`
+"N online at last export" headline + `text-xs text-dim` "of M members in the export", "Online at last export" (≤5
+44px rows, an `aria-hidden` `h-2 w-2 rounded-full bg-success` dot + `CharacterLink`, then "+N more") and "Longest away"
+(≤5 44px rows, `text-muted` "34 d" / "today" with a "Last online N days before the export" `title`), the quiet §4.5
+no-export state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. The roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
 Professions, Who's saved and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the

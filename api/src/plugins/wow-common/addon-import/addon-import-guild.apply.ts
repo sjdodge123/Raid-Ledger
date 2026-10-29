@@ -94,6 +94,9 @@ export function memberValues(
     publicNote: m.note ?? null,
     source: 'addon_import',
     lastSeenAt: seenAt,
+    // ROK-1916 D2/D3: presence verbatim; the read path normalises.
+    onlineAtExport: m.online,
+    lastOnlineDays: m.lastOnlineDays ?? null,
     capturedByUserId: ctx.userId,
     updatedAt: new Date(),
   };
@@ -244,6 +247,9 @@ const EXCLUDED_MEMBER_COLUMNS = [
   'last_seen_at',
   'captured_by_user_id',
   'updated_at',
+  // ROK-1916 D2: overwrite with excluded.* (NULL included) — clears stale days.
+  'online_at_export',
+  'last_online_days',
 ] as const;
 
 const camel = (c: string) =>
