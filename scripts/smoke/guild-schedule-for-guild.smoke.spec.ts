@@ -9,7 +9,9 @@
  * Each test seeds its OWN guild through the DEMO_MODE fixture
  * `POST /admin/test/wow/seed-guild` (unique per project, worker and run), as
  * `guild-page.smoke.spec.ts` does; seeded users and the created event are
- * deleted in `finally`.
+ * deleted in `finally`. The guild row stays, exactly as in the sibling guild
+ * specs (`guild-page`, `guild-content`): there is no guild delete endpoint or
+ * fixture, its name is unique per run, and fleet/CI envs are disposable.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
