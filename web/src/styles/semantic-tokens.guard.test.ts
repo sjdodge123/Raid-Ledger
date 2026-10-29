@@ -60,7 +60,7 @@ const themeBlock = extractBlock(css, /@theme\s*\{/);
 const lightBlock = extractBlock(css, /:is\(\[data-scheme="light"\][^)]*\)\s*\{/);
 
 /** Semantic roles plus `--color-busy`, the shipped token whose 2-block shape they copy. */
-const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy'] as const;
+const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy', 'faction-alliance', 'faction-horde'] as const;
 
 /** `--color-surface` of the shared light block — what light-family text sits on. */
 const LIGHT_SURFACE = '#ffffff';
@@ -81,8 +81,11 @@ function lightBackgrounds(token: string): Array<[string, string]> {
     ];
 }
 
-/** Roles measured on every real background of the shared light block. */
-const SEMANTIC_ROLES = ['success', 'warning', 'danger'] as const;
+/**
+ * Roles measured on every real background of the shared light block. ROK-1815: the
+ * faction hues are read as pill text on a /10 tint, so they are held to the same bar.
+ */
+const SEMANTIC_ROLES = ['success', 'warning', 'danger', 'faction-alliance', 'faction-horde'] as const;
 
 /**
  * TDB:1793 (ruling D:1714): light success is #065f46 so it clears AA as text on every
@@ -242,9 +245,10 @@ describe('dark semantic text on every dark scheme (TDB:1770 ruling 2026-10-08)',
 });
 
 describe('light semantic text on every light scheme (TDB:1770, 2026-10-08)', () => {
-    it('reads the six light schemes × three roles × three backgrounds out of index.css', () => {
+    it('reads the six light schemes × five roles × three backgrounds out of index.css', () => {
         expect(new Set(LIGHT_TEXT.map(([, name]) => name))).toEqual(new Set(['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial']));
-        expect(LIGHT_TEXT).toHaveLength(54);
+        expect(LIGHT_TEXT).toHaveLength(6 * SEMANTIC_ROLES.length * 3);
+        expect(SEMANTIC_ROLES).toHaveLength(5);
     });
 
     it.each(LIGHT_TEXT)('light text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
