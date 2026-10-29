@@ -53,18 +53,15 @@ function setIfChanged(el: HTMLElement, prop: string, value: string): void {
 
 /**
  * Reads every child, then writes every placement — one read phase, one write phase.
- * Each cell's inline `grid-column-start` is dropped BEFORE the grid is read: a stale
- * `grid-column-start: 3` left over from lg would keep an implicit third track alive at md,
- * and the computed `grid-template-columns` (which lists implicit tracks) would still say 3.
+ * Every cell's inline placement is dropped BEFORE the grid is read: stale lg placements
+ * (a column 3, or three cards pinned to row 1) would keep an implicit third track alive at
+ * md, and the computed `grid-template-columns` (which lists implicit tracks) would still say 3.
  */
 export function layoutMasonry(grid: HTMLElement): void {
     const cells = Array.from(grid.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
-    for (const el of cells) el.style.removeProperty('grid-column-start');
+    cells.forEach(clearPlacement);
     const metrics = readMetrics(grid);
-    if (metrics === null) {
-        cells.forEach(clearPlacement);
-        return;
-    }
+    if (metrics === null) return;
     const placed = packMasonry(cells.map(measureItem), metrics.cols, metrics.gap, metrics.rowUnit);
     cells.forEach((el, i) => {
         const p = placed[i];
