@@ -6,10 +6,12 @@
  * weekly series and a past raid with attendance, so several differently tall
  * cards render) and opens the Overview as the plain member.
  *
- * Desktop (≥1024px, three columns): every card starts one grid gap (+2px of
- * track rounding) below the nearest card above it in its column, and a card
- * with nothing above it sits at the grid top — no row-tall hole under a short
- * card. Mobile (one column): no inline masonry placement, a plain stack.
+ * Desktop + tablet projects (≥768px: three columns at lg, two at md): two
+ * row-mates keep their OWN heights (more than one gap apart — under the old
+ * stretched rows they were equal), and the card below the shorter one starts
+ * ABOVE the taller one's bottom edge, i.e. it slid up into the space a uniform
+ * row height left empty. Every card also sits one gap under the card above it.
+ * Mobile (one column): no inline masonry placement, a plain stack.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
@@ -53,6 +55,32 @@ async function openOverviewAsMember(page: Page, guild: SeededGuild): Promise<voi
     await expect(page.locator('#guild-attendance')).toBeVisible({ timeout: 15_000 });
 }
 
+/** A card that slid up: `below` sits under `shorter`, starting above the bottom of `shorter`'s taller row-mate. */
+interface SlideUp {
+    shorter: CellBox;
+    taller: CellBox;
+    below: CellBox;
+}
+
+const overlapsColumns = (a: CellBox, b: CellBox): boolean => a.left < b.right - 1 && a.right > b.left + 1;
+
+/** Side-by-side cards on one row whose heights differ by more than a gap; `[]` on a stretched (row-height) grid. */
+function unequalRowMates(cells: readonly CellBox[]): Array<{ shorter: CellBox; taller: CellBox }> {
+    return cells.flatMap((shorter) => cells.flatMap((taller) => {
+        const rowMates = Math.abs(shorter.top - taller.top) <= ROUNDING_PX && !overlapsColumns(shorter, taller);
+        return rowMates && taller.bottom - taller.top - (shorter.bottom - shorter.top) > GRID_GAP_PX ? [{ shorter, taller }] : [];
+    }));
+}
+
+/** Every slide-up: the card directly below the shorter row-mate starts above the taller one's bottom edge. */
+function slideUps(cells: readonly CellBox[]): SlideUp[] {
+    return unequalRowMates(cells).flatMap(({ shorter, taller }) => {
+        const below = cells.find((b) => b !== shorter && overlapsColumns(b, shorter) && b.top >= shorter.bottom - 0.5
+            && !overlapsColumns(b, taller) && b.top < taller.bottom);
+        return below ? [{ shorter, taller, below }] : [];
+    });
+}
+
 /** The grid's rendered direct children (an empty cell has no height and is skipped), relative to the grid top. */
 function cellBoxes(page: Page): Promise<CellBox[]> {
     return page.getByTestId('guild-overview').evaluate((grid) => {
@@ -60,7 +88,8 @@ function cellBoxes(page: Page): Promise<CellBox[]> {
         return Array.from(grid.children).flatMap((c, i) => {
             const r = c.getBoundingClientRect();
             if (r.height <= 0 || !(c instanceof HTMLElement)) return [];
-            return [{ id: c.id || c.getAttribute('data-testid') || `cell-${i}`, left: r.left, right: r.right,
+            const id = c.id || c.querySelector('[id]')?.id || c.getAttribute('data-testid') || `cell-${i}`;
+            return [{ id, left: r.left, right: r.right,
                 top: r.top - top, bottom: r.bottom - top, rowEnd: c.style.getPropertyValue('grid-row-end') }];
         });
     });
@@ -69,7 +98,7 @@ function cellBoxes(page: Page): Promise<CellBox[]> {
 /** Every packing violation, as a readable line; `[]` when the Overview is packed. */
 function packingViolations(cells: readonly CellBox[]): string[] {
     return cells.flatMap((cell) => {
-        const above = cells.filter((o) => o !== cell && o.bottom <= cell.top + 0.5 && o.left < cell.right - 1 && o.right > cell.left + 1);
+        const above = cells.filter((o) => o !== cell && o.bottom <= cell.top + 0.5 && overlapsColumns(o, cell));
         if (above.length === 0) {
             return cell.top > ROUNDING_PX ? [`${cell.id}: nothing above it, yet it starts ${Math.round(cell.top)}px below the grid top`] : [];
         }
@@ -81,18 +110,23 @@ function packingViolations(cells: readonly CellBox[]): string[] {
 }
 
 test.describe('Hub Overview masonry (ROK-2043)', () => {
-    test('desktop: every card slides up to one gap under the card above it', async ({ page }, testInfo) => {
-        test.skip(testInfo.project.name === 'mobile', 'Desktop-only — the multi-column bento; mobile is the next test');
+    test('desktop: a card slides up under its shorter row-mate instead of waiting for the taller one', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name === 'mobile', 'Multi-column (desktop + tablet) — mobile is the next test');
         const token = await getAdminToken();
         const guild = await seedGuild(token, testInfo);
         try {
             await openOverviewAsMember(page, guild);
+            // Behaviour, not implementation: on a row-height grid row-mates stretch equal, so both polls stay [].
+            await expect.poll(async () => unequalRowMates(await cellBoxes(page)).map((p) => `${p.shorter.id} / ${p.taller.id}`), {
+                message: 'two side-by-side row-mates keep their own heights (differ by more than the 16px gap)', timeout: 15_000,
+            }).not.toEqual([]);
+            await expect.poll(async () => slideUps(await cellBoxes(page)).map((s) => `${s.below.id} under ${s.shorter.id}, beside ${s.taller.id}`), {
+                message: 'some card starts under a shorter row-mate, above the taller row-mate\'s bottom edge', timeout: 15_000,
+            }).not.toEqual([]);
             await expect.poll(async () => packingViolations(await cellBoxes(page)), { timeout: 15_000 }).toEqual([]);
             const cells = await cellBoxes(page);
-            expect(new Set(cells.map((c) => Math.round(c.left))).size, 'the desktop Overview lays cards out in several columns')
+            expect(new Set(cells.map((c) => Math.round(c.left))).size, 'the Overview lays cards out in several columns')
                 .toBeGreaterThan(1);
-            expect(cells.filter((c) => !c.rowEnd.startsWith('span ')).map((c) => c.id), 'every card carries its masonry row span')
-                .toEqual([]);
         } finally {
             for (const user of Object.values(guild.users)) await apiDelete(token, `/users/${user.userId}`).catch(() => undefined);
         }
