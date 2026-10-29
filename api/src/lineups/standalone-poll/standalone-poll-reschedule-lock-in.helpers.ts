@@ -130,12 +130,7 @@ async function moveOrRelease(
       dto,
     );
   } catch (err: unknown) {
-    if (await eventStartsAt(deps.db, target.eventId, dto.startTime)) {
-      deps.logger.error(
-        `Reschedule lock-in ${matchId}: moved, then ${String(err)}`,
-      );
-      return null;
-    }
+    if (await movedAnyway(deps, input, target.eventId, err)) return null;
     await releaseMatchClaim(
       deps.db,
       matchId,
@@ -217,4 +212,20 @@ async function eventStartsAt(
     .from(schema.events)
     .where(eq(schema.events.id, eventId));
   return row?.duration[0].getTime() === new Date(startTime).getTime();
+}
+
+/** After a reschedule throw: did the move commit anyway? Logs when it did. */
+async function movedAnyway(
+  deps: RescheduleLockInDeps,
+  input: RescheduleLockInInput,
+  eventId: number,
+  err: unknown,
+): Promise<boolean> {
+  if (!(await eventStartsAt(deps.db, eventId, input.dto.startTime))) {
+    return false;
+  }
+  deps.logger.error(
+    `Reschedule lock-in ${input.matchId}: moved, then ${String(err)}`,
+  );
+  return true;
 }
