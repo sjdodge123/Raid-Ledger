@@ -30,7 +30,7 @@ vi.mock('../../../../hooks/use-media-query', () => ({
     useMediaQuery: () => true,
 }));
 
-function renderAction(recoverable: boolean | undefined = true) {
+function renderAction(recoverable: boolean | undefined) {
     return renderWithProviders(
         <SchedulingReopenLockInAction matchId={9} recoverable={recoverable} />,
     );
