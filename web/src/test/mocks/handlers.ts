@@ -16,6 +16,7 @@ import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
 import { hubPostsHandlers } from './hub-posts-handlers';
 import { hubSessionNoteHandlers } from './hub-session-note-handlers';
+import { bg3Handlers } from './bg3-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
 import { hubMediaChannelHandlers } from './hub-media-channel-handlers';
 import { channelLifecycleHandlers } from './channel-lifecycle-handlers';
@@ -38,6 +39,7 @@ export const handlers = [
     ...guildContentHandlers,
     ...hubPostsHandlers,
     ...hubSessionNoteHandlers,
+    ...bg3Handlers,
     ...guildDiscordHandlers,
     ...hubMediaChannelHandlers,
     ...channelLifecycleHandlers,

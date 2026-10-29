@@ -1,16 +1,18 @@
 /**
  * useSchedulingLock commit-branch tests.
  *
- * Regression for the linked-poll lock bug: `completeStandalonePoll` must
- * receive the linked event id + the locked slot's start instant, otherwise
- * the backend's eventId-gated auto-signup/re-roster pass never runs and
- * poll voters are not rostered onto the rescheduled event (ROK-1031).
+ * Regression for the linked-poll lock bug: the reschedule lock-in must
+ * carry the locked slot's start instant, otherwise the backend's slot-gated
+ * re-roster pass never runs (ROK-1031). ROK-2040: it is ONE claim-first
+ * request — no PATCH reschedule followed by `/complete` — and a 409 (another
+ * organizer won the race) shows the lost-race toast.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type {
+    EventResponseDto,
     MatchDetailResponseDto,
     SchedulePollPageResponseDto,
     ScheduleSlotWithVotesDto,
@@ -25,13 +27,8 @@ vi.mock('react-router-dom', async () => {
     return { ...actual, useNavigate: () => navigate };
 });
 
-const rescheduleMutate = vi.fn();
-vi.mock('../../../../hooks/use-reschedule', () => ({
-    useRescheduleEvent: () => ({ mutate: rescheduleMutate, isPending: false }),
-}));
-
 vi.mock('../../../../lib/api-client', () => ({
-    completeStandalonePoll: vi.fn().mockResolvedValue(undefined),
+    rescheduleLockInSchedulingPoll: vi.fn().mockResolvedValue({ id: 77 }),
     getSchedulePoll: vi.fn(),
 }));
 
@@ -40,12 +37,17 @@ vi.mock('../../../../lib/toast', () => ({
 }));
 
 import {
-    completeStandalonePoll,
     getSchedulePoll,
+    rescheduleLockInSchedulingPoll,
 } from '../../../../lib/api-client';
+import { withHttpStatus } from '../../../../lib/api/api-error';
 import { toast } from '../../../../lib/toast';
-import { useSchedulingLock } from '../use-scheduling-lock';
+import {
+    RESCHEDULE_LOCK_IN_LOST_TOAST,
+    useSchedulingLock,
+} from '../use-scheduling-lock';
 import { at } from '../../../../test/defined';
+import { createMockEvent } from '../../../../test/factories';
 
 const MATCH_ID = 500;
 const LINEUP_ID = 7;
@@ -157,47 +159,93 @@ describe('useSchedulingLock — commit', () => {
         vi.clearAllMocks();
     });
 
-    it('linked-event lock completes the poll with eventId + slot start instant', async () => {
-        rescheduleMutate.mockImplementationOnce((_vars, opts) =>
-            opts?.onSuccess?.(),
-        );
+    it('linked-event lock calls the claim-first reschedule lock-in once with the slot instant', async () => {
         const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
 
         await act(() => result.current.requestLock(buildSlot()));
 
-        expect(rescheduleMutate).toHaveBeenCalledWith(
-            {
-                startTime: FUTURE_TIME,
-                endTime: new Date(
-                    new Date(FUTURE_TIME).getTime() + 2 * 60 * 60 * 1000,
-                ).toISOString(),
-            },
-            expect.objectContaining({ onSuccess: expect.any(Function) }),
-        );
-        expect(completeStandalonePoll).toHaveBeenCalledWith(
-            MATCH_ID,
-            77,
-            FUTURE_TIME,
-        );
+        expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledTimes(1);
+        expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledWith(MATCH_ID, {
+            startTime: FUTURE_TIME,
+            endTime: new Date(
+                new Date(FUTURE_TIME).getTime() + 2 * 60 * 60 * 1000,
+            ).toISOString(),
+        });
         // Backend matches startTime to a slot via Date-getTime equality.
-        const [, , startTime] = at(vi.mocked(completeStandalonePoll).mock.calls, 0);
-        expect(new Date(startTime!).getTime()).toBe(
+        const [, body] = at(vi.mocked(rescheduleLockInSchedulingPoll).mock.calls, 0);
+        expect(new Date(body.startTime).getTime()).toBe(
             new Date(FUTURE_TIME).getTime(),
         );
         expect(toast.success).toHaveBeenCalledWith('Event rescheduled');
         expect(navigate).not.toHaveBeenCalled();
     });
 
-    it('does not complete the poll until reschedule succeeds', async () => {
+    it('linked-event lock refetches the event once the lock-in resolves (ROK-2031)', async () => {
+        const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
         const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
 
         await act(() => result.current.requestLock(buildSlot()));
 
-        expect(rescheduleMutate).toHaveBeenCalledTimes(1);
-        expect(completeStandalonePoll).not.toHaveBeenCalled();
+        // The lock-in resolves on a later microtask; flush it, then assert.
+        await act(async () => {});
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['events', 77] });
+        invalidate.mockRestore();
     });
 
-    it('non-linked lock navigates to /events/new and does NOT complete', async () => {
+    it('a lost lock-in race (409) shows the lost-race toast, not success (ROK-2040)', async () => {
+        vi.mocked(rescheduleLockInSchedulingPoll).mockRejectedValueOnce(
+            withHttpStatus(new Error('This poll has already been locked in'), 409),
+        );
+        const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
+
+        await act(() => result.current.requestLock(buildSlot()));
+        await act(async () => {});
+
+        expect(toast.error).toHaveBeenCalledWith(RESCHEDULE_LOCK_IN_LOST_TOAST);
+        expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('a double click while the lock-in runs sends one request and one toast (ROK-2040)', async () => {
+        let settle: (v: EventResponseDto) => void = () => {};
+        vi.mocked(rescheduleLockInSchedulingPoll).mockImplementationOnce(
+            () => new Promise<EventResponseDto>((resolve) => { settle = resolve; }),
+        );
+        const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
+
+        let first: Promise<void> = Promise.resolve();
+        await act(async () => {
+            first = result.current.requestLock(buildSlot());
+            await vi.waitFor(() =>
+                expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledTimes(1),
+            );
+        });
+        expect(result.current.refreshing).toBe(true);
+        await act(() => result.current.requestLock(buildSlot()));
+        await act(async () => {
+            settle(createMockEvent({ id: 77 }));
+            await first;
+        });
+
+        expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledTimes(1);
+        expect(toast.success).toHaveBeenCalledTimes(1);
+        expect(toast.error).not.toHaveBeenCalled();
+        expect(result.current.refreshing).toBe(false);
+    });
+
+    it('any other lock-in failure shows the server message', async () => {
+        vi.mocked(rescheduleLockInSchedulingPoll).mockRejectedValueOnce(
+            withHttpStatus(new Error('Event not found'), 404),
+        );
+        const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
+
+        await act(() => result.current.requestLock(buildSlot()));
+        await act(async () => {});
+
+        expect(toast.error).toHaveBeenCalledWith('Event not found');
+        expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('non-linked lock navigates to /events/new and does NOT lock in', async () => {
         const { result } = renderLock(buildMatch());
 
         await act(() => result.current.requestLock(buildSlot()));
@@ -210,8 +258,7 @@ describe('useSchedulingLock — commit', () => {
         expect(navigate).toHaveBeenCalledWith(
             `/events/new?${params.toString()}`,
         );
-        expect(completeStandalonePoll).not.toHaveBeenCalled();
-        expect(rescheduleMutate).not.toHaveBeenCalled();
+        expect(rescheduleLockInSchedulingPoll).not.toHaveBeenCalled();
     });
 
     it('a follow-up poll carries copyFromEventId so the create form prefills', async () => {
@@ -250,8 +297,7 @@ describe('useSchedulingLock — commit', () => {
         expect(toast.error).toHaveBeenCalledWith(
             'Cannot lock a time in the past',
         );
-        expect(rescheduleMutate).not.toHaveBeenCalled();
-        expect(completeStandalonePoll).not.toHaveBeenCalled();
+        expect(rescheduleLockInSchedulingPoll).not.toHaveBeenCalled();
         expect(navigate).not.toHaveBeenCalled();
     });
 });

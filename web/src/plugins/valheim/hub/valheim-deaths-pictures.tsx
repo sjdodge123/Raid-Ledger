@@ -3,7 +3,9 @@
  * thumbnails in 44px `Button` targets, then "+N" for the rest. It sits OUTSIDE
  * the row's map `<Link>` (no nested interactive). A thumb opens the Gallery
  * viewer at that picture with the Deaths chip on; "+N" opens the Gallery grid
- * on Deaths (D14: the dialog is mounted by the hub Overview). Tokens only.
+ * scoped to THIS bar's deaths (ROK-2027: `subject = valheim-death:<bar key>`,
+ * the set `pictureCount` counts) — D14: the dialog is mounted by the hub
+ * Overview. Tokens only.
  */
 import type { JSX } from 'react';
 import type { ValheimDeathPicture, ValheimDeathPlayer } from '@raid-ledger/contract';
@@ -44,7 +46,10 @@ export function ValheimDeathsPictures({ player, guildId }: { player: ValheimDeat
             ))}
             {extra > 0 && (
                 <Button variant="bare" aria-label={morePicturesLabel(extra)} data-testid="valheim-death-thumbs-more"
-                    onClick={(e) => openGallery({ guildId, mode: 'grid', filter: 'death', index: 0, returnFocus: e.currentTarget })}
+                    onClick={(e) => openGallery({
+                        guildId, mode: 'grid', filter: 'death', index: 0,
+                        subject: { id: `valheim-death:${player.key}`, label: player.name }, returnFocus: e.currentTarget,
+                    })}
                     className={`${TARGET} text-xs font-medium text-secondary hover:text-foreground`}>
                     <span className={TILE}>+{extra}</span>
                 </Button>

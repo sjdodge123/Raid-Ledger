@@ -17,6 +17,7 @@ import { Test } from '@nestjs/testing';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SchedulingService } from './scheduling.service';
+import { StandalonePollLockInService } from '../standalone-poll/standalone-poll-lock-in.service';
 import { StandalonePollService } from '../standalone-poll/standalone-poll.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
@@ -312,6 +313,8 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
     mockDb.limit.mockResolvedValueOnce([
       { name: 'Elden Ring', coverUrl: null },
     ]);
+    // ROK-2024 F2: the lock-in claim's FOR UPDATE read — still unclaimed.
+    mockDb.for.mockResolvedValueOnce([{ status: 'scheduling' }]);
   });
 
   it('asks the poll embed to re-render once the event exists', async () => {
@@ -331,16 +334,31 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       firePostInitialEmbed: jest.fn(),
       fireUpdateEmbed: jest.fn(),
     };
-    const service = new StandalonePollService(
-      createDrizzleMock() as never,
-      { enqueuePhaseTransition: jest.fn() } as never,
-      { notifyPollCreated: jest.fn() } as never,
+    const db = createDrizzleMock();
+    const events = {
+      emitLifecycleEvent: jest.fn().mockResolvedValue(undefined),
+    };
+    const notifications = { notifyPollCreated: jest.fn() };
+    // ROK-2032: the lock-in side effects moved to their own provider.
+    const lockIn = new StandalonePollLockInService(
+      db as never,
       pollEmbed as never,
       { signup: jest.fn() } as never,
       { getClientUrl: jest.fn().mockResolvedValue(CLIENT_URL) } as never,
-      { emitLifecycleEvent: jest.fn().mockResolvedValue(undefined) } as never,
-      { enqueue: jest.fn().mockResolvedValue(undefined) } as never,
+      notifications as never,
       { notifyEventCreated: jest.fn() } as never,
+      events as never,
+      { enqueue: jest.fn().mockResolvedValue(undefined) } as never,
+      { assertCreate: jest.fn() } as never,
+      { createMany: jest.fn() } as never,
+    );
+    const service = new StandalonePollService(
+      db as never,
+      { enqueuePhaseTransition: jest.fn() } as never,
+      notifications as never,
+      pollEmbed as never,
+      events as never,
+      lockIn,
     );
 
     await expect(

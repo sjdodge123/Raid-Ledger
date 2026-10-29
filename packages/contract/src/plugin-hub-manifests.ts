@@ -15,6 +15,15 @@ import {
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
 import {
+  BG3_GALLERY_SOURCE_ID,
+  BG3_GALLERY_SYNC_JOB_NAME,
+  BG3_GAME_SLUGS,
+  BG3_INGEST_SOURCE_ID,
+  BG3_PLUGIN_ID,
+  BG3_RETENTION_JOB_NAME,
+} from './bg3-hub.schema.js';
+import {
+  BG3_SETUP,
   BLIZZARD_SETUP,
   CORE_SETUP,
   PELICAN_SETUP,
@@ -64,6 +73,7 @@ const valheim = {
     { id: 'valheim', kind: 'log-parser', label: 'Reads joins, leaves and deaths from the server log' },
     { id: 'valheim', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
+    { id: 'valheim-death', kind: 'media-subject', label: "Shows one player's death pictures in the Gallery" },
   ],
   gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,
@@ -92,8 +102,10 @@ const blizzard = {
     { id: 'forever-level-progression', title: 'Level progression', description: 'Where the roster’s levels sit and who is at cap.', layoutKey: 'plugin' },
     { id: 'forever-roles', title: 'Role breakdown', description: 'Tanks, healers and DPS ready for dungeons and raids.', layoutKey: 'plugin' },
     { id: 'forever-dungeon-quests', title: 'Dungeon quests', description: 'Who has the quests for upcoming dungeon runs.', layoutKey: 'plugin' },
+    { id: 'forever-recent-dings', title: 'Recent dings', description: 'Who levelled up in the last 30 days.', layoutKey: 'plugin' },
     { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
     { id: 'forever-whos-saved', title: "Who's saved", description: 'Who is saved to which instance, and when it resets.', layoutKey: 'plugin' },
+    { id: 'forever-last-seen', title: 'Last seen', description: 'Who was online at the last roster export, and who has been away longest.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
@@ -103,11 +115,35 @@ const blizzard = {
   behaviours: [
     { id: 'wow_guild', kind: 'hub-kind', label: 'World of Warcraft guild hubs' },
     { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
+    // ROK-1964: the `wow-ledgerlink` companion contract handler.
+    { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
   ],
   // Hub-widget game scope only (web guard W4) — the api manifest's own
   // `gameSlugs` (every WoW variant) is separate and unchanged.
   gameSlugs: ['world-of-warcraft-forever'],
   setup: BLIZZARD_SETUP,
+} satisfies PluginHubManifest;
+
+/**
+ * ROK-1957 D-16 — Baldur's Gate 3 (`game_community` hubs of a `BG3_GAME_SLUGS` game).
+ * Widgets + the Campaign tab: ROK-1958. Mapped below as `bg3`.
+ */
+export const BG3_HUB_MANIFEST = {
+  widgets: [
+    { id: 'where-we-are', title: 'Where we are', description: "The party's latest save: area, screenshot and when it was saved.", layoutKey: 'plugin' },
+    { id: 'party', title: 'Party', description: 'Who plays which character, their levels and the roles the party covers.', layoutKey: 'plugin' },
+    { id: 'session-history', title: 'Session history', description: 'Recent play sessions: when, how long, levels gained and areas visited.', layoutKey: 'plugin' },
+  ],
+  tabs: [{ id: 'campaign', label: 'Campaign' }],
+  behaviours: [
+    { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
+    { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
+    { id: BG3_GALLERY_SOURCE_ID, kind: 'ingest-source', label: 'Copies one save picture per play session into the hub Gallery' },
+    { id: BG3_GALLERY_SYNC_JOB_NAME, kind: 'scheduled-job', label: 'Adds new save pictures to the Gallery every 15 minutes' },
+    { id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures while the hub hides spoilers' },
+  ],
+  gameSlugs: [...BG3_GAME_SLUGS],
+  setup: BG3_SETUP,
 } satisfies PluginHubManifest;
 
 /** Every plugin's hub declaration, keyed by plugin slug. */
@@ -116,6 +152,7 @@ export const HUB_PLUGIN_MANIFESTS = {
   valheim,
   pelican,
   blizzard,
+  [BG3_PLUGIN_ID]: BG3_HUB_MANIFEST,
 } as const satisfies Readonly<Record<string, PluginHubManifest>>;
 
 /** A plugin slug that has a hub declaration. */

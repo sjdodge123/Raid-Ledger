@@ -9,6 +9,7 @@ import type {
 import {
   MAX_DEATH_PLAYERS,
   UNKNOWN_CHARACTER,
+  bucketsForBarKey,
   toDeathsResponse,
 } from './valheim-deaths.mappers';
 
@@ -176,5 +177,56 @@ describe('toDeathsResponse', () => {
     expect(rows([group({ characterName: '  ', deaths: 2 })])).toEqual([
       `${UNKNOWN_CHARACTER}|n${UNKNOWN_CHARACTER}|2|-`,
     ]);
+  });
+});
+
+describe('bucketsForBarKey (ROK-2027 D1)', () => {
+  const buckets = (
+    groups: DeathGroupRow[],
+    profiles: DeathProfileRow[],
+    key: string,
+  ) =>
+    bucketsForBarKey({ groups, profiles }, key)
+      .map((b) => `${b.steamId ?? '-'}|${b.characterName}`)
+      .sort();
+
+  it('returns every bucket a SteamID bar merges, including a rename', () => {
+    const groups = [
+      group({ steamId: A, characterName: 'Ragnar' }),
+      group({ steamId: A, characterName: 'Ragnar2', lastDeathAt: at(3) }),
+      group({ steamId: B, characterName: 'Bjorn' }),
+    ];
+    const profiles = [prof({ id: 42, steamId: A })];
+    expect(buckets(groups, profiles, 'c42')).toEqual([
+      `${A}|Ragnar`,
+      `${A}|Ragnar2`,
+    ]);
+  });
+
+  it('folds a NULL-steam bucket attributed by the single same-name profile', () => {
+    const groups = [
+      group({ steamId: A, characterName: 'Ragnar' }),
+      group({ steamId: null, characterName: 'Ragnar' }),
+    ];
+    const profiles = [prof({ id: 7, steamId: A, name: 'Ragnar' })];
+    expect(buckets(groups, profiles, 'c7')).toEqual([
+      '-|Ragnar',
+      `${A}|Ragnar`,
+    ]);
+  });
+
+  it('resolves a name-only key and its ~2 collision to different buckets', () => {
+    const groups = [
+      group({ steamId: A, characterName: 'Sam', firstDeathAt: at(1) }),
+      group({ steamId: null, characterName: 'Sam', firstDeathAt: at(2) }),
+    ];
+    expect(buckets(groups, [], 'nSam')).toEqual([`${A}|Sam`]);
+    expect(buckets(groups, [], 'nSam~2')).toEqual(['-|Sam']);
+  });
+
+  it('returns [] for a key no bar carries', () => {
+    const groups = [group({ steamId: A, characterName: 'Ragnar' })];
+    expect(buckets(groups, [], 'nNobody')).toEqual([]);
+    expect(buckets(groups, [], 'c999')).toEqual([]);
   });
 });

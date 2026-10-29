@@ -139,5 +139,52 @@ export const BLIZZARD_SETUP = {
       appliesTo: ['wow_guild'],
       links: [{ label: 'LedgerLink on GitHub', url: 'https://github.com/sjdodge123/ledger-link' }],
     },
+    {
+      // ROK-1964: optional auto-upload; paste keeps working without it.
+      id: 'ledgerlink-companion',
+      kind: 'companion_app',
+      title: 'Raid Ledger Companion (optional auto-upload)',
+      instructions:
+        '1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.',
+      required: false,
+      appliesTo: ['wow_guild'],
+    },
+  ],
+} satisfies PluginSetup;
+
+/**
+ * ROK-1957 D-17 — both per hub, so no `check` (setupStatus is plugin-wide).
+ * Companion / drag-and-drop links are added when ROK-1960/1961 ship (Q-7:
+ * `required: true` stays meanwhile).
+ */
+export const BG3_SETUP = {
+  requirements: [
+    {
+      id: 'upload-saves',
+      kind: 'companion_app',
+      title: 'Players upload their BG3 saves',
+      instructions:
+        'Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.',
+      required: true,
+      appliesTo: ['game_community'],
+    },
+    {
+      id: 'bind-campaign',
+      kind: 'other',
+      title: 'Bind a campaign to the hub',
+      instructions:
+        "1. A member creates a campaign on the Baldur's Gate 3 hub.\n2. Each player binds their saves to it, or sets it as their default campaign. Saves that are not bound stay private to their uploader.",
+      required: true,
+      appliesTo: ['game_community'],
+    },
+    {
+      id: 'gallery-saves',
+      kind: 'other',
+      title: 'Save pictures in the hub Gallery',
+      instructions:
+        "Nothing to install. About 4 hours after a play session ends, the picture of its last save appears in the hub Gallery under Saves. While the hub's spoiler setting hides location and screenshots, save pictures stay hidden for everyone.",
+      required: false,
+      appliesTo: ['game_community'],
+    },
   ],
 } satisfies PluginSetup;

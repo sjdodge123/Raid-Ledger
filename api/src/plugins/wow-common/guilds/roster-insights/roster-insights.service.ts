@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
@@ -21,6 +22,7 @@ import {
   computeLockouts,
   countLockoutReporters,
 } from './roster-insights.lockouts';
+import { computeLastSeen } from './roster-insights.last-seen';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
@@ -66,6 +68,10 @@ export class RosterInsightsService {
     audience: InsightsAudience,
     onlyMains: boolean,
   ): Promise<WowRosterInsightsDto> {
+    // Snapshot time first: if an import lands between the two reads, the
+    // footer shows presence as older than it is, never newer.
+    const snapshotAt =
+      audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
     const all = await this.loadRows(guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
     return {
@@ -77,10 +83,22 @@ export class RosterInsightsService {
             professions: computeProfessions(rows),
             lockouts: computeLockouts(rows, Date.now()),
             lockoutReporters: countLockoutReporters(rows),
+            // Presence is per character: the full roster, never mainsOnly (D4).
+            lastSeen: { ...computeLastSeen(all), snapshotAt },
           }
         : {}),
       freshness: computeFreshness(rows),
     };
+  }
+
+  /** The guild's latest snapshot time — the export the presence rows are from. */
+  private async loadSnapshotAt(guildId: number): Promise<string | null> {
+    const [g] = await this.db
+      .select({ at: schema.guilds.lastSnapshotAt })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, guildId))
+      .limit(1);
+    return g?.at ? g.at.toISOString() : null;
   }
 
   /** Roster rows (one per member) joined to their resolved facts. */
@@ -110,6 +128,8 @@ export class RosterInsightsService {
           userId: r.userId,
           isMain: r.isMain ?? false,
           rankIndex: r.rankIndex,
+          onlineAtExport: r.onlineAtExport,
+          lastOnlineDays: r.lastOnlineDays,
           facts: resolved,
         },
       ];

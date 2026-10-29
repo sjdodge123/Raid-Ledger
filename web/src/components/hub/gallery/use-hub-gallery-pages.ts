@@ -3,12 +3,14 @@
  * (`nextCursor` paging, 24 a page, under `hubMediaKeys.all(guildId)` so a
  * moderation write refreshes the card strip too) and the editor Hide / staff
  * Remove writes (L2 routes: `PATCH` / `DELETE /hubs/:guildId/media/:id`).
+ * ROK-2027: an optional plugin-resolved `subject` scopes the list; it is part of
+ * the query key so scoped and unscoped pages never share a cache entry.
  */
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HubMediaItemSchema, type HubMediaItem, type HubMediaKind } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
-import { fetchHubMedia } from '../../../lib/hub-media-api';
+import { fetchHubMedia, type HubMediaFetchQuery } from '../../../lib/hub-media-api';
 import { hubMediaKeys, type HubMediaFilter } from '../../../lib/hub-media-query';
 import { toast } from '../../../lib/toast';
 
@@ -23,15 +25,28 @@ export interface HubGalleryPages {
     refreshing: boolean;
     hasMore: boolean;
     loadingMore: boolean;
+    /** When the loaded pages last changed (`dataUpdatedAt`): a refetch bumps it even if the length is unchanged. */
+    version: number;
     loadMore: () => Promise<unknown>;
 }
 
-export function useHubGalleryPages(guildId: number, filter: HubMediaFilter): HubGalleryPages {
+/**
+ * A subject is sent WITHOUT a kind (ROK-2027 D7): the plugin's count covers the
+ * subject's linked pictures whatever their kind, so the chip filter is dropped.
+ */
+function pageQuery(filter: HubMediaFilter, subject: string | null, cursor: string | null): HubMediaFetchQuery {
+    return {
+        filter: subject === null ? filter : 'all',
+        limit: HUB_GALLERY_PAGE_SIZE,
+        ...(cursor === null ? {} : { cursor }),
+        ...(subject === null ? {} : { subject }),
+    };
+}
+
+export function useHubGalleryPages(guildId: number, filter: HubMediaFilter, subject: string | null = null): HubGalleryPages {
     const q = useInfiniteQuery({
-        queryKey: [...hubMediaKeys.all(guildId), 'pages', filter] as const,
-        queryFn: ({ pageParam }) => fetchHubMedia(guildId, {
-            filter, limit: HUB_GALLERY_PAGE_SIZE, ...(pageParam === null ? {} : { cursor: pageParam }),
-        }),
+        queryKey: [...hubMediaKeys.all(guildId), 'pages', filter, subject] as const,
+        queryFn: ({ pageParam }) => fetchHubMedia(guildId, pageQuery(filter, subject, pageParam)),
         initialPageParam: null as string | null,
         getNextPageParam: (last) => last.nextCursor,
         retry: false,
@@ -45,6 +60,7 @@ export function useHubGalleryPages(guildId: number, filter: HubMediaFilter): Hub
         refreshing: q.isFetching && !q.isPending && !q.isFetchingNextPage,
         hasMore: q.hasNextPage,
         loadingMore: q.isFetchingNextPage,
+        version: q.dataUpdatedAt,
         loadMore: () => q.fetchNextPage(),
     };
 }

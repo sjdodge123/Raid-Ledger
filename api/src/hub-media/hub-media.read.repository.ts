@@ -1,4 +1,14 @@
-import { and, count, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+} from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubMediaKind } from '@raid-ledger/contract';
@@ -12,18 +22,34 @@ export interface HubMediaScope {
   guildId: number;
   /** Editors see hidden rows (flagged); everyone else never does (D8). */
   includeHidden: boolean;
+  /** ROK-1959 D-5 — sources a gate hides on this hub, for everyone. */
+  excludeSources: readonly string[];
 }
 
 /** Live (not tombstoned) rows of the hub this viewer may see. */
 function visible(scope: HubMediaScope): SQL {
   const live = and(eq(M.guildId, scope.guildId), isNull(M.removedAt));
-  const where = scope.includeHidden ? live : and(live, isNull(M.hiddenAt));
-  return where ?? eq(M.guildId, scope.guildId);
+  const shown = scope.includeHidden ? undefined : isNull(M.hiddenAt);
+  const gated =
+    scope.excludeSources.length > 0
+      ? notInArray(M.source, [...scope.excludeSources])
+      : undefined;
+  return and(live, shown, gated) ?? eq(M.guildId, scope.guildId);
 }
 
-function filtered(scope: HubMediaScope, kinds: HubMediaKind[] | null): SQL {
+/**
+ * `visible()` narrowed by kind and (ROK-2027 D4) by a subject's media ids.
+ * Callers short-circuit an empty `ids` (D5) — never `IN ()`.
+ */
+function filtered(
+  scope: HubMediaScope,
+  kinds: HubMediaKind[] | null,
+  ids: number[] | null,
+): SQL {
   const base = visible(scope);
-  return kinds ? (and(base, inArray(M.kind, kinds)) ?? base) : base;
+  const byKind = kinds ? inArray(M.kind, kinds) : undefined;
+  const byId = ids ? inArray(M.id, ids) : undefined;
+  return and(base, byKind, byId) ?? base;
 }
 
 /** One page newest-first by `(captured_at, id)`; asks `limit + 1` to detect more. */
@@ -32,6 +58,8 @@ export async function listPage(
   scope: HubMediaScope,
   q: {
     kinds: HubMediaKind[] | null;
+    /** ROK-2027 — a subject's media ids; null = unscoped. */
+    ids: number[] | null;
     cursor: HubMediaCursor | null;
     limit: number;
   },
@@ -45,21 +73,22 @@ export async function listPage(
   return db
     .select()
     .from(M)
-    .where(and(filtered(scope, q.kinds), after))
+    .where(and(filtered(scope, q.kinds, q.ids), after))
     .orderBy(desc(M.capturedAt), desc(M.id))
     .limit(q.limit + 1);
 }
 
-/** Visible pictures matching the filter (the response `total`). */
+/** Visible pictures matching the kind + subject filters (the response `total`). */
 export async function countVisible(
   db: Db,
   scope: HubMediaScope,
   kinds: HubMediaKind[] | null,
+  ids: number[] | null,
 ): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(M)
-    .where(filtered(scope, kinds));
+    .where(filtered(scope, kinds, ids));
   return row?.n ?? 0;
 }
 

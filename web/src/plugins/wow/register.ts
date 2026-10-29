@@ -24,6 +24,8 @@ import { registerRolesWidget } from './hub-widgets/roles.register';
 import { professionsWidget } from './hub-widgets/professions.register';
 import { whosSavedWidget } from './hub-widgets/whos-saved.register';
 import { registerDungeonQuestsWidget } from './hub-widgets/dungeon-quests.register';
+import { recentDingsWidget } from './hub-widgets/recent-dings.register';
+import { lastSeenWidget } from './hub-widgets/last-seen.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -57,3 +59,5 @@ registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
+blizzard.registerHubWidget(recentDingsWidget);
+blizzard.registerHubWidget(lastSeenWidget);

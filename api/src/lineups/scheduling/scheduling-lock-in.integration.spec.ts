@@ -14,6 +14,7 @@
  *   (b) a poll whose every slot has passed is refused (ROK-1610 AC2)
  *   (c) a non-organiser member is refused (ROK-1610 AC3)
  *   (d) voting stays closed after expiry (AC3, second half)
+ *   (e) two concurrent lock-ins leave exactly one event (ROK-2024 F2)
  */
 import { eq, sql } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
@@ -568,5 +569,35 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .send({ slotId: poll.slotIds[0] });
 
     expect(res.status).toBe(400);
+  });
+
+  // ── (e) concurrent lock-ins leave no orphan (ROK-2024 follow-up F2) ─
+
+  it('two concurrent lock-ins: one wins, the other is refused, and only ONE event exists for the poll', async () => {
+    const poll = await seedExpiredPoll([FUTURE_SLOT]);
+    const slotId = at(poll.slotIds, 0);
+    await seedVote(slotId, testApp.seed.adminUser.id);
+
+    const [first, second] = await Promise.all([
+      lockIn(poll, slotId, adminToken),
+      lockIn(poll, slotId, adminToken),
+    ]);
+
+    // 409 = lost the claim; 400 = arrived after the winner had committed.
+    const statuses = [first.status, second.status].sort();
+    expect(statuses[0]).toBe(201);
+    expect([400, 409]).toContain(statuses[1]);
+    const winner = first.status === 201 ? first : second;
+
+    const fromPoll = await testApp.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(eq(schema.events.createdFromPollId, poll.matchId));
+    expect(fromPoll).toEqual([{ id: winner.body.eventId as number }]);
+    const [match] = await testApp.db
+      .select({ linkedEventId: schema.communityLineupMatches.linkedEventId })
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    expect(match?.linkedEventId).toBe(winner.body.eventId as number);
   });
 });

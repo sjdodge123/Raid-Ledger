@@ -42,10 +42,19 @@ export function useCalendarsOverview() {
     });
 }
 
-/** True only once the overview loaded AND says the switch is on. */
-export function useCalendarSyncEnabled(): boolean {
-    const { data } = useCalendarsOverview();
-    return data?.enabled === true;
+/**
+ * Whether My Integrations shows the Calendars section: when the overview says
+ * the switch is on, or when the fetch failed (CalendarsPage then shows its own
+ * load error and keeps the OAuth callback feedback mounted). Hidden while the
+ * first fetch is pending (no frame flash on switch-off installs) and once the
+ * overview says the switch is off.
+ */
+export function useCalendarsSectionShown(): boolean {
+    // errorUpdateCount, not isError: CalendarsPage's own observer refetches the
+    // errored query on mount, which resets a data-less query to pending.
+    const { data, errorUpdateCount } = useCalendarsOverview();
+    if (data) return data.enabled;
+    return errorUpdateCount > 0;
 }
 
 /** Leaves the app for the provider's consent screen. */

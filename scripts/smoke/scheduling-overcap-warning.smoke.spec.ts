@@ -9,14 +9,14 @@
  * Attendees — the API's `resolveEventCapacity` order) the form shows the `scheduling-overflow-notice` status
  * banner; it goes away, live, as soon as the cap covers everyone.
  *
- * Seed (every test owns its poll, deleted in `finally`): a standalone poll
- * created by the admin (the creator), one proposed time — suggesting
- * auto-votes the admin YES — plus two fixture members voting YES ⇒
- * rostered 3. Cases:
+ * Seed (`scheduling-overcap-fixtures.ts`; every test owns its poll, deleted
+ * in `finally`): the admin (creator) + two fixture members voting YES in a
+ * known order ⇒ rostered 3. Cases:
  *
  *   1. Players = 2, no Max Attendees ⇒ banner with the spec's exact copy
- *      (3 people / 2 spots / 1 benched) and both voters' names, creator
- *      omitted; Increase Players ⇒ gone (at cap 3); Decrease ⇒ back (AC3).
+ *      (3 people / 2 spots / 1 benched) and both voters as bench-picker
+ *      checkboxes, creator omitted, the latest voter marked (ROK-2025);
+ *      Increase Players ⇒ gone (at cap 3); Decrease ⇒ back (AC3).
  *   2. Players overrides Max Attendees: Players 2 + Max 5 ⇒ banner (cap 2);
  *      Players 5 + Max 2 ⇒ gone (all 3 get player slots).
  *
@@ -25,115 +25,25 @@
  * under the roster section, and `toBeVisible` scrolls nothing, so each
  * assertion is on presence + copy rather than on fold position.
  */
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, getAdminToken } from './api-helpers';
+import { getAdminToken } from './api-helpers';
 import {
-    getFirstGameId,
-    seedFixtureVoter,
-    seedPollWithSlot,
-    voteAs,
-    waitForPollVisible,
-    waitForSlotCounts,
-    type SeededPoll,
-} from './scheduling-poll-fixtures';
-
-/**
- * Fixture members (slots 4 + 5). Votes are per poll, so a sibling spec (or
- * the other viewport project) reusing the same users cannot move THIS poll's
- * numbers — every test seeds its own poll.
- */
-const VOTER_SLOTS = [4, 5] as const;
+    benchPickBox,
+    benchPicker,
+    cleanupOverCapPoll as cleanup,
+    openLockForm,
+    overflowNotice as notice,
+    playersInput,
+    seedOverCapPoll,
+    setCaps,
+    type OverCapPoll as Seeded,
+} from './scheduling-overcap-fixtures';
 
 const HEADING = 'More yes-votes than roster spots';
+/** ROK-2025: the footer now follows the bench picker. */
 const FOOTER =
-    'Who goes to the bench depends on signup order. Raise the player count, or ask voters to change their vote before you create the event.';
-
-interface Seeded extends SeededPoll {
-    gameId: number;
-    /** The fixture voters' display names, as the poll API reports them. */
-    voterNames: string[];
-}
-
-interface PollSlotVotes {
-    slots?: {
-        id: number;
-        votes?: { userId: number; displayName: string }[];
-    }[];
-}
-
-/** Delete the seeded poll's lineup; never let cleanup fail a test. */
-async function cleanup(token: string, seeded: SeededPoll | null): Promise<void> {
-    if (!seeded) return;
-    await apiDelete(token, `/lineups/${seeded.lineupId}`).catch(() => {});
-}
-
-/** A poll whose one slot carries the admin + two fixture members' YES. */
-async function seedOverCapPoll(token: string, daysOut: number): Promise<Seeded> {
-    const gameId = await getFirstGameId(token);
-    const seeded = await seedPollWithSlot(token, daysOut);
-    const voterIds: number[] = [];
-    for (const slot of VOTER_SLOTS) {
-        const voter = await seedFixtureVoter(token, slot);
-        await voteAs(voter.jwt, seeded, seeded.slotId);
-        voterIds.push(voter.userId);
-    }
-    // Barrier: the form re-reads the poll, so the server must already hold
-    // all three YES votes before the page opens.
-    await waitForSlotCounts(token, seeded, seeded.slotId, { yes: 3, no: 0 });
-    await waitForPollVisible(token, seeded);
-    const poll = (await apiGet(
-        token,
-        `/lineups/${seeded.lineupId}/schedule/${seeded.pollId}`,
-    )) as PollSlotVotes | null;
-    const votes = poll?.slots?.find((s) => s.id === seeded.slotId)?.votes ?? [];
-    const voterNames = votes
-        .filter((v) => voterIds.includes(v.userId))
-        .map((v) => v.displayName);
-    expect(voterNames, 'both fixture voters on the slot').toHaveLength(2);
-    return { ...seeded, gameId, voterNames };
-}
-
-/** Open the create form exactly as "Lock this time" does. */
-async function openLockForm(page: Page, seeded: Seeded): Promise<void> {
-    const params = new URLSearchParams({
-        gameId: String(seeded.gameId),
-        startTime: seeded.time.toISOString(),
-        matchId: String(seeded.pollId),
-        lineupId: String(seeded.lineupId),
-    });
-    await page.goto(`/events/new?${params.toString()}`);
-    await expect(
-        page.getByRole('heading', { name: 'Create Event', level: 1 }),
-    ).toBeVisible({ timeout: 15_000 });
-    // The banner only exists for a generic roster — pin it, whatever the
-    // game's own default slot type is.
-    const generic = page.getByRole('radio', { name: 'Generic Slots', exact: true });
-    if (!(await generic.isChecked())) {
-        await generic.locator('xpath=..').click();
-    }
-    await expect(generic).toBeChecked();
-}
-
-function notice(page: Page): Locator {
-    return page.getByTestId('scheduling-overflow-notice');
-}
-
-function playersInput(page: Page): Locator {
-    return page.getByRole('spinbutton', { name: 'Players slots', exact: true });
-}
-
-function maxAttendeesInput(page: Page): Locator {
-    return page.getByLabel('Max Attendees', { exact: true });
-}
-
-/** Set both cap fields; an empty `max` means unlimited. */
-async function setCaps(page: Page, players: number, max: string): Promise<void> {
-    await maxAttendeesInput(page).fill(max);
-    await expect(maxAttendeesInput(page)).toHaveValue(max);
-    await playersInput(page).fill(String(players));
-    await expect(playersInput(page)).toHaveValue(String(players));
-}
+    'Or raise the player count, or ask voters to change their vote, before you create the event.';
 
 /** The banner, with the spec's exact copy for 3 rostered on a `cap` roster. */
 async function expectBanner(page: Page, seeded: Seeded, cap: number): Promise<void> {
@@ -151,12 +61,23 @@ async function expectBanner(page: Page, seeded: Seeded, cap: number): Promise<vo
     ).toBeVisible();
     // The admin voted (the suggester's auto-YES), so no "includes you" line.
     await expect(banner.getByText(/That count includes you/)).toHaveCount(0);
-    const voters = banner.getByTestId('scheduling-overflow-voters');
-    await expect(voters).toBeVisible();
-    for (const name of seeded.voterNames) {
-        await expect(voters).toContainText(name);
+    // ROK-2025: the voter list became the bench picker — every voter is a
+    // checkbox row (creator omitted), the latest `benched` voters marked.
+    const picker = benchPicker(page);
+    await expect(picker).toBeVisible();
+    const latest = seeded.voterIds.slice(-benched);
+    for (const [i, id] of seeded.voterIds.entries()) {
+        const name = seeded.voterNames[i] ?? '';
+        await expect(picker.getByRole('checkbox', { name, exact: true })).toBeVisible();
+        const box = benchPickBox(page, id);
+        if (latest.includes(id)) await expect(box).toBeChecked();
+        else await expect(box).not.toBeChecked();
     }
-    await expect(voters).toHaveText(/^Voted yes: /);
+    await expect(picker.getByRole('checkbox')).toHaveCount(seeded.voterIds.length);
+    await expect(picker.getByTestId('bench-pick-count')).toHaveText(
+        `${benched} of ${benched} picked`,
+    );
+    await expect(picker.getByTestId('bench-pick-error')).toHaveCount(0);
     await expect(banner.getByText(FOOTER, { exact: true })).toBeVisible();
 }
 

@@ -22,6 +22,10 @@ export const HUB_BEHAVIOUR_KINDS = [
   'ingest-source',
   'media-classifier',
   'media-decorator',
+  /** ROK-2027 — resolves a Gallery `?subject=<namespace>:<payload>` scope. */
+  'media-subject',
+  /** ROK-1959 — hides one Gallery source per hub at read time (e.g. a spoiler toggle). */
+  'media-gate',
 ] as const;
 export const HubBehaviourKindSchema = z.enum(HUB_BEHAVIOUR_KINDS);
 export type HubBehaviourKind = z.infer<typeof HubBehaviourKindSchema>;

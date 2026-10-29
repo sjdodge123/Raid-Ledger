@@ -8,7 +8,6 @@ import {
   Injectable,
   Logger,
   ConflictException,
-  forwardRef,
   Optional,
 } from '@nestjs/common';
 import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
@@ -35,14 +34,9 @@ import {
   completeStandalonePoll,
   stampReschedulingPollId,
 } from './standalone-poll-query.helpers';
-import {
-  assertCanRescheduleEvent,
-  assertCanCompletePoll,
-} from './standalone-poll-auth.helpers';
-import { SignupsService } from '../../events/signups.service';
+import { assertCanRescheduleEvent } from './standalone-poll-auth.helpers';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
-import { SettingsService } from '../../settings/settings.service';
 import {
   assertVisibilityAllowed,
   buildShareSettings,
@@ -50,12 +44,8 @@ import {
 import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
 import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { resolvePollHubId } from './standalone-poll-hub.helpers';
-import {
-  fireLockInFanout,
-  type LockIn,
-} from './standalone-poll-lockin.helpers';
-import { LineupNotificationService } from '../lineup-notification.service';
-import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
+import { assertCanCompleteWithBench } from './standalone-poll-bench-pick.helpers';
+import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
 const noop = (): void => {};
@@ -107,12 +97,8 @@ export class StandalonePollService {
     private readonly phaseQueue: LineupPhaseQueueService,
     private readonly notifications: StandalonePollNotificationService,
     private readonly schedulingPollEmbed: SchedulingPollEmbedService,
-    private readonly signupsService: SignupsService,
-    private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
-    @Inject(forwardRef(() => EmbedSyncQueueService))
-    private readonly embedSyncQueue: EmbedSyncQueueService,
-    private readonly lineupNotifications: LineupNotificationService,
+    private readonly lockIn: StandalonePollLockInService,
     @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
@@ -123,24 +109,27 @@ export class StandalonePollService {
 
   /** Mark a poll as completed (match -> scheduled; a standalone lineup ->
    *  archived, a regular lineup match -> linked to the event — ROK-2024).
-   *  When eventId is provided, auto-signup slot voters and auto-heart the game
-   *  (ROK-1031), then announce EVENT CREATED unless it is a reschedule. */
+   *  When eventId is provided, resolves only after the slot voters' signups
+   *  (ROK-1031/2031); heart, DMs and EVENT CREATED (skipped for a reschedule)
+   *  follow without being awaited.
+   *  ROK-2025: `benchUserIds` = the organizer's bench pick, checked before
+   *  the flip so a 400 leaves the poll open for a retry. */
   async complete(
     matchId: number,
     eventId?: number,
     startTime?: string,
     creatorId?: number,
     isAdmin = false,
+    benchUserIds?: number[],
   ): Promise<boolean> {
     // ROK-1370 (P2): a LINKED poll's lock-in re-emits UPDATED (embed → POSTED,
     // SE recreated) — restrict it to the poll/event owner or an admin.
     // ROK-1844: every completion is owner/staff-only, and `eventId` must be
     // the caller's and come from this poll — checked before anything changes.
-    await assertCanCompletePoll(
+    const bench = await assertCanCompleteWithBench(
       this.db,
-      matchId,
       { id: creatorId ?? -1, isAdmin },
-      { eventId, startTime },
+      { matchId, eventId, startTime, benchUserIds },
     );
     const result = await completeStandalonePoll(
       this.db,
@@ -152,74 +141,15 @@ export class StandalonePollService {
       throw new ConflictException('This poll has already been completed');
     }
     if (result.ok) {
-      await this.afterLockIn(result, matchId, eventId, startTime, creatorId);
-    }
-    return result.ok;
-  }
-
-  /** Side effects of a successful `complete()`. */
-  private async afterLockIn(
-    result: Awaited<ReturnType<typeof completeStandalonePoll>>,
-    matchId: number,
-    eventId: number | undefined,
-    startTime: string | undefined,
-    creatorId: number | undefined,
-  ): Promise<void> {
-    // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
-    // embed so its author line and colour follow.
-    this.schedulingPollEmbed.fireUpdateEmbed(matchId);
-    // The contract requires `startTime` with `eventId`; only that slot's
-    // yes-voters are signed up (ROK-1844), never every yes-voter.
-    // ROK-2024: announce once, after those signups, and never for a
-    // reschedule (`linkedEventId`) — its event was announced when created.
-    if (eventId && startTime) {
-      this.startLockInFanout({
+      await this.lockIn.afterComplete(result, {
         matchId,
         eventId,
         startTime,
         creatorId,
-        announce: !result.linkedEventId,
+        benchUserIds: bench,
       });
     }
-    if (result.linkedEventId && !result.linkedEventCancelled) {
-      await this.reemitLinkedEvent(result.linkedEventId);
-    }
-  }
-
-  /** Sign up + DM the slot voters, then announce (ROK-1031 / ROK-2024). */
-  private startLockInFanout(lockIn: LockIn): void {
-    fireLockInFanout(
-      {
-        db: this.db,
-        signupsService: this.signupsService,
-        settingsService: this.settingsService,
-        notifications: this.notifications,
-        lineupNotifications: this.lineupNotifications,
-        logger: this.logger,
-      },
-      lockIn,
-    );
-  }
-
-  /**
-   * ROK-1370: lock-in cleared reschedulingPollId — re-emit UPDATED so the
-   * embed resets RESCHEDULING → POSTED and the Scheduled Event is recreated
-   * at the (already-moved) winning time. The caller skips an event cancelled
-   * mid-poll: the re-emit would recreate a Discord SE for a dead event.
-   */
-  private async reemitLinkedEvent(linkedEventId: number): Promise<void> {
-    this.eventsService
-      .emitLifecycleEvent(linkedEventId, APP_EVENT_EVENTS.UPDATED)
-      .catch(noop);
-    // ROK-1392: the UPDATED re-emit recreates the Scheduled Event, but its
-    // embed re-render is fire-and-forget — on a quiet server nothing else
-    // enqueues an embed sync, so the card can stay stuck on RESCHEDULING
-    // until unrelated traffic heals it. completeStandalonePoll has already
-    // cleared reschedulingPollId, so enqueue an explicit level-triggered
-    // sync now: the processor reads the (cleared) flag and restores the live
-    // embed deterministically. Symmetric to the poll-start RESCHEDULING
-    // teardown's updateEmbedState.
-    await this.embedSyncQueue.enqueue(linkedEventId, 'reschedule-poll-lockin');
+    return result.ok;
   }
 
   /**

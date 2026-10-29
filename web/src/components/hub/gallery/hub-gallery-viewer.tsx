@@ -21,9 +21,12 @@ export interface HubGalleryViewerProps {
 
 const WHEN = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } as const;
 
-/** ROK-1965 ruling 7: an upload's caption says "Uploaded"; a Discord post says "From Discord". */
+/**
+ * ROK-1965 ruling 7: a Discord post says "From Discord"; every other source
+ * shows its label alone — an upload "Uploaded", a BG3 save "Game save" (ROK-1959).
+ */
 function sourceLine(item: HubMediaItem): string {
-    return item.source.type === 'upload' ? 'Uploaded' : `From ${item.source.label ?? ''}`;
+    return item.source.type === 'discord' ? `From ${item.source.label ?? ''}` : (item.source.label ?? '');
 }
 
 function Caption({ item }: { item: HubMediaItem }): JSX.Element {

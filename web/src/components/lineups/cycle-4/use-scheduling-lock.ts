@@ -5,9 +5,10 @@
  * `CreateEventSection` dropdown so it lives once, at composite level:
  *   - past-time guard (toast + abort),
  *   - majority-voter threshold → confirm modal for an early lock,
- *   - reschedule-vs-create branch: `linkedEventId != null` reschedules the
- *     linked event then `completeStandalonePoll(matchId, eventId, startTime)`
- *     so the backend auto-signs-up/re-rosters the slot's voters (ROK-1031);
+ *   - reschedule-vs-create branch: `linkedEventId != null` calls the
+ *     claim-first `rescheduleLockInSchedulingPoll` (ROK-2040), which moves the
+ *     linked event and re-rosters the slot's voters (ROK-1031) in one request —
+ *     a losing racer gets a 409 and moves nothing (the winner already did);
  *     otherwise navigate to `/events/new?gameId&startTime&matchId&lineupId` (verbatim
  *     target from `CreateFromSlot::performNavigate`), plus `copyFromEventId`
  *     when this is a follow-up poll so the create form prefills from the
@@ -25,11 +26,11 @@ import type {
   SchedulePollPageResponseDto,
   ScheduleSlotWithVotesDto,
 } from '@raid-ledger/contract';
-import { useRescheduleEvent } from '../../../hooks/use-reschedule';
 import {
-  completeStandalonePoll,
   getSchedulePoll,
+  rescheduleLockInSchedulingPoll,
 } from '../../../lib/api-client';
+import { isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
   computeRequiredVoters,
@@ -37,12 +38,17 @@ import {
 } from '../../../pages/scheduling/threshold';
 import { resolvePollStatus } from './scheduling-poll-status';
 import { invalidateHubPolls } from '../../hub/events/hub-polls-api';
+import { refreshLockedInEvent } from '../../events/use-bench-pick';
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 /** Toast when the fresh poll no longer offers the requested slot. */
 export const POLL_CHANGED_MESSAGE =
   'This poll changed — refresh to see the latest';
+
+/** Toast for the reschedule lock-in that lost the race (ROK-2040). */
+export const RESCHEDULE_LOCK_IN_LOST_TOAST =
+  'This poll was already locked in, so your pick was not applied. Refresh to see the event time.';
 
 /** Options for {@link SchedulingLock.requestLock}. */
 export interface RequestLockOptions {
@@ -87,7 +93,7 @@ export interface SchedulingLock {
   pendingDistinctVoters: number;
   /** Member count from the same fresh poll (confirm modal copy). */
   pendingMemberCount: number;
-  /** True while the fresh poll is being fetched. */
+  /** True while the fresh poll is fetched or the lock-in request runs. */
   refreshing: boolean;
   /** Begin a lock — refetches, runs guards, then confirm-or-commit. */
   requestLock: (
@@ -123,41 +129,54 @@ export function createEventUrl(
   return `/events/new?${params.toString()}`;
 }
 
+/** Refetch everything a reschedule lock-in (won or lost) may have changed. */
+function refreshAfterReschedule(qc: QueryClient, eventId: number): void {
+  void qc.invalidateQueries({ queryKey: ['events'] });
+  void qc.invalidateQueries({ queryKey: ['event', eventId] });
+  invalidateHubPolls(qc);
+  refreshLockedInEvent(qc, eventId);
+}
+
+/** ROK-2040: one claim-first request moves the event and closes the poll. */
+async function lockInReschedule(
+  qc: QueryClient,
+  ids: { matchId: number; eventId: number },
+  start: Date,
+): Promise<void> {
+  const end = new Date(start.getTime() + TWO_HOURS_MS);
+  try {
+    // startTime must be the same instant as slot.proposedTime — the backend
+    // matches it to a slot by Date-getTime equality (ROK-1031).
+    await rescheduleLockInSchedulingPoll(ids.matchId, {
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+    });
+    toast.success('Event rescheduled');
+  } catch (err) {
+    if (isConflictError(err)) toast.error(RESCHEDULE_LOCK_IN_LOST_TOAST);
+    else toast.error(err instanceof Error ? err.message : 'Failed to reschedule');
+  }
+  refreshAfterReschedule(qc, ids.eventId);
+}
+
 /** The commit step: reschedule the linked event, or open the create form. */
 function useLockCommit(
   match: MatchDetailResponseDto,
   matchId: number,
   lineupId: number,
   hubId: number | null,
-): (slot: ScheduleSlotWithVotesDto) => void {
+): (slot: ScheduleSlotWithVotesDto) => Promise<void> {
   const navigate = useNavigate();
-  const reschedule = useRescheduleEvent(match.linkedEventId ?? 0);
   const qc = useQueryClient();
-  return (slot: ScheduleSlotWithVotesDto): void => {
+  return async (slot: ScheduleSlotWithVotesDto): Promise<void> => {
     const start = new Date(slot.proposedTime);
     if (start <= new Date()) {
       toast.error('Cannot lock a time in the past');
       return;
     }
     if (match.linkedEventId != null) {
-      // Capture now: property narrowing doesn't survive into the callback.
-      const eventId = match.linkedEventId;
-      const end = new Date(start.getTime() + TWO_HOURS_MS);
-      reschedule.mutate(
-        { startTime: start.toISOString(), endTime: end.toISOString() },
-        {
-          onSuccess: () => {
-            // startTime must be the same instant as slot.proposedTime — the
-            // backend matches it to a slot by Date-getTime equality (ROK-1031).
-            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => invalidateHubPolls(qc));
-            toast.success('Event rescheduled');
-          },
-          onError: (err) =>
-            toast.error(
-              err instanceof Error ? err.message : 'Failed to reschedule',
-            ),
-        },
-      );
+      const ids = { matchId, eventId: match.linkedEventId };
+      await lockInReschedule(qc, ids, start);
       return;
     }
     navigate(createEventUrl(match, { matchId, lineupId, hubId }, slot));
@@ -180,34 +199,44 @@ export function useSchedulingLock(
   const [pendingSlot, setPendingSlot] =
     useState<ScheduleSlotWithVotesDto | null>(null);
 
-  const requestLock = async (
-    requested: ScheduleSlotWithVotesDto,
-    opts: RequestLockOptions = {},
-  ): Promise<void> => {
+  /** Run `step` once at a time; a second click while one runs is dropped. */
+  const exclusive = async (step: () => Promise<void>): Promise<void> => {
     if (inFlight.current) return;
     inFlight.current = true;
     setRefreshing(true);
-    const ids = { lineupId, matchId, slotId: requested.id };
-    const fresh = await loadFreshSlot(qc, ids);
-    inFlight.current = false;
-    setRefreshing(false);
-    if (!fresh) {
-      toast.error(POLL_CHANGED_MESSAGE);
-      return;
+    try {
+      await step();
+    } finally {
+      inFlight.current = false;
+      setRefreshing(false);
     }
-    const required = computeRequiredVoters(fresh.memberCount);
-    if (opts.forceConfirm || countDistinctVoters(fresh.slot) < required) {
-      setPendingMemberCount(fresh.memberCount);
-      setPendingSlot(fresh.slot);
-      return;
-    }
-    commit(fresh.slot);
   };
+
+  const requestLock = (
+    requested: ScheduleSlotWithVotesDto,
+    opts: RequestLockOptions = {},
+  ): Promise<void> =>
+    exclusive(async () => {
+      const ids = { lineupId, matchId, slotId: requested.id };
+      const fresh = await loadFreshSlot(qc, ids);
+      if (!fresh) {
+        toast.error(POLL_CHANGED_MESSAGE);
+        return;
+      }
+      const required = computeRequiredVoters(fresh.memberCount);
+      if (opts.forceConfirm || countDistinctVoters(fresh.slot) < required) {
+        setPendingMemberCount(fresh.memberCount);
+        setPendingSlot(fresh.slot);
+        return;
+      }
+      // Held until the lock-in settles, so a double click cannot send two.
+      await commit(fresh.slot);
+    });
 
   const confirmLock = (): void => {
     const slot = pendingSlot;
     setPendingSlot(null);
-    if (slot) commit(slot);
+    if (slot) void exclusive(() => commit(slot));
   };
 
   return {

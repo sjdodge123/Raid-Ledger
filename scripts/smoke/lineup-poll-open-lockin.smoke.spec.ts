@@ -4,11 +4,11 @@
  * The organiser's path: "⋯ Poll actions" on the leader card → "Lock this
  * time" → "Create anyway" (one YES voter is below the two-voter floor of
  * `computeRequiredVoters`) → the create form → "Create Event". The form
- * creates the event with `schedulingMatchId`, navigates to it, then calls
- * `POST /scheduling-polls/:matchId/complete`. Before the fix that call 404'd
- * for a lineup match (only standalone polls were found): the form raised the
- * "Event created, but auto-signup may not have completed" warning toast and
- * the poll stayed open with no linked event.
+ * sends ONE claim-first `POST /scheduling-polls/:matchId/lock-in` (ROK-2032;
+ * it used to be `POST /events` then `…/complete`) and navigates to the
+ * created event. Before ROK-2024 the poll call 404'd for a lineup match (only
+ * standalone polls were found): the form raised a warning toast and the poll
+ * stayed open with no linked event.
  *
  * The fixture is a REAL community lineup (nominate → voting → vote →
  * decided), not `POST /scheduling-polls` (a standalone poll, which always
@@ -30,7 +30,6 @@ import {
 } from './api-helpers';
 
 const FILE_PREFIX = 'open-lockin';
-const AUTO_SIGNUP_WARNING = 'auto-signup may not have completed';
 
 interface LineupPoll {
     lineupId: number;
@@ -193,34 +192,33 @@ test.describe('Lineup poll — open lock-in creates the event and closes the pol
             await lockLeaderSlot(page, seeded);
 
             await page.locator('#title').fill(`${workerPrefix}Open Lock-in Night`);
-            const completed = page.waitForResponse(
+            const lockedIn = page.waitForResponse(
                 (r) =>
                     r.request().method() === 'POST' &&
-                    r.url().includes(`/scheduling-polls/${seeded.matchId}/complete`),
+                    r.url().includes(`/scheduling-polls/${seeded.matchId}/lock-in`),
                 { timeout: 30_000 },
             );
             await page.getByRole('button', { name: 'Create Event', exact: true }).click();
 
-            const response = await completed;
+            const response = await lockedIn;
             expect(
                 response.status(),
-                'ROK-2024: completing a LINEUP match poll must succeed — a 404 here is the original bug (complete only found standalone polls).',
+                'ROK-2024/2032: locking in a LINEUP match poll must succeed — a 404 here is the original bug (only standalone polls were found).',
             ).toBe(200);
+            const result = (await response.json()) as { event?: { id?: number } };
 
             await expect(page).toHaveURL(/\/events\/\d+(?:[?#].*)?$/, { timeout: 15_000 });
             const idMatch = /\/events\/(\d+)/.exec(new URL(page.url()).pathname);
             eventId = Number(idMatch?.[1]);
             expect(Number.isInteger(eventId) && eventId > 0, 'navigated to the created event').toBe(true);
+            expect(eventId, 'navigated to the event the lock-in created').toBe(result.event?.id);
 
             await expect(
                 page.locator('[data-sonner-toast]').filter({ hasText: 'Event created successfully!' }),
             ).toBeVisible({ timeout: 10_000 });
             await expect(
-                page.locator('[data-sonner-toast]').filter({ hasText: AUTO_SIGNUP_WARNING }),
-                'ROK-2024: the auto-signup warning toast means complete failed',
-            ).toHaveCount(0);
-            await expect(
                 page.locator('[data-sonner-toast][data-type="error"], [data-sonner-toast][data-type="warning"]'),
+                'ROK-2024/2032: no error or warning toast (a lost race, a bench fallback or a failed lock-in)',
             ).toHaveCount(0);
 
             await waitForScheduled(token, seeded, eventId);

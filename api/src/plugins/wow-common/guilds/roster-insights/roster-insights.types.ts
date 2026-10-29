@@ -13,6 +13,10 @@ export interface InsightRow {
   userId: number | null;
   isMain: boolean;
   rankIndex: number | null;
+  /** ROK-1916 — online in the latest guild export; null = never reported. */
+  onlineAtExport: boolean | null;
+  /** ROK-1916 — whole days offline before that export (verbatim wire value). */
+  lastOnlineDays: number | null;
   /** Null when the resolver dropped the row (truncated). */
   facts: ResolvedWowFacts | null;
 }

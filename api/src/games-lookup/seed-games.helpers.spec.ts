@@ -223,3 +223,17 @@ describe('GAMES_SEED — WoW: Forever (ROK-1715)', () => {
     expect('coverUrl' in (forever ?? {})).toBe(false);
   });
 });
+
+describe("GAMES_SEED — Baldur's Gate 3 (ROK-1958)", () => {
+  it('carries identity only, so the upsert never overwrites the IGDB row config', () => {
+    const bg3 = GAMES_SEED.find((g) => g.slug === 'baldurs-gate-iii');
+    expect(Object.keys(bg3 ?? {}).sort()).toEqual([
+      'eventTypes',
+      'igdbId',
+      'name',
+      'slug',
+    ]);
+    expect(bg3?.igdbId).toBe(119171);
+    expect(bg3?.eventTypes).toEqual([]);
+  });
+});

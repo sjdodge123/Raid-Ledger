@@ -236,6 +236,8 @@ export * from './valheim-link-admin.schema.js';
 export * from './valheim-armory.schema.js';
 export * from './valheim-materials.schema.js';
 export * from './valheim-recipes.schema.js';
+// Planner source picker (ROK-1860).
+export * from './valheim-recipes-sources.schema.js';
 // Hub Deaths widget + death-pin layer (ROK-1930).
 export * from './valheim-deaths.schema.js';
 // Map tab cross-player pin layer (ROK-1943).
@@ -250,9 +252,13 @@ export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
+// Companion `wow-ledgerlink` v1 — wraps a LedgerLink v1 export string (ROK-1964).
+export * from './companion-wow-ledgerlink.schema.js';
 export * from './companion-registry.js';
 export * from './companion-bg3-display.js';
 export * from './companion-json-schema.js';
+// BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).
+export * from './bg3-hub.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
@@ -266,6 +272,7 @@ export * from './hub-invite.schema.js';
 export * from './guild-raids.schema.js';
 export * from './hub-facts.schema.js';
 export * from './wow-roster-insights.schema.js';
+export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).

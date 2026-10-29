@@ -18,4 +18,16 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Refreshes Steam achievements for members of game hubs whose game has Steam stats enabled, nightly at 04:30',
     category: 'Data Sync',
   },
+  // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
+  Bg3HistoryRetentionCron_prune: {
+    description:
+      'Thins Baldur’s Gate 3 save history older than 90 days to one save per play session, nightly at 05:15',
+    category: 'Maintenance',
+  },
+  // ROK-1959 D-3: the BG3 plugin's save-picture copy into hub Galleries.
+  Bg3GalleryCron_sync: {
+    description:
+      'Copies one save picture per closed Baldur’s Gate 3 play session into the hub Gallery, every 15 minutes',
+    category: 'Data Sync',
+  },
 };

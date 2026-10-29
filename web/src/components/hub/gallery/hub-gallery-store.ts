@@ -22,6 +22,12 @@ export interface HubGalleryOpenRequest {
      * the list moved between the strip's fetch and the dialog's).
      */
     mediaId?: number;
+    /**
+     * ROK-2027 — a plugin-resolved scope for the grid (`id` is the list route's
+     * `subject`, e.g. `valheim-death:c42`; `label` is the person's display name
+     * for the dialog's removable chip). Dialog-local: never written to `filters`.
+     */
+    subject?: { id: string; label: string };
     returnFocus: HTMLElement | null;
 }
 

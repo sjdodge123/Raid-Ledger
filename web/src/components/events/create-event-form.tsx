@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
 import type { CreateEventDto, UpdateEventDto, TemplateConfigDto, EventResponseDto, SeriesScope } from '@raid-ledger/contract';
-import { createEvent, updateEvent, updateSeries, completeStandalonePoll } from '../../lib/api-client';
+import { guardBenchPick, useLockBenchPick, type BenchPick } from './use-bench-pick';
+import { useCreateEventMutation } from './use-create-event-mutation';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -17,42 +17,11 @@ import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
-import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import { InheritedHubLine } from './inherited-hub-line';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
 import { FormSection, TemplatesBar, WhenSection, SaveTemplateBar, FormFooter } from './create-event-form-sections';
-
-function useCreateEventMutation(isEditMode: boolean, editEventId: number | undefined, seriesScope?: SeriesScope, schedulingMatchId?: number | null, schedulingStartTime?: string | null) {
-    const navigate = useNavigate();
-    const queryClient = useQueryClient();
-    const isSeriesEdit = isEditMode && !!seriesScope && seriesScope !== 'this';
-
-    return useMutation({
-        mutationFn: (dto: CreateEventDto | UpdateEventDto) => {
-            if (isSeriesEdit) return updateSeries(editEventId!, seriesScope!, dto as UpdateEventDto).then(() => undefined);
-            if (isEditMode) return updateEvent(editEventId!, dto as UpdateEventDto);
-            // ROK-1844: stamp the poll this event is created from — completing the
-            // poll may sign its voters up to this event and no other.
-            return createEvent({ ...(dto as CreateEventDto), ...(schedulingMatchId ? { schedulingMatchId } : {}) });
-        },
-        onSuccess: (event) => {
-            toast.success(isSeriesEdit ? 'Series updated!' : isEditMode ? 'Event updated!' : 'Event created successfully!');
-            queryClient.invalidateQueries({ queryKey: ['events'] });
-            if (isEditMode) queryClient.invalidateQueries({ queryKey: ['event', editEventId!] });
-            if (schedulingMatchId) {
-                // ROK-1844: signups need the winning slot — without one just close the poll.
-                const signupEventId = schedulingStartTime ? event?.id : undefined;
-                completeStandalonePoll(schedulingMatchId, signupEventId, schedulingStartTime ?? undefined).then(() => invalidateHubPolls(queryClient), () => {
-                    toast.warning('Event created, but auto-signup may not have completed. Voters can sign up manually.');
-                });
-            }
-            navigate(event ? `/events/${event.id}` : `/events/${editEventId}`);
-        },
-        onError: (error: Error) => { toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} event`); },
-    });
-}
 
 function loadTemplateIntoForm(config: TemplateConfigDto, setForm: React.Dispatch<React.SetStateAction<FormState>>) {
     setForm((prev) => ({
@@ -113,7 +82,8 @@ function useTemplateActions(form: FormState) {
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
-    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null) {
+    followupForEventId?: number | null, originalGuildId: number | null = null, pollHubId: number | null = null,
+    isBlocked: () => boolean = () => false) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const [firstErrorKey] = Object.keys(validationErrors);
@@ -122,6 +92,8 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
+    // ROK-2025: the bench pick is checked after the fields, so every field error shows with it.
+    if (isBlocked()) return;
     mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId, pollHubId));
 }
 
@@ -129,7 +101,7 @@ function useCreateEventFormState(
     editEvent?: EventResponseDto, seriesScope?: SeriesScope,
     initialGame?: EventFormProps['initialGame'], initialStartTime?: string | null,
     schedulingMatchId?: number | null, copyFromEvent?: EventResponseDto | null,
-    initialGuildId: number | null = null,
+    initialGuildId: number | null = null, schedulingLineupId?: number | null,
 ) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
@@ -151,7 +123,9 @@ function useCreateEventFormState(
     const [errors, setErrors] = useState<FormErrors>({});
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
-    const mutation = useCreateEventMutation(!!editEvent, editEvent?.id, seriesScope, schedulingMatchId, initialStartTime);
+    // ROK-2025: on a lock-in the organizer picks who goes to the bench.
+    const bench = useLockBenchPick(!editEvent && schedulingLineupId && schedulingMatchId && initialStartTime ? { lineupId: schedulingLineupId, matchId: schedulingMatchId, startTime: initialStartTime } : null, form);
+    const mutation = useCreateEventMutation({ isEditMode: !!editEvent, editEventId: editEvent?.id, seriesScope, schedulingMatchId, schedulingLineupId, schedulingStartTime: initialStartTime, benchUserIds: bench.benchUserIds });
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);
@@ -161,18 +135,18 @@ function useCreateEventFormState(
         if (field in errors) setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
 
-    return { form, setForm, errors, setErrors, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
+    return { form, setForm, errors, setErrors, bench, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
 }
 
 export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent, initialGuildId }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null, schedulingLineupId);
     // ROK-1893 P3: the hub of the poll being locked in (its guildId deep-link param).
     const pollHubId = schedulingMatchId != null ? initialGuildId ?? null : null;
 
     return (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId, () => guardBenchPick(s.bench)); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
                 registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} pollHubId={pollHubId} />
@@ -180,8 +154,7 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
             <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
                 endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
             <div className="border-t border-edge-subtle" />
-            <RosterFormSection form={s.form} errors={s.errors} updateField={s.updateField} setErrors={s.setErrors}
-                poll={!isEditMode && schedulingLineupId && schedulingMatchId && initialStartTime ? { lineupId: schedulingLineupId, matchId: schedulingMatchId, startTime: initialStartTime } : null} />
+            <RosterFormSection form={s.form} errors={s.errors} updateField={s.updateField} setErrors={s.setErrors} bench={s.bench} />
             <div className="border-t border-edge-subtle" />
             <RemindersFormSection form={s.form} updateField={s.updateField} />
             <div className="border-t border-edge-subtle" />
@@ -195,11 +168,13 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
 }
 
 /** ROK-1787: plugin-owned Guild picker (WoW guild editors only). */
-function GuildFieldSlot({ gameId, guildId, setForm }: {
+function GuildFieldSlot({ gameId, guildId, setForm, dropUnlisted }: {
     gameId: number | null; guildId: number | null; setForm: React.Dispatch<React.SetStateAction<FormState>>;
+    /** ROK-1817: create mode — the picker clears a guild the viewer cannot edit. */
+    dropUnlisted: boolean;
 }) {
     const onGuildChange = useCallback((next: number | null) => setForm((prev) => ({ ...prev, guildId: next })), [setForm]);
-    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange }} />;
+    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange, dropUnlisted }} />;
 }
 
 function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId }: {
@@ -240,14 +215,13 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
             {/* ROK-1893 P3: an inherited hub is shown (and clearable) in core — the plugin picker hides it from plain members. */}
             {pollHubId !== null && form.guildId === pollHubId
                 ? <InheritedHubLine hubId={pollHubId} onRemove={() => setForm((prev) => ({ ...prev, guildId: null }))} />
-                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} />}
+                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} dropUnlisted={!isEditMode} />}
         </FormSection>
     );
 }
 
-function RosterFormSection({ form, errors, updateField, setErrors, poll }: {
-    form: FormState; errors: FormErrors;
-    poll: { lineupId: number; matchId: number; startTime: string } | null;
+function RosterFormSection({ form, errors, updateField, setErrors, bench }: {
+    form: FormState; errors: FormErrors; bench: BenchPick;
     updateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
     setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
 }) {
@@ -264,7 +238,7 @@ function RosterFormSection({ form, errors, updateField, setErrors, poll }: {
                 onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => { const next = { ...prev }; delete next.maxAttendees; return next; }); }}
                 onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
             />
-            {poll && <SchedulingOverflowNotice {...poll} slotType={form.slotType} slotPlayer={form.slotPlayer} maxAttendees={form.maxAttendees} />}
+            <SchedulingOverflowNotice bench={bench} />
         </FormSection>
     );
 }

@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { surfaceClass, useMapViewport } from './use-map-viewport';
-import type { Point, Viewport } from './map-viewport.math';
+import type { Bounds, Point, Viewport } from './map-viewport.math';
 
 /** Imperative zoom commands handed to the parent's controls (L5b). */
 export interface MapViewportCommands {
@@ -26,6 +26,11 @@ export interface MapViewportProps {
     /** Called once the commands exist (and again if they change). */
     onCommands?: (commands: MapViewportCommands) => void;
     className?: string;
+    /**
+     * ROK-2028: what the initial view and Fit frame — a texture-px box (the
+     * explored area), `null` for nothing explored, absent for the whole world.
+     */
+    frame?: Bounds | null | undefined;
     /** Rendered inside the transformed layer; gets the live viewport (scale for counter-scaling). */
     children: (viewport: Viewport) => ReactNode;
 }
@@ -57,13 +62,16 @@ function TextureLayer({ size, transform, children }: TextureLayerProps) {
 }
 
 function MapViewportSurface(props: MapViewportProps) {
-    const { contentSize, label, onCommands, className, children } = props;
+    const { contentSize, label, onCommands, className, children, frame } = props;
     const api = useMapViewport(contentSize);
     const { ref, viewport, transform, handlers, style } = api;
-    const { zoomIn, zoomOut, fit, centreOn } = api;
+    const { zoomIn, zoomOut, fit, centreOn, frameTo } = api;
     useEffect(() => {
         onCommands?.({ zoomIn, zoomOut, fit, centreOn });
     }, [onCommands, zoomIn, zoomOut, fit, centreOn]);
+    useEffect(() => {
+        if (frame !== undefined) frameTo(frame);
+    }, [frame, frameTo]);
     return (
         <div
             ref={ref}

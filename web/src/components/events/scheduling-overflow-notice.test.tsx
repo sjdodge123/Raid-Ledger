@@ -9,7 +9,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LineupRealtimeEventNames, type SchedulePollPageResponseDto, type ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { CreateEventForm } from './create-event-form';
-import { getSchedulePoll } from '../../lib/api-client';
+import { completeStandalonePoll, createEvent, getSchedulePoll, lockInSchedulingPoll } from '../../lib/api-client';
+import { toast } from '../../lib/toast';
 import { useAuth } from '../../hooks/use-auth';
 import { partialResult } from '../../test/partial-result';
 import { createMockEvent } from '../../test/factories';
@@ -32,7 +33,7 @@ vi.mock('react-router-dom', async () => {
 });
 vi.mock('../../lib/api-client', () => ({
     createEvent: vi.fn(), updateEvent: vi.fn(), updateSeries: vi.fn(),
-    completeStandalonePoll: vi.fn(), getSchedulePoll: vi.fn(),
+    completeStandalonePoll: vi.fn(), getSchedulePoll: vi.fn(), lockInSchedulingPoll: vi.fn(),
 }));
 vi.mock('../../hooks/use-auth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -99,8 +100,8 @@ describe('SchedulingOverflowNotice on the create form', () => {
         expect(banner).toHaveAttribute('role', 'status');
         expect(screen.getByText('More yes-votes than roster spots')).toBeInTheDocument();
         expect(screen.getByText('5 people will be signed up for this time, but the roster has 4 spots — 1 will go to the bench.')).toBeInTheDocument();
-        expect(screen.getByText('Voted yes: User 2, User 3, User 4, User 5')).toBeInTheDocument();
-        expect(screen.getByText(/Who goes to the bench depends on signup order\./)).toBeInTheDocument();
+        expect(screen.getByText('Or raise the player count, or ask voters to change their vote, before you create the event.')).toBeInTheDocument();
+        expect(screen.queryByText(/depends on signup order/)).not.toBeInTheDocument();
         expect(screen.queryByText(/That count includes you/)).not.toBeInTheDocument();
         expect(getSchedulePoll).toHaveBeenCalledWith(7, 5);
     });
@@ -185,5 +186,107 @@ describe('SchedulingOverflowNotice on the create form', () => {
         await waitFor(() => expect(getSchedulePoll).toHaveBeenCalled());
         expect(notice()).not.toBeInTheDocument();
         expect(screen.getByRole('spinbutton', { name: 'Players slots' })).toBeInTheDocument();
+    });
+});
+
+// ─── ROK-2025: the organizer picks who goes to the bench ─────────────────────
+const box = (id: number) => screen.getByTestId(`bench-pick-${id}`);
+const submit = () => {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Event Title' }), { target: { value: 'Game night' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+};
+/** Submit, let the mutation's async start run, then assert the guard held: no lock-in and no POST /events, the picker scrolled into view. */
+async function expectSubmitBlocked() {
+    submit();
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(lockInSchedulingPoll).not.toHaveBeenCalled();
+    expect(createEvent).not.toHaveBeenCalled();
+    expect(vi.mocked(window.HTMLElement.prototype.scrollIntoView).mock.contexts).toContain(screen.getByTestId('scheduling-bench-picker'));
+}
+
+describe('bench picker on the lock-in create form (ROK-2025)', () => {
+    beforeEach(() => {
+        // ROK-2032: a lock-in is one claim-first call that creates the event and fills the roster.
+        vi.mocked(lockInSchedulingPoll).mockResolvedValue({ event: createMockEvent({ id: 77 }), benchPickFallback: false });
+    });
+
+    it('lists every yes-voter as a Checkbox with the LATEST marked by default', async () => {
+        renderForm([1, 2, 3, 4, 5, 6]);
+        const picker = await screen.findByTestId('scheduling-bench-picker');
+        expect(picker.tagName).toBe('FIELDSET');
+        expect(screen.getByText('Who goes to the bench')).toBeInTheDocument();
+        expect(screen.getByText('The latest yes-votes are marked. Earlier voters keep their spot. Change it if you like.')).toBeInTheDocument();
+        expect([2, 3, 4, 5, 6].map((id) => (box(id) as HTMLInputElement).checked)).toEqual([false, false, false, true, true]);
+        expect(screen.getByRole('checkbox', { name: 'User 6' })).toBe(box(6));
+        expect(screen.getByTestId('bench-pick-count')).toHaveTextContent('2 of 2 picked');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('a short pick shows the inline error and blocks the submit', async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        fireEvent.click(box(5));
+        expect(screen.getByRole('alert')).toHaveTextContent('Pick 1 more for the bench.');
+        expect(screen.getByTestId('bench-pick-count')).toHaveTextContent('0 of 1 picked');
+        await expectSubmitBlocked();
+    });
+
+    it('an over-full pick shows the "Unmark" error and blocks the submit', async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        fireEvent.click(box(2));
+        expect(screen.getByRole('alert')).toHaveTextContent('Only 1 can go to the bench. Unmark 1.');
+        await expectSubmitBlocked();
+    });
+
+    it('shows every field error alongside a wrong pick, not just the pick (validateForm runs first)', async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        fireEvent.click(box(5));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Event Title' }), { target: { value: '   ' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(screen.queryByText('Title is required')).toBeInTheDocument();
+        expect(screen.getByTestId('bench-pick-error')).toHaveTextContent('Pick 1 more for the bench.');
+        expect(lockInSchedulingPoll).not.toHaveBeenCalled();
+        expect(createEvent).not.toHaveBeenCalled();
+    });
+
+    it("sends the organizer's pick on lock-in", async () => {
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        fireEvent.click(box(5));
+        fireEvent.click(box(2));
+        submit();
+        await waitFor(() => expect(lockInSchedulingPoll).toHaveBeenCalledWith(5, {
+            event: expect.objectContaining({ title: 'Game night', schedulingMatchId: 5 }), startTime: START, benchUserIds: [2],
+        }));
+        expect(lockInSchedulingPoll).toHaveBeenCalledTimes(1);
+        expect(createEvent).not.toHaveBeenCalled();
+        expect(completeStandalonePoll).not.toHaveBeenCalled();
+        expect(toast.warning).not.toHaveBeenCalled();
+    });
+
+    // ROK-2032 D3: the server now drops a pick that no longer fits (default bench) and
+    // flags it — the old client-side 400 retry is gone; the organizer is still told (D6).
+    it('says so when the server dropped the pick because the votes changed (D6)', async () => {
+        vi.mocked(lockInSchedulingPoll).mockResolvedValueOnce({ event: createMockEvent({ id: 77 }), benchPickFallback: true });
+        renderForm([1, 2, 3, 4, 5]);
+        await screen.findByTestId('scheduling-bench-picker');
+        submit();
+        await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
+            "Event created, but the votes changed while you were choosing. The latest yes-voters went to the bench. You can move people on the event's roster.",
+        ));
+        expect(vi.mocked(lockInSchedulingPoll).mock.calls).toEqual([[5, { event: expect.objectContaining({ schedulingMatchId: 5 }), startTime: START, benchUserIds: [5] }]]);
+    });
+
+    it('sends no pick when the roster has room', async () => {
+        renderForm([1, 2, 3, 4]);
+        await waitFor(() => expect(getSchedulePoll).toHaveBeenCalled());
+        submit();
+        await waitFor(() => expect(lockInSchedulingPoll).toHaveBeenCalled());
+        // toStrictEqual: the body must not carry a `benchUserIds` key at all.
+        expect(vi.mocked(lockInSchedulingPoll).mock.calls).toStrictEqual([[5, { event: expect.objectContaining({ schedulingMatchId: 5 }), startTime: START }]]);
+        expect(toast.warning).not.toHaveBeenCalled();
     });
 });

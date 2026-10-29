@@ -1870,6 +1870,34 @@
       "when": 1793075423285,
       "tag": "0267_hub_session_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1793162395338,
+      "tag": "0268_guild_member_level_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1793180632075,
+      "tag": "0269_bg3_plugin",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1793212926134,
+      "tag": "0270_guild_member_presence",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1793248528469,
+      "tag": "0271_eminent_synch",
+      "breakpoints": true
     }
   ]
 }

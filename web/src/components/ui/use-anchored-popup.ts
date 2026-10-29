@@ -6,6 +6,9 @@
  * resize. No scroll lock: the popup follows the page instead of freezing it.
  * Portalled into a transformed dialog, `fixed` is relative to that dialog, so
  * the measured position is corrected by the popup's real containing-block origin.
+ * A `fixed` popup cannot be scrolled into view, so it flips above the anchor when
+ * its rendered height does not fit below, and is clamped into the viewport when
+ * it fits neither side (ROK-2030: the hub Manage menu's last item was unreachable).
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
@@ -15,6 +18,20 @@ export interface PopupPosition { top: number; left: number; width: number }
 export type PopupAlign = 'start' | 'end';
 
 const GAP_PX = 4;
+/** Clearance kept from the viewport edge when flipping or clamping. */
+const EDGE_PX = 8;
+
+/**
+ * The popup's viewport `top`: below the anchor when it fits, else above it,
+ * else clamped so as much of it as possible is on screen (top edge first).
+ */
+export function placeTop(anchor: { top: number; bottom: number }, height: number, viewportHeight: number): number {
+    const below = anchor.bottom + GAP_PX;
+    if (below + height <= viewportHeight - EDGE_PX) return below;
+    const above = anchor.top - GAP_PX - height;
+    if (above >= EDGE_PX) return above;
+    return Math.max(EDGE_PX, Math.min(below, viewportHeight - EDGE_PX - height));
+}
 
 function samePos(a: PopupPosition | null, b: PopupPosition): boolean {
     return !!a && a.top === b.top && a.left === b.left && a.width === b.width;
@@ -42,14 +59,21 @@ function usePopupPosition(
         const measure = (): void => {
             const r = anchorRef.current?.getBoundingClientRect();
             if (!r) return;
-            const o = containingOrigin(popupRef.current);
-            const next = { top: r.bottom + GAP_PX - o.y, left: alignedLeft(r, popupRef.current, align) - o.x, width: r.width };
+            const popup = popupRef.current;
+            const o = containingOrigin(popup);
+            const top = placeTop(r, popup?.getBoundingClientRect().height ?? 0, window.innerHeight);
+            const next = { top: top - o.y, left: alignedLeft(r, popup, align) - o.x, width: r.width };
             setPos((prev) => (samePos(prev, next) ? prev : next));
         };
         measure();
+        // The popup can grow after opening (a combobox's results arrive), so a
+        // fit decided at open time is re-checked when its size changes.
+        const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure());
+        if (popupRef.current) resized?.observe(popupRef.current);
         window.addEventListener('scroll', measure, true);
         window.addEventListener('resize', measure);
         return () => {
+            resized?.disconnect();
             window.removeEventListener('scroll', measure, true);
             window.removeEventListener('resize', measure);
         };
@@ -73,7 +97,8 @@ function useOutsidePress(refs: RefObject<HTMLElement | null>[], open: boolean, o
 }
 
 /**
- * Position the popup under `anchorRef`; call `onOutside` on a press outside both.
+ * Position the popup under `anchorRef` (above it when it does not fit below, see
+ * `placeTop`); call `onOutside` on a press outside both.
  * `align: 'end'` lines the popup's right edge up with the anchor's (measured, not
  * a CSS transform, which `containingOrigin` would read back and cancel).
  */

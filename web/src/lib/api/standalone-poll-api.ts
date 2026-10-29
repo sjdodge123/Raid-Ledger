@@ -5,10 +5,14 @@
 import type {
   ActiveStandalonePollDto,
   CreateSchedulingPollDto,
+  EventResponseDto,
+  LockInSchedulingPollDto,
+  LockInSchedulingPollResponseDto,
   SchedulingPollResponseDto,
   PollSharePreviewDto,
   PollShareJoinResponseDto,
   PollShareTokenResponseDto,
+  RescheduleEventDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { encodePathSegment } from './path-segment';
@@ -19,16 +23,43 @@ export async function getActiveStandalonePolls(): Promise<ActiveStandalonePollDt
 }
 
 /** Complete a standalone poll (archive after reschedule/event creation).
- *  When eventId is provided, auto-signup slot voters for that event (ROK-1031). */
+ *  When eventId is provided, auto-signup slot voters for that event (ROK-1031).
+ *  ROK-2025: `benchUserIds` is the organizer's bench pick (needs eventId). */
 export async function completeStandalonePoll(
   matchId: number,
   eventId?: number,
   startTime?: string,
+  benchUserIds?: number[],
 ): Promise<void> {
-  const body = eventId ? { eventId, startTime } : undefined;
+  const body = eventId ? { eventId, startTime, ...(benchUserIds ? { benchUserIds } : {}) } : undefined;
   await fetchApi(`/scheduling-polls/${matchId}/complete`, {
     method: 'POST',
     ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+/** ROK-2032: lock a poll in claim-first — the server claims the match, then
+ *  creates the event and fills its roster. A losing racer gets a 409 and no event. */
+export async function lockInSchedulingPoll(
+  matchId: number,
+  body: LockInSchedulingPollDto,
+): Promise<LockInSchedulingPollResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/lock-in`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** ROK-2040: lock a reschedule poll in claim-first — the server claims the
+ *  match, then moves its linked event and re-rosters the slot's voters. A
+ *  losing racer gets a 409 and the event is not moved. */
+export async function rescheduleLockInSchedulingPoll(
+  matchId: number,
+  body: RescheduleEventDto,
+): Promise<EventResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/reschedule-lock-in`, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }
 

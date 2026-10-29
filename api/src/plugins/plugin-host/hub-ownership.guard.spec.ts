@@ -11,7 +11,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { CORE_PLUGIN_ID, HUB_PLUGIN_MANIFESTS } from '@raid-ledger/contract';
+import {
+  BG3_GALLERY_SYNC_JOB_NAME,
+  BG3_PLUGIN_ID,
+  CORE_PLUGIN_ID,
+  HUB_PLUGIN_MANIFESTS,
+} from '@raid-ledger/contract';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 import { stripComments } from '../../common/testing/strip-comments';
 import type * as schema from '../../drizzle/schema';
@@ -38,6 +43,7 @@ import { WOW_COMMON_MANIFEST } from '../wow-common/manifest';
 import { CORE_MANIFEST } from '../core/core.manifest';
 import { VALHEIM_MANIFEST } from '../valheim/valheim.manifest';
 import { PELICAN_MANIFEST } from '../pelican/pelican.manifest';
+import { BG3_MANIFEST } from '../bg3/bg3.manifest';
 import { PluginRegistryService } from './plugin-registry.service';
 
 const SRC = path.resolve(__dirname, '../..');
@@ -77,6 +83,8 @@ const CTX: ScanContext = {
     VALHEIM_PLUGIN_ID,
     VALHEIM_GAME_SLUG,
     PELICAN_PLUGIN_ID,
+    BG3_PLUGIN_ID,
+    BG3_GALLERY_SYNC_JOB_NAME,
     EVENT_GUILD_TAGGER_KEY,
     'WOW_COMMON_MANIFEST.id': WOW_COMMON_MANIFEST.id,
   },
@@ -85,6 +93,7 @@ const CTX: ScanContext = {
     valheim: VALHEIM_PLUGIN_ID,
     pelican: PELICAN_PLUGIN_ID,
     'wow-common': WOW_COMMON_MANIFEST.id,
+    bg3: BG3_PLUGIN_ID,
   },
 };
 
@@ -157,6 +166,11 @@ describe('ROK-1969 A3 — declared ↔ registered, exact (source scan)', () => {
         'pelican/hub-kind/game_server',
         'blizzard/hub-kind/wow_guild',
         'core/ingest-source/hub-media.upload',
+        'bg3/ingest-source/bg3-save',
+        'bg3/scheduled-job/Bg3HistoryRetentionCron_prune',
+        'bg3/ingest-source/bg3-save.gallery',
+        'bg3/scheduled-job/Bg3GalleryCron_sync',
+        'bg3/media-gate/bg3-save',
       ]),
     );
   });
@@ -212,12 +226,42 @@ describe('ROK-1969 A3 — mutation probes (each must go red)', () => {
   });
 });
 
+describe('ROK-2027 — media subject registrations (each must go red)', () => {
+  it('fails on a media subject nobody declared, keyed by its namespace (ROK-2027)', () => {
+    const subject: ScanSource = {
+      file: 'plugins/valheim/deaths-subject.ts',
+      text: "HubMediaSubjectRegistry; this.s.register(VALHEIM_PLUGIN_ID, 'valheim-stray', fn);",
+    };
+    const keys = scanHubRegistrations([...SOURCES, subject], CTX).keys;
+    expect(keys).toContain('valheim/media-subject/valheim-stray');
+    expect(keys.filter((k) => k.includes('/media-decorator/'))).toEqual(
+      scanHubRegistrations(SOURCES, CTX).keys.filter((k) =>
+        k.includes('/media-decorator/'),
+      ),
+    );
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toContain(
+      'valheim/media-subject/valheim-stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    );
+  });
+
+  it('reports a media subject whose owner or namespace is unresolvable (ROK-2027)', () => {
+    const bad: ScanSource = {
+      file: 'plugins/x/x-subject.ts',
+      text: 'HubMediaSubjectRegistry; this.s.register(SOME_OWNER, NS, fn);',
+    };
+    expect(scanHubRegistrations([bad], CTX).problems).toEqual([
+      'plugins/x/x-subject.ts: media subject owner "SOME_OWNER" / namespace "NS" is unresolvable',
+    ]);
+  });
+});
+
 describe('ROK-1969 A2 — every live owner is a real plugin manifest', () => {
   const manifestIds = [
     CORE_MANIFEST.id,
     VALHEIM_MANIFEST.id,
     PELICAN_MANIFEST.id,
     WOW_COMMON_MANIFEST.id,
+    BG3_MANIFEST.id,
   ];
 
   it('every HUB_PLUGIN_MANIFESTS key is an api manifest id', () => {
@@ -294,6 +338,36 @@ describe('ROK-1965 D17 — ingest sources are scanned (each must go red)', () =>
     const keys = scanHubRegistrations([...SOURCES, extra], CTX).keys;
     expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toEqual([
       'valheim/ingest-source/valheim.stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    ]);
+  });
+});
+
+describe('ROK-1957 D-16 — companion handlers are scanned (each must go red)', () => {
+  it('fails when the bg3-save handler registration is gone', () => {
+    const noBg3 = SOURCES.filter((s) => s.file !== 'plugins/bg3/bg3.module.ts');
+    const keys = scanHubRegistrations(noBg3, CTX).keys;
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'bg3/ingest-source/bg3-save is declared but nothing registers it',
+    ]);
+  });
+
+  it('fails on a companion handler nobody declared, and on one it cannot resolve', () => {
+    const extra: ScanSource[] = [
+      {
+        file: 'plugins/valheim/x.module.ts',
+        text: "CompanionHandlerRegistry; class X { constructor(private readonly h: XHandler) {} } this.reg.register(VALHEIM_PLUGIN_ID, this.h);\nclass XHandler { readonly contract = 'valheim-stray'; }",
+      },
+      {
+        file: 'plugins/valheim/y.module.ts',
+        text: 'CompanionHandlerRegistry; this.reg.register(VALHEIM_PLUGIN_ID, makeHandler());',
+      },
+    ];
+    const live = scanHubRegistrations([...SOURCES, ...extra], CTX);
+    expect(ownershipDrift(live.keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'valheim/ingest-source/valheim-stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    ]);
+    expect(live.problems).toEqual([
+      'plugins/valheim/y.module.ts: companion handler "makeHandler(" — cannot resolve owner "VALHEIM_PLUGIN_ID" / contract',
     ]);
   });
 });

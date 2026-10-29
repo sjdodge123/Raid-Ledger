@@ -53,6 +53,8 @@ function row(name: string, o: RowOpts = {}): InsightRow {
     userId: o.userId ?? null,
     isMain: o.isMain ?? false,
     rankIndex: o.rankIndex ?? null,
+    onlineAtExport: null,
+    lastOnlineDays: null,
     facts: {
       ...EMPTY,
       level:

@@ -52,6 +52,12 @@ export const GuildViewerAccessSchema = z
     canManageEditors: z.boolean(),
     /** ROK-1832: viewer muted this group's notifications; absent for non-members. */
     notificationsMuted: z.boolean().optional(),
+    /**
+     * ROK-1815: `true` when the viewer's linked character holds rank 0 in the
+     * latest WoW snapshot; absent otherwise. A hero label only — it grants
+     * nothing (`GM_RANK_IMPLIES_EDIT = false`, ROK-1794).
+     */
+    isGuildMaster: z.boolean().optional(),
   })
   .strict();
 export type GuildViewerAccess = z.infer<typeof GuildViewerAccessSchema>;

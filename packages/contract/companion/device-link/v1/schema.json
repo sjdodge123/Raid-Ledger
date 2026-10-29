@@ -14,7 +14,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 64,
-              "pattern": "^(?!\\s*$)[^\\p{Cc}\\p{Cs}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
             },
             "os": {
               "type": "string",
@@ -28,7 +28,7 @@
             "osVersion": {
               "type": "string",
               "maxLength": 32,
-              "pattern": "^(?!\\s*$)[^\\p{Cc}\\p{Cs}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+              "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
             },
             "appVersion": {
               "type": "string",

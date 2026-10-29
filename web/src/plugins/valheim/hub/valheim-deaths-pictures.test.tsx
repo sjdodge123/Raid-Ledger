@@ -50,12 +50,15 @@ describe('ValheimDeathsWidget — picture strip', () => {
         expect(within(group).getByText('+2')).toBeTruthy();
     });
 
-    it('sits outside the row map link (no nested interactive) and keeps the link as the row text', async () => {
+    it('sits outside both row links — name and map (no nested interactive)', async () => {
         renderWithProviders(<Widget />);
-        const link = await screen.findByRole('link', { name: 'Ragnhild, 12 deaths — show on map' });
+        const map = await screen.findByRole('link', { name: "Show Ragnhild's 12 deaths on the map" });
+        const name = screen.getByRole('link', { name: "Open Ragnhild's character page" });
         await waitFor(() => expect(strip('Ragnhild')).toBeTruthy());
-        expect(link.contains(strip('Ragnhild'))).toBe(false);
-        expect(within(link).queryByRole('button')).toBeNull();
+        for (const link of [map, name]) {
+            expect(link.contains(strip('Ragnhild'))).toBe(false);
+            expect(within(link).queryByRole('button')).toBeNull();
+        }
         expect(rowOf('c11').contains(strip('Ragnhild'))).toBe(true);
     });
 
@@ -75,11 +78,15 @@ describe('ValheimDeathsWidget — picture strip', () => {
         fireEvent.click(second);
         expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: 5, mode: 'viewer', filter: 'death', mediaId: 40 });
         expect(useHubGalleryStore.getState().request?.returnFocus).toBe(second);
+        expect(useHubGalleryStore.getState().request?.subject).toBeUndefined();
     });
 
-    it('"+N" opens the Gallery grid with the Deaths chip on', async () => {
+    it('"+N" opens the Gallery grid scoped to that player\'s deaths (ROK-2027 subject = the bar key)', async () => {
         renderWithProviders(<Widget />);
         fireEvent.click(await screen.findByRole('button', { name: '2 more death pictures. Open the gallery' }));
-        expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: 5, mode: 'grid', filter: 'death' });
+        expect(useHubGalleryStore.getState().request).toMatchObject({
+            guildId: 5, mode: 'grid', filter: 'death', subject: { id: 'valheim-death:c11', label: 'Ragnhild' },
+        });
+        expect(useHubGalleryStore.getState().filters).toEqual({});
     });
 });

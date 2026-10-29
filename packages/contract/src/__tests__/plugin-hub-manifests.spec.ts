@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CORE_PLUGIN_ID,
+  HUB_BEHAVIOUR_KINDS,
   PluginHubManifestSchema,
   type PluginHubManifest,
 } from '../plugin-hub-manifest.schema.js';
@@ -27,8 +28,9 @@ const tabIds = (slug: string): string[] =>
   must(hubManifestFor(slug), slug).tabs.map((t) => t.id);
 
 describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
-  it('declares core, valheim, pelican and blizzard', () => {
+  it('declares core, valheim, pelican, blizzard and bg3', () => {
     expect(Object.keys(HUB_PLUGIN_MANIFESTS).sort()).toEqual([
+      'bg3',
       'blizzard',
       'core',
       'pelican',
@@ -66,6 +68,7 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
     expect(tabIds('valheim')).toEqual(['characters', 'map', 'materials', 'planner']);
     expect(tabIds('pelican')).toEqual(['quick-play']);
     expect(tabIds('blizzard')).toEqual(['raids', 'progression', 'loot']);
+    expect(tabIds('bg3')).toEqual(['campaign']);
   });
 
   it('rejects a duplicate widget id within one list', () => {
@@ -85,6 +88,13 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
       { id: 'valheim', kind: 'scheduled-job', label: 'B' },
     ];
     expect(PluginHubManifestSchema.safeParse({ behaviours, setup: noSetup }).success).toBe(true);
+  });
+
+  it('knows the media-gate behaviour kind (ROK-1959 D-6)', () => {
+    expect(HUB_BEHAVIOUR_KINDS).toContain('media-gate');
+    const behaviours = [{ id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures' }];
+    const parsed = PluginHubManifestSchema.safeParse({ behaviours, setup: noSetup });
+    expect(parsed.error?.issues ?? []).toEqual([]);
   });
 
   it('returns undefined for an unknown or inherited slug', () => {

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+    HUB_MEDIA_KINDS,
+    HUB_MEDIA_SOURCES,
     HUB_MEDIA_UPLOAD_MAX_BYTES,
     HUB_MEDIA_UPLOAD_TYPES,
+    HUB_MEDIA_SUBJECT_RE,
     HubMediaItemSchema,
+    HubMediaListQuerySchema,
+    HubMediaListResponseSchema,
     HubMediaUploadErrorCodeSchema,
     isSafeHubMediaHref,
 } from '../hub-media.schema.js';
@@ -103,5 +108,58 @@ describe('upload constants (ROK-1965)', () => {
             'rate_limited',
             'busy',
         ]);
+    });
+});
+
+describe('HubMediaListQuerySchema subject (ROK-2027)', () => {
+    it.each(['valheim-death:c42', 'valheim-death:nCallahan~2', 'valheim-death:nOld Bjorn', 'a:x'])(
+        'accepts %s',
+        (subject) => {
+            expect(HubMediaListQuerySchema.safeParse({ subject }).success).toBe(true);
+            expect(HUB_MEDIA_SUBJECT_RE.test(subject)).toBe(true);
+        },
+    );
+
+    it.each([
+        ['no namespace', ':c42'],
+        ['no payload', 'valheim-death:'],
+        ['no colon', 'valheim-death'],
+        ['upper-case namespace', 'Valheim:c1'],
+        ['namespace over 32 chars', `${'a'.repeat(33)}:c1`],
+        ['payload over 100 chars', `valheim-death:${'x'.repeat(101)}`],
+        ['leading space in payload', 'valheim-death: c1'],
+        ['newline in payload', 'valheim-death:c1\nc2'],
+    ])('refuses %s', (_label, subject) => {
+        expect(HubMediaListQuerySchema.safeParse({ subject }).success).toBe(false);
+    });
+
+    it('stays optional: a query without subject parses unchanged', () => {
+        expect(HubMediaListQuerySchema.parse({ kind: 'death', limit: '5' })).toEqual({
+            kind: 'death',
+            limit: 5,
+        });
+    });
+});
+
+describe('save pictures (ROK-1959 D-1 / D-7)', () => {
+    const save = (over: Record<string, unknown> = {}) =>
+        upload({ kind: 'save', source: { type: 'bg3-save', label: 'Game save' }, ...over });
+
+    it('adds kind "save" and source "bg3-save", keeping the existing values', () => {
+        expect(HUB_MEDIA_KINDS).toEqual(['death', 'screenshot', 'image', 'upload', 'save']);
+        expect(HUB_MEDIA_SOURCES).toEqual(['discord', 'upload', 'bg3-save']);
+    });
+
+    it('accepts a save picture item', () => {
+        const parsed = HubMediaItemSchema.safeParse(save());
+        expect(parsed.error?.issues ?? []).toEqual([]);
+        expect(parsed.data?.kind).toBe('save');
+        expect(parsed.data?.source.type).toBe('bg3-save');
+    });
+
+    it('filters a list by kind "save" and lists it for the chips', () => {
+        expect(HubMediaListQuerySchema.parse({ kind: 'save' })).toEqual({ kind: 'save' });
+        const res = HubMediaListResponseSchema.safeParse({ items: [save()], nextCursor: null, total: 1, kinds: ['save'] });
+        expect(res.error?.issues ?? []).toEqual([]);
     });
 });

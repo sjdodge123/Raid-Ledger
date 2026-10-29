@@ -1,6 +1,6 @@
 /** ROK-1942 — the Gallery dialog: viewer keys + buttons over the filtered set, focus return, chips, See-all paging, role-gated actions. */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
 import { HUB_MEDIA_KINDS, type HubMediaItem, type HubMediaListResponse } from '@raid-ledger/contract';
@@ -168,6 +168,34 @@ describe('HubGalleryDialog — viewer', () => {
         expect(await caption()).toMatch(who(99));
     });
 
+    it('a seek whose page-in an invalidate cancels asks again once the refetch lands, never "Loading…" forever', async () => {
+        const queryClient = createTestQueryClient();
+        let release = (): void => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        let pageIns = 0;
+        // The seek's first page-in hangs until released; later ones fall through to the paged handler.
+        server.use(http.get(HUB_MEDIA_LIST_URL, async ({ request }) => {
+            if (new URL(request.url).searchParams.get('cursor') !== null && pageIns++ === 0) await gate;
+            return undefined;
+        }));
+        // Only Date is faked (RTL's waitFor needs real timers): the refetch's dataUpdatedAt moves deterministically.
+        const t0 = Date.UTC(2026, 0, 1);
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(t0);
+            open({ index: 0, mediaId: 28 }, {}, queryClient);
+            await waitFor(() => expect(pageIns).toBe(1));
+            vi.setSystemTime(t0 + 1000);
+            await act(() => queryClient.invalidateQueries({ queryKey: ['hub-media', 5] }));
+            release();
+            await waitFor(() => expect(screen.queryByText('Loading pictures…')).not.toBeInTheDocument());
+            expect(await caption()).toMatch(who(28));
+            expect(counter()).toBe('28 of 30');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('an id in no page falls back to the requested index once every page is loaded', async () => {
         const calls: string[] = [];
         server.use(pagedHandler(ITEMS, calls));
@@ -275,6 +303,14 @@ describe('HubGalleryDialog — uploads (ROK-1965)', () => {
         await waitFor(() => expect(screen.getByTestId('hub-gallery-caption').textContent).toContain('From Discord'));
     });
 
+    it('a BG3 save\'s caption shows its source label alone — "Game save", not "From Game save" (ROK-1959)', async () => {
+        server.use(pagedHandler([hubMediaItem(1, 'save', { source: { type: 'bg3-save', label: 'Game save' } })]));
+        open();
+        const first = await caption();
+        expect(first).toContain('Game save');
+        expect(first).not.toContain('From Game save');
+    });
+
     it('the grid footer offers Add picture even with nothing more to load', async () => {
         server.use(pagedHandler(ITEMS.slice(0, 3)));
         open({ mode: 'grid' });
@@ -317,5 +353,58 @@ describe('HubGalleryDialog — See all grid', () => {
         open({ index: 0 });
         expect(await caption()).toMatch(who(1));
         expect(screen.getByRole('button', { name: 'Next picture' })).toBeInTheDocument();
+    });
+});
+
+/** ROK-2027: a plugin-resolved subject (one Deaths bar) — ids 1, 2, 4 of mixed kinds, never narrowed by `kind` (D7). Unscoped requests fall through. */
+function subjectHandler(calls: string[]) {
+    const scoped = ITEMS.filter((i) => [1, 2, 4].includes(i.id));
+    return http.get(HUB_MEDIA_LIST_URL, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('subject') === null) return undefined;
+        calls.push(url.search);
+        const body: HubMediaListResponse = { items: scoped, nextCursor: null, total: scoped.length, kinds: ['death', 'screenshot'] };
+        return HttpResponse.json(body);
+    });
+}
+
+const CALLAHAN = { id: 'valheim-death:c42', label: 'Callahan' };
+
+describe('HubGalleryDialog — scoped to a subject (ROK-2027)', () => {
+    it('shows one removable "<Name>\'s deaths" chip instead of All/Deaths/Screenshots, and fetches by subject without kind', async () => {
+        const calls: string[] = [];
+        server.use(subjectHandler(calls), pagedHandler(ITEMS, calls));
+        open({ mode: 'grid', filter: 'death', subject: CALLAHAN });
+        await waitFor(() => expect(calls[0]).toContain('subject=valheim-death%3Ac42'));
+        expect(await screen.findByText('3 pictures')).toBeInTheDocument();
+        expect(screen.getByTestId('hub-gallery-subject-chip')).toHaveTextContent("Callahan's deaths");
+        expect(screen.getByRole('button', { name: "Remove Callahan's deaths" })).toBeInTheDocument();
+        for (const f of ['all', 'death', 'screenshot']) expect(screen.queryByTestId(`hub-gallery-chip-${f}`)).toBeNull();
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).not.toContain('kind=');
+    });
+
+    it('Remove returns to every death (Deaths chip pressed, no subject) and leaves the card filter alone', async () => {
+        const calls: string[] = [];
+        server.use(subjectHandler(calls), pagedHandler(ITEMS, calls));
+        open({ mode: 'grid', filter: 'death', subject: CALLAHAN });
+        expect(await screen.findByText('3 pictures')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: "Remove Callahan's deaths" }));
+        await waitFor(() => expect(calls.at(-1)).not.toContain('subject='));
+        expect(calls.at(-1)).toContain('kind=death');
+        expect(await screen.findByText('10 pictures')).toBeInTheDocument();
+        expect(screen.queryByTestId('hub-gallery-subject-chip')).toBeNull();
+        expect(screen.getByTestId('hub-gallery-chip-death')).toHaveAttribute('aria-pressed', 'true');
+        expect(useHubGalleryStore.getState().filters[5]).toBeUndefined();
+    });
+
+    it('the chip and its Remove button render in the phone BottomSheet too', async () => {
+        setDesktop(false);
+        server.use(subjectHandler([]));
+        open({ mode: 'grid', filter: 'death', subject: CALLAHAN });
+        expect(await screen.findByText('3 pictures')).toBeInTheDocument();
+        const remove = within(screen.getByTestId('hub-gallery-subject-chip')).getByRole('button', { name: "Remove Callahan's deaths" });
+        remove.focus();
+        expect(document.activeElement).toBe(remove);
     });
 });

@@ -77,12 +77,32 @@ export type CompanionWebpRef = z.infer<typeof CompanionWebpRefSchema>;
 
 /**
  * Display-safe free text: no C0/C1 controls (so no NUL or line breaks), no
- * lone surrogates (Postgres rejects both), no U+2028/2029, no bidi
- * embeddings/overrides/isolates, and not whitespace-only.
+ * U+2028/2029, no bidi embeddings/overrides/isolates, and not whitespace-only.
+ * Lone surrogates are rejected separately by `rejectLoneSurrogates` — Rust's
+ * `regex` crate cannot compile `\p{Cs}`, so it stays out of the published
+ * JSON-schema pattern (ROK-2034). Pair the two wherever this pattern is used.
  */
-export const COMPANION_DISPLAY_TEXT_RE = /^(?!\s*$)[^\p{Cc}\p{Cs}\u2028\u2029\u202A-\u202E\u2066-\u2069]+$/u;
+export const COMPANION_DISPLAY_TEXT_RE = /^(?!\s*$)[^\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069]+$/u;
+
+/** A UTF-16 lone surrogate. Only JS strings can hold one; Postgres/UTF-8 cannot store it. */
+export const COMPANION_LONE_SURROGATE_RE = /\p{Cs}/u;
+
+/**
+ * Zod `superRefine` for display text: rejects lone surrogates with the same
+ * `invalid_format` issue the regex raises. A refinement is not emitted into
+ * the generated JSON schema, so non-JS validators never see `\p{Cs}`.
+ */
+export function rejectLoneSurrogates(value: string, ctx: z.RefinementCtx): void {
+    if (!COMPANION_LONE_SURROGATE_RE.test(value)) return;
+    ctx.addIssue({
+        code: 'invalid_format',
+        format: 'regex',
+        pattern: COMPANION_LONE_SURROGATE_RE.toString(),
+        message: 'Must not contain a lone surrogate',
+    });
+}
 
 /** Free text a user authored and other hub members will see, 1..`maxChars` UTF-16 units. */
 export function companionDisplayTextSchema(maxChars: number): z.ZodString {
-    return z.string().min(1).max(maxChars).regex(COMPANION_DISPLAY_TEXT_RE);
+    return z.string().min(1).max(maxChars).regex(COMPANION_DISPLAY_TEXT_RE).superRefine(rejectLoneSurrogates);
 }

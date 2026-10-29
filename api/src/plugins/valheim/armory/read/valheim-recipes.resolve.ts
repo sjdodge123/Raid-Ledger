@@ -10,6 +10,7 @@ import {
   VALHEIM_PLAN_QUANTITY_MAX,
   type ValheimPiece,
   type ValheimRecipe,
+  type ValheimRecipeSourceRef,
 } from '@raid-ledger/contract';
 import type { RecipeGraph } from './valheim-recipes.graph';
 import {
@@ -44,6 +45,8 @@ interface Ctx {
   maxDepth: number;
   /** ROK-1861 D5: upgrader stations named by any node's steps. */
   builds: StationBuilds;
+  /** ROK-1860 D1: per-prefab source overrides (D4-validated in `pickSource`). */
+  sources: ReadonlyMap<string, ValheimRecipeSourceRef>;
 }
 
 function nodeBase(need: Need, taken: Taken): NodeBase {
@@ -102,7 +105,13 @@ function expandItem(ctx: Ctx, raw: Need): void {
     ctx.b.push({ ...leaf, via: { type: 'cycle' }, alternatives: 0 });
     return;
   }
-  const pick = pickSource(ctx.graph, need.prefab, need.startStep, need.quality);
+  const pick = pickSource(
+    ctx.graph,
+    need.prefab,
+    need.startStep,
+    need.quality,
+    ctx.sources.get(need.prefab),
+  );
   const alternatives = need.alternatives ?? pick.alternatives;
   if (!pick.source && (pick.hidden || ctx.graph.withheld?.has(need.prefab))) {
     // ROK-1948 D7/R6: its only sources are hidden — generic leaf, no count.
@@ -287,6 +296,7 @@ export function resolvePlan(
     b,
     maxDepth: options.maxDepth ?? RECIPE_TREE_DEPTH_MAX,
     builds: new Map(),
+    sources: options.sources ?? new Map(),
   };
   const maxQuality = options.maxQuality ?? (() => 1);
   for (const target of targets) expandTarget(ctx, target, maxQuality);

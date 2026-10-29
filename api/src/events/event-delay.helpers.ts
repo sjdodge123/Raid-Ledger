@@ -8,13 +8,14 @@
  * driven by the caller emitting `APP_EVENT_EVENTS.UPDATED`.
  */
 import { BadRequestException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { resolveUserTimezones } from '../notifications/timezone.helpers';
+import { REMINDER_WINDOWS } from '../notifications/event-reminder.constants';
 import {
   findExistingOrThrow,
   assertOwnerOrAdmin,
@@ -124,8 +125,62 @@ async function notifyEventDelayed(
 }
 
 /**
+ * Reminder windows that re-open for a delayed start: those whose threshold is
+ * SMALLER than the new time-to-start, so they fire again for the new time
+ * (ROK-2042). A window already past for the new start stays deduped, so a
+ * delay never bursts extra "starts in N minutes" DMs.
+ */
+export function reminderWindowsToRearm(
+  newStart: Date,
+  now: Date = new Date(),
+): string[] {
+  const msUntilStart = newStart.getTime() - now.getTime();
+  return REMINDER_WINDOWS.filter((w) => w.ms < msUntilStart).map((w) => w.type);
+}
+
+/**
+ * Clears the reminder dedup rows for the windows that re-open for a moved
+ * start (see `reminderWindowsToRearm`), so they fire again for the new time.
+ * Shared by Running Late (ROK-2042) and the event edit form (ROK-2045).
+ */
+export async function rearmReminderWindows(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  newStart: Date,
+): Promise<void> {
+  const rearm = reminderWindowsToRearm(newStart);
+  if (rearm.length === 0) return;
+  await db
+    .delete(schema.eventRemindersSent)
+    .where(
+      and(
+        eq(schema.eventRemindersSent.eventId, eventId),
+        inArray(schema.eventRemindersSent.reminderType, rearm),
+      ),
+    );
+}
+
+/**
+ * Writes the shifted duration, then re-arms the reminder windows that re-open
+ * for the new start (ROK-2042) on the same connection.
+ */
+async function persistDelayedDuration(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  newStart: Date,
+  newEnd: Date,
+): Promise<void> {
+  await db
+    .update(schema.events)
+    .set({ duration: [newStart, newEnd], updatedAt: new Date() })
+    .where(eq(schema.events.id, eventId));
+  await rearmReminderWindows(db, eventId, newStart);
+}
+
+/**
  * Shifts an event's start+end by `minutes` (host-only) and notifies attendees.
- * Does NOT reset signup confirmations.
+ * Does NOT reset signup confirmations, but re-arms the reminder windows that
+ * re-open for the new start (see `reminderWindowsToRearm`).
  *
  * @returns the new start/end times.
  */
@@ -145,10 +200,7 @@ export async function applyEventDelay(
   const shiftMs = minutes * MS_PER_MINUTE;
   const newStart = new Date(existing.duration[0].getTime() + shiftMs);
   const newEnd = new Date(existing.duration[1].getTime() + shiftMs);
-  await db
-    .update(schema.events)
-    .set({ duration: [newStart, newEnd], updatedAt: new Date() })
-    .where(eq(schema.events.id, eventId));
+  await persistDelayedDuration(db, eventId, newStart, newEnd);
   await notifyEventDelayed(
     db,
     notificationService,
