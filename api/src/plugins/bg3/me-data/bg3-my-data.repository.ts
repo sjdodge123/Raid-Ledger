@@ -17,6 +17,7 @@ import * as schema from '../../../drizzle/schema';
 import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-lock';
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
+import { lockBg3Gallery } from '../gallery/bg3-gallery-lock';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -97,6 +98,8 @@ export class Bg3MyDataRepository {
   ): Promise<Bg3MyDataDeleted> {
     return this.db.transaction(async (tx) => {
       await lockCompanionUserBlobs(tx, userId);
+      // ROK-1959 P1: a Gallery copy in flight finishes (or re-checks) first.
+      await lockBg3Gallery(tx, userId);
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
       await clearLatestMarkers(tx, userId);

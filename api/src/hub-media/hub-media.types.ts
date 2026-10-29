@@ -34,6 +34,30 @@ export interface HubMediaUploadInput {
   bytes: Buffer;
 }
 
+/** ROK-1959 — a plugin-owned source (never Discord's URL path or a member upload). */
+export type HubMediaPluginSource = Exclude<
+  HubMediaSource,
+  'discord' | 'upload'
+>;
+
+/**
+ * ROK-1959 — what a plugin source (e.g. a game-save picture sync) hands the
+ * store: bytes it already holds, its own provenance key, and the member the
+ * picture belongs to (`uploaded_by`, so they can Remove it).
+ */
+export interface HubMediaSourceInput {
+  guildId: number;
+  source: HubMediaPluginSource;
+  kind: HubMediaKind;
+  provenanceKey: string;
+  /** `users.id` the picture belongs to, or null. */
+  uploadedBy: number | null;
+  authorName: string | null;
+  caption: string | null;
+  capturedAt: Date;
+  bytes: Buffer;
+}
+
 /**
  * `removed` = an upload whose bytes were removed from this hub (D5, 409);
  * `busy` = the shared ingest pool refused the job (D9, 503).

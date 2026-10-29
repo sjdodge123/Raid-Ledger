@@ -12,6 +12,7 @@ import { HubMediaController } from './hub-media.controller';
 import { HubMediaPostClassifierRegistry } from './hub-media-classifier.registry';
 import { HubMediaDecoratorRegistry } from './hub-media.decorators';
 import { HubMediaSubjectRegistry } from './hub-media.subjects';
+import { HubMediaSourceGateRegistry } from './hub-media.source-gates';
 import {
   HubMediaIngestPool,
   readIngestPoolLimits,
@@ -31,7 +32,8 @@ import { HubMediaService } from './hub-media.service';
  * `ingest` / `removeByProvenance` seam sources such as ROK-1941 call) and
  * `HubMediaDecoratorRegistry` (a source's "Show on map" link, D9) and
  * `HubMediaSubjectRegistry` (ROK-2027: a plugin's `?subject=` resolver) and
- * `HubMediaIngestPool` (ROK-1965 D9: the ONE process-wide encode gate that
+ * `HubMediaSourceGateRegistry` (ROK-1959 D-5: a plugin hides a source per
+ * hub) and `HubMediaIngestPool` (ROK-1965 D9: the ONE process-wide encode gate that
  * Discord ingest, backfill and member uploads share).
  * GuildsCoreModule for `GuildAccessService` (D7); SettingsModule for the
  * DEMO_MODE seed's `DemoModeGuard`.
@@ -51,6 +53,7 @@ import { HubMediaService } from './hub-media.service';
     HubMediaUploadGuard,
     HubMediaDecoratorRegistry,
     HubMediaSubjectRegistry,
+    HubMediaSourceGateRegistry,
     HubMediaPostClassifierRegistry,
     { provide: HUB_MEDIA_DOWNLOADER, useValue: fetchHubMediaDownloader },
     {
@@ -62,6 +65,7 @@ import { HubMediaService } from './hub-media.service';
     HubMediaService,
     HubMediaDecoratorRegistry,
     HubMediaSubjectRegistry,
+    HubMediaSourceGateRegistry,
     HubMediaPostClassifierRegistry,
     HubMediaIngestPool,
   ],

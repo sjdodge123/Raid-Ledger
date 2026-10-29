@@ -303,6 +303,14 @@ describe('HubGalleryDialog — uploads (ROK-1965)', () => {
         await waitFor(() => expect(screen.getByTestId('hub-gallery-caption').textContent).toContain('From Discord'));
     });
 
+    it('a BG3 save\'s caption shows its source label alone — "Game save", not "From Game save" (ROK-1959)', async () => {
+        server.use(pagedHandler([hubMediaItem(1, 'save', { source: { type: 'bg3-save', label: 'Game save' } })]));
+        open();
+        const first = await caption();
+        expect(first).toContain('Game save');
+        expect(first).not.toContain('From Game save');
+    });
+
     it('the grid footer offers Add picture even with nothing more to load', async () => {
         server.use(pagedHandler(ITEMS.slice(0, 3)));
         open({ mode: 'grid' });

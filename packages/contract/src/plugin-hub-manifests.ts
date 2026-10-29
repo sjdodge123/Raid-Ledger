@@ -15,6 +15,8 @@ import {
   type PluginHubManifest,
 } from './plugin-hub-manifest.schema.js';
 import {
+  BG3_GALLERY_SOURCE_ID,
+  BG3_GALLERY_SYNC_JOB_NAME,
   BG3_GAME_SLUGS,
   BG3_INGEST_SOURCE_ID,
   BG3_PLUGIN_ID,
@@ -136,6 +138,9 @@ export const BG3_HUB_MANIFEST = {
   behaviours: [
     { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
     { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
+    { id: BG3_GALLERY_SOURCE_ID, kind: 'ingest-source', label: 'Copies one save picture per play session into the hub Gallery' },
+    { id: BG3_GALLERY_SYNC_JOB_NAME, kind: 'scheduled-job', label: 'Adds new save pictures to the Gallery every 15 minutes' },
+    { id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures while the hub hides spoilers' },
   ],
   gameSlugs: [...BG3_GAME_SLUGS],
   setup: BG3_SETUP,

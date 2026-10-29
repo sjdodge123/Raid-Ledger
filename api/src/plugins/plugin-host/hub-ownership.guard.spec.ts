@@ -12,6 +12,7 @@ import * as path from 'path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
+  BG3_GALLERY_SYNC_JOB_NAME,
   BG3_PLUGIN_ID,
   CORE_PLUGIN_ID,
   HUB_PLUGIN_MANIFESTS,
@@ -83,6 +84,7 @@ const CTX: ScanContext = {
     VALHEIM_GAME_SLUG,
     PELICAN_PLUGIN_ID,
     BG3_PLUGIN_ID,
+    BG3_GALLERY_SYNC_JOB_NAME,
     EVENT_GUILD_TAGGER_KEY,
     'WOW_COMMON_MANIFEST.id': WOW_COMMON_MANIFEST.id,
   },
@@ -166,6 +168,9 @@ describe('ROK-1969 A3 — declared ↔ registered, exact (source scan)', () => {
         'core/ingest-source/hub-media.upload',
         'bg3/ingest-source/bg3-save',
         'bg3/scheduled-job/Bg3HistoryRetentionCron_prune',
+        'bg3/ingest-source/bg3-save.gallery',
+        'bg3/scheduled-job/Bg3GalleryCron_sync',
+        'bg3/media-gate/bg3-save',
       ]),
     );
   });
