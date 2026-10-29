@@ -5,6 +5,9 @@
  * member (AC3), a signed-in non-member gets an empty payload that names
  * nobody (Q1 = A, AC4/AC6), staff see the member payload (AC5), a BG3 hub has
  * no roster (AC8) and an addon import shows without waiting for the TTL (AC9).
+ *
+ * AC9's import is permanent, so it runs on its own hub with its own member
+ * (`fay`): the exact lists in AC1/AC3/AC5 hold in any `--randomize` order.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -13,7 +16,7 @@ import {
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../../common/testing/narrow';
+import { defined, nonEmpty } from '../../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../../common/testing/sign-test-access-token';
 import * as schema from '../../../../drizzle/schema';
 import { insertCommunityHub } from '../../../../guilds/community/community-proposals.queries';
@@ -21,21 +24,25 @@ import { PluginRegistryService } from '../../../plugin-host/plugin-registry.serv
 import {
   buildCharPayload,
   buildImportString,
+  buildWho,
 } from '../../addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from '../../addon-import/testing/pin-export-clock';
 
 pinExportClock();
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
-type Who = 'ash' | 'eve' | 'bob' | 'cat' | 'dan' | 'vic';
+type Who = 'ash' | 'eve' | 'bob' | 'cat' | 'dan' | 'vic' | 'fay';
 
 let testApp: TestApp;
 let hubId: number;
 let bg3HubId: number;
+/** AC9's hub: only `fay`, so her import never reaches the main hub. */
+let importHubId: number;
 let foreverGameId: number;
 let bg3GameId: number;
-const users = {} as Record<Who, number>;
-const tokens = {} as Record<Who | 'staff', string>;
+const users = new Map<Who, number>();
+const tokens = new Map<Who | 'staff', string>();
+const uid = (who: Who): number => defined(users.get(who), `user ${who}`);
 /** Every seeded character: name → id (for the deep leak scan). */
 const chars = new Map<string, string>();
 
@@ -63,12 +70,15 @@ async function mkUser(who: Who, deactivated = false): Promise<void> {
       .returning(),
     `user ${who}`,
   );
-  users[who] = user.id;
+  users.set(who, user.id);
   if (!deactivated)
-    tokens[who] = await signTestAccessToken(testApp, {
-      sub: user.id,
-      username: user.username,
-    });
+    tokens.set(
+      who,
+      await signTestAccessToken(testApp, {
+        sub: user.id,
+        username: user.username,
+      }),
+    );
 }
 
 async function mkChar(
@@ -80,7 +90,7 @@ async function mkChar(
     await testApp.db
       .insert(schema.characters)
       .values({
-        userId: users[who],
+        userId: uid(who),
         gameId: foreverGameId,
         name,
         class: 'Warrior',
@@ -102,14 +112,14 @@ async function mkHub(gameId: number, name: string): Promise<number> {
     name,
     blurb: 'ROK-1925 hub',
     status: 'active',
-    proposedBy: users.ash,
+    proposedBy: uid('ash'),
     reviewedBy: null,
   });
   return hub.id;
 }
 
 async function seedUsersAndChars(): Promise<void> {
-  for (const who of ['ash', 'eve', 'bob', 'cat', 'vic'] as const)
+  for (const who of ['ash', 'eve', 'bob', 'cat', 'vic', 'fay'] as const)
     await mkUser(who);
   await mkUser('dan', true);
   await mkChar('ash', 'Ashmain', { isMain: true, roleOverride: 'tank' });
@@ -127,7 +137,7 @@ async function seedMemberships(): Promise<void> {
   const now = new Date();
   const row = (guildId: number, who: Who) => ({
     guildId,
-    userId: users[who],
+    userId: uid(who),
     role: who === 'ash' ? ('leader' as const) : ('member' as const),
   });
   await testApp.db
@@ -139,6 +149,7 @@ async function seedMemberships(): Promise<void> {
       { ...row(hubId, 'cat'), bannedAt: now },
       row(hubId, 'dan'),
       row(bg3HubId, 'ash'),
+      row(importHubId, 'fay'),
     ]);
 }
 
@@ -152,8 +163,9 @@ beforeAll(async () => {
   await seedUsersAndChars();
   hubId = await mkHub(foreverGameId, 'Forever Friends 1925');
   bg3HubId = await mkHub(bg3GameId, 'BG3 Party 1925');
+  importHubId = await mkHub(foreverGameId, 'Forever Imports 1925');
   await seedMemberships();
-  tokens.staff = await loginAsAdmin(testApp.request, testApp.seed);
+  tokens.set('staff', await loginAsAdmin(testApp.request, testApp.seed));
 });
 
 const get = (who: Who | 'staff', gid = hubId, mains = false) =>
@@ -161,7 +173,7 @@ const get = (who: Who | 'staff', gid = hubId, mains = false) =>
     .get(
       `/plugins/wow/guilds/${gid}/roster-insights${mains ? '?mainsOnly=true' : ''}`,
     )
-    .set('Authorization', `Bearer ${tokens[who]}`);
+    .set('Authorization', `Bearer ${defined(tokens.get(who), `token ${who}`)}`);
 
 async function read(
   who: Who | 'staff',
@@ -217,8 +229,11 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
   it('AC4: a signed-in non-member gets an empty payload naming nobody', async () => {
     const res = await get('vic');
     expect(res.status).toBe(200);
-    const dto = WowRosterInsightsSchema.parse(res.body);
-    expect(leaks(res.body)).toEqual([]);
+    const body: unknown = res.body;
+    if (typeof body !== 'object' || body === null)
+      throw new Error(`Expected an object body, got ${typeof body}`);
+    const dto = WowRosterInsightsSchema.parse(body);
+    expect(leaks(body)).toEqual([]);
     expect(dto.classes).toEqual([]);
     expect(dto.levels).toMatchObject({ max: null, atCap: 0 });
     const zero = { tank: 0, healer: 0, dps: 0, unknown: 0 };
@@ -229,7 +244,7 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
       'lockoutReporters',
       'lastSeen',
     ])
-      expect(Object.keys(res.body as object)).not.toContain(key);
+      expect(Object.keys(body)).not.toContain(key);
   });
 
   it('AC5: staff who are not members get the member payload', async () => {
@@ -253,18 +268,23 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
   });
 
   it("AC9: a member's addon import shows on the next read (no TTL wait)", async () => {
-    const before = rosterNames(await read('eve'));
+    const name = 'Fayimport';
+    const who = buildWho({
+      guid: 'Player-4395-0F192500',
+      fullName: name,
+      raw: { getUnitName: name, unitName: [name, null] },
+    });
+    // Warm the cache: without the import's invalidation this entry is served.
+    expect(rosterNames(await read('fay', importHubId))).not.toContain(name);
     const res = await testApp.request
       .post('/plugins/wow/characters/addon-import')
-      .set('Authorization', `Bearer ${tokens.eve}`)
+      .set('Authorization', `Bearer ${defined(tokens.get('fay'), 'token fay')}`)
       .send({
-        importString: buildImportString(buildCharPayload()),
+        importString: buildImportString(buildCharPayload({ who })),
         dryRun: false,
       });
     expect(res.status).toBe(200);
     expect(res.body.target.action).toBe('create');
-    const after = rosterNames(await read('eve'));
-    expect(after).toHaveLength(before.length + 1);
-    expect(after).toEqual(expect.arrayContaining(before));
+    expect(rosterNames(await read('fay', importHubId))).toContain(name);
   });
 });
