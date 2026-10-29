@@ -1,11 +1,13 @@
 /**
  * Shared event conflict detection (ROK-1031 Part 4).
  * Finds events that overlap a given time range for a specific user,
- * excluding cancelled events and declined/departed signups.
+ * excluding cancelled events and signups that released the slot
+ * (declined, roached_out, departed).
  */
-import { and, eq, isNull, sql, ne, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -26,12 +28,10 @@ export interface FindConflictsParams {
   excludeEventId?: number;
 }
 
-/** Statuses that indicate a user is NOT actively signed up. */
-const EXCLUDED_STATUSES = ['declined', 'departed'];
-
 /**
  * Find events that overlap a given time range for a user.
- * Excludes cancelled events and declined/departed signups.
+ * Only active signups count (ACTIVE_SIGNUP_STATUSES): leaving an event within
+ * 23h writes `roached_out`, which must not read as a conflict (ROK-2041).
  * @param db - Database connection
  * @param params - Conflict search parameters
  * @returns Array of conflicting events
@@ -47,7 +47,7 @@ export async function findConflictingEvents(
     sql`${schema.events.duration} && ${rangeStr}::tsrange`,
     isNull(schema.events.cancelledAt),
     eq(schema.eventSignups.userId, userId),
-    notInArray(schema.eventSignups.status, EXCLUDED_STATUSES),
+    inArray(schema.eventSignups.status, [...ACTIVE_SIGNUP_STATUSES]),
   ];
 
   if (excludeEventId !== undefined) {
