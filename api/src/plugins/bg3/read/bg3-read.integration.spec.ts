@@ -400,9 +400,15 @@ describe('GET snapshot (D-3 / D-7)', () => {
     });
     expect(guestTwin).toBeLessThan(hostTwin);
     const snap = await snapshotOf(guest);
-    expect({ saveId: snap.saveId, uploader: snap.uploaderUserId }).toEqual({
+    expect({
+      saveId: snap.saveId,
+      uploaderUserId: snap.uploaderUserId,
+      uploader: snap.uploader,
+    }).toEqual({
       saveId: hostTwin,
-      uploader: host.id,
+      uploaderUserId: host.id,
+      // D-8 "Saved … by <uploader>": display_name is unset → username.
+      uploader: { userId: host.id, displayName: 'host' },
     });
   });
 

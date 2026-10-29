@@ -26,6 +26,7 @@ const SUMMARY: Bg3CampaignSummary = {
   isActive: true,
   lastSavedAt: null,
   saveCount: 0,
+  archivedAt: null,
 };
 
 function setup(opts: {
@@ -34,24 +35,29 @@ function setup(opts: {
   canEdit?: boolean;
   hostUserId?: number | null;
   campaign?: boolean;
+  archivedAt?: Date | null;
+  defaultWritten?: boolean;
 }) {
   const repo = {
     findHub: jest
       .fn()
       .mockResolvedValue(opts.hub === undefined ? HUB : opts.hub),
-    findCampaign: jest
-      .fn()
-      .mockResolvedValue(
-        opts.campaign === false
-          ? null
-          : { id: 11, guildId: 5, hostUserId: opts.hostUserId ?? 9 },
-      ),
+    findCampaign: jest.fn().mockResolvedValue(
+      opts.campaign === false
+        ? null
+        : {
+            id: 11,
+            guildId: 5,
+            hostUserId: opts.hostUserId ?? 9,
+            archivedAt: opts.archivedAt ?? null,
+          },
+    ),
     createCampaign: jest.fn().mockResolvedValue(11),
     updateCampaign: jest.fn().mockResolvedValue(undefined),
     summary: jest.fn().mockResolvedValue(SUMMARY),
     bindKey: jest.fn().mockResolvedValue(undefined),
     unbindKey: jest.fn().mockResolvedValue(undefined),
-    setDefault: jest.fn().mockResolvedValue(undefined),
+    setDefault: jest.fn().mockResolvedValue(opts.defaultWritten ?? true),
   };
   const access = {
     isMember: jest.fn().mockResolvedValue(opts.member ?? true),
@@ -130,6 +136,23 @@ describe('Bg3CampaignsService.update', () => {
     expect(repo.updateCampaign).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])(
+    'passes archived=%s through for the host (D-11)',
+    async (archived) => {
+      const { repo, svc } = setup({ hostUserId: 7 });
+      await svc.update(11, me, { archived });
+      expect(repo.updateCampaign).toHaveBeenCalledWith(11, { archived });
+    },
+  );
+
+  it('403s an archive by a plain member and writes nothing', async () => {
+    const { repo, svc } = setup({});
+    await expect(svc.update(11, me, { archived: true })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(repo.updateCampaign).not.toHaveBeenCalled();
+  });
+
   it('404s a missing campaign', async () => {
     const { svc } = setup({ campaign: false });
     await expect(svc.update(11, me, { name: 'x' })).rejects.toThrow(
@@ -174,5 +197,17 @@ describe('Bg3CampaignsService binding (D-6)', () => {
     const { repo, svc } = setup({ member: false });
     await expect(svc.setDefault(me, 11)).rejects.toThrow(ForbiddenException);
     expect(repo.setDefault).not.toHaveBeenCalled();
+  });
+
+  it('400s when the repo refuses an archived default (D-11, atomic)', async () => {
+    const { repo, svc } = setup({ defaultWritten: false });
+    await expect(svc.setDefault(me, 11)).rejects.toThrow('campaign_archived');
+    expect(repo.setDefault).toHaveBeenCalledWith(7, 11);
+  });
+
+  it('sets a live campaign as the default', async () => {
+    const { repo, svc } = setup({});
+    await expect(svc.setDefault(me, 11)).resolves.toBeUndefined();
+    expect(repo.setDefault).toHaveBeenCalledWith(7, 11);
   });
 });

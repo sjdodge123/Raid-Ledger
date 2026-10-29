@@ -59,6 +59,8 @@ export const Bg3CampaignSummarySchema = z.object({
     isActive: z.boolean(),
     lastSavedAt: iso.nullable(),
     saveCount: z.number().int().min(0),
+    /** Soft archive (ROK-1958 D-11); `null` = live. */
+    archivedAt: iso.nullable(),
 }).strict();
 export type Bg3CampaignSummary = z.infer<typeof Bg3CampaignSummarySchema>;
 
@@ -99,6 +101,8 @@ export const Bg3SnapshotSchema = z.object({
     savedAt: iso,
     receivedAt: iso,
     uploaderUserId: id,
+    /** ROK-1958 D-8 "Saved … by <uploader>": `display_name ?? username`; null is defensive, unreachable while `uploader_user_id` cascades on delete. */
+    uploader: z.object({ userId: id, displayName: z.string().min(1) }).strict().nullable(),
     area: bg3Id.nullable(),
     difficulty: bg3Id,
     ruleset: bg3Id.nullable(),
@@ -165,7 +169,12 @@ export type Bg3CreateCampaignBody = z.infer<typeof Bg3CreateCampaignBodySchema>;
 export const Bg3UpdateCampaignBodySchema = z.object({
     name: campaignName.optional(),
     hostUserId: id.optional(),
-}).strict().refine((b) => b.name !== undefined || b.hostUserId !== undefined, AT_LEAST_ONE);
+    /** ROK-1958 D-11: `true` archives (soft), `false` restores. */
+    archived: z.boolean().optional(),
+}).strict().refine(
+    (b) => b.name !== undefined || b.hostUserId !== undefined || b.archived !== undefined,
+    AT_LEAST_ONE,
+);
 export type Bg3UpdateCampaignBody = z.infer<typeof Bg3UpdateCampaignBodySchema>;
 
 export const Bg3BindKeyBodySchema = z.object({ campaignId: id }).strict();

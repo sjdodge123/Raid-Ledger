@@ -67,6 +67,7 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
     expect(tabIds('valheim')).toEqual(['characters', 'map', 'materials', 'planner']);
     expect(tabIds('pelican')).toEqual(['quick-play']);
     expect(tabIds('blizzard')).toEqual(['raids', 'progression', 'loot']);
+    expect(tabIds('bg3')).toEqual(['campaign']);
   });
 
   it('rejects a duplicate widget id within one list', () => {
