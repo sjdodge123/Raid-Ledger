@@ -100,6 +100,9 @@ function checkBuildQuery(query) {
     if (!BUILD_NETWORKS.has(mode)) return `build networkmode=${mode} is not allowed`;
   }
   if (query.has('remote')) return 'build remote= is not allowed (no daemon-side fetch)';
+  // version=2 asks dockerd for a BuildKit build (README boundary risk 2: not
+  // supported through the guard); only the classic builder (absent or 1) passes.
+  if (query.getAll('version').some((v) => v !== '' && v !== '1')) return 'build version= other than 1 (BuildKit) is not supported through the guard; build with DOCKER_BUILDKIT=0';
   if (query.getAll('cgroupparent').some((v) => v !== '')) return 'build cgroupparent= is not allowed';
   return buildTagReason(query);
 }

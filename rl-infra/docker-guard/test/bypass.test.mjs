@@ -37,6 +37,10 @@ test('links, cgroup join and plugin volume drivers are refused', () => {
 test('daemon-side URL fetches and non-canonical paths are refused', () => {
   assert.equal(classify('POST', '/v1.45/build?remote=http://127.0.0.1:2375/info').ok, false);
   assert.equal(classify('POST', '/build?networkmode=default&networkmode=host').ok, false);
+  assert.equal(classify('POST', '/build?version=2').ok, false);
+  assert.equal(classify('POST', '/v1.45/build?version=1&version=2').ok, false);
+  assert.equal(classify('POST', '/build?version=1').ok, true);
+  assert.equal(classify('POST', '/build').ok, true);
   assert.equal(classify('POST', '/images/create?fromSrc=http://127.0.0.1:2375/info').ok, false);
   assert.equal(classify('POST', '/images/create?fromImage=redis&tag=7').ok, true);
   for (const u of ['/containers/x/json/../../create', '/containers%2Fcreate', '//containers/json', '/containers\\create']) {
