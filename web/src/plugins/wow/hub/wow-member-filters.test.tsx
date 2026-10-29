@@ -16,7 +16,12 @@ const OPTIONS: WowMemberFilterOptions = {
     maxLevel: 60,
 };
 
-function renderControls(professions: Parameters<typeof WowMemberFilterControls>[0]['professions'] = [{ name: 'Mining', count: 2 }]) {
+type Professions = Parameters<typeof WowMemberFilterControls>[0]['professions'];
+const MINING: Professions = [{ name: 'Mining', count: 2 }];
+
+// No default parameter: JS applies a default to an explicit `undefined`, which
+// would hide the visitor/loading case behind the Mining fixture.
+function renderControls(professions: Professions) {
     const onChange = vi.fn<(next: WowMemberFilterState) => void>();
     render(<WowMemberFilterControls state={EMPTY_WOW_MEMBER_FILTERS} options={OPTIONS} professions={professions} onChange={onChange} />);
     return onChange;
@@ -30,7 +35,7 @@ function lastState(onChange: ReturnType<typeof renderControls>): WowMemberFilter
 
 describe('WowMemberFilterControls (ROK-1173 AC2)', () => {
     it('renders every AC2 control with its label', () => {
-        renderControls();
+        renderControls(MINING);
         expect(within(screen.getByTestId('wow-filter-class')).getByText('Class')).toBeInTheDocument();
         expect(within(screen.getByTestId('wow-filter-role')).getByText('Role')).toBeInTheDocument();
         expect(within(screen.getByTestId('wow-filter-rank')).getByText('Rank')).toBeInTheDocument();
@@ -44,7 +49,7 @@ describe('WowMemberFilterControls (ROK-1173 AC2)', () => {
     });
 
     it('reports a pressed Role chip and a pressed Rank chip as the next state', async () => {
-        const onChange = renderControls();
+        const onChange = renderControls(MINING);
         await userEvent.click(screen.getByRole('button', { name: 'Healer' }));
         expect(lastState(onChange).roles, 'the Role chip adds its value').toEqual(['healer']);
         await userEvent.click(screen.getByRole('button', { name: 'Raider' }));
