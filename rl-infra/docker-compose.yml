@@ -76,6 +76,12 @@ x-runner-base: &runner-base
   mem_reservation: 2g
   pids_limit: 4096
   init: true
+  # ROK-1846 r11 — rl-docker-guard names its caller by source IP on the shared
+  # rl-docker-guard bridge, so a runner must not forge frames there: no
+  # CAP_NET_RAW, no ARP spoofing (NET_ADMIN is not in Docker's default set).
+  # Nothing on a runner needs raw sockets; tcpdump/ping are operator tools —
+  # capture from the VM host (README "Docker API boundary").
+  cap_drop: [NET_RAW]
   networks: [rl-net, rl-docker-guard]
   extra_hosts:
     - "host.docker.internal:host-gateway"

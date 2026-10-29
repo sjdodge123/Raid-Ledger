@@ -108,10 +108,26 @@ test_rendered_config_when_docker_available() {
     assert_eq "$(jq -r '[.services | to_entries[] | select(.key|startswith("runner-")) | .value.volumes[]? | select((.source // "") | test("docker.sock"))] | length' <<<"$cfg")" "0" "rendered: no runner mounts docker.sock"
 }
 
+# Codex r11 P1: the guard names its caller by source IP on the shared guard
+# bridge, so no runner may hold CAP_NET_RAW (ARP spoofing) nor add NET_ADMIN.
+test_runners_drop_net_raw() {
+    local svc b
+    assert_eq "$(has "$(block "x-runner-base")" "cap_drop: [NET_RAW]")" "yes" "x-runner-base drops NET_RAW"
+    for svc in runner-1 runner-2 runner-3 runner-4; do
+        b=$(block "$svc")
+        assert_eq "$(has "$b" "<<: *runner-base")" "yes" "$svc inherits x-runner-base"
+        assert_eq "$(has "$b" "cap_drop")" "no" "$svc does not override cap_drop"
+        assert_eq "$(has "$b" "cap_add")" "no" "$svc adds no capability"
+        assert_eq "$(has "$b" "privileged")" "no" "$svc is not privileged"
+    done
+    assert_eq "$(has "$(block "x-runner-base")" "cap_add")" "no" "x-runner-base adds no capability"
+}
+
 run_test "proxy-is-off-rl-net" test_proxy_is_off_rl_net
 run_test "no-runner-mounts-docker-sock" test_no_runner_mounts_docker_sock
 run_test "runners-route-through-guard" test_runners_route_through_guard
 run_test "guard-is-isolated" test_guard_is_isolated
+run_test "runners-drop-net-raw" test_runners_drop_net_raw
 run_test "allinone-builds-under-classic-builder" test_allinone_builds_under_classic_builder
 run_test "rendered-config-when-docker-available" test_rendered_config_when_docker_available
 
