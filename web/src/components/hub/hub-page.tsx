@@ -7,7 +7,7 @@
  * it, or a module section reports content of its own (ROK-1830 — core asks
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
- * A 403 (not a member) is a friendly empty state; a 401 that survived the
+ * A 403 (not a member, or ROK-2044 the hub's plugin is off) is a friendly empty state; a 401 that survived the
  * refresh re-checks the session — sign in only once it is rejected (ROK-1947).
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
@@ -38,6 +38,8 @@ import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
 import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
+import { isHubPluginInactive } from './hub-plugin-inactive.helpers';
+import { HubPluginInactiveCopy } from './hub-plugin-inactive';
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -93,9 +95,10 @@ interface ErrorStateProps {
     kind?: GuildKind | undefined;
 }
 
-/** The hub page's failure notices — not-a-member (403), not-found (404), or a retryable load failure. */
+/** The hub page's failure notices — plugin off or not-a-member (403), not-found (404), or a retryable load failure. */
 export function ErrorState({ error, onRetry, kind }: ErrorStateProps): JSX.Element {
     const status = httpStatusOf(error);
+    if (isHubPluginInactive(error)) return <Notice testId="guild-plugin-inactive"><HubPluginInactiveCopy /></Notice>;
     if (status === 403) {
         return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
     }
