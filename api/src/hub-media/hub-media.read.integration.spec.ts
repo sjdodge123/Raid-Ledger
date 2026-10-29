@@ -12,6 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  CORE_PLUGIN_ID,
   HubMediaListResponseSchema,
   type HubMediaKind,
   type HubMediaListResponse,
@@ -40,6 +41,7 @@ import {
 } from './hub-media-download';
 import { mediaFilePath } from './hub-media.paths';
 import { HubMediaService } from './hub-media.service';
+import { HubMediaSourceGateRegistry } from './hub-media.source-gates';
 import { solidPng } from './hub-media.testing';
 
 type Who = 'member' | 'visitor' | 'operator';
@@ -352,6 +354,66 @@ describe('moderation (D8) + bytes route', () => {
       discord: null,
     });
     expect(reingest).toEqual({ status: 'duplicate', mediaId: id });
+  });
+});
+
+describe('source gates (ROK-1959 D-5)', () => {
+  /** The registry is an app singleton: the gate outlives this file, so it is core-owned and off by default. */
+  let hideSaves = false;
+  beforeAll(() => {
+    testApp.app
+      .get(HubMediaSourceGateRegistry)
+      .register(CORE_PLUGIN_ID, 'bg3-save', () => Promise.resolve(hideSaves));
+  });
+  afterEach(() => {
+    hideSaves = false;
+  });
+
+  async function save(): Promise<number> {
+    const res = await testApp.app.get(HubMediaService).ingestFromSource({
+      guildId: hubId,
+      source: 'bg3-save',
+      kind: 'save',
+      provenanceKey: 'bg3-save:sha256:gate',
+      uploadedBy: null,
+      authorName: 'Ada',
+      caption: 'save',
+      capturedAt: new Date(Date.UTC(2026, 9, 20, 2)),
+      bytes: await solidPng(1200, 800, 5),
+    });
+    if (res.status !== 'stored') throw new Error(`seed save: ${res.status}`);
+    return res.mediaId;
+  }
+  const shape = (r: HubMediaListResponse) => ({
+    captions: captions(r),
+    total: r.total,
+    kinds: r.kinds,
+  });
+
+  it('a gated source leaves list, total, kinds, item and bytes for editors and members alike', async () => {
+    await picture('shot', 'screenshot', 1);
+    const id = await save();
+    const open = await listOf('operator');
+    expect({ ...shape(open), source: open.items[0]?.source }).toEqual({
+      captions: ['save', 'shot'],
+      total: 2,
+      kinds: ['screenshot', 'save'],
+      source: { type: 'bg3-save', label: 'Game save' },
+    });
+    hideSaves = true;
+    for (const who of ['operator', 'member'] as const) {
+      expect(shape(await listOf(who))).toEqual({
+        captions: ['shot'],
+        total: 1,
+        kinds: ['screenshot'],
+      });
+    }
+    expect(shape(await listOf('operator', '?kind=save')).total).toBe(0);
+    const paths = [`${base()}/${id}`, `${base()}/${id}/thumb`];
+    const statuses = await Promise.all(
+      paths.map(async (p) => (await get(p, 'operator')).status),
+    );
+    expect(statuses).toEqual([404, 404]);
   });
 });
 

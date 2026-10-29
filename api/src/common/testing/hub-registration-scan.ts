@@ -13,6 +13,7 @@ import type {
   HubBehaviourKind,
   PluginHubManifest,
 } from '@raid-ledger/contract';
+import { mediaSourceGates } from './hub-registration-scan.media';
 
 /** One comment-stripped source file, path relative to `api/src`. */
 export interface ScanSource {
@@ -40,6 +41,7 @@ export const SCANNED_KINDS: readonly HubBehaviourKind[] = [
   'media-decorator',
   'media-subject',
   'ingest-source',
+  'media-gate',
 ];
 
 /** A registration key whose declared id differs (the tagger's `*` key). */
@@ -348,6 +350,7 @@ export function scanHubRegistrations(
     ...mediaSubjects(sources, ctx),
     ...ingestSources(sources, ctx),
     ...companionHandlers(sources, ctx),
+    ...mediaSourceGates(sources, ctx),
   ];
   return {
     keys: found.flatMap((f) => (f.key === undefined ? [] : [f.key])),
