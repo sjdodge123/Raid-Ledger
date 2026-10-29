@@ -42,6 +42,11 @@ export interface RawRosterRow {
   onlineAtExport: boolean | null;
   /** ROK-1916 — whole days offline before that export (verbatim). */
   lastOnlineDays: number | null;
+  /**
+   * ROK-1173 — linked character's `characters.avatar_url`. Optional so the
+   * many hand-built fixtures of this row stay valid; the query always sets it.
+   */
+  avatarUrl?: string | null;
 }
 
 /** `roleOverride ?? role`, narrowed to the contract's role enum. */
@@ -56,9 +61,37 @@ export type RosterLinks = Map<
   NonNullable<GuildMemberRow['linkedAccount']>
 >;
 
+/**
+ * ROK-1173 — the optional per-row extras: presence (omitted when the export
+ * never reported it), `isViewer` (the viewer's own linked rows only) and the
+ * linked character's avatar (omitted when it has none).
+ */
+export function rosterRowExtras(
+  row: RawRosterRow,
+  viewerId?: number,
+): Pick<GuildMemberRow, 'presence' | 'isViewer' | 'avatarUrl'> {
+  const reported = row.onlineAtExport !== null || row.lastOnlineDays !== null;
+  const own =
+    viewerId !== undefined && row.userId !== null && row.userId === viewerId;
+  return {
+    ...(reported
+      ? {
+          presence: {
+            online: row.onlineAtExport,
+            lastOnlineDays: row.lastOnlineDays,
+          },
+        }
+      : {}),
+    ...(own ? { isViewer: true as const } : {}),
+    ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+  };
+}
+
+/** `viewerId` marks the viewer's own rows (ROK-1173); omit it for no marking. */
 export function toMemberRow(
   row: RawRosterRow,
   links?: RosterLinks,
+  viewerId?: number,
 ): GuildMemberRow {
   const account =
     row.characterId === null ? undefined : links?.get(row.characterId);
@@ -73,6 +106,7 @@ export function toMemberRow(
     characterId: row.characterId,
     isMain: row.isMain ?? false,
     ...(account ? { linkedAccount: account } : {}),
+    ...rosterRowExtras(row, viewerId),
   };
 }
 
@@ -97,23 +131,25 @@ export function compareRosterRows(a: RawRosterRow, b: RawRosterRow): number {
 /**
  * Group sorted rows by rank; the group's name is its first row's rank name.
  * `links` is passed for staff viewers only (ROK-1794) — never for anyone else.
+ * `viewerId` flags the viewer's own linked rows `isViewer` (ROK-1173).
  */
 export function groupRoster(
   rows: RawRosterRow[],
   links?: RosterLinks,
+  viewerId?: number,
 ): GuildRankGroup[] {
   const sorted = dedupeByMember(rows).sort(compareRosterRows);
   const groups: GuildRankGroup[] = [];
   for (const row of sorted) {
     const last = groups[groups.length - 1];
     if (last && last.rankIndex === row.rankIndex) {
-      last.members.push(toMemberRow(row, links));
+      last.members.push(toMemberRow(row, links, viewerId));
       continue;
     }
     groups.push({
       rankIndex: row.rankIndex,
       rankName: row.rankName,
-      members: [toMemberRow(row, links)],
+      members: [toMemberRow(row, links, viewerId)],
     });
   }
   return groups;
@@ -139,6 +175,7 @@ export async function loadRosterRows(
       isMain: characters.isMain,
       onlineAtExport: guildMembers.onlineAtExport,
       lastOnlineDays: guildMembers.lastOnlineDays,
+      avatarUrl: characters.avatarUrl,
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))

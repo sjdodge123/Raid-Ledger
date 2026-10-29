@@ -2,6 +2,7 @@ import {
   dedupeByMember,
   effectiveRole,
   groupRoster,
+  rosterRowExtras,
   type RawRosterRow,
 } from './guild-roster.helpers';
 
@@ -111,5 +112,67 @@ describe('groupRoster', () => {
     expect(staff?.members[1]).not.toHaveProperty('linkedAccount');
     const [plain] = groupRoster(rows);
     expect(plain?.members.filter((m) => 'linkedAccount' in m)).toEqual([]);
+  });
+});
+
+describe('rosterRowExtras (ROK-1173)', () => {
+  it('maps presence verbatim when the export reported it', () => {
+    expect(
+      rosterRowExtras(row({ onlineAtExport: false, lastOnlineDays: 4 })),
+    ).toEqual({ presence: { online: false, lastOnlineDays: 4 } });
+    expect(rosterRowExtras(row({ onlineAtExport: true }))).toEqual({
+      presence: { online: true, lastOnlineDays: null },
+    });
+  });
+
+  it('omits presence when the export never reported it', () => {
+    expect(rosterRowExtras(row({}))).not.toHaveProperty('presence');
+  });
+
+  it('flags isViewer only on rows the viewer owns', () => {
+    const own = row({ characterId: CHAR, userId: 42 });
+    expect(rosterRowExtras(own, 42).isViewer).toBe(true);
+    expect(rosterRowExtras(own, 43)).not.toHaveProperty('isViewer');
+    expect(rosterRowExtras(own)).not.toHaveProperty('isViewer');
+    expect(rosterRowExtras(row({ userId: null }), 42)).not.toHaveProperty(
+      'isViewer',
+    );
+  });
+
+  it('carries the linked avatar and omits a missing one', () => {
+    const url = 'https://render.example/avatar.jpg';
+    expect(rosterRowExtras(row({ avatarUrl: url })).avatarUrl).toBe(url);
+    expect(rosterRowExtras(row({ avatarUrl: null }))).not.toHaveProperty(
+      'avatarUrl',
+    );
+    expect(rosterRowExtras(row({}))).not.toHaveProperty('avatarUrl');
+  });
+});
+
+describe('groupRoster viewerId (ROK-1173)', () => {
+  it('marks only the viewer own rows and maps presence + avatar', () => {
+    const rows = [
+      row({
+        memberId: 1,
+        characterId: CHAR,
+        userId: 42,
+        onlineAtExport: true,
+        lastOnlineDays: 0,
+        avatarUrl: 'https://render.example/a.jpg',
+      }),
+      row({ memberId: 2, name: 'Bea', characterId: 'other', userId: 9 }),
+      row({ memberId: 3, name: 'Cid' }),
+    ];
+    const [group] = groupRoster(rows, undefined, 42);
+    const [anna, bea, cid] = group?.members ?? [];
+    expect(anna).toMatchObject({
+      isViewer: true,
+      presence: { online: true, lastOnlineDays: 0 },
+      avatarUrl: 'https://render.example/a.jpg',
+    });
+    expect(bea).not.toHaveProperty('isViewer');
+    expect(cid).not.toHaveProperty('isViewer');
+    const [anon] = groupRoster(rows);
+    expect(anon?.members.filter((m) => m.isViewer)).toEqual([]);
   });
 });
