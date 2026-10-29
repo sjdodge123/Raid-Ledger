@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+    HUB_MEDIA_KINDS,
+    HUB_MEDIA_SOURCES,
     HUB_MEDIA_UPLOAD_MAX_BYTES,
     HUB_MEDIA_UPLOAD_TYPES,
     HUB_MEDIA_SUBJECT_RE,
     HubMediaItemSchema,
     HubMediaListQuerySchema,
+    HubMediaListResponseSchema,
     HubMediaUploadErrorCodeSchema,
     isSafeHubMediaHref,
 } from '../hub-media.schema.js';
@@ -135,5 +138,28 @@ describe('HubMediaListQuerySchema subject (ROK-2027)', () => {
             kind: 'death',
             limit: 5,
         });
+    });
+});
+
+describe('save pictures (ROK-1959 D-1 / D-7)', () => {
+    const save = (over: Record<string, unknown> = {}) =>
+        upload({ kind: 'save', source: { type: 'bg3-save', label: 'Game save' }, ...over });
+
+    it('adds kind "save" and source "bg3-save", keeping the existing values', () => {
+        expect(HUB_MEDIA_KINDS).toEqual(['death', 'screenshot', 'image', 'upload', 'save']);
+        expect(HUB_MEDIA_SOURCES).toEqual(['discord', 'upload', 'bg3-save']);
+    });
+
+    it('accepts a save picture item', () => {
+        const parsed = HubMediaItemSchema.safeParse(save());
+        expect(parsed.error?.issues ?? []).toEqual([]);
+        expect(parsed.data?.kind).toBe('save');
+        expect(parsed.data?.source.type).toBe('bg3-save');
+    });
+
+    it('filters a list by kind "save" and lists it for the chips', () => {
+        expect(HubMediaListQuerySchema.parse({ kind: 'save' })).toEqual({ kind: 'save' });
+        const res = HubMediaListResponseSchema.safeParse({ items: [save()], nextCursor: null, total: 1, kinds: ['save'] });
+        expect(res.error?.issues ?? []).toEqual([]);
     });
 });

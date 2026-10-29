@@ -24,6 +24,8 @@
 #   A-i  the build pre-flight gates on the DISK marker, not the memory one
 #   A-j  an unreadable df is UNKNOWN (fail open), never "0 GB free"
 #   A-k  rl status survives a missing/corrupt disk-pressure.json
+#   A-l  the builder rung uses the proxy-allowed legacy /build/prune route
+#   A-m  a failing rung is logged and the ladder keeps walking
 
 set -uo pipefail
 
@@ -367,6 +369,71 @@ test_status_tolerates_missing_or_garbage_state_file() {
     test_teardown
 }
 
+# A-l (2026-10-26): `docker builder prune` on a host with the buildx plugin is
+# `docker buildx prune`, which reaches BuildKit over the hijacked POST /grpc
+# endpoint (or `containers/buildx_buildkit_*/exec` for a docker-container
+# builder). rl-docker-proxy allows neither — only POST /build/prune — so the
+# admission gate's ladder failed every run with `ERROR: driver not running`.
+# DOCKER_BUILDKIT=0 forces the CLI onto the legacy POST /build/prune, which
+# the daemon serves by pruning its embedded BuildKit cache: the same cache the
+# runners' `docker build` (buildx `docker` driver) fills.
+test_builder_rung_uses_the_proxy_allowed_route() {
+    CURRENT_TEST_NAME="A-l: builder rung forces the legacy /build/prune route (DOCKER_BUILDKIT=0)"
+    _setup_ladder 92 60
+    assert_contains "$(disk_pressure::rung_cmd builder_prune)" "DOCKER_BUILDKIT=0" \
+        "builder rung must pin DOCKER_BUILDKIT=0 so buildx is bypassed"
+    local seen
+    seen=$(
+        docker() { echo "docker $* BK=${DOCKER_BUILDKIT:-unset}" >> "$DOCKER_LOG"; echo "Total reclaimed space: 2GB"; }
+        disk_pressure::guard >/dev/null 2>&1
+        cat "$DOCKER_LOG"
+    )
+    assert_contains "$seen" "builder prune -af BK=0" "the docker call itself must see DOCKER_BUILDKIT=0"
+    test_teardown
+}
+
+# A-m: a failing rung is LOGGED where the operator looks (the sweeper's log(),
+# stderr elsewhere), not only buried in the state file — and the ladder walks on.
+test_failed_rung_is_logged_and_ladder_continues() {
+    CURRENT_TEST_NAME="A-m: a non-zero rung is logged and the next rungs still run"
+    _setup_ladder 95 95 95 95
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(
+        log() { echo "$*" >> "$logged"; }
+        docker() {
+            echo "docker $*" >> "$DOCKER_LOG"
+            [[ "$*" == builder* ]] && { echo "ERROR: driver not running" >&2; return 1; }
+            echo "Total reclaimed space: 1GB"
+        }
+        disk_pressure::guard 2>/dev/null
+    )
+    assert_contains "$(cat "$logged" 2>/dev/null)" "builder_prune failed (exit 1)" "failure must be logged"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "driver not running" "log must carry the error text"
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")')" "builder_prune,image_prune,volume_prune" \
+        "the ladder must continue past the failed rung"
+    test_teardown
+}
+
+# A-n: the sweeper's real log() prints to STDOUT. A failed rung's log line must
+# not land in the rung JSON that guard/_walk return on stdout (Codex P2).
+test_failed_rung_log_does_not_corrupt_stdout_json() {
+    CURRENT_TEST_NAME="A-n: a stdout-printing log() leaves guard's JSON parseable"
+    _setup_ladder 95 95 95 95
+    local out
+    out=$(
+        log() { echo "[sweep] $*"; }
+        docker() {
+            echo "docker $*" >> "$DOCKER_LOG"
+            [[ "$*" == builder* ]] && { echo "ERROR: driver not running" >&2; return 1; }
+            echo "Total reclaimed space: 1GB"
+        }
+        disk_pressure::guard 2>/dev/null
+    )
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")' 2>/dev/null)" "builder_prune,image_prune,volume_prune" \
+        "guard stdout must stay pure JSON when log() prints to stdout"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -378,5 +445,8 @@ run_test "a-h-failed-rung-recorded" test_failed_rung_is_recorded_not_swallowed
 run_test "a-i-disk-specific-marker" test_build_preflight_uses_disk_specific_marker
 run_test "a-j-unreadable-df" test_unreadable_df_is_unknown_not_full
 run_test "a-k-status-tolerates-state-file" test_status_tolerates_missing_or_garbage_state_file
+run_test "a-l-builder-legacy-route" test_builder_rung_uses_the_proxy_allowed_route
+run_test "a-m-failed-rung-logged" test_failed_rung_is_logged_and_ladder_continues
+run_test "a-n-log-stays-off-stdout" test_failed_rung_log_does_not_corrupt_stdout_json
 
 print_test_summary

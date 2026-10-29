@@ -12,6 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  CORE_PLUGIN_ID,
   HubMediaListResponseSchema,
   type HubMediaKind,
   type HubMediaListResponse,
@@ -26,6 +27,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { HUB_NOT_FOUND } from '../guilds/hub-hidden.helpers';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { BG3_PLUGIN_ID } from '../plugins/bg3/bg3.constants';
 import { PELICAN_PLUGIN_ID } from '../plugins/pelican/pelican.constants';
 import { fakeServer } from '../plugins/pelican/testing/pelican-fixtures';
 import { ensureFixtureHubId } from '../plugins/valheim/armory/valheim-armory-map-hub.helpers';
@@ -40,6 +42,7 @@ import {
 } from './hub-media-download';
 import { mediaFilePath } from './hub-media.paths';
 import { HubMediaService } from './hub-media.service';
+import { HubMediaSourceGateRegistry } from './hub-media.source-gates';
 import { solidPng } from './hub-media.testing';
 
 type Who = 'member' | 'visitor' | 'operator';
@@ -352,6 +355,113 @@ describe('moderation (D8) + bytes route', () => {
       discord: null,
     });
     expect(reingest).toEqual({ status: 'duplicate', mediaId: id });
+  });
+});
+
+describe('source gates (ROK-1959 D-5)', () => {
+  /** The registry is an app singleton: the gate outlives this file, so it is core-owned and off by default. */
+  let hideSaves = false;
+  beforeAll(() => {
+    testApp.app
+      .get(HubMediaSourceGateRegistry)
+      .register(CORE_PLUGIN_ID, 'bg3-save', () => Promise.resolve(hideSaves));
+  });
+  /** The real bg3 gate (ROK-1959 L3) fails closed while bg3 is off, so turn it on (truncate resets plugins). */
+  beforeEach(async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.ensureInstalled(BG3_PLUGIN_ID);
+    await registry.activate(BG3_PLUGIN_ID);
+  });
+  afterEach(() => {
+    hideSaves = false;
+  });
+
+  async function save(): Promise<number> {
+    const res = await testApp.app.get(HubMediaService).ingestFromSource({
+      guildId: hubId,
+      source: 'bg3-save',
+      kind: 'save',
+      provenanceKey: 'bg3-save:sha256:gate',
+      uploadedBy: null,
+      authorName: 'Ada',
+      caption: 'save',
+      capturedAt: new Date(Date.UTC(2026, 9, 20, 2)),
+      bytes: await solidPng(1200, 800, 5),
+    });
+    if (res.status !== 'stored') throw new Error(`seed save: ${res.status}`);
+    return res.mediaId;
+  }
+  const shape = (r: HubMediaListResponse) => ({
+    captions: captions(r),
+    total: r.total,
+    kinds: r.kinds,
+  });
+
+  it('a gated source leaves list, total, kinds, item and bytes for editors and members alike', async () => {
+    await picture('shot', 'screenshot', 1);
+    const id = await save();
+    const open = await listOf('operator');
+    expect({ ...shape(open), source: open.items[0]?.source }).toEqual({
+      captions: ['save', 'shot'],
+      total: 2,
+      kinds: ['screenshot', 'save'],
+      source: { type: 'bg3-save', label: 'Game save' },
+    });
+    hideSaves = true;
+    for (const who of ['operator', 'member'] as const) {
+      expect(shape(await listOf(who))).toEqual({
+        captions: ['shot'],
+        total: 1,
+        kinds: ['screenshot'],
+      });
+    }
+    expect(shape(await listOf('operator', '?kind=save')).total).toBe(0);
+    const paths = [`${base()}/${id}`, `${base()}/${id}/thumb`];
+    const statuses = await Promise.all(
+      paths.map(async (p) => (await get(p, 'operator')).status),
+    );
+    expect(statuses).toEqual([404, 404]);
+  });
+
+  it('bg3 inactive hides its save pictures (fail closed, D-5)', async () => {
+    await picture('shot', 'screenshot', 1);
+    await save();
+    await testApp.app.get(PluginRegistryService).deactivate(BG3_PLUGIN_ID);
+    expect(shape(await listOf('operator'))).toEqual({
+      captions: ['shot'],
+      total: 1,
+      kinds: ['screenshot'],
+    });
+  });
+
+  /** An editor's hide PATCH on save `id`, plus the row's `hidden_at` after it. */
+  async function editorHide(id: number) {
+    const res = await testApp.request
+      .patch(`${base()}/${id}`)
+      .set(auth(tokens.operator))
+      .send({ hidden: true });
+    const [row] = await testApp.db
+      .select({ hiddenAt: schema.hubMedia.hiddenAt })
+      .from(schema.hubMedia)
+      .where(eq(schema.hubMedia.id, id));
+    return {
+      status: res.status,
+      caption: res.body.caption ?? null,
+      hiddenAt: row?.hiddenAt ?? null,
+    };
+  }
+  const refused = { status: 404, caption: null, hiddenAt: null };
+
+  it('an editor cannot hide a spoiler-gated save by id: 404, caption not echoed, row untouched (Codex P2)', async () => {
+    const id = await save();
+    hideSaves = true;
+    expect(await editorHide(id)).toEqual(refused);
+  });
+
+  it('an editor cannot hide a save by id while bg3 is inactive: 404, caption not echoed, row untouched (Codex P2)', async () => {
+    const id = await save();
+    await testApp.app.get(PluginRegistryService).deactivate(BG3_PLUGIN_ID);
+    expect(await editorHide(id)).toEqual(refused);
   });
 });
 
