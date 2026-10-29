@@ -7,8 +7,8 @@ import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
 import { GuildRaidsTab } from './raids-tab';
 
-export function WowRaidsTab({ raids }: HubCtx): JSX.Element {
-    return <GuildRaidsTab query={raids} />;
+export function WowRaidsTab({ page, raids }: HubCtx): JSX.Element {
+    return <GuildRaidsTab query={raids} page={page} />;
 }
 
 /** A tab declared for the frame but not yet filled — never rendered (`visible: () => false`). */

@@ -391,6 +391,13 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         for (const name of ['warning', 'danger', 'busy', 'slot']) {
             expect(screen.getByTestId(`ds-semantic-${name}`)).toBeInTheDocument();
         }
+        // ROK-1815: the faction pair paints via its own token classes, both hexes shown.
+        const horde = screen.getByTestId('ds-semantic-faction-horde');
+        expect(within(horde).getByTitle('bg-faction-horde/10')).toHaveClass('bg-faction-horde/10');
+        expect(within(horde).getByText('#991b1b')).toBeInTheDocument();
+        const alliance = screen.getByTestId('ds-semantic-faction-alliance');
+        expect(within(alliance).getByTitle('text-faction-alliance')).toHaveClass('text-faction-alliance');
+        expect(within(alliance).getByText('#1e40af')).toBeInTheDocument();
         // D-6: the solid button fill stays raw, shown beside the token it must not become.
         expect(screen.getByTestId('ds-button-raw')).toHaveClass('bg-emerald-600');
         expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success', 'text-white');
