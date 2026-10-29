@@ -243,7 +243,7 @@ describe('computeGear — ilvl through the addon snapshot fact source', () => {
     const loaded = await new AddonSnapshotFactSource(db as never).load([ref]);
     const snapshot = must(loaded.get('m1'), 'snapshot facts');
     const base = row('Half');
-    const level = must(base.facts.level ?? undefined, 'level fact');
+    const level = fact(60, T2);
     return { ...base, facts: resolveFacts([{ level }, snapshot], T2, false) };
   }
 
