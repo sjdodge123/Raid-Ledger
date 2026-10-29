@@ -53,6 +53,7 @@ export class HubKindRegistry {
     if (owner) {
       throw new ForbiddenException({
         statusCode: 403,
+        error: 'Forbidden',
         code: HUB_PLUGIN_INACTIVE,
         message: `Plugin "${owner.pluginId}" is not active`,
         pluginSlug: owner.pluginId,

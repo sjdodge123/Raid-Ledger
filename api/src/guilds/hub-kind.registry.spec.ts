@@ -101,6 +101,7 @@ describe('HubKindRegistry (ROK-1830)', () => {
       thrown instanceof ForbiddenException ? thrown.getResponse() : undefined;
     expect(body).toEqual({
       statusCode: 403,
+      error: 'Forbidden',
       code: HUB_PLUGIN_INACTIVE,
       message: `Plugin "${TEST_PLUGIN}" is not active`,
       pluginSlug: TEST_PLUGIN,
