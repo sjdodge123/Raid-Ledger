@@ -28,9 +28,8 @@ export const BG3_SESSIONS_WIDGET_LIMIT = 5;
 export const BG3_SESSIONS_PAGE_LIMIT = 20;
 
 /**
- * PATCH body. `archived` is the D-11 archive flag — NOT yet accepted by the
- * api (`Bg3UpdateCampaignBodySchema` is strict and has no `archived`; see
- * HANDOVER-1958-W1 "A1 gap"). Typed here so W4 builds against the target.
+ * PATCH body. `archived` is the D-11 archive flag (`Bg3UpdateCampaignBodySchema`):
+ * `true` archives the campaign, `false` restores it.
  */
 export interface Bg3UpdateCampaignInput {
     name?: string;

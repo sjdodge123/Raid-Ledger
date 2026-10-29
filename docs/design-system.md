@@ -1655,7 +1655,7 @@ them from non-member staff whom the API lets in.
 Baldur's Gate 3 (`web/src/plugins/bg3/register.ts`, `game_community` hubs of `baldurs-gate-3`; ROK-1958, all
 `audience: 'everyone'` + a members-or-staff `useVisible` probe, because the api lets non-member staff read):
 **Where we are** (`where-we-are`, order 35, span 1) — area, the latest save's screenshot (core `useHubMediaImageUrl`,
-the 16:9 slot appears only once the bytes load) and "Saved 2 h ago"; **Party** (`party`, order 36, span 2) — a
+the 16:9 slot appears only once the bytes load) and "Saved 2 h ago by <uploader>"; **Party** (`party`, order 36, span 2) — a
 2-column grid (1 on phone) of **BG3 party slot tiles** over the **party coverage strip**, XP per member on a
 §3.2 `GuildMeter`, the D-10 empty states whose buttons open the Campaign tab's start dialog / add-saves sheet,
 and a "Campaign ›" `action`; **Session history** (`session-history`, order 46, span 2) — the **session timeline

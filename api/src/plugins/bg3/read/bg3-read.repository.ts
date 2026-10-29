@@ -46,7 +46,7 @@ export interface Bg3SnapshotRow extends Bg3SaveLiteRow {
   gameVersion: string;
   platform: string;
   party: unknown;
-  /** `display_name ?? username` of the uploader (D-8); null if the user row is gone. */
+  /** `display_name ?? username` of the uploader (D-8); null is defensive, unreachable while `uploader_user_id` cascades on delete. */
   uploaderDisplayName: string | null;
 }
 

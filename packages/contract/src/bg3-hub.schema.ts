@@ -101,7 +101,7 @@ export const Bg3SnapshotSchema = z.object({
     savedAt: iso,
     receivedAt: iso,
     uploaderUserId: id,
-    /** ROK-1958 D-8 "Saved … by <uploader>": `display_name ?? username`; null when the user row is gone. */
+    /** ROK-1958 D-8 "Saved … by <uploader>": `display_name ?? username`; null is defensive, unreachable while `uploader_user_id` cascades on delete. */
     uploader: z.object({ userId: id, displayName: z.string().min(1) }).strict().nullable(),
     area: bg3Id.nullable(),
     difficulty: bg3Id,
