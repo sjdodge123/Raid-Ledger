@@ -38,17 +38,23 @@ function TableSpacer({ height, span }: { height: number; span: number }): JSX.El
     return <tbody aria-hidden="true"><tr style={{ height }}><td colSpan={span} className="p-0" /></tr></tbody>;
 }
 
+/** 1-based `aria-rowindex` of the band's first mounted item; the header row is 1. */
+function firstRowIndex(visible: VisibleBand): number {
+    return visible.firstItem + 2;
+}
+
 function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const { band } = visible;
+    const rowBase = firstRowIndex(visible) + (visible.showHeading ? 1 : 0);
     return (
         <tbody data-testid={band.testId}>
             {visible.showHeading && (
-                <tr style={{ height: TABLE_METRICS.heading }}>
+                <tr style={{ height: TABLE_METRICS.heading }} aria-rowindex={firstRowIndex(visible)}>
                     <th scope="colgroup" colSpan={columns.length} className={BAND}>{bandHeading(band)}</th>
                 </tr>
             )}
-            {visible.rows.map((row) => (
-                <tr key={row.memberId} data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }}
+            {visible.rows.map((row, i) => (
+                <tr key={row.memberId} data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }} aria-rowindex={rowBase + i}
                     className="border-t border-edge-subtle">
                     {columns.map((c, i) => (
                         <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rule(row, rowClass)}` : ''}`}>
@@ -64,9 +70,10 @@ function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Om
 export function HubMemberTable({ slice, columns, rowClass }: MemberShellProps): JSX.Element {
     return (
         <div data-testid="guild-members-table">
-            <table className="w-full border-collapse">
+            {/* Windowed: assistive tech learns the full size from aria-rowcount (+1 for the header row). */}
+            <table className="w-full border-collapse" aria-rowcount={slice.itemCount + 1}>
                 <thead className="sticky top-0 z-10 border-b border-edge bg-surface">
-                    <tr>
+                    <tr aria-rowindex={1}>
                         {columns.map((c) => <th key={c.id} scope="col" className={HEAD}>{c.header}</th>)}
                     </tr>
                 </thead>
@@ -78,10 +85,12 @@ export function HubMemberTable({ slice, columns, rowClass }: MemberShellProps): 
     );
 }
 
-function MemberCard({ row, columns, rowClass }: { row: HubMemberRow } & Omit<MemberShellProps, 'slice'>): JSX.Element {
+interface CardPosition { setSize: number; posInSet: number }
+
+function MemberCard({ row, columns, rowClass, setSize, posInSet }: { row: HubMemberRow } & CardPosition & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const [first, ...rest] = columns;
     return (
-        <li data-testid="guild-member-row" style={{ height: CARD_METRICS.row }}
+        <li data-testid="guild-member-row" style={{ height: CARD_METRICS.row }} aria-setsize={setSize} aria-posinset={posInSet}
             className={`flex flex-col justify-center gap-1 overflow-hidden border-b border-edge-subtle border-l-2 pl-2 last:border-b-0 ${rule(row, rowClass)}`}>
             {first && <div className="truncate text-sm"><first.cell row={row} /></div>}
             <div className="flex min-w-0 flex-nowrap items-center gap-x-2 overflow-hidden text-sm">
@@ -102,7 +111,10 @@ function CardBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omi
                 </p>
             )}
             <ul aria-label={band.label === '' ? 'Members' : `${band.label} members`} className="flex flex-col px-3">
-                {visible.rows.map((row) => <MemberCard key={row.memberId} row={row} columns={columns} rowClass={rowClass} />)}
+                {visible.rows.map((row, i) => (
+                    <MemberCard key={row.memberId} row={row} columns={columns} rowClass={rowClass}
+                        setSize={band.rows.length} posInSet={visible.firstRow + i + 1} />
+                ))}
             </ul>
         </div>
     );

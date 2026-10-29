@@ -7,9 +7,13 @@
  *
  * Focus: the box itself is a tab stop (a keyboard user can scroll it), rows
  * are plain rows whose only focusables are the cells' own links — tabbing
- * past the last mounted row leaves the list instead of trapping focus.
+ * past the last mounted row leaves the list instead of trapping focus. When a
+ * scroll unmounts the row holding focus, focus moves to the box itself rather
+ * than dropping to <body> (`useKeepFocusInList`).
+ *
+ * A new sort / filter / search (a new `bands` array) scrolls back to the top.
  */
-import { useEffect, useMemo, useState, type JSX, type UIEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type RefObject, type UIEvent } from 'react';
 import type { HubMemberColumn, HubMemberRow } from '../../plugins/hub-module';
 import type { HubMemberBand } from './hub-members.helpers';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
@@ -44,7 +48,31 @@ interface Props {
     desktop: boolean;
 }
 
+/** Back to the top whenever the list itself changes (sort, filter, search, grouping). */
+function useResetScrollOnChange(ref: RefObject<HTMLDivElement | null>, bands: Props['bands'], setScrollTop: (top: number) => void): void {
+    useEffect(() => {
+        if (ref.current) ref.current.scrollTop = 0;
+        setScrollTop(0);
+    }, [ref, bands, setScrollTop]);
+}
+
+/**
+ * Remembers, at each scroll, whether focus was inside the box; if the re-render
+ * then unmounted the focused row, focus goes to the box instead of <body>.
+ */
+function useKeepFocusInList(ref: RefObject<HTMLDivElement | null>, slice: unknown): (el: HTMLDivElement) => void {
+    const focusWasInside = useRef(false);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el || !focusWasInside.current) return;
+        focusWasInside.current = false;
+        if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    }, [ref, slice]);
+    return (el) => { focusWasInside.current = el.contains(document.activeElement); };
+}
+
 export function HubMemberVirtualList({ bands, columns, rowClass, desktop }: Props): JSX.Element {
+    const ref = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
     const viewport = useViewportHeight();
     const metrics = desktop ? TABLE_METRICS : CARD_METRICS;
@@ -52,10 +80,15 @@ export function HubMemberVirtualList({ bands, columns, rowClass, desktop }: Prop
         () => virtualSlice(bands, metrics, scrollTop, viewport, OVERSCAN),
         [bands, metrics, scrollTop, viewport],
     );
-    const onScroll = (e: UIEvent<HTMLDivElement>): void => setScrollTop(e.currentTarget.scrollTop);
+    useResetScrollOnChange(ref, bands, setScrollTop);
+    const noteFocus = useKeepFocusInList(ref, slice);
+    const onScroll = (e: UIEvent<HTMLDivElement>): void => {
+        noteFocus(e.currentTarget);
+        setScrollTop(e.currentTarget.scrollTop);
+    };
     const Shell = desktop ? HubMemberTable : HubMemberCards;
     return (
-        <div role="region" aria-label="Members list" tabIndex={0} onScroll={onScroll} data-testid="guild-members-scroller"
+        <div ref={ref} role="region" aria-label="Members list" tabIndex={0} onScroll={onScroll} data-testid="guild-members-scroller"
             className={`max-h-[70vh] max-w-full overflow-auto overscroll-contain rounded-lg border border-edge ${FOCUS_RING}`}>
             <Shell slice={slice} columns={columns} rowClass={rowClass} />
         </div>

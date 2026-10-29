@@ -24,6 +24,10 @@ export interface VisibleBand {
     band: HubMemberBand;
     showHeading: boolean;
     rows: readonly HubMemberRow[];
+    /** Index (0-based) of this band's first mounted item in the whole list — headings count (`aria-rowindex`). */
+    firstItem: number;
+    /** Index (0-based) of the first mounted row within its band (`aria-posinset`). */
+    firstRow: number;
 }
 
 export interface VirtualSlice {
@@ -34,6 +38,8 @@ export interface VirtualSlice {
     bottom: number;
     /** Mounted member rows (headings excluded). */
     mountedRows: number;
+    /** Every item in the list, mounted or not — rows plus band headings (`aria-rowcount`). */
+    itemCount: number;
 }
 
 interface Item { band: number; row: number /* -1 = the heading */; height: number }
@@ -64,20 +70,20 @@ function sumHeights(items: readonly Item[], from: number, to: number): number {
 }
 
 /** Group the mounted items back into their bands, in order. */
-function regroup(bands: readonly HubMemberBand[], items: readonly Item[]): VisibleBand[] {
-    const out: { band: HubMemberBand; showHeading: boolean; rows: HubMemberRow[] }[] = [];
-    for (const item of items) {
+function regroup(bands: readonly HubMemberBand[], items: readonly Item[], start: number): VisibleBand[] {
+    const out: (VisibleBand & { rows: HubMemberRow[] })[] = [];
+    items.forEach((item, i) => {
         const band = bands[item.band];
-        if (!band) continue;
+        if (!band) return;
         let last = out[out.length - 1];
         if (!last || last.band !== band) {
-            last = { band, showHeading: false, rows: [] };
+            last = { band, showHeading: false, rows: [], firstItem: start + i, firstRow: Math.max(0, item.row) };
             out.push(last);
         }
         const row = band.rows[item.row];
         if (item.row === -1) last.showHeading = true;
         else if (row) last.rows.push(row);
-    }
+    });
     return out;
 }
 
@@ -96,9 +102,10 @@ export function virtualSlice(
     const end = Math.min(items.length, indexAt(items, top + viewport) + 1 + overscan);
     const mounted = items.slice(start, end);
     return {
-        bands: regroup(bands, mounted),
+        bands: regroup(bands, mounted, start),
         top: sumHeights(items, 0, start),
         bottom: sumHeights(items, end, items.length),
         mountedRows: mounted.filter((i) => i.row !== -1).length,
+        itemCount: items.length,
     };
 }

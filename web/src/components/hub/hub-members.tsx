@@ -156,7 +156,8 @@ function MembersFrame({ ctx, mod }: { ctx: HubCtx; mod: HubModule | undefined })
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const { columns, actionsValue } = useMemberActions(mod, ctx);
     const v = useMembersView(mod, ctx, columns);
-    const hasFilters = mod?.useMemberFilters !== undefined;
+    // No rows (a visitor on a members-first hub): no funnel / FAB with nothing to narrow.
+    const hasFilters = mod?.useMemberFilters !== undefined && v.allRows.length > 0;
     const Summary = mod?.membersSummary;
     return (
         <section id="members" className="scroll-mt-4" data-testid="guild-members">
