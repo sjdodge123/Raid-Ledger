@@ -62,6 +62,18 @@
     /* blue-400 — Alliance */
     --color-faction-horde: #f87171;
     /* red-400 — Horde */
+    /* ROK-1173: WoW class hues (categorical, never a status) — ONLY the small class dot beside
+       the class name on the Members list; the class text stays token-coloured. Two blocks like
+       faction: Blizzard's own class colours here, deepened copies in the shared light block. */
+    --color-class-warrior: #c69b6d;
+    --color-class-paladin: #f48cba;
+    --color-class-hunter: #aad372;
+    --color-class-rogue: #fff468;
+    --color-class-priest: #ffffff;
+    --color-class-shaman: #0070dd;
+    --color-class-mage: #3fc7eb;
+    --color-class-warlock: #8788ee;
+    --color-class-druid: #ff7c0a;
 
     /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
        MEANING, not the hue. Dark family values match the Tailwind shades these
@@ -132,6 +144,17 @@ html {
     /* blue-800 — Alliance on light (ROK-1815) */
     --color-faction-horde: #991b1b;
     /* red-800 — Horde on light (ROK-1815); red-700 fails AA on the celestial / quest-log tints */
+    /* ROK-1173: class dots on light — deepened so a pale class (priest white, rogue yellow) still
+       reads as a dot (>= 3:1 non-text contrast on #ffffff). */
+    --color-class-warrior: #8c6239;
+    --color-class-paladin: #be3f7a;
+    --color-class-hunter: #4d7c0f;
+    --color-class-rogue: #a16207;
+    --color-class-priest: #64748b;
+    --color-class-shaman: #005eb8;
+    --color-class-mage: #0e7490;
+    --color-class-warlock: #5b5bd6;
+    --color-class-druid: #c2410c;
     /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
        semantic-tokens.guard.test.ts, which recomputes them from these values — warning
        and danger are ALSO asserted on the panel, the JourneyHero card and their own
