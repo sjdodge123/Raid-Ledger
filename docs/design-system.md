@@ -1850,3 +1850,7 @@ row-by-row layout and its own `col-span`, and starts one gap below the card(s) a
 use CSS `masonry` / `grid-template-rows: masonry` (not shipped everywhere), or give a grid cell `h-full`
 (its height would follow the span the hook just set and grow every frame). The arrange list (§4.28) is a
 list, not this grid.
+
+Sample: `/dev/design-system` → "Pattern — masonry-packed card grid" (`masonry-grid-section.tsx` + lazy
+`masonry-grid-demo.tsx`: the real hook over mixed-height span-1 / span-2 cards, in both colour families via the
+side-by-side view); live on every hub Overview.
