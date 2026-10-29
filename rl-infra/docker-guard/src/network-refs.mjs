@@ -41,14 +41,26 @@ export function connectNetworkRefs(urlId, body) {
   return [...refs];
 }
 
-/** Null when every reference resolves to a network a runner child may join. */
-export async function forbiddenNetworkReason(socketPath, refs) {
+const FULL_ID = /^[0-9a-f]{64}$/;
+
+/**
+ * Resolve every reference once, through the daemon. { reason } to refuse, or
+ * { ids } (ref → the full network ID) when each resolves to a network a runner
+ * child may join. The caller forwards those IDs, not the refs (network-pin.mjs):
+ * Docker re-resolves a stored ref at container start (ROK-1846 R5 M2).
+ */
+export async function resolveNetworkRefs(socketPath, refs) {
+  const ids = new Map();
   for (const ref of refs) {
-    if (FORBIDDEN_NET.test(ref)) return `network ${ref} is not allowed`;
+    if (FORBIDDEN_NET.test(ref)) return { reason: `network ${ref} is not allowed` };
     const { status, json } = await dockerJson(socketPath, 'GET', `/networks/${encodeURIComponent(ref)}`);
     const name = isObj(json) ? json.Name : undefined;
-    if (status !== 200 || typeof name !== 'string' || name === '') return `network ${ref} could not be resolved`;
-    if (FORBIDDEN_NET.test(name)) return `network ${ref} resolves to ${name}, which is not allowed`;
+    const id = isObj(json) ? json.Id : undefined;
+    if (status !== 200 || typeof name !== 'string' || name === '' || typeof id !== 'string' || !FULL_ID.test(id)) {
+      return { reason: `network ${ref} could not be resolved` };
+    }
+    if (FORBIDDEN_NET.test(name)) return { reason: `network ${ref} resolves to ${name}, which is not allowed` };
+    ids.set(ref, id);
   }
-  return null;
+  return { ids };
 }

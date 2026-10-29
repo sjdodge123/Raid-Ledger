@@ -194,10 +194,24 @@ export function checkVolumeCreate(body, { owner }) {
   return { ok: true, body: { ...body, Labels: withOwner(body.Labels, owner) } };
 }
 
+// R5 M2: Docker resolves a network ref by full ID, then exact NAME, then ID
+// prefix. A network NAMED like the guard network's ID prefix shadows it until
+// it is deleted, after which Docker re-resolves the stored ref to the guard
+// network. Docker IDs are hex, so a hex-only name is refused; so is a name that
+// imitates the guard's own network.
+const SHADOW_NAME = /^[0-9a-f]{1,64}$/i;
+
+function networkNameReason(name) {
+  if (typeof name !== 'string') return null;
+  if (SHADOW_NAME.test(name)) return `network name ${name} is all hex (it could shadow a network ID)`;
+  return /docker-guard/i.test(name) ? `network name ${name} is reserved for the guard` : null;
+}
+
 /** POST /networks/create */
 export function checkNetworkCreate(body, { owner }) {
   if (!isObj(body)) return deny('body is not a JSON object');
-  const fold = foldReason(body, ['Driver', 'Options', 'ConfigFrom', 'ConfigOnly', 'Ingress', 'Labels'], 'network');
+  const fold = foldReason(body, ['Name', 'Driver', 'Options', 'ConfigFrom', 'ConfigOnly', 'Ingress', 'Labels'], 'network')
+    ?? networkNameReason(body.Name);
   if (fold) return deny(fold);
   if (typeof body.Driver === 'string' && body.Driver !== '' && body.Driver !== 'bridge') return deny(`network driver ${body.Driver} is not allowed`);
   if (nonEmpty(body.Options) || nonEmpty(body.ConfigFrom) || body.ConfigOnly === true || body.Ingress === true) {

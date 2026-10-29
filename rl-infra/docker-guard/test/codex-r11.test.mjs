@@ -115,7 +115,8 @@ test('r11 P1: a create without CapDrop is forwarded with NET_RAW dropped', async
     const r = await post(g.port, '/containers/create', { Image: 'alpine', HostConfig: { NetworkMode: 'rl-net' } });
     assert.equal(r.status, 201, `expected 201, got ${r.status}: ${r.text}`);
     assert.deepEqual(g.created[0]?.HostConfig?.CapDrop, ['NET_RAW']);
-    assert.equal(g.created[0]?.HostConfig?.NetworkMode, 'rl-net');
+    // R5 M2: the name is forwarded as the full ID the guard resolved.
+    assert.equal(g.created[0]?.HostConfig?.NetworkMode, 'd'.repeat(64));
   } finally {
     g.close();
   }

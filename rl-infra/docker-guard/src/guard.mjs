@@ -18,7 +18,8 @@ import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
 import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
 import { namedVolumeRefs } from './volume-refs.mjs';
-import { connectNetworkRefs, containerCreateNetworkRefs, forbiddenNetworkReason } from './network-refs.mjs';
+import { connectNetworkRefs, containerCreateNetworkRefs, resolveNetworkRefs } from './network-refs.mjs';
+import { pinConnect, pinContainerCreate } from './network-pin.mjs';
 import { reservedVolumeReason } from './volume-reserve.mjs';
 import { scopedEventsUrl } from './events-scope.mjs';
 
@@ -80,18 +81,33 @@ async function authorize(req, plan) {
   if (!verdict.ok) return { reason: verdict.reason };
   const target = bodyOwnedContainer(plan.body, parsed);
   if (target !== null && !(await owns('container', target, owner))) return { reason: `container ${target} is not owned by ${owner.owner}` };
-  const nets = plan.body === 'container-create' ? containerCreateNetworkRefs(verdict.body)
-    : plan.body === 'network-connect' ? connectNetworkRefs(plan.owned?.id, verdict.body) : [];
-  const netReason = await forbiddenNetworkReason(SOCKET, nets);
-  if (netReason) return { reason: netReason };
+  const pinned = await pinNetworks(req, plan, verdict.body, owner);
+  if (pinned.reason) return pinned;
   if (plan.body === 'container-create') {
-    for (const name of namedVolumeRefs(verdict.body)) {
+    for (const name of namedVolumeRefs(pinned.body)) {
       const reserved = reservedVolumeReason(name);
       if (reserved) return { reason: reserved };
       if (!(await ensureOwnedVolume(SOCKET, name, owner, OWNER_LABEL))) return { reason: `volume ${name} is not owned by ${owner.owner}` };
     }
   }
-  return { body: Buffer.from(JSON.stringify(verdict.body)) };
+  return { body: Buffer.from(JSON.stringify(pinned.body)), url: pinned.url };
+}
+
+/**
+ * R5 M2: resolve every network ref once and forward the full IDs the check
+ * saw (network-pin.mjs). A (dis)connect's URL network is owner-checked again
+ * by that ID: the first check resolved the ref separately.
+ */
+async function pinNetworks(req, plan, body, owner) {
+  const connect = plan.body === 'network-connect';
+  const refs = plan.body === 'container-create' ? containerCreateNetworkRefs(body) : connect ? connectNetworkRefs(plan.owned?.id, body) : [];
+  const { reason, ids } = await resolveNetworkRefs(SOCKET, refs);
+  if (reason) return { reason };
+  if (plan.body === 'container-create') return pinContainerCreate(body, ids);
+  if (!connect) return { body };
+  const urlNet = ids.get(plan.owned?.id ?? '');
+  if (urlNet === undefined || !(await owns('network', urlNet, owner))) return { reason: `network ${plan.owned?.id} is not owned by ${owner.owner}` };
+  return pinConnect(req.url ?? '', plan.owned?.id ?? '', body, ids);
 }
 
 async function onRequest(req, res) {
@@ -104,7 +120,7 @@ async function onRequest(req, res) {
   if (auth.reason) return refuse(res, auth.reason);
   if (plan.context) return forwardBuild(req, res, plan);
   if (plan.events) return forwardEvents(req, res);
-  forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502));
+  forward(SOCKET, req, res, auth.body ? { buf: auth.body } : undefined, (r) => refuse(res, r, 502), auth.url ?? req.url);
 }
 
 /** /events: only the caller's own objects (events-scope.mjs). */

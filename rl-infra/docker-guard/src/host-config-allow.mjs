@@ -6,13 +6,14 @@
 // body-policy.mjs still checks Binds / Mounts / NetworkMode / Runtime /
 // VolumeDriver values. SecurityOpt (a custom seccomp profile), CapAdd,
 // Privileged, Devices, Sysctls, *Mode namespaces … therefore need no rule. Pure.
+import { foldReason } from './key-fold.mjs';
 
 export const HC_MAY_SET = ['AutoRemove', 'PortBindings', 'PublishAllPorts', 'Tmpfs', 'Binds', 'Mounts', 'NetworkMode',
   'RestartPolicy', 'LogConfig', 'ConsoleSize', 'Memory', 'MemorySwap', 'MemoryReservation', 'MemorySwappiness', 'NanoCpus',
   'CpuShares', 'CpuQuota', 'CpuPeriod', 'CpusetCpus', 'PidsLimit', 'ShmSize', 'Ulimits', 'ExtraHosts', 'Dns', 'DnsOptions',
   'DnsSearch', 'CapDrop', 'Init', 'ReadonlyRootfs', 'OomScoreAdj', 'Runtime', 'VolumeDriver'];
 const HC_SET = new Set(HC_MAY_SET);
-const ENDPOINT_MAY_SET = new Set(['Aliases', 'DNSNames', 'NetworkID']);
+export const ENDPOINT_MAY_SET = new Set(['Aliases', 'DNSNames', 'NetworkID']);
 // Local log drivers only: syslog / gelf / fluentd make the DAEMON dial an address.
 const LOG_TYPES = new Set(['', 'json-file', 'local']);
 const LOG_OPTS = new Set(['max-size', 'max-file', 'compress']);
@@ -49,6 +50,20 @@ export function hostConfigAllowReason(hc) {
   return logConfigReason(hc.LogConfig);
 }
 
+/**
+ * Null when one endpoint's settings (a create's EndpointsConfig value, a
+ * connect body's EndpointConfig) set only allowlisted keys, each spelled
+ * exactly: Docker decodes `networkid` into NetworkID (ROK-1846 R5 M1).
+ */
+export function endpointReason(ep, where) {
+  if (ep === undefined || ep === null) return null;
+  if (!isObj(ep)) return `${where} is not an object`;
+  const fold = foldReason(ep, [...ENDPOINT_MAY_SET], where);
+  if (fold) return fold;
+  const bad = Object.entries(ep).find(([k, v]) => !ENDPOINT_MAY_SET.has(k) && !isZero(v));
+  return bad ? `${where} key ${bad[0]} is not on the runner allowlist` : null;
+}
+
 /** Null when NetworkingConfig only names plain networks, each with aliases at most. */
 export function networkingConfigReason(nc) {
   if (nc === undefined || nc === null) return null;
@@ -59,9 +74,8 @@ export function networkingConfigReason(nc) {
   if (!isObj(eps)) return 'NetworkingConfig.EndpointsConfig is not an object';
   for (const [name, ep] of Object.entries(eps)) {
     if (FORBIDDEN_NET.test(name)) return `network ${name} is not allowed`;
-    if (ep !== null && !isObj(ep)) return `endpoint ${name} is not an object`;
-    const bad = Object.entries(ep ?? {}).find(([k, v]) => !ENDPOINT_MAY_SET.has(k) && !isZero(v));
-    if (bad) return `endpoint ${name} key ${bad[0]} is not on the runner allowlist`;
+    const r = endpointReason(ep, `endpoint ${name}`);
+    if (r) return r;
   }
   return null;
 }

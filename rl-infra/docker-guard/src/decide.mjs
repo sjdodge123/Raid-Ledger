@@ -1,6 +1,7 @@
 // ROK-1846 — glue between the route plan and the body checkers. Pure.
 import { checkContainerCreate, checkExecCreate, checkNetworkCreate, checkVolumeCreate } from './body-policy.mjs';
 import { foldReason } from './key-fold.mjs';
+import { endpointReason } from './host-config-allow.mjs';
 
 // Docker reads Container case-insensitively (Go encoding/json), so
 // {"Container":"owned","container":"victim"} would be owner-checked on one
@@ -8,8 +9,11 @@ import { foldReason } from './key-fold.mjs';
 // exactly (key-fold.mjs).
 function checkNetworkConnect(body) {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, reason: 'body is not a JSON object' };
-  const fold = foldReason(body, ['Container', 'EndpointConfig', 'Force'], 'network-connect');
-  return fold ? { ok: false, reason: fold } : { ok: true, body };
+  // R5 M1: the endpoint's keys too, by the create path's allowlist — Docker
+  // prefers EndpointConfig.NetworkID (any casing) over the URL network.
+  const reason = foldReason(body, ['Container', 'EndpointConfig', 'Force'], 'network-connect')
+    ?? endpointReason(body.EndpointConfig, 'EndpointConfig');
+  return reason ? { ok: false, reason } : { ok: true, body };
 }
 
 const CHECKERS = {
