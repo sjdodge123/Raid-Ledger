@@ -1,6 +1,6 @@
 /**
  * Windowed member list + WoW class dots for /dev/design-system (ROK-1173,
- * design-system §4.31). Mounts the REAL `HubMemberVirtualList` with the WoW
+ * design-system §4.32). Mounts the REAL `HubMemberVirtualList` with the WoW
  * Members columns over 2,000 sample rows — scroll it and only the visible
  * rows (+ overscan) are in the DOM. The class-dot strip shows all nine
  * `--color-class-*` tokens; flip the colour family to see both sets.
@@ -45,7 +45,7 @@ function ClassDots(): JSX.Element {
 export function MemberListSection(): JSX.Element {
     return (
         <Section id="member-list" title="Windowed member list + class dots"
-            blurb="§4.31 — hub Members list: fixed-height rows, only the visible window (+8 overscan) mounted; table at 1024px and up, cards below. Class dots are decorative; the class name stays text.">
+            blurb="§4.32 — hub Members list: fixed-height rows, only the visible window (+8 overscan) mounted; table at 1024px and up, cards below. Class dots are decorative; the class name stays text.">
             <div className="grid gap-4" data-testid="ds-member-list">
                 <StateFrame label="Class dots — --color-class-*" note="Two blocks (@theme + shared light block), like the faction hues. Unknown classes get no dot.">
                     <ClassDots />
