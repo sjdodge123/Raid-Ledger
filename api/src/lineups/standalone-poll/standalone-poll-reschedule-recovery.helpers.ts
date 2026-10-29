@@ -46,7 +46,7 @@ export async function finishMovedReschedule(
   const { eventId, caller, before, dto } = moved;
   try {
     await resetSignupConfirmations(db, eventId, caller.id);
-    if (await rescheduleNotified(db, eventId, dto.startTime)) return;
+    if (await rescheduleNotified(db, before, dto.startTime)) return;
     await notifyReschedule(
       db,
       deps.notificationService,
@@ -65,20 +65,26 @@ export async function finishMovedReschedule(
   }
 }
 
-/** True when an `event_rescheduled` row for this event's move to `startTime` exists. */
+/**
+ * True when this move's `event_rescheduled` rows exist: same event, same old
+ * start and same new start. Matching the old start too keeps an earlier move
+ * to the same slot (moved away, then back) from suppressing this one.
+ */
 async function rescheduleNotified(
   db: Db,
-  eventId: number,
+  before: MovedReschedule['before'],
   startTime: string,
 ): Promise<boolean> {
   const n = schema.notifications;
+  const oldStartTime = before.duration[0].toISOString();
   const [row] = await db
     .select({ id: n.id })
     .from(n)
     .where(
       and(
         eq(n.type, 'event_rescheduled'),
-        sql`${n.payload}->>'eventId' = ${String(eventId)}`,
+        sql`${n.payload}->>'eventId' = ${String(before.id)}`,
+        sql`${n.payload}->>'oldStartTime' = ${oldStartTime}`,
         sql`${n.payload}->>'newStartTime' = ${startTime}`,
       ),
     )

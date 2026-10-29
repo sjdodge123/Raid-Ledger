@@ -39,6 +39,7 @@ import { clearReschedulingPollId } from './standalone-poll-query.helpers';
 import { finishMovedReschedule } from './standalone-poll-reschedule-recovery.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type EventRow = typeof schema.events.$inferSelect;
 
 /** What the reschedule lock-in needs from its service. */
 export interface RescheduleLockInDeps {
@@ -129,8 +130,10 @@ async function moveOrRelease(
   prior: ClaimedFromStatus,
 ): Promise<EventResponseDto | null> {
   const { matchId, caller, dto } = input;
-  const before = await findExistingOrThrow(deps.db, target.eventId);
+  let before: EventRow | null = null;
   try {
+    // First statement in the try: if this read throws, the claim is released.
+    before = await findExistingOrThrow(deps.db, target.eventId);
     return await deps.eventsService.reschedule(
       target.eventId,
       caller.id,
@@ -138,15 +141,7 @@ async function moveOrRelease(
       dto,
     );
   } catch (err: unknown) {
-    if (await movedAnyway(deps, input, target.eventId, err)) {
-      await finishMovedReschedule(deps, {
-        eventId: target.eventId,
-        caller,
-        before,
-        dto,
-      });
-      return null;
-    }
+    if (await recoverIfMoved(deps, input, before, err)) return null;
     await releaseMatchClaim(
       deps.db,
       matchId,
@@ -156,6 +151,28 @@ async function moveOrRelease(
     );
     throw err;
   }
+}
+
+/**
+ * After a reschedule throw: when the move committed, finish its side effects
+ * and return true (keep the claim). False when the pre-move read itself
+ * failed (`before` null) or the event is not at the new slot.
+ */
+async function recoverIfMoved(
+  deps: RescheduleLockInDeps,
+  input: RescheduleLockInInput,
+  before: EventRow | null,
+  err: unknown,
+): Promise<boolean> {
+  if (before === null) return false;
+  if (!(await movedAnyway(deps, input, before.id, err))) return false;
+  await finishMovedReschedule(deps, {
+    eventId: before.id,
+    caller: input.caller,
+    before,
+    dto: input.dto,
+  });
+  return true;
 }
 
 /** The poll's lineup and linked event; 404 unknown, 400 not a reschedule poll. */
