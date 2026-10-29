@@ -5,12 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
 import type { GuildPage } from '@raid-ledger/contract';
-import type { HubCtx } from '../../hub-module';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { wowHubModule } from './register-hub';
+import { WowEventsLead } from './schedule-for-guild';
 
 const TESTID = 'guild-schedule-for-guild';
-const raids = {} as HubCtx['raids'];
 
 function page(canEdit: boolean): GuildPage {
     return {
@@ -24,20 +23,16 @@ function page(canEdit: boolean): GuildPage {
 
 describe('wowHubModule.eventsLead — Schedule for guild on the Events tab (ROK-2050)', () => {
     it('an editor sees the link, pointing at Create Event pre-linked to this guild', () => {
-        const Lead = wowHubModule.eventsLead;
-        expect(Lead, 'the WoW guild module must fill the eventsLead slot').toBeDefined();
-        if (!Lead) return;
-        renderWithProviders(<Lead page={page(true)} raids={raids} />);
+        expect(wowHubModule.eventsLead, 'the WoW guild module must fill the eventsLead slot').toBe(WowEventsLead);
+        renderWithProviders(<WowEventsLead page={page(true)} />);
         const link = screen.getByTestId(TESTID);
         expect(link).toHaveTextContent('Schedule for guild');
         expect(link).toHaveAttribute('href', '/events/new?gameId=3&guildId=7');
     });
 
     it('a plain member does not see it', () => {
-        const Lead = wowHubModule.eventsLead;
-        expect(Lead, 'the WoW guild module must fill the eventsLead slot').toBeDefined();
-        if (!Lead) return;
-        renderWithProviders(<Lead page={page(false)} raids={raids} />);
+        expect(wowHubModule.eventsLead, 'the WoW guild module must fill the eventsLead slot').toBe(WowEventsLead);
+        renderWithProviders(<WowEventsLead page={page(false)} />);
         expect(screen.queryByTestId(TESTID), 'a non-editor must not get "Schedule for guild"').toBeNull();
     });
 });

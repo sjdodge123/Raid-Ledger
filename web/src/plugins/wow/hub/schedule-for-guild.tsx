@@ -29,6 +29,6 @@ export function ScheduleForGuildRow({ guild }: { guild: GuildPage['guild'] }): J
 }
 
 /** The WoW module's `eventsLead` slot: the link for editors, nothing for anyone else. */
-export function WowEventsLead({ page }: HubCtx): JSX.Element | null {
+export function WowEventsLead({ page }: Pick<HubCtx, 'page'>): JSX.Element | null {
     return page.viewer.canEdit ? <ScheduleForGuildRow guild={page.guild} /> : null;
 }

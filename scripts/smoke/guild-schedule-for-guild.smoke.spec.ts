@@ -60,6 +60,8 @@ async function fillRequiredFields(page: Page, title: string): Promise<void> {
 test('editor: "Schedule for guild" opens Create Event pre-linked to the guild, and the saved event is tagged to it', async ({ page, world }, testInfo) => {
     await withGuild(testInfo, async (guild, adminToken) => {
         const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
+        await page.goto(`/hubs/${guild.guildId}#events`);
+        await expect(page.getByTestId(BUTTON), 'ROK-2050: editors get the link on the Events tab too').toBeVisible({ timeout: 15_000 });
         await page.goto(`/hubs/${guild.guildId}#raids`);
         const button = page.getByTestId(BUTTON);
         await expect(button, 'the officer is a guild editor (granted by name)').toBeVisible({ timeout: 15_000 });
@@ -89,11 +91,14 @@ test('editor: "Schedule for guild" opens Create Event pre-linked to the guild, a
     });
 });
 
-test('plain member: the Raids tab has no "Schedule for guild"', async ({ page }, testInfo) => {
+test('plain member: neither the Raids nor the Events tab has "Schedule for guild"', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInOnboardedMember(page, guild.users.member.userId);
         await page.goto(`/hubs/${guild.guildId}#raids`);
         await expect(page.getByTestId('guild-raids-tab')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId(BUTTON), 'a non-editor must not see "Schedule for guild"').toHaveCount(0);
+        await page.goto(`/hubs/${guild.guildId}#events`);
+        await expect(page.getByTestId('guild-events-tab')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId(BUTTON), 'ROK-2050: nor on the Events tab').toHaveCount(0);
     });
 });
