@@ -5,8 +5,14 @@
 // Accepted: printable ASCII except `#`, `?`, `;` and space; `%XX` escapes that
 // decode to printable ASCII; `+` is a space. Decoded exactly once. Pure.
 
-/** Keys Docker reads as a list (r.Form["t"]); every other key must appear once. */
-const MULTI = new Set(['t']);
+// c9: docker-modem (testcontainers) copies a whole create body into the query,
+// so array fields (`Cmd`, `Env`, …) legitimately arrive as repeated keys, which
+// Docker ignores. A key the guard INSPECTS may still appear only once (`t=` is
+// the one list Docker reads; every value is checked), and a single-value read
+// of any repeated key throws (get() below) — a second value can never slip past
+// a check that looked only at the first.
+const SINGLE = new Set(['dockerfile', 'networkmode', 'cgroupparent', 'remote', 'pull', 'fromImage', 'fromSrc',
+  'repo', 'tag', 'name', 'platform', 'filters', 'since', 'until']);
 const RAW_OK = /^[\x21-\x7e]*$/;
 const RAW_FORBIDDEN = /[#?;]/;
 
@@ -23,10 +29,14 @@ function unescape(s) {
   return out;
 }
 
-/** The parsed query: get() = first value (Go's Values.Get), getAll(), has(). */
+/** The parsed query: get() = the only value (throws when repeated), getAll(), has(). */
 class Query {
   constructor(map) { this.map = map; }
-  get(k) { return this.map.get(k)?.[0] ?? null; }
+  get(k) {
+    const list = this.map.get(k);
+    if (list && list.length > 1) throw new QueryError(`query key ${k} is repeated`);
+    return list?.[0] ?? null;
+  }
   getAll(k) { return [...(this.map.get(k) ?? [])]; }
   has(k) { return this.map.has(k); }
 }
@@ -43,7 +53,7 @@ export function parseQuery(raw) {
     const key = unescape(eq < 0 ? pair : pair.slice(0, eq));
     const value = eq < 0 ? '' : unescape(pair.slice(eq + 1));
     const list = map.get(key) ?? [];
-    if (list.length > 0 && !MULTI.has(key)) throw new QueryError(`query key ${key} is repeated`);
+    if (list.length > 0 && SINGLE.has(key)) throw new QueryError(`query key ${key} is repeated`);
     list.push(value);
     map.set(key, list);
   }

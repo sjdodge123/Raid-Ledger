@@ -137,14 +137,17 @@ function buildFacts(query) {
  * Classify a request. A refusal carries `status` 400 when the request-target
  * itself is ambiguous (bad_request_target), else the server answers 403.
  */
-export function classify(method, rawUrl, { allowBuildkit = false } = {}) {
-  let parsed;
+export function classify(method, rawUrl, opts = {}) {
   try {
-    parsed = parseUrl(rawUrl);
+    return classifyParsed(method, parseUrl(rawUrl), opts);
   } catch (e) {
+    // c9: also a single-value read (Query.get) of a key the request repeated.
     if (e instanceof QueryError) return { ok: false, status: 400, reason: `bad_request_target: ${e.message}` };
     return { ok: false, reason: 'unparseable URL' };
   }
+}
+
+function classifyParsed(method, parsed, { allowBuildkit = false }) {
   const dfBad = dockerfileParamReason(parsed.query.get('dockerfile'));
   if (dfBad) return { ok: false, status: 400, reason: `bad_request_target: ${dfBad}` };
   if (allowBuildkit && method === 'POST' && BUILDKIT_PATH.test(parsed.path)) return { ok: false, status: 400, reason: BUILDKIT_UNSUPPORTED };
