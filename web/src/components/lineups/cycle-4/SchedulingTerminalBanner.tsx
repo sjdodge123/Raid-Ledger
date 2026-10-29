@@ -88,7 +88,7 @@ function LockedInBody(props: {
           <Link
             data-testid="terminal-event-link"
             to={`/events/${linkedEventId}`}
-            className="text-cyan-200 underline"
+            className="text-cyan-300 underline"
           >
             Open the event →
           </Link>
