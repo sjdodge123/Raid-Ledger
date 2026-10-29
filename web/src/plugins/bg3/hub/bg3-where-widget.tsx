@@ -1,5 +1,5 @@
 /**
- * ROK-1958 D-8 / §3.2 — the BG3 "Where we are" card body (order 41, span 1).
+ * ROK-1958 D-8 / §3.2 — the BG3 "Where we are" card body (order 35, span 1).
  * Fed by the ONE snapshot query Party also reads (D-14). Screenshot (16:9
  * media well, collapses on a failed fetch or `onError`), "Act N · <area>", a
  * neutral difficulty chip, "Saved <relative> by <uploader>" and the patch

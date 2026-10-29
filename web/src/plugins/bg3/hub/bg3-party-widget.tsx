@@ -1,5 +1,5 @@
 /**
- * ROK-1958 §3.1 — the BG3 hub Overview "Party" card body (order 42, span 2).
+ * ROK-1958 §3.1 — the BG3 hub Overview "Party" card body (order 36, span 2).
  * ONE snapshot query feeds it (D-14). States: loading pulse tiles; error +
  * retry; the D-10 empty states (no campaign / no saves / no active campaign);
  * else the subtitle, coverage strip (Q4), a 2-column tile grid (1 on phone)

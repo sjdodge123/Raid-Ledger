@@ -5,7 +5,7 @@
  *
  * Three Overview cards on `game_community` hubs of a BG3 game (any slug in
  * `BG3_GAME_SLUGS`, ROK-2038) — Where we are
- * (41, span 1) + Party (42, span 2) share a desktop row, Session history (46,
+ * (35, span 1) + Party (36, span 2) share a desktop row above Events (40; operator 2026-10-28), Session history (46,
  * span 2) sits before Gallery (47). `audience: 'everyone'` plus a
  * members-or-staff `useVisible` probe, because the api lets non-member staff
  * read (ROK-1957 D-15; precedent `wow/hub-widgets/dungeon-quests.register.ts`).
@@ -40,7 +40,7 @@ bg3.registerHubWidget({
     id: 'where-we-are',
     title: 'Where we are',
     description: "The party's latest save: area, screenshot and when it was saved.",
-    order: 41,
+    order: 35,
     span: 1,
     component: LazyBg3WhereWidget,
     useVisible: useBg3SnapshotVisible,
@@ -52,7 +52,7 @@ bg3.registerHubWidget({
     id: 'party',
     title: 'Party',
     description: 'Who plays which character, their levels and the roles the party covers.',
-    order: 42,
+    order: 36,
     span: 2,
     component: LazyBg3PartyWidget,
     action: Bg3CampaignAction,
