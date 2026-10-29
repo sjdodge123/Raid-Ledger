@@ -5,7 +5,7 @@
 //     once too, or the container stays `Created` forever.
 //  2. docker-modem (testcontainers) copies the whole create body into the query
 //     string, so array fields (`Cmd`, `Env`) arrive as repeated query keys.
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -57,23 +57,21 @@ async function runDaemon() {
   return { sock, seen, exit, close: () => { exit(); daemon.closeAllConnections(); daemon.close(); } };
 }
 
-let daemon;
-let guard;
-let port;
-before(async () => {
-  daemon = await runDaemon();
-  guard = createGuardServer({ socket: daemon.sock });
+/** Each test gets its own daemon + guard (+ its own `exited` latch), so no test can release another's stream. */
+async function startPair() {
+  const daemon = await runDaemon();
+  const guard = createGuardServer({ socket: daemon.sock });
   await new Promise((r) => guard.listen(0, '127.0.0.1', r));
-  port = guard.address().port;
-});
-after(async () => {
-  daemon.close();
-  guard.closeAllConnections();
-  await new Promise((r) => guard.close(r));
-});
+  const close = async () => {
+    daemon.close();
+    guard.closeAllConnections();
+    await new Promise((r) => guard.close(r));
+  };
+  return { daemon, port: guard.address().port, close };
+}
 
 /** POST through the guard; resolves the response as soon as its headers arrive. */
-function headers(p) {
+function headers(port, p) {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: p, agent: false, headers: { 'Content-Length': '0' } }, resolve);
     req.on('error', reject);
@@ -82,7 +80,7 @@ function headers(p) {
 }
 
 /** Open the CLI's attach hijack; resolves the socket + the first bytes the guard relayed. */
-function hijackAttach() {
+function hijackAttach(port) {
   return new Promise((resolve) => {
     const s = net.connect(port, '127.0.0.1', () => s.write('POST /containers/c-mine/attach?stream=1&stdout=1&stderr=1 HTTP/1.1\r\nHost: d\r\nContent-Length: 0\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n'));
     let out = '';
@@ -90,18 +88,20 @@ function hijackAttach() {
   });
 }
 
-test('docker run sequence: attach hijack, then wait headers, both BEFORE start; then wait answers', async () => {
-  const attach = hijackAttach();
+test('docker run sequence: attach hijack, then wait headers, both BEFORE start; then wait answers', async (t) => {
+  const { daemon, port, close } = await startPair();
+  t.after(close);
+  const attach = hijackAttach(port);
   assert.equal(await within(attach, 2000), true, 'POST /containers/c-mine/attach (Upgrade: tcp) got no 101 through the guard: docker run blocks before start');
   const { s, out } = await attach;
   assert.match(out, /^HTTP\/1\.1 101 /, `attach was not upgraded: ${out}`);
-  const wait = headers('/containers/c-mine/wait?condition=next-exit');
+  const wait = headers(port, '/containers/c-mine/wait?condition=next-exit');
   assert.equal(await within(wait, 2000), true,
     'POST /containers/c-mine/wait?condition=next-exit: the daemon flushed its headers but the guard relayed none while the container is still Created (docker run never reaches start)');
   const res = await wait;
   assert.equal(res.statusCode, 200);
   assert.equal(daemon.seen.includes('POST /containers/c-mine/start'), false, 'start must not have been sent yet');
-  const start = await headers('/containers/c-mine/start');
+  const start = await headers(port, '/containers/c-mine/start');
   assert.equal(start.statusCode, 204);
   let body = '';
   res.on('data', (c) => { body += c; });
@@ -110,8 +110,10 @@ test('docker run sequence: attach hijack, then wait headers, both BEFORE start; 
   s.destroy();
 });
 
-test('a plain (non-upgrade) attach relays its 200 headers before any stream output', async () => {
-  const p = headers('/containers/c-mine/attach?stream=1&stdout=1');
+test('a plain (non-upgrade) attach relays its 200 headers before any stream output', async (t) => {
+  const { port, close } = await startPair();
+  t.after(close);
+  const p = headers(port, '/containers/c-mine/attach?stream=1&stdout=1');
   assert.equal(await within(p, 2000), true, 'POST /containers/c-mine/attach without Upgrade: the daemon flushed 200 but the guard relayed no headers');
   const res = await p;
   assert.equal(res.headers['content-type'], RAW_STREAM);
@@ -146,4 +148,15 @@ test('a repeated key never lets a second value past a check: every value is vali
   assert.equal(classify('POST', '/build?dockerfile=Dockerfile&dockerfile=evil').ok, false);
   assert.equal(classify('POST', '/build?pull=0&pull=1').ok, false);
   assert.equal(classify('POST', '/images/create?fromImage=alpine&tag=3&tag=latest').ok, false);
+});
+
+test('t= (the one inspected key that may repeat): every value reaches the image-write check, in either position', () => {
+  const second = classify('POST', '/build?t=rl:ci-ok&t=rl-infra/gc-sweeper:latest');
+  assert.equal(second.ok, false, 'a bad second t= value passed the image-write check');
+  assert.equal(second.status, undefined, 'a refused t= value must be a 403 policy refusal, not a 400 parse error');
+  assert.equal(second.reason, 'build t=: runners may not write image docker.io/rl-infra/gc-sweeper');
+  const first = classify('POST', '/build?t=rl-infra/x&t=rl:ci-ok');
+  assert.equal(first.ok, false, 'a bad first t= value passed the image-write check');
+  assert.equal(first.reason, 'build t=: runners may not write image docker.io/rl-infra/x');
+  assert.equal(classify('POST', '/build?t=rl:ci-a&t=rl:ci-b').ok, true, 'two allowed t= values were refused');
 });

@@ -12,7 +12,7 @@
 // of any repeated key throws (get() below) — a second value can never slip past
 // a check that looked only at the first.
 const SINGLE = new Set(['dockerfile', 'networkmode', 'cgroupparent', 'remote', 'pull', 'fromImage', 'fromSrc',
-  'repo', 'tag', 'name', 'platform', 'filters', 'since', 'until']);
+  'repo', 'tag', 'name', 'filters', 'since', 'until']);
 const RAW_OK = /^[\x21-\x7e]*$/;
 const RAW_FORBIDDEN = /[#?;]/;
 
@@ -31,6 +31,7 @@ function unescape(s) {
 
 /** The parsed query: get() = the only value (throws when repeated), getAll(), has(). */
 class Query {
+  // Checks read values only through get() / getAll(), never `map` directly.
   constructor(map) { this.map = map; }
   get(k) {
     const list = this.map.get(k);
