@@ -59,4 +59,28 @@ describe('packMasonry — keep order and span, slide up under the card above', (
             { column: 2, row: 1, rowSpan: 58 },
         ]);
     });
+    it('slides a span-2 card up under a span-2 card, not below a much taller span-1 row-mate (the Gallery / Deaths case)', () => {
+        // 3 columns: Gallery (span 2, 300px) + Deaths (span 1, 900px); "Upcoming events" (span 2) goes under the Gallery.
+        const placed = packMasonry([
+            { height: 300, span: 2 }, { height: 900, span: 1 }, { height: 200, span: 2 },
+        ], 3, 16, 2);
+        expect(placed).toEqual([
+            { column: 1, row: 1, rowSpan: 158 },
+            { column: 3, row: 1, rowSpan: 458 },
+            { column: 1, row: 159, rowSpan: 108 },
+        ]);
+        expect(placed[2]?.row, 'Upcoming must start under the Gallery, above the bottom of Deaths').toBeLessThan(459);
+    });
+
+    it('starts a full-width card under the tallest column and the next card under it', () => {
+        const placed = packMasonry([
+            { height: 100, span: 1 }, { height: 300, span: 1 }, { height: 50, span: 3 }, { height: 100, span: 1 },
+        ], 3, 16, 2);
+        expect(placed).toEqual([
+            { column: 1, row: 1, rowSpan: 58 },
+            { column: 2, row: 1, rowSpan: 158 },
+            { column: 1, row: 159, rowSpan: 33 },
+            { column: 1, row: 192, rowSpan: 58 },
+        ]);
+    });
 });

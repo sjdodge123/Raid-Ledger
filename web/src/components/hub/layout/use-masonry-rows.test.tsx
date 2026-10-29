@@ -5,26 +5,30 @@ import { useMasonryRows } from './use-masonry-rows';
 
 /** Grid metrics the "CSS" resolves to: md+ = two px tracks + 2px rows; phone = one track, auto rows. */
 const MD = { 'grid-template-columns': '300px 300px', 'grid-auto-rows': '2px', 'column-gap': '16px' };
+const LG = { 'grid-template-columns': '200px 200px 200px', 'grid-auto-rows': '2px', 'column-gap': '16px' };
 const PHONE = { 'grid-template-columns': '600px', 'grid-auto-rows': 'auto', 'column-gap': '16px' };
 
 let gridStyle: Record<string, string | undefined> = MD;
 const observed: Element[] = [];
+const observers: ImmediateResizeObserver[] = [];
 
 /** A ResizeObserver that reports once on observe, as browsers do. */
 class ImmediateResizeObserver implements ResizeObserver {
     private readonly cb: ResizeObserverCallback;
-    constructor(cb: ResizeObserverCallback) { this.cb = cb; }
+    constructor(cb: ResizeObserverCallback) { this.cb = cb; observers.push(this); }
+    /** What a browser does when a watched cell (or the viewport, via the cells) resizes. */
+    fire(): void { this.cb([], this); }
     observe(el: Element): void { observed.push(el); this.cb([], this); }
     unobserve(): void {}
     disconnect(): void {}
 }
 
-function Grid({ heights }: { heights: number[] }): JSX.Element {
+function Grid({ heights, wide = 2 }: { heights: number[]; wide?: number }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     useMasonryRows(ref);
     return (
         <div ref={ref} data-testid="grid">
-            {heights.map((h, i) => <section key={i} data-testid={`cell-${i}`} data-h={h} data-span={i === 2 ? '2' : ''} />)}
+            {heights.map((h, i) => <section key={i} data-testid={`cell-${i}`} data-h={h} data-span={i === wide ? '2' : ''} />)}
         </div>
     );
 }
@@ -34,8 +38,14 @@ function placement(id: string): string[] {
     return [s.getPropertyValue('grid-column-start'), s.getPropertyValue('grid-row-start'), s.getPropertyValue('grid-row-end')];
 }
 
+/** Every observer reports — a cell resized (image / async data) or the breakpoint changed. */
+function fireResize(): void {
+    for (const o of observers) o.fire();
+}
+
 beforeEach(() => {
     observed.length = 0;
+    observers.length = 0;
     gridStyle = MD;
     vi.stubGlobal('ResizeObserver', ImmediateResizeObserver);
     vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
@@ -81,5 +91,40 @@ describe('useMasonryRows', () => {
         expect(cell.style.getPropertyValue('grid-row-end')).toBe('span 58');
         unmount();
         expect(cell.style.getPropertyValue('grid-row-end'), 'unmount leaves no stale span').toBe('');
+    });
+    it('re-packs when a card changes height after load', () => {
+        render(<Grid heights={[100, 300, 50]} />);
+        expect(placement('cell-2')).toEqual(['1', '159', 'span 33']);
+        screen.getByTestId('cell-1').dataset.h = '100';
+        fireResize();
+        expect(placement('cell-1'), 'shrunk card takes fewer tracks').toEqual(['2', '1', 'span 58']);
+        expect(placement('cell-2'), 'wide card slides up under the shrunk card').toEqual(['1', '59', 'span 33']);
+    });
+
+    it('re-packs on md -> lg and clears every inline style on lg -> phone', () => {
+        render(<Grid heights={[100, 300, 50, 80]} />);
+        expect(placement('cell-3'), 'md: under the wide card').toEqual(['1', '192', 'span 48']);
+        gridStyle = LG;
+        fireResize();
+        expect(placement('cell-2'), 'lg: wide card wraps under the 300px card').toEqual(['1', '159', 'span 33']);
+        expect(placement('cell-3'), 'lg: third column, top').toEqual(['3', '1', 'span 48']);
+        gridStyle = PHONE;
+        fireResize();
+        for (const id of ['cell-0', 'cell-1', 'cell-2', 'cell-3']) expect(placement(id), `${id} cleared on phone`).toEqual(['', '', '']);
+    });
+
+    it('lets a cell whose card renders nothing take no slot and push nothing down', () => {
+        render(<Grid heights={[0, 100, 300]} wide={0} />);
+        expect(placement('cell-1'), 'first real card: column 1, top').toEqual(['1', '1', 'span 58']);
+        expect(placement('cell-2'), 'second real card: column 2, top').toEqual(['2', '1', 'span 158']);
+    });
+
+    it('never reorders the DOM — keyboard and reading order stay the arranged order', () => {
+        gridStyle = LG;
+        render(<Grid heights={[100, 300, 50, 80]} />);
+        // cell-3 is painted in row 1, above cell-2 — but it stays after cell-2 in the DOM.
+        expect(placement('cell-3')).toEqual(['3', '1', 'span 48']);
+        const order = Array.from(screen.getByTestId('grid').children).map((c) => c.getAttribute('data-testid'));
+        expect(order).toEqual(['cell-0', 'cell-1', 'cell-2', 'cell-3']);
     });
 });
