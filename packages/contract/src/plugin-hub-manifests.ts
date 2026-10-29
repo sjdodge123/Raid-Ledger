@@ -103,6 +103,7 @@ const blizzard = {
     { id: 'forever-recent-dings', title: 'Recent dings', description: 'Who levelled up in the last 30 days.', layoutKey: 'plugin' },
     { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
     { id: 'forever-whos-saved', title: "Who's saved", description: 'Who is saved to which instance, and when it resets.', layoutKey: 'plugin' },
+    { id: 'forever-last-seen', title: 'Last seen', description: 'Who was online at the last roster export, and who has been away longest.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },

@@ -3,6 +3,7 @@ import {
   serial,
   integer,
   bigint,
+  boolean,
   varchar,
   timestamp,
   index,
@@ -39,6 +40,13 @@ export const guildMembers = pgTable(
     /** addon_import | blizzard */
     source: varchar('source', { length: 20 }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /**
+     * ROK-1916 D1/D3: the export's wire presence, stored verbatim. NULL =
+     * never reported (rows before ROK-1916, Blizzard rows) — no default.
+     */
+    onlineAtExport: boolean('online_at_export'),
+    /** Days offline at export (wire `lastOnlineDays`); NULL when absent. */
+    lastOnlineDays: integer('last_online_days'),
     capturedByUserId: integer('captured_by_user_id').references(
       () => users.id,
       { onDelete: 'set null' },

@@ -38,6 +38,10 @@ export interface RawRosterRow {
   role: string | null;
   roleOverride: string | null;
   isMain: boolean | null;
+  /** ROK-1916 — online in the latest guild export; null = never reported. */
+  onlineAtExport: boolean | null;
+  /** ROK-1916 — whole days offline before that export (verbatim). */
+  lastOnlineDays: number | null;
 }
 
 /** `roleOverride ?? role`, narrowed to the contract's role enum. */
@@ -133,6 +137,8 @@ export async function loadRosterRows(
       role: characters.role,
       roleOverride: characters.roleOverride,
       isMain: characters.isMain,
+      onlineAtExport: guildMembers.onlineAtExport,
+      lastOnlineDays: guildMembers.lastOnlineDays,
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))

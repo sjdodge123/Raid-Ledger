@@ -12,16 +12,18 @@ interface FreshnessFooterProps {
     freshness: HubFactFreshness | null;
     /** Defaults to `forever-freshness`; a widget with its own spec hook passes one. */
     testId?: string;
+    /** Optional tooltip on the line (e.g. the absolute export time). */
+    title?: string;
 }
 
 /** Freshness line for one widget. */
-export function FreshnessFooter({ freshness, testId = 'forever-freshness' }: FreshnessFooterProps): JSX.Element {
+export function FreshnessFooter({ freshness, testId = 'forever-freshness', title }: FreshnessFooterProps): JSX.Element {
     const asOf = freshness?.asOf ?? null;
     const stale = isStale(asOf);
     const via = `via ${sourceLabel(freshness?.source ?? 'roster')}`;
     const when = asOf === null ? '' : ` · as of ${syncedAgo(asOf)}`;
     return (
-        <p data-testid={testId} data-stale={stale ? 'true' : 'false'}
+        <p data-testid={testId} data-stale={stale ? 'true' : 'false'} title={title}
             className={`mt-3 text-xs ${stale ? 'text-warning' : 'text-dim'}`}>
             {via}{when}
         </p>
