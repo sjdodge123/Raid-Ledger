@@ -22,7 +22,7 @@ import {
   claimMatchForLockIn,
   linkClaimedMatch,
   releaseMatchClaim,
-  type ClaimedFromStatus,
+  type LockInClaim,
 } from './scheduling-lockin-claim.helpers';
 import { autoSignupSlotVoters } from './scheduling-auto-signup.helpers';
 import { fireAutoHeartForVoters } from './scheduling-auto-heart.helpers';
@@ -146,7 +146,7 @@ async function createOrRelease(
   matchId: number,
   userId: number,
   dto: CreateEventDto,
-  prior: ClaimedFromStatus,
+  claim: LockInClaim,
 ): Promise<{ id: number; allEventIds?: number[] }> {
   try {
     // ROK-1893 P3 (D16): carry the poll provenance so `inheritPollHub` tags
@@ -156,7 +156,7 @@ async function createOrRelease(
       schedulingMatchId: matchId,
     });
   } catch (err: unknown) {
-    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    await releaseMatchClaim(deps.db, matchId, claim, deps.logger);
     throw err;
   }
 }
@@ -204,15 +204,20 @@ async function claimAndCreateEvent(
   userId: number,
   dto: CreateEventDto,
 ): Promise<number> {
-  const prior = await claimMatchForLockIn(deps.db, matchId);
-  const event = await createOrRelease(deps, matchId, userId, dto, prior);
+  const claim = await claimMatchForLockIn(deps.db, matchId);
+  const event = await createOrRelease(deps, matchId, userId, dto, claim);
   const eventIds = event.allEventIds ?? [event.id];
   let linked: boolean;
   try {
-    linked = await linkClaimedMatch(deps.db, matchId, event.id);
+    linked = await linkClaimedMatch(
+      deps.db,
+      matchId,
+      event.id,
+      claim.claimedAt,
+    );
   } catch (err: unknown) {
     await discardEvents(deps, eventIds, userId);
-    await releaseMatchClaim(deps.db, matchId, prior, deps.logger);
+    await releaseMatchClaim(deps.db, matchId, claim, deps.logger);
     throw err;
   }
   if (linked) return event.id;
