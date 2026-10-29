@@ -122,7 +122,8 @@ export class HubMediaService {
 
   /**
    * ROK-1959 D-9 — a member withdrew their data from `source`: tombstone
-   * every live row of theirs from it on every hub and unlink the files.
+   * every live row of theirs from it on every hub, clear its author name,
+   * caption and uploader, and unlink the files.
    * Runs regardless of plugin state. Returns how many rows were removed.
    */
   async removeSourceRowsOf(
@@ -132,7 +133,12 @@ export class HubMediaService {
     const rows = await liveRowsBySourceAndUploader(this.db, source, userId);
     let removed = 0;
     for (const { id, guildId } of rows) {
-      const storageName = await markRemoved(this.db, { guildId, id });
+      // The tombstone keeps only its key (never re-added), not the member.
+      const storageName = await markRemoved(this.db, {
+        guildId,
+        id,
+        scrub: true,
+      });
       if (!storageName) continue;
       await unlinkMediaFiles(guildId, storageName);
       removed += 1;

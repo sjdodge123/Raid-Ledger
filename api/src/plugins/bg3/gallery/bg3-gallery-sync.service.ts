@@ -7,7 +7,9 @@ import { existingKeys } from '../../../hub-media/hub-media.repository';
 import { HubMediaService } from '../../../hub-media/hub-media.service';
 import { Bg3GalleryFeed } from '../bg3-gallery.feed';
 import { retentionCutoff } from '../history/bg3-retention.helpers';
+import { copyUnderUploaderLock } from './bg3-gallery-lock';
 import {
+  BG3_GALLERY_MAX_PER_RUN,
   galleryProvenanceKey,
   planGallerySync,
   type Bg3GalleryPick,
@@ -62,16 +64,19 @@ export class Bg3GallerySyncService {
     now: Date,
     run: Bg3GallerySyncRun,
   ): Promise<void> {
-    const items = await this.feed.canonicalThumbnails(
-      guildId,
-      retentionCutoff(now),
+    const saves = await this.feed.canonicalSaves(guildId, retentionCutoff(now));
+    const keys = saves.flatMap((i) =>
+      i.sha256 === null ? [] : [galleryProvenanceKey(i.sha256)],
     );
-    const keys = items.map((i) => galleryProvenanceKey(i.sha256));
     const known = await existingKeys(this.db, guildId, keys);
-    for (const pick of planGallerySync(items, known, now)) {
+    // Only STORED pictures count toward the per-run quota, so failed picks
+    // (missing blob, undecodable) never stall the newer ones behind them.
+    let stored = 0;
+    for (const pick of planGallerySync(saves, known, now)) {
       const outcome = await this.copyOne(guildId, pick);
       if (outcome === 'cap') return; // D-11: the hub is full for this run.
       run[outcome] += 1;
+      if (outcome === 'stored' && ++stored >= BG3_GALLERY_MAX_PER_RUN) return;
     }
   }
 
@@ -86,18 +91,21 @@ export class Bg3GallerySyncService {
       return 'skipped';
     }
     const res = await this.pool.run('bg3-gallery', () =>
-      this.hubMedia.ingestFromSource({
-        guildId,
-        source: 'bg3-save',
-        kind: 'save',
-        provenanceKey,
-        uploadedBy: item.uploaderUserId,
-        authorName: item.uploaderDisplayName,
-        caption: item.area,
-        capturedAt: item.savedAt,
-        bytes,
-      }),
+      copyUnderUploaderLock(this.db, item, () =>
+        this.hubMedia.ingestFromSource({
+          guildId,
+          source: 'bg3-save',
+          kind: 'save',
+          provenanceKey,
+          uploadedBy: item.uploaderUserId,
+          authorName: item.uploaderDisplayName,
+          caption: item.area,
+          capturedAt: item.savedAt,
+          bytes,
+        }),
+      ),
     );
+    if (!res) return 'skipped'; // P1: the save was deleted meanwhile.
     if (res.status === 'stored') return 'stored';
     if (res.status === 'rejected' && res.reason === 'cap') return 'cap';
     return 'skipped';

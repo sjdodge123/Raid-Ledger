@@ -1,6 +1,6 @@
-import type { Bg3GalleryItem } from '../bg3-gallery.feed';
+import type { Bg3CanonicalSave, Bg3GalleryItem } from '../bg3-gallery.feed';
 import {
-  BG3_GALLERY_MAX_PER_RUN,
+  BG3_GALLERY_MAX_ATTEMPTS_PER_RUN,
   galleryProvenanceKey,
   planGallerySync,
 } from './bg3-gallery-sync.helpers';
@@ -27,7 +27,13 @@ function item(
   };
 }
 
-const ids = (items: Bg3GalleryItem[], known: string[] = [], max?: number) =>
+/** A canonical save with no thumbnail. */
+const bare = (saveId: number, hoursAgo: number): Bg3CanonicalSave => ({
+  ...item(saveId, hoursAgo),
+  sha256: null,
+});
+
+const ids = (items: Bg3CanonicalSave[], known: string[] = [], max?: number) =>
   planGallerySync(items, new Set(known), NOW, max).map((p) => p.item.saveId);
 
 describe('planGallerySync (ROK-1959 D-2 / D-4)', () => {
@@ -66,11 +72,26 @@ describe('planGallerySync (ROK-1959 D-2 / D-4)', () => {
     expect(ids([item(1, 30), item(2, 10, { sha256: 'sha1' })])).toEqual([1]);
   });
 
-  it(`stops at the per-run cap (${BG3_GALLERY_MAX_PER_RUN} by default)`, () => {
-    const many = Array.from({ length: 30 }, (_, n) =>
-      item(n + 1, 300 - n * 10),
+  it(`plans at most ${BG3_GALLERY_MAX_ATTEMPTS_PER_RUN} attempts by default`, () => {
+    const many = Array.from(
+      { length: BG3_GALLERY_MAX_ATTEMPTS_PER_RUN + 10 },
+      (_, n) => item(n + 1, 2000 - n * 10),
     );
-    expect(ids(many)).toHaveLength(BG3_GALLERY_MAX_PER_RUN);
+    expect(ids(many)).toHaveLength(BG3_GALLERY_MAX_ATTEMPTS_PER_RUN);
     expect(ids(many, [], 2)).toEqual([1, 2]);
+  });
+
+  it('Codex P2: a thumbnail-less save after the picture keeps the session open', () => {
+    // Pictured 5 h ago, then bare saves 3 h and 1 h ago: one open session.
+    expect(ids([item(1, 5), bare(2, 3), bare(3, 1)])).toEqual([]);
+  });
+
+  it('Codex P2: a closed session ending on a bare save yields its latest picture', () => {
+    expect(ids([item(1, 9), item(2, 8), bare(3, 6)])).toEqual([2]);
+  });
+
+  it('Codex P2: a bare save bridges two pictured saves into ONE session', () => {
+    // 10 h → 7 h → 4.5 h: gaps under 4 h, so one session, one picture.
+    expect(ids([item(1, 10), bare(2, 7), item(3, 4.5)])).toEqual([3]);
   });
 });

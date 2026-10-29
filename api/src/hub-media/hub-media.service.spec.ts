@@ -189,9 +189,9 @@ describe('HubMediaService.removeSourceRowsOf (ROK-1959 D-9)', () => {
       42,
     );
     expect(jest.mocked(markRemoved).mock.calls.map((c) => c[1])).toEqual([
-      { guildId: 7, id: 1 },
-      { guildId: 8, id: 2 },
-      { guildId: 8, id: 3 },
+      { guildId: 7, id: 1, scrub: true },
+      { guildId: 8, id: 2, scrub: true },
+      { guildId: 8, id: 3, scrub: true },
     ]);
     expect(jest.mocked(unlinkMediaFiles).mock.calls).toEqual([
       [7, 'a.webp'],

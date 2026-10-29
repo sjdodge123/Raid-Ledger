@@ -79,15 +79,24 @@ export async function bytesUsed(db: Db, guildId: number): Promise<number> {
 /** Tombstone a live row (D8); returns its storage name for the unlink, else `null`. */
 export async function markRemoved(
   db: Db,
-  where: { guildId: number; provenanceKey?: string; id?: number },
+  where: {
+    guildId: number;
+    provenanceKey?: string;
+    id?: number;
+    /** ROK-1959 review — data withdrawn: drop who/what, keep only the key. */
+    scrub?: boolean;
+  },
 ): Promise<string | null> {
   const match =
     where.id !== undefined
       ? eq(hubMedia.id, where.id)
       : eq(hubMedia.provenanceKey, where.provenanceKey ?? '');
+  const scrubbed = where.scrub
+    ? { authorName: null, caption: null, uploadedBy: null }
+    : {};
   const [row] = await db
     .update(hubMedia)
-    .set({ removedAt: new Date() })
+    .set({ removedAt: new Date(), ...scrubbed })
     .where(
       and(
         eq(hubMedia.guildId, where.guildId),
