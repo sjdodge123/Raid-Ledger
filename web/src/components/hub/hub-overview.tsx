@@ -9,8 +9,11 @@
  * by the hub's saved `widgetPrefs` through `layout/resolve-hub-layout`.
  * ROK-1941 D14: the Gallery dialog is mounted here once, so a widget can open
  * it even when the Gallery card is hidden.
+ * ROK-2043: masonry pack at ≥768px — each card keeps its slot in the arranged
+ * order and its span, and starts right under the card above it
+ * (`layout/use-masonry-rows`), so a short card no longer leaves a row-tall hole.
  */
-import { Fragment, lazy, Suspense, useState, type JSX } from 'react';
+import { Fragment, lazy, Suspense, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
 import { usePluginStore } from '../../stores/plugin-store';
@@ -18,6 +21,7 @@ import { canInvite } from './community/community-invite-access';
 import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-catalog';
 import { resolveHubLayout } from './layout/resolve-hub-layout';
 import { HubGalleryDialogMount } from './gallery/hub-gallery-dialog-mount';
+import { MASONRY_GRID_CLASS, useMasonryRows } from './layout/use-masonry-rows';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -58,6 +62,21 @@ function WidgetCell({ cell }: { cell: HubWidgetCell }): JSX.Element {
     return cell.wrap ? <div className={SPAN_2}>{cell.node}</div> : <Fragment>{cell.node}</Fragment>;
 }
 
+/**
+ * ROK-2043: the bento grid — 3 columns ≥1024px, 2 ≥768px, masonry-packed there;
+ * one plain stack on phone. Plain row flow, never `grid-flow-dense`: dense would
+ * pull later cards up into earlier holes and scramble the arranged order.
+ */
+function OverviewGrid({ hidden, children }: { hidden: boolean; children: ReactNode }): JSX.Element {
+    const ref = useRef<HTMLDivElement>(null);
+    useMasonryRows(ref);
+    return (
+        <div ref={ref} hidden={hidden} className={`grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 ${MASONRY_GRID_CLASS}`} data-testid="guild-overview">
+            {children}
+        </div>
+    );
+}
+
 /** Whether the hub kind has mod sources at all, and whether any reports content. */
 export interface ModsState {
     hasSources: boolean;
@@ -88,10 +107,10 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // One tree position for the grid (hidden, not unmounted, while arranging):
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
-        <div hidden={arranging} className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+        <OverviewGrid hidden={arranging}>
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
-        </div>
+        </OverviewGrid>
     );
     const gallery = <HubGalleryDialogMount guildId={page.guild.id} canEdit={page.viewer.canEdit} />;
     if (!page.viewer.canEdit) return <>{grid}{gallery}</>;
