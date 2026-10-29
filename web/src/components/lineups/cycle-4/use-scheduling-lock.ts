@@ -48,7 +48,7 @@ export const POLL_CHANGED_MESSAGE =
 
 /** Toast for the reschedule lock-in that lost the race (ROK-2040). */
 export const RESCHEDULE_LOCK_IN_LOST_TOAST =
-  'Someone else locked in this poll first. The event now starts at the time they picked.';
+  'This poll was already locked in, so your pick was not applied. Refresh to see the event time.';
 
 /** Options for {@link SchedulingLock.requestLock}. */
 export interface RequestLockOptions {
