@@ -68,6 +68,15 @@ export const communityLineupMatches = pgTable(
      * poll was never cancelled, or cancelled without a reason.
      */
     cancellationReason: text('cancellation_reason'),
+    /**
+     * Lock-in claim fencing token (ROK-2033). Invariant: non-null ⇔ a lock-in
+     * claimed this match and never linked an event. The claim stamps it and
+     * the link compare-and-set clears it in the same write as
+     * `linked_event_id`, so a crash orphan (stamped) is distinguishable from a
+     * locked-in event that was later deleted on purpose (cleared; the FK only
+     * nulls `linked_event_id`). Release and link are fenced on its value.
+     */
+    lockInClaimedAt: timestamp('lock_in_claimed_at', { withTimezone: true }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
