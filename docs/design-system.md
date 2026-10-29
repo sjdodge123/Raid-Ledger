@@ -400,6 +400,9 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Inventory grid with EAQS bands (`character/inventory-section.tsx` + `inventory-grid.helpers.ts`) | `plugins/valheim/` (ROK-1836) | **New pattern: a fixed-geometry item grid with labelled row bands** — no existing grid keeps 44px cells on a phone. `role="grid"` of `width × height` cells placed by each stack's `x,y` (`inventoryRows`; an unknown prefab still occupies its cell), scrolling sideways in an `overflow-x-auto` wrapper (phone swipe hint `text-xs text-dim sm:hidden`) rather than shrinking cells. EAQS/extended rows start a band only where the purpose changes — `Equipment`, `Quick slots`, `Extra` (`extended` and `other` share `Extra`); the band is a `text-[11px] font-semibold uppercase tracking-wider text-dim` label followed by a `bg-edge` hairline. Usage is body text — "n of m slots used" — never in the section `h2`. |
 | Character section slots (`character/character-section-slots.ts`, `character-sections.tsx`) | `plugins/valheim/` (ROK-1836) | The Valheim character page's body: an ordered list of sections (Equipment — nine named slots, `data-slot`; Skills — level desc, ties by name, vanilla names / "Modded skill <id>", integer level + a `GuildMeter` for progress to the next level, plus (ROK-1882) a trend chip between name and level; Inventory; Trophies — "n trophies collected" + one `ItemTile` each). The shell owns each section's card chrome and `h2`; a section component receives `ValheimCharacterSectionProps` and renders only its body. Add a section by adding an entry, never by editing the shell. The skill trend chip is the shared **Valheim trend chip** (next row) bound to 0.1 and "sessions" (`character/skill-trend.tsx` + `skill-trend.helpers.ts` are thin wrappers). |
 | `TrendChip` / `TrendDetail` (`trend/trend-chip.tsx`) + `trend.helpers.ts` — the **Valheim trend chip** | `plugins/valheim/` (ROK-1882, promoted by ROK-2014) | **New pattern: delta chip + day dots** (ROK-1882) — no trend primitive in the inventory. A `Button variant="bare"` pill in the S0 status tint (`rounded-full border-success/30 bg-success/10 text-success`; a net loss uses `danger`) reading the net change over the play days + one `aria-hidden` dot per play day, oldest → newest, 4–8px by gain (`bg-success`; no change / a loss is a 4px hollow `border-edge-strong` dot). Dot colour is per day, never the chip's net tone — a gain day stays a filled `bg-success` dot inside a danger chip. Native `title` = the per-day line for hover ("Oct 17 +20 · Oct 16 no change"); tap / Enter / Space toggles that line (`TrendDetail`, `aria-expanded` + `aria-controls`); the accessible name is the full sentence. Dates come from the `YYYY-MM-DD` string's parts, never `new Date()`. Each day rounds first and the chip sums the rounded days (U+2212 for a loss, thousands separators). No trend / `days: []` / a zero total → no chip and the row spaces exactly as before. A consumer passes a `TrendFormat` (`decimals`, singular `noun`) and its own spacing class. **Consumers:** Skills rows — "+4.1 over 3 sessions", 0.1, between name and level (Character section slots row); Materials item rows (ROK-2014, `materials/materials-trend-cell.tsx` + `materials-trend.helpers.ts`) — "+45 over 3 days", whole items; ≥1024px a non-sortable "Trend" column between Item and Total that appears only when a row in the table has a chip; below 1024px the chip sits on its own line under the row, indented to the name (`pl-13`), because the row is one toggle button. Under the Base filter the rows take that base's trend (`sharedTrendFor`, `personalFor`). Samples: `/dev/design-system` → "Pattern — Valheim trend chip" (`skill-trend-demo.tsx` + `materials-trend-demo.tsx`: the real `SkillList` and `MaterialsTotalsTable`). |
+| `Bg3PartySlotTile` (`hub/bg3-party-slot.tsx`) + `Bg3ClaimControl` (`hub/bg3-claim-control.tsx`) | `plugins/bg3/` (ROK-1958) | **New pattern: BG3 party slot tile** — one game character with no portrait: race/class, level, origin, an XP `GuildMeter`, a claim footer. Copy it for any claimable character cell without art (§4.27). |
+| `Bg3PartyCoverage` (`hub/bg3-party-coverage.tsx`) | `plugins/bg3/` (ROK-1958) | **New pattern: party coverage strip** — a row of read-only `StatusChip`s, `success` + ✓ covered / `neutral` gap, sr-only state. Use for any "does the group have X" checklist (§4.27). |
+| `Bg3SessionRow` (`hub/bg3-session-row.tsx`) in a `border-l-2 border-edge` `<ol>` | `plugins/bg3/` (ROK-1958) | **New pattern: session timeline rail** — dated rows on a token rail, latest dot `bg-success`; the Session history card and the Campaign tab's History share it. `ActivityTimeline` stays for lineup/event activity (§4.27). |
 | `hub-kind-chip.tsx` → `HubKindChip` + `hub-kind-label.ts` → `HUB_KIND_LABEL` (ROK-1875) | `components/layout/hub-nav/` | Labelling a hub's kind (Server / Community / Guild) on a nav row or directory card: a neutral `StatusChip` (`title` "<Kind> hub") — kind is a category, not a state; `size` passes through (`md` on the sheet's rows). Not a filter or a link. Its rows, `GuildRows` (`hub-entry-bits.tsx`), take `size`: `md` (default, the header Hubs menu — 44px, 24px icon, `text-sm`) or `lg` (the phone bottom "Your hubs" sheet — 64px, 40px icon, `text-base` name over `text-sm` meta, `md` chip, 20px chevron; the sheet caps at `88vh` with a `50 × --sheet-vh` floor) |
 | `HubPollsSection` (`hub/events/hub-polls-section.tsx`) + `SchedulingHubPanel` (`lineups/cycle-4/SchedulingHubPanel.tsx`) + `CreatePollHubLine` (`scheduling/create-poll-hub-line.tsx`) (ROK-1893 P3) | `components/` | Hub-tagged scheduling polls, per the approved `HubPollsFrames` wireframe. **Events tab** (community hubs, lazy chunk): "Open polls" heading + `Button variant="secondary" size="sm"` New poll (live members) over a `divide-y divide-edge-subtle` `border-edge bg-surface` list; each row links the poll and ends in a neutral `StatusChip` Public / Link only. **Create modal** with `hubId`: the game search becomes one `text-sm text-secondary` line "Game: X · Tagged to <hub>". **Poll page:** a `text-xs text-muted` "Hub: <name>" line linking `/hubs/:id`; **New pattern: voter name pills with a Member mark** — `MemberAvatarGroup` shows avatars only and nothing in the inventory names people as pills; each voter is a non-interactive `rounded-full border border-edge bg-panel px-2 py-1 text-xs text-secondary` `<li>` and a live hub member gets a neutral `StatusChip` "Member" (`title` "<name> is a hub member"); a signed-in non-member gets a `border-edge bg-surface` card with Join hub (`useCommunityJoin`, then the poll refetches). **Site-wide polls banner:** hub polls are not on it — operator ruling 2026-10-23, a hub poll shows only on its hub until P2b routes it to the hub's channel; the API leaves them out of `/scheduling-polls/active`, so the banner has no hub chip. Tokens only | Showing that a poll belongs to a hub; reuse the pill list for any read-only "who" list that needs a per-person mark |
 | `hub-row-bits.tsx` → `HubViewerAction`, `HubHiddenChip` (ROK-1883) | `components/hub/` | The per-row bits every hub list shares, so the `/hubs` directory card and the game page's Hubs card never drift. `HubViewerAction`: server and guild hubs → "View" (`buttonClass secondary sm` link, `aria-label` "View <name>"); community hubs → `Button secondary sm` "Join <name>" / `StatusChip success` Joined or Leader / `StatusChip danger` Banned. `HubHiddenChip`: `StatusChip tone="warning"` "Hidden" (`title` "Hidden — only admins and operators can see this hub") when the entry carries `hidden: true` — the API sends that key to staff only, so it never renders for anyone else. Rendered: `/dev/design-system` → Primitives → "Hub row — viewer action + Hidden chip" (`web/src/dev/design-system/hub-row-bits-demo.tsx`) |
@@ -1597,6 +1600,7 @@ renders its own card or heading.
 - **Layout.** Merged into the bento by `order` with the core cells (10/20/30/40/70) and the module's
   `overviewWidgets`, then re-ordered / hidden / added per hub by the leader's saved `widgetPrefs` (ROK-1918, §4.28). `span` 1/2/3 at ≥1024px; 3 clamps to 2
   at ≥768px; phone is one column. A hidden widget renders nothing, so it leaves no empty grid item.
+  From 768px the bento is masonry-packed (§4.31, ROK-2043): a short card no longer leaves a row-tall hole.
 
 **DO** — use `registerHubWidget` for a game-specific glanceable card (≤ ~8 rows or one chart) with an
 `action` that links to the full view. Keep kind-structural cards (role composition, recent arrivals) in the
@@ -1656,6 +1660,25 @@ Level progression also share `RosterWidgetShell` (loading / error / mains-only t
 Professions, Who's saved and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
 professions / lockouts payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
 them from non-member staff whom the API lets in.
+
+Baldur's Gate 3 (`web/src/plugins/bg3/register.ts`, `game_community` hubs of `baldurs-gate-3`; ROK-1958, all
+`audience: 'everyone'` + a members-or-staff `useVisible` probe, because the api lets non-member staff read):
+**Where we are** (`where-we-are`, order 35, span 1) — area, the latest save's screenshot (core `useHubMediaImageUrl`,
+the 16:9 slot appears only once the bytes load) and "Saved 2 h ago by <uploader>"; **Party** (`party`, order 36, span 2) — a
+2-column grid (1 on phone) of **BG3 party slot tiles** over the **party coverage strip**, XP per member on a
+§3.2 `GuildMeter`, the D-10 empty states whose buttons open the Campaign tab's start dialog / add-saves sheet,
+and a "Campaign ›" `action`; **Session history** (`session-history`, order 46, span 2) — the **session timeline
+rail**, at most 5 rows, "Show all" `action` → the **Campaign** game tab (order 40), whose History section pages
+the full list with a `Button secondary` "Show more". Three new patterns, all tokens only:
+**New pattern: BG3 party slot tile** — a `rounded-lg border-edge bg-panel` cell: race + class line, level,
+origin, an XP `GuildMeter`, and a claim footer ("That's me" / "You" + "Not me" / claimant + a × for
+hosts/editors); no inventory tile shows a game character without a portrait and with a claim control.
+**New pattern: party coverage strip** — a `ul` of read-only `StatusChip`s (healer / arcane / tank / face):
+`success` + an `aria-hidden` ✓ = covered, `neutral` = a gap, plus an sr-only state word; never colour alone.
+**New pattern: session timeline rail** — an `<ol className="ml-1.5 border-l-2 border-edge pl-4">` with one
+dot per row (`bg-edge-strong`, the latest `bg-success`): date, time range + duration, save count, level change
+and up to 3 neutral area `StatusChip`s + "+N"; `ActivityTimeline` is bound to lineup/event entities and its own
+query. Rendered: `/dev/design-system#hub-widgets` ("Party (BG3)" + "Session history (BG3)" cells).
 
 **DON'T** — wrap the body in your own `Card`/`WidgetCard`, re-derive visitor/member/editor inside the body
 (declare `audience`), or eager-import the body from `register.ts`. Rendered: `/dev/design-system#hub-widgets`
@@ -1828,3 +1851,31 @@ viewer. **Light / Dark** — tokens only (`border-edge`, `bg-panel`, `text-secon
 **DO** — use it for ≤ ~10 buckets of one count. **DON'T** — add per-bar colours, use it for a single proportion
 (that is a `GuildMeter`), or reach for a chart library inside a hub widget. Sample: `/dev/design-system` → "Pattern — meter
 tones and CSS histogram" (`meter-histogram-section.tsx`, static data); live on a Forever guild hub Overview.
+
+### 4.31 Masonry-packed card grid (hub Overview bento, ROK-2043)
+
+**New pattern** — a CSS grid row is as tall as its tallest cell, so a short card left a hole below it.
+`useMasonryRows(ref)` (`web/src/components/hub/layout/use-masonry-rows.ts`, maths in `masonry-pack.ts`)
+packs the grid's direct children: each card keeps the column its arranged order gives it in a plain
+row-by-row layout and its own `col-span`, and starts one gap below the card(s) above it.
+
+- **Grid classes.** The usual `grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3` plus
+  `MASONRY_GRID_CLASS` (`md:auto-rows-[2px] md:gap-y-0 md:items-start`): 2px row tracks, no row gap (the
+  gap is reserved inside each card's `grid-row-end: span N`, N = ceil((height + gap) / 2)), cells at their
+  own height. Spans stay on the cells as classes (`md:col-span-2`, `lg:col-span-3`); the hook writes only
+  `grid-column-start` / `grid-row-start` / `grid-row-end` inline.
+- **Phone stays a plain stack.** The hook applies only when the grid resolves to ≥ 2 px column tracks and a
+  px `grid-auto-rows`, so below 768px (one column), a `hidden` grid, or a test env without ResizeObserver it
+  writes nothing.
+- **One ResizeObserver per grid**, on the children only (never the grid — its own height changes in the
+  callback). The callback reads every size, then writes every placement. A MutationObserver hands it new
+  children (a lazy card resolving inside a Suspense). Unmount clears the inline styles.
+
+**DON'T** — add `grid-flow-dense` (later cards jump into earlier holes and scramble the arranged order),
+use CSS `masonry` / `grid-template-rows: masonry` (not shipped everywhere), or give a grid cell `h-full`
+(its height would follow the span the hook just set and grow every frame). The arrange list (§4.28) is a
+list, not this grid.
+
+Sample: `/dev/design-system` → "Pattern — masonry-packed card grid" (`masonry-grid-section.tsx` + lazy
+`masonry-grid-demo.tsx`: the real hook over mixed-height span-1 / span-2 cards, in both colour families via the
+side-by-side view); live on every hub Overview.

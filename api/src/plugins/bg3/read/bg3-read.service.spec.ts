@@ -49,6 +49,7 @@ function snapRow(id: number, uploader: number, h = 1): Bg3SnapshotRow {
     gameVersion: '4.1',
     platform: 'steam',
     party: [MEMBER],
+    uploaderDisplayName: `user${uploader}`,
   };
 }
 
@@ -58,6 +59,7 @@ function setup(
     canEdit?: boolean;
     settings?: Partial<Bg3HubSettings>;
     inHub?: boolean;
+    archived?: boolean;
     rows?: Bg3SnapshotRow[];
   } = {},
 ) {
@@ -69,10 +71,24 @@ function setup(
   const repo = {
     hubCampaigns: jest.fn().mockResolvedValue([]),
     settings: jest.fn().mockResolvedValue(settings),
-    upsertSettings: jest.fn().mockResolvedValue(undefined),
-    campaignInHub: jest
+    upsertSettings: jest
       .fn()
-      .mockResolvedValue(o.inHub === false ? null : { id: 11, hostUserId: 2 }),
+      .mockResolvedValue(
+        o.inHub === false
+          ? 'campaign_not_in_hub'
+          : o.archived
+            ? 'campaign_archived'
+            : 'ok',
+      ),
+    campaignInHub: jest.fn().mockResolvedValue(
+      o.inHub === false
+        ? null
+        : {
+            id: 11,
+            hostUserId: 2,
+            archivedAt: o.archived ? new Date() : null,
+          },
+    ),
     sessionRows: jest.fn().mockResolvedValue(o.rows ?? []),
     snapshotRows: jest.fn().mockResolvedValue(o.rows ?? [snapRow(1, 7)]),
     claims: jest.fn().mockResolvedValue([
@@ -233,12 +249,27 @@ describe('Bg3ReadService', () => {
     expect(repo.upsertSettings).not.toHaveBeenCalled();
   });
 
-  it('400s an active campaign from another hub', async () => {
+  it('400s an active campaign from another hub (atomic repo check)', async () => {
     const { svc, repo } = setup({ canEdit: true, inHub: false });
+    const err = await svc
+      .updateSettings(5, me, { activeCampaignId: 99 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('campaign_not_in_hub');
+    expect(repo.settings).not.toHaveBeenCalled();
+  });
+
+  it('400s an archived campaign as the active one (D-11, atomic repo check)', async () => {
+    const { svc, repo } = setup({ canEdit: true, archived: true });
     await expect(
-      svc.updateSettings(5, me, { activeCampaignId: 99 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(repo.upsertSettings).not.toHaveBeenCalled();
+      svc.updateSettings(5, me, { activeCampaignId: 11 }),
+    ).rejects.toThrow('campaign_archived');
+    expect(repo.upsertSettings).toHaveBeenCalledWith(
+      5,
+      { activeCampaignId: 11 },
+      7,
+    );
+    expect(repo.settings).not.toHaveBeenCalled();
   });
 
   it('lets an editor set the toggle', async () => {

@@ -11,25 +11,17 @@ import { RoleGapAlertService } from './role-gap-alert.service';
 
 describe('EventReminderService — voice channel in reminder payloads (ROK-507)', () => {
   let service: EventReminderService;
-  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
+  let mockDb: Record<'delete' | 'execute' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
   };
 
-  const makeInsertChain = (resolvedRows: unknown[]) => ({
-    values: jest.fn().mockReturnValue({
-      onConflictDoNothing: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue(resolvedRows),
-      }),
-    }),
-  });
-
   beforeEach(async () => {
     mockDb = {
       select: jest.fn(),
-      insert: jest.fn(),
+      execute: jest.fn(),
       delete: jest.fn(),
     };
 
@@ -105,7 +97,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
     // and passed into sendReminder as input fields (hoisted from per-user loop).
 
     it('includes voiceChannelId in payload when passed as input', async () => {
-      mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.sendReminder({
         ...baseReminder,
@@ -122,7 +114,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
     });
 
     it('omits voiceChannelId from payload when input is null', async () => {
-      mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.sendReminder({
         ...baseReminder,
@@ -134,7 +126,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
     });
 
     it('omits voiceChannelId from payload when input is undefined', async () => {
-      mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.sendReminder(baseReminder);
 
@@ -144,7 +136,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
 
     it('does not call resolveVoiceChannelId when reminder is a duplicate (returns false)', async () => {
       // Conflict → no row returned → duplicate
-      mockDb.insert.mockReturnValue(makeInsertChain([]));
+      mockDb.execute.mockResolvedValue([]);
 
       const result = await service.sendReminder({
         ...baseReminder,
@@ -156,7 +148,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
     });
 
     it('returns true and sends notification when not a duplicate with voice channel', async () => {
-      mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       const result = await service.sendReminder({
         ...baseReminder,
@@ -168,7 +160,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
     });
 
     it('payload contains eventId, reminderWindow, and voiceChannelId together', async () => {
-      mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.sendReminder({
         ...baseReminder,

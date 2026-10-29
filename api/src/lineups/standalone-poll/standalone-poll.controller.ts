@@ -22,6 +22,8 @@ import {
   CompleteSchedulingPollSchema,
   CreateSchedulingPollSchema,
   LockInSchedulingPollSchema,
+  RescheduleEventSchema,
+  type EventResponseDto,
   type CreateSchedulingPollDto,
   type LockInSchedulingPollResponseDto,
   type SchedulingPollResponseDto,
@@ -141,6 +143,27 @@ export class StandalonePollController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.lockInService.lockIn(matchId, req.user, parsed.data);
+  }
+
+  /**
+   * ROK-2040: lock a reschedule poll in, claim-first. The linked event is
+   * moved only after the poll is claimed, so a concurrent second lock-in gets
+   * the same 409 as `/lock-in` and neither moves the event nor emits UPDATED.
+   * Replaces `PATCH /events/:id/reschedule` + `/complete` for poll lock-ins.
+   */
+  @Post(':matchId/reschedule-lock-in')
+  @UseGuards(NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async rescheduleLockIn(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() body: unknown,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<EventResponseDto> {
+    const parsed = RescheduleEventSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.lockInService.rescheduleLockIn(matchId, req.user, parsed.data);
   }
 
   /**
