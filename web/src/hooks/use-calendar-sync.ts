@@ -50,9 +50,11 @@ export function useCalendarsOverview() {
  * overview says the switch is off.
  */
 export function useCalendarsSectionShown(): boolean {
-    const { data, isError } = useCalendarsOverview();
+    // errorUpdateCount, not isError: CalendarsPage's own observer refetches the
+    // errored query on mount, which resets a data-less query to pending.
+    const { data, errorUpdateCount } = useCalendarsOverview();
     if (data) return data.enabled;
-    return isError;
+    return errorUpdateCount > 0;
 }
 
 /** Leaves the app for the provider's consent screen. */
