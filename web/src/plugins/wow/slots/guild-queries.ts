@@ -17,18 +17,22 @@ const STALE_MS = 60_000;
 /** Moved to core with the nav fillers (ROK-1870 D9); re-exported so WoW cards keep one import. */
 export { guildHref, memberCountLabel, useMyGuilds, useMyGuildsQuery } from '../../../components/layout/hub-nav/my-hubs-queries';
 
-/** Guilds of one game the viewer can open (same shape as `mine`); `[]` until known. */
-export function useGameGuilds(gameId: number | undefined): MyGuild[] {
+/** Guilds of one game the viewer can open, as the query (callers that must know "settled" vs "not yet"). */
+export function useGameGuildsQuery(gameId: number | undefined): UseQueryResult<{ guilds: MyGuild[] }, Error> {
     const { isAuthenticated } = useAuth();
     const viewer = useViewerCacheScope();
-    const q = useQuery({
+    return useQuery({
         queryKey: ['plugins', 'wow', 'guilds', 'by-game', gameId, viewer],
         queryFn: () => fetchApi(`${BASE}?gameId=${gameId}`, {}, MyGuildsSchema),
         enabled: isAuthenticated && !!gameId,
         staleTime: STALE_MS,
         retry: false,
     });
-    return q.data?.guilds ?? [];
+}
+
+/** Guilds of one game the viewer can open (same shape as `mine`); `[]` until known. */
+export function useGameGuilds(gameId: number | undefined): MyGuild[] {
+    return useGameGuildsQuery(gameId).data?.guilds ?? [];
 }
 
 /** The guild a character belongs to (null when none). */

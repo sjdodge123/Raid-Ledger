@@ -36,10 +36,10 @@ function serve(guilds: MyGuild[]): void {
     }));
 }
 
-function renderField(guildId: number | null, onGuildChange = vi.fn()): ReturnType<typeof vi.fn> {
+function renderField(guildId: number | null, onGuildChange = vi.fn(), dropUnlisted = false): ReturnType<typeof vi.fn> {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
-    render(<EventCreateGuildField gameId={7} guildId={guildId} onGuildChange={onGuildChange} />, { wrapper });
+    render(<EventCreateGuildField gameId={7} guildId={guildId} onGuildChange={onGuildChange} dropUnlisted={dropUnlisted} />, { wrapper });
     return onGuildChange;
 }
 
@@ -68,5 +68,34 @@ describe('EventCreateGuildField (ROK-1787)', () => {
         expect(onGuildChange).toHaveBeenLastCalledWith(11);
         await userEvent.selectOptions(select, '');
         expect(onGuildChange).toHaveBeenLastCalledWith(null);
+    });
+});
+
+describe('EventCreateGuildField — a crafted ?guildId= (ROK-1817)', () => {
+    it('create mode: clears a preselected guild the viewer cannot edit (member only)', async () => {
+        serve([guild(11, 'Iron Vanguard', false)]);
+        const onGuildChange = renderField(11, vi.fn(), true);
+        await waitFor(() => expect(onGuildChange, 'an uneditable guild must not ride along unseen').toHaveBeenCalledWith(null));
+        expect(screen.queryByTestId('event-guild-field')).toBeNull();
+    });
+
+    it('create mode: clears a guild missing from an editor\'s list (another guild)', async () => {
+        serve([guild(11, 'Iron Vanguard', true)]);
+        const onGuildChange = renderField(42, vi.fn(), true);
+        await waitFor(() => expect(onGuildChange, 'a guild absent from the picker must be dropped').toHaveBeenCalledWith(null));
+    });
+
+    it('create mode: keeps a preselected guild the viewer edits', async () => {
+        serve([guild(11, 'Iron Vanguard', true)]);
+        const onGuildChange = renderField(11, vi.fn(), true);
+        expect(await screen.findByLabelText('Guild')).toHaveValue('11');
+        expect(onGuildChange).not.toHaveBeenCalled();
+    });
+
+    it('edit mode: leaves an unchanged tag alone (the submit omits it)', async () => {
+        serve([guild(11, 'Iron Vanguard', false)]);
+        const onGuildChange = renderField(11);
+        await waitFor(() => expect(lastGameId).toBe('7'));
+        expect(onGuildChange).not.toHaveBeenCalled();
     });
 });
