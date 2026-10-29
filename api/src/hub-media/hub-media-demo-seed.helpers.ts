@@ -3,7 +3,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import { HUB_MEDIA_PAGE_MAX, type HubMediaKind } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import type { HubMediaIngestInput, HubMediaSourceInput } from './hub-media.types';
+import type {
+  HubMediaIngestInput,
+  HubMediaSourceInput,
+} from './hub-media.types';
 import { solidPng } from './hub-media.testing';
 
 /**
