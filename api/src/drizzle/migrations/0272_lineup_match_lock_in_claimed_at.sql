@@ -1,0 +1,1 @@
+ALTER TABLE "community_lineup_matches" ADD COLUMN "lock_in_claimed_at" timestamp with time zone;

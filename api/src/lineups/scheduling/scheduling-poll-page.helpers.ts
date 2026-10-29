@@ -32,6 +32,7 @@ import {
   stampHubMembers,
 } from './scheduling-poll-hub.helpers';
 import { shareFieldsForViewer } from '../standalone-poll/standalone-poll-share.helpers';
+import { lockInRecoverableField } from './scheduling-lockin-recovery.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type TerminalArgs = Parameters<typeof resolvePollTerminalState>;
@@ -84,6 +85,7 @@ export async function assembleSchedulePollResponse(
       status: string;
       linkedEventId: number | null;
       cancellationReason?: string | null;
+      lockInClaimedAt?: Date | null;
     };
     lineup:
       | (PollLineupContext & {
@@ -137,6 +139,8 @@ export async function assembleSchedulePollResponse(
     // ROK-1750: the view guard already limited a private poll's viewers to
     // creator / invitee / admin — only they reach this with a token.
     ...shareFieldsForViewer(lineup ?? {}, userId),
+    // ROK-2033: admins see the "reopen a stalled lock-in" action.
+    ...lockInRecoverableField(pollMatch, callerRole),
   };
 }
 

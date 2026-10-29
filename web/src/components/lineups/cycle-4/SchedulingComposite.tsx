@@ -62,6 +62,7 @@ import {
   SchedulingBetterTimeTrigger,
 } from './SchedulingBetterTimeSheet';
 import { SchedulingTerminalBanner } from './SchedulingTerminalBanner';
+import { SchedulingReopenLockInAction } from './SchedulingReopenLockInAction';
 import { resolvePollStatus } from './scheduling-poll-status';
 import { useLockDeepLink } from './use-lock-deep-link';
 import { useVoteSource } from './use-vote-source';
@@ -225,6 +226,7 @@ export function SchedulingComposite(
           <SchedulingHubPanel poll={poll} lineupId={lineupId} matchId={matchId} />
         </Suspense>
       )}
+      <SchedulingReopenLockInAction matchId={matchId} recoverable={poll.lockInRecoverable} />
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
         lockedInTime={poll.lockedInTime ?? null}
