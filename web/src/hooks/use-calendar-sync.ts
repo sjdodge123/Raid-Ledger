@@ -43,13 +43,16 @@ export function useCalendarsOverview() {
 }
 
 /**
- * True only once the overview loaded AND says the switch is off. Loading or a
- * failed fetch is NOT "off": the caller still renders CalendarsPage, which
- * shows its own load error and keeps the OAuth callback feedback mounted.
+ * Whether My Integrations shows the Calendars section: when the overview says
+ * the switch is on, or when the fetch failed (CalendarsPage then shows its own
+ * load error and keeps the OAuth callback feedback mounted). Hidden while the
+ * first fetch is pending (no frame flash on switch-off installs) and once the
+ * overview says the switch is off.
  */
-export function useCalendarSyncOff(): boolean {
-    const { data } = useCalendarsOverview();
-    return data?.enabled === false;
+export function useCalendarsSectionShown(): boolean {
+    const { data, isError } = useCalendarsOverview();
+    if (data) return data.enabled;
+    return isError;
 }
 
 /** Leaves the app for the provider's consent screen. */
