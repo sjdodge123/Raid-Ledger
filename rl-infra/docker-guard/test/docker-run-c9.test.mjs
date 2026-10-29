@@ -22,6 +22,8 @@ const within = (p, ms) => Promise.race([p.then(() => true), new Promise((r) => s
 const RUNNER = { Names: ['/rl-runner-2'], Labels: { 'com.docker.compose.service': 'runner-2', 'com.docker.compose.project': 'rl-infra' },
   NetworkSettings: { Networks: { guard: { IPAddress: '127.0.0.1' } } } };
 const RAW_STREAM = 'application/vnd.docker.raw-stream';
+// R6: the guard forwards the inspected full ID (ref-pin.mjs), so the daemon routes on it.
+const C_MINE_ID = 'c9'.repeat(32);
 
 /** A daemon that answers wait / attach the way dockerd does: headers now, body when the container exits. */
 async function runDaemon() {
@@ -34,13 +36,13 @@ async function runDaemon() {
     seen.push(`${req.method} ${url}`);
     req.resume();
     if (url.startsWith('/containers/json')) return res.end(JSON.stringify([RUNNER]));
-    if (url === '/containers/c-mine/json') return res.end(JSON.stringify({ Config: { Labels: { 'rl.guard.owner': 'slot-2' } } }));
-    if (url.startsWith('/containers/c-mine/wait') || url.startsWith('/containers/c-mine/attach')) {
+    if (url === '/containers/c-mine/json') return res.end(JSON.stringify({ Id: C_MINE_ID, Config: { Labels: { 'rl.guard.owner': 'slot-2' } } }));
+    if (url.startsWith(`/containers/${C_MINE_ID}/wait`) || url.startsWith(`/containers/${C_MINE_ID}/attach`)) {
       res.writeHead(200, { 'Content-Type': url.includes('/wait') ? 'application/json' : RAW_STREAM });
       res.flushHeaders();
       return void exited.then(() => res.end(url.includes('/wait') ? '{"StatusCode":0}' : ''));
     }
-    if (url === '/containers/c-mine/start') {
+    if (url === `/containers/${C_MINE_ID}/start`) {
       res.statusCode = 204;
       res.end();
       return exit();
@@ -100,7 +102,7 @@ test('docker run sequence: attach hijack, then wait headers, both BEFORE start; 
     'POST /containers/c-mine/wait?condition=next-exit: the daemon flushed its headers but the guard relayed none while the container is still Created (docker run never reaches start)');
   const res = await wait;
   assert.equal(res.statusCode, 200);
-  assert.equal(daemon.seen.includes('POST /containers/c-mine/start'), false, 'start must not have been sent yet');
+  assert.equal(daemon.seen.includes(`POST /containers/${C_MINE_ID}/start`), false, 'start must not have been sent yet');
   const start = await headers(port, '/containers/c-mine/start');
   assert.equal(start.statusCode, 204);
   let body = '';

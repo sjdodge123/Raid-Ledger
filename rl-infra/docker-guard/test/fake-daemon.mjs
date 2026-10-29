@@ -8,7 +8,10 @@ import fs from 'node:fs';
 
 const RUNNER = { Names: ['/rl-runner-2'], Labels: { 'com.docker.compose.service': 'runner-2', 'com.docker.compose.project': 'rl-infra' },
   NetworkSettings: { Networks: { guard: { IPAddress: '127.0.0.1' } } } };
-const OWNED = { '/containers/c-mine/json': 'slot-2', '/containers/c-other/json': 'slot-1' };
+// R6: the guard forwards a container's full ID (ref-pin.mjs), so each inspect carries one.
+export const C_MINE_ID = 'c1'.repeat(32);
+export const C_OTHER_ID = 'c2'.repeat(32);
+const OWNED = { '/containers/c-mine/json': ['slot-2', C_MINE_ID], '/containers/c-other/json': ['slot-1', C_OTHER_ID] };
 
 /** Start a fake daemon; resolves { sock, seen, upgrades, builds, close }. */
 export async function startFakeDaemon() {
@@ -23,7 +26,7 @@ export async function startFakeDaemon() {
       seen.push({ method: req.method, url: req.url, headers: req.headers });
       const url = req.url ?? '';
       if (url.startsWith('/containers/json')) return res.end(JSON.stringify([RUNNER]));
-      if (OWNED[url]) return res.end(JSON.stringify({ Config: { Labels: { 'rl.guard.owner': OWNED[url] } } }));
+      if (OWNED[url]) return res.end(JSON.stringify({ Id: OWNED[url][1], Config: { Labels: { 'rl.guard.owner': OWNED[url][0] } } }));
       if (url === '/_ping') return res.end('OK');
       if (url.startsWith('/build')) {
         builds.push(Buffer.concat(chunks));

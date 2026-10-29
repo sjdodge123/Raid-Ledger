@@ -16,7 +16,8 @@ import fs from 'node:fs';
 import { spoolBuildContext } from './build-context.mjs';
 import { classify } from './routes.mjs';
 import { bodyOwnedContainer, checkBody } from './decide.mjs';
-import { ensureOwnedVolume, resourceLabels, runnerForAddress } from './docker-client.mjs';
+import { ensureOwnedVolume, resourceInfo, runnerForAddress } from './docker-client.mjs';
+import { pinnedRef, pinPathRef } from './ref-pin.mjs';
 import { namedVolumeRefs } from './volume-refs.mjs';
 import { connectNetworkRefs, containerCreateNetworkRefs, resolveNetworkRefs } from './network-refs.mjs';
 import { pinConnect, pinContainerCreate } from './network-pin.mjs';
@@ -55,20 +56,33 @@ function readBody(req) {
   });
 }
 
-async function owns(kind, id, owner) {
-  const labels = await resourceLabels(SOCKET, kind, id);
-  return labels !== null && labels[OWNER_LABEL] === owner.owner;
+/**
+ * The ref to forward when `owner` owns what `ref` resolves to, else null.
+ * R6: a container / network comes back as the full ID the inspect saw
+ * (ref-pin.mjs), so Docker cannot re-resolve the forwarded ref elsewhere.
+ */
+async function ownedRef(kind, ref, owner) {
+  const info = await resourceInfo(SOCKET, kind, ref);
+  if (info === null || info.labels[OWNER_LABEL] !== owner.owner) return null;
+  return pinnedRef(kind, ref, info.id);
 }
 
-/** Returns { reason } to refuse, or { body } (Buffer|undefined) to forward. */
+async function owns(kind, id, owner) {
+  return (await ownedRef(kind, id, owner)) !== null;
+}
+
+/** Returns { reason } to refuse, or { body } (Buffer|undefined) and { url } to forward. */
 async function authorize(req, plan) {
   if (!plan.body && !plan.owned) return {};
   const owner = await runnerForAddress(SOCKET, req.socket.remoteAddress);
   if (!owner) return { reason: `caller ${req.socket.remoteAddress} is not a known runner` };
-  if (plan.owned && !(await owns(plan.owned.kind, plan.owned.id, owner))) {
-    return { reason: `${plan.owned.kind} ${plan.owned.id} is not owned by ${owner.owner}` };
+  let url;
+  if (plan.owned) {
+    const pinned = await ownedRef(plan.owned.kind, plan.owned.id, owner);
+    if (pinned === null) return { reason: `${plan.owned.kind} ${plan.owned.id} is not owned by ${owner.owner}` };
+    url = pinPathRef(req.url ?? '', plan.owned.kind, pinned);
   }
-  if (!plan.body) return {};
+  if (!plan.body) return { url };
   const raw = await readBody(req);
   if (raw === null) return { reason: 'request body unreadable or over 1 MiB' };
   let parsed;
@@ -79,9 +93,14 @@ async function authorize(req, plan) {
   }
   const verdict = checkBody(plan.body, parsed, { allow: ALLOW, owner });
   if (!verdict.ok) return { reason: verdict.reason };
+  let body = verdict.body;
   const target = bodyOwnedContainer(plan.body, parsed);
-  if (target !== null && !(await owns('container', target, owner))) return { reason: `container ${target} is not owned by ${owner.owner}` };
-  const pinned = await pinNetworks(req, plan, verdict.body, owner);
+  if (target !== null) {
+    const cid = await ownedRef('container', target, owner);
+    if (cid === null) return { reason: `container ${target} is not owned by ${owner.owner}` };
+    body = { ...body, Container: cid };
+  }
+  const pinned = await pinNetworks(req, plan, body, owner);
   if (pinned.reason) return pinned;
   if (plan.body === 'container-create') {
     for (const name of namedVolumeRefs(pinned.body)) {
@@ -90,7 +109,7 @@ async function authorize(req, plan) {
       if (!(await ensureOwnedVolume(SOCKET, name, owner, OWNER_LABEL))) return { reason: `volume ${name} is not owned by ${owner.owner}` };
     }
   }
-  return { body: Buffer.from(JSON.stringify(pinned.body)), url: pinned.url };
+  return { body: Buffer.from(JSON.stringify(pinned.body)), url: pinned.url ?? url };
 }
 
 /**
@@ -176,7 +195,7 @@ async function onUpgrade(req, socket, head) {
   if (!plan.hijack) return refuseSocket(socket, 400, `${req.method} ${req.url} may not upgrade the connection`);
   const auth = await authorize(req, plan);
   if (auth.reason) return refuseSocket(socket, 403, auth.reason);
-  const reason = await spliceHijack(SOCKET, req, socket, head, log);
+  const reason = await spliceHijack(SOCKET, req, socket, head, log, auth.url ?? req.url);
   if (reason) refuseSocket(socket, 400, reason);
 }
 

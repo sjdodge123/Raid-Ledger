@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { createGuardServer } from '../src/guard.mjs';
-import { startFakeDaemon } from './fake-daemon.mjs';
+import { C_MINE_ID, startFakeDaemon } from './fake-daemon.mjs';
 
 let daemon;
 let guard;
@@ -65,7 +65,8 @@ test('attach on an owned container still hijacks; a foreign one is 403 with no t
   const mine = await raw(req('c-mine'), 'hello-stdin');
   assert.match(mine, /^HTTP\/1\.1 101/);
   assert.match(mine, /hello-stdin/);
-  assert.deepEqual(daemon.upgrades, ['/v1.45/containers/c-mine/attach?stream=1']);
+  // R6: forwarded as the full ID the ownership check saw, never the re-resolvable ref.
+  assert.deepEqual(daemon.upgrades, [`/v1.45/containers/${C_MINE_ID}/attach?stream=1`]);
   const other = await raw(req('c-other'));
   assert.match(other, /^HTTP\/1\.1 403/);
   assert.equal(daemon.upgrades.length, 1);

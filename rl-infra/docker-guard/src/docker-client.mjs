@@ -32,14 +32,26 @@ const LABEL_PATH = {
 
 /** Labels of a container / volume / network / exec, or null when it cannot be read. */
 export async function resourceLabels(socketPath, kind, id) {
-  if (kind === 'exec') return execLabels(socketPath, id);
+  return (await resourceInfo(socketPath, kind, id))?.labels ?? null;
+}
+
+/**
+ * { labels, id } of a container / volume / network / exec, or null when it
+ * cannot be read. `id` is the daemon's own `Id` for what the ref resolved to
+ * (ROK-1846 R6: the guard forwards that, not the ref); an exec's is the ref.
+ */
+export async function resourceInfo(socketPath, kind, id) {
+  if (kind === 'exec') {
+    const labels = await execLabels(socketPath, id);
+    return labels === null ? null : { labels, id };
+  }
   const entry = LABEL_PATH[kind];
   if (!entry || !id) return null;
   const [path, pick] = entry(id);
   const { status, json } = await dockerJson(socketPath, 'GET', path);
   if (status !== 200) return null;
   const labels = pick(json);
-  return labels && typeof labels === 'object' ? labels : {};
+  return { labels: labels && typeof labels === 'object' ? labels : {}, id: json?.Id };
 }
 
 /** An exec carries no labels of its own: ownership is its container's. */

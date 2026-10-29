@@ -23,6 +23,7 @@ const OWN_ID = `c0ffee00${'b'.repeat(56)}`;
 const NET_ID = 'd'.repeat(64);
 const SHADOW_ID = `5ade0000${'e'.repeat(56)}`;
 const BRIDGE_ID = `b41d9e00${'f'.repeat(56)}`;
+const MINE_ID = 'ab'.repeat(32);
 const NETS = [
   { Name: 'rl-docker-guard', Id: GUARD_ID, Labels: {} },
   { Name: 'proj_default', Id: OWN_ID, Labels: OWNED },
@@ -45,7 +46,7 @@ function findNetwork(ref) {
 function route(req, body, seen, res) {
   const url = req.url ?? '';
   if (url.startsWith('/containers/json')) return res.end(JSON.stringify([RUNNER]));
-  if (url === '/containers/mine/json') return res.end(JSON.stringify({ Config: { Labels: OWNED } }));
+  if (url === '/containers/mine/json') return res.end(JSON.stringify({ Id: MINE_ID, Config: { Labels: OWNED } }));
   const get = /^\/networks\/([^/?]+)$/.exec(url);
   const found = get && req.method === 'GET' ? findNetwork(decodeURIComponent(get[1] ?? '')) : null;
   if (found) return res.end(JSON.stringify(found));
@@ -124,7 +125,7 @@ test('R5 m2: connect to a guard-ID prefix in the URL is refused', () => withGuar
 test('R5 M2: connect by name is forwarded to the full ID with its endpoint settings intact', () => withGuard(async (g) => {
   const r = await post(g.port, '/v1.43/networks/proj_default/connect', { Container: 'mine', EndpointConfig: { Aliases: ['db'], NetworkID: 'proj_default' } });
   assert.equal(r.status, 200, `expected 200, got ${r.status}: ${r.text}`);
-  assert.deepEqual(g.seen, [{ url: `/v1.43/networks/${OWN_ID}/connect`, body: { Container: 'mine', EndpointConfig: { Aliases: ['db'], NetworkID: OWN_ID } } }]);
+  assert.deepEqual(g.seen, [{ url: `/v1.43/networks/${OWN_ID}/connect`, body: { Container: MINE_ID, EndpointConfig: { Aliases: ['db'], NetworkID: OWN_ID } } }]);
 }));
 
 test('R5 M2: create forwards every network ref as the full ID the guard checked', () => withGuard(async (g) => {

@@ -52,13 +52,14 @@ function onFirstResponse(up, socket, rest, log) {
 }
 
 /** Splice req/socket to the daemon. Returns a reason string to refuse, or null. */
-export async function spliceHijack(socketPath, req, socket, head, log) {
+export async function spliceHijack(socketPath, req, socket, head, log, url = req.url) {
   if (req.headers['transfer-encoding'] !== undefined) return 'chunked hijack requests are not accepted';
   const n = Number(req.headers['content-length'] ?? 0);
   if (!Number.isSafeInteger(n) || n < 0 || n > MAX_PREBODY) return 'hijack request body length is invalid';
   const { body, rest } = await collectBody(socket, head, n);
   const up = net.connect(socketPath, () => {
-    const lines = [`${req.method} ${req.url} HTTP/1.1`];
+    // R6: `url` carries the container ID the ownership check pinned (ref-pin.mjs).
+    const lines = [`${req.method} ${url} HTTP/1.1`];
     for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
     up.write(`${lines.join('\r\n')}\r\n\r\n`);
     if (body.length) up.write(body);

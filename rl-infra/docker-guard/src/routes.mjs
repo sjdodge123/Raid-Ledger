@@ -118,8 +118,16 @@ function checkImageWriteQuery(query, m) {
 // runner squatting any of them would impersonate or DoS it.
 const RESERVED_NAME = /^\/?rl-(runner-|env-|docker-|gc-sweeper$|traefik$|registry$|loki$|promtail$|grafana$|dashboard$|orchestrator)/;
 
+// R6: Docker resolves a container ref by full ID, exact name, then ID prefix.
+// Every owner-checked ref is forwarded as its full ID (ref-pin.mjs); refusing
+// hex-only names as well means no runner container can shadow an ID prefix.
+const HEX_NAME = /^\/?[0-9a-f]{1,64}$/i;
+
 function checkContainerCreateQuery(query) {
-  const bad = query.getAll('name').find((n) => RESERVED_NAME.test(n));
+  const names = query.getAll('name');
+  const hex = names.find((n) => HEX_NAME.test(n));
+  if (hex !== undefined) return `container name ${hex} is all hex (it could shadow a container ID)`;
+  const bad = names.find((n) => RESERVED_NAME.test(n));
   return bad === undefined ? null : `container name ${bad} is reserved for infra / runners / envs`;
 }
 
