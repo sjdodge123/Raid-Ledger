@@ -4,6 +4,9 @@ import {
   WowRosterGearSchema,
   type AddonSnapshotGearItem,
 } from '@raid-ledger/contract';
+import { createDrizzleMock } from '../../../../common/testing/drizzle-mock';
+import { AddonSnapshotFactSource } from '../../facts/addon-snapshot.fact-source';
+import { resolveFacts } from '../../facts/fact-precedence';
 import type { ResolvedWowFacts } from '../../facts/wow-fact.types';
 import { computeGear, missingEnchantSlots } from './roster-insights.gear';
 import type { InsightRow } from './roster-insights.types';
@@ -220,5 +223,35 @@ describe('computeGear — freshness', () => {
     ]);
     expect(out.freshness).toEqual({ source: 'addon', asOf: T1.toISOString() });
     expect(computeGear([row('Bare')]).freshness).toBeNull();
+  });
+});
+
+describe('computeGear — ilvl through the addon snapshot fact source', () => {
+  /** A main whose `ilvl` fact comes from a real AddonSnapshotFactSource load. */
+  async function snapshotMain(gearIlvls: number[]): Promise<InsightRow> {
+    const db = createDrizzleMock();
+    const gear = gearIlvls.map((ilvl, i) => ({ ...item(i + 1), ilvl }));
+    const data = {
+      gear,
+      talents: { nodes: [] },
+      lockouts: [],
+    };
+    db.where.mockResolvedValue([
+      { characterId: 'c1', data, capturedAt: T2, schema: 2, class: 'Mage' },
+    ]);
+    const ref = { key: 'm1', memberId: 1, characterId: 'c1' };
+    const loaded = await new AddonSnapshotFactSource(db as never).load([ref]);
+    const snapshot = must(loaded.get('m1'), 'snapshot facts');
+    const base = row('Half');
+    const level = must(base.facts.level ?? undefined, 'level fact');
+    return { ...base, facts: resolveFacts([{ level }, snapshot], T2, false) };
+  }
+
+  it('an exported 54.5 average is below the 55 floor and in the 50-54 bucket', async () => {
+    const half = await snapshotMain([54, 55]);
+    const out = computeGear([half, row('AtFloor', { ilvl: 55 })]);
+    expect(out.ilvl.below.map((b) => b.name)).toEqual(['Half']);
+    expect(out.ilvl.belowCount).toBe(1);
+    expect(out.ilvl.buckets.map((b) => b.count)).toEqual([0, 0, 1, 1, 0, 0]);
   });
 });

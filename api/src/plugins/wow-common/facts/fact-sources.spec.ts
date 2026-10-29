@@ -181,3 +181,27 @@ describe('CharacterRowFactSource', () => {
     expect(got?.class?.source).toBe('blizzard');
   });
 });
+
+describe('AddonSnapshotFactSource — ilvl precision (ROK-1915)', () => {
+  it('keeps the unrounded average: 54 + 55 is 54.5, not 55', async () => {
+    const gear = [
+      { slot: 1, itemId: 10, ilvl: 54, bonusIds: [] },
+      { slot: 5, itemId: 12, ilvl: 55, bonusIds: [] },
+    ];
+    db.where.mockResolvedValue([
+      {
+        characterId: 'c1',
+        data: { ...data, gear },
+        capturedAt: T,
+        schema: 2,
+        class: 'Warrior',
+      },
+    ]);
+    const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
+    expect(got.get('m1')?.ilvl).toEqual({
+      value: 54.5,
+      source: 'addon',
+      asOf: T,
+    });
+  });
+});
