@@ -157,10 +157,13 @@ services:
       # it as a 0B success. They are bounded operations: prune only ever
       # removes UNUSED objects, and /containers/prune is deliberately NOT
       # here (it would reap stopped env containers the sweeper still tracks).
+      # DELETE also covers pgweb-<slug>: env-destroy reaps the per-env pgweb
+      # container `rl db <slug> --web` starts (ROK-1326 HO-1); without it that
+      # rm -f got a 403 (PROOF-1681-r2). No infra container is named pgweb-*.
       - >-
         -allowPOST=^(/v[0-9.]+)?/images/create(\?.*)?$|^(/v[0-9.]+)?/containers/create(\?.*)?$|^(/v[0-9.]+)?/networks/create$|^(/v[0-9.]+)?/volumes/create$|^(/v[0-9.]+)?/containers/[A-Za-z0-9_.-]+/(start|wait|attach|resize)(\?.*)?$|^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])/(stop|restart|kill|exec)(\?.*)?$|^(/v[0-9.]+)?/exec/[A-Za-z0-9]+/(start|resize)(\?.*)?$|^(/v[0-9.]+)?/(build|images|volumes)/prune(\?.*)?$
       - >-
-        -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4])(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
+        -allowDELETE=^(/v[0-9.]+)?/containers/(rl-env-[A-Za-z0-9_.-]+|rl-runner-[1-4]|pgweb-[A-Za-z0-9_.-]+)(\?.*)?$|^(/v[0-9.]+)?/volumes/rl-data-[A-Za-z0-9_.-]+$|^(/v[0-9.]+)?/networks/[A-Za-z0-9_.-]+$
     labels:
       rl.role: infra
 
@@ -186,6 +189,9 @@ services:
       GUARD_BIND_ALLOW: ""
       # "1" re-opens BuildKit's opaque /session + /grpc (accepted-risk switch).
       GUARD_ALLOW_BUILDKIT: "0"
+      # The infra compose project: runner identity requires it, and a runner's
+      # own `docker compose` project may never use it (or any rl-infra* name).
+      RL_COMPOSE_PROJECT: ${RL_COMPOSE_PROJECT:-rl-infra}
     labels:
       rl.role: infra
 
