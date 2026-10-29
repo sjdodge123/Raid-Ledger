@@ -9,12 +9,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LineupRealtimeEventNames, type SchedulePollPageResponseDto, type ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import { CreateEventForm } from './create-event-form';
-import { completeStandalonePoll, createEvent, getSchedulePoll } from '../../lib/api-client';
+import { completeStandalonePoll, createEvent, getSchedulePoll, lockInSchedulingPoll } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
 import { useAuth } from '../../hooks/use-auth';
 import { partialResult } from '../../test/partial-result';
 import { createMockEvent } from '../../test/factories';
-import { withHttpStatus } from '../../lib/api/api-error';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -34,7 +33,7 @@ vi.mock('react-router-dom', async () => {
 });
 vi.mock('../../lib/api-client', () => ({
     createEvent: vi.fn(), updateEvent: vi.fn(), updateSeries: vi.fn(),
-    completeStandalonePoll: vi.fn(), getSchedulePoll: vi.fn(),
+    completeStandalonePoll: vi.fn(), getSchedulePoll: vi.fn(), lockInSchedulingPoll: vi.fn(),
 }));
 vi.mock('../../hooks/use-auth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -196,18 +195,19 @@ const submit = () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Event Title' }), { target: { value: 'Game night' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
 };
-/** Submit, let the mutation's async start run, then assert the guard held: no POST /events, the picker scrolled into view. */
+/** Submit, let the mutation's async start run, then assert the guard held: no lock-in and no POST /events, the picker scrolled into view. */
 async function expectSubmitBlocked() {
     submit();
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(lockInSchedulingPoll).not.toHaveBeenCalled();
     expect(createEvent).not.toHaveBeenCalled();
     expect(vi.mocked(window.HTMLElement.prototype.scrollIntoView).mock.contexts).toContain(screen.getByTestId('scheduling-bench-picker'));
 }
 
 describe('bench picker on the lock-in create form (ROK-2025)', () => {
     beforeEach(() => {
-        vi.mocked(createEvent).mockResolvedValue(createMockEvent({ id: 77 }));
-        vi.mocked(completeStandalonePoll).mockResolvedValue(undefined);
+        // ROK-2032: a lock-in is one claim-first call that creates the event and fills the roster.
+        vi.mocked(lockInSchedulingPoll).mockResolvedValue({ event: createMockEvent({ id: 77 }), benchPickFallback: false });
     });
 
     it('lists every yes-voter as a Checkbox with the LATEST marked by default', async () => {
@@ -248,6 +248,7 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
         expect(screen.queryByText('Title is required')).toBeInTheDocument();
         expect(screen.getByTestId('bench-pick-error')).toHaveTextContent('Pick 1 more for the bench.');
+        expect(lockInSchedulingPoll).not.toHaveBeenCalled();
         expect(createEvent).not.toHaveBeenCalled();
     });
 
@@ -257,26 +258,35 @@ describe('bench picker on the lock-in create form (ROK-2025)', () => {
         fireEvent.click(box(5));
         fireEvent.click(box(2));
         submit();
-        await waitFor(() => expect(completeStandalonePoll).toHaveBeenCalledWith(5, 77, START, [2]));
+        await waitFor(() => expect(lockInSchedulingPoll).toHaveBeenCalledWith(5, {
+            event: expect.objectContaining({ title: 'Game night', schedulingMatchId: 5 }), startTime: START, benchUserIds: [2],
+        }));
+        expect(lockInSchedulingPoll).toHaveBeenCalledTimes(1);
+        expect(createEvent).not.toHaveBeenCalled();
+        expect(completeStandalonePoll).not.toHaveBeenCalled();
         expect(toast.warning).not.toHaveBeenCalled();
     });
 
-    it('retries once without the pick when the server refuses it, and says so (D6)', async () => {
-        vi.mocked(completeStandalonePoll).mockRejectedValueOnce(withHttpStatus(new Error('The votes changed'), 400)).mockResolvedValueOnce(undefined);
+    // ROK-2032 D3: the server now drops a pick that no longer fits (default bench) and
+    // flags it — the old client-side 400 retry is gone; the organizer is still told (D6).
+    it('says so when the server dropped the pick because the votes changed (D6)', async () => {
+        vi.mocked(lockInSchedulingPoll).mockResolvedValueOnce({ event: createMockEvent({ id: 77 }), benchPickFallback: true });
         renderForm([1, 2, 3, 4, 5]);
         await screen.findByTestId('scheduling-bench-picker');
         submit();
         await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(
             "Event created, but the votes changed while you were choosing. The latest yes-voters went to the bench. You can move people on the event's roster.",
         ));
-        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, START, [5]], [5, 77, START]]);
+        expect(vi.mocked(lockInSchedulingPoll).mock.calls).toEqual([[5, { event: expect.objectContaining({ schedulingMatchId: 5 }), startTime: START, benchUserIds: [5] }]]);
     });
 
     it('sends no pick when the roster has room', async () => {
         renderForm([1, 2, 3, 4]);
         await waitFor(() => expect(getSchedulePoll).toHaveBeenCalled());
         submit();
-        await waitFor(() => expect(completeStandalonePoll).toHaveBeenCalled());
-        expect(vi.mocked(completeStandalonePoll).mock.calls).toEqual([[5, 77, START]]);
+        await waitFor(() => expect(lockInSchedulingPoll).toHaveBeenCalled());
+        // toStrictEqual: the body must not carry a `benchUserIds` key at all.
+        expect(vi.mocked(lockInSchedulingPoll).mock.calls).toStrictEqual([[5, { event: expect.objectContaining({ schedulingMatchId: 5 }), startTime: START }]]);
+        expect(toast.warning).not.toHaveBeenCalled();
     });
 });

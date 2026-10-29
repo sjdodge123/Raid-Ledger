@@ -16,6 +16,7 @@ import { EventsModule } from '../../events/events.module';
 import { DiscordBotModule } from '../../discord-bot/discord-bot.module';
 import { StandalonePollController } from './standalone-poll.controller';
 import { StandalonePollService } from './standalone-poll.service';
+import { StandalonePollLockInService } from './standalone-poll-lock-in.service';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { StandalonePollReminderService } from './standalone-poll-reminder.service';
 import { StandalonePollShareController } from './standalone-poll-share.controller';
@@ -44,6 +45,8 @@ import { HubPollsController } from './hub-polls.controller';
   ],
   providers: [
     StandalonePollService,
+    // ROK-2032: lock-in side effects + the claim-first form lock-in.
+    StandalonePollLockInService,
     StandalonePollNotificationService,
     StandalonePollReminderService,
     StandalonePollShareService,

@@ -8,9 +8,11 @@
  *
  * The test: B is pre-marked and A is not; unmarking B shows the inline error
  * and blocks the submit (the guard scrolls the picker into view, nothing is
- * created); marking A instead and submitting sends `benchUserIds: [A]`, the
- * lock-in completes 200 (not the refusal-then-retry fallback), and the
- * event's roster has exactly A on the bench — the pick beat the default.
+ * created); marking A instead and submitting sends `benchUserIds: [A]` on
+ * the ONE claim-first `POST /scheduling-polls/:id/lock-in` (ROK-2032), which
+ * answers 200 with `benchPickFallback: false` (the server honoured the pick,
+ * it did not fall back to the default), and the event's roster has exactly A
+ * on the bench — the pick beat the default.
  *
  * Runs in every viewport project. Each project gets its own day so two
  * projects' events never share an instant.
@@ -94,10 +96,11 @@ function submitButton(page: Page) {
     return page.getByRole('button', { name: 'Create Event', exact: true });
 }
 
-function isComplete(seeded: OverCapPoll) {
+/** The claim-first lock-in the form sends instead of POST /events (ROK-2032). */
+function isLockIn(seeded: OverCapPoll) {
     return (r: Request) =>
         r.method() === 'POST' &&
-        r.url().includes(`/scheduling-polls/${seeded.pollId}/complete`);
+        r.url().includes(`/scheduling-polls/${seeded.pollId}/lock-in`);
 }
 
 test.describe('Scheduling lock — the organizer picks who goes to the bench (ROK-2025)', () => {
@@ -137,11 +140,14 @@ test.describe('Scheduling lock — the organizer picks who goes to the bench (RO
             await page.locator('#title').fill(`smoke-bench-pick-${poll.pollId}`);
             let posted = 0;
             page.on('request', (r) => {
-                if (r.method() === 'POST' && new URL(r.url()).pathname.endsWith('/events')) posted++;
+                if (r.method() !== 'POST') return;
+                const path = new URL(r.url()).pathname;
+                if (path.endsWith('/events') || path.endsWith('/lock-in')) posted++;
             });
             await submitButton(page).click();
             // The guard's observable effects: the picker is scrolled into view,
-            // the page stays on the form, and no POST /events left the page.
+            // the page stays on the form, and neither POST /events nor the
+            // lock-in left the page.
             await expect(picker).toBeInViewport();
             await expect(page).toHaveURL(/\/events\/new\?/);
             await expect(error).toHaveText('Pick 1 more for the bench.');
@@ -153,17 +159,20 @@ test.describe('Scheduling lock — the organizer picks who goes to the bench (RO
             await expect(picker.getByTestId('bench-pick-count')).toHaveText('1 of 1 picked');
             await expect(error).toHaveCount(0);
 
-            const completeReq = page.waitForRequest(isComplete(poll), { timeout: 30_000 });
-            const completeRes = page.waitForResponse((r) => isComplete(poll)(r.request()), {
+            const lockInReq = page.waitForRequest(isLockIn(poll), { timeout: 30_000 });
+            const lockInRes = page.waitForResponse((r) => isLockIn(poll)(r.request()), {
                 timeout: 30_000,
             });
             await submitButton(page).click();
-            const body = (await completeReq).postDataJSON() as { benchUserIds?: number[] };
+            const body = (await lockInReq).postDataJSON() as { benchUserIds?: number[] };
             expect(body.benchUserIds, 'the lock-in sends the organizer\'s pick').toEqual([earlier]);
+            const res = await lockInRes;
+            expect(res.status(), 'the claim-first lock-in succeeds').toBe(200);
+            const result = (await res.json()) as { benchPickFallback?: boolean };
             expect(
-                (await completeRes).status(),
-                'the pick is accepted first time — a 400 here means the server refused it and the web fell back to the default',
-            ).toBe(200);
+                result.benchPickFallback,
+                'the pick is honoured — true here means the server refused it and benched the default',
+            ).toBe(false);
 
             await expect(page).toHaveURL(/\/events\/\d+(?:[?#].*)?$/, { timeout: 15_000 });
             eventId = Number(/\/events\/(\d+)/.exec(new URL(page.url()).pathname)?.[1]);
