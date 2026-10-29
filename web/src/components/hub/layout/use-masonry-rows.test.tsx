@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMasonryRows } from './use-masonry-rows';
 
 /** Grid metrics the "CSS" resolves to: md+ = two px tracks + 2px rows; phone = one track, auto rows. */
-const MD = { gridTemplateColumns: '300px 300px', gridAutoRows: '2px', columnGap: '16px' };
-const PHONE = { gridTemplateColumns: '600px', gridAutoRows: 'auto', columnGap: '16px' };
+const MD = { 'grid-template-columns': '300px 300px', 'grid-auto-rows': '2px', 'column-gap': '16px' };
+const PHONE = { 'grid-template-columns': '600px', 'grid-auto-rows': 'auto', 'column-gap': '16px' };
 
-let gridStyle: Record<string, string> = MD;
+let gridStyle: Record<string, string | undefined> = MD;
 const observed: Element[] = [];
 
 /** A ResizeObserver that reports once on observe, as browsers do. */
@@ -40,8 +40,8 @@ beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ImmediateResizeObserver);
     vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
         const span = el instanceof HTMLElement ? el.dataset.span : undefined;
-        const own = el.getAttribute('data-testid') === 'grid' ? gridStyle : { gridColumnEnd: span ? `span ${span}` : 'auto' };
-        return own as unknown as CSSStyleDeclaration;
+        const own = el.getAttribute('data-testid') === 'grid' ? gridStyle : { 'grid-column-end': span ? `span ${span}` : 'auto' };
+        return { getPropertyValue: (prop: string) => own[prop] ?? '' } as CSSStyleDeclaration;
     });
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
         return { height: Number(this.dataset.h ?? 0) } as DOMRect;

@@ -27,11 +27,12 @@ interface GridMetrics {
 /** Resolved column count / column gap / row unit, or null when masonry must not apply. */
 function readMetrics(grid: HTMLElement): GridMetrics | null {
     const style = getComputedStyle(grid);
-    const tracks = style.gridTemplateColumns.trim().split(/\s+/);
+    // `getPropertyValue` always returns a string — jsdom may not model the grid longhands.
+    const tracks = style.getPropertyValue('grid-template-columns').trim().split(/\s+/);
     if (tracks.length < 2 || !tracks.every((t) => /^[\d.]+px$/.test(t))) return null;
-    const rowUnit = parseFloat(style.gridAutoRows);
+    const rowUnit = parseFloat(style.getPropertyValue('grid-auto-rows'));
     if (!Number.isFinite(rowUnit) || rowUnit <= 0) return null;
-    const gap = parseFloat(style.columnGap);
+    const gap = parseFloat(style.getPropertyValue('column-gap'));
     return { cols: tracks.length, gap: Number.isFinite(gap) ? gap : 0, rowUnit };
 }
 
@@ -41,7 +42,7 @@ function clearPlacement(el: HTMLElement): void {
 
 /** The column span a cell's own classes give it (`span N`), 1 otherwise. */
 function measureItem(el: HTMLElement): MasonryItem {
-    const match = /span\s+(\d+)/.exec(getComputedStyle(el).gridColumnEnd);
+    const match = /span\s+(\d+)/.exec(getComputedStyle(el).getPropertyValue('grid-column-end'));
     return { height: el.getBoundingClientRect().height, span: match?.[1] ? Number(match[1]) : 1 };
 }
 
