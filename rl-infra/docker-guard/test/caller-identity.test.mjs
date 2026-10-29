@@ -20,6 +20,8 @@ const CONTAINERS = [
   box('eager_hopper', { ...compose(2), 'rl.role': 'runner', 'rl.slot': '2' }, '10.9.0.10'),
   box('rl-runner-3', { 'rl.role': 'runner', 'rl.slot': '3' }, '10.9.0.11'),
   box('rl-runner-4', { ...compose(4), 'rl.role': 'runner', 'rl.slot': '2' }, '10.9.0.12'),
+  // A runner's own compose project naming a service runner-1 (PROOF-1681-r2 row 18).
+  box('rl-runner-1', { 'com.docker.compose.project': 'proof1681c', 'com.docker.compose.service': 'runner-1' }, '10.9.0.13'),
 ];
 const sock = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-id-')), 'd.sock');
 const daemon = http.createServer((_req, res) => res.end(JSON.stringify(CONTAINERS)));
@@ -35,6 +37,7 @@ test('forged rl.role=runner / rl.slot / compose labels do not resolve as a slot'
   assert.equal(await runnerForAddress(sock, '10.9.0.10'), null, 'compose labels, wrong name');
   assert.equal(await runnerForAddress(sock, '10.9.0.11'), null, 'right name, no compose labels');
   assert.equal(await runnerForAddress(sock, '10.9.0.12'), null, 'rl.slot disagrees with the name');
+  assert.equal(await runnerForAddress(sock, '10.9.0.13'), null, 'service runner-1 in a non-infra compose project');
 });
 
 const ctx = { allow: [], owner: { owner: 'slot-2', slot: '2' } };

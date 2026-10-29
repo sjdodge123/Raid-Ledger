@@ -13,6 +13,7 @@ import path from 'node:path';
 import { foldEach, foldReason } from './key-fold.mjs';
 import { reservedVolumeReason } from './volume-reserve.mjs';
 import { HC_MAY_SET, hostConfigAllowReason, networkingConfigReason } from './host-config-allow.mjs';
+import { COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL, composeProjectReason } from './infra-project.mjs';
 
 export const OWNER_LABEL = 'rl.guard.owner';
 const COMPOSE_PREFIX = 'com.docker.compose.';
@@ -106,10 +107,10 @@ function checkLabels(labels) {
   if (!isObj(labels)) return 'Labels is not an object';
   if (RESERVED_ROLE_VALUES.has(labels['rl.role'])) return `label rl.role=${labels['rl.role']} is reserved for the orchestrator`;
   if ('rl.env_slug' in labels) return 'label rl.env_slug is reserved for the orchestrator';
-  // Compose's labels are how the guard recognises a runner (docker-client.mjs).
-  const composeKey = Object.keys(labels).find((k) => k.startsWith(COMPOSE_PREFIX));
-  if (composeKey) return `label ${composeKey} is reserved for docker compose`;
-  return null;
+  // A runner's own `docker compose` project is fine; the infra project is not:
+  // its compose labels are how the guard recognises a runner (docker-client.mjs).
+  if (!Object.keys(labels).some((k) => k.startsWith(COMPOSE_PREFIX))) return null;
+  return composeProjectReason(labels[COMPOSE_PROJECT_LABEL]);
 }
 
 /** Inject the ownership labels; overwrite anything the caller supplied. */
@@ -129,9 +130,11 @@ function withOwner(labels, owner) {
 function withReservedOverrides(labels) {
   const base = isObj(labels) ? labels : {};
   const role = typeof base['rl.role'] === 'string' && base['rl.role'] !== '' ? base['rl.role'] : 'runner-child';
-  // Blank compose's identity labels too, so an image built FROM a compose image
-  // never yields a container compose (or the guard) mistakes for its own.
-  return { ...base, 'rl.role': role, 'rl.env_slug': '', [`${COMPOSE_PREFIX}project`]: '', [`${COMPOSE_PREFIX}service`]: '' };
+  // Name compose's identity labels too (the caller's checked project, else
+  // blank), so an image built FROM a compose image never yields a container
+  // compose (or the guard) mistakes for its own.
+  return { ...base, 'rl.role': role, 'rl.env_slug': '',
+    [COMPOSE_PROJECT_LABEL]: base[COMPOSE_PROJECT_LABEL] ?? '', [COMPOSE_SERVICE_LABEL]: base[COMPOSE_SERVICE_LABEL] ?? '' };
 }
 
 /** POST /containers/create */
@@ -182,5 +185,7 @@ export function checkNetworkCreate(body, { owner }) {
   if (nonEmpty(body.Options) || nonEmpty(body.ConfigFrom) || body.ConfigOnly === true || body.Ingress === true) {
     return deny('network Options/ConfigFrom/ConfigOnly/Ingress are not allowed');
   }
+  const reason = checkLabels(body.Labels);
+  if (reason) return deny(reason);
   return { ok: true, body: { ...body, Labels: withOwner(body.Labels, owner) } };
 }

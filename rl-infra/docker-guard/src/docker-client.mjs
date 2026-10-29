@@ -1,5 +1,6 @@
 // ROK-1846 — minimal Docker Engine client over the unix socket (lookups only).
 import http from 'node:http';
+import { COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL, INFRA_PROJECT } from './infra-project.mjs';
 
 export function dockerJson(socketPath, method, path, body) {
   return new Promise((resolve) => {
@@ -72,15 +73,16 @@ export async function ensureOwnedVolume(socketPath, name, owner, ownerLabel) {
  * The slot a compose-created runner container serves, or null. Labels alone
  * can be inherited from an image (a classic-builder RUN container of
  * `FROM rl-infra/runner` + `LABEL rl.slot=2`), so the slot comes from the
- * compose service name AND the compose container_name `rl-runner-N`, which the
- * guard never lets a runner claim (routes.mjs) and whose compose labels it
- * never lets a runner set or inherit (body-policy.mjs). rl.slot must agree.
+ * compose service name, the INFRA compose project (RL_COMPOSE_PROJECT) AND the
+ * compose container_name `rl-runner-N`. The guard never lets a runner claim
+ * that name (routes.mjs) nor set or inherit that project (body-policy.mjs); a
+ * runner's own compose project may use any service name. rl.slot must agree.
  */
-export function composeRunnerSlot(c) {
+export function composeRunnerSlot(c, project = INFRA_PROJECT) {
   const labels = c?.Labels ?? {};
-  const svc = /^runner-([0-9]+)$/.exec(String(labels['com.docker.compose.service'] ?? ''));
+  const svc = /^runner-([0-9]+)$/.exec(String(labels[COMPOSE_SERVICE_LABEL] ?? ''));
   const slot = svc?.[1];
-  if (!slot || !labels['com.docker.compose.project']) return null;
+  if (!slot || labels[COMPOSE_PROJECT_LABEL] !== project) return null;
   if (!Array.isArray(c?.Names) || !c.Names.includes(`/rl-runner-${slot}`)) return null;
   if (labels['rl.slot'] !== undefined && labels['rl.slot'] !== slot) return null;
   return slot;
@@ -94,7 +96,7 @@ export function composeRunnerSlot(c) {
 export async function runnerForAddress(socketPath, address) {
   const ip = String(address ?? '').replace(/^::ffff:/, '');
   if (!ip) return null;
-  const filters = encodeURIComponent(JSON.stringify({ label: ['com.docker.compose.service'] }));
+  const filters = encodeURIComponent(JSON.stringify({ label: [COMPOSE_SERVICE_LABEL] }));
   const { status, json } = await dockerJson(socketPath, 'GET', `/containers/json?filters=${filters}`);
   if (status !== 200 || !Array.isArray(json)) return null;
   for (const c of json) {
