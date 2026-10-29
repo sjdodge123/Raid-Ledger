@@ -297,8 +297,13 @@ describe('D-11 the active campaign', () => {
 
   it('400s an archived campaign as the active one; unarchived it is accepted', async () => {
     const w = await world();
+    // Another campaign holds the active slot throughout, so unarchive does
+    // NOT auto-activate and the final PUT is a real make-active.
+    const other = await createCampaign(w.host.token, w.hubId, 'Side Run');
     await archive(w.host.token, w.campaignId);
     const path = `/hubs/${w.hubId}/settings`;
+    const moved = await put(w.editor.token, path, { activeCampaignId: other });
+    expect(moved.status).toBe(200);
     const refused = await put(w.editor.token, path, {
       activeCampaignId: w.campaignId,
     });
@@ -308,13 +313,16 @@ describe('D-11 the active campaign', () => {
     ]);
     // The refused write left the settings row untouched (check + write are atomic).
     const after = await hubCampaigns(w.editor.token, w.hubId);
-    expect(after.settings.activeCampaignId).toBeNull();
+    expect(after.settings.activeCampaignId).toBe(other);
 
-    await archive(w.host.token, w.campaignId, false);
+    const restored = await archive(w.host.token, w.campaignId, false);
+    expect(restored.isActive).toBe(false);
     const ok = await put(w.editor.token, path, {
       activeCampaignId: w.campaignId,
     });
     expect(ok.status).toBe(200);
+    const final = await hubCampaigns(w.editor.token, w.hubId);
+    expect(final.settings.activeCampaignId).toBe(w.campaignId);
   });
 });
 
@@ -336,6 +344,19 @@ describe('D-11 unarchive restores', () => {
     expect([restored.archivedAt, restored.isActive]).toEqual([null, false]);
     const list = await hubCampaigns(w.host.token, w.hubId);
     expect(list.settings.activeCampaignId).toBe(w.campaignId);
+  });
+
+  it('archived:false on an already-live campaign does not take the active slot', async () => {
+    const w = await world();
+    const other = await createCampaign(w.host.token, w.hubId, 'Side Run');
+    const cleared = await put(w.editor.token, `/hubs/${w.hubId}/settings`, {
+      activeCampaignId: null,
+    });
+    expect(cleared.status).toBe(200);
+    const noop = await archive(w.host.token, other, false);
+    expect([noop.archivedAt, noop.isActive]).toEqual([null, false]);
+    const list = await hubCampaigns(w.host.token, w.hubId);
+    expect(list.settings.activeCampaignId).toBeNull();
   });
 });
 

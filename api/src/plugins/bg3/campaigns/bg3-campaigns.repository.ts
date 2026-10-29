@@ -48,6 +48,17 @@ async function activateIfNoneActive(
     });
 }
 
+/** Row-locks campaign `id` (same `c` → `h` lock order as the other writers)
+ *  and reports whether it is currently archived. */
+async function wasArchived(tx: Tx, id: number): Promise<boolean> {
+  const [prior] = await tx
+    .select({ archivedAt: c.archivedAt })
+    .from(c)
+    .where(eq(c.id, id))
+    .for('update');
+  return prior?.archivedAt != null;
+}
+
 @Injectable()
 export class Bg3CampaignsRepository implements Bg3HubLookup {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
@@ -107,13 +118,20 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
 
   /**
    * D-11: archiving the hub's active campaign clears `activeCampaignId`;
-   * unarchiving one on a hub with no active campaign makes it active again
-   * (the party returns). A hub that already has an active one keeps it.
+   * unarchiving one (it WAS archived) on a hub with no active campaign makes
+   * it active again (the party returns). A hub that already has an active one
+   * keeps it, and `archived: false` on an already-live campaign is a no-op.
+   *
+   * Accepted race: archiving the active A while another tx restores B can
+   * leave the hub with no active campaign (B's upsert sees `h = A` and skips,
+   * then A's archive clears it). The one-active invariant still holds and an
+   * editor can make B active by hand.
    */
   async updateCampaign(id: number, patch: Bg3CampaignPatch): Promise<void> {
     const { archived, ...fields } = patch;
     const now = new Date();
     await this.db.transaction(async (tx) => {
+      const restoring = archived === false && (await wasArchived(tx, id));
       const [row] = await tx
         .update(c)
         .set({
@@ -126,7 +144,10 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         .where(eq(c.id, id))
         .returning({ guildId: c.guildId });
       if (!row || archived === undefined) return;
-      if (!archived) return activateIfNoneActive(tx, row.guildId, id);
+      if (!archived) {
+        if (restoring) await activateIfNoneActive(tx, row.guildId, id);
+        return;
+      }
       await tx
         .update(h)
         .set({ activeCampaignId: null, updatedAt: now })
