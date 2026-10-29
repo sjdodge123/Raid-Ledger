@@ -39,7 +39,9 @@ async function renderWhere(): Promise<HTMLElement> {
 }
 
 beforeEach(() => {
-    server.use(http.get(THUMB_URL, () => new HttpResponse(new Blob(['webp'], { type: 'image/webp' }))));
+    server.use(
+        http.get(THUMB_URL, () => new HttpResponse(new Uint8Array([82, 73, 70, 70]), { headers: { 'Content-Type': 'image/webp' } })),
+    );
 });
 /** jsdom has no object URLs; the shared media hook then never draws an image. */
 function stubObjectUrl(): void {
