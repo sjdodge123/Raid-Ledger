@@ -8,7 +8,7 @@ import { RoleGapAlertService } from './role-gap-alert.service';
 
 describe('EventReminderService', () => {
   let service: EventReminderService;
-  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
+  let mockDb: Record<'delete' | 'execute' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
@@ -19,7 +19,7 @@ describe('EventReminderService', () => {
   beforeEach(async () => {
     mockDb = {
       select: jest.fn(),
-      insert: jest.fn(),
+      execute: jest.fn(),
       delete: jest.fn(),
     };
 
@@ -80,13 +80,7 @@ describe('EventReminderService', () => {
         sentAt: new Date(),
       };
 
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([trackingRow]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       const result = await service.sendReminder({
         eventId: 10,
@@ -100,7 +94,7 @@ describe('EventReminderService', () => {
       });
 
       expect(result).toBe(true);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.execute).toHaveBeenCalled();
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
@@ -125,13 +119,7 @@ describe('EventReminderService', () => {
         sentAt: new Date(),
       };
 
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([trackingRow]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.sendReminder({
         eventId: 10,
@@ -152,13 +140,7 @@ describe('EventReminderService', () => {
     });
 
     it('should skip notification when reminder already sent (duplicate)', async () => {
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([]);
 
       const result = await service.sendReminder({
         eventId: 10,
@@ -322,13 +304,7 @@ describe('EventReminderService', () => {
         reminderType: '15min',
         sentAt: new Date(),
       };
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([trackingRow]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.handleReminders();
 
@@ -421,13 +397,7 @@ describe('EventReminderService', () => {
         reminderType: '15min',
         sentAt: new Date(),
       };
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([trackingRow]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([trackingRow]);
 
       await service.handleReminders();
 
@@ -498,15 +468,7 @@ describe('EventReminderService', () => {
         .mockReturnValueOnce(tzSelectChain)
         .mockReturnValueOnce(charsSelectChain);
 
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest
-              .fn()
-              .mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]);
 
       await service.handleReminders();
 
@@ -573,15 +535,7 @@ describe('EventReminderService', () => {
         .mockReturnValueOnce(tzSelectChain)
         .mockReturnValueOnce(charsSelectChain);
 
-      mockDb.insert.mockReturnValue({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest
-              .fn()
-              .mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]),
-          }),
-        }),
-      });
+      mockDb.execute.mockResolvedValue([{ id: 1, eventId: 10, userId: 1 }]);
 
       await service.handleReminders();
 
