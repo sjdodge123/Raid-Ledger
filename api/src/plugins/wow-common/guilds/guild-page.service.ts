@@ -22,6 +22,7 @@ import {
 } from '../../../guilds/guild-access.service';
 import {
   findLinkedMemberRows,
+  holdsGuildMasterRank,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
 import {
@@ -118,10 +119,11 @@ export class GuildPageService {
     }
     const hub = await findHubGuild(this.db, guildId);
     if (!hub) throw new NotFoundException('Guild not found');
-    const [rows, importedBy, role] = await Promise.all([
+    const [rows, importedBy, role, ownRows] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),
       this.access.resolveLadder(actor, guildId),
+      findLinkedMemberRows(this.db, actor.id, guildId),
     ]);
     // ROK-1794 (review): who a row links to is STAFF-ONLY — the grant basis.
     const links = isStaff(actor)
@@ -130,7 +132,11 @@ export class GuildPageService {
     return {
       guild: hubSummaryFor(hub, isStaff(actor)),
       importedBy,
-      viewer: viewerAccess(role),
+      viewer: {
+        ...viewerAccess(role),
+        // ROK-1815: a hero label only; rank 0 grants nothing (ROK-1794).
+        ...(holdsGuildMasterRank(ownRows) ? { isGuildMaster: true } : {}),
+      },
       ranks: groupRoster(rows, links),
       roleCounts: computeRoleCounts(rows),
     };
