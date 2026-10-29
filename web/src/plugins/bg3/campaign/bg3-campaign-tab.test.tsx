@@ -26,6 +26,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 }));
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
+const MOVE_NOTE = 'Saves from this playthrough already in another campaign move here too.';
 let campaigns: Bg3HubCampaignsResponse;
 const calls: string[] = [];
 const bodies: Record<string, unknown[]> = {};
@@ -99,11 +100,36 @@ describe('V-9 add my saves', () => {
         expect(within(sheet).queryByText('Filed_1')).not.toBeInTheDocument();
         await user.click(within(sheet).getByRole('checkbox', { name: /QuickSave_2/ }));
         await user.click(within(sheet).getByRole('checkbox', { name: /AutoSave_9/ }));
-        await user.click(within(sheet).getByRole('checkbox', { name: /Also put my future saves here/ }));
-        await user.click(screen.getByRole('button', { name: 'Add 2 saves' }));
+        await user.click(within(sheet).getByRole('checkbox', { name: 'Also put my other unfiled saves and future saves here' }));
+        await user.click(screen.getByRole('button', { name: 'Add 2 playthroughs · 2 saves' }));
         await waitFor(() => expect(calls).toEqual(['key', 'key', 'default']));
         expect(bodies['key']).toEqual([BG3_SAVE_KEY, 'b'.repeat(64)]);
         expect(bodies['default']).toEqual([{ campaignId: BG3_CAMPAIGN_ID }]);
+    });
+
+    it('groups saves by playthrough: one tick selects every save in it, and says filed saves move too', async () => {
+        server.use(bg3MySavesHandler(buildBg3MySavesResponse({
+            saves: [
+                buildBg3MySave({ id: 401, saveName: 'QuickSave_2', savedAt: '2026-10-26T20:00:00.000Z' }),
+                buildBg3MySave({ id: 404, saveName: 'QuickSave_1', savedAt: '2026-10-25T20:00:00.000Z' }),
+                buildBg3MySave({ id: 405, saveName: 'AutoSave_3', savedAt: '2026-10-24T20:00:00.000Z' }),
+                buildBg3MySave({ id: 402, saveName: 'AutoSave_9', campaignKey: 'b'.repeat(64) }),
+            ],
+        })));
+        const user = userEvent.setup();
+        renderTab();
+        await user.click(await screen.findByRole('button', { name: 'Add my saves' }));
+        const sheet = await screen.findByTestId('bg3-add-saves');
+        const list = await within(sheet).findByRole('list', { name: 'Your playthroughs that aren’t in a campaign' });
+        expect(within(list).getAllByRole('checkbox')).toHaveLength(2);
+        expect(within(list).queryByRole('checkbox', { name: /QuickSave_1/ })).not.toBeInTheDocument();
+        expect(within(sheet).getByText(/^3 saves · /)).toBeInTheDocument();
+        expect(within(sheet).queryByText(MOVE_NOTE)).not.toBeInTheDocument();
+        await user.click(within(list).getByRole('checkbox', { name: /QuickSave_2/ }));
+        expect(within(sheet).getByText(MOVE_NOTE)).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Add 1 playthrough · 3 saves' }));
+        await waitFor(() => expect(calls).toEqual(['key']));
+        expect(bodies['key']).toEqual([BG3_SAVE_KEY]);
     });
 });
 
