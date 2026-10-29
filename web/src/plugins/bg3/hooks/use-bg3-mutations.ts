@@ -66,7 +66,7 @@ export function useSetBg3DefaultCampaign(hubId: number) {
     });
 }
 
-/** Add my saves (D-5): one key PUT per selected save, then the optional default. */
+/** Add my saves (D-5): one key PUT per ticked playthrough (each binds every save with that key), then the optional default. */
 export function useBindBg3Saves(hubId: number) {
     const qc = useQueryClient();
     return useMutation({
