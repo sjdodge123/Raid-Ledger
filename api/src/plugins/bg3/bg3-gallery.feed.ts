@@ -31,29 +31,40 @@ export interface Bg3GalleryItem {
 
 type FeedRow = Awaited<ReturnType<Bg3SavesReadRepository['feedRows']>>[number];
 
-/** D-7 per campaign, then rows with a picture. */
-export function toGalleryItems(rows: readonly FeedRow[]): Bg3GalleryItem[] {
+/** A canonical save, pictured or not (`sha256` null = no thumbnail). */
+export type Bg3CanonicalSave = Omit<Bg3GalleryItem, 'sha256'> & {
+  sha256: string | null;
+};
+
+/** D-7 per campaign — every canonical save, with or without a picture. */
+export function toCanonicalSaves(rows: readonly FeedRow[]): Bg3CanonicalSave[] {
   const byCampaign = new Map<number, FeedRow[]>();
   for (const r of rows)
     byCampaign.set(r.campaignId, [...(byCampaign.get(r.campaignId) ?? []), r]);
   return [...byCampaign.values()]
     .flatMap((group) => pickCanonical(group, group[0]?.hostUserId ?? null))
-    .flatMap((r) =>
-      r.sha256 === null
-        ? []
-        : [
-            {
-              saveId: r.id,
-              uploaderUserId: r.uploaderUserId,
-              uploaderDisplayName: r.displayName ?? r.username,
-              sha256: r.sha256,
-              savedAt: r.savedAt,
-              campaignId: r.campaignId,
-              area: r.area,
-              provenanceKey: `${r.campaignKey}:${r.savedAt.toISOString()}`,
-            },
-          ],
-    );
+    .map((r) => ({
+      saveId: r.id,
+      uploaderUserId: r.uploaderUserId,
+      uploaderDisplayName: r.displayName ?? r.username,
+      sha256: r.sha256,
+      savedAt: r.savedAt,
+      campaignId: r.campaignId,
+      area: r.area,
+      provenanceKey: `${r.campaignKey}:${r.savedAt.toISOString()}`,
+    }));
+}
+
+/** The pictured ones. */
+export function pictured(saves: readonly Bg3CanonicalSave[]): Bg3GalleryItem[] {
+  return saves.flatMap(({ sha256, ...rest }) =>
+    sha256 === null ? [] : [{ ...rest, sha256 }],
+  );
+}
+
+/** D-7 per campaign, then rows with a picture. */
+export function toGalleryItems(rows: readonly FeedRow[]): Bg3GalleryItem[] {
+  return pictured(toCanonicalSaves(rows));
 }
 
 @Injectable()
@@ -74,6 +85,19 @@ export class Bg3GalleryFeed {
     const settings = await this.read.settings(guildId);
     if (settings.hideLocationAndScreenshots) return [];
     return toGalleryItems(await this.saves.feedRows(guildId, sinceSavedAt));
+  }
+
+  /**
+   * ROK-1959 Codex P2 — every canonical save (pictured or not), so session
+   * boundaries and closure see the whole timeline. Empty while spoilers hide.
+   */
+  async canonicalSaves(
+    guildId: number,
+    sinceSavedAt?: Date,
+  ): Promise<Bg3CanonicalSave[]> {
+    const settings = await this.read.settings(guildId);
+    if (settings.hideLocationAndScreenshots) return [];
+    return toCanonicalSaves(await this.saves.feedRows(guildId, sinceSavedAt));
   }
 
   /**

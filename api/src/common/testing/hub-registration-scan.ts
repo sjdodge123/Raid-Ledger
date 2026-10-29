@@ -13,6 +13,7 @@ import type {
   HubBehaviourKind,
   PluginHubManifest,
 } from '@raid-ledger/contract';
+import { mediaSourceGates, mediaSubjects } from './hub-registration-scan.media';
 
 /** One comment-stripped source file, path relative to `api/src`. */
 export interface ScanSource {
@@ -40,6 +41,7 @@ export const SCANNED_KINDS: readonly HubBehaviourKind[] = [
   'media-decorator',
   'media-subject',
   'ingest-source',
+  'media-gate',
 ];
 
 /** A registration key whose declared id differs (the tagger's `*` key). */
@@ -265,29 +267,6 @@ function mediaDecorators(
     );
 }
 
-/** ROK-2027 — every `HubMediaSubjectRegistry` `.register(owner, 'namespace', fn)` call. */
-function mediaSubjects(all: readonly ScanSource[], ctx: ScanContext): Found[] {
-  const re = /\.register\(\s*([\w.']+)\s*,\s*([\w.'-]+)\s*,/g;
-  return all
-    .filter(
-      (s) =>
-        s.text.includes('HubMediaSubjectRegistry') &&
-        !s.file.startsWith('hub-media/hub-media.subjects'),
-    )
-    .flatMap((src) =>
-      [...src.text.matchAll(re)].map((m): Found => {
-        const owner = resolveExpr(m[1] ?? '', src, all, ctx.constants);
-        const ns = resolveExpr(m[2] ?? '', src, all, ctx.constants);
-        if (owner === undefined || ns === undefined) {
-          return {
-            problem: `${src.file}: media subject owner "${m[1] ?? ''}" / namespace "${m[2] ?? ''}" is unresolvable`,
-          };
-        }
-        return { key: `${owner}/media-subject/${ns}` };
-      }),
-    );
-}
-
 /** ROK-1965 D17 — every literal `registerHubIngestSource(owner, 'id')` call. */
 function ingestSources(all: readonly ScanSource[], ctx: ScanContext): Found[] {
   const re = /registerHubIngestSource\(\s*([\w.']+)\s*,\s*'([\w.-]+)'\s*\)/g;
@@ -348,6 +327,7 @@ export function scanHubRegistrations(
     ...mediaSubjects(sources, ctx),
     ...ingestSources(sources, ctx),
     ...companionHandlers(sources, ctx),
+    ...mediaSourceGates(sources, ctx),
   ];
   return {
     keys: found.flatMap((f) => (f.key === undefined ? [] : [f.key])),

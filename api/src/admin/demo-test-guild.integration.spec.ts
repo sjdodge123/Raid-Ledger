@@ -180,6 +180,8 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
         canEdit: false,
         canManageEditors: false,
         notificationsMuted: false,
+        // ROK-1815: the seeded GM is rank 0 — labelled, not granted.
+        isGuildMaster: true,
       },
     ],
     [

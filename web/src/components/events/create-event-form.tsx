@@ -168,11 +168,13 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
 }
 
 /** ROK-1787: plugin-owned Guild picker (WoW guild editors only). */
-function GuildFieldSlot({ gameId, guildId, setForm }: {
+function GuildFieldSlot({ gameId, guildId, setForm, dropUnlisted }: {
     gameId: number | null; guildId: number | null; setForm: React.Dispatch<React.SetStateAction<FormState>>;
+    /** ROK-1817: create mode — the picker clears a guild the viewer cannot edit. */
+    dropUnlisted: boolean;
 }) {
     const onGuildChange = useCallback((next: number | null) => setForm((prev) => ({ ...prev, guildId: next })), [setForm]);
-    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange }} />;
+    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange, dropUnlisted }} />;
 }
 
 function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId }: {
@@ -213,7 +215,7 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
             {/* ROK-1893 P3: an inherited hub is shown (and clearable) in core — the plugin picker hides it from plain members. */}
             {pollHubId !== null && form.guildId === pollHubId
                 ? <InheritedHubLine hubId={pollHubId} onRemove={() => setForm((prev) => ({ ...prev, guildId: null }))} />
-                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} />}
+                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} dropUnlisted={!isEditMode} />}
         </FormSection>
     );
 }

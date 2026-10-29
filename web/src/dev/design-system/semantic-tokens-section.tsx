@@ -35,6 +35,10 @@ const SEMANTIC_ROWS: SemanticRow[] = [
         dark: '#8b5cf6', light: '#7c3aed', role: 'Someone is committed elsewhere this hour' },
     { name: 'slot', solid: 'bg-slot', border: 'border-slot/30', tint: 'bg-slot/10', text: 'text-slot',
         dark: '#22d3ee', light: '#0e7490', role: 'A time someone already proposed in a poll' },
+    { name: 'faction-alliance', solid: 'bg-faction-alliance', border: 'border-faction-alliance/30', tint: 'bg-faction-alliance/10',
+        text: 'text-faction-alliance', dark: '#60a5fa', light: '#1e40af', role: 'WoW Alliance (guild hero faction pill, ROK-1815)' },
+    { name: 'faction-horde', solid: 'bg-faction-horde', border: 'border-faction-horde/30', tint: 'bg-faction-horde/10',
+        text: 'text-faction-horde', dark: '#f87171', light: '#991b1b', role: 'WoW Horde (guild hero faction pill, ROK-1815)' },
 ];
 
 const CHIP = 'w-8 h-8 rounded-md';

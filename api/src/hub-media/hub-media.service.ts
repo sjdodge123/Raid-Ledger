@@ -9,7 +9,12 @@ import {
   parseAllowedSourceUrl,
   type HubMediaDownloader,
 } from './hub-media-download';
-import { bytesUsed, findByKey, markRemoved } from './hub-media.repository';
+import {
+  bytesUsed,
+  findByKey,
+  liveRowsBySourceAndUploader,
+  markRemoved,
+} from './hub-media.repository';
 import {
   encodeAndStore,
   hubMediaCapBytes,
@@ -20,7 +25,9 @@ import {
   uploadProvenanceKey,
   type HubMediaIngestInput,
   type HubMediaIngestResult,
+  type HubMediaPluginSource,
   type HubMediaRejectReason,
+  type HubMediaSourceInput,
   type HubMediaUploadInput,
 } from './hub-media.types';
 
@@ -91,6 +98,52 @@ export class HubMediaService {
       uploadedBy: input.uploaderId,
     };
     return this.finish(row, input.bytes, used);
+  }
+
+  /**
+   * ROK-1959 — store a plugin source's picture from bytes it already holds
+   * (the caller runs this inside `HubMediaIngestPool`). A key that exists —
+   * live or tombstoned — is `duplicate` and never re-added.
+   */
+  async ingestFromSource(
+    input: HubMediaSourceInput,
+  ): Promise<HubMediaIngestResult> {
+    const { bytes, ...fields } = input;
+    const existing = await findByKey(
+      this.db,
+      fields.guildId,
+      fields.provenanceKey,
+    );
+    if (existing) return { status: 'duplicate', mediaId: existing.id };
+    const used = await bytesUsed(this.db, fields.guildId);
+    if (used >= hubMediaCapBytes()) return this.capReached(fields.guildId);
+    return this.finish({ ...fields, discord: null }, bytes, used);
+  }
+
+  /**
+   * ROK-1959 D-9 — a member withdrew their data from `source`: tombstone
+   * every live row of theirs from it on every hub, clear its author name,
+   * caption and uploader, and unlink the files.
+   * Runs regardless of plugin state. Returns how many rows were removed.
+   */
+  async removeSourceRowsOf(
+    source: HubMediaPluginSource,
+    userId: number,
+  ): Promise<number> {
+    const rows = await liveRowsBySourceAndUploader(this.db, source, userId);
+    let removed = 0;
+    for (const { id, guildId } of rows) {
+      // The tombstone keeps only its key (never re-added), not the member.
+      const storageName = await markRemoved(this.db, {
+        guildId,
+        id,
+        scrub: true,
+      });
+      if (!storageName) continue;
+      await unlinkMediaFiles(guildId, storageName);
+      removed += 1;
+    }
+    return removed;
   }
 
   /** Source deletion (D8): tombstone the row and unlink its files. */

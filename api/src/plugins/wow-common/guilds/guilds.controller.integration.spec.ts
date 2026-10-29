@@ -182,6 +182,8 @@ describe('GET /:id — view matrix', () => {
         canEdit: false,
         canManageEditors: false,
         notificationsMuted: false,
+        // ROK-1815: rank 0 is labelled, never granted (GM_RANK_IMPLIES_EDIT off).
+        isGuildMaster: true,
       },
     ],
     [
@@ -327,6 +329,7 @@ describe('editors endpoints — manage matrix', () => {
       canEdit: true,
       canManageEditors: false,
       notificationsMuted: false,
+      isGuildMaster: true,
     });
     await testApp.db
       .delete(schema.guildEditors)

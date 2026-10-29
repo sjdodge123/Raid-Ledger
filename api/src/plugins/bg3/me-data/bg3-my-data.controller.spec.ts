@@ -8,6 +8,7 @@ import { PluginActiveGuard } from '../../plugin-host/plugin-active.guard';
 import type { AuthenticatedExpressRequest } from '../../../auth/types';
 import { Bg3MyDataController } from './bg3-my-data.controller';
 import type { Bg3MyDataRepository } from './bg3-my-data.repository';
+import type { HubMediaService } from '../../../hub-media/hub-media.service';
 
 const DELETED = {
   saves: 2,
@@ -32,11 +33,18 @@ describe('Bg3MyDataController', () => {
 
   it("deletes the caller's data and wraps the counts", async () => {
     const repo = { deleteAllFor: jest.fn().mockResolvedValue(DELETED) };
+    const hubMedia = { removeSourceRowsOf: jest.fn().mockResolvedValue(1) };
     const ctrl = new Bg3MyDataController(
       repo as unknown as Bg3MyDataRepository,
+      hubMedia as unknown as HubMediaService,
     );
     const req = { user: { id: 42 } } as AuthenticatedExpressRequest;
     await expect(ctrl.deleteMine(req)).resolves.toEqual({ deleted: DELETED });
     expect(repo.deleteAllFor).toHaveBeenCalledWith(42);
+    // ROK-1959 D-9: the caller's Gallery save pictures, after the bg3 tx.
+    expect(hubMedia.removeSourceRowsOf).toHaveBeenCalledWith('bg3-save', 42);
+    expect(repo.deleteAllFor.mock.invocationCallOrder[0]).toBeLessThan(
+      hubMedia.removeSourceRowsOf.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 });

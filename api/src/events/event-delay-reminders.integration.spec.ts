@@ -1,5 +1,5 @@
 /**
- * Running Late delay re-arms reminder windows (ROK-2042).
+ * Running Late delay (ROK-2042) and a start edit (ROK-2045) re-arm reminder windows.
  *
  * A host delay (`applyEventDelay`) shifts the event start. Reminder windows
  * that re-open for the NEW start (their threshold is smaller than the new
@@ -10,6 +10,7 @@
  * Notification ids are random UUIDs, so assertions never depend on row order.
  */
 import { and, eq } from 'drizzle-orm';
+import type { UpdateEventDto } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -18,8 +19,10 @@ import { EventReminderService } from '../notifications/event-reminder.service';
 import { fetchCandidateEvents } from '../notifications/event-reminder.helpers';
 import { NotificationService } from '../notifications/notification.service';
 import { applyEventDelay } from './event-delay.helpers';
+import { EventsService } from './events.service';
 
 const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
 
 /** Narrow an untyped jsonb payload to a plain record. */
 function asRecord(value: unknown): Record<string, unknown> {
@@ -132,6 +135,12 @@ function describeDelayRearmsReminders() {
     );
   }
 
+  /** Host (admin) edits the event through the web edit-form service path. */
+  async function edit(eventId: number, dto: UpdateEventDto) {
+    const events = testApp.app.get(EventsService);
+    return events.update(eventId, testApp.seed.adminUser.id, true, dto);
+  }
+
   beforeAll(async () => {
     testApp = await getTestApp();
     reminderService = testApp.app.get(EventReminderService);
@@ -222,6 +231,55 @@ function describeDelayRearmsReminders() {
     await reminderPass(new Date(newStart.getTime() - 14 * MINUTE));
     const fifteen = await remindersFor(testApp, userId, '15min');
     expect(startTimes(fifteen)).toEqual([newStart.toISOString()]);
+  });
+
+  it('editing the start to next week re-arms every reminder window (ROK-2045)', async () => {
+    const t0 = new Date();
+    const { eventId, userId } = await seedEventWithSignup(
+      testApp,
+      t0,
+      14 * MINUTE,
+    );
+    await reminderPass(t0);
+    expect(await dedupTypes(testApp, eventId, userId)).toEqual([
+      '15min',
+      '1hour',
+      '24hour',
+    ]);
+
+    const newStart = new Date(t0.getTime() + 7 * DAY);
+    await edit(eventId, {
+      startTime: newStart.toISOString(),
+      endTime: new Date(newStart.getTime() + 180 * MINUTE).toISOString(),
+    });
+    // Every window is ahead of the new start, so none stays deduped.
+    expect(await dedupTypes(testApp, eventId, userId)).toEqual([]);
+
+    await reminderPass(new Date(newStart.getTime() - 14 * MINUTE));
+    const fifteen = await remindersFor(testApp, userId, '15min');
+    expect(startTimes(fifteen)).toContain(newStart.toISOString());
+  });
+
+  it('an edit that keeps the start (title change, same start resent) keeps the dedup rows (ROK-2045)', async () => {
+    const t0 = new Date();
+    const { eventId, userId, start } = await seedEventWithSignup(
+      testApp,
+      t0,
+      14 * MINUTE,
+    );
+    await reminderPass(t0);
+
+    await edit(eventId, {
+      title: 'Renamed Raid',
+      startTime: start.toISOString(),
+    });
+    expect(await dedupTypes(testApp, eventId, userId)).toEqual([
+      '15min',
+      '1hour',
+      '24hour',
+    ]);
+    await reminderPass(new Date());
+    expect(await remindersFor(testApp, userId, '15min')).toHaveLength(1);
   });
 }
 describe('Event delay re-arms reminders (integration)', () =>

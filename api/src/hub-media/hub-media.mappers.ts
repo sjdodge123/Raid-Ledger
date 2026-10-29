@@ -13,11 +13,20 @@ export function hubMediaBytesPath(
 const SOURCE_LABEL: Record<HubMediaSource, string> = {
   discord: 'Discord',
   upload: 'Uploaded',
+  /** ROK-1959 D-8 — game-neutral: core never names the game. */
+  'bg3-save': 'Game save',
 };
 
-/** `hub_media_source_check` admits only these two; anything else reads as Discord. */
+/**
+ * `hub_media_source_check` admits exactly the contract's sources (ROK-1959
+ * widened it); the column is a plain string, so each is mapped explicitly
+ * and anything unexpected still reads as Discord.
+ */
 function sourceOf(row: HubMediaRow): HubMediaItem['source'] {
-  const type: HubMediaSource = row.source === 'upload' ? 'upload' : 'discord';
+  const type: HubMediaSource =
+    row.source === 'upload' || row.source === 'bg3-save'
+      ? row.source
+      : 'discord';
   return { type, label: SOURCE_LABEL[type] };
 }
 

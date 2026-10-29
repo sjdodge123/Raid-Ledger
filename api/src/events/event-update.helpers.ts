@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { UpdateEventDto } from '@raid-ledger/contract';
+import { rearmReminderWindows } from './event-delay.helpers';
 
 type EventSelect = typeof schema.events.$inferSelect;
 
@@ -76,6 +77,27 @@ export function buildUpdateData(
     updateData.duration = resolveDuration(dto, existing);
   }
   return updateData;
+}
+
+/**
+ * Writes an edit to the event. When the edit moves the start, the reminder
+ * windows that re-open for the new start are re-armed (ROK-2045) — otherwise
+ * the dedup rows from the old start suppress every reminder for the new one.
+ */
+export async function persistEventUpdate(
+  db: PostgresJsDatabase<typeof schema>,
+  existing: EventSelect,
+  dto: UpdateEventDto,
+): Promise<void> {
+  const updateData = buildUpdateData(dto, existing);
+  await db
+    .update(schema.events)
+    .set(updateData)
+    .where(eq(schema.events.id, existing.id));
+  const newStart = dto.startTime ? new Date(dto.startTime) : null;
+  if (newStart && newStart.getTime() !== existing.duration[0].getTime()) {
+    await rearmReminderWindows(db, existing.id, newStart);
+  }
 }
 
 /** Resolves the new duration from DTO and existing event. */

@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BG3_CAMPAIGN_NAME_MAX,
+  BG3_GALLERY_SOURCE_ID,
+  BG3_GALLERY_SYNC_JOB_NAME,
+  BG3_INGEST_SOURCE_ID,
   BG3_GAME_SLUG,
   BG3_GAME_SLUGS,
   Bg3ClaimBodySchema,
@@ -64,10 +67,13 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     expect(hubManifestProblems({ bg3: BG3_HUB_MANIFEST })).toEqual([]);
   });
 
-  it('declares the ingest source, the retention job, the three ROK-1958 widgets and the Campaign tab, scoped to BG3', () => {
+  it('declares the ingest sources, the jobs, the Gallery media gate (ROK-1959), the three ROK-1958 widgets and the Campaign tab, scoped to BG3', () => {
     expect(BG3_HUB_MANIFEST.behaviours.map((b) => `${b.kind}/${b.id}`)).toEqual([
       'ingest-source/bg3-save',
       'scheduled-job/Bg3HistoryRetentionCron_prune',
+      'ingest-source/bg3-save.gallery',
+      'scheduled-job/Bg3GalleryCron_sync',
+      'media-gate/bg3-save',
     ]);
     expect(BG3_HUB_MANIFEST.widgets.map((w) => `${w.layoutKey}/${w.id}`)).toEqual([
       'plugin/where-we-are', 'plugin/party', 'plugin/session-history',
@@ -82,7 +88,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     expect(['valheim', '', null, undefined].map(isBg3GameSlug)).toEqual([false, false, false, false]);
   });
 
-  it('setup: two required per-hub requirements on community hubs, without a check', () => {
+  it('setup: two required per-hub requirements plus the optional Gallery note (ROK-1959), without a check', () => {
     expect(
       BG3_HUB_MANIFEST.setup.requirements.map((r) => ({
         id: r.id,
@@ -94,6 +100,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     ).toEqual([
       { id: 'upload-saves', kind: 'companion_app', required: true, appliesTo: ['game_community'], hasCheck: false },
       { id: 'bind-campaign', kind: 'other', required: true, appliesTo: ['game_community'], hasCheck: false },
+      { id: 'gallery-saves', kind: 'other', required: false, appliesTo: ['game_community'], hasCheck: false },
     ]);
   });
 });
@@ -176,5 +183,13 @@ describe('write bodies', () => {
     expect(Bg3UpdateCampaignBodySchema.safeParse({ name: 'A', isActive: true }).success).toBe(false);
     expect(Bg3DefaultCampaignBodySchema.parse({ campaignId: null })).toEqual({ campaignId: null });
     expect(Bg3ClaimBodySchema.safeParse({ slotKey: 'Generic:Human:1', userId: 9 }).success).toBe(false);
+  });
+});
+
+describe('Gallery copy constants (ROK-1959 D-12)', () => {
+  it('names the sync cron and a gallery ingest source distinct from the save ingest', () => {
+    expect(BG3_GALLERY_SYNC_JOB_NAME).toBe('Bg3GalleryCron_sync');
+    expect(BG3_GALLERY_SOURCE_ID).toBe('bg3-save.gallery');
+    expect(BG3_GALLERY_SOURCE_ID).not.toBe(BG3_INGEST_SOURCE_ID);
   });
 });
