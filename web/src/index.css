@@ -145,16 +145,17 @@ html {
     --color-faction-horde: #991b1b;
     /* red-800 — Horde on light (ROK-1815); red-700 fails AA on the celestial / quest-log tints */
     /* ROK-1173: class dots on light — deepened so a pale class (priest white, rogue yellow) still
-       reads as a dot (>= 3:1 non-text contrast on #ffffff). */
-    --color-class-warrior: #8c6239;
-    --color-class-paladin: #be3f7a;
-    --color-class-hunter: #4d7c0f;
-    --color-class-rogue: #a16207;
-    --color-class-priest: #64748b;
+       reads as a dot; operator 2026-10-29: deepened again to >= 6:1 on #ffffff so the 8px dot is
+       legible at a glance on light rows. */
+    --color-class-warrior: #7a5230;
+    --color-class-paladin: #a3305f;
+    --color-class-hunter: #3f6212;
+    --color-class-rogue: #854d0e;
+    --color-class-priest: #475569;
     --color-class-shaman: #005eb8;
     --color-class-mage: #0e7490;
-    --color-class-warlock: #5b5bd6;
-    --color-class-druid: #c2410c;
+    --color-class-warlock: #4f46e5;
+    --color-class-druid: #9a3412;
     /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
        semantic-tokens.guard.test.ts, which recomputes them from these values — warning
        and danger are ALSO asserted on the panel, the JourneyHero card and their own

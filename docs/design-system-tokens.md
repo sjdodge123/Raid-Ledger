@@ -35,15 +35,15 @@ every utility and every opacity modifier follows. Declared in `@theme` (`:50-66`
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:119` |
 | `bg-faction-alliance/10` / `text-faction-alliance` (ROK-1815) | `#60a5fa` blue-400 | `#1e40af` blue-800 | `@theme` / shared light block |
 | `bg-faction-horde/10` / `text-faction-horde` (ROK-1815) | `#f87171` red-400 | `#991b1b` red-800 (AA on every light scheme's /10 tint) | `@theme` / shared light block |
-| `bg-class-warrior` (ROK-1173, dot only) | `#c69b6d` | `#8c6239` | `@theme` / shared light block |
-| `bg-class-paladin` | `#f48cba` | `#be3f7a` | same |
-| `bg-class-hunter` | `#aad372` | `#4d7c0f` lime-700 | same |
-| `bg-class-rogue` | `#fff468` | `#a16207` yellow-700 | same |
-| `bg-class-priest` | `#ffffff` | `#64748b` slate-500 (white would vanish on a light surface) | same |
+| `bg-class-warrior` (ROK-1173, dot only) | `#c69b6d` | `#7a5230` | `@theme` / shared light block |
+| `bg-class-paladin` | `#f48cba` | `#a3305f` | same |
+| `bg-class-hunter` | `#aad372` | `#3f6212` lime-800 | same |
+| `bg-class-rogue` | `#fff468` | `#854d0e` yellow-800 | same |
+| `bg-class-priest` | `#ffffff` | `#475569` slate-600 (white would vanish on a light surface) | same |
 | `bg-class-shaman` | `#0070dd` | `#005eb8` | same |
 | `bg-class-mage` | `#3fc7eb` | `#0e7490` cyan-700 | same |
-| `bg-class-warlock` | `#8788ee` | `#5b5bd6` | same |
-| `bg-class-druid` | `#ff7c0a` | `#c2410c` orange-700 | same |
+| `bg-class-warlock` | `#8788ee` | `#4f46e5` | same |
+| `bg-class-druid` | `#ff7c0a` | `#9a3412` orange-700 | same |
 
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
