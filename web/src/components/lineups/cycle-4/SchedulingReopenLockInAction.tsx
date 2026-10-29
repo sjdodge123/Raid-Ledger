@@ -28,18 +28,32 @@ export interface SchedulingReopenLockInActionProps {
   recoverable: boolean | undefined;
 }
 
+/**
+ * Gate first, hooks after: a poll without the flag (every poll but a stalled
+ * lock-in) mounts nothing and calls no hook, so the composite's many test
+ * doubles of `use-scheduling` / `use-auth` need no new entries.
+ */
 export function SchedulingReopenLockInAction(
   props: SchedulingReopenLockInActionProps,
 ): JSX.Element | null {
+  if (props.recoverable !== true) return null;
+  return <AdminGate matchId={props.matchId} />;
+}
+
+function AdminGate({ matchId }: { matchId: number }): JSX.Element | null {
   const { user } = useAuth();
+  if (!isAdmin(user)) return null;
+  return <ReopenBanner matchId={matchId} />;
+}
+
+function ReopenBanner({ matchId }: { matchId: number }): JSX.Element {
   const reopen = useReopenLockIn();
   const [isOpen, setIsOpen] = useState(false);
-  if (props.recoverable !== true || !isAdmin(user)) return null;
   const pending = reopen.isPending;
   const close = (): void => { if (!pending) setIsOpen(false); };
   const confirm = (): void => {
     reopen.mutate(
-      { matchId: props.matchId },
+      { matchId },
       { onSettled: () => setIsOpen(false) },
     );
   };
