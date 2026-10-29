@@ -299,3 +299,43 @@ describe('L3-ii additive fields (ROK-1831)', () => {
     expect(MyGuildSchema.parse({ ...mine, gameIconUrl: null }).gameIconUrl).toBeNull();
   });
 });
+
+describe('GuildMemberRowSchema roster fields (ROK-1173)', () => {
+  const presence = { online: false, lastOnlineDays: 3 };
+
+  it('accepts presence, isViewer and avatarUrl, and leaves old rows unchanged', () => {
+    const full = {
+      ...wowMember,
+      presence,
+      isViewer: true,
+      avatarUrl: 'https://x/a.jpg',
+    };
+    expect(GuildMemberRowSchema.parse(full)).toEqual(full);
+    const row = GuildMemberRowSchema.parse(wowMember);
+    expect(row.presence).toBeUndefined();
+    expect(row.isViewer).toBeUndefined();
+    expect(row.avatarUrl).toBeUndefined();
+  });
+
+  it('accepts unreported presence values and a null avatar', () => {
+    const unreported = { online: null, lastOnlineDays: null };
+    const row = GuildMemberRowSchema.parse({
+      ...wowMember,
+      presence: unreported,
+      avatarUrl: null,
+    });
+    expect(row.presence).toEqual(unreported);
+    expect(row.avatarUrl).toBeNull();
+  });
+
+  it('rejects isViewer false, negative days and an extra presence key', () => {
+    const bad = [
+      { ...wowMember, isViewer: false },
+      { ...wowMember, presence: { ...presence, lastOnlineDays: -1 } },
+      { ...wowMember, presence: { ...presence, lastSeenAt: null } },
+    ];
+    for (const row of bad) {
+      expect(GuildMemberRowSchema.safeParse(row).success).toBe(false);
+    }
+  });
+});

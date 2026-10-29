@@ -133,6 +133,17 @@ export const GuildMemberServerSchema = z
   .strict();
 export type GuildMemberServer = z.infer<typeof GuildMemberServerSchema>;
 
+/** ROK-1173 — one row's presence at the latest guild export (ROK-1916). */
+export const GuildMemberPresenceSchema = z
+  .object({
+    /** Online in the latest export; null = not reported. */
+    online: z.boolean().nullable(),
+    /** Whole days offline before that export; null = not reported. */
+    lastOnlineDays: z.number().int().nonnegative().nullable(),
+  })
+  .strict();
+export type GuildMemberPresence = z.infer<typeof GuildMemberPresenceSchema>;
+
 /** One roster row. Unlinked rows have `characterId: null` and no role. */
 export const GuildMemberRowSchema = z
   .object({
@@ -159,6 +170,15 @@ export const GuildMemberRowSchema = z
       .object({ username: z.string(), linkedSince: isoDate })
       .strict()
       .optional(),
+    /**
+     * ROK-1173 — presence from the latest guild export (ROK-1916 columns).
+     * Omitted when the export never reported it (sorts last under "Last seen").
+     */
+    presence: GuildMemberPresenceSchema.optional(),
+    /** ROK-1173 — set only on the viewer's own linked rows; omitted otherwise. */
+    isViewer: z.literal(true).optional(),
+    /** ROK-1173 — linked character's `characters.avatar_url`; omitted when none. */
+    avatarUrl: z.string().nullable().optional(),
   })
   .strict();
 export type GuildMemberRow = z.infer<typeof GuildMemberRowSchema>;
