@@ -130,7 +130,11 @@ export class HubMediaReadService {
     return mediaFilePath(guildId, row.storageName, variant);
   }
 
-  /** D8 Hide / Unhide — editors only; reversible. */
+  /**
+   * D8 Hide / Unhide — editors only; reversible. ROK-1959 (Codex P2): the
+   * picture must be visible to this editor first, so a gated source (spoiler
+   * toggle, plugin off) answers 404 and is never modified or read back.
+   */
   async setHidden(
     actor: GuildActor,
     guildId: number,
@@ -141,6 +145,7 @@ export class HubMediaReadService {
     if (!viewer.rights.canEdit) {
       throw new ForbiddenException('Guild editor access required');
     }
+    await this.visibleRow(viewer, id);
     const row = await setHidden(this.db, guildId, id, hidden ? actor.id : null);
     if (!row) throw new NotFoundException(HUB_MEDIA_NOT_FOUND);
     return this.toItem(row, viewer);

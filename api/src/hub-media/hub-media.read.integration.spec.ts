@@ -433,6 +433,36 @@ describe('source gates (ROK-1959 D-5)', () => {
       kinds: ['screenshot'],
     });
   });
+
+  /** An editor's hide PATCH on save `id`, plus the row's `hidden_at` after it. */
+  async function editorHide(id: number) {
+    const res = await testApp.request
+      .patch(`${base()}/${id}`)
+      .set(auth(tokens.operator))
+      .send({ hidden: true });
+    const [row] = await testApp.db
+      .select({ hiddenAt: schema.hubMedia.hiddenAt })
+      .from(schema.hubMedia)
+      .where(eq(schema.hubMedia.id, id));
+    return {
+      status: res.status,
+      caption: res.body.caption ?? null,
+      hiddenAt: row?.hiddenAt ?? null,
+    };
+  }
+  const refused = { status: 404, caption: null, hiddenAt: null };
+
+  it('an editor cannot hide a spoiler-gated save by id: 404, caption not echoed, row untouched (Codex P2)', async () => {
+    const id = await save();
+    hideSaves = true;
+    expect(await editorHide(id)).toEqual(refused);
+  });
+
+  it('an editor cannot hide a save by id while bg3 is inactive: 404, caption not echoed, row untouched (Codex P2)', async () => {
+    const id = await save();
+    await testApp.app.get(PluginRegistryService).deactivate(BG3_PLUGIN_ID);
+    expect(await editorHide(id)).toEqual(refused);
+  });
 });
 
 describe('POST /admin/test/hub-media/seed (DEMO_MODE)', () => {
