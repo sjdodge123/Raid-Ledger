@@ -156,9 +156,9 @@ describe('lock-in claim recovery (ROK-2033)', () => {
     });
     expect(d.pollEmbed.fireUpdateEmbed).toHaveBeenCalledWith(matchId);
     const res = await lockInRoute(matchId);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const row = await matchRow(matchId);
-    expect(row?.linkedEventId).toBe(res.body.id);
+    expect(row?.linkedEventId).toBe(res.body.event.id);
     expect(row?.lockInClaimedAt).toBeNull();
   });
 
@@ -184,10 +184,10 @@ describe('lock-in claim recovery (ROK-2033)', () => {
   it('row 3: a locked-in event deleted on purpose is never reopened', async () => {
     const matchId = await openPoll();
     const res = await lockInRoute(matchId);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     await testApp.app
       .get(EventsService)
-      .delete(res.body.id, testApp.seed.adminUser.id, true);
+      .delete(res.body.event.id, testApp.seed.adminUser.id, true);
     expect(await matchRow(matchId)).toEqual({
       status: 'scheduled',
       linkedEventId: null,
