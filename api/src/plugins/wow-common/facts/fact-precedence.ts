@@ -54,6 +54,7 @@ export const FIELD_PRECEDENCE: Readonly<Record<WowFactField, FieldPrecedence>> =
     quests: DEFAULT_ROW,
     lockouts: DEFAULT_ROW,
     lastOnline: DEFAULT_ROW,
+    enchantsReported: DEFAULT_ROW,
   };
 
 const time = (f: Fact<unknown>): number => f.asOf?.getTime() ?? -Infinity;
@@ -133,5 +134,6 @@ export function resolveFacts(
     quests: r('quests'),
     lockouts: r('lockouts'),
     lastOnline: r('lastOnline'),
+    enchantsReported: r('enchantsReported'),
   };
 }

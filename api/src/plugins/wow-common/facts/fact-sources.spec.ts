@@ -45,24 +45,24 @@ describe('RosterFactSource', () => {
   });
 });
 
-describe('AddonSnapshotFactSource', () => {
-  const data = {
-    gear: [
-      { slot: 1, itemId: 10, ilvl: 60, bonusIds: [], enchantId: 5 },
-      { slot: 4, itemId: 11, ilvl: 1, bonusIds: [] },
-      { slot: 5, itemId: 12, ilvl: 70, bonusIds: [] },
+const data = {
+  gear: [
+    { slot: 1, itemId: 10, ilvl: 60, bonusIds: [], enchantId: 5 },
+    { slot: 4, itemId: 11, ilvl: 1, bonusIds: [] },
+    { slot: 5, itemId: 12, ilvl: 70, bonusIds: [] },
+  ],
+  talents: {
+    nodes: [
+      { nodeId: 1, rank: 5, tree: 2 },
+      { nodeId: 2, rank: 31, tree: 2 },
+      { nodeId: 3, rank: 5, tree: 0 },
     ],
-    talents: {
-      nodes: [
-        { nodeId: 1, rank: 5, tree: 2 },
-        { nodeId: 2, rank: 31, tree: 2 },
-        { nodeId: 3, rank: 5, tree: 0 },
-      ],
-    },
-    lockouts: [],
-    quests: { completed: [1, 2], inProgress: [] },
-  };
+  },
+  lockouts: [],
+  quests: { completed: [1, 2], inProgress: [] },
+};
 
+describe('AddonSnapshotFactSource', () => {
   it('loads 2000 characters in ONE query', async () => {
     db.where.mockResolvedValue([]);
     await new AddonSnapshotFactSource(db as never).load(fullRoster);
@@ -71,7 +71,7 @@ describe('AddonSnapshotFactSource', () => {
 
   it('maps gear, ilvl, quests, lockouts and a talents role hint (asOf = capturedAt)', async () => {
     db.where.mockResolvedValue([
-      { characterId: 'c1', data, capturedAt: T, class: 'Warrior' },
+      { characterId: 'c1', data, capturedAt: T, schema: 2, class: 'Warrior' },
     ]);
     const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
     const facts = got.get('m1');
@@ -84,7 +84,7 @@ describe('AddonSnapshotFactSource', () => {
 
   it('gives no role hint when the class is unknown', async () => {
     db.where.mockResolvedValue([
-      { characterId: 'c1', data, capturedAt: T, class: null },
+      { characterId: 'c1', data, capturedAt: T, schema: 2, class: null },
     ]);
     const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
     expect(got.get('m1')?.role).toBeUndefined();
@@ -93,6 +93,42 @@ describe('AddonSnapshotFactSource', () => {
   it('skips unlinked rows without a query', async () => {
     await new AddonSnapshotFactSource(db as never).load([ref(1, false)]);
     expect(db.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddonSnapshotFactSource enchantsReported (ROK-1915)', () => {
+  it.each([
+    [2, true],
+    [3, true],
+    [1, false],
+  ])(
+    'ROK-1915: a schema-%i snapshot with gear reports enchants = %s',
+    async (schema, reported) => {
+      db.where.mockResolvedValue([
+        { characterId: 'c1', data, capturedAt: T, schema, class: null },
+      ]);
+      const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
+      expect(got.get('m1')?.enchantsReported).toEqual({
+        value: reported,
+        source: 'addon',
+        asOf: T,
+      });
+    },
+  );
+
+  it('ROK-1915: a snapshot without gear says nothing about enchants', async () => {
+    const noGear = { ...data, gear: [] };
+    db.where.mockResolvedValue([
+      {
+        characterId: 'c1',
+        data: noGear,
+        capturedAt: T,
+        schema: 2,
+        class: null,
+      },
+    ]);
+    const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
+    expect(got.get('m1')?.enchantsReported).toBeUndefined();
   });
 });
 
