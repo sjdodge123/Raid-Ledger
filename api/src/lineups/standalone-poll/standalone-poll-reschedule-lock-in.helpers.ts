@@ -11,6 +11,7 @@
  */
 import {
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   type Logger,
 } from '@nestjs/common';
@@ -39,7 +40,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** What the reschedule lock-in needs from its service. */
 export interface RescheduleLockInDeps {
   db: Db;
-  eventsService: Pick<EventsService, 'reschedule'>;
+  eventsService: Pick<EventsService, 'reschedule' | 'findOne'>;
   logger: Pick<Logger, 'error'>;
 }
 
@@ -61,15 +62,18 @@ export interface RescheduledPoll {
 interface RescheduleTarget {
   lineupId: number;
   eventId: number;
+  eventCreatorId: number | null;
   eventCancelled: boolean;
 }
 
 /**
  * Claim the reschedule poll, then move its event in place (one UPDATED from
  * the move), then archive the poll and release the event's rescheduling
- * lock. A throw from the move releases the claim. Pre-claim checks (404,
- * 400, 403) do not depend on the poll's status, so a race loser always gets
- * the claim's 409.
+ * lock. A throw before the move commits releases the claim; one after it
+ * keeps the claim and finishes the lock-in. Pre-claim checks (404, 400, 403 —
+ * including the event-owner check, so an unauthorised caller never holds the
+ * claim) do not depend on the poll's status, so a race loser always gets the
+ * claim's 409.
  */
 export async function rescheduleLockedInPoll(
   deps: RescheduleLockInDeps,
@@ -81,6 +85,7 @@ export async function rescheduleLockedInPoll(
   await assertCanCompletePoll(db, matchId, caller, {
     startTime: dto.startTime,
   });
+  assertMayMoveEvent(target, caller);
   assertSlotIsFuture(dto.startTime);
   const prior = await claimMatchForLockIn(
     db,
@@ -88,8 +93,9 @@ export async function rescheduleLockedInPoll(
     ['scheduling'],
     target.eventId,
   );
-  const event = await moveOrRelease(deps, input, target, prior);
-  await archiveAndRelease(db, target);
+  const moved = await moveOrRelease(deps, input, target, prior);
+  await archiveOrLog(deps, matchId, target);
+  const event = moved ?? (await deps.eventsService.findOne(target.eventId));
   return {
     event,
     eventId: target.eventId,
@@ -97,13 +103,24 @@ export async function rescheduleLockedInPoll(
   };
 }
 
-/** Move the claimed poll's event; a throw puts the claim back first. */
+/** `rescheduleEvent`'s owner-or-admin rule, checked before the claim. */
+function assertMayMoveEvent(target: RescheduleTarget, caller: Caller): void {
+  if (caller.isAdmin || caller.id === target.eventCreatorId) return;
+  throw new ForbiddenException('You can only reschedule your own events');
+}
+
+/**
+ * Move the claimed poll's event. A throw before the move commits puts the
+ * claim back and rethrows; a throw after it (activity log, re-read) keeps the
+ * claim and returns null — releasing would let a retry move the event again
+ * and notify everyone twice.
+ */
 async function moveOrRelease(
   deps: RescheduleLockInDeps,
   input: RescheduleLockInInput,
   target: RescheduleTarget,
   prior: ClaimedFromStatus,
-): Promise<EventResponseDto> {
+): Promise<EventResponseDto | null> {
   const { matchId, caller, dto } = input;
   try {
     return await deps.eventsService.reschedule(
@@ -113,6 +130,12 @@ async function moveOrRelease(
       dto,
     );
   } catch (err: unknown) {
+    if (await eventStartsAt(deps.db, target.eventId, dto.startTime)) {
+      deps.logger.error(
+        `Reschedule lock-in ${matchId}: event moved but a later step failed; keeping the claim: ${String(err)}`,
+      );
+      return null;
+    }
     await releaseMatchClaim(
       deps.db,
       matchId,
@@ -134,6 +157,7 @@ async function loadRescheduleTarget(
     .select({
       lineupId: m.lineupId,
       eventId: m.linkedEventId,
+      eventCreatorId: schema.events.creatorId,
       cancelledAt: schema.events.cancelledAt,
     })
     .from(m)
@@ -146,6 +170,7 @@ async function loadRescheduleTarget(
   return {
     lineupId: row.lineupId,
     eventId: row.eventId,
+    eventCreatorId: row.eventCreatorId,
     eventCancelled: row.cancelledAt !== null,
   };
 }
@@ -162,4 +187,34 @@ async function archiveAndRelease(
       .where(eq(schema.communityLineups.id, target.lineupId));
     await clearReschedulingPollId(tx, target.eventId);
   });
+}
+
+/** Archive + release, logged on failure so `afterComplete` still runs. */
+async function archiveOrLog(
+  deps: RescheduleLockInDeps,
+  matchId: number,
+  target: RescheduleTarget,
+): Promise<void> {
+  try {
+    await archiveAndRelease(deps.db, target);
+  } catch (err: unknown) {
+    // Not rethrown: the event moved and the claim holds, so a retry can only
+    // 409; `afterComplete` must still re-emit. The stale lock is ROK-2033's.
+    deps.logger.error(
+      `Reschedule lock-in ${matchId}: archive/release failed: ${String(err)}`,
+    );
+  }
+}
+
+/** True when the event already starts at `startTime` (the move committed). */
+async function eventStartsAt(
+  db: Db,
+  eventId: number,
+  startTime: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ duration: schema.events.duration })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  return row?.duration[0].getTime() === new Date(startTime).getTime();
 }
