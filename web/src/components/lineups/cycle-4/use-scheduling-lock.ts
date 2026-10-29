@@ -5,9 +5,10 @@
  * `CreateEventSection` dropdown so it lives once, at composite level:
  *   - past-time guard (toast + abort),
  *   - majority-voter threshold → confirm modal for an early lock,
- *   - reschedule-vs-create branch: `linkedEventId != null` reschedules the
- *     linked event then `completeStandalonePoll(matchId, eventId, startTime)`
- *     so the backend auto-signs-up/re-rosters the slot's voters (ROK-1031);
+ *   - reschedule-vs-create branch: `linkedEventId != null` calls the
+ *     claim-first `rescheduleLockInSchedulingPoll` (ROK-2040), which moves the
+ *     linked event and re-rosters the slot's voters (ROK-1031) in one request —
+ *     a losing racer gets a 409 and the event is not moved;
  *     otherwise navigate to `/events/new?gameId&startTime&matchId&lineupId` (verbatim
  *     target from `CreateFromSlot::performNavigate`), plus `copyFromEventId`
  *     when this is a follow-up poll so the create form prefills from the
@@ -25,11 +26,11 @@ import type {
   SchedulePollPageResponseDto,
   ScheduleSlotWithVotesDto,
 } from '@raid-ledger/contract';
-import { useRescheduleEvent } from '../../../hooks/use-reschedule';
 import {
-  completeStandalonePoll,
   getSchedulePoll,
+  rescheduleLockInSchedulingPoll,
 } from '../../../lib/api-client';
+import { isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
   computeRequiredVoters,
@@ -44,6 +45,10 @@ const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 /** Toast when the fresh poll no longer offers the requested slot. */
 export const POLL_CHANGED_MESSAGE =
   'This poll changed — refresh to see the latest';
+
+/** Toast for the reschedule lock-in that lost the race (ROK-2040). */
+export const RESCHEDULE_LOCK_IN_LOST_TOAST =
+  'Someone else locked in this poll first. The event was not moved.';
 
 /** Options for {@link SchedulingLock.requestLock}. */
 export interface RequestLockOptions {
@@ -124,6 +129,36 @@ export function createEventUrl(
   return `/events/new?${params.toString()}`;
 }
 
+/** Refetch everything a reschedule lock-in (won or lost) may have changed. */
+function refreshAfterReschedule(qc: QueryClient, eventId: number): void {
+  void qc.invalidateQueries({ queryKey: ['events'] });
+  void qc.invalidateQueries({ queryKey: ['event', eventId] });
+  invalidateHubPolls(qc);
+  refreshLockedInEvent(qc, eventId);
+}
+
+/** ROK-2040: one claim-first request moves the event and closes the poll. */
+async function lockInReschedule(
+  qc: QueryClient,
+  ids: { matchId: number; eventId: number },
+  start: Date,
+): Promise<void> {
+  const end = new Date(start.getTime() + TWO_HOURS_MS);
+  try {
+    // startTime must be the same instant as slot.proposedTime — the backend
+    // matches it to a slot by Date-getTime equality (ROK-1031).
+    await rescheduleLockInSchedulingPoll(ids.matchId, {
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+    });
+    toast.success('Event rescheduled');
+  } catch (err) {
+    if (isConflictError(err)) toast.error(RESCHEDULE_LOCK_IN_LOST_TOAST);
+    else toast.error(err instanceof Error ? err.message : 'Failed to reschedule');
+  }
+  refreshAfterReschedule(qc, ids.eventId);
+}
+
 /** The commit step: reschedule the linked event, or open the create form. */
 function useLockCommit(
   match: MatchDetailResponseDto,
@@ -132,7 +167,6 @@ function useLockCommit(
   hubId: number | null,
 ): (slot: ScheduleSlotWithVotesDto) => void {
   const navigate = useNavigate();
-  const reschedule = useRescheduleEvent(match.linkedEventId ?? 0);
   const qc = useQueryClient();
   return (slot: ScheduleSlotWithVotesDto): void => {
     const start = new Date(slot.proposedTime);
@@ -141,28 +175,8 @@ function useLockCommit(
       return;
     }
     if (match.linkedEventId != null) {
-      // Capture now: property narrowing doesn't survive into the callback.
-      const eventId = match.linkedEventId;
-      const end = new Date(start.getTime() + TWO_HOURS_MS);
-      reschedule.mutate(
-        { startTime: start.toISOString(), endTime: end.toISOString() },
-        {
-          onSuccess: () => {
-            // startTime must be the same instant as slot.proposedTime — the
-            // backend matches it to a slot by Date-getTime equality (ROK-1031).
-            // ROK-2031: complete resolves after the re-roster — refetch the event.
-            void completeStandalonePoll(matchId, eventId, start.toISOString()).then(() => {
-              invalidateHubPolls(qc);
-              refreshLockedInEvent(qc, eventId);
-            });
-            toast.success('Event rescheduled');
-          },
-          onError: (err) =>
-            toast.error(
-              err instanceof Error ? err.message : 'Failed to reschedule',
-            ),
-        },
-      );
+      const ids = { matchId, eventId: match.linkedEventId };
+      void lockInReschedule(qc, ids, start);
       return;
     }
     navigate(createEventUrl(match, { matchId, lineupId, hubId }, slot));
