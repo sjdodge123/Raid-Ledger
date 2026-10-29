@@ -10,6 +10,8 @@
  *
  * ROK-1893 P3: `lead` is the hub module's `eventsLead` block (a community
  * hub's Open polls), rendered above the widgets.
+ * ROK-2050: the lead renders in every query state (loading and error too), so
+ * a WoW editor's "Schedule for guild" never waits on the events payload.
  */
 import type { JSX, ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -22,6 +24,16 @@ import { GuildRaidSchedule } from './guild-raid-schedule';
 interface EventsTabProps { query: UseQueryResult<GuildRaidsDto, Error>; kind?: GuildKind | undefined; lead?: ReactNode }
 
 export function HubEventsTab({ query, kind, lead }: EventsTabProps): JSX.Element {
+    if (!lead) return <EventsBody query={query} kind={kind} />;
+    return (
+        <div className="flex flex-col gap-8">
+            {lead}
+            <EventsBody query={query} kind={kind} />
+        </div>
+    );
+}
+
+function EventsBody({ query, kind }: Omit<EventsTabProps, 'lead'>): JSX.Element {
     if (query.error) {
         return (
             <div className="py-12 text-center" data-testid="guild-events-error">
@@ -33,7 +45,6 @@ export function HubEventsTab({ query, kind, lead }: EventsTabProps): JSX.Element
     if (!raids) return <div aria-busy="true" data-testid="guild-events-loading" className="h-64 animate-pulse rounded-lg border border-edge bg-surface" />;
     return (
         <div className="flex flex-col gap-8" data-testid="guild-events-tab">
-            {lead}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <GuildRaidSchedule schedule={raids.schedule} kind={kind} />
                 <GuildAttendance attendance={raids.attendance} kind={kind} />

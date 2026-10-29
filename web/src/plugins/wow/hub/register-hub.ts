@@ -20,6 +20,7 @@ import {
 } from './wow-members.helpers';
 import { WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
 import { WowEditorDelegation } from './editor-delegation';
+import { WowEventsLead } from './schedule-for-guild';
 import { useWowAddonsVisible } from './wow-resources.helpers';
 import { WOW_MEMBER_SORTS } from './wow-member-filters.helpers';
 import { useWowMemberFilters } from './use-wow-member-filters';
@@ -57,6 +58,8 @@ export const wowHubModule: HubModule = {
     membersEmpty: WOW_MEMBERS_EMPTY,
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
+    /** ROK-2050: "Schedule for guild" for editors, on the core Events tab too. */
+    eventsLead: WowEventsLead,
     eventsJumpTab: 'raids',
     editorDelegation: WowEditorDelegation,
     modSources: [{ id: 'wow-addons', label: 'World of Warcraft addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
