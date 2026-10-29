@@ -41,6 +41,7 @@ const snapshot = {
   savedAt: '2026-10-27T21:00:00Z',
   receivedAt: '2026-10-27T21:00:05Z',
   uploaderUserId: 7,
+  uploader: { userId: 7, displayName: 'Tav' },
   area: 'SCL_Main_A',
   difficulty: 'DifficultyHard',
   ruleset: null,
