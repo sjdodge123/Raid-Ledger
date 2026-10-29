@@ -25,8 +25,8 @@ interface EventCreateGuildFieldProps {
 export function EventCreateGuildField({ gameId, guildId, onGuildChange, dropUnlisted = false }: EventCreateGuildFieldProps): JSX.Element | null {
     const q = useGameGuildsQuery(gameId ?? undefined);
     const guilds = (q.data?.guilds ?? []).filter((g) => g.canEdit);
-    const settled = q.isSuccess || q.isError;
-    const unseen = dropUnlisted && settled && guildId !== null && !guilds.some((g) => g.id === guildId);
+    // Only a successful lookup can prove the guild is absent; a failed one keeps the pick (Codex P2).
+    const unseen = dropUnlisted && q.isSuccess && guildId !== null && !guilds.some((g) => g.id === guildId);
     useEffect(() => {
         if (unseen) onGuildChange(null);
     }, [unseen, onGuildChange]);

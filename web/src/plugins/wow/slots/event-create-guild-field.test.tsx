@@ -4,7 +4,7 @@
  */
 import { createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
@@ -90,6 +90,17 @@ describe('EventCreateGuildField — a crafted ?guildId= (ROK-1817)', () => {
         const onGuildChange = renderField(11, vi.fn(), true);
         expect(await screen.findByLabelText('Guild')).toHaveValue('11');
         expect(onGuildChange).not.toHaveBeenCalled();
+    });
+
+    it('create mode: a failed guild lookup keeps the preselected guild', async () => {
+        server.use(http.get(API, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+        const onGuildChange = vi.fn();
+        render(<EventCreateGuildField gameId={7} guildId={11} onGuildChange={onGuildChange} dropUnlisted />, { wrapper });
+        await waitFor(() => expect(client.getQueryCache().getAll()[0]?.state.status).toBe('error'));
+        await act(async () => {});
+        expect(onGuildChange, 'a transient lookup error must not drop a valid pick').not.toHaveBeenCalled();
     });
 
     it('edit mode: leaves an unchanged tag alone (the submit omits it)', async () => {
