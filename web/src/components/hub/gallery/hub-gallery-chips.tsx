@@ -1,14 +1,20 @@
 /**
- * ROK-1942 (operator ruling 2026-10-24) — the All · Deaths · Screenshots chips
+ * ROK-1942 (operator ruling 2026-10-24) — the All · Deaths · Screenshots (· Saves, ROK-1959) chips
  * on the Overview card: an exclusive choice drawn with the shared §4.3
  * `FilterChip` (the selected one is pressed). Rendered only when the hub has
- * both kinds — with one kind, "All" already is that kind.
+ * at least two kinds — with one kind, "All" already is that kind.
  */
 import type { JSX } from 'react';
 import type { HubMediaFilter } from '../../../lib/hub-media-query';
 import { FilterChip } from '../../ui/filter-chip';
 
-const LABEL: Record<HubMediaFilter, string> = { all: 'All', death: 'Deaths', screenshot: 'Screenshots' };
+const LABEL: Record<HubMediaFilter, string> = {
+    all: 'All',
+    death: 'Deaths',
+    screenshot: 'Screenshots',
+    /** ROK-1959 D-7 — game-save pictures. */
+    save: 'Saves',
+};
 
 export interface HubGalleryChipsProps {
     filters: readonly HubMediaFilter[];

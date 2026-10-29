@@ -78,7 +78,17 @@ disk_pressure::rungs() {
 
 disk_pressure::rung_cmd() {
     case "$1" in
-        builder_prune) echo "docker builder prune -af" ;;
+        # DOCKER_BUILDKIT=0 (2026-10-26): with the buildx plugin installed
+        # (VM host + runner images) `docker builder prune` IS `docker buildx
+        # prune`, which dials BuildKit over the hijacked POST /grpc endpoint
+        # (or `containers/buildx_buildkit_*/exec`). rl-docker-proxy allows
+        # neither, so the admission gate's ladder died on this rung every run
+        # with `ERROR: driver not running`. The legacy CLI path is a plain
+        # POST /build/prune (allowlisted), which the daemon serves by pruning
+        # its embedded BuildKit cache — the one the runners' `docker build`
+        # (buildx `docker` driver, no `buildx create` anywhere) fills. The
+        # gc-sweeper image has no buildx plugin, so it was on this path already.
+        builder_prune) echo "DOCKER_BUILDKIT=0 docker builder prune -af" ;;
         image_prune)   echo "docker image prune -af --filter until=${RL_IMAGE_PRUNE_AGE} --filter label!=rl.role=runner" ;;
         # `volume prune` is anonymous-only from engine 23, but older engines
         # remove unattached NAMED volumes too — and traefik-acme /
@@ -115,6 +125,22 @@ disk_pressure::_audit() {
     fi
 }
 
+# A failed rung goes to the sweeper's log() when we were sourced by it (the
+# sweeper calls guard with stderr discarded), stderr elsewhere (the build
+# admission gate's task log). Never fatal. The sweeper's log() prints to
+# STDOUT, and _walk returns the rung JSON on stdout, so its output is sent to
+# stderr here — otherwise a failed rung's log line corrupts the captured JSON.
+disk_pressure::_log_failure() {
+    local rung="$1" outcome="$2" msg
+    msg="disk ladder: ${rung} failed (exit $(jq -r '.exit_code' <<<"$outcome")): $(jq -r '.stderr' <<<"$outcome")"
+    if declare -F log >/dev/null 2>&1; then
+        log "$msg" >&2
+    else
+        echo "[disk-pressure] $msg" >&2
+    fi
+    return 0
+}
+
 # Atomic state write, mirroring sweep.sh's mutate(): tmpfile in the SAME
 # directory so the rename is same-fs (keeps the setgid group + 664 the
 # dashboard reader needs). mutate() itself can't be reused — it requires the
@@ -147,9 +173,12 @@ disk_pressure::_walk() {
             --argjson b "$before" --argjson a "$after" \
             '. + [({rung:$r, before_pct:$b, after_pct:$a} + $o)]' <<<"$rungs")
         before="$after"
-        # A rung that could not run has not relieved anything — keep walking
-        # so a single denied route doesn't abort the whole ladder.
-        [[ "$(jq -r '.exit_code' <<<"$outcome")" == "0" ]] || continue
+        # A rung that could not run has not relieved anything — log it and
+        # keep walking so a single denied route doesn't abort the whole ladder.
+        if [[ "$(jq -r '.exit_code' <<<"$outcome")" != "0" ]]; then
+            disk_pressure::_log_failure "$rung" "$outcome"
+            continue
+        fi
         (( after < RL_DISK_TARGET_PCT )) && break
     done
     echo "$rungs"

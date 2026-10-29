@@ -13,46 +13,22 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { z } from 'zod';
-import { HUB_MEDIA_PAGE_MAX, type HubMediaKind } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoModeGuard } from '../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { findHiddenAt } from '../guilds/hub-hidden.helpers';
 import type { HubMediaDownloader } from './hub-media-download';
+import {
+  DEMO_SEED_USAGE,
+  type DemoSeedRequest,
+  discordSeedInput,
+  findSeedUploader,
+  parseDemoSeedBody,
+  saveSeedInput,
+} from './hub-media-demo-seed.helpers';
 import { HubMediaService } from './hub-media.service';
 import { solidPng } from './hub-media.testing';
-
-/**
- * The Discord-sourced kinds the seed cycles through. `upload` is excluded: an
- * upload row is `source: 'upload'` with an uploader (ROK-1965), never a
- * Discord-sourced picture, so the seed must not mint that hybrid.
- */
-const SEED_KINDS = [
-  'death',
-  'screenshot',
-  'image',
-] as const satisfies readonly HubMediaKind[];
-type SeedKind = (typeof SEED_KINDS)[number];
-
-const BodySchema = z
-  .object({
-    guildId: z.number().int().positive(),
-    count: z
-      .number()
-      .int()
-      .min(SEED_KINDS.length)
-      .max(HUB_MEDIA_PAGE_MAX)
-      .default(14),
-  })
-  .strict();
-
-const CAPTIONS: Record<SeedKind, string> = {
-  death: 'Died to a Troll',
-  screenshot: 'Base at sunset',
-  image: 'Map sketch',
-};
 
 /** Generated pictures, no network: the URL's last segment picks the colour + shape. */
 const generated: HubMediaDownloader = {
@@ -67,7 +43,10 @@ const generated: HubMediaDownloader = {
  * `count` (≥ 3, default 14) generated pictures through the real `ingest`
  * (stub downloader), cycling death → screenshot → image so every Discord
  * kind is present (never `upload` — ROK-1965), one per hour back from now.
- * Each call adds a fresh batch.
+ * ROK-1959 — `{ guildId, source: 'bg3-save', uploadedBy, count? }` instead
+ * stores `count` (default 2) game-save pictures (`kind: 'save'`) owned by
+ * `uploadedBy` through `ingestFromSource`; they list only while the owning
+ * plugin is active. Each call adds a fresh batch.
  */
 @Controller('admin/test/hub-media')
 @SkipThrottle()
@@ -87,37 +66,40 @@ export class HubMediaDemoSeedController {
   async seed(
     @Body() body: unknown,
   ): Promise<{ guildId: number; ids: number[] }> {
-    const parsed = BodySchema.safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new BadRequestException(
-        `Expected { guildId, count?: ${SEED_KINDS.length}..${HUB_MEDIA_PAGE_MAX} }`,
-      );
-    }
-    const { guildId, count } = parsed.data;
-    if ((await findHiddenAt(this.db, guildId)) === undefined) {
+    const req = parseDemoSeedBody(body);
+    if (!req) throw new BadRequestException(DEMO_SEED_USAGE);
+    if ((await findHiddenAt(this.db, req.guildId)) === undefined) {
       throw new NotFoundException('Guild not found');
     }
+    const ids =
+      req.source === 'bg3-save'
+        ? await this.seedSaves(req)
+        : await this.seedDiscord(req.guildId, req.count);
+    return { guildId: req.guildId, ids };
+  }
+
+  private async seedDiscord(guildId: number, count: number): Promise<number[]> {
     const run = randomUUID();
     const ids: number[] = [];
     for (let i = 0; i < count; i += 1) {
-      const result = await this.store.ingest(seedInput(guildId, run, i));
+      const result = await this.store.ingest(discordSeedInput(guildId, run, i));
       if (result.status === 'stored') ids.push(result.mediaId);
     }
-    return { guildId, ids };
+    return ids;
   }
-}
 
-function seedInput(guildId: number, run: string, i: number) {
-  const kind = SEED_KINDS[i % SEED_KINDS.length] ?? 'image';
-  return {
-    guildId,
-    source: 'discord' as const,
-    kind,
-    provenanceKey: `demo:${run}:${i}`,
-    sourceUrl: `https://cdn.discordapp.com/attachments/demo/${run}/${i}.png`,
-    authorName: `Viking ${(i % 5) + 1}`,
-    caption: `${CAPTIONS[kind]} #${i + 1}`,
-    capturedAt: new Date(Date.now() - i * 3_600_000),
-    discord: null,
-  };
+  private async seedSaves(
+    req: Extract<DemoSeedRequest, { source: 'bg3-save' }>,
+  ): Promise<number[]> {
+    const uploader = await findSeedUploader(this.db, req.uploadedBy);
+    if (!uploader) throw new NotFoundException('User not found');
+    const run = randomUUID();
+    const ids: number[] = [];
+    for (let i = 0; i < req.count; i += 1) {
+      const input = await saveSeedInput(req.guildId, run, i, uploader);
+      const result = await this.store.ingestFromSource(input);
+      if (result.status === 'stored') ids.push(result.mediaId);
+    }
+    return ids;
+  }
 }

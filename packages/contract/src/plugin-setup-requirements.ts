@@ -177,5 +177,14 @@ export const BG3_SETUP = {
       required: true,
       appliesTo: ['game_community'],
     },
+    {
+      id: 'gallery-saves',
+      kind: 'other',
+      title: 'Save pictures in the hub Gallery',
+      instructions:
+        "Nothing to install. About 4 hours after a play session ends, the picture of its last save appears in the hub Gallery under Saves. While the hub's spoiler setting hides location and screenshots, save pictures stay hidden for everyone.",
+      required: false,
+      appliesTo: ['game_community'],
+    },
   ],
 } satisfies PluginSetup;

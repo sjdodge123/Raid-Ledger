@@ -230,6 +230,7 @@ export {
     rallyNonVoters,
     addPollMembers,
     removePollMember,
+    reopenLockIn,
 } from './api/scheduling-api';
 
 // Standalone Scheduling Polls (ROK-977)

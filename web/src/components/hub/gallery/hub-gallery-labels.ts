@@ -8,6 +8,8 @@ export const HUB_MEDIA_KIND_LABEL: Record<HubMediaKind, string> = {
     image: 'Picture',
     /** ROK-1965 — member uploads read as screenshots (their chip). */
     upload: 'Screenshot',
+    /** ROK-1959 D-7 — a game-save picture (its own "Saves" chip). */
+    save: 'Save',
 };
 
 /** The tile's accessible name; `now` is injectable for specs. */

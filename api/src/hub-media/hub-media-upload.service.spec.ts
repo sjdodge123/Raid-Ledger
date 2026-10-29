@@ -57,7 +57,7 @@ describe('HubMediaUploadService.upload', () => {
   const actor = { id: 3, role: 'member' as const };
   const viewer = {
     actor,
-    scope: { guildId: 1, includeHidden: false },
+    scope: { guildId: 1, includeHidden: false, excludeSources: [] },
     rights: { canEdit: false, isLeader: false },
   };
 

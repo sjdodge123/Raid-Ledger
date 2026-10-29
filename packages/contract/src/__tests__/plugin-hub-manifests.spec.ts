@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CORE_PLUGIN_ID,
+  HUB_BEHAVIOUR_KINDS,
   PluginHubManifestSchema,
   type PluginHubManifest,
 } from '../plugin-hub-manifest.schema.js';
@@ -87,6 +88,13 @@ describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
       { id: 'valheim', kind: 'scheduled-job', label: 'B' },
     ];
     expect(PluginHubManifestSchema.safeParse({ behaviours, setup: noSetup }).success).toBe(true);
+  });
+
+  it('knows the media-gate behaviour kind (ROK-1959 D-6)', () => {
+    expect(HUB_BEHAVIOUR_KINDS).toContain('media-gate');
+    const behaviours = [{ id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures' }];
+    const parsed = PluginHubManifestSchema.safeParse({ behaviours, setup: noSetup });
+    expect(parsed.error?.issues ?? []).toEqual([]);
   });
 
   it('returns undefined for an unknown or inherited slug', () => {
