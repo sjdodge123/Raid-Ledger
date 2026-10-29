@@ -85,7 +85,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     expect(['valheim', '', null, undefined].map(isBg3GameSlug)).toEqual([false, false, false, false]);
   });
 
-  it('setup: two required per-hub requirements on community hubs, without a check', () => {
+  it('setup: two required per-hub requirements plus the optional Gallery note (ROK-1959), without a check', () => {
     expect(
       BG3_HUB_MANIFEST.setup.requirements.map((r) => ({
         id: r.id,
@@ -97,6 +97,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
     ).toEqual([
       { id: 'upload-saves', kind: 'companion_app', required: true, appliesTo: ['game_community'], hasCheck: false },
       { id: 'bind-campaign', kind: 'other', required: true, appliesTo: ['game_community'], hasCheck: false },
+      { id: 'gallery-saves', kind: 'other', required: false, appliesTo: ['game_community'], hasCheck: false },
     ]);
   });
 });
