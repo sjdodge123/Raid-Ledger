@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -97,4 +97,44 @@ export async function markRemoved(
     )
     .returning({ storageName: hubMedia.storageName });
   return row?.storageName ?? null;
+}
+
+/**
+ * ROK-1959 — which of `keys` already exist on the hub, live OR tombstoned
+ * (a removed picture is never re-added). Empty `keys` → no query.
+ */
+export async function existingKeys(
+  db: Db,
+  guildId: number,
+  keys: readonly string[],
+): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await db
+    .select({ key: hubMedia.provenanceKey })
+    .from(hubMedia)
+    .where(
+      and(
+        eq(hubMedia.guildId, guildId),
+        inArray(hubMedia.provenanceKey, [...keys]),
+      ),
+    );
+  return new Set(rows.map((r) => r.key));
+}
+
+/** ROK-1959 D-9 — a member's live rows from one source, across every hub. */
+export async function liveRowsBySourceAndUploader(
+  db: Db,
+  source: string,
+  userId: number,
+): Promise<{ id: number; guildId: number }[]> {
+  return db
+    .select({ id: hubMedia.id, guildId: hubMedia.guildId })
+    .from(hubMedia)
+    .where(
+      and(
+        eq(hubMedia.source, source),
+        eq(hubMedia.uploadedBy, userId),
+        isNull(hubMedia.removedAt),
+      ),
+    );
 }

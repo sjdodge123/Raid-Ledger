@@ -31,6 +31,7 @@ import {
 } from './hub-media.cursor';
 import { HubMediaDecoratorRegistry } from './hub-media.decorators';
 import { HubMediaSubjectRegistry } from './hub-media.subjects';
+import { HubMediaSourceGateRegistry } from './hub-media.source-gates';
 import { unlinkMediaFiles } from './hub-media.files';
 import { toHubMediaItem } from './hub-media.mappers';
 import { mediaFilePath } from './hub-media.paths';
@@ -62,6 +63,7 @@ export class HubMediaReadService {
     private readonly access: GuildAccessService,
     private readonly decorators: HubMediaDecoratorRegistry,
     private readonly subjects: HubMediaSubjectRegistry,
+    private readonly gates: HubMediaSourceGateRegistry,
   ) {}
 
   /**
@@ -157,7 +159,10 @@ export class HubMediaReadService {
     await unlinkMediaFiles(guildId, storageName);
   }
 
-  /** The D7 404 gate, then the viewer's rights for this request. */
+  /**
+   * The D7 404 gate, then the viewer's rights for this request. ROK-1959
+   * D-5: gated sources are excluded for every viewer, editors included.
+   */
   async viewer(actor: GuildActor, guildId: number): Promise<HubMediaViewer> {
     const rights = await assertCanViewHubMedia(
       this.db,
@@ -165,7 +170,9 @@ export class HubMediaReadService {
       actor,
       guildId,
     );
-    return { actor, rights, scope: { guildId, includeHidden: rights.canEdit } };
+    const excludeSources = await this.gates.hiddenSources(guildId);
+    const includeHidden = rights.canEdit;
+    return { actor, rights, scope: { guildId, includeHidden, excludeSources } };
   }
 
   /** A row the viewer may see (editors include hidden rows), else 404. */

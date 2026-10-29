@@ -1,4 +1,14 @@
-import { and, count, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+} from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubMediaKind } from '@raid-ledger/contract';
@@ -12,13 +22,19 @@ export interface HubMediaScope {
   guildId: number;
   /** Editors see hidden rows (flagged); everyone else never does (D8). */
   includeHidden: boolean;
+  /** ROK-1959 D-5 — sources a gate hides on this hub, for everyone. */
+  excludeSources: readonly string[];
 }
 
 /** Live (not tombstoned) rows of the hub this viewer may see. */
 function visible(scope: HubMediaScope): SQL {
   const live = and(eq(M.guildId, scope.guildId), isNull(M.removedAt));
-  const where = scope.includeHidden ? live : and(live, isNull(M.hiddenAt));
-  return where ?? eq(M.guildId, scope.guildId);
+  const shown = scope.includeHidden ? undefined : isNull(M.hiddenAt);
+  const gated =
+    scope.excludeSources.length > 0
+      ? notInArray(M.source, [...scope.excludeSources])
+      : undefined;
+  return and(live, shown, gated) ?? eq(M.guildId, scope.guildId);
 }
 
 /**
