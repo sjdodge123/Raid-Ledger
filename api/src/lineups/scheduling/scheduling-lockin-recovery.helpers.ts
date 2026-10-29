@@ -191,3 +191,25 @@ export async function recoverClaim(
   );
   return { recovered: true, discardedEventIds };
 }
+
+/**
+ * The poll page's `lockInRecoverable` (ROK-2033): `{ lockInRecoverable: true }`
+ * only for an ADMIN viewer on a claimed-and-never-linked poll (the same
+ * predicate as `findRecoverableClaim`, any age); `{}` otherwise so the key is
+ * omitted under `exactOptionalPropertyTypes`.
+ */
+export function lockInRecoverableField(
+  match: {
+    status: string;
+    linkedEventId: number | null;
+    lockInClaimedAt?: Date | null;
+  },
+  callerRole: string | null,
+): { lockInRecoverable?: true } {
+  const recoverable =
+    callerRole === 'admin' &&
+    match.status === 'scheduled' &&
+    match.linkedEventId === null &&
+    (match.lockInClaimedAt ?? null) !== null;
+  return recoverable ? { lockInRecoverable: true } : {};
+}
