@@ -12,6 +12,7 @@ import { createElement, type ReactNode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type {
+    EventResponseDto,
     MatchDetailResponseDto,
     SchedulePollPageResponseDto,
     ScheduleSlotWithVotesDto,
@@ -46,6 +47,7 @@ import {
     useSchedulingLock,
 } from '../use-scheduling-lock';
 import { at } from '../../../../test/defined';
+import { createMockEvent } from '../../../../test/factories';
 
 const MATCH_ID = 500;
 const LINEUP_ID = 7;
@@ -201,6 +203,33 @@ describe('useSchedulingLock — commit', () => {
 
         expect(toast.error).toHaveBeenCalledWith(RESCHEDULE_LOCK_IN_LOST_TOAST);
         expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('a double click while the lock-in runs sends one request and one toast (ROK-2040)', async () => {
+        let settle: (v: EventResponseDto) => void = () => {};
+        vi.mocked(rescheduleLockInSchedulingPoll).mockImplementationOnce(
+            () => new Promise<EventResponseDto>((resolve) => { settle = resolve; }),
+        );
+        const { result } = renderLock(buildMatch({ linkedEventId: 77 }));
+
+        let first: Promise<void> = Promise.resolve();
+        await act(async () => {
+            first = result.current.requestLock(buildSlot());
+            await vi.waitFor(() =>
+                expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledTimes(1),
+            );
+        });
+        expect(result.current.refreshing).toBe(true);
+        await act(() => result.current.requestLock(buildSlot()));
+        await act(async () => {
+            settle(createMockEvent({ id: 77 }));
+            await first;
+        });
+
+        expect(rescheduleLockInSchedulingPoll).toHaveBeenCalledTimes(1);
+        expect(toast.success).toHaveBeenCalledTimes(1);
+        expect(toast.error).not.toHaveBeenCalled();
+        expect(result.current.refreshing).toBe(false);
     });
 
     it('any other lock-in failure shows the server message', async () => {

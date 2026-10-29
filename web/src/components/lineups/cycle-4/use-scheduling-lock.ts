@@ -8,7 +8,7 @@
  *   - reschedule-vs-create branch: `linkedEventId != null` calls the
  *     claim-first `rescheduleLockInSchedulingPoll` (ROK-2040), which moves the
  *     linked event and re-rosters the slot's voters (ROK-1031) in one request —
- *     a losing racer gets a 409 and the event is not moved;
+ *     a losing racer gets a 409 and moves nothing (the winner already did);
  *     otherwise navigate to `/events/new?gameId&startTime&matchId&lineupId` (verbatim
  *     target from `CreateFromSlot::performNavigate`), plus `copyFromEventId`
  *     when this is a follow-up poll so the create form prefills from the
@@ -48,7 +48,7 @@ export const POLL_CHANGED_MESSAGE =
 
 /** Toast for the reschedule lock-in that lost the race (ROK-2040). */
 export const RESCHEDULE_LOCK_IN_LOST_TOAST =
-  'Someone else locked in this poll first. The event was not moved.';
+  'Someone else locked in this poll first. The event now starts at the time they picked.';
 
 /** Options for {@link SchedulingLock.requestLock}. */
 export interface RequestLockOptions {
@@ -93,7 +93,7 @@ export interface SchedulingLock {
   pendingDistinctVoters: number;
   /** Member count from the same fresh poll (confirm modal copy). */
   pendingMemberCount: number;
-  /** True while the fresh poll is being fetched. */
+  /** True while the fresh poll is fetched or the lock-in request runs. */
   refreshing: boolean;
   /** Begin a lock — refetches, runs guards, then confirm-or-commit. */
   requestLock: (
@@ -165,10 +165,10 @@ function useLockCommit(
   matchId: number,
   lineupId: number,
   hubId: number | null,
-): (slot: ScheduleSlotWithVotesDto) => void {
+): (slot: ScheduleSlotWithVotesDto) => Promise<void> {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  return (slot: ScheduleSlotWithVotesDto): void => {
+  return async (slot: ScheduleSlotWithVotesDto): Promise<void> => {
     const start = new Date(slot.proposedTime);
     if (start <= new Date()) {
       toast.error('Cannot lock a time in the past');
@@ -176,7 +176,7 @@ function useLockCommit(
     }
     if (match.linkedEventId != null) {
       const ids = { matchId, eventId: match.linkedEventId };
-      void lockInReschedule(qc, ids, start);
+      await lockInReschedule(qc, ids, start);
       return;
     }
     navigate(createEventUrl(match, { matchId, lineupId, hubId }, slot));
@@ -199,34 +199,44 @@ export function useSchedulingLock(
   const [pendingSlot, setPendingSlot] =
     useState<ScheduleSlotWithVotesDto | null>(null);
 
-  const requestLock = async (
-    requested: ScheduleSlotWithVotesDto,
-    opts: RequestLockOptions = {},
-  ): Promise<void> => {
+  /** Run `step` once at a time; a second click while one runs is dropped. */
+  const exclusive = async (step: () => Promise<void>): Promise<void> => {
     if (inFlight.current) return;
     inFlight.current = true;
     setRefreshing(true);
-    const ids = { lineupId, matchId, slotId: requested.id };
-    const fresh = await loadFreshSlot(qc, ids);
-    inFlight.current = false;
-    setRefreshing(false);
-    if (!fresh) {
-      toast.error(POLL_CHANGED_MESSAGE);
-      return;
+    try {
+      await step();
+    } finally {
+      inFlight.current = false;
+      setRefreshing(false);
     }
-    const required = computeRequiredVoters(fresh.memberCount);
-    if (opts.forceConfirm || countDistinctVoters(fresh.slot) < required) {
-      setPendingMemberCount(fresh.memberCount);
-      setPendingSlot(fresh.slot);
-      return;
-    }
-    commit(fresh.slot);
   };
+
+  const requestLock = (
+    requested: ScheduleSlotWithVotesDto,
+    opts: RequestLockOptions = {},
+  ): Promise<void> =>
+    exclusive(async () => {
+      const ids = { lineupId, matchId, slotId: requested.id };
+      const fresh = await loadFreshSlot(qc, ids);
+      if (!fresh) {
+        toast.error(POLL_CHANGED_MESSAGE);
+        return;
+      }
+      const required = computeRequiredVoters(fresh.memberCount);
+      if (opts.forceConfirm || countDistinctVoters(fresh.slot) < required) {
+        setPendingMemberCount(fresh.memberCount);
+        setPendingSlot(fresh.slot);
+        return;
+      }
+      // Held until the lock-in settles, so a double click cannot send two.
+      await commit(fresh.slot);
+    });
 
   const confirmLock = (): void => {
     const slot = pendingSlot;
     setPendingSlot(null);
-    if (slot) commit(slot);
+    if (slot) void exclusive(() => commit(slot));
   };
 
   return {
