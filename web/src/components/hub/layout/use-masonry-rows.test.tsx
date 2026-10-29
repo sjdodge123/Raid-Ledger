@@ -33,14 +33,28 @@ function Grid({ heights, wide = 2 }: { heights: number[]; wide?: number }): JSX.
     );
 }
 
+const PLACEMENT = ['grid-column-start', 'grid-row-start', 'grid-row-end'] as const;
+/** Set each time the grid's tracks are read: did any cell still carry an inline placement then? */
+let placedAtRead = false;
+
 /**
- * What a browser reports: computed `grid-template-columns` lists IMPLICIT tracks too, so an
- * inline `grid-column-start` past the explicit columns (a stale lg placement at md) adds one.
+ * What a browser reports: computed `grid-template-columns` lists IMPLICIT tracks too. Two stale
+ * lg placements create one at md: an inline `grid-column-start` past the explicit columns, and
+ * row-locked cells (an inline `grid-row-start`) — sparse auto-placement puts each cell sharing a
+ * row-start past the ones already in that row, so three lg row-1 cards need a third column.
  */
 function resolvedGridStyle(grid: Element): Record<string, string | undefined> {
     const explicit = (gridStyle['grid-template-columns'] ?? '').split(/\s+/).filter(Boolean);
-    const starts = Array.from(grid.children).map((c) => Number((c as HTMLElement).style.getPropertyValue('grid-column-start')) || 0);
-    const extra = Math.max(0, ...starts) - explicit.length;
+    const cells = Array.from(grid.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    placedAtRead = cells.some((c) => PLACEMENT.some((p) => c.style.getPropertyValue(p) !== ''));
+    const starts = cells.map((c) => Number(c.style.getPropertyValue('grid-column-start')) || 0);
+    const perRow = new Map<string, number>();
+    for (const c of cells) {
+        const row = c.style.getPropertyValue('grid-row-start');
+        if (row) perRow.set(row, (perRow.get(row) ?? 0) + (Number(c.dataset.span) || 1));
+    }
+    const needed = Math.max(0, ...starts, ...perRow.values());
+    const extra = needed - explicit.length;
     const tracks = extra > 0 && explicit.length > 1 ? [...explicit, ...Array<string>(extra).fill('0px')] : explicit;
     return { ...gridStyle, 'grid-template-columns': tracks.join(' ') };
 }
@@ -63,6 +77,7 @@ beforeEach(() => {
     observed.length = 0;
     observers.length = 0;
     gridStyle = MD;
+    placedAtRead = false;
     vi.stubGlobal('ResizeObserver', ImmediateResizeObserver);
     vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => {
         const span = el instanceof HTMLElement ? el.dataset.span : undefined;
@@ -150,6 +165,7 @@ describe('useMasonryRows', () => {
         expect(placement('cell-3'), 'lg: third column').toEqual(['3', '1', 'span 48']);
         gridStyle = MD;
         fireResize();
+        expect(placedAtRead, 'md: every stale lg placement (column AND row) is cleared before the grid is read').toBe(false);
         expect(columnStarts().filter((c) => c > 2), 'md: no card left in column 3').toEqual([]);
         const tracks = resolvedGridStyle(screen.getByTestId('grid'))['grid-template-columns']?.split(' ');
         expect(tracks, 'md: no implicit third track').toHaveLength(2);
