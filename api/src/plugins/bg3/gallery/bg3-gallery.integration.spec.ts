@@ -33,6 +33,7 @@ import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
 import { mediaFilePath } from '../../../hub-media/hub-media.paths';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { Bg3GalleryFeed } from '../bg3-gallery.feed';
 import { Bg3GallerySyncCron } from './bg3-gallery-sync.cron';
 import { Bg3GallerySyncService } from './bg3-gallery-sync.service';
 
@@ -427,7 +428,35 @@ describe('Remove + rights (G-5, G-6, G-7)', () => {
     expect(res.status).toBe(200);
     const after = await mediaRows();
     expect(after.map((r) => r.removedAt instanceof Date)).toEqual([true, true]);
+    // Review MINOR 1: the tombstone keeps only its key, not the member.
+    expect(after.map((r) => [r.authorName, r.caption, r.uploadedBy])).toEqual([
+      [null, null, null],
+      [null, null, null],
+    ]);
     expect(files.map((f) => existsSync(f))).toEqual(files.map(() => false));
+  });
+
+  it('G-12 delete-my-data landing after the bytes are read but before the insert leaves no Gallery row (Codex P1)', async () => {
+    await pictured(5, 64);
+    const feed = testApp.app.get(Bg3GalleryFeed);
+    const read = feed.openRawThumbnail.bind(feed);
+    const spy = jest
+      .spyOn(feed, 'openRawThumbnail')
+      .mockImplementationOnce(async (guildId, saveId) => {
+        const bytes = await read(guildId, saveId);
+        const res = await testApp.request
+          .delete('/plugins/bg3/me/data')
+          .set(auth(uploader));
+        expect(res.status).toBe(200);
+        return bytes;
+      });
+    try {
+      await sync();
+    } finally {
+      spy.mockRestore();
+    }
+    const live = (await mediaRows()).filter((r) => r.removedAt === null);
+    expect(live.map((r) => r.provenanceKey)).toEqual([]);
   });
 });
 
