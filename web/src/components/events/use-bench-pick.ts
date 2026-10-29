@@ -4,21 +4,19 @@
  * While the organizer has not touched the marks they follow the live votes;
  * once touched, the marks are kept (minus anyone who stopped voting yes) and
  * never filled in automatically (D7). Submit is blocked until exactly the
- * overflow is marked. If the server refuses the pick on lock-in (the votes
- * changed meanwhile — an HTTP 400), the lock-in is retried once without it, so the server
- * benches the latest yes-voters, and the organizer is told (D6).
+ * overflow is marked. If the pick no longer fits on lock-in (the votes changed
+ * meanwhile), the server benches the latest yes-voters instead and the form
+ * shows FALLBACK_TOAST (ROK-2032 D3, was a client-side 400 retry).
  */
 import { useState } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
-import { completeStandalonePoll } from '../../lib/api-client';
-import { httpStatusOf } from '../../lib/api/api-error';
-import { toast } from '../../lib/toast';
 import type { FormState } from './create-event-form.types';
 import { defaultBenchPick, useSchedulingOverflow, type SchedulingOverflow } from './use-scheduling-overflow';
 
 export const BENCH_PICKER_ID = 'scheduling-bench-picker';
 
-const FALLBACK_TOAST = "Event created, but the votes changed while you were choosing. The latest yes-voters went to the bench. You can move people on the event's roster.";
+/** Shown when the server dropped the organizer's bench pick (ROK-2025 D6 / ROK-2032 D3). */
+export const FALLBACK_TOAST = "Event created, but the votes changed while you were choosing. The latest yes-voters went to the bench. You can move people on the event's roster.";
 
 export interface BenchPick {
     overflow: SchedulingOverflow | null;
@@ -80,19 +78,7 @@ export function guardBenchPick(bench: BenchPick): boolean {
     return true;
 }
 
-/** Completes the lock-in with the pick; on a 400 refusal retries once without it (D6). Any other failure rethrows untouched. */
-export async function completeLockIn(matchId: number, eventId: number | undefined, startTime: string | undefined, benchUserIds: number[] | undefined): Promise<void> {
-    if (eventId === undefined || benchUserIds === undefined) return completeStandalonePoll(matchId, eventId, startTime);
-    try {
-        await completeStandalonePoll(matchId, eventId, startTime, benchUserIds);
-    } catch (error) {
-        if (httpStatusOf(error) !== 400) throw error;
-        await completeStandalonePoll(matchId, eventId, startTime);
-        toast.warning(FALLBACK_TOAST);
-    }
-}
-
-/** ROK-2031: `complete` signs the slot's voters up after the event page has loaded — refetch that event's queries (roster, signups) once it resolves. */
+/** ROK-2031: refetch a locked-in event's queries (roster, signups) — used after a lock-in and after a reschedule's `complete`. */
 export function refreshLockedInEvent(qc: QueryClient, eventId: number | undefined): void {
     if (eventId !== undefined) void qc.invalidateQueries({ queryKey: ['events', eventId] });
 }

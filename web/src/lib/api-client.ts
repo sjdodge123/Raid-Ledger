@@ -237,6 +237,7 @@ export {
     createSchedulingPoll,
     getActiveStandalonePolls,
     completeStandalonePoll,
+    lockInSchedulingPoll,
     getPollSharePreview,
     joinPollShare,
     resetPollShareToken,

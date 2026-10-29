@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CreateEventSchema, EventResponseSchema } from './events.schema.js';
 
 /**
  * Standalone poll visibility (ROK-1750). `private` = "Private — anyone with
@@ -74,6 +75,41 @@ export const CompleteSchedulingPollSchema = z.object({
 });
 
 export type CompleteSchedulingPollDto = z.infer<typeof CompleteSchedulingPollSchema>;
+
+/** ROK-2032: the 409 message a lock-in gets when another one claimed the poll first. */
+export const SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE = 'This poll has already been locked in';
+
+/**
+ * ROK-2032: request body for `POST /scheduling-polls/:matchId/lock-in`, the
+ * claim-first lock-in. The server claims the poll, THEN creates `event`, so a
+ * losing concurrent lock-in gets a 409 and creates nothing. Strict at the top
+ * level; `event` is the create-form body (`CreateEventSchema`, its refines
+ * still run) and the server overrides `event.schedulingMatchId` with the path
+ * param. `startTime` is the winning slot; `benchUserIds` is the organizer's
+ * bench pick (ROK-2025) and needs `startTime`.
+ */
+export const LockInSchedulingPollSchema = z.object({
+    event: CreateEventSchema,
+    startTime: z.string().datetime({ offset: true }).optional(),
+    benchUserIds: z.array(z.number().int().positive()).max(200).optional(),
+}).strict().refine((d) => d.benchUserIds === undefined || d.startTime !== undefined, {
+    message: 'benchUserIds needs startTime',
+    path: ['benchUserIds'],
+});
+
+export type LockInSchedulingPollDto = z.infer<typeof LockInSchedulingPollSchema>;
+
+/**
+ * ROK-2032: 200 response of the lock-in. `benchPickFallback` is true when the
+ * organizer's pick no longer fit the created event, so the server benched the
+ * latest yes-voters instead (the web shows its fallback toast).
+ */
+export const LockInSchedulingPollResponseSchema = z.object({
+    event: EventResponseSchema,
+    benchPickFallback: z.boolean(),
+});
+
+export type LockInSchedulingPollResponseDto = z.infer<typeof LockInSchedulingPollResponseSchema>;
 
 /**
  * Response from creating a standalone scheduling poll.

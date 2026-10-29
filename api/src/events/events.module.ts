@@ -113,6 +113,8 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
     BenchPromotionService,
     ActiveEventCacheService,
     AnalyticsService,
+    // ROK-2032: the claim-first poll lock-in checks the hub tag like POST /events.
+    EventGuildTagService,
   ],
 })
 export class EventsModule {}
