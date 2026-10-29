@@ -1895,6 +1895,10 @@ against a new dependency (Q1: no `@tanstack/react-virtual`). Used by the hub Mem
   32px (below). A cell never wraps: `whitespace-nowrap`, `truncate`, `flex-nowrap overflow-hidden`. Anything added
   to a row (avatar 20px `loading="lazy"`, the "You" `Pill`, a class dot, `ProfessionBadges`) must fit that height —
   clip, never wrap. Rows are not focus traps; the region itself is the tab stop.
+- **A11y + scroll:** the table carries `aria-rowcount` (all rows + headings + the header row) and each mounted row
+  its `aria-rowindex`; cards carry `aria-setsize` / `aria-posinset` within their band. A scroll that unmounts the
+  focused row moves focus to the region (never `<body>`). A new `bands` array (sort, filter, search, grouping)
+  scrolls the box back to the top.
 - Rank bands stay (idle view); a band wholly outside the window is not in the DOM, so a smoke selector on a band
   test id only works for bands near the top.
 - **Class dot:** `h-2 w-2 rounded-full bg-class-<slug>` + `aria-hidden`, before the class name, which stays text.
