@@ -3,9 +3,12 @@
  * avatar (AC11), the class dot (AC12) and the professions join (AC8).
  */
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import { Route, Routes } from 'react-router-dom';
 import type { GuildMemberRow, WowRosterInsightsDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { server } from '../../../test/mocks/server';
+import { MOCK_CHAR_IDS, PROFESSIONS_FIXTURE, rosterInsightsHandler } from '../../../test/handlers/forever-hub-widgets';
 import { FactsCell, NameCell, ProfessionsCell } from './wow-members';
 import { classDotClass, professionIndex, rowProfessions } from './wow-member-professions';
 
@@ -82,6 +85,16 @@ describe('professions join (ROK-1173 AC8)', () => {
 
     it('memoises the index per insights payload', () => {
         expect(professionIndex(INSIGHTS)).toBe(professionIndex(INSIGHTS));
+    });
+
+    it('renders a linked row’s professions as ProfessionBadges, reading the guild id from /hubs/:id', async () => {
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
+        renderWithProviders(
+            <Routes><Route path="/hubs/:id" element={<ProfessionsCell row={row({ characterId: MOCK_CHAR_IDS.thrall })} />} /></Routes>,
+            { initialEntries: ['/hubs/7'] },
+        );
+        const cell = await screen.findByTestId('guild-member-professions');
+        expect(within(cell).getByTitle('Alchemy 225/300'), 'AC8: the linked character’s synced profession is shown').toBeInTheDocument();
     });
 
     it('renders no professions cell for an unlinked row', () => {
