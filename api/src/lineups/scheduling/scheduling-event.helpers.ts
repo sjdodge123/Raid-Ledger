@@ -187,12 +187,13 @@ async function discardEvents(
  * The claim commits BEFORE the create (see `scheduling-lockin-claim.helpers`),
  * so no pooled connection is held while `EventsService.create` takes its own.
  * A concurrent lock-in — expired or open path — 409s before creating anything.
- * Nothing else can move the claimed row before the link write: a cancel needs
- * `scheduling`/`suggested`, so a cancel during the claim window archives
- * nothing and still returns success, and the poll locks in anyway (the same
- * "lock-in finished first" ordering as a cancel that arrives after it). The
- * lost-link branch below is therefore defensive: every instance this call made
- * is deleted (their DELETED listeners remove any Discord post) before the 409.
+ * A cancel needs `scheduling`/`suggested`, so a cancel during the claim window
+ * archives nothing and still returns success, and the poll locks in anyway
+ * (the same "lock-in finished first" ordering as a cancel that arrives after
+ * it). Only lock-in recovery (ROK-2033: the stale-claim cron or an admin
+ * reopen) can move the claimed row before the link write; the link then fails
+ * its token and the lost-link branch below deletes every instance this call
+ * made (their DELETED listeners remove any Discord post) before the 409.
  * If the link write itself throws, the instances are deleted the same way and
  * the claim is released before the error is rethrown.
  *
