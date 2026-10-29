@@ -3,6 +3,7 @@
  * Functions for schedule poll page, slot suggestions, voting, and event creation.
  */
 import type {
+  ReopenLockInResponseDto,
   SchedulePollPageResponseDto,
   SchedulingBannerDto,
   OtherPollsResponseDto,
@@ -110,6 +111,19 @@ export async function cancelSchedulePoll(
     `/lineups/${lineupId}/schedule/${matchId}/cancel`,
     { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
   );
+}
+
+/**
+ * ROK-2033: admin "Reopen lock-in" — restores a poll whose lock-in claimed
+ * the match but never linked an event back to `scheduling`. 409 when there is
+ * nothing to reopen (or the in-flight lock-in finished first).
+ */
+export async function reopenLockIn(
+  matchId: number,
+): Promise<ReopenLockInResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/reopen-lock-in`, {
+    method: 'POST',
+  });
 }
 
 /**

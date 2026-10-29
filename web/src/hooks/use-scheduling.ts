@@ -13,6 +13,7 @@ import type {
   RemindVotersResponseDto,
   ScheduleVoteStance,
   ScheduleVoteSource,
+  ReopenLockInResponseDto,
 } from '@raid-ledger/contract';
 import { summariseRally } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
@@ -29,10 +30,12 @@ import {
   remindVoters,
   rallyNonVoters,
   addPollMembers,
+  reopenLockIn,
 } from '../lib/api-client';
 import { PARTICIPANTS_KEY } from './use-lineups';
 import { weekStartQueryValue, weekTzOffsetMinutes } from '../lib/week-start-query';
 import { invalidateHubPolls } from '../components/hub/events/hub-polls-api';
+import { isConflictError } from '../lib/api/api-error';
 
 /** Query key prefix for scheduling poll queries. */
 const SCHEDULE_KEY = ['scheduling'] as const;
@@ -401,5 +404,27 @@ export function useCancelSchedulePoll() {
       toast.success('Scheduling poll cancelled');
     },
     onError: (err) => { toast.error(err.message || 'Failed to cancel poll'); },
+  });
+}
+
+/**
+ * ROK-2033: admin "Reopen lock-in" for a lock-in that never linked an event.
+ * Settled either way → refetch the poll: on 200 it shows `scheduling`; on 409
+ * (nothing to reopen / the in-flight lock-in finished first) the page shows
+ * whatever the server now holds, and the API's own message is the toast.
+ */
+export function useReopenLockIn() {
+  const qc = useQueryClient();
+  return useMutation<ReopenLockInResponseDto, Error, { matchId: number }>({
+    mutationFn: ({ matchId }) => reopenLockIn(matchId),
+    onSuccess: () => { toast.success('Poll reopened'); },
+    onError: (err) => {
+      if (isConflictError(err)) { toast(err.message); return; }
+      toast.error(err.message || "Couldn't reopen the poll");
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: [...SCHEDULE_KEY] });
+      invalidateHubPolls(qc);
+    },
   });
 }
