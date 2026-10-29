@@ -1,5 +1,5 @@
 /** ROK-1942 — the Gallery dialog: viewer keys + buttons over the filtered set, focus return, chips, See-all paging, role-gated actions. */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
@@ -178,13 +178,22 @@ describe('HubGalleryDialog — viewer', () => {
             if (new URL(request.url).searchParams.get('cursor') !== null && pageIns++ === 0) await gate;
             return undefined;
         }));
-        open({ index: 0, mediaId: 28 }, {}, queryClient);
-        await waitFor(() => expect(pageIns).toBe(1));
-        await act(() => queryClient.invalidateQueries({ queryKey: ['hub-media', 5] }));
-        release();
-        await waitFor(() => expect(screen.queryByText('Loading pictures…')).not.toBeInTheDocument());
-        expect(await caption()).toMatch(who(28));
-        expect(counter()).toBe('28 of 30');
+        // Only Date is faked (RTL's waitFor needs real timers): the refetch's dataUpdatedAt moves deterministically.
+        const t0 = Date.UTC(2026, 0, 1);
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(t0);
+            open({ index: 0, mediaId: 28 }, {}, queryClient);
+            await waitFor(() => expect(pageIns).toBe(1));
+            vi.setSystemTime(t0 + 1000);
+            await act(() => queryClient.invalidateQueries({ queryKey: ['hub-media', 5] }));
+            release();
+            await waitFor(() => expect(screen.queryByText('Loading pictures…')).not.toBeInTheDocument());
+            expect(await caption()).toMatch(who(28));
+            expect(counter()).toBe('28 of 30');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('an id in no page falls back to the requested index once every page is loaded', async () => {
