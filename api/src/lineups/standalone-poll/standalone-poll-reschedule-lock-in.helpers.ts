@@ -132,7 +132,7 @@ async function moveOrRelease(
   } catch (err: unknown) {
     if (await eventStartsAt(deps.db, target.eventId, dto.startTime)) {
       deps.logger.error(
-        `Reschedule lock-in ${matchId}: event moved but a later step failed; keeping the claim: ${String(err)}`,
+        `Reschedule lock-in ${matchId}: moved, then ${String(err)}`,
       );
       return null;
     }

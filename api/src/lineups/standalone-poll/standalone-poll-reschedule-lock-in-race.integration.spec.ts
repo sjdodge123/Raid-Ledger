@@ -27,6 +27,9 @@ import * as schema from '../../drizzle/schema';
 import { nonEmpty } from '../../common/testing/narrow';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import { EventsService } from '../../events/events.service';
+import { ActivityLogService } from '../../activity-log/activity-log.service';
+import { createMemberAndLogin } from '../../events/signups.integration.spec-helpers';
+import * as queryHelpers from './standalone-poll-query.helpers';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -90,10 +93,10 @@ async function seedReschedulePoll(): Promise<ReschedulePoll> {
 }
 
 /** The web's reschedule lock-in at `slot` (a two-hour event). */
-function rescheduleLockIn(matchId: number, slot: Date) {
+function rescheduleLockIn(matchId: number, slot: Date, token = adminToken) {
   return testApp.request
     .post(`/scheduling-polls/${matchId}/reschedule-lock-in`)
-    .set('Authorization', `Bearer ${adminToken}`)
+    .set('Authorization', `Bearer ${token}`)
     .send({
       startTime: slot.toISOString(),
       endTime: new Date(slot.getTime() + TWO_HOURS_MS).toISOString(),
@@ -167,5 +170,65 @@ describe('POST /scheduling-polls/:matchId/reschedule-lock-in (ROK-2040)', () => 
     expect(moves).not.toHaveBeenCalled();
     const event = await eventRow(poll.eventId);
     expect(event?.duration[0].toISOString()).toBe(SLOT_A.toISOString());
+  });
+});
+
+describe('reschedule lock-in failure paths (ROK-2040)', () => {
+  it('a throw after the move commits keeps the claim, so a retry 409s instead of moving the event again', async () => {
+    const poll = await seedReschedulePoll();
+    const moves = jest.spyOn(testApp.app.get(EventsService), 'reschedule');
+    // `activityLog.log` runs after `rescheduleEvent` has committed the move.
+    jest
+      .spyOn(testApp.app.get(ActivityLogService), 'log')
+      .mockRejectedValueOnce(new Error('activity log unavailable'));
+
+    const first = await rescheduleLockIn(poll.matchId, SLOT_A);
+    const retry = await rescheduleLockIn(poll.matchId, SLOT_A);
+
+    expect(moves).toHaveBeenCalledTimes(1);
+    expect(first.status).toBe(200);
+    expect(first.body.startTime).toBe(SLOT_A.toISOString());
+    expect(retry.status).toBe(409);
+    expect(retry.body.message).toBe(SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE);
+    expect(await matchStatus(poll.matchId)).toBe('scheduled');
+    expect((await eventRow(poll.eventId))?.reschedulingPollId).toBeNull();
+  });
+
+  it('a failed archive/release after the move still completes the lock-in', async () => {
+    const poll = await seedReschedulePoll();
+    const moves = jest.spyOn(testApp.app.get(EventsService), 'reschedule');
+    jest
+      .spyOn(queryHelpers, 'clearReschedulingPollId')
+      .mockRejectedValueOnce(new Error('connection reset'));
+
+    const res = await rescheduleLockIn(poll.matchId, SLOT_A);
+
+    expect(res.status).toBe(200);
+    expect(res.body.startTime).toBe(SLOT_A.toISOString());
+    expect(moves).toHaveBeenCalledTimes(1);
+    expect(await matchStatus(poll.matchId)).toBe('scheduled');
+    expect((await rescheduleLockIn(poll.matchId, SLOT_B)).status).toBe(409);
+  });
+
+  it('a poll creator who does not own the event gets 403 before the claim; the poll stays claimable', async () => {
+    const poll = await seedReschedulePoll();
+    const member = await createMemberAndLogin(
+      testApp,
+      'resched-poll-owner',
+      'resched-poll-owner@test.local',
+    );
+    // The member owns the POLL (passes the poll check) but not the EVENT.
+    await testApp.db
+      .update(schema.communityLineups)
+      .set({ createdBy: member.userId })
+      .where(eq(schema.communityLineups.id, poll.lineupId));
+    const moves = jest.spyOn(testApp.app.get(EventsService), 'reschedule');
+
+    const denied = await rescheduleLockIn(poll.matchId, SLOT_A, member.token);
+
+    expect(denied.status).toBe(403);
+    expect(moves).not.toHaveBeenCalled();
+    expect(await matchStatus(poll.matchId)).toBe('scheduling');
+    expect((await rescheduleLockIn(poll.matchId, SLOT_A)).status).toBe(200);
   });
 });
