@@ -268,7 +268,7 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
   });
 
   it("AC9: a member's addon import shows on the next read (no TTL wait)", async () => {
-    const name = 'Fayimport';
+    const name = 'Fay Import';
     const who = buildWho({
       guid: 'Player-4395-0F192500',
       fullName: name,
