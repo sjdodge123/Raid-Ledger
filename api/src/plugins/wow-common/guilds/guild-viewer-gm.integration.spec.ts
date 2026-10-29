@@ -123,26 +123,21 @@ beforeAll(async () => {
 describe('GET /:id — viewer.isGuildMaster (ROK-1815)', () => {
   it('two linked characters, rank 0 on the second → isGuildMaster', async () => {
     const viewer = await viewerOf('twoGm');
-    expect(
-      viewer.isGuildMaster,
-      'any live linked character at rank 0 makes the viewer the GM',
-    ).toBe(true);
+    // Any live linked character at rank 0 makes the viewer the GM.
+    expect(viewer.isGuildMaster).toBe(true);
   });
 
   it('two linked characters, neither rank 0 → no isGuildMaster', async () => {
     const viewer = await viewerOf('twoNoGm');
-    expect(
-      viewer.isGuildMaster ?? false,
-      'no rank-0 character, so no Guild Master label',
-    ).toBe(false);
+    // No rank-0 character, so no Guild Master label.
+    expect(viewer.isGuildMaster ?? false).toBe(false);
   });
 
   it('a rank-0 row missing from the latest snapshot → no isGuildMaster', async () => {
     const viewer = await viewerOf('staleGm');
-    expect(viewer.role, 'still a member through the live alt').toBe('member');
-    expect(
-      viewer.isGuildMaster ?? false,
-      'a stale rank-0 row (last_seen_at < last_snapshot_at) must not label the GM',
-    ).toBe(false);
+    // Still a member through the live alt...
+    expect(viewer.role).toBe('member');
+    // ...but a stale rank-0 row (last_seen_at < last_snapshot_at) must not label the GM.
+    expect(viewer.isGuildMaster ?? false).toBe(false);
   });
 });
