@@ -137,7 +137,7 @@ export class GuildPageService {
         // ROK-1815: a hero label only; rank 0 grants nothing (ROK-1794).
         ...(holdsGuildMasterRank(ownRows) ? { isGuildMaster: true } : {}),
       },
-      ranks: groupRoster(rows, links),
+      ranks: groupRoster(rows, links, actor.id),
       roleCounts: computeRoleCounts(rows),
     };
   }

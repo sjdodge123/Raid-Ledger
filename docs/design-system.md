@@ -48,8 +48,8 @@ Reviewers treat a missing update as a MINOR finding. See CLAUDE.md "Reference de
    `index.css:106` (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:199` `sky`, `:251` `dawn`,
    `:303` `holy`, `:355` `celestial`: those four re-declare the surface/text/edge set, so a surface token
    added only to the shared block is unthemed in them. **Scheme-agnostic accents are the exception** —
-   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger` and the two
-   `--color-faction-*` hues (ROK-1815) live in exactly
+   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger`, the two
+   `--color-faction-*` hues (ROK-1815) and the nine `--color-class-*` dots (ROK-1173) live in exactly
    two blocks, `@theme` and the shared light block, and inherit into the four per-scheme blocks (ROK-1586
    OQ-1). The dark defaults live on `@theme` (`:32`) and `html` (`:96`) — the root only, which is §6.8.
 
@@ -90,6 +90,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
 | `--color-faction-alliance` | `bg-faction-alliance/10` `border-faction-alliance/30` `text-faction-alliance` | `#60a5fa` | `#1e40af` | WoW Alliance — categorical, not a status: the guild hero's faction pill (`Pill tone="faction-alliance"`, ROK-1815). The label always names the faction |
 | `--color-faction-horde` | `bg-faction-horde/10` `border-faction-horde/30` `text-faction-horde` | `#f87171` | `#991b1b` | WoW Horde — same rules (ROK-1815). Light is red-800 so it clears AA on every light scheme's /10 tint (red-700 fails on celestial / quest-log). Any other faction (Neutral) stays a neutral pill |
+| `--color-class-{warrior,paladin,hunter,rogue,priest,shaman,mage,warlock,druid}` | `bg-class-<slug>` (via `classDotClass()` in `plugins/wow/hub/wow-member-professions.ts` — full class strings, so Tailwind emits them) | Blizzard class colours (`#c69b6d` … `#ff7c0a`) | deepened copies, ≥6:1 on `#ffffff` so the 8px dot reads at a glance (priest `#475569`, rogue `#854d0e`; operator 2026-10-29) | WoW class — categorical, never a status. ONLY the 8px decorative dot beside the class name on the Members list (`aria-hidden`; the class text stays `text-muted`). Not for text, fills or borders (ROK-1173). Unknown classes get no dot |
 | `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#065f46` | Free / confirmed / "on" / primary state (ROK-1586). Light is emerald-800 (TDB:1793, operator ruling D:1714): 7.68 surface / 7.01 panel / 6.02 own /10 tint, and AA on every tinted light scheme's own panel and tint (worst celestial 5.69 / 4.91) — `semantic-tokens.guard.test.ts` |
 | `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
 | `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#f87171` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586). Dark is red-400 so it reads as text: 5.29 panel / 6.45 surface (TDB:1770 ruling 2026-10-08; red-500 `#ef4444` was 3.89 on panel); white on a solid dark fill is 2.77:1, so a solid `bg-danger` label takes `--color-status-solid-label`. celestial and quest-log declare their own light danger, red-800 `#991b1b` — 5.25 / 5.58 on their own /10 tint (shared `#b91c1c` was 4.12 / 4.39 there; TDB:1770) |
@@ -367,6 +368,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
 | `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
 | `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
+| `HubMemberVirtualList` + `virtualSlice` (`hub-member-virtual.helpers.ts`) | `components/hub/` | A long, fixed-row-height list that must stay cheap at 2,000 rows — the §4.32 windowed member list. Reuse it; do not add a virtualisation library |
 | `ArrangeRow` + `useRowDrag` + `arrange-draft.ts` (`moveRow`, `moveTo`, `toggleRow`, `moveAnnouncement`) | `components/hub/arrange/` | Letting someone reorder / hide / add the cells of a configurable widget grid — the §4.28 arrange list. Reuse these; do not build a second sortable list or add a drag library |
 | `SessionNoteItemsEditor` | `components/hub/session-note/` | An editable short list inside a form (ROK-1968 checklist): one `Input` per row, ghost `iconOnly` `Button`s for move up / move down / remove, and an "Add item" `Button` hidden at the cap. Not a new pattern — it composes inventory primitives and reorders with `arrange-draft.ts` `moveRow`. Reuse it (or its shape) for the next keyboard-reorderable form list; use the §4.28 arrange list when the rows are a grid's cells |
 | `NominatingComposite.tsx`, `VotingComposite.tsx`, `SchedulingComposite.tsx` | `components/lineups/cycle-4/` | Whole-phase page shells — extend these, don't build a fourth |
@@ -1879,3 +1881,28 @@ list, not this grid.
 Sample: `/dev/design-system` → "Pattern — masonry-packed card grid" (`masonry-grid-section.tsx` + lazy
 `masonry-grid-demo.tsx`: the real hook over mixed-height span-1 / span-2 cards, in both colour families via the
 side-by-side view); live on every hub Overview.
+
+### 4.32 Windowed member list — fixed-height rows, hand-rolled (ROK-1173)
+
+**New pattern** — nothing in the inventory renders only the visible slice of a long list, and the operator ruled
+against a new dependency (Q1: no `@tanstack/react-virtual`). Used by the hub Members tab
+(`web/src/components/hub/hub-member-virtual-list.tsx`, `hub-member-virtual.helpers.ts`, shells in `hub-member-table.tsx`).
+
+- One scroll box, `max-h-[70vh] overflow-auto`, `role="region" aria-label="Members list" tabIndex={0}`. The viewport
+  height is `round(innerHeight × 0.7)` (no DOM measuring); `virtualSlice()` maps `scrollTop` to the mounted bands
+  plus a top and bottom spacer (`<tbody aria-hidden>` / `<div aria-hidden>`), with 8 rows of overscan.
+- **Every row has a FIXED height**, set inline: table row 44px / band heading 32px (≥1024px), card 64px / heading
+  32px (below). A cell never wraps: `whitespace-nowrap`, `truncate`, `flex-nowrap overflow-hidden`. Anything added
+  to a row (avatar 20px `loading="lazy"`, the "You" `Pill`, a class dot, `ProfessionBadges`) must fit that height —
+  clip, never wrap. Rows are not focus traps; the region itself is the tab stop.
+- **A11y + scroll:** the table carries `aria-rowcount` (all rows + headings + the header row) and each mounted row
+  its `aria-rowindex`; cards carry `aria-setsize` / `aria-posinset` within their band. A scroll that unmounts the
+  focused row moves focus to the region (never `<body>`). A new `bands` array (sort, filter, search, grouping)
+  scrolls the box back to the top.
+- Rank bands stay (idle view); a band wholly outside the window is not in the DOM, so a smoke selector on a band
+  test id only works for bands near the top.
+- **Class dot:** `h-2 w-2 rounded-full bg-class-<slug>` + `aria-hidden`, before the class name, which stays text.
+
+**DO** — reuse `HubMemberVirtualList` for any hub list that can reach hundreds of rows. **DON'T** — give a row
+variable height, add a virtualisation library, or use a class colour for text. Sample: `/dev/design-system` →
+"Windowed member list + class dots" (`member-list-section.tsx`, 2,000 static rows, both shells).
