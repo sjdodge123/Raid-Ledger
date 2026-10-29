@@ -16,7 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import sharp from 'sharp';
 import type { Response } from 'superagent';
 import {
@@ -26,12 +26,16 @@ import {
   type HubMediaListResponse,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  waitFor,
+} from '../../../common/testing/integration-helpers';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { HUB_NOT_FOUND } from '../../../guilds/hub-hidden.helpers';
 import { mediaFilePath } from '../../../hub-media/hub-media.paths';
+import { HubMediaService } from '../../../hub-media/hub-media.service';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { Bg3GalleryFeed } from '../bg3-gallery.feed';
 import { Bg3GallerySyncCron } from './bg3-gallery-sync.cron';
@@ -458,7 +462,62 @@ describe('Remove + rights (G-5, G-6, G-7)', () => {
     const live = (await mediaRows()).filter((r) => r.removedAt === null);
     expect(live.map((r) => r.provenanceKey)).toEqual([]);
   });
+
+  /**
+   * Delete-my-data starts INSIDE the copy (after the re-check passed, before
+   * the insert) and runs concurrently. With `deleteAllFor`'s lock it parks on
+   * the uploader's advisory lock until the copy commits, then tombstones the
+   * new row; without it, it finishes first and the insert lands live. We
+   * wait until it has either finished or is waiting on an advisory lock —
+   * never on it finishing, which would deadlock the lock-holding copy.
+   */
+  it('G-12b delete-my-data started after the copy’s re-check waits for the copy, then tombstones its row (P1 lock)', async () => {
+    await pictured(5, 65);
+    const media = testApp.app.get(HubMediaService);
+    const ingest = media.ingestFromSource.bind(media);
+    const box: { deletion: Promise<Response> | null } = { deletion: null };
+    let settled = false;
+    const spy = jest
+      .spyOn(media, 'ingestFromSource')
+      .mockImplementationOnce(async (input) => {
+        box.deletion = Promise.resolve(
+          testApp.request.delete('/plugins/bg3/me/data').set(auth(uploader)),
+        ).finally(() => (settled = true));
+        await waitFor(
+          async () => {
+            if (settled || (await advisoryWaiters()) > 0) return;
+            throw new Error('delete-my-data neither finished nor waiting');
+          },
+          5000,
+          25,
+        );
+        return ingest(input);
+      });
+    try {
+      await sync();
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await must(box.deletion, 'delete-my-data request')).status).toBe(
+      200,
+    );
+    const live = (await mediaRows()).filter((r) => r.removedAt === null);
+    expect(live.map((r) => r.provenanceKey)).toEqual([]);
+  });
 });
+
+/** Backends blocked on an advisory lock right now. */
+async function advisoryWaiters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(
+    sql`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`,
+  );
+  return Number([...rows][0]?.n ?? 0);
+}
+
+function must<T>(value: T | null, label: string): T {
+  if (value === null) throw new Error(`${label} was never started`);
+  return value;
+}
 
 describe('reads (G-10, G-11)', () => {
   it('G-10 ?kind=save lists only save rows; kinds still names both', async () => {
