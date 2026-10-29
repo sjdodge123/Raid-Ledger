@@ -36,6 +36,8 @@ export interface SeedGuildInput {
   withDings: boolean;
   /** ROK-1916: also seed guild-export presence (Last seen). */
   withPresence: boolean;
+  /** ROK-1915: also seed LedgerLink gear snapshots (Gear readiness). */
+  withGear: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -78,6 +80,7 @@ interface RawSeedFlags {
   withLockouts?: unknown;
   withDings?: unknown;
   withPresence?: unknown;
+  withGear?: unknown;
 }
 
 /** The opt-in boolean flags; 400 on a non-boolean. */
@@ -89,6 +92,7 @@ function parseSeedFlags(
     withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),
     withDings: boolFlag(raw.withDings, 'withDings'),
     withPresence: boolFlag(raw.withPresence, 'withPresence'),
+    withGear: boolFlag(raw.withGear, 'withGear'),
   };
 }
 
