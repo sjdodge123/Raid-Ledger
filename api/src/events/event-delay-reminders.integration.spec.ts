@@ -6,6 +6,8 @@
  * time-to-start) must fire again; windows already past for the new start stay
  * deduped so a delay never bursts extra DMs. Drives the reminder dispatch with
  * an explicit `now` so the "30 minutes later" pass is deterministic.
+ *
+ * Notification ids are random UUIDs, so assertions never depend on row order.
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -31,7 +33,7 @@ async function seedEventWithSignup(
   testApp: TestApp,
   now: Date,
   startOffsetMs: number,
-): Promise<{ eventId: number; userId: number }> {
+): Promise<{ eventId: number; userId: number; start: Date }> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
@@ -61,10 +63,10 @@ async function seedEventWithSignup(
   await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId: event.id, userId: user.id });
-  return { eventId: event.id, userId: user.id };
+  return { eventId: event.id, userId: user.id, start };
 }
 
-/** Reminder notifications for one user and window, oldest first. */
+/** Reminder notification payloads for one user and window (unordered). */
 async function remindersFor(
   testApp: TestApp,
   userId: number,
@@ -78,11 +80,15 @@ async function remindersFor(
         eq(schema.notifications.userId, userId),
         eq(schema.notifications.type, 'event_reminder'),
       ),
-    )
-    .orderBy(schema.notifications.id);
+    );
   return rows
     .map((r) => asRecord(r.payload))
     .filter((p) => p['reminderWindow'] === window);
+}
+
+/** Payload start times of the given reminders, sorted for set comparison. */
+function startTimes(payloads: Record<string, unknown>[]): unknown[] {
+  return payloads.map((p) => p['startTime']).sort();
 }
 
 /** Dedup window types recorded for the event + user. */
@@ -138,7 +144,7 @@ function describeDelayRearmsReminders() {
 
   it('re-sends the 15min reminder for the new start after a +30 delay', async () => {
     const t0 = new Date();
-    const { eventId, userId } = await seedEventWithSignup(
+    const { eventId, userId, start } = await seedEventWithSignup(
       testApp,
       t0,
       14 * MINUTE,
@@ -149,9 +155,11 @@ function describeDelayRearmsReminders() {
     const { newStart } = await delay(eventId, 30);
     await reminderPass(new Date(newStart.getTime() - 14 * MINUTE));
 
+    // One 15min reminder for the old start and one for the new start.
     const fifteen = await remindersFor(testApp, userId, '15min');
-    expect(fifteen).toHaveLength(2);
-    expect(fifteen[1]?.['startTime']).toBe(newStart.toISOString());
+    expect(startTimes(fifteen)).toEqual(
+      [start.toISOString(), newStart.toISOString()].sort(),
+    );
     // The 1hour window was already past for the new start: no second send.
     expect(await remindersFor(testApp, userId, '1hour')).toHaveLength(1);
   });
@@ -180,6 +188,40 @@ function describeDelayRearmsReminders() {
     expect(await remindersFor(testApp, userId, '1hour')).toHaveLength(1);
     expect(await remindersFor(testApp, userId, '24hour')).toHaveLength(1);
     expect(await remindersFor(testApp, userId, '15min')).toHaveLength(1);
+  });
+
+  it('a pass that loaded the old start cannot claim after the delay', async () => {
+    const t0 = new Date();
+    const { eventId, userId, start } = await seedEventWithSignup(
+      testApp,
+      t0,
+      14 * MINUTE,
+    );
+    // An in-flight cron pass loads the event while it still has the old start.
+    const stale = await fetchCandidateEvents(testApp.db, t0);
+    expect(nonEmpty(stale, 'stale candidates')[0].duration[0]).toEqual(start);
+
+    const { newStart } = await delay(eventId, 30);
+    // The stale pass now tries to claim + send with the old start.
+    const claimed = await reminderService.sendReminder({
+      eventId,
+      userId,
+      windowType: '15min',
+      windowLabel: '15 Minutes',
+      title: 'Delayed Raid',
+      startTime: start,
+      minutesUntil: 14,
+      characterDisplay: null,
+    });
+    expect(claimed).toBe(false);
+    await reminderService['dispatchReminderWindows'](stale, t0, 'UTC');
+    expect(await remindersFor(testApp, userId, '15min')).toHaveLength(0);
+    expect(await dedupTypes(testApp, eventId, userId)).toEqual([]);
+
+    // The next pass, at new start -14 min, sends the new-time reminder.
+    await reminderPass(new Date(newStart.getTime() - 14 * MINUTE));
+    const fifteen = await remindersFor(testApp, userId, '15min');
+    expect(startTimes(fifteen)).toEqual([newStart.toISOString()]);
   });
 }
 describe('Event delay re-arms reminders (integration)', () =>
