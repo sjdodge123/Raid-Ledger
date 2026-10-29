@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BG3_CAMPAIGN_NAME_MAX,
+  BG3_GALLERY_SOURCE_ID,
+  BG3_GALLERY_SYNC_JOB_NAME,
+  BG3_INGEST_SOURCE_ID,
   BG3_GAME_SLUG,
   BG3_GAME_SLUGS,
   Bg3ClaimBodySchema,
@@ -176,5 +179,13 @@ describe('write bodies', () => {
     expect(Bg3UpdateCampaignBodySchema.safeParse({ name: 'A', isActive: true }).success).toBe(false);
     expect(Bg3DefaultCampaignBodySchema.parse({ campaignId: null })).toEqual({ campaignId: null });
     expect(Bg3ClaimBodySchema.safeParse({ slotKey: 'Generic:Human:1', userId: 9 }).success).toBe(false);
+  });
+});
+
+describe('Gallery copy constants (ROK-1959 D-12)', () => {
+  it('names the sync cron and a gallery ingest source distinct from the save ingest', () => {
+    expect(BG3_GALLERY_SYNC_JOB_NAME).toBe('Bg3GalleryCron_sync');
+    expect(BG3_GALLERY_SOURCE_ID).toBe('bg3-save.gallery');
+    expect(BG3_GALLERY_SOURCE_ID).not.toBe(BG3_INGEST_SOURCE_ID);
   });
 });

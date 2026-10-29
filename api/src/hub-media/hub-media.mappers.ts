@@ -13,6 +13,8 @@ export function hubMediaBytesPath(
 const SOURCE_LABEL: Record<HubMediaSource, string> = {
   discord: 'Discord',
   upload: 'Uploaded',
+  /** ROK-1959 D-8 — game-neutral: core never names the game. */
+  'bg3-save': 'Game save',
 };
 
 /** `hub_media_source_check` admits only these two; anything else reads as Discord. */
