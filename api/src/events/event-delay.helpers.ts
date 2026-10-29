@@ -139,8 +139,30 @@ export function reminderWindowsToRearm(
 }
 
 /**
- * Writes the shifted duration, then clears the reminder dedup rows for the
- * windows that re-open for the new start (ROK-2042) on the same connection.
+ * Clears the reminder dedup rows for the windows that re-open for a moved
+ * start (see `reminderWindowsToRearm`), so they fire again for the new time.
+ * Shared by Running Late (ROK-2042) and the event edit form (ROK-2045).
+ */
+export async function rearmReminderWindows(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  newStart: Date,
+): Promise<void> {
+  const rearm = reminderWindowsToRearm(newStart);
+  if (rearm.length === 0) return;
+  await db
+    .delete(schema.eventRemindersSent)
+    .where(
+      and(
+        eq(schema.eventRemindersSent.eventId, eventId),
+        inArray(schema.eventRemindersSent.reminderType, rearm),
+      ),
+    );
+}
+
+/**
+ * Writes the shifted duration, then re-arms the reminder windows that re-open
+ * for the new start (ROK-2042) on the same connection.
  */
 async function persistDelayedDuration(
   db: PostgresJsDatabase<typeof schema>,
@@ -152,16 +174,7 @@ async function persistDelayedDuration(
     .update(schema.events)
     .set({ duration: [newStart, newEnd], updatedAt: new Date() })
     .where(eq(schema.events.id, eventId));
-  const rearm = reminderWindowsToRearm(newStart);
-  if (rearm.length === 0) return;
-  await db
-    .delete(schema.eventRemindersSent)
-    .where(
-      and(
-        eq(schema.eventRemindersSent.eventId, eventId),
-        inArray(schema.eventRemindersSent.reminderType, rearm),
-      ),
-    );
+  await rearmReminderWindows(db, eventId, newStart);
 }
 
 /**
