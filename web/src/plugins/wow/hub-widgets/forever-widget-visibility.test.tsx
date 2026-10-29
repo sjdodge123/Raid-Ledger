@@ -14,7 +14,7 @@ import { GuildRaidsSchema, type GuildPage, type GuildRaidsDto, type WowRosterIns
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
-    PROFESSIONS_FIXTURE, ROLES_FIXTURE, VISITOR_FIXTURE, contentEvent, createEmptyRosterInsights, createMockRosterInsights, guildRaidsHandler, questReadinessHandler, readinessFixture,
+    PROFESSIONS_FIXTURE, ROLES_FIXTURE, VISITOR_FIXTURE, contentEvent, createBareRosterInsights, createMockRosterInsights, guildRaidsHandler, questReadinessHandler, readinessFixture,
     rosterInsightsHandler,
 } from '../../../test/handlers/forever-hub-widgets';
 import { fetchApi } from '../../../lib/api-client';
@@ -131,7 +131,7 @@ describe('Forever class / level / role widgets on a community hub (ROK-1925)', (
     });
 
     it('a visitor (the API sends an empty payload) sees none of the three', async () => {
-        await renderAs('member', 'visitor', createEmptyRosterInsights(), 'game_community');
+        await renderAs('member', 'visitor', createBareRosterInsights({}, null), 'game_community');
         expect(screen.queryByRole('heading', { name: 'Class breakdown' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Level progression' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Role breakdown' })).toBeNull();
