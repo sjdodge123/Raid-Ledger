@@ -182,7 +182,7 @@ describe('HubGalleryDialog — viewer', () => {
         await waitFor(() => expect(pageIns).toBe(1));
         await act(() => queryClient.invalidateQueries({ queryKey: ['hub-media', 5] }));
         release();
-        await waitFor(() => expect(screen.queryByText('Loading picture…')).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText('Loading pictures…')).not.toBeInTheDocument());
         expect(await caption()).toMatch(who(28));
         expect(counter()).toBe('28 of 30');
     });
