@@ -109,6 +109,16 @@ describe('computeGear — ilvl (AC2)', () => {
     expect(out.ilvl.belowCount).toBe(1);
   });
 
+  it('compares the RAW average to the floor: 54.5 is below 55 and in the 50-54 bucket', () => {
+    const out = computeGear([
+      row('Half', { ilvl: 54.5 }),
+      row('AtFloor', { ilvl: 55 }),
+    ]);
+    expect(out.ilvl.below.map((b) => b.name)).toEqual(['Half']);
+    expect(out.ilvl.belowCount).toBe(1);
+    expect(out.ilvl.buckets.map((b) => b.count)).toEqual([0, 0, 1, 1, 0, 0]);
+  });
+
   it('median rounds; null with no reporters', () => {
     expect(
       computeGear([row('A', { ilvl: 50 }), row('B', { ilvl: 55 })]).ilvl.median,

@@ -65,38 +65,49 @@ function capMains(rows: readonly InsightRow[]): {
   return { cap, levelling };
 }
 
+/** Integer-edged buckets cover `[from, to + 1)`, so 54.5 is in "50-54". */
 function bucketFor(buckets: Bucket[], ilvl: number): Bucket | undefined {
-  return buckets.find((b) => ilvl <= b.to) ?? buckets[buckets.length - 1];
+  return buckets.find((b) => ilvl < b.to + 1) ?? buckets[buckets.length - 1];
 }
 
-/** Cap mains with an ilvl fact, rounded. */
-function ratedMains(cap: readonly CapMain[]): Gear['ilvl']['below'] {
+/** A cap main's RAW average ilvl; rounding is for display only. */
+interface RatedMain {
+  name: string;
+  characterId: string;
+  raw: number;
+}
+
+/** Cap mains with an ilvl fact. */
+function ratedMains(cap: readonly CapMain[]): RatedMain[] {
   return cap.flatMap((m) => {
     const fact = m.facts.ilvl;
     if (!fact) return [];
-    return [
-      {
-        name: m.name,
-        characterId: m.characterId,
-        ilvl: Math.round(fact.value),
-      },
-    ];
+    return [{ name: m.name, characterId: m.characterId, raw: fact.value }];
   });
 }
 
-/** Histogram, median and below-floor list over cap mains with an ilvl. */
+/**
+ * Histogram, median and below-floor list over cap mains with an ilvl. The
+ * floor and bucket edges compare the RAW average (spec: `ilvl < floor`, so
+ * 54.5 is below 55); ROK-1926 reuses this floor. Only the output is rounded.
+ */
 function computeIlvl(cap: readonly CapMain[], levelling: number): Gear['ilvl'] {
   const floor = foreverIlvlFloor(FOREVER_LEVEL_CAP);
   const rated = ratedMains(cap);
   const buckets = emptyGearBuckets();
   for (const m of rated) {
-    const bucket = bucketFor(buckets, m.ilvl);
+    const bucket = bucketFor(buckets, m.raw);
     if (bucket) bucket.count += 1;
   }
   const below = rated
-    .filter((m) => m.ilvl < floor)
-    .sort((a, b) => a.ilvl - b.ilvl || a.name.localeCompare(b.name));
-  const mid = median(rated.map((m) => m.ilvl));
+    .filter((m) => m.raw < floor)
+    .sort((a, b) => a.raw - b.raw || a.name.localeCompare(b.name))
+    .map((m) => ({
+      name: m.name,
+      characterId: m.characterId,
+      ilvl: Math.round(m.raw),
+    }));
+  const mid = median(rated.map((m) => m.raw));
   return {
     buckets,
     median: mid === null ? null : Math.round(mid),
