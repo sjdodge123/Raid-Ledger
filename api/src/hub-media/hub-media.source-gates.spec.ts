@@ -1,28 +1,21 @@
 import { Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { HubMediaSourceGateRegistry } from './hub-media.source-gates';
 
-/**
- * A registry whose plugin gate answers from `active` and whose hub has live
- * rows of `present` sources (default: every gated source).
- */
-function setupWith(
-  active: ReadonlySet<string>,
-  present: readonly string[] = ['bg3-save'],
-): { gates: HubMediaSourceGateRegistry; db: MockDb } {
-  const db = createDrizzleMock();
-  const asDb: unknown = db;
-  const typed = asDb as PostgresJsDatabase<typeof schema>;
-  const plugins = new PluginRegistryService(typed, new EventEmitter2());
+/** A registry whose plugin gate answers from `active`. */
+function setup(active: ReadonlySet<string>) {
+  const db: unknown = createDrizzleMock();
+  const plugins = new PluginRegistryService(
+    db as PostgresJsDatabase<typeof schema>,
+    new EventEmitter2(),
+  );
   jest.spyOn(plugins, 'isActive').mockImplementation((s) => active.has(s));
-  db.where.mockResolvedValue(present.map((source) => ({ source })));
-  return { gates: new HubMediaSourceGateRegistry(plugins, typed), db };
+  return new HubMediaSourceGateRegistry(plugins);
 }
-const setup = (active: ReadonlySet<string>) => setupWith(active).gates;
 
 describe('HubMediaSourceGateRegistry (ROK-1959 D-5)', () => {
   afterEach(() => jest.restoreAllMocks());
@@ -60,30 +53,6 @@ describe('HubMediaSourceGateRegistry (ROK-1959 D-5)', () => {
         'media gate for "bg3-save" (bg3) failed on hub 7',
       ),
     );
-  });
-
-  it('never asks the gate when the hub has no live row of its source, and still excludes it (ROK-1959 review MINOR 2)', async () => {
-    const { gates } = setupWith(new Set(['bg3']), []);
-    const gate = jest.fn(() => Promise.resolve(false));
-    gates.register('bg3', 'bg3-save', gate);
-    await expect(gates.hiddenSources(7)).resolves.toEqual(['bg3-save']);
-    expect(gate).not.toHaveBeenCalled();
-  });
-
-  it('runs no presence read at all when no gate is registered', async () => {
-    const { gates, db } = setupWith(new Set());
-    await expect(gates.hiddenSources(7)).resolves.toEqual([]);
-    expect(db.selectDistinct).not.toHaveBeenCalled();
-  });
-
-  it('fails closed without asking the gate when the presence read throws', async () => {
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const { gates, db } = setupWith(new Set(['bg3']));
-    db.where.mockRejectedValue(new Error('db down'));
-    const gate = jest.fn(() => Promise.resolve(false));
-    gates.register('bg3', 'bg3-save', gate);
-    await expect(gates.hiddenSources(7)).resolves.toEqual(['bg3-save']);
-    expect(gate).not.toHaveBeenCalled();
   });
 
   it('lists a source once when two gates both hide it', async () => {
