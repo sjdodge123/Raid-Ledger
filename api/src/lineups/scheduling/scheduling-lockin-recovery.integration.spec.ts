@@ -15,6 +15,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { nonEmpty } from '../../common/testing/narrow';
 import { EventsService } from '../../events/events.service';
+import { SignupsService } from '../../events/signups.service';
 import {
   claimMatchForLockIn,
   linkClaimedMatch,
@@ -282,6 +283,63 @@ describe('lock-in claim recovery (ROK-2033)', () => {
     expect(claim.claimedAt).toBeNull();
     expect((await matchRow(matchId))?.lockInClaimedAt).toBeNull();
     expect(await staleIds(new Date(Date.now() + 24 * 60 * MINUTE))).toEqual([]);
+  });
+
+  it('review MINOR 1: a poll event created after the release is never discarded', async () => {
+    const matchId = await openPoll();
+    const orphan = await createEvent(matchId);
+    const fresh = await createEvent(matchId);
+    const claim = await crashedClaim(matchId);
+    await setCreatedAt(orphan, new Date(claim.claimedAt.getTime() + 1000));
+    // Stands in for an event a fresh lock-in / POST /events made between the
+    // release commit and the orphan lookup: created_at after the release.
+    // +24h keeps it after `now()` whatever the DB session zone.
+    await setCreatedAt(fresh, new Date(Date.now() + 24 * 60 * MINUTE));
+    const result = await recoverClaim(deps(), claim, { kind: 'cron' });
+    expect(result).toEqual({ recovered: true, discardedEventIds: [orphan] });
+    const left = await testApp.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(eq(schema.events.createdFromPollId, matchId));
+    expect(left.map((r) => r.id)).toEqual([fresh]);
+  });
+
+  it('review MINOR 5: recovery during a live POST /lock-in makes it 409 and leaves no event', async () => {
+    const matchId = await openPoll();
+    const signups = testApp.app.get(SignupsService);
+    const signup = signups.signup.bind(signups);
+    let recovered: boolean | null = null;
+    // Recovery fires after the request's create + creator signup, before its
+    // link: the slow-but-alive request recovery is fenced against.
+    jest.spyOn(signups, 'signup').mockImplementation(async (...args) => {
+      const out = await signup(...args);
+      if (recovered === null) {
+        const pending = must(
+          await findRecoverableClaim(testApp.db, matchId),
+          'in-flight claim',
+        );
+        recovered = (
+          await recoverClaim(deps(), pending, {
+            kind: 'admin',
+            userId: testApp.seed.adminUser.id,
+          })
+        ).recovered;
+      }
+      return out;
+    });
+    const res = await lockInRoute(matchId);
+    expect(recovered).toBe(true);
+    expect(res.status).toBe(409);
+    const left = await testApp.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(eq(schema.events.createdFromPollId, matchId));
+    expect(left).toEqual([]);
+    expect(await matchRow(matchId)).toEqual({
+      status: 'scheduling',
+      linkedEventId: null,
+      lockInClaimedAt: null,
+    });
   });
 });
 
