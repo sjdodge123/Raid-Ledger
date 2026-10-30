@@ -59,6 +59,18 @@ export const GuildViewerAccessSchema = z
      * nothing (`GM_RANK_IMPLIES_EDIT = false`, ROK-1794).
      */
     isGuildMaster: z.boolean().optional(),
+    /**
+     * ROK-1814: the viewer is an admin/operator (moderation affordances such
+     * as the crest's "Remove upload"). Set by core on every hub page; absent
+     * only from older servers — read a missing key as `false`.
+     */
+    isStaff: z.boolean().optional(),
+    /**
+     * ROK-1814 (operator ruling 2026-10-30): the viewer may change the hub
+     * crest — `canEdit`, or the in-game guild master (rank 0) of a WoW guild.
+     * Set by core on every hub page; read a missing key as `canEdit`.
+     */
+    canEditCrest: z.boolean().optional(),
   })
   .strict();
 export type GuildViewerAccess = z.infer<typeof GuildViewerAccessSchema>;

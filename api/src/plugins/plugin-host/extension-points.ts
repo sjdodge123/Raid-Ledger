@@ -325,6 +325,12 @@ export interface HubKindAdapter {
    * omitted hook or `null` means "no source", so the kind cannot reset.
    */
   sourceName?(groupId: number): Promise<string | null>;
+  /**
+   * ROK-1814 (operator ruling 2026-10-30): the user holds the group's top
+   * in-game rank (a WoW guild's rank 0, the GM) — the crest edit right only,
+   * no other Leader meaning. Optional; omitted ⇒ false.
+   */
+  holdsTopRank?(userId: number, groupId: number): Promise<boolean>;
 }
 
 /** ROK-1794: one `guild_editors` row as `HubKindAdapter.editorStatus` reads it. */

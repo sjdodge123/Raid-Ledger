@@ -21,7 +21,7 @@ export function uploadPatch(
 
 /**
  * `PUT /crest`: save + show a preset, show the stored upload, or show
- * nothing. Null when `{active:'upload'}` has no stored upload to show.
+ * nothing; every write clears a staff removal. Null when `{active:'upload'}` has no stored upload to show.
  */
 export function setPatch(
   body: SetGuildCrest,
@@ -29,7 +29,13 @@ export function setPatch(
   actorId: number,
   now: Date,
 ): CrestPatch | null {
-  const stamp = { crestSetBy: actorId, crestSetAt: now };
+  // Operator ruling 2026-10-30: any editor change clears "removed by an admin".
+  const stamp = {
+    crestSetBy: actorId,
+    crestSetAt: now,
+    crestRemovedBy: null,
+    crestRemovedAt: null,
+  };
   if (body.active === 'preset') {
     return { ...stamp, crestActive: 'preset', crestPreset: body.preset };
   }

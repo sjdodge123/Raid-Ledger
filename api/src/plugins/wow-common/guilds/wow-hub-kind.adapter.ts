@@ -99,6 +99,13 @@ export class WowHubKindAdapter implements HubKindAdapter {
     return delegated ? 'officer' : 'member';
   }
 
+  /** ROK-1814: a live linked row at rank 0 (the GM) — crest edit right only. */
+  async holdsTopRank(userId: number, guildId: number): Promise<boolean> {
+    return (await findLinkedMemberRows(this.db, userId, guildId)).some(
+      isGuildMaster,
+    );
+  }
+
   /** ROK-1832 D8: distinct owners of the guild's live linked member rows. */
   memberUserIds(guildId: number): Promise<number[]> {
     return findLinkedMemberUserIds(this.db, guildId);

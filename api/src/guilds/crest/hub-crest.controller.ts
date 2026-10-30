@@ -21,7 +21,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { GuildCrestEditorState } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
-import { GuildEditorGuard } from '../guild-editor.guard';
+import { HubCrestEditorGuard } from './hub-crest-editor.guard';
 import { HubKindActiveGuard } from '../hub-kind-active.guard';
 import { HubVisibleGuard } from '../hub-visible.guard';
 import { HubCrestUploadTooLargeFilter } from './hub-crest-upload.filter';
@@ -33,7 +33,7 @@ const jwt = AuthGuard('jwt');
 /**
  * ROK-1814 — the hub crest routes (a Core hub behaviour for every kind, so
  * no plugin manifest entry, like `PATCH guilds/:id/name`). Every route is
- * editor-only (`GuildEditorGuard`: Leader, Officer, staff); the public
+ * editor-only (`HubCrestEditorGuard`: Leader, Officer, staff, and the in-game GM — operator ruling 2026-10-30); the public
  * crest rides on `GuildSummary.crest`. Removing an upload is staff-only
  * (re-checked in the service). Each returns the `GuildCrestEditorState`.
  */
@@ -43,14 +43,14 @@ export class HubCrestController {
   constructor(private readonly crests: HubCrestService) {}
 
   @Get()
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, HubCrestEditorGuard)
   @Header('Cache-Control', 'private, no-store')
   get(@Param('id', ParseIntPipe) id: number): Promise<GuildCrestEditorState> {
     return this.crests.get(id);
   }
 
   @Put()
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, HubCrestEditorGuard)
   set(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -63,7 +63,7 @@ export class HubCrestController {
   @Post('upload')
   @HttpCode(200)
   @RateLimit('upload')
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, HubCrestEditorGuard)
   @UseInterceptors(FileInterceptor('file', crestMulterOptions()))
   @UseFilters(HubCrestUploadTooLargeFilter)
   upload(
@@ -79,7 +79,7 @@ export class HubCrestController {
   @Post('from-gallery')
   @HttpCode(200)
   @RateLimit('upload')
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, HubCrestEditorGuard)
   fromGallery(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -89,7 +89,7 @@ export class HubCrestController {
   }
 
   @Delete('upload')
-  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(jwt, HubVisibleGuard, HubCrestEditorGuard)
   removeUpload(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
