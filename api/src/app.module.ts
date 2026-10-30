@@ -18,6 +18,7 @@ import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
 import { SystemModule } from './system/system.module';
+import { SetupClaimModule } from './setup-claim/setup-claim.module';
 import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
@@ -91,6 +92,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     EventsModule,
     AvailabilityModule,
     SystemModule,
+    SetupClaimModule,
     SettingsModule,
     NotificationModule,
     EnrichmentsModule,

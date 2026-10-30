@@ -86,24 +86,50 @@ if is_known_default "$JWT_SECRET"; then
   exit 1
 fi
 
-# Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set.
-# Render provides RENDER_EXTERNAL_URL; otherwise keep "auto" so the API
-# dynamically allows the request's own origin (works on any hostname).
-if [ -z "$CORS_ORIGIN" ]; then
-  export CORS_ORIGIN="auto"
-fi
-if [ "$CORS_ORIGIN" = "auto" ] && [ -n "$RENDER_EXTERNAL_URL" ]; then
-  export CORS_ORIGIN="$RENDER_EXTERNAL_URL"
-  echo "🌐 CORS_ORIGIN derived from Render: $CORS_ORIGIN"
-else
+# Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set (ROK-1697).
+# An explicit CORS_ORIGIN wins — including an explicit "auto" (same-origin on
+# every hostname; the fleet passes it because an env answers on several hosts).
+# Unset: ask the platform public-URL resolver (PUBLIC_URL / RENDER_EXTERNAL_URL /
+# RAILWAY_PUBLIC_DOMAIN / FLY_APP_NAME / APP_URL / HEROKU_APP_DEFAULT_DOMAIN_NAME
+# — the same one the API logs at boot). Nothing resolved → "auto". A resolver
+# crash only warns: it must never stop boot.
+CORS_ORIGIN_EXPLICIT=0
+if [ -n "$CORS_ORIGIN" ]; then
+  CORS_ORIGIN_EXPLICIT=1
   echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
+else
+  RESOLVED_PUBLIC_URL=""
+  if RESOLVED_PUBLIC_URL="$(node /app/dist/scripts/resolve-public-url.js)"; then
+    :
+  else
+    echo "⚠️  resolve-public-url exited non-zero — using CORS_ORIGIN=auto"
+    RESOLVED_PUBLIC_URL=""
+  fi
+  if [ -n "$RESOLVED_PUBLIC_URL" ]; then
+    export CORS_ORIGIN="$RESOLVED_PUBLIC_URL"
+    echo "🌐 CORS_ORIGIN derived from platform public URL: $CORS_ORIGIN"
+  else
+    export CORS_ORIGIN="auto"
+    echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
+  fi
 fi
 
-# Auto-derive CLIENT_URL from CORS_ORIGIN when not explicitly set.
-# The /event plan Discord command and poll embeds need this to generate links.
-if [ -z "$CLIENT_URL" ] && [ -n "$CORS_ORIGIN" ] && [ "$CORS_ORIGIN" != "auto" ]; then
+# Auto-derive CLIENT_URL when the deployer did not set it (ROK-1697).
+# Precedence: 1) explicit CLIENT_URL — always authoritative, never touched
+#             2) concrete CORS_ORIGIN — explicit, or derived from the platform
+#                public-URL resolver above
+#             3) nothing — CORS_ORIGIN is "auto" or "*" (NAS default) → leave
+#                CLIENT_URL unset for ClientUrlSeederService
+# Step 2 covers resolver-derived origins too (operator ruling 2026-10-30): the
+# /lineups socket.io gateway reads process.env.CLIENT_URL at module load and
+# falls back to '*' without it, so a Render/PaaS deploy needs a real origin.
+if [ -z "$CLIENT_URL" ] && [ -n "$CORS_ORIGIN" ] && [ "$CORS_ORIGIN" != "auto" ] && [ "$CORS_ORIGIN" != "*" ]; then
   export CLIENT_URL="$CORS_ORIGIN"
-  echo "🔗 CLIENT_URL derived from CORS_ORIGIN: $CLIENT_URL"
+  if [ "$CORS_ORIGIN_EXPLICIT" = "1" ]; then
+    echo "🔗 CLIENT_URL derived from CORS_ORIGIN: $CLIENT_URL"
+  else
+    echo "🔗 CLIENT_URL derived from platform public URL: $CLIENT_URL"
+  fi
 fi
 
 # Run entrypoint (migrations, admin bootstrap, seeding)

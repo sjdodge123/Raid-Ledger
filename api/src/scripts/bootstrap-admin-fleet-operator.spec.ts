@@ -44,6 +44,13 @@ jest.mock('bcrypt', () => ({
   compare: () => Promise.resolve(true),
 }));
 
+// ROK-1701: cloud boots now run the setup-claim step first; it has its own
+// specs (claim-bootstrap.helpers.spec.ts, bootstrap-admin-claim.spec.ts).
+jest.mock('../sentry/instrument', () => ({}));
+jest.mock('../setup-claim/claim-bootstrap.helpers', () => ({
+  runCloudClaimStep: () => Promise.resolve({ armed: false, failed: false }),
+}));
+
 const OPERATOR_DISCORD_ID = '111222333444555666';
 
 interface InsertRecord {

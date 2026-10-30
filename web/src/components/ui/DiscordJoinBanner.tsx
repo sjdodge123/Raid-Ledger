@@ -7,7 +7,7 @@ const DISMISS_KEY = 'discord-join-banner-dismissed';
 
 function isSuppressedRoute(pathname: string): boolean {
     // Exact matches
-    if (pathname === '/' || pathname === '/login' || pathname === '/auth/success' || pathname === '/join') {
+    if (pathname === '/' || pathname === '/login' || pathname === '/auth/success' || pathname === '/join' || pathname === '/claim') {
         return true;
     }
     // Prefix matches
