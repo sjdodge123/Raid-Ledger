@@ -62,8 +62,16 @@ export class SetupClaimService {
     private readonly events: EventEmitter2,
   ) {}
 
-  /** For `GET /system/status`: never the code, only whether one is armed. */
+  /**
+   * For `GET /system/status`: never the code, only whether one is armed.
+   * A NAS without DEMO_MODE never arms (only cloud bootstrap does), so it
+   * skips the read + decrypt. DEMO_MODE keeps the read: the D-9 fixture arms
+   * a claim on (non-cloud) test envs (D-7).
+   */
   async publicStatus(): Promise<PublicClaimStatus> {
+    if (!isCloudFlavour() && process.env.DEMO_MODE !== 'true') {
+      return { claimRequired: false };
+    }
     const state = await readClaimState(this.db);
     if (!isClaimRequired(state)) return { claimRequired: false };
     return state.expiresAt
