@@ -30,6 +30,7 @@ import {
   GUILD_CREST_URL_PREFIX,
   getGuildCrestDir,
 } from './guilds/crest/hub-crest.paths';
+import { enforceFlavourBootGuards } from './common/flavour/flavour-boot';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -69,6 +70,8 @@ function readLogLevelEnv(): LogLevelEnv {
 }
 
 async function bootstrap() {
+  // ROK-1700: unknown RL_FLAVOUR, or cloud + DEMO_MODE, refuses to boot.
+  await enforceFlavourBootGuards();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: getLogLevels(readLogLevelEnv()),
     rawBody: false,

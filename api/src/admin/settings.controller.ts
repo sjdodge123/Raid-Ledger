@@ -17,12 +17,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
-import { DemoDataService } from './demo-data.service';
-import type {
-  DemoDataStatusDto,
-  DemoDataResultDto,
-  SteamConfigStatusDto,
-} from '@raid-ledger/contract';
+import type { SteamConfigStatusDto } from '@raid-ledger/contract';
 import { testDiscordOAuth } from './settings-oauth.helpers';
 import {
   testIgdbCredentials,
@@ -62,7 +57,6 @@ export class AdminSettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
-    private readonly demoDataService: DemoDataService,
   ) {}
 
   // ── OAuth ───────────────────────────────────────────────
@@ -83,8 +77,9 @@ export class AdminSettingsController {
     await this.settingsService.setDiscordOAuthConfig({
       clientId: body.clientId,
       clientSecret: body.clientSecret,
-      callbackUrl:
-        body.callbackUrl || 'http://localhost:3000/auth/discord/callback',
+      // ROK-1697: a blank callback stays blank, so the default is computed
+      // at read time (getDiscordOAuthConfig) and tracks later env changes.
+      callbackUrl: body.callbackUrl || '',
     });
     this.logger.log('Discord OAuth configuration updated via admin UI');
     return {
@@ -232,21 +227,7 @@ export class AdminSettingsController {
     return { success: true, message: `Default timezone set to ${timezone}.` };
   }
 
-  // ── Demo Data ───────────────────────────────────────────
-  @Get('demo/status')
-  async getDemoStatus(): Promise<DemoDataStatusDto> {
-    return this.demoDataService.getStatus();
-  }
-  @Post('demo/install')
-  @HttpCode(HttpStatus.OK)
-  async installDemoData(): Promise<DemoDataResultDto> {
-    return this.demoDataService.installDemoData();
-  }
-  @Post('demo/clear')
-  @HttpCode(HttpStatus.OK)
-  async clearDemoData(): Promise<DemoDataResultDto> {
-    return this.demoDataService.clearDemoData();
-  }
+  // Demo Data routes: DemoDataSettingsController (ROK-1700, NAS-only).
 
   // ── Steam ───────────────────────────────────────────────
   @Get('steam')

@@ -24,6 +24,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import * as schema from '../src/drizzle/schema';
 import { revokeAllAndBumpTx } from '../src/auth/refresh/refresh-rotation.helpers';
+import { isCloudFlavour } from '../src/common/flavour/flavour';
 
 const SALT_ROUNDS = 12;
 const DEFAULT_EMAIL = 'admin@local';
@@ -60,6 +61,8 @@ const DISCORD_SNOWFLAKE = /^[0-9]{5,32}$/;
 async function promoteFleetOperator(
     db: PostgresJsDatabase<typeof schema>,
 ): Promise<void> {
+    // ROK-1700: cloud ignores FLEET_* (the api logs the one warning at boot).
+    if (isCloudFlavour()) return;
     const configuredId = (process.env[FLEET_ADMIN_ENV] ?? '').trim();
     if (!configuredId) return;
     if (process.env.DEMO_MODE !== 'true') {
@@ -109,6 +112,8 @@ export function linkedAdminScope(
 ): { kind: 'any' } | { kind: 'only'; discordId: string } | { kind: 'none' } {
     const configuredId = (env[FLEET_ADMIN_ENV] ?? '').trim();
     const firstLogin = env[FLEET_FIRST_LOGIN_ENV] === 'true';
+    // ROK-1700: cloud is never a fleet env, whatever FLEET_* says.
+    if (isCloudFlavour(env)) return { kind: 'any' };
     if (env.DEMO_MODE !== 'true' || (!configuredId && !firstLogin)) {
         return { kind: 'any' };
     }

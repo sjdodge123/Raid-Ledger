@@ -6,10 +6,13 @@ import {
   Body,
   UseGuards,
   BadRequestException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
+import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
+import { isCloudFlavour } from '../common/flavour/flavour';
 import {
   PluginActiveGuard,
   RequirePlugin,
@@ -52,7 +55,10 @@ export class AiProvidersController {
   /** GET /admin/ai/providers — List all providers with status. */
   @Get()
   async listProviders(): Promise<AiProviderInfoDto[]> {
-    const providers = this.registry.list();
+    // ROK-1700: no local Ollama on a cloud instance — it is not offered.
+    const providers = this.registry
+      .list()
+      .filter((p) => !this.isUnavailableUnderFlavour(p.key));
     const activeKey = await this.getActiveProviderKey();
     return Promise.all(providers.map((p) => this.buildInfo(p, activeKey)));
   }
@@ -96,12 +102,16 @@ export class AiProvidersController {
 
   /** POST /admin/ai/providers/ollama/setup — Start async Docker setup. */
   @Post('ollama/setup')
+  // ROK-1700: no local Ollama download/setup on a cloud instance → 404.
+  @UseGuards(NasOnlyGuard)
   async setupOllama(): Promise<AiOllamaSetupDto> {
     return this.ollamaSetup.startSetup();
   }
 
   /** POST /admin/ai/providers/ollama/stop — Stop Ollama (Docker or native). */
   @Post('ollama/stop')
+  // ROK-1700: no local Ollama to stop on a cloud instance → 404.
+  @UseGuards(NasOnlyGuard)
   async stopOllama(): Promise<{ success: boolean }> {
     if (this.native.isAllinoneMode()) {
       await this.native.stopService();
@@ -213,8 +223,17 @@ export class AiProvidersController {
     return !!value;
   }
 
-  /** Throw if provider key is not registered. */
+  /** ROK-1700: Ollama (local) does not exist under RL_FLAVOUR=cloud. */
+  private isUnavailableUnderFlavour(key: string): boolean {
+    return key === 'ollama' && isCloudFlavour();
+  }
+
+  /**
+   * Throw if provider key is not registered — or (ROK-1700) is the local
+   * Ollama on a cloud instance, which answers 404 like the Ollama routes.
+   */
   private requireKnownProvider(key: string): void {
+    if (this.isUnavailableUnderFlavour(key)) throw new NotFoundException();
     const provider = this.registry.resolve(key);
     if (!provider) {
       throw new BadRequestException(`Unknown provider: ${key}`);

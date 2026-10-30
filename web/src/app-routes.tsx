@@ -7,6 +7,7 @@ import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
 import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
 import { LegacyHubRedirect } from './components/routing/legacy-hub-redirect';
+import { NasOnlyRoute } from './components/admin/nas-only-route';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
@@ -73,7 +74,7 @@ function AdminIntegrationRoutes() {
       <Route path="integrations/igdb" element={<IgdbPanel />} />
       <Route path="integrations/steam" element={<SteamPanel />} />
       <Route path="integrations/itad" element={<ItadPanel />} />
-      <Route path="integrations/cooptimus" element={<CooptimusPanel />} />
+      <Route path="integrations/cooptimus" element={<NasOnlyRoute><CooptimusPanel /></NasOnlyRoute>} />
       <Route path="integrations/calendar-sync" element={<CalendarSyncPanel />} />
     </>
   );
@@ -84,7 +85,7 @@ function AdminSettingsRoutes() {
     <Route path="/admin/settings" element={<AdminSettingsLayout />}>
       <Route path="general" element={<GeneralPanel />} />
       <Route path="general/roles" element={<RolesPanel />} />
-      <Route path="general/data" element={<DemoDataPanel />} />
+      <Route path="general/data" element={<NasOnlyRoute><DemoDataPanel /></NasOnlyRoute>} />
       <Route path="general/lineup" element={<Navigate to="/admin/settings/general" replace />} />
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       <Route path="general/backups" element={<BackupsPanel />} />

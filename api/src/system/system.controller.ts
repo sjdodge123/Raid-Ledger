@@ -11,6 +11,7 @@ import {
 } from '../plugins/plugin-host/extension-points';
 import type { SystemStatusDto, LoginMethodDto } from '@raid-ledger/contract';
 import { servedTelemetryEnabled } from '../sentry/telemetry-policy';
+import { getFlavour } from '../common/flavour/flavour';
 
 /**
  * System status controller (ROK-175, ROK-146, ROK-238, ROK-267, ROK-271).
@@ -150,6 +151,7 @@ export class SystemController {
       ephemeralVoiceEnabled,
       ephemeralVoiceForced,
       telemetryEnabled: servedTelemetryEnabled(),
+      flavour: getFlavour(),
     };
   }
 }

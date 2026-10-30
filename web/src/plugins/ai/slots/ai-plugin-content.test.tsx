@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -279,5 +279,38 @@ describe('ROK-1687: TestChatSection button', () => {
         const button = await screen.findByRole('button', { name: /send test message/i });
         expect(button.querySelector('[data-button-label]')).not.toBeNull();
         expect(button.className).not.toMatch(/-(purple|violet|fuchsia)-\d{3}/);
+    });
+});
+
+describe('AiPluginContent under the cloud flavour (ROK-1700)', () => {
+    beforeEach(() => {
+        mockAiStatus(true);
+        mockAiProviders();
+        mockAiUsage();
+        mockAiFeatures();
+        server.use(http.get(`${API}/system/status`, () => HttpResponse.json({ status: 'ok', flavour: 'cloud' })));
+    });
+
+    it('hides the Ollama setup card and keeps the cloud providers', async () => {
+        const { queryClient } = renderWithProviders(<AiPluginContent />);
+        await waitFor(() => expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('success'));
+        expect(await screen.findByText('OpenAI')).toBeInTheDocument();
+        expect(screen.queryByText('Self-hosted LLM inference via Docker')).not.toBeInTheDocument();
+        expect(screen.queryByText('Ollama (Local)')).not.toBeInTheDocument();
+    });
+});
+
+describe('AiPluginContent under the nas flavour (ROK-1700 regression guard)', () => {
+    beforeEach(() => {
+        mockAiStatus(true);
+        mockAiProviders();
+        mockAiUsage();
+        mockAiFeatures();
+        server.use(http.get(`${API}/system/status`, () => HttpResponse.json({ status: 'ok', flavour: 'nas' })));
+    });
+
+    it('still renders the Ollama setup card', async () => {
+        renderWithProviders(<AiPluginContent />);
+        expect(await screen.findByText('Self-hosted LLM inference via Docker')).toBeInTheDocument();
     });
 });
