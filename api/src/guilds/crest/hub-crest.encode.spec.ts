@@ -107,3 +107,19 @@ describe('encodeGuildCrest rejections', () => {
     ok(await encodeGuildCrest(await img(1024, 1024)));
   });
 });
+
+describe('encodeGuildCrest allowLarge (the gallery path)', () => {
+  it('downsizes a 1600 × 900 picture instead of rejecting it', async () => {
+    const r = ok(
+      await encodeGuildCrest(await img(1600, 900), { allowLarge: true }),
+    );
+    const lg = await sharp(r.lg).metadata();
+    expect([lg.format, lg.width, lg.height]).toEqual(['webp', 384, 384]);
+  });
+
+  it('still rejects a too-small picture', async () => {
+    expect(
+      await encodeGuildCrest(await img(63, 200), { allowLarge: true }),
+    ).toEqual({ ok: false, code: 'too_small' });
+  });
+});

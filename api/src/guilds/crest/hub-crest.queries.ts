@@ -5,6 +5,7 @@ import * as schema from '../../drizzle/schema';
 /** ROK-1814 — crest reads/writes on `guilds` (the columns live there, L2). */
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 const { guilds, hubMedia } = schema;
 
@@ -52,25 +53,45 @@ export async function findCrestRow(
   return row ?? null;
 }
 
+/** `SELECT … FOR UPDATE` the crest slice inside a transaction. */
+async function lockRow(tx: Tx, guildId: number): Promise<CrestRow | null> {
+  const [row] = await tx
+    .select(CREST_COLUMNS)
+    .from(guilds)
+    .where(eq(guilds.id, guildId))
+    .for('update');
+  return row ?? null;
+}
+
+/**
+ * Run `fn` while holding the hub row's lock (null row = no such hub). File
+ * deletes go through here so they serialise with uploads, which write their
+ * files inside `updateCrestRow`'s lock.
+ */
+export async function withLockedCrestRow(
+  db: Db,
+  guildId: number,
+  fn: (row: CrestRow | null) => Promise<void>,
+): Promise<void> {
+  await db.transaction((tx) => lockRow(tx, guildId).then(fn));
+}
+
 /**
  * Lock the row, build the patch from its current crest, write it — one
  * transaction. Returns the row before and after, or null (no such hub /
- * `build` returned null = nothing to do). File deletes happen AFTER this
- * resolves (the commit), never inside it.
+ * `build` returned null = nothing to do). `build` may be
+ * async: an upload writes its files there, under the lock. File deletes
+ * happen AFTER this resolves (the commit), never inside it.
  */
 export async function updateCrestRow(
   db: Db,
   guildId: number,
-  build: (before: CrestRow) => CrestPatch | null,
+  build: (before: CrestRow) => CrestPatch | null | Promise<CrestPatch | null>,
 ): Promise<{ before: CrestRow; after: CrestRow } | null> {
   return db.transaction(async (tx) => {
-    const [before] = await tx
-      .select(CREST_COLUMNS)
-      .from(guilds)
-      .where(eq(guilds.id, guildId))
-      .for('update');
+    const before = await lockRow(tx, guildId);
     if (!before) return null;
-    const patch = build(before);
+    const patch = await build(before);
     if (!patch) return null;
     const [after] = await tx
       .update(guilds)

@@ -36,7 +36,7 @@ import {
   findCrestRow,
   findGalleryStorageName,
   updateCrestRow,
-  type CrestRow,
+  withLockedCrestRow,
 } from './hub-crest.queries';
 import { buildGuildCrestEditorState } from './hub-crest.resolve';
 
@@ -66,7 +66,9 @@ function encodeError(code: EncodeFailure['code']): Error {
  * crest, upload one (or pick one from the hub's own gallery), and the
  * staff-only upload removal. Guards (jwt, HubVisibleGuard,
  * GuildEditorGuard) run in the controller; removal re-checks `isStaff`.
- * Old upload files are deleted only after the row update commits.
+ * New files are written under the row lock; old ones are deleted only after
+ * the update commits, under the lock again, and only if the row no longer
+ * points at them (a racing re-upload of the same picture keeps its files).
  */
 @Injectable()
 export class HubCrestService {
@@ -112,13 +114,14 @@ export class HubCrestService {
     bytes: Buffer,
   ): Promise<GuildCrestEditorState> {
     await checkCrestUploadRate(this.redis, actor.id);
-    return this.storeEncoded(actor, guildId, bytes);
+    return this.storeEncoded(actor, guildId, bytes, false);
   }
 
   /**
    * `POST /guilds/:id/crest/from-gallery` — a live, unhidden picture of
    * THIS hub's gallery (404 otherwise) is copied and re-encoded into the
-   * public crest store; the gallery original stays members-only.
+   * public crest store; the gallery original stays members-only. Gallery
+   * `full` files run to 2048 px, so this path downsizes past 1024.
    */
   async fromGallery(
     actor: GuildActor,
@@ -135,7 +138,7 @@ export class HubCrestService {
     if (!name) throw new NotFoundException(PICTURE_NOT_FOUND);
     await checkCrestUploadRate(this.redis, actor.id);
     const bytes = await readGalleryFile(guildId, name);
-    return this.storeEncoded(actor, guildId, bytes);
+    return this.storeEncoded(actor, guildId, bytes, true);
   }
 
   /** `DELETE /guilds/:id/crest/upload` — staff only (moderation). */
@@ -150,37 +153,47 @@ export class HubCrestService {
       removeUploadPatch(row, actor.id, new Date()),
     );
     if (!out) throw new NotFoundException('There is no uploaded crest.');
-    await this.dropFiles(guildId, out.before, null);
+    await this.dropFiles(guildId, out.before.crestUploadKey);
     return buildGuildCrestEditorState(out.after);
   }
 
-  /** Encode → write files → point the row at them → drop the old files. */
+  /**
+   * Encode → (row lock) write files + point the row at them → drop the old
+   * files. A failed update removes the new files unless the row uses them.
+   */
   private async storeEncoded(
     actor: GuildActor,
     guildId: number,
     bytes: Buffer,
+    allowLarge: boolean,
   ): Promise<GuildCrestEditorState> {
-    const enc = await encodeGuildCrest(bytes);
+    const enc = await encodeGuildCrest(bytes, { allowLarge });
     if (!enc.ok) throw encodeError(enc.code);
-    await writeCrestFiles(guildId, enc.key, { sm: enc.sm, lg: enc.lg });
-    const out = await updateCrestRow(this.db, guildId, () =>
-      uploadPatch(enc.key, actor.id, new Date()),
-    );
+    let wrote = false;
+    const out = await updateCrestRow(this.db, guildId, async () => {
+      await writeCrestFiles(guildId, enc.key, { sm: enc.sm, lg: enc.lg });
+      wrote = true;
+      return uploadPatch(enc.key, actor.id, new Date());
+    }).catch(async (err: unknown) => {
+      if (wrote) await this.dropFiles(guildId, enc.key);
+      throw err;
+    });
     if (!out) throw new NotFoundException(HUB_NOT_FOUND);
-    await this.dropFiles(guildId, out.before, enc.key);
+    await this.dropFiles(guildId, out.before.crestUploadKey);
     return buildGuildCrestEditorState(out.after);
   }
 
-  /** Delete the previous upload's files (after commit) unless still in use. */
-  private async dropFiles(
-    guildId: number,
-    before: CrestRow,
-    keep: string | null,
-  ): Promise<void> {
-    const old = before.crestUploadKey;
-    if (!old || old === keep || !isGuildCrestKey(old)) return;
+  /**
+   * Delete one upload's files under the row lock, unless the row (still,
+   * or again) points at them. Best-effort: a failure is logged.
+   */
+  private async dropFiles(guildId: number, key: string | null): Promise<void> {
+    if (!key || !isGuildCrestKey(key)) return;
     try {
-      await deleteCrestFiles(guildId, old);
+      await withLockedCrestRow(this.db, guildId, async (row) => {
+        if (row?.crestUploadKey === key) return;
+        await deleteCrestFiles(guildId, key);
+      });
     } catch (err) {
       this.logger.warn(
         `crest file cleanup failed for guild ${guildId}: ${String(err)}`,

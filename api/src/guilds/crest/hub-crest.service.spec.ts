@@ -7,6 +7,7 @@ import {
   findCrestRow,
   findGalleryStorageName,
   updateCrestRow,
+  withLockedCrestRow,
   type CrestPatch,
   type CrestRow,
 } from './hub-crest.queries';
@@ -18,6 +19,7 @@ jest.mock('./hub-crest.queries', () => ({
   findCrestRow: jest.fn(),
   findGalleryStorageName: jest.fn(),
   updateCrestRow: jest.fn(),
+  withLockedCrestRow: jest.fn(),
 }));
 jest.mock('./hub-crest.paths', () => ({
   ...jest.requireActual<object>('./hub-crest.paths'),
@@ -51,12 +53,14 @@ beforeEach(() => {
   };
   redis.eval.mockResolvedValue(1);
   jest.mocked(findCrestRow).mockImplementation(() => Promise.resolve(row));
-  jest.mocked(updateCrestRow).mockImplementation((_db, _id, build) => {
-    const patch: CrestPatch | null = build(row);
-    return Promise.resolve(
-      patch ? { before: row, after: { ...row, ...patch } as CrestRow } : null,
-    );
+  jest.mocked(updateCrestRow).mockImplementation(async (_db, _id, build) => {
+    const patch: CrestPatch | null = await build(row);
+    if (!patch) return null;
+    const before = row;
+    row = { ...row, ...patch } as CrestRow;
+    return { before, after: row };
   });
+  jest.mocked(withLockedCrestRow).mockImplementation((_db, _id, fn) => fn(row));
   jest.mocked(encodeGuildCrest).mockResolvedValue({
     ok: true,
     key: NEW,
@@ -119,6 +123,9 @@ describe('HubCrestService.upload', () => {
     const deleted =
       jest.mocked(deleteCrestFiles).mock.invocationCallOrder[0] ?? 0;
     expect(deleted).toBeGreaterThan(updated);
+    expect(encodeGuildCrest).toHaveBeenCalledWith(Buffer.from('png'), {
+      allowLarge: false,
+    });
   });
 
   it('keeps the files when the same bytes are re-uploaded', async () => {
@@ -171,6 +178,28 @@ describe('HubCrestService.upload', () => {
   });
 });
 
+describe('HubCrestService.upload file safety', () => {
+  it('writes the files inside the locked row update, not before it', async () => {
+    await svc.upload(editor, 5, Buffer.from('png'));
+    const updated =
+      jest.mocked(updateCrestRow).mock.invocationCallOrder[0] ?? 0;
+    const written =
+      jest.mocked(writeCrestFiles).mock.invocationCallOrder[0] ?? 0;
+    expect(written).toBeGreaterThan(updated);
+  });
+
+  it('removes the new files when the row update fails', async () => {
+    jest.mocked(updateCrestRow).mockImplementation(async (_db, _id, build) => {
+      await build(row);
+      throw new Error('db down');
+    });
+    await expect(svc.upload(editor, 5, Buffer.from('png'))).rejects.toThrow(
+      'db down',
+    );
+    expect(deleteCrestFiles).toHaveBeenCalledWith(5, NEW);
+  });
+});
+
 describe('HubCrestService.fromGallery', () => {
   it('re-encodes the gallery full file of THIS hub as the upload', async () => {
     jest
@@ -187,7 +216,9 @@ describe('HubCrestService.fromGallery', () => {
     expect(typeof path === 'string' ? path : '').toMatch(
       /5[\\/]0f8fad5b-d9cb-469f-a165-70867728950e\.webp$/,
     );
-    expect(encodeGuildCrest).toHaveBeenCalledWith(Buffer.from('webp'));
+    expect(encodeGuildCrest).toHaveBeenCalledWith(Buffer.from('webp'), {
+      allowLarge: true,
+    });
     expect(state.active).toBe('upload');
   });
 
@@ -223,6 +254,16 @@ describe('HubCrestService.removeUpload', () => {
     expect(state).toMatchObject({ active: 'preset', upload: null });
     expect(state.removedByStaffAt).not.toBeNull();
     expect(deleteCrestFiles).toHaveBeenCalledWith(5, OLD);
+  });
+
+  it('keeps the files when a re-upload of the same image now owns them', async () => {
+    jest
+      .mocked(withLockedCrestRow)
+      .mockImplementationOnce((_db, _id, fn) =>
+        fn({ ...row, crestUploadKey: OLD }),
+      );
+    await svc.removeUpload(staff, 5);
+    expect(deleteCrestFiles).not.toHaveBeenCalled();
   });
 
   it('404s when there is no upload to remove', async () => {

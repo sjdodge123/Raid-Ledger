@@ -34,16 +34,22 @@ const square = (buf: Buffer, edge: number): Promise<Buffer> =>
     .webp({ quality: 85 })
     .toBuffer();
 
+/** Encoder options: `allowLarge` downsizes past the 1024 px edge instead of refusing. */
+export interface GuildCrestEncodeOptions {
+  allowLarge?: boolean;
+}
+
 /** `too_small` / `too_big_dimensions` from the header, or null when in range. */
 async function checkEdges(
   buf: Buffer,
+  allowLarge: boolean,
 ): Promise<GuildCrestEncodeErrorCode | null> {
   const { width, height } = await sharp(buf, {
     limitInputPixels: MAX_INPUT_PIXELS,
   }).metadata();
   if (!width || !height) return 'not_image';
   if (Math.min(width, height) < GUILD_CREST_MIN_EDGE) return 'too_small';
-  if (Math.max(width, height) > GUILD_CREST_MAX_EDGE)
+  if (!allowLarge && Math.max(width, height) > GUILD_CREST_MAX_EDGE)
     return 'too_big_dimensions';
   return null;
 }
@@ -52,16 +58,18 @@ async function checkEdges(
  * ROK-1814 — validate and re-encode crest bytes (an upload, or a gallery
  * picture copied into the public store). The type is sniffed from magic
  * bytes (png/jpeg/webp; gif, SVG and anything undecodable → `not_image`),
- * each edge must be 64–1024 px, and the output is a 384 + 128 px square
+ * each edge must be 64–1024 px (`allowLarge`, the gallery path: ≥ 64 px,
+ * no upper edge — gallery `full` files run to 2048 px), and the output is a 384 + 128 px square
  * webp pair keyed by the first 32 hex chars of the `lg` file's sha256.
  */
 export async function encodeGuildCrest(
   buf: Buffer,
+  opts: GuildCrestEncodeOptions = {},
 ): Promise<GuildCrestEncodeResult> {
   const type = sniffHubMediaImage(buf);
   if (!type || type === 'gif') return { ok: false, code: 'not_image' };
   try {
-    const edgeError = await checkEdges(buf);
+    const edgeError = await checkEdges(buf, opts.allowLarge === true);
     if (edgeError) return { ok: false, code: edgeError };
     const lg = await square(buf, GUILD_CREST_LG_EDGE);
     const sm = await square(buf, GUILD_CREST_SM_EDGE);
