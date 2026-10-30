@@ -61,9 +61,14 @@ function CrestFallback({ name, size, fallback, className }: Omit<HubCrestProps, 
 /** Every emblem's grid; the empty svg holds the box while the art chunk loads. */
 const EMBLEM_VIEWBOX = '0 0 512 512';
 
-/** The palette box paints at once; the emblem paths fill in once the lazy art chunk lands. */
-function PresetCrest({ preset, size, className }: { preset: CrestPreset; size: HubCrestSize; className?: string | undefined }): JSX.Element {
-    const art = useCrestEmblemArt(preset.emblemId);
+/**
+ * The palette box paints at once; the emblem paths fill in once the lazy art
+ * chunk lands. A chunk that fails to load shows the usual fallback instead.
+ */
+function PresetCrest({ preset, ...rest }: Omit<HubCrestProps, 'crest'> & { preset: CrestPreset }): JSX.Element {
+    const { size, className } = rest;
+    const { status, art } = useCrestEmblemArt(preset.emblemId);
+    if (status === 'failed') return <CrestFallback {...rest} />;
     return (
         <span aria-hidden="true" data-testid="hub-crest" data-crest="preset" className={boxClass(size, 'overflow-hidden', className)}
             style={{ backgroundColor: GUILD_CREST_PALETTE[preset.bg] }}>
@@ -90,6 +95,6 @@ export function HubCrest(props: HubCrestProps): JSX.Element {
         );
     }
     const preset = asCrestPreset(crest);
-    if (preset) return <PresetCrest preset={preset} size={size} className={className} />;
+    if (preset) return <PresetCrest {...props} preset={preset} />;
     return <CrestFallback name={props.name} size={size} fallback={props.fallback} className={className} />;
 }
