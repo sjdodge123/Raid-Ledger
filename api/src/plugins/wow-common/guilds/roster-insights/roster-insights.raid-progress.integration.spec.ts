@@ -432,4 +432,18 @@ describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
     expect(await reporterOf(904)).toBe(idOf('officer'));
     expect((await bossRows()).find(([id]) => id === 904)).toEqual([904, 1, 0]);
   });
+
+  it('a takeover import still counts its genuinely new pulls as new (xmax = 0)', async () => {
+    await seedStored(905, 4500, true, 'pug');
+    const base = reimportPayload(905, 4500);
+    const fresh = reimportPayload(906, 4600).data.pulls;
+    const payload = {
+      ...base,
+      data: { pulls: [...base.data.pulls, ...fresh] },
+    };
+    const out = await reimportAs('raider', payload);
+    expect(out.summary).toMatchObject({ newPulls: 1, duplicatePulls: 1 });
+    expect(await reporterOf(905)).toBe(idOf('raider'));
+    expect(await reporterOf(906)).toBe(idOf('raider'));
+  });
 });
