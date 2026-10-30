@@ -12,7 +12,10 @@
  * spec clicks the label and asserts the input's checked state. After each
  * save the spec polls `GET /guilds/:id/crest` (the source of truth) before
  * asserting the hero, so a stale query cache cannot mask a failed write.
+ * The upload test picks the committed 96×96 fixture PNG (the API's floor is
+ * 64×64); the file is only staged until Save commits it.
  */
+import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, apiPut, getAdminToken, pollForCondition } from './api-helpers';
@@ -80,6 +83,24 @@ async function save(page: Page, picker: Locator): Promise<void> {
     await expect(picker, 'a successful save closes the picker').toHaveCount(0);
 }
 
+/** Below this width the header Hubs menu gives way to the bottom bar's "Your hubs" sheet. */
+const HEADER_HUBS_MIN_WIDTH = 768;
+const CREST_FIXTURE = join(__dirname, 'fixtures', 'guild-crest-96.png');
+
+/** The guild's row in the header Hubs menu (≥768px) or the phone "Your hubs" sheet. */
+async function openNavRow(page: Page, guildId: number): Promise<Locator> {
+    if ((page.viewportSize()?.width ?? 0) >= HEADER_HUBS_MIN_WIDTH) {
+        const trigger = page.getByRole('navigation', { name: 'Main navigation' }).getByTestId('nav-hubs-menu-trigger');
+        await expect(trigger).toBeVisible({ timeout: 15_000 });
+        await trigger.click();
+        return page.getByRole('menu', { name: 'Hubs' }).locator(`a[href="/hubs/${guildId}"]`);
+    }
+    const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
+    await trigger.click();
+    return page.getByRole('dialog', { name: 'Your hubs' }).locator(`a[href="/hubs/${guildId}"]`);
+}
+
 function heroCrest(page: Page): Locator {
     return page.getByTestId('guild-hero').getByTestId('hub-crest');
 }
@@ -120,5 +141,26 @@ test('member: sees the saved crest but no "Change crest" button', async ({ page 
         await expect(heroCrest(page), 'members see the saved crest').toHaveAttribute('data-crest', 'preset', { timeout: 15_000 });
         await expect(heroCrest(page).getByTestId('hub-crest-emblem')).toHaveAttribute('data-emblem', 'crown');
         await expect(page.getByTestId('hub-crest-edit'), 'only editors get the picker entry').toHaveCount(0);
+
+        const row = await openNavRow(page, guild.guildId);
+        await expect(row, 'the nav lists the guild').toBeVisible({ timeout: 15_000 });
+        await expect(row.getByTestId('hub-crest'), 'the nav row shows the crest, not the shield').toHaveAttribute('data-crest', 'preset');
+        await expect(row.getByTestId('hub-crest-emblem')).toHaveAttribute('data-emblem', 'crown');
+    });
+});
+
+test('editor: uploads a PNG, Save commits it, the hero shows the image crest', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild, token) => {
+        await signInOnboardedMember(page, guild.users.officer.userId);
+        await page.goto(`/hubs/${guild.guildId}`);
+        await expect(heroCrest(page)).toHaveAttribute('data-crest', 'initials', { timeout: 15_000 });
+
+        const picker = await openPicker(page);
+        await pick(picker, 'Upload');
+        await picker.getByTestId('crest-upload-input').setInputFiles(CREST_FIXTURE);
+        await save(page, picker);
+        await waitForCrest(token, guild.guildId, (s) => s.active === 'upload', 'crest upload saved');
+        await expect(heroCrest(page), 'the hero shows the uploaded crest').toHaveAttribute('data-crest', 'upload', { timeout: 15_000 });
+        await expect(heroCrest(page).getByTestId('hub-crest-img')).toHaveAttribute('src', /\/guild-crests\//);
     });
 });
