@@ -6,7 +6,8 @@
  *
  * Pinned here against a real DB (both fixes are SQL predicates):
  *  - the reaper spares a LIVE Quick Play with an open participant row, and
- *    still reaps one whose rows are all closed;
+ *    still reaps one whose rows are all closed — or whose end is past the
+ *    occupied ceiling (a stale open row must not pin it live forever);
  *  - auto-extend picks up a live, occupied Quick Play whose end slipped out
  *    of the window and moves its end past now.
  */
@@ -22,23 +23,28 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { AdHocReaperService } from './ad-hoc-reaper.service';
 import { EventAutoExtendService } from './event-auto-extend.service';
-import { findOrphanedAdHocEvents } from './ad-hoc-event.helpers';
+import {
+  AD_HOC_OCCUPIED_REAP_CEILING_MS,
+  findOrphanedAdHocEvents,
+} from './ad-hoc-event.helpers';
 
 const e = schema.events;
 const SERVER_ID = 9813;
 let testApp: TestApp;
 let participants: AdHocParticipantService;
 
-/** A live server-born Quick Play whose end passed 40 minutes ago. */
-async function insertOverdueQuickPlay(): Promise<number> {
-  const now = Date.now();
+/** A live server-born Quick Play whose end passed `overdueMs` ago (40 min). */
+async function insertOverdueQuickPlay(
+  overdueMs = 40 * 60_000,
+): Promise<number> {
+  const end = Date.now() - overdueMs;
   const rows = await testApp.db
     .insert(e)
     .values({
       title: 'Valheim — Quick Play',
       creatorId: testApp.seed.adminUser.id,
       gameId: testApp.seed.game.id,
-      duration: [new Date(now - 100 * 60_000), new Date(now - 40 * 60_000)],
+      duration: [new Date(end - 60 * 60_000), new Date(end)],
       isAdHoc: true,
       adHocStatus: 'live',
     })
@@ -99,6 +105,18 @@ describe('reaper vs an occupied live Quick Play (ROK-2052)', () => {
     const id = await insertOverdueQuickPlay();
     await joinServer(id, '76561198000002052');
     await participants.markServerLeave(id, '76561198000002052', SERVER_ID);
+
+    expect(await orphanIds()).toContain(id);
+    await testApp.app.get(AdHocReaperService).reapOrphanedEvents();
+
+    expect((await eventRow(id)).adHocStatus).toBe('ended');
+  });
+
+  it('reaps an occupied live Quick Play overdue past the ceiling (stale row)', async () => {
+    const id = await insertOverdueQuickPlay(
+      AD_HOC_OCCUPIED_REAP_CEILING_MS + 10 * 60_000,
+    );
+    await joinServer(id, '76561198000002055');
 
     expect(await orphanIds()).toContain(id);
     await testApp.app.get(AdHocReaperService).reapOrphanedEvents();

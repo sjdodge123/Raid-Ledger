@@ -1,4 +1,4 @@
-import { and, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, eq, inArray, not, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
@@ -282,15 +282,28 @@ export async function setGracePeriodStatus(
 const ORPHAN_THRESHOLD_MS = 30 * 60 * 1000;
 
 /**
+ * ROK-2052 backstop: participant rows carry no heartbeat, so a leave missed
+ * across a bot restart / gateway drop leaves a stale open row. An occupied
+ * live event is spared only while its effective end is at most this far in
+ * the past; beyond it the reaper ends it like any orphan, so a stale row
+ * cannot pin a Quick Play live (and absorb every future spawn) forever.
+ */
+export const AD_HOC_OCCUPIED_REAP_CEILING_MS = 4 * 60 * 60 * 1000;
+
+/**
  * Find orphaned ad-hoc events: live or grace_period, not cancelled,
  * whose effective end time is more than 30 minutes in the past — except a
  * live one someone is still in (open participant row, ROK-2052): that is
- * occupied, not orphaned; the leave/grace path ends it.
+ * occupied, not orphaned; the leave/grace path ends it. The exemption lapses
+ * past {@link AD_HOC_OCCUPIED_REAP_CEILING_MS} (stale-row backstop).
  */
 export async function findOrphanedAdHocEvents(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<(typeof tables.events.$inferSelect)[]> {
-  const cutoff = new Date(Date.now() - ORPHAN_THRESHOLD_MS);
+  const now = Date.now();
+  const cutoff = new Date(now - ORPHAN_THRESHOLD_MS).toISOString();
+  const ceiling = new Date(now - AD_HOC_OCCUPIED_REAP_CEILING_MS).toISOString();
+  const effectiveEnd = sql`COALESCE(${tables.events.extendedUntil}, upper(${tables.events.duration}))`;
   return db
     .select()
     .from(tables.events)
@@ -299,8 +312,11 @@ export async function findOrphanedAdHocEvents(
         eq(tables.events.isAdHoc, true),
         inArray(tables.events.adHocStatus, ['live', 'grace_period']),
         sql`${tables.events.cancelledAt} IS NULL`,
-        sql`COALESCE(${tables.events.extendedUntil}, upper(${tables.events.duration})) < ${cutoff.toISOString()}::timestamptz`,
-        not(isOccupiedLiveAdHoc(db)),
+        sql`${effectiveEnd} < ${cutoff}::timestamptz`,
+        or(
+          sql`${effectiveEnd} < ${ceiling}::timestamptz`,
+          not(isOccupiedLiveAdHoc(db)),
+        ),
       ),
     );
 }
