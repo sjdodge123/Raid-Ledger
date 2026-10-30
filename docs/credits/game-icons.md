@@ -2,9 +2,11 @@
 
 The guild crest's preset emblems (ROK-1814) are icons from [game-icons.net](https://game-icons.net),
 licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/)
-(CC BY 3.0). Path data was copied unmodified from the official SVGs in
-[github.com/game-icons/icons](https://github.com/game-icons/icons) (`<author>/<slug>.svg`); only the
-full-canvas background square is dropped and the glyph is filled with the crest's palette colour.
+(CC BY 3.0). Path data comes from the official SVGs in
+[github.com/game-icons/icons](https://github.com/game-icons/icons) (`<author>/<slug>.svg`).
+**Changes made (CC BY adaptation):** the full-canvas background square is dropped, every coordinate is
+rounded to one decimal (at most 0.05 units on the 512 grid — invisible at crest sizes) and the glyph is
+filled with the crest's palette colour on a palette background.
 
 Attribution is shown in the app as `GUILD_CREST_EMBLEM_CREDIT_LINE` under the crest picker
 (`packages/contract/src/guild-crest.schema.ts`). The art lives in
