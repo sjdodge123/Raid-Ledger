@@ -221,3 +221,19 @@ test('the contract package stays side-effect free, so the shared zod chunk holds
   assert.ok(schemas, 'bundle-budget.config.mjs must budget the zod-only `schemas` chunk');
   assert.ok(!realBudgets.lazyOverrides.some((o) => o.name === 'dist'), 'the pre-ROK-1803 `dist` barrel chunk entry must not come back');
 });
+
+test('a .wasm asset is measured against its named budget; an unbudgeted one fails (ROK-1960)', () => {
+  const budgets = { ...BUDGETS, wasmAssets: [{ name: 'reader', budgetKB: 3 }, { name: 'gone', budgetKB: 1 }] };
+  const ok = checkBundle(makeDist({ ...CLEAN, 'reader-HHHHHHHH.wasm': 2 }), budgets);
+  const readerRow = ok.rows.find((r) => r.cls === 'wasm');
+  assert.equal(readerRow?.chunk, 'reader-HHHHHHHH.wasm');
+  assert.equal(readerRow?.ok, true);
+  assert.deepEqual(ok.failures, []);
+  assert.ok(ok.warnings.some((w) => w.includes('wasm "gone"')), ok.warnings.join('\n'));
+  const over = checkBundle(makeDist({ ...CLEAN, 'reader-HHHHHHHH.wasm': 4, 'stray-IIIIIIII.wasm': 1 }), budgets);
+  assert.deepEqual(over.failures.map((r) => r.chunk).sort(), ['reader-HHHHHHHH.wasm', 'stray-IIIIIIII.wasm']);
+});
+
+test('the real budgets name the vendored BG3 save reader (ROK-1960)', () => {
+  assert.ok(realBudgets.wasmAssets.some((o) => o.name === 'rl_collectors_web_bg' && o.budgetKB > o.baselineKB));
+});

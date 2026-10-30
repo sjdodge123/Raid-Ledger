@@ -92,6 +92,26 @@ export function measureAssets(assetsDir) {
   return sizes;
 }
 
+/** Map of `.wasm` asset filename → gzip-9 bytes (ROK-1960: the BG3 save reader). */
+export function measureWasm(assetsDir) {
+  const sizes = new Map();
+  for (const file of fs.readdirSync(assetsDir).sort()) {
+    if (file.endsWith('.wasm')) sizes.set(file, gzipSize(fs.readFileSync(path.join(assetsDir, file))));
+  }
+  return sizes;
+}
+
+/** One row per `.wasm` asset; one without a named `wasmAssets` budget gets 0 KB and fails. */
+function wasmRows(distDir, budgets) {
+  const rows = [];
+  for (const [file, bytes] of measureWasm(path.join(distDir, 'assets'))) {
+    const name = file.replace(/-[A-Za-z0-9_-]{8}\.wasm$/, '').replace(/\.wasm$/, '');
+    const named = (budgets.wasmAssets ?? []).find((o) => o.name === name) ?? null;
+    rows.push(row(file, 'wasm', bytes, named ? named.budgetKB : 0, { named }));
+  }
+  return rows;
+}
+
 function readBuild(distDir) {
   const indexPath = path.join(distDir, 'index.html');
   const assetsDir = path.join(distDir, 'assets');
@@ -147,11 +167,12 @@ function chunkRows({ entry, eager, sizes }, budgets, vendorFiles) {
 function unmatchedEntries(rows, budgets) {
   const used = new Set(rows.map((r) => r.named).filter(Boolean));
   const lazy = (budgets.lazyOverrides ?? []).filter((o) => !used.has(o)).map((o) => `"${o.name ?? o.label}"`);
+  const wasm = (budgets.wasmAssets ?? []).filter((o) => !used.has(o)).map((o) => `wasm "${o.name}"`);
   const groups = new Set(rows.filter((r) => r.cls === 'vendor').map((r) => stableName(r.files[0])));
   const vendor = Object.keys(budgets.vendorGroupsKB ?? {})
     .filter((g) => !groups.has(g))
     .map((g) => `vendor group "${g}"`);
-  return [...lazy, ...vendor];
+  return [...lazy, ...wasm, ...vendor];
 }
 
 const warningFor = (entry) =>
@@ -188,6 +209,7 @@ export function checkBundle(distDir, budgets) {
     row(entry, 'entry', sizes.get(entry), budgets.entryKB),
     ...vendors,
     ...chunks,
+    ...wasmRows(distDir, budgets),
     row(totalLabel, 'total', eagerTotalBytes, budgets.totalInitialKB),
   ];
   const failures = rows.filter((r) => !r.ok);

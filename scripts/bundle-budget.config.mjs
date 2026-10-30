@@ -103,6 +103,14 @@ const LAZY_NAMED = [
   { name: 'hub-page', kb: 13.0, why: 'route; was on lazyDefault (9.76). Operator ruling 2026-10-23: baseline recaptured to 13.0 KB (ROK-1918 arrange mode measured 12.9 KB gz + ROK-1893 P3 hub polls), so the budget is 15.0 KB, measured +15%, like every other chunk; earlier raises had nudged the baseline only far enough to pass, leaving 0% headroom and a failed gate on nearly every hub story. +0.3 KB ROK-1891 (operator ruling 2026-10-23): per-kind hub copy + the /hubs path helpers; measured 12.7 KB gz vs the 12.6 cap, cap now 12.9. +0.24 KB ROK-1787 guild S3: Raids tab, schedule, attendance leaderboard, role composition, hero Next-raid chip; measured 11.57 KB gz vs the 11.57 default cap (fleet build 0.0 KB over). +0.9 KB ROK-1788 guild S4: lazy mirror/picker loader glue — the `__vite__mapDeps` preload list for the mirror chunk (1.16 KB gz, ~60 asset paths, since the chunk reaches app-entry); module set otherwise identical to main. Mirror 3.61 KB + picker 1.73 KB split out; measured 12.52 KB gz (main 11.29), cap 12.6. ROK-1830 S5: the route chunk is named `hub-page` since the guild page became the game-agnostic hub (`guild-page.tsx` -> `components/hub/hub-page.tsx`) — same route, renamed entry, baseline deliberately unchanged so the cap stays 12.6. The S5 onboarding checklist first measured 13.0-13.2 KB gz; it is now lazy and editor-only (`hub-overview.tsx`), which brought the chunk to 11.6 KB gz, 1.0 KB under the cap' },
 ];
 
+/**
+ * Named `.wasm` assets (gzip -9 KB, hash stripped). Only fetched on demand, so
+ * they never count toward `totalInitial`; a `.wasm` with no entry here fails.
+ */
+const WASM_NAMED = [
+  { name: 'rl_collectors_web_bg', kb: 86.4, why: 'ROK-1960 BG3 save reader (vendored rl-collectors-web 0.1.0 @ rl-companion e6123f84, 209,100 B raw / 88,433 B gz measured 2026-10-30); fetched only when the upload sheet parses a save. Re-vendor with scripts/vendor-bg3-wasm.mjs, then reset this baseline to the new measured size' },
+];
+
 const mapValues = (obj, fn) =>
   Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fn(v)]));
 
@@ -117,4 +125,5 @@ export default {
     baselineKB: kb,
     budgetKB: withHeadroom(kb),
   })),
+  wasmAssets: WASM_NAMED.map(({ kb, ...rest }) => ({ ...rest, baselineKB: kb, budgetKB: withHeadroom(kb) })),
 };
