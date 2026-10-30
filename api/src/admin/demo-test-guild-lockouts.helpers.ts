@@ -12,8 +12,11 @@
  * Reset times are relative to the seed's `now` (live: +3 days, expired:
  * -1 day), and the snapshot is upserted on `(character, section)`, so a
  * re-seed of the same guild name restores fresh lockouts (the controller then
- * invalidates the guild's roster-insights cache). Gear and talents
- * are empty, so no ilvl or role-hint fact changes the other Forever widgets.
+ * invalidates the guild's roster-insights cache). Talents are empty, so no
+ * role-hint fact changes the other Forever widgets; gear is empty unless the
+ * seed also sent `withGear` (ROK-1915, `demo-test-guild-gear.helpers.ts`),
+ * which rides in this same row (unique `(character, section)`). `withGear`
+ * alone writes empty lockout lists.
  */
 import { createHash } from 'node:crypto';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -23,6 +26,7 @@ import {
   type AddonLockout,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { seedGearFor, type SeedGear } from './demo-test-guild-gear.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -67,34 +71,43 @@ export function seedLockoutsFor(
   return [lockout(SEED_LOCKOUT_SOLO, live, 1, 1)];
 }
 
+/** Which halves of the snapshot to fill. */
+export interface SeedSnapshotParts {
+  lockouts: boolean;
+  gear: boolean;
+}
+
+const NO_GEAR: SeedGear = { gear: [], schema: ADDON_CHAR_SNAPSHOT_SCHEMA };
+
 /** The snapshot columns an upsert writes (and rewrites on conflict). */
-function snapshotRow(lockouts: AddonLockout[], now: Date) {
+function snapshotRow(lockouts: AddonLockout[], gear: SeedGear, now: Date) {
   const data: AddonCharSnapshotData = {
-    gear: [],
+    gear: gear.gear,
     talents: { nodes: [] },
     lockouts,
   };
   const payloadSha256 = createHash('sha256')
     .update(JSON.stringify(data))
     .digest('hex');
-  return { data, capturedAt: now, importedAt: now, payloadSha256 };
+  return {
+    data,
+    schema: gear.schema,
+    capturedAt: now,
+    importedAt: now,
+    payloadSha256,
+  };
 }
 
 async function upsertSnapshot(
   db: Db,
   characterId: string,
-  lockouts: AddonLockout[],
+  parts: { lockouts: AddonLockout[]; gear: SeedGear },
   now: Date,
 ): Promise<void> {
-  const row = snapshotRow(lockouts, now);
+  const row = snapshotRow(parts.lockouts, parts.gear, now);
   await db
     .insert(schema.characterAddonSnapshots)
-    .values({
-      characterId,
-      section: 'char',
-      schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
-      ...row,
-    })
+    .values({ characterId, section: 'char', ...row })
     .onConflictDoUpdate({
       target: [
         schema.characterAddonSnapshots.characterId,
@@ -104,15 +117,20 @@ async function upsertSnapshot(
     });
 }
 
-/** Writes (or restores) the lockout snapshots for the linked characters. */
+/** Writes (or restores) the lockout and/or gear snapshots for the linked characters. */
 export async function seedGuildLockouts(
   db: Db,
   owners: ReadonlyArray<{ owner: SeedLockoutOwner; characterId: string }>,
   now: Date,
+  want: SeedSnapshotParts,
 ): Promise<SeededGuildLockouts> {
   const nowS = Math.floor(now.getTime() / 1000);
   for (const { owner, characterId } of owners) {
-    await upsertSnapshot(db, characterId, seedLockoutsFor(owner, nowS), now);
+    const parts = {
+      lockouts: want.lockouts ? seedLockoutsFor(owner, nowS) : [],
+      gear: want.gear ? seedGearFor(owner) : NO_GEAR,
+    };
+    await upsertSnapshot(db, characterId, parts, now);
   }
   return {
     liveResetAt: nowS + 3 * DAY_S,

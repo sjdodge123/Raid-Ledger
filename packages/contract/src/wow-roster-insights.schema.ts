@@ -3,6 +3,7 @@ import {
   HubFactFreshnessSchema,
   HubFactSourceSchema,
 } from "./hub-facts.schema.js";
+import { WowRosterGearSchema } from "./wow-roster-gear.schema.js";
 
 /**
  * ROK-1906 (epic ROK-1905) — `GET /plugins/wow/guilds/:id/roster-insights`:
@@ -180,6 +181,8 @@ export const WowRosterInsightsSchema = z
     lockoutReporters: z.number().int().nonnegative().optional(),
     /** ROK-1916 — members and staff only; absent for visitors. */
     lastSeen: WowRosterLastSeenSchema.optional(),
+    /** ROK-1915 — gear readiness; members and staff only, absent for visitors. */
+    gear: WowRosterGearSchema.optional(),
     freshness: z
       .object({
         roster: HubFactFreshnessSchema.nullable(),
