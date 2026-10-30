@@ -11,10 +11,11 @@ import type { GuildCrestEditorState } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { RadioGroup } from '../../ui/radio-group';
 import { useGuildCrestEditor, usePickGuildCrestFromGallery, useSetGuildCrest, useUploadGuildCrest } from './use-guild-crest';
-import { canSaveCrest, setBodyFor, useCrestDraft, type CrestDraft, type CrestDraftApi, type CrestMode } from './crest-picker-draft';
+import { canRemoveCrestUpload, canSaveCrest, setBodyFor, useCrestDraft, type CrestDraft, type CrestDraftApi, type CrestMode } from './crest-picker-draft';
 import { crestErrorMessage, removedNotice } from './crest-picker-copy';
 import { CrestPresetSection } from './crest-picker-preset';
 import { CrestGallerySection, CrestUploadSection } from './crest-picker-sources';
+import { CrestRemoveUpload } from './crest-picker-remove';
 import { CrestCancelButton, CrestPickerFrame, CrestPickerLoadError, CrestPickerLoading } from './crest-picker-states';
 
 const MODES: readonly { value: CrestMode; label: string }[] = [
@@ -22,7 +23,13 @@ const MODES: readonly { value: CrestMode; label: string }[] = [
     { value: 'gallery', label: 'Gallery' }, { value: 'none', label: 'None' },
 ];
 
-export interface CrestPickerProps { guildId: number; name: string; onClose: () => void }
+export interface CrestPickerProps {
+    guildId: number;
+    name: string;
+    onClose: () => void;
+    /** `viewer.isStaff` — admins/operators get "Remove upload" on an upload crest (Q7). */
+    isStaff?: boolean | undefined;
+}
 
 interface LoadedProps extends CrestPickerProps { state: GuildCrestEditorState }
 
@@ -47,13 +54,14 @@ function useCrestSave({ guildId, onClose }: CrestPickerProps, upload: CrestUploa
     };
 }
 
-function PickerBody({ state, guildId, name, api, upload }: LoadedProps & { api: CrestDraftApi; upload: CrestUpload }): JSX.Element {
+function PickerBody({ state, guildId, name, isStaff = false, api, upload }: LoadedProps & { api: CrestDraftApi; upload: CrestUpload }): JSX.Element {
     const { draft } = api;
     return (
         <div className="flex flex-col gap-4" data-testid="crest-picker">
             {state.removedByStaffAt && <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-testid="crest-removed-notice">{removedNotice(state.removedByStaffAt)}</p>}
             <RadioGroup label="Crest type" hideLabel appearance="segmented" options={MODES} value={draft.mode} onChange={api.setMode} />
             {draft.mode === 'upload' && <CrestUploadSection state={state} name={name} staged={draft.file} uploading={upload.isPending} error={upload.error ? crestErrorMessage(upload.error) : null} onFile={api.setFile} />}
+            {draft.mode === 'upload' && canRemoveCrestUpload(state, isStaff) && <CrestRemoveUpload guildId={guildId} />}
             {draft.mode === 'preset' && <CrestPresetSection preset={draft.preset} name={name} onChange={api.setPreset} />}
             {draft.mode === 'gallery' && <CrestGallerySection guildId={guildId} mediaId={draft.mediaId} onPick={api.setMediaId} />}
             {draft.mode === 'none' && <p className="text-sm text-muted">The hub shows its initials. Your stored crest is kept, so you can switch back.</p>}

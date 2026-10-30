@@ -114,6 +114,28 @@ describe('HubHero — crest (ROK-1814)', () => {
         expect(crest).toHaveClass('col-start-1', 'row-start-1', 'h-16', 'sm:h-20');
     });
 
+    /** Operator ruling 2026-10-30 — the in-game GM edits the crest without being a hub editor. */
+    function withViewer(viewer: Partial<GuildPage['viewer']>): GuildPage {
+        const page = withCrest(null);
+        return { ...page, viewer: { ...page.viewer, ...viewer } };
+    }
+
+    it('a GM with canEditCrest (but not canEdit) gets the "Change crest" editor', () => {
+        renderWithProviders(<Hero page={withViewer({ canEdit: false, canEditCrest: true })} />);
+        expect(screen.getByRole('button', { name: 'Change crest' })).toBeInTheDocument();
+    });
+
+    it('canEditCrest false wins over canEdit; an older payload without it falls back to canEdit', () => {
+        const { unmount } = renderWithProviders(<Hero page={withViewer({ canEdit: true, canEditCrest: false })} />);
+        expect(screen.queryByTestId('hub-crest-edit')).toBeNull();
+        unmount();
+        const page = withViewer({ canEdit: true });
+        const legacyViewer = { ...page.viewer };
+        delete legacyViewer.canEditCrest;
+        renderWithProviders(<Hero page={{ ...page, viewer: legacyViewer }} />);
+        expect(screen.getByTestId('hub-crest-edit')).toBeInTheDocument();
+    });
+
     it('an upload shows the large image; a load error falls back to initials', () => {
         renderWithProviders(<Hero page={withCrest({ source: 'upload', urlSm: '/u/a.sm.webp', urlLg: '/u/a.lg.webp' })} />);
         const img = screen.getByTestId('hub-crest-img');

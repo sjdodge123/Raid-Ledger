@@ -64,3 +64,8 @@ export function useCrestDraft(state: GuildCrestEditorState): CrestDraftApi {
         setFile: (file) => setDraft((d) => ({ ...d, file })),
     };
 }
+
+/** Q7 "Remove upload" (operator ruling 2026-10-30): staff, and the active crest is a stored upload. */
+export function canRemoveCrestUpload(state: GuildCrestEditorState, isStaff: boolean): boolean {
+    return isStaff && state.active === 'upload' && state.upload !== null;
+}

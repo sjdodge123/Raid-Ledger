@@ -18,6 +18,7 @@ const STATE: GuildCrestEditorState = { active: null, upload: null, preset: null,
 const set = { mutate: vi.fn(), isPending: false, error: null };
 const pick = { mutate: vi.fn(), isPending: false, error: null };
 const upload = { mutate: vi.fn(), isPending: false, error: null as Error | null };
+const remove = { mutate: vi.fn(), isPending: false, error: null };
 
 const editor = (q: object): ReturnType<typeof hooks.useGuildCrestEditor> => q as unknown as ReturnType<typeof hooks.useGuildCrestEditor>;
 
@@ -26,9 +27,10 @@ function mockHooks(state: GuildCrestEditorState = STATE): void {
     vi.mocked(hooks.useSetGuildCrest).mockReturnValue(set as unknown as ReturnType<typeof hooks.useSetGuildCrest>);
     vi.mocked(hooks.usePickGuildCrestFromGallery).mockReturnValue(pick as unknown as ReturnType<typeof hooks.usePickGuildCrestFromGallery>);
     vi.mocked(hooks.useUploadGuildCrest).mockReturnValue(upload as unknown as ReturnType<typeof hooks.useUploadGuildCrest>);
+    vi.mocked(hooks.useRemoveGuildCrestUpload).mockReturnValue(remove as unknown as ReturnType<typeof hooks.useRemoveGuildCrestUpload>);
 }
 
-const renderPicker = (): void => { render(<CrestPicker guildId={7} name="Iron Wolves" onClose={vi.fn()} />); };
+const renderPicker = (isStaff = false): void => { render(<CrestPicker guildId={7} name="Iron Wolves" isStaff={isStaff} onClose={vi.fn()} />); };
 
 describe('CrestPicker', () => {
     beforeEach(() => { vi.clearAllMocks(); upload.error = null; gallery.hasMore = false; mockHooks(); });
@@ -134,6 +136,47 @@ describe('CrestPicker gallery', () => {
         const notice = screen.getByTestId('crest-removed-notice');
         expect(notice).toHaveTextContent('Removed by an admin on');
         expect(notice).toHaveClass('border-warning/30', 'text-warning');
+    });
+});
+
+/** Operator ruling 2026-10-30 (Q7) — staff remove an upload crest from inside the editor. */
+describe('CrestPicker — staff "Remove upload"', () => {
+    const UPLOADED: GuildCrestEditorState = { ...STATE, active: 'upload', upload: { urlSm: '/u/a.sm.webp', urlLg: '/u/a.lg.webp' } };
+    beforeEach(() => { vi.clearAllMocks(); mockHooks(UPLOADED); });
+
+    it('shows staff a Remove upload button on an upload crest', () => {
+        renderPicker(true);
+        expect(screen.getByRole('button', { name: 'Remove upload' })).toBeInTheDocument();
+    });
+
+    it('shows a non-staff editor no Remove upload button', () => {
+        renderPicker(false);
+        expect(screen.getByTestId('crest-upload-input')).toBeInTheDocument();
+        expect(screen.queryByTestId('crest-remove-upload')).toBeNull();
+    });
+
+    it('shows staff no Remove upload button when the crest is a preset (stored upload inactive)', async () => {
+        mockHooks({ ...UPLOADED, active: 'preset', preset: { emblemId: 'crown', fg: 'or', bg: 'sable' } });
+        renderPicker(true);
+        await userEvent.click(screen.getByRole('radio', { name: 'Upload' }));
+        expect(screen.getByTestId('crest-upload-input')).toBeInTheDocument();
+        expect(screen.queryByTestId('crest-remove-upload')).toBeNull();
+    });
+
+    it('asks first, then removes the upload through the hook', async () => {
+        renderPicker(true);
+        await userEvent.click(screen.getByTestId('crest-remove-upload-button'));
+        expect(remove.mutate).not.toHaveBeenCalled();
+        await userEvent.click(screen.getByTestId('crest-remove-upload-yes'));
+        expect(remove.mutate).toHaveBeenCalledWith(undefined, expect.anything());
+    });
+
+    it('Keep it backs out without removing', async () => {
+        renderPicker(true);
+        await userEvent.click(screen.getByTestId('crest-remove-upload-button'));
+        await userEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+        expect(remove.mutate).not.toHaveBeenCalled();
+        expect(screen.getByTestId('crest-remove-upload-button')).toBeInTheDocument();
     });
 });
 

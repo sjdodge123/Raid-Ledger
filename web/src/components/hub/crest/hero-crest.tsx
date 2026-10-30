@@ -1,5 +1,6 @@
 /**
- * ROK-1814 Q11 — the hero crest. For `viewer.canEdit` it is a "Change crest"
+ * ROK-1814 Q11 — the hero crest. For a crest editor (`viewer.canEditCrest`,
+ * which adds the in-game GM to `canEdit` — operator ruling 2026-10-30) it is a "Change crest"
  * button with a pencil badge that opens the picker (WoW Officers have no
  * settings sheet); everyone else sees the plain, `aria-hidden` crest.
  */
@@ -15,10 +16,12 @@ interface HeroCrestProps {
     name: string;
     crest: GuildCrest | null | undefined;
     canEdit: boolean;
+    /** `viewer.isStaff` — passed to the picker for "Remove upload" (Q7). */
+    isStaff?: boolean | undefined;
     className: string;
 }
 
-export function HeroCrest({ guildId, name, crest, canEdit, className }: HeroCrestProps): JSX.Element {
+export function HeroCrest({ guildId, name, crest, canEdit, isStaff = false, className }: HeroCrestProps): JSX.Element {
     const [open, setOpen] = useState(false);
     if (!canEdit) return <HubCrest crest={crest} name={name} size="hero" className={className} />;
     return (
@@ -32,7 +35,7 @@ export function HeroCrest({ guildId, name, crest, canEdit, className }: HeroCres
                     <PencilIcon className="h-3.5 w-3.5" />
                 </span>
             </Button>
-            {open && <LazyCrestPicker guildId={guildId} name={name} onClose={() => setOpen(false)} />}
+            {open && <LazyCrestPicker guildId={guildId} name={name} isStaff={isStaff} onClose={() => setOpen(false)} />}
         </>
     );
 }

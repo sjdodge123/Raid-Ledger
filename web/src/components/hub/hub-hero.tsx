@@ -80,7 +80,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
     return (
         <header data-testid="guild-hero" className={heroClass(Boolean(action))}>
             <div className="contents lg:flex lg:min-w-0 lg:items-center lg:gap-4" data-testid="hub-hero-identity">
-                <HeroCrest guildId={ctx.page.guild.id} crest={ctx.page.guild.crest} name={ctx.page.guild.name} canEdit={ctx.page.viewer.canEdit} className="col-start-1 row-start-1" />
+                <HeroCrest guildId={ctx.page.guild.id} crest={ctx.page.guild.crest} name={ctx.page.guild.name} canEdit={ctx.page.viewer.canEditCrest ?? ctx.page.viewer.canEdit} isStaff={ctx.page.viewer.isStaff === true} className="col-start-1 row-start-1" />
                 <div className="contents lg:block lg:min-w-0">
                     <h1 className={TITLE_CLASS} title={ctx.page.guild.name}>{ctx.page.guild.name}</h1>
                     {blurb && <p className="col-span-full break-words text-sm text-secondary lg:mb-2" data-testid="hub-hero-blurb">{blurb}</p>}
