@@ -63,20 +63,6 @@ export const GUILD_CREST_EMBLEM_CREDIT_LINE =
  * 12 heraldic colours. Crest DATA, not UI chrome — the one place fixed hex is
  * allowed (spec L5): storage keeps the ids, so the hex can be retuned freely.
  */
-export const GUILD_CREST_PALETTE = {
-  or: "#d4a72c",
-  argent: "#e5e7eb",
-  gules: "#b91c1c",
-  azure: "#1d4ed8",
-  vert: "#15803d",
-  purpure: "#7e22ce",
-  sable: "#111827",
-  tenne: "#c2410c",
-  sanguine: "#7f1d1d",
-  murrey: "#9d174d",
-  celeste: "#38bdf8",
-  bronze: "#8a5a2b",
-} as const;
 export const GUILD_CREST_PALETTE_IDS = [
   "or",
   "argent",
@@ -90,8 +76,24 @@ export const GUILD_CREST_PALETTE_IDS = [
   "murrey",
   "celeste",
   "bronze",
-] as const satisfies readonly (keyof typeof GUILD_CREST_PALETTE)[];
+] as const;
 export type GuildCrestPaletteId = (typeof GUILD_CREST_PALETTE_IDS)[number];
+
+/** Hex per id — `Record` over the id list, so a missing or extra colour fails to compile. */
+export const GUILD_CREST_PALETTE = {
+  or: "#d4a72c",
+  argent: "#e5e7eb",
+  gules: "#b91c1c",
+  azure: "#1d4ed8",
+  vert: "#15803d",
+  purpure: "#7e22ce",
+  sable: "#111827",
+  tenne: "#c2410c",
+  sanguine: "#7f1d1d",
+  murrey: "#9d174d",
+  celeste: "#38bdf8",
+  bronze: "#8a5a2b",
+} as const satisfies Record<GuildCrestPaletteId, string>;
 
 /** Upload limits (spec Q5): 1 MiB, 64–1024 px per edge. */
 export const GUILD_CREST_UPLOAD_MAX_BYTES = 1_048_576;
