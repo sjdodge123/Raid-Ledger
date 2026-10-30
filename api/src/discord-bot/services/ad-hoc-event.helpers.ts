@@ -1,8 +1,13 @@
-import { and, eq, inArray, not, or, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
-import { isOccupiedLiveAdHoc } from './ad-hoc-open-participants.sql';
+import {
+  AD_HOC_OCCUPIED_REAP_CEILING_MS,
+  orphanedAdHocConditions,
+} from './ad-hoc-open-participants.sql';
+
+export { AD_HOC_OCCUPIED_REAP_CEILING_MS };
 import {
   buildBindingClause,
   buildTimeConditions,
@@ -278,18 +283,6 @@ export async function setGracePeriodStatus(
   return rows.length > 0;
 }
 
-/** Stale threshold: events whose effective end is > 30 minutes ago. */
-const ORPHAN_THRESHOLD_MS = 30 * 60 * 1000;
-
-/**
- * ROK-2052 backstop: participant rows carry no heartbeat, so a leave missed
- * across a bot restart / gateway drop leaves a stale open row. An occupied
- * live event is spared only while its effective end is at most this far in
- * the past; beyond it the reaper ends it like any orphan, so a stale row
- * cannot pin a Quick Play live (and absorb every future spawn) forever.
- */
-export const AD_HOC_OCCUPIED_REAP_CEILING_MS = 4 * 60 * 60 * 1000;
-
 /**
  * Find orphaned ad-hoc events: live or grace_period, not cancelled,
  * whose effective end time is more than 30 minutes in the past — except a
@@ -300,30 +293,18 @@ export const AD_HOC_OCCUPIED_REAP_CEILING_MS = 4 * 60 * 60 * 1000;
 export async function findOrphanedAdHocEvents(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<(typeof tables.events.$inferSelect)[]> {
-  const now = Date.now();
-  const cutoff = new Date(now - ORPHAN_THRESHOLD_MS).toISOString();
-  const ceiling = new Date(now - AD_HOC_OCCUPIED_REAP_CEILING_MS).toISOString();
-  const effectiveEnd = sql`COALESCE(${tables.events.extendedUntil}, upper(${tables.events.duration}))`;
   return db
     .select()
     .from(tables.events)
-    .where(
-      and(
-        eq(tables.events.isAdHoc, true),
-        inArray(tables.events.adHocStatus, ['live', 'grace_period']),
-        sql`${tables.events.cancelledAt} IS NULL`,
-        sql`${effectiveEnd} < ${cutoff}::timestamptz`,
-        or(
-          sql`${effectiveEnd} < ${ceiling}::timestamptz`,
-          not(isOccupiedLiveAdHoc(db)),
-        ),
-      ),
-    );
+    .where(and(...orphanedAdHocConditions(db, Date.now())));
 }
 
 /**
  * Force-claim an orphaned event (live or grace_period -> ended).
- * Returns the claimed event row, or null if already claimed.
+ * Returns the claimed event row, or null if already claimed — or if it is no
+ * longer an orphan as of `now` (ROK-2052 Codex P2: a player joined or
+ * auto-extend moved its end between the reaper's select and this claim). The
+ * WHERE re-asserts the finder's own predicate, atomically.
  */
 export async function forceClaimOrphanedEvent(
   db: PostgresJsDatabase<typeof schema>,
@@ -336,7 +317,7 @@ export async function forceClaimOrphanedEvent(
     .where(
       and(
         eq(tables.events.id, eventId),
-        inArray(tables.events.adHocStatus, ['live', 'grace_period']),
+        ...orphanedAdHocConditions(db, now.getTime()),
       ),
     )
     .returning();

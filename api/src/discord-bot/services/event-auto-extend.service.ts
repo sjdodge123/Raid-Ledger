@@ -21,19 +21,16 @@ import {
   type SuppressionWindowExtendedPayload,
 } from './suppression-window-events';
 import { countServerOnlyPresence } from './ad-hoc-server-presence.helpers';
-import { isOccupiedLiveAdHoc } from './ad-hoc-open-participants.sql';
+import {
+  anyOccupiedLiveAdHocDue,
+  isOccupiedLiveAdHoc,
+} from './ad-hoc-open-participants.sql';
 
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
 
 /** Look-behind window: catch events that ended within the last 5 minutes (ms). */
 const WINDOW_BEHIND_MS = 5 * 60 * 1000;
-
-/**
- * ROK-2052: how far back the cache gate looks for an ad-hoc event whose end
- * slipped out of the window (= the cache's own lookback, so the gate can see it).
- */
-const SLIPPED_LOOKBACK_MS = 2 * 60 * 60 * 1000;
 
 /**
  * Auto-extends events (scheduled and ad-hoc) when voice channel activity
@@ -110,8 +107,7 @@ export class EventAutoExtendService {
       this.logger.debug('Auto-extend is disabled, skipping');
       return false;
     }
-    if (this.eventCache && !this.cacheHasWork(this.eventCache, new Date()))
-      return false;
+    if (!(await this.hasPotentialWork(new Date()))) return false;
     const config = await this.loadExtendConfig();
     const now = new Date();
     const candidates = await this.queryCandidates(now);
@@ -123,17 +119,20 @@ export class EventAutoExtendService {
   }
 
   /**
-   * Cheap pre-check before the DB query: an active or just-ended event, or
-   * (ROK-2052) an ad-hoc one whose end slipped past the window — it may still
-   * be live and occupied, and must be extended once players are back.
+   * Cheap pre-check before the candidate query: an active or just-ended event
+   * in the cache — else (ROK-2052) one indexed EXISTS for a live, occupied
+   * ad-hoc event whose end slipped past the window. The cache only holds
+   * events <= 2h past their end, and one 2–4h overdue that got its players
+   * back must still be extended before the reaper's occupied ceiling.
    */
-  private cacheHasWork(cache: ActiveEventCacheService, now: Date): boolean {
+  private async hasPotentialWork(now: Date): Promise<boolean> {
+    const cache = this.eventCache;
+    if (!cache) return true;
     if (cache.getActiveEvents(now).length > 0) return true;
     if (cache.getRecentlyEndedEvents(now, WINDOW_BEHIND_MS).length > 0)
       return true;
-    return cache
-      .getRecentlyEndedEvents(now, SLIPPED_LOOKBACK_MS)
-      .some((e) => e.isAdHoc);
+    const ahead = new Date(now.getTime() + WINDOW_AHEAD_MS);
+    return anyOccupiedLiveAdHocDue(this.db, ahead);
   }
 
   /** Load auto-extend configuration from settings. */
@@ -212,7 +211,8 @@ export class EventAutoExtendService {
    * Compute the new extended end time, or null if max overage reached. An end
    * that slipped past the look-behind window (ROK-2052) extends from now, so
    * one tick brings it back inside the window instead of a +15 min step that
-   * is still in the past.
+   * is still in the past. A cap already behind `now` counts as reached: the
+   * write would show a past end on the embed.
    */
   private computeNewEnd(
     c: ExtendCandidate,
@@ -231,7 +231,10 @@ export class EventAutoExtendService {
     const slipped = effectiveEnd.getTime() < now.getTime() - WINDOW_BEHIND_MS;
     const base = slipped ? now : effectiveEnd;
     const raw = new Date(base.getTime() + incrementMs);
-    return raw > maxEnd ? maxEnd : raw;
+    if (raw <= maxEnd) return raw;
+    if (maxEnd.getTime() > now.getTime()) return maxEnd;
+    this.logger.debug(`Event ${c.id}: max overage reached (cap is past), skip`);
+    return null;
   }
 
   /** Persist extension and fire side effects. */
