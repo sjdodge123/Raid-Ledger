@@ -31,10 +31,7 @@ import {
   resolveVoiceForEdit,
   resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
-import {
-  pruneStartWarnings,
-  startCandidate,
-} from './scheduled-event.start';
+import { pruneStartWarnings, startCandidate } from './scheduled-event.start';
 import {
   createScheduledEventIdempotent,
   type GuildSECache,

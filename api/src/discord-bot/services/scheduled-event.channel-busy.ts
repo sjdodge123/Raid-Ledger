@@ -83,7 +83,8 @@ async function tryDelete(guild: Guild, se: BlockedSE): Promise<unknown> {
     return null;
   } catch (error) {
     const gone =
-      error instanceof DiscordAPIError && error.code === UNKNOWN_SCHEDULED_EVENT;
+      error instanceof DiscordAPIError &&
+      error.code === UNKNOWN_SCHEDULED_EVENT;
     return gone ? null : (error ?? new Error('delete failed'));
   }
 }

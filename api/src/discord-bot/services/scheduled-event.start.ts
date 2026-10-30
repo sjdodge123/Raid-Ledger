@@ -87,7 +87,9 @@ export function pruneStartWarnings(
 ): void {
   const live = new Set(
     candidates.flatMap((c) =>
-      c.discordScheduledEventId ? [warnKey(c.id, c.discordScheduledEventId)] : [],
+      c.discordScheduledEventId
+        ? [warnKey(c.id, c.discordScheduledEventId)]
+        : [],
     ),
   );
   for (const key of warned) if (!live.has(key)) warned.delete(key);
