@@ -315,3 +315,24 @@ describe('ROK-1000: onModuleInit auto-recovery', () => {
     expect(mocks.ollamaModel.pullModel).toHaveBeenCalledWith(AI_DEFAULTS.model);
   });
 });
+
+describe('ROK-1700: RL_FLAVOUR=cloud never auto-recovers (downloads) Ollama', () => {
+  afterEach(() => {
+    delete process.env.RL_FLAVOUR;
+    jest.restoreAllMocks();
+  });
+
+  it('skips runSetup under cloud even when the DB says ready and the binary is missing', async () => {
+    const mocks = createRecoveryMocks();
+    configureContainerRebuild(mocks);
+    const service = await buildRecoveryModule(mocks);
+    const runSetupSpy = jest.spyOn(service, 'runSetup').mockResolvedValue();
+    process.env.RL_FLAVOUR = 'cloud';
+
+    await callOnModuleInit(service);
+    await new Promise((r) => setImmediate(r));
+
+    expect(runSetupSpy).not.toHaveBeenCalled();
+    expect(mocks.native.isAllinoneMode).not.toHaveBeenCalled();
+  });
+});

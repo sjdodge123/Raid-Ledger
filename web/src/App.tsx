@@ -21,6 +21,7 @@ import { ThemeParticles } from './components/ui/ThemeParticles';
 import { takeCapturedMagicLinkToken } from './lib/magic-link-capture';
 import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
+import { ClaimGate } from './components/auth/ClaimGate';
 import { prefetchDeferredChunksOnIdle } from './idle-prefetch';
 
 // ROK-657/1366: the single-use magic-link token was already taken from the URL
@@ -118,7 +119,9 @@ function App() {
         <ConnectivityBanner />
         <Layout>
           <Suspense fallback={<LoadingSpinner />}>
-            <AppRoutes />
+            <ClaimGate>
+              <AppRoutes />
+            </ClaimGate>
             <PrefetchAfterFirstRoute />
           </Suspense>
         </Layout>

@@ -120,6 +120,9 @@ export const InsightsEventsTab = lazyWithRetry(() =>
 export const UserProfilePage = lazyWithRetry(() =>
     import('./pages/user-profile-page').then((m) => ({ default: m.UserProfilePage })),
 );
+export const ClaimPage = lazyWithRetry(() =>
+    import('./pages/claim/claim-page').then((m) => ({ default: m.ClaimPage })),
+);
 export const OnboardingWizardPage = lazyWithRetry(() =>
     import('./pages/onboarding-wizard-page').then((m) => ({ default: m.OnboardingWizardPage })),
 );

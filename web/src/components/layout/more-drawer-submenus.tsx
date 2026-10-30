@@ -8,12 +8,14 @@ import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useItadSettings } from '../../hooks/admin/use-itad-settings';
 import { useCooptimusSettings } from '../../hooks/admin/use-cooptimus-settings';
+import { useFlavour } from '../../hooks/use-flavour';
 import { useAdminCalendarSyncSettings } from '../../hooks/use-admin-calendar-sync';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
     buildDiscordNavItems,
     buildNavSections,
+    filterNavForFlavour,
 } from '../admin/admin-nav-data';
 import { SidebarNavItem } from '../admin/admin-sidebar';
 import { usePluginStore } from '../../stores/plugin-store';
@@ -132,6 +134,7 @@ function useAdminNavSections() {
     const { cooptimusStatus } = useCooptimusSettings();
     const calendarSync = useAdminCalendarSyncSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
+    const flavour = useFlavour();
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
         steam: { configured: steamStatus.data?.configured ?? false, loading: steamStatus.isLoading },
@@ -146,7 +149,7 @@ function useAdminNavSections() {
             { configured: oauthStatus.data?.configured ?? false, loading: oauthStatus.isLoading },
         )
         : null;
-    return buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
+    return filterNavForFlavour(buildNavSections(coreIntegrations, pluginIntegrations, discordItems), flavour);
 }
 
 function AdminNavSection({ section, pathname, onClose }: {

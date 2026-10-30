@@ -29,6 +29,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UserRole } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { invalidateAuthUser } from './auth-user-cache';
+import { isCloudFlavour } from '../common/flavour/flavour';
 
 export const FLEET_FIRST_LOGIN_ENV = 'FLEET_FIRST_DISCORD_LOGIN_ADMIN';
 export const FLEET_ADMIN_ID_ENV = 'FLEET_ADMIN_DISCORD_ID';
@@ -50,6 +51,8 @@ export const NO_DISCORD_ADMIN_YET = sql`NOT EXISTS (
 export function isFirstLoginAdminEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  // ROK-1700: a cloud instance ignores every FLEET_* variable.
+  if (isCloudFlavour(env)) return false;
   if (env.DEMO_MODE !== 'true') return false;
   if (env[FLEET_FIRST_LOGIN_ENV] !== 'true') return false;
   return (env[FLEET_ADMIN_ID_ENV] ?? '').trim() === '';

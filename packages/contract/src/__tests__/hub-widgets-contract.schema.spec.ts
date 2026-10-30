@@ -15,6 +15,10 @@ import {
   foreverIlvlFloor,
   WowRosterGearSchema,
 } from "../wow-roster-gear.schema.js";
+import {
+  MAX_RAID_PROGRESS_BOSSES,
+  WowRosterRaidProgressSchema,
+} from "../wow-roster-raid-progress.schema.js";
 
 const summary = {
   id: 1,
@@ -392,5 +396,66 @@ describe("WowRosterInsights gear (ROK-1915)", () => {
       "Main hand",
     ]);
     expect(foreverGearSlotName(42)).toBe("Slot 42");
+  });
+});
+
+describe("WowRosterInsights raidProgress (ROK-1917)", () => {
+  const boss = {
+    encounterId: 663,
+    difficultyId: 9,
+    difficultyLabel: "40 Player",
+    name: "Lucifron",
+    firstKillAt: "2026-10-22T20:10:00.000Z",
+    kills: 1,
+    wipes: 2,
+    lastPullAt: "2026-10-22T20:10:00.000Z",
+  };
+  const raidProgress = {
+    bosses: [
+      boss,
+      {
+        ...boss,
+        encounterId: 664,
+        name: "Magmadar",
+        firstKillAt: null,
+        kills: 0,
+        difficultyLabel: null,
+      },
+    ],
+    killedCount: 1,
+    pullCount: 5,
+    lastPullAt: "2026-10-22T20:10:00.000Z",
+  };
+  it("parses a member payload with raidProgress, an empty one, and a visitor payload without", () => {
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, raidProgress }).success,
+    ).toBe(true);
+    expect(
+      WowRosterRaidProgressSchema.safeParse({
+        bosses: [],
+        killedCount: 0,
+        pullCount: 0,
+        lastPullAt: null,
+      }).success,
+    ).toBe(true);
+    expect(WowRosterInsightsSchema.safeParse(insights).success).toBe(true);
+  });
+  it("caps bosses, and rejects extra keys, a roster and a non-ISO time", () => {
+    const bosses = Array.from(
+      { length: MAX_RAID_PROGRESS_BOSSES + 1 },
+      (_, i) => ({ ...boss, encounterId: i }),
+    );
+    const bad = [
+      { ...raidProgress, bosses },
+      { ...raidProgress, extra: 1 },
+      { ...raidProgress, bosses: [{ ...boss, rosterNames: ["Wren"] }] },
+      { ...raidProgress, bosses: [{ ...boss, lastPullAt: "yesterday" }] },
+      { ...raidProgress, bosses: [{ ...boss, kills: -1 }] },
+    ];
+    for (const rp of bad)
+      expect(
+        WowRosterInsightsSchema.safeParse({ ...insights, raidProgress: rp })
+          .success,
+      ).toBe(false);
   });
 });

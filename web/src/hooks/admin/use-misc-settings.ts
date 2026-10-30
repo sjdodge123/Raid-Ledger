@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthToken } from '../use-auth';
 import { adminFetch } from './admin-fetch';
+import { useSettledFlavour } from '../use-flavour';
 import type {
     DemoDataStatus,
     DemoDataResult,
@@ -10,11 +11,14 @@ import type {
 
 function useDemoDataSettings() {
     const queryClient = useQueryClient();
+    // ROK-1700: Demo Data is NAS-only — the route 404s under cloud, so fetch
+    // only once the flavour is known to be nas (missing/failed status = nas).
+    const flavour = useSettledFlavour();
 
     const demoDataStatus = useQuery<DemoDataStatus>({
         queryKey: ['admin', 'settings', 'demo', 'status'],
         queryFn: () => adminFetch('/admin/settings/demo/status'),
-        enabled: !!getAuthToken(),
+        enabled: !!getAuthToken() && flavour === 'nas',
         staleTime: 10_000,
     });
 

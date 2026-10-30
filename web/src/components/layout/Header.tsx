@@ -79,6 +79,26 @@ function CommunityLogo({ logoUrl, name }: { logoUrl: string | null; name: string
     );
 }
 
+/**
+ * Nav links, actions and the mobile menu button. ROK-1701 D-15: hidden while the
+ * instance awaits its claim — every route then bounces to /claim, so the header
+ * shows only the brand and "First-time setup" (the approved claim sheet frame).
+ */
+function HeaderNavRow({ pathname, user, onMenuClick }: { pathname: string; user: User | null; onMenuClick: () => void }) {
+    return (
+        <>
+            <DesktopNav pathname={pathname} user={user} />
+            <div className="flex items-center gap-4">
+                <DesktopActions user={user} />
+                {user && <div className="md:hidden"><NotificationBell /></div>}
+                <button onClick={onMenuClick} className="md:hidden p-2 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel" aria-label="Open menu">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                </button>
+            </div>
+        </>
+    );
+}
+
 export function Header({ onMenuClick }: HeaderProps) {
     const location = useLocation();
     const { user } = useAuth();
@@ -94,14 +114,9 @@ export function Header({ onMenuClick }: HeaderProps) {
                 style={{ zIndex: Z_INDEX.HEADER, transition: 'transform 300ms ease-in-out' }}>
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     <CommunityLogo logoUrl={communityLogoUrl} name={communityName} />
-                    <DesktopNav pathname={location.pathname} user={user} />
-                    <div className="flex items-center gap-4">
-                        <DesktopActions user={user} />
-                        {user && <div className="md:hidden"><NotificationBell /></div>}
-                        <button onClick={onMenuClick} className="md:hidden p-2 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel" aria-label="Open menu">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-                        </button>
-                    </div>
+                    {systemStatus?.claimRequired === true
+                        ? <span className="text-xs text-muted">First-time setup</span>
+                        : <HeaderNavRow pathname={location.pathname} user={user} onMenuClick={onMenuClick} />}
                 </div>
             </header>
         </>

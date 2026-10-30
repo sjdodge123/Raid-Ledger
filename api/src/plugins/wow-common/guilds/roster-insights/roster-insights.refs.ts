@@ -57,6 +57,19 @@ async function loadGuildRows(
   }));
 }
 
+/**
+ * ROK-1917 Q1 — the linked users of a `wow_guild` hub's roster: the same rows
+ * (and owner links) the insight's `linkedUserIds` come from. The raid import
+ * uses it to decide who may claim a duplicate pull (Codex P2).
+ */
+export async function loadGuildLinkedUserIds(
+  db: Db,
+  guildId: number,
+): Promise<number[]> {
+  const rows = await loadGuildRows(db, guildId);
+  return rows.flatMap((r) => (r.userId === null ? [] : [r.userId]));
+}
+
 async function loadCommunityRows(
   db: Db,
   hubId: number,
@@ -90,6 +103,31 @@ export function toInsightRow(
     onlineAtExport: r.onlineAtExport,
     lastOnlineDays: r.lastOnlineDays,
     facts,
+  };
+}
+
+/** The roster with facts, plus the owners of its linked characters. */
+export interface JoinedRoster {
+  /** Rows with resolved facts; rows past the resolver cap have none and drop. */
+  rows: InsightRow[];
+  /**
+   * ROK-1917 Q1 — every linked character's owner, from the RAW rows, so a
+   * member past the resolver cap still counts as a trusted pull reporter.
+   */
+  linkedUserIds: number[];
+}
+
+/** Join raw rows to their resolved facts (by resolver key). */
+export function joinFacts(
+  raw: readonly InsightRawRow[],
+  facts: { get(key: string): ResolvedWowFacts | undefined },
+): JoinedRoster {
+  return {
+    rows: raw.flatMap((r) => {
+      const resolved = facts.get(r.key);
+      return resolved ? [toInsightRow(r, resolved)] : [];
+    }),
+    linkedUserIds: raw.flatMap((r) => (r.userId === null ? [] : [r.userId])),
   };
 }
 

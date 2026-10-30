@@ -16,6 +16,9 @@
  *   RESET_PASSWORD=true npx ts-node scripts/bootstrap-admin.ts  # Reset via env var
  */
 
+// ROK-1701 D-13: MUST be first — the cloud claim-arm failure path reports to
+// Sentry. Prints nothing; its dotenv load never overrides a set variable.
+import '../src/sentry/instrument';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { and, eq, isNotNull, notLike } from 'drizzle-orm';
@@ -24,8 +27,15 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import * as schema from '../src/drizzle/schema';
 import { revokeAllAndBumpTx } from '../src/auth/refresh/refresh-rotation.helpers';
+import { isCloudFlavour } from '../src/common/flavour/flavour';
+import {
+    runCloudClaimStep,
+    type ClaimBootOutcome,
+} from '../src/setup-claim/claim-bootstrap.helpers';
 
 const SALT_ROUNDS = 12;
+/** NAS: no claim reads, no claim lines (ROK-1701). */
+const NO_CLAIM: ClaimBootOutcome = { armed: false, failed: false };
 const DEFAULT_EMAIL = 'admin@local';
 const FLEET_ADMIN_ENV = 'FLEET_ADMIN_DISCORD_ID';
 /** Set only by rl-infra env-spin (ROK-1537); see fleet-first-login-admin.helpers.ts. */
@@ -60,6 +70,8 @@ const DISCORD_SNOWFLAKE = /^[0-9]{5,32}$/;
 async function promoteFleetOperator(
     db: PostgresJsDatabase<typeof schema>,
 ): Promise<void> {
+    // ROK-1700: cloud ignores FLEET_* (the api logs the one warning at boot).
+    if (isCloudFlavour()) return;
     const configuredId = (process.env[FLEET_ADMIN_ENV] ?? '').trim();
     if (!configuredId) return;
     if (process.env.DEMO_MODE !== 'true') {
@@ -109,6 +121,8 @@ export function linkedAdminScope(
 ): { kind: 'any' } | { kind: 'only'; discordId: string } | { kind: 'none' } {
     const configuredId = (env[FLEET_ADMIN_ENV] ?? '').trim();
     const firstLogin = env[FLEET_FIRST_LOGIN_ENV] === 'true';
+    // ROK-1700: cloud is never a fleet env, whatever FLEET_* says.
+    if (isCloudFlavour(env)) return { kind: 'any' };
     if (env.DEMO_MODE !== 'true' || (!configuredId && !firstLogin)) {
         return { kind: 'any' };
     }
@@ -200,8 +214,20 @@ export async function bootstrapAdmin() {
 
     const sql = postgres(databaseUrl);
     const db = drizzle(sql, { schema });
+    let claimFailed = false;
 
     try {
+        // ROK-1701 D-13: cloud arms the setup claim BEFORE admin@local exists;
+        // RESET_PASSWORD closes an unclaimed one instead (D-14). NAS skips it.
+        const claim = isCloudFlavour()
+            ? await runCloudClaimStep(db, {
+                  resetMode,
+                  env: process.env,
+                  now: new Date(),
+              })
+            : NO_CLAIM;
+        claimFailed = claim.failed;
+
         // A3-B P6: runs BEFORE the linked-user resolve, deliberately. Once the
         // operator's row is admin + Discord-linked it satisfies the linkedUser
         // predicate below anyway — on the NEXT bootstrap run. Promoting first
@@ -325,11 +351,10 @@ export async function bootstrapAdmin() {
                 printExistingCredentialHint(
                     'bootstrap-admin: linked admin credential rebound, password unchanged',
                 );
+            } else if (existingCred) {
+                printAdminBanner('ADMIN PASSWORD RESET', password);
             } else {
-                printAdminBanner(
-                    existingCred ? 'ADMIN PASSWORD RESET' : 'INITIAL ADMIN CREDENTIALS',
-                    password,
-                );
+                printInitialCredentials(password, claim.armed);
             }
             await sql.end();
             return;
@@ -398,14 +423,36 @@ export async function bootstrapAdmin() {
             userId: adminUser.id,
         }).onConflictDoNothing({ target: schema.localCredentials.email });
 
-        printAdminBanner('INITIAL ADMIN CREDENTIALS', password);
+        printInitialCredentials(password, claim.armed);
 
         await sql.end();
     } catch (error) {
         console.error('Bootstrap failed:', error);
         await sql.end();
         process.exit(1);
+    } finally {
+        // D-13: the banner already printed (NAS fallback); the arm failure was
+        // captured + flushed to Sentry and logged as its own error line by
+        // reportClaimBootFailure. The non-zero exit is for direct callers —
+        // docker-entrypoint.sh currently swallows it (`|| echo ...`), so the
+        // error line + Sentry event are what surface it on a real boot.
+        if (claimFailed) process.exit(1);
     }
+}
+
+/**
+ * ROK-1701: on cloud with a live setup claim the first-creation password is
+ * never printed — the operator sets their own at /claim. Otherwise (NAS, a
+ * consumed claim, or a failed arm) today's banner, unchanged.
+ */
+function printInitialCredentials(password: string, claimArmed: boolean): void {
+    if (claimArmed) {
+        console.log(
+            `bootstrap-admin: cloud mode → ${DEFAULT_EMAIL} created; claim it at /claim`,
+        );
+        return;
+    }
+    printAdminBanner('INITIAL ADMIN CREDENTIALS', password);
 }
 
 /**
