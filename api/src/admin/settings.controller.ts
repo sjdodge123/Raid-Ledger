@@ -15,6 +15,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
+import { defaultDiscordCallbackUrl } from '../settings/client-url.helpers';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
@@ -84,7 +85,11 @@ export class AdminSettingsController {
       clientId: body.clientId,
       clientSecret: body.clientSecret,
       callbackUrl:
-        body.callbackUrl || 'http://localhost:3000/auth/discord/callback',
+        body.callbackUrl ||
+        defaultDiscordCallbackUrl(
+          process.env,
+          'http://localhost:3000/auth/discord/callback',
+        ),
     });
     this.logger.log('Discord OAuth configuration updated via admin UI');
     return {
