@@ -515,7 +515,7 @@ describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
     ctx.mockDb.update.mockReturnValue(createUpdateChain());
     ctx.voiceAttendanceService.getActiveCount.mockReturnValue(3);
     await ctx.service.checkAndExtendEvents();
-    expect(ctx.adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
+    expect(ctx.scheduledEventService.updateEndTime).not.toHaveBeenCalled();
   });
 
   it('does NOT queue a Discord embed update when ad-hoc event has no binding', async () => {
@@ -528,7 +528,7 @@ describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
     ctx.mockDb.update.mockReturnValue(createUpdateChain());
     ctx.voiceAttendanceService.getActiveCount.mockReturnValue(3);
     await ctx.service.checkAndExtendEvents();
-    expect(ctx.adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
+    expect(ctx.scheduledEventService.updateEndTime).not.toHaveBeenCalled();
   });
 
   it('delegates to cronJobService.executeWithTracking with the correct job name', async () => {
@@ -538,5 +538,29 @@ describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
       'EventAutoExtendService_checkExtensions',
       expect.any(Function),
     );
+  });
+});
+
+describe('EventAutoExtendService — slipped past the cap (ROK-2052)', () => {
+  let ctx: AutoExtendCtx;
+
+  beforeEach(async () => {
+    ctx = await buildAutoExtendModule();
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('does NOT extend a slipped event whose max-overage cap is already past (ROK-2052 m1)', async () => {
+    const originalEnd = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const extendedUntil = new Date(originalEnd.getTime() + 60 * 60 * 1000);
+    const candidate = makeCandidate({ id: 42, originalEnd, extendedUntil });
+    ctx.mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
+    ctx.settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(
+      120,
+    );
+    ctx.voiceAttendanceService.getActiveCount.mockReturnValue(5);
+    await ctx.service.checkAndExtendEvents();
+    expect(ctx.mockDb.update).not.toHaveBeenCalled();
+    expect(ctx.scheduledEventService.updateEndTime).not.toHaveBeenCalled();
   });
 });
