@@ -142,6 +142,17 @@ describe('writes', () => {
     );
   });
 
+  it('armClaim writes both rows inside ONE transaction', async () => {
+    const tx = createDrizzleMock();
+    mock.transaction.mockImplementationOnce(
+      async (cb: (t: MockDb) => Promise<unknown>) => cb(tx),
+    );
+    await armClaim(asDb(mock), { codeHash: HASH, expiresAt: new Date(EXP) });
+    expect(mock.transaction).toHaveBeenCalledTimes(1);
+    expect(mock.insert).not.toHaveBeenCalled();
+    expect(tx.insert).toHaveBeenCalledTimes(2);
+  });
+
   it('markClaimed records claimed_at and deletes hash + expiry', async () => {
     await markClaimed(asDb(mock), new Date(CLAIMED));
     expect(Object.fromEntries(writtenValues(mock))).toEqual({

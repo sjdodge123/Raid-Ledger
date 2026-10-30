@@ -78,9 +78,12 @@ export async function readClaimState(
   return toClaimState(rows);
 }
 
+/** A db or a transaction handle — the narrowest surface the writes use. */
+type ClaimWriter = Pick<ClaimDb, 'insert'>;
+
 /** Upsert one encrypted claim row. */
 async function writeClaimKey(
-  db: ClaimDb,
+  db: ClaimWriter,
   key: ClaimKey,
   value: string,
 ): Promise<void> {
@@ -95,18 +98,22 @@ async function writeClaimKey(
     });
 }
 
-/** Arm (or re-arm) a code: store its hash and the new expiry. Callers never
- *  arm a claimed instance (`planClaimArm` returns `claimed`). */
+/** Arm (or re-arm) a code: store its hash and the new expiry in ONE
+ *  transaction, so a failure never leaves a new (never-logged) hash beside a
+ *  stale expiry. Callers never arm a claimed instance (`planClaimArm`
+ *  returns `claimed`). */
 export async function armClaim(
   db: ClaimDb,
   arm: { codeHash: string; expiresAt: Date },
 ): Promise<void> {
-  await writeClaimKey(db, SETTING_KEYS.CLAIM_CODE_HASH, arm.codeHash);
-  await writeClaimKey(
-    db,
-    SETTING_KEYS.CLAIM_EXPIRES_AT,
-    arm.expiresAt.toISOString(),
-  );
+  await db.transaction(async (tx) => {
+    await writeClaimKey(tx, SETTING_KEYS.CLAIM_CODE_HASH, arm.codeHash);
+    await writeClaimKey(
+      tx,
+      SETTING_KEYS.CLAIM_EXPIRES_AT,
+      arm.expiresAt.toISOString(),
+    );
+  });
 }
 
 /** Consume: record `claimed_at`, delete the hash + expiry. Run inside the
