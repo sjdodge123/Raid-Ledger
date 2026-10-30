@@ -37,7 +37,7 @@ export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+2rem)]';
  */
 // Full-screen wizard routes where the tab bar must not render. Exact-match
 // paths mirroring app-routes.tsx — update this when those routes move.
-const MODAL_ROUTES = new Set(['/onboarding', '/admin/setup']);
+const MODAL_ROUTES = new Set(['/onboarding', '/admin/setup', '/claim']);
 
 function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     return (

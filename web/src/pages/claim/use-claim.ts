@@ -15,9 +15,12 @@ import type { ClaimFailure } from './claim.helpers';
 
 /** A refused claim, carrying only the mapped failure (no code, no password). */
 export class ClaimRequestError extends Error {
-    constructor(readonly failure: ClaimFailure) {
+    readonly failure: ClaimFailure;
+
+    constructor(failure: ClaimFailure) {
         super(`setup claim refused: ${failure.kind}`);
         this.name = 'ClaimRequestError';
+        this.failure = failure;
     }
 }
 
