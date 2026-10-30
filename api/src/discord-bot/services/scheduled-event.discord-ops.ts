@@ -13,6 +13,10 @@ import {
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  endChannelBlockedEvent,
+  isActiveChannelConflictError,
+} from './scheduled-event.channel-busy';
 import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
 import { parseEventTimestampUtc } from './scheduled-event.revalidate';
 
@@ -52,35 +56,6 @@ export function isTerminalStatus(status: GuildScheduledEventStatus): boolean {
   );
 }
 
-export async function tryStartEvent(
-  guild: Guild,
-  candidate: { id: number; discordScheduledEventId: string | null },
-): Promise<{ cleared: boolean; error?: unknown }> {
-  try {
-    const se = await timedDiscordCall(
-      'scheduledEvents.fetch',
-      () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
-      { eventId: candidate.id },
-    );
-    if (se.status !== GuildScheduledEventStatus.Scheduled) {
-      return { cleared: false };
-    }
-
-    await timedDiscordCall(
-      'scheduledEvents.edit',
-      () =>
-        guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
-          status: GuildScheduledEventStatus.Active,
-        }),
-      { eventId: candidate.id, op: 'start' },
-    );
-    return { cleared: false };
-  } catch (error) {
-    if (isUnknownEventError(error)) return { cleared: true };
-    return { cleared: false, error };
-  }
-}
-
 /**
  * Outcome of a single SE delete attempt. `deleted` is true on a confirmed
  * Discord delete OR when 10070 (UNKNOWN_SCHEDULED_EVENT) is swallowed — the SE
@@ -101,6 +76,11 @@ export interface CompletionProgress {
   to: GuildScheduledEventStatus | null;
   /** Discord said 10070 — the SE no longer exists. */
   unknownEvent?: boolean;
+  /**
+   * Discord refused Scheduled→Active because another SE is Active in the same
+   * voice channel, so the SE was ended another way (ROK-2053).
+   */
+  channelBusy?: 'canceled' | 'deleted';
 }
 
 export function discordErrorCode(error: unknown): number | undefined {
@@ -139,14 +119,18 @@ export async function tryDeleteEvent(
   }
 }
 
-export async function activateAndComplete(
+/**
+ * Scheduled→Active. Discord allows one Active SE per voice channel; when the
+ * channel is busy the SE is ended another way (ROK-2053) and this returns
+ * true so the caller skips the Completed edit.
+ */
+async function activateOrEndBlocked(
   guild: Guild,
   eventId: number,
   seId: string,
-  currentStatus: GuildScheduledEventStatus,
   progress?: CompletionProgress,
-): Promise<void> {
-  if (currentStatus === GuildScheduledEventStatus.Scheduled) {
+): Promise<boolean> {
+  try {
     await timedDiscordCall(
       'scheduledEvents.edit',
       () =>
@@ -155,7 +139,25 @@ export async function activateAndComplete(
         }),
       { eventId, op: 'complete-activate' },
     );
-    if (progress) progress.to = GuildScheduledEventStatus.Active;
+  } catch (error) {
+    if (!isActiveChannelConflictError(error)) throw error;
+    await endChannelBlockedEvent(guild, eventId, seId, error, progress);
+    return true;
+  }
+  if (progress) progress.to = GuildScheduledEventStatus.Active;
+  return false;
+}
+
+export async function activateAndComplete(
+  guild: Guild,
+  eventId: number,
+  seId: string,
+  currentStatus: GuildScheduledEventStatus,
+  progress?: CompletionProgress,
+): Promise<void> {
+  if (currentStatus === GuildScheduledEventStatus.Scheduled) {
+    const ended = await activateOrEndBlocked(guild, eventId, seId, progress);
+    if (ended) return;
   }
 
   await timedDiscordCall(

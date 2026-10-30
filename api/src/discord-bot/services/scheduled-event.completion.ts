@@ -87,6 +87,15 @@ function outcomeOf(
       errorMessage: 'Unknown Scheduled Event (already gone in Discord)',
     };
   }
+  if (p.channelBusy) {
+    // Ended, but not Completed: another SE held the voice channel (ROK-2053).
+    return {
+      ...base,
+      ok: false,
+      errorCode: 50035,
+      errorMessage: `Voice channel busy (another SE Active); SE ${p.channelBusy} instead of Completed`,
+    };
+  }
   return { ...base, ok: p.to === GuildScheduledEventStatus.Completed };
 }
 
