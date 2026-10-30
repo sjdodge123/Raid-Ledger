@@ -3,7 +3,7 @@
  * hero under the name, and nothing renders when the hub has none.
  */
 import type { JSX } from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { useQuery } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
@@ -11,6 +11,11 @@ import { buildCommunityPage } from '../../test/factories/community-hub';
 import { renderWithProviders } from '../../test/render-helpers';
 import { HubHero } from './hub-hero';
 import { HubSettingsTrigger } from './settings/settings-trigger';
+
+/** The picker chunk is stubbed so the hero → picker props are observable. */
+vi.mock('./crest/crest-picker-lazy', () => ({
+    LazyCrestPicker: ({ isStaff }: { isStaff?: boolean }) => <div data-testid="crest-picker-stub" data-is-staff={String(isStaff)} />,
+}));
 
 function Hero({ page, action }: { page: GuildPage; action?: JSX.Element }): JSX.Element {
     const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['test-raids'], queryFn: () => new Promise<GuildRaidsDto>(() => undefined), enabled: false });
@@ -134,6 +139,19 @@ describe('HubHero — crest (ROK-1814)', () => {
         delete legacyViewer.canEditCrest;
         renderWithProviders(<Hero page={{ ...page, viewer: legacyViewer }} />);
         expect(screen.getByTestId('hub-crest-edit')).toBeInTheDocument();
+    });
+
+    it('viewer.isStaff reaches the picker; a missing flag passes false', () => {
+        const { unmount } = renderWithProviders(<Hero page={withViewer({ canEditCrest: true, isStaff: true })} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Change crest' }));
+        expect(screen.getByTestId('crest-picker-stub')).toHaveAttribute('data-is-staff', 'true');
+        unmount();
+        const page = withViewer({ canEditCrest: true });
+        const viewer = { ...page.viewer };
+        delete viewer.isStaff;
+        renderWithProviders(<Hero page={{ ...page, viewer }} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Change crest' }));
+        expect(screen.getByTestId('crest-picker-stub')).toHaveAttribute('data-is-staff', 'false');
     });
 
     it('an upload shows the large image; a load error falls back to initials', () => {
