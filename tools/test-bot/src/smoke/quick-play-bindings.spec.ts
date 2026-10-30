@@ -30,19 +30,26 @@ async function main(): Promise<void> {
     defaultChannelId: 'default',
     textChannels: [ch('default'), ch('pool'), ch('a'), ch('b')],
   } as unknown as TestContext;
-  const got = await nonPoolFixtures(ctx);
+  const got = await nonPoolFixtures(ctx, 0);
   assert.deepEqual(
     got.freeGames.map((g) => g.id),
     [2],
     'pool games are excluded',
   );
+  // ROK-1788: 'b' and 'a' are the join-post channels of lease slots 0 and 1.
   assert.deepEqual(
     got.texts.map((c) => c.id),
-    ['a', 'b'],
-    'default and pool channels are excluded',
+    ['b'],
+    'default, pool and the other run\'s join-post channel are excluded',
   );
   assert.equal(got.games.length, 2);
-  console.log('quick-play-bindings.spec: 5 passed');
+  const slot1 = await nonPoolFixtures(ctx, 1);
+  assert.deepEqual(
+    slot1.texts.map((c) => c.id),
+    ['a'],
+    'slot 1 never gets slot 0\'s join-post channel',
+  );
+  console.log('quick-play-bindings.spec: 6 passed');
 }
 
 main().catch((err: unknown) => {

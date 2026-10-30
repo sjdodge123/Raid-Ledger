@@ -5,6 +5,7 @@
  * and the FIRST two channels, ROK-1768 the SECOND game and the LAST two).
  */
 import { deleteBinding } from './fixtures.js';
+import { foreignJoinPostChannelIds } from './join-post-channel.js';
 import type { ApiClient } from './api.js';
 import type { DiscordChannel, TestContext } from './types.js';
 
@@ -51,7 +52,7 @@ export interface NonPoolFixtures {
   games: { id: number; name: string }[];
   /** Games with no channel-pool binding. */
   freeGames: { id: number; name: string }[];
-  /** Text channels that are neither the default nor a pool channel. */
+  /** Text channels that are not the default, a pool or another run's join-post channel. */
   texts: DiscordChannel[];
 }
 
@@ -59,10 +60,19 @@ export interface NonPoolFixtures {
  * The candidates a Quick Play smoke may pick from: a card routed by the wrong
  * tier (pool or default channel) can never land where an assertion looks.
  */
-export async function nonPoolFixtures(ctx: TestContext): Promise<NonPoolFixtures> {
+export async function nonPoolFixtures(
+  ctx: TestContext,
+  poolIndex?: number,
+): Promise<NonPoolFixtures> {
   const pool = ctx.channelPool ?? [];
   const poolGames = new Set(pool.map((s) => s.gameId));
   const poolChannels = new Set(pool.map((s) => s.channelId));
+  // ROK-1788: never post into the join-post channel another lease run owns.
+  for (const id of foreignJoinPostChannelIds(
+    ctx.textChannels, ctx.defaultChannelId, poolIndex,
+  )) {
+    poolChannels.add(id);
+  }
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     '/admin/settings/games?limit=25',
   );
