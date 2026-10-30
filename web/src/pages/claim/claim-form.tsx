@@ -3,10 +3,9 @@
  * sign-in name, new + confirm password with one "Show passwords" control,
  * and the submit → server result states. Inventory primitives only.
  */
-import { useId, useState, type FormEvent, type JSX } from 'react';
+import { useId, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { SETUP_CLAIM_PASSWORD_MIN } from '@raid-ledger/contract';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { PasswordInput } from '../../components/ui/password-input';
@@ -14,7 +13,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { Button } from '../../components/ui/button';
 import { buttonClass } from '../../components/ui/button-classes';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
-import { useClaim } from './use-claim';
+import { useClaimSubmit } from './use-claim-submit';
 import { ClaimStrengthMeter } from './claim-strength-meter';
 import {
     PASSWORD_GUARD_MESSAGE, PASSWORD_MISMATCH_MESSAGE, TONE_TEXT, codeMessage,
@@ -70,32 +69,16 @@ function ContinueLink(): JSX.Element {
 /** The whole claim form; `expiredOnLoad` starts in the expired state. */
 export function ClaimForm({ expiredOnLoad = false }: { expiredOnLoad?: boolean }): JSX.Element {
     const msgId = useId();
-    const claim = useClaim();
-    const [code, setCode] = useState('');
-    const [pw, setPw] = useState('');
-    const [confirm, setConfirm] = useState('');
-    const [status, setStatus] = useState<CodeStatus>(expiredOnLoad ? { kind: 'expired' } : { kind: 'idle' });
-    const [pwRefused, setPwRefused] = useState(false);
-    const onSubmit = (e: FormEvent): void => {
-        e.preventDefault();
-        if (!code.trim()) { setStatus({ kind: 'empty' }); return; }
-        const pwOk = pw.length >= SETUP_CLAIM_PASSWORD_MIN && pw === confirm;
-        setPwRefused(!pwOk);
-        if (!pwOk) return;
-        claim.mutate({ code, newPassword: pw }, {
-            onSuccess: () => setStatus({ kind: 'ok' }),
-            onError: (err) => setStatus(err.failure),
-        });
-    };
+    const { code, setCode, pw, setPw, confirm, setConfirm, status, pwRefused, pending, onSubmit } = useClaimSubmit(expiredOnLoad);
     const invalid = status.kind !== 'idle' && status.kind !== 'ok';
     const done = status.kind === 'ok';
     return (
         <form noValidate onSubmit={onSubmit} className="flex flex-col gap-[18px]" data-testid="claim-form">
             <Field label="Setup code">
                 <Input mono autoComplete="off" spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX" value={code} readOnly={done}
-                    className="tracking-wider" invalid={invalid && !claim.isPending} aria-describedby={msgId}
+                    className="tracking-wider" invalid={invalid && !pending} aria-describedby={msgId}
                     onChange={(e) => setCode(e.target.value)} data-testid="claim-code" />
-                <CodeMessage id={msgId} status={status} checking={claim.isPending} />
+                <CodeMessage id={msgId} status={status} checking={pending} />
             </Field>
             <Field label="Sign-in name" hint="Fixed. Once Discord is connected you can sign in with Discord instead.">
                 <Input mono readOnly value="admin@local" className="text-muted" />
@@ -103,7 +86,7 @@ export function ClaimForm({ expiredOnLoad = false }: { expiredOnLoad?: boolean }
             <PasswordFields pw={pw} confirm={confirm} setPw={setPw} setConfirm={setConfirm} />
             {pwRefused && <p role="alert" className="text-sm text-danger">{PASSWORD_GUARD_MESSAGE}</p>}
             {done ? <ContinueLink /> : (
-                <Button type="submit" fullWidth loading={claim.isPending} loadingLabel="Checking the code…" data-testid="claim-submit">
+                <Button type="submit" fullWidth loading={pending} loadingLabel="Checking the code…" data-testid="claim-submit">
                     Claim and set password
                 </Button>
             )}
