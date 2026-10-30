@@ -25,6 +25,7 @@ import {
 } from './roster-insights.lockouts';
 import { computeLastSeen } from './roster-insights.last-seen';
 import { computeGear } from './roster-insights.gear';
+import { loadRaidProgress } from './roster-insights.raid-progress';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import {
   emptyInsights,
@@ -88,6 +89,11 @@ export class RosterInsightsService {
       audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
     const all = await this.loadRows(adapter, guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
+    // ROK-1917 — pulls are guild-level: the full roster's linked users (D5).
+    const raidProgress =
+      audience === 'member'
+        ? await loadRaidProgress(this.db, guildId, linkedUserIds(all))
+        : null;
     return {
       classes: computeClasses(rows),
       levels: computeLevels(rows),
@@ -101,6 +107,7 @@ export class RosterInsightsService {
             lastSeen: { ...computeLastSeen(all), snapshotAt },
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
+            ...(raidProgress ? { raidProgress } : {}),
           }
         : {}),
       freshness: computeFreshness(rows),
@@ -142,4 +149,9 @@ export class RosterInsightsService {
       return resolved ? [toInsightRow(r, resolved)] : [];
     });
   }
+}
+
+/** Owners of the roster's linked characters (the Q1 trusted reporters). */
+function linkedUserIds(rows: readonly InsightRow[]): number[] {
+  return rows.flatMap((r) => (r.userId === null ? [] : [r.userId]));
 }
