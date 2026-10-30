@@ -86,15 +86,29 @@ if is_known_default "$JWT_SECRET"; then
   exit 1
 fi
 
-# Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set.
-# Render provides RENDER_EXTERNAL_URL; otherwise keep "auto" so the API
-# dynamically allows the request's own origin (works on any hostname).
+# Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set (ROK-1697).
+# An explicit CORS_ORIGIN wins. Otherwise ask the platform public-URL resolver
+# (PUBLIC_URL / RENDER_EXTERNAL_URL / RAILWAY_PUBLIC_DOMAIN / FLY_APP_NAME /
+# APP_URL / HEROKU_APP_DEFAULT_DOMAIN_NAME — the same one the API logs at boot).
+# Nothing resolved → keep "auto" so the API allows the request's own origin
+# (works on any hostname). A resolver crash only warns: it must never stop boot.
 if [ -z "$CORS_ORIGIN" ]; then
   export CORS_ORIGIN="auto"
 fi
-if [ "$CORS_ORIGIN" = "auto" ] && [ -n "$RENDER_EXTERNAL_URL" ]; then
-  export CORS_ORIGIN="$RENDER_EXTERNAL_URL"
-  echo "🌐 CORS_ORIGIN derived from Render: $CORS_ORIGIN"
+if [ "$CORS_ORIGIN" = "auto" ]; then
+  RESOLVED_PUBLIC_URL=""
+  if RESOLVED_PUBLIC_URL="$(node /app/dist/scripts/resolve-public-url.js)"; then
+    :
+  else
+    echo "⚠️  resolve-public-url exited non-zero — keeping CORS_ORIGIN=auto"
+    RESOLVED_PUBLIC_URL=""
+  fi
+  if [ -n "$RESOLVED_PUBLIC_URL" ]; then
+    export CORS_ORIGIN="$RESOLVED_PUBLIC_URL"
+    echo "🌐 CORS_ORIGIN derived from platform public URL: $CORS_ORIGIN"
+  else
+    echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
+  fi
 else
   echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
 fi

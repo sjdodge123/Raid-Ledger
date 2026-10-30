@@ -7,7 +7,7 @@
 # Environment Variables:
 #   PORT           - External port (default: 80)
 #   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
-#   CORS_ORIGIN    - Allowed CORS origin (default: auto-derived from RENDER_EXTERNAL_URL or localhost)
+#   CORS_ORIGIN    - Allowed CORS origin (default: auto-derived from the platform public URL, ROK-1697; else "auto")
 #
 # Data is persisted under /data (PostgreSQL + Redis). Mount a volume to
 # retain data across container updates (e.g. Watchtower).
