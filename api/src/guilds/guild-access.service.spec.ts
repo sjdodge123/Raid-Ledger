@@ -120,6 +120,46 @@ describe('GuildAccessService access matrix', () => {
   });
 });
 
+describe('ROK-1814 GuildAccessService.canEditCrest (ruling 2026-10-30)', () => {
+  const withTopRank = (role: LadderRole, top: boolean): HubKindAdapter => ({
+    ...stubHub(role),
+    holdsTopRank: () => Promise.resolve(top),
+  });
+
+  it.each([
+    ['an officer', 'officer', false, true],
+    ['the in-game GM (a plain member)', 'member', true, true],
+    ['a plain member', 'member', false, false],
+    ['a visitor', 'visitor', false, false],
+  ] as const)('%s → %s', async (_label, role, top, expected) => {
+    build(withTopRank(role, top));
+    guildOfKind('wow_guild');
+    guildOfKind('wow_guild');
+    expect(await service.canEditCrest(actor('member'), GUILD)).toBe(expected);
+  });
+
+  it('the GM gains the crest right only: canEdit stays false', async () => {
+    build(withTopRank('member', true));
+    guildOfKind('wow_guild');
+    expect(await service.canEdit(actor('member'), GUILD)).toBe(false);
+  });
+
+  it('a hub kind without ranks never grants it', async () => {
+    build(stubHub('member'));
+    guildOfKind('wow_guild');
+    guildOfKind('wow_guild');
+    expect(await service.canEditCrest(actor('member'), GUILD)).toBe(false);
+  });
+
+  it.each(['admin', 'operator'] as const)(
+    '%s may, with no lookup',
+    async (r) => {
+      expect(await service.canEditCrest(actor(r), GUILD)).toBe(true);
+      expect(db.select).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('GuildAccessService.resolveLadder (ROK-1830)', () => {
   it.each(['admin', 'operator'] as const)(
     '%s is leader without any lookup',

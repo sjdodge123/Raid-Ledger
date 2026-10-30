@@ -28,7 +28,11 @@ const prefs = jest.mocked(readWidgetPrefs);
 const SAVED = { order: ['raids'], hidden: ['roster'], added: [], config: {} };
 const actor = { id: 42, role: 'member' as const };
 
-function serviceFor(role: LadderRole, member = true): HubService {
+function serviceFor(
+  role: LadderRole,
+  member = true,
+  topRank = false,
+): HubService {
   const viewer = { role, canEdit: false, canManageEditors: false };
   const pageStub: unknown = { guild: { id: 7 }, viewer };
   const adapter: Partial<HubKindAdapter> = {
@@ -36,7 +40,10 @@ function serviceFor(role: LadderRole, member = true): HubService {
   };
   const registry: unknown = { require: () => adapter };
   const db: unknown = {};
-  const access: unknown = { isMember: jest.fn().mockResolvedValue(member) };
+  const access: unknown = {
+    isMember: jest.fn().mockResolvedValue(member),
+    holdsTopRank: jest.fn().mockResolvedValue(topRank),
+  };
   return new HubService(
     db as PostgresJsDatabase<typeof schema>,
     registry as HubKindRegistry,
@@ -72,6 +79,28 @@ describe('ROK-1832 HubService.page viewer.notificationsMuted', () => {
     const page = await serviceFor('visitor').page(actor, 7);
     expect(page.viewer).not.toHaveProperty('notificationsMuted');
     expect(muted).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-1814 HubService.page viewer.isStaff / canEditCrest', () => {
+  it('a plain member holding the top in-game rank may edit the crest', async () => {
+    const page = await serviceFor('member', true, true).page(actor, 7);
+    expect(page.viewer).toMatchObject({ isStaff: false, canEditCrest: true });
+  });
+
+  it('a plain member without it may not', async () => {
+    const page = await serviceFor('member').page(actor, 7);
+    expect(page.viewer).toMatchObject({ isStaff: false, canEditCrest: false });
+  });
+
+  it('a visitor may not, even at the top rank', async () => {
+    const page = await serviceFor('visitor', false, true).page(actor, 7);
+    expect(page.viewer).toMatchObject({ canEditCrest: false });
+  });
+
+  it.each(['admin', 'operator'] as const)('%s is staff', async (role) => {
+    const page = await serviceFor('leader', false).page({ id: 1, role }, 7);
+    expect(page.viewer).toMatchObject({ isStaff: true });
   });
 });
 

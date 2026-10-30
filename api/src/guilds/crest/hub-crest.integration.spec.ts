@@ -255,6 +255,42 @@ describe('DELETE /guilds/:id/crest/upload', () => {
     expect(row?.crestUploadKey).toBeNull();
   });
 
+  // Operator ruling 2026-10-30: any editor change clears "removed by an admin".
+  it.each([
+    [
+      'picks a preset',
+      () => put('leader', { active: 'preset', preset: PRESET }),
+    ],
+    ['hides the crest', () => put('leader', { active: null })],
+    ['uploads', () => upload('leader')],
+    [
+      'picks a gallery picture',
+      async () =>
+        testApp.request
+          .post(`${url()}/from-gallery`)
+          .set(auth('leader'))
+          .send({ mediaId: await galleryItem(hubId) }),
+    ],
+  ] as const)(
+    'an editor who %s clears the staff removal',
+    async (_l, change) => {
+      await upload('leader');
+      const removed = await testApp.request
+        .delete(`${url()}/upload`)
+        .set(auth('operator'));
+      expect(state(removed.body).removedByStaffAt).not.toBeNull();
+      const res = await change();
+      expect(res.status).toBe(200);
+      expect(state(res.body).removedByStaffAt).toBeNull();
+      const [row] = await testApp.db
+        .select()
+        .from(schema.guilds)
+        .where(eq(schema.guilds.id, hubId));
+      expect(row?.crestRemovedAt).toBeNull();
+      expect(row?.crestRemovedBy).toBeNull();
+    },
+  );
+
   it('an editor (leader) cannot remove an upload', async () => {
     await upload('leader');
     const res = await testApp.request
@@ -335,6 +371,18 @@ describe('GuildSummary.crest', () => {
     expect(res.status).toBe(200);
     const page = GuildPageSchema.parse(res.body);
     expect(page.guild.crest).toEqual({ source: 'preset', ...PRESET });
+  });
+
+  // ROK-1814 rulings 2026-10-30: the crest UI's staff + edit flags.
+  it.each([
+    ['operator', { isStaff: true, canEditCrest: true }],
+    ['leader', { isStaff: false, canEditCrest: true }],
+    ['officer', { isStaff: false, canEditCrest: true }],
+    ['member', { isStaff: false, canEditCrest: false }],
+  ] as const)('GET /guilds/:id viewer flags for %s', async (who, flags) => {
+    const res = await testApp.request.get(`/guilds/${hubId}`).set(auth(who));
+    expect(res.status).toBe(200);
+    expect(GuildPageSchema.parse(res.body).viewer).toMatchObject(flags);
   });
 
   it('GET /guilds/mine carries the active crest', async () => {
