@@ -257,6 +257,25 @@ describe('getDiscordOAuthConfig — platform public URL default (ROK-1697)', () 
     );
   });
 
+  it('treats a saved blank callback as unset and defaults at read time', async () => {
+    const svc = mockSettingsCore({
+      ...creds,
+      [SETTING_KEYS.DISCORD_CALLBACK_URL]: '',
+    });
+    process.env.PUBLIC_URL = 'https://first.example';
+    expect((await getDiscordOAuthConfig(svc))?.callbackUrl).toBe(
+      'https://first.example/api/auth/discord/callback',
+    );
+    process.env.PUBLIC_URL = 'https://moved.example';
+    expect((await getDiscordOAuthConfig(svc))?.callbackUrl).toBe(
+      'https://moved.example/api/auth/discord/callback',
+    );
+    process.env.DISCORD_CALLBACK_URL = 'https://env.example/cb';
+    expect((await getDiscordOAuthConfig(svc))?.callbackUrl).toBe(
+      'https://env.example/cb',
+    );
+  });
+
   it('lets DISCORD_CALLBACK_URL outrank the public URL', async () => {
     process.env.PUBLIC_URL = 'https://public.example';
     process.env.DISCORD_CALLBACK_URL =
