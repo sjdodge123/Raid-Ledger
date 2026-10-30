@@ -18,6 +18,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
+import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
 import type {
   DemoDataStatusDto,
   DemoDataResultDto,
@@ -232,17 +233,20 @@ export class AdminSettingsController {
     return { success: true, message: `Default timezone set to ${timezone}.` };
   }
 
-  // ── Demo Data ───────────────────────────────────────────
+  // ── Demo Data ─── ROK-1700: NAS-only — a 404 under RL_FLAVOUR=cloud.
   @Get('demo/status')
+  @UseGuards(NasOnlyGuard)
   async getDemoStatus(): Promise<DemoDataStatusDto> {
     return this.demoDataService.getStatus();
   }
   @Post('demo/install')
+  @UseGuards(NasOnlyGuard)
   @HttpCode(HttpStatus.OK)
   async installDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.installDemoData();
   }
   @Post('demo/clear')
+  @UseGuards(NasOnlyGuard)
   @HttpCode(HttpStatus.OK)
   async clearDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.clearDemoData();

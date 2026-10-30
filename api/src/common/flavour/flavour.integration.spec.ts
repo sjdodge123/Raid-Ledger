@@ -102,4 +102,30 @@ describe('ROK-1700 — RL_FLAVOUR through the real app', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('/admin/settings/demo (Lead ruling: NAS-only)', () => {
+    const auth = () => `Bearer ${adminToken}`;
+
+    it('nas: an admin can read the demo-data status', async () => {
+      delete process.env.RL_FLAVOUR;
+      const res = await testApp.request
+        .get('/admin/settings/demo/status')
+        .set('Authorization', auth());
+      expect(res.status).toBe(200);
+    });
+
+    it.each([
+      ['GET', '/admin/settings/demo/status'],
+      ['POST', '/admin/settings/demo/install'],
+      ['POST', '/admin/settings/demo/clear'],
+    ])('cloud: %s %s is 404 for an admin', async (method, path) => {
+      process.env.RL_FLAVOUR = 'cloud';
+      const base =
+        method === 'GET'
+          ? testApp.request.get(path)
+          : testApp.request.post(path);
+      const res = await base.set('Authorization', auth());
+      expect(res.status).toBe(404);
+    });
+  });
 });
