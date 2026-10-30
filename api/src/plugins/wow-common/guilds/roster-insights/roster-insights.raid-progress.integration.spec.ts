@@ -446,4 +446,56 @@ describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
     expect(await reporterOf(905)).toBe(idOf('raider'));
     expect(await reporterOf(906)).toBe(idOf('raider'));
   });
+
+  it('a first-ever import whose pinned GUID is on the roster takes over an off-roster pull', async () => {
+    // ROK-1917 final P2: the binding (GUID pin) is written AFTER the raid
+    // section runs; the pending GUID must already make the importer trusted.
+    await seedStored(907, 4700, false, 'pug');
+    const guid = 'Player-7-rp1917firstimport';
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          username: 'rp1917-first',
+          discordId: 'local:rp1917-first@test',
+          role: 'member',
+        })
+        .returning({ id: schema.users.id }),
+      'first-import user',
+    );
+    await testApp.db.insert(schema.guildMembers).values({
+      guildId,
+      guid,
+      characterName: 'Firstwren',
+      level: 60,
+      class: 'Mage',
+      rankIndex: 3,
+      rankName: 'Raider',
+      source: 'addon_import',
+      lastSeenAt: at(0),
+    });
+    const [char] = nonEmpty(
+      await testApp.db
+        .insert(schema.characters)
+        .values({
+          userId: user.id,
+          gameId: testApp.seed.game.id,
+          name: 'Firstwren',
+        })
+        .returning({ id: schema.characters.id }),
+      'first-import character (addonGuid not pinned yet)',
+    );
+    const ctx = {
+      tx: testApp.db,
+      userId: user.id,
+      characterId: char.id,
+      gameId: testApp.seed.game.id,
+      region: 'us' as const,
+      sha256: 'd'.repeat(64),
+      pendingGuid: guid,
+    };
+    const out = await applyRaid(ctx, reimportPayload(907, 4700));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(907)).toBe(user.id);
+  });
 });
