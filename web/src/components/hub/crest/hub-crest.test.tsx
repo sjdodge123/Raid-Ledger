@@ -2,11 +2,17 @@
  * ROK-1814 — `HubCrest`: each crest source at each size, the image-error
  * fallback, an unknown (future) source, and the per-surface fallbacks (Q8).
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GUILD_CREST_PALETTE, type GuildCrest } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../../lib/config';
+import { stripComments } from '../../../test/strip-comments';
 import { HubCrest } from './hub-crest';
+
+const hubCrestSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hub-crest.tsx'), 'utf8');
 
 const UPLOAD: GuildCrest = { source: 'upload', urlSm: '/uploads/guild-crests/11/abc.sm.webp', urlLg: '/uploads/guild-crests/11/abc.lg.webp' };
 const PRESET: GuildCrest = { source: 'preset', emblemId: 'wolf-head', fg: 'or', bg: 'azure' };
@@ -79,14 +85,20 @@ describe('HubCrest — upload', () => {
 });
 
 describe('HubCrest — preset', () => {
-    it('paints the bg palette colour behind the emblem drawn in the fg colour', () => {
+    it('paints the bg palette colour behind the emblem drawn in the fg colour', async () => {
         render(<HubCrest crest={PRESET} name="Iron Vanguard" size="hero" />);
         expect(crestEl()).toHaveAttribute('data-crest', 'preset');
         expect(crestEl().style.backgroundColor).toBe(rgb(GUILD_CREST_PALETTE.azure));
         const emblem = screen.getByTestId('hub-crest-emblem');
         expect(emblem).toHaveAttribute('data-emblem', 'wolf-head');
         expect(emblem.style.color).toBe(rgb(GUILD_CREST_PALETTE.or));
-        expect(emblem.querySelectorAll('path').length).toBeGreaterThan(0);
+        await waitFor(() => expect(emblem.querySelectorAll('path').length).toBeGreaterThan(0));
+    });
+
+    it('keeps the emblem art out of the always-loaded module (lazy chunk only)', () => {
+        const src = stripComments(hubCrestSource);
+        expect(src).not.toMatch(/from\s+'\.\/crest-emblems'/);
+        expect(src).not.toMatch(/crest-emblem-art/);
     });
 
     it('keeps the list box size', () => {

@@ -6,11 +6,13 @@
  * colour exception; the frame and fallbacks use tokens). No crest, an unknown
  * source or an image that fails to load falls back as today (Q8): initials in
  * the hero, the shield on lists, or the caller's `fallback` (nav: game icon).
+ * The emblem art is lazy (`crest-emblems-lazy.ts`): this file sits in the
+ * always-loaded header, so the path data must not join the first page load.
  */
 import { useState, type JSX, type ReactNode } from 'react';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { GUILD_CREST_PALETTE } from '@raid-ledger/contract';
-import { CREST_EMBLEMS } from './crest-emblems';
+import { useCrestEmblemArt } from './crest-emblems-lazy';
 import { asCrestPreset, asCrestUpload, crestAssetUrl, crestInitials, type CrestPreset, type HubCrestInput } from './hub-crest.helpers';
 
 export type HubCrestSize = 'sm' | 'md' | 'lg' | 'hero';
@@ -56,14 +58,18 @@ function CrestFallback({ name, size, fallback, className }: Omit<HubCrestProps, 
     );
 }
 
+/** Every emblem's grid; the empty svg holds the box while the art chunk loads. */
+const EMBLEM_VIEWBOX = '0 0 512 512';
+
+/** The palette box paints at once; the emblem paths fill in once the lazy art chunk lands. */
 function PresetCrest({ preset, size, className }: { preset: CrestPreset; size: HubCrestSize; className?: string | undefined }): JSX.Element {
-    const art = CREST_EMBLEMS[preset.emblemId];
+    const art = useCrestEmblemArt(preset.emblemId);
     return (
         <span aria-hidden="true" data-testid="hub-crest" data-crest="preset" className={boxClass(size, 'overflow-hidden', className)}
             style={{ backgroundColor: GUILD_CREST_PALETTE[preset.bg] }}>
-            <svg viewBox={art.viewBox} className="h-3/4 w-3/4" data-testid="hub-crest-emblem" data-emblem={preset.emblemId}
+            <svg viewBox={art?.viewBox ?? EMBLEM_VIEWBOX} className="h-3/4 w-3/4" data-testid="hub-crest-emblem" data-emblem={preset.emblemId}
                 style={{ color: GUILD_CREST_PALETTE[preset.fg] }}>
-                {art.paths.map((d) => <path key={d} d={d} fill="currentColor" />)}
+                {art?.paths.map((d) => <path key={d} d={d} fill="currentColor" />)}
             </svg>
         </span>
     );
