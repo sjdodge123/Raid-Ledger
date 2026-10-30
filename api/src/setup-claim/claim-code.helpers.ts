@@ -51,14 +51,16 @@ export function generateClaimCode(
 }
 
 /**
- * Trim; a value shaped like a generated code loses its dashes and is
- * upper-cased (pasted with/without dashes, any case). Anything else — e.g. a
- * Render-generated SETUP_CODE — is compared verbatim.
+ * Trim; a value shaped like a generated code (once inner whitespace is
+ * dropped) loses its dashes and spaces and is upper-cased — pasted with or
+ * without dashes, space-grouped, any case. Anything else — e.g. a
+ * Render-generated SETUP_CODE — is compared verbatim (only trimmed).
  */
 export function normaliseClaimCode(input: string): string {
   const trimmed = input.trim();
-  if (!BASE32_SHAPE.test(trimmed)) return trimmed;
-  return trimmed.replace(/-/g, '').toUpperCase();
+  const compact = trimmed.replace(/\s+/g, '');
+  if (!BASE32_SHAPE.test(compact)) return trimmed;
+  return compact.replace(/-/g, '').toUpperCase();
 }
 
 /** sha256 hex of the normalised code — the only form ever stored. */

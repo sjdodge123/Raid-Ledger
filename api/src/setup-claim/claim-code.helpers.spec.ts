@@ -52,6 +52,13 @@ describe('normaliseClaimCode', () => {
     expect(normaliseClaimCode('abcdEFGH-ijklmnop')).toBe('ABCDEFGHIJKLMNOP');
   });
 
+  it('strips inner whitespace from a space-grouped code', () => {
+    expect(normaliseClaimCode('dtxo frhn ght2 3qor')).toBe('DTXOFRHNGHT23QOR');
+    expect(normaliseClaimCode(' dtxo - frhn\tght2-3qor ')).toBe(
+      'DTXOFRHNGHT23QOR',
+    );
+  });
+
   it('keeps any other value verbatim (only trimmed)', () => {
     const render = 'xY9-k2_Lq-8Z0a-RENDERGEN-01';
     expect(normaliseClaimCode(`  ${render}\n`)).toBe(render);
