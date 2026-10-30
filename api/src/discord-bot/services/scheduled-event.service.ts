@@ -24,7 +24,6 @@ import {
 } from './scheduled-event.db-helpers';
 import {
   isUnknownEventError,
-  tryStartEvent,
   tryDeleteEvent,
   tryEditEndTime,
   tryEditDescription,
@@ -32,6 +31,7 @@ import {
   resolveVoiceForEdit,
   resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
+import { pruneStartWarnings, startCandidate } from './scheduled-event.start';
 import {
   createScheduledEventIdempotent,
   type GuildSECache,
@@ -54,6 +54,8 @@ export class ScheduledEventService {
 
   /** Test-only toggle — when false, createScheduledEvent is a no-op (ROK-969). */
   private scheduledEventsEnabled = true;
+  /** `${eventId}:${seId}` of busy-channel start refusals already warned (ROK-2053). */
+  private readonly startWarned = new Set<string>();
   setScheduledEventsEnabled(enabled: boolean): void {
     this.scheduledEventsEnabled = enabled;
   }
@@ -95,13 +97,14 @@ export class ScheduledEventService {
     )
       return false;
     const candidates = await findStartCandidates(this.db);
+    pruneStartWarnings(this.startWarned, candidates);
     if (candidates.length === 0) return false;
-    for (const c of candidates) {
-      const result = await tryStartEvent(guild, c);
-      if (result.cleared) await clearScheduledEventId(this.db, c.id);
-      else if (result.error)
-        this.logger.error(formatApiError('start', c.id, result.error));
-    }
+    const deps = {
+      logger: this.logger,
+      warned: this.startWarned,
+      clear: (id: number) => clearScheduledEventId(this.db, id),
+    };
+    for (const c of candidates) await startCandidate(guild, c, deps);
   }
 
   /** Cron: auto-complete Discord Scheduled Events past end time (ROK-717, ROK-860). */
@@ -260,6 +263,7 @@ export class ScheduledEventService {
       this.clientService,
       eventId,
       (error) => this.logger.error(formatApiError('complete', eventId, error)),
+      this.logger,
     );
   }
 

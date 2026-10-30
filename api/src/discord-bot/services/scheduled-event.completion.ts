@@ -1,3 +1,4 @@
+import type { Logger } from '@nestjs/common';
 import { GuildScheduledEventStatus } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
@@ -7,7 +8,10 @@ import {
   getScheduledEventId,
   clearScheduledEventId,
 } from './scheduled-event.db-helpers';
-import { UNKNOWN_SCHEDULED_EVENT } from './scheduled-event.helpers';
+import {
+  INVALID_FORM_BODY,
+  UNKNOWN_SCHEDULED_EVENT,
+} from './scheduled-event.helpers';
 import {
   type CompletionProgress,
   discordErrorCode,
@@ -87,6 +91,15 @@ function outcomeOf(
       errorMessage: 'Unknown Scheduled Event (already gone in Discord)',
     };
   }
+  if (p.channelBusy) {
+    // Ended, but not Completed: another SE held the voice channel (ROK-2053).
+    return {
+      ...base,
+      ok: false,
+      errorCode: INVALID_FORM_BODY,
+      errorMessage: `Voice channel busy (another SE Active); SE ${p.channelBusy} instead of Completed`,
+    };
+  }
   return { ...base, ok: p.to === GuildScheduledEventStatus.Completed };
 }
 
@@ -113,6 +126,7 @@ export async function completeScheduledEventWithOutcome(
   client: DiscordBotClientService,
   eventId: number,
   onError: (error: unknown) => void,
+  logger?: Pick<Logger, 'warn'>,
 ): Promise<SECompletionOutcome> {
   const progress: CompletionProgress = { from: null, to: null };
   let seId: string | null = null;
@@ -122,7 +136,7 @@ export async function completeScheduledEventWithOutcome(
     if (!guild) return skipped(eventId, 'no-guild');
     seId = await getScheduledEventId(db, eventId);
     if (!seId) return skipped(eventId, 'no-discord-event-id');
-    await tryCompleteEvent(guild, eventId, seId, progress);
+    await tryCompleteEvent(guild, eventId, seId, progress, logger);
     await clearScheduledEventId(db, eventId);
     return outcomeOf(eventId, seId, progress);
   } catch (error) {
