@@ -1,3 +1,4 @@
+import type { Logger } from '@nestjs/common';
 import {
   GuildScheduledEventStatus,
   GuildScheduledEventEntityType,
@@ -13,6 +14,11 @@ import {
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  type BlockedSE,
+  endChannelBlockedEvent,
+  isActiveChannelConflictError,
+} from './scheduled-event.channel-busy';
 import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
 import { parseEventTimestampUtc } from './scheduled-event.revalidate';
 
@@ -52,35 +58,6 @@ export function isTerminalStatus(status: GuildScheduledEventStatus): boolean {
   );
 }
 
-export async function tryStartEvent(
-  guild: Guild,
-  candidate: { id: number; discordScheduledEventId: string | null },
-): Promise<{ cleared: boolean; error?: unknown }> {
-  try {
-    const se = await timedDiscordCall(
-      'scheduledEvents.fetch',
-      () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
-      { eventId: candidate.id },
-    );
-    if (se.status !== GuildScheduledEventStatus.Scheduled) {
-      return { cleared: false };
-    }
-
-    await timedDiscordCall(
-      'scheduledEvents.edit',
-      () =>
-        guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
-          status: GuildScheduledEventStatus.Active,
-        }),
-      { eventId: candidate.id, op: 'start' },
-    );
-    return { cleared: false };
-  } catch (error) {
-    if (isUnknownEventError(error)) return { cleared: true };
-    return { cleared: false, error };
-  }
-}
-
 /**
  * Outcome of a single SE delete attempt. `deleted` is true on a confirmed
  * Discord delete OR when 10070 (UNKNOWN_SCHEDULED_EVENT) is swallowed — the SE
@@ -101,6 +78,11 @@ export interface CompletionProgress {
   to: GuildScheduledEventStatus | null;
   /** Discord said 10070 — the SE no longer exists. */
   unknownEvent?: boolean;
+  /**
+   * Discord refused Scheduled→Active because another SE is Active in the same
+   * voice channel, so the SE was ended another way (ROK-2053).
+   */
+  channelBusy?: 'canceled' | 'deleted';
 }
 
 export function discordErrorCode(error: unknown): number | undefined {
@@ -139,41 +121,63 @@ export async function tryDeleteEvent(
   }
 }
 
+/**
+ * Scheduled→Active. Discord allows one Active SE per voice channel; when the
+ * channel is busy the SE is ended another way (ROK-2053) and this returns
+ * true so the caller skips the Completed edit.
+ */
+async function activateOrEndBlocked(
+  guild: Guild,
+  se: BlockedSE,
+  progress?: CompletionProgress,
+): Promise<boolean> {
+  try {
+    await timedDiscordCall(
+      'scheduledEvents.edit',
+      () =>
+        guild.scheduledEvents.edit(se.seId, {
+          status: GuildScheduledEventStatus.Active,
+        }),
+      { eventId: se.eventId, op: 'complete-activate' },
+    );
+  } catch (error) {
+    if (!isActiveChannelConflictError(error)) throw error;
+    await endChannelBlockedEvent(guild, se, error, progress);
+    return true;
+  }
+  if (progress) progress.to = GuildScheduledEventStatus.Active;
+  return false;
+}
+
 export async function activateAndComplete(
   guild: Guild,
-  eventId: number,
-  seId: string,
+  se: BlockedSE,
   currentStatus: GuildScheduledEventStatus,
   progress?: CompletionProgress,
 ): Promise<void> {
   if (currentStatus === GuildScheduledEventStatus.Scheduled) {
-    await timedDiscordCall(
-      'scheduledEvents.edit',
-      () =>
-        guild.scheduledEvents.edit(seId, {
-          status: GuildScheduledEventStatus.Active,
-        }),
-      { eventId, op: 'complete-activate' },
-    );
-    if (progress) progress.to = GuildScheduledEventStatus.Active;
+    const ended = await activateOrEndBlocked(guild, se, progress);
+    if (ended) return;
   }
 
   await timedDiscordCall(
     'scheduledEvents.edit',
     () =>
-      guild.scheduledEvents.edit(seId, {
+      guild.scheduledEvents.edit(se.seId, {
         status: GuildScheduledEventStatus.Completed,
       }),
-    { eventId, op: 'complete' },
+    { eventId: se.eventId, op: 'complete' },
   );
   if (progress) progress.to = GuildScheduledEventStatus.Completed;
 }
 
+/** `logger` hears which fallback ran when a busy channel blocks Active (ROK-2053). */
 export async function tryCompleteEvent(
   guild: Guild,
   eventId: number,
   seId: string,
   progress?: CompletionProgress,
+  logger?: Pick<Logger, 'warn'>,
 ): Promise<void> {
   try {
     const se = await timedDiscordCall(
@@ -184,7 +188,9 @@ export async function tryCompleteEvent(
     if (progress) progress.from = progress.to = se.status;
 
     if (isTerminalStatus(se.status)) return;
-    await activateAndComplete(guild, eventId, seId, se.status, progress);
+    const target: BlockedSE = { eventId, seId, channelId: se.channelId };
+    if (logger) target.logger = logger;
+    await activateAndComplete(guild, target, se.status, progress);
   } catch (error) {
     if (!isUnknownEventError(error)) throw error;
     if (progress) progress.unknownEvent = true;
