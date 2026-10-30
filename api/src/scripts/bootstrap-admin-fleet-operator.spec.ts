@@ -316,3 +316,43 @@ describe('ROK-1537 — admin@local binds only to the configured fleet operator',
     expect(linkedAdminScope(env).kind).toBe(expected);
   });
 });
+
+describe('ROK-1700 — RL_FLAVOUR=cloud ignores every FLEET_* variable', () => {
+  beforeEach(() => {
+    resetHarness();
+    process.env.RL_FLAVOUR = 'cloud';
+  });
+  afterEach(() => {
+    delete process.env.RL_FLAVOUR;
+    jest.restoreAllMocks();
+  });
+
+  it('cloud + a full fleet env shape → no fleet operator is bootstrapped', async () => {
+    process.env.DEMO_MODE = 'true';
+    process.env.FLEET_ADMIN_DISCORD_ID = OPERATOR_DISCORD_ID;
+
+    await bootstrapAdmin();
+
+    expect(usersWriteSummary()).toBe('<none>');
+  });
+
+  it('cloud + fleet vars → linkedAdminScope is the non-fleet "any"', () => {
+    const env = {
+      RL_FLAVOUR: 'cloud',
+      DEMO_MODE: 'true',
+      FLEET_FIRST_DISCORD_LOGIN_ADMIN: 'true',
+      FLEET_ADMIN_DISCORD_ID: OPERATOR_DISCORD_ID,
+    };
+    expect(linkedAdminScope(env).kind).toBe('any');
+  });
+
+  it('nas (explicit) keeps the fleet behaviour byte-identical', async () => {
+    process.env.RL_FLAVOUR = 'nas';
+    process.env.DEMO_MODE = 'true';
+    process.env.FLEET_ADMIN_DISCORD_ID = OPERATOR_DISCORD_ID;
+
+    await bootstrapAdmin();
+
+    expect(usersWriteSummary()).toBe(`${OPERATOR_DISCORD_ID}:admin`);
+  });
+});
