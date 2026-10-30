@@ -17,13 +17,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
-import { DemoDataService } from './demo-data.service';
-import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
-import type {
-  DemoDataStatusDto,
-  DemoDataResultDto,
-  SteamConfigStatusDto,
-} from '@raid-ledger/contract';
+import type { SteamConfigStatusDto } from '@raid-ledger/contract';
 import { testDiscordOAuth } from './settings-oauth.helpers';
 import {
   testIgdbCredentials,
@@ -63,7 +57,6 @@ export class AdminSettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
-    private readonly demoDataService: DemoDataService,
   ) {}
 
   // ── OAuth ───────────────────────────────────────────────
@@ -233,24 +226,7 @@ export class AdminSettingsController {
     return { success: true, message: `Default timezone set to ${timezone}.` };
   }
 
-  // ── Demo Data ─── ROK-1700: NAS-only — a 404 under RL_FLAVOUR=cloud.
-  @Get('demo/status')
-  @UseGuards(NasOnlyGuard)
-  async getDemoStatus(): Promise<DemoDataStatusDto> {
-    return this.demoDataService.getStatus();
-  }
-  @Post('demo/install')
-  @UseGuards(NasOnlyGuard)
-  @HttpCode(HttpStatus.OK)
-  async installDemoData(): Promise<DemoDataResultDto> {
-    return this.demoDataService.installDemoData();
-  }
-  @Post('demo/clear')
-  @UseGuards(NasOnlyGuard)
-  @HttpCode(HttpStatus.OK)
-  async clearDemoData(): Promise<DemoDataResultDto> {
-    return this.demoDataService.clearDemoData();
-  }
+  // Demo Data routes: DemoDataSettingsController (ROK-1700, NAS-only).
 
   // ── Steam ───────────────────────────────────────────────
   @Get('steam')

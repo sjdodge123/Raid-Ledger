@@ -4,7 +4,9 @@
  *   - GET /system/status serves `flavour` (nas when unset, cloud when set);
  *   - every /admin/settings/cooptimus route is a 404 under cloud — even for an
  *     admin, even with a Co-Optimus user-agent configured — and unchanged
- *     under nas.
+ *     under nas;
+ *   - every /admin/settings/demo route is a 404 under cloud, even
+ *     unauthenticated (NasOnlyGuard runs before the JWT guard).
  *
  * The flavour is read per request (no boot cache), so each case sets
  * process.env.RL_FLAVOUR and restores it afterwards. The boot guards
@@ -126,6 +128,28 @@ describe('ROK-1700 — RL_FLAVOUR through the real app', () => {
           : testApp.request.post(path);
       const res = await base.set('Authorization', auth());
       expect(res.status).toBe(404);
+    });
+
+    it.each([
+      ['GET', '/admin/settings/demo/status'],
+      ['POST', '/admin/settings/demo/install'],
+      ['POST', '/admin/settings/demo/clear'],
+    ])(
+      'cloud: unauthenticated %s %s is also a 404, not 401 (guard runs first)',
+      async (method, path) => {
+        process.env.RL_FLAVOUR = 'cloud';
+        const res =
+          method === 'GET'
+            ? await testApp.request.get(path)
+            : await testApp.request.post(path);
+        expect(res.status).toBe(404);
+      },
+    );
+
+    it('nas: an unauthenticated probe is still a 401', async () => {
+      delete process.env.RL_FLAVOUR;
+      const res = await testApp.request.get('/admin/settings/demo/status');
+      expect(res.status).toBe(401);
     });
   });
 });
