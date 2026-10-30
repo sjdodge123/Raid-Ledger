@@ -83,8 +83,9 @@ export class AdminSettingsController {
     await this.settingsService.setDiscordOAuthConfig({
       clientId: body.clientId,
       clientSecret: body.clientSecret,
-      callbackUrl:
-        body.callbackUrl || 'http://localhost:3000/auth/discord/callback',
+      // ROK-1697: a blank callback stays blank, so the default is computed
+      // at read time (getDiscordOAuthConfig) and tracks later env changes.
+      callbackUrl: body.callbackUrl || '',
     });
     this.logger.log('Discord OAuth configuration updated via admin UI');
     return {

@@ -3,7 +3,7 @@
  */
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { SETTING_KEYS, SettingKey } from '../drizzle/schema';
-import { originOf } from './client-url.helpers';
+import { defaultDiscordCallbackUrl, originOf } from './client-url.helpers';
 import { SETTINGS_EVENTS } from './settings.types';
 import type {
   DiscordOAuthConfig,
@@ -40,7 +40,10 @@ export async function getDiscordOAuthConfig(
     callbackUrl:
       callbackUrl ||
       process.env.DISCORD_CALLBACK_URL ||
-      'http://localhost:3000/auth/discord/callback',
+      defaultDiscordCallbackUrl(
+        process.env,
+        'http://localhost:3000/auth/discord/callback',
+      ),
   };
 }
 
