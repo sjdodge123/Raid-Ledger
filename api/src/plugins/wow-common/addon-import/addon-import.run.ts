@@ -23,6 +23,7 @@ import {
   shouldApplyBinding,
   withPendingBindingStatus,
 } from './addon-import.paste-run';
+import { raidPullScope, withRaidPullScope } from './addon-import-raid.scope';
 
 /**
  * ROK-1738 — the per-character import run, extracted from
@@ -136,6 +137,7 @@ export async function runForCharacter(
     characterId: character.id,
     gameId: character.gameId,
     region: character.binding.region as WowRegion,
+    pendingGuid: binding.pinGuid,
   };
   // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
   if (!request.dryRun) {
@@ -153,5 +155,6 @@ export async function runForCharacter(
     const [head] = runs;
     await applyBinding({ ...ctx, sha256: head?.decoded.sha256 ?? '' }, binding);
   }
-  return buildPasteResult(runs, binding);
+  const res = buildPasteResult(runs, binding);
+  return request.dryRun ? res : withRaidPullScope(res, raidPullScope(runs, ctx));
 }

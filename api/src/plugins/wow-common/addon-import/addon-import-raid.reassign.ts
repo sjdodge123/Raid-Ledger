@@ -31,8 +31,6 @@
  * reporter lose a pull.
  */
 import {
-  and,
-  eq,
   getTableColumns,
   isNotNull,
   notInArray,
@@ -41,10 +39,13 @@ import {
 } from 'drizzle-orm';
 import {
   addonEncounterPulls,
-  guilds,
   type AddonEncounterPullInsert,
 } from '../../../drizzle/schema';
 import { loadGuildLinkedUserIds } from '../guilds/roster-insights/roster-insights.refs';
+import {
+  guidOnScopeRoster,
+  pullScopeHubIds,
+} from '../guilds/roster-insights/roster-insights.pull-scope';
 import type {
   AddonApplyContext,
   AddonImportTx,
@@ -136,27 +137,40 @@ export function buildPullInsert(
     .returning(returning);
 }
 
-/** Linked roster users of every `wow_guild` hub sharing the pull scope. */
+/**
+ * ROK-1917 final P2 — the binding is applied AFTER the sections run, so on a
+ * user's first import the GUID it pins is not yet on their character. When
+ * that pending GUID is on an in-scope roster the importer is trusted already.
+ */
+export function trustWithPendingBinding(
+  trusted: ReadonlySet<number>,
+  importer: number,
+  pendingOnRoster: boolean,
+): Set<number> {
+  const out = new Set(trusted);
+  if (pendingOnRoster) out.add(importer);
+  return out;
+}
+
+/**
+ * Linked roster users of every `wow_guild` hub sharing the pull scope, plus
+ * the importer when the GUID this import pins (`ctx.pendingGuid`) is on one.
+ */
 async function scopeLinkedUserIds(
   ctx: AddonApplyContext,
   guildKey: string,
 ): Promise<Set<number>> {
-  const hubs = await ctx.tx
-    .select({ id: guilds.id })
-    .from(guilds)
-    .where(
-      and(
-        eq(guilds.gameId, ctx.gameId),
-        eq(guilds.region, ctx.region),
-        eq(guilds.nameKey, guildKey),
-        eq(guilds.kind, 'wow_guild'),
-      ),
-    );
+  const { tx, gameId, region, pendingGuid } = ctx;
+  const hubIds = await pullScopeHubIds(tx, { gameId, region, guildKey });
   const ids = new Set<number>();
-  for (const hub of hubs) {
-    for (const id of await loadGuildLinkedUserIds(ctx.tx, hub.id)) ids.add(id);
+  for (const hubId of hubIds) {
+    for (const id of await loadGuildLinkedUserIds(tx, hubId)) ids.add(id);
   }
-  return ids;
+  const pending =
+    pendingGuid && !ids.has(ctx.userId)
+      ? await guidOnScopeRoster(tx, hubIds, pendingGuid)
+      : false;
+  return trustWithPendingBinding(ids, ctx.userId, pending);
 }
 
 /**
