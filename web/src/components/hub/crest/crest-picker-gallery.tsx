@@ -23,14 +23,14 @@ interface ThumbProps {
 function GalleryThumb({ item, selected, tabbable, onPick, onKeyDown, buttonRef }: ThumbProps): JSX.Element {
     const src = useHubMediaImageUrl(item.thumbPath);
     return (
-        <button
-            type="button" role="radio" aria-checked={selected} aria-label={item.caption ?? `Picture ${item.id}`}
+        <Button
+            variant="bare" role="radio" aria-checked={selected} aria-label={item.caption ?? `Picture ${item.id}`}
             tabIndex={tabbable ? 0 : -1} onClick={onPick} onKeyDown={onKeyDown} ref={buttonRef}
             data-testid={`crest-gallery-option-${item.id}`}
-            className={`h-20 w-20 overflow-hidden rounded-lg border-2 bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${selected ? 'border-success' : 'border-edge'}`}
+            className={`h-20 w-20 overflow-hidden rounded-lg border-2 bg-surface focus-visible:ring-offset-2 focus-visible:ring-offset-panel [&>[data-button-label]]:h-full [&>[data-button-label]]:w-full ${selected ? 'border-success' : 'border-edge'}`}
         >
             {src && <img src={src} alt="" className="h-full w-full object-cover" />}
-        </button>
+        </Button>
     );
 }
 

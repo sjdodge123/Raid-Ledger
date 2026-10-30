@@ -6,6 +6,7 @@
 import { useState, type JSX } from 'react';
 import { PencilIcon } from '@heroicons/react/20/solid';
 import type { GuildCrest } from '@raid-ledger/contract';
+import { Button } from '../../ui/button';
 import { HubCrest } from './hub-crest';
 import { LazyCrestPicker } from './crest-picker-lazy';
 
@@ -22,15 +23,15 @@ export function HeroCrest({ guildId, name, crest, canEdit, className }: HeroCres
     if (!canEdit) return <HubCrest crest={crest} name={name} size="hero" className={className} />;
     return (
         <>
-            <button
-                type="button" aria-label="Change crest" onClick={() => setOpen(true)} data-testid="hub-crest-edit"
-                className={`relative rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${className}`}
+            <Button
+                variant="bare" aria-label="Change crest" onClick={() => setOpen(true)} data-testid="hub-crest-edit"
+                className={`rounded-xl focus-visible:ring-offset-2 focus-visible:ring-offset-panel ${className}`}
             >
                 <HubCrest crest={crest} name={name} size="hero" />
                 <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-edge-strong bg-overlay text-foreground" aria-hidden="true">
                     <PencilIcon className="h-3.5 w-3.5" />
                 </span>
-            </button>
+            </Button>
             {open && <LazyCrestPicker guildId={guildId} name={name} onClose={() => setOpen(false)} />}
         </>
     );

@@ -19,6 +19,13 @@
  *   not shown in a segment — keep segment labels short. The track wraps: a
  *   set wider than its container (six duration segments in a 375px card)
  *   flows onto a second row instead of pushing out past the card (ROK-1649).
+ * - `appearance="swatch"` (ROK-1814): a wrapping grid of visual cells (an
+ *   emblem, a colour) for options with no text to show. Each option's
+ *   `swatch` fills a `border-2 border-edge` cell sized by `optionClassName`;
+ *   the radio is `sr-only` and a string `label` is its `aria-label` + the
+ *   cell's `title`. ON = the full-strength `border-success` border (the same
+ *   WCAG 1.4.11 indicator as `segmented`); focus adds a `ring-success` on
+ *   `ring-offset-panel`.
  * - Controlled only: `value` + `onChange(value)`.
  * - Validation like the other controls: `invalid`, `error` (an inline
  *   `role="alert"` under the group, linked by `aria-describedby`) and
@@ -34,6 +41,8 @@ export interface RadioOption<V extends string> {
     label: ReactNode;
     description?: ReactNode;
     disabled?: boolean;
+    /** The cell's visual for `appearance="swatch"` (ignored otherwise). */
+    swatch?: ReactNode;
 }
 
 export interface RadioGroupProps<V extends string> {
@@ -42,7 +51,9 @@ export interface RadioGroupProps<V extends string> {
     options: readonly RadioOption<V>[];
     value: V;
     onChange: (value: V) => void;
-    appearance?: 'list' | 'segmented';
+    appearance?: 'list' | 'segmented' | 'swatch';
+    /** Sizes/shapes each `swatch` cell (e.g. `h-11 w-11`). */
+    optionClassName?: string | undefined;
     /** Shared `name`; generated when omitted. */
     name?: string;
     disabled?: boolean;
@@ -60,6 +71,7 @@ interface OptionProps<V extends string> {
     disabled: boolean;
     onChange: (value: V) => void;
     descId: string;
+    optionClassName?: string | undefined;
 }
 
 const RADIO = `w-5 h-5 shrink-0 accent-success cursor-pointer ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
@@ -68,6 +80,12 @@ const SEGMENT = [
     'text-base lg:text-sm font-medium text-muted cursor-pointer transition-colors hover:text-foreground',
     'has-[:checked]:bg-overlay has-[:checked]:border-success has-[:checked]:text-foreground',
     'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-success/80',
+    'has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-panel',
+    'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
+].join(' ');
+const SWATCH = [
+    'relative flex cursor-pointer items-center justify-center rounded-lg border-2 border-edge has-[:checked]:border-success',
+    'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-success',
     'has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-panel',
     'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
 ].join(' ');
@@ -100,6 +118,23 @@ function SegmentOption<V extends string>({ option, name, checked, disabled, onCh
     );
 }
 
+function SwatchOption<V extends string>({ option, name, checked, disabled, onChange, optionClassName }: OptionProps<V>): JSX.Element {
+    const text = typeof option.label === 'string' ? option.label : undefined;
+    return (
+        <label className={`${SWATCH} ${optionClassName ?? ''}`} title={text}>
+            <input
+                type="radio" name={name} value={option.value} checked={checked} disabled={disabled}
+                onChange={() => onChange(option.value)} className="sr-only" aria-label={text}
+            />
+            {option.swatch}
+            {text === undefined && <span className="sr-only">{option.label}</span>}
+        </label>
+    );
+}
+
+const OPTION = { list: ListOption, segmented: SegmentOption, swatch: SwatchOption } as const;
+const LIST_CLS = { list: 'flex flex-col', segmented: 'flex flex-wrap gap-1 p-1 bg-panel border border-edge rounded-lg', swatch: 'flex flex-wrap gap-2' } as const;
+
 /** Group-level a11y: own + Field `aria-describedby` / `aria-invalid` / `aria-required`, plus the error id. */
 function useGroupA11y<V extends string>(p: RadioGroupProps<V>, errorId: string) {
     const a = useFieldControlProps({
@@ -112,19 +147,19 @@ function useGroupA11y<V extends string>(p: RadioGroupProps<V>, errorId: string) 
 function RadioGroupImpl<V extends string>(p: RadioGroupProps<V>, ref: ForwardedRef<HTMLFieldSetElement>): JSX.Element {
     const base = useId();
     const name = p.name ?? `${base}-radio`;
-    const segmented = p.appearance === 'segmented';
-    const Option = segmented ? SegmentOption : ListOption;
+    const appearance = p.appearance ?? 'list';
+    const Option = OPTION[appearance];
     const a11y = useGroupA11y(p, `${base}-error`);
     const legendCls = p.hideLabel ? 'sr-only' : 'mb-1.5 text-sm font-medium text-secondary';
-    const listCls = segmented ? 'flex flex-wrap gap-1 p-1 bg-panel border border-edge rounded-lg' : 'flex flex-col';
     return (
         <fieldset ref={ref} role="radiogroup" aria-labelledby={`${base}-legend`} {...a11y} className={p.className}>
             <legend id={`${base}-legend`} className={legendCls}>{p.label}</legend>
-            <div className={listCls}>
+            <div className={LIST_CLS[appearance]}>
                 {p.options.map((o, i) => (
                     <Option
                         key={o.value} option={o} name={name} checked={o.value === p.value}
                         disabled={!!(p.disabled || o.disabled)} onChange={p.onChange} descId={`${base}-desc-${i}`}
+                        optionClassName={p.optionClassName}
                     />
                 ))}
             </div>

@@ -37,7 +37,7 @@ export function CrestPickerSection(): JSX.Element {
         <Section id="crest-picker" title="Crest picker — CrestPicker + SwatchRadios"
             blurb="§3.2 CrestPicker (editor-only; Modal ≥1024px, BottomSheet below) and SwatchRadios — a visual one-of-N radio grid. Pick the same emblem and background colour to see the clash guard.">
             <div className="grid gap-4" data-testid="ds-crest-picker">
-                <StateFrame label="SwatchRadios" note="crest-swatch-radios.tsx — native radios, Tab/arrow keys, ON = border-success ring.">
+                <StateFrame label="SwatchRadios" note="crest-swatch-radios.tsx over RadioGroup appearance=&quot;swatch&quot; — native radios, Tab/arrow keys, ON = border-success ring.">
                     <SwatchDemo />
                 </StateFrame>
                 <StateFrame label="CrestPicker — Emblem tab body" note="crest-picker-preset.tsx on local state; the Upload and Gallery tabs need a hub.">
