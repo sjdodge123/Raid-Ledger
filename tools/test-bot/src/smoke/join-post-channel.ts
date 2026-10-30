@@ -29,12 +29,9 @@ export function reservedJoinPostChannels(
   textChannels: DiscordChannel[],
   defaultChannelId: string,
 ): DiscordChannel[] {
-  const usable = textChannels.filter(
-    (c) =>
-      c.id !== defaultChannelId &&
-      (c.type === undefined || c.type === GUILD_TEXT),
-  );
-  return usable.slice(-RESERVED_COUNT).reverse();
+  return usableTexts(textChannels, defaultChannelId)
+    .slice(-RESERVED_COUNT)
+    .reverse();
 }
 
 /**
@@ -64,13 +61,46 @@ export function foreignJoinPostChannelIds(
   return new Set(reserved.filter((c) => c.id !== own?.id).map((c) => c.id));
 }
 
-/** Channels the binding pool may use: not default, no reserved join-post one. */
+/** Free text channels Quick Play (ROK-1766/1768) binds; both slots share them. */
+const QUICK_PLAY_FREE_COUNT = 2;
+
+function usableTexts(
+  textChannels: DiscordChannel[],
+  defaultChannelId: string,
+): DiscordChannel[] {
+  return textChannels.filter(
+    (c) =>
+      c.id !== defaultChannelId &&
+      (c.type === undefined || c.type === GUILD_TEXT),
+  );
+}
+
+/**
+ * ROK-1788 review: the two text channels just before the join-post pair,
+ * kept out of the binding pool. CI seeds more games than channels, so the
+ * pool would otherwise bind everything and each slot (which may not use the
+ * other's join-post channel) would be left one free channel — Quick Play
+ * needs two. Fewer when the guild is too small to spare them.
+ */
+export function quickPlayReservedChannels(
+  textChannels: DiscordChannel[],
+  defaultChannelId: string,
+): DiscordChannel[] {
+  const usable = usableTexts(textChannels, defaultChannelId);
+  const beforeJoinPost = usable.slice(0, Math.max(0, usable.length - RESERVED_COUNT));
+  return beforeJoinPost.slice(-QUICK_PLAY_FREE_COUNT);
+}
+
+/** Channels the binding pool may use: not default, join-post or Quick Play reserved. */
 export function poolCandidateChannels(
   textChannels: DiscordChannel[],
   defaultChannelId: string,
 ): DiscordChannel[] {
   const reserved = new Set(
-    reservedJoinPostChannels(textChannels, defaultChannelId).map((c) => c.id),
+    [
+      ...reservedJoinPostChannels(textChannels, defaultChannelId),
+      ...quickPlayReservedChannels(textChannels, defaultChannelId),
+    ].map((c) => c.id),
   );
   return textChannels.filter(
     (c) => c.id !== defaultChannelId && !reserved.has(c.id),

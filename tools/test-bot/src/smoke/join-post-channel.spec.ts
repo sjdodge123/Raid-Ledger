@@ -10,6 +10,7 @@ import {
   foreignJoinPostChannelIds,
   pickJoinPostChannel,
   poolCandidateChannels,
+  quickPlayReservedChannels,
   reservedJoinPostChannels,
 } from "./join-post-channel.js";
 import { smokePoolIndex } from "./pool-index.js";
@@ -78,9 +79,15 @@ test("each slot sees only the OTHER slot's channel as foreign", () => {
   assert.deepEqual([...foreignJoinPostChannelIds(CHANNELS, "default", 1)], ["c"]);
 });
 
-test("the pool gets neither reserved channel, even with games to spare", () => {
-  const pool = poolCandidateChannels(CHANNELS, "default").map((c) => c.id);
-  assert.deepEqual(pool, ["a"]);
+test("the pool gets no join-post or Quick Play reserved channel", () => {
+  // 4 usable: join-post pair (f, e), Quick Play pair (d, c) → pool [a, b].
+  const six = [ch("default", 0), ...["a", "b", "c", "d", "e", "f"].map((id) => ch(id, 0))];
+  assert.deepEqual(reservedJoinPostChannels(six, "default").map((c) => c.id), ["f", "e"]);
+  assert.deepEqual(quickPlayReservedChannels(six, "default").map((c) => c.id), ["c", "d"]);
+  assert.deepEqual(poolCandidateChannels(six, "default").map((c) => c.id), ["a", "b"]);
+  // A small guild spares Quick Play what it can; the pool gets nothing.
+  assert.deepEqual(quickPlayReservedChannels(CHANNELS, "default").map((c) => c.id), ["a"]);
+  assert.deepEqual(poolCandidateChannels(CHANNELS, "default"), []);
 });
 
 test("the pool is empty when there is nothing left to bind", () => {
