@@ -251,7 +251,10 @@ describe('ROK-1700 — RL_FLAVOUR=cloud never reaches the first-login path', () 
     process.env.RL_FLAVOUR = 'cloud';
     try {
       const m = makeDb([{ id: 5 }]);
-      const user = await makeService(m.db).validateDiscordUser(DISCORD_ID, 'op');
+      const user = await makeService(m.db).validateDiscordUser(
+        DISCORD_ID,
+        'op',
+      );
       expect(m.transaction).not.toHaveBeenCalled();
       expect(user?.role).toBe('member');
     } finally {

@@ -50,7 +50,11 @@ describe('ROK-1700 assertFlavourBootConfig', () => {
   it.each([
     ['nas + DEMO_MODE', { RL_FLAVOUR: 'nas', DEMO_MODE: 'true' }, 'nas'],
     ['unset + DEMO_MODE', { DEMO_MODE: 'true' }, 'nas'],
-    ['cloud, DEMO_MODE off', { RL_FLAVOUR: 'cloud', DEMO_MODE: 'false' }, 'cloud'],
+    [
+      'cloud, DEMO_MODE off',
+      { RL_FLAVOUR: 'cloud', DEMO_MODE: 'false' },
+      'cloud',
+    ],
     ['cloud, DEMO_MODE unset', { RL_FLAVOUR: 'cloud' }, 'cloud'],
   ])('%s boots as %s', (_label, vars, expected) => {
     expect(assertFlavourBootConfig(env(vars))).toBe(expected);
@@ -82,7 +86,9 @@ describe('ROK-1700 ignoredFleetEnvWarning', () => {
   });
 
   it('nas with fleet vars set → no warning (fleet behaviour unchanged)', () => {
-    expect(ignoredFleetEnvWarning(env({ RL_FLAVOUR: 'nas', ...FLEET }))).toBeNull();
+    expect(
+      ignoredFleetEnvWarning(env({ RL_FLAVOUR: 'nas', ...FLEET })),
+    ).toBeNull();
     expect(ignoredFleetEnvWarning(env(FLEET))).toBeNull();
   });
 });

@@ -24,10 +24,15 @@ describe('ROK-1700 enforceFlavourBootGuards', () => {
   it('cloud + DEMO_MODE → logs the reason, reports + flushes Sentry, exits 1', async () => {
     const { deps, logger, exit } = makeDeps();
     await expect(
-      enforceFlavourBootGuards({ RL_FLAVOUR: 'cloud', DEMO_MODE: 'true' }, deps),
+      enforceFlavourBootGuards(
+        { RL_FLAVOUR: 'cloud', DEMO_MODE: 'true' },
+        deps,
+      ),
     ).rejects.toThrow('exit 1');
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('RL_FLAVOUR=cloud cannot run with DEMO_MODE=true'),
+      expect.stringContaining(
+        'RL_FLAVOUR=cloud cannot run with DEMO_MODE=true',
+      ),
     );
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     expect(Sentry.flush).toHaveBeenCalledWith(2000);
