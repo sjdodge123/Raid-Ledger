@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SystemController } from './system.controller';
+import { SetupClaimService } from '../setup-claim/setup-claim.service';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
@@ -38,6 +39,12 @@ function describeSystemController() {
         { provide: UsersService, useValue: mockUsersService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: SetupClaimService,
+          useValue: {
+            publicStatus: jest.fn().mockResolvedValue({ claimRequired: false }),
+          },
+        },
       ],
     }).compile();
 

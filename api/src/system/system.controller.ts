@@ -12,6 +12,7 @@ import {
 import type { SystemStatusDto, LoginMethodDto } from '@raid-ledger/contract';
 import { servedTelemetryEnabled } from '../sentry/telemetry-policy';
 import { getFlavour } from '../common/flavour/flavour';
+import { SetupClaimService } from '../setup-claim/setup-claim.service';
 
 /**
  * System status controller (ROK-175, ROK-146, ROK-238, ROK-267, ROK-271).
@@ -24,6 +25,7 @@ export class SystemController {
     private readonly usersService: UsersService,
     private readonly settingsService: SettingsService,
     private readonly pluginRegistry: PluginRegistryService,
+    private readonly setupClaim: SetupClaimService,
   ) {}
 
   /**
@@ -140,10 +142,13 @@ export class SystemController {
   private async withEphemeralFlags(
     dto: SystemStatusDto,
   ): Promise<SystemStatusDto> {
-    const [ephemeralVoiceEnabled, ephemeralVoiceForced] = await Promise.all([
-      this.settingsService.getEphemeralVoiceEnabled(),
-      this.settingsService.getEphemeralVoiceForced(),
-    ]);
+    const [ephemeralVoiceEnabled, ephemeralVoiceForced, claim] =
+      await Promise.all([
+        this.settingsService.getEphemeralVoiceEnabled(),
+        this.settingsService.getEphemeralVoiceForced(),
+        // ROK-1701: claimRequired (+ claimExpiresAt) — never the code.
+        this.setupClaim.publicStatus(),
+      ]);
     // ROK-1779: the decision the api's Sentry gate booted with (live read only
     // when instrument.ts never ran), so the web follows ENABLE/DISABLE_TELEMETRY.
     return {
@@ -152,6 +157,7 @@ export class SystemController {
       ephemeralVoiceForced,
       telemetryEnabled: servedTelemetryEnabled(),
       flavour: getFlavour(),
+      ...claim,
     };
   }
 }

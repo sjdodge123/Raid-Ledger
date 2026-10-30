@@ -15,14 +15,19 @@ import { applyBinding } from './addon-import-binding.apply';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { lockImportScope } from './addon-import.locks';
-import type { AddonImportTx } from './addon-import-apply.types';
+import type {
+  AddonApplyContext,
+  AddonImportTx,
+} from './addon-import-apply.types';
 import {
   buildPasteResult,
   pasteSections,
   runPaste,
   shouldApplyBinding,
   withPendingBindingStatus,
+  type PasteSectionRun,
 } from './addon-import.paste-run';
+import { raidPullScope, withRaidPullScope } from './addon-import-raid.scope';
 
 /**
  * ROK-1738 — the per-character import run, extracted from
@@ -136,6 +141,7 @@ export async function runForCharacter(
     characterId: character.id,
     gameId: character.gameId,
     region: character.binding.region as WowRegion,
+    pendingGuid: binding.pinGuid,
   };
   // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
   if (!request.dryRun) {
@@ -147,11 +153,25 @@ export async function runForCharacter(
     binding,
     request.dryRun,
   );
-  // Lead ruling: a stale export writes NOTHING — binding updates too
-  // (a mixed paste skips them only when EVERY section is stale).
-  if (!request.dryRun && shouldApplyBinding(runs)) {
+  return finishRun({ ...ctx, sha256: '' }, runs, binding, request.dryRun);
+}
+
+/**
+ * The binding's writes, then the 200 body. Lead ruling: a stale export writes
+ * NOTHING — binding updates too (a mixed paste skips them only when EVERY
+ * section is stale). An applied raid section tags the body with its pull
+ * scope for the post-commit cache hook (ROK-1917).
+ */
+async function finishRun(
+  ctx: AddonApplyContext,
+  runs: PasteSectionRun[],
+  binding: AddonBindingResult,
+  dryRun: boolean,
+): Promise<AddonImportResultDto> {
+  if (!dryRun && shouldApplyBinding(runs)) {
     const [head] = runs;
     await applyBinding({ ...ctx, sha256: head?.decoded.sha256 ?? '' }, binding);
   }
-  return buildPasteResult(runs, binding);
+  const res = buildPasteResult(runs, binding);
+  return dryRun ? res : withRaidPullScope(res, raidPullScope(runs, ctx));
 }
