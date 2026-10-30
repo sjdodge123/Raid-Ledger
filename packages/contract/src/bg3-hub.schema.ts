@@ -148,7 +148,7 @@ export const Bg3MySaveSchema = z.object({
     saveName: z.string().min(1),
     savedAt: iso,
     campaignKey: Bg3CampaignKeySchema,
-    campaignKeySource: z.enum(['save-folder', 'game-id']),
+    campaignKeySource: z.enum(['save-folder', 'game-id', 'file-name']),
     campaignId: id.nullable(),
     area: bg3Id,
     thumbnailUrl,

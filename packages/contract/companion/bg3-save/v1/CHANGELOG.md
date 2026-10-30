@@ -5,6 +5,15 @@ Newest first. Every entry states **additive** or **breaking** (see
 Display-table edits (`src/companion-bg3-display.ts`) are not wire and get no
 entry.
 
+## v1 — 2026-10-30 (additive) — `campaignKeySource: "file-name"`
+
+- **Additive** (stays v1, ROK-1960; operator ruling). New enum value
+  `"file-name"` for `payload.campaignKeySource`: a browser upload of a bare
+  `.lsv` keys by the SHA-256 of its file stem. A dropped folder still sends
+  `"save-folder"`. Existing payloads are unchanged; a collector that never
+  sends the value is unaffected. Mirrored on the read side
+  (`Bg3MySaveSchema.campaignKeySource`).
+
 ## v1 — 2026-10-28 (additive) — `\p{Cs}` dropped from the `saveName` pattern
 
 - **Additive** (stays v1, ROK-2034). The published `saveName` pattern no longer

@@ -45,13 +45,15 @@ export async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
- * The campaign key: the hash of the save-folder name (CONTRACT §3.3). A bare
- * `.lsv` uses its file stem — BG3 names the `.lsv` after its folder, so both
- * paths give the same key. The raw name never leaves this function.
+ * The campaign key (CONTRACT §3.3): the hash of the save-folder name
+ * (`save-folder`), or for a bare `.lsv` the hash of its file stem
+ * (`file-name`, operator ruling). BG3 names the `.lsv` after its folder, so the
+ * two usually give the same key; the source records which one was seen. The
+ * raw name never leaves this function.
  */
 async function campaignKeyOf(source: Bg3SaveSource): Promise<Pick<Bg3SavePayload, 'campaignKey' | 'campaignKeySource'>> {
-    const name = source.folderName ?? source.file.name.replace(/\.lsv$/i, '');
-    return { campaignKey: await sha256Hex(name), campaignKeySource: 'save-folder' };
+    if (source.folderName !== null) return { campaignKey: await sha256Hex(source.folderName), campaignKeySource: 'save-folder' };
+    return { campaignKey: await sha256Hex(source.file.name.replace(/\.lsv$/i, '')), campaignKeySource: 'file-name' };
 }
 
 interface SchemaIssues {

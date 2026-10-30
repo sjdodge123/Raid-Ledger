@@ -70,12 +70,14 @@ describe('parseBg3Save — golden', () => {
     it('keys a dropped folder by sha256 of its name', async () => {
         const parsed = await parseBg3Save({ file: lsv(), folderName: 'X' });
         expect(parsed.payload.campaignKey).toBe('4b68ab3847feda7d6c62c1fbcbeebfa35eab7351ed5e78f4ddadea5df64b8015');
+        expect(parsed.payload.campaignKeySource).toBe('save-folder');
         expect(JSON.stringify(parsed.payload)).not.toContain('"X"');
     });
 
-    it('keys a bare .lsv by its file stem, the same key its folder gives', async () => {
+    it('keys a bare .lsv by its file stem (same key its folder gives) with source file-name', async () => {
         const bare = await parseBg3Save({ file: lsv('Tav-1234__QuickSave_1.LSV'), folderName: null });
         expect(bare.payload.campaignKey).toBe(await sha256Hex('Tav-1234__QuickSave_1'));
+        expect(bare.payload.campaignKeySource).toBe('file-name');
     });
 
     it('drops the thumbnail when the reader returns none', async () => {
