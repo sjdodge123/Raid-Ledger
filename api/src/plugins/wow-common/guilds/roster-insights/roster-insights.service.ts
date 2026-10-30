@@ -89,11 +89,6 @@ export class RosterInsightsService {
       audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
     const all = await this.loadRows(adapter, guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
-    // ROK-1917 — pulls are guild-level: the full roster's linked users (D5).
-    const raidProgress =
-      audience === 'member'
-        ? await loadRaidProgress(this.db, guildId, linkedUserIds(all))
-        : null;
     return {
       classes: computeClasses(rows),
       levels: computeLevels(rows),
@@ -107,11 +102,19 @@ export class RosterInsightsService {
             lastSeen: { ...computeLastSeen(all), snapshotAt },
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
-            ...(raidProgress ? { raidProgress } : {}),
+            ...(await this.raidSection(guildId, all)),
           }
         : {}),
       freshness: computeFreshness(rows),
     };
+  }
+
+  /** ROK-1917 — `{ raidProgress }` for a WoW guild hub, else nothing. */
+  private async raidSection(guildId: number, all: readonly InsightRow[]) {
+    // Pulls are guild-level: the FULL roster's linked users report (D5, Q1).
+    const ids = linkedUserIds(all);
+    const raidProgress = await loadRaidProgress(this.db, guildId, ids);
+    return raidProgress ? { raidProgress } : {};
   }
 
   /** The guild's latest snapshot time — the export the presence rows are from. */

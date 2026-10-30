@@ -161,6 +161,14 @@ async function loadScope(db: Db, guildId: number) {
   return row;
 }
 
+/** Q1: a linked roster user of this hub, or a since-deleted user (NULL). */
+function trustedReporter(reporterIds: readonly number[]) {
+  const by = schema.addonEncounterPulls.reportedByUserId;
+  return reporterIds.length > 0
+    ? or(inArray(by, [...reporterIds]), isNull(by))
+    : isNull(by);
+}
+
 /** In-scope pulls reported by `reporterIds` or by a deleted user (Q1). */
 async function loadGuildPulls(
   db: Db,
@@ -168,13 +176,7 @@ async function loadGuildPulls(
   reporterIds: readonly number[],
 ): Promise<RaidPull[]> {
   const p = schema.addonEncounterPulls;
-  const trusted =
-    reporterIds.length > 0
-      ? or(
-          inArray(p.reportedByUserId, [...reporterIds]),
-          isNull(p.reportedByUserId),
-        )
-      : isNull(p.reportedByUserId);
+  const trusted = trustedReporter(reporterIds);
   return db
     .select({
       encounterId: p.encounterId,
