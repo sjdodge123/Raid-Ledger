@@ -33,12 +33,18 @@ import { GuildRaidsService } from './guild-raids.service';
 export const GM_RANK_INDEX = 0;
 
 /**
- * SECURITY (ROK-1785 review, Lead decision pending the operator): rank 0 does
- * NOT imply edit rights. Member GUIDs are claimed first-come from unsigned
- * LedgerLink exports, so anyone could claim the GM's GUID. Until the follow-up
- * "verify character ownership" story ships, the GM edits only through an
- * explicit `guild_editors` grant made by an admin/operator. Flipping this to
- * `true` restores implicit GM edit rights (managing editors stays staff-only).
+ * SECURITY (ROK-1785 review): rank 0 does NOT imply edit rights. Member GUIDs
+ * are claimed first-come from unsigned LedgerLink exports, so anyone could
+ * claim the GM's GUID. Until the follow-up "verify character ownership" story
+ * ships, the GM edits only through an explicit `guild_editors` grant made by
+ * an admin/operator. Flipping this to `true` restores implicit GM edit rights
+ * (managing editors stays staff-only).
+ *
+ * ACCEPTED RISK (operator ruling 2026-10-30, ROK-1814): the ONE exception is
+ * the hub crest — `holdsTopRank` below lets rank 0 change it without a grant.
+ * Rank 0 is self-reported via those same unsigned exports, so a GUID squatter
+ * can act as the GM and edit or upload the crest. Staff can remove an upload
+ * (`DELETE guilds/:id/crest/upload`); the operator accepted this risk.
  */
 export const GM_RANK_IMPLIES_EDIT = false;
 
@@ -99,7 +105,12 @@ export class WowHubKindAdapter implements HubKindAdapter {
     return delegated ? 'officer' : 'member';
   }
 
-  /** ROK-1814: a live linked row at rank 0 (the GM) — crest edit right only. */
+  /**
+   * ROK-1814: a live linked row at rank 0 (the GM) — crest edit right only.
+   * Rank 0 is self-reported via unsigned LedgerLink exports, so a GUID
+   * squatter passes this; accepted by the operator 2026-10-30 (staff can
+   * remove a squatter's upload). See the SECURITY note on GM_RANK_IMPLIES_EDIT.
+   */
   async holdsTopRank(userId: number, guildId: number): Promise<boolean> {
     return (await findLinkedMemberRows(this.db, userId, guildId)).some(
       isGuildMaster,

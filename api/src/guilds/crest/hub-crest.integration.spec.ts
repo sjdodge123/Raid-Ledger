@@ -29,6 +29,7 @@ import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { solidPng } from '../../hub-media/hub-media.testing';
 import { HubMediaSourceGateRegistry } from '../../hub-media/hub-media.source-gates';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { insertCommunityHub } from '../community/community-proposals.queries';
 import { crestFilePath } from './hub-crest.paths';
@@ -72,7 +73,8 @@ function perRole<U, T>(
 const keyOf = (u: string | undefined): string =>
   u?.split('/').pop()?.split('.')[0] ?? '';
 
-const auth = (who: Who) => ({ Authorization: `Bearer ${tokens[who]}` });
+const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+const auth = (who: Who) => bearer(tokens[who]);
 const url = (g = hubId) => `/guilds/${g}/crest`;
 const upload = async (who: Who) =>
   testApp.request
@@ -113,10 +115,15 @@ async function makeHub(name: string, leaderId: number): Promise<number> {
   return hub.id;
 }
 
-async function galleryItem(g: number, w = 300, h = 300): Promise<number> {
+async function galleryItem(
+  g: number,
+  w = 300,
+  h = 300,
+  token = tokens.leader,
+): Promise<number> {
   const res = await testApp.request
     .post(`/hubs/${g}/media`)
-    .set(auth('leader'))
+    .set(bearer(token))
     .attach('file', await solidPng(w, h, (n += 1)), {
       filename: 'pic.png',
       contentType: 'image/png',
@@ -255,7 +262,17 @@ describe('DELETE /guilds/:id/crest/upload', () => {
     expect(row?.crestUploadKey).toBeNull();
   });
 
-  // Operator ruling 2026-10-30: any editor change clears "removed by an admin".
+  it('an editor (leader) cannot remove an upload', async () => {
+    await upload('leader');
+    const res = await testApp.request
+      .delete(`${url()}/upload`)
+      .set(auth('leader'));
+    expect(res.status).toBe(403);
+  });
+});
+
+// Operator ruling 2026-10-30: any editor change clears "removed by an admin".
+describe('staff removal reset', () => {
   it.each([
     [
       'picks a preset',
@@ -290,14 +307,6 @@ describe('DELETE /guilds/:id/crest/upload', () => {
       expect(row?.crestRemovedBy).toBeNull();
     },
   );
-
-  it('an editor (leader) cannot remove an upload', async () => {
-    await upload('leader');
-    const res = await testApp.request
-      .delete(`${url()}/upload`)
-      .set(auth('leader'));
-    expect(res.status).toBe(403);
-  });
 });
 
 describe('POST /guilds/:id/crest/from-gallery', () => {
@@ -393,5 +402,156 @@ describe('GuildSummary.crest', () => {
       (g) => g.id === hubId,
     );
     expect(mine?.crest).toEqual({ source: 'preset', ...PRESET });
+  });
+});
+
+/*
+ * ROK-1814 (operator ruling 2026-10-30): the in-game GM — rank 0 in the hub's
+ * latest roster import, with no editor grant, not an officer, not staff — may
+ * change the crest through `HubCrestEditorGuard`, but not remove an upload.
+ * Rank 0 is self-reported via unsigned LedgerLink exports; that spoof risk is
+ * accepted (see `wow-hub-kind.adapter.ts`). `GuildEditorGuard` 403s every
+ * 200 below, which is what these pin.
+ */
+const SNAP = new Date('2026-10-10T20:00:00.000Z');
+
+/** A WoW guild hub whose latest roster import ran at SNAP. */
+async function makeWowGuild(name: string): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        region: 'us',
+        name,
+        nameKey: name.toLowerCase(),
+        source: 'addon_import',
+        lastSnapshotAt: SNAP,
+      })
+      .returning({ id: schema.guilds.id }),
+    `guild ${name}`,
+  );
+  return g.id;
+}
+
+/** A plain member whose linked character is rank 0 of `guildId` at SNAP. */
+async function makeGm(name: string, guildId: number) {
+  const user = await makeUser(name);
+  const guid = `Player-1-${name}`;
+  await testApp.db.insert(schema.characters).values({
+    userId: user.id,
+    gameId: testApp.seed.game.id,
+    name,
+    addonGuid: guid,
+    role: 'dps',
+    isMain: true,
+  });
+  await testApp.db.insert(schema.guildMembers).values({
+    guildId,
+    guid,
+    characterName: name,
+    rankIndex: 0,
+    rankName: 'Guild Master',
+    source: 'addon_import',
+    lastSeenAt: SNAP,
+  });
+  return user;
+}
+
+let wowId: number;
+
+/** The WoW plugin on (truncation drops its row) + a guild hub per test. */
+async function wowSetup(): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  await registry.ensureInstalled('blizzard');
+  await registry.activate('blizzard');
+  wowId = await makeWowGuild('Ledger Keepers');
+}
+
+const wowUrl = (path = '') => `/guilds/${wowId}/crest${path}`;
+const gmUpload = async (token: string) =>
+  testApp.request
+    .post(wowUrl('/upload'))
+    .set(bearer(token))
+    .attach('file', await solidPng(200, 120, (n += 1)), {
+      filename: 'crest.png',
+      contentType: 'image/png',
+    });
+
+describe('the in-game GM may change the crest (HubCrestEditorGuard)', () => {
+  let gm: string;
+  beforeEach(async () => {
+    await wowSetup();
+    gm = (await makeGm('gm', wowId)).token;
+  });
+
+  it('GET 200', async () => {
+    const res = await testApp.request.get(wowUrl()).set(bearer(gm));
+    expect(res.status).toBe(200);
+    expect(state(res.body).active).toBeNull();
+  });
+
+  it('PUT 200 saves a preset', async () => {
+    const res = await testApp.request
+      .put(wowUrl())
+      .set(bearer(gm))
+      .send({ active: 'preset', preset: PRESET });
+    expect(res.status).toBe(200);
+    expect(state(res.body)).toMatchObject({ active: 'preset', preset: PRESET });
+  });
+
+  it('upload 200', async () => {
+    const res = await gmUpload(gm);
+    expect(res.status).toBe(200);
+    expect(state(res.body).active).toBe('upload');
+  });
+
+  it('from-gallery 200', async () => {
+    const mediaId = await galleryItem(wowId, 300, 300, tokens.operator);
+    const res = await testApp.request
+      .post(wowUrl('/from-gallery'))
+      .set(bearer(gm))
+      .send({ mediaId });
+    expect(res.status).toBe(200);
+    expect(state(res.body).active).toBe('upload');
+  });
+
+  it('DELETE /upload 403 — removal stays staff-only', async () => {
+    expect((await gmUpload(gm)).status).toBe(200);
+    const res = await testApp.request.delete(wowUrl('/upload')).set(bearer(gm));
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('rank 0 that does not admit a crest editor', () => {
+  beforeEach(wowSetup);
+
+  it("another guild's GM gets 403", async () => {
+    const otherId = await makeWowGuild('Other Guild');
+    const { token } = await makeGm('othergm', otherId);
+    const res = await testApp.request
+      .put(wowUrl())
+      .set(bearer(token))
+      .send({ active: null });
+    expect(res.status).toBe(403);
+  });
+
+  // Plain tokens 401 at the JWT lockout; impersonation reaches the guard.
+  it('a deactivated GM gets 403', async () => {
+    const { id } = await makeGm('gone', wowId);
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, id));
+    const token = await signTestAccessToken(testApp, {
+      sub: id,
+      username: 'gone',
+      impersonatedBy: ids.operator,
+    });
+    const res = await testApp.request
+      .put(wowUrl())
+      .set(bearer(token))
+      .send({ active: null });
+    expect(res.status).toBe(403);
   });
 });

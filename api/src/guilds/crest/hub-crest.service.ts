@@ -66,7 +66,7 @@ function encodeError(code: EncodeFailure['code']): Error {
  * ROK-1814 — the hub crest: read the editor state, pick/clear the shown
  * crest, upload one (or pick one from the hub's own gallery), and the
  * staff-only upload removal. Guards (jwt, HubVisibleGuard,
- * GuildEditorGuard) run in the controller; removal re-checks `isStaff`.
+ * HubCrestEditorGuard) run in the controller; removal re-checks `isStaff`.
  * New files are written under the row lock; old ones are deleted only after
  * the update commits, under the lock again, and only if the row no longer
  * points at them (a racing re-upload of the same picture keeps its files).
