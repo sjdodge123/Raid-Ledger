@@ -3,11 +3,13 @@
  * editor matrix (leader/officer/staff 2xx; member/visitor 403), preset
  * set/clear, staff-only upload removal (records removed_by/at, falls back
  * to the preset), the gallery pick (this hub only; another hub's id 404)
- * and `GuildSummary.crest` on `GET /guilds/:id`.
+ * (this hub only; another hub's id or a hidden picture 404; a 1600 × 900
+ * picture is downsized, not refused), removal deletes the files, and
+ * `GuildSummary.crest` on `GET /guilds/:id` and `GET /guilds/mine`.
  */
 import { eq } from 'drizzle-orm';
 import { existsSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Redis from 'ioredis';
@@ -15,6 +17,7 @@ import {
   GuildCrestEditorStateSchema,
   GuildPageSchema,
   HubMediaItemSchema,
+  MyGuildsSchema,
 } from '@raid-ledger/contract';
 import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -34,6 +37,34 @@ let otherHubId: number;
 let ids: Record<Who, number>;
 let tokens: Record<Who, string>;
 let n = 0;
+const tempDirs: string[] = [];
+const ENV_KEYS = ['GUILD_CREST_DIR', 'HUB_MEDIA_DIR'] as const;
+const savedEnv = ENV_KEYS.map((k) => [k, process.env[k]] as const);
+
+/** A fresh tmpdir, removed in afterAll. */
+async function tempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+/** The same per-role pick for every test user, without a cast. */
+function perRole<U, T>(
+  users: Record<Who, U>,
+  pick: (u: U) => T,
+): Record<Who, T> {
+  return {
+    leader: pick(users.leader),
+    officer: pick(users.officer),
+    member: pick(users.member),
+    visitor: pick(users.visitor),
+    operator: pick(users.operator),
+  };
+}
+
+/** The crest key from an editor-state upload URL. */
+const keyOf = (u: string | undefined): string =>
+  u?.split('/').pop()?.split('.')[0] ?? '';
 
 const auth = (who: Who) => ({ Authorization: `Bearer ${tokens[who]}` });
 const url = (g = hubId) => `/guilds/${g}/crest`;
@@ -76,11 +107,11 @@ async function makeHub(name: string, leaderId: number): Promise<number> {
   return hub.id;
 }
 
-async function galleryItem(g: number): Promise<number> {
+async function galleryItem(g: number, w = 300, h = 300): Promise<number> {
   const res = await testApp.request
     .post(`/hubs/${g}/media`)
     .set(auth('leader'))
-    .attach('file', await solidPng(300, 300, (n += 1)), {
+    .attach('file', await solidPng(w, h, (n += 1)), {
       filename: 'pic.png',
       contentType: 'image/png',
     });
@@ -92,9 +123,19 @@ beforeAll(async () => {
   testApp = await getTestApp();
 });
 
+afterAll(async () => {
+  for (const [k, v] of savedEnv) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  await Promise.all(
+    tempDirs.map((d) => rm(d, { recursive: true, force: true })),
+  );
+});
+
 beforeEach(async () => {
-  process.env.GUILD_CREST_DIR = await mkdtemp(join(tmpdir(), 'guild-crest-'));
-  process.env.HUB_MEDIA_DIR = await mkdtemp(join(tmpdir(), 'crest-media-'));
+  process.env.GUILD_CREST_DIR = await tempDir('guild-crest-');
+  process.env.HUB_MEDIA_DIR = await tempDir('crest-media-');
   testApp.seed = await truncateAllTables(testApp.db);
   const redis = testApp.app.get<Redis>(REDIS_CLIENT);
   const keys = await redis.keys('guild-crest-upload:*');
@@ -114,12 +155,8 @@ beforeEach(async () => {
     { guildId: hubId, userId: users.member.id, role: 'member' as const },
     { guildId: otherHubId, userId: users.leader.id, role: 'leader' as const },
   ]);
-  ids = Object.fromEntries(
-    Object.entries(users).map(([k, u]) => [k, u.id]),
-  ) as Record<Who, number>;
-  tokens = Object.fromEntries(
-    Object.entries(users).map(([k, u]) => [k, u.token]),
-  ) as Record<Who, string>;
+  ids = perRole(users, (u) => u.id);
+  tokens = perRole(users, (u) => u.token);
 });
 
 describe('POST /guilds/:id/crest/upload', () => {
@@ -130,7 +167,7 @@ describe('POST /guilds/:id/crest/upload', () => {
       expect(res.status).toBe(200);
       const s = state(res.body);
       expect(s.active).toBe('upload');
-      const key = s.upload?.urlLg.split('/').pop()?.split('.')[0] ?? '';
+      const key = keyOf(s.upload?.urlLg);
       expect(existsSync(crestFilePath(hubId, key, 'lg'))).toBe(true);
     },
   );
@@ -141,7 +178,7 @@ describe('POST /guilds/:id/crest/upload', () => {
 
   it('a replace deletes the previous files after the update', async () => {
     const first = state((await upload('leader')).body);
-    const oldKey = first.upload?.urlSm.split('/').pop()?.split('.')[0] ?? '';
+    const oldKey = keyOf(first.upload?.urlSm);
     expect((await upload('leader')).status).toBe(200);
     expect(existsSync(crestFilePath(hubId, oldKey, 'sm'))).toBe(false);
   });
@@ -164,11 +201,14 @@ describe('PUT /guilds/:id/crest', () => {
 describe('DELETE /guilds/:id/crest/upload', () => {
   it('staff removal records removed_by/at and falls back to the preset', async () => {
     await put('leader', { active: 'preset', preset: PRESET });
-    await upload('leader');
+    const key = keyOf(state((await upload('leader')).body).upload?.urlLg);
+    expect(existsSync(crestFilePath(hubId, key, 'lg'))).toBe(true);
     const res = await testApp.request
       .delete(`${url()}/upload`)
       .set(auth('operator'));
     expect(res.status).toBe(200);
+    expect(existsSync(crestFilePath(hubId, key, 'lg'))).toBe(false);
+    expect(existsSync(crestFilePath(hubId, key, 'sm'))).toBe(false);
     expect(state(res.body)).toMatchObject({ active: 'preset', upload: null });
     const [row] = await testApp.db
       .select()
@@ -201,6 +241,30 @@ describe('POST /guilds/:id/crest/from-gallery', () => {
     expect(s.upload?.urlLg).toMatch(/^\/uploads\/guild-crests\//);
   });
 
+  it('downsizes a 1600 × 900 gallery picture instead of refusing it', async () => {
+    const mediaId = await galleryItem(hubId, 1600, 900);
+    const res = await testApp.request
+      .post(`${url()}/from-gallery`)
+      .set(auth('leader'))
+      .send({ mediaId });
+    expect(res.status).toBe(200);
+    const key = keyOf(state(res.body).upload?.urlLg);
+    expect(existsSync(crestFilePath(hubId, key, 'lg'))).toBe(true);
+  });
+
+  it('404s for a hidden gallery picture', async () => {
+    const mediaId = await galleryItem(hubId);
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    const res = await testApp.request
+      .post(`${url()}/from-gallery`)
+      .set(auth('leader'))
+      .send({ mediaId });
+    expect(res.status).toBe(404);
+  });
+
   it("404s for another hub's picture", async () => {
     const mediaId = await galleryItem(otherHubId);
     const res = await testApp.request
@@ -220,5 +284,15 @@ describe('GuildSummary.crest', () => {
     expect(res.status).toBe(200);
     const page = GuildPageSchema.parse(res.body);
     expect(page.guild.crest).toEqual({ source: 'preset', ...PRESET });
+  });
+
+  it('GET /guilds/mine carries the active crest', async () => {
+    await put('leader', { active: 'preset', preset: PRESET });
+    const res = await testApp.request.get('/guilds/mine').set(auth('member'));
+    expect(res.status).toBe(200);
+    const mine = MyGuildsSchema.parse(res.body).guilds.find(
+      (g) => g.id === hubId,
+    );
+    expect(mine?.crest).toEqual({ source: 'preset', ...PRESET });
   });
 });
