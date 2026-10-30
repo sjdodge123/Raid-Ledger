@@ -7,7 +7,7 @@ import { useState, type JSX } from 'react';
 import { PencilIcon } from '@heroicons/react/20/solid';
 import type { GuildCrest } from '@raid-ledger/contract';
 import { HubCrest } from './hub-crest';
-import { CrestPicker } from './crest-picker';
+import { LazyCrestPicker } from './crest-picker-lazy';
 
 interface HeroCrestProps {
     guildId: number;
@@ -31,7 +31,7 @@ export function HeroCrest({ guildId, name, crest, canEdit, className }: HeroCres
                     <PencilIcon className="h-3.5 w-3.5" />
                 </span>
             </button>
-            {open && <CrestPicker guildId={guildId} name={name} onClose={() => setOpen(false)} />}
+            {open && <LazyCrestPicker guildId={guildId} name={name} onClose={() => setOpen(false)} />}
         </>
     );
 }

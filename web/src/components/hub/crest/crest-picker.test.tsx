@@ -155,6 +155,6 @@ describe('HeroCrest', () => {
     it('opens the picker for an editor', async () => {
         render(<HeroCrest guildId={7} name="Iron Wolves" crest={null} canEdit className="" />);
         await userEvent.click(screen.getByRole('button', { name: 'Change crest' }));
-        expect(screen.getByTestId('crest-picker')).toBeInTheDocument();
+        expect(await screen.findByTestId('crest-picker')).toBeInTheDocument();
     });
 });
