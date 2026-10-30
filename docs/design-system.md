@@ -231,6 +231,17 @@ variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-h
 light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
 
+**Crest-palette exception (ROK-1814).** A guild's preset crest is *data the guild chose*, not UI chrome, so
+its colours are the one sanctioned fixed hex in the app: `GUILD_CREST_PALETTE` in
+`packages/contract/src/guild-crest.schema.ts` (12 heraldic colours, stored by id so the hex can be retuned).
+`HubCrest` paints the preset's background and emblem from it with an inline `style` and the same colours in
+every scheme — a gules-and-or crest is gules-and-or on all fifteen themes.
+
+- **DO** read crest colours only from `GUILD_CREST_PALETTE` via the stored palette id.
+- **DON'T** extend the exception to anything around the crest: the frame (`border-edge-strong`), the empty
+  state, the initials/shield fallbacks and the picker chrome are tokens and must repaint. No other feature
+  may cite this exception for a hardcoded colour.
+
 > **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
 > → *Accent hues*, where every row paints in the class it documents and the "Side by
 > side" toggle shows both families at once.
@@ -412,6 +423,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `hub-nav/hubs-circle.tsx` → `HubsCircle` (ROK-1875, operator ruling 2026-10-21) | `components/layout/hub-nav/` | **The one Hubs circle, phone and desktop.** A decorative (`aria-hidden`) `rounded-full bg-success text-white` circle around the solid `Squares2X2Icon`: `size="raised"` is the phone bar's 56px raised centre action (collar, shadow, press scale), `size="inline"` the header's 28px one. `active` adds the same `ring-success/40` ring on both. The host button/link owns the name and the focus ring. Never copy the class string — any new Hubs entry point uses this |
 | `hubs-nav-menu.tsx` → `HubsNavItem` (ROK-1875) | `components/layout/hub-nav/` | The header's single Hubs item, from 768px. Its face (trigger and plain link alike) is `HubsCircle size="inline"` then "Hubs" (`hidden lg:inline`; the host carries `aria-label="Hubs"`) — 768–1023px shows the circle alone (+ the menu's chevron). No hubs / loading / error → a plain `navClass` link to `/hubs`; ≥1 hub → a §4.14 `role="menu"` ("Your hubs" heading, `GuildRows role="menuitem"`, separator, "Browse all hubs →"). Lit on `/hubs` and every `/guilds/:id` page (`isHubsNavActive`). Phone uses the bottom bar's raised Hubs button (`BottomHubsButton`) instead; the More drawer lists no hubs (ROK-1890). **768–1023px the header row must fit** (it overflowed at 768 even before this menu): nav `gap-3 lg:gap-6`, the trigger trims to `md:px-1 lg:px-3`, Insights shows its icon with an `sr-only lg:not-sr-only` label, the user-menu name is hidden below `lg` (still the button's name) and from `lg` caps at `max-w-40` + `truncate` (full name in `title`; ROK-2030 — a 38-char seed name overflowed 1024px by 108px), and the brand name truncates (`min-w-0` + `truncate`) rather than wrapping. A new header item at md must fit that budget — `hubs-nav.smoke.spec.ts` checks 768×1024 and 812×375 |
 | `hub-entry-bits.tsx` → `GuildRows`, `GuildRowIcon`, `GuildCrest` (ROK-1785/1870/1875) | `components/layout/hub-nav/` | A list of the viewer's hubs: 44px rows of icon · name over rank/realm meta · `HubKindChip` · chevron. Pass `role="menuitem"` when the list sits inside a `role="menu"`. The WoW plugin re-exports them |
+| `hub-crest.tsx` → `HubCrest` (+ `hub-crest.helpers.ts`, `crest-emblems.ts` over `crest-emblem-art-a/b.ts`) (ROK-1814) | `components/hub/crest/` | **The one guild-crest renderer** — hero, nav rows (`GuildCrest`/`GuildRowIcon`), the character guild badge and the Players card all go through it. `crest` = the contract `GuildCrest` (`upload` → `<img>`, `urlSm` at `sm`/`md`, `urlLg` at `lg`/`hero`; `preset` → a curated game-icons.net emblem in `currentColor` on the palette background, the §2.2 crest exception); null, an unknown `source` (ROK-1170's future `blizzard`) or a failed image → `fallback`, else initials on `hero` and the shield in lists. Sizes `sm` 24 / `md` 40 / `lg` 48 / `hero` 64→80px; frame `border-edge-strong`. Always `aria-hidden` — the host names the hub. Never draw a crest or initials box by hand. The crest picker (Modal ≥1024px / BottomSheet below, editor-only) is in progress in ROK-1814 lane 4a. Emblem credits: `docs/credits/game-icons.md`. Rendered: `/dev/design-system#crest` |
 | `event-hub-label.tsx` → `EventHubLabel` + `event-hub-label.helpers.ts` → `hubSuffixText` (ROK-1893 P4, R23) | `components/calendar/` | **New pattern: hub suffix on event game lines** — nothing in the inventory stated an event's hub provenance on a calendar card, and a chip would break the Week minimal tier's height budget. An event tagged to a visible hub reads `<game> · <hub>` on its game line: Week compact/standard cards, Day cards and the phone agenda (`ScheduleView`) render `EventHubLabel` — plain text in the line's own size, `text-muted` (default) on page surfaces, `className="opacity-80"` over game art (those cards paint white text on the game colour, so a muted token would lose contrast in light families); the line gains `truncate`. The Week `minimal` tier carries it in `title`, the Month chip in `title` plus an `sr-only` span (an `aria-label` on a role-less div is ignored), both via `hubSuffixText`. `hub: null` (untagged, or a hidden/proposed hub — R28) renders nothing. The event page puts a `HubBadge` (`Link` → `/guilds/:id`, `<name> hub`) beside `GameBadge` in `EventBanner`, same `event-banner__game--link` class. Rendered: `/dev/design-system#calendar-hub`. |
 | `CalendarOAuthErrorBanner.tsx` → `CalendarOAuthErrorBanner` (ROK-2022; moved out of `CalendarsPage`) | `components/features/calendar-sync/` | The §4.7 dismissible banner for a calendar OAuth `?error=<code>` return, on Profile → Integrations and the first-run wizard's Calendar step. Reuse it (`code`, `onDismiss`); do not copy it |
 
@@ -1331,7 +1343,8 @@ D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pa
 (`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). ROK-1774 adds
 *Pattern — server-schedule layer* (`calendar-layer-section.tsx`, §4.22), which mounts the real band label and tick
 in the grid's own DOM so `calendar-layers.css` applies. Check both families there before
-changing any of them.
+changing any of them. ROK-1814 adds *Guild crest — HubCrest* (`crest-section.tsx`): upload / preset /
+fallback at every size plus all 16 preset emblems and their credit line.
 
 ---
 
