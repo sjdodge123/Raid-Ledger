@@ -35,7 +35,7 @@ const GUILD_KEY = GUILD_NAME.toLowerCase();
 const T0 = Date.parse('2026-10-22T20:00:00.000Z');
 const at = (s: number): Date => new Date(T0 + s * 1000);
 
-type Who = 'raider' | 'pug' | 'visitor';
+type Who = 'raider' | 'officer' | 'pug' | 'visitor';
 
 let testApp: TestApp;
 let guildId: number;
@@ -50,7 +50,7 @@ function idOf(who: Who): number {
   return id;
 }
 
-/** A user; `raider` also gets a linked character on the guild roster. */
+/** A user; `raider` and `officer` also get a linked character on the guild roster. */
 async function seedUser(who: Who): Promise<void> {
   const [user] = nonEmpty(
     await testApp.db
@@ -71,11 +71,11 @@ async function seedUser(who: Who): Promise<void> {
       username: user.username,
     }),
   );
-  if (who === 'raider') await seedRosterChar(user.id);
+  if (who === 'raider' || who === 'officer') await seedRosterChar(user.id, who);
 }
 
-async function seedRosterChar(userId: number): Promise<void> {
-  const guid = 'Player-7-rp1917raider';
+async function seedRosterChar(userId: number, who: Who): Promise<void> {
+  const guid = `Player-7-rp1917${who}`;
   await testApp.db.insert(schema.characters).values({
     userId,
     gameId: testApp.seed.game.id,
@@ -219,7 +219,8 @@ beforeAll(async () => {
   await registry.activate('blizzard');
   guildId = await insertGuild();
   otherGameId = await insertOtherGame();
-  for (const who of ['raider', 'pug', 'visitor'] as const) await seedUser(who);
+  for (const who of ['raider', 'officer', 'pug', 'visitor'] as const)
+    await seedUser(who);
   await testApp.db
     .insert(schema.addonEncounterPulls)
     .values([...IN_SCOPE, ...outOfScope()].map(pullRow));
@@ -307,12 +308,19 @@ function reimportPayload(encounterId: number, start: number): AddonRaidExport {
 }
 
 /** Run the real raid apply as `who`, with a character they own. */
+let reimportSeq = 0;
+
 async function reimportAs(who: Who, payload: AddonRaidExport) {
   const userId = idOf(who);
+  reimportSeq += 1;
   const [char] = nonEmpty(
     await testApp.db
       .insert(schema.characters)
-      .values({ userId, gameId: testApp.seed.game.id, name: `Re${who}` })
+      .values({
+        userId,
+        gameId: testApp.seed.game.id,
+        name: `Re${who}${reimportSeq}`,
+      })
       .returning({ id: schema.characters.id }),
     `${who} character`,
   );
@@ -339,6 +347,26 @@ async function reporterOf(encounterId: number): Promise<number | null> {
     `pull ${encounterId}`,
   );
   return row.by;
+}
+
+/** Raid progress as the raider sees it: `[encounterId, kills, wipes]` per boss. */
+async function bossRows(): Promise<Array<[number, number, number]>> {
+  const res = await insights('raider');
+  const rp = WowRosterInsightsSchema.parse(res.body).raidProgress;
+  return (rp?.bosses ?? []).map((b) => [b.encounterId, b.kills, b.wipes]);
+}
+
+/** Seed a stored pull of `encounterId` at `start`, reported by `reporter`. */
+async function seedStored(
+  encounterId: number,
+  start: number,
+  success: boolean,
+  reporter: Who | null,
+): Promise<void> {
+  await testApp.db
+    .insert(schema.addonEncounterPulls)
+    .values(pullRow({ encounterId, start, success, reporter }));
+  testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
 }
 
 async function bossIds(): Promise<number[]> {
@@ -379,5 +407,29 @@ describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
     expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
     expect(await reporterOf(901)).toBe(idOf('raider'));
     expect(await bossIds()).toContain(901);
+  });
+  it('a hand-over replaces the content too: an outsider-forged kill stops counting', async () => {
+    await seedStored(902, 4200, true, 'pug');
+    const out = await reimportAs('raider', reimportPayload(902, 4200));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(902)).toBe(idOf('raider'));
+    const boss = (await bossRows()).find(([id]) => id === 902);
+    expect(boss).toEqual([902, 0, 1]);
+  });
+
+  it('a since-deleted (NULL) reporter keeps its pull and content', async () => {
+    await seedStored(903, 4300, true, null);
+    const out = await reimportAs('raider', reimportPayload(903, 4300));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(903)).toBeNull();
+    expect((await bossRows()).find(([id]) => id === 903)).toEqual([903, 1, 0]);
+  });
+
+  it('a member never takes a pull reported by another roster member', async () => {
+    await seedStored(904, 4400, true, 'officer');
+    const out = await reimportAs('raider', reimportPayload(904, 4400));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(904)).toBe(idOf('officer'));
+    expect((await bossRows()).find(([id]) => id === 904)).toEqual([904, 1, 0]);
   });
 });
