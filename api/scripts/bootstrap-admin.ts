@@ -432,7 +432,10 @@ export async function bootstrapAdmin() {
         process.exit(1);
     } finally {
         // D-13: the banner already printed (NAS fallback); the arm failure was
-        // captured + flushed. Exit non-zero so the boot log flags it.
+        // captured + flushed to Sentry and logged as its own error line by
+        // reportClaimBootFailure. The non-zero exit is for direct callers —
+        // docker-entrypoint.sh currently swallows it (`|| echo ...`), so the
+        // error line + Sentry event are what surface it on a real boot.
         if (claimFailed) process.exit(1);
     }
 }

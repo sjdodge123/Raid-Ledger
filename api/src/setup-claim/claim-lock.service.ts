@@ -3,6 +3,12 @@
  * rolling 60-min window ⇒ claiming pauses for 15 min. The code itself is
  * never burned. In-memory by design (cloud is single-instance); a restart
  * clears it. Only a wrong code counts — never 400/403/409/410.
+ *
+ * PER-PROCESS: the counter and lock live in this Nest singleton, so N api
+ * instances each allow 100 wrong codes/h (budget × N) and lock
+ * independently. A sustained 100+/h guesser can keep the owner locked out
+ * until the code expires (restart re-arms). Spec-accepted for single-instance
+ * cloud; a shared (Redis) counter is the fix if cloud ever scales out.
  */
 import { Injectable } from '@nestjs/common';
 

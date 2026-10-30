@@ -91,6 +91,8 @@ async function closeClaimOnReset(
 /**
  * D-13: capture + flush before the caller falls back to the banner and exits
  * non-zero (copy of `run-migrations-with-sentry.ts::reportBootFailure`).
+ * The error line + Sentry event are the signal: docker-entrypoint.sh ignores
+ * bootstrap's exit code today, so the exit status alone flags nothing.
  * Logs only the error message — never the env value (it is not in it).
  */
 async function reportClaimBootFailure(
