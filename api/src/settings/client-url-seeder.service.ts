@@ -9,7 +9,9 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { SETTING_KEYS } from '../drizzle/schema';
 import {
+  describePublicUrl,
   isUnset,
+  resolvePlatformPublicUrl,
   resolveSeedClientUrl,
   type ClientUrlAnchors,
 } from './client-url.helpers';
@@ -27,7 +29,19 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
 
   /** Seed once the app is up and the settings cache can be read. */
   async onApplicationBootstrap(): Promise<void> {
+    this.logPublicUrl();
     await this.seedSafely();
+  }
+
+  /**
+   * ROK-1697: the one boot line naming the platform public URL (or
+   * `unresolved`), after a warning for each set-but-unusable source.
+   */
+  private logPublicUrl(): void {
+    const resolved = resolvePlatformPublicUrl(process.env, (message) =>
+      this.logger.warn(message),
+    );
+    this.logger.log(describePublicUrl(resolved));
   }
 
   /**
@@ -63,6 +77,7 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
       settingClientUrl,
       settingDiscordCallbackUrl,
       envDiscordCallbackUrl: process.env.DISCORD_CALLBACK_URL,
+      platformPublicUrl: resolvePlatformPublicUrl(process.env)?.url,
     };
   }
 
@@ -100,7 +115,8 @@ export class ClientUrlSeederService implements OnApplicationBootstrap {
     this.warnedMissing = true;
     this.logger.warn(
       'CLIENT_URL is not set and no configured source (the client_url ' +
-        'setting, DISCORD_CALLBACK_URL) could supply it. Set CLIENT_URL to ' +
+        'setting, DISCORD_CALLBACK_URL, PUBLIC_URL or a platform URL) could ' +
+        'supply it. Set CLIENT_URL to ' +
         'your public site URL. Until then: Discord embeds and DMs omit links ' +
         'where the link cannot be built, and logins plus link previews fall ' +
         'back to the origin each request arrived on.',
