@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, or, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -21,6 +21,10 @@ import {
   type SuppressionWindowExtendedPayload,
 } from './suppression-window-events';
 import { countServerOnlyPresence } from './ad-hoc-server-presence.helpers';
+import {
+  anyOccupiedLiveAdHocDue,
+  isOccupiedLiveAdHoc,
+} from './ad-hoc-open-participants.sql';
 
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
@@ -103,23 +107,32 @@ export class EventAutoExtendService {
       this.logger.debug('Auto-extend is disabled, skipping');
       return false;
     }
-    if (this.eventCache) {
-      const now = new Date();
-      const active = this.eventCache.getActiveEvents(now);
-      const recent = this.eventCache.getRecentlyEndedEvents(
-        now,
-        WINDOW_BEHIND_MS,
-      );
-      if (active.length === 0 && recent.length === 0) return false;
-    }
+    if (!(await this.hasPotentialWork(new Date()))) return false;
     const config = await this.loadExtendConfig();
     const now = new Date();
     const candidates = await this.queryCandidates(now);
     this.logger.debug(`Auto-extend candidates found: ${candidates.length}`);
     if (candidates.length === 0) return false;
     for (const c of candidates) {
-      await this.tryExtendCandidate(c, config);
+      await this.tryExtendCandidate(c, config, now);
     }
+  }
+
+  /**
+   * Cheap pre-check before the candidate query: an active or just-ended event
+   * in the cache — else (ROK-2052) one indexed EXISTS for a live, occupied
+   * ad-hoc event whose end slipped past the window. The cache only holds
+   * events <= 2h past their end, and one 2–4h overdue that got its players
+   * back must still be extended before the reaper's occupied ceiling.
+   */
+  private async hasPotentialWork(now: Date): Promise<boolean> {
+    const cache = this.eventCache;
+    if (!cache) return true;
+    if (cache.getActiveEvents(now).length > 0) return true;
+    if (cache.getRecentlyEndedEvents(now, WINDOW_BEHIND_MS).length > 0)
+      return true;
+    const ahead = new Date(now.getTime() + WINDOW_AHEAD_MS);
+    return anyOccupiedLiveAdHocDue(this.db, ahead);
   }
 
   /** Load auto-extend configuration from settings. */
@@ -133,7 +146,11 @@ export class EventAutoExtendService {
     return { incrementMinutes, maxOverageMinutes, minVoiceMembers };
   }
 
-  /** Find events approaching their effective end time. */
+  /**
+   * Find events approaching their effective end time. A live ad-hoc event
+   * someone is still in stays a candidate after its end slid out of the
+   * look-behind window (ROK-2052) — no permanent cliff after one quiet tick.
+   */
   private async queryCandidates(now: Date): Promise<ExtendCandidate[]> {
     const ahead = new Date(now.getTime() + WINDOW_AHEAD_MS);
     const behind = new Date(now.getTime() - WINDOW_BEHIND_MS);
@@ -152,7 +169,10 @@ export class EventAutoExtendService {
           sql`${schema.events.cancelledAt} IS NULL`,
           sql`(${schema.events.isAdHoc} = false OR ${schema.events.adHocStatus} = 'live')`,
           sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${behind.toISOString()}::timestamptz`,
+          or(
+            sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${behind.toISOString()}::timestamptz`,
+            isOccupiedLiveAdHoc(this.db),
+          ),
           sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${ahead.toISOString()}::timestamptz`,
         ),
       );
@@ -162,6 +182,7 @@ export class EventAutoExtendService {
   private async tryExtendCandidate(
     c: ExtendCandidate,
     config: ExtendConfig,
+    now: Date,
   ): Promise<void> {
     const activeCount = await this.attendanceCount(c);
     if (activeCount < config.minVoiceMembers) {
@@ -170,7 +191,7 @@ export class EventAutoExtendService {
       );
       return;
     }
-    const newEnd = this.computeNewEnd(c, config);
+    const newEnd = this.computeNewEnd(c, config, now);
     if (!newEnd) return;
     await this.applyExtension(c, newEnd, activeCount);
   }
@@ -186,8 +207,18 @@ export class EventAutoExtendService {
     return voice + (await countServerOnlyPresence(this.db, c.id));
   }
 
-  /** Compute the new extended end time, or null if max overage reached. */
-  private computeNewEnd(c: ExtendCandidate, config: ExtendConfig): Date | null {
+  /**
+   * Compute the new extended end time, or null if max overage reached. An end
+   * that slipped past the look-behind window (ROK-2052) extends from now, so
+   * one tick brings it back inside the window instead of a +15 min step that
+   * is still in the past. A cap already behind `now` counts as reached: the
+   * write would show a past end on the embed.
+   */
+  private computeNewEnd(
+    c: ExtendCandidate,
+    config: ExtendConfig,
+    now: Date,
+  ): Date | null {
     const originalEnd = c.duration[1];
     const effectiveEnd = c.extendedUntil ?? originalEnd;
     const maxOverageMs = config.maxOverageMinutes * 60 * 1000;
@@ -197,8 +228,13 @@ export class EventAutoExtendService {
     }
     const incrementMs = config.incrementMinutes * 60 * 1000;
     const maxEnd = new Date(originalEnd.getTime() + maxOverageMs);
-    const raw = new Date(effectiveEnd.getTime() + incrementMs);
-    return raw > maxEnd ? maxEnd : raw;
+    const slipped = effectiveEnd.getTime() < now.getTime() - WINDOW_BEHIND_MS;
+    const base = slipped ? now : effectiveEnd;
+    const raw = new Date(base.getTime() + incrementMs);
+    if (raw <= maxEnd) return raw;
+    if (maxEnd.getTime() > now.getTime()) return maxEnd;
+    this.logger.debug(`Event ${c.id}: max overage reached (cap is past), skip`);
+    return null;
   }
 
   /** Persist extension and fire side effects. */
