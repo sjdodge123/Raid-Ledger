@@ -3,6 +3,10 @@ import { perfLog } from '../../common/perf-logger';
 /** Discord API error code for "Unknown Scheduled Event" (manually deleted). */
 export const UNKNOWN_SCHEDULED_EVENT = 10070;
 
+/** Discord API error code 50035 — Invalid Form Body; the specific reason
+ *  lives in the nested form-error keys (ROK-2053). */
+export const INVALID_FORM_BODY = 50035;
+
 /** Discord API error code 30038 — guild has hit its 100 uncompleted scheduled
  *  events cap (ROK-1332). */
 export const MAX_SCHEDULED_EVENTS_REACHED = 30038;
