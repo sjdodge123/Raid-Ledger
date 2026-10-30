@@ -39,6 +39,7 @@ import {
   UNKNOWN_PAGE_FACTS,
   type CooptimusPageFacts,
 } from './cooptimus-page.util';
+import { isCloudFlavour } from '../common/flavour/flavour';
 
 type GameRow = {
   id: number;
@@ -77,6 +78,8 @@ export class CooptimusSyncService {
   /** Weekly delta sync — records a no-op run while unconfigured (ITAD convention). */
   @Cron(COOPTIMUS_SYNC_CRON, { name: 'CooptimusSyncService_weeklySync' })
   async weeklySync(): Promise<void> {
+    // ROK-1700: Co-Optimus is NAS-only — no sync on cloud, even with a UA set.
+    if (isCloudFlavour()) return;
     await this.cronJobService.executeWithTracking(
       'CooptimusSyncService_weeklySync',
       async () => {

@@ -46,6 +46,7 @@ import { DemoTestJoinPostController } from './demo-test-join-post.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CooptimusSettingsController } from './cooptimus-settings.controller';
+import { DemoDataSettingsController } from './demo-data-settings.controller';
 import { CooptimusModule } from '../cooptimus/cooptimus.module';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
@@ -159,6 +160,7 @@ import { UsersModule } from '../users/users.module';
     SlashCommandTestController,
     ItadSettingsController,
     CooptimusSettingsController,
+    DemoDataSettingsController,
     CommunityInsightsSettingsController,
     OnboardingController,
     GamesDedupAuditController,
