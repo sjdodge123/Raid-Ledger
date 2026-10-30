@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 export type GuildCrestSize = 'sm' | 'lg';
@@ -75,7 +75,20 @@ async function writeAtomic(final: string, buf: Buffer): Promise<void> {
   }
 }
 
-/** Store both renditions; on failure removes whatever was written, then rethrows. */
+/** True when `file` exists (a crest file is only ever there complete). */
+async function exists(file: string): Promise<boolean> {
+  return access(file).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * Store both renditions. The key is content-addressed, so a rendition that
+ * already exists (re-uploading the shown picture) is kept, not rewritten.
+ * On failure only the files THIS call created are removed — never ones the
+ * row may still point at — then the error is rethrown.
+ */
 export async function writeCrestFiles(
   guildId: number,
   key: string,
@@ -83,11 +96,16 @@ export async function writeCrestFiles(
 ): Promise<void> {
   assertInputs(guildId, key);
   await mkdir(crestGuildDir(guildId), { recursive: true });
+  const created: string[] = [];
   try {
-    await writeAtomic(crestFilePath(guildId, key, 'lg'), files.lg);
-    await writeAtomic(crestFilePath(guildId, key, 'sm'), files.sm);
+    for (const size of ['lg', 'sm'] as const) {
+      const final = crestFilePath(guildId, key, size);
+      if (await exists(final)) continue;
+      await writeAtomic(final, files[size]);
+      created.push(final);
+    }
   } catch (err) {
-    await deleteCrestFiles(guildId, key);
+    await Promise.all(created.map((f) => rm(f, { force: true })));
     throw err;
   }
 }

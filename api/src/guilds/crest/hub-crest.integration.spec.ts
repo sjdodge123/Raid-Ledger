@@ -6,6 +6,8 @@
  * (this hub only; another hub's id or a hidden picture 404; a 1600 × 900
  * picture is downsized, not refused), removal deletes the files, and
  * `GuildSummary.crest` on `GET /guilds/:id` and `GET /guilds/mine`.
+ * Fix lane 3: a gallery picture whose SOURCE is gated (spoiler toggle,
+ * plugin off) is 404 like a hidden one; the multipart 413 / 415 wiring.
  */
 import { eq } from 'drizzle-orm';
 import { existsSync } from 'node:fs';
@@ -14,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Redis from 'ioredis';
 import {
+  GUILD_CREST_UPLOAD_MAX_BYTES,
   GuildCrestEditorStateSchema,
   GuildPageSchema,
   HubMediaItemSchema,
@@ -25,6 +28,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { solidPng } from '../../hub-media/hub-media.testing';
+import { HubMediaSourceGateRegistry } from '../../hub-media/hub-media.source-gates';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { insertCommunityHub } from '../community/community-proposals.queries';
 import { crestFilePath } from './hub-crest.paths';
@@ -37,6 +41,8 @@ let otherHubId: number;
 let ids: Record<Who, number>;
 let tokens: Record<Who, string>;
 let n = 0;
+/** Toggled per test: a `core` gate that hides `upload` pictures on `hubId`. */
+let gateUploads = false;
 const tempDirs: string[] = [];
 const ENV_KEYS = ['GUILD_CREST_DIR', 'HUB_MEDIA_DIR'] as const;
 const savedEnv = ENV_KEYS.map((k) => [k, process.env[k]] as const);
@@ -121,6 +127,11 @@ async function galleryItem(g: number, w = 300, h = 300): Promise<number> {
 
 beforeAll(async () => {
   testApp = await getTestApp();
+  testApp.app
+    .get(HubMediaSourceGateRegistry)
+    .register('core', 'upload', (g) =>
+      Promise.resolve(gateUploads && g === hubId),
+    );
 });
 
 afterAll(async () => {
@@ -134,6 +145,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  gateUploads = false;
   process.env.GUILD_CREST_DIR = await tempDir('guild-crest-');
   process.env.HUB_MEDIA_DIR = await tempDir('crest-media-');
   testApp.seed = await truncateAllTables(testApp.db);
@@ -174,6 +186,30 @@ describe('POST /guilds/:id/crest/upload', () => {
 
   it.each<Who>(['member', 'visitor'])('%s gets 403', async (who) => {
     expect((await upload(who)).status).toBe(403);
+  });
+
+  it('413 too_large over the 1 MiB cap (multer + the crest filter)', async () => {
+    const res = await testApp.request
+      .post(`${url()}/upload`)
+      .set(auth('leader'))
+      .attach('file', Buffer.alloc(GUILD_CREST_UPLOAD_MAX_BYTES + 1, 1), {
+        filename: 'big.png',
+        contentType: 'image/png',
+      });
+    expect(res.status).toBe(413);
+    expect(res.body).toMatchObject({ code: 'too_large' });
+  });
+
+  it('415 for a file that is not a picture', async () => {
+    const res = await testApp.request
+      .post(`${url()}/upload`)
+      .set(auth('leader'))
+      .attach('file', Buffer.from('just some text, not an image'), {
+        filename: 'notes.txt',
+        contentType: 'text/plain',
+      });
+    expect(res.status).toBe(415);
+    expect(res.body).toMatchObject({ code: 'not_image' });
   });
 
   it('a replace deletes the previous files after the update', async () => {
@@ -263,6 +299,21 @@ describe('POST /guilds/:id/crest/from-gallery', () => {
       .set(auth('leader'))
       .send({ mediaId });
     expect(res.status).toBe(404);
+  });
+
+  it('404s for a picture whose source a gate hides (no crest written)', async () => {
+    const mediaId = await galleryItem(hubId);
+    gateUploads = true;
+    const res = await testApp.request
+      .post(`${url()}/from-gallery`)
+      .set(auth('leader'))
+      .send({ mediaId });
+    expect(res.status).toBe(404);
+    const [row] = await testApp.db
+      .select({ key: schema.guilds.crestUploadKey })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, hubId));
+    expect(row?.key).toBeNull();
   });
 
   it("404s for another hub's picture", async () => {

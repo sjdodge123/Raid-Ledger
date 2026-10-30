@@ -1,13 +1,14 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { findVisible } from '../../hub-media/hub-media.read.repository';
 
 /** ROK-1814 — crest reads/writes on `guilds` (the columns live there, L2). */
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-const { guilds, hubMedia } = schema;
+const { guilds } = schema;
 
 const CREST_COLUMNS = {
   id: guilds.id,
@@ -103,25 +104,18 @@ export async function updateCrestRow(
 }
 
 /**
- * The storage name of a live, unhidden picture in THIS hub's gallery, or
- * null (another hub's id, removed, hidden, or missing).
+ * The storage name of a picture every viewer of THIS hub's gallery can see,
+ * or null (another hub's id, removed, hidden, a source a gate hides —
+ * `excludeSources` from `HubMediaSourceGateRegistry` — or missing). Same
+ * visibility rule as the gallery itself (`findVisible`, non-editor scope).
  */
 export async function findGalleryStorageName(
   db: Db,
   guildId: number,
   mediaId: number,
+  excludeSources: readonly string[],
 ): Promise<string | null> {
-  const [row] = await db
-    .select({ storageName: hubMedia.storageName })
-    .from(hubMedia)
-    .where(
-      and(
-        eq(hubMedia.guildId, guildId),
-        eq(hubMedia.id, mediaId),
-        isNull(hubMedia.removedAt),
-        isNull(hubMedia.hiddenAt),
-      ),
-    )
-    .limit(1);
+  const scope = { guildId, includeHidden: false, excludeSources };
+  const row = await findVisible(db, scope, mediaId);
   return row?.storageName ?? null;
 }

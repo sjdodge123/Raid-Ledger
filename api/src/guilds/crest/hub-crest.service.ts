@@ -18,6 +18,7 @@ import {
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type * as schema from '../../drizzle/schema';
 import { mediaFilePath } from '../../hub-media/hub-media.paths';
+import { HubMediaSourceGateRegistry } from '../../hub-media/hub-media.source-gates';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { isStaff, type GuildActor } from '../guild-access.service';
 import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
@@ -77,6 +78,7 @@ export class HubCrestService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly gates: HubMediaSourceGateRegistry,
   ) {}
 
   /** `GET /guilds/:id/crest` — the editor state. */
@@ -119,7 +121,7 @@ export class HubCrestService {
 
   /**
    * `POST /guilds/:id/crest/from-gallery` — a live, unhidden picture of
-   * THIS hub's gallery (404 otherwise) is copied and re-encoded into the
+   * THIS hub's gallery whose source no gate hides (404 otherwise) is copied and re-encoded into the
    * public crest store; the gallery original stays members-only. Gallery
    * `full` files run to 2048 px, so this path downsizes past 1024.
    */
@@ -134,6 +136,7 @@ export class HubCrestService {
       this.db,
       guildId,
       parsed.data.mediaId,
+      await this.gates.hiddenSources(guildId),
     );
     if (!name) throw new NotFoundException(PICTURE_NOT_FOUND);
     await checkCrestUploadRate(this.redis, actor.id);

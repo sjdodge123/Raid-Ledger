@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type Redis from 'ioredis';
+import type { HubMediaSourceGateRegistry } from '../../hub-media/hub-media.source-gates';
 import type { GuildActor } from '../guild-access.service';
 import { encodeGuildCrest } from './hub-crest.encode';
 import { deleteCrestFiles, writeCrestFiles } from './hub-crest.paths';
@@ -35,13 +36,16 @@ const staff: GuildActor = { id: 1, role: 'admin' };
 
 let row: CrestRow;
 const redis = { eval: jest.fn() };
+const gates = { hiddenSources: jest.fn() };
 const svc = new HubCrestService(
   {} as ConstructorParameters<typeof HubCrestService>[0],
   redis as unknown as Redis,
+  gates as unknown as HubMediaSourceGateRegistry,
 );
 
 beforeEach(() => {
   jest.clearAllMocks();
+  gates.hiddenSources.mockResolvedValue(['bg3-save']);
   delete process.env.GUILD_CREST_UPLOAD_PER_HOUR;
   delete process.env.THROTTLE_DISABLED;
   row = {
@@ -207,10 +211,12 @@ describe('HubCrestService.fromGallery', () => {
       .mockResolvedValue('0f8fad5b-d9cb-469f-a165-70867728950e');
     jest.mocked(readFile).mockResolvedValue(Buffer.from('webp'));
     const state = await svc.fromGallery(editor, 5, { mediaId: 3 });
+    expect(gates.hiddenSources).toHaveBeenCalledWith(5);
     expect(findGalleryStorageName).toHaveBeenCalledWith(
       expect.anything(),
       5,
       3,
+      ['bg3-save'],
     );
     const path = jest.mocked(readFile).mock.calls[0]?.[0];
     expect(typeof path === 'string' ? path : '').toMatch(

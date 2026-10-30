@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -11,7 +11,27 @@ import {
   writeCrestFiles,
 } from './hub-crest.paths';
 
+jest.mock('node:fs/promises', () => {
+  const actual =
+    jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
+  return { ...actual, rename: jest.fn(actual.rename) };
+});
+
 const KEY = '0123456789abcdef0123456789abcdef';
+
+const actualFs =
+  jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
+
+/** Every `rename` onto a `*.sm.webp` final path fails like a full disk. */
+function failSmallRenames(): void {
+  jest.mocked(rename).mockImplementation(async (from, to) => {
+    if (String(to).endsWith('.sm.webp')) throw new Error('disk full');
+    return actualFs.rename(from, to);
+  });
+}
+
+const read = async (size: 'sm' | 'lg'): Promise<string> =>
+  (await readFile(crestFilePath(7, KEY, size))).toString();
 
 const saved = { dir: process.env.GUILD_CREST_DIR, env: process.env.NODE_ENV };
 let root = '';
@@ -22,6 +42,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  jest.mocked(rename).mockImplementation(actualFs.rename);
   await rm(root, { recursive: true, force: true });
   if (saved.dir === undefined) delete process.env.GUILD_CREST_DIR;
   else process.env.GUILD_CREST_DIR = saved.dir;
@@ -96,5 +117,45 @@ describe('hub-crest path guards and files', () => {
         lg: Buffer.from('b'),
       }),
     ).rejects.toThrow('invalid crest key');
+  });
+});
+
+describe('writeCrestFiles never destroys a shown crest (Codex P2)', () => {
+  it('re-writing the same key keeps the existing files as they are', async () => {
+    await writeCrestFiles(7, KEY, {
+      sm: Buffer.from('s1'),
+      lg: Buffer.from('l1'),
+    });
+    jest.mocked(rename).mockClear();
+    await writeCrestFiles(7, KEY, {
+      sm: Buffer.from('s2'),
+      lg: Buffer.from('l2'),
+    });
+    expect(rename).not.toHaveBeenCalled();
+    expect([await read('sm'), await read('lg')]).toEqual(['s1', 'l1']);
+  });
+
+  it('a failed write never deletes a rendition that already existed', async () => {
+    await writeCrestFiles(7, KEY, {
+      sm: Buffer.from('s1'),
+      lg: Buffer.from('l1'),
+    });
+    await rm(crestFilePath(7, KEY, 'sm'));
+    jest
+      .mocked(rename)
+      .mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+    await expect(
+      writeCrestFiles(7, KEY, { sm: Buffer.from('s2'), lg: Buffer.from('l2') }),
+    ).rejects.toThrow('disk full');
+    expect(await read('lg')).toBe('l1');
+    expect(await readdir(path.join(root, '7'))).toEqual([`${KEY}.lg.webp`]);
+  });
+
+  it('a failed fresh write removes only what this call created', async () => {
+    failSmallRenames();
+    await expect(
+      writeCrestFiles(7, KEY, { sm: Buffer.from('s'), lg: Buffer.from('l') }),
+    ).rejects.toThrow('disk full');
+    expect(await readdir(path.join(root, '7'))).toEqual([]);
   });
 });

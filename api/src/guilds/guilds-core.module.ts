@@ -19,8 +19,6 @@ import { HubEventTagger } from './hub-event-tagger';
 import { HubMineController } from './hub-mine.controller';
 import { HubNotificationMuteController } from './hub-notification-mute.controller';
 import { HubController } from './hub.controller';
-import { HubCrestController } from './crest/hub-crest.controller';
-import { HubCrestService } from './crest/hub-crest.service';
 import { HubService } from './hub.service';
 import { HubRenameService } from './hub-rename.service';
 import { HubVisibleGuard } from './hub-visible.guard';
@@ -57,7 +55,6 @@ import {
     HubOnboardingController,
     HubMineController,
     HubController,
-    HubCrestController,
     HubNotificationMuteController,
     GuildDiscordController,
     HubPostsController,
@@ -74,7 +71,6 @@ import {
     HubKindRegistry,
     HubOnboardingService,
     HubService,
-    HubCrestService,
     HubRenameService,
     HubVisibleGuard,
     HubWidgetPrefsService,
@@ -86,6 +82,7 @@ import {
   ],
   exports: [
     GuildAccessService,
+    HubKindActiveGuard,
     GuildEditorGuard,
     GuildLeaderGuard,
     GuildEditorsService,
