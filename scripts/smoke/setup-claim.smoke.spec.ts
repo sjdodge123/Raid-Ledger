@@ -97,13 +97,23 @@ async function submitClaim(page: Page, code: string): Promise<void> {
     await page.getByRole('button', { name: 'Claim and set password' }).click();
 }
 
-/** Submit once against a stubbed refusal and return the message's text. */
+/**
+ * Submit once against a stubbed refusal and return the message's text.
+ * A soft lock is a warning, not a bad code: `ClaimForm` leaves the code field
+ * without `aria-invalid` for `locked` and shows the paused-claiming copy instead.
+ */
 async function expectRefusal(page: Page, status: number, body: Record<string, unknown>, state: string): Promise<string> {
     await stubClaim(page, status, body);
     await submitClaim(page, CODE);
     const message = page.getByTestId('claim-code-message');
     await expect(message).toHaveAttribute('data-state', state);
-    await expect(page.getByTestId('claim-code')).toHaveAttribute('aria-invalid', 'true');
+    const codeField = page.getByTestId('claim-code');
+    if (state === 'locked') {
+        await expect(message).toContainText('Too many wrong codes.');
+        await expect(codeField).not.toHaveAttribute('aria-invalid');
+    } else {
+        await expect(codeField).toHaveAttribute('aria-invalid', 'true');
+    }
     return (await message.innerText()).trim();
 }
 
