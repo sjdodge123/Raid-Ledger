@@ -18,6 +18,13 @@ jest.mock('bcrypt', () => ({
   compare: () => Promise.resolve(true),
 }));
 
+/** Cloud only: the claim step is unit-tested in claim-bootstrap.helpers.spec.ts
+ *  (incl. the Sentry capture → flush order); here it only records its call. */
+const mockClaimStep = jest.fn();
+jest.mock('../setup-claim/claim-bootstrap.helpers', () => ({
+  runCloudClaimStep: (...a: unknown[]): unknown => mockClaimStep(...a),
+}));
+
 const FIXED_PASSWORD = 'Golden-Fixed-Pass-1';
 
 const dbState: {
@@ -131,6 +138,11 @@ function logLines(): string[] {
 function resetHarness(): void {
   dbState.existingCredRows = [];
   credentialWrites.length = 0;
+  mockClaimStep.mockReset();
+  mockClaimStep.mockImplementation(() => {
+    credentialWrites.push('claim-step');
+    return Promise.resolve({ armed: true, failed: false });
+  });
   consoleLines.length = 0;
   for (const key of [
     'RESET_PASSWORD',
@@ -184,5 +196,88 @@ describe('ROK-1701 — NAS bootstrap console output is byte-identical (golden)',
       GOLDEN_RESET.map((l) => `log|${l}`).join('\n'),
     );
     expect(credentialWrites).toEqual(['update']);
+  });
+});
+
+const CLOUD_CLAIM_LINE =
+  'bootstrap-admin: cloud mode → admin@local created; claim it at /claim';
+
+describe('ROK-1701 — cloud bootstrap and the setup claim', () => {
+  beforeEach(() => {
+    resetHarness();
+    process.env.RL_FLAVOUR = 'cloud';
+  });
+  afterEach(() => {
+    delete process.env.RL_FLAVOUR;
+    jest.restoreAllMocks();
+  });
+
+  it('NAS never runs the claim step', async () => {
+    delete process.env.RL_FLAVOUR;
+
+    await bootstrapAdmin();
+
+    expect(mockClaimStep).not.toHaveBeenCalled();
+  });
+
+  it('D-13: arms the claim BEFORE admin@local is created, exits clean', async () => {
+    const exitSpy = jest
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as () => never);
+
+    await bootstrapAdmin();
+
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    expect(credentialWrites).toEqual(['claim-step', 'insert']);
+    expect(mockClaimStep.mock.calls[0]?.[1]).toMatchObject({
+      resetMode: false,
+    });
+  });
+
+  it('first creation prints no banner and no password — the claim line instead', async () => {
+    await bootstrapAdmin();
+
+    expect(logLines()).toEqual([PLACEHOLDER_LINE, CLOUD_CLAIM_LINE]);
+    expect(consoleLines.filter((l) => l.includes(FIXED_PASSWORD))).toEqual([]);
+  });
+
+  it('claimed instance with no credential → banner (no claim is possible)', async () => {
+    mockClaimStep.mockResolvedValue({ armed: false, failed: false });
+
+    await bootstrapAdmin();
+
+    expect(logLines()).toEqual(GOLDEN_FIRST_CREATION);
+  });
+
+  it("existing credential → today's hint, unchanged", async () => {
+    dbState.existingCredRows = [{ userId: 999, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(logLines()).toEqual(GOLDEN_EXISTING);
+  });
+
+  it("D-14: RESET_PASSWORD passes resetMode and prints today's reset banner", async () => {
+    dbState.existingCredRows = [{ userId: 999, passwordHash: 'SEEDED_HASH' }];
+    process.env.RESET_PASSWORD = 'true';
+    mockClaimStep.mockResolvedValue({ armed: false, failed: false });
+
+    await bootstrapAdmin();
+
+    expect(mockClaimStep.mock.calls[0]?.[1]).toMatchObject({ resetMode: true });
+    expect(logLines()).toEqual(GOLDEN_RESET);
+  });
+
+  it('D-13: arm failure → falls back to the banner, then exit(1)', async () => {
+    mockClaimStep.mockResolvedValue({ armed: false, failed: true });
+    const exitSpy = jest
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined) as () => never);
+
+    await bootstrapAdmin();
+
+    expect(logLines()).toEqual(GOLDEN_FIRST_CREATION);
+    expect(exitSpy.mock.calls).toEqual([[1]]);
   });
 });
