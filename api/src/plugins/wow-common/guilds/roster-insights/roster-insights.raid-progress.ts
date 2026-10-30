@@ -144,21 +144,20 @@ export function computeRaidProgress(
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/** The guild row columns that place a hub's pulls (read once by the service). */
+export interface RaidHubRow {
+  gameId: number;
+  region: string;
+  nameKey: string;
+  kind: string;
+}
+
+type RaidScope = Pick<RaidHubRow, 'gameId' | 'region' | 'nameKey'>;
+
 /** The hub's pull scope; null for a non-guild hub or an empty name key. */
-async function loadScope(db: Db, guildId: number) {
-  const g = schema.guilds;
-  const [row] = await db
-    .select({
-      gameId: g.gameId,
-      region: g.region,
-      nameKey: g.nameKey,
-      kind: g.kind,
-    })
-    .from(g)
-    .where(eq(g.id, guildId))
-    .limit(1);
+export function raidScope(row: RaidHubRow | null): RaidScope | null {
   if (!row || row.kind !== 'wow_guild' || row.nameKey === '') return null;
-  return row;
+  return { gameId: row.gameId, region: row.region, nameKey: row.nameKey };
 }
 
 /** Q1: a linked roster user of this hub, or a since-deleted user (NULL). */
@@ -172,7 +171,7 @@ function trustedReporter(reporterIds: readonly number[]) {
 /** In-scope pulls reported by `reporterIds` or by a deleted user (Q1). */
 async function loadGuildPulls(
   db: Db,
-  scope: { gameId: number; region: string; nameKey: string },
+  scope: RaidScope,
   reporterIds: readonly number[],
 ): Promise<RaidPull[]> {
   const p = schema.addonEncounterPulls;
@@ -199,15 +198,16 @@ async function loadGuildPulls(
 
 /**
  * The members-only `raidProgress` for a hub, or null when the hub is not a
- * WoW guild (the key is then omitted). `rosterUserIds` are the owners of the
- * FULL roster's linked characters — never narrowed by `?mainsOnly` (D5).
+ * WoW guild (the key is then omitted). `hub` is the guild row the service
+ * already read; `rosterUserIds` are the owners of the FULL roster's linked
+ * characters — never narrowed by `?mainsOnly` (D5), nor by the resolver cap.
  */
 export async function loadRaidProgress(
   db: Db,
-  guildId: number,
+  hub: RaidHubRow | null,
   rosterUserIds: readonly number[],
 ): Promise<WowRosterRaidProgressDto | null> {
-  const scope = await loadScope(db, guildId);
+  const scope = raidScope(hub);
   if (!scope) return null;
   const reporters = [...new Set(rosterUserIds)];
   return computeRaidProgress(await loadGuildPulls(db, scope, reporters));
