@@ -67,20 +67,36 @@ export async function nonPoolFixtures(
   const pool = ctx.channelPool ?? [];
   const poolGames = new Set(pool.map((s) => s.gameId));
   const poolChannels = new Set(pool.map((s) => s.channelId));
-  // ROK-1788: never post into the join-post channel another lease run owns.
-  for (const id of foreignJoinPostChannelIds(
-    ctx.textChannels, ctx.defaultChannelId, poolIndex,
-  )) {
-    poolChannels.add(id);
-  }
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     '/admin/settings/games?limit=25',
   );
   return {
     games: res.data,
     freeGames: res.data.filter((g) => !poolGames.has(g.id)),
-    texts: ctx.textChannels.filter(
-      (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
-    ),
+    texts: quickPlayTexts(ctx, poolChannels, poolIndex),
   };
+}
+
+/** Quick Play binds two channels; fewer than this and it must share. */
+const QUICK_PLAY_MIN_TEXTS = 2;
+
+/**
+ * Non-default, non-pool text channels, minus the join-post channel another
+ * lease run owns (ROK-1788) — unless that leaves Quick Play fewer than two:
+ * the CI guild has only `#general` + `#wow-channel` besides the default, both
+ * join-post reserves, so there Quick Play shares them as it did before.
+ */
+function quickPlayTexts(
+  ctx: TestContext,
+  poolChannels: Set<string>,
+  poolIndex: number | undefined,
+): DiscordChannel[] {
+  const free = ctx.textChannels.filter(
+    (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
+  );
+  const foreign = foreignJoinPostChannelIds(
+    ctx.textChannels, ctx.defaultChannelId, poolIndex,
+  );
+  const own = free.filter((c) => !foreign.has(c.id));
+  return own.length >= QUICK_PLAY_MIN_TEXTS ? own : free;
 }
