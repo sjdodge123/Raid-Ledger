@@ -1,72 +1,147 @@
 /**
- * ROK-1917 Codex P2 — reporter hand-over for exact duplicate pulls.
+ * ROK-1917 Codex P2 — the raid pull insert, with a reporter hand-over for
+ * exact duplicates.
  *
- * `applyRaid` inserts with `ON CONFLICT DO NOTHING`, so a duplicate keeps its
- * FIRST reporter, and raid progress (Q1) only counts pulls whose reporter is a
- * linked roster user of the hub (or deleted). Without this, a pull vanished
- * once its first reporter left the roster even though a current member
- * re-imported it. Rule: a re-import claims a stored pull only when the stored
- * reporter is NOT a linked roster user of any `wow_guild` hub in the pull's
- * scope AND the importer IS — an outsider never takes a trusted pull.
- * Separate statements after the insert, so `newPulls` stays insert-only; the
- * UPDATE re-checks the reporter so a concurrent hand-over is never undone.
+ * Raid progress (Q1) only counts pulls whose reporter is a linked roster user
+ * of the hub (or deleted). With a plain `ON CONFLICT DO NOTHING` a duplicate
+ * kept its FIRST reporter, so a pull vanished once that reporter left the
+ * roster even though a current member re-imported it. Rule: a re-import takes
+ * a stored pull only when the stored reporter is non-NULL and NOT a linked
+ * roster user of any `wow_guild` hub in the pull's scope, AND the importer IS.
+ * An outsider never takes a trusted pull; a member never takes another
+ * member's; a NULL (since-deleted) reporter is already trusted and stays put.
+ *
+ * Round-2 review: a hand-over replaces the row's CONTENT (success, difficulty,
+ * end, name, roster, …) with the importer's too — otherwise an outsider's
+ * forged kill would start counting once a member re-imported the same pull.
+ * Only the id, the dedupe key and `importedAt` survive.
+ *
+ * Atomicity: one `INSERT … ON CONFLICT DO UPDATE … WHERE <stored reporter
+ * untrusted>` statement — Postgres evaluates the WHERE against the locked
+ * current row, so a concurrent hand-over is never undone, and `RETURNING
+ * (xmax = 0)` tells genuine inserts from hand-overs so `newPulls` stays
+ * insert-only. Nothing here catches and retries (a failed statement poisons
+ * the postgres.js transaction).
+ *
+ * Trust scope is deliberately conservative: it is the UNION of the linked
+ * rosters of every `wow_guild` hub sharing (game, region, guild name key),
+ * even when those hubs sit on different realms — the pull's dedupe key has no
+ * realm, so any of them could be the pull's guild. A same-named guild on
+ * another realm can therefore count as trusted; it can never make a trusted
+ * reporter lose a pull.
  */
 import {
   and,
   eq,
-  inArray,
+  getTableColumns,
   isNotNull,
   notInArray,
-  or,
+  sql,
   type SQL,
 } from 'drizzle-orm';
-import type { AddonRaidExport } from '@raid-ledger/contract';
-import { addonEncounterPulls, guilds } from '../../../drizzle/schema';
-import { loadGuildLinkedUserIds } from '../guilds/roster-insights/roster-insights.refs';
 import {
-  fromUnix,
-  guildNameKey,
-  type AddonApplyContext,
-  type AddonImportTx,
+  addonEncounterPulls,
+  guilds,
+  type AddonEncounterPullInsert,
+} from '../../../drizzle/schema';
+import { loadGuildLinkedUserIds } from '../guilds/roster-insights/roster-insights.refs';
+import type {
+  AddonApplyContext,
+  AddonImportTx,
 } from './addon-import-apply.types';
 
-/** A stored duplicate's id and its current reporter. */
-export interface StoredReporter {
-  id: number;
-  reportedByUserId: number | null;
-}
+type PullColumn = keyof typeof addonEncounterPulls._.columns;
 
-/**
- * True when `importer` may take over a pull reported by `existing`. NULL (a
- * since-deleted user) is already trusted by Q1, so it is never moved.
- */
-export function shouldReassign(
-  existing: number | null,
+/** Never rewritten by a hand-over: the id, the dedupe key, the first import time. */
+const KEPT_COLUMNS: ReadonlySet<PullColumn> = new Set<PullColumn>([
+  'id',
+  'gameId',
+  'region',
+  'encounterId',
+  'startAt',
+  'guildKey',
+  'importedAt',
+]);
+
+const p = addonEncounterPulls;
+const DEDUPE_TARGET = [
+  p.gameId,
+  p.region,
+  p.encounterId,
+  p.startAt,
+  p.guildKey,
+];
+
+/** True when the importer may take over untrusted duplicates of this scope. */
+export function takeoverEligible(
+  guildKey: string,
   importer: number,
   trusted: ReadonlySet<number>,
 ): boolean {
-  if (existing === null || existing === importer) return false;
-  return !trusted.has(existing) && trusted.has(importer);
+  return guildKey !== '' && trusted.has(importer);
 }
 
-/** Ids of the stored pulls the importer may claim (see `shouldReassign`). */
-export function pickReassignable(
-  rows: readonly StoredReporter[],
-  importer: number,
-  trusted: ReadonlySet<number>,
-): number[] {
-  return rows
-    .filter((r) => shouldReassign(r.reportedByUserId, importer, trusted))
-    .map((r) => r.id);
+/**
+ * First row of each (encounter, start) key. `ON CONFLICT DO UPDATE` refuses a
+ * statement that hits the same row twice, so in-payload repeats go first.
+ */
+export function dedupePullRows(
+  rows: readonly AddonEncounterPullInsert[],
+): AddonEncounterPullInsert[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const key = `${r.encounterId}:${r.startAt.getTime()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** `col = excluded.col` for every content column (see `KEPT_COLUMNS`). */
+function takeoverSet(): Record<string, SQL> {
+  const set: Record<string, SQL> = {};
+  for (const [key, col] of Object.entries(getTableColumns(p))) {
+    if (KEPT_COLUMNS.has(key as PullColumn)) continue;
+    set[key] = sql.raw(`excluded."${col.name}"`);
+  }
+  return set;
+}
+
+/**
+ * The pull insert. `trusted` null = the importer may not take over, so every
+ * duplicate is skipped; otherwise an untrusted, non-NULL stored reporter's
+ * duplicate is rewritten with the importer's row.
+ */
+export function buildPullInsert(
+  tx: Pick<AddonImportTx, 'insert'>,
+  rows: AddonEncounterPullInsert[],
+  trusted: ReadonlySet<number> | null,
+) {
+  const insert = tx.insert(p).values(rows);
+  const returning = { id: p.id, inserted: sql<boolean>`(xmax = 0)` };
+  if (trusted === null) {
+    return insert
+      .onConflictDoNothing({ target: DEDUPE_TARGET })
+      .returning(returning);
+  }
+  return insert
+    .onConflictDoUpdate({
+      target: DEDUPE_TARGET,
+      set: takeoverSet(),
+      setWhere: sql`${isNotNull(p.reportedByUserId)} and ${notInArray(
+        p.reportedByUserId,
+        [...trusted],
+      )}`,
+    })
+    .returning(returning);
 }
 
 /** Linked roster users of every `wow_guild` hub sharing the pull scope. */
 async function scopeLinkedUserIds(
-  tx: AddonImportTx,
   ctx: AddonApplyContext,
   guildKey: string,
 ): Promise<Set<number>> {
-  const hubs = await tx
+  const hubs = await ctx.tx
     .select({ id: guilds.id })
     .from(guilds)
     .where(
@@ -79,74 +154,30 @@ async function scopeLinkedUserIds(
     );
   const ids = new Set<number>();
   for (const hub of hubs) {
-    for (const id of await loadGuildLinkedUserIds(tx, hub.id)) ids.add(id);
+    for (const id of await loadGuildLinkedUserIds(ctx.tx, hub.id)) ids.add(id);
   }
   return ids;
 }
 
-/** The payload's exact `(encounter, start)` pairs within the pull scope. */
-function payloadPulls(
-  ctx: AddonApplyContext,
-  payload: AddonRaidExport,
-  guildKey: string,
-): SQL | undefined {
-  const p = addonEncounterPulls;
-  const pairs = payload.data.pulls.map((pull) =>
-    and(
-      eq(p.encounterId, pull.encounterId),
-      eq(p.startAt, fromUnix(pull.startAt)),
-    ),
-  );
-  return and(
-    eq(p.gameId, ctx.gameId),
-    eq(p.region, ctx.region),
-    eq(p.guildKey, guildKey),
-    or(...pairs),
-  );
-}
-
-/** The payload's already-stored pulls and their current reporters. */
-async function loadStoredReporters(
-  ctx: AddonApplyContext,
-  payload: AddonRaidExport,
-  guildKey: string,
-): Promise<StoredReporter[]> {
-  const p = addonEncounterPulls;
-  return ctx.tx
-    .select({ id: p.id, reportedByUserId: p.reportedByUserId })
-    .from(p)
-    .where(payloadPulls(ctx, payload, guildKey));
-}
-
 /**
- * Hand the payload's already-stored pulls to the importer where the rule
- * allows. Returns how many moved. Unguilded ('') pulls never count — skipped.
+ * Insert the payload's pulls (one guild key per payload), handing untrusted
+ * duplicates to a trusted importer. Returns how many rows were genuinely new.
  */
-export async function reassignDuplicatePulls(
+export async function insertPulls(
   ctx: AddonApplyContext,
-  payload: AddonRaidExport,
+  rows: AddonEncounterPullInsert[],
+  guildKey: string,
 ): Promise<number> {
-  const guildKey = guildNameKey(payload.who.guildName);
-  if (guildKey === '' || payload.data.pulls.length === 0) return 0;
-  const trusted = await scopeLinkedUserIds(ctx.tx, ctx, guildKey);
-  if (!trusted.has(ctx.userId)) return 0;
-  const stored = await loadStoredReporters(ctx, payload, guildKey);
-  const ids = pickReassignable(stored, ctx.userId, trusted);
-  if (ids.length === 0) return 0;
-  const p = addonEncounterPulls;
-  const moved = await ctx.tx
-    .update(p)
-    .set({
-      reportedByUserId: ctx.userId,
-      reportedByCharacterId: ctx.characterId,
-    })
-    .where(
-      and(
-        inArray(p.id, ids),
-        isNotNull(p.reportedByUserId),
-        notInArray(p.reportedByUserId, [...trusted]),
-      ),
-    )
-    .returning({ id: p.id });
-  return moved.length;
+  if (rows.length === 0) return 0;
+  const trusted =
+    guildKey === ''
+      ? new Set<number>()
+      : await scopeLinkedUserIds(ctx, guildKey);
+  const eligible = takeoverEligible(guildKey, ctx.userId, trusted);
+  const out = await buildPullInsert(
+    ctx.tx,
+    dedupePullRows(rows),
+    eligible ? trusted : null,
+  );
+  return out.filter((r) => r.inserted).length;
 }

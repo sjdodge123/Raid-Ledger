@@ -16,7 +16,7 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
-import { reassignDuplicatePulls } from './addon-import-raid.reassign';
+import { insertPulls } from './addon-import-raid.reassign';
 
 /**
  * ROK-1724 §4.3 Apply — section `raid`. Pulls are shared, self-reported rows
@@ -131,9 +131,10 @@ export async function previewRaid(
 }
 
 /**
- * Insert every pull, skipping ones already reported (by anyone); then a
- * roster member re-importing a pull whose reporter left the roster takes it
- * over (ROK-1917 P2). `newPulls` counts inserts only.
+ * Insert every pull, skipping ones already reported — except that a roster
+ * member re-importing a pull whose reporter is off the roster takes it over,
+ * content included (ROK-1917 P2, see `insertPulls`). `newPulls` counts
+ * genuine inserts only.
  */
 export async function applyRaid(
   ctx: AddonApplyContext,
@@ -143,23 +144,13 @@ export async function applyRaid(
   if (pulls.length === 0) {
     return { status: 'applied', summary: buildRaidSummary(pulls, 0) };
   }
-  const inserted = await ctx.tx
-    .insert(addonEncounterPulls)
-    .values(pulls.map((p) => pullRow(p, payload, ctx)))
-    .onConflictDoNothing({
-      target: [
-        addonEncounterPulls.gameId,
-        addonEncounterPulls.region,
-        addonEncounterPulls.encounterId,
-        addonEncounterPulls.startAt,
-        addonEncounterPulls.guildKey,
-      ],
-    })
-    .returning({ id: addonEncounterPulls.id });
-  if (inserted.length < pulls.length)
-    await reassignDuplicatePulls(ctx, payload);
+  const newPulls = await insertPulls(
+    ctx,
+    pulls.map((p) => pullRow(p, payload, ctx)),
+    guildNameKey(payload.who.guildName),
+  );
   return {
     status: 'applied',
-    summary: buildRaidSummary(pulls, inserted.length),
+    summary: buildRaidSummary(pulls, newPulls),
   };
 }
