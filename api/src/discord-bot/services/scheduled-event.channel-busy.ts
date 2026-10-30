@@ -1,5 +1,7 @@
+import type { Logger } from '@nestjs/common';
 import { DiscordAPIError, GuildScheduledEventStatus } from 'discord.js';
 import {
+  INVALID_FORM_BODY,
   timedDiscordCall,
   UNKNOWN_SCHEDULED_EVENT,
 } from './scheduled-event.helpers';
@@ -29,7 +31,8 @@ function containsErrorKey(node: unknown, key: string): boolean {
  * discord.js writes into `message` — never the bare 50035.
  */
 export function isActiveChannelConflictError(error: unknown): boolean {
-  if (!(error instanceof DiscordAPIError) || error.code !== 50035) return false;
+  if (!(error instanceof DiscordAPIError) || error.code !== INVALID_FORM_BODY)
+    return false;
   const raw: unknown = error.rawError;
   const errors =
     raw && typeof raw === 'object'
@@ -39,66 +42,87 @@ export function isActiveChannelConflictError(error: unknown): boolean {
   return error.message.includes(`[${ACTIVE_STATUS_BY_CHANNEL_KEY}]`);
 }
 
-async function tryCancel(
-  guild: Guild,
-  eventId: number,
-  seId: string,
-): Promise<boolean> {
+/** The SE a busy voice channel kept from going Active, and who to tell. */
+export interface BlockedSE {
+  eventId: number;
+  seId: string;
+  channelId: string | null;
+  logger?: Pick<Logger, 'warn'>;
+}
+
+function reasonOf(error: unknown): string {
+  if (error instanceof DiscordAPIError) return `${error.code} ${error.message}`;
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Resolves to `null` on success, or the error the Canceled edit hit. */
+async function tryCancel(guild: Guild, se: BlockedSE): Promise<unknown> {
   try {
     await timedDiscordCall(
       'scheduledEvents.edit',
       () =>
-        guild.scheduledEvents.edit(seId, {
+        guild.scheduledEvents.edit(se.seId, {
           status: GuildScheduledEventStatus.Canceled,
         }),
-      { eventId, op: 'complete-cancel-channel-busy' },
+      { eventId: se.eventId, op: 'complete-cancel-channel-busy' },
     );
-    return true;
-  } catch {
-    return false;
+    return null;
+  } catch (error) {
+    return error ?? new Error('cancel failed');
   }
 }
 
-async function tryDelete(
-  guild: Guild,
-  eventId: number,
-  seId: string,
-): Promise<boolean> {
+/** Resolves to `null` when the SE is gone (deleted or 10070), else the error. */
+async function tryDelete(guild: Guild, se: BlockedSE): Promise<unknown> {
   try {
     await timedDiscordCall(
       'scheduledEvents.delete',
-      () => guild.scheduledEvents.delete(seId),
-      { eventId, op: 'complete-delete-channel-busy' },
+      () => guild.scheduledEvents.delete(se.seId),
+      { eventId: se.eventId, op: 'complete-delete-channel-busy' },
     );
-    return true;
+    return null;
   } catch (error) {
-    return (
-      error instanceof DiscordAPIError && error.code === UNKNOWN_SCHEDULED_EVENT
-    );
+    const gone =
+      error instanceof DiscordAPIError && error.code === UNKNOWN_SCHEDULED_EVENT;
+    return gone ? null : (error ?? new Error('delete failed'));
   }
+}
+
+function warnBlocked(se: BlockedSE, what: string): void {
+  se.logger?.warn(
+    `Complete SE ${se.seId} for event ${se.eventId}: voice channel ${se.channelId ?? 'unknown'} already has an Active scheduled event; ${what}`,
+  );
 }
 
 /**
  * End a Scheduled SE that Discord would not activate because its channel is
  * busy (ROK-2053): Canceled first (Scheduled→Canceled is allowed), delete if
- * that fails. Re-throws `refusal` when neither works, so the caller still
- * sees the original error and the SE binding is kept for the next pass.
+ * that fails, and warn which fallback ran. Re-throws `refusal` when neither
+ * works, so the caller still sees the original error and the SE binding is
+ * kept for the next pass.
  */
 export async function endChannelBlockedEvent(
   guild: Guild,
-  eventId: number,
-  seId: string,
+  se: BlockedSE,
   refusal: unknown,
   progress?: CompletionProgress,
 ): Promise<void> {
-  if (await tryCancel(guild, eventId, seId)) {
+  const cancelError = await tryCancel(guild, se);
+  if (cancelError === null) {
+    warnBlocked(se, 'fallback: canceled instead of completed');
     if (progress) {
       progress.to = GuildScheduledEventStatus.Canceled;
       progress.channelBusy = 'canceled';
     }
     return;
   }
-  if (!(await tryDelete(guild, eventId, seId))) throw refusal;
+  const cancelWhy = `cancel failed (${reasonOf(cancelError)})`;
+  const deleteError = await tryDelete(guild, se);
+  if (deleteError !== null) {
+    warnBlocked(se, `${cancelWhy}; delete failed (${reasonOf(deleteError)})`);
+    throw refusal;
+  }
+  warnBlocked(se, `${cancelWhy}; fallback: deleted instead of completed`);
   if (progress) {
     progress.to = null;
     progress.channelBusy = 'deleted';

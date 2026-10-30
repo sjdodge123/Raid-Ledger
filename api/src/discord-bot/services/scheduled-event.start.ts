@@ -14,8 +14,8 @@ interface StartCandidate {
 
 /**
  * `channelBusy` is set when Discord refused the start because another SE is
- * already Active in the voice channel (ROK-2053) — retrying cannot succeed
- * while it stays Active, so the caller logs it once and stops retrying.
+ * already Active in the voice channel (ROK-2053). The cron keeps retrying —
+ * the channel frees when the other SE ends — but warns only once per SE.
  */
 export interface StartOutcome {
   cleared: boolean;
@@ -25,14 +25,15 @@ export interface StartOutcome {
 
 export async function tryStartEvent(
   guild: Guild,
-  candidate: StartCandidate,
+  eventId: number,
+  seId: string,
 ): Promise<StartOutcome> {
   let channelId: string | null = null;
   try {
     const se = await timedDiscordCall(
       'scheduledEvents.fetch',
-      () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
-      { eventId: candidate.id },
+      () => guild.scheduledEvents.fetch(seId),
+      { eventId },
     );
     if (se.status !== GuildScheduledEventStatus.Scheduled) {
       return { cleared: false };
@@ -42,10 +43,10 @@ export async function tryStartEvent(
     await timedDiscordCall(
       'scheduledEvents.edit',
       () =>
-        guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
+        guild.scheduledEvents.edit(seId, {
           status: GuildScheduledEventStatus.Active,
         }),
-      { eventId: candidate.id, op: 'start' },
+      { eventId, op: 'start' },
     );
     return { cleared: false };
   } catch (error) {
@@ -64,30 +65,61 @@ function startFailure(error: unknown, channelId: string | null): StartOutcome {
 /** What the start cron needs to act on one candidate's outcome. */
 export interface StartPassDeps {
   logger: Pick<Logger, 'warn' | 'error'>;
-  /** Events whose start Discord refused for a busy channel — never retried. */
-  blocked: Set<number>;
+  /**
+   * `${eventId}:${seId}` of SEs whose busy-channel refusal was already
+   * warned about (ROK-2053) — dedupes the warning only, never the retry.
+   */
+  warned: Set<string>;
   clear: (eventId: number) => Promise<unknown>;
 }
 
+function warnKey(eventId: number, seId: string): string {
+  return `${eventId}:${seId}`;
+}
+
 /**
- * Start one candidate (ROK-573). A busy-channel refusal (ROK-2053) is logged
- * once with the event + channel and the event is not retried; the completion
- * cron later ends the SE via its Canceled/delete fallback.
+ * Drop warning keys for SEs that are no longer start candidates (started,
+ * past their end, rebound to a new SE id), so the set stays bounded.
+ */
+export function pruneStartWarnings(
+  warned: Set<string>,
+  candidates: readonly StartCandidate[],
+): void {
+  const live = new Set(
+    candidates.flatMap((c) =>
+      c.discordScheduledEventId ? [warnKey(c.id, c.discordScheduledEventId)] : [],
+    ),
+  );
+  for (const key of warned) if (!live.has(key)) warned.delete(key);
+}
+
+/**
+ * Start one candidate (ROK-573). A busy-channel refusal (ROK-2053) is
+ * retried on every pass until the start window closes, but warned about
+ * once per SE; if it never frees, the completion cron ends the SE via its
+ * Canceled/delete fallback.
  */
 export async function startCandidate(
   guild: Guild,
   c: StartCandidate,
   deps: StartPassDeps,
 ): Promise<void> {
-  if (deps.blocked.has(c.id)) return;
-  const result = await tryStartEvent(guild, c);
-  if (result.cleared) await deps.clear(c.id);
-  else if (result.channelBusy) {
-    deps.blocked.add(c.id);
+  const seId = c.discordScheduledEventId;
+  if (!seId) return;
+  const key = warnKey(c.id, seId);
+  const result = await tryStartEvent(guild, c.id, seId);
+  if (result.channelBusy) {
+    if (deps.warned.has(key)) return;
+    deps.warned.add(key);
     deps.logger.warn(
-      `Start SE for event ${c.id} refused: voice channel ${result.channelBusy.channelId ?? 'unknown'} already has an Active scheduled event; not retrying`,
+      `Start SE ${seId} for event ${c.id} refused: voice channel ${result.channelBusy.channelId ?? 'unknown'} already has an Active scheduled event; retrying each pass until it frees or the event ends`,
     );
-  } else if (result.error) {
-    deps.logger.error(formatApiError('start', c.id, result.error));
+    return;
   }
+  if (result.error) {
+    deps.logger.error(formatApiError('start', c.id, result.error));
+    return;
+  }
+  deps.warned.delete(key);
+  if (result.cleared) await deps.clear(c.id);
 }
