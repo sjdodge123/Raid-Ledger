@@ -134,7 +134,7 @@ export const BLIZZARD_SETUP = {
       kind: 'companion_app',
       title: 'LedgerLink addon (players)',
       instructions:
-        '1. Install LedgerLink from CurseForge or GitHub.\n2. In game, open LedgerLink and copy your guild export.\n3. Paste it under Guilds → Import guild. Roster, ranks and raid schedule come with it. Each player’s character export adds gear, quests and lockouts.',
+        '1. Install LedgerLink from CurseForge or GitHub.\n2. In game, open LedgerLink and copy your guild export.\n3. Paste it under Guilds → Import guild. Roster, ranks and raid schedule come with it. Each player’s character export adds gear, quests and lockouts; a raider’s raid export adds boss kills and wipes.',
       required: false,
       appliesTo: ['wow_guild'],
       links: [{ label: 'LedgerLink on GitHub', url: 'https://github.com/sjdodge123/ledger-link' }],

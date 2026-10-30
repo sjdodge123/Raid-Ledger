@@ -1663,11 +1663,18 @@ no-export state, `MembersSeeAll` action and the shared `FreshnessFooter` — no 
 mains not counted" line, then two collapsed 44px disclosures over a `border-edge` rule — "Below floor (55)" (`CharacterLink`
 · `tabular-nums` ilvl, "+N more") and "N of M checked mains" missing enchants (`CharacterLink` · slot names "Feet, Wrist") —
 a `text-xs text-muted` "N unknown — re-export from LedgerLink to check enchants." line for schema-1 exports, the quiet §4.5
-"No gear yet — …" state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. The roster cards share
+"No gear yet — …" state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. **Raid progress**
+(`forever-raid-progress`, order 89, span 2, ROK-1917) — from LedgerLink raid-export boss pulls: a `text-3xl` "N bosses
+killed" headline + `text-xs text-dim` "from M pulls in LedgerLink raid exports", then a `divide-edge` list of 44px boss
+rows in the API's order (name + a `border-edge` `text-[11px] text-dim` difficulty pill only when the encounter appears at
+two difficulties · `text-muted` "First kill Nov 6" / `text-dim` "Not killed yet" · kills with a `text-success` count when
+non-zero · wipes; four columns ≥640px, first-kill line and counts stacked below), the first 8 shown and a 44px
+`Button bare` "N more bosses ▾" disclosure for the rest, the quiet §4.5 "No raid pulls yet — …" state, `EventsSeeAll`
+action (no per-boss link) and the shared `FreshnessFooter` dated by the latest pull — no new pattern. The roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
-Professions, Who's saved, Last seen, Gear readiness and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
-professions / lockouts / lastSeen / gear payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
+Professions, Who's saved, Last seen, Gear readiness, Raid progress and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
+professions / lockouts / lastSeen / gear / raidProgress payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
 them from non-member staff whom the API lets in.
 
 Baldur's Gate 3 (`web/src/plugins/bg3/register.ts`, `game_community` hubs of `baldurs-gate-3`; ROK-1958, all

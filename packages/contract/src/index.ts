@@ -274,6 +274,7 @@ export * from './guild-raids.schema.js';
 export * from './hub-facts.schema.js';
 export * from './wow-roster-insights.schema.js';
 export * from './wow-roster-gear.schema.js';
+export * from './wow-roster-raid-progress.schema.js';
 export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
 

@@ -45,6 +45,8 @@ import {
 } from './addon-import.service.helpers';
 import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { flagIfRosterHeld } from './addon-import-guild.flag';
+import { readRaidPullScope } from './addon-import-raid.scope';
+import type { PullScope } from '../guilds/roster-insights/roster-insights.pull-scope';
 
 /**
  * ROK-1738 — `POST /plugins/wow/characters/addon-import`: import a
@@ -87,7 +89,9 @@ export class AddonImportCreateService {
       outcome.characterId = res.target.characterId;
       // ROK-1913: AFTER the tx committed, with the created/updated id (a
       // create's id only exists once `attempt` resolved).
-      if (!facts.dryRun) await this.afterApply(res.target.characterId);
+      if (!facts.dryRun) {
+        await this.afterApply(res.target.characterId, readRaidPullScope(res));
+      }
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
@@ -135,11 +139,15 @@ export class AddonImportCreateService {
   }
 
   /** ROK-1913: the imported character's guilds' roster insights are stale. */
-  private afterApply(characterId: string | null): Promise<void> {
+  private afterApply(
+    characterId: string | null,
+    pullScope: PullScope | undefined,
+  ): Promise<void> {
     return invalidateRosterInsights(
       this.insightsCache,
       characterId,
       this.logger,
+      pullScope,
     );
   }
 
