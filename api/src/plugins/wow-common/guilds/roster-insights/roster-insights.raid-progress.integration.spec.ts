@@ -10,8 +10,15 @@
  * Staff who are not members get the member payload, `raidProgress` included
  * (as ROK-1915's `gear`); a community (non-`wow_guild`) hub has no key even
  * when pulls match its game, region and name key.
+ * Codex P2: a re-import by a roster member claims a duplicate pull whose
+ * reporter is off the roster; an outsider's re-import never moves a pull.
  */
-import { WowRosterInsightsSchema } from '@raid-ledger/contract';
+import { and, eq } from 'drizzle-orm';
+import {
+  WowRosterInsightsSchema,
+  type AddonPull,
+  type AddonRaidExport,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -19,6 +26,8 @@ import { signTestAccessToken } from '../../../../common/testing/sign-test-access
 import * as schema from '../../../../drizzle/schema';
 import { insertCommunityHub } from '../../../../guilds/community/community-proposals.queries';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import { applyRaid } from '../../addon-import/addon-import-raid.apply';
+import { buildRaidPayload } from '../../addon-import/testing/addon-fixture.builder';
 import { RosterInsightsCache } from './roster-insights.cache';
 
 const GUILD_NAME = 'Raid Progress 1917';
@@ -273,5 +282,102 @@ describe('roster-insights raidProgress (ROK-1917, real DB)', () => {
     const dto = WowRosterInsightsSchema.parse(res.body);
     expect(Object.keys(dto)).toContain('gear');
     expect('raidProgress' in res.body).toBe(false);
+  });
+});
+
+/** A payload for this guild re-reporting `start`-second pulls of `encounterId`. */
+function reimportPayload(encounterId: number, start: number): AddonRaidExport {
+  const base = buildRaidPayload();
+  const pull: AddonPull = {
+    encounterId,
+    name: `Boss ${encounterId}`,
+    difficultyId: 9,
+    groupSize: 40,
+    startAt: T0 / 1000 + start,
+    endAt: T0 / 1000 + start + 60,
+    success: false,
+    roster: [],
+    rosterNames: [],
+  };
+  return {
+    ...base,
+    who: { ...base.who, guildName: GUILD_NAME },
+    data: { pulls: [pull] },
+  };
+}
+
+/** Run the real raid apply as `who`, with a character they own. */
+async function reimportAs(who: Who, payload: AddonRaidExport) {
+  const userId = idOf(who);
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({ userId, gameId: testApp.seed.game.id, name: `Re${who}` })
+      .returning({ id: schema.characters.id }),
+    `${who} character`,
+  );
+  const ctx = {
+    tx: testApp.db,
+    userId,
+    characterId: char.id,
+    gameId: testApp.seed.game.id,
+    region: 'us' as const,
+    sha256: 'c'.repeat(64),
+  };
+  const out = await applyRaid(ctx, payload);
+  testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+  return out;
+}
+
+async function reporterOf(encounterId: number): Promise<number | null> {
+  const p = schema.addonEncounterPulls;
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ by: p.reportedByUserId })
+      .from(p)
+      .where(and(eq(p.encounterId, encounterId), eq(p.guildKey, GUILD_KEY))),
+    `pull ${encounterId}`,
+  );
+  return row.by;
+}
+
+async function bossIds(): Promise<number[]> {
+  const res = await insights('raider');
+  const rp = WowRosterInsightsSchema.parse(res.body).raidProgress;
+  return (rp?.bosses ?? []).map((b) => b.encounterId);
+}
+
+describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
+  it('a roster member re-importing a pull whose reporter left the roster makes it count', async () => {
+    // `pug` stands in for a first reporter no longer on the linked roster.
+    await testApp.db.insert(schema.addonEncounterPulls).values(
+      pullRow({
+        encounterId: 900,
+        start: 4000,
+        success: false,
+        reporter: 'pug',
+      }),
+    );
+    testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+    expect(await bossIds()).not.toContain(900);
+    const out = await reimportAs('raider', reimportPayload(900, 4000));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(900)).toBe(idOf('raider'));
+    expect(await bossIds()).toContain(900);
+  });
+
+  it('an outsider re-importing a trusted pull does NOT move its reporter', async () => {
+    await testApp.db.insert(schema.addonEncounterPulls).values(
+      pullRow({
+        encounterId: 901,
+        start: 4100,
+        success: false,
+        reporter: 'raider',
+      }),
+    );
+    const out = await reimportAs('pug', reimportPayload(901, 4100));
+    expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
+    expect(await reporterOf(901)).toBe(idOf('raider'));
+    expect(await bossIds()).toContain(901);
   });
 });
