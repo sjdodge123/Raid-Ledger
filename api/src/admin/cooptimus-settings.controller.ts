@@ -21,13 +21,15 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
+import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
 import { SettingsService } from '../settings/settings.service';
 import { CooptimusService } from '../cooptimus/cooptimus.service';
 import { CooptimusConfigDto, CooptimusProseDto } from './settings.dto';
 import type { OAuthTestResponse } from './settings.dto';
 
 @Controller('admin/settings/cooptimus')
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+// ROK-1700: NasOnlyGuard first — under RL_FLAVOUR=cloud every route is a 404.
+@UseGuards(NasOnlyGuard, AuthGuard('jwt'), AdminGuard)
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class CooptimusSettingsController {
   private readonly logger = new Logger(CooptimusSettingsController.name);

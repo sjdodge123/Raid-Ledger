@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
+import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
 import {
   PluginActiveGuard,
   RequirePlugin,
@@ -96,6 +97,8 @@ export class AiProvidersController {
 
   /** POST /admin/ai/providers/ollama/setup — Start async Docker setup. */
   @Post('ollama/setup')
+  // ROK-1700: no local Ollama download/setup on a cloud instance → 404.
+  @UseGuards(NasOnlyGuard)
   async setupOllama(): Promise<AiOllamaSetupDto> {
     return this.ollamaSetup.startSetup();
   }
