@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthToken } from '../use-auth';
 import { adminFetch } from './admin-fetch';
-import { useIsCloudFlavour } from '../use-flavour';
+import { useSettledFlavour } from '../use-flavour';
 import type { OAuthTestResponse, ApiResponse } from './admin-settings-types';
 
 const COOPTIMUS_KEY = ['admin', 'settings', 'cooptimus'] as const;
@@ -27,13 +27,14 @@ function useProseMutation() {
  */
 export function useCooptimusSettings() {
     const queryClient = useQueryClient();
-    // ROK-1700: Co-Optimus is NAS-only — the route 404s under cloud, so never fetch it there.
-    const isCloud = useIsCloudFlavour();
+    // ROK-1700: Co-Optimus is NAS-only — the route 404s under cloud, so fetch
+    // only once the flavour is known to be nas (missing/failed status = nas).
+    const flavour = useSettledFlavour();
 
     const cooptimusStatus = useQuery<{ configured: boolean; proseEnabled: boolean }>({
         queryKey: [...COOPTIMUS_KEY],
         queryFn: () => adminFetch('/admin/settings/cooptimus'),
-        enabled: !!getAuthToken() && !isCloud,
+        enabled: !!getAuthToken() && flavour === 'nas',
         staleTime: 30_000,
     });
 

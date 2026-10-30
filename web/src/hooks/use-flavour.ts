@@ -23,3 +23,16 @@ export function useFlavour(): RuntimeFlavour {
 export function useIsCloudFlavour(): boolean {
     return useFlavour() === 'cloud';
 }
+
+/**
+ * The flavour once `/system/status` has settled — `undefined` while it is
+ * still in flight (an error settles as nas). For callers that must not act
+ * on the nas default before the api has answered, e.g. a fetch that 404s
+ * under cloud. The boot path seeds this query, so in the app it is settled
+ * from the first render.
+ */
+export function useSettledFlavour(): RuntimeFlavour | undefined {
+    const { data, isPending } = useSystemStatus();
+    if (isPending) return undefined;
+    return resolveFlavour(data);
+}
