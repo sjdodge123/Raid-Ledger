@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildKind, GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { resolveGuildCrest } from './crest/hub-crest.resolve';
 
 /** ROK-1830 — game-agnostic guild reads shared by core and every hub kind. */
 
@@ -95,6 +96,7 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
     faction: row.faction,
     memberCount: row.memberCount,
     lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,
+    crest: resolveGuildCrest(row),
     ...kindNameFields(row),
   };
 }

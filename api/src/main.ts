@@ -26,6 +26,10 @@ import {
 import type { LogLevelEnv } from './main.helpers';
 import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from './companion/ingest/companion-body-bypass';
+import {
+  GUILD_CREST_URL_PREFIX,
+  getGuildCrestDir,
+} from './guilds/crest/hub-crest.paths';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -45,6 +49,12 @@ function configureStaticAssets(
   app.useStaticAssets(brandingDir, {
     prefix: '/uploads/branding/',
     maxAge: '1d',
+  });
+  // ROK-1814 Q3: re-encoded, content-hashed guild crests are public static.
+  app.useStaticAssets(getGuildCrestDir(), {
+    prefix: GUILD_CREST_URL_PREFIX,
+    maxAge: '365d',
+    immutable: true,
   });
 }
 
