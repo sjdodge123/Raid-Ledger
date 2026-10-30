@@ -61,9 +61,13 @@ async function waitForCrest(token: string, guildId: number, done: (s: CrestEdito
     }, { description });
 }
 
-/** The label wrapping the radio named `name` inside `scope` (the input itself is `sr-only`). */
+/**
+ * The label wrapping the radio named `name` inside `scope` (the input itself is `sr-only`).
+ * The `has` locator is evaluated RELATIVE to each label, so it must be page-rooted: a
+ * `scope.getByRole(...)` would carry the scope's own selector and need it inside the label.
+ */
 function radioLabel(scope: Locator, name: string): Locator {
-    return scope.locator('label').filter({ has: scope.getByRole('radio', { name, exact: true }) });
+    return scope.locator('label').filter({ has: scope.page().getByRole('radio', { name, exact: true }) });
 }
 
 async function pick(scope: Locator, name: string): Promise<void> {
