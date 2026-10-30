@@ -68,7 +68,7 @@ export function AdminSetupWizard() {
     <div className="min-h-[calc(100vh-4rem)] flex flex-col">
       <WizardHeader onSkip={handleSkipAll} />
       <WizardStepper currentStep={currentStep} firstStep={firstStep} goToStep={goToStep} />
-      <WizardStepContent currentStep={currentStep} goNext={goNext} goBack={goBack} goToStep={goToStep} onComplete={handleComplete} />
+      <WizardStepContent currentStep={currentStep} firstStep={firstStep} goNext={goNext} goBack={goBack} goToStep={goToStep} onComplete={handleComplete} />
     </div>
   );
 }
@@ -141,8 +141,8 @@ function WizardStepIndicator({ step, index, displayNumber, currentStep, isLast, 
   );
 }
 
-function WizardStepContent({ currentStep, goNext, goBack, goToStep, onComplete }: {
-  currentStep: number; goNext: () => void; goBack: () => void; goToStep: (i: number) => void; onComplete: () => void;
+function WizardStepContent({ currentStep, firstStep, goNext, goBack, goToStep, onComplete }: {
+  currentStep: number; firstStep: number; goNext: () => void; goBack: () => void; goToStep: (i: number) => void; onComplete: () => void;
 }) {
   return (
     <div className="flex-1">
@@ -150,7 +150,7 @@ function WizardStepContent({ currentStep, goNext, goBack, goToStep, onComplete }
         {currentStep === 0 && <SecureAccountStep onNext={goNext} onSkip={goNext} />}
         {currentStep === 1 && <CommunityIdentityStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
         {currentStep === 2 && <ConnectPluginsStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
-        {currentStep === 3 && <DoneStep onComplete={onComplete} goToStep={goToStep} />}
+        {currentStep === 3 && <DoneStep onComplete={onComplete} goToStep={goToStep} firstStep={firstStep} />}
       </div>
     </div>
   );

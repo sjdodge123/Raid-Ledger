@@ -4,6 +4,11 @@ import { useOnboarding } from '../../../hooks/use-onboarding';
 interface DoneStepProps {
   onComplete: () => void;
   goToStep: (step: number) => void;
+  /**
+   * First wizard step the flavour shows (ROK-1701 OQ-8b: cloud hides Secure
+   * Account, so 1). Rows that edit a hidden step get no edit affordance.
+   */
+  firstStep?: number;
 }
 
 const CheckCircleIcon = (
@@ -43,10 +48,23 @@ function DoneBadge({ done }: { done: boolean }) {
     return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">Skipped</span>;
 }
 
-function SummaryItem({ item, goToStep }: { item: { label: string; done: boolean; wizardStep: number }; goToStep: (step: number) => void }) {
+const ROW_CLASS = 'w-full flex items-center justify-between py-2.5 px-3 -mx-3 min-h-[44px] border-b border-edge/20 last:border-0 rounded-lg';
+
+/** A summary row for a hidden step: status only, nothing to click. */
+function StaticSummaryItem({ item }: { item: { label: string; done: boolean } }) {
+    return (
+        <div className={ROW_CLASS}>
+            <span className="text-sm text-foreground">{item.label}</span>
+            <DoneBadge done={item.done} />
+        </div>
+    );
+}
+
+function SummaryItem({ item, goToStep, firstStep }: { item: { label: string; done: boolean; wizardStep: number }; goToStep: (step: number) => void; firstStep: number }) {
+    if (item.wizardStep < firstStep) return <StaticSummaryItem item={item} />;
     return (
         <button type="button" onClick={() => goToStep(item.wizardStep)}
-            className="w-full flex items-center justify-between py-2.5 px-3 -mx-3 min-h-[44px] border-b border-edge/20 last:border-0 rounded-lg hover:bg-surface/50 transition-colors cursor-pointer group text-left">
+            className={`${ROW_CLASS} hover:bg-surface/50 transition-colors cursor-pointer group text-left`}>
             <span className="text-sm text-foreground group-hover:text-emerald-400 transition-colors">{item.label}</span>
             <div className="flex items-center gap-2">
                 <DoneBadge done={item.done} />
@@ -72,7 +90,7 @@ function SkippedNotice({ hasSkipped }: { hasSkipped: boolean }) {
  * Step 4: Done (ROK-204)
  * Summary of what was configured vs. skipped.
  */
-export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
+export function DoneStep({ onComplete, goToStep, firstStep = 0 }: DoneStepProps) {
     const { statusQuery, dataSourcesQuery } = useOnboarding();
     const items = buildSummaryItems(statusQuery.data?.steps, dataSourcesQuery.data);
     const hasSkipped = items.some((i) => !i.done);
@@ -89,7 +107,7 @@ export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
             <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Configuration Summary</h3>
                 <div className="space-y-2">
-                    {items.map((item) => <SummaryItem key={item.label} item={item} goToStep={goToStep} />)}
+                    {items.map((item) => <SummaryItem key={item.label} item={item} goToStep={goToStep} firstStep={firstStep} />)}
                 </div>
             </div>
             <SkippedNotice hasSkipped={hasSkipped} />

@@ -19,7 +19,9 @@ vi.mock('../../components/admin/onboarding/community-identity-step', () => ({
 vi.mock('../../components/admin/onboarding/connect-plugins-step', () => ({
     ConnectPluginsStep: () => <div data-testid="connect-plugins-step" />,
 }));
-vi.mock('../../components/admin/onboarding/done-step', () => ({ DoneStep: () => <div data-testid="done-step" /> }));
+vi.mock('../../components/admin/onboarding/done-step', () => ({
+    DoneStep: ({ firstStep }: { firstStep?: number }) => <div data-testid="done-step" data-first-step={firstStep} />,
+}));
 
 import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useOnboarding } from '../../hooks/use-onboarding';
@@ -65,6 +67,11 @@ describe('AdminSetupWizard — flavour (ROK-1701 OQ-8b)', () => {
         setup('cloud', 2);
         expect(screen.getByTestId('connect-plugins-step')).toBeInTheDocument();
         expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
+    });
+
+    it.each([['cloud' as const, '1'], ['nas' as const, '0']])('%s: Done step is told the first visible step', (flavour, first) => {
+        setup(flavour, 3);
+        expect(screen.getByTestId('done-step')).toHaveAttribute('data-first-step', first);
     });
 
     it.each([['nas' as const], [undefined]])('%s: keeps Secure Account as step 1 of 4', (flavour) => {
