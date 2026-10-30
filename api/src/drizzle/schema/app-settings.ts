@@ -246,6 +246,17 @@ export const SETTING_KEYS = {
   /** ROK-1786: JSON array of `PinnedAddon` shown on every guild page.
    *  Unset ⇒ LedgerLink only (`readPinnedAddons`); `[]` ⇒ none. */
   GUILD_PINNED_ADDONS: 'guild_pinned_addons',
+  /** ROK-1701: sha256 hex of the normalised setup code. Absent ⇒ not armed
+   *  (NAS) or already consumed. Read/written only by claim-state.repository. */
+  CLAIM_CODE_HASH: 'claim_code_hash',
+  /** ROK-1701: ISO time the armed setup code stops working (arm + 72 h). */
+  CLAIM_EXPIRES_AT: 'claim_expires_at',
+  /** ROK-1701: ISO time the instance was claimed. Permanent — once set,
+   *  bootstrap never re-arms, even with an unchanged SETUP_CODE. */
+  CLAIMED_AT: 'claimed_at',
+  /** ROK-1701 (DEMO_MODE fixture only): admin@local's password hash before a
+   *  test arm, restored by `POST /admin/test/claim/reset`. */
+  CLAIM_TEST_RESTORE_HASH: 'claim_test_restore_hash',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
