@@ -6,6 +6,8 @@ import { AdminSessionController } from './admin-session.controller';
 import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
 import { DemoTestCoreController } from './demo-test-core.controller';
+import { DemoTestClaimController } from './demo-test-claim.controller';
+import { SetupClaimModule } from '../setup-claim/setup-claim.module';
 import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
 import { NotificationModule } from '../notifications/notification.module';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
@@ -81,6 +83,8 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
+    // ROK-1701: the shared in-memory ClaimLockService for the claim fixture.
+    SetupClaimModule,
     SettingsModule,
     BackupModule,
     VersionModule,
@@ -122,6 +126,7 @@ import { UsersModule } from '../users/users.module';
     AdminGamesController,
     BrandingController,
     DemoTestCoreController,
+    DemoTestClaimController,
     DemoTestDeactivationController,
     DemoTestVoiceController,
     DemoTestLfgController,
