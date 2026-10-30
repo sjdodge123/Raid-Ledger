@@ -2,6 +2,7 @@ import { Strategy, Profile } from 'passport-discord';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { defaultDiscordCallbackUrl } from '../settings/client-url.helpers';
 
 @Injectable()
 export class DiscordStrategy extends PassportStrategy(Strategy, 'discord') {
@@ -11,7 +12,10 @@ export class DiscordStrategy extends PassportStrategy(Strategy, 'discord') {
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
       callbackURL:
         process.env.DISCORD_CALLBACK_URL ||
-        'http://localhost/api/auth/discord/callback',
+        defaultDiscordCallbackUrl(
+          process.env,
+          'http://localhost/api/auth/discord/callback',
+        ),
       scope: ['identify'],
     });
   }

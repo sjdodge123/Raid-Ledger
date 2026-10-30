@@ -32,6 +32,7 @@ const ALLOWLIST = [
   'api/src/auth/fleet-first-login-admin.helpers.ts', // gated reader
   'api/src/auth/fleet-first-login-admin.spec.ts',
   'api/src/scripts/bootstrap-admin-fleet-operator.spec.ts',
+  'api/src/common/flavour/', // ROK-1700: names them only to ignore them under cloud
 ];
 
 function isAllowlisted(file: string): boolean {

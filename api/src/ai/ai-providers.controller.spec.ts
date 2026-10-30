@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { NasOnlyGuard } from '../common/flavour/nas-only.guard';
 import { Reflector } from '@nestjs/core';
 import { AiProvidersController } from './ai-providers.controller';
 import { LlmProviderRegistry } from './llm-provider-registry';
@@ -525,6 +527,62 @@ describe('AiProvidersController', () => {
         'claude',
       );
       expect(inactiveProbe).toHaveBeenCalled();
+    });
+  });
+
+  describe('ROK-1700: no local Ollama under RL_FLAVOUR=cloud', () => {
+    afterEach(() => delete process.env.RL_FLAVOUR);
+
+    it.each(['setupOllama', 'stopOllama'] as const)(
+      '%s carries NasOnlyGuard (404 under cloud)',
+      (method) => {
+        const handler = AiProvidersController.prototype[method];
+        const guards: unknown = Reflect.getMetadata(GUARDS_METADATA, handler);
+        expect(guards).toEqual([NasOnlyGuard]);
+      },
+    );
+
+    it('cloud: listProviders omits ollama', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      mockRegistry.list.mockReturnValue([
+        createMockProvider(),
+        createMockProvider({ key: 'openai', requiresApiKey: false }),
+      ]);
+      const keys = (await controller.listProviders()).map((p) => p.key);
+      expect(keys).toEqual(['openai']);
+    });
+
+    it('nas: listProviders still includes ollama', async () => {
+      mockRegistry.list.mockReturnValue([createMockProvider()]);
+      const keys = (await controller.listProviders()).map((p) => p.key);
+      expect(keys).toEqual(['ollama']);
+    });
+
+    it('cloud: configure ollama is rejected without writing settings', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      mockRegistry.resolve.mockReturnValue(createMockProvider());
+      await expect(
+        controller.configureProvider('ollama', { url: 'http://ollama:11434' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+
+    it('cloud: activate ollama is rejected without writing settings', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      mockRegistry.resolve.mockReturnValue(createMockProvider());
+      await expect(controller.activateProvider('ollama')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockSettings.set).not.toHaveBeenCalled();
+    });
+
+    it('cloud: activating a hosted provider still works', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      mockRegistry.resolve.mockReturnValue(
+        createMockProvider({ key: 'openai' }),
+      );
+      await controller.activateProvider('openai');
+      expect(mockSettings.set).toHaveBeenCalledWith('ai_provider', 'openai');
     });
   });
 });

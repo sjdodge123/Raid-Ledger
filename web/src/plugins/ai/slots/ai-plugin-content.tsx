@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAiProviders, useAiStatus, useTestChat } from '../../../hooks/admin/use-ai-settings';
+import { useIsCloudFlavour } from '../../../hooks/use-flavour';
 import { OllamaSetupCard } from './ollama-setup-card';
 import { CloudProviderCard } from './cloud-provider-card';
 import { AiFeatureToggles } from './ai-feature-toggles';
@@ -45,6 +46,13 @@ function ProviderGrid({ providers, onOllamaSettingChange }: {
     );
 }
 
+/** ROK-1700: the cloud flavour has no self-hosted (Ollama) provider — its setup card is hidden. */
+function useShownProviders(providers: AiProviderInfoDto[] | undefined): AiProviderInfoDto[] {
+    const isCloud = useIsCloudFlavour();
+    const all = providers ?? [];
+    return isCloud ? all.filter((p) => !p.selfHosted) : all;
+}
+
 /**
  * Main admin panel content for the AI plugin.
  * Renders in the admin-settings:plugin-content slot.
@@ -55,23 +63,23 @@ export function AiPluginContent({ pluginSlug }: { pluginSlug?: string }) {
     const pollingInterval = setupActive ? ACTIVE_POLL_INTERVAL : false;
     const { data: providers, isLoading: providersLoading } = useAiProviders({ pollingInterval });
     const handleOllamaSettingChange = useCallback((v: boolean) => setSetupActive(v), []);
+    const shown = useShownProviders(providers);
 
     if (pluginSlug && pluginSlug !== 'ai') return null;
 
     const available = status?.available ?? false;
-    const isLoading = statusLoading || providersLoading;
 
     return (
         <IntegrationCard title="AI Features" description="Multi-provider LLM inference"
-            pluginBadge={getPluginBadge('ai')} icon={<AiIcon />} isConfigured={available} isLoading={isLoading}>
+            pluginBadge={getPluginBadge('ai')} icon={<AiIcon />} isConfigured={available} isLoading={statusLoading || providersLoading}>
             <div className="space-y-6">
-                {providers && providers.length > 0 && (
+                {shown.length > 0 && (
                     <>
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-medium text-secondary">AI Providers</h3>
-                            <ActiveIndicator providers={providers} />
+                            <ActiveIndicator providers={shown} />
                         </div>
-                        <ProviderGrid providers={providers} onOllamaSettingChange={handleOllamaSettingChange} />
+                        <ProviderGrid providers={shown} onOllamaSettingChange={handleOllamaSettingChange} />
                     </>
                 )}
                 {available && <TestChatSection />}

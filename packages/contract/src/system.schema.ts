@@ -50,6 +50,9 @@ export const SystemStatusSchema = z.object({
      *  default in production; ENABLE_TELEMETRY=false opts out, DISABLE_TELEMETRY
      *  wins. Absent = treat as off. */
     telemetryEnabled: z.boolean().optional(),
+    /** ROK-1700: runtime flavour (`RL_FLAVOUR`). `cloud` hides NAS-only
+     *  surfaces (Ollama, Co-Optimus, demo data). Absent = treat as `nas`. */
+    flavour: z.enum(['nas', 'cloud']).optional(),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
