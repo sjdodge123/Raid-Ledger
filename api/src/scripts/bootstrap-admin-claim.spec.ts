@@ -40,7 +40,8 @@ const fakeDb: Record<string, unknown> = {
   select: () => ({ from: (table: unknown) => makeSelectChain(table) }),
   insert: (table: unknown) => ({
     values: () => {
-      if (table === realSchema.localCredentials) credentialWrites.push('insert');
+      if (table === realSchema.localCredentials)
+        credentialWrites.push('insert');
       return {
         onConflictDoUpdate: () => Promise.resolve(),
         onConflictDoNothing: () => ({
@@ -105,7 +106,10 @@ const GOLDEN_EXISTING = [
   '  Admin credentials already exist (admin@local) — password unchanged.',
   '  Forgot it? Start ONCE with RESET_PASSWORD=true and ADMIN_PASSWORD=<your choice>, then remove RESET_PASSWORD.',
 ];
-const GOLDEN_RESET = [PLACEHOLDER_LINE, ...goldenBanner('ADMIN PASSWORD RESET')];
+const GOLDEN_RESET = [
+  PLACEHOLDER_LINE,
+  ...goldenBanner('ADMIN PASSWORD RESET'),
+];
 
 /** Every console line of the run, all streams, in order (`<stream>|<text>`). */
 const consoleLines: string[] = [];
