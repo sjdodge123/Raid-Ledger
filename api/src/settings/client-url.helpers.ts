@@ -145,8 +145,9 @@ export const PLATFORM_PUBLIC_URL_VARS: readonly string[] = PLATFORM_SOURCES.map(
  * `PUBLIC_URL` → `RENDER_EXTERNAL_URL` → `RAILWAY_PUBLIC_DOMAIN` →
  * `FLY_APP_NAME` → `APP_URL` (DigitalOcean) → `HEROKU_APP_DEFAULT_DOMAIN_NAME`.
  * A set value that is not usable (not http(s), or not a bare host for a
- * host-style source) is skipped with a warning; a URL is reduced to its origin. Pure: warnings go
- * to the optional callback. Returns `null` when no source is usable.
+ * host-style source) is skipped with a warning; a URL is reduced to its
+ * origin. Pure: warnings go to the optional callback. Returns `null` when no
+ * source is usable.
  */
 export function resolvePlatformPublicUrl(
   env: PlatformEnv,

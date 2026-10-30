@@ -320,7 +320,6 @@ describe('resolvePlatformPublicUrl — source validation (ROK-1697)', () => {
       );
     },
   );
-
 });
 
 describe('resolvePlatformPublicUrl — origin reduction (ROK-1697)', () => {
