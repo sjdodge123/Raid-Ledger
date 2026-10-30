@@ -30,7 +30,7 @@ function pull(
   };
 }
 
-describe('computeRaidProgress (ROK-1917)', () => {
+describe('computeRaidProgress totals (ROK-1917)', () => {
   it('is empty when the guild has no pulls', () => {
     expect(computeRaidProgress([])).toEqual({
       bosses: [],
@@ -91,7 +91,9 @@ describe('computeRaidProgress (ROK-1917)', () => {
     ]);
     expect(out.bosses[0]).toMatchObject({ kills: 0, wipes: 2 });
   });
+});
 
+describe('computeRaidProgress rows and ordering (ROK-1917)', () => {
   it('two difficulties of one encounter are separate rows; unmapped id → null label', () => {
     const out = computeRaidProgress([
       pull(663, 0, true),
