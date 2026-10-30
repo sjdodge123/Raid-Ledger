@@ -138,23 +138,10 @@ export function buildPullInsert(
 }
 
 /**
- * ROK-1917 final P2 — the binding is applied AFTER the sections run, so on a
- * user's first import the GUID it pins is not yet on their character. When
- * that pending GUID is on an in-scope roster the importer is trusted already.
- */
-export function trustWithPendingBinding(
-  trusted: ReadonlySet<number>,
-  importer: number,
-  pendingOnRoster: boolean,
-): Set<number> {
-  const out = new Set(trusted);
-  if (pendingOnRoster) out.add(importer);
-  return out;
-}
-
-/**
  * Linked roster users of every `wow_guild` hub sharing the pull scope, plus
- * the importer when the GUID this import pins (`ctx.pendingGuid`) is on one.
+ * the importer when the GUID this import pins (`ctx.pendingGuid`) is on one —
+ * ROK-1917 final P2: the binding is applied AFTER the sections run, so on a
+ * user's first import that GUID is not yet on their character.
  */
 async function scopeLinkedUserIds(
   ctx: AddonApplyContext,
@@ -166,11 +153,14 @@ async function scopeLinkedUserIds(
   for (const hubId of hubIds) {
     for (const id of await loadGuildLinkedUserIds(tx, hubId)) ids.add(id);
   }
-  const pending =
-    pendingGuid && !ids.has(ctx.userId)
-      ? await guidOnScopeRoster(tx, hubIds, pendingGuid)
-      : false;
-  return trustWithPendingBinding(ids, ctx.userId, pending);
+  if (
+    pendingGuid &&
+    !ids.has(ctx.userId) &&
+    (await guidOnScopeRoster(tx, hubIds, pendingGuid, ctx.characterId))
+  ) {
+    ids.add(ctx.userId);
+  }
+  return ids;
 }
 
 /**

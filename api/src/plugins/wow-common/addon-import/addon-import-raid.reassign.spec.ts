@@ -15,7 +15,6 @@ import {
   buildPullInsert,
   dedupePullRows,
   takeoverEligible,
-  trustWithPendingBinding,
 } from './addon-import-raid.reassign';
 
 const db = drizzle.mock({ schema });
@@ -55,20 +54,6 @@ describe('takeoverEligible (ROK-1917 P2)', () => {
 
   it('is false for unguilded pulls, which never count', () => {
     expect(takeoverEligible('', 1, new Set([1]))).toBe(false);
-  });
-});
-
-describe('trustWithPendingBinding (ROK-1917 final P2)', () => {
-  it('a first import whose pinned GUID is on the roster trusts the importer', () => {
-    const trusted = trustWithPendingBinding(new Set([2]), 8, true);
-    expect([...trusted].sort()).toEqual([2, 8]);
-    expect(takeoverEligible('guild', 8, trusted)).toBe(true);
-  });
-
-  it('a pending GUID off every roster leaves the importer untrusted', () => {
-    const trusted = trustWithPendingBinding(new Set([2]), 8, false);
-    expect([...trusted]).toEqual([2]);
-    expect(takeoverEligible('guild', 8, trusted)).toBe(false);
   });
 });
 

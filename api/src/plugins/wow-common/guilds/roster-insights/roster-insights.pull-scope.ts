@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../../drizzle/schema';
 import { inLatestSnapshot } from '../guild-membership.helpers';
+import { ownerIsActive } from '../guild-roster.helpers';
 
 type Db = Pick<PostgresJsDatabase<typeof schema>, 'select'>;
 
@@ -40,21 +41,26 @@ export async function pullScopeHubIds(
  * ROK-1917 final P2 — true when `guid` (a GUID this import is about to pin on
  * the importer's character) sits on the current roster of one of `hubIds`,
  * i.e. the importer is a linked member once the binding lands in this tx.
+ * `characterId` is the importer's character: the same active-owner predicate
+ * the roster's link applies (D3) keeps a deactivated importer untrusted.
  */
 export async function guidOnScopeRoster(
   db: Db,
   hubIds: readonly number[],
   guid: string,
+  characterId: string,
 ): Promise<boolean> {
   if (hubIds.length === 0) return false;
-  const { guildMembers, guilds } = schema;
+  const { guildMembers, guilds, characters } = schema;
   const rows = await db
     .select({ id: guildMembers.guildId })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(characters, eq(characters.id, characterId))
     .where(
       and(
         inArray(guildMembers.guildId, [...hubIds]),
+        ownerIsActive(),
         eq(guildMembers.guid, guid),
         inLatestSnapshot(),
       ),
