@@ -118,6 +118,11 @@ async function expectRefusal(page: Page, status: number, body: Record<string, un
 }
 
 test.describe('Setup claim (/claim)', () => {
+    // A stub mid-`route.fetch()` when the test ends would throw "Response has been disposed".
+    test.afterEach(async ({ page }) => {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+    });
+
     test('every route lands on /claim while a claim is pending', async ({ page }) => {
         await stubStatus(page, { required: true });
         for (const path of ['/events', '/']) {
