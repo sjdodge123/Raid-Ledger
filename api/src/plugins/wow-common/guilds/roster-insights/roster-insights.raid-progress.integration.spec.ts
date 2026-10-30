@@ -12,6 +12,8 @@
  * when pulls match its game, region and name key.
  * Codex P2: a re-import by a roster member claims a duplicate pull whose
  * reporter is off the roster; an outsider's re-import never moves a pull.
+ * The hand-over tests write pulls into a SECOND guild of their own, so the
+ * exact boss list AC1 asserts holds under `--randomize` test order.
  */
 import { and, eq } from 'drizzle-orm';
 import {
@@ -32,6 +34,8 @@ import { RosterInsightsCache } from './roster-insights.cache';
 
 const GUILD_NAME = 'Raid Progress 1917';
 const GUILD_KEY = GUILD_NAME.toLowerCase();
+const HANDOVER_NAME = 'Raid Progress 1917 Handover';
+const HANDOVER_KEY = HANDOVER_NAME.toLowerCase();
 const T0 = Date.parse('2026-10-22T20:00:00.000Z');
 const at = (s: number): Date => new Date(T0 + s * 1000);
 
@@ -39,6 +43,7 @@ type Who = 'raider' | 'officer' | 'pug' | 'visitor';
 
 let testApp: TestApp;
 let guildId: number;
+let handoverGuildId: number;
 let communityHubId: number;
 let otherGameId: number;
 const userIds = new Map<Who, number>();
@@ -87,17 +92,19 @@ async function seedRosterChar(userId: number, who: Who): Promise<void> {
     ruleset: 'normal',
     isMain: true,
   });
-  await testApp.db.insert(schema.guildMembers).values({
-    guildId,
-    guid,
-    characterName: 'Raidwren',
-    level: 60,
-    class: 'Warrior',
-    rankIndex: 2,
-    rankName: 'Raider',
-    source: 'addon_import',
-    lastSeenAt: at(0),
-  });
+  await testApp.db.insert(schema.guildMembers).values(
+    [guildId, handoverGuildId].map((gid) => ({
+      guildId: gid,
+      guid,
+      characterName: 'Raidwren',
+      level: 60,
+      class: 'Warrior',
+      rankIndex: 2,
+      rankName: 'Raider',
+      source: 'addon_import' as const,
+      lastSeenAt: at(0),
+    })),
+  );
 }
 
 interface PullSpec {
@@ -150,15 +157,15 @@ function outOfScope(): PullSpec[] {
   ];
 }
 
-async function insertGuild(): Promise<number> {
+async function insertGuild(name: string): Promise<number> {
   const [g] = nonEmpty(
     await testApp.db
       .insert(schema.guilds)
       .values({
         gameId: testApp.seed.game.id,
         region: 'us',
-        name: GUILD_NAME,
-        nameKey: GUILD_KEY,
+        name,
+        nameKey: name.toLowerCase(),
         source: 'addon_import',
         lastSnapshotAt: at(0),
       })
@@ -217,7 +224,8 @@ beforeAll(async () => {
   const registry = testApp.app.get(PluginRegistryService);
   await registry.ensureInstalled('blizzard');
   await registry.activate('blizzard');
-  guildId = await insertGuild();
+  guildId = await insertGuild(GUILD_NAME);
+  handoverGuildId = await insertGuild(HANDOVER_NAME);
   otherGameId = await insertOtherGame();
   for (const who of ['raider', 'officer', 'pug', 'visitor'] as const)
     await seedUser(who);
@@ -302,7 +310,7 @@ function reimportPayload(encounterId: number, start: number): AddonRaidExport {
   };
   return {
     ...base,
-    who: { ...base.who, guildName: GUILD_NAME },
+    who: { ...base.who, guildName: HANDOVER_NAME },
     data: { pulls: [pull] },
   };
 }
@@ -333,7 +341,7 @@ async function reimportAs(who: Who, payload: AddonRaidExport) {
     sha256: 'c'.repeat(64),
   };
   const out = await applyRaid(ctx, payload);
-  testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+  testApp.app.get(RosterInsightsCache).invalidateGuild(handoverGuildId);
   return out;
 }
 
@@ -343,7 +351,7 @@ async function reporterOf(encounterId: number): Promise<number | null> {
     await testApp.db
       .select({ by: p.reportedByUserId })
       .from(p)
-      .where(and(eq(p.encounterId, encounterId), eq(p.guildKey, GUILD_KEY))),
+      .where(and(eq(p.encounterId, encounterId), eq(p.guildKey, HANDOVER_KEY))),
     `pull ${encounterId}`,
   );
   return row.by;
@@ -351,12 +359,16 @@ async function reporterOf(encounterId: number): Promise<number | null> {
 
 /** Raid progress as the raider sees it: `[encounterId, kills, wipes]` per boss. */
 async function bossRows(): Promise<Array<[number, number, number]>> {
-  const res = await insights('raider');
+  const res = await insights('raider', handoverGuildId);
   const rp = WowRosterInsightsSchema.parse(res.body).raidProgress;
   return (rp?.bosses ?? []).map((b) => [b.encounterId, b.kills, b.wipes]);
 }
 
-/** Seed a stored pull of `encounterId` at `start`, reported by `reporter`. */
+/** A pull row on the hand-over tests' own guild. */
+const handoverRow = (p: Omit<PullSpec, 'guildKey'>) =>
+  pullRow({ ...p, guildKey: HANDOVER_KEY });
+
+/** Seed a stored hand-over pull of `encounterId` at `start`, reported by `reporter`. */
 async function seedStored(
   encounterId: number,
   start: number,
@@ -365,12 +377,12 @@ async function seedStored(
 ): Promise<void> {
   await testApp.db
     .insert(schema.addonEncounterPulls)
-    .values(pullRow({ encounterId, start, success, reporter }));
-  testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+    .values(handoverRow({ encounterId, start, success, reporter }));
+  testApp.app.get(RosterInsightsCache).invalidateGuild(handoverGuildId);
 }
 
 async function bossIds(): Promise<number[]> {
-  const res = await insights('raider');
+  const res = await insights('raider', handoverGuildId);
   const rp = WowRosterInsightsSchema.parse(res.body).raidProgress;
   return (rp?.bosses ?? []).map((b) => b.encounterId);
 }
@@ -379,14 +391,14 @@ describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
   it('a roster member re-importing a pull whose reporter left the roster makes it count', async () => {
     // `pug` stands in for a first reporter no longer on the linked roster.
     await testApp.db.insert(schema.addonEncounterPulls).values(
-      pullRow({
+      handoverRow({
         encounterId: 900,
         start: 4000,
         success: false,
         reporter: 'pug',
       }),
     );
-    testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+    testApp.app.get(RosterInsightsCache).invalidateGuild(handoverGuildId);
     expect(await bossIds()).not.toContain(900);
     const out = await reimportAs('raider', reimportPayload(900, 4000));
     expect(out.summary).toMatchObject({ newPulls: 0, duplicatePulls: 1 });
@@ -396,7 +408,7 @@ describe('raid import reporter hand-over (ROK-1917 Codex P2, real DB)', () => {
 
   it('an outsider re-importing a trusted pull does NOT move its reporter', async () => {
     await testApp.db.insert(schema.addonEncounterPulls).values(
-      pullRow({
+      handoverRow({
         encounterId: 901,
         start: 4100,
         success: false,
@@ -490,7 +502,7 @@ async function seedFirstImporter(
     `${username} user`,
   );
   await testApp.db.insert(schema.guildMembers).values({
-    guildId,
+    guildId: handoverGuildId,
     guid,
     characterName: name,
     level: 60,
