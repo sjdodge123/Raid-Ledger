@@ -32,6 +32,8 @@ function bodyCode(body: unknown): { code?: unknown; retryAt?: unknown } {
 /** Map an HTTP status + error body to the failure the screen shows. */
 export function mapClaimError(status: number, body: unknown): ClaimFailure {
     const { code, retryAt } = bodyCode(body);
+    // The client guarantees a code, so a schema refusal is about the password.
+    if (status === 400) return { kind: 'password' };
     if (status === 401 && code === 'claim_code_invalid') return { kind: 'wrong' };
     if (status === 410 && code === 'claim_expired') return { kind: 'expired' };
     if (status === 403 && code === 'claim_https_required') return { kind: 'https' };

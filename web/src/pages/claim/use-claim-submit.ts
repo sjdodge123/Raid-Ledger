@@ -1,12 +1,11 @@
 /**
  * Form state + submit for the claim form (ROK-1701): the client-side guards
- * (empty code, password length/match), the `useClaim` result → code status,
+ * (empty code, password min chars / 72-byte cap / match), the `useClaim` result → code status,
  * focus on the offending field, and the sign-in after the claim settles.
  */
 import { useRef, useState, type FormEvent, type RefObject } from 'react';
-import { SETUP_CLAIM_PASSWORD_MIN } from '@raid-ledger/contract';
 import { useClaim, useClaimSignIn } from './use-claim';
-import type { CodeStatus } from './claim.helpers';
+import { isPasswordValid, type CodeStatus } from './claim.helpers';
 
 /** Everything `ClaimForm` renders from. */
 export interface ClaimSubmitState {
@@ -48,12 +47,15 @@ export function useClaimSubmit(expiredOnLoad: boolean): ClaimSubmitState {
     const onSubmit = (e: FormEvent): void => {
         e.preventDefault();
         if (!code.trim()) { setStatus({ kind: 'empty' }); codeRef.current?.focus(); return; }
-        const pwOk = passwords.pw.length >= SETUP_CLAIM_PASSWORD_MIN && passwords.pw === passwords.confirm;
+        const pwOk = isPasswordValid(passwords.pw) && passwords.pw === passwords.confirm;
         setPwRefused(!pwOk);
         if (!pwOk) { pwRef.current?.focus(); return; }
         claim.mutate({ code, newPassword: passwords.pw }, {
             onSuccess: (token) => { void signIn(token).then((ok) => { setSignedIn(ok); setStatus({ kind: 'ok' }); }); },
-            onError: (err) => { setStatus(err.failure); codeRef.current?.focus(); },
+            onError: ({ failure }) => {
+                if (failure.kind === 'password') { setStatus({ kind: 'idle' }); setPwRefused(true); pwRef.current?.focus(); return; }
+                setStatus(failure); codeRef.current?.focus();
+            },
         });
     };
     const pending = claim.isPending || signingIn;

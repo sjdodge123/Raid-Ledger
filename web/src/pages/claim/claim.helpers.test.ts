@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { codeMessage, hoursLeft, isClaimExpired, passwordStrength, strengthHint } from './claim.helpers';
+import {
+    codeMessage, hoursLeft, isClaimExpired, isPasswordTooLong, isPasswordValid, passwordStrength, strengthHint,
+} from './claim.helpers';
 
 const HOUR = 3_600_000;
 
@@ -10,6 +12,9 @@ describe('passwordStrength', () => {
         ['12345678', 2],
         ['12345678901', 2],
         ['123456789012', 3],
+        ['x'.repeat(72), 3],
+        ['x'.repeat(73), 4],
+        ['é'.repeat(37), 4],
     ] as const)('"%s" → %d', (pw, level) => {
         expect(passwordStrength(pw)).toBe(level);
     });
@@ -19,6 +24,16 @@ describe('passwordStrength', () => {
         expect(strengthHint(1)).toEqual({ text: 'Too short.', tone: 'danger' });
         expect(strengthHint(2)).toEqual({ text: 'Nearly there: 12 characters or more.', tone: 'warning' });
         expect(strengthHint(3)).toEqual({ text: 'Strong enough.', tone: 'success' });
+        expect(strengthHint(4)).toEqual({ text: expect.stringMatching(/^Too long/), tone: 'danger' });
+    });
+
+    it('validates min chars and the 72-byte cap, counting bytes', () => {
+        expect(isPasswordValid('x'.repeat(11))).toBe(false);
+        expect(isPasswordValid('x'.repeat(12))).toBe(true);
+        expect(isPasswordValid('é'.repeat(36))).toBe(true);
+        expect(isPasswordTooLong('é'.repeat(36))).toBe(false);
+        expect(isPasswordTooLong('é'.repeat(37))).toBe(true);
+        expect(isPasswordValid('é'.repeat(37))).toBe(false);
     });
 });
 

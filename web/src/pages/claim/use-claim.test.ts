@@ -10,6 +10,7 @@ describe('mapClaimError', () => {
         [429, { code: 'claim_locked', message: 'x', retryAt: '2026-10-30T13:05:00.000Z' }, { kind: 'locked', retryAt: '2026-10-30T13:05:00.000Z' }],
         [429, { message: 'ThrottlerException: Too Many Requests' }, { kind: 'generic' }],
         [500, { message: 'boom' }, { kind: 'generic' }],
+        [400, { message: 'A setup code and a password of at least 12 characters are required.' }, { kind: 'password' }],
         [401, 'not json', { kind: 'generic' }],
     ] as const)('%d %j → %j', (status, body, expected) => {
         expect(mapClaimError(status, body)).toEqual(expected);

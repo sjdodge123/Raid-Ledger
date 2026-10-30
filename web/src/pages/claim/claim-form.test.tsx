@@ -20,9 +20,11 @@ async function fill(code: string, pw = GOOD_PW, confirm = pw): Promise<void> {
     await user.click(screen.getByRole('button', { name: 'Claim and set password' }));
 }
 
-describe('ClaimForm', () => {
-    beforeEach(() => { fetchMock.mockReset(); loginMock.mockReset(); });
+const TOO_LONG_PW = 'é'.repeat(37); // 37 chars, 74 UTF-8 bytes
 
+beforeEach(() => { fetchMock.mockReset(); loginMock.mockReset(); });
+
+describe('ClaimForm — fields and client guards', () => {
     it('shows the idle hint and the fixed sign-in name', () => {
         renderWithProviders(<ClaimForm />);
         expect(screen.getByText(/Paste the whole value/)).toBeInTheDocument();
@@ -65,6 +67,28 @@ describe('ClaimForm', () => {
         expect(screen.getByText('Strong enough.')).toBeInTheDocument();
     });
 
+    it('refuses a password past 72 bytes on the password field, not the code field', async () => {
+        renderWithProviders(<ClaimForm />);
+        await fill('ABCD-EFGH', TOO_LONG_PW);
+        const pw = screen.getByLabelText('New password');
+        expect(screen.getByText(/That password is too long/)).toBeInTheDocument();
+        expect(screen.getByText(/^Too long/)).toBeInTheDocument();
+        expect(pw).toHaveFocus();
+        expect(pw).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByLabelText('Setup code')).not.toHaveAttribute('aria-invalid');
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('a matching confirm is not painted success while the password is invalid', async () => {
+        renderWithProviders(<ClaimForm />);
+        const user = userEvent.setup();
+        await user.type(screen.getByLabelText('New password'), 'short');
+        await user.type(screen.getByLabelText('Confirm password'), 'short');
+        expect(screen.getByLabelText('Confirm password')).not.toHaveAttribute('data-success', 'true');
+    });
+});
+
+describe('ClaimForm — server results', () => {
     it.each([
         [401, { code: 'claim_code_invalid', message: 'x' }, "That code doesn't match."],
         [410, { code: 'claim_expired', message: 'x' }, 'This code has expired. Restart the service for a new code.'],
@@ -99,6 +123,19 @@ describe('ClaimForm', () => {
         await waitFor(() => expect(queryClient.getQueryData(['system', 'status'])).toMatchObject({ claimRequired: false }));
     });
 
+    it('a server 400 lands on the password field, not under the setup code', async () => {
+        fetchMock.mockResolvedValue(respond(400, { message: 'A setup code and a password of at least 12 characters are required.' }));
+        renderWithProviders(<ClaimForm />);
+        await fill('MY-SECRET-CODE');
+        const pw = screen.getByLabelText('New password');
+        await waitFor(() => expect(pw).toHaveFocus());
+        expect(pw).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.queryByText('Something went wrong. Try again.')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Setup code')).not.toHaveAttribute('aria-invalid');
+    });
+});
+
+describe('ClaimForm — focus and success', () => {
     it('focuses the code field on an empty submit', async () => {
         renderWithProviders(<ClaimForm />);
         await fill('');

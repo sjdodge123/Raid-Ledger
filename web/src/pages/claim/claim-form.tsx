@@ -16,8 +16,8 @@ import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { useClaimSubmit } from './use-claim-submit';
 import { ClaimStrengthMeter } from './claim-strength-meter';
 import {
-    PASSWORD_GUARD_MESSAGE, PASSWORD_MISMATCH_MESSAGE, TONE_TEXT, codeMessage,
-    passwordStrength, strengthHint, type CodeStatus,
+    PASSWORD_GUARD_MESSAGE, PASSWORD_MISMATCH_MESSAGE, PASSWORD_TOO_LONG_MESSAGE, TONE_TEXT, codeMessage,
+    isPasswordTooLong, isPasswordValid, passwordStrength, strengthHint, type CodeStatus,
 } from './claim.helpers';
 
 function CodeMessage({ id, status, checking }: { id: string; status: CodeStatus; checking: boolean }): JSX.Element {
@@ -44,14 +44,14 @@ function PasswordFields({ pw, confirm, setPw, setConfirm, refused, pwRef }: {
     return (
         <>
             <Field label="New password" hint={<span className={TONE_TEXT[hint.tone]}>{hint.text}</span>}
-                error={refused ? PASSWORD_GUARD_MESSAGE : undefined}>
+                error={refused ? (isPasswordTooLong(pw) ? PASSWORD_TOO_LONG_MESSAGE : PASSWORD_GUARD_MESSAGE) : undefined}>
                 <PasswordInput ref={pwRef} label="new password" autoComplete="new-password" value={pw} revealed={revealed}
                     onRevealedChange={setRevealed} onChange={(e) => setPw(e.target.value)} />
                 <ClaimStrengthMeter level={level} />
             </Field>
             <Field label="Confirm password" error={mismatch ? PASSWORD_MISMATCH_MESSAGE : undefined}>
                 <PasswordInput label="confirm password" autoComplete="new-password" value={confirm} revealed={revealed}
-                    success={confirm.length > 0 && confirm === pw}
+                    success={confirm.length > 0 && confirm === pw && isPasswordValid(pw)}
                     onRevealedChange={setRevealed} onChange={(e) => setConfirm(e.target.value)} />
             </Field>
             <Checkbox label="Show passwords" checked={revealed} onChange={(e) => setRevealed(e.target.checked)} />
