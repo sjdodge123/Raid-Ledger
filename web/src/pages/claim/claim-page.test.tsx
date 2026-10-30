@@ -13,7 +13,7 @@ describe('ClaimPage', () => {
         statusMock.mockReturnValue({ data: { claimRequired: true, claimExpiresAt: new Date(Date.now() + 71.5 * 3_600_000).toISOString() } });
         renderWithProviders(<ClaimPage />);
         expect(screen.getByRole('heading', { level: 1, name: 'Claim this Raid Ledger' })).toBeInTheDocument();
-        expect(screen.getByTestId('claim-footnote')).toHaveTextContent('(71 hours left)');
+        expect(screen.getByTestId('claim-footnote')).toHaveTextContent('(72 hours left)');
     });
 
     it('omits hours left without an expiry and shows the expired state when lapsed', () => {
@@ -24,6 +24,7 @@ describe('ClaimPage', () => {
         statusMock.mockReturnValue({ data: { claimRequired: true, claimExpiresAt: new Date(Date.now() - 1000).toISOString() } });
         renderWithProviders(<ClaimPage />);
         expect(screen.getByTestId('claim-code-message')).toHaveAttribute('data-state', 'expired');
+        expect(screen.getByTestId('claim-footnote').textContent).not.toContain('hours left');
     });
 
     it('switches host instructions with the segmented radio group', async () => {

@@ -10,7 +10,7 @@ import { ClaimHostHelp } from './claim-host-help';
 import { hoursLeft, isClaimExpired } from './claim.helpers';
 
 function Footnote({ expiresAt, now }: { expiresAt: string | undefined; now: number }): JSX.Element {
-    const left = expiresAt ? ` (${hoursLeft(expiresAt, now)} hours left)` : '';
+    const left = expiresAt && !isClaimExpired(expiresAt, now) ? ` (${hoursLeft(expiresAt, now)} hours left)` : '';
     return (
         <p className="text-xs text-muted" data-testid="claim-footnote">
             The code stops working 72 hours after the first start{left}. Expired? Restart the service and a fresh

@@ -70,9 +70,9 @@ export function strengthHint(level: StrengthLevel): { text: string; tone: Messag
     return STRENGTH_HINTS[level];
 }
 
-/** Whole hours until the code stops working, never negative. */
+/** Whole hours until the code stops working, rounded up (a fresh 72h code reads 72), never negative. */
 export function hoursLeft(expiresAt: string, now: number): number {
-    return Math.max(0, Math.floor((Date.parse(expiresAt) - now) / HOUR_MS));
+    return Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / HOUR_MS));
 }
 
 /** True once `now` reaches the expiry instant; false when there is none. */

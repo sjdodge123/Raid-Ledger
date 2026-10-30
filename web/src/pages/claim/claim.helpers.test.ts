@@ -39,8 +39,10 @@ describe('passwordStrength', () => {
 
 describe('hoursLeft / isClaimExpired', () => {
     const now = Date.UTC(2026, 9, 30, 12, 0, 0);
-    it('floors whole hours left', () => {
-        expect(hoursLeft(new Date(now + 71.9 * HOUR).toISOString(), now)).toBe(71);
+    it('rounds whole hours left up', () => {
+        expect(hoursLeft(new Date(now + 72 * HOUR).toISOString(), now)).toBe(72);
+        expect(hoursLeft(new Date(now + 71.9 * HOUR).toISOString(), now)).toBe(72);
+        expect(hoursLeft(new Date(now + 0.1 * HOUR).toISOString(), now)).toBe(1);
     });
     it('never goes below zero', () => {
         expect(hoursLeft(new Date(now - 5 * HOUR).toISOString(), now)).toBe(0);
