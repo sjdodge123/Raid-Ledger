@@ -7,7 +7,7 @@
 # Environment Variables:
 #   PORT           - External port (default: 80)
 #   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
-#   CORS_ORIGIN    - Allowed CORS origin (default: auto-derived from RENDER_EXTERNAL_URL or localhost)
+#   CORS_ORIGIN    - Allowed CORS origin (unset: derived from the platform public URL, ROK-1697; else "auto")
 #
 # Data is persisted under /data (PostgreSQL + Redis). Mount a volume to
 # retain data across container updates (e.g. Watchtower).
@@ -238,7 +238,8 @@ ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
 ENV REDIS_URL=/tmp/redis.sock
 ENV DOTENV_CONFIG_QUIET=true
-ENV CORS_ORIGIN=auto
+# Empty = derive from the platform public URL in start-api.sh, else "auto" (ROK-1697).
+ENV CORS_ORIGIN=
 ENV CLIENT_URL=
 ENV BACKUP_DIR=/data/backups
 ENV LOG_DIR=/data/logs
