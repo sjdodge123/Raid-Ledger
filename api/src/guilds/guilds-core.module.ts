@@ -82,6 +82,7 @@ import {
   ],
   exports: [
     GuildAccessService,
+    HubKindActiveGuard,
     GuildEditorGuard,
     GuildLeaderGuard,
     GuildEditorsService,

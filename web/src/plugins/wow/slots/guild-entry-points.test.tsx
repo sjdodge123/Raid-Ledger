@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
@@ -179,5 +179,29 @@ describe('generic slots', () => {
     ])('%s hosts its slot', (file, snippet) => {
         const src = readFileSync(resolve(__dirname, '../../..', file), 'utf8');
         expect(src.includes(snippet), `${file} is missing: ${snippet}`).toBe(true);
+    });
+});
+
+/** ROK-1814 — the badge (24px) and the Players card (48px) render the guild's crest. */
+describe('guild crest on the WoW entry points (ROK-1814)', () => {
+    it('the character badge shows a preset crest at the small size', async () => {
+        server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
+            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined, gmPostHeadline: undefined, crest: { source: 'preset', emblemId: 'lion', fg: 'or', bg: 'gules' } }, rankName: 'Officer', viewerCanOpen: false } })));
+        renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
+        const badge = await screen.findByTestId('character-guild-badge');
+        const crest = within(badge).getByTestId('hub-crest');
+        expect(crest).toHaveAttribute('data-crest', 'preset');
+        expect(crest).toHaveClass('h-6', 'w-6');
+    });
+
+    it('the Players card shows an uploaded crest at the 48px card size; none keeps the shield', async () => {
+        serve([{ ...guild(11, 'Iron Vanguard'), crest: { source: 'upload', urlSm: '/u/a.sm.webp', urlLg: '/u/a.lg.webp' } }, { ...guild(12, 'Dusk Wardens'), crest: null }]);
+        renderWithProviders(<PlayersGuildCard />);
+        const cards = await screen.findAllByTestId('players-guild-card');
+        const [first, second] = cards;
+        if (!first || !second) throw new Error('expected two guild cards');
+        expect(within(first).getByTestId('hub-crest')).toHaveClass('h-12', 'w-12');
+        expect(within(first).getByTestId('hub-crest-img').getAttribute('src')).toMatch(/\/u\/a\.lg\.webp$/);
+        expect(within(second).getByTestId('hub-crest')).toHaveAttribute('data-crest', 'shield');
     });
 });

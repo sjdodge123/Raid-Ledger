@@ -132,6 +132,22 @@ describe('WowHubKindAdapter membership', () => {
   });
 });
 
+describe('ROK-1814 WowHubKindAdapter.holdsTopRank (crest edit right)', () => {
+  it('a live linked row at rank 0 holds the top rank', async () => {
+    db.where.mockResolvedValueOnce([member(2, 4), member(1, 0)]);
+    expect(await adapter.holdsTopRank(42, GUILD)).toBe(true);
+  });
+
+  it.each([
+    ['another rank', [member(2, 1)]],
+    ['a rank-less row', [member(5, null)]],
+    ['no live row', []],
+  ] as const)('%s does not', async (_label, rows) => {
+    db.where.mockResolvedValueOnce([...rows]);
+    expect(await adapter.holdsTopRank(42, GUILD)).toBe(false);
+  });
+});
+
 describe('GM_RANK_IMPLIES_EDIT', () => {
   it('is off until character ownership is verified', () => {
     expect(GM_RANK_IMPLIES_EDIT).toBe(false);

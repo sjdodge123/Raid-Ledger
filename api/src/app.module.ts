@@ -64,6 +64,7 @@ import { CommunityInsightsModule } from './community-insights/community-insights
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 import { HubMediaModule } from './hub-media/hub-media.module';
+import { HubCrestModule } from './guilds/crest/hub-crest.module';
 import { HubMediaChannelModule } from './discord-bot/hub-media-channel/hub-media-channel.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
@@ -137,6 +138,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     GamesLookupModule,
     CalendarSyncModule,
     HubMediaModule,
+    HubCrestModule,
     CompanionModule,
     HubMediaChannelModule,
   ],

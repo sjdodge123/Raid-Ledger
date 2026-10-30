@@ -103,6 +103,23 @@ export class GuildAccessService {
   }
 
   /**
+   * ROK-1814 (operator ruling 2026-10-30): the kind's top in-game rank (a
+   * WoW GM). Grants ONLY the crest edit right — every other Leader meaning
+   * waits on ROK-1794. A kind without ranks, or an inactive one ⇒ false.
+   */
+  async holdsTopRank(actor: GuildActor, guildId: number): Promise<boolean> {
+    const hub = await this.hubKinds.forGuild(guildId);
+    if (!hub?.holdsTopRank) return false;
+    return hub.holdsTopRank(actor.id, guildId);
+  }
+
+  /** ROK-1814: change the hub crest — `canEdit`, or the top in-game rank. */
+  async canEditCrest(actor: GuildActor, guildId: number): Promise<boolean> {
+    if (await this.canEdit(actor, guildId)) return true;
+    return this.holdsTopRank(actor, guildId);
+  }
+
+  /**
    * Granting/revoking editors: Leader only. Today only staff are Leader, so
    * no DB lookup is needed (ROK-1794 makes rank 0 a Leader and this a query).
    */
