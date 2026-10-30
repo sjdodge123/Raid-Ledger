@@ -6,7 +6,9 @@
  * Scope (D2): `game_id`, `region` and `guild_key` match the hub (the same
  * realm-less normaliser on both sides); unguilded ('') pulls never count.
  * Trust (Q1): only pulls reported by a linked roster user of this hub, or by
- * a since-deleted user (reporter NULL). Window (Q7): all time.
+ * a since-deleted user (reporter NULL). A duplicate keeps its first reporter,
+ * so the raid import hands a pull to a re-importing member once that reporter
+ * left the roster (`addon-import-raid.reassign.ts`). Window (Q7): all time.
  */
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';

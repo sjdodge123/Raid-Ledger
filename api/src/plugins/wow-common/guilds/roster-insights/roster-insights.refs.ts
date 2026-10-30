@@ -57,6 +57,19 @@ async function loadGuildRows(
   }));
 }
 
+/**
+ * ROK-1917 Q1 — the linked users of a `wow_guild` hub's roster: the same rows
+ * (and owner links) the insight's `linkedUserIds` come from. The raid import
+ * uses it to decide who may claim a duplicate pull (Codex P2).
+ */
+export async function loadGuildLinkedUserIds(
+  db: Db,
+  guildId: number,
+): Promise<number[]> {
+  const rows = await loadGuildRows(db, guildId);
+  return rows.flatMap((r) => (r.userId === null ? [] : [r.userId]));
+}
+
 async function loadCommunityRows(
   db: Db,
   hubId: number,

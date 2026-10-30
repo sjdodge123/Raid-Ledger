@@ -16,6 +16,7 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
+import { reassignDuplicatePulls } from './addon-import-raid.reassign';
 
 /**
  * ROK-1724 §4.3 Apply — section `raid`. Pulls are shared, self-reported rows
@@ -129,7 +130,11 @@ export async function previewRaid(
   };
 }
 
-/** Insert every pull, skipping ones already reported (by anyone). */
+/**
+ * Insert every pull, skipping ones already reported (by anyone); then a
+ * roster member re-importing a pull whose reporter left the roster takes it
+ * over (ROK-1917 P2). `newPulls` counts inserts only.
+ */
 export async function applyRaid(
   ctx: AddonApplyContext,
   payload: AddonRaidExport,
@@ -151,6 +156,8 @@ export async function applyRaid(
       ],
     })
     .returning({ id: addonEncounterPulls.id });
+  if (inserted.length < pulls.length)
+    await reassignDuplicatePulls(ctx, payload);
   return {
     status: 'applied',
     summary: buildRaidSummary(pulls, inserted.length),
