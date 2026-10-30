@@ -28,7 +28,8 @@ function jpegName(name: string): string {
     return `${base === '' ? 'picture' : base}.jpg`;
 }
 
-async function encodeJpeg(file: File, maxEdge: number, quality: number): Promise<Blob | null> {
+/** Decodes `file` and re-encodes it as JPEG no longer than `maxEdge`; null when it cannot. */
+export async function encodeJpeg(file: File, maxEdge: number, quality: number): Promise<Blob | null> {
     if (typeof createImageBitmap !== 'function') return null;
     const bitmap = await createImageBitmap(file);
     try {
