@@ -53,6 +53,12 @@ export const SystemStatusSchema = z.object({
     /** ROK-1700: runtime flavour (`RL_FLAVOUR`). `cloud` hides NAS-only
      *  surfaces (Ollama, Co-Optimus, demo data). Absent = treat as `nas`. */
     flavour: z.enum(['nas', 'cloud']).optional(),
+    /** ROK-1701: true while this instance waits for its owner to claim it
+     *  (cloud). Never carries the code. Absent = not claimable. */
+    claimRequired: z.boolean().optional(),
+    /** ROK-1701: ISO time the current setup code stops working; present only
+     *  while claimRequired. Not secret. */
+    claimExpiresAt: z.string().datetime().optional(),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
