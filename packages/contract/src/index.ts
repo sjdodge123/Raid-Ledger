@@ -47,6 +47,7 @@ export * from './public-identity.schema.js';
 
 // System Status (ROK-175)
 export * from './system.schema.js';
+export * from './setup-claim.schema.js';
 
 // Users (ROK-181)
 export * from './users.schema.js';

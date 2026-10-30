@@ -240,3 +240,30 @@ it('clicking Community Identity calls goToStep(1)', () => {
         });
     });
 });
+
+describe('DoneStep — cloud flavour hides Secure Account (ROK-1701 OQ-8b)', () => {
+    const mockGoToStep = vi.fn();
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseOnboarding.mockReturnValue(defaultOnboarding);
+    });
+
+    it.each(['Password Changed', 'Discord OAuth'])('"%s" keeps its status but has no edit affordance', (label) => {
+        renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={mockGoToStep} firstStep={1} />);
+        const row = screen.getByText(label);
+        expect(row.closest('button')).toBeNull();
+        fireEvent.click(row);
+        expect(mockGoToStep).not.toHaveBeenCalled();
+        expect(screen.getAllByText('Skipped')).toHaveLength(6);
+    });
+
+    it('rows on visible steps stay editable', () => {
+        renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={mockGoToStep} firstStep={1} />);
+        const community = screen.getByText('Community Identity').closest('button');
+        expect(community).not.toBeNull();
+        if (community) fireEvent.click(community);
+        expect(mockGoToStep).toHaveBeenCalledWith(1);
+        expect(screen.getAllByRole('button', { name: /Skipped/ })).toHaveLength(4);
+    });
+});

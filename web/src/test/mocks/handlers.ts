@@ -171,7 +171,7 @@ export const handlers = [
 
     // System status
     http.get(`${API_BASE}/system/status`, () =>
-        HttpResponse.json({ status: 'ok' }),
+        HttpResponse.json({ status: 'ok', claimRequired: false }),
     ),
 
     // User profile — hearted games

@@ -37,6 +37,7 @@ import {
   SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
   CompanionLinkPage,
+  ClaimPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -145,6 +146,7 @@ export function AppRoutes() {
       <Route path="/p/poll/:token" element={<PollSharePage />} />
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/claim" element={<ClaimPage />} />
       {/* ROK-1891: old hub links (Discord, notifications, bookmarks) → /hubs/… */}
       <Route path="/guilds/:id" element={<LegacyHubRedirect />} />
       <Route path="/guilds/:id/*" element={<LegacyHubRedirect />} />
