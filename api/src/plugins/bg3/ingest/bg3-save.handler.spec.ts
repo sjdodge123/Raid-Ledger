@@ -116,6 +116,16 @@ describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
       thumbnailHeight: null,
     });
   });
+
+  it('accepts and stores campaignKeySource "file-name" (bare .lsv upload, ROK-1960)', async () => {
+    const { repo, handler, ctx } = setup(null);
+    const bare = Bg3SaveMessageSchema.parse({
+      ...ACT2,
+      payload: { ...ACT2.payload, campaignKeySource: 'file-name' },
+    });
+    await handler.handle(ctx, bare);
+    expect(insertedRow(repo)).toMatchObject({ campaignKeySource: 'file-name' });
+  });
 });
 
 describe('partyMaxLevel', () => {
