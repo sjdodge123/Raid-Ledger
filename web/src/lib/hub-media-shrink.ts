@@ -28,8 +28,27 @@ function jpegName(name: string): string {
     return `${base === '' ? 'picture' : base}.jpg`;
 }
 
+/** The output types the shrinkers ask the canvas for. */
+export type ShrinkOutputType = 'image/jpeg' | 'image/webp';
+
+/** Re-encodes `file` as `type` within `maxEdge`; null when the browser can't decode it. */
+export type ImageEncoder = (file: File, maxEdge: number, quality: number, type: ShrinkOutputType) => Promise<Blob | null>;
+
+/** PNG and WebP can carry transparency; re-encoding them as JPEG would turn it black. */
+export function mayHaveAlpha(file: File): boolean {
+    return file.type === 'image/png' || file.type === 'image/webp';
+}
+
 /** Decodes `file` and re-encodes it as JPEG no longer than `maxEdge`; null when it cannot. */
-export async function encodeJpeg(file: File, maxEdge: number, quality: number): Promise<Blob | null> {
+export function encodeJpeg(file: File, maxEdge: number, quality: number): Promise<Blob | null> {
+    return encodeImage(file, maxEdge, quality, 'image/jpeg');
+}
+
+/**
+ * Decodes `file` and re-encodes it as `type` no longer than `maxEdge`; null when it cannot.
+ * A browser without a WebP encoder hands back PNG, so callers name the file from `blob.type`.
+ */
+export async function encodeImage(file: File, maxEdge: number, quality: number, type: ShrinkOutputType): Promise<Blob | null> {
     if (typeof createImageBitmap !== 'function') return null;
     const bitmap = await createImageBitmap(file);
     try {
@@ -40,7 +59,7 @@ export async function encodeJpeg(file: File, maxEdge: number, quality: number): 
         const ctx = canvas.getContext('2d');
         if (ctx === null) return null;
         ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+        return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
     } finally {
         bitmap.close();
     }
