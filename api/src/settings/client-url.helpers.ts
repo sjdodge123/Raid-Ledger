@@ -87,24 +87,52 @@ export interface PlatformPublicUrl {
 
 interface PlatformSource {
   name: string;
-  toUrl: (value: string) => string;
+  /** What a usable value looks like — completes "Ignoring X=…: not …". */
+  expected: string;
+  /** The public origin the value names, or `undefined` when unusable. */
+  toUrl: (value: string) => string | undefined;
 }
 
-const SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\/\//i;
+/**
+ * A bare `host[:port]` — no path, query, fragment, userinfo or whitespace.
+ * An explicit `http(s)://` prefix is tolerated and kept.
+ */
+const BARE_HOST = /^(?:https?:\/\/)?[^\s/?#@:]+(?::\d+)?$/i;
+
+/** A Fly.io app name: the label in front of `.fly.dev`. */
+const FLY_APP_NAME = /^[a-z0-9-]+$/i;
 
 /** Railway/Heroku publish a bare host; prefix `https://` unless a scheme is there. */
-function httpsHost(value: string): string {
-  return SCHEME_PREFIX.test(value) ? value : `https://${value}`;
+function hostOrigin(value: string): string | undefined {
+  if (!BARE_HOST.test(value)) return undefined;
+  return originOf(/^https?:\/\//i.test(value) ? value : `https://${value}`);
 }
 
-/** Precedence order: the first usable source wins. */
+/** Fly publishes the app name; the public site is `https://<name>.fly.dev`. */
+function flyOrigin(value: string): string | undefined {
+  return FLY_APP_NAME.test(value)
+    ? originOf(`https://${value}.fly.dev`)
+    : undefined;
+}
+
+const URL_SOURCE = { expected: 'an http(s) URL', toUrl: originOf } as const;
+const HOST_SOURCE = {
+  expected: 'a bare host name',
+  toUrl: hostOrigin,
+} as const;
+
+/**
+ * Precedence order: the first usable source wins. Full-URL sources reduce to
+ * their origin — a path would disagree with the callback-origin anchor, and
+ * subpath deployments are not supported.
+ */
 const PLATFORM_SOURCES: readonly PlatformSource[] = [
-  { name: 'PUBLIC_URL', toUrl: (v) => v },
-  { name: 'RENDER_EXTERNAL_URL', toUrl: (v) => v },
-  { name: 'RAILWAY_PUBLIC_DOMAIN', toUrl: httpsHost },
-  { name: 'FLY_APP_NAME', toUrl: (v) => `https://${v}.fly.dev` },
-  { name: 'APP_URL', toUrl: (v) => v },
-  { name: 'HEROKU_APP_DEFAULT_DOMAIN_NAME', toUrl: httpsHost },
+  { name: 'PUBLIC_URL', ...URL_SOURCE },
+  { name: 'RENDER_EXTERNAL_URL', ...URL_SOURCE },
+  { name: 'RAILWAY_PUBLIC_DOMAIN', ...HOST_SOURCE },
+  { name: 'FLY_APP_NAME', expected: 'a Fly app name', toUrl: flyOrigin },
+  { name: 'APP_URL', ...URL_SOURCE },
+  { name: 'HEROKU_APP_DEFAULT_DOMAIN_NAME', ...HOST_SOURCE },
 ];
 
 /** Every env var the resolver reads, in precedence order. */
@@ -116,7 +144,8 @@ export const PLATFORM_PUBLIC_URL_VARS: readonly string[] = PLATFORM_SOURCES.map(
  * Resolve the public URL from deployer-controlled env, in precedence order
  * `PUBLIC_URL` → `RENDER_EXTERNAL_URL` → `RAILWAY_PUBLIC_DOMAIN` →
  * `FLY_APP_NAME` → `APP_URL` (DigitalOcean) → `HEROKU_APP_DEFAULT_DOMAIN_NAME`.
- * A set value that is not http(s) is skipped with a warning. Pure: warnings go
+ * A set value that is not usable (not http(s), or not a bare host for a
+ * host-style source) is skipped with a warning; a URL is reduced to its origin. Pure: warnings go
  * to the optional callback. Returns `null` when no source is usable.
  */
 export function resolvePlatformPublicUrl(
@@ -126,10 +155,10 @@ export function resolvePlatformPublicUrl(
   for (const source of PLATFORM_SOURCES) {
     const raw = env[source.name];
     if (raw === undefined || isUnset(raw)) continue;
-    const url = normalizeClientUrl(source.toUrl(raw.trim()));
+    const url = source.toUrl(raw.trim());
     if (url) return { url, source: source.name };
     onWarning?.(
-      `Ignoring ${source.name}=${JSON.stringify(raw)}: not an http(s) URL`,
+      `Ignoring ${source.name}=${JSON.stringify(raw)}: not ${source.expected}`,
     );
   }
   return null;

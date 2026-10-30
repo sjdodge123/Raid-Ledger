@@ -281,6 +281,76 @@ describe('resolvePlatformPublicUrl (ROK-1697)', () => {
   });
 });
 
+describe('resolvePlatformPublicUrl — source validation (ROK-1697)', () => {
+  it.each([
+    ['FLY_APP_NAME', 'raid ledger', 'a Fly app name'],
+    ['FLY_APP_NAME', 'evil.example/x', 'a Fly app name'],
+    ['FLY_APP_NAME', 'a@b', 'a Fly app name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'rl.example/path', 'a bare host name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'rl.example?x=1', 'a bare host name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'rl.example#frag', 'a bare host name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'user@rl.example', 'a bare host name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'rl .example', 'a bare host name'],
+    ['RAILWAY_PUBLIC_DOMAIN', 'ftp://rl.example', 'a bare host name'],
+  ])('rejects %s=%j with a warning and falls through', (name, value, what) => {
+    const onWarning = jest.fn();
+    expect(
+      resolvePlatformPublicUrl(
+        { [name]: value, APP_URL: 'https://next.example' },
+        onWarning,
+      ),
+    ).toEqual({ url: 'https://next.example', source: 'APP_URL' });
+    expect(onWarning).toHaveBeenCalledWith(
+      `Ignoring ${name}=${JSON.stringify(value)}: not ${what}`,
+    );
+  });
+
+  it.each(['javascript:alert(1)', 'h.example/a', 'h.example?q'])(
+    'rejects HEROKU_APP_DEFAULT_DOMAIN_NAME=%j with a warning (last source)',
+    (value) => {
+      const onWarning = jest.fn();
+      expect(
+        resolvePlatformPublicUrl(
+          { HEROKU_APP_DEFAULT_DOMAIN_NAME: value },
+          onWarning,
+        ),
+      ).toBeNull();
+      expect(onWarning).toHaveBeenCalledWith(
+        `Ignoring HEROKU_APP_DEFAULT_DOMAIN_NAME=${JSON.stringify(value)}: not a bare host name`,
+      );
+    },
+  );
+
+});
+
+describe('resolvePlatformPublicUrl — origin reduction (ROK-1697)', () => {
+  it.each([
+    ['PUBLIC_URL', 'https://pub.example/rl/'],
+    ['RENDER_EXTERNAL_URL', 'https://pub.example/app?x=1#y'],
+    ['APP_URL', 'https://pub.example/a/b'],
+  ])('reduces %s=%s to its origin', (name, value) => {
+    expect(resolvePlatformPublicUrl({ [name]: value })).toEqual({
+      url: 'https://pub.example',
+      source: name,
+    });
+  });
+
+  it('keeps an explicit port on a bare host', () => {
+    expect(
+      resolvePlatformPublicUrl({ RAILWAY_PUBLIC_DOMAIN: 'rl.example:8443' }),
+    ).toEqual({
+      url: 'https://rl.example:8443',
+      source: 'RAILWAY_PUBLIC_DOMAIN',
+    });
+  });
+
+  it('builds the Discord callback from the origin, not a configured path', () => {
+    expect(
+      defaultDiscordCallbackUrl({ PUBLIC_URL: 'https://pub.example/rl' }, 'x'),
+    ).toBe('https://pub.example/api/auth/discord/callback');
+  });
+});
+
 describe('describePublicUrl (ROK-1697)', () => {
   it('names the URL and its source, or says unresolved', () => {
     expect(
