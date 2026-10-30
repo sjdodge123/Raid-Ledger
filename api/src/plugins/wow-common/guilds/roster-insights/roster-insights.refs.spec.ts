@@ -8,7 +8,13 @@ import type * as schema from '../../../../drizzle/schema';
 import type { HubKindAdapter } from '../../../plugin-host/extension-points';
 import { loadRosterRows, type RawRosterRow } from '../guild-roster.helpers';
 import { loadCommunityRosterRows } from './roster-insights.community';
-import { emptyInsights, loadInsightRawRows } from './roster-insights.refs';
+import type { ResolvedWowFacts } from '../../facts/wow-fact.types';
+import {
+  emptyInsights,
+  joinFacts,
+  loadInsightRawRows,
+  type InsightRawRow,
+} from './roster-insights.refs';
 
 jest.mock('../guild-roster.helpers', () => ({
   ...jest.requireActual<object>('../guild-roster.helpers'),
@@ -107,5 +113,40 @@ describe('emptyInsights', () => {
       'levels',
       'roles',
     ]);
+  });
+});
+
+const NO_FACTS: ResolvedWowFacts = {
+  level: null,
+  class: null,
+  race: null,
+  role: null,
+  ilvl: null,
+  gear: null,
+  professions: null,
+  quests: null,
+  lockouts: null,
+  lastOnline: null,
+  enchantsReported: null,
+};
+
+const rawRow = (key: string, userId: number | null): InsightRawRow => ({
+  key,
+  memberId: null,
+  name: key,
+  characterId: null,
+  userId,
+  isMain: false,
+  rankIndex: null,
+  onlineAtExport: null,
+  lastOnlineDays: null,
+});
+
+describe('joinFacts', () => {
+  it('drops rows past the resolver cap but keeps their owners as linked users (ROK-1917 Q1)', () => {
+    const raw = [rawRow('m1', 11), rawRow('m2', null), rawRow('m3', 33)];
+    const out = joinFacts(raw, new Map([['m1', NO_FACTS]]));
+    expect(out.rows.map((r) => r.name)).toEqual(['m1']);
+    expect(out.linkedUserIds).toEqual([11, 33]);
   });
 });
