@@ -1,4 +1,5 @@
 import type { PluginInfoDto } from '@raid-ledger/contract';
+import type { RuntimeFlavour } from '../../hooks/use-flavour';
 
 /** Status info for integration sidebar items */
 export type IntegrationStatus = 'online' | 'offline' | 'loading';
@@ -138,6 +139,24 @@ export function isOperatorSettingsPath(pathname: string): boolean {
 export function buildOperatorNavSections(): NavSection[] {
     const children = GENERAL_CHILDREN.filter((c) => OPERATOR_SETTINGS_PATHS.includes(c.to));
     return [{ id: 'general', label: 'General', icon: GeneralIcon, children }];
+}
+
+/**
+ * ROK-1700: settings pages that only exist on a NAS install. The cloud flavour
+ * hides them from the nav (and `NasOnlyRoute` redirects a direct URL).
+ */
+export const NAS_ONLY_SETTINGS_PATHS: readonly string[] = [
+    '/admin/settings/general/data',
+    '/admin/settings/integrations/cooptimus',
+];
+
+/** Drop the NAS-only items under the cloud flavour; nas returns `sections` unchanged. */
+export function filterNavForFlavour(sections: NavSection[], flavour: RuntimeFlavour): NavSection[] {
+    if (flavour !== 'cloud') return sections;
+    return sections.map((s) => ({
+        ...s,
+        children: s.children.filter((c) => !NAS_ONLY_SETTINGS_PATHS.includes(c.to)),
+    }));
 }
 
 export function buildNavSections(
