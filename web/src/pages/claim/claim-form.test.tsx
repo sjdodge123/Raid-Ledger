@@ -168,6 +168,8 @@ describe('ClaimForm — focus and success', () => {
         renderWithProviders(<ClaimForm />);
         await fill('WRONG-CODE');
         await screen.findByText(/Too many wrong codes/);
+        expect(screen.getByTestId('claim-code-message')).toHaveClass('text-warning');
+        expect(screen.getByTestId('claim-code-message').querySelector('[aria-hidden="true"]')?.textContent).toBe('\u26A0\uFE0E');
         expect(screen.getByLabelText('Setup code')).not.toHaveAttribute('aria-invalid');
     });
 

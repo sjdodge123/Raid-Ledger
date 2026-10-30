@@ -17,15 +17,18 @@ import { useClaimSubmit } from './use-claim-submit';
 import { ClaimStrengthMeter } from './claim-strength-meter';
 import {
     PASSWORD_GUARD_MESSAGE, PASSWORD_MISMATCH_MESSAGE, PASSWORD_TOO_LONG_MESSAGE, TONE_TEXT, codeMessage,
-    isPasswordTooLong, isPasswordValid, passwordStrength, strengthHint, type CodeStatus,
+    isPasswordTooLong, isPasswordValid, passwordStrength, strengthHint, type CodeStatus, type MessageTone,
 } from './claim.helpers';
+
+/** Leading glyph per tone; it inherits the message's token colour. U+FE0E keeps ⚠ a text glyph, not an emoji. */
+const MESSAGE_ICON: Record<MessageTone, string> = { danger: '✕', success: '✓', warning: '\u26A0\uFE0E', muted: '' };
 
 function CodeMessage({ id, status, checking }: { id: string; status: CodeStatus; checking: boolean }): JSX.Element {
     if (checking) {
         return <p id={id} className="mt-1 min-h-5 text-sm text-muted flex items-center gap-2"><ArrowPathIcon className="w-4 h-4 animate-spin" aria-hidden="true" />Checking the code…</p>;
     }
     const msg = codeMessage(status);
-    const icon = msg.tone === 'danger' ? '✕' : msg.tone === 'success' ? '✓' : '';
+    const icon = MESSAGE_ICON[msg.tone];
     return (
         <p id={id} role={msg.alert ? 'alert' : undefined} className={`mt-1 min-h-5 text-sm flex gap-1.5 ${TONE_TEXT[msg.tone]}`} data-testid="claim-code-message" data-state={status.kind}>
             {icon && <span aria-hidden="true">{icon}</span>}<span>{msg.text}</span>
