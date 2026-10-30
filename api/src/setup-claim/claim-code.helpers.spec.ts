@@ -45,7 +45,9 @@ describe('generateClaimCode', () => {
 
 describe('normaliseClaimCode', () => {
   it('strips dashes and upper-cases a base32-shaped code', () => {
-    expect(normaliseClaimCode(' abcd-efgh-ijkl-mnop ')).toBe('ABCDEFGHIJKLMNOP');
+    expect(normaliseClaimCode(' abcd-efgh-ijkl-mnop ')).toBe(
+      'ABCDEFGHIJKLMNOP',
+    );
     expect(normaliseClaimCode('ABCDEFGHIJKLMNOP')).toBe('ABCDEFGHIJKLMNOP');
     expect(normaliseClaimCode('abcdEFGH-ijklmnop')).toBe('ABCDEFGHIJKLMNOP');
   });
@@ -54,7 +56,9 @@ describe('normaliseClaimCode', () => {
     const render = 'xY9-k2_Lq-8Z0a-RENDERGEN-01';
     expect(normaliseClaimCode(`  ${render}\n`)).toBe(render);
     // 0/1/8/9 are outside the base32 alphabet → verbatim, case kept.
-    expect(normaliseClaimCode('abcd-efgh-ijkl-mno1')).toBe('abcd-efgh-ijkl-mno1');
+    expect(normaliseClaimCode('abcd-efgh-ijkl-mno1')).toBe(
+      'abcd-efgh-ijkl-mno1',
+    );
   });
 });
 
@@ -92,7 +96,8 @@ describe('verifyClaimCode', () => {
   });
 
   it('compares with crypto.timingSafeEqual', () => {
-    const crypto = jest.requireActual<typeof import('node:crypto')>('node:crypto');
+    const crypto =
+      jest.requireActual<typeof import('node:crypto')>('node:crypto');
     const spy = jest.spyOn(crypto, 'timingSafeEqual');
     verifyClaimCode(code, stored);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -114,11 +119,15 @@ describe('expiry', () => {
   });
 });
 
-describe('planClaimArm (OQ-8a)', () => {
-  const later = new Date(NOW.getTime() + 5 * 60 * 60 * 1000);
+const later = new Date(NOW.getTime() + 5 * 60 * 60 * 1000);
 
+describe('planClaimArm (OQ-8a) — claimed and env code', () => {
   it('never re-arms a claimed instance, even with an unchanged SETUP_CODE', () => {
-    const plan = planClaimArm({ claimedAt: NOW, envCode: 'same-env-code-value', now: later });
+    const plan = planClaimArm({
+      claimedAt: NOW,
+      envCode: 'same-env-code-value',
+      now: later,
+    });
     expect(plan).toEqual({ kind: 'claimed' });
   });
 
@@ -126,7 +135,8 @@ describe('planClaimArm (OQ-8a)', () => {
     const env = '  render-generated-long-value  ';
     const first = planClaimArm({ claimedAt: null, envCode: env, now: NOW });
     const second = planClaimArm({ claimedAt: null, envCode: env, now: later });
-    if (first.kind !== 'env' || second.kind !== 'env') throw new Error('expected env plans');
+    if (first.kind !== 'env' || second.kind !== 'env')
+      throw new Error('expected env plans');
     expect(second.codeHash).toBe(first.codeHash);
     expect(first.codeHash).toBe(sha('render-generated-long-value'));
     expect(first.expiresAt.toISOString()).toBe('2026-11-02T05:00:00.000Z');
@@ -135,23 +145,48 @@ describe('planClaimArm (OQ-8a)', () => {
   });
 
   it('never carries the env plaintext in the plan', () => {
-    const plan = planClaimArm({ claimedAt: null, envCode: 'secret-env-value-123', now: NOW });
+    const plan = planClaimArm({
+      claimedAt: null,
+      envCode: 'secret-env-value-123',
+      now: NOW,
+    });
     expect(JSON.stringify(plan)).not.toContain('secret-env-value-123');
   });
 
   it('flags a SETUP_CODE shorter than 16 chars', () => {
-    const plan = planClaimArm({ claimedAt: null, envCode: 'short-15-chars!', now: NOW });
+    const plan = planClaimArm({
+      claimedAt: null,
+      envCode: 'short-15-chars!',
+      now: NOW,
+    });
     expect(plan).toMatchObject({ kind: 'env', isShort: true });
-    const ok = planClaimArm({ claimedAt: null, envCode: 'exactly-16-chars', now: NOW });
+    const ok = planClaimArm({
+      claimedAt: null,
+      envCode: 'exactly-16-chars',
+      now: NOW,
+    });
     expect(ok).toMatchObject({ kind: 'env', isShort: false });
   });
+});
 
+describe('planClaimArm (OQ-8a) — generated code', () => {
   it('generates a NEW code every boot when no env code (blank counts as none)', () => {
     const codes = ['AAAA-BBBB-CCCC-DDDD', 'EEEE-FFFF-GGGG-HHHH'];
     const generate = jest.fn(() => codes.shift() ?? 'unexpected');
-    const first = planClaimArm({ claimedAt: null, envCode: '   ', now: NOW, generate });
-    const second = planClaimArm({ claimedAt: null, envCode: undefined, now: later, generate });
-    if (first.kind !== 'generated' || second.kind !== 'generated') throw new Error('expected generated plans');
+    const first = planClaimArm({
+      claimedAt: null,
+      envCode: '   ',
+      now: NOW,
+      generate,
+    });
+    const second = planClaimArm({
+      claimedAt: null,
+      envCode: undefined,
+      now: later,
+      generate,
+    });
+    if (first.kind !== 'generated' || second.kind !== 'generated')
+      throw new Error('expected generated plans');
     expect(first.code).toBe('AAAA-BBBB-CCCC-DDDD');
     expect(second.code).toBe('EEEE-FFFF-GGGG-HHHH');
     expect(first.codeHash).toBe(hashClaimCode('AAAA-BBBB-CCCC-DDDD'));
@@ -160,7 +195,11 @@ describe('planClaimArm (OQ-8a)', () => {
   });
 
   it('defaults to a real generated code', () => {
-    const plan = planClaimArm({ claimedAt: null, envCode: undefined, now: NOW });
+    const plan = planClaimArm({
+      claimedAt: null,
+      envCode: undefined,
+      now: NOW,
+    });
     if (plan.kind !== 'generated') throw new Error('expected generated plan');
     expect(plan.code).toMatch(CLAIM_CODE_PATTERN);
     expect(verifyClaimCode(plan.code, plan.codeHash)).toBe(true);

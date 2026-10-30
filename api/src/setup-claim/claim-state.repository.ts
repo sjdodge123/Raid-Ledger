@@ -68,7 +68,10 @@ export async function readClaimState(
   opts: { forUpdate?: boolean } = {},
 ): Promise<ClaimState> {
   const query = db
-    .select({ key: appSettings.key, encryptedValue: appSettings.encryptedValue })
+    .select({
+      key: appSettings.key,
+      encryptedValue: appSettings.encryptedValue,
+    })
     .from(appSettings)
     .where(inArray(appSettings.key, CLAIM_STATE_KEYS));
   const rows = opts.forUpdate ? await query.for('update') : await query;

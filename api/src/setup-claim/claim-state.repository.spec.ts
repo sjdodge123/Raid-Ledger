@@ -43,21 +43,47 @@ describe('toClaimState / isClaimRequired', () => {
       row(SETTING_KEYS.CLAIM_CODE_HASH, HASH),
       row(SETTING_KEYS.CLAIM_EXPIRES_AT, EXP),
     ]);
-    expect(state).toEqual({ codeHash: HASH, expiresAt: new Date(EXP), claimedAt: null });
+    expect(state).toEqual({
+      codeHash: HASH,
+      expiresAt: new Date(EXP),
+      claimedAt: null,
+    });
     expect(isClaimRequired(state)).toBe(true);
   });
 
   it('treats an unparsable time as absent', () => {
-    const state = toClaimState([row(SETTING_KEYS.CLAIM_EXPIRES_AT, 'not-a-date')]);
+    const state = toClaimState([
+      row(SETTING_KEYS.CLAIM_EXPIRES_AT, 'not-a-date'),
+    ]);
     expect(state.expiresAt).toBeNull();
   });
 
   it.each<[string, ClaimState, boolean]>([
-    ['never armed (NAS)', { codeHash: null, expiresAt: null, claimedAt: null }, false],
-    ['armed', { codeHash: HASH, expiresAt: new Date(EXP), claimedAt: null }, true],
-    ['armed but expired (still required)', { codeHash: HASH, expiresAt: new Date(0), claimedAt: null }, true],
-    ['claimed', { codeHash: null, expiresAt: null, claimedAt: new Date(CLAIMED) }, false],
-    ['claimed with a stray hash', { codeHash: HASH, expiresAt: null, claimedAt: new Date(CLAIMED) }, false],
+    [
+      'never armed (NAS)',
+      { codeHash: null, expiresAt: null, claimedAt: null },
+      false,
+    ],
+    [
+      'armed',
+      { codeHash: HASH, expiresAt: new Date(EXP), claimedAt: null },
+      true,
+    ],
+    [
+      'armed but expired (still required)',
+      { codeHash: HASH, expiresAt: new Date(0), claimedAt: null },
+      true,
+    ],
+    [
+      'claimed',
+      { codeHash: null, expiresAt: null, claimedAt: new Date(CLAIMED) },
+      false,
+    ],
+    [
+      'claimed with a stray hash',
+      { codeHash: HASH, expiresAt: null, claimedAt: new Date(CLAIMED) },
+      false,
+    ],
   ])('claimRequired when %s → %s', (_label, state, expected) => {
     expect(isClaimRequired(state)).toBe(expected);
   });
@@ -75,7 +101,11 @@ describe('readClaimState', () => {
       row(SETTING_KEYS.CLAIMED_AT, CLAIMED),
     ]);
     const state = await readClaimState(asDb(mock));
-    expect(state).toEqual({ codeHash: HASH, expiresAt: null, claimedAt: new Date(CLAIMED) });
+    expect(state).toEqual({
+      codeHash: HASH,
+      expiresAt: null,
+      claimedAt: new Date(CLAIMED),
+    });
     expect(mock.from).toHaveBeenCalledWith(appSettings);
     expect(mock.for).not.toHaveBeenCalled();
   });
@@ -101,7 +131,9 @@ describe('writes', () => {
       [SETTING_KEYS.CLAIM_CODE_HASH]: HASH,
       [SETTING_KEYS.CLAIM_EXPIRES_AT]: EXP,
     });
-    for (const [arg] of mock.values.mock.calls as Array<[{ encryptedValue: string }]>) {
+    for (const [arg] of mock.values.mock.calls as Array<
+      [{ encryptedValue: string }]
+    >) {
       expect(arg.encryptedValue).not.toContain(HASH);
     }
     expect(mock.onConflictDoUpdate).toHaveBeenCalledTimes(2);
@@ -126,7 +158,9 @@ describe('writes', () => {
   });
 
   it('readRestoreHash decrypts the snapshot or returns null', async () => {
-    mock.limit.mockResolvedValueOnce([{ encryptedValue: encrypt('$2b$12$hash') }]);
+    mock.limit.mockResolvedValueOnce([
+      { encryptedValue: encrypt('$2b$12$hash') },
+    ]);
     await expect(readRestoreHash(asDb(mock))).resolves.toBe('$2b$12$hash');
     mock.limit.mockResolvedValueOnce([]);
     await expect(readRestoreHash(asDb(mock))).resolves.toBeNull();

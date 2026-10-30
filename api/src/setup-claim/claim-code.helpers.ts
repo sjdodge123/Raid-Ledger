@@ -120,7 +120,12 @@ export function planClaimArm(input: ClaimArmInput): ClaimArmPlan {
   const envCode = input.envCode?.trim() ?? '';
   if (envCode !== '') {
     const isShort = envCode.length < SHORT_ENV_CODE_LENGTH;
-    return { kind: 'env', codeHash: hashClaimCode(envCode), expiresAt, isShort };
+    return {
+      kind: 'env',
+      codeHash: hashClaimCode(envCode),
+      expiresAt,
+      isShort,
+    };
   }
   const code = (input.generate ?? generateClaimCode)();
   return { kind: 'generated', code, codeHash: hashClaimCode(code), expiresAt };
