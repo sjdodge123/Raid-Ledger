@@ -7,12 +7,17 @@
  * a linked roster user (or a since-deleted user) reported them (Q1).
  * AC3: two stored pulls 1 s apart count once; 11 s apart count twice.
  * AC4: members get the key; a visitor's payload has NO `raidProgress` key.
+ * Staff who are not members get the member payload, `raidProgress` included
+ * (as ROK-1915's `gear`); a community (non-`wow_guild`) hub has no key even
+ * when pulls match its game, region and name key.
  */
 import { WowRosterInsightsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
+import { loginAsAdmin } from '../../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../../common/testing/sign-test-access-token';
 import * as schema from '../../../../drizzle/schema';
+import { insertCommunityHub } from '../../../../guilds/community/community-proposals.queries';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { RosterInsightsCache } from './roster-insights.cache';
 
@@ -25,9 +30,10 @@ type Who = 'raider' | 'pug' | 'visitor';
 
 let testApp: TestApp;
 let guildId: number;
+let communityHubId: number;
 let otherGameId: number;
 const userIds = new Map<Who, number>();
-const tokens = new Map<Who, string>();
+const tokens = new Map<Who | 'staff', string>();
 
 function idOf(who: Who): number {
   const id = userIds.get(who);
@@ -164,9 +170,37 @@ async function insertOtherGame(): Promise<number> {
   return g.id;
 }
 
-const insights = (who: Who) =>
+/**
+ * A Forever-style community hub on the same game, plus a trusted pull whose
+ * game, region and guild key match it — it would count if the hub kind were
+ * not checked.
+ */
+async function seedCommunityHub(): Promise<void> {
+  const hub = await insertCommunityHub(testApp.db, {
+    gameId: testApp.seed.game.id,
+    name: 'RP1917 Community',
+    blurb: 'ROK-1917 hub',
+    status: 'active',
+    proposedBy: idOf('raider'),
+    reviewedBy: null,
+  });
+  communityHubId = hub.id;
+  await testApp.db.insert(schema.addonEncounterPulls).values(
+    pullRow({
+      encounterId: 800,
+      start: 0,
+      success: true,
+      reporter: null,
+      region: hub.region,
+      guildKey: hub.nameKey,
+    }),
+  );
+  testApp.app.get(RosterInsightsCache).invalidateGuild(communityHubId);
+}
+
+const insights = (who: Who | 'staff', gid = guildId) =>
   testApp.request
-    .get(`/plugins/wow/guilds/${guildId}/roster-insights`)
+    .get(`/plugins/wow/guilds/${gid}/roster-insights`)
     .set('Authorization', `Bearer ${tokens.get(who) ?? ''}`);
 
 beforeAll(async () => {
@@ -181,6 +215,8 @@ beforeAll(async () => {
     .insert(schema.addonEncounterPulls)
     .values([...IN_SCOPE, ...outOfScope()].map(pullRow));
   testApp.app.get(RosterInsightsCache).invalidateGuild(guildId);
+  await seedCommunityHub();
+  tokens.set('staff', await loginAsAdmin(testApp.request, testApp.seed));
 });
 
 describe('roster-insights raidProgress (ROK-1917, real DB)', () => {
@@ -216,5 +252,26 @@ describe('roster-insights raidProgress (ROK-1917, real DB)', () => {
     expect(JSON.stringify(res.body.raidProgress)).not.toMatch(
       /Raidwren|Player-7|roster/,
     );
+  });
+
+  it('staff who are not members get raidProgress, same as a member (as ROK-1915 gear)', async () => {
+    const staff = await insights('staff');
+    expect(staff.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(staff.body);
+    const rp = dto.raidProgress;
+    if (!rp) throw new Error('staff payload has no raidProgress key');
+    expect(Object.keys(dto)).toContain('gear');
+    const member = WowRosterInsightsSchema.parse(
+      (await insights('raider')).body,
+    );
+    expect(rp).toEqual(member.raidProgress);
+  });
+
+  it('a community (non-wow_guild) hub has NO raidProgress key, even for staff', async () => {
+    const res = await insights('staff', communityHubId);
+    expect(res.status).toBe(200);
+    const dto = WowRosterInsightsSchema.parse(res.body);
+    expect(Object.keys(dto)).toContain('gear');
+    expect('raidProgress' in res.body).toBe(false);
   });
 });
