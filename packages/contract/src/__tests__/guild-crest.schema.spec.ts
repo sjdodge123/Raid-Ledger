@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GUILD_CREST_EMBLEM_IDS,
   GUILD_CREST_EMBLEM_CREDITS,
+  GUILD_CREST_EMBLEM_CREDIT_LINE,
   GUILD_CREST_MAX_EDGE,
   GUILD_CREST_MIN_EDGE,
   GUILD_CREST_PALETTE,
@@ -46,6 +47,18 @@ describe('constants', () => {
     expect(new Set(GUILD_CREST_EMBLEM_IDS).size).toBe(16);
     for (const e of GUILD_CREST_EMBLEM_IDS) {
       expect(GUILD_CREST_EMBLEM_CREDITS[e]).toMatch(/\S/);
+    }
+  });
+
+  it('credits the verified game-icons.net authors and names each in the credit line', () => {
+    // Verified against github.com/game-icons/icons folders (ROK-1814 lane 4b).
+    expect(GUILD_CREST_EMBLEM_CREDITS['death-skull']).toBe('Sbed');
+    expect(GUILD_CREST_EMBLEM_CREDITS.flame).toBe('Carl Olsen');
+    expect(GUILD_CREST_EMBLEM_CREDITS['griffin-symbol']).toBe('Delapouite');
+    expect(GUILD_CREST_EMBLEM_CREDITS['fleur-de-lys']).toBe('Delapouite');
+    expect(GUILD_CREST_EMBLEM_CREDITS.lion).toBe('Lorc');
+    for (const author of new Set(Object.values(GUILD_CREST_EMBLEM_CREDITS))) {
+      expect(GUILD_CREST_EMBLEM_CREDIT_LINE).toContain(author);
     }
   });
 

@@ -12,24 +12,25 @@ import { z } from "zod";
 /**
  * Curated preset emblems: game-icons.net icon slugs, CC BY 3.0. The author of
  * each icon is in `GUILD_CREST_EMBLEM_CREDITS` for the credit line under the
- * picker and the credits doc. Check each icon's page before shipping its art.
+ * picker and `docs/credits/game-icons.md`. Slugs and authors verified against
+ * the github.com/game-icons/icons author folders (ROK-1814 lane 4b).
  */
 export const GUILD_CREST_EMBLEM_IDS = [
   "checked-shield", // Lorc
   "crossed-swords", // Lorc
   "dragon-head", // Lorc
   "wolf-head", // Lorc
-  "death-skull", // Lorc
+  "death-skull", // Sbed
   "oak", // Lorc
   "crown", // Lorc
   "battle-axe", // Lorc
   "eagle-emblem", // Lorc
-  "griffin-symbol", // Lorc
-  "fleur-de-lys", // Lorc
-  "flame", // Lorc
+  "griffin-symbol", // Delapouite
+  "fleur-de-lys", // Delapouite
+  "flame", // Carl Olsen
   "anvil", // Lorc
   "castle", // Delapouite
-  "lion", // Delapouite
+  "lion", // Lorc
   "bear-head", // Delapouite
 ] as const;
 export type GuildCrestEmblemId = (typeof GUILD_CREST_EMBLEM_IDS)[number];
@@ -40,23 +41,23 @@ export const GUILD_CREST_EMBLEM_CREDITS: Record<GuildCrestEmblemId, string> = {
   "crossed-swords": "Lorc",
   "dragon-head": "Lorc",
   "wolf-head": "Lorc",
-  "death-skull": "Lorc",
+  "death-skull": "Sbed",
   oak: "Lorc",
   crown: "Lorc",
   "battle-axe": "Lorc",
   "eagle-emblem": "Lorc",
-  "griffin-symbol": "Lorc",
-  "fleur-de-lys": "Lorc",
-  flame: "Lorc",
+  "griffin-symbol": "Delapouite",
+  "fleur-de-lys": "Delapouite",
+  flame: "Carl Olsen",
   anvil: "Lorc",
   castle: "Delapouite",
-  lion: "Delapouite",
+  lion: "Lorc",
   "bear-head": "Delapouite",
 };
 
 /** The credit line shown under the picker grid. */
 export const GUILD_CREST_EMBLEM_CREDIT_LINE =
-  "Emblems by Lorc and Delapouite, game-icons.net (CC BY 3.0)";
+  "Emblems by Lorc, Delapouite, Sbed and Carl Olsen, game-icons.net (CC BY 3.0)";
 
 /**
  * 12 heraldic colours. Crest DATA, not UI chrome — the one place fixed hex is
