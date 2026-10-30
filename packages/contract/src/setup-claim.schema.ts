@@ -12,9 +12,23 @@ import { z } from 'zod';
 /** Minimum admin password length on the claim screen (approved sheet). */
 export const SETUP_CLAIM_PASSWORD_MIN = 12;
 
+/**
+ * Maximum admin password length in UTF-8 BYTES. bcrypt silently ignores
+ * every byte past 72, so a longer password would only look stronger.
+ * Counted in bytes (not chars) — TextEncoder works in the browser and Node.
+ */
+export const SETUP_CLAIM_PASSWORD_MAX_BYTES = 72;
+
+const utf8 = new TextEncoder();
+
 export const SetupClaimRequestSchema = z.object({
     code: z.string().trim().min(1).max(256),
-    newPassword: z.string().min(SETUP_CLAIM_PASSWORD_MIN).max(256),
+    newPassword: z
+        .string()
+        .min(SETUP_CLAIM_PASSWORD_MIN)
+        .refine((value) => utf8.encode(value).length <= SETUP_CLAIM_PASSWORD_MAX_BYTES, {
+            message: `Password must be at most ${SETUP_CLAIM_PASSWORD_MAX_BYTES} bytes (bcrypt ignores the rest)`,
+        }),
 });
 
 export type SetupClaimRequestDto = z.infer<typeof SetupClaimRequestSchema>;

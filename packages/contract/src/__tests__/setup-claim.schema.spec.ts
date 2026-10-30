@@ -33,6 +33,22 @@ describe('SetupClaimRequestSchema', () => {
         expect(r.success).toBe(false);
     });
 
+    it('accepts a password of exactly 72 UTF-8 bytes', () => {
+        const r = SetupClaimRequestSchema.safeParse({ code: 'abc', newPassword: 'x'.repeat(72) });
+        expect(r.success).toBe(true);
+    });
+
+    it('rejects a password past 72 UTF-8 bytes (bcrypt ignores the rest)', () => {
+        const r = SetupClaimRequestSchema.safeParse({ code: 'abc', newPassword: 'x'.repeat(73) });
+        expect(r.success).toBe(false);
+    });
+
+    it('counts bytes, not chars: 25 three-byte chars (75 bytes) are refused', () => {
+        const r = SetupClaimRequestSchema.safeParse({ code: 'abc', newPassword: '€'.repeat(25) });
+        expect(r.success).toBe(false);
+        if (!r.success) expect(r.error.issues[0]?.message).toMatch(/72 bytes/);
+    });
+
     it('rejects a code longer than 256 chars', () => {
         const r = SetupClaimRequestSchema.safeParse({ code: 'a'.repeat(257), newPassword: 'x'.repeat(12) });
         expect(r.success).toBe(false);
