@@ -1,7 +1,8 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, not, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
+import { isOccupiedLiveAdHoc } from './ad-hoc-open-participants.sql';
 import {
   buildBindingClause,
   buildTimeConditions,
@@ -282,7 +283,9 @@ const ORPHAN_THRESHOLD_MS = 30 * 60 * 1000;
 
 /**
  * Find orphaned ad-hoc events: live or grace_period, not cancelled,
- * whose effective end time is more than 30 minutes in the past.
+ * whose effective end time is more than 30 minutes in the past — except a
+ * live one someone is still in (open participant row, ROK-2052): that is
+ * occupied, not orphaned; the leave/grace path ends it.
  */
 export async function findOrphanedAdHocEvents(
   db: PostgresJsDatabase<typeof schema>,
@@ -297,6 +300,7 @@ export async function findOrphanedAdHocEvents(
         inArray(tables.events.adHocStatus, ['live', 'grace_period']),
         sql`${tables.events.cancelledAt} IS NULL`,
         sql`COALESCE(${tables.events.extendedUntil}, upper(${tables.events.duration})) < ${cutoff.toISOString()}::timestamptz`,
+        not(isOccupiedLiveAdHoc(db)),
       ),
     );
 }
