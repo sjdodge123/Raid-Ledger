@@ -14,6 +14,11 @@
  * `second` character its own death pictures and adds one non-death picture
  * (so the Gallery draws its kind chips); "+N" on a bar opens the Gallery
  * scoped to that player, and Remove on the chip returns to every death.
+ *
+ * The worker's hub is shared with hub-gallery(-saves).smoke.spec.ts, whose
+ * `/admin/test/hub-media/seed` batches (death · screenshot · image) accumulate
+ * and are not cleared by this seed, so the hub-wide Deaths total is read from
+ * the API after seeding, never assumed to be only this spec's pictures.
  */
 import type { Page, Response, TestInfo } from "@playwright/test";
 import { test, expect } from "./base";
@@ -38,6 +43,24 @@ interface SeedBody {
   mediaIds?: number[];
   secondCharacterName?: string;
   secondMediaIds?: number[];
+}
+
+/** The Gallery dialog's page size (`HUB_GALLERY_PAGE_SIZE`, use-hub-gallery-pages.ts). */
+const GALLERY_PAGE_SIZE = 24;
+
+interface MediaListBody {
+  total: number;
+}
+
+/** Every death picture on the hub (ours + any other spec's leftover batches). */
+async function hubDeathTotal(guildId: number): Promise<number> {
+  const token = await getAdminToken();
+  const body = (await apiGet(
+    token,
+    `/hubs/${guildId}/media?kind=death&limit=1`,
+  )) as MediaListBody | null;
+  if (body === null) throw new Error(`hub ${guildId} death list read failed`);
+  return body.total;
 }
 
 interface DeathsBody {
@@ -179,6 +202,12 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
     // The fixture's second character must be the bar we drive.
     expect(res.secondCharacterName).toBe(second.name);
     expect(res.secondMediaIds).toHaveLength(SECOND_PICTURES);
+    // Both players' pictures plus any leftover death pictures on this hub.
+    const total = await hubDeathTotal(f.guildId);
+    expect(
+      total,
+      "the hub's Deaths total includes every picture this test seeded",
+    ).toBeGreaterThanOrEqual(PICTURES + SECOND_PICTURES);
     await signInContextAs(page.context(), f.users.member.id);
     await openOverview(page, f);
 
@@ -227,11 +256,10 @@ test.describe("Valheim hub — Deaths card picture strip (ROK-1941)", () => {
       "aria-pressed",
       "true",
     );
-    const total = PICTURES + SECOND_PICTURES;
     await expect(
       dialog.getByText(`${total} pictures`, { exact: true }),
     ).toBeVisible();
-    await expect(tiles).toHaveCount(total);
+    await expect(tiles).toHaveCount(Math.min(total, GALLERY_PAGE_SIZE));
     // Back to the Deaths filter: both players' deaths, never the screenshot.
     await expect(
       dialog.locator(
