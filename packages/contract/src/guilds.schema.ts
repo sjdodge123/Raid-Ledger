@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CharacterRoleSchema } from "./characters.schema.js";
 import { GameServerStateSchema } from "./game-servers.schema.js";
+import { GuildCrestSchema } from "./guild-crest.schema.js";
 import {
   HubAutoMembershipModeSchema,
   HubJoinSourceSchema,
@@ -101,6 +102,11 @@ export const GuildSummarySchema = z
      * reported (what Reset goes back to). Optional so older fixtures parse.
      */
     inGameName: z.string().max(64).nullable().optional(),
+    /**
+     * ROK-1814 — the hub's resolved crest (upload or preset); null = initials.
+     * Optional so older fixtures parse.
+     */
+    crest: GuildCrestSchema.nullable().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
