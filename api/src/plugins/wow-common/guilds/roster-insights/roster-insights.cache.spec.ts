@@ -87,9 +87,15 @@ describe('invalidateForPullScope (ROK-1917 final P2)', () => {
   it("drops every wow_guild hub of the pull's scope, and only those", async () => {
     const cache = new RosterInsightsCache(dbReturning([{ id: 7 }, { id: 9 }]));
     const fetcher = jest.fn().mockResolvedValue(dto('A'));
-    for (const id of [7, 8, 9]) await cache.get(insightsKey(id, 'member', false), fetcher);
-    await cache.invalidateForPullScope({ gameId: 1, region: 'us', guildKey: 'g' });
-    for (const id of [7, 8, 9]) await cache.get(insightsKey(id, 'member', false), fetcher);
+    for (const id of [7, 8, 9])
+      await cache.get(insightsKey(id, 'member', false), fetcher);
+    await cache.invalidateForPullScope({
+      gameId: 1,
+      region: 'us',
+      guildKey: 'g',
+    });
+    for (const id of [7, 8, 9])
+      await cache.get(insightsKey(id, 'member', false), fetcher);
     // 3 initial fetches + refetches of hubs 7 and 9 only.
     expect(fetcher).toHaveBeenCalledTimes(5);
   });

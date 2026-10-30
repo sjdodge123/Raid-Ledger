@@ -21,7 +21,10 @@ function raidRun(status: string, guildName = ' My Guild '): PasteSectionRun {
   } as unknown as PasteSectionRun;
 }
 
-const charRun = { ...raidRun('applied'), decoded: { payload: { section: 'char' } } } as unknown as PasteSectionRun;
+const charRun = {
+  ...raidRun('applied'),
+  decoded: { payload: { section: 'char' } },
+} as unknown as PasteSectionRun;
 
 describe('raidPullScope (ROK-1917 final P2)', () => {
   it("is the applied raid section's (game, region, guild key)", () => {
@@ -32,9 +35,12 @@ describe('raidPullScope (ROK-1917 final P2)', () => {
     });
   });
 
-  it.each(['noop', 'stale', 'preview'])('is undefined for a %s raid section', (status) => {
-    expect(raidPullScope([raidRun(status)], ctx)).toBeUndefined();
-  });
+  it.each(['noop', 'stale', 'preview'])(
+    'is undefined for a %s raid section',
+    (status) => {
+      expect(raidPullScope([raidRun(status)], ctx)).toBeUndefined();
+    },
+  );
 
   it('is undefined without a raid section or for unguilded pulls', () => {
     expect(raidPullScope([charRun], ctx)).toBeUndefined();
@@ -49,7 +55,10 @@ describe('withRaidPullScope', () => {
     const scope = { gameId: 3, region: 'eu', guildKey: 'g' };
     const marked = { ...withRaidPullScope(res, scope), target: {} };
     expect(marked[RAID_PULL_SCOPE]).toEqual(scope);
-    expect(JSON.parse(JSON.stringify(marked))).toEqual({ status: 'applied', target: {} });
+    expect(JSON.parse(JSON.stringify(marked))).toEqual({
+      status: 'applied',
+      target: {},
+    });
   });
 
   it('leaves the result untouched without a scope', () => {
