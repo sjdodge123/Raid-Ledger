@@ -25,6 +25,12 @@ export interface WowFactValues {
   quests: AddonQuests;
   lockouts: AddonLockout[];
   lastOnline: Date;
+  /**
+   * ROK-1915 — the gear came from an export that reports enchants (addon
+   * snapshot schema ≥ 2). False = an older export; its missing enchants are
+   * unknown, never "missing".
+   */
+  enchantsReported: boolean;
 }
 
 /** A field a source can answer. */
@@ -42,6 +48,7 @@ export const WOW_FACT_FIELDS: readonly WowFactField[] = [
   'quests',
   'lockouts',
   'lastOnline',
+  'enchantsReported',
 ];
 
 /** One fact: its value, where it came from, and how fresh it is. */

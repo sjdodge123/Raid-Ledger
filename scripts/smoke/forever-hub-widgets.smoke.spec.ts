@@ -56,6 +56,8 @@ const DING_TOO_OLD = 'Dainel';
 const ONLINE_AT_EXPORT = 2;
 const LONGEST_AWAY = 'Elowen';
 const LONGEST_AWAY_DAYS = '34 d';
+/** seed-guild `withGear` (`demo-test-guild-gear.helpers.ts`): one cap main below the 55 floor, missing Wrist + Feet. */
+const MISSING_SLOT = 'Wrist';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -64,9 +66,14 @@ interface SeededUser {
     characterId: string | null;
 }
 
+interface SeededGear {
+    belowFloor: { name: string; ilvl: number };
+}
+
 interface SeededGuild {
     guildId: number;
     users: Record<Role, SeededUser>;
+    gear?: SeededGear;
 }
 
 interface Insights {
@@ -95,7 +102,7 @@ async function seedGuild(token: string, testInfo: TestInfo, extra: Record<string
     if (typeof body.guildId !== 'number' || !body.users) {
         throw new Error(`seed-guild: ${JSON.stringify(body)}`);
     }
-    return { guildId: body.guildId, users: body.users };
+    return { guildId: body.guildId, users: body.users, ...(body.gear ? { gear: body.gear } : {}) };
 }
 
 async function removeUsers(token: string, guild: SeededGuild): Promise<void> {
@@ -268,6 +275,40 @@ async function expectLastSeen(page: Page, seen: { onlineCount: number; away: { n
     await expect(region.getByText(/online now|\blive\b/i), 'presence is never called live').toHaveCount(0);
 }
 
+interface GearInsights {
+    ilvl: { reporters: number; belowCount: number };
+    enchants: { missingCount: number; unknown: number };
+}
+
+async function waitForGear(jwt: string, guildId: number): Promise<GearInsights> {
+    return pollForCondition(
+        async () => {
+            const data = (await apiGet(jwt, `/plugins/wow/guilds/${guildId}/roster-insights`)) as { gear?: GearInsights } | null;
+            const gear = data?.gear;
+            return gear !== undefined && gear.ilvl.reporters > 0 ? gear : null;
+        },
+        { timeoutMs: 15_000, description: `roster-insights for guild ${guildId} carries the seeded gear` },
+    );
+}
+
+async function expectGearReadiness(page: Page, gear: GearInsights, seeded: SeededGear): Promise<void> {
+    expect(gear.ilvl.belowCount, 'the API counts the one seeded below-floor main').toBe(1);
+    expect(gear.enchants.missingCount, 'the API counts the one seeded main missing enchants').toBe(1);
+    const region = card(page, 'Gear readiness');
+    await expect(region, 'the Gear readiness card renders for a member on a Forever guild Overview').toBeVisible({ timeout: 20_000 });
+    await expect(region.getByRole('group', { name: 'Level 60 mains per item-level range' })).toBeVisible();
+    await region.getByRole('button', { name: /Below floor \(55\)/ }).click();
+    const below = region.getByRole('list', { name: 'Mains below the item-level floor' }).getByRole('listitem');
+    await expect(below, 'one main is below the floor').toHaveCount(1);
+    await expect(below.first()).toContainText(seeded.belowFloor.name);
+    await expect(below.first()).toContainText(String(seeded.belowFloor.ilvl));
+    await region.getByRole('button', { name: /checked mains/ }).click();
+    const missing = region.getByRole('list', { name: 'Mains missing enchants' }).getByRole('listitem');
+    await expect(missing, 'one main is missing enchants').toHaveCount(1);
+    await expect(missing.first(), 'the row names the unenchanted slots').toContainText(MISSING_SLOT);
+    await expect(region.getByTestId('gear-unknown'), 'the schema-1 main counts as unknown').toBeVisible();
+}
+
 test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
     test.beforeAll(async () => {
         const token = await getAdminToken();
@@ -323,6 +364,21 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
             await page.goto(`/hubs/${guild.guildId}`);
             await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
             await expectLastSeen(page, seen);
+        } finally {
+            await removeUsers(token, guild);
+        }
+    });
+
+    test('Overview: Gear readiness shows the item-level histogram, below-floor and missing enchants (ROK-1915)', async ({ page }, testInfo) => {
+        const token = await getAdminToken();
+        const guild = await seedGuild(token, testInfo, { withGear: true });
+        try {
+            if (guild.gear === undefined) throw new Error('seed-guild withGear: the response should describe the seeded gear');
+            const memberJwt = await signInOnboardedMember(page, guild.users.member.userId);
+            const gear = await waitForGear(memberJwt, guild.guildId);
+            await page.goto(`/hubs/${guild.guildId}`);
+            await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+            await expectGearReadiness(page, gear, guild.gear);
         } finally {
             await removeUsers(token, guild);
         }

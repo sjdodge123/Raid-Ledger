@@ -24,6 +24,7 @@ import {
   countLockoutReporters,
 } from './roster-insights.lockouts';
 import { computeLastSeen } from './roster-insights.last-seen';
+import { computeGear } from './roster-insights.gear';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import {
   emptyInsights,
@@ -98,6 +99,8 @@ export class RosterInsightsService {
             lockoutReporters: countLockoutReporters(rows),
             // Presence is per character: the full roster, never mainsOnly (D4).
             lastSeen: { ...computeLastSeen(all), snapshotAt },
+            // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
+            gear: computeGear(all),
           }
         : {}),
       freshness: computeFreshness(rows),

@@ -33,6 +33,13 @@ describe('FIELD_PRECEDENCE table', () => {
     expect(editable.sort()).toEqual(['professions', 'role']);
   });
 
+  it('ROK-1915: enchantsReported uses the default row (no override, blizzard allowed)', () => {
+    expect(FIELD_PRECEDENCE.enchantsReported).toEqual({
+      manualOverride: false,
+      blizzardAllowed: true,
+    });
+  });
+
   it('never sources professions from blizzard', () => {
     expect(FIELD_PRECEDENCE.professions.blizzardAllowed).toBe(false);
   });
@@ -175,7 +182,28 @@ describe('resolveFacts', () => {
     expect(got.level).toEqual({ value: 60, source: 'addon', asOf: NOW });
     expect(got.role).toEqual({ value: 'tank', source: 'manual', asOf: null });
     expect(got.professions).toBeNull();
+    expect(got.enchantsReported).toBeNull();
     expect(Object.keys(got).sort()).toEqual([...WOW_FACT_FIELDS].sort());
+  });
+});
+
+describe('resolveFacts — enchantsReported (ROK-1915)', () => {
+  it('the newest export decides whether enchants are reported', () => {
+    const got = resolveFacts(
+      [
+        {
+          enchantsReported: { value: false, source: 'addon', asOf: ago(HOUR) },
+        },
+        { enchantsReported: { value: true, source: 'addon', asOf: NOW } },
+      ],
+      NOW,
+      true,
+    );
+    expect(got.enchantsReported).toEqual({
+      value: true,
+      source: 'addon',
+      asOf: NOW,
+    });
   });
 });
 

@@ -1656,11 +1656,17 @@ text-dim` "Based on N members' addon exports" line instead of `FreshnessFooter` 
 "N online at last export" headline + `text-xs text-dim` "of M members in the export", "Online at last export" (≤5
 44px rows, an `aria-hidden` `h-2 w-2 rounded-full bg-success` dot + `CharacterLink`, then "+N more") and "Longest away"
 (≤5 44px rows, `text-muted` "34 d" / "today" with a "Last online N days before the export" `title`), the quiet §4.5
-no-export state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. The roster cards share
+no-export state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. **Gear readiness**
+(`forever-gear-readiness`, order 88, ROK-1915) — linked level-60 mains only: the §4.30 histogram over item-level ranges
+(`<45` … `65+`, `aria-label` "Item level 50–54: 4 mains") + a `text-xs text-muted` "Median N · floor F · N levelling
+mains not counted" line, then two collapsed 44px disclosures over a `border-edge` rule — "Below floor (55)" (`CharacterLink`
+· `tabular-nums` ilvl, "+N more") and "N of M checked mains" missing enchants (`CharacterLink` · slot names "Feet, Wrist") —
+a `text-xs text-muted` "N unknown — re-export from LedgerLink to check enchants." line for schema-1 exports, the quiet §4.5
+"No gear yet — …" state, `MembersSeeAll` action and the shared `FreshnessFooter` — no new pattern. The roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
-Professions, Who's saved and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
-professions / lockouts payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
+Professions, Who's saved, Last seen, Gear readiness and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
+professions / lockouts / lastSeen / gear payload key / `viewer.role !== 'visitor' || isOperatorOrAdmin(user)`), because `members` would hide
 them from non-member staff whom the API lets in.
 
 Baldur's Gate 3 (`web/src/plugins/bg3/register.ts`, `game_community` hubs of `baldurs-gate-3`; ROK-1958, all

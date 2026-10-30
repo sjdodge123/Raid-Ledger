@@ -73,13 +73,17 @@ export function toRole(raw: string | null): CharacterRole | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** Mean item level of the worn, non-cosmetic gear; null when none. */
+/**
+ * Mean item level of the worn, non-cosmetic gear; null when none. UNROUNDED:
+ * the gear widget compares it to the floor (`ilvl < floor`, so 54.5 is below
+ * 55) and rounds only what it displays (ROK-1915).
+ */
 export function averageIlvl(gear: AddonSnapshotGearItem[]): number | null {
   const ilvls = gear.flatMap((g) =>
     COSMETIC_SLOTS.has(g.slot) || g.ilvl === undefined ? [] : [g.ilvl],
   );
   if (ilvls.length === 0) return null;
-  return Math.round(ilvls.reduce((a, b) => a + b, 0) / ilvls.length);
+  return ilvls.reduce((a, b) => a + b, 0) / ilvls.length;
 }
 
 /** Talent points spent per sub-tree 0-2. */

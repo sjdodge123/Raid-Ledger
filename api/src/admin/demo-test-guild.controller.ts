@@ -24,6 +24,8 @@
  *   - with `withLockouts: true` (ROK-1914), LedgerLink lockout snapshots on
  *     the three linked characters for the Who's saved widget (see
  *     `demo-test-guild-lockouts.helpers.ts`). Re-seeding restores them.
+ *   - with `withGear: true` (ROK-1915), LedgerLink gear in the same
+ *     snapshots for the Gear readiness widget (`demo-test-guild-gear.helpers.ts`).
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -75,8 +77,13 @@ import {
 } from './demo-test-guild-content.helpers';
 import {
   seedGuildLockouts,
+  type SeedLockoutOwner,
   type SeededGuildLockouts,
 } from './demo-test-guild-lockouts.helpers';
+import {
+  seededGear,
+  type SeededGuildGear,
+} from './demo-test-guild-gear.helpers';
 import {
   seedGuildDings,
   type SeededGuildDings,
@@ -125,11 +132,22 @@ export interface SeedGuildResponse {
   dings?: SeededGuildDings;
   /** Present only when the body sent `withPresence: true` (ROK-1916). */
   presence?: SeededGuildPresence;
+  /** Present only when the body sent `withGear: true` (ROK-1915). */
+  gear?: SeededGuildGear;
 }
 
 interface SeededRoster {
   users: Record<SeedGuildRole, SeedGuildUser>;
   unlinked: number[];
+}
+
+/** The three linked owners' character ids (every seeded linked user has one). */
+function snapshotOwners(
+  users: Record<SeedGuildRole, SeedGuildUser>,
+): Record<SeedLockoutOwner, string> {
+  const id = (owner: SeedLockoutOwner): string =>
+    defined(users[owner].characterId ?? undefined, `seeded ${owner} character`);
+  return { gm: id('gm'), officer: id('officer'), member: id('member') };
 }
 
 @Controller('admin/test/wow')
@@ -170,22 +188,23 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916). */
+  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915). */
   private async seedOptional(
     input: Omit<SeedGuildInput, 'name' | 'gameSlug'>,
     ctx: RosterCtx,
     roster: SeededRoster,
   ): Promise<
-    Pick<SeedGuildResponse, 'content' | 'lockouts' | 'dings' | 'presence'>
+    Pick<
+      SeedGuildResponse,
+      'content' | 'lockouts' | 'dings' | 'presence' | 'gear'
+    >
   > {
     const { users, unlinked } = roster;
     const gm = users.gm.userId;
     const content = input.withContent
       ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
       : null;
-    const lockouts = input.withLockouts
-      ? await this.seedLockouts(users, ctx)
-      : null;
+    const snapshots = await this.seedSnapshotHalves(users, ctx, input);
     const dings = input.withDings
       ? await this.seedDings(users, unlinked, ctx)
       : null;
@@ -194,28 +213,46 @@ export class DemoTestGuildController {
       : null;
     return {
       ...(content ? { content } : {}),
-      ...(lockouts ? { lockouts } : {}),
+      ...snapshots,
       ...(dings ? { dings } : {}),
       ...(presence ? { presence } : {}),
     };
   }
 
-  /**
-   * ROK-1914 — lockout snapshots on the three linked characters, then drop
-   * the guild's 5-minute roster-insights cache so a re-seed of the same guild
-   * name serves the fresh saves at once (WowCommonModule owns the cache).
-   */
-  private async seedLockouts(
+  /** `withLockouts` / `withGear`: one snapshot write, each half reported only when asked. */
+  private async seedSnapshotHalves(
     users: Record<SeedGuildRole, SeedGuildUser>,
     ctx: RosterCtx,
+    input: Pick<SeedGuildInput, 'withLockouts' | 'withGear'>,
+  ): Promise<Pick<SeedGuildResponse, 'lockouts' | 'gear'>> {
+    if (!input.withLockouts && !input.withGear) return {};
+    const lockouts = await this.seedSnapshots(users, ctx, input);
+    return {
+      ...(input.withLockouts ? { lockouts } : {}),
+      ...(input.withGear ? { gear: seededGear(snapshotOwners(users)) } : {}),
+    };
+  }
+
+  /**
+   * ROK-1914/1915 — lockout and/or gear snapshots on the three linked
+   * characters (one row each), then drop the guild's 5-minute roster-insights
+   * cache so a re-seed of the same guild name is served at once
+   * (WowCommonModule owns the cache).
+   */
+  private async seedSnapshots(
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    ctx: RosterCtx,
+    input: Pick<SeedGuildInput, 'withLockouts' | 'withGear'>,
   ): Promise<SeededGuildLockouts> {
-    const owners = (['gm', 'officer', 'member'] as const).map((owner) => {
-      const characterId = users[owner].characterId;
-      if (characterId === null)
-        throw new Error(`seeded ${owner} has no character`);
-      return { owner, characterId };
+    const ids = snapshotOwners(users);
+    const owners = (['gm', 'officer', 'member'] as const).map((owner) => ({
+      owner,
+      characterId: ids[owner],
+    }));
+    const seeded = await seedGuildLockouts(this.db, owners, ctx.now, {
+      lockouts: input.withLockouts,
+      gear: input.withGear,
     });
-    const seeded = await seedGuildLockouts(this.db, owners, ctx.now);
     this.invalidateInsights(ctx.guildId);
     return seeded;
   }

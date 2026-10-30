@@ -26,6 +26,7 @@ const EMPTY: ResolvedWowFacts = {
   quests: null,
   lockouts: null,
   lastOnline: null,
+  enchantsReported: null,
 };
 
 interface RowOpts {

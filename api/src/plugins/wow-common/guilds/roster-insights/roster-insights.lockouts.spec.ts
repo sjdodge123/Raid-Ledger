@@ -20,6 +20,7 @@ const EMPTY: ResolvedWowFacts = {
   quests: null,
   lockouts: null,
   lastOnline: null,
+  enchantsReported: null,
 };
 
 function lock(o: Partial<AddonLockout> = {}): AddonLockout {
