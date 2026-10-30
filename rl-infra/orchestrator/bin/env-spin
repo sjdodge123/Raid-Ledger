@@ -902,8 +902,11 @@ if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
         -e "PUBLIC_DOMAIN=${PUBLIC_HOST}"
         -e "DISCORD_CALLBACK_URL=https://${SLOT_HOST}/api/auth/discord/callback"
         -e "CLIENT_URL=https://${SLOT_HOST}"
-        # ROK-1697: pin CORS to the slot host — the allinone resolver would otherwise derive it from the per-slug PUBLIC_URL, and OAuth only works on slot-N.
-        -e "CORS_ORIGIN=https://${SLOT_HOST}"
+        # ROK-1697: explicit same-origin CORS. The env answers on slot-N, the per-slug
+        # host AND ${SLUG}.rl.lan (Traefik rule below; slot-N only when this env owns
+        # it), and CORS_ORIGIN takes ONE origin — any single pin 403s the other hosts.
+        # Unset, the allinone resolver would pin the per-slug PUBLIC_URL.
+        -e "CORS_ORIGIN=auto"
     )
 fi
 
