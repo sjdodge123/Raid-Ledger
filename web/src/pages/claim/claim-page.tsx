@@ -20,15 +20,14 @@ function Footnote({ expiresAt, now }: { expiresAt: string | undefined; now: numb
     );
 }
 
-/** The claim screen: intro, form, footnote, "Where's my code?". */
+/** The claim screen: intro, form, footnote, "Where's my code?". "First-time setup" lives in the Header. */
 export function ClaimPage(): JSX.Element {
     const { data } = useSystemStatus();
     const expiresAt = data?.claimExpiresAt;
     const [now] = useState(() => Date.now());
     return (
         <div className="mx-auto w-full max-w-[560px] px-4 py-8">
-            <p className="mb-3 text-right text-xs text-muted">First-time setup</p>
-            <div className="flex flex-col gap-[18px] rounded-xl border border-edge bg-surface p-5 sm:p-8" data-testid="claim-card">
+            <div className="flex flex-col gap-5 rounded-xl border border-edge bg-surface p-5 sm:p-8" data-testid="claim-card">
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">Claim this Raid Ledger</h1>
                     <p className="mt-2 text-sm text-secondary">

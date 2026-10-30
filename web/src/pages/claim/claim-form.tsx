@@ -3,7 +3,7 @@
  * sign-in name, new + confirm password with one "Show passwords" control,
  * and the submit → server result states. Inventory primitives only.
  */
-import { useId, useState, type JSX } from 'react';
+import { useId, useState, type JSX, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Field } from '../../components/ui/field';
@@ -33,8 +33,9 @@ function CodeMessage({ id, status, checking }: { id: string; status: CodeStatus;
     );
 }
 
-function PasswordFields({ pw, confirm, setPw, setConfirm }: {
+function PasswordFields({ pw, confirm, setPw, setConfirm, refused, pwRef }: {
     pw: string; confirm: string; setPw: (v: string) => void; setConfirm: (v: string) => void;
+    refused: boolean; pwRef: RefObject<HTMLInputElement | null>;
 }): JSX.Element {
     const [revealed, setRevealed] = useState(false);
     const level = passwordStrength(pw);
@@ -42,13 +43,15 @@ function PasswordFields({ pw, confirm, setPw, setConfirm }: {
     const mismatch = confirm.length > 0 && confirm !== pw;
     return (
         <>
-            <Field label="New password" hint={<span className={TONE_TEXT[hint.tone]}>{hint.text}</span>}>
-                <PasswordInput label="new password" autoComplete="new-password" value={pw} revealed={revealed}
+            <Field label="New password" hint={<span className={TONE_TEXT[hint.tone]}>{hint.text}</span>}
+                error={refused ? PASSWORD_GUARD_MESSAGE : undefined}>
+                <PasswordInput ref={pwRef} label="new password" autoComplete="new-password" value={pw} revealed={revealed}
                     onRevealedChange={setRevealed} onChange={(e) => setPw(e.target.value)} />
                 <ClaimStrengthMeter level={level} />
             </Field>
             <Field label="Confirm password" error={mismatch ? PASSWORD_MISMATCH_MESSAGE : undefined}>
                 <PasswordInput label="confirm password" autoComplete="new-password" value={confirm} revealed={revealed}
+                    success={confirm.length > 0 && confirm === pw}
                     onRevealedChange={setRevealed} onChange={(e) => setConfirm(e.target.value)} />
             </Field>
             <Checkbox label="Show passwords" checked={revealed} onChange={(e) => setRevealed(e.target.checked)} />
@@ -56,36 +59,40 @@ function PasswordFields({ pw, confirm, setPw, setConfirm }: {
     );
 }
 
-function ContinueLink(): JSX.Element {
+/** Continue after the claim: setup when signed in, else the sign-in page. */
+function ContinueLink({ signedIn }: { signedIn: boolean }): JSX.Element {
     const queryClient = useQueryClient();
     const onClick = (): void => {
         // Same event as the navigation, so ClaimGate never bounces /claim → /.
         queryClient.setQueryData(['system', 'status'], (old: object | undefined) => ({ ...old, claimRequired: false, claimExpiresAt: undefined }));
         void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
     };
-    return <Link to="/admin/setup" onClick={onClick} className={buttonClass({ variant: 'primary', fullWidth: true })}>Continue to setup</Link>;
+    return (
+        <Link to={signedIn ? '/admin/setup' : '/login'} onClick={onClick} className={buttonClass({ variant: 'primary', fullWidth: true })}>
+            {signedIn ? 'Continue to setup' : 'Sign in to continue'}
+        </Link>
+    );
 }
 
 /** The whole claim form; `expiredOnLoad` starts in the expired state. */
 export function ClaimForm({ expiredOnLoad = false }: { expiredOnLoad?: boolean }): JSX.Element {
     const msgId = useId();
-    const { code, setCode, pw, setPw, confirm, setConfirm, status, pwRefused, pending, onSubmit } = useClaimSubmit(expiredOnLoad);
-    const invalid = status.kind !== 'idle' && status.kind !== 'ok';
+    const { code, setCode, pw, setPw, confirm, setConfirm, status, pwRefused, pending, signedIn, codeRef, pwRef, onSubmit } = useClaimSubmit(expiredOnLoad);
+    const invalid = !['idle', 'ok', 'locked'].includes(status.kind);
     const done = status.kind === 'ok';
     return (
-        <form noValidate onSubmit={onSubmit} className="flex flex-col gap-[18px]" data-testid="claim-form">
+        <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4" data-testid="claim-form">
             <Field label="Setup code">
-                <Input mono autoComplete="off" spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX" value={code} readOnly={done}
-                    className="tracking-wider" invalid={invalid && !pending} aria-describedby={msgId}
+                <Input ref={codeRef} mono autoComplete="off" spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX" value={code} readOnly={done}
+                    className="tracking-wider" invalid={invalid && !pending} success={done} aria-describedby={msgId}
                     onChange={(e) => setCode(e.target.value)} data-testid="claim-code" />
                 <CodeMessage id={msgId} status={status} checking={pending} />
             </Field>
             <Field label="Sign-in name" hint="Fixed. Once Discord is connected you can sign in with Discord instead.">
                 <Input mono readOnly value="admin@local" className="text-muted" />
             </Field>
-            <PasswordFields pw={pw} confirm={confirm} setPw={setPw} setConfirm={setConfirm} />
-            {pwRefused && <p role="alert" className="text-sm text-danger">{PASSWORD_GUARD_MESSAGE}</p>}
-            {done ? <ContinueLink /> : (
+            <PasswordFields pw={pw} confirm={confirm} setPw={setPw} setConfirm={setConfirm} refused={pwRefused} pwRef={pwRef} />
+            {done ? <ContinueLink signedIn={signedIn} /> : (
                 <Button type="submit" fullWidth loading={pending} loadingLabel="Checking the code…" data-testid="claim-submit">
                     Claim and set password
                 </Button>

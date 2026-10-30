@@ -5,9 +5,10 @@
  * not "session expired", so it must bypass the silent re-auth interceptor.
  * The code travels only in the JSON body — never a URL, never a log.
  */
+import { useCallback, useState } from 'react';
 import { useMutation, type UseMutationResult } from '@tanstack/react-query';
 import type { SetupClaimRequestDto } from '@raid-ledger/contract';
-import { useAuth, type User } from '../../hooks/use-auth';
+import { useAuth } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { nativeFetch } from '../../lib/api/native-fetch';
 import { clearSilentGuard, setAuthMethod } from '../../lib/api/silent-reauth';
@@ -61,15 +62,36 @@ export async function postClaim(input: SetupClaimRequestDto): Promise<string> {
     return token.access_token;
 }
 
-/** Claim the instance, then sign in as admin@local with the returned token. */
-export function useClaim(): UseMutationResult<User | null, ClaimRequestError, SetupClaimRequestDto> {
+/** Claim the instance; resolves the access token. Signing in is {@link useClaimSignIn}'s job. */
+export function useClaim(): UseMutationResult<string, ClaimRequestError, SetupClaimRequestDto> {
+    return useMutation<string, ClaimRequestError, SetupClaimRequestDto>({ mutationFn: postClaim });
+}
+
+/** What {@link useClaimSignIn} exposes. */
+export interface ClaimSignIn {
+    /** True while `login()` fetches the new admin's profile. */
+    signingIn: boolean;
+    /** Sign in with the claim's token; resolves whether a session now exists. */
+    signIn: (accessToken: string) => Promise<boolean>;
+}
+
+/**
+ * Sign in as admin@local with the claim's token. Runs AFTER the claim
+ * mutation has settled: `login()` drops the viewer-private caches, the
+ * mutation cache included, which must never happen under a pending mutation.
+ */
+export function useClaimSignIn(): ClaimSignIn {
     const { login } = useAuth();
-    return useMutation<User | null, ClaimRequestError, SetupClaimRequestDto>({
-        mutationFn: async (input) => {
-            const accessToken = await postClaim(input);
-            setAuthMethod('local');
-            clearSilentGuard();
-            return login(accessToken);
-        },
-    });
+    const [signingIn, setSigningIn] = useState(false);
+    const signIn = useCallback(async (accessToken: string): Promise<boolean> => {
+        setSigningIn(true);
+        setAuthMethod('local');
+        clearSilentGuard();
+        try {
+            return (await login(accessToken)) !== null;
+        } finally {
+            setSigningIn(false);
+        }
+    }, [login]);
+    return { signingIn, signIn };
 }

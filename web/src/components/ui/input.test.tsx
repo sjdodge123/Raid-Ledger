@@ -114,3 +114,22 @@ describe('Input inside Field', () => {
         expect(screen.getByRole('textbox', { name: 'Event name' })).toHaveAttribute('aria-required', 'true');
     });
 });
+
+describe('Input — success (ROK-1701)', () => {
+    it('success paints the success border through data-success', () => {
+        render(<Input aria-label="Code" success />);
+        const input = screen.getByRole('textbox', { name: 'Code' });
+        expect(input).toHaveAttribute('data-success', 'true');
+        expect(input).toHaveClass('data-[success=true]:border-success');
+    });
+
+    it('invalid wins over success', () => {
+        render(<Input aria-label="Code" success invalid />);
+        expect(screen.getByRole('textbox', { name: 'Code' })).not.toHaveAttribute('data-success');
+    });
+
+    it('no success attribute by default', () => {
+        render(<Input aria-label="Code" />);
+        expect(screen.getByRole('textbox', { name: 'Code' })).not.toHaveAttribute('data-success');
+    });
+});

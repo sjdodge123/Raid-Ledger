@@ -99,6 +99,60 @@ describe('ClaimForm', () => {
         await waitFor(() => expect(queryClient.getQueryData(['system', 'status'])).toMatchObject({ claimRequired: false }));
     });
 
+    it('focuses the code field on an empty submit', async () => {
+        renderWithProviders(<ClaimForm />);
+        await fill('');
+        expect(screen.getByLabelText('Setup code')).toHaveFocus();
+    });
+
+    it('focuses the code field after a wrong code', async () => {
+        fetchMock.mockResolvedValue(respond(401, { code: 'claim_code_invalid', message: 'x' }));
+        renderWithProviders(<ClaimForm />);
+        await fill('WRONG-CODE');
+        await screen.findByText(/That code doesn't match/);
+        expect(screen.getByLabelText('Setup code')).toHaveFocus();
+    });
+
+    it('password refusal: linked to New password, focused, cleared on edit', async () => {
+        renderWithProviders(<ClaimForm />);
+        await fill('ABCD-EFGH', 'short', 'short');
+        const pw = screen.getByLabelText('New password');
+        const alert = screen.getByText(/Choose a password of at least 12 characters/);
+        expect(pw).toHaveFocus();
+        expect(pw).toHaveAttribute('aria-invalid', 'true');
+        expect(pw.getAttribute('aria-describedby')).toContain(alert.id);
+        await userEvent.setup().type(pw, 'x');
+        expect(screen.queryByText(/Choose a password of at least 12 characters/)).not.toBeInTheDocument();
+        expect(pw).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('locked shows its warning without marking the code invalid', async () => {
+        fetchMock.mockResolvedValue(respond(429, { code: 'claim_locked', message: 'x', retryAt: '2026-10-30T13:05:00.000Z' }));
+        renderWithProviders(<ClaimForm />);
+        await fill('WRONG-CODE');
+        await screen.findByText(/Too many wrong codes/);
+        expect(screen.getByLabelText('Setup code')).not.toHaveAttribute('aria-invalid');
+    });
+
+    it('ok paints the code field success; matching confirm too', async () => {
+        fetchMock.mockResolvedValue(respond(200, { access_token: 'jwt-1' }));
+        loginMock.mockResolvedValue({ id: 1 });
+        renderWithProviders(<ClaimForm />);
+        await fill('MY-SECRET-CODE');
+        await screen.findByText('Code accepted. This Raid Ledger is yours.');
+        expect(screen.getByLabelText('Setup code')).toHaveAttribute('data-success', 'true');
+        expect(screen.getByLabelText('Confirm password')).toHaveAttribute('data-success', 'true');
+    });
+
+    it('a failed sign-in after the claim sends Continue to /login', async () => {
+        fetchMock.mockResolvedValue(respond(200, { access_token: 'jwt-1' }));
+        loginMock.mockResolvedValue(null);
+        renderWithProviders(<ClaimForm />);
+        await fill('MY-SECRET-CODE');
+        const link = await screen.findByRole('link', { name: 'Sign in to continue' });
+        expect(link).toHaveAttribute('href', '/login');
+    });
+
     it('shows the expired state on load when the code already lapsed', () => {
         renderWithProviders(<ClaimForm expiredOnLoad />);
         expect(screen.getByRole('alert')).toHaveTextContent('This code has expired.');
