@@ -9,6 +9,7 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { ClientUrlSeederService } from './client-url-seeder.service';
+import { PLATFORM_PUBLIC_URL_VARS } from './client-url.helpers';
 import { SettingsService } from './settings.service';
 
 type SettingsMock = { get: jest.Mock };
@@ -17,6 +18,7 @@ interface Harness {
   service: ClientUrlSeederService;
   settings: SettingsMock;
   warn: jest.SpyInstance;
+  log: jest.SpyInstance;
 }
 
 const CALLBACK = 'https://raid.example/auth/discord/callback';
@@ -27,14 +29,14 @@ async function createHarness(): Promise<Harness> {
   const warn = jest
     .spyOn(Logger.prototype, 'warn')
     .mockImplementation(() => {});
-  jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+  const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
   const module = await Test.createTestingModule({
     providers: [
       ClientUrlSeederService,
       { provide: SettingsService, useValue: settings },
     ],
   }).compile();
-  return { service: module.get(ClientUrlSeederService), settings, warn };
+  return { service: module.get(ClientUrlSeederService), settings, warn, log };
 }
 
 /** Resolve settings-backed anchors from a key→value map. */
@@ -63,7 +65,11 @@ function useCleanEnv(...names: string[]): void {
 describe('ClientUrlSeederService', () => {
   let h: Harness;
 
-  useCleanEnv('CLIENT_URL', 'DISCORD_CALLBACK_URL');
+  useCleanEnv(
+    'CLIENT_URL',
+    'DISCORD_CALLBACK_URL',
+    ...PLATFORM_PUBLIC_URL_VARS,
+  );
 
   beforeEach(async () => {
     h = await createHarness();
@@ -150,5 +156,70 @@ describe('ClientUrlSeederService', () => {
     await h.service.onApplicationBootstrap();
     expect(process.env.CLIENT_URL).toBe('https://env.example');
     expect(h.warn).not.toHaveBeenCalled();
+  });
+
+  describe('platform public URL — lowest-trust anchor (ROK-1697)', () => {
+    /** Messages logged at `log` level that start with `public URL:`. */
+    const publicUrlLines = (): unknown[] =>
+      h.log.mock.calls
+        .map((call: unknown[]) => call[0])
+        .filter((m) => typeof m === 'string' && m.startsWith('public URL:'));
+
+    it('seeds CLIENT_URL from PUBLIC_URL when no other anchor exists', async () => {
+      process.env.PUBLIC_URL = 'https://public.example/';
+      await h.service.onApplicationBootstrap();
+      expect(process.env.CLIENT_URL).toBe('https://public.example');
+      expect(h.warn).not.toHaveBeenCalled();
+    });
+
+    it('lets the discord callback setting outrank the platform URL', async () => {
+      process.env.RENDER_EXTERNAL_URL = 'https://rl.onrender.com';
+      stubSettings(h.settings, {
+        [SETTING_KEYS.DISCORD_CALLBACK_URL]: CALLBACK,
+      });
+      await h.service.onApplicationBootstrap();
+      expect(process.env.CLIENT_URL).toBe('https://raid.example');
+    });
+
+    it('lets DISCORD_CALLBACK_URL outrank the platform URL (fleet envs)', async () => {
+      process.env.PUBLIC_URL = 'https://public.example';
+      process.env.DISCORD_CALLBACK_URL =
+        'https://slot-1.example/api/auth/discord/callback';
+      await h.service.onApplicationBootstrap();
+      expect(process.env.CLIENT_URL).toBe('https://slot-1.example');
+    });
+
+    it('never overwrites a deployer CLIENT_URL with the platform URL', async () => {
+      process.env.CLIENT_URL = 'https://deployer.example';
+      process.env.PUBLIC_URL = 'https://public.example';
+      await h.service.onApplicationBootstrap();
+      expect(process.env.CLIENT_URL).toBe('https://deployer.example');
+    });
+
+    it('logs exactly one public URL line naming its source at boot', async () => {
+      process.env.FLY_APP_NAME = 'raid-ledger';
+      await h.service.onApplicationBootstrap();
+      expect(publicUrlLines()).toEqual([
+        'public URL: https://raid-ledger.fly.dev (from FLY_APP_NAME)',
+      ]);
+    });
+
+    it('logs "public URL: unresolved" when no source is set', async () => {
+      await h.service.onApplicationBootstrap();
+      expect(publicUrlLines()).toEqual(['public URL: unresolved']);
+    });
+
+    it('warns about an unusable source and falls through to the next', async () => {
+      process.env.PUBLIC_URL = 'javascript:alert(1)';
+      process.env.APP_URL = 'https://do.example';
+      await h.service.onApplicationBootstrap();
+      expect(h.warn).toHaveBeenCalledWith(
+        'Ignoring PUBLIC_URL="javascript:alert(1)": not an http(s) URL',
+      );
+      expect(publicUrlLines()).toEqual([
+        'public URL: https://do.example (from APP_URL)',
+      ]);
+      expect(process.env.CLIENT_URL).toBe('https://do.example');
+    });
   });
 });

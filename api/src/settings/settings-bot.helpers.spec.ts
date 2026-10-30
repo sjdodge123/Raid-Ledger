@@ -8,6 +8,7 @@ import {
   type SettingsCore,
 } from './settings-bot.helpers';
 import { SETTING_KEYS } from '../drizzle/schema';
+import { PLATFORM_PUBLIC_URL_VARS } from './client-url.helpers';
 
 /** Build a mock SettingsCore with configurable key-value responses. */
 function mockSettingsCore(
@@ -221,6 +222,48 @@ describe('branding — dropped accent colour (TDB:991)', () => {
     await clearBranding(svc);
     expect(svc.delete).toHaveBeenCalledWith(
       SETTING_KEYS.COMMUNITY_ACCENT_COLOR,
+    );
+  });
+});
+
+describe('getDiscordOAuthConfig — platform public URL default (ROK-1697)', () => {
+  const names = ['DISCORD_CALLBACK_URL', ...PLATFORM_PUBLIC_URL_VARS];
+  const original = names.map((name) => [name, process.env[name]] as const);
+  const creds = {
+    [SETTING_KEYS.DISCORD_CLIENT_ID]: 'client-id',
+    [SETTING_KEYS.DISCORD_CLIENT_SECRET]: 'client-secret',
+  };
+
+  beforeEach(() => names.forEach((name) => delete process.env[name]));
+  afterEach(() => {
+    for (const [name, value] of original) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+
+  it('defaults the callback to <public url>/api/auth/discord/callback', async () => {
+    process.env.RAILWAY_PUBLIC_DOMAIN = 'rl.up.railway.app';
+    const config = await getDiscordOAuthConfig(mockSettingsCore(creds));
+    expect(config?.callbackUrl).toBe(
+      'https://rl.up.railway.app/api/auth/discord/callback',
+    );
+  });
+
+  it('keeps the localhost default when no public URL resolves', async () => {
+    const config = await getDiscordOAuthConfig(mockSettingsCore(creds));
+    expect(config?.callbackUrl).toBe(
+      'http://localhost:3000/auth/discord/callback',
+    );
+  });
+
+  it('lets DISCORD_CALLBACK_URL outrank the public URL', async () => {
+    process.env.PUBLIC_URL = 'https://public.example';
+    process.env.DISCORD_CALLBACK_URL =
+      'https://slot-1.example/api/auth/discord/callback';
+    const config = await getDiscordOAuthConfig(mockSettingsCore(creds));
+    expect(config?.callbackUrl).toBe(
+      'https://slot-1.example/api/auth/discord/callback',
     );
   });
 });
