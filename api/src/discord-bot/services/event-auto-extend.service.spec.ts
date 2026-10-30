@@ -515,7 +515,7 @@ describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
     ctx.mockDb.update.mockReturnValue(createUpdateChain());
     ctx.voiceAttendanceService.getActiveCount.mockReturnValue(3);
     await ctx.service.checkAndExtendEvents();
-    expect(ctx.scheduledEventService.updateEndTime).not.toHaveBeenCalled();
+    expect(ctx.adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
   });
 
   it('does NOT queue a Discord embed update when ad-hoc event has no binding', async () => {
@@ -528,7 +528,7 @@ describe('EventAutoExtendService — ad-hoc embed update & cron', () => {
     ctx.mockDb.update.mockReturnValue(createUpdateChain());
     ctx.voiceAttendanceService.getActiveCount.mockReturnValue(3);
     await ctx.service.checkAndExtendEvents();
-    expect(ctx.scheduledEventService.updateEndTime).not.toHaveBeenCalled();
+    expect(ctx.adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
   });
 
   it('delegates to cronJobService.executeWithTracking with the correct job name', async () => {
