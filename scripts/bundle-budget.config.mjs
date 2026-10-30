@@ -108,7 +108,7 @@ const LAZY_NAMED = [
  * they never count toward `totalInitial`; a `.wasm` with no entry here fails.
  */
 const WASM_NAMED = [
-  { name: 'rl_collectors_web_bg', kb: 86.4, why: 'ROK-1960 BG3 save reader (vendored rl-collectors-web 0.1.0 @ rl-companion e6123f84, 209,100 B raw / 88,433 B gz measured 2026-10-30); fetched only when the upload sheet parses a save. Re-vendor with scripts/vendor-bg3-wasm.mjs, then reset this baseline to the new measured size' },
+  { name: 'rl_collectors_web_bg', kb: 87.7, why: 'ROK-1960 BG3 save reader (vendored rl-collectors-web 0.1.0 @ rl-companion e767eadf, 212,554 B raw / 89,834 B gz measured 2026-10-30); fetched only when the upload sheet parses a save. Re-vendor with scripts/vendor-bg3-wasm.mjs, then reset this baseline to the new measured size' },
 ];
 
 const mapValues = (obj, fn) =>
