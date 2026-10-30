@@ -1,6 +1,6 @@
 /**
  * ROK-1785/ROK-1830 — the hub hero (prototype `layout/GuildHero.tsx`): crest
- * placeholder, name, the module's facts pills, member count, and the
+ * (ROK-1814; initials when none), name, the module's facts pills, member count, and the
  * "Next raid" chip that jumps to the module's events tab. Everything
  * game-specific (realm, faction, the LedgerLink import line) arrives through
  * the hub module's `heroPills` / `heroNote`.
@@ -19,21 +19,7 @@ import { NAV_CHIP_CLASS } from '../ui/nav-chip';
 import { hubCopy } from './hub-copy';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
 import { memberCountLabel } from '../layout/hub-nav/my-hubs-queries';
-
-/** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
-function crestInitials(name: string): string {
-    const letters = name.split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase());
-    return letters.slice(0, 2).join('') || '?';
-}
-
-function Crest({ name }: { name: string }): JSX.Element {
-    return (
-        <div aria-hidden="true"
-            className="col-start-1 row-start-1 flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-2 border-edge-strong bg-surface text-xl font-bold text-secondary sm:h-20 sm:w-20 sm:text-2xl">
-            {crestInitials(name)}
-        </div>
-    );
-}
+import { HubCrest } from './crest/hub-crest';
 
 function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     return (
@@ -94,7 +80,7 @@ export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroPr
     return (
         <header data-testid="guild-hero" className={heroClass(Boolean(action))}>
             <div className="contents lg:flex lg:min-w-0 lg:items-center lg:gap-4" data-testid="hub-hero-identity">
-                <Crest name={ctx.page.guild.name} />
+                <HubCrest crest={ctx.page.guild.crest} name={ctx.page.guild.name} size="hero" className="col-start-1 row-start-1" />
                 <div className="contents lg:block lg:min-w-0">
                     <h1 className={TITLE_CLASS} title={ctx.page.guild.name}>{ctx.page.guild.name}</h1>
                     {blurb && <p className="col-span-full break-words text-sm text-secondary lg:mb-2" data-testid="hub-hero-blurb">{blurb}</p>}

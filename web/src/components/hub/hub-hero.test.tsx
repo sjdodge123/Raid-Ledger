@@ -4,7 +4,7 @@
  */
 import type { JSX } from 'react';
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { useQuery } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { buildCommunityPage } from '../../test/factories/community-hub';
@@ -90,5 +90,35 @@ describe('HubSettingsTrigger — icon-only below sm (ROK-1884)', () => {
         expect(button).toHaveClass('min-h-[44px]', 'min-w-[44px]');
         expect(screen.getByTestId('guild-settings-trigger-label')).toHaveClass('hidden', 'sm:inline');
         expect(screen.getByTestId('guild-settings-trigger-label')).not.toHaveClass('sr-only');
+    });
+});
+
+/** ROK-1814 — the hero renders the hub's crest in today's 64/80px box; no crest keeps the initials. */
+describe('HubHero — crest (ROK-1814)', () => {
+    function withCrest(crest: GuildPage['guild']['crest']): GuildPage {
+        const page = buildCommunityPage();
+        return { ...page, guild: { ...page.guild, crest } };
+    }
+
+    it('no crest → the initials box exactly as before, in the grid\'s first cell', () => {
+        renderWithProviders(<Hero page={withCrest(null)} />);
+        const crest = within(screen.getByTestId('guild-hero')).getByTestId('hub-crest');
+        expect(crest).toHaveAttribute('data-crest', 'initials');
+        expect(crest).toHaveClass('col-start-1', 'row-start-1', 'h-16', 'w-16', 'sm:h-20', 'sm:w-20');
+    });
+
+    it('a preset crest replaces the initials', () => {
+        renderWithProviders(<Hero page={withCrest({ source: 'preset', emblemId: 'crown', fg: 'or', bg: 'sable' })} />);
+        const crest = screen.getByTestId('hub-crest');
+        expect(crest).toHaveAttribute('data-crest', 'preset');
+        expect(crest).toHaveClass('col-start-1', 'row-start-1', 'h-16', 'sm:h-20');
+    });
+
+    it('an upload shows the large image; a load error falls back to initials', () => {
+        renderWithProviders(<Hero page={withCrest({ source: 'upload', urlSm: '/u/a.sm.webp', urlLg: '/u/a.lg.webp' })} />);
+        const img = screen.getByTestId('hub-crest-img');
+        expect(img.getAttribute('src')).toMatch(/\/u\/a\.lg\.webp$/);
+        fireEvent.error(img);
+        expect(screen.getByTestId('hub-crest')).toHaveAttribute('data-crest', 'initials');
     });
 });
