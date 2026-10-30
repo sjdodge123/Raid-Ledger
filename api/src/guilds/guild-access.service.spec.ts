@@ -210,6 +210,8 @@ describe('GuildAccessService.myGuilds', () => {
         faction: 'Alliance',
         memberCount: 12,
         lastSnapshotAt: '2026-10-01T12:00:00.000Z',
+        // ROK-1814: no crest columns set → no crest.
+        crest: null,
       },
     ]);
   });
