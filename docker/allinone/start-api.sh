@@ -114,13 +114,22 @@ else
   fi
 fi
 
-# Auto-derive CLIENT_URL only from a CORS_ORIGIN the deployer set explicitly.
-# A resolver-derived value is left to ClientUrlSeederService, which ranks the
-# platform URL BELOW the saved client_url / Discord callback settings — an
-# export here would read as deployer-supplied and shadow them (ROK-1697).
-if [ -z "$CLIENT_URL" ] && [ "$CORS_ORIGIN_EXPLICIT" = "1" ] && [ "$CORS_ORIGIN" != "auto" ]; then
+# Auto-derive CLIENT_URL when the deployer did not set it (ROK-1697).
+# Precedence: 1) explicit CLIENT_URL — always authoritative, never touched
+#             2) concrete CORS_ORIGIN — explicit, or derived from the platform
+#                public-URL resolver above
+#             3) nothing — CORS_ORIGIN is "auto" or "*" (NAS default) → leave
+#                CLIENT_URL unset for ClientUrlSeederService
+# Step 2 covers resolver-derived origins too (operator ruling 2026-10-30): the
+# /lineups socket.io gateway reads process.env.CLIENT_URL at module load and
+# falls back to '*' without it, so a Render/PaaS deploy needs a real origin.
+if [ -z "$CLIENT_URL" ] && [ -n "$CORS_ORIGIN" ] && [ "$CORS_ORIGIN" != "auto" ] && [ "$CORS_ORIGIN" != "*" ]; then
   export CLIENT_URL="$CORS_ORIGIN"
-  echo "🔗 CLIENT_URL derived from CORS_ORIGIN: $CLIENT_URL"
+  if [ "$CORS_ORIGIN_EXPLICIT" = "1" ]; then
+    echo "🔗 CLIENT_URL derived from CORS_ORIGIN: $CLIENT_URL"
+  else
+    echo "🔗 CLIENT_URL derived from platform public URL: $CLIENT_URL"
+  fi
 fi
 
 # Run entrypoint (migrations, admin bootstrap, seeding)
