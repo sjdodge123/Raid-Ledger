@@ -49,6 +49,19 @@ describe('SetupClaimRequestSchema', () => {
         if (!r.success) expect(r.error.issues[0]?.message).toMatch(/72 bytes/);
     });
 
+    it.each([
+        ['36 two-byte chars', 'é'.repeat(36)],
+        ['18 four-byte emoji (36 UTF-16 units)', '🐉'.repeat(18)],
+        ['24 three-byte chars', '€'.repeat(24)],
+    ])('the char ceiling keeps every <=72-byte password: %s', (_label, newPassword) => {
+        expect(SetupClaimRequestSchema.safeParse({ code: 'abc', newPassword }).success).toBe(true);
+    });
+
+    it('refuses a huge password at the char ceiling', () => {
+        const r = SetupClaimRequestSchema.safeParse({ code: 'abc', newPassword: 'x'.repeat(100_000) });
+        expect(r.success).toBe(false);
+    });
+
     it('rejects a code longer than 256 chars', () => {
         const r = SetupClaimRequestSchema.safeParse({ code: 'a'.repeat(257), newPassword: 'x'.repeat(12) });
         expect(r.success).toBe(false);

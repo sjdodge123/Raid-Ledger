@@ -26,6 +26,9 @@ export const SetupClaimRequestSchema = z.object({
     newPassword: z
         .string()
         .min(SETUP_CLAIM_PASSWORD_MIN)
+        // Cheap ceiling before encoding: a UTF-16 unit is never fewer than one
+        // UTF-8 byte, so this refuses nothing the byte check would accept.
+        .max(SETUP_CLAIM_PASSWORD_MAX_BYTES)
         .refine((value) => utf8.encode(value).length <= SETUP_CLAIM_PASSWORD_MAX_BYTES, {
             message: `Password must be at most ${SETUP_CLAIM_PASSWORD_MAX_BYTES} bytes (bcrypt ignores the rest)`,
         }),
