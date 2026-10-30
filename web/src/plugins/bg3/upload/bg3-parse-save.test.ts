@@ -1,5 +1,5 @@
 /**
- * ROK-1960 L1 — the browser parse layer with the WASM reader mocked. The
+ * ROK-1960 L1 — the browser parse layer with the worker boundary mocked. The
  * golden case feeds the contract's own `act2-party-4p-summon` raw
  * `SaveInfo.json` through the reader stub and expects the fixture payload,
  * so a drift in `normaliseBg3SaveInfo` (e.g. the summon rule) turns it red.
@@ -13,13 +13,8 @@ import { Bg3ParseError, bg3ParseErrorMessage, type Bg3ParseErrorCode } from './b
 import { BG3_SAVE_MAX_BYTES, parseBg3Save, selectBg3SaveSource, sha256Hex } from './bg3-parse-save';
 import type { Bg3SaveInspection } from './vendor/rl_collectors_web';
 
-const inspectBg3Save = vi.fn<(bytes: Uint8Array) => Bg3SaveInspection>();
-const loadBg3Wasm = vi.fn();
-const resetBg3Wasm = vi.fn();
-vi.mock('./bg3-wasm', () => ({
-    loadBg3Wasm: () => loadBg3Wasm(),
-    resetBg3Wasm: () => resetBg3Wasm(),
-}));
+const inspectBg3SaveInWorker = vi.fn<(bytes: ArrayBuffer) => Promise<Bg3SaveInspection>>();
+vi.mock('./bg3-parse-client', () => ({ inspectBg3SaveInWorker: (bytes: ArrayBuffer) => inspectBg3SaveInWorker(bytes) }));
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../packages/contract/companion/bg3-save/v1/fixtures');
 const RAW = readFileSync(resolve(FIXTURES, 'saveinfo/act2-party-4p-summon.saveinfo.json'), 'utf8');
@@ -44,10 +39,6 @@ function lsv(name = 'QuickSave_1.lsv', size?: number): File {
     return file;
 }
 
-function wasmError(code: string): Error {
-    return Object.assign(new Error(`bg3 save: ${code}`), { name: 'Bg3SaveError', code });
-}
-
 async function codeOf(promise: Promise<unknown>): Promise<Bg3ParseErrorCode> {
     const error: unknown = await promise.then(() => null, (e: unknown) => e);
     if (!(error instanceof Bg3ParseError)) throw new Error(`expected a Bg3ParseError, got ${String(error)}`);
@@ -55,9 +46,7 @@ async function codeOf(promise: Promise<unknown>): Promise<Bg3ParseErrorCode> {
 }
 
 beforeEach(() => {
-    inspectBg3Save.mockReset().mockReturnValue(inspection());
-    loadBg3Wasm.mockReset().mockResolvedValue({ inspectBg3Save });
-    resetBg3Wasm.mockReset();
+    inspectBg3SaveInWorker.mockReset().mockResolvedValue(inspection());
 });
 
 describe('parseBg3Save — golden', () => {
@@ -75,7 +64,7 @@ describe('parseBg3Save — golden', () => {
 
     it('passes the whole file to the reader and never the folder name', async () => {
         await parseBg3Save({ file: lsv(), folderName: 'Tav-1234__QuickSave_1' });
-        expect(Array.from(must(inspectBg3Save.mock.calls[0], 'call')[0])).toEqual([0x4c, 0x53, 0x50, 0x4b]);
+        expect(Array.from(new Uint8Array(must(inspectBg3SaveInWorker.mock.calls[0], 'call')[0]))).toEqual([0x4c, 0x53, 0x50, 0x4b]);
     });
 
     it('keys a dropped folder by sha256 of its name', async () => {
@@ -90,7 +79,7 @@ describe('parseBg3Save — golden', () => {
     });
 
     it('drops the thumbnail when the reader returns none', async () => {
-        inspectBg3Save.mockReturnValue(inspection({ webp: null, thumbnail: null }));
+        inspectBg3SaveInWorker.mockResolvedValue(inspection({ webp: null, thumbnail: null }));
         const parsed = await parseBg3Save({ file: lsv(), folderName: 'X' });
         expect(parsed.payload.thumbnail).toBeNull();
         expect(parsed.webp).toBeNull();
@@ -100,46 +89,27 @@ describe('parseBg3Save — golden', () => {
 describe('parseBg3Save — error rows (spec section 7)', () => {
     it('rejects a file over the cap before reading it', async () => {
         expect(await codeOf(parseBg3Save({ file: lsv('a.lsv', BG3_SAVE_MAX_BYTES + 1), folderName: null }))).toBe('too_large');
-        expect(loadBg3Wasm).not.toHaveBeenCalled();
+        expect(inspectBg3SaveInWorker).not.toHaveBeenCalled();
     });
 
-    it.each([
-        ['not_lspk', 'not_a_save'],
-        ['unsupported_version', 'not_a_save'],
-        ['unsupported_package', 'unsupported_package'],
-        ['corrupt_package', 'corrupt_package'],
-        ['missing_save_info', 'missing_save_info'],
-        ['invalid_save_info', 'invalid_save_info'],
-    ] as const)('maps the reader code %s to %s and keeps the reader', async (wasmCode, code) => {
-        inspectBg3Save.mockImplementation(() => {
-            throw wasmError(wasmCode);
-        });
-        expect(await codeOf(parseBg3Save({ file: lsv(), folderName: 'X' }))).toBe(code);
-        expect(resetBg3Wasm).not.toHaveBeenCalled();
+    it('passes a coded worker error through unchanged', async () => {
+        inspectBg3SaveInWorker.mockRejectedValue(new Bg3ParseError('corrupt_package'));
+        expect(await codeOf(parseBg3Save({ file: lsv(), folderName: 'X' }))).toBe('corrupt_package');
     });
 
-    it('treats a trap as reader_failed and drops the cached reader', async () => {
-        inspectBg3Save.mockImplementation(() => {
-            throw new WebAssembly.RuntimeError('unreachable');
-        });
+    it('treats any other failure (e.g. an unreadable file) as reader_failed', async () => {
+        inspectBg3SaveInWorker.mockRejectedValue(new DOMException('gone', 'NotReadableError'));
         expect(await codeOf(parseBg3Save({ file: lsv(), folderName: 'X' }))).toBe('reader_failed');
-        expect(resetBg3Wasm).toHaveBeenCalledTimes(1);
-    });
-
-    it('treats a failed load as reader_failed and drops the cached reader', async () => {
-        loadBg3Wasm.mockRejectedValue(new TypeError('Failed to fetch'));
-        expect(await codeOf(parseBg3Save({ file: lsv(), folderName: 'X' }))).toBe('reader_failed');
-        expect(resetBg3Wasm).toHaveBeenCalledTimes(1);
     });
 
     it('treats SaveInfo text that is not JSON as invalid_save_info', async () => {
-        inspectBg3Save.mockReturnValue(inspection({ saveInfo: '{not json' }));
+        inspectBg3SaveInWorker.mockResolvedValue(inspection({ saveInfo: '{not json' }));
         expect(await codeOf(parseBg3Save({ file: lsv(), folderName: 'X' }))).toBe('invalid_save_info');
     });
 
     it('rejects a control-char save name as invalid_payload naming the field', async () => {
         const raw = { ...JSON.parse(RAW), 'Save Name': 'bad\u0007name' };
-        inspectBg3Save.mockReturnValue(inspection({ saveInfo: JSON.stringify(raw) }));
+        inspectBg3SaveInWorker.mockResolvedValue(inspection({ saveInfo: JSON.stringify(raw) }));
         const error: unknown = await parseBg3Save({ file: lsv(), folderName: 'X' }).catch((e: unknown) => e);
         expect(error).toBeInstanceOf(Bg3ParseError);
         expect(error instanceof Bg3ParseError && error.code).toBe('invalid_payload');

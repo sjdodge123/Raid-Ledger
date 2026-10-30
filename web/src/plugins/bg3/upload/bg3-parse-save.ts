@@ -1,7 +1,7 @@
 /**
  * ROK-1960 L1 — a dropped/picked BG3 save → the normalised `bg3-save`
  * payload + its WebP thumbnail, entirely in the browser (spec D-2). The WASM
- * reader does only the binary work; the payload is built by the contract's
+ * reader does only the binary work, in a dedicated worker; the payload is built by the contract's
  * own `normaliseBg3SaveInfo` and validated with `Bg3SavePayloadSchema`, so
  * this path cannot drift from the reference. Nothing here touches the
  * network. Every failure is a `Bg3ParseError`.
@@ -14,8 +14,8 @@ import {
     type CompanionWebpRef,
 } from '@raid-ledger/contract';
 import type { Bg3ParsedSave } from './bg3-upload-api';
-import { Bg3ParseError, wasmErrorCode } from './bg3-parse-errors';
-import { loadBg3Wasm, resetBg3Wasm } from './bg3-wasm';
+import { Bg3ParseError } from './bg3-parse-errors';
+import { inspectBg3SaveInWorker } from './bg3-parse-client';
 import type { Bg3SaveInspection } from './vendor/rl_collectors_web';
 import provenance from './vendor/PROVENANCE.json';
 
@@ -63,14 +63,12 @@ function firstIssuePath(error: SchemaIssues): string | null {
     return first ? first.path.map(String).join('.') || first.code : null;
 }
 
-async function inspect(bytes: Uint8Array): Promise<Bg3SaveInspection> {
+/** The reader runs in a worker; the file's buffer is transferred, not copied. */
+async function inspect(file: File): Promise<Bg3SaveInspection> {
     try {
-        const reader = await loadBg3Wasm();
-        return reader.inspectBg3Save(bytes);
+        return await inspectBg3SaveInWorker(await file.arrayBuffer());
     } catch (error) {
-        const code = wasmErrorCode(error);
-        if (code) throw new Bg3ParseError(code);
-        resetBg3Wasm();
+        if (error instanceof Bg3ParseError) throw error;
         throw new Bg3ParseError('reader_failed');
     }
 }
@@ -92,7 +90,7 @@ function parseSaveInfoJson(text: string): unknown {
 /** Read, inspect, normalise and validate one save. */
 export async function parseBg3Save(source: Bg3SaveSource): Promise<Bg3ParsedSave> {
     if (source.file.size > BG3_SAVE_MAX_BYTES) throw new Bg3ParseError('too_large');
-    const inspection = await inspect(new Uint8Array(await source.file.arrayBuffer()));
+    const inspection = await inspect(source.file);
     const raw = Bg3SaveInfoRawSchema.safeParse(parseSaveInfoJson(inspection.saveInfo));
     if (!raw.success) throw new Bg3ParseError('invalid_payload', firstIssuePath(raw.error));
     const thumb = thumbnailOf(inspection);
