@@ -13,6 +13,8 @@ entry.
   `"save-folder"`. Existing payloads are unchanged; a collector that never
   sends the value is unaffected. Mirrored on the read side
   (`Bg3MySaveSchema.campaignKeySource`).
+- New golden pair `file-name-bare-lsv` (synthetic `SaveInfo.json` + message
+  with `campaignKeySource: "file-name"`); no existing fixture changes.
 
 ## v1 — 2026-10-28 (additive) — `\p{Cs}` dropped from the `saveName` pattern
 

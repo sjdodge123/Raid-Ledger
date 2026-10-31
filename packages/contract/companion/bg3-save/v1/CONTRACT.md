@@ -209,7 +209,8 @@ cap grows.
   Cases: `act2-party-4p-summon` (from the operator's save, transform below),
   `act1-solo-no-thumbnail` (synthetic, `thumbnail: null`,
   `campaignKeySource: "game-id"`), `ruleset-null` (synthetic, one-element
-  `Difficulty`).
+  `Difficulty`), `file-name-bare-lsv` (synthetic, a browser upload of a bare
+  `.lsv`: `campaignKeySource: "file-name"`, ROK-1960).
 - `fixtures/invalid/<name>.json` — MUST be rejected; `fixtures/invalid/EXPECTED.json`
   maps each name to the `{ path, code }` of the Zod issue it must raise (path
   joined with `.`, `""` = root).

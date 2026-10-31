@@ -1,0 +1,42 @@
+{
+  "envelopeVersion": 1,
+  "contract": "bg3-save",
+  "contractVersion": 1,
+  "capturedAt": "2026-10-29T18:45:03Z",
+  "appVersion": "0.1.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "saveName": "QuickSave_9",
+    "savedAt": "2026-10-29T18:45:00Z",
+    "campaignKey": "9a8b7c6d5e4f30219a8b7c6d5e4f30219a8b7c6d5e4f30219a8b7c6d5e4f3021",
+    "campaignKeySource": "file-name",
+    "gameVersion": "4.1.1.7631656",
+    "platform": "Steam",
+    "currentLevel": "BGO_Main_A",
+    "difficulty": "DifficultyNormal",
+    "ruleset": "RulesetBalanced",
+    "party": [
+      {
+        "origin": "Generic",
+        "race": "Halfling_Lightfoot",
+        "level": 7,
+        "xpLevel": 1200,
+        "xpTotal": 15200,
+        "classes": [
+          {
+            "main": "Cleric",
+            "sub": "LifeDomain"
+          }
+        ],
+        "isSummon": false
+      }
+    ],
+    "thumbnail": {
+      "sha256": "8d6272fcaf63cbc49f2eb9be3a83bba29d6464592d55fdfb49a41f1c4af7b9f7",
+      "byteLength": 1698,
+      "contentType": "image/webp",
+      "width": 1280,
+      "height": 720
+    }
+  }
+}
