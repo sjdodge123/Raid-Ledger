@@ -226,7 +226,9 @@ describe('join materialises from the anchor (I1)', () => {
       [s.n3, s.n5].sort(),
     );
   });
+});
 
+describe('join audit (I1)', () => {
   it('I1: audits the join once on the anchor as series_joined', async () => {
     const s = await seedSeries();
     const userId = await createMember();
