@@ -32,3 +32,35 @@ export const PREFER_IMMUTABLE_ID = 'IdType="ImmutableId"';
 
 /** `/me` projection: the stable id plus the two possible labels. */
 export const MS_ME_URL = `${GRAPH_API}/me?$select=id,mail,userPrincipalName`;
+
+/**
+ * Raid Ledger's single-value extended property on every copy (spec §3.4).
+ * NEVER change this string: every copy already written carries it, and a new
+ * GUID orphans them all (adoption and the read-side `ourId` both key on it).
+ * Minted once in lane 7a-2 because the read `$expand` needs it; 7b-1 writes
+ * it on copies.
+ */
+export const RL_COPY_PROP_ID =
+  'String {5ee82885-bb24-48df-8d4a-123f14548871} Name rlCopyId';
+
+/**
+ * §6.4.1 privacy — the exact `calendarView` `$select`. `isCancelled` and
+ * `responseStatus` (the user's own reply only) back Q2; `originalStartTimeZone`
+ * backs the §3.3 all-day correction. No subject, body, location or attendees.
+ */
+export const MICROSOFT_EVENTS_SELECT =
+  'start,end,showAs,isAllDay,isCancelled,responseStatus,originalStartTimeZone';
+/** Extended properties come back only via `$expand`, never `$select`. */
+export const MICROSOFT_EVENTS_EXPAND = `singleValueExtendedProperties($filter=id eq '${RL_COPY_PROP_ID}')`;
+/** §6.4.1 — the exact calendar-list `$select` (names shown, never stored). */
+export const MICROSOFT_CALENDARS_SELECT = 'id,name,canEdit,isDefaultCalendar';
+/** Conservative page sizes; paging follows `@odata.nextLink` (UNVERIFIED max). */
+export const MICROSOFT_EVENTS_PAGE_SIZE = 250;
+export const MICROSOFT_CALENDARS_PAGE_SIZE = 100;
+/** Stop following `@odata.nextLink` after this many pages (as Google). */
+export const MICROSOFT_READ_MAX_PAGES = 10;
+/** Every read asks for UTC times and immutable ids (one `Prefer` header). */
+export const MICROSOFT_READ_PREFER: readonly string[] = [
+  PREFER_UTC,
+  PREFER_IMMUTABLE_ID,
+];
