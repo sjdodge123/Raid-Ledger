@@ -154,8 +154,8 @@ describe('close paths', () => {
         const user = userEvent.setup();
         await choose(user);
         await user.click(screen.getByRole('button', { name: 'Cancel' }));
-        expect(await screen.findByText(DISCARD)).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
+        expect(await screen.findByText(DISCARD)).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: 'Discard' }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
