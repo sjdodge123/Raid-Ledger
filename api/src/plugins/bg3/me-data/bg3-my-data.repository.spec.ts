@@ -138,6 +138,7 @@ describe('Bg3MyDataRepository.deleteAllFor', () => {
     expect(steps).toEqual([
       `companion-blobs:${ME}`,
       `bg3-gallery:${ME}`,
+      `bg3-save-markers:${ME}`,
       'companion_ingest_latest',
       `bg3-campaigns:${ME}`,
       'bg3_party_claims',
