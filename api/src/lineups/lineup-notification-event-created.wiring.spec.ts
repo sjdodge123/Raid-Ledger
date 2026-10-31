@@ -73,18 +73,22 @@ const MATCH = {
 } as unknown as MatchInfo;
 
 /** `findEventRosterUsers`' chain; records the table so a match-members read fails. */
-function rosterDb(names: string[]) {
+function rosterDb(names: string[], maxAttendees: number | null = null) {
   const seen: { fromTable?: unknown } = {};
   const db = {
     select: () => ({
       from: (table: unknown) => {
-        seen.fromTable = table;
+        seen.fromTable ??= table;
         return {
           innerJoin: () => ({
             where: () =>
               Promise.resolve(
                 names.map((displayName, i) => ({ userId: i + 1, displayName })),
               ),
+          }),
+          // ROK-2054: the event-cap read (`.from(events).where().limit(1)`).
+          where: () => ({
+            limit: () => Promise.resolve([{ slotConfig: null, maxAttendees }]),
           }),
         };
       },
@@ -97,8 +101,9 @@ function rosterDb(names: string[]) {
 async function postedCard(
   eventId: number | undefined,
   rostered: string[] = ROSTERED,
+  maxAttendees: number | null = null,
 ) {
-  const { db, seen } = rosterDb(rostered);
+  const { db, seen } = rosterDb(rostered, maxAttendees);
   jest.mocked(findMatchMemberUsers).mockResolvedValue(GROUP);
   const { resolveEmbedCtx } = jest.requireMock<
     typeof import('./lineup-notification-dispatch.helpers')
@@ -116,7 +121,11 @@ async function postedCard(
   await orchestrateEventCreated(deps, MATCH, new Date(), eventId);
   if (!out.card) throw new Error('orchestrateEventCreated posted no card');
   const fields = out.card.embed.toJSON().fields ?? [];
-  return { players: fields.find((f) => f.name.includes('Players')), seen };
+  return {
+    players: fields.find((f) => f.name.includes('Players')),
+    description: out.card.embed.toJSON().description ?? '',
+    seen,
+  };
 }
 
 describe('orchestrateEventCreated — card names the roster (ROK-1624 AC1/AC3)', () => {
@@ -168,6 +177,30 @@ describe('orchestrateEventCreated — "N of M from the group" line (ROK-1863 AC4
     const { players } = await postedCard(undefined);
 
     expect(players?.value).not.toContain('from the group signed up');
+  });
+});
+
+describe('orchestrateEventCreated — capacity-aware copy (ROK-2054)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('posts the "full" copy when the roster reaches the event cap', async () => {
+    const { description } = await postedCard(
+      EVENT_ID,
+      ROSTERED,
+      ROSTERED.length,
+    );
+
+    expect(description).toContain(
+      'is officially scheduled and full. Join the waitlist on the event page.',
+    );
+  });
+
+  it('posts the open copy when the event has no cap', async () => {
+    const { description } = await postedCard(EVENT_ID, ROSTERED, null);
+
+    expect(description).toContain(
+      'is officially scheduled and open for signups.',
+    );
   });
 });
 
