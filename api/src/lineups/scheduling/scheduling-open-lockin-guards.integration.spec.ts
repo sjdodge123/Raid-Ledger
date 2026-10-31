@@ -145,7 +145,7 @@ async function addSlot(
   matchId: number,
   votes: Array<[number, Stance]>,
   at: Date = SLOT,
-): Promise<void> {
+): Promise<number> {
   const [slot] = nonEmpty(
     await testApp.db
       .insert(schema.communityLineupScheduleSlots)
@@ -158,6 +158,7 @@ async function addSlot(
     .values(
       votes.map(([userId, stance]) => ({ slotId: slot.id, userId, stance })),
     );
+  return slot.id;
 }
 
 /** The create form's first call, as admin: `POST /events {schedulingMatchId}`. */
@@ -485,6 +486,19 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
     return sendEmbed.mock.calls.map((c) => c[0]);
   }
 
+  /** Every channel posted to, once the event's own game-channel embed (the
+   *  only post a standalone lock-in should make) has landed. */
+  async function settledChannels(
+    sendEmbed: jest.SpyInstance,
+  ): Promise<unknown[]> {
+    const channels = () => sendEmbed.mock.calls.map((c) => c[0]);
+    await waitFor(() => {
+      expect(channels()).toContain(GAME_CHANNEL);
+      return Promise.resolve();
+    }, 5000);
+    return channels();
+  }
+
   it('standalone: no channel post to the default (or any lineup) channel; the EVENT CREATED DM still goes out', async () => {
     const sendEmbed = await wireDiscord();
     const opened = await testApp.request
@@ -507,9 +521,34 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
     });
 
     expect(res.status).toBe(200);
-    expect(await postedChannels(sendEmbed, bystander, eventId)).not.toContain(
-      DEFAULT_CHANNEL,
-    );
+    await postedChannels(sendEmbed, bystander, eventId);
+    expect(await settledChannels(sendEmbed)).toEqual([GAME_CHANNEL]);
+  });
+
+  it('standalone, expired-path lock-in (createEventFromSlot → createLockedInEvent): no lineup card, the DM still goes out', async () => {
+    const sendEmbed = await wireDiscord();
+    const opened = await testApp.request
+      .post('/scheduling-polls')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ gameId: testApp.seed.game.id });
+    expect(opened.status).toBe(201);
+    const matchId = opened.body.id as number;
+    const bystander = await createUser('rok2054-expired-bystander');
+    await addMember(matchId, bystander);
+    const slotId = await addSlot(matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [bystander, 'no'],
+    ]);
+
+    const res = await testApp.request
+      .post(`/lineups/0/schedule/${matchId}/create-event`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slotId });
+
+    expect(res.status).toBe(201);
+    const eventId = res.body.eventId as number;
+    await postedChannels(sendEmbed, bystander, eventId);
+    expect(await settledChannels(sendEmbed)).toEqual([GAME_CHANNEL]);
   });
 
   it('community lineup: the EVENT CREATED card still posts to the default channel', async () => {
