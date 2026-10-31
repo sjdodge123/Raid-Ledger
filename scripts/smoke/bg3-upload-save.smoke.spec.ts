@@ -16,7 +16,8 @@
  * `GET /plugins/bg3/hubs/:id/snapshot` with `pollForCondition`. No sleeps.
  */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
@@ -33,6 +34,8 @@ const PARTY_SIZE = 5; // 4 heroes + 1 summon
 /** `BG3_SEED_CAMPAIGN_NAME` — the seed's active campaign. */
 const CAMPAIGN_NAME = 'Tactician run';
 const UI_TIMEOUT = 20_000;
+/** Fixed mtime (2024-01-01T00:00:00Z, seconds) for every picked copy of the fixture. */
+const PINNED_MTIME_S = 1_704_067_200;
 
 interface Seed {
     hubId: number;
@@ -43,8 +46,8 @@ type Snapshot = { empty: true } | { empty: false; party: { isSummon: boolean }[]
 
 interface UploadFile {
     name: string;
-    mimeType: string;
-    buffer: Buffer;
+    /** Absolute path of the on-disk copy handed to `setInputFiles`. */
+    path: string;
 }
 
 /** One upload-path request: a companion blob/message or the campaign-key bind. */
@@ -121,10 +124,23 @@ async function seedHub(testInfo: TestInfo): Promise<Seed> {
     return { hubId: body.hubId, memberId };
 }
 
-/** The synthetic save under a name unique to this run (the bare-file campaign key is the file name). */
+/** Per-worker temp dir holding the on-disk fixture copies; created in `beforeAll`, removed in `afterAll`. */
+let tempDir: string | null = null;
+
+/**
+ * Copy the synthetic save to disk under a name unique to this run (the
+ * bare-file campaign key is the file name), as a real user picks it. The
+ * mtime is pinned because the web derives `savedAt` from `file.lastModified`:
+ * an in-memory buffer gets "now" on every pick, so a replay would look newer
+ * and be filed instead of reported as "Already uploaded.".
+ */
 function uploadFile(testInfo: TestInfo): UploadFile {
-    const stem = `${hubSeedTag('bg3-upload', testInfo)}-${Date.now().toString(36)}`;
-    return { name: `${stem}.lsv`, mimeType: 'application/octet-stream', buffer: readFileSync(LSV_FIXTURE) };
+    if (tempDir === null) throw new Error('bg3 upload: temp dir not created (beforeAll did not run)');
+    const name = `${hubSeedTag('bg3-upload', testInfo)}-${Date.now().toString(36)}.lsv`;
+    const path = join(tempDir, name);
+    copyFileSync(LSV_FIXTURE, path);
+    utimesSync(path, PINNED_MTIME_S, PINNED_MTIME_S);
+    return { name, path };
 }
 
 /** Poll the hub snapshot until the party has `size` members (heroes + summons). */
@@ -147,7 +163,7 @@ function uploadSheet(page: Page): Locator {
 async function pickSave(page: Page, file: UploadFile): Promise<Locator> {
     const sheet = uploadSheet(page);
     await expect(sheet, 'the "Upload a save" sheet opens').toBeVisible();
-    await sheet.getByTestId('bg3-upload-input').setInputFiles(file);
+    await sheet.getByTestId('bg3-upload-input').setInputFiles(file.path);
     const preview = sheet.getByTestId('bg3-upload-preview');
     await expect(preview, 'the browser parses the .lsv into a preview').toBeVisible({ timeout: UI_TIMEOUT });
     return preview;
@@ -174,7 +190,13 @@ function partyList(page: Page): Locator {
 
 test.describe('BG3 upload a save (ROK-1960)', () => {
     test.beforeAll(async () => {
+        tempDir = mkdtempSync(join(tmpdir(), 'rl-bg3-upload-'));
         await ensurePluginActive(await getAdminToken(), 'bg3');
+    });
+
+    test.afterAll(() => {
+        if (tempDir !== null) rmSync(tempDir, { recursive: true, force: true });
+        tempDir = null;
     });
 
     test('Party empty state → Upload a save → preview → Upload → the Party widget shows the party', async ({ page }, testInfo) => {
