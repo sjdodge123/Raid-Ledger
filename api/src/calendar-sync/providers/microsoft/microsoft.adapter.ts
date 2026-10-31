@@ -1,9 +1,8 @@
 /**
  * ROK-1597: Microsoft's account capability (connect / refresh / disconnect)
  * over the identity platform v2.0 `common` tenant, plus read (calendar list
- * + `calendarView` busy time). Write (7b-1) is added by the layer that
- * implements it — the registry detects capability structurally, so this
- * adapter routes read but not write until then.
+ * + `calendarView` busy time) and write (the dedicated "Raid Ledger"
+ * calendar + per-sign-up copies, `microsoft-write.helpers`).
  *
  * The client id + secret are read per call from app settings, so an admin
  * edit applies without a restart. Nothing here logs a token, code or secret.
@@ -14,6 +13,7 @@ import type { SettingsCore } from '../../../settings/settings-bot.helpers';
 import { getCalendarProviderConfig } from '../../../settings/settings-calendar-sync.helpers';
 import {
   MissingScopesError,
+  NotFoundError,
   ProviderAuthError,
   ProviderNotConfiguredError,
   TransientError,
@@ -24,7 +24,10 @@ import type {
   CalendarAccountProvider,
   CalendarCredentials,
   CalendarReadCapability,
+  CalendarWriteCapability,
   ConnectResult,
+  CopyEventInput,
+  CopyRef,
   FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
@@ -48,10 +51,22 @@ import {
   refreshMicrosoftToken,
   type MicrosoftClient,
 } from './microsoft-oauth.helpers';
+import {
+  deleteMicrosoftCalendar,
+  deleteMicrosoftEvent,
+  findMicrosoftEventByCopyId,
+  getMicrosoftCalendar,
+  insertMicrosoftCalendar,
+  insertMicrosoftEvent,
+  patchMicrosoftEvent,
+} from './microsoft-write.helpers';
 
 @Injectable()
 export class MicrosoftCalendarAdapter
-  implements CalendarAccountProvider, CalendarReadCapability
+  implements
+    CalendarAccountProvider,
+    CalendarReadCapability,
+    CalendarWriteCapability
 {
   readonly key = 'microsoft' as const;
   private readonly logger = new Logger(MicrosoftCalendarAdapter.name);
@@ -175,6 +190,67 @@ export class MicrosoftCalendarAdapter
     return busyResult(blocks, missing, refused);
   }
 
+  /** Known id still there → it; gone (404/410) or none → create / adopt. */
+  async ensureRaidLedgerCalendar(
+    credentials: CalendarCredentials,
+    knownId: string | null,
+  ): Promise<string> {
+    const token = accessTokenOf(credentials);
+    if (knownId) {
+      const known = await ignoreNotFound(getMicrosoftCalendar(token, knownId));
+      if (known) return known;
+    }
+    return insertMicrosoftCalendar(token);
+  }
+
+  /**
+   * PATCH the existing copy (NotFound propagates: the caller recreates).
+   * With no ref, adopt the copy already carrying this copy id in THIS
+   * calendar before inserting, so a retried create never duplicates (M1).
+   * `calendarId` may be the `'primary'` alias (main calendar).
+   */
+  async upsertEvent(
+    credentials: CalendarCredentials,
+    calendarId: string,
+    input: CopyEventInput,
+    existing: CopyRef | null,
+  ): Promise<CopyRef> {
+    const token = accessTokenOf(credentials);
+    if (existing) {
+      const id = existing.providerEventId;
+      return patchMicrosoftEvent(token, calendarId, id, input);
+    }
+    const found = await findMicrosoftEventByCopyId(
+      token,
+      calendarId,
+      input.copyId,
+    );
+    const adopted = found
+      ? await ignoreNotFound(
+          patchMicrosoftEvent(token, calendarId, found.providerEventId, input),
+        )
+      : null;
+    return adopted ?? insertMicrosoftEvent(token, calendarId, input);
+  }
+
+  /** A copy already gone (404/410) counts as deleted. */
+  async deleteEvent(
+    credentials: CalendarCredentials,
+    ref: CopyRef,
+  ): Promise<void> {
+    const token = accessTokenOf(credentials);
+    await ignoreNotFound(deleteMicrosoftEvent(token, ref.providerEventId));
+  }
+
+  /** Deleting the calendar removes its copies; already gone is fine. */
+  async deleteRaidLedgerCalendar(
+    credentials: CalendarCredentials,
+    calendarId: string,
+  ): Promise<void> {
+    const token = accessTokenOf(credentials);
+    await ignoreNotFound(deleteMicrosoftCalendar(token, calendarId));
+  }
+
   private async client(): Promise<MicrosoftClient> {
     const config = await getCalendarProviderConfig(this.settings, 'microsoft', {
       includeSecret: true,
@@ -219,4 +295,14 @@ function busyResult(
     ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
     ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
   };
+}
+
+/** Resolve to null on NotFoundError; every other error propagates. */
+async function ignoreNotFound<T>(work: Promise<T>): Promise<T | null> {
+  try {
+    return await work;
+  } catch (err) {
+    if (err instanceof NotFoundError) return null;
+    throw err;
+  }
 }
