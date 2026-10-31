@@ -2,8 +2,10 @@
  * ROK-1597 (spec §6): an in-memory Microsoft Graph behind the
  * `microsoftJsonRequest` seam — the READ half (lane 7a-2): `/me`,
  * `/me/calendars` and `calendarView` with `@odata.nextLink` paging
- * (`pageSize` forces 2+ pages). Write routes (POST/PATCH/DELETE, the
- * extended-property `$filter`) are lane 7b-1's. Events are stored in
+ * (`pageSize` forces 2+ pages) — and the WRITE half (lane 7b-1): calendar
+ * create (409 `ErrorFolderExists` on a duplicate name) / get / delete /
+ * `$filter=name eq`, event create / PATCH / DELETE and the
+ * extended-property `$filter` adopt lookup. Events are stored in
  * Graph's own shape (`start.dateTime` zone-less + `timeZone: 'UTC'`).
  * Install with
  * `jest.spyOn(microsoftHttp, 'microsoftJsonRequest').mockImplementation(api.handle)`.
@@ -98,9 +100,23 @@ export class FakeGraphCalendarApi {
 
   /** Any Graph-shaped event (all-day fixtures, copies with the property). */
   seedRaw(calendarId: string, event: Json): string {
-    const id = `AAMkADevt${++this.seq}=`;
+    const id = this.nextId('evt');
     this.calendars.get(calendarId)?.events.set(id, { ...event, id });
     return id;
+  }
+
+  /** A fresh Graph-looking id (`evt`, `cal`) or etag (`tag`). */
+  nextId(kind: 'evt' | 'cal' | 'tag'): string {
+    return `AAMkAD${kind}${++this.seq}=`;
+  }
+
+  /** The event with this id in any calendar, or null. */
+  findEvent(eventId: string): { calendarId: string; event: Json } | null {
+    for (const [calendarId, cal] of this.calendars) {
+      const event = cal.events.get(eventId);
+      if (event) return { calendarId, event };
+    }
+    return null;
   }
 
   /** Drop a calendar (and its events) as if the user deleted it. */
@@ -126,8 +142,104 @@ export class FakeGraphCalendarApi {
     if (failure) return Promise.resolve(failure);
     if (url === MS_ME_URL)
       return Promise.resolve(reply(200, fixture('me-work')));
+    const written = this.routeWrite(method, url, body);
+    if (written) return Promise.resolve(written);
     return Promise.resolve(method === 'GET' ? this.routeGet(url) : bad());
   };
+
+  /** Write routes (+ the write-side GETs); null = not a write route. */
+  private routeWrite(
+    method: MicrosoftJsonMethod,
+    fullUrl: string,
+    body: unknown,
+  ): MicrosoftHttpResponse | null {
+    const [rawPath = '', query = ''] = fullUrl.split('?');
+    const path = rawPath.slice(GRAPH_API.length);
+    const params = new URLSearchParams(query);
+    if (path === '/me/calendars')
+      return this.calendarsRoute(method, params, body);
+    const one = /^\/me\/calendars\/([^/]+)$/.exec(path);
+    if (one?.[1]) return this.oneCalendar(method, decodeURIComponent(one[1]));
+    const events = /^\/me\/(?:calendar|calendars\/([^/]+))\/events$/.exec(path);
+    if (events) {
+      const id = events[1]
+        ? decodeURIComponent(events[1])
+        : FAKE_DEFAULT_CALENDAR_ID;
+      return this.eventsRoute(method, id, params, body);
+    }
+    const ev = /^\/me\/events\/([^/]+)$/.exec(path);
+    if (ev?.[1]) return this.oneEvent(method, decodeURIComponent(ev[1]), body);
+    return null;
+  }
+
+  private calendarsRoute(
+    method: MicrosoftJsonMethod,
+    params: URLSearchParams,
+    body: unknown,
+  ): MicrosoftHttpResponse | null {
+    if (method === 'GET') {
+      const name = /^name eq '(.*)'$/.exec(params.get('$filter') ?? '')?.[1];
+      if (name === undefined) return null;
+      const value = this.calendarRows().filter((r) => r.name === name);
+      return reply(200, { value });
+    }
+    if (method !== 'POST') return bad();
+    const rawName = toJson(body).name;
+    const name = typeof rawName === 'string' ? rawName : '';
+    const taken = [...this.calendars.values()].some((c) => c.name === name);
+    if (taken) return reply(409, { error: { code: 'ErrorFolderExists' } });
+    const id = this.nextId('cal');
+    this.addCalendar(id, name);
+    return reply(201, { id, name, canEdit: true, isDefaultCalendar: false });
+  }
+
+  private oneCalendar(
+    method: MicrosoftJsonMethod,
+    id: string,
+  ): MicrosoftHttpResponse {
+    const cal = this.calendars.get(id);
+    if (!cal) return reply(404, fixture('error-404'));
+    if (method === 'GET') return reply(200, { id, name: cal.name });
+    if (method !== 'DELETE') return bad();
+    this.calendars.delete(id);
+    return reply(204, null);
+  }
+
+  private eventsRoute(
+    method: MicrosoftJsonMethod,
+    calendarId: string,
+    params: URLSearchParams,
+    body: unknown,
+  ): MicrosoftHttpResponse {
+    const cal = this.calendars.get(calendarId);
+    if (!cal) return reply(404, fixture('error-404'));
+    if (method === 'GET')
+      return reply(200, { value: adoptMatches(cal, params) });
+    if (method !== 'POST') return bad();
+    const id = this.nextId('evt');
+    const event = { ...toJson(body), id, '@odata.etag': this.nextId('tag') };
+    cal.events.set(id, event);
+    return reply(201, event);
+  }
+
+  private oneEvent(
+    method: MicrosoftJsonMethod,
+    eventId: string,
+    body: unknown,
+  ): MicrosoftHttpResponse {
+    const found = this.findEvent(eventId);
+    const cal = found ? this.calendars.get(found.calendarId) : undefined;
+    if (!found || !cal) return reply(404, fixture('error-404'));
+    if (method === 'DELETE') {
+      cal.events.delete(eventId);
+      return reply(204, null);
+    }
+    if (method !== 'PATCH') return bad();
+    const etag = this.nextId('tag');
+    const next = { ...found.event, ...toJson(body), '@odata.etag': etag };
+    cal.events.set(eventId, next);
+    return reply(200, next);
+  }
 
   private routeGet(fullUrl: string): MicrosoftHttpResponse {
     const [path = '', query = ''] = fullUrl.split('?');
@@ -185,6 +297,33 @@ function inWindow(cal: FakeGraphCalendar, params: URLSearchParams): Json[] {
   return [...cal.events.values()].filter(
     (e) => at(e, 'start') < max && at(e, 'end') > min,
   );
+}
+
+/** The adopt lookup: `ep/id eq '<prop>' and ep/value eq '<copyId>'`. */
+function adoptMatches(cal: FakeGraphCalendar, params: URLSearchParams): Json[] {
+  const filter = params.get('$filter') ?? '';
+  const m = /ep\/id eq '(.*?)' and ep\/value eq '(.*?)'\)$/.exec(filter);
+  if (!m) return [];
+  const [, propId = '', value = ''] = m;
+  const hits = [...cal.events.values()].filter((e) => {
+    const props = e.singleValueExtendedProperties;
+    return (
+      Array.isArray(props) &&
+      props.some((p) => {
+        const prop = toJson(p);
+        return prop.id === propId && prop.value === value;
+      })
+    );
+  });
+  const top = Number(params.get('$top') ?? '10');
+  return hits.slice(0, top).map((e) => ({ id: e.id }));
+}
+
+function toJson(value: unknown): Json {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(value));
 }
 
 const bad = (): MicrosoftHttpResponse =>

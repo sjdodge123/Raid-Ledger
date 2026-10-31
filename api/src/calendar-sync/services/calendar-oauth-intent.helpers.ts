@@ -27,6 +27,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import type { CalendarProviderKey } from '../providers/calendar-provider.interface';
 import { hasGoogleEventsScope } from '../providers/google/google-oauth.helpers';
+import { hasMicrosoftCalendarScope } from '../providers/microsoft/microsoft-oauth.helpers';
 import {
   applyReadConsent,
   grantAllowsRead,
@@ -56,6 +57,7 @@ export function grantCoversIntent(
 ): boolean {
   if (intent === 'read') return grantAllowsRead(provider, grantedScopes);
   if (intent !== 'primary') return true;
+  if (provider === 'microsoft') return hasMicrosoftCalendarScope(grantedScopes);
   return provider === 'google' && hasGoogleEventsScope(grantedScopes);
 }
 

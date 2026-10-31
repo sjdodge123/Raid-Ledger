@@ -31,6 +31,7 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { hasGoogleEventsScope } from '../providers/google/google-oauth.helpers';
+import { hasMicrosoftCalendarScope } from '../providers/microsoft/microsoft-oauth.helpers';
 import {
   enqueueCalendarWriteJob,
   type CalendarWriteEnqueueDeps,
@@ -164,13 +165,17 @@ async function assertNoOtherWriteConnection(
   if (other) throw new ConflictException('write_already_enabled');
 }
 
-/** D8: the primary target needs the sensitive events scope on the grant. */
+/**
+ * D8: the primary target needs write access to the main calendar on the
+ * grant — Google's sensitive events scope, or Microsoft's
+ * `Calendars.ReadWrite` (ROK-1597 Q4: it covers the main calendar too).
+ */
 function assertEventsScope(row: ConnectionRow): void {
   const creds = decryptCalendarCredentials(row.credentialsEncrypted);
+  if (creds.kind !== 'oauth') throw new ConflictException('needs_consent');
   const granted =
-    row.provider === 'google' &&
-    creds.kind === 'oauth' &&
-    hasGoogleEventsScope(creds.scopes);
+    (row.provider === 'google' && hasGoogleEventsScope(creds.scopes)) ||
+    (row.provider === 'microsoft' && hasMicrosoftCalendarScope(creds.scopes));
   if (!granted) throw new ConflictException('needs_consent');
 }
 
