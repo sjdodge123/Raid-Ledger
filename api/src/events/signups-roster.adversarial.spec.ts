@@ -26,6 +26,7 @@ const baseSignup = {
   roachedOutAt: null,
   runningLateAt: null,
   lateMinutes: null,
+  seriesSignupId: null,
 };
 
 const baseUser = {

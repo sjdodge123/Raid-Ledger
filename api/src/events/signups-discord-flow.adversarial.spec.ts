@@ -77,6 +77,7 @@ const insertedSignup = {
   roachedOutAt: null,
   runningLateAt: null,
   lateMinutes: null,
+  seriesSignupId: null,
 };
 
 describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
