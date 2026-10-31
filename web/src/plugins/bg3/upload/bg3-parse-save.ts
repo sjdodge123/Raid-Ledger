@@ -16,6 +16,7 @@ import {
 import type { Bg3ParsedSave } from './bg3-upload-api';
 import { Bg3ParseError } from './bg3-parse-errors';
 import { inspectBg3SaveInWorker } from './bg3-parse-client';
+import { hasSubtleCrypto, sha256HexSync } from './bg3-sha256';
 import type { Bg3SaveInspection } from './vendor/rl_collectors_web';
 import provenance from './vendor/PROVENANCE.json';
 
@@ -38,9 +39,15 @@ export function selectBg3SaveSource(files: readonly File[], folderName: string |
     return { file, folderName };
 }
 
-/** Lowercase hex SHA-256 of a UTF-8 string (WebCrypto). */
+/**
+ * Lowercase hex SHA-256 of a UTF-8 string. WebCrypto when available; otherwise
+ * the pure-JS fallback, because `crypto.subtle` is undefined in an insecure
+ * context (the plain-HTTP LAN self-host) and every save would fail to hash.
+ */
 export async function sha256Hex(text: string): Promise<string> {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const bytes = new TextEncoder().encode(text);
+    if (!hasSubtleCrypto()) return sha256HexSync(bytes);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
