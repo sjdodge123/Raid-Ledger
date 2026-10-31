@@ -4,12 +4,14 @@
  * `SchemaValidationError` on drift); 204 routes resolve `undefined`.
  */
 import {
+    Bg3CampaignKeyBindingResponseSchema,
     Bg3CampaignSummarySchema,
     Bg3HubCampaignsResponseSchema,
     Bg3HubSettingsSchema,
     Bg3MySavesResponseSchema,
     Bg3SessionsResponseSchema,
     Bg3SnapshotResponseSchema,
+    type Bg3CampaignKeyBindingResponse,
     type Bg3CampaignSummary,
     type Bg3HubCampaignsResponse,
     type Bg3HubSettings,
@@ -114,6 +116,11 @@ export function updateBg3Campaign(campaignId: number, body: Bg3UpdateCampaignInp
 /** `null` clears the default; setting one also files the caller's unassigned saves. */
 export function setBg3DefaultCampaign(campaignId: number | null): Promise<void> {
     return fetchApi<void>(`${BG3_API}/me/default-campaign`, json('PUT', { campaignId }));
+}
+
+/** ROK-1960: where the caller's own saves with this key sit now (the upload's cross-hub confirm). */
+export function fetchBg3KeyBinding(campaignKey: string): Promise<Bg3CampaignKeyBindingResponse> {
+    return fetchApi(`${BG3_API}/me/campaign-keys/${seg(campaignKey)}`, {}, Bg3CampaignKeyBindingResponseSchema);
 }
 
 export function bindBg3CampaignKey(campaignKey: string, campaignId: number): Promise<void> {

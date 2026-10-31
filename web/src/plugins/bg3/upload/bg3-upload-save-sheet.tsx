@@ -16,6 +16,7 @@ import { Bg3StartCampaignDialog } from '../campaign/bg3-start-campaign-dialog';
 import { Bg3UploadDropZone } from './bg3-upload-drop-zone';
 import { Bg3UploadPreview } from './bg3-upload-preview';
 import { Bg3UploadBanner } from './bg3-upload-banner';
+import { Bg3UploadMoveConfirm } from './bg3-upload-move-confirm';
 import { useBg3UploadFlow } from './use-bg3-upload-flow';
 import { bg3InitialUploadCampaign } from './bg3-upload-format';
 import type { Bg3UploadResult } from './use-bg3-upload-save';
@@ -50,8 +51,9 @@ function SheetBody({ flow, campaigns, onNewCampaign }: BodyProps): JSX.Element |
             <div className="flex flex-col gap-1">
                 <label htmlFor={BG3_UPLOAD_CAMPAIGN_ID} className="text-sm text-secondary">Campaign</label>
                 <Bg3CampaignPicker id={BG3_UPLOAD_CAMPAIGN_ID} campaigns={campaigns} value={flow.campaignId}
-                    onChange={flow.setCampaignId} onNewCampaign={onNewCampaign} disabled={flow.uploading} />
+                    onChange={flow.setCampaignId} onNewCampaign={onNewCampaign} disabled={flow.uploading || flow.confirm !== null} />
             </div>
+            {flow.confirm !== null && <Bg3UploadMoveConfirm binding={flow.confirm} onMove={flow.moveHere} onCancel={flow.cancelMove} />}
         </>
     );
 }
@@ -64,7 +66,7 @@ function SheetFooter({ flow, onCancel, onDone, onUpload }: FooterProps): JSX.Ele
         <>
             <Button variant="secondary" onClick={onCancel} disabled={flow.uploading}>Cancel</Button>
             {flow.parsed !== null && (
-                <Button onClick={onUpload} loading={flow.uploading} loadingLabel="Uploading…" disabled={flow.campaignId === null}>
+                <Button onClick={onUpload} loading={flow.uploading} loadingLabel="Uploading…" disabled={flow.campaignId === null || flow.confirm !== null}>
                     Upload
                 </Button>
             )}

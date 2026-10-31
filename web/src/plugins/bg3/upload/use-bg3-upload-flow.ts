@@ -9,8 +9,9 @@ import { useEffect, useRef, useState } from 'react';
 import { disposeBg3ParseWorker } from './bg3-parse-client';
 import { parseBg3Save, selectBg3SaveSource } from './bg3-parse-save';
 import { Bg3ParseError, bg3ParseErrorMessage } from './bg3-parse-errors';
-import { bg3UploadErrorMessage } from './bg3-upload-errors';
+import { bg3UploadErrorMessage, type Bg3UploadError } from './bg3-upload-errors';
 import { useBg3UploadSave, type Bg3UploadResult } from './use-bg3-upload-save';
+import { useBg3MoveCheck } from './use-bg3-move-check';
 import type { Bg3ParsedSave } from './bg3-upload-api';
 import type { Bg3DroppedFiles } from './bg3-drop-files';
 import type { Bg3UploadBannerTone } from './bg3-upload-banner';
@@ -71,6 +72,8 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
     const [picked, setPicked] = useState<number | null | undefined>(undefined);
     useRevokeOnChange(parsed?.thumbUrl ?? null);
     const campaignId = picked === undefined ? initialCampaignId : picked;
+    const fail = (e: Bg3UploadError): void => setBanner({ tone: 'danger', text: bg3UploadErrorMessage(e) });
+    const move = useBg3MoveCheck(hubId, isOpen, fail);
 
     const read = (dropped: Bg3DroppedFiles): void => {
         setBanner(null);
@@ -80,16 +83,15 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
                 (e: unknown) => { if (isOpen()) setBanner({ tone: 'danger', text: parseMessage(e) }); })
             .finally(() => { if (isOpen()) setParsing(false); });
     };
+    /** Upload: read the key's binding first; a cross-hub one waits on `moveHere` / `cancelMove`. */
     const submit = (): void => {
         if (parsed === null || campaignId === null) return;
         setBanner(null);
-        upload.mutate({ save: parsed.save, campaignId }, {
-            onSuccess: setResult,
-            onError: (e) => setBanner({ tone: 'danger', text: bg3UploadErrorMessage(e) }),
-        });
+        const vars = { save: parsed.save, campaignId };
+        move.check(vars.save.payload.campaignKey, () => upload.mutate(vars, { onSuccess: setResult, onError: fail }));
     };
     return {
-        parsed, parsing, banner, result, campaignId, read, submit,
-        uploading: upload.isPending, setCampaignId: setPicked,
+        parsed, parsing, banner, result, campaignId, read, submit, setCampaignId: setPicked,
+        confirm: move.confirm, moveHere: move.confirmMove, cancelMove: move.cancel, uploading: upload.isPending || move.checking,
     };
 }

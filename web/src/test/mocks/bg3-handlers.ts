@@ -6,6 +6,7 @@
  */
 import { http, HttpResponse } from 'msw';
 import type {
+    Bg3CampaignKeyBinding,
     Bg3CampaignSummary,
     Bg3HubCampaignsResponse,
     Bg3MySavesResponse,
@@ -59,6 +60,11 @@ export function bg3SessionsHandler(pages: Record<string, Bg3SessionsResponse>, s
         const page = pages[url.searchParams.get('cursor') ?? ''];
         return page ? HttpResponse.json(page) : bg3Error(400, 'Invalid cursor');
     });
+}
+
+/** GET the caller's binding for a key (ROK-1960 cross-hub confirm); `null` = unbound. */
+export function bg3KeyBindingHandler(binding: Bg3CampaignKeyBinding | null = null) {
+    return http.get(BG3_KEY_URL, () => HttpResponse.json({ binding }));
 }
 
 export function bg3MySavesHandler(body: Bg3MySavesResponse) {

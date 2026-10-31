@@ -7,6 +7,9 @@ import type { JSX, ReactNode } from 'react';
 
 export type Bg3UploadBannerTone = 'danger' | 'success' | 'info';
 
+/** §4.7 `warning` status tint — the cross-hub move confirm (`bg3-upload-move-confirm.tsx`). */
+export const BG3_UPLOAD_WARNING_PANEL = 'rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm';
+
 const TONE: Readonly<Record<Bg3UploadBannerTone, string>> = {
     danger: 'border-danger/30 bg-danger/10 text-danger',
     success: 'border-success/30 bg-success/10 text-success',
