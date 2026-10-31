@@ -20,6 +20,7 @@ import { DiscordNotificationService } from '../notifications/discord-notificatio
 import { GuildMemberAddListener } from '../discord-bot/listeners/guild-member-add.listener';
 import { fetchSignupsByEvent } from '../notifications/event-reminder.helpers';
 import { createMemberAndLogin } from './signups.integration.spec-helpers';
+import { insertMembershipOrConflict } from './series-signups-join.helpers';
 
 const HOUR = 60 * 60 * 1000;
 const ACTIVE = ['signed_up', 'tentative'];
@@ -603,5 +604,107 @@ describe('reminders (I13)', () => {
     const after = await fetchSignupsByEvent(testApp.db, [s.n3]);
     // mutation: status filter removed from fetchSignupsByEvent
     expect(after.get(s.n3) ?? []).not.toContain(userId);
+  });
+});
+
+// ── review fixes: rows that appear mid-join, the 23505 → 409 map, leave failures
+
+describe('join never resurrects a night that appeared mid-join (spec §4)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a night declined while the join loop runs stays declined, untagged, and is reported in failed', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    const svc = signups();
+    const real = svc.signup.bind(svc);
+    // The user declines night 5 while the loop is still creating night 2.
+    jest.spyOn(svc, 'signup').mockImplementationOnce(async (...args) => {
+      await insertSignup(s.n5, userId, { status: 'declined' });
+      return real(...args);
+    });
+
+    const res = await join(s.n2, userId);
+
+    // mutation: drop the findUserRowsForEvents re-read in materializeOne
+    // (signup() reactivates the declined row — ROK-1769 — and it is tagged)
+    const n5 = must(await rowFor(s.n5, userId), 'night 5');
+    expect(n5.status).toBe('declined');
+    expect(n5.seriesSignupId).toBeNull();
+    expect(res.createdEventIds).not.toContain(s.n5);
+    expect(res.failed).toEqual([
+      { eventId: s.n5, message: 'You already had a signup on this night' },
+    ]);
+  });
+
+  it('a row signup() returns from before the join is a duplicate, never tagged', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    const svc = signups();
+    const real = svc.signup.bind(svc);
+    const before = new Date(Date.now() - 48 * HOUR);
+    // The row lands after the re-read, so only the signedUpAt cutoff sees it.
+    jest.spyOn(svc, 'signup').mockImplementation(async (...args) => {
+      if (args[0] === s.n5)
+        await insertSignup(s.n5, userId, { signedUpAt: before });
+      return real(...args);
+    });
+
+    const res = await join(s.n2, userId);
+
+    // mutation: drop the `signedUpAt < membership.joinedAt` check
+    expect(
+      must(await rowFor(s.n5, userId), 'night 5').seriesSignupId,
+    ).toBeNull();
+    expect(res.createdEventIds).not.toContain(s.n5);
+    expect(res.failed.map((f) => f.eventId)).toEqual([s.n5]);
+  });
+});
+
+describe('membership insert conflict (I6, 23505 → 409)', () => {
+  it('a unique violation on the active membership maps to 409 ALREADY_MEMBER', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await testApp.db
+      .insert(schema.seriesSignups)
+      .values({ recurrenceGroupId: s.groupId, userId, status: 'active' });
+
+    // mutation: rethrow the raw error instead of mapping isUniqueViolation
+    await expect(
+      insertMembershipOrConflict(testApp.db, {
+        groupId: s.groupId,
+        userId,
+        characterId: null,
+        preferredRoles: null,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'You are already signed up for this series',
+    });
+  });
+});
+
+describe('leave reports nights it could not cancel (I9c)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a failed cancel is returned in failed, the night stays signed_up and untagged', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await join(s.n2, userId);
+    const svc = signups();
+    const real = svc.cancel.bind(svc);
+    jest.spyOn(svc, 'cancel').mockImplementation(async (...args) => {
+      if (args[0] === s.n3) throw new Error('cancel exploded');
+      return real(...args);
+    });
+
+    const res = await series().leave(s.n2, userId);
+
+    // mutation: only log the failure in cancelTaggedNights (failed stays [])
+    expect(res.failed).toEqual([{ eventId: s.n3, message: 'cancel exploded' }]);
+    expect([...res.cancelledEventIds].sort()).toEqual([s.n2, s.n5].sort());
+    const n3 = must(await rowFor(s.n3, userId), 'night 3');
+    expect(n3.status).toBe('signed_up');
+    // mutation: clearFutureTagsForMemberships filters on the wrong events
+    expect(n3.seriesSignupId).toBeNull();
   });
 });
