@@ -3802,3 +3802,5 @@ same day (#1278, #1279, #1280).
 ### 2026-10-31 — fix/lockin-card-standalone (surfaced during ROK-2054 review)
 
 - low `api/src/events/signup-slot.helpers.ts:281` — a second `checkAutoBench` counts against `maxAttendees` only, so it disagrees with the canonical `isEventAtCapacity` (slot config first) in `signups-signup.helpers.ts`. Its only caller, `performSignup` (`signup-core.helpers.ts:26`), is imported nowhere — dead code, pre-existing. Suggested: delete `performSignup` + this `checkAutoBench`.
+
+- nit — `web/src/plugins/bg3/upload/bg3-upload-save-sheet.tsx` closing the sheet through the "Discard your changes?" guard (Discard) leaves focus on BODY instead of the "Upload a save" trigger (verify plan 2026-10-31-0551-b366 step 8 note). Pre-existing on the branch; not a step failure. `Suggested:` return focus to the trigger after the guard resolves, as the plain Escape path does.
