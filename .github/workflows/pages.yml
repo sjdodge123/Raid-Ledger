@@ -4,16 +4,19 @@ on:
   push:
     branches: [main]
     paths: ['docs/**', 'README.md']
+  # ROK-2051: build (never deploy) on PRs, so a README change that breaks the
+  # compose snippet docs/src/data/compose.ts reads fails the PR, not main.
+  pull_request:
+    paths: ['docs/**', 'README.md', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  # PR builds get their own group (cancelled when superseded); deploys queue.
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -36,13 +39,18 @@ jobs:
         run: npm run build
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: docs/dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
