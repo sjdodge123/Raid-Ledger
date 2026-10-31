@@ -109,7 +109,10 @@ footer { border-top: 1px solid var(--edge-subtle); padding: 48px 0 104px; margin
 .section-flush { padding-top: 0; }
 @media (min-width: 1024px) { .section-flush { padding-top: 0; } }
 .section-band { background: var(--surface); border-block: 1px solid var(--edge-subtle); }
-.host h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; margin: 14px 0; }
+.vps h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; margin: 14px 0; }
+.vps { padding: 28px 20px; margin-bottom: 56px; border-radius: 18px; background: var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+@media (min-width: 1024px) { .vps { padding: 40px 48px; margin-bottom: 72px; } }
+.host-title { font-size: clamp(22px, 3vw, 30px); font-weight: 800; margin: 14px 0; color: var(--fg); }
 .final .lede { margin: 0 auto; }
 /* plugin accent colours (one per game, same in both themes) */
 .plug { --c: #059669; }
