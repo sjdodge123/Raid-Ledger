@@ -1,5 +1,5 @@
 {
-  "id": "fe57403d-c71e-4faf-9580-63a5a7177290",
+  "id": "c9ae21de-b835-4bc8-8f23-ef3826737337",
   "prevId": "0714e265-c8eb-4fd3-94ff-a3cd638b613c",
   "version": "7",
   "dialect": "postgresql",
@@ -11304,6 +11304,48 @@
           "primaryKey": false,
           "notNull": false
         },
+        "crest_active": {
+          "name": "crest_active",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_upload_key": {
+          "name": "crest_upload_key",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_preset": {
+          "name": "crest_preset",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_set_by": {
+          "name": "crest_set_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_set_at": {
+          "name": "crest_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_removed_by": {
+          "name": "crest_removed_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crest_removed_at": {
+          "name": "crest_removed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11446,6 +11488,36 @@
           "method": "btree",
           "with": {}
         },
+        "idx_guilds_crest_set_by": {
+          "name": "idx_guilds_crest_set_by",
+          "columns": [
+            {
+              "expression": "crest_set_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guilds_crest_removed_by": {
+          "name": "idx_guilds_crest_removed_by",
+          "columns": [
+            {
+              "expression": "crest_removed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_guilds_kind_status": {
           "name": "idx_guilds_kind_status",
           "columns": [
@@ -11520,6 +11592,32 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "guilds_crest_set_by_users_id_fk": {
+          "name": "guilds_crest_set_by_users_id_fk",
+          "tableFrom": "guilds",
+          "tableTo": "users",
+          "columnsFrom": [
+            "crest_set_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "guilds_crest_removed_by_users_id_fk": {
+          "name": "guilds_crest_removed_by_users_id_fk",
+          "tableFrom": "guilds",
+          "tableTo": "users",
+          "columnsFrom": [
+            "crest_removed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11553,6 +11651,10 @@
         "guilds_auto_membership_kind_check": {
           "name": "guilds_auto_membership_kind_check",
           "value": "\"guilds\".\"kind\" = 'game_community' OR \"guilds\".\"auto_membership\" = 'off'"
+        },
+        "guilds_crest_active_check": {
+          "name": "guilds_crest_active_check",
+          "value": "\"guilds\".\"crest_active\" IS NULL OR \"guilds\".\"crest_active\" IN ('upload', 'preset')"
         },
         "guilds_name_override_kind_check": {
           "name": "guilds_name_override_kind_check",
@@ -19596,7 +19698,7 @@
         },
         "bg3_saves_key_source_chk": {
           "name": "bg3_saves_key_source_chk",
-          "value": "\"bg3_saves\".\"campaign_key_source\" IN ('save-folder', 'game-id', 'file-name')"
+          "value": "\"bg3_saves\".\"campaign_key_source\" IN ('save-folder', 'game-id')"
         },
         "bg3_saves_thumbnail_sha_chk": {
           "name": "bg3_saves_thumbnail_sha_chk",

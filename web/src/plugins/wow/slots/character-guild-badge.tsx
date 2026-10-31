@@ -18,7 +18,7 @@ export function CharacterGuildBadge({ characterId }: { characterId: string }): J
     if (!entry) return null;
     const content: ReactNode = (
         <>
-            <GuildCrest small />
+            <GuildCrest small crest={entry.guild.crest} name={entry.guild.name} />
             <span className="font-medium text-foreground">{entry.guild.name}</span>
             {entry.rankName && <span className="text-muted">· {entry.rankName}</span>}
         </>

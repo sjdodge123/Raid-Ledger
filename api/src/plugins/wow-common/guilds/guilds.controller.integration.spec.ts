@@ -184,6 +184,9 @@ describe('GET /:id — view matrix', () => {
         notificationsMuted: false,
         // ROK-1815: rank 0 is labelled, never granted (GM_RANK_IMPLIES_EDIT off).
         isGuildMaster: true,
+        isStaff: false,
+        // ROK-1814 ruling 2026-10-30: the GM may change the crest (only).
+        canEditCrest: true,
       },
     ],
     [
@@ -193,6 +196,8 @@ describe('GET /:id — view matrix', () => {
         canEdit: true,
         canManageEditors: false,
         notificationsMuted: false,
+        isStaff: false,
+        canEditCrest: true,
       },
     ],
     [
@@ -202,6 +207,8 @@ describe('GET /:id — view matrix', () => {
         canEdit: true,
         canManageEditors: false,
         notificationsMuted: false,
+        isStaff: false,
+        canEditCrest: true,
       },
     ],
     [
@@ -211,10 +218,21 @@ describe('GET /:id — view matrix', () => {
         canEdit: false,
         canManageEditors: false,
         notificationsMuted: false,
+        isStaff: false,
+        canEditCrest: false,
       },
     ],
     // A staff non-member cannot mute, so its viewer omits notificationsMuted.
-    ['admin', { role: 'leader', canEdit: true, canManageEditors: true }],
+    [
+      'admin',
+      {
+        role: 'leader',
+        canEdit: true,
+        canManageEditors: true,
+        isStaff: true,
+        canEditCrest: true,
+      },
+    ],
   ] as const)('%s → 200 with viewer %o', async (who, viewer) => {
     const res = await get(`/${guildId}`, who);
     expect(res.status).toBe(200);
@@ -330,6 +348,8 @@ describe('editors endpoints — manage matrix', () => {
       canManageEditors: false,
       notificationsMuted: false,
       isGuildMaster: true,
+      isStaff: false,
+      canEditCrest: true,
     });
     await testApp.db
       .delete(schema.guildEditors)

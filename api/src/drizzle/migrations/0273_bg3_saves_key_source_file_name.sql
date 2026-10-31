@@ -1,2 +1,0 @@
-ALTER TABLE "bg3_saves" DROP CONSTRAINT "bg3_saves_key_source_chk";--> statement-breakpoint
-ALTER TABLE "bg3_saves" ADD CONSTRAINT "bg3_saves_key_source_chk" CHECK ("bg3_saves"."campaign_key_source" IN ('save-folder', 'game-id', 'file-name'));
