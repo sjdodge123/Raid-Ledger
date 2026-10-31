@@ -210,7 +210,7 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
       { start: window.start, end: window.end },
       ['home'],
       CURSOR,
-      { copyCalendarIds: [] },
+      { copyCalendarIds: ['primary', 'home'] },
     ]);
   });
 
@@ -220,7 +220,7 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     expect(fetchBusy.mock.calls[0]?.slice(2)).toEqual([
       ['home'],
       undefined,
-      { copyCalendarIds: [] },
+      { copyCalendarIds: ['primary', 'home'] },
     ]);
   });
 
@@ -251,6 +251,19 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     await fetchWindow({ db, provider }, row, window);
     expect(fetchBusy.mock.calls[0]?.[4]).toEqual({
       copyCalendarIds: ['primary', 'home'],
+    });
+  });
+
+  it('Codex P2: switched primary → dedicated, the main calendar stays a copy calendar (leftover copies are ours)', async () => {
+    const { provider, fetchBusy } = stub();
+    const row = {
+      ...conn(undefined),
+      writeTarget: 'dedicated',
+      dedicatedCalendarId: 'raid-ledger-x',
+    };
+    await fetchWindow({ db, provider }, row, window);
+    expect(fetchBusy.mock.calls[0]?.[4]).toEqual({
+      copyCalendarIds: ['primary', 'home', 'raid-ledger-x'],
     });
   });
 });
