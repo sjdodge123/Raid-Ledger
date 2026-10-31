@@ -248,11 +248,16 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
         await user.click(screen.getByRole('button', { name: 'Upload' }));
     }
 
+    /** Settled = the sheet either asks or says it uploaded (so a wrong path fails on its own assertion, not a timeout). */
+    const CONFIRM = 'bg3-upload-move-confirm';
+    const settled = (): Promise<void> => waitFor(() => expect(
+        screen.queryByTestId(CONFIRM) ?? screen.queryByTestId('bg3-upload-banner-success')).not.toBeNull());
+
     it('an unbound key uploads without asking', async () => {
         const user = userEvent.setup();
         await uploadClick(user);
-        expect(await screen.findByTestId('bg3-upload-banner-success')).toBeInTheDocument();
-        expect(screen.queryByTestId('bg3-upload-move-confirm')).not.toBeInTheDocument();
+        await settled();
+        expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
         expect(calls).toEqual(['blob', 'bind', 'message']);
     });
 
@@ -260,8 +265,8 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
         server.use(bg3KeyBindingHandler({ ...elsewhere, hubId: BG3_HUB_ID, hubName: 'BG3 Crew' }));
         const user = userEvent.setup();
         await uploadClick(user);
-        expect(await screen.findByTestId('bg3-upload-banner-success')).toBeInTheDocument();
-        expect(screen.queryByTestId('bg3-upload-move-confirm')).not.toBeInTheDocument();
+        await settled();
+        expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
         expect(calls).toEqual(['blob', 'bind', 'message']);
     });
 
@@ -269,12 +274,14 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
         server.use(bg3KeyBindingHandler(elsewhere));
         const user = userEvent.setup();
         await uploadClick(user);
-        const confirm = await screen.findByTestId('bg3-upload-move-confirm');
+        await settled();
+        expect(calls).toEqual([]);
+        const confirm = screen.getByTestId(CONFIRM);
         expect(confirm).toHaveTextContent(
             "This playthrough's saves are in Honour run in Other Crew. Moving it here also moves your 3 earlier saves.");
         expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled();
         await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
-        expect(screen.queryByTestId('bg3-upload-move-confirm')).not.toBeInTheDocument();
+        expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
         expect(screen.getByTestId('bg3-upload-preview')).toBeInTheDocument();
         expect(calls).toEqual([]);
     });
@@ -283,8 +290,9 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
         server.use(bg3KeyBindingHandler(elsewhere));
         const user = userEvent.setup();
         await uploadClick(user);
-        const confirm = await screen.findByTestId('bg3-upload-move-confirm');
+        await settled();
         expect(calls).toEqual([]);
+        const confirm = screen.getByTestId(CONFIRM);
         await user.click(within(confirm).getByRole('button', { name: 'Move here' }));
         expect(await screen.findByTestId('bg3-upload-banner-success')).toHaveTextContent('Uploaded to Tactician run');
         expect(calls).toEqual(['blob', 'bind', 'message']);
@@ -295,8 +303,9 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
         server.use(bg3KeyBindingHandler(redacted));
         const user = userEvent.setup();
         await uploadClick(user);
-        expect(await screen.findByTestId('bg3-upload-move-confirm')).toHaveTextContent(
-            "This playthrough's saves are in a hub you can no longer open. Moving it here also moves your 1 earlier save.");
+        await settled();
         expect(calls).toEqual([]);
+        expect(screen.getByTestId(CONFIRM)).toHaveTextContent(
+            "This playthrough's saves are in a hub you can no longer open. Moving it here also moves your 1 earlier save.");
     });
 });
