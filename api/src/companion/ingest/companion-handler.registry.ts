@@ -56,6 +56,13 @@ interface CompanionHandlerBase<M> {
   latestWins?(msg: M): { key: string; at: Date } | null;
   /** In-tx handlers only (an after-commit one is refused at register). */
   blobRefs?(msg: M): readonly CompanionWebpRef[];
+  /**
+   * Optional per-user lock, taken on the ingest tx immediately before the
+   * latest-wins marker upsert (after the blob lock). A plugin's own delete
+   * path takes the same lock before clearing markers, so a NEW key's
+   * uncommitted marker cannot slip past it (ROK-1960 P2-3).
+   */
+  lockLatestWins?(tx: CompanionDeviceTx, userId: number): Promise<void>;
 }
 
 /** Default mode: `handle` runs INSIDE the ingest transaction (step 11). */

@@ -86,6 +86,8 @@ export class CompanionIngestService {
     await this.assertDeviceHeld(tx, auth);
     const refs = await this.checkBlobRefs(tx, auth.userId, msg);
     if (marker) {
+      // The handler's marker lock (if any) first: blob → markers lock → marker.
+      await msg.handler.lockLatestWins?.(tx, auth.userId);
       const row = { userId: auth.userId, contract: msg.contract, ...marker };
       if (!(await this.repo.advance(tx, row))) return 'stale';
     }

@@ -79,10 +79,10 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
   }
 
   /**
-   * P2-3: the per-user markers lock, taken on the ingest tx immediately
-   * before the latest-wins marker upsert (after any blob lock, before the
-   * campaign lock) — the same lock "Delete my BG3 data" takes before it
-   * clears this user's markers.
+   * P2-3: the per-user markers lock. `CompanionIngestService.commit` calls
+   * it on the ingest tx immediately before the latest-wins marker upsert
+   * (after any blob lock, before the campaign lock) — the same lock "Delete
+   * my BG3 data" takes before it clears this user's markers.
    */
   lockLatestWins(tx: CompanionDeviceTx, userId: number): Promise<void> {
     return lockBg3UserMarkers(tx, userId);
