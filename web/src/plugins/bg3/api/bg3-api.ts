@@ -116,8 +116,13 @@ export function setBg3DefaultCampaign(campaignId: number | null): Promise<void> 
     return fetchApi<void>(`${BG3_API}/me/default-campaign`, json('PUT', { campaignId }));
 }
 
-export function bindBg3CampaignKey(campaignKey: string, campaignId: number): Promise<void> {
-    return fetchApi<void>(`${BG3_API}/me/campaign-keys/${seg(campaignKey)}`, json('PUT', { campaignId }));
+/**
+ * ROK-1960 F4: without `confirmCrossHub` a bind that would move the caller's
+ * saves out of another hub rejects with 409 `cross_hub_move` and moves nothing.
+ */
+export function bindBg3CampaignKey(campaignKey: string, campaignId: number, confirmCrossHub = false): Promise<void> {
+    const body = confirmCrossHub ? { campaignId, confirmCrossHub: true } : { campaignId };
+    return fetchApi<void>(`${BG3_API}/me/campaign-keys/${seg(campaignKey)}`, json('PUT', body));
 }
 
 export function updateBg3HubSettings(hubId: number, body: Bg3HubSettingsBody): Promise<Bg3HubSettings> {

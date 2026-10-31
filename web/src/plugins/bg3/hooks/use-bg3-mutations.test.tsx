@@ -8,6 +8,7 @@ import { createTestQueryClient } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
 import {
     BG3_DEFAULT_URL,
+    bg3BindKeyCrossHubHandler,
     bg3BindKeyHandler,
     bg3ClaimHandler,
     bg3CreateCampaignHandler,
@@ -20,6 +21,7 @@ import { toast } from '../../../lib/toast';
 import { bg3Keys } from './bg3-keys';
 import {
     BG3_CLAIM_CONFLICT_TOAST,
+    Bg3BindCrossHubHold,
     BG3_CREATED_DEFAULT_FAILED_TOAST,
     useBindBg3Saves,
     useClaimBg3Slot,
@@ -97,5 +99,32 @@ describe('use-bg3-mutations', () => {
         expect(result.current.data?.id).toBe(12);
         expect(creates).toBe(1);
         expect(toast.error).toHaveBeenCalledWith(BG3_CREATED_DEFAULT_FAILED_TOAST);
+    });
+});
+
+describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)', () => {
+    it('a 409 cross_hub_move stops at that key with a hold (no default); confirmCrossHub re-binds only the keys it names', async () => {
+        const { wrapper } = setup();
+        const calls: string[] = [];
+        // The contract needs ≥1 location — an empty list would not parse as a hold (the server never sends one).
+        const move = {
+            code: 'cross_hub_move' as const, saveCount: 2,
+            locations: [{ campaignId: 99, campaignName: 'Honour run', hubId: BG3_HUB_ID + 1, hubName: 'Other Crew' }],
+        };
+        server.use(
+            bg3BindKeyCrossHubHandler(move, (b, p) => calls.push(`key:${String(p['campaignKey']).slice(0, 1)}:${JSON.stringify(b)}`)),
+            bg3DefaultCampaignHandler((b) => calls.push(`default:${JSON.stringify(b)}`)),
+        );
+        const { result } = renderHook(() => useBindBg3Saves(BG3_HUB_ID), { wrapper });
+        const vars = { campaignKeys: ['a'.repeat(64)], campaignId: BG3_CAMPAIGN_ID, alsoDefault: true };
+        const failure = await result.current.mutateAsync(vars).then(() => null, (e: unknown) => e);
+        expect(failure).toBeInstanceOf(Bg3BindCrossHubHold);
+        expect(failure instanceof Bg3BindCrossHubHold ? [failure.campaignKey, failure.move] : null).toEqual(['a'.repeat(64), move]);
+        await act(() => result.current.mutateAsync({ ...vars, confirmCrossHub: ['a'.repeat(64)] }));
+        expect(calls).toEqual([
+            `key:a:{"campaignId":${BG3_CAMPAIGN_ID}}`,
+            `key:a:{"campaignId":${BG3_CAMPAIGN_ID},"confirmCrossHub":true}`,
+            `default:{"campaignId":${BG3_CAMPAIGN_ID}}`,
+        ]);
     });
 });

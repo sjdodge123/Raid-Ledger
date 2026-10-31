@@ -1,0 +1,33 @@
+{
+  "Active Party": {
+    "Characters": [
+      {
+        "Classes": [
+          {
+            "Main": "Cleric",
+            "Sub": "LifeDomain"
+          }
+        ],
+        "Experience Points (Current level)": 1200,
+        "Experience Points (Total)": 15200,
+        "Level": 7,
+        "Origin": "Generic",
+        "Position": [
+          0,
+          0,
+          0
+        ],
+        "Race": "Halfling_Lightfoot",
+        "Subregion": ""
+      }
+    ]
+  },
+  "Current Level": "BGO_Main_A",
+  "Difficulty": [
+    "DifficultyNormal",
+    "RulesetBalanced"
+  ],
+  "Game Version": "4.1.1.7631656",
+  "Platform": "Steam",
+  "Save Name": "QuickSave_9"
+}

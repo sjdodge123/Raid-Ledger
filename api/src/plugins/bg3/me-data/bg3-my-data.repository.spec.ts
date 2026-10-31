@@ -121,6 +121,33 @@ describe('Bg3MyDataRepository.deleteAllFor', () => {
     expect(lockOrder).toBeLessThan(firstDelete);
   });
 
+  it('keeps the global lock order: blob → gallery → markers → campaign lock → row deletes', async () => {
+    const { db, repo } = build([SHA_A]);
+    await repo.deleteAllFor(ME, STARTED);
+    const locks = db.execute.mock.calls.map((c, i) => ({
+      at: db.execute.mock.invocationCallOrder[i] ?? Infinity,
+      step: String(rendered(c[0]).params[0]),
+    }));
+    const deletes = db.delete.mock.calls.map((c, i) => ({
+      at: db.delete.mock.invocationCallOrder[i] ?? Infinity,
+      step: getTableName(c[0] as Table),
+    }));
+    const steps = [...locks, ...deletes]
+      .sort((x, y) => x.at - y.at)
+      .map((x) => x.step);
+    expect(steps).toEqual([
+      `companion-blobs:${ME}`,
+      `bg3-gallery:${ME}`,
+      `bg3-save-markers:${ME}`,
+      'companion_ingest_latest',
+      `bg3-campaigns:${ME}`,
+      'bg3_party_claims',
+      'bg3_campaign_keys',
+      'bg3_user_defaults',
+      'bg3_saves',
+    ]);
+  });
+
   it('returns the per-table counts', async () => {
     const { repo } = build([SHA_A, SHA_B, null], 1);
     await expect(repo.deleteAllFor(ME, STARTED)).resolves.toEqual({

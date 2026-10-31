@@ -17,6 +17,7 @@ const STEPS = [
 ] as const;
 
 const MAX_STEP = STEPS.length - 1;
+const DISCORD_SETTINGS_PATH = '/admin/settings/discord';
 
 /**
  * ROK-1701 OQ-8b: the cloud flavour skips "Secure Account" (the claim already
@@ -38,6 +39,9 @@ function useWizardNavigation(updateStep: ReturnType<typeof useOnboarding>['updat
   const navigate = useNavigate();
   const { completeOnboarding } = useOnboarding();
   const [stepOverride, setStepOverride] = useState<number | null>(null);
+  // Where the wizard exits once the refetched status says `completed`. The lazy Admin → Discord route
+  // suspends inside the navigate transition, so the still-mounted wizard's completed-redirect would win.
+  const [exitTo, setExitTo] = useState<string | null>(null);
 
   const goToStep = useCallback((step: number) => { const clamped = clampStep(step, firstStep); setStepOverride(clamped); updateStep.mutate(clamped); }, [updateStep, firstStep]);
   const handleSkipAll = useCallback(() => {
@@ -48,26 +52,28 @@ function useWizardNavigation(updateStep: ReturnType<typeof useOnboarding>['updat
   const handleComplete = useCallback(() => { completeOnboarding.mutate(undefined, { onSuccess: () => navigate('/calendar', { replace: true }) }); }, [completeOnboarding, navigate]);
   // ROK-1703 D-9: "Finish later" on 4e completes onboarding (as Skip Setup does) and opens Admin → Discord.
   const handleFinishLater = useCallback(() => {
+    setExitTo(DISCORD_SETTINGS_PATH);
     completeOnboarding.mutate(undefined, {
-      onSuccess: () => { toast.info('Pick a default channel any time in Admin \u2192 Discord'); navigate('/admin/settings/discord', { replace: true }); },
+      onSuccess: () => { toast.info('Pick a default channel any time in Admin \u2192 Discord'); navigate(DISCORD_SETTINGS_PATH, { replace: true }); },
+      onError: () => setExitTo(null),
     });
   }, [completeOnboarding, navigate]);
 
-  return { stepOverride, goToStep, handleSkipAll, handleComplete, handleFinishLater };
+  return { stepOverride, exitTo, goToStep, handleSkipAll, handleComplete, handleFinishLater };
 }
 
 export function AdminSetupWizard() {
   const { user } = useAuth();
   const { statusQuery, updateStep } = useOnboarding();
   const firstStep = useFirstStep();
-  const { stepOverride, goToStep, handleSkipAll, handleComplete, handleFinishLater } = useWizardNavigation(updateStep, firstStep);
+  const { stepOverride, exitTo, goToStep, handleSkipAll, handleComplete, handleFinishLater } = useWizardNavigation(updateStep, firstStep);
 
   const currentStep = stepOverride ?? clampStep(statusQuery.data?.currentStep ?? 0, firstStep);
   const goNext = useCallback(() => { if (currentStep < MAX_STEP) goToStep(currentStep + 1); }, [currentStep, goToStep]);
   const goBack = useCallback(() => { if (currentStep > firstStep) goToStep(currentStep - 1); }, [currentStep, firstStep, goToStep]);
 
   if (user && !isAdmin(user)) return <Navigate to="/calendar" replace />;
-  if (statusQuery.data?.completed) return <Navigate to="/calendar" replace />;
+  if (statusQuery.data?.completed) return <Navigate to={exitTo ?? '/calendar'} replace />;
   if (statusQuery.isLoading) return <WizardLoading />;
 
   return (

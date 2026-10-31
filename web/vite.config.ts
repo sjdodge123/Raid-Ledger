@@ -55,6 +55,9 @@ export default defineConfig({
     // change never reaches an already-cached worker unless its url changes.
     __BUILD_ID__: JSON.stringify(process.env.APP_BUILD_ID ?? Date.now().toString(36)),
   },
+  // ROK-1960: the BG3 save-parse worker is a module worker (`type: 'module'`)
+  // whose wasm-bindgen glue resolves its `.wasm` via `import.meta.url`.
+  worker: { format: 'es' },
   build: {
     sourcemap: true,
     rollupOptions: {

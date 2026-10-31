@@ -142,6 +142,7 @@ describe('Companion v1 golden fixtures — valid (C1, C2)', () => {
     expect(namesIn(BG3_FIX)).toEqual([
       'act1-solo-no-thumbnail',
       'act2-party-4p-summon',
+      'file-name-bare-lsv',
       'ruleset-null',
       'unicode-save-name',
     ]);
