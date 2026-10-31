@@ -78,14 +78,21 @@ function rosterDb(names: string[], maxAttendees: number | null = null) {
   const db = {
     select: () => ({
       from: (table: unknown) => {
-        seen.fromTable ??= table;
         return {
-          innerJoin: () => ({
-            where: () =>
-              Promise.resolve(
-                names.map((displayName, i) => ({ userId: i + 1, displayName })),
-              ),
-          }),
+          // Record the JOINED select's table (the roster read), so the later
+          // event-cap read (ROK-2054) cannot mask a wrong roster source.
+          innerJoin: () => {
+            seen.fromTable = table;
+            return {
+              where: () =>
+                Promise.resolve(
+                  names.map((displayName, i) => ({
+                    userId: i + 1,
+                    displayName,
+                  })),
+                ),
+            };
+          },
           // ROK-2054: the event-cap read (`.from(events).where().limit(1)`).
           where: () => ({
             limit: () => Promise.resolve([{ slotConfig: null, maxAttendees }]),
