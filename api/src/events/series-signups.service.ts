@@ -121,30 +121,45 @@ export class SeriesSignupsService {
     membership: SeriesSignupRow,
     classified: ClassifiedNights,
   ): Promise<JoinSeriesResponseDto> {
-    const attachedEventIds = await attachSignups(
-      this.db,
-      classified.attach.map((r) => r.id),
-      membership.id,
-    );
-    const materialized = await materializeNights(
-      { db: this.db, signups: this.signupsService },
-      classified.create,
+    const applied = await this.applyPlan(
       userId,
-      membership.id,
       dto,
+      membership.id,
+      classified,
     );
     await this.logJoined(
       anchor.event.id,
       userId,
       membership.id,
-      attachedEventIds.length + materialized.createdEventIds.length,
+      applied.attachedEventIds.length + applied.createdEventIds.length,
     );
     return {
       membership: toSeriesSignupDto(membership),
-      attachedEventIds,
-      ...materialized,
+      ...applied,
       keptEventIds: classified.keep.map((r) => r.eventId),
     };
+  }
+
+  /** Attaches the active rows in place, then creates the missing nights. */
+  private async applyPlan(
+    userId: number,
+    dto: JoinSeriesDto,
+    membershipId: number,
+    classified: ClassifiedNights,
+  ): Promise<Omit<JoinSeriesResponseDto, 'membership' | 'keptEventIds'>> {
+    const attachedEventIds = await attachSignups(
+      this.db,
+      classified.attach.map((r) => r.id),
+      membershipId,
+    );
+    const materialized = await materializeNights(
+      { db: this.db, signups: this.signupsService },
+      classified.create,
+      userId,
+      membershipId,
+      dto,
+    );
+    return { attachedEventIds, ...materialized };
   }
 
   /** Audits a join on the anchor event (Q8: per-night `signup_added` too). */
