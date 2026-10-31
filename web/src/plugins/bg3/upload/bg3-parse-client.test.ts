@@ -86,9 +86,14 @@ describe('inspectBg3SaveInWorker', () => {
         worker.reply((id) => ({ id, ok: false, code: 'corrupt_package' }), 1);
         expect(await codeOf(b)).toBe('corrupt_package');
         expect(worker.terminated).toBe(true);
-        void inspectBg3SaveInWorker(new ArrayBuffer(1));
+        const next = inspectBg3SaveInWorker(new ArrayBuffer(1));
         expect(workers).toHaveLength(2);
+        disposeBg3ParseWorker();
+        expect(await codeOf(next)).toBe('reader_failed');
     });
+});
+
+describe('inspectBg3SaveInWorker — hangs and dispose', () => {
 
     it('a parse past the timeout rejects reader_failed and terminates the hung worker', async () => {
         vi.useFakeTimers();
@@ -97,8 +102,8 @@ describe('inspectBg3SaveInWorker', () => {
         vi.advanceTimersByTime(BG3_PARSE_TIMEOUT_MS - 1);
         expect(must(workers[0], 'worker').terminated).toBe(false);
         vi.advanceTimersByTime(1);
-        expect(await outcome).toBe('reader_failed');
         expect(must(workers[0], 'worker').terminated).toBe(true);
+        expect(await outcome).toBe('reader_failed');
     });
 
     it('disposeBg3ParseWorker rejects the in-flight parse and terminates the worker', async () => {

@@ -52,6 +52,11 @@ function useMountedFlag(): () => boolean {
     return () => mounted.current;
 }
 
+/** Revoke the thumbnail's object URL when the save changes and when the sheet unmounts. */
+function useRevokeOnChange(thumbUrl: string | null): void {
+    useEffect(() => () => { if (thumbUrl !== null) URL.revokeObjectURL(thumbUrl); }, [thumbUrl]);
+}
+
 function parseMessage(error: unknown): string {
     return bg3ParseErrorMessage(error instanceof Bg3ParseError ? error : new Bg3ParseError('reader_failed'));
 }
@@ -64,8 +69,7 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
     const [banner, setBanner] = useState<Bg3UploadBannerState | null>(null);
     const [result, setResult] = useState<Bg3UploadResult | null>(null);
     const [picked, setPicked] = useState<number | null | undefined>(undefined);
-    const thumbUrl = parsed?.thumbUrl ?? null;
-    useEffect(() => () => { if (thumbUrl !== null) URL.revokeObjectURL(thumbUrl); }, [thumbUrl]);
+    useRevokeOnChange(parsed?.thumbUrl ?? null);
     const campaignId = picked === undefined ? initialCampaignId : picked;
 
     const read = (dropped: Bg3DroppedFiles): void => {
