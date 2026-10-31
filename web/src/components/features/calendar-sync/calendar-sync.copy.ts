@@ -142,6 +142,11 @@ export const PROVIDER_DISPLAY: Record<CalendarProvider, { tile: string; name: st
     microsoft: { tile: CALENDARS_COPY.microsoft.tile, name: CALENDARS_COPY.microsoft.name },
 };
 
+/** The disconnect success toast, named per provider ("Outlook / Microsoft 365 disconnected"). */
+export function disconnectedToast(provider: CalendarProvider): string {
+    return `${PROVIDER_DISPLAY[provider].name} disconnected`;
+}
+
 /** S3 — the event page's calendar line, the sign-up toast and the "Add to calendar" menu (ROK-1596 W2). */
 export const EVENT_CALENDAR_COPY = {
     /* Canvas S3, verbatim. */

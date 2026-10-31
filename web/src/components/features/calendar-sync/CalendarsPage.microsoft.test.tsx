@@ -142,6 +142,15 @@ describe('CalendarConnectionCard — Outlook (ROK-1597 T22)', () => {
         const dialog = await screen.findByTestId('calendar-disconnect-dialog');
         expect(within(dialog).queryByTestId('calendar-disconnect-microsoft-hint')).toBeNull();
     });
+
+    it('the Outlook disconnect toast names Outlook / Microsoft 365, not Google', async () => {
+        renderPage(withMicrosoft([OUTLOOK]));
+        fireEvent.click(await screen.findByTestId('calendar-manage'));
+        fireEvent.click(within(screen.getByTestId('calendar-manage-menu')).getByRole('menuitem', { name: C.disconnect }));
+        fireEvent.click(await screen.findByTestId('calendar-disconnect-confirm'));
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Outlook / Microsoft 365 disconnected'));
+        expect(toast.success).not.toHaveBeenCalledWith(C.toastDisconnected);
+    });
 });
 
 describe('CalendarsPage — ?connected=microsoft', () => {

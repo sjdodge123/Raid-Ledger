@@ -26,7 +26,7 @@ import { CalendarDisconnectConfirm } from './CalendarDisconnectConfirm';
 import { CalendarPicker } from './CalendarPicker';
 import { readGranted } from './use-read-rules';
 import { useCalendarSheetsStacked } from './calendar-sheet-stack';
-import { CALENDARS_COPY as C, READ_COPY as R } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, READ_COPY as R, disconnectedToast } from './calendar-sync.copy';
 
 /** `onSync` is absent when reading is off, not granted, or the connection is broken. */
 interface ShellProps { connection: CalendarConnection; onDisconnect: () => void; onSync: (() => void) | null }
@@ -118,7 +118,7 @@ export function CalendarManageMenu({ connection }: { connection: CalendarConnect
     const ask = (): void => { disconnect.reset(); setConfirming(true); };
     const confirm = (): void => {
         disconnect.mutate(connection.id, {
-            onSuccess: () => { setConfirming(false); toast.success(C.toastDisconnected); },
+            onSuccess: () => { setConfirming(false); toast.success(disconnectedToast(connection.provider)); },
         });
     };
     return (
