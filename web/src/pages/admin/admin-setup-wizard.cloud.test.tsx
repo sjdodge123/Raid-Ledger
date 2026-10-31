@@ -16,8 +16,8 @@ vi.mock('../../components/admin/onboarding/community-identity-step', () => ({
         <div data-testid="community-identity-step"><button onClick={onBack}>Back</button></div>
     ),
 }));
-vi.mock('../../components/admin/onboarding/connect-plugins-step', () => ({
-    ConnectPluginsStep: () => <div data-testid="connect-plugins-step" />,
+vi.mock('../../components/admin/onboarding/discord/discord-setup-step', () => ({
+    DiscordSetupStep: () => <div data-testid="discord-setup-step" />,
 }));
 vi.mock('../../components/admin/onboarding/done-step', () => ({
     DoneStep: ({ firstStep }: { firstStep?: number }) => <div data-testid="done-step" data-first-step={firstStep} />,
@@ -63,9 +63,9 @@ describe('AdminSetupWizard — flavour (ROK-1701 OQ-8b)', () => {
         expect(screen.getByTestId('community-identity-step')).toBeInTheDocument();
     });
 
-    it('cloud: server step numbers are not renumbered', () => {
+    it('cloud: server step numbers are not renumbered', async () => {
         setup('cloud', 2);
-        expect(screen.getByTestId('connect-plugins-step')).toBeInTheDocument();
+        expect(await screen.findByTestId('discord-setup-step')).toBeInTheDocument();
         expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
     });
 

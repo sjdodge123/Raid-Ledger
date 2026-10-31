@@ -17,6 +17,8 @@ export interface OAuthConfigDto {
 export interface OAuthTestResponse {
     success: boolean;
     message: string;
+    /** ROK-1703: Discord couldn't be asked; nothing was verified (try again). */
+    retryable?: boolean;
 }
 
 export interface IgdbHealthStatus {

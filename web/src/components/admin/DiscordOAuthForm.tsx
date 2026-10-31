@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { API_BASE_URL } from '../../lib/config';
+import { buildCallbackUrl, buildLinkCallbackUrl } from './discord-shared/callback-urls';
+import { CallbackUrlsSection } from './discord-shared/callback-urls-section';
 import { Field } from '../ui/field';
-import { PasswordInput, TestResultBanner, CopyableInput, FormTextField } from './admin-form-helpers';
+import { PasswordInput, TestResultBanner, FormTextField } from './admin-form-helpers';
 import { IntegrationFormActions } from './integration-form-actions';
 
 function SetupInstructions() {
@@ -20,29 +21,6 @@ function SetupInstructions() {
     );
 }
 
-function buildCallbackUrl() {
-    const apiPath = API_BASE_URL.startsWith('/') ? API_BASE_URL : '';
-    if (apiPath) return `${window.location.origin}${apiPath}/auth/discord/callback`;
-    return `${API_BASE_URL}/auth/discord/callback`;
-}
-
-function CallbackUrlsSection({ callbackUrl, linkCallbackUrl }: { callbackUrl: string; linkCallbackUrl: string }) {
-    return (
-        <div>
-            <label className="block text-sm font-medium text-secondary mb-1.5">
-                <>Callback URLs <span className="text-dim">(add both to Discord)</span></>
-            </label>
-            <div className="mb-2">
-                <CopyableInput value={callbackUrl} onCopied="Callback URL copied!" label="Callback URL" />
-            </div>
-            <CopyableInput value={linkCallbackUrl} onCopied="Link callback copied!" label="Link Callback URL" />
-            <p className="text-xs text-dim mt-1.5">
-                <>Click to copy. Add <strong>both</strong> URLs to Discord &rarr; OAuth2 &rarr; Redirects.</>
-            </p>
-        </div>
-    );
-}
-
 function useOAuthFormState() {
     const { oauthStatus, updateOAuth, testOAuth, clearOAuth } = useAdminSettings();
     const [clientId, setClientId] = useState('');
@@ -50,7 +28,7 @@ function useOAuthFormState() {
     const [showSecret, setShowSecret] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
     const callbackUrl = useMemo(() => buildCallbackUrl(), []);
-    const linkCallbackUrl = useMemo(() => callbackUrl.replace('/callback', '/link/callback'), [callbackUrl]);
+    const linkCallbackUrl = useMemo(() => buildLinkCallbackUrl(callbackUrl), [callbackUrl]);
     return { oauthStatus, updateOAuth, testOAuth, clearOAuth, clientId, setClientId, clientSecret, setClientSecret, showSecret, setShowSecret, testResult, setTestResult, callbackUrl, linkCallbackUrl };
 }
 

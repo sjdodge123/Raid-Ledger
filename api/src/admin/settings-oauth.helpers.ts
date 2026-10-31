@@ -3,33 +3,66 @@
  * Extracted from settings.controller.ts for file size compliance.
  */
 import { Logger } from '@nestjs/common';
+import { DiscordOAuthTestSchema } from '@raid-ledger/contract';
+import { handleValidationError } from '../common/validation.util';
 
 const logger = new Logger('AdminSettingsOAuth');
 
 interface OAuthTestResponse {
   success: boolean;
   message: string;
+  /** ROK-1703: Discord could not be asked (429 / non-JSON) — nothing was verified, try again. */
+  retryable?: boolean;
 }
 
-interface OAuthConfig {
+/** ROK-1703: a typed pair Discord could not check is unverified, never accepted. */
+const TYPED_PAIR_UNCHECKED: OAuthTestResponse = {
+  success: false,
+  retryable: true,
+  message:
+    "Discord is busy and couldn't check the ID and secret right now. Try again in a moment.",
+};
+
+/** The pair under test; the callback URL plays no part in the check. */
+interface OAuthPair {
   clientId: string;
   clientSecret: string;
-  callbackUrl: string;
 }
+
+/** `saved` = the stored pair; `typed` = a pair sent in the request body. */
+export type OAuthPairSource = 'saved' | 'typed';
 
 const DISCORD_HEADERS = {
   'User-Agent': 'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
 };
 
+/**
+ * ROK-1703 D-5: an empty body means "test the saved pair" (null); otherwise
+ * the body must be a valid `{ clientId, clientSecret }` (400 if not). The
+ * Zod issues name the field and rule only, never the submitted value.
+ */
+export function parseOAuthTestBody(body: unknown): OAuthPair | null {
+  if (body === undefined || body === null) return null;
+  if (typeof body === 'object' && Object.keys(body).length === 0) return null;
+  try {
+    return DiscordOAuthTestSchema.parse(body);
+  } catch (error) {
+    handleValidationError(error);
+  }
+}
+
 /** Test Discord OAuth credentials via token endpoint with gateway fallback. */
 export async function testDiscordOAuth(
-  config: OAuthConfig,
+  config: OAuthPair,
+  source: OAuthPairSource = 'saved',
 ): Promise<OAuthTestResponse> {
   try {
     const tokenResult = await testTokenEndpoint(config);
     if (tokenResult) return tokenResult;
 
-    // Token endpoint blocked — fall back to gateway check
+    // Token endpoint blocked. Gateway reachability proves nothing about a
+    // typed pair, so the wizard gets an unverified answer, never a success.
+    if (source === 'typed') return TYPED_PAIR_UNCHECKED;
     return testGatewayFallback();
   } catch (error) {
     logger.error('Failed to test Discord OAuth:', error);
@@ -42,7 +75,7 @@ export async function testDiscordOAuth(
 
 /** Attempt token endpoint to validate credentials. Returns null if rate-limited. */
 async function testTokenEndpoint(
-  config: OAuthConfig,
+  config: OAuthPair,
 ): Promise<OAuthTestResponse | null> {
   const basicAuth = Buffer.from(
     `${config.clientId}:${config.clientSecret}`,

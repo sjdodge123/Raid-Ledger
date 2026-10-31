@@ -18,7 +18,8 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import type { SteamConfigStatusDto } from '@raid-ledger/contract';
-import { testDiscordOAuth } from './settings-oauth.helpers';
+import { RateLimit } from '../throttler/rate-limit.decorator';
+import { parseOAuthTestBody, testDiscordOAuth } from './settings-oauth.helpers';
 import {
   testIgdbCredentials,
   testBlizzardCredentials,
@@ -89,9 +90,13 @@ export class AdminSettingsController {
     };
   }
 
+  /** ROK-1703 D-5: an optional `{ clientId, clientSecret }` body tests that pair. */
   @Post('oauth/test')
+  @RateLimit('admin')
   @HttpCode(HttpStatus.OK)
-  async testOAuthConfig(): Promise<OAuthTestResponse> {
+  async testOAuthConfig(@Body() body?: unknown): Promise<OAuthTestResponse> {
+    const typed = parseOAuthTestBody(body);
+    if (typed) return testDiscordOAuth(typed, 'typed');
     const config = await this.settingsService.getDiscordOAuthConfig();
     if (!config)
       return { success: false, message: 'Discord OAuth is not configured' };

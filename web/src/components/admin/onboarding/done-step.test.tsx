@@ -119,7 +119,8 @@ it('shows all 6 configuration items', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
             expect(screen.getByText('Password Changed')).toBeInTheDocument();
             expect(screen.getByText('Community Identity')).toBeInTheDocument();
-            expect(screen.getByText('Plugins')).toBeInTheDocument();
+            expect(screen.getByText('Discord')).toBeInTheDocument();
+            expect(screen.queryByText('Plugins')).not.toBeInTheDocument();
             expect(screen.getByText('Blizzard API')).toBeInTheDocument();
             expect(screen.getByText('IGDB / Twitch API')).toBeInTheDocument();
             expect(screen.getByText('Discord OAuth')).toBeInTheDocument();
@@ -170,6 +171,42 @@ it('clicking Community Identity calls goToStep(1)', () => {
             expect(mockGoToStep).toHaveBeenCalledWith(1);
         });
 
+it('ROK-1703: the Discord and Discord OAuth rows jump to the Discord step (2)', () => {
+            renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
+            for (const label of ['Discord', 'Discord OAuth']) {
+                const row = screen.getByText(label).closest('button');
+                if (!row) throw new Error(`no row button for ${label}`);
+                fireEvent.click(row);
+                expect(mockGoToStep).toHaveBeenLastCalledWith(2);
+            }
+        });
+
+it('ROK-1703: the Blizzard and IGDB rows link to their admin pages, never into the Discord step', () => {
+            renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
+            const rows: [string, string][] = [['Blizzard API', '/admin/settings/plugins'], ['IGDB / Twitch API', '/admin/settings/integrations/igdb']];
+            for (const [label, href] of rows) {
+                const link = screen.getByText(label).closest('a');
+                expect(link, `${label} row should be a link`).not.toBeNull();
+                expect(link?.getAttribute('href')).toBe(href);
+                if (link) fireEvent.click(link);
+            }
+            expect(mockGoToStep).not.toHaveBeenCalled();
+        });
+
+it('ROK-1703: shows the Discord-link line only once Discord sign-in is configured', () => {
+            const base = { statusQuery: { data: { steps: { discord: true } } } };
+            mockUseOnboarding.mockReturnValue({ ...base, dataSourcesQuery: { data: { discord: { configured: false } } } });
+            const { unmount } = renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
+            expect(screen.queryByTestId('discord-link-note')).not.toBeInTheDocument();
+            unmount();
+            mockUseOnboarding.mockReturnValue({ ...base, dataSourcesQuery: { data: { discord: { configured: true } } } });
+            renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
+            const note = screen.getByTestId('discord-link-note');
+            expect(note).toHaveTextContent('Next: link this admin account to your Discord user in Profile → Integrations.');
+            // Plain Discord sign-in would create a separate user; the profile's link flow links this admin.
+            expect(screen.getByRole('link', { name: 'Profile → Integrations' })).toHaveAttribute('href', '/profile/integrations');
+        });
+
     }
 
     describe('Configuration summary items', () => {
@@ -192,6 +229,7 @@ it('clicking Community Identity calls goToStep(1)', () => {
                             secureAccount: true,
                             communityIdentity: true,
                             connectPlugins: true,
+                            discord: true,
                         },
                     },
                 },
@@ -249,7 +287,7 @@ describe('DoneStep — cloud flavour hides Secure Account (ROK-1701 OQ-8b)', () 
         mockUseOnboarding.mockReturnValue(defaultOnboarding);
     });
 
-    it.each(['Password Changed', 'Discord OAuth'])('"%s" keeps its status but has no edit affordance', (label) => {
+    it.each(['Password Changed'])('"%s" keeps its status but has no edit affordance', (label) => {
         renderWithProviders(<DoneStep onComplete={vi.fn()} goToStep={mockGoToStep} firstStep={1} />);
         const row = screen.getByText(label);
         expect(row.closest('button')).toBeNull();
@@ -264,6 +302,8 @@ describe('DoneStep — cloud flavour hides Secure Account (ROK-1701 OQ-8b)', () 
         expect(community).not.toBeNull();
         if (community) fireEvent.click(community);
         expect(mockGoToStep).toHaveBeenCalledWith(1);
-        expect(screen.getAllByRole('button', { name: /Skipped/ })).toHaveLength(4);
+        // ROK-1703: three wizard-step rows; Blizzard and IGDB are links to their admin pages.
+        expect(screen.getAllByRole('button', { name: /Skipped/ })).toHaveLength(3);
+        expect(screen.getAllByRole('link', { name: /Skipped/ })).toHaveLength(2);
     });
 });

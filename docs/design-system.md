@@ -1936,3 +1936,14 @@ against a new dependency (Q1: no `@tanstack/react-virtual`). Used by the hub Mem
 **DO** — reuse `HubMemberVirtualList` for any hub list that can reach hundreds of rows. **DON'T** — give a row
 variable height, add a virtualisation library, or use a class colour for text. Sample: `/dev/design-system` →
 "Windowed member list + class dots" (`member-list-section.tsx`, 2,000 static rows, both shells).
+
+### 4.33 Wizard sub-step rail (ROK-1703)
+
+One top-level wizard step that holds several short screens (the setup wizard's **Discord** step, 4a–4e) gets a **sub-step rail** inside the step, never more top-level stepper dots.
+
+- **Where:** `web/src/components/admin/onboarding/discord/discord-substep-rail.tsx`, laid out by the step container in a `lg:grid-cols-[13rem_minmax(0,1fr)]` grid.
+- **≥1024px:** a `<nav aria-label>` with a titled `<ol>`; each item is a 24px numbered marker + label. Done = `success` check marker, current = `border-success text-success` marker + `bg-overlay` row with `aria-current="step"`, upcoming = `border-edge text-muted`. Items up to the furthest reachable screen are `Button variant="bare"` rows (44px); later ones are inert.
+- **<1024px (§4.18):** collapses to one line above the card: "Connect Discord · n of 5 **Label**".
+- **The screen frame** (`substep-screen.tsx`): "Step n of 5" eyebrow, `h2`, lead, body, then a footer with Back (ghost) left and the primary action plus an `aria-live` status line right.
+- **Not** §4.24's setup checklist: that is a status list; this is navigation. Tokens only — it reads the same in every theme.
+- **Rendered:** `/dev/design-system#wizard-substep-rail` (`wizard-substep-rail-section.tsx`, lazy demo) drives the real rail.

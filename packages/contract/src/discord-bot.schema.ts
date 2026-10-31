@@ -25,16 +25,65 @@ export const DiscordBotStatusSchema = z.object({
     botUserId: z.string().optional(),
     /** ROK-1469: username of the connected bot (portal app name). */
     botUsername: z.string().optional(),
+    /**
+     * ROK-1703: how many servers the connected bot is in. Only the first is
+     * used, so the setup wizard warns when this is above 1. Absent when the
+     * bot is not connected.
+     */
+    guildCount: z.number().int().optional(),
 });
 
+/**
+ * ROK-1703: the three privileged gateway intents Raid Ledger requests. Each
+ * is switched on in the Developer Portal under Bot > Privileged Gateway
+ * Intents.
+ */
+export const PrivilegedIntentSchema = z.enum([
+    'presence',
+    'guildMembers',
+    'messageContent',
+]);
+
+export type PrivilegedIntent = z.infer<typeof PrivilegedIntentSchema>;
+
+/** ROK-1703: portal labels, shared by the api error text and the web checklist. */
+export const PRIVILEGED_INTENT_LABELS: Record<PrivilegedIntent, string> = {
+    presence: 'Presence Intent',
+    guildMembers: 'Server Members Intent',
+    messageContent: 'Message Content Intent',
+};
+
 export const DiscordBotTestConnectionSchema = z.object({
-    botToken: z.string().optional(),
+    /** Input-only (never stored); real tokens are ~72 chars. */
+    botToken: z.string().max(256).optional(),
 });
+
+/**
+ * ROK-1703 D-5: optional body for `POST /admin/settings/oauth/test`. With it
+ * the endpoint checks this typed Application ID + Client Secret together
+ * (the setup wizard's live check); without a body it checks the saved pair.
+ */
+export const DiscordOAuthTestSchema = z.object({
+    clientId: z.string().trim().regex(/^\d{17,20}$/, 'Application ID must be 17 to 20 digits'),
+    clientSecret: z.string().trim().min(1).max(128),
+}).strict();
 
 export const DiscordBotTestResultSchema = z.object({
     success: z.boolean(),
     guildName: z.string().optional(),
     message: z.string(),
+    /**
+     * ROK-1703: the application id decoded from the token's first segment, so
+     * the wizard can tell a token from a different application. Absent when the
+     * token cannot be decoded.
+     */
+    applicationId: z.string().optional(),
+    /**
+     * ROK-1703: privileged intents switched OFF in the portal, read from
+     * `GET /applications/@me` flags. Absent when that check failed; an empty
+     * array means all three are on.
+     */
+    missingIntents: z.array(PrivilegedIntentSchema).optional(),
 });
 
 /** Response from GET /discord/server-invite (ROK-403) */
@@ -60,6 +109,7 @@ export type DiscordBotConfigDto = z.infer<typeof DiscordBotConfigSchema>;
 export type DiscordBotTestConnectionDto = z.infer<typeof DiscordBotTestConnectionSchema>;
 export type DiscordBotStatusResponse = z.infer<typeof DiscordBotStatusSchema>;
 export type DiscordBotTestResult = z.infer<typeof DiscordBotTestResultSchema>;
+export type DiscordOAuthTestDto = z.infer<typeof DiscordOAuthTestSchema>;
 export type ServerInviteResponseDto = z.infer<typeof ServerInviteResponseSchema>;
 export type GuildMembershipResponseDto = z.infer<typeof GuildMembershipResponseSchema>;
 
