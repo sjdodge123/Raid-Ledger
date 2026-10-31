@@ -18,6 +18,8 @@ import * as schema from '../../../drizzle/schema';
 import { CompanionIngestLatestRepository } from '../../../companion/ingest/companion-ingest-latest.repository';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
+import { waitFor } from '../../../common/testing/integration-helpers';
+import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
 import {
   Bg3MyDataRepository,
   type Bg3MyDataDeleted,
@@ -375,5 +377,66 @@ describe('DELETE plugins/bg3/me/data — latest-wins markers', () => {
     // Another contract's marker and another user's marker are untouched.
     expect(await advance(a.id, OTHER_CONTRACT)).toBe(false);
     expect(await advance(b.id, BG3_SAVE_CONTRACT_ID)).toBe(false);
+  });
+});
+
+// ROK-1960 F5b — an ingest advances its marker (row lock), THEN takes the
+// campaign lock. The delete must clear markers before that lock, or the two
+// wait on each other and Postgres aborts one with "deadlock detected".
+
+/** Backends queued on a row lock (the delete waiting on the held marker). */
+async function rowLockWaiters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(sql`
+    select count(*)::int as n from pg_locks
+    where not granted and locktype in ('transactionid', 'tuple')`);
+  return rows[0]?.n ?? 0;
+}
+
+function outcome(p: Promise<unknown>): Promise<string> {
+  return p.then(
+    () => 'ok',
+    (e: unknown) => {
+      const err = e as { message?: string; cause?: { message?: string } };
+      return `rejected: ${err.cause?.message ?? err.message ?? String(e)}`;
+    },
+  );
+}
+
+describe('Bg3MyDataRepository.deleteAllFor — lock order vs ingest (F5b)', () => {
+  it('an ingest holding its marker row then taking the campaign lock does not deadlock the delete', async () => {
+    const a = await makeUser('lockorder');
+    const latest = testApp.app.get(CompanionIngestLatestRepository);
+    const marker = (at: Date) => ({
+      userId: a.id,
+      contract: BG3_SAVE_CONTRACT_ID,
+      key: KEY,
+      at,
+    });
+    expect(
+      await latest.transaction((tx) => latest.advance(tx, marker(T0))),
+    ).toBe(true);
+    let deleted: Promise<string> = Promise.resolve('delete never started');
+    const ingested = outcome(
+      latest.transaction(async (tx) => {
+        const later = new Date(T0.getTime() + HOUR);
+        expect(await latest.advance(tx, marker(later))).toBe(true);
+        deleted = outcome(
+          testApp.app.get(Bg3MyDataRepository).deleteAllFor(a.id),
+        );
+        await waitFor(
+          async () => expect(await rowLockWaiters()).toBeGreaterThan(0),
+          10_000,
+          20,
+        );
+        await lockBg3UserCampaigns(tx, a.id);
+      }),
+    );
+    expect([await ingested, await deleted]).toEqual(['ok', 'ok']);
+    const m = schema.companionIngestLatest;
+    const left = await testApp.db
+      .select({ key: m.latestKey })
+      .from(m)
+      .where(and(eq(m.userId, a.id), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
+    expect(left).toEqual([]);
   });
 });

@@ -92,6 +92,12 @@ export class Bg3MyDataRepository {
    * lock is taken FIRST, before any row lock — the order ingest and
    * retention use — so the three cannot deadlock; the re-take inside
    * `releaseUnusedRefsIn` is re-entrant.
+   *
+   * ROK-1960 F5b — the one per-user order every BG3 writer keeps: blob lock
+   * → gallery lock → `bg3-save` marker rows → campaign lock → key / default
+   * / save rows. Ingest touches its marker (11c) before `resolveCampaign`
+   * takes the campaign lock, so clearing markers after that lock would wait
+   * on an ingest that is itself waiting on us.
    */
   deleteAllFor(
     userId: number,
@@ -101,11 +107,13 @@ export class Bg3MyDataRepository {
       await lockCompanionUserBlobs(tx, userId);
       // ROK-1959 P1: a Gallery copy in flight finishes (or re-checks) first.
       await lockBg3Gallery(tx, userId);
+      // Marker rows BEFORE the campaign lock: ingest advances its marker
+      // and only then takes that lock in `resolveCampaign` (F5b).
+      await clearLatestMarkers(tx, userId);
       // Same per-user lock as bind / setDefault / ingest filing, so a concurrent bind can't deadlock against this delete.
       await lockBg3UserCampaigns(tx, userId);
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
-      await clearLatestMarkers(tx, userId);
       const thumbnailRefs = await this.blobs.releaseUnusedRefsIn(tx, {
         userId,
         contract: BG3_SAVE_CONTRACT_ID,
