@@ -10,6 +10,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { assertSlotIsFuture } from '../scheduling/scheduling-lock-in.helpers';
+import { standaloneLineupFlag } from './standalone-lineup-flag.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -25,7 +26,7 @@ export async function selectCompletionTarget(db: Db, matchId: number) {
       // cancelled mid-poll.
       linkedEventCancelled: sql<boolean>`${schema.events.cancelledAt} IS NOT NULL`,
       // ROK-2024: only a standalone poll archives its lineup on lock-in.
-      standalone: sql<boolean>`coalesce(${schema.communityLineups.phaseDurationOverride}->>'standalone' = 'true', false)`,
+      standalone: standaloneLineupFlag(),
     })
     .from(schema.communityLineupMatches)
     .innerJoin(

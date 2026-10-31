@@ -239,3 +239,21 @@ describe('lineup embed chrome parity — breadcrumb tracks the phase', () => {
     },
   );
 });
+
+describe('EVENT CREATED card — terminal breadcrumb (ROK-2054)', () => {
+  it('marks every step done and ends on "Scheduled", whatever ctx.phase is', () => {
+    const fields =
+      buildEventCreatedEmbed(
+        ctx({ phase: 'decided' }),
+        'Deep Rock',
+        1,
+        DEADLINE,
+        99,
+      ).embed.toJSON().fields ?? [];
+    const breadcrumb = fields.find((f) => f.name === BREADCRUMB_FIELD_NAME);
+
+    expect(breadcrumb?.value).toBe(
+      '\u2705 Nominations  \u203A  \u2705 Voting  \u203A  \u2705 Scheduled',
+    );
+  });
+});

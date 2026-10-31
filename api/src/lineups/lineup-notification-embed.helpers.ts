@@ -33,8 +33,11 @@ import { decidedEmbedCopy } from './lineup-notification-decided-copy.helpers';
 /** Trailing glyph on every masked call-to-action link. */
 const ARROW = '\u2197';
 
-/** Lineup phase for breadcrumb rendering. */
-export type LineupPhase = 'nominations' | 'voting' | 'decided';
+/**
+ * Lineup phase for breadcrumb rendering. `scheduled` (ROK-2054) is terminal:
+ * only the EVENT CREATED card renders it — every step done.
+ */
+export type LineupPhase = 'nominations' | 'voting' | 'decided' | 'scheduled';
 
 /** Shared context for embed building — resolved once by the service. */
 export interface EmbedContext {
@@ -247,10 +250,22 @@ function groupSubtextLine(text: string): string {
 }
 
 /**
+ * ROK-2054: the card's lead sentence — "full" once the event's roster has
+ * reached its cap, so nobody is told to confirm a spot that no longer exists.
+ */
+function eventCreatedLead(gameLink: string, full: boolean): string {
+  return full
+    ? `${gameLink} is officially scheduled and full. Join the waitlist on the event page.`
+    : `${gameLink} is officially scheduled and open for signups. ` +
+        'Head to the event page to confirm your spot.';
+}
+
+/**
  * Event created from a scheduled match (AC-10).
  *
  * @param groupSubtext - ROK-1863 "N of M from the group signed up" copy,
  *   printed under the Players field; omit for no line.
+ * @param full - ROK-2054: signups ≥ the event's cap (null cap ⇒ never full).
  */
 export function buildEventCreatedEmbed(
   ctx: EmbedContext,
@@ -260,12 +275,13 @@ export function buildEventCreatedEmbed(
   eventId?: number,
   memberNames?: string[],
   groupSubtext?: string | null,
+  full = false,
 ): EmbedWithRow {
   const embed = createLineupEmbed(ctx, 'event_created', 'Event Created');
+  const game = `[**${gameName}**](${ctx.baseUrl}/games/${gameId})`;
   embed.setDescription(
-    `[**${gameName}**](${ctx.baseUrl}/games/${gameId}) is officially ` +
-      'scheduled and open for signups. Head to the event page to confirm ' +
-      `your spot.\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}` +
+    `${eventCreatedLead(game, full)}` +
+      `\n\n\u{1F4C5} **Starts** ${discordTs(eventDate)}` +
       `\n\n${eventCreatedLinks(ctx, eventId)}`,
   );
   if (memberNames?.length) {
@@ -276,7 +292,8 @@ export function buildEventCreatedEmbed(
         : formatRoster(memberNames),
     });
   }
-  appendBreadcrumb(embed, ctx);
+  // ROK-2054: the event exists — the lineup is done, whatever ctx.phase says.
+  appendBreadcrumb(embed, { ...ctx, phase: 'scheduled' });
   return { embed };
 }
 
