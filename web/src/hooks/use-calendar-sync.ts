@@ -102,11 +102,6 @@ export function useStartGoogleConnect(returnTarget?: CalendarOAuthReturn) {
     return useStartOAuth('connect', returnTarget);
 }
 
-/** K1 Outlook "Connect" (ROK-1597): the Microsoft sign-in; the server adds `prompt=select_account`. */
-export function useStartMicrosoftConnect(returnTarget?: CalendarOAuthReturn) {
-    return useStartOAuth('connect', returnTarget, 'microsoft');
-}
-
 /** Why an Apple connect was refused: the server's code, the route throttle, or no answer at all. */
 export type AppleConnectFailure = AppleConnectErrorCode | 'throttled' | 'network';
 

@@ -343,7 +343,9 @@ function adoptMatches(cal: FakeGraphCalendar, params: URLSearchParams): Json[] {
 /** The `$expand` filter's match: our property id (case-insensitive here). */
 function isOurProp(p: unknown): boolean {
   const id = toJson(p).id;
-  return typeof id === 'string' && id.toLowerCase() === RL_COPY_PROP_ID.toLowerCase();
+  return (
+    typeof id === 'string' && id.toLowerCase() === RL_COPY_PROP_ID.toLowerCase()
+  );
 }
 
 function toJson(value: unknown): Json {

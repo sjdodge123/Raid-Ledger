@@ -47,7 +47,7 @@ export const CALENDARS_COPY = {
         connect: 'Connect',
         connecting: 'Connecting…',
         startFailed: 'Could not start the Microsoft sign-in. Try again.',
-        toastConnected: 'Outlook Calendar connected',
+        toastConnected: 'Outlook / Microsoft 365 connected',
         /* §8 Q7: Microsoft has no per-app revoke, so the grant outlives our disconnect. */
         disconnectHint: "You can also remove Raid Ledger from your Microsoft account's app permissions.",
     },

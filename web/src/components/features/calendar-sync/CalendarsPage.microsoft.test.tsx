@@ -156,6 +156,6 @@ describe('CalendarConnectionCard — Outlook (ROK-1597 T22)', () => {
 describe('CalendarsPage — ?connected=microsoft', () => {
     it('toasts the Outlook success copy', async () => {
         renderPage(withMicrosoft([OUTLOOK]), '/?connected=microsoft');
-        await waitFor(() => expect(toast.success).toHaveBeenCalledWith(C.microsoft.toastConnected, expect.anything()));
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Outlook / Microsoft 365 connected', expect.anything()));
     });
 });

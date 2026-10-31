@@ -264,9 +264,7 @@ describe('MicrosoftCalendarAdapter.fetchBusy (T10-T12)', () => {
     busyAt(api, PRIMARY, '04');
     const out = await a.fetchBusy(CREDS, RANGE, ['AAMkADwork=', PRIMARY]);
     expect(out.blocks).toHaveLength(2);
-    expect(api.requests.some((r) => r.url.includes('/me/events/'))).toBe(
-      false,
-    );
+    expect(api.requests.some((r) => r.url.includes('/me/events/'))).toBe(false);
     expect(log).not.toHaveBeenCalled();
   });
 

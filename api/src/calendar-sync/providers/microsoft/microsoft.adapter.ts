@@ -191,11 +191,7 @@ export class MicrosoftCalendarAdapter
         blocks.push(...(await this.busyBlocksOf(token, read.items, lookup)));
       }
     }
-    if (truncated > 0) {
-      this.logger.warn(
-        `Graph read hit the page cap on ${truncated} calendar(s)`,
-      );
-    }
+    if (truncated > 0) this.warnTruncated(truncated);
     assertSomeReadable(calendarIds, refused, missing);
     return busyResult(blocks, missing, refused);
   }
@@ -285,6 +281,10 @@ export class MicrosoftCalendarAdapter
       this.logger.debug('Graph copy-id path=expand');
     }
     return read.items.flatMap((i) => normalizeGraphEvent(i) ?? []);
+  }
+
+  private warnTruncated(calendars: number): void {
+    this.logger.warn(`Graph read hit the page cap on ${calendars} calendar(s)`);
   }
 
   private async client(): Promise<MicrosoftClient> {
