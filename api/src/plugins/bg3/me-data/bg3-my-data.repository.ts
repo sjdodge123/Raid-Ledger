@@ -18,6 +18,7 @@ import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
 import { lockBg3Gallery } from '../gallery/bg3-gallery-lock';
+import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -100,6 +101,8 @@ export class Bg3MyDataRepository {
       await lockCompanionUserBlobs(tx, userId);
       // ROK-1959 P1: a Gallery copy in flight finishes (or re-checks) first.
       await lockBg3Gallery(tx, userId);
+      // Same per-user lock as bind / setDefault / ingest filing, so a concurrent bind can't deadlock against this delete.
+      await lockBg3UserCampaigns(tx, userId);
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
       await clearLatestMarkers(tx, userId);
