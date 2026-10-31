@@ -5,6 +5,9 @@
  * `$filter`, and the pinned extended-property id.
  */
 import type { CopyEventInput } from '../calendar-provider.interface';
+import { TransientError } from '../calendar-provider.errors';
+import * as microsoftHttp from './microsoft-http';
+import type { MicrosoftHttpResponse } from './microsoft-http';
 import { RL_COPY_PROP_ID } from './microsoft-graph.constants';
 import {
   buildCopyIdLookupUrl,
@@ -12,6 +15,7 @@ import {
   buildMicrosoftPatchBody,
   calendarEventsPath,
   eventUrl,
+  insertMicrosoftCalendar,
   RAID_LEDGER_CALENDAR_NAME,
   readCopyRef,
   toGraphDateTime,
@@ -137,5 +141,42 @@ describe('readCopyRef', () => {
 
   it('a reply without an id is malformed (transient)', () => {
     expect(() => readCopyRef({}, 'primary')).toThrow('malformed_response');
+  });
+});
+
+const reply = (status: number, json: unknown): MicrosoftHttpResponse => ({
+  status,
+  json,
+  retryAfter: null,
+});
+const FOLDER_EXISTS = reply(409, { error: { code: 'ErrorFolderExists' } });
+
+describe('insertMicrosoftCalendar name-conflict fallback (T16, item 3)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a 409 re-lists and adopts the editable "Raid Ledger" calendar', async () => {
+    const spy = jest
+      .spyOn(microsoftHttp, 'microsoftJsonRequest')
+      .mockResolvedValueOnce(FOLDER_EXISTS)
+      .mockResolvedValueOnce(
+        reply(200, {
+          value: [
+            { id: 'AAMkADshared-rl=', name: 'Raid Ledger', canEdit: false },
+            { id: 'AAMkADrl=', name: 'Raid Ledger', canEdit: true },
+          ],
+        }),
+      );
+    await expect(insertMicrosoftCalendar('tok')).resolves.toBe('AAMkADrl=');
+    expect(spy.mock.calls.map((c) => c[0])).toEqual(['POST', 'GET']);
+  });
+
+  it('a 409 with no listed match is a TransientError, not a duplicate', async () => {
+    jest
+      .spyOn(microsoftHttp, 'microsoftJsonRequest')
+      .mockResolvedValueOnce(FOLDER_EXISTS)
+      .mockResolvedValueOnce(reply(200, { value: [] }));
+    await expect(insertMicrosoftCalendar('tok')).rejects.toBeInstanceOf(
+      TransientError,
+    );
   });
 });

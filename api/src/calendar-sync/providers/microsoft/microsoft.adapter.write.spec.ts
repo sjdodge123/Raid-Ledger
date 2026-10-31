@@ -101,12 +101,13 @@ describe('MicrosoftCalendarAdapter write — Graph specifics', () => {
     ]);
   });
 
-  it('a name conflict on POST /me/calendars adopts the existing "Raid Ledger" calendar (T16)', async () => {
+  it('an existing "Raid Ledger" calendar is adopted from the list before any POST (T16, item 3)', async () => {
     const { api, a } = setup();
     api.addCalendar('AAMkADexisting-rl=', 'Raid Ledger');
     await expect(a.ensureRaidLedgerCalendar(CREDS, null)).resolves.toBe(
       'AAMkADexisting-rl=',
     );
+    expect(api.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
     expect(
       [...api.calendars.values()].filter((c) => c.name === 'Raid Ledger'),
     ).toHaveLength(1);

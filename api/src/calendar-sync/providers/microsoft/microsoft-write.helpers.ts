@@ -29,6 +29,10 @@ import {
   PREFER_UTC,
   RL_COPY_PROP_ID,
 } from './microsoft-graph.constants';
+import {
+  buildCalendarListUrl,
+  readAllGraphPages,
+} from './microsoft-read.helpers';
 
 /** Same name as Google's dedicated calendar — must stay `'Raid Ledger'`. */
 export const RAID_LEDGER_CALENDAR_NAME = RAID_LEDGER_CALENDAR_SUMMARY;
@@ -131,14 +135,40 @@ export function buildCopyIdLookupUrl(
 }
 
 /**
- * `POST /me/calendars {name:'Raid Ledger'}` → the new id. A name conflict
- * (409, or the UNVERIFIED `ErrorFolderExists` code) adopts the existing one.
+ * The calendar named exactly "Raid Ledger" that we may edit, else null.
+ * `POST /me/calendars` is NOT documented to refuse a duplicate name (ROK-1597
+ * Graph verification, item 5), so `ensureRaidLedgerCalendar` looks here
+ * BEFORE creating. Reads the full list (follows `@odata.nextLink`) and
+ * matches client-side — `$filter` on `name` is not documented either.
+ */
+export async function findRaidLedgerCalendar(
+  token: string,
+): Promise<string | null> {
+  const { items } = await readAllGraphPages(token, buildCalendarListUrl());
+  for (const item of items) {
+    const row = asRecord(item);
+    if (row.name !== RAID_LEDGER_CALENDAR_NAME || row.canEdit === false) {
+      continue;
+    }
+    if (typeof row.id === 'string' && row.id) return row.id;
+  }
+  return null;
+}
+
+/**
+ * `POST /me/calendars {name:'Raid Ledger'}` → the new id. Fallback only (the
+ * caller lists first): a name conflict (409, or the UNVERIFIED
+ * `ErrorFolderExists` code) re-lists and adopts the existing one.
  */
 export async function insertMicrosoftCalendar(token: string): Promise<string> {
   const res = await send('POST', calendarsUrl(), token, {
     name: RAID_LEDGER_CALENDAR_NAME,
   });
-  if (isNameConflict(res)) return findNamedCalendar(token);
+  if (isNameConflict(res)) {
+    const existing = await findRaidLedgerCalendar(token);
+    if (!existing) throw new TransientError('calendar_name_conflict');
+    return existing;
+  }
   assertGraphOk(res, 'write');
   return readId(res.json);
 }
@@ -220,17 +250,6 @@ export function readCopyRef(json: unknown, calendarId: string): CopyRef {
   const ref: CopyRef = { calendarId, providerEventId: id };
   if (typeof etag === 'string' && etag) ref.etag = etag;
   return ref;
-}
-
-async function findNamedCalendar(token: string): Promise<string> {
-  const name = encodeURIComponent(
-    `name eq '${odata(RAID_LEDGER_CALENDAR_NAME)}'`,
-  );
-  const url = `${calendarsUrl()}?$filter=${name}&$select=id,name`;
-  const value = asRecord((await call('GET', url, token)).json).value;
-  const first: unknown = Array.isArray(value) ? value[0] : undefined;
-  if (first === undefined) throw new TransientError('calendar_name_conflict');
-  return readId(first);
 }
 
 function isNameConflict(res: MicrosoftHttpResponse): boolean {

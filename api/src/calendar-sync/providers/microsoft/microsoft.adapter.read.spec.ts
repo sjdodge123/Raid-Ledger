@@ -202,6 +202,20 @@ describe('MicrosoftCalendarAdapter.fetchBusy (T10-T12)', () => {
     );
   });
 
+  it('T11 / item 1: listCalendars follows @odata.nextLink, never trusting $top', async () => {
+    const { api, a } = setup();
+    api.pageSize = 1;
+    api.addCalendar('AAMkADtwo=', 'Two');
+    api.addCalendar('AAMkADthree=', 'Three');
+    const rows = await a.listCalendars(CREDS);
+    expect(rows.map((r) => r.id)).toEqual([
+      PRIMARY,
+      'AAMkADtwo=',
+      'AAMkADthree=',
+    ]);
+    expect(api.requests).toHaveLength(3);
+  });
+
   it('T11: follows @odata.nextLink across pages', async () => {
     const { api, a } = setup();
     api.pageSize = 1;

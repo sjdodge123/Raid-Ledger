@@ -55,6 +55,7 @@ import {
   deleteMicrosoftCalendar,
   deleteMicrosoftEvent,
   findMicrosoftEventByCopyId,
+  findRaidLedgerCalendar,
   getMicrosoftCalendar,
   insertMicrosoftCalendar,
   insertMicrosoftEvent,
@@ -190,7 +191,10 @@ export class MicrosoftCalendarAdapter
     return busyResult(blocks, missing, refused);
   }
 
-  /** Known id still there → it; gone (404/410) or none → create / adopt. */
+  /**
+   * Known id still there → it. Gone (404/410) or none → adopt a listed
+   * "Raid Ledger" calendar, else create (a create conflict adopts too).
+   */
   async ensureRaidLedgerCalendar(
     credentials: CalendarCredentials,
     knownId: string | null,
@@ -200,7 +204,8 @@ export class MicrosoftCalendarAdapter
       const known = await ignoreNotFound(getMicrosoftCalendar(token, knownId));
       if (known) return known;
     }
-    return insertMicrosoftCalendar(token);
+    const listed = await findRaidLedgerCalendar(token);
+    return listed ?? insertMicrosoftCalendar(token);
   }
 
   /**
