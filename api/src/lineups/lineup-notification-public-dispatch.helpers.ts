@@ -37,7 +37,10 @@ import {
   fanOutSchedulingDMs,
   fanOutEventCreatedDMs,
 } from './lineup-notification-dm-batch.helpers';
-import { findMatchMemberUsers } from './lineup-notification-targets.helpers';
+import {
+  findMatchMemberUsers,
+  isStandaloneLineup,
+} from './lineup-notification-targets.helpers';
 import { loadDecisionReason } from './lineup-decision-reason.helpers';
 import {
   resolveEventRosterCard,
@@ -263,7 +266,8 @@ function eventCreatedBuilder(
  * AC-10: Event-created notification — gates on visibility, then posts.
  * `skipDmUserIds` (ROK-2024): users the open poll lock-in already DM'd
  * ("Auto-signed up" / "On the bench") get no second, EVENT CREATED, DM. The
- * channel card still posts; the expired lock-in passes none.
+ * channel card still posts (community lineups only, ROK-2054); the expired
+ * lock-in passes none.
  */
 export async function orchestrateEventCreated(
   deps: OrchestrationDeps,
@@ -329,13 +333,20 @@ async function routeEventCreatedPrivate(
   return { routedPrivate, defaultTimezone };
 }
 
-/** Post the public EVENT CREATED card; returns the match group it read. */
+/**
+ * Post the public EVENT CREATED card; returns the match group it read.
+ * ROK-2054: a standalone poll posts no card (it used the lineup channel chain,
+ * never the game binding) — its group is still returned for the DM fan-out.
+ * One check here covers both the open and the expired lock-in.
+ */
 async function postEventCreatedCard(
   deps: OrchestrationDeps,
   match: MatchInfo,
   eventDate: Date,
   eventId: number | undefined,
 ) {
+  if (await isStandaloneLineup(deps.db, match.lineupId))
+    return findMatchMemberUsers(deps.db, match.id);
   // ROK-1872: ctx (+ hub link) before the roster reads, so the card's
   // event-roster lookup stays the last DB read the builder depends on.
   const base = await resolveEmbedCtx(

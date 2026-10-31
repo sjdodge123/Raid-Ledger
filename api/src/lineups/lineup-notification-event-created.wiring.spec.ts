@@ -19,7 +19,10 @@ import type {
   EmbedWithRow,
 } from './lineup-notification-embed.helpers';
 import type { MatchInfo } from './lineup-notification.service';
-import { findMatchMemberUsers } from './lineup-notification-targets.helpers';
+import {
+  findMatchMemberUsers,
+  isStandaloneLineup,
+} from './lineup-notification-targets.helpers';
 import { postChannelEmbed } from './lineup-notification-dispatch.helpers';
 import { fanOutEventCreatedDMs } from './lineup-notification-dm-batch.helpers';
 import * as schema from '../drizzle/schema';
@@ -31,6 +34,7 @@ jest.mock('./lineup-notification-routing.helpers', () => ({
 jest.mock('./lineup-notification-targets.helpers', () => ({
   ...jest.requireActual('./lineup-notification-targets.helpers'),
   findMatchMemberUsers: jest.fn(),
+  isStandaloneLineup: jest.fn().mockResolvedValue(false),
 }));
 jest.mock('./lineup-notification-dispatch.helpers', () => ({
   ...jest.requireActual('./lineup-notification-dispatch.helpers'),
@@ -164,5 +168,26 @@ describe('orchestrateEventCreated — "N of M from the group" line (ROK-1863 AC4
     const { players } = await postedCard(undefined);
 
     expect(players?.value).not.toContain('from the group signed up');
+  });
+});
+
+describe('orchestrateEventCreated — standalone poll (ROK-2054)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('posts no lineup channel card but still DMs the whole group', async () => {
+    jest.mocked(isStandaloneLineup).mockResolvedValueOnce(true);
+    jest.mocked(findMatchMemberUsers).mockResolvedValue(GROUP);
+    const deps = {
+      db: rosterDb(ROSTERED).db,
+      settingsService: { getDefaultTimezone: () => Promise.resolve('UTC') },
+    } as unknown as OrchestrationDeps;
+
+    await orchestrateEventCreated(deps, MATCH, new Date(), EVENT_ID);
+
+    expect(jest.mocked(postChannelEmbed)).not.toHaveBeenCalled();
+    const dmMembers = jest.mocked(fanOutEventCreatedDMs).mock.calls[0]?.[6];
+    expect(dmMembers?.map((m) => m.displayName)).toEqual(
+      GROUP.map((m) => m.displayName),
+    );
   });
 });

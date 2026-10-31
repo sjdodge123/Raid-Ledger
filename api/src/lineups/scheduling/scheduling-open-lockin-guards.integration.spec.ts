@@ -25,6 +25,9 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
+import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../../settings/settings.service';
+import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 
 const SLOT = new Date('2099-10-10T21:00:00.000Z');
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
@@ -426,5 +429,108 @@ describe('ROK-2024 open lock-in announcement evidence (integration)', () => {
     }, 5000);
     expect(await titlesAfterWindow(bystander)).toEqual([eventCreatedTitle()]);
     expect(await titlesAfterWindow(yesVoter)).toEqual(['Auto-signed up']);
+  });
+});
+
+describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)', () => {
+  const DEFAULT_CHANNEL = 'rok2054-default-chan';
+  const GAME_CHANNEL = 'rok2054-game-chan';
+
+  /** Bot "connected", every channel post recorded; default + game channels. */
+  async function wireDiscord(): Promise<jest.SpyInstance> {
+    const client = testApp.app.get(DiscordBotClientService);
+    track(jest.spyOn(client, 'isConnected').mockReturnValue(true));
+    // The binding's guild, so the event's own embed resolves the game channel.
+    track(jest.spyOn(client, 'getGuildId').mockReturnValue('rok2054-guild'));
+    const sendEmbed = track(
+      jest
+        .spyOn(client, 'sendEmbed')
+        .mockResolvedValue({ id: 'rok2054-msg' } as never),
+    );
+    await testApp.app
+      .get(SettingsService)
+      .set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, DEFAULT_CHANNEL);
+    await testApp.db.insert(schema.channelBindings).values({
+      guildId: 'rok2054-guild',
+      channelId: GAME_CHANNEL,
+      channelType: 'text',
+      bindingPurpose: 'game-announcements',
+      gameId: testApp.seed.game.id,
+    });
+    return sendEmbed;
+  }
+
+  /** Channel ids `sendEmbed` posted to — after `dmUserId`'s DM proves the
+   *  fan-out (which runs after the card) has finished. */
+  async function postedChannels(
+    sendEmbed: jest.SpyInstance,
+    dmUserId: number,
+    eventId: number,
+  ): Promise<unknown[]> {
+    await waitFor(async () => {
+      const rows = await testApp.db
+        .select({ payload: schema.notifications.payload })
+        .from(schema.notifications)
+        .where(
+          and(
+            eq(schema.notifications.userId, dmUserId),
+            eq(schema.notifications.type, 'community_lineup'),
+          ),
+        );
+      const ids = rows.map(
+        (r) => (r.payload as { eventId?: unknown } | null)?.eventId,
+      );
+      expect(ids).toContain(eventId);
+    }, 5000);
+    return sendEmbed.mock.calls.map((c) => c[0]);
+  }
+
+  it('standalone: no channel post to the default (or any lineup) channel; the EVENT CREATED DM still goes out', async () => {
+    const sendEmbed = await wireDiscord();
+    const opened = await testApp.request
+      .post('/scheduling-polls')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ gameId: testApp.seed.game.id });
+    expect(opened.status).toBe(201);
+    const matchId = opened.body.id as number;
+    const bystander = await createUser('rok2054-bystander');
+    await addMember(matchId, bystander);
+    await addSlot(matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [bystander, 'no'],
+    ]);
+    const eventId = await postEvent(matchId);
+
+    const res = await complete(adminToken, matchId, {
+      eventId,
+      startTime: SLOT.toISOString(),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await postedChannels(sendEmbed, bystander, eventId)).not.toContain(
+      DEFAULT_CHANNEL,
+    );
+  });
+
+  it('community lineup: the EVENT CREATED card still posts to the default channel', async () => {
+    const sendEmbed = await wireDiscord();
+    const matchId = await seedLineupMatch();
+    const bystander = await createUser('rok2054-lineup-bystander');
+    await addMember(matchId, bystander);
+    await addSlot(matchId, [
+      [testApp.seed.adminUser.id, 'yes'],
+      [bystander, 'no'],
+    ]);
+    const eventId = await postEvent(matchId);
+
+    const res = await complete(adminToken, matchId, {
+      eventId,
+      startTime: SLOT.toISOString(),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await postedChannels(sendEmbed, bystander, eventId)).toContain(
+      DEFAULT_CHANNEL,
+    );
   });
 });
