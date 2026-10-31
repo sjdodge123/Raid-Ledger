@@ -60,7 +60,8 @@ export function bg3UploadErrorMessage(error: Bg3UploadError): string {
         case 'rate_limited':
             return 'Too many uploads. Try again in a minute.';
         case 'bind_failed':
-            return "Uploaded, but it couldn't be filed under that campaign. Use “Add my saves” to move it.";
+            // D-6: the bind runs before the message, so a failed bind means nothing was posted.
+            return "Couldn't file the save under that campaign, so it wasn't uploaded. Try again.";
         case 'upload_failed':
             return "Couldn't upload the save. Try again.";
     }

@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { bg3LevelDisplay } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { bg3BindKeyHandler, bg3CampaignsHandler, bg3MySavesHandler } from '../../../test/mocks/bg3-handlers';
+import { BG3_KEY_URL, bg3BindKeyHandler, bg3CampaignsHandler, bg3MySavesHandler } from '../../../test/mocks/bg3-handlers';
 import {
     COMPANION_BG3_MESSAGE_URL, companionBg3MessageHandler, companionBlobHandler, type CompanionRefusal,
 } from '../../../test/mocks/bg3-companion-handlers';
@@ -14,6 +14,7 @@ import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignsResponse, buildBg3MySaves
 import { buildBg3ParsedSave } from '../../../test/factories/bg3-upload';
 import { toast } from '../../../lib/toast';
 import { parseBg3Save } from './bg3-parse-save';
+import { disposeBg3ParseWorker } from './bg3-parse-client';
 import { Bg3ParseError } from './bg3-parse-errors';
 import { Bg3UploadSaveSheet } from './bg3-upload-save-sheet';
 import { BG3_UPLOAD_PRIVACY_NOTE } from './bg3-upload-preview';
@@ -22,6 +23,10 @@ import { BG3_UPLOAD_PRIVACY_NOTE } from './bg3-upload-preview';
 vi.mock('./bg3-parse-save', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./bg3-parse-save')>()),
     parseBg3Save: vi.fn(),
+}));
+vi.mock('./bg3-parse-client', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./bg3-parse-client')>()),
+    disposeBg3ParseWorker: vi.fn(),
 }));
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -59,6 +64,7 @@ beforeEach(() => {
     calls.length = 0;
     onClose.mockClear();
     vi.mocked(toast.error).mockClear();
+    vi.mocked(disposeBg3ParseWorker).mockClear();
     vi.mocked(parseBg3Save).mockReset().mockResolvedValue(buildBg3ParsedSave());
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => THUMB_URL) });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() });
@@ -90,9 +96,16 @@ describe('pick → preview → upload', () => {
         await waitFor(() => expect(screen.getByLabelText('Campaign')).toHaveDisplayValue('Tactician run'));
         await user.click(screen.getByRole('button', { name: 'Upload' }));
         expect(await screen.findByTestId('bg3-upload-banner-success')).toHaveTextContent('Uploaded to Tactician run');
-        expect(calls).toEqual(['blob', 'message']);
+        expect(calls).toEqual(['blob', 'bind', 'message']);
         await user.click(screen.getByRole('button', { name: 'Done' }));
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('the Campaign label names the picker alone and does not wrap it', async () => {
+        await choose(userEvent.setup());
+        const picker = screen.getByLabelText('Campaign');
+        expect(picker).toBe(screen.getByRole('combobox'));
+        expect(screen.getByText('Campaign').closest('label')).not.toContainElement(picker);
     });
 
     it('dropping a .lsv onto the zone reads it the same way', async () => {
@@ -129,6 +142,21 @@ describe('errors are inline banners (§7)', () => {
         fireEvent.drop(screen.getByTestId('bg3-upload-drop-zone'), { dataTransfer: { files: [lsv('a.lsv'), lsv('b.lsv')] } });
         expect(await screen.findByRole('alert')).toHaveTextContent('Drop one save folder at a time.');
         expect(parseBg3Save).not.toHaveBeenCalled();
+    });
+
+    it('a failed bind posts nothing: its banner says so, and closing still warns the save won\'t be uploaded', async () => {
+        server.use(http.put(BG3_KEY_URL, () => {
+            calls.push('bind');
+            return HttpResponse.json({ message: 'nope' }, { status: 500 });
+        }));
+        const user = userEvent.setup();
+        await choose(user);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled());
+        await user.click(screen.getByRole('button', { name: 'Upload' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't file the save under that campaign, so it wasn't uploaded. Try again.");
+        expect(calls).toEqual(['blob', 'bind']);
+        await user.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(await screen.findByText(DISCARD)).toBeInTheDocument();
     });
 
     it('429 says "try again in a minute" and keeps the preview for a retry', async () => {
@@ -177,6 +205,24 @@ describe('close paths', () => {
         expect(screen.queryByText(DISCARD)).not.toBeInTheDocument();
         release();
         expect(await screen.findByTestId('bg3-upload-banner-success')).toBeInTheDocument();
+    });
+
+    it('closing mid-parse terminates the parse worker and revokes the late thumbnail URL', async () => {
+        let finish: () => void = () => {};
+        vi.mocked(parseBg3Save).mockImplementation(() => new Promise((resolve) => {
+            finish = () => resolve(buildBg3ParsedSave());
+        }));
+        const user = userEvent.setup();
+        const view = renderSheet();
+        await user.upload(fileInput(), lsv());
+        await waitFor(() => expect(parseBg3Save).toHaveBeenCalledTimes(1));
+        expect(disposeBg3ParseWorker).not.toHaveBeenCalled();
+        view.unmount();
+        expect(disposeBg3ParseWorker).toHaveBeenCalledTimes(1);
+        finish();
+        // The read settles (and builds its URL) in one microtask drain; by the time waitFor sees it, the drop ran too.
+        await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith(THUMB_URL);
     });
 
     it('revokes the thumbnail object URL when the sheet goes away', async () => {

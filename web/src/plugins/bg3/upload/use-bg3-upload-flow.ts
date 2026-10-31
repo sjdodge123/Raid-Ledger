@@ -1,9 +1,12 @@
 /**
  * ROK-1960 L3 — the upload sheet's state: pick → parsed preview → result, the
  * one inline banner, the picked campaign and the thumbnail's object URL
- * (revoked when the save changes and when the sheet unmounts).
+ * (revoked when the save changes and when the sheet unmounts). Unmounting
+ * terminates the parse worker; a parse that settles after the sheet closed
+ * is dropped, and its object URL revoked at once.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { disposeBg3ParseWorker } from './bg3-parse-client';
 import { parseBg3Save, selectBg3SaveSource } from './bg3-parse-save';
 import { Bg3ParseError, bg3ParseErrorMessage } from './bg3-parse-errors';
 import { bg3UploadErrorMessage } from './bg3-upload-errors';
@@ -31,12 +34,31 @@ async function readSave(dropped: Bg3DroppedFiles): Promise<Parsed> {
     return { save, thumbUrl: thumbUrlOf(save) };
 }
 
+/** A read that settled after the sheet closed: nothing will render it, so free its object URL now. */
+function drop(late: Parsed): void {
+    if (late.thumbUrl !== null) URL.revokeObjectURL(late.thumbUrl);
+}
+
+/** `true` while the sheet is mounted; unmounting also kills the parse worker. */
+function useMountedFlag(): () => boolean {
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+            disposeBg3ParseWorker();
+        };
+    }, []);
+    return () => mounted.current;
+}
+
 function parseMessage(error: unknown): string {
     return bg3ParseErrorMessage(error instanceof Bg3ParseError ? error : new Bg3ParseError('reader_failed'));
 }
 
 export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null) {
     const upload = useBg3UploadSave(hubId);
+    const isOpen = useMountedFlag();
     const [parsed, setParsed] = useState<Parsed | null>(null);
     const [parsing, setParsing] = useState(false);
     const [banner, setBanner] = useState<Bg3UploadBannerState | null>(null);
@@ -50,13 +72,14 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
         setBanner(null);
         setParsing(true);
         readSave(dropped)
-            .then(setParsed, (e: unknown) => setBanner({ tone: 'danger', text: parseMessage(e) }))
-            .finally(() => setParsing(false));
+            .then((next) => { if (isOpen()) setParsed(next); else drop(next); },
+                (e: unknown) => { if (isOpen()) setBanner({ tone: 'danger', text: parseMessage(e) }); })
+            .finally(() => { if (isOpen()) setParsing(false); });
     };
-    const submit = (defaultCampaignId: number | null): void => {
+    const submit = (): void => {
         if (parsed === null || campaignId === null) return;
         setBanner(null);
-        upload.mutate({ save: parsed.save, campaignId, defaultCampaignId }, {
+        upload.mutate({ save: parsed.save, campaignId }, {
             onSuccess: setResult,
             onError: (e) => setBanner({ tone: 'danger', text: bg3UploadErrorMessage(e) }),
         });

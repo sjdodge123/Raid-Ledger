@@ -29,6 +29,7 @@ export interface Bg3UploadSaveSheetProps {
 type Flow = ReturnType<typeof useBg3UploadFlow>;
 
 const noop = (): void => {};
+const BG3_UPLOAD_CAMPAIGN_ID = 'bg3-upload-campaign';
 
 function resultText(result: Bg3UploadResult, campaigns: readonly Bg3CampaignSummary[]): string {
     const name = campaigns.find((c) => c.id === result.campaignId)?.name ?? 'your campaign';
@@ -46,11 +47,11 @@ function SheetBody({ flow, campaigns, onNewCampaign }: BodyProps): JSX.Element |
     return (
         <>
             <Bg3UploadPreview save={flow.parsed.save} thumbUrl={flow.parsed.thumbUrl} />
-            <label className="flex flex-col gap-1 text-sm text-secondary">
-                Campaign
-                <Bg3CampaignPicker campaigns={campaigns} value={flow.campaignId} onChange={flow.setCampaignId}
-                    onNewCampaign={onNewCampaign} disabled={flow.uploading} />
-            </label>
+            <div className="flex flex-col gap-1">
+                <label htmlFor={BG3_UPLOAD_CAMPAIGN_ID} className="text-sm text-secondary">Campaign</label>
+                <Bg3CampaignPicker id={BG3_UPLOAD_CAMPAIGN_ID} campaigns={campaigns} value={flow.campaignId}
+                    onChange={flow.setCampaignId} onNewCampaign={onNewCampaign} disabled={flow.uploading} />
+            </div>
         </>
     );
 }
@@ -80,7 +81,7 @@ export function Bg3UploadSaveSheet({ isOpen, hubId, onClose }: Bg3UploadSaveShee
     const [starting, setStarting] = useState(false);
     const guard = useDirtyCloseGuard(flow.parsed !== null && flow.result === null, onClose);
     const closeGuard = flow.uploading ? { ...guard, requestClose: noop } : guard;
-    const footer = <SheetFooter flow={flow} onCancel={closeGuard.requestClose} onDone={onClose} onUpload={() => flow.submit(defaultId)} />;
+    const footer = <SheetFooter flow={flow} onCancel={closeGuard.requestClose} onDone={onClose} onUpload={flow.submit} />;
     return (
         <>
             <Bg3Overlay isOpen={isOpen} title="Upload a save" onClose={flow.uploading ? noop : onClose} footer={footer}
