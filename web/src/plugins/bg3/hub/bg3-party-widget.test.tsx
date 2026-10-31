@@ -277,3 +277,25 @@ describe('Bg3PartyWidget — empty-state dialogs (D-4 / D-5)', () => {
         expect(await screen.findByText('Add my saves to Tactician run')).toBeInTheDocument();
     });
 });
+
+describe('ROK-1960 "Upload a save"', () => {
+    it('members get it in the no-campaign and no-saves states, and it opens the upload sheet', async () => {
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        const user = userEvent.setup();
+        const view = renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        await user.click(await screen.findByRole('button', { name: 'Upload a save' }));
+        expect(await screen.findByTestId('bg3-upload-save')).toBeInTheDocument();
+        view.unmount();
+        serve(undefined, { empty: true, campaignId: BG3_CAMPAIGN_ID } as never);
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(await screen.findByText('No saves in Tactician run yet.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Upload a save' })).toBeInTheDocument();
+    });
+
+    it('a non-member does not get it', async () => {
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        renderWithProviders(<Bg3PartyWidget {...ctx('visitor')} />);
+        expect(await screen.findByText('No campaign on this hub yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload a save' })).not.toBeInTheDocument();
+    });
+});
