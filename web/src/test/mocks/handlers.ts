@@ -144,6 +144,10 @@ export const handlers = [
     http.get(`${API_BASE}/admin/settings/oauth`, () =>
         HttpResponse.json({ configured: false }),
     ),
+    // ROK-1703 D-5: the typed (or saved) ID + secret pair check
+    http.post(`${API_BASE}/admin/settings/oauth/test`, () =>
+        HttpResponse.json({ success: true, message: 'Credentials verified successfully!' }),
+    ),
     http.get(`${API_BASE}/admin/settings/igdb`, () =>
         HttpResponse.json({ configured: false }),
     ),

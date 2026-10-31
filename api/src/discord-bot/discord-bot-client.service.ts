@@ -13,11 +13,13 @@ import {
 import {
   DISCORD_BOT_EVENTS,
   friendlyDiscordErrorMessage,
+  friendlyConnectErrorMessage,
 } from './discord-bot.constants';
 import { emitIsolated } from './discord-bot-event-dispatch.helpers';
 import {
   createDiscordClient,
   checkBotPermissions,
+  warnIfMultipleGuilds,
   type GuildInfo,
   type PermissionCheckResult,
 } from './discord-bot-client.helpers';
@@ -155,6 +157,11 @@ export class DiscordBotClientService {
         discordId,
       });
     }
+  }
+
+  /** ROK-1703: servers the bot is in (only the first is used); 0 offline. */
+  getGuildCount(): number {
+    return this.client?.guilds.cache.size ?? 0;
   }
 
   getGuildId(): string | null {
@@ -299,12 +306,7 @@ export class DiscordBotClientService {
       this.connecting = false;
       this.logger.log(`Discord bot connected as ${client.user?.tag}`);
 
-      const guildCount = client.guilds.cache.size;
-      if (guildCount > 1) {
-        this.logger.warn(
-          `Bot is in ${guildCount} guilds but only the first one is used.`,
-        );
-      }
+      warnIfMultipleGuilds(this.logger, client.guilds.cache.size);
 
       this.emitConnected().then(resolve, resolve);
     });
@@ -334,10 +336,15 @@ export class DiscordBotClientService {
       clearTimeout(this.connectTimeout!);
       this.connectTimeout = null;
       this.connecting = false;
-      const message = friendlyDiscordErrorMessage(err);
-      this.logger.error('Discord bot login failed:', message);
       this.client = null;
-      reject(new Error(message));
+      // ROK-1703: a 4014 names the intents that are actually off.
+      // The .catch keeps connect() from hanging if the lookup ever throws.
+      void friendlyConnectErrorMessage(err, token)
+        .catch(() => friendlyDiscordErrorMessage(err))
+        .then((message) => {
+          this.logger.error('Discord bot login failed:', message);
+          reject(new Error(message));
+        });
     });
   }
 

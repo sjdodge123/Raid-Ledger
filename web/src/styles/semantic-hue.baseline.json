@@ -1,12 +1,11 @@
 {
-  "__total": 640,
+  "__total": 636,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
   "components/admin/DynamicCategoryCard.tsx": 2,
   "components/admin/admin-sidebar.tsx": 2,
   "components/admin/integration-form-actions.test-utils.ts": 1,
-  "components/admin/onboarding/connect-plugins-step.tsx": 4,
   "components/admin/onboarding/done-step.tsx": 4,
   "components/admin/onboarding/secure-account-step.tsx": 1,
   "components/analytics/attendance-trends-chart.tsx": 1,
