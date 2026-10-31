@@ -23,14 +23,15 @@ const EditIcon = (
     </svg>
 );
 
-function buildSummaryItems(steps: Record<string, boolean> | undefined, dataSources: Record<string, { configured: boolean }> | undefined) {
+function buildSummaryItems(steps: Record<string, boolean | undefined> | undefined, dataSources: Record<string, { configured: boolean }> | undefined): (SummaryRow & { skipMessage: string })[] {
     return [
         { label: 'Password Changed', done: steps?.secureAccount ?? false, skipMessage: 'Default password still in use', wizardStep: 0 },
         { label: 'Community Identity', done: steps?.communityIdentity ?? false, skipMessage: 'Using default settings', wizardStep: 1 },
-        { label: 'Plugins', done: steps?.connectPlugins ?? false, skipMessage: 'No plugins configured', wizardStep: 2 },
-        { label: 'Blizzard API', done: dataSources?.blizzard?.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
-        { label: 'IGDB / Twitch API', done: dataSources?.igdb?.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
-        { label: 'Discord OAuth', done: dataSources?.discord?.configured ?? false, skipMessage: 'Not configured', wizardStep: 0 },
+        { label: 'Discord', done: steps?.discord ?? false, skipMessage: 'Not connected', wizardStep: 2 },
+        // No wizard step owns these yet (R15 adds Game data) — they link to their admin pages.
+        { label: 'Blizzard API', done: dataSources?.blizzard?.configured ?? false, skipMessage: 'Not connected', href: '/admin/settings/plugins' },
+        { label: 'IGDB / Twitch API', done: dataSources?.igdb?.configured ?? false, skipMessage: 'Not connected', href: '/admin/settings/integrations/igdb' },
+        { label: 'Discord OAuth', done: dataSources?.discord?.configured ?? false, skipMessage: 'Not configured', wizardStep: 2 },
     ];
 }
 
@@ -60,17 +61,49 @@ function StaticSummaryItem({ item }: { item: { label: string; done: boolean } })
     );
 }
 
-function SummaryItem({ item, goToStep, firstStep }: { item: { label: string; done: boolean; wizardStep: number }; goToStep: (step: number) => void; firstStep: number }) {
-    if (item.wizardStep < firstStep) return <StaticSummaryItem item={item} />;
+function RowLabel({ label }: { label: string }) {
+    return <span className="text-sm text-foreground group-hover:text-emerald-400 transition-colors">{label}</span>;
+}
+
+type SummaryRow = { label: string; done: boolean } & ({ wizardStep: number; href?: never } | { href: string; wizardStep?: never });
+
+const ROW_EDIT_CLASS = `${ROW_CLASS} hover:bg-surface/50 transition-colors cursor-pointer group text-left`;
+
+function SummaryItem({ item, goToStep, firstStep }: { item: SummaryRow; goToStep: (step: number) => void; firstStep: number }) {
+    if (item.href !== undefined) {
+        return (
+            <Link to={item.href} className={ROW_EDIT_CLASS}>
+                <RowLabel label={item.label} />
+                <div className="flex items-center gap-2"><DoneBadge done={item.done} />{EditIcon}</div>
+            </Link>
+        );
+    }
+    const step = item.wizardStep;
+    if (step < firstStep) return <StaticSummaryItem item={item} />;
     return (
-        <button type="button" onClick={() => goToStep(item.wizardStep)}
-            className={`${ROW_CLASS} hover:bg-surface/50 transition-colors cursor-pointer group text-left`}>
-            <span className="text-sm text-foreground group-hover:text-emerald-400 transition-colors">{item.label}</span>
+        <button type="button" onClick={() => goToStep(step)} className={ROW_EDIT_CLASS}>
+            <RowLabel label={item.label} />
             <div className="flex items-center gap-2">
                 <DoneBadge done={item.done} />
                 {EditIcon}
             </div>
         </button>
+    );
+}
+
+/**
+ * ROK-1703 OQ-2 (approved): the one Discord-link line, once Discord sign-in is
+ * configured. It points at the profile's authenticated link flow: a plain
+ * Discord sign-in would create a separate user instead of linking this admin.
+ */
+function DiscordLinkNote({ show }: { show: boolean }) {
+    if (!show) return null;
+    return (
+        <p className="flex items-center gap-2 text-sm text-secondary" data-testid="discord-link-note">
+            <svg className="w-4 h-4 shrink-0 text-muted" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+            <span>Next: link this admin account to your Discord user in{' '}
+                <Link to="/profile/integrations" className="font-medium underline underline-offset-2">Profile → Integrations</Link>.</span>
+        </p>
     );
 }
 
@@ -109,6 +142,7 @@ export function DoneStep({ onComplete, goToStep, firstStep = 0 }: DoneStepProps)
                 <div className="space-y-2">
                     {items.map((item) => <SummaryItem key={item.label} item={item} goToStep={goToStep} firstStep={firstStep} />)}
                 </div>
+                <DiscordLinkNote show={dataSourcesQuery.data?.discord?.configured ?? false} />
             </div>
             <SkippedNotice hasSkipped={hasSkipped} />
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">

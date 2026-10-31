@@ -17,10 +17,12 @@ import { SettingsService } from '../settings/settings.service';
 describe('DiscordBotService — running bot identity (ROK-1469)', () => {
   let service: DiscordBotService;
   let clientService: jest.Mocked<Partial<DiscordBotClientService>>;
+  let isConnected: jest.Mock<boolean, []>;
 
   beforeEach(async () => {
+    isConnected = jest.fn<boolean, []>().mockReturnValue(true);
     clientService = {
-      isConnected: jest.fn().mockReturnValue(true),
+      isConnected,
       isConnecting: jest.fn().mockReturnValue(false),
       getGuildInfo: jest
         .fn()
@@ -28,6 +30,7 @@ describe('DiscordBotService — running bot identity (ROK-1469)', () => {
       getBotUser: jest
         .fn()
         .mockReturnValue({ id: '900000000000000009', username: 'RL Slot 2' }),
+      getGuildCount: jest.fn().mockReturnValue(2),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -57,6 +60,18 @@ describe('DiscordBotService — running bot identity (ROK-1469)', () => {
       botUserId: '900000000000000009',
       botUsername: 'RL Slot 2',
     });
+  });
+
+  // ROK-1703: the setup wizard warns when the bot sits in several servers.
+  it('reports how many servers the connected bot is in', async () => {
+    const status = await service.getStatus();
+    expect(status.guildCount).toBe(2);
+  });
+
+  it('omits guildCount while the bot is offline', async () => {
+    isConnected.mockReturnValue(false);
+    const status = await service.getStatus();
+    expect(status.guildCount).toBeUndefined();
   });
 
   it('omits the identity when the bot is not connected', async () => {

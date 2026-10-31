@@ -1,3 +1,9 @@
+import type { PrivilegedIntent } from '@raid-ledger/contract';
+import {
+  describeMissingIntents,
+  fetchMissingPrivilegedIntents,
+} from './discord-intents.helpers';
+
 export const DISCORD_BOT_EVENTS = {
   CONNECTED: 'discord-bot.connected',
   DISCONNECTED: 'discord-bot.disconnected',
@@ -311,20 +317,42 @@ export const SIGNUP_BUTTON_IDS = {
   QUICK_SIGNUP: 'quick_signup',
 } as const;
 
+/** A gateway close 4014 / "disallowed intents" connect failure. */
+export function isDisallowedIntentError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    /disallowed intent|privileged intent/i.test(error.message) ||
+    (error as Error & { code?: number }).code === 4014
+  );
+}
+
+/**
+ * ROK-1703: name the intents that are off (from `applications/@me` flags);
+ * without a list, name all three rather than guess one.
+ */
+function disallowedIntentMessage(
+  missing: readonly PrivilegedIntent[] | null | undefined,
+): string {
+  const plural = !missing || missing.length !== 1;
+  const noun = plural ? 'intents' : 'intent';
+  const pronoun = plural ? 'them' : 'it';
+  return `Missing required privileged ${noun}: ${describeMissingIntents(missing)}. Turn ${pronoun} on in the Discord Developer Portal under Bot > Privileged Gateway Intents.`;
+}
+
 /**
  * Convert Discord.js errors into admin-friendly messages.
  * Shared between DiscordBotService and DiscordBotClientService to avoid
  * duplicating intent / token / network error detection.
  */
-export function friendlyDiscordErrorMessage(error: unknown): string {
+export function friendlyDiscordErrorMessage(
+  error: unknown,
+  missingIntents?: readonly PrivilegedIntent[] | null,
+): string {
   if (!(error instanceof Error)) return 'Failed to connect with provided token';
   const raw = error.message;
 
-  if (
-    /disallowed intent|privileged intent/i.test(raw) ||
-    (error as Error & { code?: number })?.code === 4014
-  ) {
-    return 'Missing required privileged intent: Server Members. Enable it in the Discord Developer Portal under Bot > Privileged Gateway Intents.';
+  if (isDisallowedIntentError(error)) {
+    return disallowedIntentMessage(missingIntents);
   }
   if (/invalid token|TOKEN_INVALID/i.test(raw)) {
     return 'Invalid bot token. Please check the token and try again.';
@@ -337,4 +365,18 @@ export function friendlyDiscordErrorMessage(error: unknown): string {
   }
 
   return 'Failed to connect with provided token';
+}
+
+/**
+ * ROK-1703: like {@link friendlyDiscordErrorMessage}, but on a disallowed-intent
+ * failure first asks Discord which intents are off so the text names them.
+ */
+export async function friendlyConnectErrorMessage(
+  error: unknown,
+  token: string,
+): Promise<string> {
+  const missing = isDisallowedIntentError(error)
+    ? await fetchMissingPrivilegedIntents(token)
+    : null;
+  return friendlyDiscordErrorMessage(error, missing);
 }

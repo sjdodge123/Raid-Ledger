@@ -146,3 +146,15 @@ export function createDiscordClient(): Client {
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 }
+
+/** Only the first guild is used; say so when the bot sits in several. */
+export function warnIfMultipleGuilds(
+  logger: { warn(message: string): void },
+  guildCount: number,
+): void {
+  if (guildCount > 1) {
+    logger.warn(
+      `Bot is in ${guildCount} guilds but only the first one is used.`,
+    );
+  }
+}

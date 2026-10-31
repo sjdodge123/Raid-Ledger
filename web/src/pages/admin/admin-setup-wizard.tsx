@@ -6,13 +6,13 @@ import { useSystemStatus } from '../../hooks/use-system-status';
 import { toast } from '../../lib/toast';
 import { SecureAccountStep } from '../../components/admin/onboarding/secure-account-step';
 import { CommunityIdentityStep } from '../../components/admin/onboarding/community-identity-step';
-import { ConnectPluginsStep } from '../../components/admin/onboarding/connect-plugins-step';
+import { LazyDiscordSetupStep } from '../../components/admin/onboarding/discord/discord-setup-step-lazy';
 import { DoneStep } from '../../components/admin/onboarding/done-step';
 
 const STEPS = [
   { key: 'secure-account', label: 'Secure Account', number: 1 },
   { key: 'community', label: 'Community', number: 2 },
-  { key: 'plugins', label: 'Plugins', number: 3 },
+  { key: 'discord', label: 'Discord', number: 3 },
   { key: 'done', label: 'Done', number: 4 },
 ] as const;
 
@@ -46,15 +46,21 @@ function useWizardNavigation(updateStep: ReturnType<typeof useOnboarding>['updat
     });
   }, [completeOnboarding, navigate]);
   const handleComplete = useCallback(() => { completeOnboarding.mutate(undefined, { onSuccess: () => navigate('/calendar', { replace: true }) }); }, [completeOnboarding, navigate]);
+  // ROK-1703 D-9: "Finish later" on 4e completes onboarding (as Skip Setup does) and opens Admin → Discord.
+  const handleFinishLater = useCallback(() => {
+    completeOnboarding.mutate(undefined, {
+      onSuccess: () => { toast.info('Pick a default channel any time in Admin \u2192 Discord'); navigate('/admin/settings/discord', { replace: true }); },
+    });
+  }, [completeOnboarding, navigate]);
 
-  return { stepOverride, goToStep, handleSkipAll, handleComplete };
+  return { stepOverride, goToStep, handleSkipAll, handleComplete, handleFinishLater };
 }
 
 export function AdminSetupWizard() {
   const { user } = useAuth();
   const { statusQuery, updateStep } = useOnboarding();
   const firstStep = useFirstStep();
-  const { stepOverride, goToStep, handleSkipAll, handleComplete } = useWizardNavigation(updateStep, firstStep);
+  const { stepOverride, goToStep, handleSkipAll, handleComplete, handleFinishLater } = useWizardNavigation(updateStep, firstStep);
 
   const currentStep = stepOverride ?? clampStep(statusQuery.data?.currentStep ?? 0, firstStep);
   const goNext = useCallback(() => { if (currentStep < MAX_STEP) goToStep(currentStep + 1); }, [currentStep, goToStep]);
@@ -68,7 +74,7 @@ export function AdminSetupWizard() {
     <div className="min-h-[calc(100vh-4rem)] flex flex-col">
       <WizardHeader onSkip={handleSkipAll} />
       <WizardStepper currentStep={currentStep} firstStep={firstStep} goToStep={goToStep} />
-      <WizardStepContent currentStep={currentStep} firstStep={firstStep} goNext={goNext} goBack={goBack} goToStep={goToStep} onComplete={handleComplete} />
+      <WizardStepContent currentStep={currentStep} firstStep={firstStep} goNext={goNext} goBack={goBack} goToStep={goToStep} onComplete={handleComplete} onFinishLater={handleFinishLater} />
     </div>
   );
 }
@@ -141,15 +147,15 @@ function WizardStepIndicator({ step, index, displayNumber, currentStep, isLast, 
   );
 }
 
-function WizardStepContent({ currentStep, firstStep, goNext, goBack, goToStep, onComplete }: {
-  currentStep: number; firstStep: number; goNext: () => void; goBack: () => void; goToStep: (i: number) => void; onComplete: () => void;
+function WizardStepContent({ currentStep, firstStep, goNext, goBack, goToStep, onComplete, onFinishLater }: {
+  currentStep: number; firstStep: number; goNext: () => void; goBack: () => void; goToStep: (i: number) => void; onComplete: () => void; onFinishLater: () => void;
 }) {
   return (
     <div className="flex-1">
       <div className="max-w-4xl mx-auto px-6 py-8">
         {currentStep === 0 && <SecureAccountStep onNext={goNext} onSkip={goNext} />}
         {currentStep === 1 && <CommunityIdentityStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
-        {currentStep === 2 && <ConnectPluginsStep onNext={goNext} onBack={goBack} onSkip={goNext} />}
+        {currentStep === 2 && <LazyDiscordSetupStep onNext={goNext} onBack={goBack} onFinishLater={onFinishLater} />}
         {currentStep === 3 && <DoneStep onComplete={onComplete} goToStep={goToStep} firstStep={firstStep} />}
       </div>
     </div>

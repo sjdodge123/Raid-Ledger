@@ -42,6 +42,7 @@ import { PasswordChangeSessionService } from '../auth/password-change/password-c
 import { setRefreshCookie } from '../auth/refresh/refresh-cookie.helpers';
 import { isCloudFlavour } from '../common/flavour/flavour';
 import { readClaimState } from '../setup-claim/claim-state.repository';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 /** Change-password response; `access_token` replaces the caller's revoked one. */
 type ChangePasswordResult = {
@@ -63,6 +64,7 @@ export class OnboardingController {
     private readonly settingsService: SettingsService,
     private readonly localAuthService: LocalAuthService,
     private readonly passwordSession: PasswordChangeSessionService,
+    private readonly discordClient: DiscordBotClientService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -89,6 +91,7 @@ export class OnboardingController {
       blizzardConfigured,
       igdbConfigured,
       discordConfigured,
+      discordBotConfigured,
     ] = await Promise.all([
       this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
       this.settingsService.get(SETTING_KEYS.ONBOARDING_CURRENT_STEP),
@@ -97,6 +100,7 @@ export class OnboardingController {
       this.settingsService.isBlizzardConfigured(),
       this.settingsService.isIgdbConfigured(),
       this.settingsService.isDiscordConfigured(),
+      this.settingsService.isDiscordBotConfigured(),
     ]);
     return {
       completedRaw,
@@ -106,6 +110,7 @@ export class OnboardingController {
       blizzardConfigured,
       igdbConfigured,
       discordConfigured,
+      discordBotConfigured,
     };
   }
 
@@ -125,6 +130,11 @@ export class OnboardingController {
         communityIdentity: !!(s.communityName || s.defaultTimezone),
         connectPlugins:
           s.blizzardConfigured || s.igdbConfigured || s.discordConfigured,
+        // ROK-1703: OAuth saved + bot token saved + bot connected (D-3).
+        discord:
+          s.discordConfigured &&
+          s.discordBotConfigured &&
+          this.discordClient.isConnected(),
       },
     };
   }

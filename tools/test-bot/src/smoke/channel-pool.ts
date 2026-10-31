@@ -34,7 +34,7 @@ export async function setupChannelPool(
   defaultChannelId: string,
 ): Promise<ChannelSlot[]> {
   const poolGames = await fetchGames(api);
-  // Non-default channels, minus the one reserved for the join post (ROK-1740)
+  // Non-default channels, minus the join-post (ROK-1740/1788) and Quick Play reserves
   const poolChannels = poolCandidateChannels(textChannels, defaultChannelId);
 
   if (poolGames.length === 0 || poolChannels.length === 0) {

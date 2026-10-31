@@ -25,6 +25,7 @@ import { HubWidgetsSection } from './hub-widgets-section';
 import { ArrangeListSection } from './arrange-list-section';
 import { MasonryGridSection } from './masonry-grid-section';
 import { MemberListSection } from './member-list-section';
+import { WizardSubstepRailSection } from './wizard-substep-rail-section';
 import { CrestSection } from './crest-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
@@ -64,6 +65,7 @@ const NAV = [
     { id: 'map-viewport', label: 'Map viewport' },
     { id: 'hub-widgets', label: 'Hub widgets' },
     { id: 'meter-histogram', label: 'Meter + histogram' },
+    { id: 'wizard-substep-rail', label: 'Wizard rail' },
     { id: 'crest', label: 'Crest' },
     { id: 'crest-picker', label: 'Crest picker' },
 ];
@@ -137,6 +139,7 @@ function FeatureSections(): JSX.Element {
             <ArrangeListSection />
             <MasonryGridSection />
             <MemberListSection />
+            <WizardSubstepRailSection />
             <CrestSection />
             <Suspense fallback={<SamplesLoading />}>
                 <CrestPickerSection />
