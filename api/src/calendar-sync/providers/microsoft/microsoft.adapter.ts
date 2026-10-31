@@ -1,29 +1,45 @@
 /**
  * ROK-1597: Microsoft's account capability (connect / refresh / disconnect)
- * over the identity platform v2.0 `common` tenant. Read (7a-2) and write
- * (7b-1) capabilities are added by the layers that implement them — the
- * registry detects capability structurally, so this account-only adapter
- * routes neither read nor write until then.
+ * over the identity platform v2.0 `common` tenant, plus read (calendar list
+ * + `calendarView` busy time). Write (7b-1) is added by the layer that
+ * implements it — the registry detects capability structurally, so this
+ * adapter routes read but not write until then.
  *
  * The client id + secret are read per call from app settings, so an admin
  * edit applies without a restart. Nothing here logs a token, code or secret.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { SettingsService } from '../../../settings/settings.service';
 import type { SettingsCore } from '../../../settings/settings-bot.helpers';
 import { getCalendarProviderConfig } from '../../../settings/settings-calendar-sync.helpers';
 import {
   MissingScopesError,
+  ProviderAuthError,
   ProviderNotConfiguredError,
+  TransientError,
 } from '../calendar-provider.errors';
 import type {
   AuthUrlInput,
+  BusyBlock,
   CalendarAccountProvider,
   CalendarCredentials,
+  CalendarReadCapability,
   ConnectResult,
+  FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
+  ProviderCalendar,
+  TimeRange,
 } from '../calendar-provider.interface';
+import { normalizeGraphEvent } from './microsoft-normalize.helpers';
+import {
+  buildCalendarListUrl,
+  buildCalendarViewUrl,
+  GRAPH_ACCESS_DENIED,
+  readAllGraphPages,
+  readCalendarOrSkip,
+  toProviderCalendar,
+} from './microsoft-read.helpers';
 import {
   buildMicrosoftAuthUrl,
   exchangeMicrosoftCode,
@@ -34,8 +50,11 @@ import {
 } from './microsoft-oauth.helpers';
 
 @Injectable()
-export class MicrosoftCalendarAdapter implements CalendarAccountProvider {
+export class MicrosoftCalendarAdapter
+  implements CalendarAccountProvider, CalendarReadCapability
+{
   readonly key = 'microsoft' as const;
+  private readonly logger = new Logger(MicrosoftCalendarAdapter.name);
 
   constructor(
     @Inject(SettingsService) private readonly settings: SettingsCore,
@@ -110,6 +129,52 @@ export class MicrosoftCalendarAdapter implements CalendarAccountProvider {
     return Promise.resolve();
   }
 
+  /** Every calendar of the user (picker); `isRaidLedger` set by the caller. */
+  async listCalendars(
+    credentials: CalendarCredentials,
+  ): Promise<ProviderCalendar[]> {
+    const token = accessTokenOf(credentials);
+    const { items } = await readAllGraphPages(token, buildCalendarListUrl());
+    return items.flatMap((item) => toProviderCalendar(item) ?? []);
+  }
+
+  /**
+   * Busy blocks across `calendarIds` (full window). A gone calendar
+   * (404/410) goes to `missingCalendarIds` (pruned by the caller); one
+   * refused by 403 `ErrorAccessDenied` to `unreadableCalendarIds` (kept).
+   * When EVERY requested calendar is refused the fetch fails instead (a
+   * zero-block success would wipe the user's busy blocks). Every other
+   * error fails the whole fetch.
+   */
+  async fetchBusy(
+    credentials: CalendarCredentials,
+    range: TimeRange,
+    calendarIds: string[],
+  ): Promise<FetchBusyResult> {
+    const token = accessTokenOf(credentials);
+    const blocks: BusyBlock[] = [];
+    const missing: string[] = [];
+    const refused: string[] = [];
+    let truncated = 0;
+    for (const calendarId of calendarIds) {
+      const url = buildCalendarViewUrl(calendarId, range);
+      const read = await readCalendarOrSkip(readAllGraphPages(token, url));
+      if (read === 'missing') missing.push(calendarId);
+      else if (read === 'refused') refused.push(calendarId);
+      else {
+        if (read.truncated) truncated += 1;
+        blocks.push(...read.items.flatMap((i) => normalizeGraphEvent(i) ?? []));
+      }
+    }
+    if (truncated > 0) {
+      this.logger.warn(
+        `Graph read hit the page cap on ${truncated} calendar(s)`,
+      );
+    }
+    assertSomeReadable(calendarIds, refused, missing);
+    return busyResult(blocks, missing, refused);
+  }
+
   private async client(): Promise<MicrosoftClient> {
     const config = await getCalendarProviderConfig(this.settings, 'microsoft', {
       includeSecret: true,
@@ -119,4 +184,39 @@ export class MicrosoftCalendarAdapter implements CalendarAccountProvider {
     }
     return { clientId: config.clientId, clientSecret: config.clientSecret };
   }
+}
+
+/** Microsoft rows hold OAuth credentials; anything else is unusable. */
+export function accessTokenOf(credentials: CalendarCredentials): string {
+  if (credentials.kind !== 'oauth' || !credentials.accessToken) {
+    throw new ProviderAuthError('credentials_kind');
+  }
+  return credentials.accessToken;
+}
+
+/** Every calendar refused (or refused + gone): fail, keep the old blocks. */
+function assertSomeReadable(
+  requested: string[],
+  refused: string[],
+  missing: string[],
+): void {
+  if (
+    refused.length > 0 &&
+    refused.length + missing.length === requested.length
+  ) {
+    throw new TransientError(GRAPH_ACCESS_DENIED);
+  }
+}
+
+/** Only the skip lists that are non-empty are set (exact optional props). */
+function busyResult(
+  blocks: BusyBlock[],
+  missing: string[],
+  refused: string[],
+): FetchBusyResult {
+  return {
+    blocks,
+    ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
+    ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
+  };
 }
