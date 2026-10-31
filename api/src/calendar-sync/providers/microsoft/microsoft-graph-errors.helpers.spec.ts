@@ -5,6 +5,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import * as microsoftHttp from './microsoft-http';
+import { DEFAULT_RETRY_AFTER_MS } from '../google/google-http';
 import {
   assertGraphOk,
   graphErrorCode,
@@ -160,6 +161,25 @@ describe('mapGraphError', () => {
     expect(r503 instanceof RateLimitError && r503.retryAfterMs).toBe(3000);
   });
 
+  it('a 429 without Retry-After falls back to the default wait; an HTTP-date is honoured (item 6)', () => {
+    const bare = mapGraphError(res(429, null), 'read');
+    expect(bare).toBeInstanceOf(RateLimitError);
+    expect(bare instanceof RateLimitError && bare.retryAfterMs).toBe(
+      DEFAULT_RETRY_AFTER_MS,
+    );
+    const inFive = new Date(Date.now() + 5_000).toUTCString();
+    const dated = mapGraphError(res(429, null, inFive), 'write');
+    const ms = dated instanceof RateLimitError ? dated.retryAfterMs : -1;
+    expect(ms).toBeGreaterThan(0);
+    expect(ms).toBeLessThanOrEqual(5_000);
+  });
+
+  it('a 503 without Retry-After stays a TransientError (BullMQ backoff)', () => {
+    expect(mapGraphError(res(503, null), 'read')).toBeInstanceOf(
+      TransientError,
+    );
+  });
+
   it('never puts the Graph message in the error text', () => {
     const err = mapGraphError(res(401, fixture('error-401')), 'read');
     expect(String(err)).not.toContain('expired');
@@ -173,10 +193,18 @@ describe('graphErrorCode / isGraphAccessDenied / assertGraphOk', () => {
     expect(graphErrorCode('not json')).toBeNull();
   });
 
-  it('flags only a 403 ErrorAccessDenied as an unreadable calendar', () => {
+  it('flags any 403 as an unreadable calendar, by status not code (item 5)', () => {
     expect(isGraphAccessDenied(res(403, fixture('error-403')))).toBe(true);
+    expect(isGraphAccessDenied(res(403, null))).toBe(true);
+    expect(
+      isGraphAccessDenied(res(403, { error: { code: 'ErrorItemNotFound' } })),
+    ).toBe(true);
     expect(isGraphAccessDenied(res(401, fixture('error-403')))).toBe(false);
-    expect(isGraphAccessDenied(res(403, null))).toBe(false);
+  });
+
+  it('keeps a consent 403 (Authorization_RequestDenied) out of the skip', () => {
+    const consent = { error: { code: 'Authorization_RequestDenied' } };
+    expect(isGraphAccessDenied(res(403, consent))).toBe(false);
   });
 
   it('passes a 2xx and throws the mapped error otherwise', () => {

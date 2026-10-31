@@ -10,6 +10,11 @@
  * 3. else (Windows zone names such as "W. Europe Standard Time") the instant
  *    is rounded to the nearest UTC midnight — exact for offsets in (−12h, +12h).
  *
+ * Why both shapes stay: Graph documents neither the all-day shape under
+ * `Prefer: outlook.timezone="UTC"` nor the zone that drives all-day bounds
+ * in `calendarView` (ROK-1597 Graph verification, items 1-2 — NOT
+ * DOCUMENTED). Do not drop a branch until a live mailbox proves it dead.
+ *
  * Pure — no I/O, no logging.
  */
 const DAY_MS = 86_400_000;

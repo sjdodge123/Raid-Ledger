@@ -26,13 +26,21 @@ import {
 import {
   GRAPH_API,
   PREFER_IMMUTABLE_ID,
+  PREFER_UTC,
   RL_COPY_PROP_ID,
 } from './microsoft-graph.constants';
 
 /** Same name as Google's dedicated calendar — must stay `'Raid Ledger'`. */
 export const RAID_LEDGER_CALENDAR_NAME = RAID_LEDGER_CALENDAR_SUMMARY;
-/** Every write asks for immutable ids (stable across folder moves). */
-export const MICROSOFT_WRITE_PREFER: readonly string[] = [PREFER_IMMUTABLE_ID];
+/**
+ * Every write asks for UTC times and immutable ids (stable across folder
+ * moves) — the same pair as the reads, so a returned event is read the same
+ * way on both sides (both headers VERIFIED, ROK-1597 Graph verification 9).
+ */
+export const MICROSOFT_WRITE_PREFER: readonly string[] = [
+  PREFER_UTC,
+  PREFER_IMMUTABLE_ID,
+];
 /** UNVERIFIED (spec §3.5): Graph's code for "a calendar with that name exists". */
 export const GRAPH_FOLDER_EXISTS = 'ErrorFolderExists';
 

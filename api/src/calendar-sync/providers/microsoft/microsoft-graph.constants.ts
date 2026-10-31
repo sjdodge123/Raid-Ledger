@@ -25,6 +25,19 @@ export const MS_SCOPES: readonly string[] = [
  * the presence of a refresh token, since its echo is unreliable). */
 export const MS_REQUIRED_SCOPES: readonly string[] = [MS_CALENDAR_SCOPE];
 
+/**
+ * Documented Outlook throttling limits (calendar included), per app id +
+ * mailbox: 10,000 requests per 10 minutes and 4 concurrent requests
+ * (https://learn.microsoft.com/en-us/graph/throttling-limits). Reference
+ * only — no behaviour keys on it. Calls here are sequential per connection
+ * (never more than one in flight per mailbox); a 429 maps to
+ * `RateLimitError(Retry-After)` and the queue backs off.
+ */
+export const OUTLOOK_THROTTLE_LIMITS = {
+  requestsPer10Min: 10_000,
+  concurrentPerMailbox: 4,
+} as const;
+
 /** Graph returns every dateTime in UTC with this `Prefer` value. */
 export const PREFER_UTC = 'outlook.timezone="UTC"';
 /** Stable event ids across folder moves. */

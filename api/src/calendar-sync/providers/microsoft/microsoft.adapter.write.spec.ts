@@ -20,7 +20,7 @@ import {
   FAKE_DEFAULT_CALENDAR_ID,
   FakeGraphCalendarApi,
 } from './microsoft-graph-api.spec-helpers';
-import { PREFER_IMMUTABLE_ID } from './microsoft-graph.constants';
+import { PREFER_IMMUTABLE_ID, PREFER_UTC } from './microsoft-graph.constants';
 import { MicrosoftCalendarAdapter } from './microsoft.adapter';
 
 const CREDS: OAuthCredentials = {
@@ -72,7 +72,7 @@ describe('MicrosoftCalendarAdapter write — Graph specifics', () => {
     expect(main?.events.has(ref.providerEventId)).toBe(true);
   });
 
-  it('no POST or PATCH body ever carries attendees; every call sends the bearer + ImmutableId', async () => {
+  it('no POST or PATCH body ever carries attendees; every call sends the bearer + Prefer UTC + ImmutableId', async () => {
     const { api, a } = setup();
     const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
     const ref = await a.upsertEvent(CREDS, cal, COPY, null);
@@ -81,7 +81,7 @@ describe('MicrosoftCalendarAdapter write — Graph specifics', () => {
     for (const r of writes(api)) expect(r.body).not.toHaveProperty('attendees');
     for (const r of api.requests) {
       expect(r.accessToken).toBe('ms-write-token');
-      expect(r.prefer).toContain(PREFER_IMMUTABLE_ID);
+      expect(r.prefer).toEqual([PREFER_UTC, PREFER_IMMUTABLE_ID]);
     }
   });
 

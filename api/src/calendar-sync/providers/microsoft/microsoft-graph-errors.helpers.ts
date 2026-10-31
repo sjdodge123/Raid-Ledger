@@ -33,11 +33,18 @@ export function graphErrorCode(json: unknown): string | null {
 }
 
 /**
- * A read-side 403 `ErrorAccessDenied`: the calendar is unreadable and the
- * read loop skips it (7a-2 `readCalendarOrSkip`) instead of failing.
+ * A read-side 403: the calendar is unreadable and the read loop skips it
+ * (7a-2 `readCalendarOrSkip`) instead of failing.
+ *
+ * Judged by the HTTP status, any body: Graph documents 403 as "Access is
+ * denied to the requested resource" but NOT the `ErrorAccessDenied` code for
+ * an unshared calendar (ROK-1597 Graph verification, item 5). The code is a
+ * secondary hint only — `Authorization_RequestDenied` means the app lacks
+ * consent, which must fail the read (scope), not skip one calendar.
  */
 export function isGraphAccessDenied(res: MicrosoftHttpResponse): boolean {
-  return res.status === 403 && graphErrorCode(res.json) === 'ErrorAccessDenied';
+  if (res.status !== 403) return false;
+  return graphErrorCode(res.json) !== 'Authorization_RequestDenied';
 }
 
 /**
