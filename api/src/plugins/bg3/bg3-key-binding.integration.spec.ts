@@ -8,7 +8,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   BG3_GAME_SLUG,
   BG3_PLUGIN_ID,
@@ -28,6 +28,11 @@ import {
   makeUser,
 } from '../../companion/devices/testing/companion-link.helpers';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { waitFor } from '../../common/testing/integration-helpers';
+import {
+  bg3CampaignLockKey,
+  lockBg3UserCampaigns,
+} from './campaigns/bg3-campaign-lock';
 
 const MESSAGES = `/companion/v1/messages/${BG3_SAVE_CONTRACT_ID}`;
 const BG3 = '/plugins/bg3';
@@ -300,4 +305,150 @@ describe('PUT me/campaign-keys/:key — silent binds', () => {
     });
     expect(res.status).toBe(400);
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1960 F5 — one per-user lock serialises every campaign-filing writer
+// ═══════════════════════════════════════════════════════════════════════════
+
+type Tx = Parameters<Parameters<TestApp['db']['transaction']>[0]>[0];
+
+/** Waiters queued on `userId`'s campaign lock (one-arg bigint key → classid/objid). */
+async function lockWaiters(userId: number): Promise<number> {
+  const key = bg3CampaignLockKey(userId);
+  const rows = await testApp.db.execute<{ n: number }>(sql`
+    select count(*)::int as n from pg_locks, hashtextextended(${key}, 0) as h
+    where locktype = 'advisory' and not granted and objsubid = 1
+      and classid::bigint = ((h >> 32) & 4294967295)
+      and objid::bigint = (h & 4294967295)`);
+  return rows[0]?.n ?? 0;
+}
+
+interface Tracked<T> {
+  settled: boolean;
+  done: Promise<T>;
+}
+
+function track<T>(started: PromiseLike<T>): Tracked<T> {
+  const t: Tracked<T> = { settled: false, done: Promise.resolve(started) };
+  t.done = t.done.finally(() => {
+    t.settled = true;
+  });
+  return t;
+}
+
+/** Returns once the writer queues on the lock — or finishes, i.e. never took it. */
+async function untilQueuedOrSettled(userId: number, t: Tracked<unknown>) {
+  await waitFor(
+    async () => {
+      if (t.settled) return;
+      expect(await lockWaiters(userId)).toBeGreaterThan(0);
+    },
+    10_000,
+    20,
+  );
+}
+
+/** Holds `userId`'s campaign lock in its own tx while `body` runs, then commits. */
+async function holdingLock(userId: number, body: (tx: Tx) => Promise<void>) {
+  await testApp.db.transaction(async (tx) => {
+    await lockBg3UserCampaigns(tx, userId);
+    await body(tx);
+  });
+}
+
+/** What `setDefault` writes: the default, plus the user's unassigned rows. */
+async function fileUnassigned(tx: Tx, userId: number, campaignId: number) {
+  await tx.insert(schema.bg3UserDefaults).values({ userId, campaignId });
+  const s = schema.bg3Saves;
+  await tx
+    .update(s)
+    .set({ campaignId })
+    .where(and(eq(s.uploaderUserId, userId), isNull(s.campaignId)));
+}
+
+describe('ROK-1960 F5 — per-user campaign lock', () => {
+  // MUTATION: drop `lockBg3UserCampaigns` from `bindKey` — the bind then runs
+  // its guard while the save is unassigned, binds 204 and moves the row into
+  // B, and this fails on the status/body assertion (204, not 409).
+  it('a bind queued behind a default change sees the newly filed save and 409s', async () => {
+    const w = await twoHubs();
+    await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
+    expect(await filedIn(w.host.id)).toEqual([null]);
+    let bound: Tracked<{ status: number; body: unknown }> | undefined;
+    await holdingLock(w.host.id, async (tx) => {
+      const b = track(bind(w.host.token, w.inB).then((r) => r));
+      bound = b;
+      await untilQueuedOrSettled(w.host.id, b);
+      await fileUnassigned(tx, w.host.id, w.inA);
+    });
+    if (!bound) throw new Error('bind never started');
+    const res = await bound.done;
+    expect([res.status, res.body]).toEqual([
+      409,
+      {
+        code: 'cross_hub_move',
+        saveCount: 1,
+        locations: [
+          {
+            campaignId: w.inA,
+            campaignName: 'Act Two',
+            hubId: w.hubA,
+            hubName: 'BG3 Crew',
+          },
+        ],
+      },
+    ]);
+    expect(await filedIn(w.host.id)).toEqual([w.inA]);
+    expect(await boundTo(w.host.id)).toBeNull();
+  });
+
+  type World = Awaited<ReturnType<typeof twoHubs>>;
+  const writers: [string, (w: World) => PromiseLike<{ status: number }>][] = [
+    [
+      'setDefault',
+      (w) => put(w.host.token, '/me/default-campaign', { campaignId: w.inA }),
+    ],
+    [
+      'setDefault(null)',
+      (w) => put(w.host.token, '/me/default-campaign', { campaignId: null }),
+    ],
+    [
+      'unbind',
+      (w) =>
+        testApp.request.delete(`${BG3}${keyPath}`).set(bearer(w.host.token)),
+    ],
+    [
+      'ingest',
+      (w) =>
+        testApp.request
+          .post(MESSAGES)
+          .set('Content-Type', 'application/json')
+          .set(bearer(w.host.token))
+          .serialize((bytes) => bytes)
+          .send(
+            Buffer.from(JSON.stringify(save(KEY_A, '2026-10-24T22:00:00Z'))),
+          ),
+    ],
+  ];
+
+  // MUTATION: drop `lockBg3UserCampaigns` from that writer and it finishes
+  // while the lock is held — fails on `{ finishedWhileLocked: true }`.
+  it.each(writers)(
+    '%s waits for the per-user campaign lock',
+    async (_name, run) => {
+      const w = await twoHubs();
+      let writer: Tracked<{ status: number }> | undefined;
+      let finishedWhileLocked: boolean | undefined;
+      await holdingLock(w.host.id, async () => {
+        const t = track(run(w));
+        writer = t;
+        await untilQueuedOrSettled(w.host.id, t);
+        finishedWhileLocked = t.settled;
+      });
+      expect({ finishedWhileLocked }).toEqual({ finishedWhileLocked: false });
+      if (!writer) throw new Error('writer never started');
+      expect([202, 204]).toContain((await writer.done).status);
+    },
+  );
 });

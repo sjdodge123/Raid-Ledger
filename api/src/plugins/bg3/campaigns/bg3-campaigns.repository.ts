@@ -10,9 +10,9 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { Bg3HubLookup, Bg3HubRow } from '../read/bg3-hub-access.helpers';
 import { toBg3CampaignSummary } from '../read/bg3-read.mappers';
+import { lockBg3UserCampaigns } from './bg3-campaign-lock';
 import {
   crossHubPlan,
-  lockUserKey,
   ownRows,
   type Bg3CrossHubPlan,
 } from './bg3-key-bind.helpers';
@@ -181,8 +181,8 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
   }
 
   /**
-   * ROK-1960 F4: bind + re-file the caller's rows with `key`, under a
-   * per-(user, key) lock. Unless `confirmCrossHub`, a bind that would move
+   * ROK-1960 F4: bind + re-file the caller's rows with `key`, under the
+   * per-user campaign lock (F5). Unless `confirmCrossHub`, a bind that would move
    * saves (or the binding) out of a hub other than `target.hubId` writes
    * nothing and returns what it would have moved.
    */
@@ -195,7 +195,7 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
     const k = schema.bg3CampaignKeys;
     const { campaignId } = target;
     return this.db.transaction(async (tx) => {
-      await lockUserKey(tx, userId, key);
+      await lockBg3UserCampaigns(tx, userId);
       const plan = await crossHubPlan(tx, userId, key, target);
       if (plan && !confirmCrossHub) return plan;
       await tx
@@ -213,6 +213,7 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
   async unbindKey(userId: number, key: string): Promise<void> {
     const k = schema.bg3CampaignKeys;
     await this.db.transaction(async (tx) => {
+      await lockBg3UserCampaigns(tx, userId);
       await tx
         .delete(k)
         .where(and(eq(k.userId, userId), eq(k.campaignKey, key)));
@@ -224,15 +225,17 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
    * Upsert (and assign the caller's unassigned rows) or delete. Returns
    * `false` — writing nothing — when the campaign is archived (D-11); the
    * row is locked `FOR UPDATE` so a concurrent archive cannot slip between
-   * the check and the write.
+   * the check and the write. Both branches take the per-user campaign lock
+   * first (F5): ingest resolves against the default under the same lock.
    */
   async setDefault(userId: number, campaignId: number | null) {
     const d = schema.bg3UserDefaults;
-    if (campaignId === null) {
-      await this.db.delete(d).where(eq(d.userId, userId));
-      return true;
-    }
     return this.db.transaction(async (tx) => {
+      await lockBg3UserCampaigns(tx, userId);
+      if (campaignId === null) {
+        await tx.delete(d).where(eq(d.userId, userId));
+        return true;
+      }
       const [row] = await tx
         .select({ archivedAt: c.archivedAt })
         .from(c)

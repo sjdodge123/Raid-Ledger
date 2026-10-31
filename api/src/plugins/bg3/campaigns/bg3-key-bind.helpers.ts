@@ -2,10 +2,11 @@
  * ROK-1960 F4 — the cross-hub guard's reads for `PUT me/campaign-keys/:key`.
  * A bind moves every one of the caller's saves with the key, and those saves
  * can sit in several hubs (`setDefault` only files unassigned rows), so the
- * guard looks at ALL of them plus the binding — under a per-(user, key)
- * advisory lock so two tabs cannot both pass the check.
+ * guard looks at ALL of them plus the binding — under the per-user
+ * `lockBg3UserCampaigns` lock (F5) so no other writer can re-file a row
+ * between the check and the bind's UPDATE.
  */
-import { and, count, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, isNull, ne, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 
@@ -38,18 +39,6 @@ const LOCATION_COLS = {
 
 export function ownRows(userId: number, key: string) {
   return and(eq(s.uploaderUserId, userId), eq(s.campaignKey, key));
-}
-
-/** Held to the end of the bind's transaction; serialises binds of one (user, key). */
-export async function lockUserKey(
-  tx: Bg3Tx,
-  userId: number,
-  key: string,
-): Promise<void> {
-  const name = `bg3-campaign-key:${userId}:${key}`;
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${name}, 0))`,
-  );
 }
 
 /** Every campaign holding one of the caller's saves with `key`, plus the bound one. */
