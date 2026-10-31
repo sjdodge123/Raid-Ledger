@@ -16,7 +16,7 @@ const COLUMNS = [
       </div>
       {COLUMNS.map((col) => (
         <div>
-          <h4>{col.head}</h4>
+          <h3>{col.head}</h3>
           <ul>{col.links.map(([href, label]) => <li><a href={href}>{label}</a></li>)}</ul>
         </div>
       ))}

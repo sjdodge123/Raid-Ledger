@@ -106,7 +106,7 @@ a:hover { text-decoration: underline; }
 .embed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; color: var(--embed-muted); margin-bottom: 8px; }
 .bot-ava { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #6366f1); }
 .bot-tag { background: var(--discord); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
-.embed h4 { color: var(--embed-fg); font-size: 16px; margin-bottom: 4px; }
+.embed .embed-title { color: var(--embed-fg); font-size: 16px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 4px; }
 .embed .meta { color: var(--embed-muted); font-size: 13px; margin-bottom: 10px; }
 .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
 .role { background: var(--embed-bar); border-radius: 6px; padding: 8px; font-size: 12px; color: var(--embed-muted); }
@@ -117,7 +117,8 @@ a:hover { text-decoration: underline; }
 .dbtn { min-height: 44px; padding: 0 14px; border-radius: 6px; border: 0; font: 600 14px/1 Inter, sans-serif; cursor: pointer; color: #fff; background: #4e5058; transition: filter .15s, transform .15s; }
 .dbtn:active { transform: scale(.97); }
 .dbtn.go { background: #248046; }
-.dbtn[aria-pressed="true"] { outline: 2px solid var(--embed-fg); outline-offset: 1px; }
+/* Pressed = a box-shadow ring, so the global :focus-visible outline still shows on top. */
+.dbtn[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--embed-bg), 0 0 0 3px var(--embed-fg); }
 .dbtn:hover { filter: brightness(1.1); }
 .embed-foot { margin-top: 10px; font-size: 12px; color: var(--embed-muted); min-height: 18px; }
 

@@ -99,7 +99,7 @@ footer { border-top: 1px solid var(--edge-subtle); padding: 48px 0 104px; margin
 .foot { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; }
 .foot > :first-child { grid-column: 1 / -1; }
 @media (min-width: 900px) { .foot { grid-template-columns: 1.4fr repeat(3, 1fr); } .foot > :first-child { grid-column: auto; } }
-.foot h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.foot h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
 .foot ul { list-style: none; margin: 0; padding: 0; display: grid; }
 .foot li a { color: var(--secondary); display: inline-flex; align-items: center; min-height: 44px; }
 .foot p { color: var(--muted); max-width: 22rem; margin-top: 12px; }
