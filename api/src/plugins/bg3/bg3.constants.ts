@@ -10,3 +10,6 @@ export {
 export const BG3_SESSION_GAP_MS = 4 * 3_600_000;
 /** D-9: every save is kept this long, then one per session. */
 export const BG3_RETENTION_DAYS = 90;
+
+/** `Cache-Control` for every per-viewer bg3 read (hub data is membership-gated). */
+export const BG3_NO_STORE = 'private, no-store';

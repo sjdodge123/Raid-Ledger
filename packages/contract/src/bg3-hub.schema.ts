@@ -163,26 +163,32 @@ export const Bg3MySavesResponseSchema = z.object({
 export type Bg3MySavesResponse = z.infer<typeof Bg3MySavesResponseSchema>;
 
 /**
- * ROK-1960 — where the caller's saves with one campaign key sit now: their
- * binding, else the campaign of their latest assigned save with that key.
- * Read before an upload binds the key (a bind moves every one of those
- * saves). `saveCount` = the caller's saves with that key. Campaign + hub are
- * null when the caller can no longer read that hub (left it, or hidden).
+ * ROK-1960 F4 — one place the caller's saves with a campaign key sit (or its
+ * binding points). Campaign + hub are null when the caller can no longer read
+ * that hub (left it, or hidden).
  */
-export const Bg3CampaignKeyBindingSchema = z.object({
+export const Bg3KeyLocationSchema = z.object({
     campaignId: id.nullable(),
     campaignName: z.string().nullable(),
     hubId: id.nullable(),
     hubName: z.string().nullable(),
-    saveCount: z.number().int().min(0),
 }).strict();
-export type Bg3CampaignKeyBinding = z.infer<typeof Bg3CampaignKeyBindingSchema>;
+export type Bg3KeyLocation = z.infer<typeof Bg3KeyLocationSchema>;
 
-/** `binding: null` = the key is unbound and none of the caller's saves with it is assigned. */
-export const Bg3CampaignKeyBindingResponseSchema = z.object({
-    binding: Bg3CampaignKeyBindingSchema.nullable(),
-}).strict();
-export type Bg3CampaignKeyBindingResponse = z.infer<typeof Bg3CampaignKeyBindingResponseSchema>;
+export const BG3_CROSS_HUB_MOVE = 'cross_hub_move' as const;
+
+/**
+ * ROK-1960 F4 — the 409 body of `PUT me/campaign-keys/:key` sent without
+ * `confirmCrossHub` when the bind would move the caller's saves (or binding)
+ * out of another hub. Nothing moved. `locations` = the other hubs' places;
+ * `saveCount` = the caller's saves with the key the bind would move.
+ */
+export const Bg3CrossHubMoveSchema = z.object({
+    code: z.literal(BG3_CROSS_HUB_MOVE),
+    saveCount: z.number().int().min(0),
+    locations: z.array(Bg3KeyLocationSchema).min(1),
+});
+export type Bg3CrossHubMove = z.infer<typeof Bg3CrossHubMoveSchema>;
 
 // ---------- writes ----------
 
@@ -203,7 +209,11 @@ export const Bg3UpdateCampaignBodySchema = z.object({
 );
 export type Bg3UpdateCampaignBody = z.infer<typeof Bg3UpdateCampaignBodySchema>;
 
-export const Bg3BindKeyBodySchema = z.object({ campaignId: id }).strict();
+/** ROK-1960 F4: `confirmCrossHub: true` = the user agreed to move saves out of another hub (else 409 `cross_hub_move`). */
+export const Bg3BindKeyBodySchema = z.object({
+    campaignId: id,
+    confirmCrossHub: z.boolean().optional(),
+}).strict();
 export type Bg3BindKeyBody = z.infer<typeof Bg3BindKeyBodySchema>;
 
 /** `null` clears the uploader's default campaign (D-6). */

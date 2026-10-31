@@ -4,15 +4,18 @@
  */
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  Bg3CampaignKeyBindingResponse,
-  Bg3CampaignSummary,
-  Bg3CreateCampaignBody,
-  Bg3UpdateCampaignBody,
+import {
+  BG3_CROSS_HUB_MOVE,
+  type Bg3CrossHubMove,
+  type Bg3KeyLocation,
+  type Bg3CampaignSummary,
+  type Bg3CreateCampaignBody,
+  type Bg3UpdateCampaignBody,
 } from '@raid-ledger/contract';
 import {
   GuildAccessService,
@@ -27,6 +30,15 @@ import {
   Bg3CampaignsRepository,
   type Bg3CampaignRow,
 } from './bg3-campaigns.repository';
+import type { Bg3CrossHubPlan } from './bg3-key-bind.helpers';
+
+/** A place in a hub the caller can no longer read: named nowhere. */
+const HIDDEN_LOCATION: Bg3KeyLocation = {
+  campaignId: null,
+  campaignName: null,
+  hubId: null,
+  hubName: null,
+};
 
 @Injectable()
 export class Bg3CampaignsService {
@@ -74,41 +86,44 @@ export class Bg3CampaignsService {
     return this.summaryOf(campaignId);
   }
 
-  /** Bind one of the caller's keys; retro-assigns their rows with it. */
-  async bindKey(actor: GuildActor, key: string, campaignId: number) {
-    await this.memberCampaign(campaignId, actor);
-    await this.repo.bindKey(actor.id, key, campaignId);
-  }
-
   /**
-   * ROK-1960: where the caller's saves with `key` sit now. Campaign + hub are
-   * redacted to null when the caller cannot read that hub (left it, hidden).
+   * Bind one of the caller's keys; retro-assigns their rows with it. ROK-1960
+   * F4: moving saves (or the binding) out of ANOTHER hub needs
+   * `confirmCrossHub` — else 409 `cross_hub_move` naming where they sit
+   * (redacted when unreadable) and nothing moves.
    */
-  async keyBinding(
+  async bindKey(
     actor: GuildActor,
     key: string,
-  ): Promise<Bg3CampaignKeyBindingResponse> {
-    const at = await this.repo.keyLocation(actor.id, key);
-    if (!at) return { binding: null };
-    const readable = await assertBg3HubReader(
-      this.repo,
-      this.access,
-      at.hubId,
-      actor,
-    ).then(
-      () => true,
-      () => false,
+    campaignId: number,
+    confirmCrossHub = false,
+  ): Promise<void> {
+    const campaign = await this.memberCampaign(campaignId, actor);
+    const target = { campaignId, hubId: campaign.guildId };
+    const plan = await this.repo.bindKey(
+      actor.id,
+      key,
+      target,
+      confirmCrossHub,
     );
-    if (readable) return { binding: at };
-    const hidden = { campaignId: null, campaignName: null };
-    return {
-      binding: {
-        ...hidden,
-        hubId: null,
-        hubName: null,
-        saveCount: at.saveCount,
-      },
-    };
+    if (plan) throw new ConflictException(await this.crossHubBody(actor, plan));
+  }
+
+  private async crossHubBody(
+    actor: GuildActor,
+    plan: Bg3CrossHubPlan,
+  ): Promise<Bg3CrossHubMove> {
+    const readable = (hubId: number) =>
+      assertBg3HubReader(this.repo, this.access, hubId, actor).then(
+        () => true,
+        () => false,
+      );
+    const locations = await Promise.all(
+      plan.locations.map(async (at) =>
+        (await readable(at.hubId)) ? at : HIDDEN_LOCATION,
+      ),
+    );
+    return { code: BG3_CROSS_HUB_MOVE, saveCount: plan.saveCount, locations };
   }
 
   /** Drop the caller's binding; their rows with the key go unassigned. */

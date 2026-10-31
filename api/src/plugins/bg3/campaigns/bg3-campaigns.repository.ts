@@ -3,13 +3,19 @@
  * and default changes re-assign the caller's own rows in the same tx (D-6).
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, isNull, max } from 'drizzle-orm';
+import { and, count, eq, isNull, max } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Bg3CampaignSummary } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { Bg3HubLookup, Bg3HubRow } from '../read/bg3-hub-access.helpers';
 import { toBg3CampaignSummary } from '../read/bg3-read.mappers';
+import {
+  crossHubPlan,
+  lockUserKey,
+  ownRows,
+  type Bg3CrossHubPlan,
+} from './bg3-key-bind.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -21,14 +27,6 @@ export interface Bg3CampaignRow {
   archivedAt: Date | null;
 }
 
-export interface Bg3KeyLocation {
-  campaignId: number;
-  campaignName: string;
-  hubId: number;
-  hubName: string;
-  saveCount: number;
-}
-
 export interface Bg3CampaignPatch {
   name?: string;
   hostUserId?: number;
@@ -38,12 +36,6 @@ export interface Bg3CampaignPatch {
 
 const c = schema.bg3Campaigns;
 const s = schema.bg3Saves;
-const LOCATION_COLS = {
-  campaignId: c.id,
-  campaignName: c.name,
-  hubId: schema.guilds.id,
-  hubName: schema.guilds.name,
-};
 const h = schema.bg3HubSettings;
 
 /** Make `campaignId` the hub's active campaign only when it has none (D-11). */
@@ -188,9 +180,24 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
     return row ? toBg3CampaignSummary(row) : null;
   }
 
-  async bindKey(userId: number, key: string, campaignId: number) {
+  /**
+   * ROK-1960 F4: bind + re-file the caller's rows with `key`, under a
+   * per-(user, key) lock. Unless `confirmCrossHub`, a bind that would move
+   * saves (or the binding) out of a hub other than `target.hubId` writes
+   * nothing and returns what it would have moved.
+   */
+  async bindKey(
+    userId: number,
+    key: string,
+    target: { campaignId: number; hubId: number },
+    confirmCrossHub: boolean,
+  ): Promise<Bg3CrossHubPlan | null> {
     const k = schema.bg3CampaignKeys;
-    await this.db.transaction(async (tx) => {
+    const { campaignId } = target;
+    return this.db.transaction(async (tx) => {
+      await lockUserKey(tx, userId, key);
+      const plan = await crossHubPlan(tx, userId, key, target);
+      if (plan && !confirmCrossHub) return plan;
       await tx
         .insert(k)
         .values({ userId, campaignKey: key, campaignId })
@@ -199,41 +206,8 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
           set: { campaignId },
         });
       await tx.update(s).set({ campaignId }).where(ownRows(userId, key));
+      return null;
     });
-  }
-
-  /** ROK-1960: the caller's binding for `key`, else their latest assigned save's campaign; + their save count. */
-  async keyLocation(
-    userId: number,
-    key: string,
-  ): Promise<Bg3KeyLocation | null> {
-    const k = schema.bg3CampaignKeys;
-    const [bound] = await this.db
-      .select(LOCATION_COLS)
-      .from(k)
-      .innerJoin(c, eq(c.id, k.campaignId))
-      .innerJoin(schema.guilds, eq(schema.guilds.id, c.guildId))
-      .where(and(eq(k.userId, userId), eq(k.campaignKey, key)))
-      .limit(1);
-    const at = bound ?? (await this.latestFiled(userId, key));
-    if (!at) return null;
-    const [n] = await this.db
-      .select({ n: count() })
-      .from(s)
-      .where(ownRows(userId, key));
-    return { ...at, saveCount: n?.n ?? 0 };
-  }
-
-  private async latestFiled(userId: number, key: string) {
-    const [row] = await this.db
-      .select(LOCATION_COLS)
-      .from(s)
-      .innerJoin(c, eq(c.id, s.campaignId))
-      .innerJoin(schema.guilds, eq(schema.guilds.id, c.guildId))
-      .where(ownRows(userId, key))
-      .orderBy(desc(s.savedAt))
-      .limit(1);
-    return row;
   }
 
   async unbindKey(userId: number, key: string): Promise<void> {
@@ -280,8 +254,4 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
       return true;
     });
   }
-}
-
-function ownRows(userId: number, key: string) {
-  return and(eq(s.uploaderUserId, userId), eq(s.campaignKey, key));
 }

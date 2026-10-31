@@ -1,9 +1,10 @@
 /**
- * ROK-1960 F3 — `GET /plugins/bg3/me/campaign-keys/:key` against a real DB:
- * where the caller's OWN saves with a key sit (binding, else the latest
- * assigned save), counted for the caller only, and redacted to null campaign
- * + hub once the caller can no longer read that hub. Conventions follow
- * `bg3-archive.integration.spec.ts` (no afterAll DB work).
+ * ROK-1960 F4 — the cross-hub guard on `PUT /plugins/bg3/me/campaign-keys/:key`
+ * against a real DB. A bind moves EVERY one of the caller's saves with the
+ * key, and those can sit in several hubs, so a bind that would move any of
+ * them (or the binding) out of another hub 409s `cross_hub_move` and moves
+ * nothing unless `confirmCrossHub: true`. Hubs the caller can no longer read
+ * are redacted. Conventions follow `bg3-archive.integration.spec.ts`.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,8 +13,8 @@ import {
   BG3_GAME_SLUG,
   BG3_PLUGIN_ID,
   BG3_SAVE_CONTRACT_ID,
-  Bg3CampaignKeyBindingResponseSchema,
   Bg3CampaignSummarySchema,
+  Bg3CrossHubMoveSchema,
   Bg3SaveMessageSchema,
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
@@ -135,95 +136,168 @@ async function put(token: string, path: string, body: object) {
   return testApp.request.put(`${BG3}${path}`).set(bearer(token)).send(body);
 }
 
-async function binding(token: string, key: string = KEY_A) {
-  const res = await testApp.request
-    .get(`${BG3}/me/campaign-keys/${key}`)
-    .set(bearer(token));
-  expect(res.status).toBe(200);
-  return Bg3CampaignKeyBindingResponseSchema.parse(res.body).binding;
+const keyPath = `/me/campaign-keys/${KEY_A}`;
+
+async function bind(token: string, campaignId: number, confirm?: true) {
+  const body = confirm ? { campaignId, confirmCrossHub: true } : { campaignId };
+  return put(token, keyPath, body);
 }
 
-/** Host + mate in one hub; the host's campaign "Act Two". */
-async function world() {
-  const hubId = await insertHub();
+async function setDefault(token: string, campaignId: number): Promise<void> {
+  const res = await put(token, '/me/default-campaign', { campaignId });
+  expect(res.status).toBe(204);
+}
+
+/** The uploader's saves with KEY_A, oldest first, as their campaign ids. */
+async function filedIn(userId: number): Promise<(number | null)[]> {
+  const s = schema.bg3Saves;
+  const rows = await testApp.db
+    .select({ campaignId: s.campaignId })
+    .from(s)
+    .where(and(eq(s.uploaderUserId, userId), eq(s.campaignKey, KEY_A)))
+    .orderBy(s.savedAt);
+  return rows.map((r) => r.campaignId);
+}
+
+async function boundTo(userId: number): Promise<number | null> {
+  const k = schema.bg3CampaignKeys;
+  const [row] = await testApp.db
+    .select({ campaignId: k.campaignId })
+    .from(k)
+    .where(and(eq(k.userId, userId), eq(k.campaignKey, KEY_A)));
+  return row?.campaignId ?? null;
+}
+
+/** The host is in hub A ("Act Two") and hub B ("Act Three"). */
+async function twoHubs() {
+  const hubA = await insertHub('BG3 Crew');
+  const hubB = await insertHub('Other Crew');
   const host = await makeUser(testApp, 'bg3-host');
-  const mate = await makeUser(testApp, 'bg3-mate');
-  await joinHub(hubId, host.id);
-  await joinHub(hubId, mate.id);
-  const campaignId = await createCampaign(host.token, hubId, 'Act Two');
-  return { hubId, host, mate, campaignId };
+  await joinHub(hubA, host.id);
+  await joinHub(hubB, host.id);
+  const inA = await createCampaign(host.token, hubA, 'Act Two');
+  const inB = await createCampaign(host.token, hubB, 'Act Three');
+  return { hubA, hubB, host, inA, inB };
 }
 
-describe('GET /plugins/bg3/me/campaign-keys/:key', () => {
-  it('is null for a key the caller never bound nor filed', async () => {
-    const w = await world();
-    expect(await binding(w.host.token)).toBeNull();
+/** Older save filed in A, newer in B (the default only files unassigned rows). */
+async function splitSaves(w: Awaited<ReturnType<typeof twoHubs>>) {
+  await setDefault(w.host.token, w.inA);
+  await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
+  await setDefault(w.host.token, w.inB);
+  await ingest(w.host.token, save(KEY_A, '2026-10-24T21:00:00Z'));
+  expect(await filedIn(w.host.id)).toEqual([w.inA, w.inB]);
+}
+
+describe('PUT me/campaign-keys/:key — cross-hub guard', () => {
+  it('409s a bind in B while an older save sits in A, and moves nothing', async () => {
+    const w = await twoHubs();
+    await splitSaves(w);
+    const res = await bind(w.host.token, w.inB);
+    expect([res.status, res.body]).toEqual([
+      409,
+      {
+        code: 'cross_hub_move',
+        saveCount: 1,
+        locations: [
+          {
+            campaignId: w.inA,
+            campaignName: 'Act Two',
+            hubId: w.hubA,
+            hubName: 'BG3 Crew',
+          },
+        ],
+      },
+    ]);
+    expect(Bg3CrossHubMoveSchema.safeParse(res.body).success).toBe(true);
+    expect(await filedIn(w.host.id)).toEqual([w.inA, w.inB]);
+    expect(await boundTo(w.host.id)).toBeNull();
   });
 
-  it("names the bound campaign + hub and counts only the caller's own saves", async () => {
-    const w = await world();
-    const bound = await put(w.host.token, `/me/campaign-keys/${KEY_A}`, {
-      campaignId: w.campaignId,
-    });
-    expect(bound.status).toBe(204);
-    await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
+  it('with confirmCrossHub, binds and moves every save', async () => {
+    const w = await twoHubs();
+    await splitSaves(w);
+    const res = await bind(w.host.token, w.inB, true);
+    expect(res.status).toBe(204);
+    expect(await filedIn(w.host.id)).toEqual([w.inB, w.inB]);
+    expect(await boundTo(w.host.id)).toBe(w.inB);
+  });
+
+  it('409s when the binding points into A even though the latest save is in B', async () => {
+    const w = await twoHubs();
+    await setDefault(w.host.token, w.inB);
     await ingest(w.host.token, save(KEY_A, '2026-10-24T21:00:00Z'));
-    await ingest(w.mate.token, save(KEY_A, '2026-10-24T22:00:00Z'));
-    expect(await binding(w.host.token)).toEqual({
-      campaignId: w.campaignId,
-      campaignName: 'Act Two',
-      hubId: w.hubId,
-      hubName: 'BG3 Crew',
-      saveCount: 2,
-    });
-    // The mate's same-key save is unassigned (no binding, no default): nothing to report.
-    expect(await binding(w.mate.token)).toBeNull();
+    await testApp.db
+      .insert(schema.bg3CampaignKeys)
+      .values({ userId: w.host.id, campaignKey: KEY_A, campaignId: w.inA });
+    const res = await bind(w.host.token, w.inB);
+    expect([res.status, res.body]).toEqual([
+      409,
+      {
+        code: 'cross_hub_move',
+        saveCount: 0,
+        locations: [
+          {
+            campaignId: w.inA,
+            campaignName: 'Act Two',
+            hubId: w.hubA,
+            hubName: 'BG3 Crew',
+          },
+        ],
+      },
+    ]);
+    expect(await boundTo(w.host.id)).toBe(w.inA);
   });
 
-  it('without a binding, reports the campaign the default filed the saves into', async () => {
-    const w = await world();
-    const def = await put(w.host.token, '/me/default-campaign', {
-      campaignId: w.campaignId,
-    });
-    expect(def.status).toBe(204);
-    await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
-    expect(await binding(w.host.token)).toMatchObject({
-      campaignId: w.campaignId,
-      hubId: w.hubId,
-      saveCount: 1,
-    });
+  it('redacts a hub the caller has left (409, nulls, nothing moved)', async () => {
+    const w = await twoHubs();
+    await splitSaves(w);
+    const m = schema.hubCommunityMembers;
+    await testApp.db
+      .delete(m)
+      .where(and(eq(m.guildId, w.hubA), eq(m.userId, w.host.id)));
+    const res = await bind(w.host.token, w.inB);
+    expect([res.status, res.body]).toEqual([
+      409,
+      {
+        code: 'cross_hub_move',
+        saveCount: 1,
+        locations: [
+          { campaignId: null, campaignName: null, hubId: null, hubName: null },
+        ],
+      },
+    ]);
+    expect(await filedIn(w.host.id)).toEqual([w.inA, w.inB]);
   });
 });
 
-describe('GET /plugins/bg3/me/campaign-keys/:key — redaction + validation', () => {
-  it('redacts campaign + hub once the caller has left that hub (count kept)', async () => {
-    const w = await world();
-    await put(w.host.token, `/me/campaign-keys/${KEY_A}`, {
-      campaignId: w.campaignId,
-    });
+describe('PUT me/campaign-keys/:key — silent binds', () => {
+  it('a same-hub move binds without asking', async () => {
+    const w = await twoHubs();
+    const alsoInA = await createCampaign(w.host.token, w.hubA, 'Act One');
+    await setDefault(w.host.token, w.inA);
     await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
-    await testApp.db
-      .delete(schema.hubCommunityMembers)
-      .where(
-        and(
-          eq(schema.hubCommunityMembers.guildId, w.hubId),
-          eq(schema.hubCommunityMembers.userId, w.host.id),
-        ),
-      );
-    expect(await binding(w.host.token)).toEqual({
-      campaignId: null,
-      campaignName: null,
-      hubId: null,
-      hubName: null,
-      saveCount: 1,
-    });
+    const res = await bind(w.host.token, alsoInA);
+    expect(res.status).toBe(204);
+    expect(await filedIn(w.host.id)).toEqual([alsoInA]);
+    expect(await boundTo(w.host.id)).toBe(alsoInA);
   });
 
-  it('400s a malformed key', async () => {
-    const w = await world();
-    const res = await testApp.request
-      .get(`${BG3}/me/campaign-keys/not-a-key`)
-      .set(bearer(w.host.token));
+  it('an unbound key with no filed saves binds without asking', async () => {
+    const w = await twoHubs();
+    await ingest(w.host.token, save(KEY_A, '2026-10-24T20:00:00Z'));
+    expect(await filedIn(w.host.id)).toEqual([null]);
+    const res = await bind(w.host.token, w.inB);
+    expect(res.status).toBe(204);
+    expect(await filedIn(w.host.id)).toEqual([w.inB]);
+  });
+
+  it('400s a non-boolean confirmCrossHub', async () => {
+    const w = await twoHubs();
+    const res = await put(w.host.token, keyPath, {
+      campaignId: w.inB,
+      confirmCrossHub: 'yes',
+    });
     expect(res.status).toBe(400);
   });
 });
