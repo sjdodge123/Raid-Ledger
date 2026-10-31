@@ -16,10 +16,12 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import * as schema from '../../../drizzle/schema';
 import { CompanionIngestLatestRepository } from '../../../companion/ingest/companion-ingest-latest.repository';
+import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
+import { lockBg3UserMarkers } from '../ingest/bg3-marker-lock';
 import {
   Bg3MyDataRepository,
   type Bg3MyDataDeleted,
@@ -130,17 +132,18 @@ async function makeCampaign(hostUserId: number): Promise<number> {
   return c.id;
 }
 
-async function insertSave(
+function saveValues(
   userId: number,
-  campaignId: number,
+  campaignId: number | null,
   minute: number,
   sha: string | null,
-): Promise<void> {
+  campaignKey = KEY,
+): typeof schema.bg3Saves.$inferInsert {
   const savedAt = new Date(T0.getTime() + minute * 60_000);
-  await testApp.db.insert(schema.bg3Saves).values({
+  return {
     uploaderUserId: userId,
     campaignId,
-    campaignKey: KEY,
+    campaignKey,
     campaignKeySource: 'save-folder',
     saveName: `Save ${minute}`,
     savedAt,
@@ -155,7 +158,18 @@ async function insertSave(
     thumbnailSha256: sha,
     thumbnailWidth: sha === null ? null : 1280,
     thumbnailHeight: sha === null ? null : 720,
-  });
+  };
+}
+
+async function insertSave(
+  userId: number,
+  campaignId: number,
+  minute: number,
+  sha: string | null,
+): Promise<void> {
+  await testApp.db
+    .insert(schema.bg3Saves)
+    .values(saveValues(userId, campaignId, minute, sha));
 }
 
 async function insertRef(
@@ -384,11 +398,32 @@ describe('DELETE plugins/bg3/me/data — latest-wins markers', () => {
 // campaign lock. The delete must clear markers before that lock, or the two
 // wait on each other and Postgres aborts one with "deadlock detected".
 
-/** Backends queued on a row lock (the delete waiting on the held marker). */
-async function rowLockWaiters(): Promise<number> {
+/** The backend pid of the connection running `tx` (the would-be blocker). */
+async function backendPid(tx: CompanionDeviceTx): Promise<number> {
+  const [row] = await tx.execute<{ pid: number }>(
+    sql`select pg_backend_pid() as pid`,
+  );
+  if (!row) throw new Error('pg_backend_pid() returned no row');
+  return row.pid;
+}
+
+/**
+ * Ungranted locks of `locktypes` held by backends that `blockerPid` is
+ * blocking — scoped to that one blocker, not the whole database, so another
+ * spec's lock traffic can never satisfy it.
+ */
+async function waitersBlockedBy(
+  blockerPid: number,
+  locktypes: readonly string[],
+): Promise<number> {
   const rows = await testApp.db.execute<{ n: number }>(sql`
     select count(*)::int as n from pg_locks
-    where not granted and locktype in ('transactionid', 'tuple')`);
+    where not granted
+      and locktype in (${sql.join(
+        locktypes.map((t) => sql`${t}`),
+        sql`, `,
+      )})
+      and ${blockerPid}::int = any(pg_blocking_pids(pid))`);
   return rows[0]?.n ?? 0;
 }
 
@@ -418,13 +453,16 @@ describe('Bg3MyDataRepository.deleteAllFor — lock order vs ingest (F5b)', () =
     let deleted: Promise<string> = Promise.resolve('delete never started');
     const ingested = outcome(
       latest.transaction(async (tx) => {
+        const pid = await backendPid(tx);
         const later = new Date(T0.getTime() + HOUR);
         expect(await latest.advance(tx, marker(later))).toBe(true);
         deleted = outcome(
           testApp.app.get(Bg3MyDataRepository).deleteAllFor(a.id),
         );
+        const rowLocks = ['transactionid', 'tuple'];
         await waitFor(
-          async () => expect(await rowLockWaiters()).toBeGreaterThan(0),
+          async () =>
+            expect(await waitersBlockedBy(pid, rowLocks)).toBeGreaterThan(0),
           10_000,
           20,
         );
@@ -438,5 +476,65 @@ describe('Bg3MyDataRepository.deleteAllFor — lock order vs ingest (F5b)', () =
       .from(m)
       .where(and(eq(m.userId, a.id), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
     expect(left).toEqual([]);
+  });
+});
+
+// ROK-1960 P2-3 — a thumbnail-less ingest of a NEW campaign key takes no
+// blob lock, and its marker is an uncommitted INSERT the delete's DELETE
+// cannot see. Without the markers lock the delete clears nothing for that
+// key; if the ingest then wins the campaign lock, its save commits, the
+// delete deletes it, and the marker is left behind — a re-upload of that
+// save is then acked `stale` and never restored. With the lock the delete
+// waits for the ingest to commit and removes the marker AND the save.
+
+const NEW_KEY = 'ef'.repeat(32);
+
+describe('Bg3MyDataRepository.deleteAllFor — markers lock vs a new-key ingest (P2-3)', () => {
+  it('waits for the in-flight ingest, then clears its marker and its save', async () => {
+    const a = await makeUser('markerlock');
+    const latest = testApp.app.get(CompanionIngestLatestRepository);
+    let deleted: Promise<string> = Promise.resolve('delete never started');
+    let settled = false;
+    let deleteWas = 'not observed';
+    const ingested = outcome(
+      latest.transaction(async (tx) => {
+        const pid = await backendPid(tx);
+        // Ingest order: [no blob lock] → markers lock → marker → campaign lock.
+        await lockBg3UserMarkers(tx, a.id);
+        const row = { userId: a.id, contract: BG3_SAVE_CONTRACT_ID };
+        const at = new Date(T0.getTime() + HOUR);
+        expect(await latest.advance(tx, { ...row, key: NEW_KEY, at })).toBe(
+          true,
+        );
+        deleted = outcome(
+          testApp.app.get(Bg3MyDataRepository).deleteAllFor(a.id),
+        );
+        void deleted.then(() => (settled = true));
+        await waitFor(
+          async () => {
+            const waiting = await waitersBlockedBy(pid, ['advisory']);
+            if (waiting > 0) deleteWas = 'waiting on the markers lock';
+            else if (settled) deleteWas = 'finished before the ingest';
+            expect(deleteWas).not.toBe('not observed');
+          },
+          10_000,
+          20,
+        );
+        await lockBg3UserCampaigns(tx, a.id);
+        await tx
+          .insert(schema.bg3Saves)
+          .values(saveValues(a.id, null, 60, null, NEW_KEY));
+      }),
+    );
+    expect([await ingested, await deleted]).toEqual(['ok', 'ok']);
+    // Red on revert: the delete no longer queues behind the ingest.
+    expect(deleteWas).toBe('waiting on the markers lock');
+    const m = schema.companionIngestLatest;
+    const markers = await testApp.db
+      .select({ key: m.latestKey })
+      .from(m)
+      .where(and(eq(m.userId, a.id), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
+    expect(markers).toEqual([]);
+    expect((await bg3Counts(a.id)).saves).toBe(0);
   });
 });
