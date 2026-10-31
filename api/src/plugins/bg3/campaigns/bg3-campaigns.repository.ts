@@ -38,6 +38,12 @@ export interface Bg3CampaignPatch {
 
 const c = schema.bg3Campaigns;
 const s = schema.bg3Saves;
+const LOCATION_COLS = {
+  campaignId: c.id,
+  campaignName: c.name,
+  hubId: schema.guilds.id,
+  hubName: schema.guilds.name,
+};
 const h = schema.bg3HubSettings;
 
 /** Make `campaignId` the hub's active campaign only when it has none (D-11). */
@@ -202,36 +208,32 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
     key: string,
   ): Promise<Bg3KeyLocation | null> {
     const k = schema.bg3CampaignKeys;
-    const g = schema.guilds;
-    const cols = {
-      campaignId: c.id,
-      campaignName: c.name,
-      hubId: g.id,
-      hubName: g.name,
-    };
     const [bound] = await this.db
-      .select(cols)
+      .select(LOCATION_COLS)
       .from(k)
       .innerJoin(c, eq(c.id, k.campaignId))
-      .innerJoin(g, eq(g.id, c.guildId))
+      .innerJoin(schema.guilds, eq(schema.guilds.id, c.guildId))
       .where(and(eq(k.userId, userId), eq(k.campaignKey, key)))
       .limit(1);
-    const [latest] = bound
-      ? [bound]
-      : await this.db
-          .select(cols)
-          .from(s)
-          .innerJoin(c, eq(c.id, s.campaignId))
-          .innerJoin(g, eq(g.id, c.guildId))
-          .where(ownRows(userId, key))
-          .orderBy(desc(s.savedAt))
-          .limit(1);
-    if (!latest) return null;
+    const at = bound ?? (await this.latestFiled(userId, key));
+    if (!at) return null;
     const [n] = await this.db
       .select({ n: count() })
       .from(s)
       .where(ownRows(userId, key));
-    return { ...latest, saveCount: n?.n ?? 0 };
+    return { ...at, saveCount: n?.n ?? 0 };
+  }
+
+  private async latestFiled(userId: number, key: string) {
+    const [row] = await this.db
+      .select(LOCATION_COLS)
+      .from(s)
+      .innerJoin(c, eq(c.id, s.campaignId))
+      .innerJoin(schema.guilds, eq(schema.guilds.id, c.guildId))
+      .where(ownRows(userId, key))
+      .orderBy(desc(s.savedAt))
+      .limit(1);
+    return row;
   }
 
   async unbindKey(userId: number, key: string): Promise<void> {
