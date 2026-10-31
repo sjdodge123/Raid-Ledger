@@ -1,10 +1,12 @@
 /**
- * ROK-1960 — page side of the BG3 parse worker. One worker is created on the
- * first parse and reused; it is TERMINATED (and recreated on the next parse)
- * after anything other than the reader's own typed error — a WASM trap, a
- * failed init, a worker `error`/`messageerror` — because the wasm-bindgen
- * glue would otherwise keep a broken instance. Every failure is a
- * `Bg3ParseError`.
+ * ROK-1960 — page side of the BG3 parse worker. A worker is created for a
+ * parse and TERMINATED as soon as no parse is in flight any more: WASM linear
+ * memory only grows, so a kept worker would hold at least the largest save's
+ * worth for the rest of the page's life. It is also terminated at once on a
+ * WASM trap, a failed init, a worker `error`/`messageerror`, or a parse that
+ * runs past `BG3_PARSE_TIMEOUT_MS` (a hung reader must not block later
+ * parses). `disposeBg3ParseWorker` lets the upload sheet kill it on unmount.
+ * Every failure is a `Bg3ParseError`.
  */
 import { Bg3ParseError } from './bg3-parse-errors';
 import type { Bg3ParseRequest, Bg3ParseResponse } from './bg3-parse-protocol';
@@ -24,9 +26,13 @@ export type Bg3ParseWorkerFactory = () => Bg3ParseWorker;
 const defaultFactory: Bg3ParseWorkerFactory = () =>
     new Worker(new URL('./bg3-parse.worker.ts', import.meta.url), { type: 'module', name: 'bg3-parse' });
 
+/** A parse still running after this long is treated as hung (spec §7 `reader_failed`). */
+export const BG3_PARSE_TIMEOUT_MS = 60_000;
+
 interface Pending {
     resolve(inspection: Bg3SaveInspection): void;
     reject(error: Bg3ParseError): void;
+    timer: ReturnType<typeof setTimeout>;
 }
 
 let factory: Bg3ParseWorkerFactory = defaultFactory;
@@ -34,33 +40,40 @@ let worker: Bg3ParseWorker | null = null;
 let nextId = 1;
 const pending = new Map<number, Pending>();
 
-/** Reject every in-flight parse and kill the worker; the next parse gets a fresh one. */
-function failAll(): void {
+/** Reject every in-flight parse (`reader_failed`) and terminate the worker; the next parse gets a fresh one. */
+export function disposeBg3ParseWorker(): void {
     const waiting = [...pending.values()];
     pending.clear();
     worker?.terminate();
     worker = null;
-    for (const p of waiting) p.reject(new Bg3ParseError('reader_failed'));
+    for (const p of waiting) {
+        clearTimeout(p.timer);
+        p.reject(new Bg3ParseError('reader_failed'));
+    }
 }
 
 function settle(response: Bg3ParseResponse): void {
     const waiting = pending.get(response.id);
     if (!waiting) return;
     pending.delete(response.id);
+    clearTimeout(waiting.timer);
+    let trapped = false;
     if (response.ok) waiting.resolve(response.inspection);
     else if (response.code) waiting.reject(new Bg3ParseError(response.code));
     else {
         waiting.reject(new Bg3ParseError('reader_failed'));
-        failAll();
+        trapped = true;
     }
+    // Trapped, or idle: free the WASM memory now rather than at page unload.
+    if (trapped || pending.size === 0) disposeBg3ParseWorker();
 }
 
 function ensureWorker(): Bg3ParseWorker {
     if (worker) return worker;
     const created = factory();
     created.onmessage = (event) => settle(event.data);
-    created.onerror = () => failAll();
-    created.onmessageerror = () => failAll();
+    created.onerror = () => disposeBg3ParseWorker();
+    created.onmessageerror = () => disposeBg3ParseWorker();
     worker = created;
     return created;
 }
@@ -71,11 +84,11 @@ export function inspectBg3SaveInWorker(bytes: ArrayBuffer): Promise<Bg3SaveInspe
         const id = nextId++;
         try {
             const target = ensureWorker();
-            pending.set(id, { resolve, reject });
+            const timer = setTimeout(disposeBg3ParseWorker, BG3_PARSE_TIMEOUT_MS);
+            pending.set(id, { resolve, reject, timer });
             target.postMessage({ id, bytes }, [bytes]);
         } catch {
-            pending.delete(id);
-            failAll();
+            disposeBg3ParseWorker();
             reject(new Bg3ParseError('reader_failed'));
         }
     });
@@ -83,6 +96,6 @@ export function inspectBg3SaveInWorker(bytes: ArrayBuffer): Promise<Bg3SaveInspe
 
 /** Tests only: swap the worker factory (`null` restores the real one) and drop the current worker. */
 export function setBg3ParseWorkerFactory(next: Bg3ParseWorkerFactory | null): void {
-    failAll();
+    disposeBg3ParseWorker();
     factory = next ?? defaultFactory;
 }

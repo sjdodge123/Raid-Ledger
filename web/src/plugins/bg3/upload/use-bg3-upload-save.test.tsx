@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
-import { bg3BindKeyHandler } from '../../../test/mocks/bg3-handlers';
+import { BG3_KEY_URL, bg3BindKeyHandler } from '../../../test/mocks/bg3-handlers';
 import { companionBg3MessageHandler, companionBlobHandler, type CompanionRefusal } from '../../../test/mocks/bg3-companion-handlers';
 import { BG3_UPLOAD_KEY, BG3_UPLOAD_THUMB_SHA, buildBg3ParsedSave } from '../../../test/factories/bg3-upload';
 import { bg3Keys } from '../hooks/bg3-keys';
@@ -14,6 +15,8 @@ import { uploadBg3Save, useBg3UploadSave, type Bg3UploadVars } from './use-bg3-u
 const HUB_ID = 7;
 const PICKED = 11;
 const DEFAULT = 4;
+const BLOB = `blob:${BG3_UPLOAD_THUMB_SHA.slice(0, 2)}`;
+const bindTo = (id: number): string => `bind:${BG3_UPLOAD_KEY.slice(0, 2)}:{"campaignId":${id}}`;
 
 /** Records every companion/bind call in order; `blob`/`message` pick the replies. */
 function routes(opts: { blob?: 'stored' | CompanionRefusal; message?: 'accepted' | 'stale' | CompanionRefusal; bindStatus?: number } = {}) {
@@ -24,11 +27,18 @@ function routes(opts: { blob?: 'stored' | CompanionRefusal; message?: 'accepted'
         companionBg3MessageHandler(opts.message ?? 'accepted', (b) => { calls.push('message'); bodies.push(b); }),
         bg3BindKeyHandler((b, p) => calls.push(`bind:${String(p['campaignKey']).slice(0, 2)}:${JSON.stringify(b)}`)),
     );
+    const bindStatus = opts.bindStatus;
+    if (bindStatus !== undefined) {
+        server.use(http.put(BG3_KEY_URL, () => {
+            calls.push('bind:refused');
+            return HttpResponse.json({ message: 'nope' }, { status: bindStatus });
+        }));
+    }
     return { calls, bodies };
 }
 
 const vars = (over: Partial<Bg3UploadVars> = {}): Bg3UploadVars => ({
-    save: buildBg3ParsedSave(), campaignId: PICKED, defaultCampaignId: DEFAULT, ...over,
+    save: buildBg3ParsedSave(), campaignId: PICKED, ...over,
 });
 
 async function rejection(p: Promise<unknown>): Promise<Bg3UploadError> {
@@ -38,14 +48,16 @@ async function rejection(p: Promise<unknown>): Promise<Bg3UploadError> {
 }
 
 describe('uploadBg3Save (D-6)', () => {
-    it('PUTs the blob, then POSTs the message, then binds the key to the picked campaign', async () => {
+    it('PUTs the blob, then binds the key to the picked campaign, then POSTs the message', async () => {
         const { calls } = routes();
         await expect(uploadBg3Save(vars())).resolves.toEqual({ status: 'uploaded', campaignId: PICKED });
-        expect(calls).toEqual([
-            `blob:${BG3_UPLOAD_THUMB_SHA.slice(0, 2)}`,
-            'message',
-            `bind:${BG3_UPLOAD_KEY.slice(0, 2)}:{"campaignId":${PICKED}}`,
-        ]);
+        expect(calls).toEqual([BLOB, bindTo(PICKED), 'message']);
+    });
+
+    it('a failed bind posts nothing: bind_failed, and the message is never sent', async () => {
+        const { calls } = routes({ bindStatus: 500 });
+        expect((await rejection(uploadBg3Save(vars()))).code).toBe('bind_failed');
+        expect(calls).toEqual([BLOB, 'bind:refused']);
     });
 
     it('sends only the summary: no position keys, no path strings', async () => {
@@ -56,10 +68,10 @@ describe('uploadBg3Save (D-6)', () => {
         expect(sent).not.toMatch(/\\|Savegames|\.lsv/i);
     });
 
-    it('skips the blob PUT without a thumbnail and the bind when the pick is the default', async () => {
+    it('skips the blob PUT without a thumbnail, and still binds when the pick is the server default', async () => {
         const { calls } = routes();
         await uploadBg3Save(vars({ save: buildBg3ParsedSave({ thumbnail: null }), campaignId: DEFAULT }));
-        expect(calls).toEqual(['message']);
+        expect(calls).toEqual([bindTo(DEFAULT), 'message']);
     });
 
     it('reports a replayed save as already uploaded', async () => {
@@ -67,17 +79,17 @@ describe('uploadBg3Save (D-6)', () => {
         await expect(uploadBg3Save(vars())).resolves.toEqual({ status: 'already_uploaded', campaignId: PICKED });
     });
 
-    it('maps a 429 to rate_limited and stops before the bind', async () => {
+    it('maps a 429 on the message to rate_limited', async () => {
         const { calls } = routes({ message: { status: 429, code: 'rate_limited' } });
         expect((await rejection(uploadBg3Save(vars()))).code).toBe('rate_limited');
-        expect(calls.some((c) => c.startsWith('bind'))).toBe(false);
+        expect(calls).toEqual([BLOB, bindTo(PICKED), 'message']);
     });
 
     it('sends nothing after a refused blob', async () => {
         const { calls } = routes({ blob: { status: 413, code: 'payload_too_large' } });
         const err = await rejection(uploadBg3Save(vars()));
         expect([err.code, err.detail]).toEqual(['server_refused', 'payload_too_large']);
-        expect(calls).toEqual([`blob:${BG3_UPLOAD_THUMB_SHA.slice(0, 2)}`]);
+        expect(calls).toEqual([BLOB]);
     });
 
     it('maps 404 unknown_contract to uploads_disabled', async () => {

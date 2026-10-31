@@ -1,8 +1,10 @@
 /**
  * ROK-1960 L2 — the "Upload" mutation (spec D-6 steps 2–5): PUT the
- * thumbnail when there is one, POST the message, bind the campaign key when
- * the picked campaign is not the server default, then invalidate every bg3
- * query of the hub. Every failure rejects with a `Bg3UploadError`.
+ * thumbnail when there is one, bind the campaign key to the picked campaign,
+ * and only then POST the message, so the save lands straight in the picked
+ * campaign and never sits in another (another hub's) campaign first. A failed
+ * bind aborts before anything is posted. Then invalidate every bg3 query of
+ * the hub. Every failure rejects with a `Bg3UploadError`.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Bg3SaveMessage } from '@raid-ledger/contract';
@@ -13,10 +15,8 @@ import { Bg3UploadError, toBg3UploadError } from './bg3-upload-errors';
 
 export interface Bg3UploadVars {
     readonly save: Bg3ParsedSave;
-    /** The campaign picked in the sheet. */
+    /** The campaign picked in the sheet; the key is always bound to it (a binding beats the default on ingest). */
     readonly campaignId: number;
-    /** The caller's server default (`Bg3MySavesResponse.defaultCampaignId`); a save lands there on ingest. */
-    readonly defaultCampaignId: number | null;
 }
 
 export interface Bg3UploadResult {
@@ -32,23 +32,23 @@ async function putThumbnailIfAny(message: Bg3SaveMessage, webp: Bg3ParsedSave['w
     await putBg3Thumbnail(ref.sha256, webp);
 }
 
-/** D-6 steps 2–4; exported for direct testing. `now` pins `capturedAt`. */
+/** D-6 steps 2–4 (blob → bind → message); exported for direct testing. `now` pins `capturedAt`. */
 export async function uploadBg3Save(vars: Bg3UploadVars, now: number = Date.now()): Promise<Bg3UploadResult> {
     const message = buildBg3SaveMessage(vars.save, now);
-    let status: Bg3UploadResult['status'];
     try {
         await putThumbnailIfAny(message, vars.save.webp);
-        const ack = await postBg3SaveMessage(message);
-        status = ack.status === 'stale' ? 'already_uploaded' : 'uploaded';
     } catch (error) {
         throw toBg3UploadError(error);
     }
-    if (vars.campaignId !== vars.defaultCampaignId) {
-        await bindBg3CampaignKey(message.payload.campaignKey, vars.campaignId).catch(() => {
-            throw new Bg3UploadError('bind_failed');
-        });
+    await bindBg3CampaignKey(message.payload.campaignKey, vars.campaignId).catch(() => {
+        throw new Bg3UploadError('bind_failed');
+    });
+    try {
+        const ack = await postBg3SaveMessage(message);
+        return { status: ack.status === 'stale' ? 'already_uploaded' : 'uploaded', campaignId: vars.campaignId };
+    } catch (error) {
+        throw toBg3UploadError(error);
     }
-    return { status, campaignId: vars.campaignId };
 }
 
 /** The sheet's Upload button (D-6 step 5: invalidate snapshot, campaigns and my saves on settle). */
