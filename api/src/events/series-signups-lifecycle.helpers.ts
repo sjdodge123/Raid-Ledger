@@ -4,7 +4,10 @@
  */
 import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import type { SeriesSignupEndedReason } from '@raid-ledger/contract';
+import type {
+  SeriesNightFailureDto,
+  SeriesSignupEndedReason,
+} from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import type { SignupsService } from './signups.service';
@@ -21,6 +24,8 @@ import { isLateCancel } from './series-signups-plan.helpers';
 export interface CancelledNights {
   cancelledEventIds: number[];
   lateCancelledEventIds: number[];
+  /** Nights whose cancel threw; reported to the caller, not only logged. */
+  failed: SeriesNightFailureDto[];
 }
 
 /** System end reasons applied by series delete / cancel. */
@@ -47,6 +52,7 @@ export async function cancelTaggedNights(
   const out: CancelledNights = {
     cancelledEventIds: [],
     lateCancelledEventIds: [],
+    failed: [],
   };
   const rows = await findTaggedFutureActiveSignups(deps.db, membershipId, now);
   for (const row of rows) {
@@ -56,8 +62,10 @@ export async function cancelTaggedNights(
       if (isLateCancel(row.startTime, now))
         out.lateCancelledEventIds.push(row.eventId);
     } catch (err: unknown) {
+      const message = errMessage(err);
+      out.failed.push({ eventId: row.eventId, message });
       deps.logger.warn(
-        `ROK-1728: leave-series cancel of event ${row.eventId} failed: ${errMessage(err)}`,
+        `ROK-1728: leave-series cancel of event ${row.eventId} failed: ${message}`,
       );
     }
   }

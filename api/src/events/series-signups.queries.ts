@@ -309,19 +309,13 @@ export async function clearFutureTagsForMemberships(
   now: Date,
 ): Promise<number> {
   if (membershipIds.length === 0) return 0;
-  const futureEvents = db
-    .select({ id: ev.id })
-    .from(ev)
-    .where(startsAfter(now));
-  const rows = await db
-    .update(es)
-    .set({ seriesSignupId: null })
-    .where(
-      and(
-        inArray(es.seriesSignupId, membershipIds),
-        inArray(es.eventId, futureEvents),
-      ),
-    )
-    .returning({ id: es.id });
-  return rows.length;
+  // Joined select: Drizzle qualifies `events.duration` in startsAfter.
+  const tagged = await db
+    .select({ id: es.id })
+    .from(es)
+    .innerJoin(ev, eq(ev.id, es.eventId))
+    .where(and(inArray(es.seriesSignupId, membershipIds), startsAfter(now)));
+  const ids = tagged.map((r) => r.id);
+  await clearFutureTags(db, ids);
+  return ids.length;
 }

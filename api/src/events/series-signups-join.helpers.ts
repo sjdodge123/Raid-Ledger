@@ -37,6 +37,7 @@ export const SERIES_ERRORS = {
   NO_NIGHTS: 'No upcoming nights to join',
   NOT_MEMBER: 'You are not signed up for this series',
   CHANGED: 'Your signup on this night changed while joining',
+  DUPLICATE: 'You already had a signup on this night',
 } as const;
 
 /** The clicked occurrence and its series. */
@@ -136,17 +137,40 @@ function isActiveStatus(status: string): boolean {
   return ACTIVE_SIGNUP_STATUSES.some((s) => s === status);
 }
 
-/** One night: `signup()` then the D3 post-tag. False = changed meanwhile. */
+/** Outcome of one night: created + tagged, or the failure message. */
+type NightOutcome = { ok: true } | { ok: false; message: string };
+
+/** The membership fields materialization needs (id + D3 duplicate cutoff). */
+export type MaterializeMembership = Pick<SeriesSignupRow, 'id' | 'joinedAt'>;
+
+interface MaterializeDeps {
+  db: Tx;
+  signups: Pick<SignupsService, 'signup'>;
+}
+
+const DUPLICATE: NightOutcome = { ok: false, message: SERIES_ERRORS.DUPLICATE };
+const CHANGED: NightOutcome = { ok: false, message: SERIES_ERRORS.CHANGED };
+
+/**
+ * One "create" night (spec §4). A row that appeared since the plan was read
+ * is a duplicate: never routed through `signup()`, which would reactivate a
+ * declined row (ROK-1769). A row `signup()` returns from before the join is
+ * a pre-existing one — also a duplicate, never tagged.
+ */
 async function materializeOne(
-  deps: { db: Tx; signups: Pick<SignupsService, 'signup'> },
+  deps: MaterializeDeps,
   eventId: number,
   userId: number,
-  membershipId: number,
+  membership: MaterializeMembership,
   dto: JoinSeriesDto,
-): Promise<boolean> {
+): Promise<NightOutcome> {
+  const current = await findUserRowsForEvents(deps.db, userId, [eventId]);
+  if (current.length > 0) return DUPLICATE;
   const signup = await deps.signups.signup(eventId, userId, dto);
-  if (!isActiveStatus(signup.status)) return false;
-  return tagSignup(deps.db, signup.id, membershipId);
+  if (new Date(signup.signedUpAt) < membership.joinedAt) return DUPLICATE;
+  if (!isActiveStatus(signup.status)) return CHANGED;
+  const tagged = await tagSignup(deps.db, signup.id, membership.id);
+  return tagged ? { ok: true } : CHANGED;
 }
 
 /**
@@ -154,25 +178,21 @@ async function materializeOne(
  * tags each one after it returns (Q5). Best-effort per night (D5).
  */
 export async function materializeNights(
-  deps: { db: Tx; signups: Pick<SignupsService, 'signup'> },
+  deps: MaterializeDeps,
   nights: JoinableNight[],
   userId: number,
-  membershipId: number,
+  membership: MaterializeMembership,
   dto: JoinSeriesDto,
 ): Promise<MaterializeResult> {
   const out: MaterializeResult = { createdEventIds: [], failed: [] };
-  for (const night of nights) {
+  for (const { eventId } of nights) {
     try {
-      if (await materializeOne(deps, night.eventId, userId, membershipId, dto))
-        out.createdEventIds.push(night.eventId);
-      else
-        out.failed.push({
-          eventId: night.eventId,
-          message: SERIES_ERRORS.CHANGED,
-        });
+      const res = await materializeOne(deps, eventId, userId, membership, dto);
+      if (res.ok) out.createdEventIds.push(eventId);
+      else out.failed.push({ eventId, message: res.message });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      out.failed.push({ eventId: night.eventId, message });
+      out.failed.push({ eventId, message });
     }
   }
   return out;

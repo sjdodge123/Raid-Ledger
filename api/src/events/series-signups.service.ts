@@ -43,6 +43,7 @@ import {
   materializeNights,
   planNights,
   SERIES_ERRORS,
+  type MaterializeMembership,
   type SeriesAnchor,
 } from './series-signups-join.helpers';
 import { cancelTaggedNights } from './series-signups-lifecycle.helpers';
@@ -121,12 +122,7 @@ export class SeriesSignupsService {
     membership: SeriesSignupRow,
     classified: ClassifiedNights,
   ): Promise<JoinSeriesResponseDto> {
-    const applied = await this.applyPlan(
-      userId,
-      dto,
-      membership.id,
-      classified,
-    );
+    const applied = await this.applyPlan(userId, dto, membership, classified);
     await this.logJoined(
       anchor.event.id,
       userId,
@@ -144,19 +140,19 @@ export class SeriesSignupsService {
   private async applyPlan(
     userId: number,
     dto: JoinSeriesDto,
-    membershipId: number,
+    membership: MaterializeMembership,
     classified: ClassifiedNights,
   ): Promise<Omit<JoinSeriesResponseDto, 'membership' | 'keptEventIds'>> {
     const attachedEventIds = await attachSignups(
       this.db,
       classified.attach.map((r) => r.id),
-      membershipId,
+      membership.id,
     );
     const materialized = await materializeNights(
       { db: this.db, signups: this.signupsService },
       classified.create,
       userId,
-      membershipId,
+      membership,
       dto,
     );
     return { attachedEventIds, ...materialized };

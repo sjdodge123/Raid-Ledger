@@ -69,13 +69,20 @@ export const SeriesSignupStateSchema = z.object({
 });
 export type SeriesSignupStateDto = z.infer<typeof SeriesSignupStateSchema>;
 
+/** A night the join or leave could not apply, with the user-facing reason. */
+export const SeriesNightFailureSchema = z.object({
+    eventId: z.number(),
+    message: z.string(),
+});
+export type SeriesNightFailureDto = z.infer<typeof SeriesNightFailureSchema>;
+
 /** POST /events/:id/series/signup response — best-effort per night. */
 export const JoinSeriesResponseSchema = z.object({
     membership: SeriesSignupSchema,
     attachedEventIds: z.array(z.number()),
     createdEventIds: z.array(z.number()),
     keptEventIds: z.array(z.number()),
-    failed: z.array(z.object({ eventId: z.number(), message: z.string() })),
+    failed: z.array(SeriesNightFailureSchema),
 });
 export type JoinSeriesResponseDto = z.infer<typeof JoinSeriesResponseSchema>;
 
@@ -84,5 +91,7 @@ export const LeaveSeriesResponseSchema = z.object({
     membership: SeriesSignupSchema,
     cancelledEventIds: z.array(z.number()),
     lateCancelledEventIds: z.array(z.number()),
+    /** Nights whose cancel failed — left as they were but untagged (additive, optional). */
+    failed: z.array(SeriesNightFailureSchema).optional(),
 });
 export type LeaveSeriesResponseDto = z.infer<typeof LeaveSeriesResponseSchema>;
