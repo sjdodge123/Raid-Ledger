@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { GuildPage } from '@raid-ledger/contract';
+import type { Bg3SnapshotResponse, GuildPage } from '@raid-ledger/contract';
 import type { User } from '../../../hooks/use-auth';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -286,7 +286,8 @@ describe('ROK-1960 "Upload a save"', () => {
         await user.click(await screen.findByRole('button', { name: 'Upload a save' }));
         expect(await screen.findByTestId('bg3-upload-save')).toBeInTheDocument();
         view.unmount();
-        serve(undefined, { empty: true, campaignId: BG3_CAMPAIGN_ID } as never);
+        const noSaves: Bg3SnapshotResponse = { empty: true, campaignId: BG3_CAMPAIGN_ID };
+        server.use(bg3CampaignsHandler(buildBg3CampaignsResponse()), bg3SnapshotHandler(noSaves));
         renderWithProviders(<Bg3PartyWidget {...ctx()} />);
         expect(await screen.findByText('No saves in Tactician run yet.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Upload a save' })).toBeInTheDocument();
