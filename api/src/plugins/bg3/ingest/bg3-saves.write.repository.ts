@@ -30,6 +30,11 @@ export class Bg3SavesWriteRepository {
    * default change cannot re-file rows between this read and the insert.
    * Taken here (not at message start) to keep the lock's scope to the
    * resolution + row write.
+   *
+   * Per-user order (F5b + P2-3): blob lock → gallery lock → markers lock
+   * (`lockBg3UserMarkers`, taken before the 11c marker write) → marker rows
+   * → THIS campaign lock → key / default / save rows. Never take the markers
+   * lock after this one.
    */
   async resolveCampaign(
     tx: CompanionDeviceTx,

@@ -2,6 +2,13 @@
  * ROK-1957 §5.2 — the `bg3-save` v1 companion contract handler, owned by
  * the `bg3` plugin. C3 has already validated the message, checked its blob
  * refs and applied latest-wins before `handle` runs on the ingest tx.
+ *
+ * Per-user lock order on that tx (ROK-1960 F5b + P2-3): device row share →
+ * blob lock (only with a thumbnail) → markers lock ({@link
+ * Bg3SaveHandler.lockLatestWins}, just before the marker upsert) → marker
+ * row → campaign lock (`resolveCampaign`) → `bg3_saves` insert. "Delete my
+ * BG3 data" keeps the same order, so the two serialise instead of a new
+ * key's uncommitted marker slipping past the delete.
  */
 import { Injectable } from '@nestjs/common';
 import type { Bg3SaveMessage, CompanionWebpRef } from '@raid-ledger/contract';
@@ -10,6 +17,8 @@ import type {
   CompanionHandlerContext,
 } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
+import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
+import { lockBg3UserMarkers } from './bg3-marker-lock';
 import {
   Bg3SavesWriteRepository,
   type Bg3SaveInsert,
@@ -67,6 +76,16 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
   /** D-4: one latest marker per campaign key. */
   latestWins(msg: Bg3SaveMessage): { key: string; at: Date } {
     return { key: msg.payload.campaignKey, at: new Date(msg.payload.savedAt) };
+  }
+
+  /**
+   * P2-3: the per-user markers lock, taken on the ingest tx immediately
+   * before the latest-wins marker upsert (after any blob lock, before the
+   * campaign lock) — the same lock "Delete my BG3 data" takes before it
+   * clears this user's markers.
+   */
+  lockLatestWins(tx: CompanionDeviceTx, userId: number): Promise<void> {
+    return lockBg3UserMarkers(tx, userId);
   }
 
   blobRefs(msg: Bg3SaveMessage): readonly CompanionWebpRef[] {
