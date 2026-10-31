@@ -22,10 +22,9 @@ export function countOf(connections: readonly CalendarConnection[], provider: Ca
 
 /**
  * Whether sign-ups can go to the account's main calendar. Apple writes only
- * to the dedicated "Raid Ledger" calendar (ROK-1598 A9/Q3). Outlook stays
- * dedicated-only until ROK-1597 §8 Q4 is ruled (the "primary" consent flow
- * is Google's extra-scope grant).
+ * to the dedicated "Raid Ledger" calendar (ROK-1598 A9/Q3). Outlook writes to
+ * the main calendar too (ROK-1597 §8 Q4, Lead ruling).
  */
 export function supportsPrimaryWrite(provider: CalendarProvider): boolean {
-    return provider === 'google';
+    return provider === 'google' || provider === 'microsoft';
 }
