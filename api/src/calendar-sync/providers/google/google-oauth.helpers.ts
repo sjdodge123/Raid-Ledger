@@ -16,6 +16,9 @@ import {
   TransientError,
 } from '../calendar-provider.errors';
 
+/** ROK-1597: moved to the shared errors file; re-exported for old imports. */
+export { MissingScopesError } from '../calendar-provider.errors';
+
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
@@ -46,19 +49,6 @@ export const GOOGLE_READ_SCOPES: readonly string[] = [
 export const GOOGLE_REQUIRED_SCOPES = [GOOGLE_CALENDAR_APP_CREATED_SCOPE];
 export const GOOGLE_REVOKE_TIMEOUT_MS = 5_000;
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
-
-/**
- * The grant lacks a required scope (the user unticked it on Google's
- * granular consent, U4). The callback maps it to `?error=scopes`; the
- * adapter has already attempted a revoke and nothing is stored (Q-F).
- */
-export class MissingScopesError extends Error {
-  readonly code = 'scopes' as const;
-  constructor(readonly missing: string[]) {
-    super(`Calendar grant is missing required scopes: ${missing.join(' ')}`);
-    this.name = 'MissingScopesError';
-  }
-}
 
 export interface GoogleClient {
   clientId: string;

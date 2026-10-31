@@ -62,9 +62,9 @@ import type { CalendarAccountProvider } from '../providers/calendar-provider.int
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import {
   CalendarProviderError,
+  MissingScopesError,
   ProviderNotConfiguredError,
 } from '../providers/calendar-provider.errors';
-import { MissingScopesError } from '../providers/google/google-oauth.helpers';
 import { buildRedirectUris } from '../services/calendar-sync-admin.helpers';
 import {
   callbackLocation,
@@ -84,9 +84,10 @@ import {
   upsertCalendarConnection,
 } from '../services/calendar-connect.helpers';
 
-/** Browser-binding cookie key per provider (L4). Microsoft: ROK-1597. */
+/** Browser-binding cookie key per provider (L4; Microsoft ROK-1597). */
 const LINK_KEYS: Partial<Record<CalendarOAuthProvider, LinkStateProvider>> = {
   google: 'calendar-google',
+  microsoft: 'calendar-microsoft',
 };
 
 interface OAuthTarget {

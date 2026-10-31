@@ -75,7 +75,7 @@ export interface OAuthCodeInput {
 /** A linked account, as `connect` reports it. */
 export interface ConnectResult {
   credentials: OAuthTokenGrant;
-  /** Stable account id: Google `sub` / Microsoft `oid` / Apple email. */
+  /** Stable account id: Google `sub` / Microsoft Graph `/me` id / Apple email. */
   accountSubject: string;
   /** Display label (the account email), or null when not disclosed. */
   accountLabel: string | null;
