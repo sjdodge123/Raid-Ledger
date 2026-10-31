@@ -114,6 +114,7 @@ export function buildRosterAssignmentResponse(
     signupStatus: row.event_signups.status as
       'signed_up' | 'tentative' | 'declined',
     runningLate: row.event_signups.runningLateAt != null,
+    inSeries: row.event_signups.seriesSignupId != null,
     lateMinutes: row.event_signups.lateMinutes ?? null,
   };
 }

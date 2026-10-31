@@ -40,6 +40,9 @@ export const ActivityActionSchema = z.enum([
     'event_cancelled',
     'event_rescheduled',
     'signup_reconfirmed',
+    // ROK-1728: series membership joined / left.
+    'series_joined',
+    'series_left',
     // Hub actions (ROK-1918) — Overview arrange mode saved or reset.
     'hub_widget_layout_updated',
     'hub_renamed', // ROK-1950
