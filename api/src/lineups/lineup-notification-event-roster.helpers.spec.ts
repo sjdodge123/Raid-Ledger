@@ -311,9 +311,10 @@ async function fullAndAutoBench(rows: EventRosterUser[], event: CapRow) {
   const card = await resolveEventRosterCard(db, EVENT_ID, GROUP);
   const autoBench = await checkAutoBench(
     db,
-    { slotConfig: event.slotConfig, maxAttendees: event.maxAttendees } as Parameters<
-      typeof checkAutoBench
-    >[1],
+    {
+      slotConfig: event.slotConfig,
+      maxAttendees: event.maxAttendees,
+    } as Parameters<typeof checkAutoBench>[1],
     EVENT_ID,
   );
   return { full: card.full, autoBench, countJoin: seen.countJoin };
@@ -378,6 +379,10 @@ describe('resolveEventRosterCard full = checkAutoBench full (ROK-2054)', () => {
       occupied: 99,
     });
 
-    expect(out).toEqual({ full: false, autoBench: false, countJoin: undefined });
+    expect(out).toEqual({
+      full: false,
+      autoBench: false,
+      countJoin: undefined,
+    });
   });
 });

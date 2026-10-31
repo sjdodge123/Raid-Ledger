@@ -85,7 +85,9 @@ function rosterDb(names: string[], maxAttendees: number | null = null) {
             // ROK-2054: the shared occupied-slot count (`isEventAtCapacity`)
             // — every rostered name holds a slot in these cases.
             if (joined === schema.rosterAssignments) {
-              return { where: () => Promise.resolve([{ count: names.length }]) };
+              return {
+                where: () => Promise.resolve([{ count: names.length }]),
+              };
             }
             seen.fromTable = table;
             return {
