@@ -218,7 +218,9 @@ describe('MicrosoftCalendarAdapter.fetchBusy (T10-T12)', () => {
         { id: RL_COPY_PROP_ID, value: 'rl:0123456789ab:42:7' },
       ],
     });
-    const out = await a.fetchBusy(CREDS, RANGE, [PRIMARY]);
+    const out = await a.fetchBusy(CREDS, RANGE, [PRIMARY], undefined, {
+      copyCalendarIds: [PRIMARY],
+    });
     expect(out.blocks.map((b) => b.ourId)).toEqual([
       undefined,
       'rl:0123456789ab:42:7',
@@ -228,13 +230,44 @@ describe('MicrosoftCalendarAdapter.fetchBusy (T10-T12)', () => {
     );
   });
 
-  it('item 4: an honoured $expand makes no per-event lookups', async () => {
+  it('item 4: an honoured $expand on a write calendar makes no per-event lookups', async () => {
     const { api, a } = setup();
     busyAt(api, PRIMARY, '03');
-    await a.fetchBusy(CREDS, RANGE, [PRIMARY]);
+    api.seedRaw(PRIMARY, {
+      showAs: 'busy',
+      start: graphDateTime(at('04T18:00')),
+      end: graphDateTime(at('04T20:00')),
+      singleValueExtendedProperties: [
+        { id: RL_COPY_PROP_ID, value: 'rl:0123456789ab:42:7' },
+      ],
+    });
+    const out = await a.fetchBusy(CREDS, RANGE, [PRIMARY], undefined, {
+      copyCalendarIds: [PRIMARY],
+    });
+    expect(out.blocks.map((b) => b.ourId)).toEqual([
+      undefined,
+      'rl:0123456789ab:42:7',
+    ]);
     expect(api.requests.map((r) => r.url.includes('/me/events/'))).toEqual([
       false,
     ]);
+  });
+
+  it('review: a calendar we never write to pays no fallback and logs nothing', async () => {
+    const { api, a } = setup();
+    const log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    api.ignoreViewExpand = true;
+    api.addCalendar('AAMkADwork=', 'Work');
+    busyAt(api, 'AAMkADwork=', '03');
+    busyAt(api, PRIMARY, '04');
+    const out = await a.fetchBusy(CREDS, RANGE, ['AAMkADwork=', PRIMARY]);
+    expect(out.blocks).toHaveLength(2);
+    expect(api.requests.some((r) => r.url.includes('/me/events/'))).toBe(
+      false,
+    );
+    expect(log).not.toHaveBeenCalled();
   });
 
   it('T11 / item 1: listCalendars follows @odata.nextLink, never trusting $top', async () => {

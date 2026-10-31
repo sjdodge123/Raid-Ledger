@@ -28,6 +28,7 @@ import type {
   ConnectResult,
   CopyEventInput,
   CopyRef,
+  FetchBusyOptions,
   FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
@@ -161,14 +162,19 @@ export class MicrosoftCalendarAdapter
    * refused by 403 `ErrorAccessDenied` to `unreadableCalendarIds` (kept).
    * When EVERY requested calendar is refused the fetch fails instead (a
    * zero-block success would wipe the user's busy blocks). Every other
-   * error fails the whole fetch.
+   * error fails the whole fetch. The per-event copy-id fallback runs only
+   * for `options.copyCalendarIds` (where our copies can be).
    */
   async fetchBusy(
     credentials: CalendarCredentials,
     range: TimeRange,
     calendarIds: string[],
+    cursor?: Record<string, string>,
+    options?: FetchBusyOptions,
   ): Promise<FetchBusyResult> {
+    void cursor;
     const token = accessTokenOf(credentials);
+    const copyCals = new Set(options?.copyCalendarIds ?? []);
     const blocks: BusyBlock[] = [];
     const missing: string[] = [];
     const refused: string[] = [];
@@ -180,7 +186,8 @@ export class MicrosoftCalendarAdapter
       else if (read === 'refused') refused.push(calendarId);
       else {
         if (read.truncated) truncated += 1;
-        blocks.push(...(await this.busyBlocksOf(token, read.items)));
+        const lookup = copyCals.has(calendarId);
+        blocks.push(...(await this.busyBlocksOf(token, read.items, lookup)));
       }
     }
     if (truncated > 0) {
@@ -259,12 +266,15 @@ export class MicrosoftCalendarAdapter
 
   /**
    * Item 4: copy ids via the `$expand` fast path, or the bounded per-event
-   * fallback — one log line says which ran (the live-mailbox check).
+   * fallback — one log line says which ran (the live-mailbox check). A
+   * calendar our copies cannot be in (`lookup` false) never pays it.
    */
   private async busyBlocksOf(
     token: string,
     items: unknown[],
+    lookup: boolean,
   ): Promise<BusyBlock[]> {
+    if (!lookup) return items.flatMap((i) => normalizeGraphEvent(i) ?? []);
     const read = await resolveCopyIds(token, items);
     if (read.path === 'fallback') {
       this.logger.log(

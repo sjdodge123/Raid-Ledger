@@ -7,6 +7,7 @@ import type * as schema from '../../drizzle/schema';
 import { _resetKeyCache } from '../../settings/encryption.util';
 import type {
   CalendarCredentials,
+  FetchBusyOptions,
   FetchBusyResult,
   ProviderCalendar,
   TimeRange,
@@ -168,7 +169,13 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
   function stub() {
     const fetchBusy = jest.fn<
       Promise<FetchBusyResult>,
-      [CalendarCredentials, TimeRange, string[], Record<string, string>?]
+      [
+        CalendarCredentials,
+        TimeRange,
+        string[],
+        Record<string, string>?,
+        FetchBusyOptions?,
+      ]
     >(() => Promise.resolve({ blocks: [] }));
     const provider = {
       key: 'apple' as const,
@@ -192,6 +199,7 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
       readCalendarIds: [],
       dedicatedCalendarId: null,
       syncCursor,
+      writeTarget: 'dedicated',
     };
   }
 
@@ -202,13 +210,18 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
       { start: window.start, end: window.end },
       ['home'],
       CURSOR,
+      { copyCalendarIds: [] },
     ]);
   });
 
   it('a malformed stored cursor goes in as undefined (full read)', async () => {
     const { provider, fetchBusy } = stub();
     await fetchWindow({ db, provider }, conn({ w: 3 }), window);
-    expect(fetchBusy.mock.calls[0]?.slice(2)).toEqual([['home'], undefined]);
+    expect(fetchBusy.mock.calls[0]?.slice(2)).toEqual([
+      ['home'],
+      undefined,
+      { copyCalendarIds: [] },
+    ]);
   });
 
   it('Codex r5: no resolvable calendar → empty blocks AND an emptied cursor', async () => {
@@ -230,6 +243,15 @@ describe('fetchWindow passes the stored cursor (D7 wiring)', () => {
     const row = { ...conn(undefined), dedicatedCalendarId: 'raid-ledger-x' };
     await fetchWindow({ db, provider }, row, window);
     expect(fetchBusy.mock.calls[0]?.[2]).toEqual(['work']);
+  });
+
+  it('ROK-1597: target primary → the main calendar (alias + id) is a copy calendar', async () => {
+    const { provider, fetchBusy } = stub();
+    const row = { ...conn(undefined), writeTarget: 'primary' };
+    await fetchWindow({ db, provider }, row, window);
+    expect(fetchBusy.mock.calls[0]?.[4]).toEqual({
+      copyCalendarIds: ['primary', 'home'],
+    });
   });
 });
 

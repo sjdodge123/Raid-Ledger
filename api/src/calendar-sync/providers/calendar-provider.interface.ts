@@ -141,6 +141,16 @@ export interface BusyBlock {
   ourId?: string;
 }
 
+/** ROK-1597: per-read hints from the connection row (all optional). */
+export interface FetchBusyOptions {
+  /**
+   * Requested calendars our copies may sit in (the connection's write
+   * target when it is the main calendar). Microsoft runs its per-event
+   * copy-id fallback only for these; other providers ignore it.
+   */
+  copyCalendarIds?: readonly string[];
+}
+
 export interface FetchBusyResult {
   blocks: BusyBlock[];
   /** Per-calendar ctag / sync-token (Apple); opaque for others. */
@@ -168,6 +178,7 @@ export interface CalendarReadCapability {
     range: TimeRange,
     calendarIds: string[],
     cursor?: Record<string, string>,
+    options?: FetchBusyOptions,
   ): Promise<FetchBusyResult>;
 }
 

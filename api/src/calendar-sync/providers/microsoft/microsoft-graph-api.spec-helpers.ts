@@ -17,7 +17,11 @@ import type {
   MicrosoftJsonMethod,
   MicrosoftJsonOptions,
 } from './microsoft-http';
-import { GRAPH_API, MS_ME_URL } from './microsoft-graph.constants';
+import {
+  GRAPH_API,
+  MS_ME_URL,
+  RL_COPY_PROP_ID,
+} from './microsoft-graph.constants';
 
 type Json = Record<string, unknown>;
 export const fixture = (name: string): unknown =>
@@ -261,11 +265,17 @@ export class FakeGraphCalendarApi {
     return this.page(fullUrl, params, rows);
   }
 
-  /** Honoured expand: always the array (empty when not ours). */
+  /**
+   * Honoured expand, as real Graph does it: the array only on occurrences
+   * whose properties match the filter; omitted on every other one.
+   */
   private viewRow(e: Json): Json {
     const { singleValueExtendedProperties: props, ...rest } = e;
     if (this.ignoreViewExpand) return rest;
-    return { ...rest, singleValueExtendedProperties: props ?? [] };
+    const ours = Array.isArray(props) ? props.filter(isOurProp) : [];
+    return ours.length > 0
+      ? { ...rest, singleValueExtendedProperties: ours }
+      : rest;
   }
 
   private calendarRows(): Json[] {
@@ -328,6 +338,12 @@ function adoptMatches(cal: FakeGraphCalendar, params: URLSearchParams): Json[] {
   });
   const top = Number(params.get('$top') ?? '10');
   return hits.slice(0, top).map((e) => ({ id: e.id }));
+}
+
+/** The `$expand` filter's match: our property id (case-insensitive here). */
+function isOurProp(p: unknown): boolean {
+  const id = toJson(p).id;
+  return typeof id === 'string' && id.toLowerCase() === RL_COPY_PROP_ID.toLowerCase();
 }
 
 function toJson(value: unknown): Json {

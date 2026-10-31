@@ -103,3 +103,17 @@ export function unchangedStillValid(
     keys.every((k) => locked[k] === sent[k])
   );
 }
+
+/**
+ * ROK-1597: the read calendars our copies can sit in. Copies go to the
+ * dedicated calendar (never read) or, with target `primary`, to the main
+ * calendar — so only then is the main calendar (alias or real id) listed.
+ */
+export function copyCalendarIdsOf(
+  conn: { writeTarget: string },
+  calendars: readonly ProviderCalendar[],
+): string[] {
+  if (conn.writeTarget !== PRIMARY_ALIAS) return [];
+  const main = calendars.filter((c) => c.primary).map((c) => c.id);
+  return [PRIMARY_ALIAS, ...main];
+}
