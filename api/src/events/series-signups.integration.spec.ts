@@ -169,7 +169,7 @@ async function join(eventId: number, userId: number) {
 
 // ── I1–I3: join materialises from the anchor forward ───────────────────────
 
-describe('join (I1–I3)', () => {
+describe('join materialises from the anchor (I1)', () => {
   it('I1: attaches the anchor in place, creates the missing future nights, skips cancelled + past', async () => {
     const s = await seedSeries();
     const { userId, token } = await createMemberAndLogin(
@@ -225,6 +225,14 @@ describe('join (I1–I3)', () => {
     expect([...(res.body.createdEventIds as number[])].sort()).toEqual(
       [s.n3, s.n5].sort(),
     );
+  });
+
+  it('I1: audits the join once on the anchor as series_joined', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await insertSignup(s.n2, userId);
+    await join(s.n2, userId);
+    const membership = await onlyMembership(userId);
 
     const logs = await testApp.db
       .select()
@@ -239,7 +247,9 @@ describe('join (I1–I3)', () => {
       nights: 3,
     });
   });
+});
 
+describe('join keeps inactive nights and the anchor (I2–I3)', () => {
   it('I2: declined and roached_out nights stay exactly as they were, untagged, in keptEventIds', async () => {
     const s = await seedSeries();
     const userId = await createMember();
@@ -279,7 +289,7 @@ describe('join (I1–I3)', () => {
 
 // ── I4–I7: rejections ───────────────────────────────────────────────────────
 
-describe('join rejections (I4–I7)', () => {
+describe('join rejections (I4–I5)', () => {
   it('I4: a non-series event returns 400', async () => {
     const plain = await insertNight(null, 48);
     const { token } = await createMemberAndLogin(
@@ -316,8 +326,10 @@ describe('join rejections (I4–I7)', () => {
       expect(await rowFor(s.n2, userId)).toBeUndefined();
     },
   );
+});
 
-  it('I6: a second join is 409 with one active row; the partial index allows re-join after leave', async () => {
+describe('join conflicts (I6–I7)', () => {
+  it('I6: a second join is 409, one active row stays, and a direct duplicate INSERT is rejected', async () => {
     const s = await seedSeries();
     const userId = await createMember();
     await join(s.n2, userId);
@@ -339,6 +351,12 @@ describe('join rejections (I4–I7)', () => {
     };
     // mutation: drop uq_series_signups_active
     await expect(insertDuplicate()).rejects.toThrow();
+  });
+
+  it('I6: re-join after leave is allowed (partial index WHERE status = active)', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await join(s.n2, userId);
 
     await series().leave(s.n2, userId);
     // leave cancelled 2/3/5, so a fresh night is the joinable one.
