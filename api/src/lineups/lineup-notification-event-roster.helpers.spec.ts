@@ -66,14 +66,23 @@ const ROSTER_ROWS: EventRosterUser[] = ROSTERED.map((displayName, i) => ({
  * records what was queried so a fix that "works" by reading the match-members
  * table cannot pass.
  */
-function fakeDb(rows: EventRosterUser[]) {
+/** The event row the ROK-2054 capacity read returns (no cap by default). */
+interface CapRow {
+  slotConfig: unknown;
+  maxAttendees: number | null;
+}
+const NO_CAP: CapRow = { slotConfig: null, maxAttendees: null };
+
+function fakeDb(rows: EventRosterUser[], event: CapRow = NO_CAP) {
   const seen: { fromTable?: unknown } = {};
   const db = {
     select: () => ({
       from: (table: unknown) => {
-        seen.fromTable = table;
+        seen.fromTable ??= table;
         return {
           innerJoin: () => ({ where: () => Promise.resolve(rows) }),
+          // ROK-2054: `.from(events).where(...).limit(1)` — the cap read.
+          where: () => ({ limit: () => Promise.resolve([event]) }),
         };
       },
     }),
@@ -235,5 +244,79 @@ describe('EVENT CREATED card — group subtext line (ROK-1863)', () => {
     expect(
       playersField([], '0 of 12 from the group signed up'),
     ).toBeUndefined();
+  });
+});
+
+/** ROK-2054: the card's description for a roster that is / is not full. */
+function eventCreatedDescription(full: boolean): string {
+  const { embed } = buildEventCreatedEmbed(
+    ctx(),
+    'Valheim',
+    3,
+    new Date('2026-09-18T19:00:00.000Z'),
+    EVENT_ID,
+    ROSTERED,
+    null,
+    full,
+  );
+  return embed.toJSON().description ?? '';
+}
+
+describe('EVENT CREATED card — capacity-aware copy (ROK-2054)', () => {
+  it('says "full" and points at the waitlist when the roster is at the cap', () => {
+    const description = eventCreatedDescription(true);
+
+    expect(description).toContain(
+      'is officially scheduled and full. Join the waitlist on the event page.',
+    );
+    expect(description).not.toContain('open for signups');
+  });
+
+  it('keeps the open-for-signups copy when there is room', () => {
+    const description = eventCreatedDescription(false);
+
+    expect(description).toContain(
+      'is officially scheduled and open for signups. Head to the event page to confirm your spot.',
+    );
+    expect(description).not.toContain('Join the waitlist');
+  });
+});
+
+describe('resolveEventRosterCard full (ROK-2054)', () => {
+  it('is full when the roster reaches maxAttendees', async () => {
+    const { db } = fakeDb(ROSTER_ROWS, {
+      slotConfig: null,
+      maxAttendees: ROSTERED.length,
+    });
+
+    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(true);
+  });
+
+  it('is full when the roster reaches the generic slot capacity', async () => {
+    const { db } = fakeDb(ROSTER_ROWS, {
+      slotConfig: { type: 'generic', player: 4 },
+      maxAttendees: null,
+    });
+
+    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(true);
+  });
+
+  it('is open when the roster is under the cap', async () => {
+    const { db } = fakeDb(ROSTER_ROWS, {
+      slotConfig: null,
+      maxAttendees: ROSTERED.length + 1,
+    });
+
+    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(
+      false,
+    );
+  });
+
+  it('treats a null cap as unlimited — never full', async () => {
+    const { db } = fakeDb(ROSTER_ROWS, NO_CAP);
+
+    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(
+      false,
+    );
   });
 });

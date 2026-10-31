@@ -18,6 +18,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { ACTIVE_SIGNUP_STATUSES } from './scheduling/active-signup-statuses.constants';
+import { resolveEventCapacity } from '../events/signups-signup.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -86,6 +87,30 @@ export interface EventRosterCard {
   names: string[];
   /** ROK-1863 "N of M from the group" copy, or null for no line. */
   groupSubtext: string | null;
+  /** ROK-2054: the roster has reached the event's cap (null cap ⇒ false). */
+  full: boolean;
+}
+
+/**
+ * ROK-2054: is the roster at the event's cap? The cap is the same one signup
+ * auto-bench uses (`resolveEventCapacity`: slot config, else `maxAttendees`);
+ * no cap means unlimited, never full. The count is the card's own roster.
+ */
+async function isEventFull(
+  db: Db,
+  eventId: number,
+  rosterCount: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({
+      slotConfig: schema.events.slotConfig,
+      maxAttendees: schema.events.maxAttendees,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  const cap = row ? resolveEventCapacity(row) : null;
+  return cap !== null && rosterCount >= cap;
 }
 
 /**
@@ -110,6 +135,7 @@ export async function resolveEventRosterCard(
     return {
       names: groupMembers.map((m) => m.displayName),
       groupSubtext: null,
+      full: false,
     };
   }
   const roster = await findEventRosterUsers(db, eventId);
@@ -119,5 +145,6 @@ export async function resolveEventRosterCard(
       roster.map((r) => r.userId),
       groupMembers.map((m) => m.userId),
     ),
+    full: await isEventFull(db, eventId, roster.length),
   };
 }

@@ -259,6 +259,7 @@ function eventCreatedBuilder(
       eventId,
       card.names,
       card.groupSubtext,
+      card.full,
     );
 }
 
