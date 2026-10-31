@@ -1,22 +1,26 @@
 /**
- * ROK-1960 L2 — the "Upload" mutation (spec D-6 steps 2–5): PUT the
- * thumbnail when there is one, bind the campaign key to the picked campaign,
- * and only then POST the message, so the save lands straight in the picked
- * campaign and never sits in another (another hub's) campaign first. A failed
- * bind aborts before anything is posted. Then invalidate every bg3 query of
- * the hub. Every failure rejects with a `Bg3UploadError`.
+ * ROK-1960 L2/F4 — the "Upload" mutation (spec D-6 steps 2–5): bind the
+ * campaign key to the picked campaign, then PUT the thumbnail when there is
+ * one, and only then POST the message, so the save lands straight in the
+ * picked campaign. The bind goes FIRST because it is the step that can stop
+ * for the cross-hub confirm (409 `cross_hub_move`): nothing — not even the
+ * thumbnail — leaves the browser before the user agrees. A failed bind aborts
+ * before anything is sent. Then invalidate every bg3 query of the hub. Every
+ * failure rejects with a `Bg3UploadError`.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Bg3SaveMessage } from '@raid-ledger/contract';
 import { bindBg3CampaignKey } from '../api/bg3-api';
 import { invalidateBg3Hub } from '../hooks/bg3-keys';
 import { buildBg3SaveMessage, postBg3SaveMessage, putBg3Thumbnail, type Bg3ParsedSave } from './bg3-upload-api';
-import { Bg3UploadError, toBg3UploadError } from './bg3-upload-errors';
+import { Bg3UploadError, crossHubMoveOf, toBg3UploadError } from './bg3-upload-errors';
 
 export interface Bg3UploadVars {
     readonly save: Bg3ParsedSave;
     /** The campaign picked in the sheet; the key is always bound to it (a binding beats the default on ingest). */
     readonly campaignId: number;
+    /** Set by "Move here": the user agreed to move this key's saves out of another hub. */
+    readonly confirmCrossHub?: boolean;
 }
 
 export interface Bg3UploadResult {
@@ -25,25 +29,31 @@ export interface Bg3UploadResult {
     readonly campaignId: number;
 }
 
-async function putThumbnailIfAny(message: Bg3SaveMessage, webp: Bg3ParsedSave['webp']): Promise<void> {
+/** The thumbnail bytes to PUT, checked against the ref before any request. */
+function thumbnailOf(message: Bg3SaveMessage, webp: Bg3ParsedSave['webp']): Bg3ParsedSave['webp'] {
     const ref = message.payload.thumbnail;
-    if (ref === null) return;
+    if (ref === null) return null;
     if (webp === null || webp.byteLength !== ref.byteLength) throw new Bg3UploadError('invalid_payload', 'payload.thumbnail');
-    await putBg3Thumbnail(ref.sha256, webp);
+    return webp;
 }
 
-/** D-6 steps 2–4 (blob → bind → message); exported for direct testing. `now` pins `capturedAt`. */
+async function bindKey(message: Bg3SaveMessage, vars: Bg3UploadVars): Promise<void> {
+    try {
+        await bindBg3CampaignKey(message.payload.campaignKey, vars.campaignId, vars.confirmCrossHub === true);
+    } catch (error) {
+        const move = crossHubMoveOf(error);
+        throw move === null ? new Bg3UploadError('bind_failed') : new Bg3UploadError('cross_hub_move', null, move);
+    }
+}
+
+/** D-6 steps 2–4 (bind → blob → message); exported for direct testing. `now` pins `capturedAt`. */
 export async function uploadBg3Save(vars: Bg3UploadVars, now: number = Date.now()): Promise<Bg3UploadResult> {
     const message = buildBg3SaveMessage(vars.save, now);
+    const webp = thumbnailOf(message, vars.save.webp);
+    await bindKey(message, vars);
     try {
-        await putThumbnailIfAny(message, vars.save.webp);
-    } catch (error) {
-        throw toBg3UploadError(error);
-    }
-    await bindBg3CampaignKey(message.payload.campaignKey, vars.campaignId).catch(() => {
-        throw new Bg3UploadError('bind_failed');
-    });
-    try {
+        const ref = message.payload.thumbnail;
+        if (ref !== null && webp !== null) await putBg3Thumbnail(ref.sha256, webp);
         const ack = await postBg3SaveMessage(message);
         return { status: ack.status === 'stale' ? 'already_uploaded' : 'uploaded', campaignId: vars.campaignId };
     } catch (error) {

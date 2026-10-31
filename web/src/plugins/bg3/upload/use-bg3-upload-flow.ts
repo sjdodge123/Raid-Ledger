@@ -10,7 +10,7 @@ import { disposeBg3ParseWorker } from './bg3-parse-client';
 import { parseBg3Save, selectBg3SaveSource } from './bg3-parse-save';
 import { Bg3ParseError, bg3ParseErrorMessage } from './bg3-parse-errors';
 import { bg3UploadErrorMessage, type Bg3UploadError } from './bg3-upload-errors';
-import { useBg3UploadSave, type Bg3UploadResult } from './use-bg3-upload-save';
+import { useBg3UploadSave, type Bg3UploadResult, type Bg3UploadVars } from './use-bg3-upload-save';
 import { useBg3MoveCheck } from './use-bg3-move-check';
 import type { Bg3ParsedSave } from './bg3-upload-api';
 import type { Bg3DroppedFiles } from './bg3-drop-files';
@@ -62,8 +62,21 @@ function parseMessage(error: unknown): string {
     return bg3ParseErrorMessage(error instanceof Bg3ParseError ? error : new Bg3ParseError('reader_failed'));
 }
 
-export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null) {
+/** Bind → blob → message; a 409 `cross_hub_move` holds the upload for Move here (re-bind with the flag) / Cancel. */
+function useGuardedUpload(hubId: number, onResult: (r: Bg3UploadResult) => void, fail: (e: Bg3UploadError) => void) {
     const upload = useBg3UploadSave(hubId);
+    const move = useBg3MoveCheck();
+    const run = (vars: Bg3UploadVars): void => upload.mutate(vars, {
+        onSuccess: onResult,
+        onError: (e) => {
+            if (e.move === null) return fail(e);
+            move.hold(e.move, () => run({ ...vars, confirmCrossHub: true }));
+        },
+    });
+    return { upload, move, run };
+}
+
+export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null) {
     const isOpen = useMountedFlag();
     const [parsed, setParsed] = useState<Parsed | null>(null);
     const [parsing, setParsing] = useState(false);
@@ -73,7 +86,7 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
     useRevokeOnChange(parsed?.thumbUrl ?? null);
     const campaignId = picked === undefined ? initialCampaignId : picked;
     const fail = (e: Bg3UploadError): void => setBanner({ tone: 'danger', text: bg3UploadErrorMessage(e) });
-    const move = useBg3MoveCheck(hubId, isOpen, fail);
+    const { upload, move, run } = useGuardedUpload(hubId, setResult, fail);
 
     const read = (dropped: Bg3DroppedFiles): void => {
         setBanner(null);
@@ -83,15 +96,13 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
                 (e: unknown) => { if (isOpen()) setBanner({ tone: 'danger', text: parseMessage(e) }); })
             .finally(() => { if (isOpen()) setParsing(false); });
     };
-    /** Upload: read the key's binding first; a cross-hub one waits on `moveHere` / `cancelMove`. */
     const submit = (): void => {
         if (parsed === null || campaignId === null) return;
         setBanner(null);
-        const vars = { save: parsed.save, campaignId };
-        move.check(vars.save.payload.campaignKey, () => upload.mutate(vars, { onSuccess: setResult, onError: fail }));
+        run({ save: parsed.save, campaignId });
     };
     return {
         parsed, parsing, banner, result, campaignId, read, submit, setCampaignId: setPicked,
-        confirm: move.confirm, moveHere: move.confirmMove, cancelMove: move.cancel, uploading: upload.isPending || move.checking,
+        confirm: move.confirm, moveHere: move.confirmMove, cancelMove: move.cancel, uploading: upload.isPending,
     };
 }

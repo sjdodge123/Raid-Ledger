@@ -53,7 +53,7 @@ function SheetBody({ flow, campaigns, onNewCampaign }: BodyProps): JSX.Element |
                 <Bg3CampaignPicker id={BG3_UPLOAD_CAMPAIGN_ID} campaigns={campaigns} value={flow.campaignId}
                     onChange={flow.setCampaignId} onNewCampaign={onNewCampaign} disabled={flow.uploading || flow.confirm !== null} />
             </div>
-            {flow.confirm !== null && <Bg3UploadMoveConfirm binding={flow.confirm} onMove={flow.moveHere} onCancel={flow.cancelMove} />}
+            {flow.confirm !== null && <Bg3UploadMoveConfirm move={flow.confirm} onMove={flow.moveHere} onCancel={flow.cancelMove} />}
         </>
     );
 }

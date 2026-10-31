@@ -5,7 +5,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
-import { BG3_KEY_URL, bg3BindKeyHandler } from '../../../test/mocks/bg3-handlers';
+import type { Bg3CrossHubMove } from '@raid-ledger/contract';
+import { BG3_KEY_URL, bg3BindKeyCrossHubHandler, bg3BindKeyHandler } from '../../../test/mocks/bg3-handlers';
 import { companionBg3MessageHandler, companionBlobHandler, type CompanionRefusal } from '../../../test/mocks/bg3-companion-handlers';
 import { BG3_UPLOAD_KEY, BG3_UPLOAD_THUMB_SHA, buildBg3ParsedSave } from '../../../test/factories/bg3-upload';
 import { bg3Keys } from '../hooks/bg3-keys';
@@ -48,16 +49,16 @@ async function rejection(p: Promise<unknown>): Promise<Bg3UploadError> {
 }
 
 describe('uploadBg3Save (D-6)', () => {
-    it('PUTs the blob, then binds the key to the picked campaign, then POSTs the message', async () => {
+    it('binds the key to the picked campaign, then PUTs the blob, then POSTs the message', async () => {
         const { calls } = routes();
         await expect(uploadBg3Save(vars())).resolves.toEqual({ status: 'uploaded', campaignId: PICKED });
-        expect(calls).toEqual([BLOB, bindTo(PICKED), 'message']);
+        expect(calls).toEqual([bindTo(PICKED), BLOB, 'message']);
     });
 
-    it('a failed bind posts nothing: bind_failed, and the message is never sent', async () => {
+    it('a failed bind sends nothing else: bind_failed, no blob, no message', async () => {
         const { calls } = routes({ bindStatus: 500 });
         expect((await rejection(uploadBg3Save(vars()))).code).toBe('bind_failed');
-        expect(calls).toEqual([BLOB, 'bind:refused']);
+        expect(calls).toEqual(['bind:refused']);
     });
 
     it('sends only the summary: no position keys, no path strings', async () => {
@@ -82,14 +83,14 @@ describe('uploadBg3Save (D-6)', () => {
     it('maps a 429 on the message to rate_limited', async () => {
         const { calls } = routes({ message: { status: 429, code: 'rate_limited' } });
         expect((await rejection(uploadBg3Save(vars()))).code).toBe('rate_limited');
-        expect(calls).toEqual([BLOB, bindTo(PICKED), 'message']);
+        expect(calls).toEqual([bindTo(PICKED), BLOB, 'message']);
     });
 
-    it('sends nothing after a refused blob', async () => {
+    it('posts no message after a refused blob (the bind already ran)', async () => {
         const { calls } = routes({ blob: { status: 413, code: 'payload_too_large' } });
         const err = await rejection(uploadBg3Save(vars()));
         expect([err.code, err.detail]).toEqual(['server_refused', 'payload_too_large']);
-        expect(calls).toEqual([BLOB]);
+        expect(calls).toEqual([bindTo(PICKED), BLOB]);
     });
 
     it('maps 404 unknown_contract to uploads_disabled', async () => {
@@ -102,6 +103,21 @@ describe('uploadBg3Save (D-6)', () => {
         const save = { ...buildBg3ParsedSave(), webp: null };
         expect((await rejection(uploadBg3Save(vars({ save })))).code).toBe('invalid_payload');
         expect(calls).toEqual([]);
+    });
+
+    it('a 409 cross_hub_move stops after the bind with the body; confirmCrossHub re-binds with the flag', async () => {
+        const move: Bg3CrossHubMove = { code: 'cross_hub_move', saveCount: 2, locations: [{ campaignId: 9, campaignName: 'A', hubId: 4, hubName: 'Other' }] };
+        const calls: string[] = [];
+        server.use(
+            companionBlobHandler('stored', () => calls.push('blob')),
+            companionBg3MessageHandler('accepted', () => calls.push('message')),
+            bg3BindKeyCrossHubHandler(move, (b) => calls.push(`bind:${JSON.stringify(b)}`)),
+        );
+        const err = await rejection(uploadBg3Save(vars()));
+        expect([err.code, err.move]).toEqual(['cross_hub_move', move]);
+        expect(calls).toEqual([`bind:{"campaignId":${PICKED}}`]);
+        await uploadBg3Save(vars({ confirmCrossHub: true }));
+        expect(calls.slice(1)).toEqual([`bind:{"campaignId":${PICKED},"confirmCrossHub":true}`, 'blob', 'message']);
     });
 });
 

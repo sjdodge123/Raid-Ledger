@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { bg3LevelDisplay } from '@raid-ledger/contract';
+import { bg3LevelDisplay, type Bg3CrossHubMove } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
-    BG3_KEY_URL, bg3BindKeyHandler, bg3CampaignsHandler, bg3KeyBindingHandler, bg3MySavesHandler,
+    BG3_KEY_URL, bg3BindKeyCrossHubHandler, bg3BindKeyHandler, bg3CampaignsHandler, bg3MySavesHandler,
 } from '../../../test/mocks/bg3-handlers';
 import {
     COMPANION_BG3_MESSAGE_URL, companionBg3MessageHandler, companionBlobHandler, type CompanionRefusal,
@@ -73,7 +73,6 @@ beforeEach(() => {
     server.use(
         bg3CampaignsHandler(buildBg3CampaignsResponse()),
         bg3MySavesHandler(buildBg3MySavesResponse({ defaultCampaignId: BG3_CAMPAIGN_ID })),
-        bg3KeyBindingHandler(null),
     );
     routes();
 });
@@ -99,7 +98,7 @@ describe('pick → preview → upload', () => {
         await waitFor(() => expect(screen.getByLabelText('Campaign')).toHaveDisplayValue('Tactician run'));
         await user.click(screen.getByRole('button', { name: 'Upload' }));
         expect(await screen.findByTestId('bg3-upload-banner-success')).toHaveTextContent('Uploaded to Tactician run');
-        expect(calls).toEqual(['blob', 'bind', 'message']);
+        expect(calls).toEqual(['bind', 'blob', 'message']);
         await user.click(screen.getByRole('button', { name: 'Done' }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -157,7 +156,7 @@ describe('errors are inline banners (§7)', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled());
         await user.click(screen.getByRole('button', { name: 'Upload' }));
         expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't file the save under that campaign, so it wasn't uploaded. Try again.");
-        expect(calls).toEqual(['blob', 'bind']);
+        expect(calls).toEqual(['bind']);
         await user.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(await screen.findByText(DISCARD)).toBeInTheDocument();
     });
@@ -239,8 +238,13 @@ describe('close paths', () => {
     });
 });
 
-describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
-    const elsewhere = { campaignId: 99, campaignName: 'Honour run', hubId: BG3_HUB_ID + 1, hubName: 'Other Crew', saveCount: 3 };
+describe('cross-hub bind asks first (operator ruling 2026-10-31; server guard F4)', () => {
+    const elsewhere = { campaignId: 99, campaignName: 'Honour run', hubId: BG3_HUB_ID + 1, hubName: 'Other Crew' };
+    const move = (locations: Bg3CrossHubMove['locations'], saveCount = 3): Bg3CrossHubMove => ({ code: 'cross_hub_move', saveCount, locations });
+    /** The guarded bind: records `bind` / `bind+confirm` by body. */
+    const guard = (m: Bg3CrossHubMove): void => {
+        server.use(bg3BindKeyCrossHubHandler(m, (b) => calls.push(JSON.stringify(b).includes('confirmCrossHub') ? 'bind+confirm' : 'bind')));
+    };
 
     async function uploadClick(user: ReturnType<typeof userEvent.setup>): Promise<void> {
         await choose(user);
@@ -253,59 +257,50 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31)', () => {
     const settled = (): Promise<void> => waitFor(() => expect(
         screen.queryByTestId(CONFIRM) ?? screen.queryByTestId('bg3-upload-banner-success')).not.toBeNull());
 
-    it('an unbound key uploads without asking', async () => {
+    it('a bind the server accepts uploads without asking', async () => {
         const user = userEvent.setup();
         await uploadClick(user);
         await settled();
         expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
-        expect(calls).toEqual(['blob', 'bind', 'message']);
+        expect(calls).toEqual(['bind', 'blob', 'message']);
     });
 
-    it('a key bound to another campaign in THIS hub uploads without asking', async () => {
-        server.use(bg3KeyBindingHandler({ ...elsewhere, hubId: BG3_HUB_ID, hubName: 'BG3 Crew' }));
+    it('a 409 cross_hub_move shows the banner before any blob; focus lands on Move here; Cancel sends nothing further', async () => {
+        guard(move([elsewhere]));
         const user = userEvent.setup();
         await uploadClick(user);
         await settled();
-        expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
-        expect(calls).toEqual(['blob', 'bind', 'message']);
-    });
-
-    it('a key bound in another hub stops before any bind; Cancel moves and posts nothing', async () => {
-        server.use(bg3KeyBindingHandler(elsewhere));
-        const user = userEvent.setup();
-        await uploadClick(user);
-        await settled();
-        expect(calls).toEqual([]);
         const confirm = screen.getByTestId(CONFIRM);
         expect(confirm).toHaveTextContent(
             "This playthrough's saves are in Honour run in Other Crew. Moving it here also moves your 3 earlier saves.");
+        expect(within(confirm).getByRole('button', { name: 'Move here' })).toHaveFocus();
         expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled();
+        expect(calls).toEqual(['bind']);
         await user.click(within(confirm).getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
         expect(screen.getByTestId('bg3-upload-preview')).toBeInTheDocument();
-        expect(calls).toEqual([]);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(calls).toEqual(['bind']);
     });
 
-    it('Move here binds, then posts', async () => {
-        server.use(bg3KeyBindingHandler(elsewhere));
+    it('Move here re-binds with confirmCrossHub, then sends the blob and the message', async () => {
+        guard(move([elsewhere]));
         const user = userEvent.setup();
         await uploadClick(user);
         await settled();
-        expect(calls).toEqual([]);
-        const confirm = screen.getByTestId(CONFIRM);
-        await user.click(within(confirm).getByRole('button', { name: 'Move here' }));
+        await user.click(within(screen.getByTestId(CONFIRM)).getByRole('button', { name: 'Move here' }));
         expect(await screen.findByTestId('bg3-upload-banner-success')).toHaveTextContent('Uploaded to Tactician run');
-        expect(calls).toEqual(['blob', 'bind', 'message']);
+        expect(calls).toEqual(['bind', 'bind+confirm', 'blob', 'message']);
     });
 
-    it('a hub the uploader can no longer open is not named, but still asks', async () => {
-        const redacted = { campaignId: null, campaignName: null, hubId: null, hubName: null, saveCount: 1 };
-        server.use(bg3KeyBindingHandler(redacted));
+    it('names every other-hub place once, and a hub the uploader can no longer open without naming it', async () => {
+        const hidden = { campaignId: null, campaignName: null, hubId: null, hubName: null };
+        guard(move([elsewhere, hidden, hidden], 1));
         const user = userEvent.setup();
         await uploadClick(user);
         await settled();
-        expect(calls).toEqual([]);
         expect(screen.getByTestId(CONFIRM)).toHaveTextContent(
-            "This playthrough's saves are in a hub you can no longer open. Moving it here also moves your 1 earlier save.");
+            "This playthrough's saves are in Honour run in Other Crew and a hub you can no longer open. Moving it here also moves your 1 earlier save.");
+        expect(calls).toEqual(['bind']);
     });
 });
