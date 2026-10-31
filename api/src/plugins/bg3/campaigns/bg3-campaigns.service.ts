@@ -9,6 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  Bg3CampaignKeyBindingResponse,
   Bg3CampaignSummary,
   Bg3CreateCampaignBody,
   Bg3UpdateCampaignBody,
@@ -77,6 +78,37 @@ export class Bg3CampaignsService {
   async bindKey(actor: GuildActor, key: string, campaignId: number) {
     await this.memberCampaign(campaignId, actor);
     await this.repo.bindKey(actor.id, key, campaignId);
+  }
+
+  /**
+   * ROK-1960: where the caller's saves with `key` sit now. Campaign + hub are
+   * redacted to null when the caller cannot read that hub (left it, hidden).
+   */
+  async keyBinding(
+    actor: GuildActor,
+    key: string,
+  ): Promise<Bg3CampaignKeyBindingResponse> {
+    const at = await this.repo.keyLocation(actor.id, key);
+    if (!at) return { binding: null };
+    const readable = await assertBg3HubReader(
+      this.repo,
+      this.access,
+      at.hubId,
+      actor,
+    ).then(
+      () => true,
+      () => false,
+    );
+    if (readable) return { binding: at };
+    const hidden = { campaignId: null, campaignName: null };
+    return {
+      binding: {
+        ...hidden,
+        hubId: null,
+        hubName: null,
+        saveCount: at.saveCount,
+      },
+    };
   }
 
   /** Drop the caller's binding; their rows with the key go unassigned. */

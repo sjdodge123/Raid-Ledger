@@ -3,7 +3,7 @@
  * and default changes re-assign the caller's own rows in the same tx (D-6).
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, isNull, max } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, max } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Bg3CampaignSummary } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -19,6 +19,14 @@ export interface Bg3CampaignRow {
   guildId: number;
   hostUserId: number | null;
   archivedAt: Date | null;
+}
+
+export interface Bg3KeyLocation {
+  campaignId: number;
+  campaignName: string;
+  hubId: number;
+  hubName: string;
+  saveCount: number;
 }
 
 export interface Bg3CampaignPatch {
@@ -186,6 +194,44 @@ export class Bg3CampaignsRepository implements Bg3HubLookup {
         });
       await tx.update(s).set({ campaignId }).where(ownRows(userId, key));
     });
+  }
+
+  /** ROK-1960: the caller's binding for `key`, else their latest assigned save's campaign; + their save count. */
+  async keyLocation(
+    userId: number,
+    key: string,
+  ): Promise<Bg3KeyLocation | null> {
+    const k = schema.bg3CampaignKeys;
+    const g = schema.guilds;
+    const cols = {
+      campaignId: c.id,
+      campaignName: c.name,
+      hubId: g.id,
+      hubName: g.name,
+    };
+    const [bound] = await this.db
+      .select(cols)
+      .from(k)
+      .innerJoin(c, eq(c.id, k.campaignId))
+      .innerJoin(g, eq(g.id, c.guildId))
+      .where(and(eq(k.userId, userId), eq(k.campaignKey, key)))
+      .limit(1);
+    const [latest] = bound
+      ? [bound]
+      : await this.db
+          .select(cols)
+          .from(s)
+          .innerJoin(c, eq(c.id, s.campaignId))
+          .innerJoin(g, eq(g.id, c.guildId))
+          .where(ownRows(userId, key))
+          .orderBy(desc(s.savedAt))
+          .limit(1);
+    if (!latest) return null;
+    const [n] = await this.db
+      .select({ n: count() })
+      .from(s)
+      .where(ownRows(userId, key));
+    return { ...latest, saveCount: n?.n ?? 0 };
   }
 
   async unbindKey(userId: number, key: string): Promise<void> {

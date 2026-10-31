@@ -162,6 +162,28 @@ export const Bg3MySavesResponseSchema = z.object({
 }).strict();
 export type Bg3MySavesResponse = z.infer<typeof Bg3MySavesResponseSchema>;
 
+/**
+ * ROK-1960 — where the caller's saves with one campaign key sit now: their
+ * binding, else the campaign of their latest assigned save with that key.
+ * Read before an upload binds the key (a bind moves every one of those
+ * saves). `saveCount` = the caller's saves with that key. Campaign + hub are
+ * null when the caller can no longer read that hub (left it, or hidden).
+ */
+export const Bg3CampaignKeyBindingSchema = z.object({
+    campaignId: id.nullable(),
+    campaignName: z.string().nullable(),
+    hubId: id.nullable(),
+    hubName: z.string().nullable(),
+    saveCount: z.number().int().min(0),
+}).strict();
+export type Bg3CampaignKeyBinding = z.infer<typeof Bg3CampaignKeyBindingSchema>;
+
+/** `binding: null` = the key is unbound and none of the caller's saves with it is assigned. */
+export const Bg3CampaignKeyBindingResponseSchema = z.object({
+    binding: Bg3CampaignKeyBindingSchema.nullable(),
+}).strict();
+export type Bg3CampaignKeyBindingResponse = z.infer<typeof Bg3CampaignKeyBindingResponseSchema>;
+
 // ---------- writes ----------
 
 const AT_LEAST_ONE = 'Change at least one field';

@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
+  Header,
   HttpCode,
   Param,
   Patch,
@@ -19,6 +21,7 @@ import {
   Bg3CreateCampaignBodySchema,
   Bg3DefaultCampaignBodySchema,
   Bg3UpdateCampaignBodySchema,
+  type Bg3CampaignKeyBindingResponse,
   type Bg3CampaignSummary,
 } from '@raid-ledger/contract';
 import type { AuthenticatedExpressRequest } from '../../../auth/types';
@@ -27,6 +30,7 @@ import {
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
+import { BG3_NO_STORE } from '../read/bg3-read.controller';
 import { bg3IdPipe } from './bg3-id.pipe';
 import { Bg3CampaignsService } from './bg3-campaigns.service';
 
@@ -77,6 +81,17 @@ export class Bg3CampaignsController {
       'Invalid body',
     );
     return this.campaigns.update(campaignId, req.user, parsed);
+  }
+
+  /** ROK-1960: where the caller's own saves with this key sit (the upload's cross-hub confirm). */
+  @Get('me/campaign-keys/:campaignKey')
+  @Header('Cache-Control', BG3_NO_STORE)
+  keyBinding(
+    @Param('campaignKey') key: string,
+    @Req() req: AuthenticatedExpressRequest,
+  ): Promise<Bg3CampaignKeyBindingResponse> {
+    const k = parseOr400(Bg3CampaignKeySchema, key, 'Invalid campaign key');
+    return this.campaigns.keyBinding(req.user, k);
   }
 
   @Put('me/campaign-keys/:campaignKey')
