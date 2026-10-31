@@ -522,7 +522,10 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
 
     expect(res.status).toBe(200);
     await postedChannels(sendEmbed, bystander, eventId);
-    expect(await settledChannels(sendEmbed)).toEqual([GAME_CHANNEL]);
+    // Every post went to the game channel (the poll's own card may land there too).
+    expect(new Set(await settledChannels(sendEmbed))).toEqual(
+      new Set([GAME_CHANNEL]),
+    );
   });
 
   it('standalone, expired-path lock-in (createEventFromSlot → createLockedInEvent): no lineup card, the DM still goes out', async () => {
@@ -548,7 +551,10 @@ describe('ROK-2054 standalone lock-in posts no lineup channel card (integration)
     expect(res.status).toBe(201);
     const eventId = res.body.eventId as number;
     await postedChannels(sendEmbed, bystander, eventId);
-    expect(await settledChannels(sendEmbed)).toEqual([GAME_CHANNEL]);
+    // Every post went to the game channel (the poll's own card may land there too).
+    expect(new Set(await settledChannels(sendEmbed))).toEqual(
+      new Set([GAME_CHANNEL]),
+    );
   });
 
   it('community lineup: the EVENT CREATED card still posts to the default channel', async () => {
