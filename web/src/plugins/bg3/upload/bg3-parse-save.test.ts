@@ -7,10 +7,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Bg3SavePayloadSchema } from '@raid-ledger/contract';
 import { Bg3ParseError, bg3ParseErrorMessage, type Bg3ParseErrorCode } from './bg3-parse-errors';
 import { BG3_SAVE_MAX_BYTES, parseBg3Save, selectBg3SaveSource, sha256Hex } from './bg3-parse-save';
+import { hasSubtleCrypto } from './bg3-sha256';
 import type { Bg3SaveInspection } from './vendor/rl_collectors_web';
 
 const inspectBg3SaveInWorker = vi.fn<(bytes: ArrayBuffer) => Promise<Bg3SaveInspection>>();
@@ -116,6 +117,18 @@ describe('parseBg3Save — error rows (spec section 7)', () => {
         expect(error).toBeInstanceOf(Bg3ParseError);
         expect(error instanceof Bg3ParseError && error.code).toBe('invalid_payload');
         expect(error instanceof Bg3ParseError && error.detail).toMatch(/Save Name|saveName/);
+    });
+});
+
+describe('sha256Hex — insecure context (no crypto.subtle)', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('still hashes via the pure-JS fallback, with the WebCrypto answer', async () => {
+        vi.stubGlobal('crypto', { subtle: undefined });
+        expect(hasSubtleCrypto()).toBe(false);
+        expect(await sha256Hex('x')).toBe('2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881');
     });
 });
 
