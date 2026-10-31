@@ -67,6 +67,8 @@ export class FakeGraphCalendarApi {
   readonly requests: GraphSeenRequest[] = [];
   /** Items per page on every list (set low to force `@odata.nextLink`). */
   pageSize = 250;
+  /** Item 4: `calendarView` drops `$expand` (no property array at all). */
+  ignoreViewExpand = false;
   private seq = 0;
   private readonly failures: MicrosoftHttpResponse[] = [];
 
@@ -230,6 +232,7 @@ export class FakeGraphCalendarApi {
     const found = this.findEvent(eventId);
     const cal = found ? this.calendars.get(found.calendarId) : undefined;
     if (!found || !cal) return reply(404, fixture('error-404'));
+    if (method === 'GET') return reply(200, found.event);
     if (method === 'DELETE') {
       cal.events.delete(eventId);
       return reply(204, null);
@@ -254,7 +257,15 @@ export class FakeGraphCalendarApi {
     const id = view[1] ? decodeURIComponent(view[1]) : FAKE_DEFAULT_CALENDAR_ID;
     const cal = this.calendars.get(id);
     if (!cal) return reply(404, fixture('error-404'));
-    return this.page(fullUrl, params, inWindow(cal, params));
+    const rows = inWindow(cal, params).map((e) => this.viewRow(e));
+    return this.page(fullUrl, params, rows);
+  }
+
+  /** Honoured expand: always the array (empty when not ours). */
+  private viewRow(e: Json): Json {
+    const { singleValueExtendedProperties: props, ...rest } = e;
+    if (this.ignoreViewExpand) return rest;
+    return { ...rest, singleValueExtendedProperties: props ?? [] };
   }
 
   private calendarRows(): Json[] {

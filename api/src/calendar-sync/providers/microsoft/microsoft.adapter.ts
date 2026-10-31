@@ -35,6 +35,7 @@ import type {
   TimeRange,
 } from '../calendar-provider.interface';
 import { normalizeGraphEvent } from './microsoft-normalize.helpers';
+import { resolveCopyIds } from './microsoft-copy-id-fallback.helpers';
 import {
   buildCalendarListUrl,
   buildCalendarViewUrl,
@@ -179,7 +180,7 @@ export class MicrosoftCalendarAdapter
       else if (read === 'refused') refused.push(calendarId);
       else {
         if (read.truncated) truncated += 1;
-        blocks.push(...read.items.flatMap((i) => normalizeGraphEvent(i) ?? []));
+        blocks.push(...(await this.busyBlocksOf(token, read.items)));
       }
     }
     if (truncated > 0) {
@@ -254,6 +255,25 @@ export class MicrosoftCalendarAdapter
   ): Promise<void> {
     const token = accessTokenOf(credentials);
     await ignoreNotFound(deleteMicrosoftCalendar(token, calendarId));
+  }
+
+  /**
+   * Item 4: copy ids via the `$expand` fast path, or the bounded per-event
+   * fallback — one log line says which ran (the live-mailbox check).
+   */
+  private async busyBlocksOf(
+    token: string,
+    items: unknown[],
+  ): Promise<BusyBlock[]> {
+    const read = await resolveCopyIds(token, items);
+    if (read.path === 'fallback') {
+      this.logger.log(
+        `Graph copy-id path=fallback lookups=${read.lookups} capped=${read.capped}`,
+      );
+    } else if (read.path === 'expand') {
+      this.logger.debug('Graph copy-id path=expand');
+    }
+    return read.items.flatMap((i) => normalizeGraphEvent(i) ?? []);
   }
 
   private async client(): Promise<MicrosoftClient> {
