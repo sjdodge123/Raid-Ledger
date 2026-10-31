@@ -1,0 +1,189 @@
+/**
+ * ROK-1960 — "Upload a save" on a BG3 `game_community` hub: a member picks the
+ * committed synthetic Act 2 `.lsv`, the browser parses it (WASM, no
+ * `/companion/*` call before Upload), the preview shows the save name, area and
+ * party, Upload files it into the hub's active campaign and the Party widget
+ * renders the party (spec §6 AC 1–5, §9 Playwright). Desktop AND mobile.
+ *
+ * Fixture: `POST /admin/test/bg3/seed-hub` variant `no-saves` (the active
+ * campaign "Tactician run" with the host's saves left unassigned) under a tag
+ * unique to spec × project × worker (`hubSeedTag`); the seed's reset deletes
+ * every save the tag's users uploaded, so each test starts empty. The actor is
+ * `bg3-member-<tag>`, a hub member with no saves of their own.
+ *
+ * The file is sent under a per-run name, so its `file-name` campaign key never
+ * matches an earlier run's. Every write is confirmed against
+ * `GET /plugins/bg3/hubs/:id/snapshot` with `pollForCondition`. No sleeps.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Locator, Page, TestInfo } from '@playwright/test';
+import { test, expect } from './base';
+import { API_BASE, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
+import { signInOnboardedMember } from './browser-session';
+import { hubSeedTag } from './hub-seed';
+
+const LSV_FIXTURE = join(__dirname, '..', '..', 'web', 'src', 'plugins', 'bg3', 'upload', 'fixtures', 'synthetic-act2.lsv');
+/** The fixture's `SaveInfo.json` (see `synthetic-act2.expected.json`). */
+const SAVE_NAME = 'QuickSave_1';
+const WHERE_TEXT = 'Act 2 · Shadow-Cursed Lands';
+const HERO_COUNT = 4;
+const PARTY_SIZE = 5; // 4 heroes + 1 summon
+/** `BG3_SEED_CAMPAIGN_NAME` — the seed's active campaign. */
+const CAMPAIGN_NAME = 'Tactician run';
+const UI_TIMEOUT = 20_000;
+
+interface Seed {
+    hubId: number;
+    memberId: number;
+}
+
+type Snapshot = { empty: true } | { empty: false; party: { isSummon: boolean }[] };
+
+interface UploadFile {
+    name: string;
+    mimeType: string;
+    buffer: Buffer;
+}
+
+/** The bg3 plugin is not active on a fresh env; install, else activate (a sibling worker won). */
+async function ensurePluginActive(token: string, pluginId: string): Promise<void> {
+    const init = { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
+    const install = await fetch(`${API_BASE}/admin/plugins/${pluginId}/install`, init);
+    if (install.ok) return;
+    const activate = await fetch(`${API_BASE}/admin/plugins/${pluginId}/activate`, init);
+    if (!activate.ok) throw new Error(`failed to enable the ${pluginId} plugin: install ${install.status}, activate ${activate.status}`);
+}
+
+async function seedHub(testInfo: TestInfo): Promise<Seed> {
+    const token = await getAdminToken();
+    const body = (await apiPost(token, '/admin/test/bg3/seed-hub', {
+        tag: hubSeedTag('bg3-upload', testInfo),
+        variant: 'no-saves',
+    })) as { hubId?: unknown; users?: { member?: { userId?: unknown } } } | null;
+    const memberId = body?.users?.member?.userId;
+    if (typeof body?.hubId !== 'number' || typeof memberId !== 'number') {
+        throw new Error(`bg3 seed-hub: ${JSON.stringify(body)}`);
+    }
+    return { hubId: body.hubId, memberId };
+}
+
+/** The synthetic save under a name unique to this run (the bare-file campaign key is the file name). */
+function uploadFile(testInfo: TestInfo): UploadFile {
+    const stem = `${hubSeedTag('bg3-upload', testInfo)}-${Date.now().toString(36)}`;
+    return { name: `${stem}.lsv`, mimeType: 'application/octet-stream', buffer: readFileSync(LSV_FIXTURE) };
+}
+
+/** Poll the hub snapshot until the party has `size` members (heroes + summons). */
+async function waitForParty(jwt: string, hubId: number, size: number): Promise<number> {
+    return pollForCondition(
+        async () => {
+            const s = (await apiGet(jwt, `/plugins/bg3/hubs/${hubId}/snapshot`)) as Snapshot | null;
+            if (!s || s.empty || s.party.length !== size) return null;
+            return s.party.filter((m) => !m.isSummon).length;
+        },
+        { timeoutMs: 15_000, description: `bg3 snapshot for hub ${hubId}: party of ${size}` },
+    );
+}
+
+function uploadSheet(page: Page): Locator {
+    return page.getByRole('dialog', { name: 'Upload a save' });
+}
+
+/** Pick the file in the open sheet and wait for the local preview. */
+async function pickSave(page: Page, file: UploadFile): Promise<Locator> {
+    const sheet = uploadSheet(page);
+    await expect(sheet, 'the "Upload a save" sheet opens').toBeVisible();
+    await sheet.getByTestId('bg3-upload-input').setInputFiles(file);
+    const preview = sheet.getByTestId('bg3-upload-preview');
+    await expect(preview, 'the browser parses the .lsv into a preview').toBeVisible({ timeout: UI_TIMEOUT });
+    return preview;
+}
+
+/** Upload the picked save; returns the sheet once the result banner shows. */
+async function submitUpload(page: Page): Promise<Locator> {
+    const sheet = uploadSheet(page);
+    const upload = sheet.getByRole('button', { name: 'Upload', exact: true });
+    await expect(upload, 'Upload is enabled — the active campaign is preselected').toBeEnabled();
+    await upload.click();
+    return sheet;
+}
+
+async function closeWithDone(page: Page): Promise<void> {
+    const sheet = uploadSheet(page);
+    await sheet.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(sheet, 'Done closes the sheet').toHaveCount(0);
+}
+
+function partyList(page: Page): Locator {
+    return page.getByRole('list', { name: 'Party', exact: true });
+}
+
+test.describe('BG3 upload a save (ROK-1960)', () => {
+    test.beforeAll(async () => {
+        await ensurePluginActive(await getAdminToken(), 'bg3');
+    });
+
+    test('Party empty state → Upload a save → preview → Upload → the Party widget shows the party', async ({ page }, testInfo) => {
+        const seed = await seedHub(testInfo);
+        const file = uploadFile(testInfo);
+        const companionCalls: string[] = [];
+        page.on('request', (r) => {
+            if (new URL(r.url()).pathname.includes('/companion/')) companionCalls.push(`${r.method()} ${r.url()}`);
+        });
+        const jwt = await signInOnboardedMember(page, seed.memberId);
+        await page.goto(`/hubs/${seed.hubId}`);
+        const empty = page.getByTestId('bg3-party-empty');
+        await expect(empty, 'the campaign has no saves yet').toContainText(`No saves in ${CAMPAIGN_NAME} yet.`, { timeout: UI_TIMEOUT });
+        await empty.getByRole('button', { name: 'Upload a save' }).click();
+
+        const preview = await pickSave(page, file);
+        await expect(preview, 'the preview names the save').toContainText(SAVE_NAME);
+        await expect(preview, 'the preview shows the act and area').toContainText(WHERE_TEXT);
+        await expect(preview.getByRole('listitem'), 'the preview lists the whole party').toHaveCount(PARTY_SIZE);
+        expect(companionCalls, 'parsing and previewing never call /companion/*').toEqual([]);
+
+        const sheet = await submitUpload(page);
+        await expect(sheet.getByTestId('bg3-upload-banner-success'), 'the success banner names the campaign').toHaveText(
+            `Uploaded to ${CAMPAIGN_NAME}`,
+            { timeout: UI_TIMEOUT },
+        );
+        expect(await waitForParty(jwt, seed.hubId, PARTY_SIZE), 'the uploaded save is the 4-hero party').toBe(HERO_COUNT);
+        await closeWithDone(page);
+
+        await expect(partyList(page).getByTestId('bg3-party-slot'), 'one Party tile per hero').toHaveCount(HERO_COUNT, {
+            timeout: UI_TIMEOUT,
+        });
+        await expect(page.getByTestId('bg3-party-summons'), 'the summon is listed apart from the heroes').toBeVisible();
+        await expect(page.getByTestId('bg3-where-place'), 'Where we are shows the uploaded area').toHaveText(WHERE_TEXT, {
+            timeout: UI_TIMEOUT,
+        });
+    });
+
+    test('Campaign tab → Upload a save twice → the second says "Already uploaded."', async ({ page }, testInfo) => {
+        const seed = await seedHub(testInfo);
+        const file = uploadFile(testInfo);
+        const jwt = await signInOnboardedMember(page, seed.memberId);
+        await page.goto(`/hubs/${seed.hubId}#campaign`);
+        const tab = page.getByTestId('bg3-campaign-tab');
+        const openSheet = tab.getByRole('button', { name: 'Upload a save' });
+        await expect(openSheet, 'a member sees Upload a save under Your saves').toBeVisible({ timeout: UI_TIMEOUT });
+
+        await openSheet.click();
+        await pickSave(page, file);
+        await expect((await submitUpload(page)).getByTestId('bg3-upload-banner-success'), 'the first upload lands').toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await waitForParty(jwt, seed.hubId, PARTY_SIZE);
+        await closeWithDone(page);
+
+        await openSheet.click();
+        await pickSave(page, file);
+        const sheet = await submitUpload(page);
+        await expect(sheet.getByTestId('bg3-upload-banner-info'), 'the replay is reported, not filed twice').toHaveText('Already uploaded.', {
+            timeout: UI_TIMEOUT,
+        });
+        await expect(sheet.getByTestId('bg3-upload-banner-success'), 'no success banner on a replay').toHaveCount(0);
+        await closeWithDone(page);
+    });
+});
