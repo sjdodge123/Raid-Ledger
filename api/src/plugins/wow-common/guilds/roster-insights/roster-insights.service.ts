@@ -24,13 +24,19 @@ import {
   countLockoutReporters,
 } from './roster-insights.lockouts';
 import { computeLastSeen } from './roster-insights.last-seen';
+import { computeGear } from './roster-insights.gear';
+import {
+  loadRaidProgress,
+  type RaidHubRow,
+} from './roster-insights.raid-progress';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
 import {
   emptyInsights,
+  joinFacts,
   loadInsightRawRows,
-  toInsightRow,
+  type JoinedRoster,
 } from './roster-insights.refs';
-import type { InsightRow, InsightsAudience } from './roster-insights.types';
+import type { InsightsAudience } from './roster-insights.types';
 
 /**
  * ROK-1913 (H5) — `GET plugins/wow/guilds/:id/roster-insights`. One roster
@@ -83,9 +89,8 @@ export class RosterInsightsService {
       return emptyInsights();
     // Snapshot time first: if an import lands between the two reads, the
     // footer shows presence as older than it is, never newer.
-    const snapshotAt =
-      audience === 'member' ? await this.loadSnapshotAt(guildId) : null;
-    const all = await this.loadRows(adapter, guildId);
+    const hub = audience === 'member' ? await this.loadHubRow(guildId) : null;
+    const { rows: all, linkedUserIds } = await this.loadRows(adapter, guildId);
     const rows = onlyMains ? mainsOnly(all) : all;
     return {
       classes: computeClasses(rows),
@@ -97,28 +102,53 @@ export class RosterInsightsService {
             lockouts: computeLockouts(rows, Date.now()),
             lockoutReporters: countLockoutReporters(rows),
             // Presence is per character: the full roster, never mainsOnly (D4).
-            lastSeen: { ...computeLastSeen(all), snapshotAt },
+            lastSeen: { ...computeLastSeen(all), snapshotAt: hub?.at ?? null },
+            // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
+            gear: computeGear(all),
+            ...(await this.raidSection(hub, linkedUserIds)),
           }
         : {}),
       freshness: computeFreshness(rows),
     };
   }
 
-  /** The guild's latest snapshot time — the export the presence rows are from. */
-  private async loadSnapshotAt(guildId: number): Promise<string | null> {
-    const [g] = await this.db
-      .select({ at: schema.guilds.lastSnapshotAt })
-      .from(schema.guilds)
-      .where(eq(schema.guilds.id, guildId))
+  /** ROK-1917 — `{ raidProgress }` for a WoW guild hub, else nothing. */
+  private async raidSection(
+    hub: RaidHubRow | null,
+    linkedUserIds: readonly number[],
+  ) {
+    // Pulls are guild-level: the FULL roster's linked users report (D5, Q1).
+    const raidProgress = await loadRaidProgress(this.db, hub, linkedUserIds);
+    return raidProgress ? { raidProgress } : {};
+  }
+
+  /**
+   * The hub row, read once per member request: its latest snapshot time (the
+   * export the presence rows are from) and the ROK-1917 pull scope.
+   */
+  private async loadHubRow(
+    guildId: number,
+  ): Promise<(RaidHubRow & { at: string | null }) | null> {
+    const g = schema.guilds;
+    const [row] = await this.db
+      .select({
+        at: g.lastSnapshotAt,
+        gameId: g.gameId,
+        region: g.region,
+        nameKey: g.nameKey,
+        kind: g.kind,
+      })
+      .from(g)
+      .where(eq(g.id, guildId))
       .limit(1);
-    return g?.at ? g.at.toISOString() : null;
+    return row ? { ...row, at: row.at ? row.at.toISOString() : null } : null;
   }
 
   /** Roster rows (one per member / community character) with their facts. */
   private async loadRows(
     adapter: HubKindAdapter | undefined,
     guildId: number,
-  ): Promise<InsightRow[]> {
+  ): Promise<JoinedRoster> {
     const raw = await loadInsightRawRows(this.db, adapter, guildId);
     const refs: RosterCharRef[] = raw.map((r) => ({
       key: r.key,
@@ -133,10 +163,6 @@ export class RosterInsightsService {
         `roster-insights guild=${guildId} truncated at the resolver cap (${refs.length} rows)`,
       );
     }
-    // Rows past the resolver cap have no facts and are left out.
-    return raw.flatMap((r) => {
-      const resolved = facts.get(r.key);
-      return resolved ? [toInsightRow(r, resolved)] : [];
-    });
+    return joinFacts(raw, facts);
   }
 }

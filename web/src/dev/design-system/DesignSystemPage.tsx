@@ -25,6 +25,8 @@ import { HubWidgetsSection } from './hub-widgets-section';
 import { ArrangeListSection } from './arrange-list-section';
 import { MasonryGridSection } from './masonry-grid-section';
 import { MemberListSection } from './member-list-section';
+import { WizardSubstepRailSection } from './wizard-substep-rail-section';
+import { CrestSection } from './crest-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -40,6 +42,8 @@ const CalendarHubSection = lazy(() => import('./calendar-hub-section')
 
 const MeterHistogramSection = lazy(() => import('./meter-histogram-section')
     .then((m) => ({ default: m.MeterHistogramSection })));
+const CrestPickerSection = lazy(() => import('./crest-picker-section')
+    .then((m) => ({ default: m.CrestPickerSection })));
 
 function SamplesLoading(): JSX.Element {
     return <p className="text-sm text-muted">Loading samples…</p>;
@@ -61,6 +65,9 @@ const NAV = [
     { id: 'map-viewport', label: 'Map viewport' },
     { id: 'hub-widgets', label: 'Hub widgets' },
     { id: 'meter-histogram', label: 'Meter + histogram' },
+    { id: 'wizard-substep-rail', label: 'Wizard rail' },
+    { id: 'crest', label: 'Crest' },
+    { id: 'crest-picker', label: 'Crest picker' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -91,7 +98,8 @@ function PageHeader(): JSX.Element {
     );
 }
 
-function Sections(): JSX.Element {
+/** Tokens, primitives and the earlier pattern rows. */
+function FoundationSections(): JSX.Element {
     return (
         <>
             <TokensSection />
@@ -105,6 +113,14 @@ function Sections(): JSX.Element {
             <WeekStripSection />
             <GroupMarksSection />
             <CalendarBusySection />
+        </>
+    );
+}
+
+/** The later pattern rows; one Suspense boundary per lazy section. */
+function FeatureSections(): JSX.Element {
+    return (
+        <>
             {/* One boundary per lazy section: under a shared boundary React 19 stops at the
                 first child that suspends, so the second chunk's import only started on a later
                 render — a load waterfall that hid BOTH sections until it finished (PR #1820 CI). */}
@@ -123,6 +139,20 @@ function Sections(): JSX.Element {
             <ArrangeListSection />
             <MasonryGridSection />
             <MemberListSection />
+            <WizardSubstepRailSection />
+            <CrestSection />
+            <Suspense fallback={<SamplesLoading />}>
+                <CrestPickerSection />
+            </Suspense>
+        </>
+    );
+}
+
+function Sections(): JSX.Element {
+    return (
+        <>
+            <FoundationSections />
+            <FeatureSections />
         </>
     );
 }

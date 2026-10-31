@@ -40,6 +40,9 @@ import { Req } from '@nestjs/common';
 import type { AuthenticatedExpressRequest } from '../auth/types';
 import { PasswordChangeSessionService } from '../auth/password-change/password-change-session.service';
 import { setRefreshCookie } from '../auth/refresh/refresh-cookie.helpers';
+import { isCloudFlavour } from '../common/flavour/flavour';
+import { readClaimState } from '../setup-claim/claim-state.repository';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 /** Change-password response; `access_token` replaces the caller's revoked one. */
 type ChangePasswordResult = {
@@ -61,6 +64,7 @@ export class OnboardingController {
     private readonly settingsService: SettingsService,
     private readonly localAuthService: LocalAuthService,
     private readonly passwordSession: PasswordChangeSessionService,
+    private readonly discordClient: DiscordBotClientService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -71,8 +75,11 @@ export class OnboardingController {
    */
   @Get('status')
   async getStatus(): Promise<OnboardingStatusDto> {
-    const settings = await this.fetchOnboardingSettings();
-    return this.buildStatusDto(settings);
+    const [settings, claim] = await Promise.all([
+      this.fetchOnboardingSettings(),
+      readClaimState(this.db),
+    ]);
+    return this.buildStatusDto(settings, claim.claimedAt !== null);
   }
 
   private async fetchOnboardingSettings() {
@@ -84,6 +91,7 @@ export class OnboardingController {
       blizzardConfigured,
       igdbConfigured,
       discordConfigured,
+      discordBotConfigured,
     ] = await Promise.all([
       this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
       this.settingsService.get(SETTING_KEYS.ONBOARDING_CURRENT_STEP),
@@ -92,6 +100,7 @@ export class OnboardingController {
       this.settingsService.isBlizzardConfigured(),
       this.settingsService.isIgdbConfigured(),
       this.settingsService.isDiscordConfigured(),
+      this.settingsService.isDiscordBotConfigured(),
     ]);
     return {
       completedRaw,
@@ -101,11 +110,13 @@ export class OnboardingController {
       blizzardConfigured,
       igdbConfigured,
       discordConfigured,
+      discordBotConfigured,
     };
   }
 
   private buildStatusDto(
     s: Awaited<ReturnType<OnboardingController['fetchOnboardingSettings']>>,
+    claimed: boolean,
   ): OnboardingStatusDto {
     return {
       completed: s.completedRaw === 'true',
@@ -114,10 +125,16 @@ export class OnboardingController {
         3,
       ),
       steps: {
-        secureAccount: false,
+        // ROK-1701 OQ-8b: on cloud the claim set the password; NAS keeps the step.
+        secureAccount: isCloudFlavour() && claimed,
         communityIdentity: !!(s.communityName || s.defaultTimezone),
         connectPlugins:
           s.blizzardConfigured || s.igdbConfigured || s.discordConfigured,
+        // ROK-1703: OAuth saved + bot token saved + bot connected (D-3).
+        discord:
+          s.discordConfigured &&
+          s.discordBotConfigured &&
+          this.discordClient.isConnected(),
       },
     };
   }

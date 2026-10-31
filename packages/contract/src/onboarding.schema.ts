@@ -11,7 +11,17 @@ import { z } from 'zod';
 export const OnboardingStepStatusSchema = z.object({
   secureAccount: z.boolean(),
   communityIdentity: z.boolean(),
+  /**
+   * @deprecated ROK-1703: the Plugins step became the Discord step. Still
+   * filled in (blizzard || igdb || discord OAuth) for one release so older
+   * clients keep parsing; read `discord` instead.
+   */
   connectPlugins: z.boolean(),
+  /**
+   * ROK-1703: the wizard's Discord step is done — Discord OAuth saved, a bot
+   * token saved, and the bot connected. Optional (additive).
+   */
+  discord: z.boolean().optional(),
 });
 
 export type OnboardingStepStatusDto = z.infer<typeof OnboardingStepStatusSchema>;

@@ -5,6 +5,7 @@
  * and the FIRST two channels, ROK-1768 the SECOND game and the LAST two).
  */
 import { deleteBinding } from './fixtures.js';
+import { foreignJoinPostChannelIds } from './join-post-channel.js';
 import type { ApiClient } from './api.js';
 import type { DiscordChannel, TestContext } from './types.js';
 
@@ -51,7 +52,7 @@ export interface NonPoolFixtures {
   games: { id: number; name: string }[];
   /** Games with no channel-pool binding. */
   freeGames: { id: number; name: string }[];
-  /** Text channels that are neither the default nor a pool channel. */
+  /** Text channels that are not the default, a pool or another run's join-post channel. */
   texts: DiscordChannel[];
 }
 
@@ -59,7 +60,10 @@ export interface NonPoolFixtures {
  * The candidates a Quick Play smoke may pick from: a card routed by the wrong
  * tier (pool or default channel) can never land where an assertion looks.
  */
-export async function nonPoolFixtures(ctx: TestContext): Promise<NonPoolFixtures> {
+export async function nonPoolFixtures(
+  ctx: TestContext,
+  poolIndex?: number,
+): Promise<NonPoolFixtures> {
   const pool = ctx.channelPool ?? [];
   const poolGames = new Set(pool.map((s) => s.gameId));
   const poolChannels = new Set(pool.map((s) => s.channelId));
@@ -69,8 +73,30 @@ export async function nonPoolFixtures(ctx: TestContext): Promise<NonPoolFixtures
   return {
     games: res.data,
     freeGames: res.data.filter((g) => !poolGames.has(g.id)),
-    texts: ctx.textChannels.filter(
-      (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
-    ),
+    texts: quickPlayTexts(ctx, poolChannels, poolIndex),
   };
+}
+
+/** Quick Play binds two channels; fewer than this and it must share. */
+const QUICK_PLAY_MIN_TEXTS = 2;
+
+/**
+ * Non-default, non-pool text channels, minus the join-post channel another
+ * lease run owns (ROK-1788) — unless that leaves Quick Play fewer than two:
+ * the CI guild has only `#general` + `#wow-channel` besides the default, both
+ * join-post reserves, so there Quick Play shares them as it did before.
+ */
+function quickPlayTexts(
+  ctx: TestContext,
+  poolChannels: Set<string>,
+  poolIndex: number | undefined,
+): DiscordChannel[] {
+  const free = ctx.textChannels.filter(
+    (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
+  );
+  const foreign = foreignJoinPostChannelIds(
+    ctx.textChannels, ctx.defaultChannelId, poolIndex,
+  );
+  const own = free.filter((c) => !foreign.has(c.id));
+  return own.length >= QUICK_PLAY_MIN_TEXTS ? own : free;
 }

@@ -33,8 +33,20 @@ const PHASE_LABELS: [LineupPhase, string][] = [
   ['decided', 'Scheduling'],
 ];
 
+/**
+ * ROK-2054: the terminal step — the event exists, so every phase is done and
+ * the last one reads "Scheduled" rather than the in-progress "Scheduling".
+ */
+const SCHEDULED_BREADCRUMB = [
+  ...PHASE_LABELS.slice(0, -1).map(([, name]) => name),
+  'Scheduled',
+]
+  .map((name) => `\u2705 ${name}`)
+  .join('  \u203A  ');
+
 /** Build a breadcrumb with completed phases struck through. */
 function phaseBreadcrumb(current: LineupPhase): string {
+  if (current === 'scheduled') return SCHEDULED_BREADCRUMB;
   const idx = PHASE_LABELS.findIndex(([k]) => k === current);
   return PHASE_LABELS.map(([key, name], i) => {
     if (i < idx) return `\u2705 ${name}`;

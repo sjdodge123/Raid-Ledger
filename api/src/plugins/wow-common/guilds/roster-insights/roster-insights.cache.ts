@@ -6,6 +6,7 @@ import { memorySwr, type MemoryCacheEntry } from '../../../../common/swr-cache';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import { liveMemberPredicate } from '../../../../guilds/community/community-membership.queries';
+import { pullScopeHubIds, type PullScope } from './roster-insights.pull-scope';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
 export const ROSTER_INSIGHTS_TTL_MS = 5 * 60 * 1000;
@@ -95,6 +96,15 @@ export class RosterInsightsCache {
     for (const { guildId } of [...guildRows, ...hubRows])
       this.invalidateGuild(guildId);
   }
+
+  /**
+   * ROK-1917 final P2 — after raid writes: every `wow_guild` hub of the pull
+   * scope (an alt without a `guild_members` row finds no guild above).
+   */
+  async invalidateForPullScope(scope: PullScope): Promise<void> {
+    for (const id of await pullScopeHubIds(this.db, scope))
+      this.invalidateGuild(id);
+  }
 }
 
 /**
@@ -113,17 +123,22 @@ export function insightsKey(
 }
 
 /**
- * Post-import hook: drop the imported character's guilds from the insights
- * cache. Never throws — a failed invalidation must not fail an applied import.
+ * Post-import hook: drop the imported character's guilds — and, after raid
+ * writes, every hub of the pull scope (ROK-1917) — from the insights cache.
+ * Never throws — a failed invalidation must not fail an applied import.
  */
 export async function invalidateRosterInsights(
-  cache: Pick<RosterInsightsCache, 'invalidateForCharacter'>,
+  cache: Pick<
+    RosterInsightsCache,
+    'invalidateForCharacter' | 'invalidateForPullScope'
+  >,
   characterId: string | null,
   logger: Pick<Logger, 'warn'>,
+  pullScope?: PullScope,
 ): Promise<void> {
-  if (characterId === null) return;
   try {
-    await cache.invalidateForCharacter(characterId);
+    if (characterId !== null) await cache.invalidateForCharacter(characterId);
+    if (pullScope) await cache.invalidateForPullScope(pullScope);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn(`roster-insights invalidation failed: ${msg}`);

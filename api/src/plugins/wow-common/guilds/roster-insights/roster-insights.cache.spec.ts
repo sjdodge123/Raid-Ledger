@@ -7,7 +7,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import type * as schema from '../../../../drizzle/schema';
 import { _resetInFlightRefreshes } from '../../../../common/swr-cache';
-import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
+import {
+  RosterInsightsCache,
+  insightsKey,
+  invalidateRosterInsights,
+} from './roster-insights.cache';
 
 const dto = (tag: string): WowRosterInsightsDto =>
   ({ classes: [{ class: tag, count: 1 }] }) as unknown as WowRosterInsightsDto;
@@ -69,5 +73,41 @@ describe('RosterInsightsCache', () => {
     const again = await cache.get(key, fetcher);
     expect(again).toEqual(dto('fresh'));
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** A db whose single `select … from … where` resolves to `rows`. */
+function dbReturning(rows: { id: number }[]) {
+  const where = jest.fn().mockResolvedValue(rows);
+  const db = { select: () => ({ from: () => ({ where }) }) };
+  return db as unknown as PostgresJsDatabase<typeof schema>;
+}
+
+describe('invalidateForPullScope (ROK-1917 final P2)', () => {
+  it("drops every wow_guild hub of the pull's scope, and only those", async () => {
+    const cache = new RosterInsightsCache(dbReturning([{ id: 7 }, { id: 9 }]));
+    const fetcher = jest.fn().mockResolvedValue(dto('A'));
+    for (const id of [7, 8, 9])
+      await cache.get(insightsKey(id, 'member', false), fetcher);
+    await cache.invalidateForPullScope({
+      gameId: 1,
+      region: 'us',
+      guildKey: 'g',
+    });
+    for (const id of [7, 8, 9])
+      await cache.get(insightsKey(id, 'member', false), fetcher);
+    // 3 initial fetches + refetches of hubs 7 and 9 only.
+    expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it('the post-import hook invalidates the raid scope next to the character', async () => {
+    const cache = {
+      invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
+      invalidateForPullScope: jest.fn().mockResolvedValue(undefined),
+    };
+    const scope = { gameId: 1, region: 'us', guildKey: 'g' };
+    await invalidateRosterInsights(cache, 'c1', { warn: jest.fn() }, scope);
+    expect(cache.invalidateForCharacter).toHaveBeenCalledWith('c1');
+    expect(cache.invalidateForPullScope).toHaveBeenCalledWith(scope);
   });
 });

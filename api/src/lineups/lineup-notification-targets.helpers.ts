@@ -8,6 +8,7 @@ import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { resolveUserTimezones } from '../notifications/timezone.helpers';
+import { standaloneLineupFlag } from './standalone-poll/standalone-lineup-flag.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -144,4 +145,24 @@ export async function findInviteeRecipients(
     defaultTimezone,
   );
   return { members, tzByUser };
+}
+
+/**
+ * Whether `lineupId` is a standalone scheduling poll's storage row
+ * (`phase_duration_override.standalone`, ROK-1067). ROK-2054: a standalone
+ * lock-in posts no lineup-family channel card — the event's own embed, in the
+ * game channel, is the announcement.
+ */
+export async function isStandaloneLineup(
+  db: Db,
+  lineupId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({
+      standalone: standaloneLineupFlag(),
+    })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  return row?.standalone ?? false;
 }

@@ -40,6 +40,7 @@ import {
 } from './addon-import.run';
 import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import { readRaidPullScope } from './addon-import-raid.scope';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { flagIfRosterHeld } from './addon-import-guild.flag';
 
@@ -136,6 +137,7 @@ export class AddonImportService {
       this.insightsCache,
       characterId,
       this.logger,
+      readRaidPullScope(res),
     );
   }
 

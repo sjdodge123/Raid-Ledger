@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminSetupWizard } from './admin-setup-wizard';
@@ -45,8 +45,10 @@ vi.mock('../../components/admin/onboarding/community-identity-step', () => ({
     CommunityIdentityStep: () => <div data-testid="community-identity-step" />,
 }));
 
-vi.mock('../../components/admin/onboarding/connect-plugins-step', () => ({
-    ConnectPluginsStep: () => <div data-testid="connect-plugins-step" />,
+vi.mock('../../components/admin/onboarding/discord/discord-setup-step', () => ({
+    DiscordSetupStep: ({ onFinishLater }: { onFinishLater: () => void }) => (
+        <div data-testid="discord-setup-step"><button onClick={onFinishLater}>Finish later</button></div>
+    ),
 }));
 
 vi.mock('../../components/admin/onboarding/done-step', () => ({
@@ -55,6 +57,7 @@ vi.mock('../../components/admin/onboarding/done-step', () => ({
 
 import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useOnboarding } from '../../hooks/use-onboarding';
+import { toast } from '../../lib/toast';
 
 const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 const mockIsAdmin = isAdmin as unknown as ReturnType<typeof vi.fn>;
@@ -84,17 +87,22 @@ function createQueryClient() {
     return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderWithRouter(ui: React.ReactElement) {
-    return render(
-        <QueryClientProvider client={createQueryClient()}>
+function routerTree(ui: React.ReactElement, client: QueryClient) {
+    return (
+        <QueryClientProvider client={client}>
             <MemoryRouter initialEntries={['/admin/setup']}>
                 <Routes>
                     <Route path="/admin/setup" element={ui} />
                     <Route path="/calendar" element={<div>Calendar</div>} />
+                    <Route path="/admin/settings/discord" element={<div>Discord settings</div>} />
                 </Routes>
             </MemoryRouter>
         </QueryClientProvider>
     );
+}
+
+function renderWithRouter(ui: React.ReactElement) {
+    return render(routerTree(ui, createQueryClient()));
 }
 
 describe('AdminSetupWizard — part 1', () => {
@@ -186,7 +194,7 @@ describe('AdminSetupWizard — part 2', () => {
             // These are rendered in the hidden md:flex stepper
             expect(screen.getAllByText(/secure account/i).length).toBeGreaterThan(0);
             expect(screen.getAllByText(/community/i).length).toBeGreaterThan(0);
-            expect(screen.getAllByText(/plugins/i).length).toBeGreaterThan(0);
+            expect(screen.getAllByText(/^discord$/i).length).toBeGreaterThan(0);
             expect(screen.getAllByText(/done/i).length).toBeGreaterThan(0);
         });
 
@@ -240,7 +248,7 @@ describe('AdminSetupWizard — part 3', () => {
             expect(screen.getByTestId('community-identity-step')).toBeInTheDocument();
         });
 
-        it('renders ConnectPluginsStep on step 2', () => {
+        it('renders the Discord step on step 2 (ROK-1703)', async () => {
             mockUseOnboarding.mockReturnValue({
                 ...defaultOnboarding,
                 statusQuery: {
@@ -250,7 +258,7 @@ describe('AdminSetupWizard — part 3', () => {
             });
 
             renderWithRouter(<AdminSetupWizard />);
-            expect(screen.getByTestId('connect-plugins-step')).toBeInTheDocument();
+            expect(await screen.findByTestId('discord-setup-step')).toBeInTheDocument();
         });
 
         it('renders DoneStep on step 3', () => {
@@ -313,4 +321,41 @@ describe('AdminSetupWizard — part 4', () => {
         });
     });
 
+});
+
+describe('AdminSetupWizard — Finish later (ROK-1703 D-9)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'admin', role: 'admin', discordId: 'local:admin' } });
+        mockIsAdmin.mockReturnValue(true);
+    });
+
+    it('completes onboarding, toasts the Admin → Discord hint and opens /admin/settings/discord', async () => {
+        const mutate = vi.fn((_: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        mockUseOnboarding.mockReturnValue({
+            ...defaultOnboarding,
+            statusQuery: { isLoading: false, data: { currentStep: 2, completed: false, steps: {} } },
+            completeOnboarding: { mutate, isPending: false },
+        });
+        renderWithRouter(<AdminSetupWizard />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Finish later' }));
+        expect(mutate).toHaveBeenCalledTimes(1);
+        expect(toast.info).toHaveBeenCalledWith('Pick a default channel any time in Admin \u2192 Discord');
+        expect(mockNavigate).toHaveBeenCalledWith('/admin/settings/discord', { replace: true });
+    });
+
+    it('lands on Admin → Discord, not Calendar, when the completed status arrives while the wizard is still mounted', async () => {
+        // The real navigate runs in a transition and the lazy Discord page suspends, so the refetched
+        // `completed: true` reaches the still-mounted wizard first — model that with a pending mutate.
+        const mutate = vi.fn();
+        const pending = { ...defaultOnboarding, statusQuery: { isLoading: false, data: { currentStep: 2, completed: false, steps: {} } }, completeOnboarding: { mutate, isPending: true } };
+        mockUseOnboarding.mockReturnValue(pending);
+        const client = createQueryClient();
+        const view = render(routerTree(<AdminSetupWizard />, client));
+        fireEvent.click(await screen.findByRole('button', { name: 'Finish later' }));
+        mockUseOnboarding.mockReturnValue({ ...pending, statusQuery: { isLoading: false, data: { currentStep: 2, completed: true, steps: {} } } });
+        view.rerender(routerTree(<AdminSetupWizard />, client));
+        expect(await screen.findByText('Discord settings')).toBeInTheDocument();
+        expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
+    });
 });

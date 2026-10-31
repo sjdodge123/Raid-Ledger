@@ -6,6 +6,8 @@ import { AdminSessionController } from './admin-session.controller';
 import { AdminGamesController } from './settings-games.controller';
 import { BrandingController } from './branding.controller';
 import { DemoTestCoreController } from './demo-test-core.controller';
+import { DemoTestClaimController } from './demo-test-claim.controller';
+import { SetupClaimModule } from '../setup-claim/setup-claim.module';
 import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
 import { NotificationModule } from '../notifications/notification.module';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
@@ -46,6 +48,7 @@ import { DemoTestJoinPostController } from './demo-test-join-post.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CooptimusSettingsController } from './cooptimus-settings.controller';
+import { DemoDataSettingsController } from './demo-data-settings.controller';
 import { CooptimusModule } from '../cooptimus/cooptimus.module';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
 import { OnboardingController } from './onboarding.controller';
@@ -80,6 +83,8 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
+    // ROK-1701: the shared in-memory ClaimLockService for the claim fixture.
+    SetupClaimModule,
     SettingsModule,
     BackupModule,
     VersionModule,
@@ -121,6 +126,7 @@ import { UsersModule } from '../users/users.module';
     AdminGamesController,
     BrandingController,
     DemoTestCoreController,
+    DemoTestClaimController,
     DemoTestDeactivationController,
     DemoTestVoiceController,
     DemoTestLfgController,
@@ -159,6 +165,7 @@ import { UsersModule } from '../users/users.module';
     SlashCommandTestController,
     ItadSettingsController,
     CooptimusSettingsController,
+    DemoDataSettingsController,
     CommunityInsightsSettingsController,
     OnboardingController,
     GamesDedupAuditController,

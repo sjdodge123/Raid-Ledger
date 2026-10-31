@@ -4,7 +4,7 @@
  * D5/D6). The More drawer no longer lists hubs (ROK-1890).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MyGuild } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -52,5 +52,36 @@ describe('kind chips in the hub rows (ROK-1875 D5/D6)', () => {
         const row = screen.getByTestId('guild-entry-row');
         expect(screen.getByTestId('hub-kind-chip')).toHaveTextContent('Server');
         expect(row).not.toHaveTextContent('SERVER');
+    });
+});
+
+/** ROK-1814 Q8 — a nav row shows crest → game icon → shield. */
+describe('hub row icon precedence (ROK-1814)', () => {
+    const UPLOAD = { source: 'upload', urlSm: '/u/a.sm.webp', urlLg: '/u/a.lg.webp' } as const;
+
+    it('a crest wins over the game icon, at the 24px row size', () => {
+        renderWithProviders(<GuildRows guilds={[{ ...guild(11, 'Iron Vanguard'), gameIconUrl: '/g.png', crest: UPLOAD }]} />);
+        expect(screen.getByTestId('hub-crest')).toHaveClass('h-6', 'w-6');
+        expect(screen.getByTestId('hub-crest-img').getAttribute('src')).toMatch(/\/u\/a\.sm\.webp$/);
+        expect(screen.queryByTestId('guild-entry-game-icon')).toBeNull();
+    });
+
+    it('a crest image that fails to load falls back to the game icon', () => {
+        renderWithProviders(<GuildRows guilds={[{ ...guild(11, 'Iron Vanguard'), gameIconUrl: '/g.png', crest: UPLOAD }]} />);
+        fireEvent.error(screen.getByTestId('hub-crest-img'));
+        expect(screen.getByTestId('guild-entry-game-icon')).toHaveAttribute('src', '/g.png');
+    });
+
+    it('no crest, no game icon → today\'s shield; the phone sheet row uses the 40px box', () => {
+        renderWithProviders(<GuildRows size="lg" guilds={[{ ...guild(11, 'Iron Vanguard'), crest: null }]} />);
+        const crest = screen.getByTestId('hub-crest');
+        expect(crest).toHaveAttribute('data-crest', 'shield');
+        expect(crest).toHaveClass('h-10', 'w-10');
+    });
+
+    it('a preset crest on a row with a game icon shows the preset', () => {
+        renderWithProviders(<GuildRows guilds={[{ ...guild(11, 'Iron Vanguard'), gameIconUrl: '/g.png', crest: { source: 'preset', emblemId: 'oak', fg: 'argent', bg: 'vert' } }]} />);
+        expect(screen.getByTestId('hub-crest')).toHaveAttribute('data-crest', 'preset');
+        expect(screen.queryByTestId('guild-entry-game-icon')).toBeNull();
     });
 });

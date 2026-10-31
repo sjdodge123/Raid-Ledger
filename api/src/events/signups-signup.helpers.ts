@@ -49,6 +49,22 @@ export async function checkAutoBench(
   dto?: CreateSignupDto,
 ): Promise<boolean> {
   if (dto?.slotRole === 'bench') return false;
+  return isEventAtCapacity(tx, eventRow, eventId);
+}
+
+/**
+ * Whether the event's occupied, non-bench roster slots have reached its cap
+ * (`resolveEventCapacity`; no cap ⇒ never full). This is THE definition of
+ * "full": signup auto-bench uses it via `checkAutoBench`, and the lineup
+ * EVENT CREATED card (ROK-2054) uses it for its "full" copy, so the two cannot
+ * drift. A signup with no roster assignment (an unassigned MMO voter) or a
+ * bench assignment does not occupy a slot.
+ */
+export async function isEventAtCapacity(
+  tx: Tx,
+  eventRow: Pick<EventRow, 'slotConfig' | 'maxAttendees'>,
+  eventId: number,
+): Promise<boolean> {
   const capacity = resolveEventCapacity(eventRow);
   if (capacity === null) return false;
   const [countRow] = await tx

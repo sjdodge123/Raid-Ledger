@@ -7,6 +7,7 @@ import { DiscordEmojiService } from './services/discord-emoji.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { RATE_LIMIT_TIERS } from '../throttler/rate-limit.decorator';
 
 let controller: DiscordBotSettingsController;
 let discordBotService: DiscordBotService;
@@ -290,6 +291,21 @@ describe('DiscordBotSettingsController — testConnection: validation', () => {
     await expect(
       controller.testConnection(undefined as unknown as Record<string, string>),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('ROK-1703: rejects a token longer than 256 chars without calling Discord', async () => {
+    await expect(
+      controller.testConnection({ botToken: 'x'.repeat(257) }),
+    ).rejects.toThrow(BadRequestException);
+    expect(discordBotService.testToken).not.toHaveBeenCalled();
+  });
+
+  it('ROK-1703: is rate-limited at the admin tier (a live wizard check)', () => {
+    const limit: unknown = Reflect.getMetadata(
+      'THROTTLER:LIMITdefault',
+      DiscordBotSettingsController.prototype.testConnection,
+    );
+    expect(limit).toBe(RATE_LIMIT_TIERS.admin.limit);
   });
 });
 

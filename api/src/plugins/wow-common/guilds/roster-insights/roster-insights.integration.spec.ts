@@ -272,7 +272,12 @@ beforeAll(async () => {
     section: 'char',
     schema: 2,
     data: {
-      gear: [{ slot: 1, itemId: 16866, ilvl: 66, bonusIds: [] }],
+      // ROK-1915: wrist (9) equipped without an enchant, chest (5) enchanted.
+      gear: [
+        { slot: 1, itemId: 16866, ilvl: 66, bonusIds: [] },
+        { slot: 9, itemId: 16861, ilvl: 66, bonusIds: [] },
+        { slot: 5, itemId: 16865, ilvl: 66, bonusIds: [], enchantId: 1891 },
+      ],
       talents: { nodes: [] },
       lockouts: [LIVE_LOCKOUT, EXPIRED_LOCKOUT],
     },
@@ -376,6 +381,32 @@ describe('GET roster-insights (real DB)', () => {
     expect('lockouts' in res.body).toBe(false);
     expect('lockoutReporters' in res.body).toBe(false);
     expect('lastSeen' in res.body).toBe(false);
+    expect('gear' in res.body).toBe(false);
+  });
+
+  it('a member gets gear readiness over linked cap mains (ROK-1915 AC4)', async () => {
+    const dto = WowRosterInsightsSchema.parse((await insights('crafter')).body);
+    const gear = dto.gear;
+    if (!gear) throw new Error('member payload has no gear key');
+    // lead is the only linked cap main; healer (45) and crafter (22) level.
+    expect(gear.ilvl).toMatchObject({
+      median: 66,
+      floor: 55,
+      belowCount: 0,
+      reporters: 1,
+      levelling: 2,
+    });
+    expect(gear.ilvl.buckets.map((b) => b.count)).toEqual([0, 0, 0, 0, 0, 1]);
+    expect(gear.enchants).toEqual({
+      checked: 1,
+      unknown: 0,
+      missingCount: 1,
+      missing: [{ name: 'lead', characterId: charIds.lead, slots: [9] }],
+    });
+    expect(gear.freshness).toEqual({
+      source: 'addon',
+      asOf: SNAP.toISOString(),
+    });
   });
 
   it('serves the cached payload until an import of a guild character invalidates it', async () => {

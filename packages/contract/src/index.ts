@@ -47,6 +47,7 @@ export * from './public-identity.schema.js';
 
 // System Status (ROK-175)
 export * from './system.schema.js';
+export * from './setup-claim.schema.js';
 
 // Users (ROK-181)
 export * from './users.schema.js';
@@ -262,6 +263,7 @@ export * from './bg3-hub.schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+export * from './guild-crest.schema.js';
 export * from './hub-welcome.schema.js';
 export * from './valheim-claim-status.schema.js';
 export * from './community-hubs.schema.js';
@@ -272,6 +274,8 @@ export * from './hub-invite.schema.js';
 export * from './guild-raids.schema.js';
 export * from './hub-facts.schema.js';
 export * from './wow-roster-insights.schema.js';
+export * from './wow-roster-gear.schema.js';
+export * from './wow-roster-raid-progress.schema.js';
 export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
 

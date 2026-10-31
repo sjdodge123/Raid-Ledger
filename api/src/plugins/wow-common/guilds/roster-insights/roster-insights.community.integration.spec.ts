@@ -243,6 +243,7 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
       'lockouts',
       'lockoutReporters',
       'lastSeen',
+      'gear',
     ])
       expect(Object.keys(body)).not.toContain(key);
   });
@@ -251,6 +252,7 @@ describe('roster-insights on a Forever community hub (ROK-1925)', () => {
     const dto = await read('staff');
     expect(rosterNames(dto)).toEqual(['Ashalt', 'Ashmain', 'Evepriest']);
     expect(Object.keys(dto)).toContain('professions');
+    expect(Object.keys(dto)).toContain('gear');
   });
 
   it('AC6: a member read then a visitor read never shares a cache entry', async () => {

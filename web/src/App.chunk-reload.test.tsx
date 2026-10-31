@@ -18,6 +18,9 @@ vi.mock('./app-routes', () => ({ AppRoutes: () => null }));
 vi.mock('./idle-prefetch', () => ({ prefetchDeferredChunksOnIdle: () => {} }));
 vi.mock('./components/layout', () => ({ Layout: passthrough }));
 vi.mock('./components/ui/StartupGate', () => ({ StartupGate: passthrough }));
+// ROK-1701: ClaimGate reads /system/status via TanStack Query; app-entry.tsx
+// provides the QueryClient in production, and this harness renders App bare.
+vi.mock('./components/auth/ClaimGate', () => ({ ClaimGate: passthrough }));
 vi.mock('./components/ui/ConnectivityBanner', () => ({ ConnectivityBanner: () => null }));
 vi.mock('./components/ui/ThemeParticles', () => ({ ThemeParticles: () => null }));
 vi.mock('./plugins/wow/register', () => ({}));

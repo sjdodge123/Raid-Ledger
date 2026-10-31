@@ -8,6 +8,7 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import type { SettingKey } from '../../drizzle/schema';
 import type { AiOllamaSetupDto } from '@raid-ledger/contract';
 import { fetchOllama } from './ollama.helpers';
+import { isCloudFlavour } from '../../common/flavour/flavour';
 import type { OllamaRawModel } from './ollama.helpers';
 
 /** Steps that indicate setup is actively running. */
@@ -42,6 +43,8 @@ export class OllamaSetupService implements OnModuleInit {
 
   /** Auto-recover Ollama after container rebuild (non-blocking). */
   async onModuleInit(): Promise<void> {
+    // ROK-1700: cloud never downloads or starts a local Ollama.
+    if (isCloudFlavour()) return;
     await bestEffortInit('OllamaAutoRecovery', this.logger, async () => {
       if (!this.native.isAllinoneMode()) return;
       const provider = await this.getSetting(AI_SETTING_KEYS.PROVIDER);

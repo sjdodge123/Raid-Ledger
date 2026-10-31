@@ -18,6 +18,7 @@ import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
 import { SystemModule } from './system/system.module';
+import { SetupClaimModule } from './setup-claim/setup-claim.module';
 import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
@@ -63,6 +64,7 @@ import { CommunityInsightsModule } from './community-insights/community-insights
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 import { HubMediaModule } from './hub-media/hub-media.module';
+import { HubCrestModule } from './guilds/crest/hub-crest.module';
 import { HubMediaChannelModule } from './discord-bot/hub-media-channel/hub-media-channel.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
@@ -90,6 +92,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     EventsModule,
     AvailabilityModule,
     SystemModule,
+    SetupClaimModule,
     SettingsModule,
     NotificationModule,
     EnrichmentsModule,
@@ -135,6 +138,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     GamesLookupModule,
     CalendarSyncModule,
     HubMediaModule,
+    HubCrestModule,
     CompanionModule,
     HubMediaChannelModule,
   ],

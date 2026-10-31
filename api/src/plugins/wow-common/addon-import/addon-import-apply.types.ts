@@ -17,6 +17,11 @@ export interface AddonApplyContext {
   region: WowRegion;
   /** `DecodedAddonImport.sha256` — stored, never the string itself. */
   sha256: string;
+  /**
+   * ROK-1917 final P2 — the GUID the binding pins on this character once the
+   * sections ran (`AddonBindingResult.pinGuid`); the raid takeover trusts it.
+   */
+  pendingGuid?: string | null;
 }
 
 /** A section's outcome: `preview` on dry runs, else applied/noop/stale. */

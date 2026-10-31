@@ -21,6 +21,7 @@ then a release that *does* matter gets ignored with it.
 |---|---|---|---|
 | **Version** (`v1.2.0`) | "Is there something new worth caring about?" | A `feat:`/breaking commit shipped | A human dispatches `release.yml` |
 | **Build** (`:main` image / commit sha) | "Am I missing fixes?" | Every push to `main` | `ci.yml` pushes `ghcr.io/…:main` |
+| **`:stable` image** | "What do deploy templates track?" | A plain `vX.Y.Z` release that is the highest version tag (never a pre-release or a re-cut of an older one) | `docker-publish.yml` adds `:stable` next to `:X.Y.Z` |
 
 So a fix-only week produces **no** new version and **several** new builds — and that is the intended
 outcome, not a gap. Pulling `:main` (Watchtower does this automatically) is how fixes arrive.

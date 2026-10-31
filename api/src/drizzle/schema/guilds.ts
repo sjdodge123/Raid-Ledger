@@ -9,8 +9,10 @@ import {
   index,
   uniqueIndex,
   check,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { GuildCrestPreset } from '@raid-ledger/contract';
 import { games } from './games';
 import { pelicanServers } from './pelican-servers';
 import { users } from './users';
@@ -120,6 +122,28 @@ export const guilds = pgTable(
       length: 10,
       enum: ['admin', 'leader', 'empty'],
     }),
+    /**
+     * ROK-1814: which stored crest shows — `upload`, `preset`, or null
+     * (initials). The upload and the preset are kept independently (L3).
+     */
+    crestActive: varchar('crest_active', {
+      length: 8,
+      enum: ['upload', 'preset'],
+    }),
+    /** ROK-1814: content-hash file stem of the uploaded crest (sha256 hex 32). */
+    crestUploadKey: varchar('crest_upload_key', { length: 64 }),
+    /** ROK-1814: the preset emblem (palette ids, never hex — L5). */
+    crestPreset: jsonb('crest_preset').$type<GuildCrestPreset>(),
+    /** ROK-1814: the editor who last changed the crest. */
+    crestSetBy: integer('crest_set_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    crestSetAt: timestamp('crest_set_at', { withTimezone: true }),
+    /** ROK-1814 moderation: the staff member who removed the upload. */
+    crestRemovedBy: integer('crest_removed_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    crestRemovedAt: timestamp('crest_removed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -151,6 +175,8 @@ export const guilds = pgTable(
       ),
     index('idx_guilds_proposed_by').on(table.proposedBy),
     index('idx_guilds_reviewed_by').on(table.reviewedBy),
+    index('idx_guilds_crest_set_by').on(table.crestSetBy),
+    index('idx_guilds_crest_removed_by').on(table.crestRemovedBy),
     /** ROK-1870: the directory + the admin proposal queue. */
     index('idx_guilds_kind_status').on(table.kind, table.status),
     check(
@@ -180,6 +206,10 @@ export const guilds = pgTable(
     check(
       'guilds_auto_membership_kind_check',
       sql`${table.kind} = 'game_community' OR ${table.autoMembership} = 'off'`,
+    ),
+    check(
+      'guilds_crest_active_check',
+      sql`${table.crestActive} IS NULL OR ${table.crestActive} IN ('upload', 'preset')`,
     ),
     check(
       'guilds_name_override_kind_check',

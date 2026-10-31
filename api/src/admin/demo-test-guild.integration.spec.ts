@@ -182,6 +182,9 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
         notificationsMuted: false,
         // ROK-1815: the seeded GM is rank 0 — labelled, not granted.
         isGuildMaster: true,
+        isStaff: false,
+        // ROK-1814 ruling 2026-10-30: the GM may change the crest (only).
+        canEditCrest: true,
       },
     ],
     [
@@ -192,6 +195,8 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
         canEdit: true,
         canManageEditors: false,
         notificationsMuted: false,
+        isStaff: false,
+        canEditCrest: true,
       },
     ],
     [
@@ -202,6 +207,8 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
         canEdit: false,
         canManageEditors: false,
         notificationsMuted: false,
+        isStaff: false,
+        canEditCrest: false,
       },
     ],
     ['outsider', 403, undefined],

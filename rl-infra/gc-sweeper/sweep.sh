@@ -101,6 +101,20 @@ TEST_PLAN_ATTACHMENTS_DIR="${TEST_PLAN_ATTACHMENTS_DIR:-/state/test-plan-attachm
 # screenshot attachments are preserved for review. Operators clear
 # explicitly via rl_test_plan_clear when ready. The clean_test_plan
 # function stays as a no-op so callers in this script don't need touching.
+# ROK-1846 — the dead-claim and hoarded-slot reapers find envs by the
+# rl.slot / rl.role / rl.env_slug labels, which are whatever the container's
+# creator wrote. Reap a slug only through a container that IS that env's
+# (docker names are unique, so a forged container cannot hold the victim's
+# name) and never when env-registry gives the slug to another slot.
+env_container_belongs_to_slot() {
+    local slug="$1" cname="$2" slot="$3"
+    [[ "$cname" == "rl-env-${slug}-allinone" || "$cname" == "rl-env-${slug}-pg" ]] || return 1
+    if jq -e --arg s "$slug" --argjson n "$slot" 'any(.[]?; .slug == $s and .slot != $n)' "$ENVS" >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
+
 clean_test_plan() {
     local _slug="$1"
     return 0
@@ -308,14 +322,19 @@ slot_running_task_ids() {
 # or the dead claim's branch. Every other env stays on the slot, marked
 # claimable_by_next with its own stamp (Codex fleet-claim r2). Sets REAPED_ANY.
 reap_dead_claim_envs() {
-    local slot="$1" drop_route="$2" branch slug cid kept=" "
+    local slot="$1" drop_route="$2" branch slug cid cname kept=" "
     REAPED_ANY=0
     branch=$(jq -r --argjson s "$slot" '[.[] | select(.slot == $s) | .branch // ""] | first // ""' "$CLAIMS" 2>/dev/null || echo "")
     local slot_envs
     slot_envs=$(docker ps -aq --filter "label=rl.slot=$slot" --filter "label=rl.role=env" \
-        --format '{{ .Label "rl.env_slug" }} {{.ID}}' 2>/dev/null || true)
-    while read -r slug cid; do
+        --format '{{ .Label "rl.env_slug" }} {{.ID}} {{.Names}}' 2>/dev/null || true)
+    while read -r slug cid cname; do
         if [[ -z "$slug" || "$kept" == *" $slug "* ]]; then continue; fi
+        # ROK-1846 — never trust a forged rl.env_slug label (see env_container_belongs_to_slot).
+        if ! env_container_belongs_to_slot "$slug" "$cname" "$slot"; then
+            log "WARN: container $cid ($cname) on slot $slot claims rl.env_slug=$slug but is not that env's or the slug is another slot's — not reaping it"
+            continue
+        fi
         if keep_preserved_env "$slug" "$slot" "$branch"; then kept+="$slug "; continue; fi
         log "  destroying env $slug (orphaned by dead claim)"
         docker rm -f "$cid" >/dev/null 2>&1 || true
@@ -775,6 +794,13 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     LAST_TOUCHED=$(jq -r '."rl.last_touched" // empty' <<<"$LABELS")
     SLOT=$(jq -r '."rl.slot" // empty' <<<"$LABELS")
     [[ -z "$SLUG" || -z "$TTL_RAW" || -z "$LAST_TOUCHED" ]] && continue
+    # ROK-1846 AC5 — rl.* labels are whatever the container's creator wrote, so
+    # they are claims, not facts. Reap only a slug env-registry knows (env-spin
+    # writes the row; nothing branch code can reach does)...
+    if ! jq -e --arg s "$SLUG" 'any(.[]?; .slug == $s)' "$ENVS" >/dev/null 2>&1; then
+        log "WARN: container $cid claims rl.env_slug=$SLUG, which is not in env-registry — skipping its TTL reap (forged or stale labels)"
+        continue
+    fi
     # env-spin labels BOTH the allinone and the pg sidecar `rl.role=env`, so
     # this loop sees each env TWICE. The DECISION must be computed for both
     # (either container is enough to destroy the env), but the spare's log line
@@ -782,6 +808,14 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
     # spared env wrote ~192 duplicate `env_ttl_extended_pending_plan` rows a day
     # into the same audit log an operator greps for "where did my plan go?".
     CNAME=$(docker inspect "$cid" --format '{{.Name}}' 2>/dev/null || echo "")
+    # ...and only through a container that IS that env's: docker names are
+    # unique, so a forged container cannot be named rl-env-<victim>-allinone
+    # while the victim's real one exists. An unreadable name still proceeds
+    # (pre-ROK-1846 behaviour) because the registry check above already held.
+    if [[ -n "$CNAME" && "$CNAME" != "/rl-env-${SLUG}-allinone" && "$CNAME" != "/rl-env-${SLUG}-pg" ]]; then
+        log "WARN: container $cid ($CNAME) claims rl.env_slug=$SLUG but is not one of its containers — skipping its TTL reap"
+        continue
+    fi
     TTL_HOURS=$(sed 's/h$//' <<<"$TTL_RAW")
     # FAIL SAFE: this branch deletes containers, volumes, the registry row and
     # the env's test plans. Anything we cannot read confidently means KEEP.

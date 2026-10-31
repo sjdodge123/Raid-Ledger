@@ -105,6 +105,9 @@ function InputVariants(): JSX.Element {
             <StateFrame label="Input — mono">
                 <Input aria-label="Invite code" mono readOnly value="RL-7F3K-92QX" />
             </StateFrame>
+            <StateFrame label="Input — success" note="data-success paints border-success for a confirmed value; invalid wins.">
+                <Input aria-label="Accepted setup code" mono readOnly success value="7F3K-92QX-ABCD-EFGH" />
+            </StateFrame>
         </>
     );
 }

@@ -2,6 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { fetchMissingPrivilegedIntents } from './discord-intents.helpers';
+
+// ROK-1703: testToken's intent pre-flight calls Discord; keep specs offline.
+jest.mock('./discord-intents.helpers', () => ({
+  ...jest.requireActual<object>('./discord-intents.helpers'),
+  fetchMissingPrivilegedIntents: jest.fn().mockResolvedValue(null),
+}));
 
 let service: DiscordBotService;
 let clientService: DiscordBotClientService;
@@ -26,6 +33,7 @@ beforeEach(async () => {
           getGuildInfo: jest.fn(),
           // ROK-1469: getStatus now reports WHICH Discord app is connected.
           getBotUser: jest.fn().mockReturnValue(null),
+          getGuildCount: jest.fn().mockReturnValue(1),
           sendDirectMessage: jest.fn(),
           checkPermissions: jest.fn(),
         },
@@ -260,6 +268,7 @@ describe('DiscordBotService — getStatus: connected', () => {
       memberCount: 100,
       setupCompleted: false,
       adHocEventsEnabled: false,
+      guildCount: 1,
     });
   });
 
@@ -282,6 +291,7 @@ describe('DiscordBotService — getStatus: connected', () => {
       memberCount: undefined,
       setupCompleted: false,
       adHocEventsEnabled: false,
+      guildCount: 1,
     });
   });
 });
@@ -581,6 +591,56 @@ describe('DiscordBotService — testToken: failures', () => {
     expect(result).toEqual({
       success: false,
       message: 'Failed to connect with provided token',
+    });
+  });
+});
+
+describe('DiscordBotService — testToken: intents + application id (ROK-1703)', () => {
+  const APP_ID = '900000000000000001';
+  const token = `${Buffer.from(APP_ID).toString('base64url')}.GxYzAb.fake`;
+
+  it('names the missing intent and returns the token facts on a 4014', async () => {
+    jest
+      .mocked(fetchMissingPrivilegedIntents)
+      .mockResolvedValueOnce(['messageContent']);
+    jest
+      .spyOn(DiscordBotClientService.prototype, 'connect')
+      .mockRejectedValue(
+        Object.assign(new Error('Used disallowed intents'), { code: 4014 }),
+      );
+    jest
+      .spyOn(DiscordBotClientService.prototype, 'disconnect')
+      .mockResolvedValue();
+
+    const result = await service.testToken(token);
+
+    expect(result).toEqual({
+      success: false,
+      message:
+        'Missing required privileged intent: Message Content Intent. Turn it on in the Discord Developer Portal under Bot > Privileged Gateway Intents.',
+      applicationId: APP_ID,
+      missingIntents: ['messageContent'],
+    });
+  });
+
+  it('returns an empty missingIntents list when all three are on', async () => {
+    jest.mocked(fetchMissingPrivilegedIntents).mockResolvedValueOnce([]);
+    jest
+      .spyOn(DiscordBotClientService.prototype, 'connect')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(DiscordBotClientService.prototype, 'disconnect')
+      .mockResolvedValue();
+    jest
+      .spyOn(DiscordBotClientService.prototype, 'getGuildInfo')
+      .mockReturnValue(null);
+
+    const result = await service.testToken(token);
+
+    expect(result).toMatchObject({
+      success: true,
+      applicationId: APP_ID,
+      missingIntents: [],
     });
   });
 });

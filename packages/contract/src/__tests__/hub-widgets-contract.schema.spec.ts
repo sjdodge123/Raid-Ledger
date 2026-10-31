@@ -9,6 +9,16 @@ import { GuildEventCardSchema } from "../guild-raids.schema.js";
 import { HubFactFreshnessSchema } from "../hub-facts.schema.js";
 import { WowRosterInsightsSchema } from "../wow-roster-insights.schema.js";
 import { EventQuestReadinessSchema } from "../wow-event-quest-readiness.schema.js";
+import {
+  FOREVER_ENCHANTABLE_SLOTS,
+  foreverGearSlotName,
+  foreverIlvlFloor,
+  WowRosterGearSchema,
+} from "../wow-roster-gear.schema.js";
+import {
+  MAX_RAID_PROGRESS_BOSSES,
+  WowRosterRaidProgressSchema,
+} from "../wow-roster-raid-progress.schema.js";
 
 const summary = {
   id: 1,
@@ -284,6 +294,167 @@ describe("WowRosterInsights lastSeen (ROK-1916)", () => {
     for (const ls of bad)
       expect(
         WowRosterInsightsSchema.safeParse({ ...insights, lastSeen: ls })
+          .success,
+      ).toBe(false);
+  });
+});
+
+describe("WowRosterInsights gear (ROK-1915)", () => {
+  const LINKED = "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c";
+  const gear = {
+    ilvl: {
+      buckets: [
+        { from: 0, to: 44, count: 1 },
+        { from: 55, to: 59, count: 3 },
+      ],
+      median: 57,
+      floor: 55,
+      belowCount: 1,
+      below: [{ name: "Wren", characterId: LINKED, ilvl: 41 }],
+      reporters: 4,
+      levelling: 2,
+    },
+    enchants: {
+      checked: 3,
+      unknown: 1,
+      missingCount: 1,
+      missing: [{ name: "Wren", characterId: LINKED, slots: [8, 9] }],
+    },
+    freshness: { source: "addon", asOf: "2026-10-22T20:00:00.000Z" },
+  };
+  it("parses a member payload with gear and a visitor payload without", () => {
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, gear }).success,
+    ).toBe(true);
+    expect(WowRosterInsightsSchema.safeParse(insights).success).toBe(true);
+    expect(
+      WowRosterGearSchema.safeParse({ ...gear, freshness: null }).success,
+    ).toBe(true);
+  });
+  it("caps below at 10 and missing at 25, and rejects bad slots and extra keys", () => {
+    const below = Array.from({ length: 11 }, (_, i) => ({
+      name: `m${i}`,
+      characterId: LINKED,
+      ilvl: i,
+    }));
+    const missing = Array.from({ length: 26 }, (_, i) => ({
+      name: `m${i}`,
+      characterId: LINKED,
+      slots: [5],
+    }));
+    const bad = [
+      { ...gear, ilvl: { ...gear.ilvl, below } },
+      { ...gear, enchants: { ...gear.enchants, missing } },
+      {
+        ...gear,
+        enchants: {
+          ...gear.enchants,
+          missing: [{ name: "x", characterId: LINKED, slots: [20] }],
+        },
+      },
+      {
+        ...gear,
+        ilvl: {
+          ...gear.ilvl,
+          below: [{ name: "x", characterId: null, ilvl: 1 }],
+        },
+      },
+      { ...gear, extra: 1 },
+    ];
+    for (const g of bad)
+      expect(
+        WowRosterInsightsSchema.safeParse({ ...insights, gear: g }).success,
+      ).toBe(false);
+  });
+  it("foreverIlvlFloor is bracket start minus 5, and 55 at the level cap", () => {
+    const cases: Array<[number, number]> = [
+      [1, 0],
+      [9, 0],
+      [10, 5],
+      [19, 5],
+      [20, 15],
+      [35, 25],
+      [49, 35],
+      [50, 45],
+      [59, 45],
+      [60, 55],
+      [70, 55],
+    ];
+    for (const [level, floor] of cases)
+      expect({ level, floor: foreverIlvlFloor(level) }).toEqual({
+        level,
+        floor,
+      });
+  });
+  it("names the enchantable slots chest, feet, wrist, hands, back, main hand", () => {
+    expect(FOREVER_ENCHANTABLE_SLOTS.map(foreverGearSlotName)).toEqual([
+      "Chest",
+      "Feet",
+      "Wrist",
+      "Hands",
+      "Back",
+      "Main hand",
+    ]);
+    expect(foreverGearSlotName(42)).toBe("Slot 42");
+  });
+});
+
+describe("WowRosterInsights raidProgress (ROK-1917)", () => {
+  const boss = {
+    encounterId: 663,
+    difficultyId: 9,
+    difficultyLabel: "40 Player",
+    name: "Lucifron",
+    firstKillAt: "2026-10-22T20:10:00.000Z",
+    kills: 1,
+    wipes: 2,
+    lastPullAt: "2026-10-22T20:10:00.000Z",
+  };
+  const raidProgress = {
+    bosses: [
+      boss,
+      {
+        ...boss,
+        encounterId: 664,
+        name: "Magmadar",
+        firstKillAt: null,
+        kills: 0,
+        difficultyLabel: null,
+      },
+    ],
+    killedCount: 1,
+    pullCount: 5,
+    lastPullAt: "2026-10-22T20:10:00.000Z",
+  };
+  it("parses a member payload with raidProgress, an empty one, and a visitor payload without", () => {
+    expect(
+      WowRosterInsightsSchema.safeParse({ ...insights, raidProgress }).success,
+    ).toBe(true);
+    expect(
+      WowRosterRaidProgressSchema.safeParse({
+        bosses: [],
+        killedCount: 0,
+        pullCount: 0,
+        lastPullAt: null,
+      }).success,
+    ).toBe(true);
+    expect(WowRosterInsightsSchema.safeParse(insights).success).toBe(true);
+  });
+  it("caps bosses, and rejects extra keys, a roster and a non-ISO time", () => {
+    const bosses = Array.from(
+      { length: MAX_RAID_PROGRESS_BOSSES + 1 },
+      (_, i) => ({ ...boss, encounterId: i }),
+    );
+    const bad = [
+      { ...raidProgress, bosses },
+      { ...raidProgress, extra: 1 },
+      { ...raidProgress, bosses: [{ ...boss, rosterNames: ["Wren"] }] },
+      { ...raidProgress, bosses: [{ ...boss, lastPullAt: "yesterday" }] },
+      { ...raidProgress, bosses: [{ ...boss, kills: -1 }] },
+    ];
+    for (const rp of bad)
+      expect(
+        WowRosterInsightsSchema.safeParse({ ...insights, raidProgress: rp })
           .success,
       ).toBe(false);
   });

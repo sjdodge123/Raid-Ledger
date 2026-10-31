@@ -9,6 +9,8 @@ import {
     buildPluginIntegrationItems,
     buildDiscordNavItems,
     buildNavSections,
+    filterNavForFlavour,
+    NAS_ONLY_SETTINGS_PATHS,
 } from './admin-nav-data';
 import { emptyPluginHubManifest, type PluginInfoDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
@@ -398,4 +400,29 @@ describe('buildNavSections — part 2', () => {
         expect(general.children.length).toBe(7);
     });
 
+});
+
+describe('filterNavForFlavour (ROK-1700)', () => {
+    const sections = () => buildNavSections(
+        buildCoreIntegrationItems({ ...allOfflineStatuses, cooptimus: { configured: true, loading: false } }),
+        [],
+    );
+    const paths = (s: ReturnType<typeof buildNavSections>) => s.flatMap((x) => x.children.map((c) => c.to));
+
+    it('cloud drops Demo Data and Co-Optimus and nothing else', () => {
+        const all = paths(sections());
+        const cloud = paths(filterNavForFlavour(sections(), 'cloud'));
+        expect(cloud).not.toContain('/admin/settings/general/data');
+        expect(cloud).not.toContain('/admin/settings/integrations/cooptimus');
+        expect(cloud).toEqual(all.filter((p) => !NAS_ONLY_SETTINGS_PATHS.includes(p)));
+        expect(all.length - cloud.length).toBe(2);
+    });
+
+    it('nas returns the sections unchanged (regression guard)', () => {
+        const input = sections();
+        const out = filterNavForFlavour(input, 'nas');
+        expect(out).toBe(input);
+        expect(paths(out)).toContain('/admin/settings/general/data');
+        expect(paths(out)).toContain('/admin/settings/integrations/cooptimus');
+    });
 });

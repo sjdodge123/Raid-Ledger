@@ -26,6 +26,8 @@ import { whosSavedWidget } from './hub-widgets/whos-saved.register';
 import { registerDungeonQuestsWidget } from './hub-widgets/dungeon-quests.register';
 import { recentDingsWidget } from './hub-widgets/recent-dings.register';
 import { lastSeenWidget } from './hub-widgets/last-seen.register';
+import { gearReadinessWidget } from './hub-widgets/gear-readiness.register';
+import { raidProgressWidget } from './hub-widgets/raid-progress.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -61,3 +63,5 @@ blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
 blizzard.registerHubWidget(recentDingsWidget);
 blizzard.registerHubWidget(lastSeenWidget);
+blizzard.registerHubWidget(gearReadinessWidget);
+blizzard.registerHubWidget(raidProgressWidget);

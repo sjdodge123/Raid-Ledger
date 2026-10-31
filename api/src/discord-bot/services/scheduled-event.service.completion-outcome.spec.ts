@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { GuildScheduledEventStatus } from 'discord.js';
 import {
   setupScheduledEventTestModule,
@@ -160,5 +161,49 @@ describe('completeExpiredEventsDetailed (ROK-944)', () => {
     await expect(
       mocks.service.completeExpiredEventsDetailed(),
     ).resolves.toEqual({ outcomes: [], reason: 'bot-not-connected' });
+  });
+});
+
+describe('completeScheduledEvent — voice channel already has an Active SE (ROK-2053)', () => {
+  let mocks: ScheduledEventMocks;
+
+  beforeEach(async () => {
+    mocks = await setupBoundEvent();
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('reports the Canceled fallback as not ok with errorCode 50035 and warns which ran', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({
+      id: 'se-1',
+      status: GuildScheduledEventStatus.Scheduled,
+      channelId: 'voice-9',
+    });
+    mocks.mockGuild.scheduledEvents.edit.mockImplementation(
+      (_id: string, body: { status?: number }) =>
+        body.status === GuildScheduledEventStatus.Active
+          ? Promise.reject(
+              makeDiscordApiError(
+                50035,
+                'Invalid Form Body\nstatus[GUILD_SCHEDULED_EVENT_INVALID_ACTIVE_STATUS_BY_CHANNEL]: busy',
+              ),
+            )
+          : Promise.resolve({ id: 'se-1' }),
+    );
+
+    await expect(mocks.service.completeScheduledEvent(42)).resolves.toEqual({
+      eventId: 42,
+      discordEventId: 'se-1',
+      from: 'Scheduled',
+      to: 'Canceled',
+      ok: false,
+      errorCode: 50035,
+      errorMessage:
+        'Voice channel busy (another SE Active); SE canceled instead of Completed',
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('SE se-1 for event 42: voice channel voice-9'),
+    );
   });
 });

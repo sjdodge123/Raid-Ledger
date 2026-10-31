@@ -26,6 +26,11 @@ import {
 import type { LogLevelEnv } from './main.helpers';
 import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from './companion/ingest/companion-body-bypass';
+import {
+  GUILD_CREST_URL_PREFIX,
+  getGuildCrestDir,
+} from './guilds/crest/hub-crest.paths';
+import { enforceFlavourBootGuards } from './common/flavour/flavour-boot';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -46,6 +51,12 @@ function configureStaticAssets(
     prefix: '/uploads/branding/',
     maxAge: '1d',
   });
+  // ROK-1814 Q3: re-encoded, content-hashed guild crests are public static.
+  app.useStaticAssets(getGuildCrestDir(), {
+    prefix: GUILD_CREST_URL_PREFIX,
+    maxAge: '365d',
+    immutable: true,
+  });
 }
 
 /** Copies only the set log-level env vars, omitting unset keys. */
@@ -59,6 +70,8 @@ function readLogLevelEnv(): LogLevelEnv {
 }
 
 async function bootstrap() {
+  // ROK-1700: unknown RL_FLAVOUR, or cloud + DEMO_MODE, refuses to boot.
+  await enforceFlavourBootGuards();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: getLogLevels(readLogLevelEnv()),
     rawBody: false,

@@ -7,6 +7,9 @@
  * - `fieldSize`, not `size`: the native `size?: number` attribute would clash.
  * - Inside a `Field` it picks up `id`, `aria-describedby`, `aria-invalid` and
  *   `aria-required` from context (`useFieldControlProps`).
+ * - `success` paints the border `success` (a confirmed value, ROK-1701) via
+ *   `data-success` + a `data-[success=true]:` variant, which outranks the
+ *   frame's `border-edge` without tailwind-merge. Invalid always wins.
  * - `leading` is a decorative icon slot (pointer-events off, `text-muted`);
  *   `trailing` is interactive (a show/hide or copy button). A bare input
  *   renders no wrapper, so it drops into flex rows unchanged. Their padding
@@ -23,6 +26,8 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
     trailing?: ReactNode;
     /** Monospace text — ids, codes, URLs, numeric readouts. */
     mono?: boolean | undefined;
+    /** Success border for a confirmed value. Ignored while invalid. */
+    success?: boolean | undefined;
 }
 
 const DATE_TIME_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
@@ -46,6 +51,9 @@ const DATE_TIME_GUARD = 'min-w-0 appearance-none [&::-webkit-date-and-time-value
 const LEADING_PAD: Record<FieldSize, string> = { md: 'pl-10', lg: 'pl-10', sm: 'pl-10 lg:pl-10' };
 const TRAILING_PAD: Record<FieldSize, string> = { md: 'pr-14', lg: 'pr-14', sm: 'pr-14 lg:pr-14' };
 
+/** Always emitted; only paints when the input carries `data-success="true"`. */
+const SUCCESS_BORDER = 'data-[success=true]:border-success';
+
 function inputClass(p: Pick<InputProps, 'type' | 'fieldSize' | 'leading' | 'trailing' | 'mono' | 'className'>): string {
     const size = p.fieldSize ?? 'md';
     return [
@@ -55,6 +63,7 @@ function inputClass(p: Pick<InputProps, 'type' | 'fieldSize' | 'leading' | 'trai
         p.leading ? LEADING_PAD[size] : '',
         p.trailing ? TRAILING_PAD[size] : '',
         p.mono ? 'font-mono' : '',
+        SUCCESS_BORDER,
         p.className ?? '',
     ].filter(Boolean).join(' ');
 }
@@ -77,13 +86,13 @@ function Adorned({ leading, trailing, children }: {
 
 /** The shared text input. See the file header for the contract. */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(props, ref) {
-    const { invalid, fieldSize, leading, trailing, mono, className, id,
+    const { invalid, fieldSize, leading, trailing, mono, success, className, id,
         'aria-describedby': describedBy, 'aria-invalid': ariaInvalid, 'aria-required': ariaRequired, ...rest } = props;
     const a11y = useFieldControlProps({
         id, invalid, 'aria-describedby': describedBy, 'aria-invalid': ariaInvalid, 'aria-required': ariaRequired,
     });
     const input = (
-        <input ref={ref} {...rest} {...a11y} className={inputClass({ type: rest.type, fieldSize, leading, trailing, mono, className })} />
+        <input ref={ref} {...rest} {...a11y} data-success={success && !a11y['aria-invalid'] ? 'true' : undefined} className={inputClass({ type: rest.type, fieldSize, leading, trailing, mono, className })} />
     );
     if (!leading && !trailing) return input;
     return <Adorned leading={leading} trailing={trailing}>{input}</Adorned>;

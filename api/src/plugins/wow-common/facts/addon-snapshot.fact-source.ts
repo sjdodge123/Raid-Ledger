@@ -26,8 +26,13 @@ interface SnapshotRow {
   characterId: string;
   data: AddonCharSnapshotData;
   capturedAt: Date;
+  /** Snapshot schema; enchant ids are stored from schema 2 (ROK-1915). */
+  schema: number;
   class: string | null;
 }
+
+/** Snapshot schema whose gear items carry `enchantId` (ROK-1915). */
+const ENCHANTS_SCHEMA = 2;
 
 /** One LedgerLink `char` snapshot as facts; asOf = its capture time. */
 function toCandidates(row: SnapshotRow): WowFactCandidates {
@@ -35,7 +40,11 @@ function toCandidates(row: SnapshotRow): WowFactCandidates {
   const out: WowFactCandidates = {
     lockouts: fact(data.lockouts, 'addon', asOf),
   };
-  if (data.gear.length > 0) out.gear = fact(data.gear, 'addon', asOf);
+  if (data.gear.length > 0) {
+    out.gear = fact(data.gear, 'addon', asOf);
+    const reported = row.schema >= ENCHANTS_SCHEMA;
+    out.enchantsReported = fact(reported, 'addon', asOf);
+  }
   const ilvl = averageIlvl(data.gear);
   if (ilvl !== null) out.ilvl = fact(ilvl, 'addon', asOf);
   if (data.quests) out.quests = fact(data.quests, 'addon', asOf);
@@ -46,7 +55,8 @@ function toCandidates(row: SnapshotRow): WowFactCandidates {
 
 /**
  * ROK-1910 — facts from the linked characters' LedgerLink `char` snapshots:
- * gear (with enchants), ilvl, quests, lockouts and a talents role hint.
+ * gear (with enchants), ilvl, quests, lockouts and a talents role hint, plus
+ * whether the export reports enchants (`enchantsReported`, ROK-1915).
  */
 @Injectable()
 export class AddonSnapshotFactSource implements WowFactSource {
@@ -57,6 +67,7 @@ export class AddonSnapshotFactSource implements WowFactSource {
     'quests',
     'lockouts',
     'role',
+    'enchantsReported',
   ];
 
   constructor(
@@ -75,6 +86,7 @@ export class AddonSnapshotFactSource implements WowFactSource {
         characterId: snap.characterId,
         data: snap.data,
         capturedAt: snap.capturedAt,
+        schema: snap.schema,
         class: c.class,
       })
       .from(snap)

@@ -1,4 +1,4 @@
-# rl-infra runner image — long-lived per-slot dev container.
+# rl-infra runner image -- long-lived per-slot dev container.
 #
 # Built once on the VM (docker compose build runner-1). Mutagen syncs the
 # worktree from the laptop into /workspace; node_modules + cache live in
@@ -15,7 +15,7 @@
 # ("After changing rl-infra/runner/Dockerfile ...").
 FROM mcr.microsoft.com/playwright:v1.64.1-jammy
 
-# ROK-1568 — the disk-pressure ladder's rung 2 spares images matching
+# ROK-1568 -- the disk-pressure ladder's rung 2 spares images matching
 # `--filter label!=rl.role=runner`. That filter reads IMAGE labels, while
 # rl.role has only ever existed as a compose CONTAINER label, so without this
 # line the guard is inert and a prune run while the stack is down would delete
@@ -49,7 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && apt-get install -y --no-install-recommends \
         postgresql-client-16 && \
-    # Docker CLI (no daemon — uses the host docker.sock).
+    # Docker CLI (no daemon -- uses the host docker.sock).
     install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     chmod a+r /etc/apt/keyrings/docker.gpg && \
@@ -60,15 +60,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Mutagen agent is NOT installed here. The agent runs on the VM host
-# (installed by cloud-init), not inside the runner container — Mutagen syncs
+# (installed by cloud-init), not inside the runner container -- Mutagen syncs
 # to /srv/rl-infra/runners/slot-N/worktree on the VM, which is bind-mounted
 # into this container at /workspace. The runner just sees the synced files.
 
-# Profiling toolchain — installed globally so `clinic doctor` / `0x` are
+# Profiling toolchain -- installed globally so `clinic doctor` / `0x` are
 # available without per-claim npm installs.
 RUN npm install -g clinic 0x autocannon
 
-# pgweb — single-binary web UI for Postgres introspection.
+# pgweb -- single-binary web UI for Postgres introspection.
 RUN curl -fsSL https://github.com/sosedoff/pgweb/releases/download/v0.16.2/pgweb_linux_amd64.zip -o /tmp/pgweb.zip && \
     unzip /tmp/pgweb.zip -d /usr/local/bin && \
     mv /usr/local/bin/pgweb_linux_amd64 /usr/local/bin/pgweb && \
@@ -80,7 +80,7 @@ WORKDIR /workspace
 # tmux default session so `rl shell` attaches to a stable name.
 COPY tmux.conf /root/.tmux.conf
 COPY entrypoint.sh /usr/local/bin/runner-entrypoint
-# A3-B P3 — baked into the image, NOT read from /workspace: the entrypoint runs
+# A3-B P3 -- baked into the image, NOT read from /workspace: the entrypoint runs
 # before Mutagen has synced anything, and a check that reports a mis-provisioned
 # runner must not itself depend on the runner being provisioned.
 COPY check-state-locks.sh /usr/local/bin/rl-check-state-locks

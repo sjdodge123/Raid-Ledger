@@ -234,3 +234,31 @@ describe('ROK-1537 AC3 — production cannot reach the first-login path', () => 
     expect(isFirstLoginAdminEnabled(env as NodeJS.ProcessEnv)).toBe(true);
   });
 });
+
+describe('ROK-1700 — RL_FLAVOUR=cloud never reaches the first-login path', () => {
+  it('is disabled under cloud even with every fleet gate set', () => {
+    const env = { ...FLEET_ENV, RL_FLAVOUR: 'cloud' };
+    expect(isFirstLoginAdminEnabled(env as NodeJS.ProcessEnv)).toBe(false);
+  });
+
+  it('nas (explicit) behaves exactly like unset', () => {
+    const env = { ...FLEET_ENV, RL_FLAVOUR: 'nas' };
+    expect(isFirstLoginAdminEnabled(env as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  it('cloud login with the fleet env set keeps member and opens no transaction', async () => {
+    setEnv(FLEET_ENV);
+    process.env.RL_FLAVOUR = 'cloud';
+    try {
+      const m = makeDb([{ id: 5 }]);
+      const user = await makeService(m.db).validateDiscordUser(
+        DISCORD_ID,
+        'op',
+      );
+      expect(m.transaction).not.toHaveBeenCalled();
+      expect(user?.role).toBe('member');
+    } finally {
+      delete process.env.RL_FLAVOUR;
+    }
+  });
+});

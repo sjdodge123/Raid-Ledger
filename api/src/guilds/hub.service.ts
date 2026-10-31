@@ -19,7 +19,11 @@ import type {
   HubKindAdapter,
   HubMineRank,
 } from '../plugins/plugin-host/extension-points';
-import { GuildAccessService, type GuildActor } from './guild-access.service';
+import {
+  GuildAccessService,
+  isStaff,
+  type GuildActor,
+} from './guild-access.service';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
@@ -62,8 +66,32 @@ export class HubService {
     guildId: number,
     page: GuildPage,
   ): Promise<GuildPage> {
-    const widgetPrefs = await readWidgetPrefs(this.db, guildId);
-    return this.withViewerMute(actor, guildId, { ...page, widgetPrefs });
+    const [widgetPrefs, viewer] = await Promise.all([
+      readWidgetPrefs(this.db, guildId),
+      this.withCrestRights(actor, guildId, page.viewer),
+    ]);
+    return this.withViewerMute(actor, guildId, {
+      ...page,
+      widgetPrefs,
+      viewer,
+    });
+  }
+
+  /**
+   * ROK-1814: `isStaff` (moderation, e.g. the crest's "Remove upload") and
+   * `canEditCrest` (`canEdit`, or the kind's top in-game rank — the same
+   * predicate `HubCrestEditorGuard` applies). Visitors never edit the crest.
+   */
+  private async withCrestRights(
+    actor: GuildActor,
+    guildId: number,
+    viewer: GuildPage['viewer'],
+  ): Promise<GuildPage['viewer']> {
+    const canEditCrest =
+      viewer.canEdit ||
+      (viewer.role !== 'visitor' &&
+        (await this.access.holdsTopRank(actor, guildId)));
+    return { ...viewer, isStaff: isStaff(actor), canEditCrest };
   }
 
   /**

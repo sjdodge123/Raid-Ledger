@@ -20,7 +20,7 @@ function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
     return (
         <div className="flex flex-col gap-3 rounded-xl border border-edge bg-panel p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="players-guild-card">
             <div className="flex min-w-0 items-center gap-3">
-                <GuildCrest />
+                <GuildCrest crest={guild.crest} name={guild.name} />
                 <div className="min-w-0">
                     <p className="truncate text-lg font-semibold text-foreground">{guild.name}</p>
                     {headline && <p className="line-clamp-2 break-words text-sm text-secondary" data-testid="players-guild-headline">{headline}</p>}

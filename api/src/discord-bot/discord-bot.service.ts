@@ -11,9 +11,15 @@ import { SettingsService } from '../settings/settings.service';
 import type { DiscordBotConfig } from '../settings/settings.types';
 import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
+import {
+  applicationIdFromToken,
+  fetchMissingPrivilegedIntents,
+} from './discord-intents.helpers';
 import type {
   DiscordBotStatusResponse,
+  DiscordBotTestResult,
   DiscordSetupStatus,
+  PrivilegedIntent,
 } from '@raid-ledger/contract';
 
 @Injectable()
@@ -147,6 +153,8 @@ export class DiscordBotService
       ...(botUser
         ? { botUserId: botUser.id, botUsername: botUser.username }
         : {}),
+      // ROK-1703: the wizard warns when the bot sits in more than one server.
+      ...(connected ? { guildCount: this.clientService.getGuildCount() } : {}),
     };
   }
 
@@ -189,13 +197,12 @@ export class DiscordBotService
   }
 
   /**
-   * Test a bot token by temporarily connecting.
+   * Test a bot token by temporarily connecting. ROK-1703: alongside the
+   * connect, asks Discord which privileged intents are off (a failed check
+   * leaves `missingIntents` absent) and decodes the token's application id.
    */
-  async testToken(token: string): Promise<{
-    success: boolean;
-    guildName?: string;
-    message: string;
-  }> {
+  async testToken(token: string): Promise<DiscordBotTestResult> {
+    const preflight = fetchMissingPrivilegedIntents(token);
     const testClient = new DiscordBotClientService(
       // Create a minimal event emitter that does nothing — test-only
       { emit: () => false } as never,
@@ -212,12 +219,30 @@ export class DiscordBotService
         message: guildInfo
           ? `Connected to ${guildInfo.name} (${guildInfo.memberCount} members)`
           : 'Bot token is valid! Almost done — save the token, enable the bot, then use the Invite URL under "Invite Bot to Your Server" above to add it to your Discord server.',
+        ...tokenFacts(token, await preflight),
       };
     } catch (error) {
       await testClient.disconnect();
-      return { success: false, message: friendlyDiscordErrorMessage(error) };
+      const missing = await preflight;
+      return {
+        success: false,
+        message: friendlyDiscordErrorMessage(error, missing),
+        ...tokenFacts(token, missing),
+      };
     }
   }
+}
+
+/** ROK-1703: the optional `applicationId` / `missingIntents` result fields. */
+function tokenFacts(
+  token: string,
+  missing: PrivilegedIntent[] | null,
+): Pick<DiscordBotTestResult, 'applicationId' | 'missingIntents'> {
+  const applicationId = applicationIdFromToken(token);
+  return {
+    ...(applicationId ? { applicationId } : {}),
+    ...(missing ? { missingIntents: missing } : {}),
+  };
 }
 
 type SetupStep = {

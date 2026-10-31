@@ -28,11 +28,12 @@ export function emitOAuthReconnect(
   const id = cache.get(SETTING_KEYS.DISCORD_CLIENT_ID);
   const secret = cache.get(SETTING_KEYS.DISCORD_CLIENT_SECRET);
   const callback = cache.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
-  if (id && secret && callback) {
+  // ROK-1697: a blank callback is valid — readers default it at read time.
+  if (id && secret) {
     emitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, {
       clientId: id,
       clientSecret: secret,
-      callbackUrl: callback,
+      callbackUrl: callback ?? '',
     });
   }
 }
