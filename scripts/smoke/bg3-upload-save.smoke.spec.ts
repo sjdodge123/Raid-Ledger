@@ -15,6 +15,7 @@
  * matches an earlier run's. Every write is confirmed against
  * `GET /plugins/bg3/hubs/:id/snapshot` with `pollForCondition`. No sleeps.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
@@ -44,6 +45,58 @@ interface UploadFile {
     name: string;
     mimeType: string;
     buffer: Buffer;
+}
+
+/** One upload-path request: a companion blob/message or the campaign-key bind. */
+interface UploadCall {
+    method: string;
+    path: string;
+    body: string | null;
+}
+
+const BLOB_PATH = /\/companion\/v1\/blobs\/([0-9a-f]{64})$/;
+const MESSAGE_PATH = /\/companion\/v1\/messages\/bg3-save$/;
+const BIND_PATH = /\/me\/campaign-keys\/([0-9a-f]{64})$/;
+
+/** Record every request the upload path makes (blob, bind, message), with its body. */
+function watchUploadCalls(page: Page): UploadCall[] {
+    const calls: UploadCall[] = [];
+    page.on('request', (r) => {
+        const path = new URL(r.url()).pathname;
+        if (BLOB_PATH.test(path) || MESSAGE_PATH.test(path) || BIND_PATH.test(path)) {
+            calls.push({ method: r.method(), path, body: r.method() === 'POST' ? r.postData() : null });
+        }
+    });
+    return calls;
+}
+
+const sha256Hex = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
+/**
+ * AC3 after Upload: exactly one blob PUT, one bind PUT and one message POST
+ * (order not pinned), keyed to the payload; the message names neither the
+ * per-run file stem nor any path.
+ */
+function expectUploadCalls(calls: readonly UploadCall[], file: UploadFile): void {
+    const label = (c: UploadCall): string => `${c.method} ${c.path}`;
+    const blobs = calls.filter((c) => c.method === 'PUT' && BLOB_PATH.test(c.path));
+    const binds = calls.filter((c) => c.method === 'PUT' && BIND_PATH.test(c.path));
+    const posts = calls.filter((c) => c.method === 'POST' && MESSAGE_PATH.test(c.path));
+    expect(blobs.map(label), 'exactly one thumbnail blob PUT').toHaveLength(1);
+    expect(binds.map(label), 'exactly one campaign-key bind PUT').toHaveLength(1);
+    expect(posts.map(label), 'exactly one bg3-save message POST').toHaveLength(1);
+    expect(calls.map(label), 'nothing else on the upload path').toHaveLength(3);
+    const body = posts[0]?.body ?? '';
+    const stem = file.name.replace(/\.lsv$/i, '');
+    expect(body, 'the message never names the per-run file stem').not.toContain(stem);
+    expect(body, 'the message never names the file').not.toContain('.lsv');
+    expect(body, 'the message carries no Windows path').not.toContain('\\');
+    expect(body, 'the message carries no saves path').not.toMatch(/Savegames|PlayerProfiles|Larian Studios/);
+    const payload = (JSON.parse(body) as { payload: { campaignKey: string; campaignKeySource: string; thumbnail: { sha256: string } | null } }).payload;
+    expect(payload.campaignKeySource, 'a bare file is keyed by its stem').toBe('file-name');
+    expect(payload.campaignKey, 'the key is the sha256 of the stem, not the stem').toBe(sha256Hex(stem));
+    expect(binds[0]?.path.match(BIND_PATH)?.[1], 'the bind targets the payload campaign key').toBe(payload.campaignKey);
+    expect(blobs[0]?.path.match(BLOB_PATH)?.[1], 'the blob is the payload thumbnail').toBe(payload.thumbnail?.sha256);
 }
 
 /** The bg3 plugin is not active on a fresh env; install, else activate (a sibling worker won). */
@@ -127,10 +180,7 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
     test('Party empty state → Upload a save → preview → Upload → the Party widget shows the party', async ({ page }, testInfo) => {
         const seed = await seedHub(testInfo);
         const file = uploadFile(testInfo);
-        const companionCalls: string[] = [];
-        page.on('request', (r) => {
-            if (/\/companion\/v1\/(messages|blobs)\//.test(new URL(r.url()).pathname)) companionCalls.push(`${r.method()} ${r.url()}`);
-        });
+        const uploadCalls = watchUploadCalls(page);
         const jwt = await signInOnboardedMember(page, seed.memberId);
         await page.goto(`/hubs/${seed.hubId}`);
         const empty = page.getByTestId('bg3-party-empty');
@@ -141,13 +191,14 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         await expect(preview, 'the preview names the save').toContainText(SAVE_NAME);
         await expect(preview, 'the preview shows the act and area').toContainText(WHERE_TEXT);
         await expect(preview.getByRole('listitem'), 'the preview lists the whole party').toHaveCount(PARTY_SIZE);
-        expect(companionCalls, 'parsing and previewing send nothing to the companion ingest (blobs / messages)').toEqual([]);
+        expect(uploadCalls, 'parsing and previewing send nothing (no blob, bind or message)').toEqual([]);
 
         const sheet = await submitUpload(page);
         await expect(sheet.getByTestId('bg3-upload-banner-success'), 'the success banner names the campaign').toHaveText(
             `Uploaded to ${CAMPAIGN_NAME}`,
             { timeout: UI_TIMEOUT },
         );
+        expectUploadCalls(uploadCalls, file);
         expect(await waitForParty(jwt, seed.hubId, PARTY_SIZE), 'the uploaded save is the 4-hero party').toBe(HERO_COUNT);
         await closeWithDone(page);
 
