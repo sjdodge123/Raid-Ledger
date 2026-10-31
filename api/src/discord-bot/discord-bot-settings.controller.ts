@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
+import { RateLimit } from '../throttler/rate-limit.decorator';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordEmojiService } from './services/discord-emoji.service';
@@ -129,6 +130,7 @@ export class DiscordBotSettingsController {
 
   @Post('test')
   @HttpCode(HttpStatus.OK)
+  @RateLimit('admin')
   async testConnection(@Body() body: unknown): Promise<DiscordBotTestResult> {
     try {
       const dto = DiscordBotTestConnectionSchema.parse(body);

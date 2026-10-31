@@ -5,9 +5,17 @@
  * render `-#` subtext inside an embed field) when the roster is short, and
  * carries no such line when everyone in the group signed up.
  *
+ * Fixture: a decided community LINEUP (not `POST /scheduling-polls`). Since
+ * ROK-2054 a standalone poll's lock-in posts no lineup-channel card (the poll
+ * card's LOCKED IN state is its announcement), so only a lineup match can
+ * carry the group line. The lineup's one nominated game is voted by the admin
+ * and fixture users A + B, then decided, so the match's group is admin + A +
+ * B (`source: 'voted'`) — the same set the old standalone poll was created
+ * with.
+ *
  * Where the numbers come from (api `resolveEventRosterCard`):
- *   - M = the poll's match members with a Discord id and not deactivated
- *     (`findMatchMemberUsers`). The creator is always inserted as a member.
+ *   - M = the match members with a Discord id and not deactivated
+ *     (`findMatchMemberUsers`).
  *   - N = members of that group with an active signup on the created event.
  *     The lock-in signs up the locked slot's YES voters only (ROK-1617).
  *
@@ -33,10 +41,15 @@
  */
 import { pollForEmbed, snapshotMessageIds } from '../../helpers/polling.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 import { awaitProcessing, deleteEvent, seedFixtureUser } from '../fixtures.js';
 import type { FixtureUser } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
-import { resolveLineupChannelId } from './lineup-scheduling-poll-card.test.js';
+import {
+  deleteLineup,
+  loadSchedulingMatch,
+  resolveLineupChannelId,
+} from './lineup-scheduling-poll-card.test.js';
 
 /**
  * Fixture slots 8 + 9, shared with the ROK-1874 / unanimous-DM poll smokes.
@@ -47,15 +60,13 @@ const MEMBER_A_SLOT = 8;
 const MEMBER_B_SLOT = 9;
 export const PLAYERS_PREFIX = '\u{1F465} Players (';
 const GROUP_LINE_MARK = 'from the group';
+const TITLE_PREFIX = 'Group Count ';
+const OWN_TITLE_PREFIXES = [TITLE_PREFIX] as const;
+const RUN_STARTED_AT = Date.now();
 
-interface CreatePollResponse {
-  id: number;
-  lineupId: number;
-}
-
-/** One poll under test and the two members it was created with. */
+/** One decided lineup's scheduling match and the two members it voted with. */
 interface GroupPoll {
-  poll: CreatePollResponse;
+  lineupId: number;
   base: string;
   memberA: FixtureUser;
   memberB: FixtureUser;
@@ -83,17 +94,40 @@ export async function adminIsInGroup(ctx: TestContext): Promise<boolean> {
   return typeof me?.discordId === 'string' && me.discordId.length > 0;
 }
 
-/** A public standalone poll whose group is the admin + fixture A + B. */
-async function createGroupPoll(ctx: TestContext): Promise<GroupPoll> {
+/**
+ * A decided community lineup whose scheduling match's group is the admin +
+ * fixture A + B (all three vote its one nominated game). `onLineupId` claims
+ * the lineup id before any later call can throw, so cleanup never leaks it.
+ */
+async function createGroupPoll(
+  ctx: TestContext,
+  onLineupId: (id: number) => void,
+): Promise<GroupPoll> {
   const memberA = await seedFixtureUser(ctx.api, 3, MEMBER_A_SLOT);
   const memberB = await seedFixtureUser(ctx.api, 3, MEMBER_B_SLOT);
-  const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
-    gameId: await resolveGameId(ctx),
-    durationHours: 24,
-    memberUserIds: [memberA.userId, memberB.userId],
+  const gameId = await resolveGameId(ctx);
+  const { id: lineupId } = await ctx.api.post<{ id: number }>('/lineups', {
+    title: `${TITLE_PREFIX}${Date.now()}`,
+    description: 'ROK-1863 EVENT CREATED group-count smoke',
+    buildingDurationHours: 720,
+    votingDurationHours: 720,
+    decidedDurationHours: 720,
+    matchThreshold: 10,
   });
-  const base = `/lineups/${poll.lineupId}/schedule/${poll.id}`;
-  return { poll, base, memberA, memberB };
+  onLineupId(lineupId);
+  await ctx.api.post(`/lineups/${lineupId}/nominate`, { gameId });
+  await ctx.api.patch(`/lineups/${lineupId}/status`, { status: 'voting' });
+  for (const voter of [ctx.api, memberA.api, memberB.api]) {
+    await voter.post(`/lineups/${lineupId}/vote`, { gameId });
+  }
+  await ctx.api.patch(`/lineups/${lineupId}/status`, {
+    status: 'decided',
+    decidedGameId: gameId,
+  });
+  await awaitProcessing(ctx.api);
+  const match = await loadSchedulingMatch(ctx.api, lineupId);
+  const base = `/lineups/${lineupId}/schedule/${match.id}`;
+  return { lineupId, base, memberA, memberB };
 }
 
 /**
@@ -182,21 +216,14 @@ async function lockInAndReadPlayers(
   return players;
 }
 
-/** Shared guild — never leave the poll or the event behind. */
+/** Shared guild — never leave the lineup or the event behind. */
 async function cleanup(
   ctx: TestContext,
-  gp: GroupPoll | undefined,
+  lineupId: number | undefined,
   eventId: number | undefined,
 ): Promise<void> {
-  if (gp) {
-    await ctx.api
-      .post(`${gp.base}/cancel`, { reason: 'smoke cleanup ROK-1863' })
-      .catch(() => null);
-    await ctx.api
-      .patch(`/lineups/${gp.poll.lineupId}/status`, { status: 'archived' })
-      .catch(() => null);
-  }
   if (eventId !== undefined) await deleteEvent(ctx.api, eventId);
+  if (lineupId !== undefined) await deleteLineup(ctx.api, lineupId);
 }
 
 /** Assert the Players field names `count` players (the `(N)` in its name). */
@@ -213,11 +240,14 @@ const shortRosterShowsGroupLine: SmokeTest = {
   name: 'ROK-1863: EVENT CREATED card says "N of M from the group signed up"',
   category: 'embed',
   async run(ctx: TestContext) {
-    let gp: GroupPoll | undefined;
+    let lineupId: number | undefined;
     let eventId: number | undefined;
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     try {
       const adminInGroup = await adminIsInGroup(ctx);
-      gp = await createGroupPoll(ctx);
+      const gp = await createGroupPoll(ctx, (id) => {
+        lineupId = id;
+      });
       const slot = await suggestSlot(gp, ctx, 10);
       await voteYes(gp.memberA, gp.base, slot.id); // B never votes
       await awaitProcessing(ctx.api);
@@ -237,7 +267,7 @@ const shortRosterShowsGroupLine: SmokeTest = {
         );
       }
     } finally {
-      await cleanup(ctx, gp, eventId);
+      await cleanup(ctx, lineupId, eventId);
     }
   },
 };
@@ -246,10 +276,13 @@ const fullRosterHasNoGroupLine: SmokeTest = {
   name: 'ROK-1863: EVENT CREATED card has no group line when the whole group signed up',
   category: 'embed',
   async run(ctx: TestContext) {
-    let gp: GroupPoll | undefined;
+    let lineupId: number | undefined;
     let eventId: number | undefined;
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     try {
-      gp = await createGroupPoll(ctx);
+      const gp = await createGroupPoll(ctx, (id) => {
+        lineupId = id;
+      });
       const slot = await suggestSlot(gp, ctx, 11);
       await voteYes(gp.memberA, gp.base, slot.id);
       await voteYes(gp.memberB, gp.base, slot.id);
@@ -266,7 +299,7 @@ const fullRosterHasNoGroupLine: SmokeTest = {
         );
       }
     } finally {
-      await cleanup(ctx, gp, eventId);
+      await cleanup(ctx, lineupId, eventId);
     }
   },
 };

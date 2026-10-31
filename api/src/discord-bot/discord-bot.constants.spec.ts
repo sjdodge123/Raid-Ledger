@@ -69,6 +69,21 @@ describe('friendlyDiscordErrorMessage', () => {
     expect(friendlyDiscordErrorMessage(err)).toContain('privileged intent');
   });
 
+  // ROK-1703 (AC-6): the 4014 text names the intents that are actually off.
+  it('names only the missing intent when a list is given (4014)', () => {
+    const err = Object.assign(new Error('Unknown error'), { code: 4014 });
+    expect(friendlyDiscordErrorMessage(err, ['messageContent'])).toBe(
+      'Missing required privileged intent: Message Content Intent. Turn it on in the Discord Developer Portal under Bot > Privileged Gateway Intents.',
+    );
+  });
+
+  it('names all three intents without a list (4014)', () => {
+    const err = Object.assign(new Error('Unknown error'), { code: 4014 });
+    expect(friendlyDiscordErrorMessage(err)).toBe(
+      'Missing required privileged intents: Presence Intent, Server Members Intent and Message Content Intent. Turn them on in the Discord Developer Portal under Bot > Privileged Gateway Intents.',
+    );
+  });
+
   it('detects invalid token errors', () => {
     const err = new Error('invalid token provided');
     expect(friendlyDiscordErrorMessage(err)).toContain('Invalid bot token');

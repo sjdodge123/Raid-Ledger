@@ -27,6 +27,7 @@ jest.mock('./lineup-notification-dm-batch.helpers', () => ({
 }));
 jest.mock('./lineup-notification-targets.helpers', () => ({
   findMatchMemberUsers: jest.fn(() => Promise.resolve([])),
+  isStandaloneLineup: jest.fn(() => Promise.resolve(false)),
 }));
 jest.mock('./lineup-decision-reason.helpers', () => ({
   loadDecisionReason: jest.fn(() => Promise.resolve(null)),
