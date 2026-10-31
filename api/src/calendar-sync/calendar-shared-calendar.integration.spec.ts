@@ -147,6 +147,32 @@ describe('a dedicated calendar shared by two connections (Codex P1)', () => {
     expect(row?.cal).toBeNull();
   });
 
+  it('keeps the calendar when the sibling references it only through a live copy link', async () => {
+    const { cal, alice, bob } = await twoConnectionsOneCalendar();
+    // Bob's row no longer names the calendar; only his copy link points at it.
+    await testApp.db
+      .update(conns)
+      .set({ dedicatedCalendarId: null })
+      .where(eq(conns.id, bob.id));
+    // mutation: `linkedElsewhere` returning false makes this go red (deleted).
+    expect(await disconnect(alice.id)).toMatchObject({ remote: 'cleaned' });
+    expect(fake.store.hasCalendar(cal)).toBe(true);
+    expect(copyIdsIn(cal)).toEqual([bob.copyId]);
+  });
+
+  it('removes the calendar when both connections are already disconnecting', async () => {
+    const { cal, alice, bob } = await twoConnectionsOneCalendar();
+    // Bob is mid-disconnect too: his row and copy link still name the calendar.
+    await testApp.db
+      .update(conns)
+      .set({ status: 'disconnecting' })
+      .where(eq(conns.id, bob.id));
+    // mutation: dropping `ne(status, 'disconnecting')` from `siblingsOf`
+    // counts Bob as live and leaves the calendar, so this goes red.
+    expect(await disconnect(alice.id)).toMatchObject({ remote: 'cleaned' });
+    expect(fake.store.hasCalendar(cal)).toBe(false);
+  });
+
   it('a lone connection still removes its own calendar on disconnect', async () => {
     const cal = fake.store.createCalendar('Raid Ledger');
     const eventId = await createFutureEvent(testApp, adminToken);

@@ -80,6 +80,15 @@ export async function calendarUsedElsewhere(
 /**
  * Delete the dedicated calendar only when no other connection uses it (a 404
  * is success). Call AFTER this connection's own copies are deleted.
+ *
+ * Known gap (tolerated): the reference check and the remote delete are NOT in
+ * one transaction and hold no lock. A sibling connection could claim this
+ * calendar (set its `dedicated_calendar_id`) and write its first copy between
+ * the check and the delete; the delete then removes that fresh calendar. The
+ * window is one provider round-trip and needs two users of the same remote
+ * account acting at that instant. It is not data loss: that sibling's next
+ * reconcile gets `DedicatedTargetGoneError`, recreates (or re-adopts) the
+ * calendar and rewrites its copies.
  * @returns true when the calendar was deleted (or already gone).
  */
 export async function deleteCalendarIfExclusive(
