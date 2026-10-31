@@ -58,7 +58,7 @@ function SheetBody({ flow, campaigns, onNewCampaign }: BodyProps): JSX.Element |
 interface FooterProps { flow: Flow; onCancel: () => void; onDone: () => void; onUpload: () => void }
 
 function SheetFooter({ flow, onCancel, onDone, onUpload }: FooterProps): JSX.Element {
-    if (flow.result !== null) return <Button onClick={onDone}>Close</Button>;
+    if (flow.result !== null) return <Button onClick={onDone}>Done</Button>;
     return (
         <>
             <Button variant="secondary" onClick={onCancel} disabled={flow.uploading}>Cancel</Button>

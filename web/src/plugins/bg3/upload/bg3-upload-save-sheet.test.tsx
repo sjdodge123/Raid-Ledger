@@ -91,7 +91,7 @@ describe('pick → preview → upload', () => {
         await user.click(screen.getByRole('button', { name: 'Upload' }));
         expect(await screen.findByTestId('bg3-upload-banner-success')).toHaveTextContent('Uploaded to Tactician run');
         expect(calls).toEqual(['blob', 'message']);
-        await user.click(screen.getByRole('button', { name: 'Close' }));
+        await user.click(screen.getByRole('button', { name: 'Done' }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
