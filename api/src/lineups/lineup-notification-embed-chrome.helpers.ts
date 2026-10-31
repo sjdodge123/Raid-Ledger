@@ -37,7 +37,10 @@ const PHASE_LABELS: [LineupPhase, string][] = [
  * ROK-2054: the terminal step — the event exists, so every phase is done and
  * the last one reads "Scheduled" rather than the in-progress "Scheduling".
  */
-const SCHEDULED_BREADCRUMB = ['Nominations', 'Voting', 'Scheduled']
+const SCHEDULED_BREADCRUMB = [
+  ...PHASE_LABELS.slice(0, -1).map(([, name]) => name),
+  'Scheduled',
+]
   .map((name) => `\u2705 ${name}`)
   .join('  \u203A  ');
 

@@ -8,6 +8,7 @@ import * as schema from '../drizzle/schema';
 import type { DiscordMember } from './lineup-notification-dm.helpers';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { resolveUserTimezones } from '../notifications/timezone.helpers';
+import { standaloneLineupFlag } from './standalone-poll/standalone-lineup-flag.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -158,7 +159,7 @@ export async function isStandaloneLineup(
 ): Promise<boolean> {
   const [row] = await db
     .select({
-      standalone: sql<boolean>`coalesce(${schema.communityLineups.phaseDurationOverride}->>'standalone' = 'true', false)`,
+      standalone: standaloneLineupFlag(),
     })
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
