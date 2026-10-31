@@ -3796,3 +3796,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-31 — fix/lockin-card-standalone (surfaced during ROK-2054 review)
 
 - low `api/src/events/signup-slot.helpers.ts:281` — a second `checkAutoBench` counts against `maxAttendees` only, so it disagrees with the canonical `isEventAtCapacity` (slot config first) in `signups-signup.helpers.ts`. Its only caller, `performSignup` (`signup-core.helpers.ts:26`), is imported nowhere — dead code, pre-existing. Suggested: delete `performSignup` + this `checkAutoBench`.
+
+### 2026-10-31 — feat/rok-1597-outlook-calendar (surfaced during ROK-1597 hardening)
+
+- med `api/src/calendar-sync/read/calendar-read-failure.helpers.ts:69` — calendar-sync retries ignore the provider's `Retry-After`: `RateLimitError.retryAfterMs` reaches `classifyReadFailure`'s decision only, and nothing delays the BullMQ retry by it; read (`calendar-read.enqueue.helpers.ts:60`, exponential 60 s base) and write (exponential 30 s base) jobs back off on their own schedule, so a long `Retry-After` from Google or Microsoft Graph is not honoured (pre-existing for Google; the Microsoft adapter inherits it). Suggested: when a job fails with `RateLimitError` carrying `retryAfterMs`, re-schedule it with that delay (e.g. `job.moveToDelayed(now + retryAfterMs)` + `DelayedError`) instead of the exponential backoff.
