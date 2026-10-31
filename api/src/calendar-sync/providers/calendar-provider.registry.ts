@@ -1,8 +1,9 @@
 /**
  * ROK-1592: resolves a calendar adapter by provider key (plan L1, L12, L15).
  *
- * `google` and `apple` (ROK-1598) resolve; `microsoft` (ROK-1597) returns
- * null so its routes 404. Apple connects with a password, not OAuth:
+ * `google`, `apple` (ROK-1598) and `microsoft` (ROK-1597) resolve; read and
+ * write routing follow each adapter's structural capabilities, so the
+ * account-only Microsoft adapter routes neither until those layers land. Apple connects with a password, not OAuth:
  * `getPasswordProvider` resolves it for the connect route, and its OAuth
  * methods refuse (the OAuth routes accept only google/microsoft). ROK-1596 adds
  * `getWriteProviderForConnection`: an adapter is a write provider when it
@@ -24,6 +25,7 @@ import type {
 } from './calendar-provider.interface';
 import { AppleCalendarAdapter } from './apple/apple.adapter';
 import { GoogleCalendarAdapter } from './google/google.adapter';
+import { MicrosoftCalendarAdapter } from './microsoft/microsoft.adapter';
 import { FAKE_SUBJECT_PREFIX } from './testing/fake-calendar.provider';
 
 /** `account_subject` prefix of a DEMO_MODE fake connection (L15). */
@@ -119,8 +121,13 @@ export class CalendarProviderRegistry {
     @Optional()
     @Inject(AppleCalendarAdapter)
     apple: CalendarAccountProvider | null = null,
+    @Optional()
+    @Inject(MicrosoftCalendarAdapter)
+    microsoft: CalendarAccountProvider | null = null,
   ) {
-    const all = apple ? [google, apple] : [google];
+    const all = [google, apple, microsoft].filter(
+      (p): p is CalendarAccountProvider => p !== null,
+    );
     this.accountProviders = new Map(all.map((p) => [p.key, p]));
   }
 

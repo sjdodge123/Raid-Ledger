@@ -58,7 +58,10 @@ export function mapGraphError(
   if (status === 401) return new ProviderAuthError(reason);
   if (status === 403) return forbidden(code, ctx, reason);
   if (status === 404 || status === 410) return new NotFoundError(reason);
-  if (status === 429 || ((status === 503 || status === 504) && res.retryAfter)) {
+  if (
+    status === 429 ||
+    ((status === 503 || status === 504) && res.retryAfter)
+  ) {
     return new RateLimitError(parseRetryAfterMs(res.retryAfter), reason);
   }
   if (status >= 500) return new TransientError(reason);
