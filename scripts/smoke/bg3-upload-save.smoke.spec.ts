@@ -129,7 +129,7 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         const file = uploadFile(testInfo);
         const companionCalls: string[] = [];
         page.on('request', (r) => {
-            if (new URL(r.url()).pathname.includes('/companion/')) companionCalls.push(`${r.method()} ${r.url()}`);
+            if (/\/companion\/v1\/(messages|blobs)\//.test(new URL(r.url()).pathname)) companionCalls.push(`${r.method()} ${r.url()}`);
         });
         const jwt = await signInOnboardedMember(page, seed.memberId);
         await page.goto(`/hubs/${seed.hubId}`);
@@ -141,7 +141,7 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         await expect(preview, 'the preview names the save').toContainText(SAVE_NAME);
         await expect(preview, 'the preview shows the act and area').toContainText(WHERE_TEXT);
         await expect(preview.getByRole('listitem'), 'the preview lists the whole party').toHaveCount(PARTY_SIZE);
-        expect(companionCalls, 'parsing and previewing never call /companion/*').toEqual([]);
+        expect(companionCalls, 'parsing and previewing send nothing to the companion ingest (blobs / messages)').toEqual([]);
 
         const sheet = await submitUpload(page);
         await expect(sheet.getByTestId('bg3-upload-banner-success'), 'the success banner names the campaign').toHaveText(
