@@ -6,15 +6,18 @@ function initMenu(): void {
   const nav = document.getElementById('nav');
   const btn = document.getElementById('menuBtn');
   if (!nav || !btn) return;
-  const close = () => {
-    nav.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false');
-  };
-  btn.addEventListener('click', () => {
-    const open = nav.classList.toggle('open');
+  const set = (open: boolean): void => {
+    nav.classList.toggle('open', open);
     btn.setAttribute('aria-expanded', String(open));
+    btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  };
+  btn.addEventListener('click', () => set(!nav.classList.contains('open')));
+  document.querySelectorAll('#mobileMenu a').forEach((a) => a.addEventListener('click', () => set(false)));
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !nav.classList.contains('open')) return;
+    set(false);
+    btn.focus();
   });
-  document.querySelectorAll('#mobileMenu a').forEach((a) => a.addEventListener('click', close));
 }
 
 function initReveal(): void {
@@ -63,6 +66,9 @@ function initEmbed(): void {
   );
 }
 
+/** Manual-copy hint when the Clipboard API is missing or refused. */
+const COPY_FALLBACK = 'Press Ctrl+C / ⌘C';
+
 function initCopy(): void {
   const btn = document.getElementById('copyBtn');
   const code = document.getElementById('compose');
@@ -73,9 +79,9 @@ function initCopy(): void {
       window.setTimeout(() => (btn.textContent = 'Copy'), 1600);
     };
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(code.textContent ?? '').then(done('Copied'), done('Press ⌘C'));
+      navigator.clipboard.writeText(code.textContent ?? '').then(done('Copied'), done(COPY_FALLBACK));
     } else {
-      done('Press ⌘C')();
+      done(COPY_FALLBACK)();
     }
   });
 }
