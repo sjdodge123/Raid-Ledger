@@ -81,7 +81,12 @@ function rosterDb(names: string[], maxAttendees: number | null = null) {
         return {
           // Record the JOINED select's table (the roster read), so the later
           // event-cap read (ROK-2054) cannot mask a wrong roster source.
-          innerJoin: () => {
+          innerJoin: (joined: unknown) => {
+            // ROK-2054: the shared occupied-slot count (`isEventAtCapacity`)
+            // — every rostered name holds a slot in these cases.
+            if (joined === schema.rosterAssignments) {
+              return { where: () => Promise.resolve([{ count: names.length }]) };
+            }
             seen.fromTable = table;
             return {
               where: () =>

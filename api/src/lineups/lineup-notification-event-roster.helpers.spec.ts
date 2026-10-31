@@ -20,6 +20,7 @@ import {
   buildEventCreatedEmbed,
   type EmbedContext,
 } from './lineup-notification-embed.helpers';
+import { checkAutoBench } from '../events/signups-signup.helpers';
 import * as schema from '../drizzle/schema';
 
 type Db = Parameters<typeof resolveEventRosterCard>[0];
@@ -66,21 +67,35 @@ const ROSTER_ROWS: EventRosterUser[] = ROSTERED.map((displayName, i) => ({
  * records what was queried so a fix that "works" by reading the match-members
  * table cannot pass.
  */
-/** The event row the ROK-2054 capacity read returns (no cap by default). */
+/**
+ * The event row the ROK-2054 capacity read returns (no cap by default), plus
+ * `occupied`: what the shared occupied-slot count (`isEventAtCapacity`, the
+ * `checkAutoBench` query) returns — non-bench roster ASSIGNMENTS, which is
+ * deliberately not the roster length.
+ */
 interface CapRow {
   slotConfig: unknown;
   maxAttendees: number | null;
+  occupied?: number;
 }
 const NO_CAP: CapRow = { slotConfig: null, maxAttendees: null };
 
 function fakeDb(rows: EventRosterUser[], event: CapRow = NO_CAP) {
-  const seen: { fromTable?: unknown } = {};
+  const seen: { fromTable?: unknown; countJoin?: unknown } = {};
   const db = {
     select: () => ({
       from: (table: unknown) => {
         seen.fromTable ??= table;
         return {
-          innerJoin: () => ({ where: () => Promise.resolve(rows) }),
+          innerJoin: (joined: unknown) => {
+            if (joined === schema.users) {
+              return { where: () => Promise.resolve(rows) };
+            }
+            // ROK-2054: the occupied-slot count, joined to roster assignments.
+            seen.countJoin = joined;
+            const count = event.occupied ?? 0;
+            return { where: () => Promise.resolve([{ count }]) };
+          },
           // ROK-2054: `.from(events).where(...).limit(1)` — the cap read.
           where: () => ({ limit: () => Promise.resolve([event]) }),
         };
@@ -282,41 +297,87 @@ describe('EVENT CREATED card — capacity-aware copy (ROK-2054)', () => {
   });
 });
 
-describe('resolveEventRosterCard full (ROK-2054)', () => {
-  it('is full when the roster reaches maxAttendees', async () => {
-    const { db } = fakeDb(ROSTER_ROWS, {
+/** `n` role-less voters — an MMO auto-signup leaves them unassigned. */
+function voters(n: number): EventRosterUser[] {
+  return Array.from({ length: n }, (_, i) => ({
+    userId: i + 1,
+    displayName: `voter${i + 1}`,
+  }));
+}
+
+/** The card's `full` and `checkAutoBench`'s verdict on the same event. */
+async function fullAndAutoBench(rows: EventRosterUser[], event: CapRow) {
+  const { db, seen } = fakeDb(rows, event);
+  const card = await resolveEventRosterCard(db, EVENT_ID, GROUP);
+  const autoBench = await checkAutoBench(
+    db,
+    { slotConfig: event.slotConfig, maxAttendees: event.maxAttendees } as Parameters<
+      typeof checkAutoBench
+    >[1],
+    EVENT_ID,
+  );
+  return { full: card.full, autoBench, countJoin: seen.countJoin };
+}
+
+describe('resolveEventRosterCard full = checkAutoBench full (ROK-2054)', () => {
+  it('is open at cap 5 with 4 players + 1 voluntary bench (5 on the roster)', async () => {
+    const out = await fullAndAutoBench(ROSTER_ROWS, {
       slotConfig: null,
-      maxAttendees: ROSTERED.length,
+      maxAttendees: 5,
+      occupied: 4,
     });
 
-    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(true);
+    expect(out).toEqual({
+      full: false,
+      autoBench: false,
+      countJoin: schema.rosterAssignments,
+    });
   });
 
-  it('is full when the roster reaches the generic slot capacity', async () => {
-    const { db } = fakeDb(ROSTER_ROWS, {
+  it('is open for a cap-sized MMO group of unassigned voters — signup still admits', async () => {
+    const out = await fullAndAutoBench(voters(25), {
+      slotConfig: { type: 'mmo' },
+      maxAttendees: null,
+      occupied: 0,
+    });
+
+    expect(out).toEqual({
+      full: false,
+      autoBench: false,
+      countJoin: schema.rosterAssignments,
+    });
+  });
+
+  it('is full when occupied slots reach the generic slot capacity', async () => {
+    const out = await fullAndAutoBench(ROSTER_ROWS, {
       slotConfig: { type: 'generic', player: 4 },
       maxAttendees: null,
+      occupied: 4,
     });
 
-    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(true);
+    expect(out).toEqual({
+      full: true,
+      autoBench: true,
+      countJoin: schema.rosterAssignments,
+    });
   });
 
-  it('is open when the roster is under the cap', async () => {
-    const { db } = fakeDb(ROSTER_ROWS, {
+  it('is full when occupied slots reach maxAttendees', async () => {
+    const out = await fullAndAutoBench(ROSTER_ROWS, {
       slotConfig: null,
-      maxAttendees: ROSTERED.length + 1,
+      maxAttendees: 5,
+      occupied: 5,
     });
 
-    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(
-      false,
-    );
+    expect(out).toMatchObject({ full: true, autoBench: true });
   });
 
-  it('treats a null cap as unlimited — never full', async () => {
-    const { db } = fakeDb(ROSTER_ROWS, NO_CAP);
+  it('treats a null cap as unlimited — never full, no count read', async () => {
+    const out = await fullAndAutoBench(ROSTER_ROWS, {
+      ...NO_CAP,
+      occupied: 99,
+    });
 
-    expect((await resolveEventRosterCard(db, EVENT_ID, GROUP)).full).toBe(
-      false,
-    );
+    expect(out).toEqual({ full: false, autoBench: false, countJoin: undefined });
   });
 });

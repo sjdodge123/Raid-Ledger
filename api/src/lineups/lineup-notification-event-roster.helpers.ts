@@ -18,7 +18,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { ACTIVE_SIGNUP_STATUSES } from './scheduling/active-signup-statuses.constants';
-import { resolveEventCapacity } from '../events/signups-signup.helpers';
+import { isEventAtCapacity } from '../events/signups-signup.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -92,15 +92,12 @@ export interface EventRosterCard {
 }
 
 /**
- * ROK-2054: is the roster at the event's cap? The cap is the same one signup
- * auto-bench uses (`resolveEventCapacity`: slot config, else `maxAttendees`);
- * no cap means unlimited, never full. The count is the card's own roster.
+ * ROK-2054: is the event full? Exactly what signup auto-bench considers full
+ * (`isEventAtCapacity`, shared with `checkAutoBench`): occupied non-bench
+ * roster slots against the event's cap. NOT the card's roster length — that
+ * also counts bench, tentative and role-less (unassigned MMO) signups.
  */
-async function isEventFull(
-  db: Db,
-  eventId: number,
-  rosterCount: number,
-): Promise<boolean> {
+async function isEventFull(db: Db, eventId: number): Promise<boolean> {
   const [row] = await db
     .select({
       slotConfig: schema.events.slotConfig,
@@ -109,8 +106,7 @@ async function isEventFull(
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-  const cap = row ? resolveEventCapacity(row) : null;
-  return cap !== null && rosterCount >= cap;
+  return row ? isEventAtCapacity(db, row, eventId) : false;
 }
 
 /**
@@ -145,6 +141,6 @@ export async function resolveEventRosterCard(
       roster.map((r) => r.userId),
       groupMembers.map((m) => m.userId),
     ),
-    full: await isEventFull(db, eventId, roster.length),
+    full: await isEventFull(db, eventId),
   };
 }
