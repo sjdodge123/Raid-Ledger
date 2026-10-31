@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { Bg3SavePayloadSchema } from '@raid-ledger/contract';
 import { handleBg3ParseRequest } from './bg3-parse-protocol';
-import { parseBg3Save, sha256Hex } from './bg3-parse-save';
+import { Bg3ParseError } from './bg3-parse-errors';
+import { parseBg3Save, sha256Hex, type Bg3SaveSource } from './bg3-parse-save';
 import { initSync } from './vendor/rl_collectors_web';
 
 vi.mock('./bg3-parse-client', async () => {
@@ -114,6 +115,22 @@ const GOLDEN_PARTY = [
     ),
 ];
 
+/**
+ * The parse result as a value, so a drifted normaliser (whose output the
+ * schema then rejects as `invalid_payload`) fails the golden's own `toEqual`
+ * with a diff instead of an uncaught throw.
+ */
+async function outcome(source: Bg3SaveSource) {
+    try {
+        const parsed = await parseBg3Save(source);
+        const schemaValid = Bg3SavePayloadSchema.safeParse(parsed.payload).success;
+        return { ok: true as const, schemaValid, payload: parsed.payload, webpBytes: parsed.webp?.byteLength ?? null };
+    } catch (error) {
+        if (!(error instanceof Bg3ParseError)) throw error;
+        return { ok: false as const, code: error.code, detail: error.detail };
+    }
+}
+
 beforeAll(() => {
     // jsdom cannot fetch the `.wasm` by URL; instantiate the vendored bytes once,
     // so the reader's own `init()` (inside loadBg3Wasm) finds it ready.
@@ -138,37 +155,29 @@ describe('the real WASM reader on the synthetic Act 2 save', () => {
     });
 
     it('a bare .lsv → a schema-valid payload matching the golden (file-name key, summon rule)', async () => {
-        const parsed = await parseBg3Save({
-            file: lsvFile(),
-            folderName: null,
+        expect(await outcome({ file: lsvFile(), folderName: null })).toEqual({
+            ok: true,
+            schemaValid: true,
+            payload: {
+                saveName: 'QuickSave_1',
+                savedAt: '2026-10-24T12:00:00.000Z',
+                campaignKey: await sha256Hex('QuickSave_1'),
+                campaignKeySource: 'file-name',
+                gameVersion: '4.1.1.7631656',
+                platform: 'Steam',
+                currentLevel: 'SCL_Main_A',
+                difficulty: 'DifficultyHard',
+                ruleset: 'RulesetLarian',
+                party: GOLDEN_PARTY,
+                thumbnail: { ...EXPECTED.thumbnail, contentType: 'image/webp' },
+            },
+            webpBytes: EXPECTED.thumbnail.byteLength,
         });
-        expect(Bg3SavePayloadSchema.safeParse(parsed.payload).success).toBe(
-            true,
-        );
-        expect(parsed.payload).toEqual({
-            saveName: 'QuickSave_1',
-            savedAt: '2026-10-24T12:00:00.000Z',
-            campaignKey: await sha256Hex('QuickSave_1'),
-            campaignKeySource: 'file-name',
-            gameVersion: '4.1.1.7631656',
-            platform: 'Steam',
-            currentLevel: 'SCL_Main_A',
-            difficulty: 'DifficultyHard',
-            ruleset: 'RulesetLarian',
-            party: GOLDEN_PARTY,
-            thumbnail: { ...EXPECTED.thumbnail, contentType: 'image/webp' },
-        });
-        expect(parsed.webp?.byteLength).toBe(EXPECTED.thumbnail.byteLength);
     });
 
     it('a dropped folder → campaignKey is the folder-name hash, source save-folder', async () => {
-        const parsed = await parseBg3Save({
-            file: lsvFile(),
-            folderName: 'Tav-1234__QuickSave_1',
-        });
-        expect([
-            parsed.payload.campaignKey,
-            parsed.payload.campaignKeySource,
-        ]).toEqual([await sha256Hex('Tav-1234__QuickSave_1'), 'save-folder']);
+        const result = await outcome({ file: lsvFile(), folderName: 'Tav-1234__QuickSave_1' });
+        const key = result.ok ? [result.payload.campaignKey, result.payload.campaignKeySource] : result;
+        expect(key).toEqual([await sha256Hex('Tav-1234__QuickSave_1'), 'save-folder']);
     });
 });
