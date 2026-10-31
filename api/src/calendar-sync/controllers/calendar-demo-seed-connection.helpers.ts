@@ -7,6 +7,8 @@
  * to the Fake (never CalDAV), and the stored credentials are a `caldav`
  * shape pointing at a fake home set. `status: 'needs_reconnect'` renders the
  * "Password was revoked · reconnect" card (smoke P3, test plans).
+ * `provider: 'microsoft'` (ROK-1597) seeds an Outlook row exactly like the
+ * Google one — a Fake OAuth grant with a `demo-fake:` subject, no tenant.
  */
 import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
@@ -28,7 +30,7 @@ export const SeedConnectionSchema = z
     accountLabel: z.string().min(1).max(255).optional(),
     writeEnabled: z.boolean().optional(),
     writeTarget: z.enum(['dedicated', 'primary']).optional(),
-    provider: z.enum(['google', 'apple']).optional(),
+    provider: z.enum(['google', 'apple', 'microsoft']).optional(),
     status: z.enum(['active', 'needs_reconnect']).optional(),
   })
   .strict();
@@ -65,11 +67,13 @@ async function seedApple(
   return writeConnectionRow(db, row, creds, true);
 }
 
-async function seedGoogle(
+/** A Fake OAuth grant stored as `google` or `microsoft` (same shape). */
+async function seedOAuth(
   db: Db,
   fake: FakeCalendarProvider,
   userId: number,
   input: SeedConnectionInput,
+  provider: 'google' | 'microsoft',
 ): Promise<number> {
   const result = fake.seedConnection({
     id: randomBytes(6).toString('hex'),
@@ -77,7 +81,7 @@ async function seedGoogle(
   });
   const { id } = await upsertCalendarConnection(db, {
     userId,
-    provider: 'google',
+    provider,
     result,
   });
   return id;
@@ -106,7 +110,7 @@ export async function seedDemoConnection(
   const id =
     input.provider === 'apple'
       ? await seedApple(db, userId, input)
-      : await seedGoogle(db, fake, userId, input);
+      : await seedOAuth(db, fake, userId, input, input.provider ?? 'google');
   const set = overrides(input);
   if (Object.keys(set).length > 0) {
     await db
