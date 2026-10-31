@@ -26,13 +26,14 @@ const record = (b: unknown): void => { calls.push(JSON.stringify(b).includes('co
 async function addOne(user: ReturnType<typeof userEvent.setup>, alsoDefault = false): Promise<HTMLElement> {
     renderWithProviders(<Bg3AddSavesSheet isOpen hubId={BG3_HUB_ID} campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
     const sheet = await screen.findByTestId('bg3-add-saves');
-    await user.click(within(sheet).getByRole('checkbox', { name: /QuickSave_2/ }));
+    await user.click(await within(sheet).findByRole('checkbox', { name: /QuickSave_2/ }));
     if (alsoDefault) await user.click(within(sheet).getByRole('checkbox', { name: BG3_ADD_SAVES_DEFAULT_LABEL }));
     await user.click(screen.getByRole('button', { name: /^Add 1 playthrough/ }));
     return sheet;
 }
 
 /** Settled = the sheet asks or has closed, so a wrong path fails on its own assertion rather than a timeout. */
+// The sheet shows "Loading your saves…" until the unassigned-saves query resolves, so rows are awaited with findByRole.
 const settled = (): Promise<void> => waitFor(() => expect(screen.queryByTestId(CONFIRM) !== null || onClose.mock.calls.length > 0).toBe(true));
 
 beforeEach(() => {
@@ -104,7 +105,7 @@ describe('Add my saves — several holds, and failures that are not a hold', () 
         const user = userEvent.setup();
         renderWithProviders(<Bg3AddSavesSheet isOpen hubId={BG3_HUB_ID} campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
         const sheet = await screen.findByTestId('bg3-add-saves');
-        await user.click(within(sheet).getByRole('checkbox', { name: /QuickSave_2/ }));
+        await user.click(await within(sheet).findByRole('checkbox', { name: /QuickSave_2/ }));
         await user.click(within(sheet).getByRole('checkbox', { name: /AutoSave_9/ }));
         await user.click(screen.getByRole('button', { name: /^Add 2 playthroughs/ }));
         await user.click(within(await screen.findByTestId(CONFIRM)).getByRole('button', { name: 'Move here' }));
