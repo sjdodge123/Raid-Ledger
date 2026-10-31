@@ -23,6 +23,12 @@ import {
   type DemoModeSource,
 } from '../calendar-provider.registry';
 import { describeCalendarProviderConformance } from '../testing/calendar-provider.conformance.spec-helpers';
+import { describeCalendarReadConformance } from '../testing/calendar-read.conformance.spec-helpers';
+import { describeCalendarWriteConformance } from '../testing/calendar-write.conformance.spec-helpers';
+import {
+  FAKE_DEFAULT_CALENDAR_ID,
+  FakeGraphCalendarApi,
+} from './microsoft-graph-api.spec-helpers';
 
 const fixture = (name: string): unknown =>
   JSON.parse(
@@ -186,7 +192,7 @@ describe('CalendarProviderRegistry with the Microsoft adapter (T18 account)', ()
   };
   const ROW = { provider: 'microsoft', accountSubject: WORK_ID };
 
-  it('resolves microsoft for connect, but routes no read or write yet', async () => {
+  it('resolves microsoft for connect, read and write (full CalendarProvider)', async () => {
     const ms = configured();
     const reg = new CalendarProviderRegistry(
       settings,
@@ -198,8 +204,8 @@ describe('CalendarProviderRegistry with the Microsoft adapter (T18 account)', ()
     expect(reg.getAccountProvider('microsoft')).toBe(ms);
     expect(reg.getAccountProvider('google')).toBe(googleStub);
     await expect(reg.getAccountProviderForConnection(ROW)).resolves.toBe(ms);
-    await expect(reg.getReadProviderForConnection(ROW)).resolves.toBeNull();
-    await expect(reg.getWriteProviderForConnection(ROW)).resolves.toBeNull();
+    await expect(reg.getReadProviderForConnection(ROW)).resolves.toBe(ms);
+    await expect(reg.getWriteProviderForConnection(ROW)).resolves.toBe(ms);
   });
 
   it('still resolves microsoft to null when the adapter is not injected', () => {
@@ -207,3 +213,48 @@ describe('CalendarProviderRegistry with the Microsoft adapter (T18 account)', ()
     expect(reg.getAccountProvider('microsoft')).toBeNull();
   });
 });
+
+/** T13 / T14: the shared write + read suites over the in-memory Graph. */
+const GRAPH_CREDS: OAuthCredentials = { ...STORED, accessToken: 'ms-write' };
+
+function fakeGraph(): {
+  api: FakeGraphCalendarApi;
+  a: MicrosoftCalendarAdapter;
+} {
+  const api = new FakeGraphCalendarApi();
+  jest
+    .spyOn(microsoftHttp, 'microsoftJsonRequest')
+    .mockImplementation(api.handle);
+  return { api, a: configured() };
+}
+
+describeCalendarWriteConformance(() => {
+  const { api, a } = fakeGraph();
+  return {
+    provider: a,
+    credentials: GRAPH_CREDS,
+    removeCalendarRemotely: (id) => api.removeCalendar(id),
+    readCopy: (ref) => {
+      const found = api.findEvent(ref.providerEventId);
+      return Promise.resolve(
+        found
+          ? {
+              title: String(found.event.subject),
+              busy: found.event.showAs === 'busy',
+            }
+          : null,
+      );
+    },
+  };
+}, 'MicrosoftCalendarAdapter');
+
+describeCalendarReadConformance(() => {
+  const { api, a } = fakeGraph();
+  return {
+    provider: a,
+    credentials: GRAPH_CREDS,
+    primaryCalendarId: FAKE_DEFAULT_CALENDAR_ID,
+    seedEvent: (calendarId, event) => api.seedEvent(calendarId, event),
+    failNextRead: (kind) => api.failNext(kind),
+  };
+}, 'MicrosoftCalendarAdapter');
