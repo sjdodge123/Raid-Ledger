@@ -132,6 +132,20 @@ describe('RadioGroup — validation wiring and ref', () => {
         expect(group).toHaveAccessibleDescription('Shown on the event. Pick one. Required.');
     });
 
+    it('swatch: sr-only radios named by their label, the cell paints ON with a success border and is sized by optionClassName', async () => {
+        const opts = OPTIONS.map((o) => ({ ...o, swatch: <span data-testid={`sw-${o.value}`} /> }));
+        render(<Harness appearance="swatch" options={opts} optionClassName="h-11 w-11" />);
+        const radio = screen.getByRole('radio', { name: '2 hours' });
+        expect(radio).toHaveClass('sr-only');
+        const cell = radio.closest('label');
+        expect(cell, 'swatch radio is not inside its cell label').not.toBeNull();
+        expect(cell).toHaveClass('border-edge', 'has-[:checked]:border-success', 'h-11', 'w-11');
+        expect(cell).toHaveAttribute('title', '2 hours');
+        expect(cell).toContainElement(screen.getByTestId('sw-2h'));
+        await userEvent.click(screen.getByTestId('sw-2h'));
+        expect(radio).toBeChecked();
+    });
+
     it('forwards its ref to the fieldset', () => {
         const ref = createRef<HTMLFieldSetElement>();
         render(<RadioGroup ref={ref} label="Duration" options={OPTIONS} value="1h" onChange={() => undefined} />);

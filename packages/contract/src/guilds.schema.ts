@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CharacterRoleSchema } from "./characters.schema.js";
 import { GameServerStateSchema } from "./game-servers.schema.js";
+import { GuildCrestSchema } from "./guild-crest.schema.js";
 import {
   HubAutoMembershipModeSchema,
   HubJoinSourceSchema,
@@ -58,6 +59,18 @@ export const GuildViewerAccessSchema = z
      * nothing (`GM_RANK_IMPLIES_EDIT = false`, ROK-1794).
      */
     isGuildMaster: z.boolean().optional(),
+    /**
+     * ROK-1814: the viewer is an admin/operator (moderation affordances such
+     * as the crest's "Remove upload"). Set by core on every hub page; absent
+     * only from older servers — read a missing key as `false`.
+     */
+    isStaff: z.boolean().optional(),
+    /**
+     * ROK-1814 (operator ruling 2026-10-30): the viewer may change the hub
+     * crest — `canEdit`, or the in-game guild master (rank 0) of a WoW guild.
+     * Set by core on every hub page; read a missing key as `canEdit`.
+     */
+    canEditCrest: z.boolean().optional(),
   })
   .strict();
 export type GuildViewerAccess = z.infer<typeof GuildViewerAccessSchema>;
@@ -101,6 +114,11 @@ export const GuildSummarySchema = z
      * reported (what Reset goes back to). Optional so older fixtures parse.
      */
     inGameName: z.string().max(64).nullable().optional(),
+    /**
+     * ROK-1814 — the hub's resolved crest (upload or preset); null = initials.
+     * Optional so older fixtures parse.
+     */
+    crest: GuildCrestSchema.nullable().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
