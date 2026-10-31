@@ -71,18 +71,26 @@ function oauthStartQuery(intent: CalendarOAuthIntent, returnTarget?: CalendarOAu
     return query ? `?${query}` : '';
 }
 
+/** The providers that connect through an OAuth redirect (Apple uses a password). */
+export type OAuthCalendarProvider = 'google' | 'microsoft';
+
 /**
- * GET the signed Google consent URL, then send the browser there.
+ * GET the signed consent URL for `provider` (Google by default; Outlook,
+ * ROK-1597), then send the browser there.
  * `primary` asks for the extra `calendar.events` scope (ROK-1596 D8);
  * `connect` sends no intent, which the server reads as `connect`.
  * `returnTarget: 'onboarding'` makes the callback land on
  * `/onboarding?resume=calendar` instead of Profile → Integrations (ROK-2022).
  */
-export function useStartOAuth(intent: CalendarOAuthIntent = 'connect', returnTarget?: CalendarOAuthReturn) {
+export function useStartOAuth(
+    intent: CalendarOAuthIntent = 'connect',
+    returnTarget?: CalendarOAuthReturn,
+    provider: OAuthCalendarProvider = 'google',
+) {
     return useMutation<string, Error, void>({
         mutationFn: async () => {
             const query = oauthStartQuery(intent, returnTarget);
-            const res = await fetchApi(`${BASE}/oauth/google/start${query}`, {}, OAuthStartResponseSchema);
+            const res = await fetchApi(`${BASE}/oauth/${provider}/start${query}`, {}, OAuthStartResponseSchema);
             return res.url;
         },
         onSuccess: goToProvider,
@@ -92,6 +100,11 @@ export function useStartOAuth(intent: CalendarOAuthIntent = 'connect', returnTar
 /** K1 "Connect": the plain sign-in; the wizard passes `'onboarding'`. */
 export function useStartGoogleConnect(returnTarget?: CalendarOAuthReturn) {
     return useStartOAuth('connect', returnTarget);
+}
+
+/** K1 Outlook "Connect" (ROK-1597): the Microsoft sign-in; the server adds `prompt=select_account`. */
+export function useStartMicrosoftConnect(returnTarget?: CalendarOAuthReturn) {
+    return useStartOAuth('connect', returnTarget, 'microsoft');
 }
 
 /** Why an Apple connect was refused: the server's code, the route throttle, or no answer at all. */

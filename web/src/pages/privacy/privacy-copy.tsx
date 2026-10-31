@@ -101,6 +101,8 @@ function whoElseSection(): PrivacySection {
         bullets: [
             { key: 'discord', content: <><Lead>Discord</Lead> shows event posts and messages that mention members.</> },
             { key: 'google', requires: 'calendar', content: <><Lead>Google</Lead>: calendar sync, as above.</> },
+            // ROK-1597 §8 Q10: wording is the operator's call — flagged in the PR.
+            { key: 'microsoft', requires: 'calendar', content: <><Lead>Microsoft</Lead>: Outlook calendar sync, as above.</> },
             // ROK-1838: reports are on by default; admins opt out with ENABLE_TELEMETRY=false.
             { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Before anything leaves your browser we remove the secrets that appear in web addresses, headers and sign-in links from the report and from feedback you send, and we strip usernames, email addresses and IP addresses wherever they can be detected. One thing this does not cover: a screenshot you attach is sent exactly as captured, so anything visible in it is sent too. Feedback you send, including any screenshot you attach, also goes to Sentry. Error reports are on by default, and this site&apos;s admins can turn them off.</> },
             { key: 'ai', requires: 'ai', content: <><Lead>AI suggestions.</Lead> If the admins turn on AI features, members&apos; usernames and gaming stats (not calendar data) are sent to the AI provider they chose to suggest games.</> },

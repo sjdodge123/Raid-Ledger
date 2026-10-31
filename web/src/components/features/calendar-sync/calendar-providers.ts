@@ -1,11 +1,10 @@
 /**
- * The calendar providers the member page ships (ROK-1598): Google and Apple
- * iCloud. Microsoft stays hidden until its story (ROK-669 Q13), so its
- * connections never render even if the server lists one.
+ * The calendar providers the member page ships: Google, Apple iCloud
+ * (ROK-1598) and Outlook / Microsoft 365 (ROK-1597).
  */
 import type { CalendarConnection, CalendarProvider } from '@raid-ledger/contract';
 
-export const SHIPPED_CALENDAR_PROVIDERS = ['google', 'apple'] as const satisfies readonly CalendarProvider[];
+export const SHIPPED_CALENDAR_PROVIDERS = ['google', 'microsoft', 'apple'] as const satisfies readonly CalendarProvider[];
 
 function isShipped(provider: CalendarProvider): boolean {
     return SHIPPED_CALENDAR_PROVIDERS.some((p) => p === provider);
@@ -23,7 +22,9 @@ export function countOf(connections: readonly CalendarConnection[], provider: Ca
 
 /**
  * Whether sign-ups can go to the account's main calendar. Apple writes only
- * to the dedicated "Raid Ledger" calendar (ROK-1598 A9/Q3).
+ * to the dedicated "Raid Ledger" calendar (ROK-1598 A9/Q3). Outlook stays
+ * dedicated-only until ROK-1597 §8 Q4 is ruled (the "primary" consent flow
+ * is Google's extra-scope grant).
  */
 export function supportsPrimaryWrite(provider: CalendarProvider): boolean {
     return provider === 'google';

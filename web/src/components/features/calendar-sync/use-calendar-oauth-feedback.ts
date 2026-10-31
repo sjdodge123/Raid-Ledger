@@ -30,6 +30,7 @@ export function useCalendarOAuthFeedback(
     useEffect(() => {
         if (connected === null && error === null && !hasExtra) return;
         if (connected === 'google') toast.success(C.toastConnected, { id: CONNECTED_TOAST_ID });
+        if (connected === 'microsoft') toast.success(C.microsoft.toastConnected, { id: CONNECTED_TOAST_ID });
         setParams((prev) => {
             const next = new URLSearchParams(prev);
             for (const key of ['connected', 'error', ...extraParams]) next.delete(key);

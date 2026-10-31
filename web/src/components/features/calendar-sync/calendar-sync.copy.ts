@@ -37,6 +37,20 @@ export const CALENDARS_COPY = {
         connecting: 'Connecting…',
         startFailed: 'Could not start the Google sign-in. Try again.',
     },
+    /* ROK-1597: K1 row copy verbatim from the design canvas ("Outlook / Microsoft 365 · Sign in with Microsoft"). */
+    microsoft: {
+        name: 'Outlook / Microsoft 365',
+        tile: 'O',
+        hint: 'Sign in with Microsoft',
+        hintAnother: 'Connect another Microsoft account',
+        notConfigured: 'Not set up on this server yet. Ask an admin.',
+        connect: 'Connect',
+        connecting: 'Connecting…',
+        startFailed: 'Could not start the Microsoft sign-in. Try again.',
+        toastConnected: 'Outlook Calendar connected',
+        /* §8 Q7: Microsoft has no per-app revoke, so the grant outlives our disconnect. */
+        disconnectHint: "You can also remove Raid Ledger from your Microsoft account's app permissions.",
+    },
     toastConnected: 'Google Calendar connected',
     toastDisconnected: 'Google Calendar disconnected',
     manage: 'Manage',
@@ -121,11 +135,11 @@ export const SEND_EVENTS_COPY = {
 /** Provider display names for the event line + toast ("On your Google Calendar"). */
 export const PROVIDER_CALENDAR_NAME = { google: 'Google Calendar', microsoft: 'Outlook Calendar', apple: 'Apple Calendar' } as const;
 
-/** ROK-1598: the connected card's monogram tile + title per provider (Microsoft stays hidden, ROK-669 Q13). */
+/** ROK-1598: the connected card's monogram tile + title per provider (Outlook ships in ROK-1597). */
 export const PROVIDER_DISPLAY: Record<CalendarProvider, { tile: string; name: string }> = {
     google: { tile: CALENDARS_COPY.google.tile, name: CALENDARS_COPY.google.name },
     apple: { tile: APPLE_CONNECT_COPY.tile, name: APPLE_CONNECT_COPY.name },
-    microsoft: { tile: 'O', name: PROVIDER_CALENDAR_NAME.microsoft },
+    microsoft: { tile: CALENDARS_COPY.microsoft.tile, name: CALENDARS_COPY.microsoft.name },
 };
 
 /** S3 — the event page's calendar line, the sign-up toast and the "Add to calendar" menu (ROK-1596 W2). */

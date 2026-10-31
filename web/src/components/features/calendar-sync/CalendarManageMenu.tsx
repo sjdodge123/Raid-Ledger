@@ -126,7 +126,7 @@ export function CalendarManageMenu({ connection }: { connection: CalendarConnect
             {isDesktop
                 ? <ManageDropdown connection={connection} onDisconnect={ask} onSync={onSync} />
                 : <ManageSheet connection={connection} onDisconnect={ask} onSync={onSync} />}
-            <CalendarDisconnectConfirm isOpen={confirming} accountLabel={connection.accountLabel}
+            <CalendarDisconnectConfirm isOpen={confirming} accountLabel={connection.accountLabel} provider={connection.provider}
                 isPending={disconnect.isPending} failed={disconnect.isError}
                 onCancel={() => setConfirming(false)} onConfirm={confirm} />
         </>
