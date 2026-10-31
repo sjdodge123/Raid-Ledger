@@ -2,11 +2,13 @@
  * ROK-1597 T9 (mask) + T11 (paging guard): exact read URLs, the `primary`
  * alias, and that a nextLink to a non-Graph host is never followed.
  */
+import { ProviderAuthError } from '../calendar-provider.errors';
 import * as microsoftHttp from './microsoft-http';
 import {
   buildCalendarListUrl,
   buildCalendarViewUrl,
   readAllGraphPages,
+  readCalendarOrSkip,
 } from './microsoft-read.helpers';
 import {
   GRAPH_API,
@@ -67,5 +69,20 @@ describe('readAllGraphPages', () => {
     const out = await readAllGraphPages('tok', `${GRAPH_API}/me/calendars`);
     expect(spy).toHaveBeenCalledTimes(1);
     expect(out).toEqual({ items: [1], truncated: false });
+  });
+
+  it('review: a 403 on the calendar list is missing consent, a calendarView 403 a skip', async () => {
+    jest.spyOn(microsoftHttp, 'microsoftJsonRequest').mockResolvedValue({
+      status: 403,
+      json: { error: { code: 'ErrorAccessDenied', message: 'x' } },
+      retryAfter: null,
+    });
+    const list = readAllGraphPages('tok', `${GRAPH_API}/me/calendars`);
+    await expect(list).rejects.toBeInstanceOf(ProviderAuthError);
+    await expect(
+      readAllGraphPages('tok', `${GRAPH_API}/me/calendars`),
+    ).rejects.toMatchObject({ reason: 'scope' });
+    const view = readAllGraphPages('tok', `${GRAPH_API}/me/calendar`, 'skip');
+    await expect(readCalendarOrSkip(view)).resolves.toBe('refused');
   });
 });

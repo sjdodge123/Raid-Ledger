@@ -2,8 +2,8 @@
  * ROK-1592: resolves a calendar adapter by provider key (plan L1, L12, L15).
  *
  * `google`, `apple` (ROK-1598) and `microsoft` (ROK-1597) resolve; read and
- * write routing follow each adapter's structural capabilities, so the
- * account-only Microsoft adapter routes neither until those layers land. Apple connects with a password, not OAuth:
+ * write routing follow each adapter's structural capabilities (all three now
+ * implement both). Apple connects with a password, not OAuth:
  * `getPasswordProvider` resolves it for the connect route, and its OAuth
  * methods refuse (the OAuth routes accept only google/microsoft). ROK-1596 adds
  * `getWriteProviderForConnection`: an adapter is a write provider when it

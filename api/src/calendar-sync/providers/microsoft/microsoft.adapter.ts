@@ -181,7 +181,8 @@ export class MicrosoftCalendarAdapter
     let truncated = 0;
     for (const calendarId of calendarIds) {
       const url = buildCalendarViewUrl(calendarId, range);
-      const read = await readCalendarOrSkip(readAllGraphPages(token, url));
+      const pages = readAllGraphPages(token, url, 'skip');
+      const read = await readCalendarOrSkip(pages);
       if (read === 'missing') missing.push(calendarId);
       else if (read === 'refused') refused.push(calendarId);
       else {
