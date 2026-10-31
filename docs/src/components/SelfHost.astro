@@ -1,0 +1,58 @@
+---
+// Self-host section. Leads with the VPS path (operator ruling 2026-10-31: most
+// readers have no spare server), then "Your community, on your hardware":
+// checklist, setup CTA and the compose snippet (README.md via data/compose.ts).
+import { composeHtml } from '../data/compose';
+import { LINKS } from '../data/site';
+import Check from './Check.astro';
+
+const CHECKS = [
+  'One container: app, PostgreSQL, Redis',
+  'Nightly backups, kept across resets',
+  'A setup wizard walks you through Discord',
+  'Update notices inside the app',
+  'Demo data to explore before you invite anyone',
+  'MIT licensed; fork it freely',
+];
+const compose = composeHtml();
+---
+<section class="section section-flush" id="self-host">
+  <div class="wrap">
+  <div class="vps reveal">
+    <span class="eyebrow">Own it</span>
+    <h2>Run it on a small VPS</h2>
+    <p class="lede">
+      No spare server? Rent one. Any $5–10 a month VPS will do (Hetzner, DigitalOcean or Linode, for example).
+      It runs the same single container, and the setup guide gets you live in about 10 minutes.
+    </p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href={LINKS.setup}>Set it up on a VPS</a>
+    </div>
+    <p class="runs-on">A one-click deploy is coming.</p>
+  </div>
+  <div class="host">
+    <div class="reveal">
+      <span class="eyebrow">Already have a NAS or home server?</span>
+      <h3 class="host-title">Your community, on your hardware</h3>
+      <p class="lede">
+        Raid Ledger is free and open source. Run it on a NAS or a home server; the app, database and
+        cache ship in one container. No subscription, and nobody else holding your members' data.
+      </p>
+      <ul class="checks">
+        {CHECKS.map((c) => <li><Check />{c}</li>)}
+      </ul>
+      <p class="runs-on">Runs on Synology Container Manager, unRAID, Portainer, Docker Compose or plain Docker.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href={LINKS.setup}>Read the setup guide</a>
+        <a class="btn btn-ghost" href={LINKS.repo}>Star on GitHub</a>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="term">
+        <div class="term-bar"><span>docker-compose.yml</span><button class="copy" id="copyBtn" type="button">Copy</button></div>
+        <pre id="compose" set:html={compose}></pre>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>

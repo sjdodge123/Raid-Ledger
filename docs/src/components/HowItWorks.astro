@@ -1,0 +1,19 @@
+---
+const steps = [
+  ['Run it and add the bot', 'Start one container, follow the setup wizard and add the Raid Ledger bot to your Discord server. Members sign in with the Discord account they already have.'],
+  ['Post an event or a poll', 'Create a raid, a game night or a "when can everyone play?" poll. The bot posts it to the right channel as an embed members answer in one click.'],
+  ['Let it run itself', 'Reminders go out, a voice channel opens on time, attendance is taken from who joins, and a recap lands in the channel afterwards.'],
+] as const;
+---
+<section class="section" id="how">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>Up and running before your next game night</h2>
+      <p class="lede">No new app for members to learn. They stay in Discord; Raid Ledger fills in around it.</p>
+    </div>
+    <div class="steps">
+      {steps.map(([title, body]) => <div class="step reveal"><h3>{title}</h3><p>{body}</p></div>)}
+    </div>
+  </div>
+</section>

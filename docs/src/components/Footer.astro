@@ -1,0 +1,29 @@
+---
+import { LINKS } from '../data/site';
+
+const COLUMNS = [
+  { head: 'Product', links: [['#features', 'Features'], ['#games', 'Game plugins'], ['#self-host', 'Self-host'], ['#faq', 'FAQ']] },
+  { head: 'Resources', links: [[LINKS.wiki, 'Documentation'], [LINKS.ledgerLink, 'LedgerLink addon'], [LINKS.releases, 'Releases']] },
+  { head: 'Project', links: [[LINKS.repo, 'GitHub'], [LINKS.issues, 'Report an issue'], [LINKS.license, 'MIT License']] },
+];
+---
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">RL</span>Raid Ledger</a>
+        <p>Run and grow your Discord gaming community. Free, open source, self-hosted.</p>
+      </div>
+      {COLUMNS.map((col) => (
+        <div>
+          <h3>{col.head}</h3>
+          <ul>{col.links.map(([href, label]) => <li><a href={href}>{label}</a></li>)}</ul>
+        </div>
+      ))}
+    </div>
+    <div class="fine">
+      <span>© 2026 Raid Ledger contributors</span>
+      <span>Not affiliated with Discord, Blizzard, Iron Gate, Larian or Valve. Game names are trademarks of their owners.</span>
+    </div>
+  </div>
+</footer>
