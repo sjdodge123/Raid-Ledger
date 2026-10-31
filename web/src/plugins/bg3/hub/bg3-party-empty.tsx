@@ -34,6 +34,16 @@ function EmptyFrame({ text, children }: { text: string; children?: ReactNode }):
     );
 }
 
+/** The state's own next step + "Upload a save" (ROK-1960). */
+function MemberActions({ onUpload, children }: { onUpload: () => void; children: ReactNode }): JSX.Element {
+    return (
+        <div className="flex flex-wrap justify-center gap-2">
+            {children}
+            <Bg3UploadSaveButton onClick={onUpload} />
+        </div>
+    );
+}
+
 function CampaignTabLink(): JSX.Element {
     const { pathname, search } = useLocation();
     return (
@@ -48,10 +58,9 @@ export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
         return (
             <EmptyFrame text="No campaign on this hub yet.">
                 {props.isMember && (
-                    <div className="flex flex-wrap justify-center gap-2">
+                    <MemberActions onUpload={props.onUploadSave}>
                         <Button variant="primary" size="sm" onClick={props.onStartCampaign}>Start a campaign</Button>
-                        <Bg3UploadSaveButton onClick={props.onUploadSave} />
-                    </div>
+                    </MemberActions>
                 )}
             </EmptyFrame>
         );
@@ -60,10 +69,9 @@ export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
         return (
             <EmptyFrame text={`No saves in ${props.campaignName ?? 'this campaign'} yet.`}>
                 {props.isMember && (
-                    <div className="flex flex-wrap justify-center gap-2">
+                    <MemberActions onUpload={props.onUploadSave}>
                         <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>
-                        <Bg3UploadSaveButton onClick={props.onUploadSave} />
-                    </div>
+                    </MemberActions>
                 )}
             </EmptyFrame>
         );

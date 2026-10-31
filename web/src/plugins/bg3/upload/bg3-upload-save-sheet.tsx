@@ -17,6 +17,7 @@ import { Bg3UploadDropZone } from './bg3-upload-drop-zone';
 import { Bg3UploadPreview } from './bg3-upload-preview';
 import { Bg3UploadBanner } from './bg3-upload-banner';
 import { useBg3UploadFlow } from './use-bg3-upload-flow';
+import { bg3InitialUploadCampaign } from './bg3-upload-format';
 import type { Bg3UploadResult } from './use-bg3-upload-save';
 
 export interface Bg3UploadSaveSheetProps {
@@ -28,13 +29,6 @@ export interface Bg3UploadSaveSheetProps {
 type Flow = ReturnType<typeof useBg3UploadFlow>;
 
 const noop = (): void => {};
-
-/** The user's default when it is a live campaign of this hub, else the hub's active one. */
-export function bg3InitialUploadCampaign(campaigns: readonly Bg3CampaignSummary[], defaultId: number | null, activeId: number | null): number | null {
-    const live = (id: number | null): boolean => campaigns.some((c) => c.id === id && c.archivedAt === null);
-    if (live(defaultId)) return defaultId;
-    return live(activeId) ? activeId : null;
-}
 
 function resultText(result: Bg3UploadResult, campaigns: readonly Bg3CampaignSummary[]): string {
     const name = campaigns.find((c) => c.id === result.campaignId)?.name ?? 'your campaign';

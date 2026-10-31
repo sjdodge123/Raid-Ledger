@@ -66,6 +66,21 @@ function YourSaves({ hubId, data, onAddSaves, onStart, onUpload }: YourSavesProp
 
 type Dialog = 'start' | 'add-saves' | 'upload' | null;
 
+interface TabDialogsProps { dialog: Dialog; hubId: number; active: Bg3CampaignSummary | null; onClose: () => void }
+
+function TabDialogs({ dialog, hubId, active, onClose }: TabDialogsProps): JSX.Element {
+    return (
+        <>
+            {/* Mounted only while open (the `removing !== null && <Confirm/>` idiom): a closed
+                BottomSheet stays in the DOM off-screen, and one showed at a member's screen bottom. */}
+            {dialog === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={onClose} />}
+            {dialog === 'upload' && <Bg3UploadSaveSheet isOpen hubId={hubId} onClose={onClose} />}
+            {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={active.id}
+                campaignName={active.name} onClose={onClose} />}
+        </>
+    );
+}
+
 export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
     const hubId = page.guild.id;
     const campaigns = useBg3Campaigns(hubId);
@@ -88,12 +103,7 @@ export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
                 onUpload={() => setDialog('upload')} />}
             {active && <Section title="History"><Bg3CampaignHistory hubId={hubId} campaignId={active.id} /></Section>}
             {data.canEdit && <div className="rounded-lg border border-edge bg-surface p-4"><Bg3EditorSection hubId={hubId} data={data} /></div>}
-            {/* Mounted only while open (the `removing !== null && <Confirm/>` idiom): a closed
-                BottomSheet stays in the DOM off-screen, and one showed at a member's screen bottom. */}
-            {dialog === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={close} />}
-            {dialog === 'upload' && <Bg3UploadSaveSheet isOpen hubId={hubId} onClose={close} />}
-            {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={active.id}
-                campaignName={active.name} onClose={close} />}
+            <TabDialogs dialog={dialog} hubId={hubId} active={active} onClose={close} />
             {archiving && <Bg3ArchiveConfirm hubId={hubId} campaign={archiving} onClose={() => setArchiving(null)} />}
         </div>
     );
