@@ -2,11 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http } from 'msw';
 import type { Bg3CrossHubMove } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
-    bg3BindKeyCrossHubHandler, bg3BindKeyHandler, bg3DefaultCampaignHandler, bg3MySavesHandler,
+    BG3_KEY_URL, bg3BindKeyCrossHubHandler, bg3BindKeyHandler, bg3DefaultCampaignHandler, bg3Error, bg3MySavesHandler,
 } from '../../../test/mocks/bg3-handlers';
 import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3MySavesResponse } from '../../../test/factories/bg3';
 import { toast } from '../../../lib/toast';
@@ -66,6 +67,7 @@ describe('Add my saves — cross-hub bind asks first', () => {
         expect(within(confirm).getByRole('button', { name: 'Move here' })).toHaveFocus();
         expect(screen.getByRole('button', { name: /^Add 1 playthrough/ })).toBeDisabled();
         expect(onClose).not.toHaveBeenCalled();
+        expect(toast.error).not.toHaveBeenCalled();
         expect(calls).toEqual(['bind']);
     });
 
@@ -90,5 +92,37 @@ describe('Add my saves — cross-hub bind asks first', () => {
         await user.click(within(screen.getByTestId(CONFIRM)).getByRole('button', { name: 'Move here' }));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         expect(calls).toEqual(['bind', 'bind+confirm', 'default']);
+    });
+});
+
+describe('Add my saves — several holds, and failures that are not a hold', () => {
+    it('two playthroughs from other hubs are asked about one at a time, and both end bound with confirm', async () => {
+        const keyed: string[] = [];
+        server.use(bg3BindKeyCrossHubHandler(MOVE, (b, p) => {
+            keyed.push(`${String(p['campaignKey']).slice(0, 1)}${JSON.stringify(b).includes('confirmCrossHub') ? '+' : ''}`);
+        }));
+        const user = userEvent.setup();
+        renderWithProviders(<Bg3AddSavesSheet isOpen hubId={BG3_HUB_ID} campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
+        const sheet = await screen.findByTestId('bg3-add-saves');
+        await user.click(within(sheet).getByRole('checkbox', { name: /QuickSave_2/ }));
+        await user.click(within(sheet).getByRole('checkbox', { name: /AutoSave_9/ }));
+        await user.click(screen.getByRole('button', { name: /^Add 2 playthroughs/ }));
+        await user.click(within(await screen.findByTestId(CONFIRM)).getByRole('button', { name: 'Move here' }));
+        await waitFor(() => expect(keyed).toHaveLength(3));
+        expect(onClose).not.toHaveBeenCalled();
+        await user.click(within(await screen.findByTestId(CONFIRM)).getByRole('button', { name: 'Move here' }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        const [first, second] = [keyed[0], keyed[2]];
+        expect(new Set([first, second])).toEqual(new Set(['a', 'b']));
+        expect(keyed).toEqual([first, `${first}+`, second, `${first}+`, `${second}+`]);
+    });
+
+    it('a non-409 failure still shows the error toast and no confirm', async () => {
+        server.use(http.put(BG3_KEY_URL, () => bg3Error(500, 'boom')));
+        await addOne(userEvent.setup());
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't add your saves."));
+        expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        vi.mocked(toast.error).mockClear();
     });
 });

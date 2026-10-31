@@ -106,7 +106,11 @@ describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)'
     it('a 409 cross_hub_move stops at that key with a hold (no default); confirmCrossHub re-binds only the keys it names', async () => {
         const { wrapper } = setup();
         const calls: string[] = [];
-        const move = { code: 'cross_hub_move' as const, saveCount: 2, locations: [] };
+        // The contract needs ≥1 location — an empty list would not parse as a hold (the server never sends one).
+        const move = {
+            code: 'cross_hub_move' as const, saveCount: 2,
+            locations: [{ campaignId: 99, campaignName: 'Honour run', hubId: BG3_HUB_ID + 1, hubName: 'Other Crew' }],
+        };
         server.use(
             bg3BindKeyCrossHubHandler(move, (b, p) => calls.push(`key:${String(p['campaignKey']).slice(0, 1)}:${JSON.stringify(b)}`)),
             bg3DefaultCampaignHandler((b) => calls.push(`default:${JSON.stringify(b)}`)),
