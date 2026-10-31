@@ -40,6 +40,8 @@ const CASES = {
     'ruleset-null': { savedAt: '2026-10-22T19:15:00Z', capturedAt: '2026-10-22T19:15:01Z', campaignKey: 'a1b2c3d4e5f60718'.repeat(4), campaignKeySource: 'save-folder', thumbnail },
     /** Non-ASCII save name: proves collectors use a Unicode-mode regex for COMPANION_DISPLAY_TEXT_RE (delta review MINOR). */
     'unicode-save-name': { savedAt: '2026-10-23T21:00:00Z', capturedAt: '2026-10-23T21:00:01Z', campaignKey: '0f1e2d3c4b5a6978'.repeat(4), campaignKeySource: 'save-folder', thumbnail: null },
+    /** A browser upload of a bare `.lsv` (ROK-1960): keyed by the sha256 of the file stem, source `file-name`. */
+    'file-name-bare-lsv': { savedAt: '2026-10-29T18:45:00Z', capturedAt: '2026-10-29T18:45:03Z', campaignKey: '9a8b7c6d5e4f3021'.repeat(4), campaignKeySource: 'file-name', thumbnail },
 };
 
 const messages = {};

@@ -6,9 +6,12 @@
  * `BG3_GAME_SLUG` game); campaigns, bindings and defaults go through the
  * routes. No blob bytes are uploaded — ingest only records the thumbnail ref.
  */
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { and, asc, eq } from 'drizzle-orm';
+import sharp from 'sharp';
 import type { Response } from 'supertest';
 import {
   BG3_GAME_SLUG,
@@ -25,6 +28,7 @@ import {
   type Bg3SessionsResponse,
   type Bg3Snapshot,
   type Bg3SnapshotResponse,
+  type CompanionWebpRef,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -35,6 +39,7 @@ import {
   expireLimiterWindows,
   linkDevice,
   makeUser,
+  withEnv,
 } from '../../companion/devices/testing/companion-link.helpers';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
@@ -496,5 +501,74 @@ describe('I-9 ingest with the plugin inactive', () => {
     } finally {
       await plugins().activate(BG3_PLUGIN_ID);
     }
+  });
+});
+
+/** A tiny lossless WebP and the ref a message carries for it. */
+async function thumbnail(): Promise<{ bytes: Buffer; ref: CompanionWebpRef }> {
+  const create = {
+    width: 16,
+    height: 8,
+    channels: 3,
+    background: { r: 10, g: 20, b: 30 },
+  } as const;
+  const bytes = await sharp({ create }).webp({ lossless: true }).toBuffer();
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const ref: CompanionWebpRef = {
+    sha256,
+    byteLength: bytes.length,
+    contentType: 'image/webp',
+    width: 16,
+    height: 8,
+  };
+  return { bytes, ref };
+}
+
+describe('I-10 browser upload (ROK-1960): a session JWT, a bare .lsv', () => {
+  it('PUT blob → POST bg3-save (campaignKeySource file-name) → 202; the row lands in the default campaign as file-name', async () => {
+    const w = await world();
+    await setDefault(w.host.token, w.campaignId);
+    expect(w.host.token.startsWith('rlcd_')).toBe(false);
+    const { bytes, ref } = await thumbnail();
+    const root = mkdtempSync(join(tmpdir(), 'rl-bg3-upload-'));
+    try {
+      await withEnv({ COMPANION_BLOB_DIR: root }, async () => {
+        const put = await testApp.request
+          .put(`/companion/v1/blobs/${ref.sha256}`)
+          .set('Content-Type', 'image/webp')
+          .set(bearer(w.host.token))
+          .serialize((b) => b)
+          .send(bytes);
+        expect([put.status, put.body]).toEqual([
+          201,
+          { status: 'stored', sha256: ref.sha256 },
+        ]);
+        const msg = save();
+        const upload: Bg3SaveMessage = {
+          ...msg,
+          payload: {
+            ...msg.payload,
+            campaignKeySource: 'file-name',
+            thumbnail: ref,
+          },
+        };
+        expectAck(await ingest(w.host.token, upload), 'accepted');
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+    const rows = await saveRows();
+    expect(
+      rows.map((r) => [
+        r.uploaderUserId,
+        r.campaignId,
+        r.campaignKey,
+        r.campaignKeySource,
+      ]),
+    ).toEqual([[w.host.id, w.campaignId, KEY_A, 'file-name']]);
+    const blobs = await testApp.db.select().from(schema.companionBlobs);
+    expect(blobs.map((b) => [b.userId, b.sha256, b.deviceId])).toEqual([
+      [w.host.id, ref.sha256, null],
+    ]);
   });
 });

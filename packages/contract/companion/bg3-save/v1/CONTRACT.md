@@ -45,7 +45,7 @@ change. Every field is required; nullable fields send `null`, never omit.
 | `saveName` | display-safe string, 1–128 UTF-16 units (`COMPANION_DISPLAY_TEXT_RE`: no C0/C1 controls or line breaks, no U+2028/2029, no bidi embeddings/overrides/isolates U+202A–202E / U+2066–2069, not whitespace-only) | `"Save Name"` | User-authored free text; shown in the local preview before the first upload (spec Q2). A name the schema rejects makes the whole payload invalid — collectors MUST skip and report that save. The `schema.json` pattern uses the `\p{Cc}` class: validators MUST compile it in Unicode mode (JS `u`/`v` flag, Rust `regex`); a non-Unicode engine rejects every name. Fixture `unicode-save-name` is the check. Lone surrogates (U+D800–DFFF unpaired) are rejected by the Raid Ledger server (Zod refinement, issue `invalid_format`) but are **not** in the pattern — Rust's `regex` cannot compile `\p{Cs}`, and a Rust/UTF-8 string cannot hold one anyway (fixture `invalid/save-name-lone-surrogate`; ROK-2034). |
 | `savedAt` | ISO-8601 UTC `Z`, ≤ 24 chars | collector: `.lsv` file mtime | MUST NOT be after the envelope's `capturedAt`. |
 | `campaignKey` | lowercase hex, `^[0-9a-f]{64}$` | collector (§3.3) | SHA-256 of the save-folder name (or GameID). **Never the raw name.** |
-| `campaignKeySource` | `"save-folder"` \| `"game-id"` | collector | What `campaignKey` was hashed from (§3.3). |
+| `campaignKeySource` | `"save-folder"` \| `"game-id"` \| `"file-name"` | collector | What `campaignKey` was hashed from (§3.3). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,10}){1,3}$` | `"Game Version"` | e.g. `4.1.1.7631656`. |
 | `platform` | `^[A-Za-z0-9_]{1,32}$` | `"Platform"` | `Steam` is verified; other values are open. |
 | `currentLevel` | engine id | `"Current Level"` | e.g. `SCL_Main_A`. |
@@ -130,6 +130,11 @@ isSummon`. Key order is not significant to the schema.
   the UTF-8 bytes of the folder's own name (no path) and MUST send all 64 hex
   characters. **The raw folder name is never sent**: its format is unverified
   and may embed the character name.
+- A browser upload of a bare `.lsv` (no folder, ROK-1960) hashes the file's
+  stem (its name without `.lsv`) and sends `campaignKeySource: "file-name"`.
+  BG3 names the `.lsv` after its folder, so the key usually equals the folder
+  key, but the source records that the folder was not seen. The same never-
+  send-the-raw-name rule applies.
 - The schema accepts exactly 64 lowercase hex characters (`^[0-9a-f]{64}$`,
   a full SHA-256; a later GameID key is hashed the same way). The invalid fixture `campaign-key-raw-folder` proves a
   raw name is rejected.
@@ -204,7 +209,8 @@ cap grows.
   Cases: `act2-party-4p-summon` (from the operator's save, transform below),
   `act1-solo-no-thumbnail` (synthetic, `thumbnail: null`,
   `campaignKeySource: "game-id"`), `ruleset-null` (synthetic, one-element
-  `Difficulty`).
+  `Difficulty`), `file-name-bare-lsv` (synthetic, a browser upload of a bare
+  `.lsv`: `campaignKeySource: "file-name"`, ROK-1960).
 - `fixtures/invalid/<name>.json` — MUST be rejected; `fixtures/invalid/EXPECTED.json`
   maps each name to the `{ path, code }` of the Zod issue it must raise (path
   joined with `.`, `""` = root).

@@ -55,9 +55,10 @@ export const Bg3SavePayloadSchema = z.object({
     /** User-authored; display-safe text only (`COMPANION_DISPLAY_TEXT_RE`). */
     saveName: companionDisplayTextSchema(BG3_SAVE_NAME_MAX_CHARS),
     savedAt: CompanionTimestampSchema,
-    /** Unsalted lowercase hex SHA-256 of the save-folder name (or GameID): a PSEUDONYMOUS grouping key, not an anonymiser. */
+    /** Unsalted lowercase hex SHA-256 of the save-folder name, the bare `.lsv` file stem, or the GameID: a PSEUDONYMOUS grouping key, not an anonymiser. */
     campaignKey: z.string().regex(/^[0-9a-f]{64}$/),
-    campaignKeySource: z.enum(['save-folder', 'game-id']),
+    /** `file-name` (ROK-1960, additive): a bare `.lsv` uploaded without its folder, keyed by its file stem. */
+    campaignKeySource: z.enum(['save-folder', 'game-id', 'file-name']),
     gameVersion: z.string().regex(/^\d{1,4}(\.\d{1,10}){1,3}$/),
     platform: z.string().regex(/^[A-Za-z0-9_]{1,32}$/),
     currentLevel: Bg3IdSchema,

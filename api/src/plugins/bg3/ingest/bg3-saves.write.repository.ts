@@ -8,6 +8,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
+import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
 
 /** A campaign an incoming save may be assigned to, with its hub. */
 export interface Bg3CampaignTarget {
@@ -23,12 +24,24 @@ export class Bg3SavesWriteRepository {
   /**
    * D-6: the uploader's binding for `campaignKey`, else their default
    * campaign, else null (the save stays unassigned).
+   *
+   * ROK-1960 F5: takes the per-user campaign lock FIRST. It is a tx lock, so
+   * it holds through `insertSave` to the ingest commit — a bind/unbind/
+   * default change cannot re-file rows between this read and the insert.
+   * Taken here (not at message start) to keep the lock's scope to the
+   * resolution + row write.
+   *
+   * Per-user order (F5b + P2-3): blob lock → gallery lock → markers lock
+   * (`lockBg3UserMarkers`, taken before the 11c marker write) → marker rows
+   * → THIS campaign lock → key / default / save rows. Never take the markers
+   * lock after this one.
    */
   async resolveCampaign(
     tx: CompanionDeviceTx,
     userId: number,
     campaignKey: string,
   ): Promise<Bg3CampaignTarget | null> {
+    await lockBg3UserCampaigns(tx, userId);
     const c = schema.bg3Campaigns;
     const k = schema.bg3CampaignKeys;
     const [bound] = await tx

@@ -103,6 +103,7 @@ describe('Bg3SaveMessageSchema (ROK-1954)', () => {
         expect(issue(withPayload({ campaignKey: 'A'.repeat(64) }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKey: 'Tav-123__QuickSave' }), 'payload.campaignKey', 'invalid_format')).toBe(true);
         expect(issue(withPayload({ campaignKeySource: 'folder' }), 'payload.campaignKeySource', 'invalid_value')).toBe(true);
+        expect(ok(withPayload({ campaignKeySource: 'file-name' }))).toBe(true);
     });
     it('B10: saveName is display-safe text (no controls, lone surrogates, line breaks, bidi overrides, blank)', () => {
         for (const name of ['QuickSave_1', 'Tav\u2019s save', 'Ünïcødé 🐉 save', 'a'.repeat(128), ' padded ']) {

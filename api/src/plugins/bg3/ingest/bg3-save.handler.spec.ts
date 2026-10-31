@@ -11,6 +11,11 @@ import {
 } from '@raid-ledger/contract';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
 import { Bg3SaveHandler, partyMaxLevel } from './bg3-save.handler';
+import { lockBg3UserMarkers } from './bg3-marker-lock';
+
+jest.mock('./bg3-marker-lock', () => ({
+  lockBg3UserMarkers: jest.fn().mockResolvedValue(undefined),
+}));
 
 const FIXTURES = join(
   __dirname,
@@ -69,6 +74,14 @@ describe('Bg3SaveHandler — contract wiring (U-5)', () => {
   });
 });
 
+describe('Bg3SaveHandler.lockLatestWins — markers lock (ROK-1960 P2-3)', () => {
+  it("takes the user's markers lock on the ingest tx", async () => {
+    const { handler, ctx } = setup(null);
+    await handler.lockLatestWins(ctx.tx, 7);
+    expect(lockBg3UserMarkers).toHaveBeenCalledWith(ctx.tx, 7);
+  });
+});
+
 describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
   it('assigns the bound campaign when the uploader is in its hub', async () => {
     const { repo, handler, ctx } = setup({ id: 11, guildId: 5 });
@@ -115,6 +128,16 @@ describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
       thumbnailWidth: null,
       thumbnailHeight: null,
     });
+  });
+
+  it('accepts and stores campaignKeySource "file-name" (bare .lsv upload, ROK-1960)', async () => {
+    const { repo, handler, ctx } = setup(null);
+    const bare = Bg3SaveMessageSchema.parse({
+      ...ACT2,
+      payload: { ...ACT2.payload, campaignKeySource: 'file-name' },
+    });
+    await handler.handle(ctx, bare);
+    expect(insertedRow(repo)).toMatchObject({ campaignKeySource: 'file-name' });
   });
 });
 

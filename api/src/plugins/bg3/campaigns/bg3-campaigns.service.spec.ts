@@ -55,7 +55,7 @@ function setup(opts: {
     createCampaign: jest.fn().mockResolvedValue(11),
     updateCampaign: jest.fn().mockResolvedValue(undefined),
     summary: jest.fn().mockResolvedValue(SUMMARY),
-    bindKey: jest.fn().mockResolvedValue(undefined),
+    bindKey: jest.fn().mockResolvedValue(null),
     unbindKey: jest.fn().mockResolvedValue(undefined),
     setDefault: jest.fn().mockResolvedValue(opts.defaultWritten ?? true),
   };
@@ -165,7 +165,23 @@ describe('Bg3CampaignsService binding (D-6)', () => {
   it('binds a key for a member of the campaign hub', async () => {
     const { repo, svc } = setup({});
     await svc.bindKey(me, KEY, 11);
-    expect(repo.bindKey).toHaveBeenCalledWith(7, KEY, 11);
+    expect(repo.bindKey).toHaveBeenCalledWith(
+      7,
+      KEY,
+      { campaignId: 11, hubId: 5 },
+      false,
+    );
+  });
+
+  it('forwards confirmCrossHub to the guarded bind', async () => {
+    const { repo, svc } = setup({});
+    await svc.bindKey(me, KEY, 11, true);
+    expect(repo.bindKey).toHaveBeenCalledWith(
+      7,
+      KEY,
+      { campaignId: 11, hubId: 5 },
+      true,
+    );
   });
 
   it('403s a bind to a hub the caller is not in', async () => {

@@ -1912,6 +1912,13 @@
       "when": 1793340669789,
       "tag": "0273_guild_crest",
       "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1793407580291,
+      "tag": "0274_bg3_saves_key_source_file_name",
+      "breakpoints": true
     }
   ]
 }
