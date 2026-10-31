@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- S12 social card source (ROK-2051). Rebuild: render at 1200×630, deviceScaleFactor 1,
+     screenshot to S12-og-card.png. Uses the site's own tokens and embed styles. -->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../styles/site.css" />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body { background: var(--hero-grad), var(--backdrop); position: relative; }
+  .copy { position: absolute; left: 64px; top: 60px; width: 520px; }
+  .brand { font-size: 30px; gap: 14px; }
+  .brand-mark { width: 48px; height: 48px; font-size: 20px; border-radius: 12px; }
+  h1 { margin: 40px 0 18px; color: var(--fg); font: 800 50px/1.08 Inter, sans-serif; letter-spacing: -.02em; }
+  h1 .hl { background: linear-gradient(90deg, var(--accent-text), var(--indigo)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { font-size: 20px; color: var(--muted); }
+  .shot1 { position: absolute; left: 640px; top: 70px; width: 760px; border-radius: 14px; border: 1px solid var(--edge); overflow: hidden;
+           transform: perspective(1400px) rotateY(-14deg) rotateX(4deg); transform-origin: left center; box-shadow: 0 30px 80px -20px rgb(0 0 0 / .7); }
+  .shot1 img { display: block; width: 100%; }
+  .embed { position: absolute; left: 560px; bottom: 44px; width: 400px; }
+</style>
+</head>
+<body>
+  <div class="copy">
+    <span class="brand"><span class="brand-mark">RL</span><span>Raid Ledger</span></span>
+    <h1>Grow a Discord gaming community that <span class="hl">actually shows up.</span></h1>
+    <p class="sub">Events, attendance, polls and hubs, right inside Discord. Free, open source, self-hosted.</p>
+  </div>
+  <div class="shot1"><img src="S1-hub-overview.png" alt="" /></div>
+  <div class="embed">
+    <div class="embed-head"><span class="bot-ava"></span><b class="embed-name">Raid Ledger</b><span class="bot-tag">APP</span><span>Today at 6:02 PM</span></div>
+    <h4>Molten Core: Thursday Raid</h4>
+    <p class="meta">Thu 8:00 PM · 3h · voice opens 7:45 in <b class="embed-name">#mc-thursday</b></p>
+    <div class="roles">
+      <div class="role">Tanks<b>2/2</b><div class="bar"><i style="width:100%"></i></div></div>
+      <div class="role">Healers<b>5/8</b><div class="bar"><i style="width:63%"></i></div></div>
+      <div class="role">DPS<b>24/30</b><div class="bar"><i style="width:80%"></i></div></div>
+    </div>
+    <div class="embed-btns"><span class="dbtn go" style="display:inline-flex;align-items:center">Sign up</span><span class="dbtn" style="display:inline-flex;align-items:center">Tentative</span><span class="dbtn" style="display:inline-flex;align-items:center">Can't make it</span></div>
+  </div>
+</body>
+</html>

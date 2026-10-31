@@ -1,7 +1,7 @@
 ---
 // A browser/phone frame for screenshot slot S1–S12. Shows the real capture
-// when src/assets/screenshots/<id>-<slug>.png exists, an interim June
-// screenshot when the slot maps one (src/data/shots.ts), else a placeholder.
+// when src/assets/screenshots/<id>-<slug>.png exists, else a placeholder.
+// Withheld slots (src/data/shots.ts) render nothing.
 import { Image } from 'astro:assets';
 import { resolveShot, type ShotId } from '../data/shots';
 
@@ -16,8 +16,9 @@ const shot = resolveShot(id);
 const loading = priority ? 'eager' : 'lazy';
 const widths = shot.phone ? [200, 400] : [640, 960, 1440];
 const sizes = shot.phone ? '200px' : '(min-width: 1024px) 600px, 100vw';
-const alt = `${shot.title}. ${shot.desc}.`;
+const alt = `${shot.alt}.`;
 ---
+{!shot.withheld && (
 <div class:list={['shot', { phone: shot.phone }]} data-shot={id}>
   {!shot.phone && (
     <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>{shot.bar}</span></div>
@@ -31,7 +32,6 @@ const alt = `${shot.title}. ${shot.desc}.`;
         sizes={sizes}
         loading={loading}
         class:list={['shot-img', { 'has-light': shot.light }]}
-        data-interim={shot.interim ? 'true' : undefined}
       />
       {shot.light && (
         <Image src={shot.light} alt={alt} widths={widths} sizes={sizes} loading={loading} class="shot-img is-light" />
@@ -47,3 +47,4 @@ const alt = `${shot.title}. ${shot.desc}.`;
     </div>
   )}
 </div>
+)}

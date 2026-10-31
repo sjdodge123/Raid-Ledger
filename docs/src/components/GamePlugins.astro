@@ -2,12 +2,14 @@
 // Game plugins grid (ruling Q7). COMING_NEXT names upcoming hubs only once a
 // spike is approved; empty it to fall back to the generic "Your game next?" card.
 import { LINKS } from '../data/site';
+import type { ShotId } from '../data/shots';
+import ScreenshotFrame from './ScreenshotFrame.astro';
 
-const PLUGINS = [
+const PLUGINS: { c: string; ic: string; name: string; via: string; body: string; chips: string[]; shot?: ShotId }[] = [
   { c: 'core', ic: 'C', name: 'Core', via: 'Built in · every game', body: 'Events, polls, lineups, hubs, the Gallery, and Steam achievements and playtime for any game your community plays.', chips: ['Steam sync', 'Deal prices', 'Game library'] },
-  { c: 'wow', ic: 'W', name: 'World of Warcraft', via: 'Classic and Forever · LedgerLink addon', body: 'Guild hubs with the roster by rank, class and profession, who is saved to which raid, recent level-ups, and gear and quests from the LedgerLink addon.', chips: ['Guild roster', 'Lockouts', 'Characters'] },
+  { c: 'wow', ic: 'W', name: 'World of Warcraft', via: 'Classic and Forever · LedgerLink addon', body: 'Guild hubs with the roster by rank, class and profession, who is saved to which raid, recent level-ups, and gear and quests from the LedgerLink addon.', chips: ['Guild roster', 'Lockouts', 'Characters'], shot: 'S9' },
   { c: 'valheim', ic: 'V', name: 'Valheim', via: 'Dedicated server · ValheimLink mod', body: 'A server hub with the explored map, portals, deaths, characters, chest contents and a crafting planner that knows what your server has found.', chips: ['Map', 'Deaths', 'Planner'] },
-  { c: 'bg3', ic: 'B', name: "Baldur's Gate 3", via: 'Campaign saves · Companion app', body: 'A campaign hub with the party, where you left off, session history and a save picture for every session you close.', chips: ['Party', 'Sessions', 'Saves'] },
+  { c: 'bg3', ic: 'B', name: "Baldur's Gate 3", via: 'Campaign saves · Companion app', body: 'A campaign hub with the party, where you left off, session history and a save picture for every session you close.', chips: ['Party', 'Sessions', 'Saves'], shot: 'S10' },
   { c: 'servers', ic: 'S', name: 'Game servers', via: 'Pelican panel', body: "Server hours on the calendar, a live status chip on events, and who's online feeding Quick Play, so a quiet server fills up.", chips: ['Schedules', 'Live status', 'Quick Play'] },
 ];
 
@@ -35,6 +37,7 @@ const comingBody = COMING_NEXT.length
           </div>
           <p>{p.body}</p>
           <div class="chips">{p.chips.map((chip) => <span class="chip">{chip}</span>)}</div>
+          {p.shot && <ScreenshotFrame id={p.shot} />}
         </div>
       ))}
       <div class="plug soon reveal">

@@ -2,6 +2,7 @@
 // One chapter of the growth story: copy + feature list beside its screenshot slots.
 import type { Chapter } from '../data/chapters';
 import ScreenshotFrame from './ScreenshotFrame.astro';
+import { visibleShots } from '../data/shots';
 
 interface Props {
   chapter: Chapter;
@@ -9,6 +10,9 @@ interface Props {
 }
 
 const { chapter, index } = Astro.props;
+// TODO(ROK-2051): S2 (Discord client) and S6 (Valheim map) are withheld until
+// the operator supplies them; a chapter left with one shot drops the duo grid.
+const shots = visibleShots(chapter.shots);
 ---
 <article class:list={['chapter', { first: index === 0, flip: chapter.flip }]}>
   <div class="ch-copy reveal">
@@ -26,7 +30,7 @@ const { chapter, index } = Astro.props;
       ))}
     </ul>
   </div>
-  <div class:list={['ch-media', 'reveal', { duo: chapter.duo }]}>
-    {chapter.shots.map((id) => <ScreenshotFrame id={id} />)}
+  <div class:list={['ch-media', 'reveal', { duo: chapter.duo && shots.length > 1 }]}>
+    {shots.map((id) => <ScreenshotFrame id={id} />)}
   </div>
 </article>

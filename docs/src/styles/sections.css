@@ -117,3 +117,7 @@ footer { border-top: 1px solid var(--edge-subtle); padding: 48px 0 104px; margin
 .plug[data-c="valheim"] { --c: #0369a1; }
 .plug[data-c="bg3"] { --c: #7c3aed; }
 .plug[data-c="servers"] { --c: #0f766e; }
+
+/* screenshots inside a plugin card (S9, S10) and under the example week (S11) */
+.plug .shot { margin-top: 4px; }
+.week-shot { max-width: 960px; margin: 40px auto 0; }

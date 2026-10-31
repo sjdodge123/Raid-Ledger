@@ -1,6 +1,7 @@
 ---
 // "A week at Hearthside Gaming" (ruling Q9): a labelled fictional example in
-// place of testimonials, then the stat tiles.
+// place of testimonials, the week on the calendar (S11), then the stat tiles.
+import ScreenshotFrame from './ScreenshotFrame.astro';
 const WEEK = [
   ['Mon', 'A poll picks raid night.', 'Officer Brannoc asks "When can we raid this week?". Thursday wins with 27 votes by the deadline; the event is created and posted to #raids.'],
   ['Tue', 'A new member finds their way in.', 'Kestrel joins the Discord, taps the pinned sign-in button, sets the evenings they play and joins the Emberfall guild hub from an invite link.'],
@@ -27,6 +28,7 @@ const STATS = [
     <div class="timeline">
       {WEEK.map(([day, head, body]) => <div class="tl reveal"><time>{day}</time><div><b>{head}</b><p>{body}</p></div></div>)}
     </div>
+    <div class="week-shot reveal"><ScreenshotFrame id="S11" /></div>
     <div class="stats">
       {STATS.map(([n, label]) => <div class="stat reveal"><b>{n}</b><span>{label}</span></div>)}
     </div>
