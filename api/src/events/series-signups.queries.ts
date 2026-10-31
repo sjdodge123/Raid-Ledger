@@ -297,3 +297,31 @@ export async function countRemainingNights(
     );
   return row?.n ?? 0;
 }
+
+/**
+ * Lead ruling on D9: clears the tag on EVERY future row of the given
+ * memberships, whatever its status, so no dead tag survives a leave or a
+ * system end. Past rows keep the tag as history. Returns the rows untagged.
+ */
+export async function clearFutureTagsForMemberships(
+  db: Tx,
+  membershipIds: number[],
+  now: Date,
+): Promise<number> {
+  if (membershipIds.length === 0) return 0;
+  const futureEvents = db
+    .select({ id: ev.id })
+    .from(ev)
+    .where(startsAfter(now));
+  const rows = await db
+    .update(es)
+    .set({ seriesSignupId: null })
+    .where(
+      and(
+        inArray(es.seriesSignupId, membershipIds),
+        inArray(es.eventId, futureEvents),
+      ),
+    )
+    .returning({ id: es.id });
+  return rows.length;
+}

@@ -26,6 +26,10 @@ import {
   deleteSeriesEvents,
   cancelSeriesEvents,
 } from './event-series.helpers';
+import {
+  endMembershipsAfterSeriesOp,
+  findRecurrenceGroupId,
+} from './series-signups-lifecycle.helpers';
 
 @Injectable()
 export class EventSeriesService {
@@ -70,8 +74,16 @@ export class EventSeriesService {
     isAdmin: boolean,
     scope: SeriesScope,
   ): Promise<void> {
+    // ROK-1728 AC6: the anchor row is gone after the delete — read it first.
+    const groupId = await findRecurrenceGroupId(this.db, id, this.logger);
     const ids = await deleteSeriesEvents(this.db, id, userId, isAdmin, scope);
     this.logger.log(`Series deleted: ${id} scope=${scope} by user ${userId}`);
+    await endMembershipsAfterSeriesOp(
+      this.db,
+      groupId,
+      'series_deleted',
+      this.logger,
+    );
     for (const eid of ids) {
       this.eventEmitter.emit(APP_EVENT_EVENTS.DELETED, { eventId: eid });
     }
@@ -95,6 +107,13 @@ export class EventSeriesService {
       dto,
     );
     this.logger.log(`Series cancelled: ${id} scope=${scope} by user ${userId}`);
+    const groupId = await findRecurrenceGroupId(this.db, id, this.logger);
+    await endMembershipsAfterSeriesOp(
+      this.db,
+      groupId,
+      'series_cancelled',
+      this.logger,
+    );
     await this.emitLifecycleForIds(ids, APP_EVENT_EVENTS.CANCELLED);
   }
 
