@@ -7,6 +7,7 @@ import type { JSX, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { buttonClass } from '../../../components/ui/button-classes';
+import { Bg3UploadSaveButton } from '../upload/bg3-upload-save-button';
 
 export type Bg3PartyEmptyKind = 'no-campaign' | 'no-saves' | 'no-active';
 
@@ -20,6 +21,8 @@ export interface Bg3PartyEmptyProps {
     readonly isMember: boolean;
     readonly onStartCampaign: () => void;
     readonly onAddSaves: () => void;
+    /** ROK-1960 — opens the "Upload a save" sheet (members, no-campaign and no-saves states). */
+    readonly onUploadSave: () => void;
 }
 
 function EmptyFrame({ text, children }: { text: string; children?: ReactNode }): JSX.Element {
@@ -44,14 +47,24 @@ export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
     if (props.kind === 'no-campaign') {
         return (
             <EmptyFrame text="No campaign on this hub yet.">
-                {props.isMember && <Button variant="primary" size="sm" onClick={props.onStartCampaign}>Start a campaign</Button>}
+                {props.isMember && (
+                    <div className="flex flex-wrap justify-center gap-2">
+                        <Button variant="primary" size="sm" onClick={props.onStartCampaign}>Start a campaign</Button>
+                        <Bg3UploadSaveButton onClick={props.onUploadSave} />
+                    </div>
+                )}
             </EmptyFrame>
         );
     }
     if (props.kind === 'no-saves') {
         return (
             <EmptyFrame text={`No saves in ${props.campaignName ?? 'this campaign'} yet.`}>
-                {props.isMember && <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>}
+                {props.isMember && (
+                    <div className="flex flex-wrap justify-center gap-2">
+                        <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>
+                        <Bg3UploadSaveButton onClick={props.onUploadSave} />
+                    </div>
+                )}
             </EmptyFrame>
         );
     }
