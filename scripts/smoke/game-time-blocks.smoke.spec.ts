@@ -21,8 +21,10 @@
 // `base` re-exports `test` and `expect` only — `Page` is a Playwright type and
 // comes from the package itself (importing it from `./base` type-errors, which
 // nothing caught because no tsconfig covers `scripts/smoke`).
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { test, expect } from './base';
+import { apiDelete, apiPost, getAdminToken } from './api-helpers';
+import { signInContextAs, signInOnboardedMember } from './browser-session';
 import { isMobile, isPhoneLayout } from './helpers';
 
 const GRID = 'game-time-grid';
@@ -33,6 +35,54 @@ const PHONE_GRID = 'phone-day-grid';
 const LAYER = 'block-editor-layer';
 /** Mirrors SELECTED_MIN_WIDTH in SlotBlockLayer.tsx. */
 const SELECTED_MIN_WIDTH = 56;
+
+/** A value that must exist — fails loudly, naming what was missing. */
+function must<T>(value: T | null | undefined, label: string): T {
+    if (value === null || value === undefined) throw new Error(`expected ${label}`);
+    return value;
+}
+
+/*
+ * Every test runs as a FRESH member seeded once per worker (ROK-1597), the way
+ * `game-time-calendar.smoke.spec.ts` does it. This file used to run as the
+ * shared smoke admin, whose saved week, signups and absences every other spec
+ * in the same shard mutates — in GitHub shard 1/5 a sibling filled the admin's
+ * Tuesday, so `createBlock`'s tap found no free cell, created nothing, and
+ * "the steppers move the block bounds" failed 3/3 while passing 26/26 solo.
+ * A fresh member has an empty template and no commitments, so every hour is
+ * free. No case here exercises an admin-only control; the admin token is used
+ * only to seed the member, sign the context in, and delete it afterwards
+ * (which drops its game time and absences with it).
+ */
+let adminToken = '';
+let memberId: number | null = null;
+
+async function seedMember(browser: Browser): Promise<number> {
+    const user = (await apiPost(adminToken, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
+    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
+    memberId = user.userId; // claimed before anything can throw, so afterAll deletes it
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    try {
+        await signInOnboardedMember(await context.newPage(), user.userId);
+    } finally {
+        await context.close();
+    }
+    return user.userId;
+}
+
+test.beforeAll(async ({ browser }) => {
+    adminToken = await getAdminToken();
+    await seedMember(browser);
+});
+
+test.afterAll(async () => {
+    if (memberId !== null) await apiDelete(adminToken, `/users/${memberId}`).catch(() => undefined);
+    memberId = null;
+});
+
+test.beforeEach(async ({ page }) => {
+    await signInContextAs(page.context(), must(memberId, 'beforeAll to have seeded a member'));
+});
 
 /** True when this project gets the one-day phone editor (ROK-1569 AC4). */
 function onPhone(): boolean {
@@ -102,12 +152,44 @@ async function freeCellTestId(page: Page, day?: number): Promise<string> {
             if (!cellPrefix.startsWith('phone-') && (cell as HTMLElement).dataset.status !== 'inactive') continue;
             const r = cell.getBoundingClientRect();
             if (r.width === 0 || r.height === 0 || covered(r)) continue;
-            return (cell as HTMLElement).dataset.testid!;
+            const testId = (cell as HTMLElement).dataset.testid;
+            if (testId) return testId;
         }
         return null;
     }, prefix);
-    expect(id, 'no free cell to tap — every visible hour is locked or blocked').not.toBeNull();
-    return id!;
+    expect(id, `no free cell to tap under "${prefix}" — every visible hour is locked or blocked`).not.toBeNull();
+    return must(id, `a free cell under "${prefix}"`);
+}
+
+/**
+ * Re-check, right before the tap and after scrolling, that `id` is still a free
+ * cell: on screen with a real box, not locked (desktop `data-status`), not under
+ * a block, and that the topmost element at its centre is the cell or the day
+ * target that owns taps — never a block, the inspector or an overlay. Returns
+ * null when free, else the reason, so the failure names the cell instead of
+ * surfacing later as a missing inspector.
+ */
+async function cellBlocker(page: Page, id: string): Promise<string | null> {
+    return page.evaluate((testId: string) => {
+        const cell = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+        if (!cell) return 'it is not in the DOM';
+        if (!testId.startsWith('phone-') && cell.dataset.status !== 'inactive') {
+            return `its data-status is "${cell.dataset.status ?? ''}", not "inactive"`;
+        }
+        const r = cell.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return 'it has no box';
+        const block = Array.from(document.querySelectorAll('[data-testid^="slot-block-"]')).find((b) => {
+            const o = b.getBoundingClientRect();
+            return r.left < o.right && r.right > o.left && r.top < o.bottom && r.bottom > o.top;
+        });
+        if (block) return `it is under ${block.getAttribute('data-testid') ?? 'a block'}`;
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!top) return 'its centre is off screen';
+        const owner = top.closest('[data-testid]');
+        const ownerId = owner?.getAttribute('data-testid') ?? '';
+        if (owner === cell || ownerId.startsWith('slot-day-target-') || ownerId === 'block-editor-layer') return null;
+        return `its centre is covered by ${ownerId ? `[data-testid="${ownerId}"]` : `<${top.tagName.toLowerCase()}>`}`;
+    }, id);
 }
 
 /**
@@ -143,8 +225,10 @@ async function createBlock(page: Page, day?: number): Promise<string> {
     // ROK-1579: the phone's day is its own scroll container, so an hour below the
     // fold has to be scrolled to first — `force` skips the actionability checks
     // that would otherwise have waited for it to be in view.
-    const cell = page.getByTestId(await freeCellTestId(page, day));
+    const cellId = await freeCellTestId(page, day);
+    const cell = page.getByTestId(cellId);
     await cell.scrollIntoViewIfNeeded();
+    expect(await cellBlocker(page, cellId), `cell ${cellId} is not free to tap`).toBeNull();
     await cell.click({ force: true });
 
     // A new block is auto-selected, so the inspector proves the tap landed —
@@ -155,7 +239,7 @@ async function createBlock(page: Page, day?: number): Promise<string> {
     await expect(created).toHaveCount(1);
     const id = await created.getAttribute('data-testid');
     expect(id).not.toBeNull();
-    return id!;
+    return must(id, 'the created block\'s data-testid');
 }
 
 /**
@@ -248,10 +332,10 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
         test.skip(!isMobile(test.info()), 'Touch-scroll behaviour is mobile-specific');
         // Each band resolves as `expanded = choice ?? auto` (`useWindowBand`,
         // `use-profile-window.ts`). Auto opens a band whenever an available hour
-        // in the signed-in admin's saved week falls outside the fitted window, and
-        // that week is shared with every spec running in parallel, so another
-        // spec's saved hour can open "Show earlier" before this test sees it (a
-        // tap would then CLOSE it). A stored choice outranks auto, so both bands
+        // in the signed-in user's saved week falls outside the fitted window. The
+        // member is fresh now (ROK-1597), but the pin keeps this test independent
+        // of whatever an earlier case in this worker left saved (a tap would
+        // otherwise CLOSE an auto-opened band). A stored choice outranks auto, so both bands
         // are pinned: earlier open, because the overflow below needs the morning,
         // and later shut, because the 1 AM–6 AM band would turn 19 cells into 24.
         // The key mirrors PROFILE_WINDOW_KEY in `phone-window.helpers.ts`.
@@ -326,16 +410,19 @@ test.describe('Game Time blocks — editing', () => {
                 for (let d = 0; d < 7; d++) {
                     if (document.querySelector(`[data-testid^="slot-block-${d}-"]`)) continue;
                     const cell = document.querySelector(`[data-testid^="cell-${d}-"][data-status="inactive"]`);
-                    if (cell) return (cell as HTMLElement).dataset.testid!;
+                    const testId = (cell as HTMLElement | null)?.dataset.testid;
+                    if (testId) return testId;
                 }
                 return null;
             });
         expect(cellId).not.toBeNull();
+        const freeId = must(cellId, 'a free cell in a column with no block');
         const existingNow = await page.locator('[data-testid^="slot-block-"]').count();
-        const cell = page.getByTestId(cellId!);
+        const cell = page.getByTestId(freeId);
         // ROK-1579: the phone's day scrolls inside the drawer — `force` skips the
         // actionability checks, so an hour below the fold must be brought up first.
         await cell.scrollIntoViewIfNeeded();
+        expect(await cellBlocker(page, freeId), `cell ${freeId} is not free to tap`).toBeNull();
         await cell.click({ force: true });
 
         await expect(page.getByTestId('selected-block-inspector')).toBeVisible();

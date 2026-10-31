@@ -3,7 +3,8 @@
  *
  * Under fresh credentials: delete every non-suppressed link's copy (a 404 is
  * success), each link row right after its copy so a retried job resumes;
- * then delete the dedicated "Raid Ledger" calendar and null its id; finally
+ * then delete the dedicated "Raid Ledger" calendar — only when no other
+ * connection still uses it (ROK-1597 Codex P1) — and null its id; finally
  * drop the remaining (suppressed) link rows so a later re-enable starts clean.
  *
  * Skipped when the connection is gone or sending is back on by the time the
@@ -19,13 +20,13 @@ import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
-  NotFoundError,
   ProviderAuthError,
   ProviderRequestError,
 } from '../providers/calendar-provider.errors';
 import type { CalendarCredentials } from '../providers/calendar-provider.interface';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
+import { deleteCalendarIfExclusive } from '../services/calendar-shared-calendar.helpers';
 import { errorCode } from './calendar-write-reconcile.helpers';
 import {
   enqueueCalendarWriteJob,
@@ -115,7 +116,8 @@ async function writeOff(
   const ofConn = eq(links.connectionId, conn.id);
   const deletedCopies = await deleteLiveCopies(db, conn.id, provider, creds);
   if (conn.dedicatedCalendarId) {
-    await deleteCalendar(provider, creds, conn.dedicatedCalendarId);
+    const calendarId = conn.dedicatedCalendarId;
+    await deleteCalendarIfExclusive(db, conn, provider, creds, calendarId);
     await db
       .update(schema.calendarConnections)
       .set({ dedicatedCalendarId: null, updatedAt: new Date() })
@@ -165,17 +167,4 @@ export async function enqueuePendingWriteOff(
 ): Promise<EnqueueResult | null> {
   if (!(await hasPendingWriteOff(db, connectionId))) return null;
   return enqueueCalendarWriteJob(deps, { kind: 'write-off', connectionId });
-}
-
-/** A calendar already gone remotely is the outcome we wanted. */
-async function deleteCalendar(
-  provider: WriteProvider,
-  creds: CalendarCredentials,
-  calendarId: string,
-): Promise<void> {
-  try {
-    await provider.deleteRaidLedgerCalendar(creds, calendarId);
-  } catch (err) {
-    if (!(err instanceof NotFoundError)) throw err;
-  }
 }

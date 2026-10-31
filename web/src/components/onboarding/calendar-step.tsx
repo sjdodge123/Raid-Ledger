@@ -54,6 +54,9 @@ function ProviderRows({ data }: { data: CalendarsOverview }): JSX.Element {
     return (
         <div className="space-y-3" data-testid="calendar-step-providers">
             <CalendarProviderRow available={data.providers.google.available} returnTarget="onboarding" />
+            {data.providers.microsoft.available && (
+                <CalendarProviderRow provider="microsoft" available returnTarget="onboarding" />
+            )}
             <AppleProviderRow available={data.providers.apple.available} />
         </div>
     );

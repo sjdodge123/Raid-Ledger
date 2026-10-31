@@ -44,10 +44,23 @@ describe('grantCoversIntent (ROK-1596 D8)', () => {
     ).toBe(true);
   });
 
-  it('primary is Google-only for now', () => {
+  it('primary for Microsoft needs Calendars.ReadWrite, never a Google scope (ROK-1597 Q4)', () => {
     expect(
       grantCoversIntent('primary', 'microsoft', [GOOGLE_EVENTS_SCOPE]),
     ).toBe(false);
+    expect(
+      grantCoversIntent('primary', 'microsoft', [
+        'offline_access',
+        'User.Read',
+        'Calendars.ReadWrite',
+      ]),
+    ).toBe(true);
+  });
+
+  it('primary stays refused for Apple', () => {
+    expect(grantCoversIntent('primary', 'apple', ['Calendars.ReadWrite'])).toBe(
+      false,
+    );
   });
 });
 

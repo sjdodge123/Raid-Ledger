@@ -47,6 +47,7 @@ import { deriveInstanceId } from '../providers/rl-copy-id.helpers';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
 import { lockUserDerive } from './calendar-away-guard.helpers';
 import {
+  copyCalendarIdsOf,
   cursorFields,
   resolvePrimaryAlias,
   storedCursor,
@@ -71,6 +72,7 @@ export type ReadSyncConnection = Pick<
   | 'readCalendarIds'
   | 'dedicatedCalendarId'
   | 'syncCursor'
+  | 'writeTarget'
 >;
 
 /** D7: next sync 30 min out, ± 5 min jitter. */
@@ -171,7 +173,10 @@ export function fetchWindow(
     if (ids.length === 0) return { blocks: [], cursor: {} };
     // ROK-1598 D7: the stored cursor in, so Apple can answer `unchanged`.
     const cursor = storedCursor(conn.syncCursor);
-    return deps.provider.fetchBusy(creds, range, ids, cursor);
+    const copyCalendarIds = copyCalendarIdsOf(conn, calendars);
+    return deps.provider.fetchBusy(creds, range, ids, cursor, {
+      copyCalendarIds,
+    });
   });
 }
 

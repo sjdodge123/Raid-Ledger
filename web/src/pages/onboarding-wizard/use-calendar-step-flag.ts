@@ -24,8 +24,8 @@ export interface CalendarStepFlag {
 }
 
 function canConnect(overview: CalendarsOverview): boolean {
-    const { google, apple } = overview.providers;
-    return overview.enabled && (google.available || apple.available);
+    const { google, microsoft, apple } = overview.providers;
+    return overview.enabled && (google.available || microsoft.available || apple.available);
 }
 
 function hasConnection(overview: CalendarsOverview): boolean {
