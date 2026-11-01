@@ -52,6 +52,14 @@ if [[ -d settings ]]; then
     chmod 2750 settings 2>/dev/null || true
     chmod 640 settings/bundle.enc 2>/dev/null || true
 fi
+# ROK-2049 — rl-docker-proxy listens on a unix socket in this dir (no TCP).
+# rl:rl-fleet 3770: the proxy (uid 65532, primary gid rl-fleet) creates its 0660
+# socket here; rl-agent + rl reach it through the group; sticky stops anyone
+# but the proxy from unlinking it. Must exist BEFORE the proxy starts, or the
+# daemon mkdirs the bind source root:root 0755 and the proxy cannot bind.
+mkdir -p run/docker-proxy
+chgrp rl-fleet run/docker-proxy 2>/dev/null || true
+chmod 3770 run/docker-proxy 2>/dev/null || true
 # A3-B P3 — scaffold /srv/rl-infra/runners/slot-{1..4}/worktree + state/locks
 # with the rl-agent:rl-fleet 2775 the Mutagen beta needs. Nothing created the
 # slot-3/4 dirs before, so the Docker daemon mkdir'd the bind-mount sources as

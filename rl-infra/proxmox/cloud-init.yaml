@@ -111,8 +111,11 @@ runcmd:
   # (connecting as rl-agent) then could not write — 38 of 39 entries failed
   # and /workspace stayed empty for 12 minutes. Empty dirs cost nothing.
   # rl-infra/runner/ensure-runner-dirs.sh re-asserts this on every deploy.
-  - mkdir -p /srv/rl-infra/{state/locks,runners/slot-1/worktree,runners/slot-2/worktree,runners/slot-3/worktree,runners/slot-4/worktree,envs,bin,traefik,loki,grafana,gc-sweeper}
+  - mkdir -p /srv/rl-infra/{state/locks,runners/slot-1/worktree,runners/slot-2/worktree,runners/slot-3/worktree,runners/slot-4/worktree,envs,bin,traefik,loki,grafana,gc-sweeper,run/docker-proxy}
   - chown -R rl:rl /srv/rl-infra
+  # ROK-2049: rl-docker-proxy's unix-socket dir. deploy.sh re-asserts it as
+  # rl:rl-fleet 3770 once the rl-fleet group exists (SETUP.md).
+  - chmod 3770 /srv/rl-infra/run/docker-proxy
   - touch /srv/rl-infra/state/{claims.json,env-registry.json,audit.log,perf.log}
   - chown rl:rl /srv/rl-infra/state/*
 
