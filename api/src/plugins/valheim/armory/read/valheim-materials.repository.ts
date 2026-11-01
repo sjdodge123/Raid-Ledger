@@ -6,7 +6,7 @@
  * import committing mid-request cannot mix old and new totals (review M2).
  */
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
@@ -18,7 +18,11 @@ import {
   type ChestFocusQuery,
   type ChestFocusRow,
 } from './valheim-chest-focus.helpers';
-import { atlasReady, itemsSubset } from './valheim-armory-read.repository';
+import {
+  atlasReady,
+  cataloguePreference,
+  itemsSubset,
+} from './valheim-armory-read.repository';
 import {
   toCountsRow,
   type MaterialsContainerRow,
@@ -256,10 +260,11 @@ export class MaterialsReader {
     gameVersion: string,
     prefabs: readonly string[],
   ): Promise<MaterialsCatalogRow | null> {
-    const exact = sql<boolean>`${cat.gameVersion} = ${gameVersion}`;
+    const { exact, order } = cataloguePreference(gameVersion);
     const [row] = await this.db
       .select({
         items: itemsSubset(prefabs),
+        gameVersion: cat.gameVersion,
         atlasSha256: cat.atlasSha256,
         atlasWidth: cat.atlasWidth,
         atlasHeight: cat.atlasHeight,
@@ -268,7 +273,7 @@ export class MaterialsReader {
       })
       .from(cat)
       .where(eq(cat.pelicanServerId, serverId))
-      .orderBy(desc(exact), desc(cat.capturedAt), desc(cat.id))
+      .orderBy(...order)
       .limit(1);
     return row ?? null;
   }

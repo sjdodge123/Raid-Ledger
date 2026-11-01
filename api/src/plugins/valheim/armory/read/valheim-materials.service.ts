@@ -128,7 +128,7 @@ export class ValheimMaterialsService {
               omittedPrivate: viewer.isAdmin ? scan.omittedPrivate : null,
             }
           : null,
-        ...projectCatalog(prefabs, catalog),
+        ...catalogOf(prefabs, catalog),
       },
       trend,
     );
@@ -172,7 +172,7 @@ export class ValheimMaterialsService {
       containers: rows.map((row) =>
         toContainerSummary(row, placeOf(view, row.key)),
       ),
-      ...projectCatalog(prefabs, catalog),
+      ...catalogOf(prefabs, catalog),
     };
   }
 
@@ -242,4 +242,13 @@ function scanHeader(scan: ValheimContainerScan) {
     worldUid: scan.worldUid,
     capturedAt: toMinuteIso(scan.capturedAt),
   };
+}
+
+/**
+ * `{ items, atlas }` only: the Materials and Containers responses are
+ * `.strict()` and carry no `catalogueGameVersion` (ROK-2058).
+ */
+function catalogOf(...args: Parameters<typeof projectCatalog>) {
+  const { items, atlas } = projectCatalog(...args);
+  return { items, atlas };
 }

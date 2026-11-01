@@ -184,6 +184,13 @@ export const ValheimCharacterDetailSchema =
     hubId: Id.nullable().optional(),
     /** ROK-1882 (additive): skill gains over the last 3 play days; the API always sends it (`days: []` when none). */
     skillTrend: ValheimSkillTrendSchema.optional(),
+    /**
+     * ROK-2058 (additive): the game version of the catalogue `items` came from.
+     * Differs from `gameVersion` when the server has no catalogue for the
+     * character's version yet and the API fell back to the newest one; null
+     * when there is no catalogue at all.
+     */
+    catalogueGameVersion: z.string().nullable().optional(),
   }).strict();
 export type ValheimCharacterDetail = z.infer<
   typeof ValheimCharacterDetailSchema

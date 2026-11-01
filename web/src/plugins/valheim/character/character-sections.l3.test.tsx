@@ -197,3 +197,77 @@ describe('Valheim inventory grid semantics', () => {
         }
     });
 });
+
+describe('Valheim catalogue version (ROK-2058)', () => {
+    it('server sent no catalogue (catalogueGameVersion null): the missing banner, no fallback note', () => {
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={valheimSheetFixture({
+                    items: {},
+                    atlas: null,
+                    catalogueGameVersion: null,
+                })}
+            />,
+        );
+        expect(
+            screen.getByTestId('valheim-missing-catalogue'),
+        ).toHaveTextContent('game version 0.220.5');
+        expect(screen.queryByTestId('valheim-catalogue-fallback')).toBeNull();
+    });
+
+    it('older-version catalogue: a quiet note names both versions; items it lacks show their ids', () => {
+        const base = valheimSheetFixture();
+        const olderItems = Object.fromEntries(
+            Object.entries(base.items ?? {}).filter(([k]) => k !== 'SwordIron'),
+        );
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={{
+                    ...base,
+                    items: olderItems,
+                    catalogueGameVersion: '0.219.0',
+                }}
+            />,
+        );
+        expect(screen.queryByTestId('valheim-missing-catalogue')).toBeNull();
+        expect(
+            screen.getByTestId('valheim-catalogue-fallback'),
+        ).toHaveTextContent(
+            "Item names are from game version 0.219.0 — the server hasn't sent the 0.220.5 item list yet. New items show their game ids.",
+        );
+        expect(
+            within(section('Equipment')).getByRole('button', {
+                name: 'SwordIron, quality 3, durability 20%, equipped',
+            }),
+        ).toBeInTheDocument();
+    });
+
+    it('this version’s catalogue: no banner and no note', () => {
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={valheimSheetFixture({
+                    catalogueGameVersion: '0.220.5',
+                })}
+            />,
+        );
+        expect(screen.queryByTestId('valheim-missing-catalogue')).toBeNull();
+        expect(screen.queryByTestId('valheim-catalogue-fallback')).toBeNull();
+    });
+});
+
+describe('Valheim catalogue naming none of the sheet’s items (ROK-2058)', () => {
+    it('a catalogue that names none of the sheet’s items: the missing banner, even for this version', () => {
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={valheimSheetFixture({
+                    items: {},
+                    catalogueGameVersion: '0.220.5',
+                })}
+            />,
+        );
+        expect(
+            screen.getByTestId('valheim-missing-catalogue'),
+        ).toHaveTextContent('game version 0.220.5');
+        expect(screen.queryByTestId('valheim-catalogue-fallback')).toBeNull();
+    });
+});
