@@ -31,6 +31,7 @@ function catalog(
       },
       ...items,
     },
+    gameVersion: '0.220.5',
     atlasSha256: null,
     atlasWidth: null,
     atlasHeight: null,
@@ -47,7 +48,11 @@ describe('projectCatalog own-property lookup', () => {
     } catch {
       out = 'threw';
     }
-    expect(out).toEqual({ items: { SwordIron: SWORD }, atlas: null });
+    expect(out).toEqual({
+      items: { SwordIron: SWORD },
+      atlas: null,
+      catalogueGameVersion: '0.220.5',
+    });
   });
 
   it('keeps a catalogue entry the catalogue really owns under such a name', () => {
@@ -57,5 +62,23 @@ describe('projectCatalog own-property lookup', () => {
     const out = projectCatalog(['__proto__'], catalog(own));
     expect(Object.keys(out.items)).toEqual(['__proto__']);
     expect(Object.getPrototypeOf(out.items)).toBe(Object.prototype);
+  });
+});
+
+describe('projectCatalog catalogueGameVersion (ROK-2058)', () => {
+  it('is the catalogue row’s own version, even when it is a fallback', () => {
+    const out = projectCatalog(['SwordIron'], {
+      ...catalog(),
+      gameVersion: '1.0.20',
+    });
+    expect(out.catalogueGameVersion).toBe('1.0.20');
+  });
+
+  it('is null when the server has no catalogue', () => {
+    expect(projectCatalog(['SwordIron'], null)).toEqual({
+      items: {},
+      atlas: null,
+      catalogueGameVersion: null,
+    });
   });
 });
