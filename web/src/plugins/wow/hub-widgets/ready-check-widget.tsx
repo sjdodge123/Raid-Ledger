@@ -10,7 +10,7 @@ import type { EventRaidReadiness, GuildEventCardDto } from '@raid-ledger/contrac
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { StatusChip } from '../../../components/ui/status-chip';
-import { contentEvents, MATRIX_MQ } from './dungeon-quests.helpers';
+import { MATRIX_MQ, nextContentEvent } from './dungeon-quests.helpers';
 import { formatStart, requirementsLine, summaryCounts } from './ready-check.helpers';
 import { ReadyRows } from './ready-check-rows';
 import { FreshnessFooter } from './freshness-footer';
@@ -80,7 +80,7 @@ function ReadyCheckBody({ event, wide }: { event: GuildEventCardDto; wide: boole
 /** The next content event's checklist; nothing when no upcoming event has content. */
 export function ReadyCheckWidget({ raids }: HubWidgetCtx): JSX.Element | null {
     const wide = useMediaQuery(MATRIX_MQ);
-    const event = contentEvents(raids.data, 1)[0];
+    const event = nextContentEvent(raids.data);
     if (!event) return null;
     return <ReadyCheckBody event={event} wide={wide} />;
 }

@@ -29,6 +29,8 @@ const READINESS_URL = 'http://localhost:3000/plugins/wow-classic/events/:eventId
 const START = '2099-01-03T20:00:00.000Z';
 const RESET = '2099-01-06T15:00:00.000Z';
 const MC = [{ id: 409, name: 'Molten Core' }];
+/** Started in the past, ends far in the future: in progress for any real clock. */
+const RUNNING = { ...contentEvent(100, '2000-01-01T20:00:00.000Z', MC), endTime: '2099-12-31T23:00:00.000Z', title: 'Running Raid' };
 
 type Viewer = GuildPage['viewer']['role'];
 
@@ -191,6 +193,29 @@ describe('ReadyCheckWidget — desktop table', () => {
         expect(more).toHaveAttribute('aria-expanded', 'false');
         await userEvent.click(more);
         expect(within(table).getAllByRole('rowheader')).toHaveLength(12);
+    });
+});
+
+describe('ReadyCheckWidget — next run is upcoming, not in progress', () => {
+    it('skips an event already in progress and shows the next scheduled one', async () => {
+        serve(RAID);
+        server.use(guildRaidsHandler([RUNNING, { ...contentEvent(101, START, MC), title: 'Molten Core Night' }]));
+        renderWithProviders(<WidgetHarness />);
+        const link = await screen.findByRole('link', { name: /^(Molten Core Night|Running Raid)$/ });
+        expect(link.textContent).toBe('Molten Core Night');
+        expect(link).toHaveAttribute('href', '/events/101');
+    });
+
+    it('hides the card (no request) when the only content event is in progress', async () => {
+        clearRegistry();
+        registerReadyCheckWidget(registerPlugin('blizzard', { icon: '/x.png', color: 'blue', label: 'WoW' }));
+        serve(RAID);
+        server.use(guildRaidsHandler([RUNNING]));
+        renderWithProviders(<CellsHarness role="member" />);
+        await screen.findByTestId('raids-ready');
+        expect(screen.queryByRole('heading', { name: 'Ready for next run' })).toBeNull();
+        expect(screen.queryByRole('link', { name: 'Running Raid' })).toBeNull();
+        expect(calls.count).toBe(0);
     });
 });
 

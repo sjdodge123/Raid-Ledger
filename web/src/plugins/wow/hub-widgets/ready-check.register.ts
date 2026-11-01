@@ -3,17 +3,26 @@
  * next run" card on guild hub Overviews. Order 44 makes it the first Forever
  * card (operator ruling 2026-11-01, rec 1); span 2 (rec 3). Same gate as
  * Dungeon quests: `audience` 'everyone' + `useVisible` = (not a visitor OR
- * staff) AND an upcoming guild event has planned content — so a visitor never
- * mounts the body and the card hides when there is no such event (rec 2).
+ * staff) AND a not-yet-started guild event has planned content — so a visitor
+ * never mounts the body and the card hides when there is no such event (rec 2;
+ * a running event is not the next run).
  * Lazy body (app-entry budget).
  */
 import { lazy } from 'react';
 import type { PluginHandle } from '../../plugin-registry';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
-import { useForeverEventWidgetVisible } from './dungeon-quests.register';
+import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { nextContentEvent } from './dungeon-quests.helpers';
+import { useForeverEventViewerAllowed } from './dungeon-quests.register';
 import { EventsSeeAll } from './see-all-actions';
 
 const ReadyCheckWidget = lazy(() => import('./ready-check-widget'));
+
+/** `useVisible`: members or staff, and a content event that has not started yet (the body's pick). */
+export function useReadyCheckVisible({ page, raids }: HubWidgetCtx): boolean {
+    const allowed = useForeverEventViewerAllowed(page);
+    return allowed && nextContentEvent(raids.data) !== undefined;
+}
 
 /** Add the Ready for next run widget to the WoW plugin. */
 export function registerReadyCheckWidget(plugin: PluginHandle): void {
@@ -28,6 +37,6 @@ export function registerReadyCheckWidget(plugin: PluginHandle): void {
         audience: 'everyone',
         component: ReadyCheckWidget,
         action: EventsSeeAll,
-        useVisible: useForeverEventWidgetVisible,
+        useVisible: useReadyCheckVisible,
     });
 }
