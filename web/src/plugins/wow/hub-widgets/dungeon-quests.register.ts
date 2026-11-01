@@ -17,10 +17,15 @@ import { EventsSeeAll } from './see-all-actions';
 
 const DungeonQuestsWidget = lazy(() => import('./dungeon-quests-widget'));
 
-/** `useVisible`: members or staff, and the guild raids query (already loaded) has a content event. */
-export function useDungeonQuestsVisible({ page, raids }: HubWidgetCtx): boolean {
+/** Members or staff (the readiness endpoints let both in). */
+export function useForeverEventViewerAllowed(page: HubWidgetCtx['page']): boolean {
     const { user } = useAuth();
-    const allowed = page.viewer.role !== 'visitor' || isOperatorOrAdmin(user);
+    return page.viewer.role !== 'visitor' || isOperatorOrAdmin(user);
+}
+
+/** `useVisible`: members or staff, and the guild raids query (already loaded) has a content event. */
+export function useForeverEventWidgetVisible({ page, raids }: HubWidgetCtx): boolean {
+    const allowed = useForeverEventViewerAllowed(page);
     return allowed && hasContentEvents(raids.data);
 }
 
@@ -37,6 +42,6 @@ export function registerDungeonQuestsWidget(plugin: PluginHandle): void {
         audience: 'everyone',
         component: DungeonQuestsWidget,
         action: EventsSeeAll,
-        useVisible: useDungeonQuestsVisible,
+        useVisible: useForeverEventWidgetVisible,
     });
 }

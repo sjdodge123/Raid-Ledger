@@ -108,6 +108,7 @@ const blizzard = {
     { id: 'forever-last-seen', title: 'Last seen', description: 'Who was online at the last roster export, and who has been away longest.', layoutKey: 'plugin' },
     { id: 'forever-gear-readiness', title: 'Gear readiness', description: 'Average item level of level-60 mains, and who is missing enchants.', layoutKey: 'plugin' },
     { id: 'forever-raid-progress', title: 'Raid progress', description: 'First kills, kills and wipes per raid boss.', layoutKey: 'plugin' },
+    { id: 'forever-ready-check', title: 'Ready for next run', description: 'Whether everyone signed up for the next raid or dungeon meets its level, quests, lockout and item level.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
