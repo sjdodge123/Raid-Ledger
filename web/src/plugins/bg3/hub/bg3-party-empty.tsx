@@ -8,6 +8,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { buttonClass } from '../../../components/ui/button-classes';
 import { Bg3UploadSaveButton } from '../upload/bg3-upload-save-button';
+import { CompanionInstallLink } from '../../../components/common/companion-install-link';
+
+/** ROK-2056 L7 — mockup panel E, verbatim; the line hides once the viewer links a computer. */
+export const BG3_COMPANION_LEAD = 'Saves can upload by themselves —';
 
 export type Bg3PartyEmptyKind = 'no-campaign' | 'no-saves' | 'no-active';
 
@@ -53,6 +57,22 @@ function CampaignTabLink(): JSX.Element {
     );
 }
 
+/** `no-saves`: the members' next steps + the ROK-2056 Companion line (hidden once linked). */
+function NoSaves(props: Bg3PartyEmptyProps): JSX.Element {
+    return (
+        <EmptyFrame text={`No saves in ${props.campaignName ?? 'this campaign'} yet.`}>
+            {props.isMember && (
+                <>
+                    <MemberActions onUpload={props.onUploadSave}>
+                        <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>
+                    </MemberActions>
+                    <CompanionInstallLink lead={BG3_COMPANION_LEAD} />
+                </>
+            )}
+        </EmptyFrame>
+    );
+}
+
 export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
     if (props.kind === 'no-campaign') {
         return (
@@ -65,17 +85,7 @@ export function Bg3PartyEmpty(props: Bg3PartyEmptyProps): JSX.Element {
             </EmptyFrame>
         );
     }
-    if (props.kind === 'no-saves') {
-        return (
-            <EmptyFrame text={`No saves in ${props.campaignName ?? 'this campaign'} yet.`}>
-                {props.isMember && (
-                    <MemberActions onUpload={props.onUploadSave}>
-                        <Button variant="secondary" size="sm" onClick={props.onAddSaves}>Add my saves</Button>
-                    </MemberActions>
-                )}
-            </EmptyFrame>
-        );
-    }
+    if (props.kind === 'no-saves') return <NoSaves {...props} />;
     if (!props.canEdit) return <EmptyFrame text="No active campaign." />;
     return (
         <EmptyFrame text="Pick the active campaign.">

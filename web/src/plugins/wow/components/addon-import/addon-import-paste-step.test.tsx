@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { screen, waitFor } from '@testing-library/react';
@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { ADDON_IMPORT_MAX_BYTES } from '@raid-ledger/contract';
 import { server } from '../../../../test/mocks/server';
+import { companionDevicesHandler } from '../../../../test/mocks/companion-devices-handlers';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { AddonImportPasteActions, AddonImportPasteStep } from './addon-import-paste-step';
 import { useAddonImportPreview } from './use-addon-import';
@@ -102,5 +103,23 @@ describe('AddonImportPasteStep', () => {
         await userEvent.paste(CHAR_STRING);
         await userEvent.click(await screen.findByRole('link', { name: 'Add this character' }));
         expect(await screen.findByText('prefill Ana Forever game 7')).toBeInTheDocument();
+    });
+});
+
+// ROK-2056 — the Companion install line (AC5 / AC6). Off by default; one test flips it on.
+const companionFlag = vi.hoisted(() => ({ available: false }));
+vi.mock('../../../../lib/companion-install', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../../lib/companion-install')>()),
+    companionDownloadAvailable: () => companionFlag.available,
+}));
+
+describe('ROK-2056 Companion install line', () => {
+    it('the paste step offers "Make this automatic — install the Companion" when not linked', async () => {
+        companionFlag.available = true;
+        server.use(companionDevicesHandler([]));
+        renderWithProviders(<AddonImportPasteStep value="" onChange={() => {}} onCheck={() => {}} />);
+        expect(await screen.findByTestId('companion-install-link'))
+            .toHaveTextContent('Make this automatic — install the Companion.');
+        companionFlag.available = false;
     });
 });
