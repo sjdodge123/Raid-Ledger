@@ -12,7 +12,8 @@ import { gatedHubCompanionPrompt } from './hub-companion-prompts';
 
 const CompanionInstallPrompt = lazy(() => import('./companion-install-prompt').then((m) => ({ default: m.CompanionInstallPrompt })));
 
-export function HubCompanionPromptCell({ ctx }: { ctx: HubCtx }): JSX.Element | null {
+/** Reads only `ctx.page`, so it takes just that slice of the hub context. */
+export function HubCompanionPromptCell({ ctx }: { ctx: Pick<HubCtx, 'page'> }): JSX.Element | null {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
     const registration = gatedHubCompanionPrompt(ctx.page, activeSlugs);
     if (registration === undefined) return null;

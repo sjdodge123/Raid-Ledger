@@ -11,7 +11,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { useCompanionDevices } from '../../hooks/use-companion-devices';
-import { COMPANION_CARD_HREF, companionDownloadAvailable } from '../../lib/companion-install';
+import { COMPANION_CARD_HREF, COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../lib/companion-install';
 
 export interface CompanionInstallLinkProps {
     /** Words before the link, e.g. "Saves can upload by themselves —". */
@@ -32,7 +32,7 @@ function UnlinkedLine({ lead, label = 'install the Companion', className }: Comp
     return (
         <p data-testid="companion-install-link" className={`text-xs text-dim${className ? ` ${className}` : ''}`}>
             {lead}{' '}
-            <Link to={COMPANION_CARD_HREF} className="text-success underline underline-offset-2 hover:text-foreground">
+            <Link to={COMPANION_CARD_HREF} className={COMPANION_LINK_CLASS}>
                 {label}
             </Link>
             .

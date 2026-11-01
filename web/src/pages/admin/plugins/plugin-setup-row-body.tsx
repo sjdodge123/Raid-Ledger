@@ -16,7 +16,7 @@ import { MarkdownBlock } from '../../../components/ui/markdown-block';
 import { Button } from '../../../components/ui/button';
 import { buttonClass } from '../../../components/ui/button-classes';
 import { SECTION_LABEL } from './plugin-hub-contributions';
-import { COMPANION_CARD_HREF, companionDownloadAvailable } from '../../../lib/companion-install';
+import { COMPANION_CARD_HREF, COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../../lib/companion-install';
 
 /** Integrations › Pelican Panel — where a server's token is issued today (ITEM Q4). */
 export const PELICAN_SERVER_ROWS_URL = '/admin/settings/integrations/plugin/pelican/pelican-panel';
@@ -79,7 +79,7 @@ function IssueTokenLink(): JSX.Element {
 function HowPlayersInstall(): JSX.Element {
     return (
         <Link to={COMPANION_CARD_HREF} data-testid="setup-companion-install"
-            className="inline-block text-sm text-secondary underline underline-offset-2 hover:text-foreground">
+            className={`inline-block text-sm ${COMPANION_LINK_CLASS}`}>
             How players install it
         </Link>
     );

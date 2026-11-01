@@ -17,3 +17,9 @@ export const COMPANION_CARD_ANCHOR = 'companion';
 export function companionDownloadAvailable(): boolean {
     return COMPANION_DOWNLOAD_AVAILABLE;
 }
+
+/**
+ * The inline-link idiom every Companion entry point uses (approved mockup
+ * `a.link`, `--color-success`; the app's existing inline links).
+ */
+export const COMPANION_LINK_CLASS = 'text-success underline underline-offset-2 hover:text-foreground';

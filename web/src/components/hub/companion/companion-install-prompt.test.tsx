@@ -12,7 +12,6 @@ import type { CompanionDevice, GuildPage, HubOnboardingStateDto } from '@raid-le
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { usePluginStore } from '../../../stores/plugin-store';
-import type { HubCtx } from '../../../plugins/hub-module';
 import '../../../plugins/bg3/register';
 import '../../../plugins/wow/register';
 import { gatedHubCompanionPrompt } from './hub-companion-prompts';
@@ -64,14 +63,14 @@ function serve(devices: CompanionDevice[] = [], onboarding: HubOnboardingStateDt
 }
 
 function renderCell(opts: PageOpts = {}): void {
-    renderWithProviders(<HubCompanionPromptCell ctx={{ page: page(opts) } as HubCtx} />);
+    renderWithProviders(<HubCompanionPromptCell ctx={{ page: page(opts) }} />);
 }
 
 /** The subject beside a control hub (id 9) that passes every gate: once the control shows, the shared queries have settled. */
 function renderWithControl(opts: PageOpts): void {
     renderWithProviders(<>
-        <HubCompanionPromptCell ctx={{ page: page(opts) } as HubCtx} />
-        <HubCompanionPromptCell ctx={{ page: page({ id: 9 }) } as HubCtx} />
+        <HubCompanionPromptCell ctx={{ page: page(opts) }} />
+        <HubCompanionPromptCell ctx={{ page: page({ id: 9 }) }} />
     </>);
 }
 

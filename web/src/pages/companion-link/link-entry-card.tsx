@@ -10,7 +10,7 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { LinkCard } from './link-card';
 import { formatUserCodeInput } from './companion-link-code';
-import { COMPANION_CARD_HREF, companionDownloadAvailable } from '../../lib/companion-install';
+import { COMPANION_CARD_HREF, COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../lib/companion-install';
 
 interface LinkEntryCardProps {
     code: string;
@@ -54,7 +54,7 @@ function DownloadLine(): JSX.Element {
     return (
         <p data-testid="link-download-line" className="mt-4 text-xs text-muted">
             {"Don't have the app? "}
-            <Link to={COMPANION_CARD_HREF} className="text-secondary underline underline-offset-2 hover:text-foreground">
+            <Link to={COMPANION_CARD_HREF} className={COMPANION_LINK_CLASS}>
                 Download it
             </Link>
         </p>
