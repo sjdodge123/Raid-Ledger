@@ -27,7 +27,7 @@ import type { ResolvedRoster } from './facts/wow-facts.service';
 import { WowFactsService } from './facts/wow-facts.service';
 import type { RosterCharRef } from './facts/wow-fact.types';
 import { loadForeverCharSnapshots } from './forever-char-snapshot.query';
-import { loadRosterRows } from './guilds/guild-roster.helpers';
+import { loadRosterMemberIds } from './guilds/guild-roster.helpers';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -41,21 +41,16 @@ function refKey(characterId: string | null, members: Map<string, number>) {
 
 /**
  * D6 — `characterId → memberId` for signup characters that are rows of the
- * event guild's latest roster (one query; empty without a guild).
+ * event guild's latest roster (one query bounded to `charIds`; empty
+ * without a guild).
  */
-async function loadMemberIds(
+function loadMemberIds(
   db: Db,
   guildId: number | null,
   charIds: readonly string[],
 ): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  if (guildId === null || charIds.length === 0) return map;
-  const wanted = new Set(charIds);
-  for (const row of await loadRosterRows(db, guildId)) {
-    if (row.characterId === null || !wanted.has(row.characterId)) continue;
-    if (!map.has(row.characterId)) map.set(row.characterId, row.memberId);
-  }
-  return map;
+  if (guildId === null) return Promise.resolve(new Map<string, number>());
+  return loadRosterMemberIds(db, guildId, charIds);
 }
 
 /** One resolver ref per distinct signup character. */
