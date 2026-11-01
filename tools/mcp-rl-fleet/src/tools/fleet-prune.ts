@@ -12,6 +12,7 @@
 // stop-at-target rule can never drift from what an agent triggers by hand.
 
 import { execFile } from 'node:child_process';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import { promisify } from 'node:util';
 import { buildSshArgs } from '../exec.js';
 
@@ -100,7 +101,7 @@ export function buildRemoteScript(dryRun: boolean): string {
   // reclaims more than it has to.
   return [
     'set -u',
-    'export DOCKER_HOST=tcp://127.0.0.1:2375',
+    `export DOCKER_HOST=${VM_DOCKER_HOST}`,
     'export RL_DISK_PRUNE_PCT=0',
     `export RL_DISK_PRUNE_DRY_RUN=${dry}`,
     `source ${LADDER_LIB}`,

@@ -8,6 +8,7 @@
 // rl_env_deploy chain (step 6) can call it inline inside its own runner.
 
 import { execFile } from 'node:child_process';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -90,7 +91,7 @@ export async function runCloneCore(params: EnvCloneProdParams): Promise<EnvClone
   try {
     const sshArgs = await buildSshArgs(
       // DOCKER_HOST→wollomatic proxy (rl-agent has no docker group; Bug G).
-      `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${params.slug}-allinone && sleep 6`,
+      `DOCKER_HOST=${VM_DOCKER_HOST} docker restart rl-env-${params.slug}-allinone && sleep 6`,
     );
     await execFileAsync('ssh', sshArgs, { timeout: 60_000 });
     restartedForSettings = true;
