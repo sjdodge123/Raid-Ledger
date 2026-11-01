@@ -57,9 +57,13 @@ fi
 # socket here; rl-agent + rl reach it through the group; sticky stops anyone
 # but the proxy from unlinking it. Must exist BEFORE the proxy starts, or the
 # daemon mkdirs the bind source root:root 0755 and the proxy cannot bind.
+# Fails LOUDLY (unlike the dirs above): a silent no-op leaves rl:rl 3770, the
+# proxy cannot create its socket (crash loop) and rl-agent cannot traverse.
 mkdir -p run/docker-proxy
-chgrp rl-fleet run/docker-proxy 2>/dev/null || true
-chmod 3770 run/docker-proxy 2>/dev/null || true
+if ! chgrp rl-fleet run/docker-proxy || ! chmod 3770 run/docker-proxy; then
+    echo "ERROR: could not set run/docker-proxy to rl:rl-fleet 3770. The deploy user must be in rl-fleet: sudo usermod -aG rl-fleet rl, then re-run deploy.sh (new SSH session)." >&2
+    exit 1
+fi
 # A3-B P3 — scaffold /srv/rl-infra/runners/slot-{1..4}/worktree + state/locks
 # with the rl-agent:rl-fleet 2775 the Mutagen beta needs. Nothing created the
 # slot-3/4 dirs before, so the Docker daemon mkdir'd the bind-mount sources as
