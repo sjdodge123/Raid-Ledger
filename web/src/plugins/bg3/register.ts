@@ -88,3 +88,15 @@ bg3.registerHubGameTab([...BG3_GAME_SLUGS], {
     component: LazyBg3CampaignTab,
     visible: campaignTabVisible,
 });
+
+// ROK-2056 L4 + operator ruling Q8 — the hub Overview's "install the Companion"
+// card; browser upload still works, so the copy says so. Requirement
+// `upload-saves` in BG3_SETUP carries `rlCompanion: bg3-save`. Copy: approved mockup panels C/D.
+bg3.registerHubCompanionPrompt({
+    requirementId: 'upload-saves',
+    games: [...BG3_GAME_SLUGS],
+    kinds: ['game_community'],
+    heading: 'Upload your saves automatically',
+    body: "This hub reads Baldur's Gate 3 saves. Install the Raid Ledger Companion on the PC you play on and your party, level and location update after every save — or upload saves from your browser.",
+    shortBody: 'Install the Raid Ledger Companion on the PC you play on — or upload saves from your browser.',
+});
