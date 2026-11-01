@@ -72,9 +72,26 @@ export const PluginSetupRequirementSchema = z
     links: z.array(PluginSetupLinkSchema).max(5).optional(),
     check: z.string().regex(CHECK_ID, 'A check id is <plugin>.<name>').optional(),
     pelican: PluginSetupPelicanSchema.optional(),
+    /**
+     * ROK-2056 — marks a `companion_app` requirement that the Raid Ledger
+     * Companion fulfils (the LedgerLink addon row is also `companion_app` but
+     * has no marker). `collector` is a `COMPANION_CONTRACTS` key; the web shows
+     * the Companion install prompt only for marked requirements.
+     */
+    rlCompanion: z
+      .object({ collector: z.string().regex(/^[a-z0-9][a-z0-9-]{0,59}$/, 'Invalid collector') })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((r, ctx) => {
+    if (r.rlCompanion !== undefined && r.kind !== 'companion_app') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['rlCompanion'],
+        message: 'Only a companion_app requirement can be fulfilled by the Raid Ledger Companion',
+      });
+    }
     const placed = r.pelican?.variable !== undefined || r.pelican?.files !== undefined;
     if (r.kind === 'server_secret' && !placed) {
       ctx.addIssue({
