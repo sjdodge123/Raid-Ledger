@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { bg3LevelDisplay, type Bg3CrossHubMove } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
+import { companionDevicesHandler } from '../../../test/mocks/companion-devices-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     BG3_KEY_URL, bg3BindKeyCrossHubHandler, bg3BindKeyHandler, bg3CampaignsHandler, bg3MySavesHandler,
@@ -302,5 +303,23 @@ describe('cross-hub bind asks first (operator ruling 2026-10-31; server guard F4
         expect(screen.getByTestId(CONFIRM)).toHaveTextContent(
             "This playthrough's saves are in Honour run in Other Crew and a hub you can no longer open. Moving it here also moves your 1 earlier save.");
         expect(calls).toEqual(['bind']);
+    });
+});
+
+// ROK-2056 — the Companion install line (AC5 / AC6). Off by default; one test flips it on.
+const companionFlag = vi.hoisted(() => ({ available: false }));
+vi.mock('../../../lib/companion-install', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/companion-install')>()),
+    companionDownloadAvailable: () => companionFlag.available,
+}));
+
+describe('ROK-2056 Companion install line', () => {
+    it('the pick step offers "Make this automatic — install the Companion" when not linked', async () => {
+        companionFlag.available = true;
+        server.use(companionDevicesHandler([]));
+        renderSheet();
+        expect(await screen.findByTestId('companion-install-link'))
+            .toHaveTextContent('Make this automatic — install the Companion.');
+        companionFlag.available = false;
     });
 });

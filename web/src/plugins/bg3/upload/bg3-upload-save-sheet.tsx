@@ -8,6 +8,7 @@
 import { useState, type JSX } from 'react';
 import type { Bg3CampaignSummary } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { CompanionInstallLink } from '../../../components/common/companion-install-link';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useBg3Campaigns, useBg3MyUnassignedSaves } from '../hooks/use-bg3-hub';
 import { Bg3Overlay } from '../campaign/bg3-overlay';
@@ -91,6 +92,7 @@ export function Bg3UploadSaveSheet({ isOpen, hubId, onClose }: Bg3UploadSaveShee
                 <div className="flex flex-col gap-4" data-testid="bg3-upload-save">
                     {flow.banner !== null && <Bg3UploadBanner tone={flow.banner.tone}>{flow.banner.text}</Bg3UploadBanner>}
                     <SheetBody flow={flow} campaigns={list} onNewCampaign={() => setStarting(true)} />
+                    {flow.parsed === null && flow.result === null && <CompanionInstallLink lead="Make this automatic —" />}
                 </div>
             </Bg3Overlay>
             {starting && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={() => setStarting(false)}

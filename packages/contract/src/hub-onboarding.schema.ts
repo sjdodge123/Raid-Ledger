@@ -17,6 +17,8 @@ import { z } from 'zod';
 export const HubOnboardingKeySchema = z.enum([
     'players-get-your-guild',
     'hub-setup-checklist',
+    /** ROK-2056 — the hub Overview's "install the Companion" card, dismissed per hub. */
+    'companion-install',
 ]);
 export type HubOnboardingKey = z.infer<typeof HubOnboardingKeySchema>;
 

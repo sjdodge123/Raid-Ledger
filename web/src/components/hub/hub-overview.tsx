@@ -12,6 +12,7 @@
  * ROK-2043: masonry pack at ≥768px — each card keeps its slot in the arranged
  * order and its span, and starts right under the card above it
  * (`layout/use-masonry-rows`), so a short card no longer leaves a row-tall hole.
+ * ROK-2056: a plugin-declared "install the Companion" card sits first.
  */
 import { Fragment, lazy, Suspense, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
@@ -22,6 +23,7 @@ import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-c
 import { resolveHubLayout } from './layout/resolve-hub-layout';
 import { HubGalleryDialogMount } from './gallery/hub-gallery-dialog-mount';
 import { MASONRY_GRID_CLASS, useMasonryRows } from './layout/use-masonry-rows';
+import { HubCompanionPromptCell } from './companion/hub-companion-prompt-cell';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -108,6 +110,8 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
         <OverviewGrid hidden={arranging}>
+            {/* ROK-2056 L4: first, full width; renders nothing unless a plugin asks and every gate passes. */}
+            <HubCompanionPromptCell ctx={ctx} />
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </OverviewGrid>

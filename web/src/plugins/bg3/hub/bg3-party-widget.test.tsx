@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { Bg3SnapshotResponse, GuildPage } from '@raid-ledger/contract';
 import type { User } from '../../../hooks/use-auth';
 import { server } from '../../../test/mocks/server';
+import { companionDevicesHandler } from '../../../test/mocks/companion-devices-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     BG3_CLAIMS_URL, BG3_SNAPSHOT_URL, bg3CampaignsHandler, bg3ClaimHandler, bg3SnapshotHandler, bg3UnclaimHandler,
@@ -298,5 +299,24 @@ describe('ROK-1960 "Upload a save"', () => {
         renderWithProviders(<Bg3PartyWidget {...ctx('visitor')} />);
         expect(await screen.findByText('No campaign on this hub yet.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Upload a save' })).not.toBeInTheDocument();
+    });
+});
+
+// ROK-2056 — the Companion install line (AC5 / AC6). Off by default; one test flips it on.
+const companionFlag = vi.hoisted(() => ({ available: false }));
+vi.mock('../../../lib/companion-install', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/companion-install')>()),
+    companionDownloadAvailable: () => companionFlag.available,
+}));
+
+describe('ROK-2056 Companion install line', () => {
+    it('a member who is not linked sees it in the no-saves state (mockup panel E)', async () => {
+        companionFlag.available = true;
+        const noSaves: Bg3SnapshotResponse = { empty: true, campaignId: BG3_CAMPAIGN_ID };
+        server.use(bg3CampaignsHandler(buildBg3CampaignsResponse()), bg3SnapshotHandler(noSaves), companionDevicesHandler([]));
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(await screen.findByTestId('companion-install-link'))
+            .toHaveTextContent('Saves can upload by themselves — install the Companion.');
+        companionFlag.available = false;
     });
 });
