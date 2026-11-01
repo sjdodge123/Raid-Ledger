@@ -56,9 +56,9 @@ const DING_TOO_OLD = 'Dainel';
 const ONLINE_AT_EXPORT = 2;
 const LONGEST_AWAY = 'Elowen';
 const LONGEST_AWAY_DAYS = '34 d';
-/** seed-guild raids (`demo-test-guild-raids.helpers.ts`): first night = Molten Core, min level 60; the benched member (Dainel) is level 52. */
+/** seed-guild raids (`demo-test-guild-raids.helpers.ts`): first night = Molten Core, min level 60; the member benches with a level-52 alt (`SEED_UNDER_LEVEL_ALT`) that has no roster row — their linked main Dainel stays 60. */
 const SEEDED_RAID_EVENT = 'Molten Core Night';
-const UNDER_LEVEL_NAME = 'Dainel';
+const UNDER_LEVEL_NAME = 'Daenvar';
 /** seed-guild `withGear` (`demo-test-guild-gear.helpers.ts`): one cap main below the 55 floor, missing Wrist + Feet. */
 const MISSING_SLOT = 'Wrist';
 
