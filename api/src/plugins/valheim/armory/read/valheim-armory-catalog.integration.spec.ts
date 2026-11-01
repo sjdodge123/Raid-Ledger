@@ -224,6 +224,61 @@ describe('Valheim character detail catalogue subset (ROK-1836 D4)', () => {
   });
 });
 
+/** A one-item catalogue row whose SwordIron name tags which row was read. */
+async function addCatalogue(
+  serverId: number,
+  gameVersion: string,
+  capturedAt: string,
+  swordName: string,
+) {
+  await testApp.db.insert(schema.valheimItemCatalogs).values({
+    pelicanServerId: serverId,
+    gameVersion,
+    locale: 'English',
+    capturedAt: new Date(capturedAt),
+    items: {
+      SwordIron: {
+        name: swordName,
+        category: 'OneHandedWeapon',
+        maxStack: 1,
+        maxQuality: 4,
+        variants: 0,
+        icon: null,
+      },
+    },
+  });
+}
+
+describe('catalogue version fallback (ROK-2058)', () => {
+  it('the exact game-version catalogue beats a newer one for another version', async () => {
+    const { id, serverId } = await seed(30, 'character-vanilla');
+    const v = (await detail(id)).body.gameVersion;
+    await addCatalogue(serverId, v, '2026-01-01T00:00:00Z', 'Exact sword');
+    await addCatalogue(serverId, '9.9.9', '2026-06-01T00:00:00Z', 'Newer');
+    const { body } = await detail(id);
+    expect(body.items?.SwordIron?.name).toBe('Exact sword');
+    expect(body.catalogueGameVersion).toBe(v);
+  });
+
+  it('with no exact catalogue, names come from the newest-captured one', async () => {
+    const { id, serverId } = await seed(31, 'character-vanilla');
+    await addCatalogue(serverId, '0.1.0', '2026-01-01T00:00:00Z', 'Oldest');
+    await addCatalogue(serverId, '0.3.0', '2026-06-01T00:00:00Z', 'Newest');
+    await addCatalogue(serverId, '0.2.0', '2026-03-01T00:00:00Z', 'Middle');
+    const { body } = await detail(id);
+    expect(body.items?.SwordIron?.name).toBe('Newest');
+    expect(body.catalogueGameVersion).toBe('0.3.0');
+  });
+
+  it('no catalogue on the server: catalogueGameVersion is null', async () => {
+    const { id } = await seed(32, 'character-vanilla');
+    await seed(33, 'character-vanilla', 'items-atlas');
+    const { body } = await detail(id);
+    expect(body.items).toEqual({});
+    expect(body.catalogueGameVersion).toBeNull();
+  });
+});
+
 describe('GET plugins/valheim/armory/servers/:serverId/blobs/:sha256 (D5)', () => {
   it('streams the stored PNG with fixed headers', async () => {
     const serverId = await makeServer(10);
