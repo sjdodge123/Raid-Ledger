@@ -259,8 +259,9 @@ describe('POST /admin/test/wow/seed-guild — guild raids (ROK-1787)', () => {
       { role: 'healer', filled: 1, needed: 4 },
       { role: 'dps', filled: 0, needed: 14 },
     ]);
+    // ROK-1926: the member benches with a level-52 alt, not the linked main.
     expect(res.body.composition.benched).toEqual([
-      { characterId: out.users.member.characterId, name: 'Dainel' },
+      { characterId: out.raids.underLevelCharacterId, name: 'Daenvar' },
     ]);
     expect(res.body.recent).toEqual([
       expect.objectContaining({

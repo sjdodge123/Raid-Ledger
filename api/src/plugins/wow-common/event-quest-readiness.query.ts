@@ -18,6 +18,9 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /** What access + the Forever gate need about the event. */
 export interface ReadinessEvent {
+  title: string;
+  /** `[start, end]` of the event (ROK-1926 compares lockouts to the start). */
+  duration: [Date, Date];
   guildId: number | null;
   slug: string | null;
   contentInstances: unknown;
@@ -30,6 +33,8 @@ export async function loadReadinessEvent(
 ): Promise<ReadinessEvent | null> {
   const [row] = await db
     .select({
+      title: schema.events.title,
+      duration: schema.events.duration,
       guildId: schema.events.guildId,
       slug: schema.games.slug,
       contentInstances: schema.events.contentInstances,
