@@ -62,7 +62,8 @@ let raidEvent: number;
 let raidStart: Date;
 let emptyEvent: number;
 let classicEvent: number;
-const users = {} as Record<Who, { id: number; token: string }>;
+const userMap = new Map<Who, { id: number; token: string }>();
+const users = (who: Who) => defined(userMap.get(who), `seeded user ${who}`);
 
 async function ensureGame(slug: string): Promise<number> {
   const [found] = await testApp.db
@@ -109,7 +110,7 @@ async function seedUser(who: Who): Promise<number> {
     username: who,
     role: 'member',
   });
-  users[who] = { id: user.id, token };
+  userMap.set(who, { id: user.id, token });
   return user.id;
 }
 
@@ -221,16 +222,16 @@ async function seedSignups(): Promise<void> {
     rostered: await char('rostered', { guid: await rosterRow('rostered', 58) }),
   };
   for (const who of ['ready', 'under', 'saved', 'rostered'] as const) {
-    await signUp(raidEvent, users[who].id, ids[who]);
+    await signUp(raidEvent, users(who).id, ids[who]);
   }
   await signUp(raidEvent, await seedUser('nochar'), null);
-  await signUp(raidEvent, users.tentative.id, ids.tentative, 'tentative');
-  const benchSignup = await signUp(raidEvent, users.benched.id, ids.benched);
+  await signUp(raidEvent, users('tentative').id, ids.tentative, 'tentative');
+  const benchSignup = await signUp(raidEvent, users('benched').id, ids.benched);
   await testApp.db
     .insert(schema.rosterAssignments)
     .values({ eventId: raidEvent, signupId: benchSignup, role: 'bench' });
-  await signUp(emptyEvent, users.under.id, ids.under);
-  await signUp(classicEvent, users.ready.id, ids.ready);
+  await signUp(emptyEvent, users('under').id, ids.under);
+  await signUp(classicEvent, users('ready').id, ids.ready);
 }
 
 /** member: a roster member (guid link) who is not signed up. */
@@ -275,12 +276,12 @@ afterAll(() => {
 let body: EventRaidReadiness;
 const row = (who: Who): Row =>
   defined(
-    body.signups.find((s) => s.userId === users[who].id),
+    body.signups.find((s) => s.userId === users(who).id),
     `row for ${who}`,
   );
 
 async function loadRaidBody(): Promise<void> {
-  const res = await readiness(raidEvent, users.ready.token);
+  const res = await readiness(raidEvent, users('ready').token);
   expect(res.status).toBe(200);
   body = EventRaidReadinessSchema.parse(res.body);
 }
@@ -311,7 +312,7 @@ describe('GET raid-readiness — payload (ROK-1926)', () => {
           'benched',
         ] as const
       )
-        .map((w) => users[w].id)
+        .map((w) => users(w).id)
         .sort((a, b) => a - b),
     );
   });
@@ -367,7 +368,7 @@ describe('GET raid-readiness — unknowns + roster facts (ROK-1926)', () => {
 
 describe('GET raid-readiness — event with no content (ROK-1926)', () => {
   it('has null requirements and `na` level / saved / ilvl checks', async () => {
-    const res = await readiness(emptyEvent, users.under.token);
+    const res = await readiness(emptyEvent, users('under').token);
     expect(res.status).toBe(200);
     const empty = EventRaidReadinessSchema.parse(res.body);
     expect(empty.requirements).toEqual({
@@ -386,24 +387,28 @@ describe('GET raid-readiness — event with no content (ROK-1926)', () => {
 
 describe('GET raid-readiness — access (ROK-1926)', () => {
   it('is 200 for a guild member who is not signed up, and for staff', async () => {
-    expect((await readiness(raidEvent, users.member.token)).status).toBe(200);
+    expect((await readiness(raidEvent, users('member').token)).status).toBe(
+      200,
+    );
     expect((await readiness(raidEvent, adminToken)).status).toBe(200);
   });
 
   it('is 403 for a visitor (non-member, not signed up)', async () => {
-    const res = await readiness(raidEvent, users.outsider.token);
+    const res = await readiness(raidEvent, users('outsider').token);
     expect(res.status).toBe(403);
     expect(res.body).not.toHaveProperty('signups');
   });
 
   it('is 403, not 404, for a visitor on a Classic event', async () => {
-    expect((await readiness(classicEvent, users.outsider.token)).status).toBe(
-      403,
-    );
+    expect(
+      (await readiness(classicEvent, users('outsider').token)).status,
+    ).toBe(403);
   });
 
   it('is 404 for a missing event and for a Classic event', async () => {
     expect((await readiness(987654, adminToken)).status).toBe(404);
-    expect((await readiness(classicEvent, users.ready.token)).status).toBe(404);
+    expect((await readiness(classicEvent, users('ready').token)).status).toBe(
+      404,
+    );
   });
 });

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { useQuery } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import type { JSX } from 'react';
-import type { EventRaidReadiness, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { GuildRaidsSchema, type EventRaidReadiness, type GuildPage, type GuildRaidsDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { ALDRIC_CHARACTER_ID, contentEvent, guildRaidsHandler } from '../../../test/handlers/forever-hub-widgets';
@@ -17,7 +17,7 @@ import { registerReadyCheckWidget } from './ready-check.register';
 import { ReadyCheckWidget } from './ready-check-widget';
 import { requirementsLine, rowCells, sortSignups, summaryCounts, type ReadySignup } from './ready-check.helpers';
 
-const auth = vi.hoisted(() => ({ role: 'member' as string }));
+const auth = vi.hoisted((): { role: string } => ({ role: 'member' }));
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -88,7 +88,7 @@ function serve(reply: Reply, instances = MC): void {
 function useRaids(): ReturnType<typeof useQuery<GuildRaidsDto, Error>> {
     return useQuery<GuildRaidsDto, Error>({
         queryKey: ['raids-harness'],
-        queryFn: async () => (await fetch('http://localhost:3000/guilds/7/raids')).json() as Promise<GuildRaidsDto>,
+        queryFn: async () => GuildRaidsSchema.parse(await (await fetch('http://localhost:3000/guilds/7/raids')).json()),
     });
 }
 
