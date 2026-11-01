@@ -24,6 +24,7 @@ import { PELICAN_PLUGIN_ID } from '../../pelican/pelican.constants';
 import { memberToken } from '../../pelican/testing/pelican-integration.helpers';
 import { VALHEIM_GAME_SLUG, VALHEIM_PLUGIN_ID } from '../valheim.constants';
 import type { ArmoryCharacterFixture } from './valheim-armory-demo-seed.controller';
+import { ARMORY_FIXTURE_GAME_VERSION } from './valheim-armory-demo-seed.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/valheim/armory-character';
@@ -216,6 +217,66 @@ describe('armory-character keys + claimant check (ROK-1836 M2, m2)', () => {
 
   it('400s on an unknown key or a non-boolean extraRows', async () => {
     for (const body of [{ key: 'c4' }, { extraRows: 'yes' }]) {
+      const res = await testApp.request
+        .post(ROUTE)
+        .set(bearer(adminToken))
+        .send(body);
+      expect(res.status).toBe(400);
+    }
+  });
+});
+
+describe('armory-character game versions (ROK-2058)', () => {
+  const versions = async () => {
+    const P = schema.valheimProfiles;
+    const C = schema.valheimItemCatalogs;
+    return {
+      profiles: (await testApp.db.select({ v: P.gameVersion }).from(P)).map(
+        (r) => r.v,
+      ),
+      catalogs: (await testApp.db.select({ v: C.gameVersion }).from(C))
+        .map((r) => r.v)
+        .sort(),
+    };
+  };
+
+  it('defaults both versions to the fixture version', async () => {
+    await seed({ key: 'c1' });
+    expect(await versions()).toEqual({
+      profiles: [ARMORY_FIXTURE_GAME_VERSION],
+      catalogs: [ARMORY_FIXTURE_GAME_VERSION],
+    });
+  });
+
+  it('lands gameVersion on the character and catalogGameVersion on the catalogue; the read falls back', async () => {
+    const seeded = await seed({
+      key: 'c2',
+      gameVersion: '1.0.21',
+      catalogGameVersion: '1.0.20',
+    });
+    expect(await versions()).toEqual({
+      profiles: ['1.0.21'],
+      catalogs: ['1.0.20'],
+    });
+    const detail = await readDetail(seeded.characterId, adminToken);
+    expect(detail.catalogueGameVersion).toBe('1.0.20');
+    expect(Object.keys(detail.items ?? {})).toContain('SwordIron');
+  });
+
+  it("keeps another version's catalogue when seeding an override", async () => {
+    await seed({ key: 'c1' });
+    await seed({
+      key: 'c2',
+      gameVersion: '1.0.21',
+      catalogGameVersion: '1.0.20',
+    });
+    expect((await versions()).catalogs).toEqual(
+      [ARMORY_FIXTURE_GAME_VERSION, '1.0.20'].sort(),
+    );
+  });
+
+  it('400s on a malformed game version', async () => {
+    for (const body of [{ gameVersion: 'v1' }, { catalogGameVersion: '1' }]) {
       const res = await testApp.request
         .post(ROUTE)
         .set(bearer(adminToken))

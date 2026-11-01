@@ -14,6 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { ValheimGameVersionSchema } from '@raid-ledger/contract';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -55,6 +56,9 @@ const RequestSchema = z
       z.literal(DEMO_SKILL_DAY_COUNTS[0]),
       z.literal(DEMO_SKILL_DAY_COUNTS[1]),
     ]),
+    /** ROK-2058: the character's / the catalogue's game version. */
+    gameVersion: ValheimGameVersionSchema,
+    catalogGameVersion: ValheimGameVersionSchema,
   })
   .partial()
   .strict();
@@ -74,13 +78,22 @@ function parseRequest(body: unknown): SeedRequest {
   const parsed = RequestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     throw new BadRequestException(
-      'Expected { slot?, key?: "c1"|"c2"|"c3", claimedBy?: userId | null, withCatalog?, extraRows?, skillDays?: 0 | 3 }',
+      'Expected { slot?, key?: "c1"|"c2"|"c3", claimedBy?: userId | null, withCatalog?, extraRows?, skillDays?: 0 | 3, gameVersion?, catalogGameVersion? }',
     );
   }
   const { slot = 0, key = 'c1', claimedBy = null } = parsed.data;
   const { withCatalog = true, extraRows = false } = parsed.data;
-  const { skillDays = 0 } = parsed.data;
-  return { slot, key, claimedBy, withCatalog, extraRows, skillDays };
+  const { skillDays = 0, gameVersion, catalogGameVersion } = parsed.data;
+  return {
+    slot,
+    key,
+    claimedBy,
+    withCatalog,
+    extraRows,
+    skillDays,
+    ...(gameVersion === undefined ? {} : { gameVersion }),
+    ...(catalogGameVersion === undefined ? {} : { catalogGameVersion }),
+  };
 }
 
 /** `claimedBy` must name a real user — a readable 400, not an FK 500. */
