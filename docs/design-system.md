@@ -1686,7 +1686,14 @@ rows in the API's order (name + a `border-edge` `text-[11px] text-dim` difficult
 two difficulties · `text-muted` "First kill Nov 6" / `text-dim` "Not killed yet" · kills with a `text-success` count when
 non-zero · wipes; four columns ≥640px, first-kill line and counts stacked below), the first 8 shown and a 44px
 `Button bare` "N more bosses ▾" disclosure for the rest, the quiet §4.5 "No raid pulls yet — …" state, `EventsSeeAll`
-action (no per-boss link) and the shared `FreshnessFooter` dated by the latest pull — no new pattern. The roster cards share
+action (no per-boss link) and the shared `FreshnessFooter` dated by the latest pull — no new pattern. **Ready for next run**
+(`forever-ready-check`, order 44, span 2, ROK-1926) — the next content event's header (title `Link` to the event +
+`<time>`), a `text-xs text-muted` requirements line ("Level 60+ · item level 55+ · not saved to Molten Core") and a
+✓ / ✗ / ? summary of `StatusChip`s, then one row per signup: a Character / Level / Quests / Saved / Item level / Ready
+table at ≥768px (labelled mini chips in a `divide-edge` list below), not ready first, 10 shown then a 44px "N more"
+disclosure. Chips are `success` ✓, `warning` ✗ (the quest and lockout fails are amber too, never `danger`) and `neutral`
+? — **unknown is never red**; an n/a check is a `text-dim` "—"; every chip carries a `title`. Members + staff only
+(`useVisible`, like Dungeon quests); the Dungeon-quests matrix idiom + `StatusChip` + §4.5/§4.6 states — no new pattern. The roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
 Professions, Who's saved, Last seen, Gear readiness, Raid progress and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
