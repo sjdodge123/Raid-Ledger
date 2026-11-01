@@ -270,6 +270,16 @@ describe('catalogue version fallback (ROK-2058)', () => {
     expect(body.catalogueGameVersion).toBe('0.3.0');
   });
 
+  it('two non-exact catalogues captured at the same instant: the higher id wins', async () => {
+    const { id, serverId } = await seed(34, 'character-vanilla');
+    const at = '2026-04-01T00:00:00Z';
+    await addCatalogue(serverId, '0.5.0', at, 'Inserted first');
+    await addCatalogue(serverId, '0.4.0', at, 'Inserted second');
+    const { body } = await detail(id);
+    expect(body.items?.SwordIron?.name).toBe('Inserted second');
+    expect(body.catalogueGameVersion).toBe('0.4.0');
+  });
+
   it('no catalogue on the server: catalogueGameVersion is null', async () => {
     const { id } = await seed(32, 'character-vanilla');
     await seed(33, 'character-vanilla', 'items-atlas');
