@@ -23,6 +23,7 @@ import {
   buildRaidReadiness,
   type ReadinessSignupInput,
 } from './event-raid-readiness.helpers';
+import { questEvidence } from './event-raid-readiness.evidence';
 import type { ResolvedRoster } from './facts/wow-facts.service';
 import { WowFactsService } from './facts/wow-facts.service';
 import type { RosterCharRef } from './facts/wow-fact.types';
@@ -124,9 +125,10 @@ export class EventRaidReadinessService {
         contentInstances: event.contentInstances,
       },
       questCount: qr.quests.length,
-      signups: signups.map((s, i) =>
-        toSignupInput(s, qr.signups[i]?.perQuest ?? null, members, facts),
-      ),
+      signups: signups.map((s, i) => ({
+        ...toSignupInput(s, qr.signups[i]?.perQuest ?? null, members, facts),
+        questEvidence: questEvidence(qr.signups[i], snapshots, manual),
+      })),
     });
   }
 }
@@ -137,7 +139,7 @@ function toSignupInput(
   perQuest: ReadinessSignupInput['perQuest'],
   members: Map<string, number>,
   facts: ResolvedRoster,
-): ReadinessSignupInput {
+): Omit<ReadinessSignupInput, 'questEvidence'> {
   const key = refKey(s.characterId, members);
   return {
     userId: s.userId,

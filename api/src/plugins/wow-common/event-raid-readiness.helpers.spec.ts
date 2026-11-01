@@ -72,6 +72,7 @@ const signup = (
   name: 'Aldric',
   facts: facts(),
   perQuest: null,
+  questEvidence: [],
   ...over,
 });
 
@@ -528,7 +529,59 @@ describe('oldestFreshness', () => {
       asOf: null,
     });
   });
+});
 
+describe('freshness covers the quest check', () => {
+  it('a quest snapshot older than the level/ilvl facts sets the footer', () => {
+    const out = buildRaidReadiness({
+      event: {
+        id: 1,
+        title: 'Run',
+        startTime: START,
+        contentInstances: RAID_60,
+      },
+      questCount: 1,
+      signups: [
+        signup({
+          facts: facts({ level: fact(60, 'roster'), ilvl: fact(58) }),
+          perQuest: [{ state: 'done', prereqsMet: true }],
+          questEvidence: [{ source: 'addon', asOf: OLD }],
+        }),
+      ],
+    });
+    expect(out.freshness).toEqual({ source: 'addon', asOf: OLD.toISOString() });
+  });
+
+  it('a quest-only requirement still gets a footer', () => {
+    const out = buildRaidReadiness({
+      event: { id: 1, title: 'Run', startTime: START, contentInstances: [] },
+      questCount: 1,
+      signups: [
+        signup({
+          facts: null,
+          characterId: null,
+          perQuest: [{ state: 'have', prereqsMet: null }],
+          questEvidence: [{ source: 'manual', asOf: NEW }],
+        }),
+      ],
+    });
+    expect(out.freshness).toEqual({
+      source: 'manual',
+      asOf: NEW.toISOString(),
+    });
+  });
+
+  it('ignores quest evidence when the quest check is na', () => {
+    const out = buildRaidReadiness({
+      event: { id: 1, title: 'Run', startTime: START, contentInstances: [] },
+      questCount: 0,
+      signups: [signup({ questEvidence: [{ source: 'addon', asOf: OLD }] })],
+    });
+    expect(out.freshness).toBeNull();
+  });
+});
+
+describe('oldestFreshness — na cells', () => {
   it('ignores facts behind an na cell', () => {
     const out = buildRaidReadiness({
       event: { id: 1, title: 'Run', startTime: START, contentInstances: [] },

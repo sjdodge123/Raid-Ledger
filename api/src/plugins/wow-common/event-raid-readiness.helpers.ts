@@ -38,6 +38,9 @@ type Signup = EventRaidReadiness['signups'][number];
 type Requirements = EventRaidReadiness['requirements'];
 type PerQuest = EventQuestReadinessDto['signups'][number]['perQuest'][number];
 
+/** Where one piece of evidence came from and when (a `Fact` satisfies it). */
+export type ReadinessEvidence = Pick<Fact<unknown>, 'source' | 'asOf'>;
+
 /** The facts the checks read (a `ResolvedWowFacts` satisfies it). */
 export type ReadinessFacts = Pick<
   ResolvedWowFacts,
@@ -54,6 +57,11 @@ export interface ReadinessSignupInput {
   facts: ReadinessFacts | null;
   /** The signup's `buildQuestReadiness` row; null = no row. */
   perQuest: readonly Pick<PerQuest, 'state' | 'prereqsMet'>[] | null;
+  /**
+   * The dated evidence behind `perQuest` (the quests snapshot, the manual
+   * rows) so the freshness footer covers the quest check too; [] = none.
+   */
+  questEvidence: readonly ReadinessEvidence[];
 }
 
 export interface RaidReadinessInput {
@@ -238,18 +246,19 @@ function evaluateSignup(
   };
 }
 
-type AnyFact = Pick<Fact<unknown>, 'source' | 'asOf'>;
+type AnyFact = ReadinessEvidence;
 
-/** The facts that fed a non-`na` cell of one signup. */
+/** The facts (and quest evidence) that fed a non-`na` cell of one signup. */
 function usedFacts(s: ReadinessSignupInput, row: Signup): AnyFact[] {
   const f = s.facts;
-  if (!f) return [];
+  const quests = row.quests.state === 'na' ? [] : s.questEvidence;
+  if (!f) return [...quests];
   const used: (AnyFact | null)[] = [
     row.level.state === 'na' ? null : f.level,
     row.saved.state === 'na' ? null : f.lockouts,
     row.ilvl.state === 'na' ? null : f.ilvl,
   ];
-  return used.filter((x): x is AnyFact => x !== null);
+  return [...used.filter((x): x is AnyFact => x !== null), ...quests];
 }
 
 /** The oldest fact that fed any cell; a dated fact beats an undated one. */
