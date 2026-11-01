@@ -4,7 +4,9 @@
  * (guild_id, title), so a re-call returns the same ids:
  *   - a tagged weekly series of 3 MMO-slotted (2/4/14) nights; its first
  *     night has the GM (tank) + officer (healer) signed and roster-assigned
- *     and the member benched;
+ *     and the member benched. ROK-1926: that night carries a Molten Core
+ *     (raid, min level 60) `content_instances` entry and the member's
+ *     character is level 52, so "Ready for next run" shows a level fail;
  *   - one tagged raid a week ago with attendance recorded: member attended,
  *     officer no_show.
  * Direct inserts: no Discord embeds or reminders are scheduled.
@@ -23,6 +25,15 @@ const SLOT_CONFIG = { type: 'mmo', tank: 2, healer: 4, dps: 14 };
 const HOUR = 3600 * 1000;
 const WEEK = 7 * 24 * HOUR;
 const SERIES_NIGHTS = 3;
+/** ROK-1926 — the first night's raid; the id is synthetic (journal not live). */
+const SEED_RAID_INSTANCE = {
+  id: 90_000_001,
+  name: 'Molten Core',
+  shortName: 'MC',
+  category: 'raid',
+  minimumLevel: 60,
+};
+const UNDER_LEVEL = 52;
 
 export interface SeedRaider {
   userId: number;
@@ -73,6 +84,7 @@ interface NewEvent {
   title: string;
   start: Date;
   groupId: string | null;
+  contentInstances?: unknown[];
 }
 
 async function insertEvent(
@@ -91,6 +103,7 @@ async function insertEvent(
       slotConfig: SLOT_CONFIG,
       guildId: ctx.guildId,
       recurrenceGroupId: ev.groupId,
+      contentInstances: ev.contentInstances ?? null,
       recurrenceRule: ev.groupId
         ? { frequency: 'weekly', until: until.toISOString() }
         : null,
@@ -131,6 +144,42 @@ async function assign(
     .values({ eventId, signupId, role, position: 1 });
 }
 
+/**
+ * The member's character drops below the raid's minimum level. The roster
+ * row says 60 and fact precedence takes the newest `asOf`, so the character
+ * row is stamped an hour ahead of the roster's `lastSeenAt`; `guild_members`
+ * is untouched, so the roster-insights cards keep counting five at cap.
+ */
+async function makeUnderLevel(
+  db: Db,
+  characterId: string,
+  now: Date,
+): Promise<void> {
+  await db
+    .update(schema.characters)
+    .set({ level: UNDER_LEVEL, lastSyncedAt: new Date(now.getTime() + HOUR) })
+    .where(eq(schema.characters.id, characterId));
+}
+
+async function insertSeriesNights(
+  db: Db,
+  ctx: SeedRaidCtx,
+  groupId: string,
+): Promise<number[]> {
+  const base = Math.ceil(ctx.now.getTime() / HOUR) * HOUR;
+  const ids: number[] = [];
+  for (let week = 1; week <= SERIES_NIGHTS; week++) {
+    const ev: NewEvent = {
+      title: SEED_RAID_SERIES_TITLE,
+      start: new Date(base + week * WEEK),
+      groupId,
+      ...(week === 1 ? { contentInstances: [SEED_RAID_INSTANCE] } : {}),
+    };
+    ids.push(await insertEvent(db, ctx, ev));
+  }
+  return ids;
+}
+
 async function ensureSeries(
   db: Db,
   ctx: SeedRaidCtx,
@@ -145,17 +194,12 @@ async function ensureSeries(
     };
   }
   const seriesGroupId = randomUUID();
-  const base = Math.ceil(ctx.now.getTime() / HOUR) * HOUR;
-  const ids: number[] = [];
-  for (let week = 1; week <= SERIES_NIGHTS; week++) {
-    const start = new Date(base + week * WEEK);
-    const ev = { title: SEED_RAID_SERIES_TITLE, start, groupId: seriesGroupId };
-    ids.push(await insertEvent(db, ctx, ev));
-  }
+  const ids = await insertSeriesNights(db, ctx, seriesGroupId);
   const night = defined(ids[0], 'first series night');
   await assign(db, night, ctx.gm, 'tank');
   await assign(db, night, ctx.officer, 'healer');
   await assign(db, night, ctx.member, 'bench');
+  await makeUnderLevel(db, ctx.member.characterId, ctx.now);
   return { seriesGroupId, seriesEventIds: ids };
 }
 
