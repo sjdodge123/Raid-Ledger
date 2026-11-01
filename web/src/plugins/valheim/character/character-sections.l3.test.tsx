@@ -254,3 +254,20 @@ describe('Valheim catalogue version (ROK-2058)', () => {
         expect(screen.queryByTestId('valheim-catalogue-fallback')).toBeNull();
     });
 });
+
+describe('Valheim catalogue naming none of the sheet’s items (ROK-2058)', () => {
+    it('a catalogue that names none of the sheet’s items: the missing banner, even for this version', () => {
+        renderWithProviders(
+            <ValheimCharacterSections
+                character={valheimSheetFixture({
+                    items: {},
+                    catalogueGameVersion: '0.220.5',
+                })}
+            />,
+        );
+        expect(
+            screen.getByTestId('valheim-missing-catalogue'),
+        ).toHaveTextContent('game version 0.220.5');
+        expect(screen.queryByTestId('valheim-catalogue-fallback')).toBeNull();
+    });
+});
