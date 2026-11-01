@@ -10,7 +10,7 @@
 import { lazy } from 'react';
 import type { PluginHandle } from '../../plugin-registry';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
-import { useDungeonQuestsVisible } from './dungeon-quests.register';
+import { useForeverEventWidgetVisible } from './dungeon-quests.register';
 import { EventsSeeAll } from './see-all-actions';
 
 const ReadyCheckWidget = lazy(() => import('./ready-check-widget'));
@@ -28,6 +28,6 @@ export function registerReadyCheckWidget(plugin: PluginHandle): void {
         audience: 'everyone',
         component: ReadyCheckWidget,
         action: EventsSeeAll,
-        useVisible: useDungeonQuestsVisible,
+        useVisible: useForeverEventWidgetVisible,
     });
 }

@@ -18,7 +18,7 @@ import { EventsSeeAll } from './see-all-actions';
 const DungeonQuestsWidget = lazy(() => import('./dungeon-quests-widget'));
 
 /** `useVisible`: members or staff, and the guild raids query (already loaded) has a content event. */
-export function useDungeonQuestsVisible({ page, raids }: HubWidgetCtx): boolean {
+export function useForeverEventWidgetVisible({ page, raids }: HubWidgetCtx): boolean {
     const { user } = useAuth();
     const allowed = page.viewer.role !== 'visitor' || isOperatorOrAdmin(user);
     return allowed && hasContentEvents(raids.data);
@@ -37,6 +37,6 @@ export function registerDungeonQuestsWidget(plugin: PluginHandle): void {
         audience: 'everyone',
         component: DungeonQuestsWidget,
         action: EventsSeeAll,
-        useVisible: useDungeonQuestsVisible,
+        useVisible: useForeverEventWidgetVisible,
     });
 }
