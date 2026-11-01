@@ -70,15 +70,18 @@ fi
 # else depends on docker-socket-proxy, so without this a fleet keeps the old
 # host-TCP 127.0.0.1:2375 listener (the exposure stays open) while the rsynced
 # _state.sh and MCP tools look for a socket that does not exist. `up -d` is a
-# no-op when the service is unchanged. Runs on the raw socket (rl is in docker).
-docker compose pull -q docker-socket-proxy
+# no-op when the service is unchanged (and pulls the pinned tag if missing).
+# Runs on the raw socket (rl is in docker). Readiness is a real _ping, not -S:
+# a socket file left by a killed old container would pass -S before the new
+# process binds.
 docker compose up -d docker-socket-proxy
+proxy_ready() { curl -fsS --max-time 1 --unix-socket run/docker-proxy/docker.sock http://localhost/_ping >/dev/null 2>&1; }
 for _ in $(seq 1 30); do
-    [[ -S run/docker-proxy/docker.sock ]] && break
+    proxy_ready && break
     sleep 0.5
 done
-if [[ ! -S run/docker-proxy/docker.sock ]]; then
-    echo "ERROR: rl-docker-proxy did not create run/docker-proxy/docker.sock within 15s. Check: docker logs --tail 30 rl-docker-proxy" >&2
+if ! proxy_ready; then
+    echo "ERROR: rl-docker-proxy is not answering _ping on run/docker-proxy/docker.sock within 15s. Check: docker logs --tail 30 rl-docker-proxy" >&2
     exit 1
 fi
 echo "docker-socket-proxy up (unix socket ready)"
