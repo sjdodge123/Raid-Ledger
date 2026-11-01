@@ -343,6 +343,21 @@ describe('GET raid-readiness — payload (ROK-1926)', () => {
 describe('GET raid-readiness — unknowns + roster facts (ROK-1926)', () => {
   beforeAll(loadRaidBody);
 
+  it.each(['tentative', 'benched'] as const)(
+    'the %s signup is evaluated like any other (status never changes a check)',
+    (who) => {
+      expect(row(who)).toMatchObject({
+        name: `${who}char`,
+        characterId: expect.any(String),
+        level: { state: 'pass', value: 60 },
+        ilvl: { state: 'pass', value: 60 },
+        saved: { state: 'unknown' },
+        quests: { state: 'na' },
+        overall: 'unknown',
+      });
+    },
+  );
+
   it('no LedgerLink export → saved unknown, not pass or fail', () => {
     expect(row('under').saved.state).toBe('unknown');
   });
