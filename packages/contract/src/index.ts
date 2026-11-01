@@ -279,6 +279,7 @@ export * from './wow-roster-gear.schema.js';
 export * from './wow-roster-raid-progress.schema.js';
 export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
+export * from './wow-event-raid-readiness.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';

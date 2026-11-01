@@ -56,6 +56,9 @@ const DING_TOO_OLD = 'Dainel';
 const ONLINE_AT_EXPORT = 2;
 const LONGEST_AWAY = 'Elowen';
 const LONGEST_AWAY_DAYS = '34 d';
+/** seed-guild raids (`demo-test-guild-raids.helpers.ts`): first night = Molten Core, min level 60; the member benches with a level-52 alt (`SEED_UNDER_LEVEL_ALT`) that has no roster row — their linked main Dainel stays 60. */
+const SEEDED_RAID_EVENT = 'Molten Core Night';
+const UNDER_LEVEL_NAME = 'Daenvar';
 /** seed-guild `withGear` (`demo-test-guild-gear.helpers.ts`): one cap main below the 55 floor, missing Wrist + Feet. */
 const MISSING_SLOT = 'Wrist';
 
@@ -445,6 +448,26 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
             await page.goto(`/hubs/${guild.guildId}`);
             await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
             await expectRaidProgress(page, progress, guild.pulls);
+        } finally {
+            await removeUsers(token, guild);
+        }
+    });
+
+    test('Overview: Ready for next run lists the next raid night with its level check (ROK-1926)', async ({ page }, testInfo) => {
+        const token = await getAdminToken();
+        const guild = await seedGuild(token, testInfo);
+        try {
+            await signInOnboardedMember(page, guild.users.member.userId);
+            await page.goto(`/hubs/${guild.guildId}`);
+            await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+            const region = card(page, 'Ready for next run');
+            await expect(region, 'a guild member sees the Ready for next run card for the seeded raid night').toBeVisible({ timeout: 20_000 });
+            await expect(region.getByRole('link', { name: SEEDED_RAID_EVENT }), 'the header links the seeded event').toHaveAttribute('href', /\/events\/\d+/);
+            await expect(region.getByTestId('ready-check-requirements'), 'the requirements line reads the raid minimum level').toContainText('Level 60+');
+            await expect(region.getByTestId('ready-check-summary')).toBeVisible();
+            const levelChip = region.locator(`[title="${UNDER_LEVEL_NAME} — level 52, needs 60"]:visible`);
+            await expect(levelChip, 'the under-level benched member shows a level fail chip').toHaveCount(1);
+            await expect(region.getByRole('link', { name: UNDER_LEVEL_NAME }).first(), 'a signup name links to its character').toHaveAttribute('href', /\/characters\//);
         } finally {
             await removeUsers(token, guild);
         }
