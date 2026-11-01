@@ -1,10 +1,13 @@
 /**
- * ROK-1955 — "Companion devices" card on My Integrations
- * (`/profile/integrations#companion-devices`, the /link "Manage devices"
- * target). Lists the computers linked with a device token; removing one asks
- * first (Modal ≥1024px, BottomSheet below, §4.4) and revokes it at once.
+ * ROK-1955 / ROK-2056 — the "Raid Ledger Companion" card on My Integrations
+ * (`/profile/integrations#companion` or `#companion-devices`, the /link
+ * "Manage devices" target). Not linked: how to install it (open), then "Your
+ * computers". Linked (any active device): the device list, then a collapsed
+ * "Install on another computer". Removing a device asks first (Modal ≥1024px,
+ * BottomSheet below, §4.4) and revokes it at once.
  */
 import { useState } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { JSX, ReactNode } from 'react';
 import type { CompanionDevice } from '@raid-ledger/contract';
 import { Button } from '../../components/ui/button';
@@ -14,7 +17,10 @@ import { useHashScrollIntoView } from '../../hooks/use-hash-scroll-into-view';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useCompanionDevices, useRevokeCompanionDevice } from '../../hooks/use-companion-devices';
+import { StatusChip } from '../../components/ui/status-chip';
+import { COMPANION_CARD_ANCHOR } from '../../lib/companion-install';
 import { CompanionDeviceRow } from './companion-device-row';
+import { CompanionInstallBlock } from './companion-install-block';
 
 interface ConfirmProps { device: CompanionDevice; onClose: () => void }
 
@@ -67,21 +73,21 @@ function LoadError({ onRetry, retrying }: { onRetry: () => void; retrying: boole
 function EmptyDevices(): JSX.Element {
     return (
         <p className="text-sm text-muted">
-            No computers linked. Install the Raid Ledger Companion and choose <strong>Link this computer</strong>
-            {' '}— it shows a code to enter at /link.
+            No computers linked yet.
         </p>
     );
 }
 
-/** The card's anchor: `/link`'s "Manage devices" lands here. */
+/** The card's anchor: `/link`'s "Manage devices" lands here; `#companion` is an alias (ROK-2056). */
 const SECTION_ID = 'companion-devices';
+const HASH_ALIASES = [COMPANION_CARD_ANCHOR] as const;
 
 const DESCRIPTION = 'Computers running the Raid Ledger Companion that can upload game data for you.';
 
+type DevicesQuery = UseQueryResult<CompanionDevice[]>;
+
 /** The list body for each query state; the empty state replaces the description (mockup §5). */
-function DevicesBody({ onRemove }: { onRemove: (d: CompanionDevice) => void }): JSX.Element | null {
-    const devices = useCompanionDevices();
-    useHashScrollIntoView(SECTION_ID, devices.data !== undefined || devices.isError);
+function DevicesBody({ devices, onRemove }: { devices: DevicesQuery; onRemove: (d: CompanionDevice) => void }): JSX.Element | null {
     if (devices.isError) return <LoadError onRetry={() => { void devices.refetch(); }} retrying={devices.isFetching} />;
     if (devices.data === undefined) return null;
     if (devices.data.length === 0) return <EmptyDevices />;
@@ -95,14 +101,35 @@ function DevicesBody({ onRemove }: { onRemove: (d: CompanionDevice) => void }): 
     );
 }
 
-/** The Companion devices card. */
+/** Not linked: install first, then "Your computers". Linked: the list, then the collapsed install block. */
+function CardBody({ devices, onRemove }: { devices: DevicesQuery; onRemove: (d: CompanionDevice) => void }): JSX.Element | null {
+    if (devices.data === undefined && !devices.isError) return null;
+    const linked = (devices.data ?? []).some((d) => d.state === 'active');
+    if (linked) {
+        return (<><DevicesBody devices={devices} onRemove={onRemove} /><CompanionInstallBlock linked /></>);
+    }
+    return (
+        <>
+            <CompanionInstallBlock linked={false} />
+            <h3 className="mt-5 mb-2 border-t border-edge-subtle pt-4 text-base font-semibold text-foreground">Your computers</h3>
+            <DevicesBody devices={devices} onRemove={onRemove} />
+        </>
+    );
+}
+
+/** The Raid Ledger Companion card. */
 export function CompanionDevicesSection(): JSX.Element {
     const [removing, setRemoving] = useState<CompanionDevice | null>(null);
+    const devices = useCompanionDevices();
+    useHashScrollIntoView(SECTION_ID, devices.data !== undefined || devices.isError, HASH_ALIASES);
     return (
         <section id={SECTION_ID} aria-labelledby="companion-devices-heading"
             className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-20">
-            <h2 id="companion-devices-heading" className="text-xl font-semibold text-foreground mb-3">Companion devices</h2>
-            <DevicesBody onRemove={setRemoving} />
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+                <h2 id="companion-devices-heading" className="text-xl font-semibold text-foreground">Raid Ledger Companion</h2>
+                <StatusChip tone="neutral" title="Beta — test builds">Beta</StatusChip>
+            </div>
+            <CardBody devices={devices} onRemove={setRemoving} />
             {removing !== null && <RemoveDeviceConfirm device={removing} onClose={() => setRemoving(null)} />}
         </section>
     );
