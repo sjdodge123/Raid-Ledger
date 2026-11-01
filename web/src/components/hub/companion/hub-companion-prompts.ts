@@ -12,6 +12,7 @@ import type { GuildPage } from '@raid-ledger/contract';
 import type { HubKind } from '../../../plugins/hub-module';
 import { audienceAllows } from '../../../plugins/hub-game-widgets';
 import { isSlugActive } from '../../../stores/plugin-store';
+import { companionDownloadAvailable } from '../../../lib/companion-install';
 
 export interface HubCompanionPrompt {
     /** A requirement id in this plugin's manifest `setup` that carries `rlCompanion`. */
@@ -53,13 +54,13 @@ export function clearHubCompanionPrompts(): void {
 
 /**
  * The one prompt this hub may show (first registered wins — a hub has one game,
- * so at most one plugin matches in practice): plugin active, game and kind
- * match, viewer is a member (never a visitor). Linked / dismissed / download
- * flag are checked by the card.
+ * so at most one plugin matches in practice): a public download exists (AC 9),
+ * plugin active, game and kind match, viewer is a member (never a visitor).
+ * Linked / dismissed are checked by the card, which needs queries for them.
  */
 export function gatedHubCompanionPrompt(page: GuildPage, active: ReadonlySet<string>): HubCompanionPromptRegistration | undefined {
     const gameSlug = page.guild.gameSlug;
-    if (gameSlug === undefined || !audienceAllows('members', page.viewer)) return undefined;
+    if (!companionDownloadAvailable() || gameSlug === undefined || !audienceAllows('members', page.viewer)) return undefined;
     return getHubCompanionPromptRegistrations().find((r) => isSlugActive(active, r.pluginSlug)
         && r.prompt.games.includes(gameSlug)
         && r.prompt.kinds.includes(page.guild.kind));

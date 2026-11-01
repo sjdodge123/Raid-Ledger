@@ -8,14 +8,12 @@
 import { lazy, Suspense, type JSX } from 'react';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { usePluginStore } from '../../../stores/plugin-store';
-import { companionDownloadAvailable } from '../../../lib/companion-install';
 import { gatedHubCompanionPrompt } from './hub-companion-prompts';
 
 const CompanionInstallPrompt = lazy(() => import('./companion-install-prompt').then((m) => ({ default: m.CompanionInstallPrompt })));
 
 export function HubCompanionPromptCell({ ctx }: { ctx: HubCtx }): JSX.Element | null {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
-    if (!companionDownloadAvailable()) return null;
     const registration = gatedHubCompanionPrompt(ctx.page, activeSlugs);
     if (registration === undefined) return null;
     const guildId = ctx.page.guild.id;

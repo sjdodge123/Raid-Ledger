@@ -35,11 +35,11 @@ const ONBOARDING = `${API}/guilds/onboarding`;
 const DISMISS = `${ONBOARDING}/companion-install/dismiss`;
 const PROMPT = 'companion-install-prompt';
 
-interface PageOpts { gameSlug?: string; kind?: GuildPage['guild']['kind']; role?: GuildPage['viewer']['role'] }
+interface PageOpts { id?: number; gameSlug?: string; kind?: GuildPage['guild']['kind']; role?: GuildPage['viewer']['role'] }
 
-function page({ gameSlug = 'baldurs-gate-3', kind = 'game_community', role = 'member' }: PageOpts = {}): GuildPage {
+function page({ id = 7, gameSlug = 'baldurs-gate-3', kind = 'game_community', role = 'member' }: PageOpts = {}): GuildPage {
     return {
-        guild: { id: 7, gameId: 1, kind, name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, gameSlug },
+        guild: { id, gameId: 1, kind, name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, gameSlug },
         importedBy: null,
         viewer: { role, canEdit: false, canManageEditors: false },
         ranks: [],
@@ -65,6 +65,14 @@ function serve(devices: CompanionDevice[] = [], onboarding: HubOnboardingStateDt
 
 function renderCell(opts: PageOpts = {}): void {
     renderWithProviders(<HubCompanionPromptCell ctx={{ page: page(opts) } as HubCtx} />);
+}
+
+/** The subject beside a control hub (id 9) that passes every gate: once the control shows, the shared queries have settled. */
+function renderWithControl(opts: PageOpts): void {
+    renderWithProviders(<>
+        <HubCompanionPromptCell ctx={{ page: page(opts) } as HubCtx} />
+        <HubCompanionPromptCell ctx={{ page: page({ id: 9 }) } as HubCtx} />
+    </>);
 }
 
 beforeEach(() => {
@@ -106,40 +114,34 @@ describe('Companion prompt — hidden', () => {
         await waitFor(() => { expect(screen.queryByTestId(PROMPT)).toBeNull(); });
     });
 
-    it('when dismissed for this hub — and the device list is never fetched', async () => {
-        let onboardingHits = 0;
+    it('when dismissed for this hub (another hub still shows it)', async () => {
         serve([], { dismissed: [{ key: 'companion-install', guildId: 7, dismissedAt: '2026-11-01T00:00:00.000Z' }] });
-        server.use(http.get(ONBOARDING, () => {
-            onboardingHits += 1;
-            return HttpResponse.json({ dismissed: [{ key: 'companion-install', guildId: 7, dismissedAt: '2026-11-01T00:00:00.000Z' }] });
-        }));
-        renderCell();
-        await waitFor(() => { expect(onboardingHits).toBe(1); });
-        expect(screen.queryByTestId(PROMPT)).toBeNull();
-        expect(deviceHits).toBe(0);
+        renderWithControl({ id: 7 });
+        await waitFor(() => { expect(screen.queryAllByTestId(PROMPT).length).toBeGreaterThan(0); });
+        expect(screen.getAllByTestId(PROMPT)).toHaveLength(1);
     });
 
     it.each([
         ['a visitor', { role: 'visitor' as const }],
         ['the wrong game', { gameSlug: 'valheim' }],
         ['the wrong hub kind', { kind: 'wow_guild' as const }],
-    ])('for %s, without fetching anything', (_label, opts) => {
+    ])('for %s (beside a hub that shows it)', async (_label, opts) => {
         serve();
-        renderCell(opts);
-        expect(screen.queryByTestId(PROMPT)).toBeNull();
-        expect(deviceHits).toBe(0);
+        renderWithControl(opts);
+        await waitFor(() => { expect(screen.queryAllByTestId(PROMPT).length).toBeGreaterThan(0); });
+        expect(screen.getAllByTestId(PROMPT)).toHaveLength(1);
+        expect(gatedHubCompanionPrompt(page(opts), new Set(['core', 'bg3']))).toBeUndefined();
     });
 
     it('while the owning plugin is inactive', () => {
-        usePluginStore.setState({ activeSlugs: new Set(['core', 'blizzard']), initialized: true });
-        serve();
-        renderCell();
-        expect(screen.queryByTestId(PROMPT)).toBeNull();
-        expect(deviceHits).toBe(0);
+        expect(gatedHubCompanionPrompt(page(), new Set(['core', 'bg3']))?.pluginSlug).toBe('bg3');
+        expect(gatedHubCompanionPrompt(page(), new Set(['core', 'blizzard']))).toBeUndefined();
     });
 
-    it('while no public download exists (AC 9)', () => {
+    it('while no public download exists (AC 9) — nothing is fetched', () => {
+        expect(gatedHubCompanionPrompt(page(), new Set(['core', 'bg3']))?.pluginSlug).toBe('bg3');
         flag.on = false;
+        expect(gatedHubCompanionPrompt(page(), new Set(['core', 'bg3']))).toBeUndefined();
         serve();
         renderCell();
         expect(screen.queryByTestId(PROMPT)).toBeNull();

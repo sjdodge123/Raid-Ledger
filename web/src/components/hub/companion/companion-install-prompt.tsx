@@ -31,7 +31,7 @@ const DISMISS_TOAST = "Got it. We won't show this again.";
 interface PromptCopy { heading: string; body: string; shortBody: string }
 
 /** Registration overrides first, then the manifest requirement's title and the plugin's badge label. */
-export function companionPromptCopy({ pluginSlug, prompt }: HubCompanionPromptRegistration): PromptCopy {
+function companionPromptCopy({ pluginSlug, prompt }: HubCompanionPromptRegistration): PromptCopy {
     const manifest = Object.entries(HUB_PLUGIN_MANIFESTS).find(([slug]) => slug === pluginSlug)?.[1];
     const requirement = manifest?.setup.requirements.find((r) => r.id === prompt.requirementId);
     const label = getPluginBadge(pluginSlug)?.label ?? 'this game';
@@ -52,21 +52,27 @@ function LinkedGate({ prompt, copy }: { prompt: HubOnboardingPrompt; copy: Promp
     return <PromptCard prompt={prompt} copy={copy} />;
 }
 
+function PromptHead({ copy, onClose }: { copy: PromptCopy; onClose: () => void }): JSX.Element {
+    return (
+        <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+                <h2 id={TITLE_ID} className="text-lg font-semibold text-foreground">{copy.heading}</h2>
+                <p className="mt-1 hidden text-sm text-secondary md:block" data-testid="companion-install-prompt-body">{copy.body}</p>
+                <p className="mt-1 text-sm text-secondary md:hidden">{copy.shortBody}</p>
+            </div>
+            <Button variant="ghost" size="sm" iconOnly aria-label="Dismiss: don't show this again"
+                onClick={onClose} data-testid="companion-install-prompt-close">
+                <span aria-hidden>×</span>
+            </Button>
+        </div>
+    );
+}
+
 function PromptCard({ prompt, copy }: { prompt: HubOnboardingPrompt; copy: PromptCopy }): JSX.Element {
     const dismiss = (): void => { prompt.dismiss({ onSuccess: () => { toast.success(DISMISS_TOAST); } }); };
     return (
         <section className={CARD} aria-labelledby={TITLE_ID} data-testid="companion-install-prompt">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h2 id={TITLE_ID} className="text-lg font-semibold text-foreground">{copy.heading}</h2>
-                    <p className="mt-1 hidden text-sm text-secondary md:block" data-testid="companion-install-prompt-body">{copy.body}</p>
-                    <p className="mt-1 text-sm text-secondary md:hidden">{copy.shortBody}</p>
-                </div>
-                <Button variant="ghost" size="sm" iconOnly aria-label="Dismiss: don't show this again"
-                    onClick={dismiss} data-testid="companion-install-prompt-close">
-                    <span aria-hidden>×</span>
-                </Button>
-            </div>
+            <PromptHead copy={copy} onClose={dismiss} />
             {prompt.failed && (
                 <p role="alert" data-testid="companion-install-prompt-error" className="text-sm text-danger">
                     We couldn&apos;t dismiss that just now. Try again in a moment.
