@@ -115,7 +115,8 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('ready-check helpers', () => {
     it('sorts not ready, then unknown, then ready, by name within each', () => {
-        expect(sortSignups(RAID.signups).map((s) => s.name)).toEqual(['Brannoch', 'Mirelle', 'Torvald', 'Aldric']);
+        const abe = signup('Abe', 8, { overall: 'unknown' });
+        expect(sortSignups([...RAID.signups, abe]).map((s) => s.name)).toEqual(['Brannoch', 'Mirelle', 'Abe', 'Torvald', 'Aldric']);
     });
 
     it('counts the summary and leaves n/a requirements out of the line', () => {
