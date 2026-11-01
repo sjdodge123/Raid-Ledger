@@ -120,11 +120,33 @@ export function itemAriaLabel(
     return parts.join(', ');
 }
 
-/** True when the sheet references items but no catalogue entry came with it. */
-export function isCatalogueMissing(character: ValheimCharacterDetail): boolean {
+/**
+ * Where the sheet's item names came from (ROK-2058): `missing` — no
+ * catalogue at all; `fallback` — another game version's catalogue (the
+ * server hasn't sent this version's list yet); `current` — this version's,
+ * or the sheet has no items to name.
+ */
+export type CatalogueState = 'missing' | 'fallback' | 'current';
+
+export function catalogueState(
+    character: ValheimCharacterDetail,
+): CatalogueState {
     const hasItems =
         character.equipment.length > 0 ||
         character.inventory.items.length > 0 ||
         character.trophies.length > 0;
-    return hasItems && Object.keys(character.items ?? {}).length === 0;
+    if (!hasItems) return 'current';
+    const version = character.catalogueGameVersion;
+    // An older api omits the field: infer "missing" from an empty subset.
+    if (version === undefined) {
+        const empty = Object.keys(character.items ?? {}).length === 0;
+        return empty ? 'missing' : 'current';
+    }
+    if (version === null) return 'missing';
+    return version === character.gameVersion ? 'current' : 'fallback';
+}
+
+/** True when the sheet references items but the server sent no catalogue. */
+export function isCatalogueMissing(character: ValheimCharacterDetail): boolean {
+    return catalogueState(character) === 'missing';
 }
