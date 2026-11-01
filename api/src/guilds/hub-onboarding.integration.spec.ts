@@ -273,6 +273,41 @@ describe('HubOnboardingService scope authorization (integration)', () => {
   });
 });
 
+/** ROK-2056 — the hub Overview's Companion prompt is a per-hub, member-dismissable key. */
+describe('HubOnboardingService companion-install key (integration)', () => {
+  it('lets a plain member dismiss companion-install for their hub only', async () => {
+    const guildId = await seedGuild('Companion Hub');
+    const other = await seedGuild('Other Hub');
+    const plain = await seedGuildMember(guildId, 'onboard-companion', {
+      editor: false,
+    });
+
+    const after = await onboarding.dismiss(plain, 'companion-install', {
+      guildId: String(guildId),
+    });
+
+    expect(after.dismissed).toEqual([
+      expect.objectContaining({ key: 'companion-install', guildId }),
+    ]);
+    expect(after.dismissed.some((d) => d.guildId === other)).toBe(false);
+    expect(await rowCount(plain.id)).toBe(1);
+  });
+
+  it('still refuses an unknown key on the same hub', async () => {
+    const guildId = await seedGuild('Companion Hub B');
+    const plain = await seedGuildMember(guildId, 'onboard-companion-b', {
+      editor: false,
+    });
+
+    await expect(
+      onboarding.dismiss(plain, 'companion-install-typo', {
+        guildId: String(guildId),
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(await rowCount(plain.id)).toBe(0);
+  });
+});
+
 /**
  * PR-3 review: every case above talks to the service. These two go through
  * the real HTTP stack, so deleting `@UseGuards(AuthGuard('jwt'))` or reading
