@@ -13,6 +13,8 @@
 #   3. Re-asserts the canonical rl-fleet group-write + setgid on the dirs
 #      rl-agent must write (traefik/conf.d — matches the state/ pattern),
 #      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r).
+#   3b. Creates the rl-docker-proxy socket dir and applies the proxy's compose
+#      config, failing loudly if its unix socket does not appear (ROK-2049).
 #   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build)
 #      and the dashboard (ROK-1847: a bind-mounted server.js edit is not live
 #      until the node process restarts, and the image must carry every module
@@ -64,6 +66,22 @@ if ! chgrp rl-fleet run/docker-proxy || ! chmod 3770 run/docker-proxy; then
     echo "ERROR: could not set run/docker-proxy to rl:rl-fleet 3770. The deploy user must be in rl-fleet: sudo usermod -aG rl-fleet rl, then re-run deploy.sh (new SSH session)." >&2
     exit 1
 fi
+# ROK-2049 (Codex P1) — apply the proxy's compose config on every deploy. Nothing
+# else depends on docker-socket-proxy, so without this a fleet keeps the old
+# host-TCP 127.0.0.1:2375 listener (the exposure stays open) while the rsynced
+# _state.sh and MCP tools look for a socket that does not exist. `up -d` is a
+# no-op when the service is unchanged. Runs on the raw socket (rl is in docker).
+docker compose pull -q docker-socket-proxy
+docker compose up -d docker-socket-proxy
+for _ in $(seq 1 30); do
+    [[ -S run/docker-proxy/docker.sock ]] && break
+    sleep 0.5
+done
+if [[ ! -S run/docker-proxy/docker.sock ]]; then
+    echo "ERROR: rl-docker-proxy did not create run/docker-proxy/docker.sock within 15s. Check: docker logs --tail 30 rl-docker-proxy" >&2
+    exit 1
+fi
+echo "docker-socket-proxy up (unix socket ready)"
 # A3-B P3 — scaffold /srv/rl-infra/runners/slot-{1..4}/worktree + state/locks
 # with the rl-agent:rl-fleet 2775 the Mutagen beta needs. Nothing created the
 # slot-3/4 dirs before, so the Docker daemon mkdir'd the bind-mount sources as
