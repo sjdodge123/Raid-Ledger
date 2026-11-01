@@ -26,8 +26,10 @@ describe('PluginSetupRowBody — Companion rows (ROK-2056)', () => {
     });
 
     it('a companion_app row without rlCompanion (LedgerLink addon) gets no link', () => {
-        const { rlCompanion: _omit, ...addon } = companionReq;
-        renderWithProviders(<PluginSetupRowBody req={{ ...addon, id: 'ledgerlink-addon' }} />);
+        const addon: PluginSetupRequirement = {
+            id: 'ledgerlink-addon', kind: 'companion_app', title: 'Install LedgerLink', instructions: '1. Install it.', required: false,
+        };
+        renderWithProviders(<PluginSetupRowBody req={addon} />);
         expect(screen.queryByRole('link', { name: 'How players install it' })).toBeNull();
     });
 
