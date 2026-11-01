@@ -9,12 +9,10 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { COMPANION_DOWNLOAD_FORMATS, COMPANION_DOWNLOAD_URL, COMPANION_UNSIGNED_NOTE } from '@raid-ledger/contract';
 import { buttonClass } from '../../components/ui/button-classes';
-import { companionDownloadAvailable } from '../../lib/companion-install';
+import { COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../lib/companion-install';
 
 const INTRO = "A small desktop app that sends game data Raid Ledger can't get on its own — Baldur's Gate 3 saves, "
     + 'LedgerLink exports — to the hubs you play in. You choose which games it reads.';
-
-const LINK_CLS = 'text-secondary underline underline-offset-2 hover:text-foreground';
 
 /** Download (new tab) + what the releases page offers. */
 function DownloadRow(): JSX.Element {
@@ -39,7 +37,7 @@ function InstallSteps(): JSX.Element {
             <li>Install it and open it.</li>
             <li>Choose <strong className="text-foreground">Link this computer</strong>. It shows an 8-letter code.</li>
             <li>
-                Enter the code at <Link to="/link" className={LINK_CLS}>/link</Link>, then turn on the games you
+                Enter the code at <Link to="/link" className={COMPANION_LINK_CLASS}>/link</Link>, then turn on the games you
                 want it to read.
             </li>
         </ol>

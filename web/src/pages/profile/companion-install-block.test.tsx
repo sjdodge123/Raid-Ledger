@@ -89,16 +89,38 @@ describe('Companion card — linked (ROK-2056 AC1)', () => {
     });
 });
 
-describe('Companion card — download flag off (ROK-2056 AC9)', () => {
-    it('hides Download, formats and the unsigned note; steps and the device list stay', async () => {
+describe('Companion card — download flag off (ROK-2056 AC9, ruling Q5: nothing before a public release)', () => {
+    function expectNoInstallContent(): void {
+        expect(screen.queryByText('Beta')).toBeNull();
+        expect(screen.queryByTestId('companion-install')).toBeNull();
+        expect(screen.queryByTestId('companion-install-steps')).toBeNull();
+        expect(screen.queryByTestId('companion-install-more')).toBeNull();
+        expect(screen.queryByText(/A small desktop app/)).toBeNull();
+        expect(screen.queryByText('Install on another computer')).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Your computers' })).toBeNull();
+        expect(screen.queryByRole('link', { name: 'Download' })).toBeNull();
+        expect(screen.queryByTestId('companion-unsigned-note')).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Raid Ledger Companion' })).toBeNull();
+        expect(screen.getByRole('heading', { name: 'Companion devices' })).toBeInTheDocument();
+    }
+
+    it.each([
+        ['not linked (revoked only)', device({ id: 2, state: 'revoked', revokedAt: '2026-10-20T12:00:00.000Z' })],
+        ['linked', device({ id: 2 })],
+    ])('%s: renders only the device list', async (_label, row) => {
         flag.on = false;
-        mockDevices([device({ id: 2, state: 'revoked', revokedAt: '2026-10-20T12:00:00.000Z' })]);
+        mockDevices([row]);
         renderWithProviders(<CompanionDevicesSection />);
         await screen.findByTestId('companion-device-2');
-        expect(screen.getByTestId('companion-install-steps')).toBeInTheDocument();
-        expect(screen.queryByRole('link', { name: 'Download' })).toBeNull();
-        expect(screen.queryByTestId('companion-download-formats')).toBeNull();
-        expect(screen.queryByTestId('companion-unsigned-note')).toBeNull();
+        expectNoInstallContent();
+    });
+
+    it('no devices: the empty state alone', async () => {
+        flag.on = false;
+        mockDevices([]);
+        renderWithProviders(<CompanionDevicesSection />);
+        expect(await screen.findByText('No computers linked yet.')).toBeInTheDocument();
+        expectNoInstallContent();
     });
 });
 

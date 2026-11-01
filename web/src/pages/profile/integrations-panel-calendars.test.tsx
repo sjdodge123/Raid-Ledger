@@ -100,7 +100,7 @@ describe('IntegrationsPanel — inline Calendars section (ROK-1780)', () => {
         renderPanel(calendarsOverviewVariants.connected);
         await screen.findByTestId('calendars-page');
         const integrations = screen.getByRole('heading', { level: 2, name: 'Integrations' });
-        const devices = screen.getByRole('heading', { level: 2, name: 'Raid Ledger Companion' });
+        const devices = screen.getByRole('heading', { level: 2, name: 'Companion devices' });
         const calendarsHeading = screen.getByRole('heading', { level: 2, name: C.title });
         expect(integrations.compareDocumentPosition(devices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(devices.compareDocumentPosition(calendarsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

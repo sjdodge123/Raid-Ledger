@@ -1,10 +1,13 @@
 /**
- * ROK-1955 / ROK-2056 — the "Raid Ledger Companion" card on My Integrations
+ * ROK-1955 / ROK-2056 — the Companion card on My Integrations
  * (`/profile/integrations#companion` or `#companion-devices`, the /link
- * "Manage devices" target). Not linked: how to install it (open), then "Your
- * computers". Linked (any active device): the device list, then a collapsed
- * "Install on another computer". Removing a device asks first (Modal ≥1024px,
- * BottomSheet below, §4.4) and revokes it at once.
+ * "Manage devices" target). While `COMPANION_DOWNLOAD_AVAILABLE` is false it
+ * is the pre-release "Companion devices" card: the device list only — no
+ * install content, no Beta chip (AC9, operator ruling Q5). Once a public
+ * download exists it becomes "Raid Ledger Companion" + Beta. Not linked: how
+ * to install it (open), then "Your computers". Linked (any active device):
+ * the device list, then a collapsed "Install on another computer". Removing a
+ * device asks first (Modal ≥1024px, BottomSheet below, §4.4) and revokes it.
  */
 import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -18,7 +21,7 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useCompanionDevices, useRevokeCompanionDevice } from '../../hooks/use-companion-devices';
 import { StatusChip } from '../../components/ui/status-chip';
-import { COMPANION_CARD_ANCHOR } from '../../lib/companion-install';
+import { COMPANION_CARD_ANCHOR, companionDownloadAvailable } from '../../lib/companion-install';
 import { CompanionDeviceRow } from './companion-device-row';
 import { CompanionInstallBlock } from './companion-install-block';
 
@@ -101,9 +104,12 @@ function DevicesBody({ devices, onRemove }: { devices: DevicesQuery; onRemove: (
     );
 }
 
-/** Not linked: install first, then "Your computers". Linked: the list, then the collapsed install block. */
-function CardBody({ devices, onRemove }: { devices: DevicesQuery; onRemove: (d: CompanionDevice) => void }): JSX.Element | null {
+interface CardBodyProps { devices: DevicesQuery; onRemove: (d: CompanionDevice) => void; canInstall: boolean }
+
+/** Flag off: the list only. Not linked: install first, then "Your computers". Linked: the list, then the collapsed install block. */
+function CardBody({ devices, onRemove, canInstall }: CardBodyProps): JSX.Element | null {
     if (devices.data === undefined && !devices.isError) return null;
+    if (!canInstall) return <DevicesBody devices={devices} onRemove={onRemove} />;
     const linked = (devices.data ?? []).some((d) => d.state === 'active');
     if (linked) {
         return (<><DevicesBody devices={devices} onRemove={onRemove} /><CompanionInstallBlock linked /></>);
@@ -117,19 +123,31 @@ function CardBody({ devices, onRemove }: { devices: DevicesQuery; onRemove: (d: 
     );
 }
 
-/** The Raid Ledger Companion card. */
+const HEADING_ID = 'companion-devices-heading';
+const HEADING_CLS = 'text-xl font-semibold text-foreground';
+
+/** Pre-release: the unchanged "Companion devices" heading. Released: "Raid Ledger Companion" + Beta. */
+function CardHeading({ canInstall }: { canInstall: boolean }): JSX.Element {
+    if (!canInstall) return <h2 id={HEADING_ID} className={`${HEADING_CLS} mb-3`}>Companion devices</h2>;
+    return (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 id={HEADING_ID} className={HEADING_CLS}>Raid Ledger Companion</h2>
+            <StatusChip tone="neutral" title="Beta — test builds">Beta</StatusChip>
+        </div>
+    );
+}
+
+/** The Companion card. */
 export function CompanionDevicesSection(): JSX.Element {
     const [removing, setRemoving] = useState<CompanionDevice | null>(null);
     const devices = useCompanionDevices();
+    const canInstall = companionDownloadAvailable();
     useHashScrollIntoView(SECTION_ID, devices.data !== undefined || devices.isError, HASH_ALIASES);
     return (
-        <section id={SECTION_ID} aria-labelledby="companion-devices-heading"
+        <section id={SECTION_ID} aria-labelledby={HEADING_ID}
             className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-20">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-                <h2 id="companion-devices-heading" className="text-xl font-semibold text-foreground">Raid Ledger Companion</h2>
-                <StatusChip tone="neutral" title="Beta — test builds">Beta</StatusChip>
-            </div>
-            <CardBody devices={devices} onRemove={setRemoving} />
+            <CardHeading canInstall={canInstall} />
+            <CardBody devices={devices} onRemove={setRemoving} canInstall={canInstall} />
             {removing !== null && <RemoveDeviceConfirm device={removing} onClose={() => setRemoving(null)} />}
         </section>
     );
