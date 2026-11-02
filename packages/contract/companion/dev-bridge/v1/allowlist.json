@@ -1,0 +1,142 @@
+{
+  "allowlistVersion": 1,
+  "segmentPattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+  "maxSegments": 3,
+  "tokenizer": "Split the segment at every \"_\". Inside each piece start a new word before an uppercase letter that follows a lowercase letter or a digit, and before an uppercase letter that is followed by a lowercase letter and preceded by an uppercase letter. Drop empty words. Deny words, deny pairs and deny-exact names compare case-insensitively; allow prefixes and allow-exact names compare case-sensitively.",
+  "allowPrefixes": [
+    "Get",
+    "Is",
+    "Has",
+    "Can",
+    "Unit",
+    "Num"
+  ],
+  "allowExact": [
+    "InCombatLockdown",
+    "time",
+    "date"
+  ],
+  "denyWords": [
+    "send",
+    "set",
+    "delete",
+    "destroy",
+    "buy",
+    "sell",
+    "accept",
+    "decline",
+    "confirm",
+    "use",
+    "cast",
+    "pickup",
+    "place",
+    "drop",
+    "repair",
+    "learn",
+    "unlearn",
+    "abandon",
+    "leave",
+    "invite",
+    "uninvite",
+    "promote",
+    "demote",
+    "kick",
+    "run",
+    "load",
+    "reload",
+    "logout",
+    "quit",
+    "create",
+    "hook",
+    "register",
+    "secure",
+    "macro",
+    "chat",
+    "mail",
+    "auction",
+    "trade",
+    "getfenv",
+    "setfenv",
+    "rawset",
+    "loadstring",
+    "pcall",
+    "cancel",
+    "clear",
+    "remove",
+    "reset",
+    "toggle",
+    "equip",
+    "disband"
+  ],
+  "denyWordPairs": [
+    [
+      "guild",
+      "set"
+    ],
+    [
+      "guild",
+      "remove"
+    ],
+    [
+      "guild",
+      "disband"
+    ],
+    [
+      "guild",
+      "promote"
+    ]
+  ],
+  "denyExact": [
+    "GetQuestReward",
+    "GetInboxText"
+  ],
+  "redact": [
+    {
+      "fn": "GetGuildRosterInfo",
+      "returns": [
+        8
+      ],
+      "replacement": "<redacted>"
+    }
+  ],
+  "examples": {
+    "allowed": [
+      "GetProfessions",
+      "GetNumSkillLines",
+      "GetSkillLineInfo",
+      "GetCVar",
+      "IsInGuild",
+      "IsAddOnLoaded",
+      "C_AddOns.IsAddOnLoaded",
+      "UnitName",
+      "UnitGUID",
+      "GetNumAddOns",
+      "GetGuildRosterInfo",
+      "InCombatLockdown",
+      "UnitCastingInfo",
+      "C_Map.GetBestMapForUnit",
+      "GetSavedInstanceInfo"
+    ],
+    "denied": [
+      "SendChatMessage",
+      "SetCVar",
+      "loadstring",
+      "getfenv",
+      "RunScript",
+      "GuildUninvite",
+      "C_Container.UseContainerItem",
+      "GetQuestReward",
+      "CancelUnitBuff",
+      "DoEmote",
+      "GuildSetMOTD",
+      "C_ChatInfo.GetRegisteredAddonMessagePrefixes",
+      "GetTradeSkillLine",
+      "C_GuildInfo.RemoveFromGuild",
+      "UnitSetRole",
+      "A.B.C.GetMoney",
+      "1Get",
+      "Get-Money",
+      "Get..Money"
+    ]
+  }
+}
