@@ -123,12 +123,41 @@ describe('reply copy', () => {
       formatLeftReply({
         cancelledEventIds: [1, 2],
         lateCancelledEventIds: [1],
+        failed: [],
       }),
     ).toBe(
       "You've left the series — 2 nights cancelled.\n**Heads up:** 1 of them starts within 23 hours, so it counts as a late cancellation.",
     );
     expect(
-      formatLeftReply({ cancelledEventIds: [1], lateCancelledEventIds: [] }),
+      formatLeftReply({
+        cancelledEventIds: [1],
+        lateCancelledEventIds: [],
+        failed: [],
+      }),
     ).toBe("You've left the series — 1 night cancelled.");
+  });
+
+  it('tells the user which nights could not be cancelled and that they are still signed up (Codex P2)', () => {
+    expect(
+      formatLeftReply({
+        cancelledEventIds: [1],
+        lateCancelledEventIds: [],
+        failed: [{ eventId: 2, message: 'cancel exploded' }],
+      }),
+    ).toBe(
+      "You've left the series — 1 night cancelled.\n**Still signed up:** 1 night could not be cancelled (cancel exploded). Leave it from the event page.",
+    );
+    expect(
+      formatLeftReply({
+        cancelledEventIds: [],
+        lateCancelledEventIds: [],
+        failed: [
+          { eventId: 2, message: 'boom' },
+          { eventId: 3, message: 'boom' },
+        ],
+      }),
+    ).toBe(
+      "You've left the series — 0 nights cancelled.\n**Still signed up:** 2 nights could not be cancelled (boom). Leave them from each event page.",
+    );
   });
 });
