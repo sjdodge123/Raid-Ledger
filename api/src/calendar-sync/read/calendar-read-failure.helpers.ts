@@ -104,7 +104,11 @@ function failureFields(
   if (decision.code === 'auth') return { status: 'needs_reconnect' };
   if (decision.retry && !opts.finalAttempt) return null;
   // No `status`: see the file header (writes keep running).
-  const backoff = readErrorBackoffMs(conn, opts.now);
+  // A provider Retry-After later than the D5 step wins; never sooner.
+  const backoff = Math.max(
+    readErrorBackoffMs(conn, opts.now),
+    Number.isFinite(decision.retryAfterMs) ? (decision.retryAfterMs ?? 0) : 0,
+  );
   return { nextSyncAt: new Date(opts.now.getTime() + backoff) };
 }
 

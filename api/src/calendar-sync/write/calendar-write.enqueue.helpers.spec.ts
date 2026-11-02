@@ -1,4 +1,5 @@
 import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
+import { CALENDAR_RETRY_BACKOFF_TYPE } from '../calendar-retry-backoff.helpers';
 import {
   enqueueCalendarWriteJob,
   type CalendarWriteJobData,
@@ -90,7 +91,7 @@ describe('enqueueCalendarWriteJob — new jobs', () => {
           jobId: 'cal-write-7-42-3',
           delay: 5000,
           attempts: 6,
-          backoff: { type: 'exponential', delay: 30_000 },
+          backoff: { type: CALENDAR_RETRY_BACKOFF_TYPE, delay: 30_000 },
           removeOnComplete: true,
         },
       },
