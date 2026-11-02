@@ -132,6 +132,53 @@ async function seedRollup(
   });
 }
 
+/** One event for `gameId` ending `daysAgo` days ago, every user attended (ROK-2063). */
+async function seedGroupEvent(
+  testApp: TestApp,
+  userIds: readonly number[],
+  daysAgo: number,
+  gameId: number,
+): Promise<void> {
+  const end = new Date(Date.now() - daysAgo * DAY);
+  const [e] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: `ms group event ${daysAgo}`,
+        creatorId: nonEmpty([...userIds], 'users')[0],
+        gameId,
+        duration: [new Date(end.getTime() - 3 * HOUR), end],
+      })
+      .returning(),
+    'event',
+  );
+  for (const userId of userIds) {
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({ eventId: e.id, userId, attendanceStatus: 'attended' });
+  }
+}
+
+/** Every user plays `gameId` in the same hour, starting `daysAgo` days ago (ROK-2063). */
+async function seedCoPlay(
+  testApp: TestApp,
+  userIds: readonly number[],
+  gameId: number,
+  daysAgo: number,
+  now: Date = new Date(),
+): Promise<void> {
+  const start = new Date(now.getTime() - daysAgo * DAY);
+  for (const userId of userIds) {
+    await testApp.db.insert(schema.gameActivitySessions).values({
+      userId,
+      gameId,
+      discordActivityName: 'game',
+      startedAt: start,
+      endedAt: new Date(start.getTime() + HOUR),
+    });
+  }
+}
+
 /** Shared app + truncate hooks; read `ctx.testApp` inside each test. */
 function useMilestonesApp(): { testApp: TestApp } {
   const ctx = {} as { testApp: TestApp };
@@ -232,18 +279,19 @@ describe('Weekly digest milestones — games (ROK-1771 L2, integration)', () => 
     ({ testApp } = ctx);
   });
 
-  it('B2: a game first played this week is listed; older or opted-out-only games are not', async () => {
+  it('B2: a game first played together this week is listed; older or opted-out-only games are not', async () => {
     const ann = await seedUser(testApp, 'Ann');
+    const bob = await seedUser(testApp, 'Bob');
     const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
     const valheim = await seedGame(testApp, 'Valheim');
     const lethal = await seedGame(testApp, 'Lethal Company');
     const wow = await seedGame(testApp, 'World of Warcraft');
     const secret = await seedGame(testApp, 'Secret Game');
-    await seedAttended(testApp, ann, 2, valheim);
-    await seedRollup(testApp, ann, lethal, 3, 2);
-    await seedAttended(testApp, ann, 30, wow);
-    await seedAttended(testApp, ann, 1, wow);
-    await seedRollup(testApp, hidden, secret, 4, 1);
+    await seedGroupEvent(testApp, [ann, bob], 2, valheim);
+    await seedCoPlay(testApp, [ann, bob], lethal, 2);
+    await seedGroupEvent(testApp, [ann, bob], 30, wow);
+    await seedGroupEvent(testApp, [ann, bob], 1, wow);
+    await seedCoPlay(testApp, [hidden, ann], secret, 1);
 
     const { firstGames } = await fetchDigestMilestones(testApp.db);
     expect(firstGames).toEqual([
@@ -276,27 +324,20 @@ describe('Weekly digest milestones — first games privacy (AC10, integration)',
     ({ testApp } = ctx);
   });
 
-  it('B2: activity only from opted-out or inactive members, by event or rollup, is no first', async () => {
+  it('B2: an opted-out or inactive partner, by event or session, makes no co-play first', async () => {
     const ann = await seedUser(testApp, 'Ann');
+    const bob = await seedUser(testApp, 'Bob');
     const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
     const valheim = await seedGame(testApp, 'Valheim');
-    await seedAttended(testApp, ann, 2, valheim);
-    await seedAttended(testApp, hidden, 1, await seedGame(testApp, 'Opt Ev'));
+    await seedGroupEvent(testApp, [ann, bob], 2, valheim);
+    const optEv = await seedGame(testApp, 'Opt Ev');
+    await seedGroupEvent(testApp, [hidden, ann], 1, optEv);
     for (const kind of INACTIVE) {
       const gone = await seedUser(testApp, `Gone ${kind}`, { inactive: kind });
-      await seedAttended(
-        testApp,
-        gone,
-        1,
-        await seedGame(testApp, `Ev ${kind}`),
-      );
-      await seedRollup(
-        testApp,
-        gone,
-        await seedGame(testApp, `Ro ${kind}`),
-        3,
-        1,
-      );
+      const ev = await seedGame(testApp, `Ev ${kind}`);
+      await seedGroupEvent(testApp, [gone, ann], 1, ev);
+      const ro = await seedGame(testApp, `Ro ${kind}`);
+      await seedCoPlay(testApp, [gone, ann], ro, 1);
     }
 
     const { firstGames } = await fetchDigestMilestones(testApp.db);
@@ -305,13 +346,15 @@ describe('Weekly digest milestones — first games privacy (AC10, integration)',
 
   it('B2 and B4: an OAuth guest never seen in the guild contributes nothing', async () => {
     const ann = await seedUser(testApp, 'Ann');
+    const bob = await seedUser(testApp, 'Bob');
     const guest = await seedUser(testApp, 'Guest', { seenInGuild: false });
     const valheim = await seedGame(testApp, 'Valheim');
     const drg = await seedGame(testApp, 'Deep Rock Galactic');
-    await seedAttended(testApp, ann, 2, valheim);
-    // B2: a game only the guest played this week, by event and by rollup.
-    await seedAttended(testApp, guest, 1, await seedGame(testApp, 'Guest Ev'));
-    await seedRollup(testApp, guest, await seedGame(testApp, 'Guest Ro'), 3, 1);
+    await seedGroupEvent(testApp, [ann, bob], 2, valheim);
+    // B2: a game Ann played only with the guest, by event and by session.
+    const guestEv = await seedGame(testApp, 'Guest Ev');
+    await seedGroupEvent(testApp, [guest, ann], 1, guestEv);
+    await seedCoPlay(testApp, [guest, ann], await seedGame(testApp, 'Guest Ro'), 1);
     // B4: 90 member hours; the guest's 20 this week would cross 100.
     await seedRollup(testApp, ann, drg, 90, 20);
     await seedRollup(testApp, guest, drg, 20, 2);
@@ -331,9 +374,10 @@ describe('Weekly digest milestones — game visibility (ROK-1783, integration)',
 
   it('B2 and B4: a hidden or a banned game never appears in either list', async () => {
     const ann = await seedUser(testApp, 'Ann');
+    const bob = await seedUser(testApp, 'Bob');
     const valheim = await seedGame(testApp, 'Valheim');
     const drg = await seedGame(testApp, 'Deep Rock Galactic');
-    await seedRollup(testApp, ann, valheim, 3, 2);
+    await seedCoPlay(testApp, [ann, bob], valheim, 2);
     await seedRollup(testApp, ann, drg, 90, 20);
     await seedRollup(testApp, ann, drg, 20, 2);
     for (const { label, flags } of [
@@ -341,8 +385,8 @@ describe('Weekly digest milestones — game visibility (ROK-1783, integration)',
       { label: 'banned', flags: { banned: true } },
     ]) {
       const first = await seedGame(testApp, `First ${label}`, flags);
-      await seedAttended(testApp, ann, 2, first);
-      await seedRollup(testApp, ann, first, 3, 2);
+      await seedGroupEvent(testApp, [ann, bob], 2, first);
+      await seedCoPlay(testApp, [ann, bob], first, 2);
       const hours = await seedGame(testApp, `Hours ${label}`, flags);
       await seedRollup(testApp, ann, hours, 90, 20);
       await seedRollup(testApp, ann, hours, 20, 2);
