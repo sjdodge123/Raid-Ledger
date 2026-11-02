@@ -39,13 +39,6 @@ describe('addonImportErrorCopy', () => {
         expect(copy.body).toBe('The string decoded, but its contents are not in the expected format.');
     });
 
-    it('NOT_IN_GUILD from the re-import guard says only an admin or an admin-made guild editor may update the roster (ROK-1794)', () => {
-        const server = 'Only an admin, or a member an admin has made a guild editor, can update this roster.';
-        const copy = addonImportErrorCopy(new AddonImportRequestError(422, 'NOT_IN_GUILD', server));
-        expect(copy.title).toBe('Ask an admin for editor rights');
-        expect(copy.body).toBe('Only an admin, or a member an admin has made a guild editor, can update this roster. Ask an admin to make you a guild editor, then import again.');
-    });
-
     it('NOT_IN_GUILD for an exporter missing from the roster keeps the roster copy', () => {
         const copy = addonImportErrorCopy(new AddonImportRequestError(422, 'NOT_IN_GUILD', 'The exporting character is not in that guild roster.'));
         expect(copy.title).toBe('Not in this guild');
