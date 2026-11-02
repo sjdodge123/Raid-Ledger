@@ -6,9 +6,15 @@
  *      bounds (an open session runs until `now`, capped at the bound's end); or
  *  (b) an attended event for it, ending inside the bounds, had 2+ attended
  *      signups by active guild members.
- * "Active guild member" is the digest's one rule: guild-seen, not
- * deactivated/banned/kicked, and not opted out of `show_activity` — the same
- * predicates `weekly-digest-spotlight-duo.helpers.ts` applies.
+ * "Active guild member" = guild-seen and not deactivated/banned/kicked.
+ *
+ * Opt-out rule (same as the recap's `GROUP_EVENTS_CTE`): qualification counts
+ * EVERY active member, opted out of `show_activity` or not, so an opted-out
+ * member completes a pair or the 2+ of an event. `players` then counts only
+ * members who show activity, and a game with 0 visible players is not listed
+ * — so a game played only by opted-out members never appears. Firsts asks for
+ * `members: 'visible'` (opted-out members do not qualify at all), keeping its
+ * AC10 rule that an opted-out partner never makes a "first".
  *
  * Steam `playtime_2weeks` is deliberately absent: it carries no timing.
  * `/games` keeps its own read (`fetchCommunityPlayingRow`), unchanged.
@@ -32,18 +38,36 @@ export const CO_PLAY_MIN_OVERLAP_MINUTES = 15;
 /** Days in the digest's co-play week. */
 export const CO_PLAY_WINDOW_DAYS = 7;
 
+/**
+ * Longest a session is trusted to run. The bot caps a session at
+ * `MAX_SESSION_DURATION_SECONDS` = 24h (`discord-bot/services/game-activity.helpers.ts:8`),
+ * and `sweepStaleSessions` (`game-activity.service.ts:213`, every 15 min)
+ * closes any row open past it, so a row normally spans ≤ ~24h15m. Every
+ * session end is clipped to `started_at` + this many hours (rows left long by
+ * downtime included), which makes `started_at >= start - 25h` an exact,
+ * index-usable lower bound (prior art: `MAX_SESSION_LOOKBACK_MS`).
+ */
+export const MAX_SESSION_SPAN_HOURS = 25;
+
+/** {@link MAX_SESSION_SPAN_HOURS} as a SQL interval. */
+export const SESSION_SPAN_SQL = sql.raw(
+  `interval '${MAX_SESSION_SPAN_HOURS} hours'`,
+);
+
 /** A closed time window, `start` ≤ t ≤ `end`. */
 export interface CoPlayWindow {
   start: Date;
   end: Date;
 }
 
-/** Bounds for {@link coPlayParticipationSql}; `start: null` = since forever. */
+/** Bounds for {@link coPlayParticipationSql}. */
 export interface CoPlayBounds {
-  start: Date | null;
+  start: Date;
   end: Date;
   /** The instant an open session is treated as ending at (capped at `end`). */
   now: Date;
+  /** Who may qualify a co-play; `'active'` (default) includes the opted-out. */
+  members?: 'active' | 'visible';
 }
 
 /** Options for {@link fetchCoPlayGames}. */
@@ -57,7 +81,7 @@ export interface CoPlayGame {
   gameId: number;
   name: string;
   slug: string;
-  /** Distinct active members who took part in a qualifying co-play. */
+  /** Distinct visible (not opted-out) members in a qualifying co-play. */
   players: number;
 }
 
@@ -70,31 +94,38 @@ type CoPlayGameRow = {
 };
 
 /** A Date as a `timestamp` literal parameter (UTC wall clock, as drizzle stores it). */
-function ts(at: Date): SQL {
+export function pgTimestamp(at: Date): SQL {
   return sql`${at.toISOString()}::timestamp`;
 }
 
-/** The members filter on a `users u` join (guild-seen, active, not opted out). */
-const ACTIVE_MEMBER = sql`${GUILD_MEMBER_SEEN}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
+/** The members filter on a `users u` join (guild-seen, active). */
+const ACTIVE_MEMBER = sql`${GUILD_MEMBER_SEEN}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}`;
+
+/** {@link ACTIVE_MEMBER}, minus members opted out of `show_activity`. */
+const VISIBLE_MEMBER = sql`${ACTIVE_MEMBER}
       AND ${SHOWS_ACTIVITY_SQL('u.id')}`;
+
+function memberFilter(b: CoPlayBounds): SQL {
+  return b.members === 'visible' ? VISIBLE_MEMBER : ACTIVE_MEMBER;
+}
 
 /** Rule (a) input: active members' sessions on a game, clipped to the bounds. */
 function clippedSessionsCte(b: CoPlayBounds): SQL {
-  const openEnd = ts(b.now.getTime() < b.end.getTime() ? b.now : b.end);
-  const from = b.start
-    ? sql`GREATEST(gs.started_at, ${ts(b.start)})`
-    : sql`gs.started_at`;
-  const lower = b.start
-    ? sql` AND COALESCE(gs.ended_at, ${openEnd}) > ${ts(b.start)}`
-    : sql``;
+  const openEnd = pgTimestamp(
+    b.now.getTime() < b.end.getTime() ? b.now : b.end,
+  );
+  const start = pgTimestamp(b.start);
+  const sessionEnd = sql`LEAST(COALESCE(gs.ended_at, ${openEnd}), gs.started_at + ${SESSION_SPAN_SQL})`;
   return sql`
   cp_sessions AS (
-    SELECT gs.user_id, gs.game_id, ${from} AS s_from,
-           LEAST(COALESCE(gs.ended_at, ${openEnd}), ${ts(b.end)}) AS s_to
+    SELECT gs.user_id, gs.game_id, GREATEST(gs.started_at, ${start}) AS s_from,
+           LEAST(${sessionEnd}, ${pgTimestamp(b.end)}) AS s_to
     FROM game_activity_sessions gs
     INNER JOIN users u ON u.id = gs.user_id
     WHERE gs.game_id IS NOT NULL
-      AND gs.started_at < ${ts(b.end)}${lower}${ACTIVE_MEMBER}
+      AND gs.started_at < ${pgTimestamp(b.end)}
+      AND gs.started_at >= ${start} - ${SESSION_SPAN_SQL}
+      AND ${sessionEnd} > ${start}${memberFilter(b)}
   )`;
 }
 
@@ -112,7 +143,6 @@ const SESSION_PAIRS_CTE = sql`
 
 /** Rule (b) input: active members' attended signups on game events in bounds. */
 function attendedEventsCte(b: CoPlayBounds): SQL {
-  const lower = b.start ? sql` AND upper(e.duration) >= ${ts(b.start)}` : sql``;
   return sql`
   cp_attended AS (
     SELECT e.id AS event_id, e.game_id, s.user_id,
@@ -122,7 +152,8 @@ function attendedEventsCte(b: CoPlayBounds): SQL {
     INNER JOIN users u ON u.id = s.user_id
     WHERE ${ATTENDED_SIGNUP_SQL}
       AND e.game_id IS NOT NULL
-      AND upper(e.duration) <= ${ts(b.end)}${lower}${ACTIVE_MEMBER}
+      AND upper(e.duration) <= ${pgTimestamp(b.end)}
+      AND upper(e.duration) >= ${pgTimestamp(b.start)}${memberFilter(b)}
   )`;
 }
 
@@ -144,7 +175,10 @@ export function coPlayParticipationSql(bounds: CoPlayBounds): SQL {
   )`;
 }
 
-/** Games played together in the bounds, most players first, then by name. */
+/**
+ * Games played together in the bounds, most players first, then by name.
+ * Qualified on all active members; `players` and listing on visible ones.
+ */
 export function buildCoPlayGamesQuery(bounds: CoPlayBounds): SQL {
   return sql`
     SELECT g.id AS game_id, g.name, g.slug,
@@ -152,6 +186,7 @@ export function buildCoPlayGamesQuery(bounds: CoPlayBounds): SQL {
     FROM (${coPlayParticipationSql(bounds)}) cp
     INNER JOIN games g ON g.id = cp.game_id
     WHERE ${VISIBLE_GAME}
+      AND ${SHOWS_ACTIVITY_SQL('cp.user_id')}
     GROUP BY g.id, g.name, g.slug
     ORDER BY players DESC, g.name ASC, g.id ASC
   `;

@@ -203,18 +203,19 @@ describe('B2 first co-play query (ROK-2063)', () => {
 
   it('takes candidates from the bounded week, never solo rollups', () => {
     expect(text).toContain('GREATEST(gs.started_at');
-    expect(text).toContain("gs.started_at >= $");
+    expect(text).toContain('gs.started_at >= $');
     expect(text).not.toContain('game_activity_rollups');
     expect(text).toContain('make_interval(mins => 15)');
   });
 
   it('rules out earlier co-play with index-bounded NOT EXISTS lookups', () => {
-    expect(text).toContain('NOT EXISTS ( SELECT 1 FROM game_activity_sessions ha');
+    expect(text).toContain(
+      'NOT EXISTS ( SELECT 1 FROM game_activity_sessions ha',
+    );
     expect(text).toMatch(
       /hb\.started_at BETWEEN ha\.started_at - interval '25 hours' AND /,
     );
     expect(text).toContain('NOT EXISTS ( SELECT 1 FROM events he');
     expect(text).not.toContain('WITH cp_history');
   });
-});
 });
