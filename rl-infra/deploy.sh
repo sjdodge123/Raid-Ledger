@@ -12,7 +12,8 @@
 #   2. Restores exec bits (new scripts arrive 644 under --no-perms).
 #   3. Re-asserts the canonical rl-fleet group-write + setgid on the dirs
 #      rl-agent must write (traefik/conf.d — matches the state/ pattern),
-#      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r).
+#      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r),
+#      and FAILS unless state/approvals is uid 1000 mode 0700 (ROK-1900 Q8).
 #   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build)
 #      and the dashboard (ROK-1847: a bind-mounted server.js edit is not live
 #      until the node process restarts, and the image must carry every module
@@ -44,13 +45,29 @@ chmod 2775 traefik/conf.d 2>/dev/null || true
 # the rl-fleet group, so it must be 640 root:rl-fleet — never world-readable.
 chgrp rl-fleet .env 2>/dev/null || true
 chmod 640 .env 2>/dev/null || true
-# ROK-1900: the dashboard (uid 1000, gid rl-fleet) writes approval items here.
-# Create it BEFORE the dashboard recreate — otherwise Docker mkdirs the bind
-# source as root and every submit EACCESs. Same 2775 rl-fleet as test-plans.
-install -d -m 2775 -g rl-fleet state/approvals 2>/dev/null \
-    || echo "WARN: could not create state/approvals rl-fleet 2775"
-chgrp rl-fleet state/approvals 2>/dev/null || echo "WARN: chgrp rl-fleet state/approvals failed"
-chmod 2775 state/approvals 2>/dev/null || echo "WARN: chmod 2775 state/approvals failed"
+# ROK-1900 Q8: approval items are the dashboard's ALONE. The container runs as
+# uid 1000 (compose `user: "1000:1004"`); rl-agent / rl-fleet must not read or
+# write state/approvals, or an agent could forge a ruling in item.json. So the
+# dir is uid 1000, mode 0700 — rl-agent's rl_approval_wait polls the API
+# instead of watching the dir. Created BEFORE the dashboard recreate (else
+# Docker mkdirs the bind source as root and every submit EACCESs). Creating or
+# re-owning it needs root once; a wrong dir STOPS the deploy, it never warns.
+APPROVALS_UID=1000
+APPROVALS_GID=1004
+[[ -d state/approvals ]] \
+    || install -d -o "$APPROVALS_UID" -g "$APPROVALS_GID" -m 0700 state/approvals 2>/dev/null || true
+# Owner-side repair needs no sudo when this deploy runs as uid 1000.
+if [[ "$(stat -c '%u' state/approvals 2>/dev/null)" == "$APPROVALS_UID" ]]; then
+    chmod 0700 state/approvals 2>/dev/null || true
+fi
+approvals_have="$(stat -c '%u %a' state/approvals 2>/dev/null || echo missing)"
+if [[ "$approvals_have" != "$APPROVALS_UID 700" ]]; then
+    echo "FATAL: state/approvals is '$approvals_have' (uid mode); want '$APPROVALS_UID 700' — agents could forge rulings." >&2
+    echo "Repair once as root on the VM, then re-run deploy.sh:" >&2
+    echo "  sudo install -d -o $APPROVALS_UID -g $APPROVALS_GID -m 0700 /srv/rl-infra/state/approvals" >&2
+    echo "  sudo chown -R $APPROVALS_UID:$APPROVALS_GID /srv/rl-infra/state/approvals" >&2
+    exit 1
+fi
 # ROK-1469: same treatment for the settings bundle rl-agent must READ. rsync
 # resets these on every deploy, and an unreadable bundle costs each env its
 # shared API keys.

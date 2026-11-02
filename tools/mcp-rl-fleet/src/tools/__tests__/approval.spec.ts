@@ -49,7 +49,7 @@ vi.mock('../../exec.js', async (orig) => ({
   buildSshArgs: async (remote: string) => ['-o', 'BatchMode=yes', 'rl-agent@vm', remote],
 }));
 
-const { executeList, executeStatus, executeSubmit, executeWait, executeWithdraw } = await import('../approval.js');
+const { executeList, executeStatus, executeSubmit, executeWait, executeWithdraw, waitDeps } = await import('../approval.js');
 const { buildRemoteCommand } = await import('../approval-transport.js');
 
 const TOKEN = 'agent-token-for-tests-xyz';
@@ -235,30 +235,41 @@ describe('rl_approval_wait', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('wakes on an item.json rename and returns the changed item; ignores the store tmp file', async () => {
-    replies.push(reply(200, { ok: true, item: item() }));
-    const pending = executeWait({ approval_id: ID, timeout_seconds: 30 });
-    await vi.waitFor(() => expect(watchChild).not.toBeNull());
-    const watch = must(watchChild, 'watch child');
-    expect(remoteOf(calls[1])).toContain(`inotifywait -m -q -e close_write,moved_to,delete_self --format '%f' '/srv/rl-infra/state/approvals/${ID}/'`);
-    watch.stdout.emit('data', Buffer.from('.item.json.42.1.abc.tmp\n'));
-    replies.push(reply(200, { ok: true, item: item({ rulings: [{ n: 1, choice: 'accept', has_note: false, ts: 't' }] }) }));
-    watch.stdout.emit('data', Buffer.from('item.json\n'));
-    const res = await pending;
-    expect(res).toMatchObject({ ok: true, item: { rulings: [{ n: 1, choice: 'accept' }], unruled: [2, 3] } });
-    expect(calls).toHaveLength(3);
-  });
+  // ROK-1900 Q8: rl-agent cannot read state/approvals, so the wait polls the API.
+  const fakeClock = () => {
+    const real = { ...waitDeps };
+    let t = 0;
+    const sleeps: number[] = [];
+    waitDeps.now = () => t;
+    waitDeps.sleep = async (ms: number) => { sleeps.push(ms); t += ms; };
+    return { sleeps, restore: () => Object.assign(waitDeps, real) };
+  };
 
-  it('times out with timed_out:true', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  it('polls GET /api/approvals/<id> over HTTP (never inotify) and returns the changed item', async () => {
+    const clock = fakeClock();
     try {
       replies.push(reply(200, { ok: true, item: item() }));
-      const pending = executeWait({ approval_id: ID, timeout_seconds: 5 });
-      await vi.waitFor(() => expect(watchChild).not.toBeNull());
-      vi.advanceTimersByTime(5000);
-      expect(await pending).toMatchObject({ ok: true, timed_out: true });
+      replies.push(reply(200, { ok: true, item: item() }));
+      replies.push(reply(200, { ok: true, item: item({ rulings: [{ n: 1, choice: 'accept', has_note: false, ts: 't' }] }) }));
+      const res = await executeWait({ approval_id: ID, timeout_seconds: 60 });
+      expect(res).toMatchObject({ ok: true, item: { rulings: [{ n: 1, choice: 'accept' }], unruled: [2, 3] } });
+      expect(calls).toHaveLength(3);
+      expect(calls.every((c) => !(c.args.at(-1) ?? '').includes('inotifywait'))).toBe(true);
+      expect(clock.sleeps).toEqual([10_000, 10_000]);
     } finally {
-      vi.useRealTimers();
+      clock.restore();
+    }
+  });
+
+  it('times out with timed_out:true without passing the deadline', async () => {
+    const clock = fakeClock();
+    try {
+      for (let i = 0; i < 10; i += 1) replies.push(reply(200, { ok: true, item: item() }));
+      const res = await executeWait({ approval_id: ID, timeout_seconds: 35 });
+      expect(res).toEqual({ ok: true, timed_out: true, waited_seconds: 30 });
+      expect(calls).toHaveLength(4);
+    } finally {
+      clock.restore();
     }
   });
 });

@@ -7,10 +7,9 @@
 // verdicts + structured choices + `has_note` only; note text comes back only
 // with include_notes:true, sanitised and wrapped like tester comments
 // (test-plan-comments.ts), and only a disposable sub-agent lane may ask.
-import { spawn } from 'node:child_process';
 
 import { readSubmitFiles, relativeSpecPath, SubmitFileError } from './approval-files.js';
-import { AgentTokenMissingError, approvalRequest, watchArgs } from './approval-transport.js';
+import { AgentTokenMissingError, approvalRequest } from './approval-transport.js';
 import { sanitizeCommentText, TRUNCATION_MARK } from './test-plan-comments.js';
 
 export const APPROVAL_ID_RE = /^\d{4}-\d{2}-\d{2}-\d{4}-[0-9a-f]{4}$/;
@@ -31,7 +30,7 @@ export const STATUS_DESC =
   `Read one approval item's rulings. Returns \`{ok, item:{id, story, title, status (pending|approved|changes_requested|rejected|withdrawn|superseded), decided_at, rulings:[{n, choice ('accept'|'other'|<option key>), has_note, ts}], verdict:{value (approve|changes|reject), has_note, ts}|null, unruled:[n…]}}\`. The DEFAULT read is SAFE and carries NO operator note text — \`has_note\` tells you a note exists. \`include_notes: true\` (default false) adds \`notes:[{n | 'verdict', text}]\`, each note plain sanitised text inside \`${NOTE_OPEN}…${NOTE_CLOSE}\` (invisible/format characters removed, every angle bracket neutralised, ${NOTE_CAP} characters per note). ${UNTRUSTED_RULE} A 'changes' or 'reject' verdict and an 'other' choice always carry a note — hand those to such a lane.`;
 export const WAIT_TOOL = 'rl_approval_wait';
 export const WAIT_DESC =
-  "Block until the operator rules on an approval item (any ruling, verdict, or a withdraw), or until timeout_seconds (5–120, default 110 — ROK-1362: no call holds the channel past 120 s; call again to keep waiting). Watches the item file on the VM with inotify. Returns at once if the item is no longer pending. Result: the rl_approval_status shape (never note text — use rl_approval_status include_notes from a disposable sub-agent lane for that), or `{ok:true, timed_out:true, waited_seconds}`.";
+  "Block until the operator rules on an approval item (any ruling, verdict, or a withdraw), or until timeout_seconds (5–120, default 110 — ROK-1362: no call holds the channel past 120 s; call again to keep waiting). Polls the dashboard API every 10 s (agents cannot read the approvals dir). Returns at once if the item is no longer pending. Result: the rl_approval_status shape (never note text — use rl_approval_status include_notes from a disposable sub-agent lane for that), or `{ok:true, timed_out:true, waited_seconds}`.";
 export const WITHDRAW_TOOL = 'rl_approval_withdraw';
 export const WITHDRAW_DESC =
   "Withdraw your own still-pending approval item (it moves to the Archive; nothing is ever deleted). Pass `superseded_by:<new approval_id>` when a newer item replaces it (status becomes 'superseded'), else an optional `reason` (status 'withdrawn'). Returns `{ok, status}`. 409 once the operator has decided the item.";
@@ -171,48 +170,31 @@ const fingerprint = (s: unknown): string => {
   return JSON.stringify([it.status, it.rulings, it.verdict]);
 };
 
+// state/approvals is uid 1000 mode 0700 on the VM (ROK-1900 Q8): rl-agent cannot
+// watch it, so the wait polls GET /api/approvals/<id> through the agent token.
+// Injectable for tests; the deadline is fixed at entry so no call passes the cap.
+export const waitDeps = {
+  pollMs: 10_000,
+  now: (): number => Date.now(),
+  sleep: (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)),
+};
+
 export async function executeWait(p: { approval_id: string; timeout_seconds?: number | undefined }) {
   if (typeof p.approval_id !== 'string' || !APPROVAL_ID_RE.test(p.approval_id)) return badId(p.approval_id);
-  const timeoutS = Math.max(5, Math.min(120, p.timeout_seconds ?? 110));
+  const startedAt = waitDeps.now();
+  const deadline = startedAt + Math.max(5, Math.min(120, p.timeout_seconds ?? 110)) * 1000;
   const pre = await executeStatus({ approval_id: p.approval_id });
   if (pre.ok !== true) return pre;
   if (asObj(asObj(pre).item).status !== 'pending') return pre;
   const baseline = fingerprint(pre);
-  const startedAt = Date.now();
-  const args = await watchArgs(p.approval_id);
-  return new Promise((resolve) => {
-    const child = spawn('ssh', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let settled = false;
-    let buf = '';
-    const settle = (v: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { child.kill('SIGTERM'); } catch { /* already gone */ }
-      resolve(v);
-    };
-    const timer = setTimeout(
-      () => settle({ ok: true, timed_out: true, waited_seconds: Math.round((Date.now() - startedAt) / 1000) }),
-      timeoutS * 1000,
-    );
-    const onEvent = async () => {
-      const post = await executeStatus({ approval_id: p.approval_id });
-      // A transient ssh blip keeps waiting; a real answer (changed item, 404) settles.
-      const changed = post.ok === true ? fingerprint(post) !== baseline : post.error !== 'curl_failed';
-      if (changed) settle(post);
-    };
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buf += chunk.toString('utf8');
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      // Only the rename target counts; the store's `.item.json.<pid>…tmp` files start with a dot.
-      if (lines.some((l) => l.trim() === 'item.json')) void onEvent();
-    });
-    child.on('error', (e: Error) => settle({ ok: false, error: 'wait_failed', message: e.message }));
-    child.on('exit', (code: number | null) => {
-      if (!settled) settle({ ok: false, error: 'wait_failed', message: `inotifywait stream ended (code=${code ?? 'null'})` });
-    });
-  });
+  while (waitDeps.now() + waitDeps.pollMs < deadline) {
+    await waitDeps.sleep(waitDeps.pollMs);
+    const post = await executeStatus({ approval_id: p.approval_id });
+    // A transient ssh blip keeps waiting; a real answer (changed item, 404) settles.
+    const changed = post.ok === true ? fingerprint(post) !== baseline : post.error !== 'curl_failed';
+    if (changed) return post;
+  }
+  return { ok: true, timed_out: true, waited_seconds: Math.round((waitDeps.now() - startedAt) / 1000) };
 }
 
 // ----- withdraw -----

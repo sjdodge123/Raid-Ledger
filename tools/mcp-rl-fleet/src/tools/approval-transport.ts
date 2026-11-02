@@ -123,14 +123,3 @@ export async function approvalRequest(
   const stdout = await runSsh(args, buildStdin(token, body), hasBody ? BODY_TIMEOUT_MS : SMALL_TIMEOUT_MS);
   return parseCurlOutput(stdout);
 }
-
-/** Path of an item's directory on the VM host (compose: ./state/approvals). */
-export const itemDirOnVm = (id: string): string => `/srv/rl-infra/state/approvals/${id}/`;
-
-/** ssh argv for the inotify watch rl_approval_wait holds open. id is ID_RE-checked by the caller. */
-export async function watchArgs(id: string): Promise<string[]> {
-  const remote =
-    `inotifywait -m -q -e close_write,moved_to,delete_self ` +
-    `--format '%f' ${shellQuote(itemDirOnVm(id))} 2>/dev/null`;
-  return buildSshArgs(remote);
-}
