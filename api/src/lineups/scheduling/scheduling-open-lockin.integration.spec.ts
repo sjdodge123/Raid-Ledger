@@ -12,6 +12,7 @@
  * — except a reschedule poll, whose event already exists.
  */
 import { and, eq } from 'drizzle-orm';
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -136,18 +137,13 @@ describe('ROK-2024 open lock-in (integration)', () => {
   }
 
   async function createEvent(schedulingMatchId?: number): Promise<number> {
-    const created = await testApp.request
-      .post('/events')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        title: 'Open Lock-in Night',
-        startTime: SLOT.toISOString(),
-        endTime: SLOT_END.toISOString(),
-        gameId: testApp.seed.game.id,
-        ...(schedulingMatchId === undefined ? {} : { schedulingMatchId }),
-      });
-    expect(created.status).toBe(201);
-    return created.body.id as number;
+    return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+      title: 'Open Lock-in Night',
+      startTime: SLOT.toISOString(),
+      endTime: SLOT_END.toISOString(),
+      gameId: testApp.seed.game.id,
+      ...(schedulingMatchId === undefined ? {} : { schedulingMatchId }),
+    });
   }
 
   async function complete(matchId: number, eventId: number): Promise<number> {

@@ -19,6 +19,7 @@
  * voter's poll DM has landed.
  */
 import { and, eq } from 'drizzle-orm';
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -156,20 +157,15 @@ async function seedVotes(matchId: number, ids: number[]): Promise<void> {
 
 /** POST /events from the poll on a 2-spot generic roster. */
 async function createEventFromPoll(matchId: number): Promise<number> {
-  const res = await testApp.request
-    .post('/events')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({
-      title: 'Bench pick lock',
-      startTime: SLOT.toISOString(),
-      endTime: SLOT_END.toISOString(),
-      gameId: testApp.seed.game.id,
-      slotConfig: { type: 'generic', player: ROSTER_CAP },
-      maxAttendees: ROSTER_CAP,
-      schedulingMatchId: matchId,
-    });
-  expect(res.status).toBe(201);
-  return res.body.id;
+  return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+    title: 'Bench pick lock',
+    startTime: SLOT.toISOString(),
+    endTime: SLOT_END.toISOString(),
+    gameId: testApp.seed.game.id,
+    slotConfig: { type: 'generic', player: ROSTER_CAP },
+    maxAttendees: ROSTER_CAP,
+    schedulingMatchId: matchId,
+  });
 }
 
 /** Seed the poll + votes + event; nothing is completed yet. */

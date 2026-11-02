@@ -14,6 +14,7 @@
  * `slotConfig.player = 2`, `maxAttendees = 2`. The creator's own signup takes
  * one spot, so creator + 2 other yes-voters overflows by exactly one.
  */
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -94,20 +95,15 @@ async function createEventFromPoll(
   matchId: number,
   start: Date,
 ): Promise<number> {
-  const res = await testApp.request
-    .post('/events')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({
-      title: 'Locked In Over Cap',
-      startTime: start.toISOString(),
-      endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
-      gameId: testApp.seed.game.id,
-      slotConfig: { type: 'generic', player: ROSTER_CAP },
-      maxAttendees: ROSTER_CAP,
-      schedulingMatchId: matchId,
-    });
-  expect(res.status).toBe(201);
-  return res.body.id as number;
+  return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+    title: 'Locked In Over Cap',
+    startTime: start.toISOString(),
+    endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId: testApp.seed.game.id,
+    slotConfig: { type: 'generic', player: ROSTER_CAP },
+    maxAttendees: ROSTER_CAP,
+    schedulingMatchId: matchId,
+  });
 }
 
 /** POST the lock-in that triggers auto-signup + the voter DMs. */
