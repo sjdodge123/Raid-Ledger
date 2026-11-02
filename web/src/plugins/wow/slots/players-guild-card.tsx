@@ -46,7 +46,7 @@ const WOW_HOW = (
         <ol className="ml-4 list-decimal space-y-1" data-testid="players-guild-how-steps">
             <li>Install LedgerLink from CurseForge or GitHub.</li>
             <li>In game, open LedgerLink and copy your guild export.</li>
-            <li>Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.</li>
+            <li>Paste it on your character's page under <strong>Import string</strong> (or Add Character → <strong>Import LedgerLink character</strong>). Your roster, ranks and raid schedule come with it.</li>
         </ol>
         {/* ROK-2064: the public step-by-step guide (officers + members, Companion). */}
         <p className="mt-2">
