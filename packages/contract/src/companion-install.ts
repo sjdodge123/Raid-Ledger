@@ -11,11 +11,11 @@ export const COMPANION_DOWNLOAD_URL =
   "https://github.com/Raid-Ledger-Plugins/rl-companion/releases";
 
 /**
- * Off until the first public release exists (ROK-2057's first tag). While
+ * On since ROK-2060 (2026-11-01): the first public release, v0.1.0-test.1, exists (ROK-2057). While
  * false, no download affordance renders anywhere; the linked-device list still
  * does. Flip in one place.
  */
-export const COMPANION_DOWNLOAD_AVAILABLE = false;
+export const COMPANION_DOWNLOAD_AVAILABLE = true;
 
 /** Shown under the Download button: what the releases page offers. */
 export const COMPANION_DOWNLOAD_FORMATS = "Windows .exe · macOS .dmg";

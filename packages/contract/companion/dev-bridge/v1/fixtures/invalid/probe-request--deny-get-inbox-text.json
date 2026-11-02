@@ -1,0 +1,31 @@
+{
+  "title": "Can an addon read professions?",
+  "flavor": "auto",
+  "after": "PLAYER_LOGIN",
+  "ttlHours": 72,
+  "calls": [
+    {
+      "id": "profs",
+      "fn": "GetInboxText"
+    },
+    {
+      "id": "n",
+      "fn": "GetNumSkillLines"
+    },
+    {
+      "id": "skill",
+      "fn": "GetSkillLineInfo",
+      "args": [
+        "$i"
+      ],
+      "forEach": {
+        "countFrom": "n",
+        "max": 60
+      }
+    },
+    {
+      "id": "ts",
+      "presence": "C_TradeSkillUI"
+    }
+  ]
+}
