@@ -54,7 +54,8 @@ function useSignupSelectionReset(
     }, [defaultCharacterId, preSelectedRole, characters, setSelectedCharacterId, setSelectedRole, setSelectedRoles]);
 }
 
-function useSignupSelection(isOpen: boolean, characters: CharacterDto[], preSelectedRole?: CharacterRole) {
+/** Character + role selection for a signup overlay; reset each time it opens. Shared with the series join (ROK-1728). */
+export function useSignupSelection(isOpen: boolean, characters: CharacterDto[], preSelectedRole?: CharacterRole) {
     const mainCharacter = characters.find((c) => c.isMain);
     const [sessionKey, setSessionKey] = useState(0);
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
