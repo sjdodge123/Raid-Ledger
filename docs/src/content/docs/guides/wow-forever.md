@@ -43,16 +43,15 @@ fills the lockout, quest and readiness cards. You need both.
    CurseForge app instead.
 2. Unzip it into your game's AddOns folder. You should end up with:
 
-   `World of Warcraft/<client folder>/Interface/AddOns/LedgerLink/LedgerLink.toc`
+   `World of Warcraft/_forever_/Interface/AddOns/LedgerLink/LedgerLink.toc`
 
 3. Start the game (or type `/reload`). On the character screen, open **AddOns**
    and make sure **Ledger Link** is ticked.
 4. In game, type `/rl` or click the LedgerLink minimap button to open its panel.
 
 :::note
-**Unverified:** the name of the WoW: Forever client folder at launch
-(`<client folder>` above). During the beta it was `_classic_beta_`. Look for the
-folder starting with `_` inside your `World of Warcraft` folder.
+WoW: Forever lives in the `_forever_` folder inside your `World of Warcraft`
+folder. Install LedgerLink there, not in `_classic_` or `_retail_`.
 :::
 
 If another addon already uses `/rl`, type `/ledgerlink` instead. It works
@@ -140,15 +139,19 @@ exports for you after you log out of the game.
    **Run anyway**. On a Mac, right-click the app and choose **Open** the first time.
    :::
 
-3. In the Companion, link it to your account. It shows an 8-letter code.
+   **Can't see the Companion's tray icon on Windows 11?** Go to **Settings →
+   Personalization → Taskbar → Other system tray icons** and turn on
+   **RL Companion**.
+
+3. In the Companion, click **Link this device**. It shows an 8-letter code.
 4. Enter the code at `/link` on your Raid Ledger site (for example
    `https://your-site/link`), then turn on the games you want it to read.
 5. In the Companion's **WoW: LedgerLink uploads** section, tick
    **Upload LedgerLink exports automatically after you log out or /reload**.
 
 :::note
-Raid Ledger's install steps call the button **Link this computer**. In the
-v0.1.0-test.1 Companion it reads **Link this device**. Same button.
+Some Raid Ledger screens call this button **Link this computer**. It's the same
+**Link this device** button.
 :::
 
 **How uploads happen.** LedgerLink saves an Export all every time you log out.

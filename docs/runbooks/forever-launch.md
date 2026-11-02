@@ -31,7 +31,7 @@ Every claim cites a file. Anything marked **UNVERIFIED** could not be confirmed 
 | 2.1 | Confirm prod = main. `GET /api/system/version` returns the expected `commitSha`. | Lead session |
 | 2.2 | Run the fleet rehearsal plan in §8 on a main-built env. Both `default-dark` and `default-light`, desktop and phone. | Lead session (via a `fleet-ui-verify` lane) |
 | 2.3 | Install the Companion app on the Windows PC. It is unsigned, so Windows SmartScreen blocks it: click **More info → Run anyway**. Link it to your account under My Integrations (ROK-1955, commit `36fea9f87`). | Operator |
-| 2.4 | Confirm LedgerLink is installed in the game client and set to auto-export on logout. **UNVERIFIED:** the auto-export-on-logout setting lives in the addon repo (`sjdodge123/ledger-link`), not here. | Operator |
+| 2.4 | Confirm LedgerLink is installed at `World of Warcraft/_forever_/Interface/AddOns/LedgerLink` and ticked in the AddOns list. Auto-export on logout is on by default (`/rl autoexport on` turns it back on). The setting lives in the addon repo (`sjdodge123/ledger-link`). | Operator |
 | 2.5 | Name the on-call Lead session for the US launch window (§6). | Operator |
 
 ---
