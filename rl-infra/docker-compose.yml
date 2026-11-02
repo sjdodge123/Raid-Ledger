@@ -114,24 +114,40 @@ services:
   # through this proxy.
   #
   # Operator (rl) bypasses the proxy by using the raw socket directly
-  # (DOCKER_HOST unset). The orchestrator scripts auto-detect the proxy when
-  # available (see _state.sh).
+  # (DOCKER_HOST unset). The orchestrator scripts auto-detect the proxy's unix
+  # socket (/srv/rl-infra/run/docker-proxy/docker.sock) when available (see
+  # _state.sh); the MCP tools pin it (tools/mcp-rl-fleet/src/docker-proxy.ts).
   docker-socket-proxy:
-    image: wollomatic/socket-proxy:1
+    # ROK-2049 — pinned: the unix-socket listener (-proxysocketendpoint) exists
+    # since 1.5 and its file mode is honoured correctly since 1.10.
+    image: wollomatic/socket-proxy:1.13.2
     container_name: rl-docker-proxy
     restart: unless-stopped
-    # ROK-1846 — host network + loopback listener. It used to sit on rl-net
-    # accepting any source address, so every env container (branch code,
-    # internet-facing) could POST an unfiltered containers/create. Every
-    # consumer (orchestrator _state.sh, the MCP tools over SSH) dials
-    # 127.0.0.1:2375 on the VM host, which a bridge-network container cannot.
-    network_mode: host
-    # Wollomatic runs as non-root (UID 65532). Match GID to the host's
-    # docker group so the proxy can read /var/run/docker.sock without root.
-    # Host docker GID is 1001 (verified on rl-infra VM 2026-05-18).
-    user: "65532:1001"
+    # ROK-2049 — unix socket ONLY, no network at all. ROK-1846 moved the proxy
+    # off rl-net onto the host network with a 127.0.0.1:2375 listener, but the
+    # Docker daemon itself sits in the host network namespace and fetches a
+    # build's `ADD <url>` sources (and a base image's inherited `ONBUILD ADD`
+    # triggers) from there — so a branch Dockerfile could make the DAEMON call
+    # this body-blind proxy. With -proxysocketendpoint wollomatic opens no TCP
+    # listener (and skips -allowfrom, which only applies to TCP); there is
+    # nothing on host TCP 2375 left to fetch. `network_mode: none` makes that
+    # structural: the container has no interface but loopback, and it needs
+    # none — it talks to the daemon through the mounted docker.sock.
+    network_mode: none
+    # UID 65532 (wollomatic's non-root user). Primary GID = rl-fleet (1004 on
+    # the rl-infra VM; override RL_FLEET_GID in /srv/rl-infra/.env if it
+    # differs), so the socket it creates is owned 65532:rl-fleet and its 0660
+    # mode admits exactly rl-agent + rl (the orchestrator scripts and the MCP
+    # tools over SSH). group_add the host docker GID (1001, verified on the VM
+    # 2026-05-18) so it can still open /var/run/docker.sock.
+    user: "65532:${RL_FLEET_GID:-1004}"
+    group_add: ["1001"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Host dir rl:rl-fleet mode 3770 (setgid + sticky), created by deploy.sh
+      # and cloud-init. Mounted into THIS service only — never into a runner,
+      # env, bridge or gc-sweeper container (compose-docker-boundary.test.sh).
+      - /srv/rl-infra/run/docker-proxy:/run/rl-docker-proxy
     # wollomatic regex flags. Single regex per method, pipe-separated
     # alternatives. The boundary lives entirely in these regexes — broaden
     # them and you weaken the hardening. Patterns accept an optional
@@ -142,8 +158,9 @@ services:
     # rl-grafana, rl-loki, rl-promtail, rl-registry, rl-gc-sweeper,
     # rl-docker-proxy.
     command:
-      - -listenip=127.0.0.1
-      - -allowfrom=127.0.0.1/32
+      # ROK-2049: unix socket instead of TCP (removes stale socket on start).
+      - -proxysocketendpoint=/run/rl-docker-proxy/docker.sock
+      - -proxysocketendpointfilemode=0660
       - -loglevel=INFO
       - -allowHEAD=^.*$
       - >-
@@ -401,8 +418,8 @@ services:
       # /srv/rl-infra/.env, and sweep.sh reads these unprefixed knobs straight
       # from the environment. `environment:` wins over `env_file:`, so pinning
       # them here stops a host-side .env entry (e.g. RL_STATE_DIR=/srv/rl-infra/state
-      # or DOCKER_HOST=tcp://127.0.0.1:2375, both correct on the VM and both wrong
-      # in here) from silently pointing the sweeper at a nonexistent state dir or
+      # or a DOCKER_HOST pointing at rl-docker-proxy's host socket, both of which
+      # mean nothing in here) from silently pointing the sweeper at a nonexistent state dir or
       # an unreachable daemon. Every docker call in sweep.sh is `2>/dev/null || true`
       # and every jq is `|| true`, so it would go completely dark with no error —
       # it would just stop reaping. Values below are the container-correct ones

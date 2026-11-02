@@ -5,6 +5,7 @@
 // ChainCtx, which mutates the laptop task JSON so rl_task_status shows progress.
 
 import * as claim from './claim.js';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import * as buildImage from './env-build-image.js';
 import * as envSpin from './env-spin.js';
 import { describeOperatorAdmin, type OperatorAdminMode } from './operator-admin.js';
@@ -111,7 +112,7 @@ async function stepBuild(
 
 async function restartAllinone(slug: string): Promise<void> {
   const sshArgs = await buildSshArgs(
-    `DOCKER_HOST=tcp://127.0.0.1:2375 docker restart rl-env-${slug}-allinone && sleep 6`,
+    `DOCKER_HOST=${VM_DOCKER_HOST} docker restart rl-env-${slug}-allinone && sleep 6`,
   );
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');

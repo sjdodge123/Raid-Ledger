@@ -5,6 +5,7 @@
 // Strict service enum + tail cap. SSH via execFile argv-array.
 
 import { z } from 'zod';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import {
   buildSshArgs,
   classifySshFailure,
@@ -83,7 +84,7 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
   // we still pass via execFile argv-array — never `bash -c`.
   const container = SERVICE_TO_CONTAINER[service];
   // ROK-1338 PR-1 dogfood-1: route docker calls through the rl-docker-proxy
-  // (wollomatic socket-proxy) at 127.0.0.1:2375 instead of the host's unix
+  // (wollomatic socket-proxy) on its own unix socket (ROK-2049) instead of the host's raw
   // socket. The proxy whitelists GET /containers/[id]/logs, so this is the
   // intended read path. rl-agent is NOT in the host's docker group; talking
   // directly to /var/run/docker.sock returns permission-denied. The proxy
@@ -95,7 +96,7 @@ export async function execute(params: InfraLogsParams): Promise<InfraLogsResult>
   // upstream rather than locally (where we'd be left concatenating two
   // already-buffered streams in the wrong order). `--timestamps` keeps each
   // line individually datable if a consumer needs to re-sort.
-  const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail ${tail} --timestamps ${container} 2>&1`;
+  const remote = `DOCKER_HOST=${VM_DOCKER_HOST} docker logs --tail ${tail} --timestamps ${container} 2>&1`;
   // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
   // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
   const args = await buildSshArgs(remote);
