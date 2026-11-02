@@ -40,11 +40,46 @@ const result = {
         { id: 'ts', status: 'ok', values: ['nil'] },
     ],
 };
+const ID2 = '01JBX7Q2M3N4P5R6S7T8V9W0XZ';
+const bytes = (v) => Buffer.byteLength(JSON.stringify(v), 'utf8');
+/** Largest n whose build(n) serialises to ≤ limit bytes (build grows strictly with n). */
+const largest = (build, limit) => { let n = 0; while (bytes(build(n + 1)) <= limit) n += 1; return n; };
+/** `n` chars split into strings of ≤ size. */
+const chunks = (n, size, ch) => Array.from({ length: Math.ceil(n / size) }, (_, k) => ch.repeat(Math.min(size, n - k * size)));
+/** A request (output form) carrying n chars of GetCVar string args, 8 per call. */
+const requestOf = (n) => {
+    const args = chunks(n, 128, 'x');
+    const calls = Array.from({ length: Math.max(1, Math.ceil(args.length / 8)) }, (_, c) => ({ id: `c${c}`, fn: 'GetCVar', args: args.slice(c * 8, c * 8 + 8) }));
+    return { title: 'Largest request', flavor: 'auto', after: 'PLAYER_LOGIN', ttlHours: 72, calls };
+};
+const REQ_MAX = 4096;
+const ITEM_MAX = 3072;
+const maxRequest = requestOf(largest(requestOf, REQ_MAX));
+const overRequest = requestOf(largest(requestOf, REQ_MAX) + 1);
+const head = (n) => ({ id: 'skill', status: 'ok', values: chunks(n, 512, 'v'), truncated: true });
+const iteration = (n, i = 1) => ({ i, status: 'ok', values: chunks(n, 512, 'w') });
+const maxHead = head(largest(head, ITEM_MAX));
+const maxIteration = (i) => iteration(largest((n) => iteration(n, i), ITEM_MAX), i);
+/** Worst case of every repeated field + one call head + one iteration, each at its cap. */
+const maxPage = {
+    probeId: ID, title: '€'.repeat(120), status: 'rejected', submittedAt: AT, answeredAt: AT,
+    request: maxRequest,
+    result: { probeId: ID, capturedAt: AT, addonVersion: `9999.9999.9999-${'a'.repeat(32)}`, truncated: true, calls: [{ ...maxHead, iterations: [maxIteration(1)] }] },
+    error: '\u0001'.repeat(512),
+    next: 'n'.repeat(128),
+};
+const queue = { queueVersion: 1, probes: [
+    { probeId: ID, ...professions, flavor: '_anniversary_' },
+    { probeId: ID2, title: 'Does a quoted CVar arg survive the long bracket?', flavor: '_anniversary_', after: 'PLAYER_ENTERING_WORLD', ttlHours: 24, calls: [{ id: 'c', fn: 'GetCVar', args: ['a]]b]==]c"d\ne\\f', "it's"] }] },
+] };
 const nested = { ...clone(result), calls: [{ id: 'roster', status: 'ok', values: ['Tester', { rank: 'Officer', note: '<redacted>', tags: ['raider', { main: true }] }] }] };
 
 const VALID = {
     'probe-request--professions': professions,
     'probe-request--minimal': { title: 'Guild check', calls: [{ id: 'g', fn: 'IsInGuild' }] },
+    'probe-request--max-size': maxRequest,
+    'probe-queue': queue,
+    'probe-detail--max-page': maxPage,
     'probe-result--professions': result,
     'probe-result--nested-tables': nested,
     health: { app: 'rl-companion', appVersion: '0.4.0', bridgeVersion: 1, devMode: true, probesEnabled: true, wowDir: 'D:/Games/World of Warcraft', flavors: ['_classic_era_', '_anniversary_'], wowRunning: false, uptimeSec: 5400, now: AT },
@@ -75,14 +110,24 @@ const VALID = {
 const withFn = (fn) => (m) => { m.calls[0].fn = fn; };
 /** [name, base valid fixture, mutate, expected path, expected code] */
 const CASES = [
-    ['probe-request--deny-send-chat-message', 'probe-request--professions', withFn('SendChatMessage'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-set-cvar', 'probe-request--professions', withFn('SetCVar'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-loadstring', 'probe-request--professions', withFn('loadstring'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-run-script', 'probe-request--professions', withFn('RunScript'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-guild-uninvite', 'probe-request--professions', withFn('GuildUninvite'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-use-container-item', 'probe-request--professions', withFn('C_Container.UseContainerItem'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-get-send-mail-item', 'probe-request--professions', withFn('GetSendMailItem'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-unit-set-role', 'probe-request--professions', withFn('UnitSetRole'), 'calls.0.fn', 'custom'],
     ['probe-request--deny-get-quest-reward', 'probe-request--professions', withFn('GetQuestReward'), 'calls.0.fn', 'custom'],
-    ['probe-request--deny-cancel-unit-buff', 'probe-request--professions', withFn('CancelUnitBuff'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-get-inbox-text', 'probe-request--professions', withFn('GetInboxText'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-guild-disband-info', 'probe-request--professions', withFn('C_GuildInfo.GetGuildDisbandInfo'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-get-trade-skill-line', 'probe-request--professions', withFn('GetTradeSkillLine'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-registered-addon-prefixes', 'probe-request--professions', withFn('C_ChatInfo.GetRegisteredAddonMessagePrefixes'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-get-macro-info', 'probe-request--professions', withFn('GetMacroInfo'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-can-guild-invite', 'probe-request--professions', withFn('CanGuildInvite'), 'calls.0.fn', 'custom'],
+    ['probe-request--deny-get-auction-item-info', 'probe-request--professions', withFn('GetAuctionItemInfo'), 'calls.0.fn', 'custom'],
+    ['probe-request--framexml-handler', 'probe-request--professions', withFn('UnitPopup_OnClick'), 'calls.0.fn', 'custom'],
+    ['probe-request--not-read-verb-send-chat-message', 'probe-request--professions', withFn('SendChatMessage'), 'calls.0.fn', 'custom'],
+    ['probe-request--over-size', 'probe-request--max-size', (m) => { Object.assign(m, clone(overRequest)); }, '', 'custom'],
+    ['probe-result--item-too-big', 'probe-result--professions', (m) => { m.calls[1].values = chunks(ITEM_MAX, 512, 'v'); }, 'calls.1', 'custom'],
+    ['probe-detail--over-page', 'probe-detail--max-page', (m) => { m.result.calls[0].iterations.push(maxIteration(2)); }, '', 'custom'],
+    ['probe-queue--flavor-auto', 'probe-queue', (m) => { m.probes[0].flavor = 'auto'; }, 'probes.0.flavor', 'invalid_format'],
+    ['probe-queue--missing-probe-id', 'probe-queue', (m) => { delete m.probes[1].probeId; }, 'probes.1.probeId', 'invalid_type'],
+    ['probe-queue--missing-ttl', 'probe-queue', (m) => { delete m.probes[0].ttlHours; }, 'probes.0.ttlHours', 'invalid_type'],
     ['probe-request--not-read-verb', 'probe-request--professions', withFn('DoEmote'), 'calls.0.fn', 'custom'],
     ['probe-request--fn-four-segments', 'probe-request--professions', withFn('A.B.C.GetMoney'), 'calls.0.fn', 'invalid_format'],
     ['probe-request--arg-table', 'probe-request--professions', (m) => { m.calls[0].args = [{}]; }, 'calls.0.args.0', 'invalid_union'],
@@ -100,6 +145,8 @@ const CASES = [
     ['sv-raw--parent-path', 'sv-raw', (m) => { m.path = '../../secrets.txt'; }, 'path', 'custom'],
     ['probe-list--missing-next', 'probe-list', (m) => { delete m.next; }, 'next', 'invalid_type'],
     ['logs--unredacted-token', 'logs', (m) => { m.lines[1].msg = 'rejected Authorization: Bearer rlcdev_abc123'; }, 'lines.1.msg', 'custom'],
+    ['logs--unredacted-bearer-lowercase', 'logs', (m) => { m.lines[1].msg = 'rejected authorization: bearer abc123'; }, 'lines.1.msg', 'custom'],
+    ['logs--unredacted-bearer-uppercase', 'logs', (m) => { m.lines[1].msg = 'rejected AUTHORIZATION: BEARER abc123'; }, 'lines.1.msg', 'custom'],
     ['error--unknown-code', 'error--unauthorized', (m) => { m.error = 'teapot'; }, 'error', 'invalid_value'],
 ];
 
@@ -110,6 +157,11 @@ const schemaFor = (name) => {
     return schema;
 };
 
+const sizes = { request: bytes(maxRequest), head: bytes(maxHead), iteration: bytes(maxIteration(1)), page: bytes(maxPage) };
+if (sizes.request > REQ_MAX || sizes.request < REQ_MAX - 8 || sizes.head < ITEM_MAX - 8 || sizes.iteration < ITEM_MAX - 8) {
+    throw new Error(`max-size fixtures are not at their caps: ${JSON.stringify(sizes)}`);
+}
+console.log('worst-case sizes', sizes);
 rmSync(FIX, { recursive: true, force: true });
 mkdirSync(INVALID, { recursive: true });
 for (const [name, value] of Object.entries(VALID)) {

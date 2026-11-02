@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raid.gamernight.net/contracts/companion/dev-bridge/v1/schema.json",
   "title": "RL Companion dev bridge v1",
-  "description": "GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; \"$i\" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no \"..\", drive or backslash; log lines hold no unredacted token. Size caps (16 KiB per page, 64 KiB per probe result) are producer rules; see CONTRACT.md.",
+  "description": "GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; \"$i\" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no \"..\", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request (output form) ≤4 KiB, each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB; see CONTRACT.md.",
   "$defs": {
     "probe-request": {
       "type": "object",
@@ -998,6 +998,133 @@
       ],
       "additionalProperties": false
     },
+    "probe-queue": {
+      "type": "object",
+      "properties": {
+        "queueVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "probes": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "probeId": {
+                "type": "string",
+                "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
+              },
+              "flavor": {
+                "type": "string",
+                "pattern": "^_[a-z0-9_]{1,32}_$"
+              },
+              "after": {
+                "type": "string",
+                "enum": [
+                  "PLAYER_LOGIN",
+                  "PLAYER_ENTERING_WORLD",
+                  "GUILD_ROSTER_UPDATE"
+                ]
+              },
+              "ttlHours": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 168
+              },
+              "calls": {
+                "minItems": 1,
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+                    },
+                    "fn": {
+                      "type": "string",
+                      "maxLength": 160,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*){0,2}$"
+                    },
+                    "presence": {
+                      "type": "string",
+                      "maxLength": 160,
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*){0,2}$"
+                    },
+                    "args": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 128
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "forEach": {
+                      "type": "object",
+                      "properties": {
+                        "countFrom": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+                        },
+                        "max": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 200
+                        }
+                      },
+                      "required": [
+                        "countFrom",
+                        "max"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "probeId",
+              "title",
+              "flavor",
+              "after",
+              "ttlHours",
+              "calls"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "queueVersion",
+        "probes"
+      ],
+      "additionalProperties": false
+    },
     "health": {
       "type": "object",
       "properties": {
@@ -1436,7 +1563,8 @@
               "title": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 120
+                "maxLength": 120,
+                "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
               },
               "status": {
                 "type": "string",
@@ -1498,7 +1626,8 @@
         "title": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 120
+          "maxLength": 120,
+          "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
         },
         "status": {
           "type": "string",

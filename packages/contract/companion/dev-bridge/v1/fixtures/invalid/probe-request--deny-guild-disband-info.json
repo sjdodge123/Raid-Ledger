@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "loadstring"
+      "fn": "C_GuildInfo.GetGuildDisbandInfo"
     },
     {
       "id": "n",

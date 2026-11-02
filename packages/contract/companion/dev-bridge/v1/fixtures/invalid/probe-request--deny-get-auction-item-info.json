@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "SetCVar"
+      "fn": "GetAuctionItemInfo"
     },
     {
       "id": "n",

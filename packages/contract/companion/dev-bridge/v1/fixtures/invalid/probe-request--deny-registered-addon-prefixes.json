@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "C_Container.UseContainerItem"
+      "fn": "C_ChatInfo.GetRegisteredAddonMessagePrefixes"
     },
     {
       "id": "n",

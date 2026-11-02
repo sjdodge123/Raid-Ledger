@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "GuildUninvite"
+      "fn": "CanGuildInvite"
     },
     {
       "id": "n",

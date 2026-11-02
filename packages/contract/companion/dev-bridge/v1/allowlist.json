@@ -136,7 +136,162 @@
       "A.B.C.GetMoney",
       "1Get",
       "Get-Money",
-      "Get..Money"
+      "Get..Money",
+      "UnitPopup_OnClick",
+      "UnitFrame_OnEvent",
+      "UnitPopup_ShowMenu",
+      "SomeAddon.time"
+    ],
+    "denyListed": [
+      "GetSendMailItem",
+      "UnitSetRole",
+      "GetQuestReward",
+      "GetInboxText",
+      "C_GuildInfo.GetGuildDisbandInfo",
+      "GetTradeSkillLine",
+      "C_ChatInfo.GetRegisteredAddonMessagePrefixes",
+      "GetMacroInfo",
+      "GetAuctionItemInfo",
+      "CanGuildInvite",
+      "IsAddOnLoadOnDemand",
+      "GetSendInfo",
+      "GetSetInfo",
+      "GetDeleteInfo",
+      "GetDestroyInfo",
+      "GetBuyInfo",
+      "GetSellInfo",
+      "GetAcceptInfo",
+      "GetDeclineInfo",
+      "GetConfirmInfo",
+      "GetUseInfo",
+      "GetCastInfo",
+      "GetPickupInfo",
+      "GetPlaceInfo",
+      "GetDropInfo",
+      "GetRepairInfo",
+      "GetLearnInfo",
+      "GetUnlearnInfo",
+      "GetAbandonInfo",
+      "GetLeaveInfo",
+      "GetInviteInfo",
+      "GetUninviteInfo",
+      "GetPromoteInfo",
+      "GetDemoteInfo",
+      "GetKickInfo",
+      "GetRunInfo",
+      "GetLoadInfo",
+      "GetReloadInfo",
+      "GetLogoutInfo",
+      "GetQuitInfo",
+      "GetCreateInfo",
+      "GetHookInfo",
+      "GetRegisterInfo",
+      "GetSecureInfo",
+      "GetMacroInfo",
+      "GetChatInfo",
+      "GetMailInfo",
+      "GetAuctionInfo",
+      "GetTradeInfo",
+      "GetGetfenvInfo",
+      "GetSetfenvInfo",
+      "GetRawsetInfo",
+      "GetLoadstringInfo",
+      "GetPcallInfo",
+      "GetCancelInfo",
+      "GetClearInfo",
+      "GetRemoveInfo",
+      "GetResetInfo",
+      "GetToggleInfo",
+      "GetEquipInfo",
+      "GetDisbandInfo"
+    ],
+    "tokenizer": [
+      {
+        "segment": "GetCVar",
+        "words": [
+          "Get",
+          "C",
+          "Var"
+        ]
+      },
+      {
+        "segment": "IsAddOnLoaded",
+        "words": [
+          "Is",
+          "Add",
+          "On",
+          "Loaded"
+        ]
+      },
+      {
+        "segment": "C_TradeSkillUI",
+        "words": [
+          "C",
+          "Trade",
+          "Skill",
+          "UI"
+        ]
+      },
+      {
+        "segment": "GUIDSetThing",
+        "words": [
+          "GUID",
+          "Set",
+          "Thing"
+        ]
+      },
+      {
+        "segment": "UnitIsAFK",
+        "words": [
+          "Unit",
+          "Is",
+          "AFK"
+        ]
+      },
+      {
+        "segment": "GetHTTPResponse2Code",
+        "words": [
+          "Get",
+          "HTTP",
+          "Response2",
+          "Code"
+        ]
+      },
+      {
+        "segment": "Get2Money",
+        "words": [
+          "Get2",
+          "Money"
+        ]
+      },
+      {
+        "segment": "Get2FA",
+        "words": [
+          "Get2",
+          "FA"
+        ]
+      },
+      {
+        "segment": "UnitPopup_OnClick",
+        "words": [
+          "Unit",
+          "Popup",
+          "On",
+          "Click"
+        ]
+      },
+      {
+        "segment": "__index",
+        "words": [
+          "index"
+        ]
+      },
+      {
+        "segment": "loadstring",
+        "words": [
+          "loadstring"
+        ]
+      }
     ]
   }
 }

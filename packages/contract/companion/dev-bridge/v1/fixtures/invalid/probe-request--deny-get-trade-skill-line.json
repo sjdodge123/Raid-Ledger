@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "CancelUnitBuff"
+      "fn": "GetTradeSkillLine"
     },
     {
       "id": "n",

@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * ROK-2055 — dev-bridge v1 conformance + drift guard (AC-1, AC-8 schema half).
  * - every golden `fixtures/*.json` parses with the message its filename prefix names;

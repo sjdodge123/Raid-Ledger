@@ -6,7 +6,7 @@
   "calls": [
     {
       "id": "profs",
-      "fn": "RunScript"
+      "fn": "UnitPopup_OnClick"
     },
     {
       "id": "n",
