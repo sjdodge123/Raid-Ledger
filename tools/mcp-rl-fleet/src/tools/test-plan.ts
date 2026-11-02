@@ -20,6 +20,7 @@
 //   rl_test_plan_clear   — delete the plan (auto-fires on rl_env_destroy)
 
 import { execFile, spawn } from 'node:child_process';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 
@@ -238,7 +239,7 @@ const curlOnVM = async (
   // token is piped in, so docker fell back to the unix socket rl-agent cannot
   // open (2026-10-22, the first time RL_AGENT_TOKEN was ever set).
   const remote =
-    `${stdinPrefix}DOCKER_HOST=tcp://127.0.0.1:2375 docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
+    `${stdinPrefix}DOCKER_HOST=${VM_DOCKER_HOST} docker run --rm${envArgs} --network rl-net curlimages/curl:8.10.1 ` +
     `curl -s -X ${method} ${bodyArgs}${headerArgs} ` +
     `-w '\\nRL_STATUS:%{http_code}' ` +
     `${quotedUrl}`;

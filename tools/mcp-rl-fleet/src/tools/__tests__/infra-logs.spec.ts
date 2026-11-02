@@ -104,7 +104,7 @@ describe('rl_infra_logs — execute()', () => {
     // codex P2 (2026-05-21): merge stderr→stdout (2>&1) on the remote side
     // to preserve temporal ordering between docker logs's two streams.
     expect(remote).toBe(
-      'DOCKER_HOST=tcp://127.0.0.1:2375 docker logs --tail 20 --timestamps rl-gc-sweeper 2>&1',
+      'DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock docker logs --tail 20 --timestamps rl-gc-sweeper 2>&1',
     );
   });
 
@@ -113,7 +113,7 @@ describe('rl_infra_logs — execute()', () => {
       execFileOk('');
       await execute({ service, tail: 1 });
       const remote = String(mockExecFile.mock.calls.at(-1)?.[1].at(-1));
-      expect(remote.startsWith('DOCKER_HOST=tcp://127.0.0.1:2375 ')).toBe(true);
+      expect(remote.startsWith('DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock ')).toBe(true);
       expect(remote).toContain(`docker logs --tail 1 --timestamps ${SERVICE_TO_CONTAINER[service]}`);
     }
   });

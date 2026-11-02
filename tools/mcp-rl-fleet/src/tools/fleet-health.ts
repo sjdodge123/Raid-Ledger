@@ -7,6 +7,7 @@
 // poll after a flake to see if known fleet-bug-class signals just spiked.
 
 import { execFile } from 'node:child_process';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import { promisify } from 'node:util';
 import { buildSshArgs } from '../exec.js';
 
@@ -100,7 +101,7 @@ export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthRe
     `curl -s -X GET -w '\\nRL_STATUS:%{http_code}' '${url}'`;
   let stdout = '';
   try {
-    const sshArgs = await buildSshArgs(`DOCKER_HOST=tcp://127.0.0.1:2375 ${remote}`);
+    const sshArgs = await buildSshArgs(`DOCKER_HOST=${VM_DOCKER_HOST} ${remote}`);
     const r = await execFileAsync(
       'ssh',
       sshArgs,

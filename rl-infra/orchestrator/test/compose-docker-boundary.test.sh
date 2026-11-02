@@ -2,8 +2,10 @@
 # ROK-1846 AC1 + AC2 — compose topology of the Docker API boundary.
 #
 #  * rl-docker-proxy (the orchestrator's unfiltered-create proxy) must not be on
-#    rl-net, where every per-env allinone/pg container lives: host network,
-#    loopback listener, loopback-only allowfrom.
+#    rl-net, where every per-env allinone/pg container lives — and since
+#    ROK-2049 it has no network at all: a unix socket in a host dir mounted into
+#    no other service, so nothing listens on host TCP 2375 for the Docker
+#    daemon's own `ADD <url>` / `ONBUILD ADD` fetches to reach.
 #  * No runner (nor the shared x-runner-base anchor) mounts the raw docker.sock;
 #    runners reach Docker through rl-docker-guard on its own network.
 #  * env-spin never attaches an env container to the guard's network.
@@ -11,7 +13,10 @@
 # Parses docker-compose.yml with awk (no Docker needed on the test host); when
 # `docker compose` is available it ALSO asserts on the rendered config.
 # Revert-proof: the pre-ROK-1846 compose fails every case (proxy on rl-net with
-# -allowfrom=0.0.0.0/0; docker.sock on runner-1..4).
+# -allowfrom=0.0.0.0/0; docker.sock on runner-1..4); the pre-ROK-2049 compose
+# (host network + -listenip=127.0.0.1) fails proxy-is-unix-socket-only and
+# nothing-listens-on-host-2375. RL_COMPOSE_FILE points the awk cases at another
+# compose file for that revert check.
 #
 # macOS bash 3.2 compatible.
 
@@ -23,7 +28,7 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TEST_DIR/test_helpers.sh"
 
 RL_INFRA="$(cd "$TEST_DIR/../.." && pwd)"
-COMPOSE="$RL_INFRA/docker-compose.yml"
+COMPOSE="${RL_COMPOSE_FILE:-$RL_INFRA/docker-compose.yml}"
 
 # block <key> — the lines of a 2-space-indented service (or a top-level x- anchor)
 # up to the next key at the same or lower indent. Comment lines are dropped so a
@@ -42,10 +47,51 @@ test_proxy_is_off_rl_net() {
     local b; b=$(block "docker-socket-proxy")
     assert_neq "$b" "" "docker-socket-proxy service found"
     assert_eq "$(has "$b" "rl-net")" "no" "rl-docker-proxy is not on rl-net"
-    assert_eq "$(has "$b" "network_mode: host")" "yes" "rl-docker-proxy uses the host network"
-    assert_eq "$(has "$b" "-listenip=127.0.0.1")" "yes" "proxy listens on loopback only"
-    assert_eq "$(has "$b" "-allowfrom=127.0.0.1/32")" "yes" "proxy allowfrom is loopback only"
     assert_eq "$(has "$b" "0.0.0.0")" "no" "no 0.0.0.0 listener / allowfrom left"
+}
+
+# ROK-2049 — the proxy's only listener is a unix socket in a dedicated host dir.
+test_proxy_is_unix_socket_only() {
+    local b; b=$(block "docker-socket-proxy")
+    assert_eq "$(has "$b" "network_mode: none")" "yes" "rl-docker-proxy has no network (network_mode: none)"
+    assert_eq "$(has "$b" "network_mode: host")" "no" "rl-docker-proxy is not on the host network"
+    assert_eq "$(has "$b" "-listenip")" "no" "no -listenip (TCP listener) flag"
+    assert_eq "$(has "$b" "-allowfrom")" "no" "no -allowfrom (TCP-only) flag"
+    assert_eq "$(has "$b" "ports:")" "no" "rl-docker-proxy publishes no port"
+    assert_eq "$(has "$b" "-proxysocketendpoint=/run/rl-docker-proxy/docker.sock")" "yes" "unix socket endpoint configured"
+    assert_eq "$(has "$b" "-proxysocketendpointfilemode=0660")" "yes" "socket is 0660 (owner + rl-fleet group only)"
+    assert_eq "$(has "$b" "/srv/rl-infra/run/docker-proxy:/run/rl-docker-proxy")" "yes" "socket dir is the dedicated host dir"
+    assert_eq "$(has "$b" "image: wollomatic/socket-proxy:1.13.2")" "yes" "image pinned to a version with the unix listener"
+}
+
+# ROK-2049 — no other service may mount the socket dir; env-spin and the image
+# build path never bind it into an env or runner child either.
+test_proxy_socket_dir_not_shared() {
+    local svc leaks="" f
+    for svc in $(awk '/^services:/ { s = 1; next } s && /^[^ #]/ { s = 0 } s && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { sub(/^  /, ""); sub(/:.*/, ""); print }' "$COMPOSE"); do
+        [[ "$svc" == "docker-socket-proxy" ]] && continue
+        [[ "$(has "$(block "$svc")" "run/docker-proxy")" == "yes" ]] && leaks="$leaks $svc"
+        [[ "$(has "$(block "$svc")" "rl-docker-proxy:/")" == "yes" ]] && leaks="$leaks $svc"
+    done
+    assert_eq "$leaks" "" "no service but the proxy mounts the proxy socket dir"
+    for f in env-spin build-image-on-runner; do
+        [[ -f "$RL_INFRA/orchestrator/bin/$f" ]] || continue
+        assert_eq "$(grep -v '^[[:space:]]*#' "$RL_INFRA/orchestrator/bin/$f" | grep -c "docker-proxy" | tr -d ' ')" "0" "$f never mounts the proxy socket"
+    done
+}
+
+# ROK-2049 AC1 — nothing in the stack listens on (or publishes) host TCP 2375:
+# the only live 2375 is the guard's own listener on its internal network, and no
+# consumer still dials the retired loopback address.
+test_nothing_listens_on_host_2375() {
+    local code consumers
+    code=$(grep -v '^[[:space:]]*#' "$COMPOSE")
+    assert_eq "$(grep -E '2375' <<<"$code" | grep -vc 'rl-docker-guard:2375' | tr -d ' ')" "0" "every 2375 in compose is the guard's internal address"
+    assert_eq "$(grep -cE 'network_mode:[[:space:]]*"?host' <<<"$code" | tr -d ' ')" "0" "no service runs on the host network"
+    consumers=$(grep -rlE '(127\.0\.0\.1|localhost):2375' \
+        "$RL_INFRA/orchestrator/bin" "$RL_INFRA/cli" "$RL_INFRA/gc-sweeper" \
+        "$RL_INFRA/../tools/mcp-rl-fleet/src" 2>/dev/null | grep -v '__tests__' | grep -v '/_state.sh$' || true)
+    assert_eq "$consumers" "" "no consumer dials the retired 127.0.0.1:2375"
 }
 
 test_no_runner_mounts_docker_sock() {
@@ -102,9 +148,17 @@ test_rendered_config_when_docker_available() {
         return 0
     fi
     local cfg
+    # gc-sweeper's `env_file: .env` makes `config` fail on a host with no .env;
+    # a throwaway empty one is created (and removed) only when none exists.
+    local made_env=0
+    [[ -e "$RL_INFRA/.env" ]] || { : > "$RL_INFRA/.env" && made_env=1; }
     cfg=$(cd "$RL_INFRA" && docker compose --profile extra-slots config --format json 2>/dev/null) || cfg=""
+    [[ "$made_env" == "1" ]] && rm -f "$RL_INFRA/.env"
     [[ -z "$cfg" ]] && { echo "  (skip: docker compose config failed on this host)"; return 0; }
     assert_eq "$(jq -r '.services["docker-socket-proxy"].networks // {} | has("rl-net")' <<<"$cfg")" "false" "rendered: proxy not on rl-net"
+    assert_eq "$(jq -r '.services["docker-socket-proxy"].network_mode' <<<"$cfg")" "none" "rendered: proxy has no network"
+    assert_eq "$(jq -r '[.services[] | .ports[]? | select(((.published // "") | tostring) == "2375")] | length' <<<"$cfg")" "0" "rendered: nothing publishes host 2375"
+    assert_eq "$(jq -r '[.services | to_entries[] | select(.key != "docker-socket-proxy") | .value.volumes[]? | select((.source // "") | test("run/docker-proxy"))] | length' <<<"$cfg")" "0" "rendered: only the proxy mounts its socket dir"
     assert_eq "$(jq -r '[.services | to_entries[] | select(.key|startswith("runner-")) | .value.volumes[]? | select((.source // "") | test("docker.sock"))] | length' <<<"$cfg")" "0" "rendered: no runner mounts docker.sock"
 }
 
@@ -124,6 +178,9 @@ test_runners_drop_net_raw() {
 }
 
 run_test "proxy-is-off-rl-net" test_proxy_is_off_rl_net
+run_test "proxy-is-unix-socket-only" test_proxy_is_unix_socket_only
+run_test "proxy-socket-dir-not-shared" test_proxy_socket_dir_not_shared
+run_test "nothing-listens-on-host-2375" test_nothing_listens_on_host_2375
 run_test "no-runner-mounts-docker-sock" test_no_runner_mounts_docker_sock
 run_test "runners-route-through-guard" test_runners_route_through_guard
 run_test "guard-is-isolated" test_guard_is_isolated

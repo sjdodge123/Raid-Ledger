@@ -27,9 +27,17 @@ fi
 # directly (useful for ops like `docker compose down` that the proxy blocks).
 # When the proxy is unreachable (e.g. on first stack bring-up), this falls
 # back transparently.
-if [[ -z "${DOCKER_HOST:-}" && "${RL_USE_DOCKER_SOCKET:-0}" != "1" ]]; then
-    if curl -fsS --max-time 1 http://127.0.0.1:2375/_ping >/dev/null 2>&1; then
-        export DOCKER_HOST=tcp://127.0.0.1:2375
+# ROK-2049: the proxy listens on a unix socket only (group rl-fleet, 0660) —
+# nothing listens on TCP 127.0.0.1:2375 any more, where the Docker daemon's own
+# build-time URL fetches could reach it. A DOCKER_HOST still naming that retired
+# address (e.g. a stale line in /srv/rl-infra/.env) is dropped, not honoured.
+RL_DOCKER_PROXY_SOCK="${RL_DOCKER_PROXY_SOCK:-/srv/rl-infra/run/docker-proxy/docker.sock}"
+if [[ "${DOCKER_HOST:-}" == "tcp://127.0.0.1:2375" || "${DOCKER_HOST:-}" == "tcp://localhost:2375" ]]; then
+    unset DOCKER_HOST
+fi
+if [[ -z "${DOCKER_HOST:-}" && "${RL_USE_DOCKER_SOCKET:-0}" != "1" && -S "$RL_DOCKER_PROXY_SOCK" ]]; then
+    if curl -fsS --max-time 1 --unix-socket "$RL_DOCKER_PROXY_SOCK" http://localhost/_ping >/dev/null 2>&1; then
+        export DOCKER_HOST="unix://${RL_DOCKER_PROXY_SOCK}"
     fi
 fi
 
