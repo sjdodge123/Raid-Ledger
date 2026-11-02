@@ -73,7 +73,9 @@ export function GameTimePanel({ enabled = true }: GameTimePanelProps): JSX.Eleme
     const editor = useGameTimeEditor({ enabled });
     const isMobile = useMediaQuery(PHONE_MQ);
 
-    if (editor.isLoading) {
+    // A disabled query is not `isLoading` (TanStack v5): without `!enabled` the grid
+    // renders editable before auth lands, then unmounts, dropping the selection.
+    if (!enabled || editor.isLoading) {
         return <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" /></div>;
     }
     return <ProfileWeek editor={editor} isMobile={isMobile} />;
