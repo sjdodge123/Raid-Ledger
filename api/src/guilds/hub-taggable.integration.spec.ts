@@ -200,6 +200,56 @@ describe('GET guilds/taggable?gameId=', () => {
   });
 });
 
+describe('GET guilds/taggable — hidden, proposed, archived, plugin off', () => {
+  it('offers a hidden hub to staff but not to its non-staff Leader', async () => {
+    const leader = await mkUser();
+    const hubId = await mkCommunityHub([[leader, 'leader']]);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.id, hubId));
+    const staff = await taggable(bg3GameId, adminToken);
+    expect(hubIds(staff.body)).toContain(hubId);
+    const own = await taggable(bg3GameId, leader.token);
+    expect(own.status).toBe(200);
+    expect(hubIds(own.body)).not.toContain(hubId);
+  });
+
+  it('never offers a proposed or archived hub, even to staff', async () => {
+    const leader = await mkUser();
+    const proposed = await mkCommunityHub([[leader, 'leader']]);
+    const archived = await mkCommunityHub([[leader, 'leader']]);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ status: 'proposed' })
+      .where(eq(schema.guilds.id, proposed));
+    await testApp.db
+      .update(schema.guilds)
+      .set({ status: 'archived' })
+      .where(eq(schema.guilds.id, archived));
+    for (const token of [adminToken, leader.token]) {
+      const ids = hubIds((await taggable(bg3GameId, token)).body);
+      expect(ids).not.toContain(proposed);
+      expect(ids).not.toContain(archived);
+    }
+  });
+
+  it('drops WoW guilds while the Blizzard plugin is off', async () => {
+    const wowId = await mkWowGuild();
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.deactivate('blizzard');
+    try {
+      const off = await taggable(testApp.seed.game.id, adminToken);
+      expect(off.status).toBe(200);
+      expect(hubIds(off.body)).not.toContain(wowId);
+    } finally {
+      await registry.activate('blizzard');
+    }
+    const on = await taggable(testApp.seed.game.id, adminToken);
+    expect(hubIds(on.body)).toContain(wowId);
+  });
+});
+
 describe('GET guilds/taggable — WoW alias + validation', () => {
   it('keeps the WoW-only plugins/wow/guilds?gameId= list working', async () => {
     const wowId = await mkWowGuild();
@@ -212,10 +262,12 @@ describe('GET guilds/taggable — WoW alias + validation', () => {
   });
 
   it('rejects a missing or invalid gameId with 400', async () => {
-    const res = await testApp.request
-      .get('/guilds/taggable?gameId=abc')
-      .set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(400);
+    for (const path of ['/guilds/taggable', '/guilds/taggable?gameId=abc']) {
+      const res = await testApp.request
+        .get(path)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect({ path, status: res.status }).toEqual({ path, status: 400 });
+    }
   });
 });
 
