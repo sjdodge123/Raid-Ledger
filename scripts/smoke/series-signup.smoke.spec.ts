@@ -8,9 +8,8 @@
  * series" on every night, the labelled roster `SeriesBadge` on night 3,
  * Skip this night on night 2 brings the sign-up button back there only, and
  * Leave series → its confirm takes every night off (Sign Up returns on
- * nights 1 and 3). Join series does NOT return: leave declines every night,
- * so joinableCount is 0 and JoinSeriesButton hides (spec §6.4 says otherwise
- * — flagged to the Lead).
+ * nights 1 and 3) and Join series comes back (spec §6.4, Q6: re-joining
+ * after a leave is allowed; the nights the leave declined are joinable again).
  *
  * Every API write is followed by a poll of `GET /events/:id/series/signup`
  * (memory feedback_smoke_polling_for_async_writes). Each project creates its
@@ -127,10 +126,12 @@ test.describe('Series signup — join, skip a night, leave (ROK-1728)', () => {
         await page.getByTestId('leave-series-confirm').click();
         await expect(page.getByRole('button', { name: SIGN_UP }), 'Leave series takes night 1 off').toBeVisible({ timeout: 15_000 });
         await expectMembership(false);
+        await expect(page.getByTestId('join-series-button'), 'Join series returns after a leave (Q6)').toBeVisible({ timeout: 15_000 });
 
-        // Leave declines every night, so joinableCount is 0 and Join series stays hidden (JoinSeriesButton).
+        // The nights the leave declined are joinable again, so Join series shows on night 3 too.
         await openNight(page, 2);
         await expect(page.getByRole('button', { name: SIGN_UP }), 'Leave series takes later nights off too').toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('join-series-button'), 'Join series returns on a later night').toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('series-member-actions')).toHaveCount(0);
         await expect(page.locator(ROSTER_BADGE)).toHaveCount(0);
     });
