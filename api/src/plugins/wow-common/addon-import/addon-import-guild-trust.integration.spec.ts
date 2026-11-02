@@ -268,7 +268,9 @@ describe(`${R2066} — a newer snapshot from any roster member applies`, () => {
       }),
     ]);
   });
+});
 
+describe(`${R2066} — an equal-instant re-import`, () => {
   it(`${R2066}: re-importing an equal-instant roster that drops members flags no one`, async () => {
     const { token, id } = await seedRealGuild();
     // Same snapshotAt as the seed: every row keeps its seenAt, so all 40
