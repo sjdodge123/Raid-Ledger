@@ -171,3 +171,29 @@ describe('re-join after leave — review follow-ups (Q6)', () => {
     ]);
   });
 });
+
+describe('re-join after leave — re-sign then an unaudited decline (review round 2)', () => {
+  it('a night re-signed after the leave and then declined without an audit row stays declined', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await series().join(s.n2, userId, {});
+    await series().leave(s.n2, userId);
+    await signups().signup(s.n3, userId);
+    // The reschedule DM's Decline writes the row directly, with no audit row.
+    await testApp.db
+      .update(schema.eventSignups)
+      .set({ status: 'declined' })
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, s.n3),
+          eq(schema.eventSignups.userId, userId),
+        ),
+      );
+
+    const rejoin = await series().join(s.n2, userId, {});
+    // mutation: finalizeDuplicate logs nothing on reactivation (night 3 revived)
+    expect(sorted(rejoin.createdEventIds)).toEqual(sorted([s.n2, s.n5]));
+    expect(rejoin.keptEventIds).toEqual([s.n3]);
+    expect(await statusOf(s.n3, userId)).toBe('declined');
+  });
+});

@@ -49,15 +49,29 @@ export function logSignupReconfirmed(
 }
 
 /**
- * Post-commit finalize for a duplicate signup: emit the reconfirm audit entry
- * when the self-heal fired, then return the response. Extracted so the service
- * `signup` path stays within its size budget.
+ * Post-commit finalize for a duplicate signup: audit a reactivation of a
+ * departed/declined row, emit the reconfirm audit entry when the self-heal
+ * fired, then return the response. Extracted so the service `signup` path
+ * stays within its size budget.
+ *
+ * ROK-1728 review MINOR 1: the reactivation row marks the night as the user's
+ * own post-leave decision, so a series re-join never revives a night the user
+ * re-signed and then declined again by a path that writes no audit row (the
+ * reschedule DM's Decline).
  */
 export async function finalizeDuplicate(
   activityLog: ActivityLogger,
   eventId: number,
   result: DuplicateSignupResult,
 ): Promise<SignupResponseDto> {
+  if (result.reactivated && result.reconfirmedUserId != null)
+    await activityLog.log(
+      'event',
+      eventId,
+      'signup_status_changed',
+      result.reconfirmedUserId,
+      { status: result.response.status, reason: 'signup-reactivated' },
+    );
   if (result.reconfirmed && result.reconfirmedUserId != null)
     await logSignupReconfirmed(
       activityLog,
