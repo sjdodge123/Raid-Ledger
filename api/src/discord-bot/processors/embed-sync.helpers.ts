@@ -230,6 +230,8 @@ function assembleEventData(
     > | null,
     roleCounts,
     ...(signupMentions !== undefined ? { signupMentions } : {}),
+    // ROK-1728: a series night renders the Join Series row.
+    recurrenceGroupId: event.recurrenceGroupId ?? null,
   };
 }
 

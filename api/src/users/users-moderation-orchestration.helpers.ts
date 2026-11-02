@@ -34,6 +34,7 @@ import {
 } from './users-moderation.helpers';
 import { reassignPugSlots, wipeUserData } from './users-delete.helpers';
 import { revokeGameRoleGrants } from './users-moderation-game-roles.helpers';
+import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-lifecycle.helpers';
 import {
   deleteUserScreenshotsBestEffort,
   selectUserScreenshotPaths,
@@ -135,11 +136,19 @@ async function maybeKickFromDiscord(
   }
 }
 
-/** Best-effort cancel of every upcoming signup (drop from rosters). Never throws. */
+/** Best-effort series-membership end + cancel of every upcoming signup. Never throws. */
 async function cancelUpcomingSignups(
   deps: ModerationDeps,
   userId: number,
 ): Promise<void> {
+  // ROK-1728 AC5: end series memberships BEFORE the signup cascade, exactly
+  // as deactivation does — a ban without a wipe keeps the users row.
+  await endSeriesMembershipsForUserBestEffort(
+    deps.db,
+    userId,
+    deps.logger,
+    'banned user',
+  );
   if (!deps.rosterService) return;
   try {
     const n = await cancelAllUpcomingSignupsForUser(

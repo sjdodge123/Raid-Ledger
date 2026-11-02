@@ -33,11 +33,19 @@ import {
   listGuildTextChannels as listGuildTextChannelsHelper,
   listGuildVoiceChannels as listGuildVoiceChannelsHelper,
 } from './discord-bot-client.guild.helpers';
+import {
+  buildDmRows,
+  fetchReadyTextChannel,
+  toRows,
+  type EmbedRows,
+} from './discord-bot-client-rows.helpers';
 
 export type {
   GuildInfo,
   PermissionCheckResult,
 } from './discord-bot-client.helpers';
+
+export type { EmbedRows } from './discord-bot-client-rows.helpers';
 
 @Injectable()
 export class DiscordBotClientService {
@@ -142,10 +150,7 @@ export class DiscordBotClientService {
     }
     const start = isPerfEnabled() ? performance.now() : 0;
     const user = await this.client.users.fetch(discordId);
-
-    const components: ActionRowBuilder<ButtonBuilder>[] = [];
-    if (extraRows) components.push(...extraRows);
-    if (row) components.push(row);
+    const components = buildDmRows(row, extraRows);
 
     await user.send({
       ...(content ? { content } : {}),
@@ -186,19 +191,20 @@ export class DiscordBotClientService {
     return this.client.user?.id ?? null;
   }
 
-  /** Send an embed message to a channel. */
+  /** Send an embed message to a channel (one row, or several in order). */
   async sendEmbed(
     channelId: string,
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
+    const components = toRows(row);
     const result = await channel.send({
       ...(content ? { content } : {}),
       embeds: [embed],
-      ...(row ? { components: [row] } : {}),
+      ...(components.length ? { components } : {}),
     });
     if (start) {
       perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
@@ -208,12 +214,12 @@ export class DiscordBotClientService {
     return result;
   }
 
-  /** Edit an existing embed message in a channel. */
+  /** Edit an existing embed message (one row, or several in order). */
   async editEmbed(
     channelId: string,
     messageId: string,
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
@@ -223,7 +229,7 @@ export class DiscordBotClientService {
     const result = await message.edit({
       ...(content ? { content } : {}),
       embeds: [embed],
-      components: row ? [row] : [],
+      components: toRows(row),
     });
 
     if (start) {
@@ -364,14 +370,7 @@ export class DiscordBotClientService {
     );
   }
 
-  private async fetchTextChannel(channelId: string): Promise<TextChannel> {
-    if (!this.client?.isReady()) {
-      throw new Error('Discord bot is not connected');
-    }
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !('send' in channel)) {
-      throw new Error(`Channel ${channelId} not found or not a text channel`);
-    }
-    return channel as TextChannel;
+  private fetchTextChannel(channelId: string): Promise<TextChannel> {
+    return fetchReadyTextChannel(this.client, channelId);
   }
 }

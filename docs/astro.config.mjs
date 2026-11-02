@@ -16,6 +16,7 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Home', slug: 'index' },
+        { label: 'WoW: Forever setup', slug: 'guides/wow-forever' },
       ],
       favicon: '/favicon.svg',
     }),

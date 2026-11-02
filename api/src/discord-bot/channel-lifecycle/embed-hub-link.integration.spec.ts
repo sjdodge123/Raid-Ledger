@@ -28,9 +28,15 @@ let sendEmbed: jest.SpyInstance;
 
 type ButtonJson = { label?: string; url?: string };
 
-/** The Link-button JSON on the posted card's action row. */
+/**
+ * The Link-button JSON on the posted card's FIRST action row (the signup row,
+ * where Hub/Hubs live). ROK-1728: the poster now sends `embedComponents()` —
+ * a row list — so accept either a single row or a list and read row 1.
+ */
 function postedButtons(): ButtonJson[] {
-  const row: unknown = sendEmbed.mock.calls[0]?.[2];
+  const arg: unknown = sendEmbed.mock.calls[0]?.[2];
+  const rows: unknown[] = Array.isArray(arg) ? arg : [arg];
+  const row = rows[0];
   if (!(row instanceof ActionRowBuilder)) return [];
   const json: unknown = row.toJSON();
   if (typeof json !== 'object' || json === null) return [];
