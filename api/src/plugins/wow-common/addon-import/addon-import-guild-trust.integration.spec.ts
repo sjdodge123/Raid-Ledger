@@ -279,6 +279,39 @@ describe(`${R2066} — an equal-instant re-import`, () => {
     expect(await liveCount()).toBe(40);
     expect(await flagRows()).toEqual([]);
   });
+
+  it(`${R2066}: an equal-instant roster that adds members records the additions, flags over the threshold and removes nobody`, async () => {
+    const { token, id } = await seedRealGuild();
+    // Same snapshotAt, 5 real members left out and 11 invented GUIDs added:
+    // nobody is demoted at an equal instant, but the 11 go live (Codex P2).
+    applied(await apply(token, id, padded(11, 5, 0)));
+    expect(await liveCount()).toBe(51);
+    expect((await replaceAudits()).map((a) => a.metadata)).toEqual([
+      expect.objectContaining({ removed: 0, added: 0 }),
+      expect.objectContaining({ removed: 0, added: 11 }),
+    ]);
+    expect(await flagPayloads()).toContainEqual(
+      expect.objectContaining({ removed: 0, added: 11, live: 40 }),
+    );
+  });
+});
+
+describe(`${R2066} — one staff alarm per wholesale change`, () => {
+  it(`${R2066}: after a wholesale change has flagged, a newer snapshot of the same roster notifies no one again`, async () => {
+    const { token, id } = await seedRealGuild();
+    applied(await apply(token, id, selfOnly(1)));
+    const first = await flagRows();
+    expect(first.length).toBeGreaterThan(0);
+    // The window still holds 39 removals, but this logout export moves no one.
+    applied(await apply(token, id, selfOnly(2)));
+    expect(await liveCount()).toBe(1);
+    expect(await flagRows()).toHaveLength(first.length);
+    expect((await replaceAudits()).map((a) => a.metadata)).toEqual([
+      expect.objectContaining({ removed: 0, added: 0 }),
+      expect.objectContaining({ removed: 39, added: 0 }),
+      expect.objectContaining({ removed: 0, added: 0 }),
+    ]);
+  });
 });
 
 /** Only the GM's own row, `step` minutes after the seed snapshot. */

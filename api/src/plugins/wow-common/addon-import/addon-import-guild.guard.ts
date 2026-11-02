@@ -46,8 +46,9 @@ export function receivedSnapshotAt(
 
 /**
  * Strictly newer than the stored snapshot (compared at its received instant).
- * An equal-instant re-import moves no member's liveness, so it is not measured
- * or flagged — a re-import of the same snapshot must not alarm staff.
+ * An equal-instant import demotes nobody (every stored row keeps its seenAt),
+ * so it counts no removals — but the GUIDs it adds still go live, so those
+ * are measured, audited and flagged like any other (Codex P2).
  */
 export function isNewerGuildSnapshot(
   lastSnapshotAt: Date | null | undefined,
@@ -55,6 +56,14 @@ export function isNewerGuildSnapshot(
 ): boolean {
   if (!lastSnapshotAt) return true;
   return receivedSnapshotAt(snapshotAt).getTime() > lastSnapshotAt.getTime();
+}
+
+/** Where a snapshot sits against the stored one. */
+export type SnapshotOrder = 'stale' | 'equal' | 'newer';
+
+export function snapshotOrder(stale: boolean, newer: boolean): SnapshotOrder {
+  if (stale) return 'stale';
+  return newer ? 'newer' : 'equal';
 }
 
 export function isMassRemoval(live: number, removed: number): boolean {
@@ -170,17 +179,25 @@ export function wholesaleFlag(
   return { guildId, removed, added, live, dropsEditor };
 }
 
-/** This import's delta plus the flag its window earns (never throws). */
+/**
+ * This import's delta plus the flag its window earns (never throws). Staff
+ * are notified only when THIS import moves someone (Codex P2): once a
+ * wholesale change applies, the window totals stay over the line for 24h,
+ * and every later logout export of the unchanged roster must not re-alarm.
+ */
 async function measureRosterChange(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
+  countRemovals: boolean,
 ): Promise<RosterCheck> {
   const incoming = new Set(payload.data.members.map((m) => m.guid));
   // Legacy rows without a GUID can't be matched to a snapshot: not counted.
   const live = (await liveRoster(ctx, guildId)).filter((r) => r.guid !== null);
   const liveGuids = new Set(live.map((r) => r.guid));
-  const gone = live.filter((r) => r.guid !== null && !incoming.has(r.guid));
+  const gone = countRemovals
+    ? live.filter((r) => r.guid !== null && !incoming.has(r.guid))
+    : [];
   const added = [...incoming].filter((g) => !liveGuids.has(g)).length;
   const delta = { removed: gone.length, added };
   const dropsEditor = gone.some((r) => r.grantId !== null);
@@ -189,7 +206,8 @@ async function measureRosterChange(
     await recentChanges(ctx, guildId),
     delta,
   );
-  const flag = wholesaleFlag(guildId, v, dropsEditor);
+  const moved = delta.removed + delta.added > 0;
+  const flag = moved ? wholesaleFlag(guildId, v, dropsEditor) : null;
   if (flag) {
     logger.warn(
       `Wholesale guild snapshot applied: guild=${guildId} user=${ctx.userId} removes ${delta.removed}, adds ${added} of ${live.length} (${v.removed}/${v.added} of ${v.base} in ${REMOVAL_WINDOW_HOURS}h)${dropsEditor ? ' incl. an editor' : ''}`,
@@ -200,19 +218,19 @@ async function measureRosterChange(
 
 /**
  * Measure a snapshot of an EXISTING guild (a brand-new guild has no roster
- * to protect). Staff count 0/0 and are never flagged; anyone else's strictly
- * NEWER snapshot (`isNewerGuildSnapshot`) returns its delta and any wholesale
- * flag. A stale snapshot writes nothing and an equal-instant one moves no
- * liveness, so neither measures anything. Never refuses (ROK-2066).
+ * to protect). Staff count 0/0 and are never flagged; a stale snapshot
+ * writes nothing, so it measures nothing. Anyone else's NEWER snapshot
+ * returns its delta and any wholesale flag; an EQUAL-instant one counts its
+ * additions only (it demotes nobody). Never refuses (ROK-2066).
  */
 export async function checkRosterReplace(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
-  newer: boolean,
+  order: SnapshotOrder,
 ): Promise<RosterCheck> {
-  if (!newer || (await importerIsStaff(ctx))) return UNCHECKED;
-  return measureRosterChange(ctx, guildId, payload);
+  if (order === 'stale' || (await importerIsStaff(ctx))) return UNCHECKED;
+  return measureRosterChange(ctx, guildId, payload, order === 'newer');
 }
 
 /** AC6 — which user's import replaced a guild's roster (shared activity_log). */

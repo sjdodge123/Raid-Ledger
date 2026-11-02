@@ -17,6 +17,7 @@ import {
   auditRosterReplaced,
   checkRosterReplace,
   isNewerGuildSnapshot,
+  snapshotOrder,
   lockGuildImport,
   receivedSnapshotAt,
   type RosterCheck,
@@ -155,7 +156,8 @@ async function guardExisting(
     guild.lastSnapshotAt,
     payload.data.snapshotAt,
   );
-  const check = await checkRosterReplace(ctx, guild.id, payload, newer);
+  const order = snapshotOrder(stale, newer);
+  const check = await checkRosterReplace(ctx, guild.id, payload, order);
   return { stale, ...check };
 }
 
