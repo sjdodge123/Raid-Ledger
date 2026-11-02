@@ -48,6 +48,8 @@ const DUERGAR = 'Generic:Duergar:1';
 const SUMMON = 'DogFamiliar_Scratch_Summon:Beast:1';
 const KEY = 'ab'.repeat(32);
 const T0 = new Date('2026-10-24T12:00:00Z');
+const MEMBER_DISCORD_ID = '206900000000000001';
+const MEMBER_AVATAR_HASH = 'a_rok2069claimhash';
 
 let testApp: TestApp;
 const tokens = {} as Record<Who, string>;
@@ -93,6 +95,10 @@ beforeAll(async () => {
           username: `bg3c-${who}`,
           displayName: `Claims ${who}`,
           role: 'member',
+          // ROK-2069: `member` is a Discord-avatar user with no custom upload.
+          ...(who === 'member'
+            ? { discordId: MEMBER_DISCORD_ID, avatar: MEMBER_AVATAR_HASH }
+            : {}),
         })
         .returning(),
       `user ${who}`,
@@ -253,10 +259,14 @@ describe('POST plugins/bg3/campaigns/:id/claims', () => {
       DUERGAR,
       'Generic:Tiefling_Asmodeus:1',
     ]);
+    // ROK-2069: the claim carries the avatar inputs `toAvatarUser` needs.
     expect(party.find((s) => s.slotKey === HUMAN)?.claim).toEqual({
       userId: userIds.member,
       displayName: 'Claims member',
       avatarUrl: null,
+      avatar: MEMBER_AVATAR_HASH,
+      discordId: MEMBER_DISCORD_ID,
+      customAvatarUrl: null,
     });
     expect(party.filter((s) => s.claim !== null)).toHaveLength(1);
   });
