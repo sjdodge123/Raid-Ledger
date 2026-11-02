@@ -66,4 +66,24 @@ describe('use-series-signup', () => {
         expect(toasts.success).toHaveBeenCalledWith('You left the series');
         expect(toasts.warning).not.toHaveBeenCalled();
     });
+
+    it('join warns about nights it could not sign up for', async () => {
+        api.joinSeries.mockResolvedValue({ membership, attachedEventIds: [10], createdEventIds: [11], keptEventIds: [],
+            failed: [{ eventId: 12, message: 'This event is full' }] });
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useJoinSeries(10), { wrapper });
+        result.current.mutate({});
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(toasts.warning).toHaveBeenCalledWith('1 night could not be joined', { description: 'This event is full' });
+    });
+
+    it('leave warns about nights it could not cancel', async () => {
+        api.leaveSeries.mockResolvedValue({ membership, cancelledEventIds: [11], lateCancelledEventIds: [],
+            failed: [{ eventId: 12, message: 'cancel exploded' }, { eventId: 13, message: 'cancel exploded' }] });
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useLeaveSeries(10), { wrapper });
+        result.current.mutate();
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(toasts.warning).toHaveBeenCalledWith('2 nights could not be cancelled', { description: 'cancel exploded' });
+    });
 });

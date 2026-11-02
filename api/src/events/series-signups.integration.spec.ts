@@ -708,3 +708,27 @@ describe('leave reports nights it could not cancel (I9c)', () => {
     expect(n3.seriesSignupId).toBeNull();
   });
 });
+
+describe('state lists every night leave would cancel (leaveNights)', () => {
+  it('a member viewing a later night still sees the earlier tagged night leave cancels', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await join(s.n2, userId);
+
+    const state = await series().getState(s.n3, userId);
+
+    // mutation: leaveNights built from `nights` (from :id forward) drops n2
+    expect(state.leaveNights?.map((n) => n.eventId)).toEqual([s.n2, s.n3, s.n5]);
+    const left = await series().leave(s.n3, userId);
+    expect([...left.cancelledEventIds].sort()).toEqual(
+      (state.leaveNights ?? []).map((n) => n.eventId).sort(),
+    );
+  });
+
+  it('a non-member gets no leaveNights', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    const state = await series().getState(s.n3, userId);
+    expect(state.leaveNights).toBeUndefined();
+  });
+});

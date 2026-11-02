@@ -61,4 +61,13 @@ describe('JoinSeriesOverlay', () => {
         expect(env.mutate).toHaveBeenCalledWith(
             { characterId: '33333333-3333-4333-8333-333333333333', preferredRoles: ['healer', 'tank'] }, expect.anything());
     });
+
+    it('shows "No character" and sends none when the user has no main character', () => {
+        env.characters = [character({ isMain: false })];
+        renderWithProviders(<JoinSeriesOverlay event={event} state={seriesState(SIX)} onClose={vi.fn()} />);
+        expect(screen.getByLabelText('Character')).toHaveDisplayValue('No character');
+        fireEvent.click(screen.getByRole('checkbox', { name: /Tank/ }));
+        fireEvent.click(screen.getByTestId('join-series-confirm'));
+        expect(env.mutate).toHaveBeenCalledWith({ preferredRoles: ['tank'] }, expect.anything());
+    });
 });

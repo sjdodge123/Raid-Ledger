@@ -20,6 +20,9 @@ function renderActions(firstNightHours: number, onSkip = vi.fn()) {
     return { onSkip };
 }
 
+const state10 = () => new Date(Date.now() + 168 * 3600_000).toISOString();
+const state11 = () => new Date(Date.now() + 336 * 3600_000).toISOString();
+
 describe('SeriesMemberActions', () => {
     beforeEach(() => { env.mutate = vi.fn(); });
 
@@ -59,5 +62,20 @@ describe('SeriesMemberActions', () => {
         renderActions(48);
         fireEvent.click(screen.getByTestId('leave-series'));
         expect(screen.queryByTestId('leave-series-late-warning')).not.toBeInTheDocument();
+    });
+
+    it('counts and warns from every night Leave cancels, not only the nights from this page forward', () => {
+        // Viewing next week's night; tonight (5h out) is also tagged and leave cancels it too.
+        const state = seriesState([night(10, 168, 'in_series', 'signed_up'), night(11, 336, 'in_series', 'signed_up')], {
+            membership: activeMembership(),
+            leaveNights: [{ eventId: 9, startTime: new Date(Date.now() + 5 * 3600_000).toISOString() },
+                { eventId: 10, startTime: state10() }, { eventId: 11, startTime: state11() }],
+        });
+        renderWithProviders(
+            <SeriesMemberActions event={event} state={state} statusToggle={null} onSkip={vi.fn()} isSkipping={false} />,
+        );
+        fireEvent.click(screen.getByTestId('leave-series'));
+        expect(screen.getByRole('dialog')).toHaveTextContent('taken off the 3 nights');
+        expect(screen.getByTestId('leave-series-late-warning')).toHaveTextContent('less than 23 hours away');
     });
 });
