@@ -64,17 +64,25 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - `probe-detail` pages a large result by **item** — a call result without its
   `iterations`, or one iteration. Each page repeats the other fields (summary,
   `request`, `error`) and carries the next items; a `forEach` call whose
-  iterations span pages repeats its `id`/`status`/`values` with the next slice
-  of `iterations` (clients merge by call `id`, iterations by `i`). One page
-  always fits: request ≤ 4 KiB + call head ≤ 3 KiB + one iteration ≤ 3 KiB +
-  the other fields at their maxima is ≤ 14,171 bytes
-  (`fixtures/probe-detail--max-page.json`).
-- `probe-detail.request` is the request in output form (defaults filled),
-  checked for shape only — NOT against the allowlist, so a stored probe stays
-  readable after the deny list grows.
+  iterations span pages repeats its whole head — the call without
+  `iterations` (`id`, `status`, and `values`/`error`/`truncated` when present,
+  ≤ 3 KiB) — with the next slice of `iterations` (clients merge by call `id`,
+  iterations by `i`). One page always fits: echoed request ≤ 4,057 B + call
+  head ≤ 3 KiB + one iteration ≤ 3 KiB + the other fields at their maxima
+  (120 × `€` title, 512 × `\u0001` error, 128-char `next`) is ≤ 14,132 bytes
+  (`fixtures/probe-detail--max-page.json`; the fixture generator fails if it
+  drifts), leaving 2,252 B of the 16 KiB page for longer timestamps.
+- `probe-detail.request` is the probe **as queued**: output form (defaults
+  filled), `flavor` the resolved folder it was written to (never `auto`), no
+  `probeId` (the page carries it). Checked for shape only — NOT against the
+  allowlist, so a stored probe stays readable after the deny list grows.
 - `logs` lines are already redacted: a line holding `rlcd_…`, `rlcdev_…` or a
   bearer value other than exactly `<redacted>` is invalid, in any letter case
-  (`bearer`, `BEARER`, `RLCDEV_`).
+  (`bearer`, `BEARER`, `RLCDEV_`). The companion redacts with the same
+  patterns before it stores a line — `(?i)bearer\s+\S+` → `bearer <redacted>`
+  and `(?i)rlcd(ev)?_[A-Za-z0-9_-]+` → `<redacted>` — rather than relying on
+  hand-written messages (so prose like "missing bearer token" becomes
+  "missing bearer <redacted>").
 - Probe `status`: `queued` → `answered` | `expired` (past `ttlHours`) |
   `rejected` (the stored result failed `probe-result`; `error` says why) |
   `cancelled` (after DELETE).
@@ -94,9 +102,15 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
   the flavor LedgerLink SavedVariables was last seen in) or a flavor folder
   name. `after` `PLAYER_LOGIN` (default) | `PLAYER_ENTERING_WORLD` |
   `GUILD_ROSTER_UPDATE`. `ttlHours` 1–168 (default 72). `calls` 1–40.
-- The whole request in output form (defaults filled), serialised, is
-  **≤ 4 KiB** (`DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES`) — it is echoed on every
-  `probe-detail` page.
+- The request's **largest derived form** — output form (defaults filled) plus
+  a 26-char `probeId`, with `flavor` replaced by a 34-char folder name (the
+  longest `_[a-z0-9_]{1,32}_` allows) — serialised, is **≤ 4 KiB**
+  (`DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES`, `devBridgeProbeRequestWorstBytes`).
+  POST, the Queue.lua entry and the `probe-detail` echo all measure that same
+  form, so a request the bridge accepts always fits as a queue entry and as
+  an echo whatever flavor it resolves to. In practice a POST body with
+  `flavor: "auto"` is ≤ 4,027 B (`fixtures/probe-request--max-size.json`;
+  its queue entry, `fixtures/probe-queue--max-entry.json`, is exactly 4,096 B).
 - Each call has an `id` (unique, `^[A-Za-z][A-Za-z0-9_]{0,31}$`) and **exactly
   one** of `fn` (call it) or `presence` (report `type()` of the path; nothing
   is called, takes no `args`/`forEach`).
@@ -155,8 +169,14 @@ What LedgerLinkProbe stores as a JSON string in
   values per call. `presence` reports `values: ["<lua type>"]`.
 - The whole serialised result is ≤ 64 KiB (`DEV_BRIDGE_PROBE_RESULT_MAX_BYTES`)
   and each item — a call result without `iterations`, or one iteration — is
-  ≤ 3 KiB (`DEV_BRIDGE_RESULT_ITEM_MAX_BYTES`). The addon cuts trailing values
-  to meet them and sets `truncated` (on the call and the result).
+  ≤ 3 KiB (`DEV_BRIDGE_RESULT_ITEM_MAX_BYTES`). To meet them the addon cuts
+  trailing values, trims `error` (a 512-char error can escape to 3,074 B),
+  and drops a lone value that is still too big (`values: []`), setting
+  `truncated` on the call and the result. Its byte count must escape exactly
+  as `devBridgeJsonBytes` does (`JSON.stringify` then UTF-8): raw UTF-8 for
+  non-ASCII, `\"` `\\` `\n` `\r` `\t` `\b` `\f` short escapes, `\u00XX` for
+  every other control character. An encoder that writes controls raw
+  under-counts.
 - A `forEach` call's top-level `status` is `ok` when `countFrom` returned a
   number (its own `values` omitted, per-index outcomes in `iterations`), and
   `error` with no `iterations` when it did not.
@@ -171,7 +191,7 @@ rename). The JSON is `$defs/probe-queue`:
 POST body in **output form** (`title`, `flavor`, `after`, `ttlHours`, `calls` all
 present), `flavor` resolved to the folder the file sits in (never `auto`),
 plus the companion-assigned `probeId`; the allowlist and the 4 KiB request cap
-apply. `fixtures/probe-queue.json` carries an arg holding `]]`, `]==]`, a
+(measured as above, so any accepted POST fits) apply. `fixtures/probe-queue.json` carries an arg holding `]]`, `]==]`, a
 quote, a backslash and a newline.
 
 ## Fixtures

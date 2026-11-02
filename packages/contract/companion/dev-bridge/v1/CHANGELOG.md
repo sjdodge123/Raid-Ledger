@@ -31,6 +31,13 @@ previous version during the transition.
     reversible: raising a cap is additive.
   - `APPLY:` the request cap is 4 KiB of serialised output (≈30 full 128-char
     args) rather than lower per-field limits — reversible the same way.
+  - `APPLY:` the 4 KiB request cap is measured on the request's largest
+    derived form (output form + `probeId`, `flavor` padded to 34 chars) on
+    POST, queue entry and echo alike, rather than giving the queue entry and
+    echo extra headroom — one number, and any accepted POST fits Queue.lua and
+    the probe-detail echo by construction. The echo carries the resolved
+    flavor (never `auto`). Worst-case probe-detail page: 14,132 B. Reversible:
+    raising the cap or switching to headroom is additive.
   - `APPLY:` the Queue.lua JSON is an object `{ queueVersion, probes }`
     (not a bare array) so the addon can detect a shape change; entries are
     output form with `flavor` resolved.
