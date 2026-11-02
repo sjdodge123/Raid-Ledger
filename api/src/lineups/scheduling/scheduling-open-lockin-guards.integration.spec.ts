@@ -162,7 +162,7 @@ async function addSlot(
   return slot.id;
 }
 
-/** The create form's first call, as admin: `POST /events {schedulingMatchId}`. */
+/** The poll's event, created as admin by the direct fixture (ROK-2039: `POST /events` refuses `schedulingMatchId`). */
 async function postEvent(schedulingMatchId: number): Promise<number> {
   return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
     title: 'Guarded Lock-in Night',

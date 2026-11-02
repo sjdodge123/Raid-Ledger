@@ -1,8 +1,11 @@
 /**
  * ROK-2024 — locking in an OPEN scheduling poll.
  *
- * The web create form locks in an open poll with two calls: `POST /events
- * {schedulingMatchId}` then `POST /scheduling-polls/:matchId/complete`. Before
+ * The web create form now locks in with one `POST /scheduling-polls/:id/lock-in`
+ * (ROK-2032/2039), but `POST /scheduling-polls/:matchId/complete` stays live
+ * and is this spec's subject: the poll's event is created by a direct fixture
+ * (`createPollEventDirect`, since `POST /events` refuses `schedulingMatchId`
+ * after ROK-2039), then the poll is completed onto it. Before
  * the fix, `complete` 404'd for a REGULAR lineup match (never linked, still
  * `scheduling`, yes-voters not signed up) and no open lock-in ever fired the
  * lineup EVENT CREATED announcement; only the expired lock-in

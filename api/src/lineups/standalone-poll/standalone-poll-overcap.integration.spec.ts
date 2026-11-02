@@ -2,8 +2,10 @@
  * ROK-1874 AC5–7 — locking a standalone poll onto a full roster benches the
  * overflow voter and DMs them "On the bench" instead of "Auto-signed up".
  *
- * Flow under test is the real one the create form drives: POST /events with
- * `schedulingMatchId` (which signs the creator up first), then
+ * Flow under test is the legacy two-step one, kept live for `/complete`: the
+ * poll's event is created by the direct fixture `createPollEventDirect` (which
+ * signs the creator up first; ROK-2039 made `POST /events` refuse
+ * `schedulingMatchId`, and the form now uses `/lock-in`), then
  * POST /scheduling-polls/:matchId/complete. The auto-signup + DM chain is
  * fire-and-forget after `/complete`, so every assertion first waits (via the
  * repo's `waitFor` poll helper) until EVERY selected voter's notification row
@@ -90,7 +92,7 @@ async function addSlotWithYesVotes(
   }
 }
 
-/** POST /events from the poll on an N-spot generic roster; returns its id. */
+/** The poll's event (direct fixture) on an N-spot generic roster; returns its id. */
 async function createEventFromPoll(
   matchId: number,
   start: Date,
