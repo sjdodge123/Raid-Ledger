@@ -175,6 +175,7 @@ test_concurrent_build_waits() {
     : > "$SEQ"
     # Announce the build's first wait once, through a fifo (no polling).
     eval "$(declare -f admission::_mark_waiting | sed '1s/admission::_mark_waiting/_orig_mark_waiting/')"
+    # shellcheck disable=SC2329  # invoked by admission::acquire
     admission::_mark_waiting() {
         _orig_mark_waiting "$@"
         [[ -e "$RL_STATE_DIR/announced" ]] && return 0
@@ -201,6 +202,7 @@ test_concurrent_build_waits() {
 
 test_suite_registers_us() {
     CURRENT_TEST_NAME="G7: run-tests.sh runs this file"
+    # shellcheck disable=SC2016  # the literal "$TEST_DIR/…" line is what we look for
     assert_contains "$(cat "$TEST_DIR/run-tests.sh")" '"$TEST_DIR/registry-gc-admission.test.sh"' "registered"
 }
 
