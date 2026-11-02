@@ -100,6 +100,19 @@ export function computeHeatmapLabel(
     return `${heatmapData.available} free${staleCopy}${busyCopy} · ${heatmapData.unknown ?? 0} unknown`;
 }
 
+/**
+ * Stacking for a hovered cell, so its hover shadow paints over its neighbours.
+ * An interactive grid has the block layer (`SlotBlockLayer`, z-[8]) on top
+ * owning every pointer gesture, so its hovered cell lifts only to z-[7]: at
+ * z-10 it sat above the layer's day targets and swallowed the next tap
+ * (TD-1102). Click-to-toggle grids have no block layer and keep z-10.
+ */
+function hoverStackClass(isHovered: boolean, clickable: boolean, isInteractive: boolean): string {
+    if (!isHovered) return '';
+    if (isInteractive) return 'relative z-[7]';
+    return clickable ? 'z-10 relative' : '';
+}
+
 /** Computes cursor and conditional classes for a grid cell */
 export function computeCellClasses(
     compact: boolean | undefined, rounding: string, cellClasses: string,
@@ -107,7 +120,7 @@ export function computeCellClasses(
     locked: boolean, isHovered: boolean, isInteractive: boolean,
 ): string {
     const cursorClass = canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : '';
-    const hoverClass = isHovered && (isInteractive || clickable) ? 'z-10 relative' : '';
+    const hoverClass = hoverStackClass(isHovered, clickable, isInteractive);
     return `${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${cellClasses} ${cursorClass} ${hoverClass}`;
 }
 

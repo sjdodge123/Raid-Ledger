@@ -12,6 +12,7 @@ import type { JSX, ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { GuildPage, WowRosterGearDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
+import { companionDevicesHandler } from '../../../test/mocks/companion-devices-handlers';
 import { renderWithProviders, createTestQueryClient } from '../../../test/render-helpers';
 import {
     MOCK_CHAR_IDS, VISITOR_FIXTURE, createBareRosterInsights, rosterInsightsHandler,
@@ -179,5 +180,23 @@ describe('gearReadinessWidget registration', () => {
             games: ['world-of-warcraft-forever'], kinds: ['wow_guild'],
         });
         expect(gearReadinessWidget.action).toBe(MembersSeeAll);
+    });
+});
+
+// ROK-2056 — the Companion install line (AC5 / AC6). Off by default; one test flips it on.
+const companionFlag = vi.hoisted(() => ({ available: false }));
+vi.mock('../../../lib/companion-install', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/companion-install')>()),
+    companionDownloadAvailable: () => companionFlag.available,
+}));
+
+describe('ROK-2056 Companion install line', () => {
+    it('the empty state links to the install card when the viewer is not linked', async () => {
+        companionFlag.available = true;
+        server.use(companionDevicesHandler([]));
+        await renderWith(EMPTY);
+        expect(await screen.findByTestId('companion-install-link'))
+            .toHaveTextContent('Exports can upload by themselves — install the Companion.');
+        companionFlag.available = false;
     });
 });

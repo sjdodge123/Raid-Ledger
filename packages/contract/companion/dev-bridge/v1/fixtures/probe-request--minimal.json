@@ -1,0 +1,9 @@
+{
+  "title": "Guild check",
+  "calls": [
+    {
+      "id": "g",
+      "fn": "IsInGuild"
+    }
+  ]
+}

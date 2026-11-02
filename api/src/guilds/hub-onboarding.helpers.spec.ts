@@ -18,6 +18,8 @@ describe('parseOnboardingKey', () => {
     expect(parseOnboardingKey('hub-setup-checklist')).toBe(
       'hub-setup-checklist',
     );
+    // ROK-2056 — the hub Overview's Companion prompt, dismissed per hub.
+    expect(parseOnboardingKey('companion-install')).toBe('companion-install');
   });
 
   it('refuses an unknown key with a 400, not a stored row', () => {

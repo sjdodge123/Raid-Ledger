@@ -1,0 +1,24 @@
+{
+  "flavor": "_anniversary_",
+  "next": "cGFnZTI",
+  "addons": [
+    {
+      "folder": "LedgerLink",
+      "title": "LedgerLink",
+      "version": "1.4.0",
+      "interface": "11507",
+      "savedVariables": [
+        "LedgerLinkDB"
+      ],
+      "loadOnDemand": false
+    },
+    {
+      "folder": "LedgerLinkProbe",
+      "title": null,
+      "version": null,
+      "interface": "11507, 20505",
+      "savedVariables": [],
+      "loadOnDemand": false
+    }
+  ]
+}

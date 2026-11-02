@@ -3,7 +3,8 @@
  * the kill switch, resolves the read provider and runs one sync
  * (`runCalendarReadSync`). On a throw `recordReadSyncFailure` writes the
  * terminal state (D5) and decides: retryable → rethrow for BullMQ backoff
- * (attempts 4, 60 s exponential); otherwise `UnrecoverableError` (auth →
+ * (attempts 4, 60 s exponential raised to a
+ * provider's Retry-After — `calendarRetryBackoff`); otherwise `UnrecoverableError` (auth →
  * `needs_reconnect`, scope 403 → `read_access_granted=false`, U7).
  *
  * PR-B: a `derive` job rebuilds one user's synced away days
@@ -25,6 +26,7 @@ import { getCalendarSyncEnabled } from '../../settings/settings-calendar-sync.he
 import { SettingsService } from '../../settings/settings.service';
 import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
+import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { isFinalAttempt } from '../write/calendar-write-reconcile-persist.helpers';
 import { runCalendarDerive } from './calendar-away-persist.helpers';
@@ -92,7 +94,10 @@ export async function onReadConnectionBroken(
   }
 }
 
-@Processor(CALENDAR_READ_QUEUE, { concurrency: 3 })
+@Processor(CALENDAR_READ_QUEUE, {
+  concurrency: 3,
+  settings: { backoffStrategy: calendarRetryBackoff },
+})
 export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,

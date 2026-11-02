@@ -1,27 +1,20 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventQuestReadinessDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   GuildAccessService,
-  isStaff,
   type GuildActor,
 } from '../../guilds/guild-access.service';
 import { loadEventQuestSet } from './event-forever-progress.query';
 import { buildQuestReadiness } from './event-quest-readiness.helpers';
 import {
-  hasActiveSignup,
   loadEventManualRows,
   loadReadinessEvent,
   loadReadinessRoster,
-  type ReadinessEvent,
 } from './event-quest-readiness.query';
+import { assertCanReadEvent } from './event-readiness.access';
 import { loadForeverCharSnapshots } from './forever-char-snapshot.query';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
@@ -47,7 +40,7 @@ export class EventQuestReadinessService {
   ): Promise<EventQuestReadinessDto> {
     const event = await loadReadinessEvent(this.db, eventId);
     if (!event) throw new NotFoundException('Event not found');
-    await this.assertCanRead(actor, eventId, event);
+    await assertCanReadEvent(this.db, this.access, actor, eventId, event);
     if (event.slug !== WOW_FOREVER_GAME_SLUG) {
       throw new NotFoundException('Quest readiness is for Forever events only');
     }
@@ -59,19 +52,5 @@ export class EventQuestReadinessService {
     const charIds = signups.flatMap((s) => s.characterId ?? []);
     const snapshots = await loadForeverCharSnapshots(this.db, charIds);
     return buildQuestReadiness({ quests, signups, snapshots, manual });
-  }
-
-  /** Staff, the event's guild members, or the event's active signups. */
-  private async assertCanRead(
-    actor: GuildActor,
-    eventId: number,
-    event: ReadinessEvent,
-  ): Promise<void> {
-    if (isStaff(actor)) return;
-    if (event.guildId !== null) {
-      if (await this.access.canView(actor, event.guildId)) return;
-    }
-    if (await hasActiveSignup(this.db, eventId, actor.id)) return;
-    throw new ForbiddenException('Not a member of this event or its guild');
   }
 }

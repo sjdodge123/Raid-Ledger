@@ -14,6 +14,7 @@ import { FreshnessFooter } from './freshness-footer';
 import { BelowFloorSection, GearHistogram, GearSectionLabel, MissingEnchantsSection } from './gear-readiness-rows';
 import { gearMeta, isGearEmpty } from './gear-readiness.helpers';
 import { useRosterInsights } from './use-roster-insights';
+import { CompanionInstallLink } from '../../../components/common/companion-install-link';
 
 /** AC6 copy, verbatim. */
 export const GEAR_EMPTY_COPY = "No gear yet — each player's LedgerLink character export fills this card.";
@@ -29,6 +30,7 @@ export default function GearReadinessWidget({ page }: Pick<HubWidgetCtx, 'page'>
         return (
             <div data-testid="gear-readiness-empty" className="flex flex-col">
                 <p className="text-sm text-muted">{GEAR_EMPTY_COPY}</p>
+                <CompanionInstallLink lead="Exports can upload by themselves —" className="mt-1.5" />
                 {footer}
             </div>
         );

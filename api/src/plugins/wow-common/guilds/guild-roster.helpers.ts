@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CharacterRoleSchema,
@@ -185,4 +185,37 @@ export async function loadRosterRows(
     )
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()))
     .orderBy(asc(guildMembers.rankIndex), asc(guildMembers.characterName));
+}
+
+/**
+ * ROK-1926 — `characterId → memberId` for just `charIds` among the guild's
+ * latest-snapshot rows (one bounded query; first row in roster order wins).
+ */
+export async function loadRosterMemberIds(
+  db: Db,
+  guildId: number,
+  charIds: readonly string[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (charIds.length === 0) return map;
+  const rows = await db
+    .select({ memberId: guildMembers.id, characterId: characters.id })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(
+      characters,
+      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
+    )
+    .where(
+      and(
+        eq(guildMembers.guildId, guildId),
+        inLatestSnapshot(),
+        inArray(characters.id, [...charIds]),
+      ),
+    )
+    .orderBy(asc(guildMembers.rankIndex), asc(guildMembers.characterName));
+  for (const r of rows) {
+    if (!map.has(r.characterId)) map.set(r.characterId, r.memberId);
+  }
+  return map;
 }

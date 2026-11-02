@@ -32,6 +32,8 @@ import {
 import * as schema from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { nonEmpty } from '../../common/testing/narrow';
+import { CreateEventSchema } from '@raid-ledger/contract';
+import { assertSchedulingMatchUsable } from '../../events/event-poll-provenance.helpers';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -514,19 +516,94 @@ async function eventsFromPoll(matchId: number): Promise<number> {
   return rows.length;
 }
 
+/** POST /scheduling-polls/:matchId/lock-in as `token` for a poll slot. */
+function lockIn(
+  token: string,
+  matchId: number,
+  slotTime: Date,
+  extra: Record<string, unknown> = {},
+) {
+  return testApp.request
+    .post(`/scheduling-polls/${matchId}/lock-in`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      event: {
+        title: 'From Poll',
+        startTime: slotTime.toISOString(),
+        endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
+        gameId: testApp.seed.game.id,
+        ...extra,
+      },
+    });
+}
+
+/** The lock-in claim columns of a match: status, claim token, linked event. */
+async function claimState(matchId: number) {
+  const m = schema.communityLineupMatches;
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({
+        status: m.status,
+        lockInClaimedAt: m.lockInClaimedAt,
+        linkedEventId: m.linkedEventId,
+      })
+      .from(m)
+      .where(eq(m.id, matchId)),
+    'match',
+  );
+  return row;
+}
+
+/** The provenance check the lock-in binds (ROK-2039: POST /events refuses the field). */
+function provenance(
+  creatorId: number,
+  slotTime: Date,
+  extra: Record<string, unknown>,
+) {
+  const dto = CreateEventSchema.parse({
+    title: 'From Poll',
+    startTime: slotTime.toISOString(),
+    endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId: testApp.seed.game.id,
+    ...extra,
+  });
+  return assertSchedulingMatchUsable(testApp.db, dto, {
+    id: creatorId,
+    isStaff: false,
+  });
+}
+
 function describeAc6() {
-  it('stamps created_from_poll_id for the poll owner creating a same-game event', async () => {
+  it('stamps created_from_poll_id for the poll owner locking in a same-game event', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6ok');
+
+    const res = await lockIn(creator.token, matchId, slotTime);
+
+    expect(res.status).toBe(200);
+    expect(await eventsFromPoll(matchId)).toBe(2);
+  });
+
+  it('ROK-2039: 400s POST /events carrying schedulingMatchId, pointing at lock-in, stamping nothing', async () => {
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac6door');
 
     const res = await createEventFromPoll(creator.token, slotTime, {
       schedulingMatchId: matchId,
     });
 
-    expect(res.status).toBe(201);
-    expect(await eventsFromPoll(matchId)).toBe(2);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(
+      new RegExp(`/scheduling-polls/${matchId}/lock-in`),
+    );
+    expect(await eventsFromPoll(matchId)).toBe(1);
   });
+}
+describe(
+  'ROK-1844 AC6 — schedulingMatchId provenance is validated (lock-in door only, ROK-2039)',
+  describeAc6,
+);
 
-  it("400s an event whose game is not the poll's game", async () => {
+function describeAc6Game() {
+  it("400s a lock-in whose event game is not the poll's game — poll stays unclaimed, no event", async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6game');
     const [other] = nonEmpty(
       await testApp.db
@@ -536,47 +613,50 @@ function describeAc6() {
       'other game',
     );
 
-    const res = await createEventFromPoll(creator.token, slotTime, {
+    const res = await lockIn(creator.token, matchId, slotTime, {
       gameId: other.id,
-      schedulingMatchId: matchId,
     });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/game must match/);
     expect(await eventsFromPoll(matchId)).toBe(1);
+    expect(await claimState(matchId)).toEqual({
+      status: 'scheduling',
+      lockInClaimedAt: null,
+      linkedEventId: null,
+    });
   });
+}
+describe(
+  'ROK-1844 AC6 — the lock-in refuses a cross-game event',
+  describeAc6Game,
+);
 
+function describeAc6Provenance() {
+  // Helper-level: /lock-in 403s a non-owner before provenance runs.
   it("400s a member tagging their event with someone else's poll", async () => {
     const { matchId, slotTime } = await seedOwnPoll('ac6foreign');
     const stranger = await loginAsMember('ac6foreign-stranger');
 
-    const res = await createEventFromPoll(stranger.token, slotTime, {
-      schedulingMatchId: matchId,
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/your own poll/);
-    expect(await eventsFromPoll(matchId)).toBe(1);
+    await expect(
+      provenance(stranger.userId, slotTime, { schedulingMatchId: matchId }),
+    ).rejects.toThrow(/your own poll/);
   });
 
+  // Helper-level: /lock-in turns a closed poll into its claim 409 and an unknown id into a 404.
   it('400s a poll that is no longer open, and an unknown poll id', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6closed');
     expect((await complete(creator.token, matchId, {})).status).toBe(200);
 
-    const closed = await createEventFromPoll(creator.token, slotTime, {
-      schedulingMatchId: matchId,
-    });
-    const unknown = await createEventFromPoll(creator.token, slotTime, {
-      schedulingMatchId: 999_999,
-    });
-
-    expect(closed.status).toBe(400);
-    expect(closed.body.message).toMatch(/no longer open/);
-    expect(unknown.status).toBe(400);
-    expect(unknown.body.message).toMatch(/not found/);
+    await expect(
+      provenance(creator.userId, slotTime, { schedulingMatchId: matchId }),
+    ).rejects.toThrow(/no longer open/);
+    await expect(
+      provenance(creator.userId, slotTime, { schedulingMatchId: 999_999 }),
+    ).rejects.toThrow(/not found/);
   });
 }
 describe(
-  'ROK-1844 AC6 — schedulingMatchId on event create is validated',
-  describeAc6,
+  'ROK-1844 AC6 — provenance reasons /lock-in cannot reach (helper level)',
+  describeAc6Provenance,
 );

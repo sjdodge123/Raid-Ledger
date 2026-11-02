@@ -15,16 +15,20 @@ import type { ArmoryDetailReadRow } from './valheim-armory-read.mappers';
 /** The catalogue row as the detail read loads it (items already subset). */
 export interface ArmoryCatalogReadRow {
   items: Record<string, ValheimItemCatalogEntryRow>;
+  /** The catalogue's own version — may differ from the character's (ROK-2058). */
+  gameVersion: string;
   atlasSha256: string | null;
   atlasWidth: number | null;
   atlasHeight: number | null;
   atlasReady: boolean;
 }
 
-/** The two additive detail fields. */
+/** The additive detail fields. */
 export interface ArmoryCatalogProjection {
   items: Record<string, ValheimCatalogEntry>;
   atlas: ValheimMapBaseMap | null;
+  /** Which version's catalogue named the items; null when none (ROK-2058). */
+  catalogueGameVersion: string | null;
 }
 
 type Sheet = Pick<ArmoryDetailReadRow, 'equipment' | 'inventory' | 'trophies'>;
@@ -64,12 +68,15 @@ function toAtlas(row: ArmoryCatalogReadRow): ValheimMapBaseMap | null {
   return { sha256, width, height, ready: row.atlasReady };
 }
 
-/** `items` (referenced prefabs only) + `atlas`; no catalogue → `{}`/null. */
+/**
+ * `items` (referenced prefabs only) + `atlas` + `catalogueGameVersion`;
+ * no catalogue → `{}`/null/null.
+ */
 export function projectCatalog(
   prefabs: readonly string[],
   catalog: ArmoryCatalogReadRow | null,
 ): ArmoryCatalogProjection {
-  if (!catalog) return { items: {}, atlas: null };
+  if (!catalog) return { items: {}, atlas: null, catalogueGameVersion: null };
   // Own-property lookup: `constructor` / `toString` / `__proto__` are valid
   // prefab ids and must read as "not in catalogue", never an inherited
   // Object member. `fromEntries` defines own keys (no `__proto__` setter).
@@ -79,5 +86,9 @@ export function projectCatalog(
     const entry = catalog.items[prefab];
     if (entry) pairs.push([prefab, toEntry(entry)]);
   }
-  return { items: Object.fromEntries(pairs), atlas: toAtlas(catalog) };
+  return {
+    items: Object.fromEntries(pairs),
+    atlas: toAtlas(catalog),
+    catalogueGameVersion: catalog.gameVersion,
+  };
 }
