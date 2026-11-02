@@ -54,8 +54,14 @@ const requestOf = (n) => {
 };
 const REQ_MAX = 4096;
 const ITEM_MAX = 3072;
-const maxRequest = requestOf(largest(requestOf, REQ_MAX));
-const overRequest = requestOf(largest(requestOf, REQ_MAX) + 1);
+/** The longest flavor folder `_[a-z0-9_]{1,32}_` allows: the request cap is measured with it + a probeId. */
+const LONG_FLAVOR = `_${'z'.repeat(32)}_`;
+const queued = (r) => ({ probeId: ID, ...r, flavor: LONG_FLAVOR });
+const reqChars = largest((n) => queued(requestOf(n)), REQ_MAX);
+const maxRequest = requestOf(reqChars);
+const overRequest = requestOf(reqChars + 1);
+/** What probe-detail echoes: the request as queued (flavor resolved), without probeId. */
+const echoOf = (r, flavor = '_anniversary_') => ({ ...r, flavor });
 const head = (n) => ({ id: 'skill', status: 'ok', values: chunks(n, 512, 'v'), truncated: true });
 const iteration = (n, i = 1) => ({ i, status: 'ok', values: chunks(n, 512, 'w') });
 const maxHead = head(largest(head, ITEM_MAX));
@@ -63,7 +69,7 @@ const maxIteration = (i) => iteration(largest((n) => iteration(n, i), ITEM_MAX),
 /** Worst case of every repeated field + one call head + one iteration, each at its cap. */
 const maxPage = {
     probeId: ID, title: '€'.repeat(120), status: 'rejected', submittedAt: AT, answeredAt: AT,
-    request: maxRequest,
+    request: echoOf(maxRequest, LONG_FLAVOR),
     result: { probeId: ID, capturedAt: AT, addonVersion: `9999.9999.9999-${'a'.repeat(32)}`, truncated: true, calls: [{ ...maxHead, iterations: [maxIteration(1)] }] },
     error: '\u0001'.repeat(512),
     next: 'n'.repeat(128),
@@ -79,6 +85,7 @@ const VALID = {
     'probe-request--minimal': { title: 'Guild check', calls: [{ id: 'g', fn: 'IsInGuild' }] },
     'probe-request--max-size': maxRequest,
     'probe-queue': queue,
+    'probe-queue--max-entry': { queueVersion: 1, probes: [queued(maxRequest)] },
     'probe-detail--max-page': maxPage,
     'probe-result--professions': result,
     'probe-result--nested-tables': nested,
@@ -94,8 +101,8 @@ const VALID = {
     ] },
     'probe-queued': { probeId: ID, status: 'queued', flavor: '_anniversary_', answersOn: 'next UI load, then next save' },
     'probe-list': { next: null, probes: [{ probeId: ID, title: professions.title, status: 'answered', submittedAt: AT, answeredAt: '2026-11-01T19:05:00Z' }] },
-    'probe-detail--answered': { probeId: ID, title: professions.title, status: 'answered', submittedAt: AT, answeredAt: '2026-11-01T19:05:00Z', request: professions, result, next: null },
-    'probe-detail--queued': { probeId: ID, title: professions.title, status: 'queued', submittedAt: AT, request: professions, next: null },
+    'probe-detail--answered': { probeId: ID, title: professions.title, status: 'answered', submittedAt: AT, answeredAt: '2026-11-01T19:05:00Z', request: echoOf(professions), result, next: null },
+    'probe-detail--queued': { probeId: ID, title: professions.title, status: 'queued', submittedAt: AT, request: echoOf(professions), next: null },
     'probe-cancelled': { probeId: ID, status: 'cancelled' },
     logs: { next: 'bG9nczI', lines: [
         { at: AT, level: 'info', target: 'dev_bridge', msg: 'GET /dev/v1/health 200 412B from 192.168.0.229' },
@@ -125,6 +132,7 @@ const CASES = [
     ['probe-request--over-size', 'probe-request--max-size', (m) => { Object.assign(m, clone(overRequest)); }, '', 'custom'],
     ['probe-result--item-too-big', 'probe-result--professions', (m) => { m.calls[1].values = chunks(ITEM_MAX, 512, 'v'); }, 'calls.1', 'custom'],
     ['probe-detail--over-page', 'probe-detail--max-page', (m) => { m.result.calls[0].iterations.push(maxIteration(2)); }, '', 'custom'],
+    ['probe-detail--echo-flavor-auto', 'probe-detail--queued', (m) => { m.request.flavor = 'auto'; }, 'request.flavor', 'invalid_format'],
     ['probe-queue--flavor-auto', 'probe-queue', (m) => { m.probes[0].flavor = 'auto'; }, 'probes.0.flavor', 'invalid_format'],
     ['probe-queue--missing-probe-id', 'probe-queue', (m) => { delete m.probes[1].probeId; }, 'probes.1.probeId', 'invalid_type'],
     ['probe-queue--missing-ttl', 'probe-queue', (m) => { delete m.probes[0].ttlHours; }, 'probes.0.ttlHours', 'invalid_type'],
@@ -157,8 +165,10 @@ const schemaFor = (name) => {
     return schema;
 };
 
-const sizes = { request: bytes(maxRequest), head: bytes(maxHead), iteration: bytes(maxIteration(1)), page: bytes(maxPage) };
-if (sizes.request > REQ_MAX || sizes.request < REQ_MAX - 8 || sizes.head < ITEM_MAX - 8 || sizes.iteration < ITEM_MAX - 8) {
+/** CONTRACT.md quotes this worst-case probe-detail page size; change both together. */
+const PAGE_WORST = 14_132;
+const sizes = { request: bytes(maxRequest), queueEntry: bytes(queued(maxRequest)), echo: bytes(maxPage.request), head: bytes(maxHead), iteration: bytes(maxIteration(1)), page: bytes(maxPage) };
+if (sizes.queueEntry > REQ_MAX || sizes.queueEntry < REQ_MAX - 8 || sizes.head < ITEM_MAX - 8 || sizes.iteration < ITEM_MAX - 8 || sizes.page !== PAGE_WORST) {
     throw new Error(`max-size fixtures are not at their caps: ${JSON.stringify(sizes)}`);
 }
 console.log('worst-case sizes', sizes);

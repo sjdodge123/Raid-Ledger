@@ -6,7 +6,7 @@
   "answeredAt": "2026-11-01T19:05:00Z",
   "request": {
     "title": "Can an addon read professions?",
-    "flavor": "auto",
+    "flavor": "_anniversary_",
     "after": "PLAYER_LOGIN",
     "ttlHours": 72,
     "calls": [

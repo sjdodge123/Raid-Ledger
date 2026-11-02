@@ -59,6 +59,10 @@
     "path": "",
     "code": "custom"
   },
+  "probe-detail--echo-flavor-auto": {
+    "path": "request.flavor",
+    "code": "invalid_format"
+  },
   "probe-queue--flavor-auto": {
     "path": "probes.0.flavor",
     "code": "invalid_format"

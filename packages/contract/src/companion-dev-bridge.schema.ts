@@ -21,7 +21,13 @@ export const DEV_BRIDGE_PAGE_MAX_BYTES = 16_384;
 /** A whole ProbeResult as the addon stores it, serialised, stays at or under this. */
 export const DEV_BRIDGE_PROBE_RESULT_MAX_BYTES = 65_536;
 
-/** A probe request (output form, defaults filled), serialised, stays at or under this — it is echoed on every probe-detail page. */
+/**
+ * A probe request's LARGEST derived form, serialised, stays at or under this:
+ * output form (defaults filled) plus a `probeId`, with `flavor` at its longest
+ * (34 chars). POST, the Queue.lua entry and the probe-detail echo all measure
+ * that same form (`devBridgeProbeRequestWorstBytes`), so a request the bridge
+ * accepts always fits as a queue entry and as an echo.
+ */
 export const DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES = 4_096;
 
 /**
@@ -155,10 +161,25 @@ export function devBridgeProbeRequestFields<C extends z.ZodType<ProbeCallShape>>
     };
 }
 
-/** Unique call ids, backward countFrom, and ≤ DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES serialised. */
+/** The longest flavor folder `DevBridgeFlavorSchema` accepts (34 chars) and a probe id (always 26 chars). */
+const WORST_FLAVOR = `_${'a'.repeat(32)}_`;
+const WORST_PROBE_ID = '0'.repeat(26);
+
+/** Bytes of the request's largest derived form: `probeId` set, `flavor` at its longest. */
+export function devBridgeProbeRequestWorstBytes(req: object): number {
+    return devBridgeJsonBytes({ ...req, probeId: WORST_PROBE_ID, flavor: WORST_FLAVOR });
+}
+
+/** Unique call ids, backward countFrom, and largest derived form ≤ DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES. */
 export function checkDevBridgeProbeRequest(req: { calls: readonly ProbeCallShape[] }, ctx: z.RefinementCtx): void {
     checkCallIds(req.calls, ctx);
-    devBridgeMaxBytes(DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES, 'Probe request')(req, ctx);
+    const bytes = devBridgeProbeRequestWorstBytes(req);
+    if (bytes <= DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES) return;
+    ctx.addIssue({
+        code: 'custom',
+        path: [],
+        message: `Probe request is ${bytes} bytes as a queue entry with the longest flavor; the cap is ${DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES}`,
+    });
 }
 
 /** POST /dev/v1/probes body (strict). Defaults: flavor `auto`, after `PLAYER_LOGIN`, ttlHours 72. */
@@ -167,9 +188,18 @@ export const DevBridgeProbeRequestSchema = z
     .strict()
     .superRefine(checkDevBridgeProbeRequest);
 
-/** The request as probe-detail echoes it (output form; shape rules, no allowlist). */
+/**
+ * The request as probe-detail echoes it: the probe as QUEUED — output form,
+ * `flavor` resolved to the folder it was written to (never `auto`), no
+ * `probeId` (the page carries it). Shape rules only, no allowlist.
+ */
 export const DevBridgeEchoedProbeRequestSchema = z
-    .object(devBridgeProbeRequestFields(DevBridgeEchoedProbeCallSchema))
+    .object({
+        ...devBridgeProbeRequestFields(DevBridgeEchoedProbeCallSchema),
+        flavor: DevBridgeFlavorSchema,
+        after: DevBridgeProbeAfterSchema,
+        ttlHours: DevBridgeTtlHoursSchema,
+    })
     .strict()
     .superRefine(checkDevBridgeProbeRequest);
 

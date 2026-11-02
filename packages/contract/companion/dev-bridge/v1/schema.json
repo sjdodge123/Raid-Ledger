@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raid.gamernight.net/contracts/companion/dev-bridge/v1/schema.json",
   "title": "RL Companion dev bridge v1",
-  "description": "GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; \"$i\" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no \"..\", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request (output form) ≤4 KiB, each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB; see CONTRACT.md.",
+  "description": "GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; \"$i\" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no \"..\", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request ≤4 KiB measured as its largest queue entry (output form + probeId, flavor padded to 34 chars), each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB; see CONTRACT.md.",
   "$defs": {
     "probe-request": {
       "type": "object",
@@ -1661,20 +1661,10 @@
               "pattern": "^(?!\\s*$)[^\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+$"
             },
             "flavor": {
-              "default": "auto",
-              "anyOf": [
-                {
-                  "type": "string",
-                  "const": "auto"
-                },
-                {
-                  "type": "string",
-                  "pattern": "^_[a-z0-9_]{1,32}_$"
-                }
-              ]
+              "type": "string",
+              "pattern": "^_[a-z0-9_]{1,32}_$"
             },
             "after": {
-              "default": "PLAYER_LOGIN",
               "type": "string",
               "enum": [
                 "PLAYER_LOGIN",
@@ -1683,7 +1673,6 @@
               ]
             },
             "ttlHours": {
-              "default": 72,
               "type": "integer",
               "minimum": 1,
               "maximum": 168

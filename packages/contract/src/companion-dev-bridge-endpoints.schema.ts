@@ -156,8 +156,9 @@ export const DevBridgeProbeListSchema = z
 /**
  * GET /dev/v1/probes/:id?cursor= — paged by result ITEM (a call without its
  * iterations, or one iteration): each page repeats the other fields; a forEach
- * call whose iterations span pages repeats its `id` and status with the next
- * slice of `iterations`. Request ≤4 KiB + one item ≤3 KiB always fits.
+ * call whose iterations span pages repeats its whole head (the call without
+ * `iterations`, ≤3 KiB) with the next slice. Request ≤4 KiB + head + one
+ * iteration always fits (worst case 14,132 B).
  */
 export const DevBridgeProbeDetailSchema = DevBridgeProbeSummarySchema.extend({
     request: DevBridgeEchoedProbeRequestSchema,
