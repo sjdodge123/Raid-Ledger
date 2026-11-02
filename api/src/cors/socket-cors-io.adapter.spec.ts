@@ -4,7 +4,7 @@
  * engine.io polling handshake through `SocketCorsIoAdapter` and reads ACAO.
  */
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import type { Server } from 'socket.io';
 import request from 'supertest';
 import { SocketCorsIoAdapter } from './socket-cors-io.adapter';
 
@@ -16,6 +16,20 @@ const FOREIGN = 'https://evil.example.net';
 function restoreEnv(key: string, value: string | undefined): void {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
+}
+
+/**
+ * Structural check: `instanceof` is unreliable here because api and the Nest
+ * adapter can resolve different socket.io copies.
+ */
+function isIoServer(value: unknown): value is Server {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'close' in value &&
+    typeof value.close === 'function' &&
+    'engine' in value
+  );
 }
 
 describe('SocketCorsIoAdapter — polling handshake CORS', () => {
@@ -30,8 +44,7 @@ describe('SocketCorsIoAdapter — polling handshake CORS', () => {
     const created = new SocketCorsIoAdapter(httpServer).createIOServer(0, {
       cors: { origin: '*' },
     });
-    if (!(created instanceof Server))
-      throw new Error('expected a socket.io Server');
+    if (!isIoServer(created)) throw new Error('expected a socket.io Server');
     io = created;
   });
 
