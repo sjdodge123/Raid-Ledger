@@ -181,14 +181,15 @@ describe('PlayersGuildCard', () => {
     });
 
     // ROK-1840 r2 gap 3: step 3 names where the paste goes, as the prototype
-    // words it — "Paste it here" left the destination out.
-    it('the WoW how-to sends the export to Guilds → Import guild', async () => {
+    // words it — "Paste it here" left the destination out. ROK-2064: the
+    // destination is the character's Import string dialog (no Guilds screen exists).
+    it('the WoW how-to sends the export to the character Import string dialog', async () => {
         serveOnboarding();
         server.use(http.get(MINE, () => HttpResponse.json({ guilds: [] } satisfies MyGuilds)));
         renderWithProviders(<PlayersGuildCard />);
         await userEvent.click(await screen.findByTestId('get-your-guild-how-toggle'));
         expect(screen.getByTestId('players-guild-how-steps')).toHaveTextContent(
-            'Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.',
+            "Paste it on your character's page under Import string (or Add Character → Import LedgerLink character). Your roster, ranks and raid schedule come with it.",
         );
     });
 
