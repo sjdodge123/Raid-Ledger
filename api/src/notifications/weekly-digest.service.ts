@@ -165,7 +165,7 @@ export class WeeklyDigestService {
   ): Promise<BuiltDigest | null> {
     const context = await this.spotlightContext(now, timeZone);
     const sections = await assembleDigestSections(
-      buildDigestSources(this.db, this.redis),
+      buildDigestSources(this.db),
       context,
       (section, error) =>
         this.logger.warn(

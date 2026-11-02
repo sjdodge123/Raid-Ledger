@@ -424,11 +424,9 @@ async function seedFutureEvent(
 
 describe('Weekly digest v2 assembly over the real reads (ROK-1771 L6b, integration)', () => {
   let testApp: TestApp;
-  let redis: Redis;
 
   beforeAll(async () => {
     testApp = await getTestApp();
-    redis = testApp.app.get<Redis>(REDIS_CLIENT);
   });
 
   afterEach(async () => {
@@ -447,7 +445,7 @@ describe('Weekly digest v2 assembly over the real reads (ROK-1771 L6b, integrati
     const week = formatSpotlightWeek(isoWeek(new Date(), 'UTC'));
 
     const s = await assembleDigestSections(
-      buildDigestSources(testApp.db, redis),
+      buildDigestSources(testApp.db),
       { history: [], week },
       onError,
     );

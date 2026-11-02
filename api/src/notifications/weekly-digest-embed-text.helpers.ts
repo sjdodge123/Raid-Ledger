@@ -41,7 +41,9 @@ const ZWSP = String.fromCharCode(0x200b);
 /**
  * Per-section "see all" targets. Every one resolves to a real web route:
  * - playing, bestPrice → `/games` (no `/games/discover` route exists — it
- *   would fall into `/games/:id`; no deals-filtered view exists either);
+ *   would fall into `/games/:id`; no deals-filtered view exists either).
+ *   `playing` is the embed's author link only: the Been playing line has no
+ *   "see all" (ROK-2063 — `/games` is not the co-play-filtered set);
  * - recap → `/events?tab=past` (the tabs are upcoming|past|mine|plans; there
  *   is no `history` tab); upcoming → `/events` (the upcoming tab is default);
  * - lfg → `/games?lfg=1` (no `/lfg` index; only `/lfg/:gameSlug`).

@@ -138,7 +138,14 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
     const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
     const game = await seedGame(testApp, 'Short Overlap');
     await seedSession(testApp, now, a, game, 2 * DAY, 2 * DAY - 60 * MIN);
-    await seedSession(testApp, now, b, game, 2 * DAY - 50 * MIN, 2 * DAY - 120 * MIN);
+    await seedSession(
+      testApp,
+      now,
+      b,
+      game,
+      2 * DAY - 50 * MIN,
+      2 * DAY - 120 * MIN,
+    );
     await expect(read()).resolves.toEqual([]);
   });
 
@@ -146,7 +153,14 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
     const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
     const game = await seedGame(testApp, 'Valheim');
     await seedSession(testApp, now, a, game, 2 * DAY, 2 * DAY - 60 * MIN);
-    await seedSession(testApp, now, b, game, 2 * DAY - 40 * MIN, 2 * DAY - 120 * MIN);
+    await seedSession(
+      testApp,
+      now,
+      b,
+      game,
+      2 * DAY - 40 * MIN,
+      2 * DAY - 120 * MIN,
+    );
     await expect(read()).resolves.toEqual([
       { gameId: game, name: 'Valheim', slug: 'valheim', players: 2 },
     ]);
@@ -160,7 +174,14 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
     ];
     const game = await seedGame(testApp, 'Trio');
     await seedSession(testApp, now, a, game, 3 * DAY, 3 * DAY - 2 * HOUR);
-    await seedSession(testApp, now, b, game, 3 * DAY - HOUR, 3 * DAY - 3 * HOUR);
+    await seedSession(
+      testApp,
+      now,
+      b,
+      game,
+      3 * DAY - HOUR,
+      3 * DAY - 3 * HOUR,
+    );
     await seedSession(testApp, now, c, game, 1 * DAY, 1 * DAY - 2 * HOUR);
     const games = await read();
     expect(games.map((g) => [g.gameId, g.players])).toEqual([[game, 2]]);

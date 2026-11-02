@@ -6,7 +6,6 @@
  * wiring calls the existing reads with the ruled options.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
 import type { LfgGroupAggregate } from '../lfg/lfg-query.helpers';
 import * as lfgQuery from '../lfg/lfg-query.helpers';
@@ -182,7 +181,6 @@ describe('assembleDigestSections (v2) — spotlight and null fallbacks', () => {
 
 describe('buildDigestSources — production wiring (v2)', () => {
   const db = {} as PostgresJsDatabase<typeof schema>;
-  const redis = {} as Redis;
 
   afterEach(() => jest.restoreAllMocks());
 
@@ -190,7 +188,7 @@ describe('buildDigestSources — production wiring (v2)', () => {
     const spy = jest
       .spyOn(recapHelpers, 'fetchWeeklyRecap')
       .mockResolvedValue(RECAP);
-    const built = buildDigestSources(db, redis);
+    const built = buildDigestSources(db);
     await built.recap();
     await built.priorRecap();
     expect(spy).toHaveBeenNthCalledWith(1, db, { respectActivityOptOut: true });
@@ -204,7 +202,7 @@ describe('buildDigestSources — production wiring (v2)', () => {
     const spy = jest
       .spyOn(bestPriceHelpers, 'fetchWishlistedBestPrice')
       .mockResolvedValue({ items: [], total: 0 });
-    await buildDigestSources(db, redis).bestPrice();
+    await buildDigestSources(db).bestPrice();
     expect(spy).toHaveBeenCalledWith(db);
   });
 
@@ -212,9 +210,9 @@ describe('buildDigestSources — production wiring (v2)', () => {
     const spy = jest
       .spyOn(spotlightSources, 'fetchMarathonCandidate')
       .mockResolvedValue(MARATHON);
-    await expect(
-      buildDigestSources(db, redis).spotlight.marathon(),
-    ).resolves.toEqual(MARATHON);
+    await expect(buildDigestSources(db).spotlight.marathon()).resolves.toEqual(
+      MARATHON,
+    );
     expect(spy).toHaveBeenCalledWith(db);
   });
 
@@ -226,7 +224,7 @@ describe('buildDigestSources — production wiring (v2)', () => {
     const playing = jest
       .spyOn(coPlayQueries, 'fetchCoPlayGames')
       .mockResolvedValue(CO_PLAY);
-    const built = buildDigestSources(db, redis);
+    const built = buildDigestSources(db);
     await built.lfgGroups();
     await expect(built.coPlayGames()).resolves.toEqual(CO_PLAY);
     expect(channel).toHaveBeenCalledWith(db);
