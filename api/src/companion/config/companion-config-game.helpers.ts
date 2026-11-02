@@ -65,8 +65,7 @@ export function pickConfigGame(
   const ordered = inSlugOrder(slugs, rows);
   const most = Math.max(0, ...ordered.map((r) => r.hubs));
   const leaders = ordered.filter((r) => r.hubs === most);
-  const clearWinner =
-    most > 0 && leaders.length === 1 ? leaders[0] : undefined;
+  const clearWinner = most > 0 && leaders.length === 1 ? leaders[0] : undefined;
   const picked =
     clearWinner ?? ordered.find((r) => r.slug === primary) ?? leaders[0];
   if (!picked) return null;
