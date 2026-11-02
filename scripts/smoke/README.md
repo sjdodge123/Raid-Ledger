@@ -50,6 +50,7 @@ still parallel.
 | `characters.smoke.spec.ts` | Self-contained | None | n/a | Read-only character list. |
 | `community-insights.smoke.spec.ts` | Self-contained | None | n/a | Read-only insights page. |
 | `community-lineup.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry` to avoid `/lineups/banner` fallback. Banner-backed pages are pinned to the spec's own lineup with `scopeBannerTo` before `page.goto`. |
+| `companion-install.smoke.spec.ts` | Demo-scoped | `POST /admin/test/bg3/seed-hub` per test (`default` / `no-saves`) | Yes — `hubSeedTag('bg3comp', testInfo)` | ROK-2060: needs the bg3 plugin (installed/activated in `beforeAll`). The seed does not clear onboarding dismissals, so the "Not now" test restores `companion-install` for its hub before and after. |
 | `create-event.smoke.spec.ts` | Demo-scoped | `reset-to-seed` once | n/a | ROK-1070: keeps event-creation-redirect test deterministic across runs. |
 | `decided-composite.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1517: AC2 matches href against the SET of this lineup's match ids (unordered `/matches` response). |
 | `dynamic-categories.smoke.spec.ts` | Self-contained | `POST /admin/test/seed-discovery-categories` per-test via `seedSuggestion()` | n/a | Established pattern, predates ROK-1070. |
