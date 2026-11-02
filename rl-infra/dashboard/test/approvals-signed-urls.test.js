@@ -159,16 +159,22 @@ test('more than 2 submits in flight → 429 too_many_submits', async () => {
   assert.equal(third.json?.error, 'too_many_submits');
 });
 
-test('failed approval auth is counted per IP; past the cap even a valid key gets 429', async () => {
+// Delta review MAJOR: behind Cloudflare -> Traefik many visitors can share one
+// IP, so a stranger's bad keys must never lock out the holder of a valid key.
+test('failed approval auth is counted per IP; past the cap guesses get 429 but a valid key is never locked out', async () => {
   const port = await boot({ RL_APPROVAL_AUTH_FAIL_MAX: '3' });
   for (let i = 0; i < 3; i += 1) {
     assert.equal((await call(port, 'GET', '/api/approvals', { headers: { 'x-approval-token': `guess-${i}` } })).status, 401);
   }
-  const locked = await call(port, 'GET', '/api/approvals', { headers: INBOX });
-  assert.equal(locked.status, 429, `after 3 failures: ${locked.text}`);
+  const locked = await call(port, 'GET', '/api/approvals', { headers: { 'x-approval-token': 'guess-4' } });
+  assert.equal(locked.status, 429, `4th guess after 3 failures: ${locked.text}`);
   assert.equal(locked.json?.error, 'too_many_auth_failures');
-  const content = await raw(port, 'GET', `/approvals-content/${ID_A}/mockup.html`, INBOX);
-  assert.equal(content.status, 429, 'content route shares the lockout');
+  const noKey = await raw(port, 'GET', `/approvals-content/${ID_A}/mockup.html`);
+  assert.equal(noKey.status, 429, 'content route shares the lockout');
+  const operator = await call(port, 'GET', '/api/approvals', { headers: INBOX });
+  assert.equal(operator.status, 200, `valid inbox key on a locked-out IP: ${operator.text}`);
+  const agent = await call(port, 'GET', '/api/approvals', { headers: agentHeaders });
+  assert.equal(agent.status, 200, `valid agent token on a locked-out IP: ${agent.text}`);
 });
 
 test('approval GETs are rate-limited per IP', async () => {
