@@ -105,10 +105,10 @@ If your character isn't on Raid Ledger yet: open **Add Character**, click
 character and imports the rest in one go.
 
 :::note
-The character that made the export must be on the guild roster. Once a guild
-exists on Raid Ledger, only an admin or a member an admin has made a
-**guild editor** can update its roster. If you see *"Ask an admin for editor
-rights"*, ask your Raid Ledger admin.
+The character that made the export must be on the guild roster. Any guild
+member's newer export updates the roster, so members can keep it fresh too.
+If a roster changes a lot at once, Raid Ledger tells the guild's staff so they
+can check it.
 :::
 
 ## 5. Members: export your character
