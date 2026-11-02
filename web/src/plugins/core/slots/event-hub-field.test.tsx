@@ -45,8 +45,11 @@ function serve(hubs: TaggableHub[]): void {
     }));
 }
 
+let lastClient: QueryClient | null = null;
+
 function wrapper(): (p: { children: ReactNode }) => ReactNode {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    lastClient = client;
     return ({ children }) => createElement(QueryClientProvider, { client }, children);
 }
 
@@ -55,7 +58,13 @@ function renderField(guildId: number | null, onGuildChange = vi.fn(), dropUnlist
     return onGuildChange;
 }
 
-afterEach(() => { lastGameId = null; });
+/** Waits until the taggable lookup has RESOLVED (not merely been requested) and the field re-rendered. */
+async function settled(): Promise<void> {
+    await waitFor(() => expect(lastClient?.getQueryCache().getAll()[0]?.state.status, 'the taggable lookup resolved').toBe('success'));
+    await act(async () => {});
+}
+
+afterEach(() => { lastGameId = null; lastClient = null; });
 
 describe('EventHubField (ROK-2071)', () => {
     it('lists hubs of every kind after a "None" option, labelled Hub', async () => {
@@ -71,7 +80,8 @@ describe('EventHubField (ROK-2071)', () => {
     it('renders nothing when the viewer may tag no hub of this game', async () => {
         serve([]);
         renderField(null);
-        await waitFor(() => expect(lastGameId).toBe('7'));
+        await settled();
+        expect(lastGameId).toBe('7');
         expect(screen.queryByTestId('event-hub-field'), 'an empty list must hide the Hub field').toBeNull();
     });
 
@@ -148,9 +158,12 @@ describe('EventHubField — a crafted ?guildId= (ROK-1817)', () => {
     });
 
     it('edit mode: leaves an unchanged tag alone (the submit omits it)', async () => {
-        serve([]);
+        serve([SERVER]);
         const onGuildChange = renderField(21);
-        await waitFor(() => expect(lastGameId).toBe('7'));
-        expect(onGuildChange).not.toHaveBeenCalled();
+        const select = await screen.findByLabelText('Hub');
+        await settled();
+        const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+        expect(options, 'the list the edit form settled on').toEqual(['None', 'Seed Server']);
+        expect(onGuildChange, 'edit mode must not clear a tag absent from the list').not.toHaveBeenCalled();
     });
 });
