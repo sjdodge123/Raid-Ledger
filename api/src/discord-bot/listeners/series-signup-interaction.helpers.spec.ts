@@ -123,20 +123,17 @@ describe('reply copy', () => {
       formatLeftReply({
         cancelledEventIds: [1, 2],
         lateCancelledEventIds: [1],
-        failed: [],
       }),
     ).toBe(
       "You've left the series — 2 nights cancelled.\n**Heads up:** 1 of them starts within 23 hours, so it counts as a late cancellation.",
     );
     expect(
-      formatLeftReply({
-        cancelledEventIds: [1],
-        lateCancelledEventIds: [],
-        failed: [],
-      }),
+      formatLeftReply({ cancelledEventIds: [1], lateCancelledEventIds: [] }),
     ).toBe("You've left the series — 1 night cancelled.");
   });
+});
 
+describe('leave reply reports nights still signed up (Codex P2)', () => {
   it('tells the user which nights could not be cancelled and that they are still signed up (Codex P2)', () => {
     expect(
       formatLeftReply({

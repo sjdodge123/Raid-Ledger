@@ -49,6 +49,10 @@ import {
 } from './series-signups-join.helpers';
 import { cancelTaggedNights } from './series-signups-lifecycle.helpers';
 import { createAndReviveNights } from './series-signups-rejoin.helpers';
+import {
+  SERIES_RACE_ERRORS,
+  undoFillIfMembershipEnded,
+} from './series-signups-race.helpers';
 
 @Injectable()
 export class SeriesSignupsService {
@@ -126,7 +130,10 @@ export class SeriesSignupsService {
     return this.fillMembership(anchor, userId, dto, membership, classified);
   }
 
-  /** Attach + materialize + audit for a freshly inserted membership. */
+  /**
+   * Attach + materialize + audit for a freshly inserted membership. A leave
+   * that ended the membership mid-fill is repaired, then reported as 409.
+   */
   private async fillMembership(
     anchor: SeriesAnchor,
     userId: number,
@@ -135,6 +142,7 @@ export class SeriesSignupsService {
     classified: ClassifiedNights,
   ): Promise<JoinSeriesResponseDto> {
     const applied = await this.applyPlan(userId, dto, membership, classified);
+    await this.assertStillMember(membership.id, userId);
     await this.logJoined(
       anchor.event.id,
       userId,
@@ -171,6 +179,20 @@ export class SeriesSignupsService {
       dto,
     );
     return { attachedEventIds, ...created };
+  }
+
+  /** Throws 409 after releasing the nights when a leave won the race. */
+  private async assertStillMember(
+    membershipId: number,
+    userId: number,
+  ): Promise<void> {
+    const deps = {
+      db: this.db,
+      signups: this.signupsService,
+      logger: this.logger,
+    };
+    if (await undoFillIfMembershipEnded(deps, membershipId, userId))
+      throw new ConflictException(SERIES_RACE_ERRORS.LEFT_DURING_JOIN);
   }
 
   /** Audits a join on the anchor event (Q8: per-night `signup_added` too). */

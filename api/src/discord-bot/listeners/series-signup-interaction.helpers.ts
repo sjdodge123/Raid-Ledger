@@ -104,19 +104,37 @@ export function formatJoinedReply(
   return `${head}\n${plural(res.failed.length, 'night')} could not be joined.`;
 }
 
-/** "You've left the series — N nights cancelled." plus the <23h warning. */
+/** Nights a leave could not cancel: the user is still signed up for them. */
+function stillSignedUpLine(
+  failed: LeaveSeriesResponseDto['failed'] | undefined,
+): string {
+  const first = failed?.[0];
+  if (!failed || !first) return '';
+  const n = failed.length;
+  const how =
+    n === 1
+      ? 'Leave it from the event page.'
+      : 'Leave them from each event page.';
+  return `\n**Still signed up:** ${plural(n, 'night')} could not be cancelled (${first.message}). ${how}`;
+}
+
+/**
+ * "You've left the series — N nights cancelled." plus the <23h warning and,
+ * mirroring the web toast, the nights whose cancel failed.
+ */
 export function formatLeftReply(
   res: Pick<
     LeaveSeriesResponseDto,
-    'cancelledEventIds' | 'lateCancelledEventIds'
+    'cancelledEventIds' | 'lateCancelledEventIds' | 'failed'
   >,
 ): string {
   const head = `You've left the series — ${plural(res.cancelledEventIds.length, 'night')} cancelled.`;
+  const failedLine = stillSignedUpLine(res.failed);
   const late = res.lateCancelledEventIds.length;
-  if (late === 0) return head;
+  if (late === 0) return `${head}${failedLine}`;
   const tail =
     late === 1
       ? '1 of them starts within 23 hours, so it counts as a late cancellation.'
       : `${late} of them start within 23 hours, so they count as late cancellations.`;
-  return `${head}\n**Heads up:** ${tail}`;
+  return `${head}\n**Heads up:** ${tail}${failedLine}`;
 }
