@@ -25,6 +25,12 @@
 #   R-n  a locally built tag (docker images, no container/row yet) is protected;
 #        an unreadable `docker images` aborts the sweep
 #   R-o  a timed-out garbage-collect is pkill'd inside rl-registry
+#   R-p  fail closed: a kept tag whose digest HEAD fails aborts the sweep
+#        (protected_digest_unreadable, rc 1); env-destroy keeps its tag
+#   R-q  digest-pinned refs (container, env row, local RepoDigests) protect
+#   R-r  keep-N survivors and young tags protect a doomed tag sharing a digest
+#   R-s  a 137 (timeout -k) also pkills; the pkill is itself under timeout
+#   R-t  RL_REGISTRY_GC_DRY_RUN defaults to 1; sweep.sh logs the ledger path
 
 set -uo pipefail
 CURRENT_TEST_FILE="registry-gc.test.sh"
@@ -42,11 +48,12 @@ curl() {
     local args="$*" url="${*: -1}"
     echo "curl $args" >> "$CALL_LOG"
     case "$url" in
-        */tags/list) jq -nc --arg t "$TAGS" '{name:"rl-allinone", tags:($t|split(" "))}' ;;
+        */tags/list) [[ -n "${LIST_FAIL:-}" ]] && return 22; jq -nc --arg t "$TAGS" '{name:"rl-allinone", tags:($t|split(" "))}' ;;
         */manifests/*)
             local tag="${url##*/}"
             if [[ "$args" == *DELETE* ]]; then return 0
             elif [[ "$args" == *-I* ]]; then
+                [[ " ${HEAD_FAIL:-} " == *" $tag "* ]] && return 22
                 local d; d=$(tr ' ' '\n' <<<"${DIGESTS:-}" | sed -n "s/^${tag}=//p")
                 printf 'HTTP/1.1 200 OK\r\nDocker-Content-Digest: sha256:%s\r\n\r\n' "${d:-$tag}"
             else jq -nc --arg t "$tag" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}'; fi ;;
@@ -61,14 +68,21 @@ docker() {
     # shellcheck disable=SC2086  # PS_IMAGES is a space-separated list on purpose
     if [[ "$1" == ps ]]; then [[ -n "${DOCKER_PS_FAIL:-}" ]] && return 1; printf '%s\n' ${PS_IMAGES:-}; fi
     # shellcheck disable=SC2086  # LOCAL_IMAGES is a space-separated list on purpose
-    if [[ "$1" == images ]]; then [[ -n "${DOCKER_IMAGES_FAIL:-}" ]] && return 1; printf '%s\n' ${LOCAL_IMAGES:-}; fi
+    if [[ "$1" == images ]]; then
+        [[ -n "${DOCKER_IMAGES_FAIL:-}" ]] && return 1
+        # shellcheck disable=SC2086  # space-separated lists on purpose
+        if [[ "$*" == *--digests* ]]; then printf '%s\n' ${LOCAL_DIGESTS:-}; else printf '%s\n' ${LOCAL_IMAGES:-}; fi
+    fi
     return 0
 }
-# timeout stub: log the wrapper, then run the (stubbed) command — `-k N SECS cmd…`.
-# TIMEOUT_RC set = simulate the bound expiring (coreutils exits 124).
+# timeout stub: log the wrapper, then run the (stubbed) command — `[-k N] SECS cmd…`.
+# TIMEOUT_RC set = the garbage-collect bound expires (124, or 137 after -k);
+# CLEANUP_TIMEOUT_RC set = the in-container pkill's own bound expires.
 timeout() {
-    echo "timeout $*" >> "$CALL_LOG"; shift 3
-    [[ -n "${TIMEOUT_RC:-}" ]] && return "$TIMEOUT_RC"
+    echo "timeout $*" >> "$CALL_LOG"
+    [[ "$1" == -k ]] && shift 2; shift
+    if [[ "$*" == *pkill* ]]; then [[ -n "${CLEANUP_TIMEOUT_RC:-}" ]] && return "$CLEANUP_TIMEOUT_RC"
+    elif [[ -n "${TIMEOUT_RC:-}" ]]; then return "$TIMEOUT_RC"; fi
     "$@"
 }
 
@@ -80,7 +94,8 @@ _setup_gc() {
     export RL_REGISTRY_URL="http://reg.test:5000" RL_REGISTRY_KEEP_N=2 RL_REGISTRY_RETENTION_HOURS=48
     echo '[]' > "$RL_ENVS_FILE"; echo '{"heavy_running":[]}' > "$RL_ADMISSION_FILE"
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
-    LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""
+    LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""; CLEANUP_TIMEOUT_RC=""
+    TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -179,7 +194,7 @@ test_env_destroy_spares_shared_digest() {
     _setup_gc
     jq -nc '[{slug:"s1", image:"registry.rl.lan:5000/rl-allinone:s1"},
              {slug:"s2", image:"registry.rl.lan:5000/rl-allinone:s2"}]' > "$RL_ENVS_FILE"
-    DIGESTS="s1=same s2=same"
+    TAGS="s1 s2"; DIGESTS="s1=same s2=same"
     registry_gc::delete_env_tag s1 >/dev/null 2>&1
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "deleting s1's digest would take s2's tag down too"
     test_teardown
@@ -283,6 +298,98 @@ test_collect_timeout_kills_gc() {
     test_teardown
 }
 
+test_unreadable_digest_fails_closed() {
+    CURRENT_TEST_NAME="R-p: a kept tag with an unreadable digest aborts the sweep"
+    _setup_gc
+    TAGS="latest a b c old"; AGES="a=1 b=2 c=300 old=200"; HEAD_FAIL="latest"
+    local out rc
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$rc" "1" "an unreadable protected digest fails the sweep"
+    assert_eq "$(jq -r '.error' <<<"$out")" "protected_digest_unreadable" "result names the failure"
+    HEAD_FAIL="a"
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$(jq -r '.error' <<<"$out")" "protected_digest_unreadable" "a keep-N survivor's digest counts too"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "nothing deleted on an unknown digest"
+    assert_eq "$(grep -c 'garbage-collect' "$CALL_LOG")" "0" "no GC either"
+    HEAD_FAIL=""; PS_IMAGES="rl-allinone:gone"
+    out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.deleted | sort | join(",")' <<<"$out")" "c,old" "a protected tag absent from the registry is no blocker"
+    : > "$CALL_LOG"
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1 other"; HEAD_FAIL="other"
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    TAGS="s1"; HEAD_FAIL=""; LIST_FAIL=1
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy keeps its tag when any digest is unknown"
+    test_teardown
+}
+
+test_digest_pinned_refs_protect() {
+    CURRENT_TEST_NAME="R-q: digest-pinned container/env/local refs protect the manifest"
+    _setup_gc
+    TAGS="a b c d e old"; AGES="a=1 b=2 c=300 d=300 e=300 old=200"
+    PS_IMAGES="registry.rl.lan:5000/rl-allinone@sha256:c"
+    jq -nc '[{slug:"s9", image:"127.0.0.1:5000/rl-allinone:gone@sha256:d"}]' > "$RL_ENVS_FILE"
+    LOCAL_DIGESTS="registry.rl.lan:5000/rl-allinone@sha256:e postgres@sha256:old rl-allinone@<none>"
+    local out; out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.deleted | join(",")' <<<"$out")" "old" "pinned c, d and e survive; another repo's digest is ignored"
+    : > "$CALL_LOG"
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1"; PS_IMAGES="rl-allinone@sha256:s1"
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy spares a digest a container pins"
+    test_teardown
+}
+
+test_survivors_share_digest() {
+    CURRENT_TEST_NAME="R-r: keep-N survivors and young tags protect a shared digest"
+    _setup_gc
+    TAGS="a b old1"; AGES="a=100 b=250 old1=200"
+    RL_REGISTRY_KEEP_N=1; DIGESTS="a=same old1=same"
+    local out; out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.deleted | join(",")' <<<"$out")" "b" "old1 shares the keep-N survivor a's digest"
+    TAGS="y1 y2 b old2"; AGES="y1=1 y2=2 b=250 old2=300"; DIGESTS="y2=yd old2=yd"
+    out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.deleted | join(",")' <<<"$out")" "b" "old2 shares the young (non-doomed) y2's digest"
+    : > "$CALL_LOG"
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1 untracked"; DIGESTS="s1=x untracked=x"
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy spares a digest any other registry tag shares"
+    test_teardown
+}
+
+test_collect_137_and_bounded_cleanup() {
+    CURRENT_TEST_NAME="R-s: exit 137 is a timeout; the pkill cleanup is bounded"
+    _setup_gc
+    TIMEOUT_RC=137
+    local out; out=$(registry_gc::collect 2>/dev/null)
+    assert_eq "$out" "timed_out" "a KILL escalation is still a timeout"
+    assert_contains "$(cat "$CALL_LOG")" "timeout -k 5 30 docker exec rl-registry pkill -f garbage-collect" \
+        "the cleanup exec is bounded by timeout"
+    CLEANUP_TIMEOUT_RC=124
+    local err; err=$(registry_gc::collect 2>&1 >/dev/null)
+    assert_contains "$err" "pkill garbage-collect in rl-registry failed" "a stuck cleanup is logged"
+    test_teardown
+}
+
+test_dry_run_default() {
+    CURRENT_TEST_NAME="R-t: dry run is the default; sweep.sh logs the admission ledger path"
+    _setup_gc
+    unset RL_REGISTRY_GC_DRY_RUN
+    # shellcheck disable=SC1090
+    source "$LIB"
+    assert_eq "$RL_REGISTRY_GC_DRY_RUN" "1" "unset means dry run"
+    TAGS="a b c old"; AGES="a=1 b=2 c=300 old=200"
+    local out; out=$(registry_gc::sweep force 2>/dev/null)
+    assert_eq "$(jq -r '.gc + " " + (.dry_run|tostring) + " " + (.deleted|sort|join(","))' <<<"$out")" \
+        "dry_run true c,old" "a default sweep only reports would-delete tags"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "a default sweep deletes nothing"
+    local stripped; stripped=$(grep -v '^[[:space:]]*#' "$TEST_DIR/../../gc-sweeper/sweep.sh")
+    assert_contains "$stripped" 'registry: admission ledger $RL_ADMISSION_FILE' "sweeper logs which admission.json it locks"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
@@ -298,4 +405,9 @@ run_test "r-l-destroy-dry-run" test_env_destroy_dry_run
 run_test "r-m-collect-timeout" test_collect_has_timeout
 run_test "r-n-local-images" test_local_images_protected
 run_test "r-o-timeout-pkill" test_collect_timeout_kills_gc
+run_test "r-p-digest-fail-closed" test_unreadable_digest_fails_closed
+run_test "r-q-digest-pins" test_digest_pinned_refs_protect
+run_test "r-r-survivor-digest" test_survivors_share_digest
+run_test "r-s-137-cleanup" test_collect_137_and_bounded_cleanup
+run_test "r-t-dry-run-default" test_dry_run_default
 print_test_summary
