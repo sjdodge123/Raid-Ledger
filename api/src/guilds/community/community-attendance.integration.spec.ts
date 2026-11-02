@@ -30,13 +30,14 @@ interface UserOpts {
 }
 
 async function mkUser(opts: UserOpts = {}): Promise<number> {
+  const n = ++seq;
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
       .values({
-        username: opts.username ?? next('ca'),
+        username: opts.username ?? `ca-${n}-${Date.now() % 100000}`,
         displayName: opts.displayName ?? null,
-        discordId: `92${String(Date.now() % 1e9).padStart(9, '0')}${String(seq).padStart(5, '0')}`,
+        discordId: `92${String(Date.now() % 1e9).padStart(9, '0')}${String(n).padStart(5, '0')}`,
         role: 'member',
         deactivatedAt: opts.deactivated ? new Date() : null,
       })
