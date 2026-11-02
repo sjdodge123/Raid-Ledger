@@ -1,5 +1,5 @@
 // ROK-1900 L3 — /approvals-content/<id>/<file>: sandbox headers (D5, AC6),
-// auth matrix (header or ?k=), traversal refusal, magic-byte content type.
+// auth matrix (header or signed ?t=; never ?k=), traversal refusal, magic-byte content type.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
@@ -66,7 +66,7 @@ test('mockup.html is served with the exact D5 sandbox CSP, no-referrer and nosni
   assert.equal(r.body.toString('utf8'), MOCKUP);
 });
 
-test('auth matrix: inbox header, ?k= inbox key and agent token read; nothing else does', async () => {
+test('auth matrix: inbox header and agent token read; ?k= is never accepted', async () => {
   const { port } = await boot();
   const id = await submitWithFiles(port);
   const path = `/approvals-content/${id}/mockup.html`;
@@ -75,7 +75,8 @@ test('auth matrix: inbox header, ?k= inbox key and agent token read; nothing els
   assert.equal((await get(port, `${path}?k=wrong`)).status, 401, 'wrong ?k=');
   assert.equal((await get(port, `${path}?k=${agentHeaders['x-agent-token']}`)).status, 401,
     '?k= never accepts the agent token');
-  assert.equal((await get(port, `${path}?k=${encodeURIComponent(INBOX_KEY)}`)).status, 200, '?k= inbox key');
+  assert.equal((await get(port, `${path}?k=${encodeURIComponent(INBOX_KEY)}`)).status, 401,
+    'the real inbox key in ?k= is refused — keys never ride in a URL');
   assert.equal((await get(port, path, agentHeaders)).status, 200, 'agent token header');
   assert.equal((await get(port, path, { 'x-approval-token': INBOX_KEY }, 'POST')).status, 405, 'POST');
 });
@@ -109,7 +110,9 @@ test('traversal and unlisted names are refused before any file read', async () =
 test('screenshots are typed from their magic bytes; a tampered file is refused (415)', async () => {
   const { dir, port } = await boot();
   const id = await submitWithFiles(port);
-  const path = `/approvals-content/${id}/shot-1.png?k=${encodeURIComponent(INBOX_KEY)}`;
+  const item = await call(port, 'GET', `/api/approvals/${id}`, { headers: { 'x-approval-token': INBOX_KEY } });
+  const path = item.json?.content_urls?.files?.['shot-1.png'];
+  assert.match(path ?? '', /^\/approvals-content\/.+\/shot-1\.png\?t=/, 'signed screenshot url');
   const ok = await get(port, path);
   assert.equal(ok.status, 200);
   assert.equal(ok.headers['content-type'], 'image/png');

@@ -7,15 +7,18 @@
 // (no allow-same-origin) AND every response here carries a CSP whose `sandbox`
 // directive keeps the document in an opaque origin even when the URL is opened
 // top-level. With `connect-src 'none'` and `default-src 'none'` the mockup
-// cannot beacon out or load anything external (Q9); no-referrer keeps the
-// `?k=` key out of any request the frame makes.
+// cannot beacon out or load anything external (Q9).
 //
-// Auth: the agent token, the inbox key header, or `?k=<inbox key>` (an iframe
-// or <img> src cannot send headers). Paths are never built from the request:
+// Auth: the agent token or inbox key HEADER (non-browser clients), or a
+// signed `?t=` minted by GET /api/approvals/<id> (approvals-sign.js) — valid
+// for this one file of this one item for ~10 minutes. The inbox key is never
+// accepted from the query string (the mockup can read its own URL and leak
+// it): `?k=` is ignored and the request is 401. Paths are never built from the request:
 // the id must match ID_RE, the name a strict filename regex, and the store
 // only resolves names the item itself lists. spec.md is never served raw —
 // the page renders it from GET /api/approvals/<id> (spec "API routes").
 import { readFile } from 'node:fs/promises';
+import { noteDenial, preGate } from './approvals-limits.js';
 import { ApprovalError, ID_RE, sniffImage } from './approvals-validate.js';
 
 export const CONTENT_CSP = [
@@ -48,19 +51,20 @@ const sendError = (res, status, error, extra = {}) => {
   res.end(JSON.stringify({ ok: false, error }));
 };
 
-const queryKey = (req) => {
-  const k = new URLSearchParams((req.url || '').split('?')[1] ?? '').get('k');
-  return typeof k === 'string' && k.length > 0 ? k : null;
-};
+const queryToken = (req) => new URLSearchParams((req.url || '').split('?')[1] ?? '').get('t');
 
-// null when allowed, else { status, error }. A `?k=` only ever counts as the
-// inbox key; it is never compared against the agent token.
-const denial = (auth, req) => {
+const BAD_TOKEN = Object.freeze({ status: 403, error: 'content_token_invalid' });
+
+// null when allowed, else { status, error }. Header auth first; otherwise a
+// `?t=` must verify for exactly (id, name) — expired, tampered, or minted for
+// another file/item is 403. Neither the inbox key nor the agent token is
+// ever read from the query string.
+const denial = (auth, signer, req, id, name) => {
   const viaHeader = auth.deny(req, 'read');
-  if (!viaHeader) return null;
-  if (viaHeader.status === 503) return viaHeader;
-  const k = queryKey(req);
-  return k !== null && auth.keyOk(k) ? null : viaHeader;
+  if (!viaHeader || viaHeader.status === 503) return viaHeader;
+  const t = queryToken(req);
+  if (t === null) return viaHeader;
+  return signer && signer.verify(id, name, t) ? null : BAD_TOKEN;
 };
 
 // Content type from the bytes for images (never the name); html as uploaded.
@@ -80,16 +84,27 @@ const serve = async (store, id, name, req, res) => {
 };
 
 // Returns an async (req, res, pathOnly) => boolean — true when it answered.
-export const createApprovalContent = ({ store, auth }) => async (req, res, pathOnly) => {
+export const createApprovalContent = ({
+  store, auth, signer = null, limits = null, ipOf = () => null,
+}) => async (req, res, pathOnly) => {
   if (!pathOnly.startsWith('/approvals-content/')) return false;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     sendError(res, 405, 'method_not_allowed', { allow: 'GET, HEAD' });
     return true;
   }
-  const denied = denial(auth, req);
-  if (denied) { sendError(res, denied.status, denied.error); return true; }
+  const ip = ipOf(req);
+  if (limits && preGate(limits, ip, req, res)) return true;
   const m = pathOnly.match(PATH_RE);
-  const [, id = '', name = ''] = m ?? [];
+  const [, rawId = '', rawName = ''] = m ?? [];
+  let id = rawId;
+  let name = rawName;
+  try { id = decodeURIComponent(rawId); name = decodeURIComponent(rawName); } catch { /* checked below */ }
+  const denied = denial(auth, signer, req, id, name);
+  if (denied) {
+    if (limits) noteDenial(limits, ip, denied.status);
+    sendError(res, denied.status, denied.error);
+    return true;
+  }
   if (!m || !ID_RE.test(id) || !NAME_RE.test(name)) { sendError(res, 404, 'not_found'); return true; }
   try {
     await serve(store, id, name, req, res);

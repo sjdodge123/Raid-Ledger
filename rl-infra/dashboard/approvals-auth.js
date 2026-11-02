@@ -44,7 +44,8 @@ export const createApprovalAuth = ({ agentToken = '', inboxHashHex } = {}) => {
     if (need === 'inbox') return isOperator(req) ? null : NEED_INBOX;
     return isAgent(req) || isOperator(req) ? null : NEED_INBOX;
   };
-  // For L3's /approvals-content/ `?k=` (iframes cannot send headers).
+  // Raw inbox-key check for a value read from a HEADER (plan-step tester
+  // gate, D10). Never feed it a query-string value: keys stay out of URLs.
   const keyOk = (presented) => inboxKeyMatches(presented, hash);
   return Object.freeze({ configured: hash !== null, deny, isAgent, isOperator, keyOk });
 };

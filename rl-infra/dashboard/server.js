@@ -19,6 +19,8 @@ import {
 } from './plan-auth.js';
 import { createApprovalAuth } from './approvals-auth.js';
 import { createApprovalContent } from './approvals-content.js';
+import { createApprovalLimits } from './approvals-limits.js';
+import { createContentSigner } from './approvals-sign.js';
 import { createPlanStepSource } from './approvals-plan-steps.js';
 import { createApprovalRoutes } from './approvals-routes.js';
 import { createApprovalStore } from './approvals-store.js';
@@ -147,16 +149,23 @@ const approvalStore = createApprovalStore({ root: process.env.RL_APPROVALS_ROOT 
 const approvalAuth = createApprovalAuth({
   agentToken: RL_AGENT_TOKEN, inboxHashHex: process.env.RL_APPROVAL_TOKEN_SHA256,
 });
+// Per-boot HMAC secret for signed content URLs (never persisted or logged).
+const approvalSigner = createContentSigner();
+const approvalLimits = createApprovalLimits();
 const handleApprovals = createApprovalRoutes({
   store: approvalStore,
   auth: approvalAuth,
+  signer: approvalSigner,
+  limits: approvalLimits,
   publicDomain: PUBLIC_DOMAIN,
   ipOf: clientIp,
   // Unverdicted design/operator plan steps (D9). Called per request, after
   // the plan loader below is initialised.
   planSteps: (...a) => planStepSource(...a),
 });
-const handleApprovalContent = createApprovalContent({ store: approvalStore, auth: approvalAuth });
+const handleApprovalContent = createApprovalContent({
+  store: approvalStore, auth: approvalAuth, signer: approvalSigner, limits: approvalLimits, ipOf: clientIp,
+});
 const planStepSource = createPlanStepSource({
   listSlugs: async () => {
     try {
@@ -2047,6 +2056,26 @@ const handleTestPlanList = async (res) => {
   }
 };
 
+// ROK-1900 — CSP for the dashboard's own pages. Scripts are external files
+// only (no inline <script>, no handlers), so script-src stays 'self' with no
+// 'unsafe-inline'. Styles keep 'unsafe-inline' for the one style="" attribute
+// in index.html and JS-set styles. frame-src 'self' confines iframes to the
+// sandboxed /approvals-content/ mockups; base-uri/object-src/form-action shut
+// the classic injection pivots; frame-ancestors stops the approve buttons
+// being clickjacked.
+const PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
 const serveStatic = async (req, res) => {
   const path = sanitizePath(req.url);
   if (!path) {
@@ -2060,6 +2089,7 @@ const serveStatic = async (req, res) => {
     res.writeHead(200, {
       'content-type': ct,
       'cache-control': 'no-store',
+      ...(extname(path) === '.html' ? { 'content-security-policy': PAGE_CSP } : {}),
     });
     res.end(data);
   } catch {

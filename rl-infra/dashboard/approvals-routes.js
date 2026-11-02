@@ -7,10 +7,14 @@
 //   POST /api/approvals/<id>/verdict       inbox  decide         {ok, item}
 //   POST /api/approvals/<id>/withdraw      agent  withdraw       {ok, status, item}
 //
-// Auth runs BEFORE any body is read. Nothing is ever deleted: DELETE (or any
+// GET /api/approvals/<id> also returns `content_urls` — signed, ~10-minute,
+// single-file URLs for the mockup and screenshots (approvals-sign.js), so the
+// inbox key never rides in an iframe/img src. Auth runs BEFORE any body is read. Nothing is ever deleted: DELETE (or any
 // other method) on an approval path is 405. Writes are rate-limited by the
 // dispatcher (rateLimitOk) before this handler runs. File serving
 // (/approvals-content/) and the plan-step join live in other modules.
+import { noteDenial, preGate, sendTooMany } from './approvals-limits.js';
+import { contentUrlsFor } from './approvals-sign.js';
 import { ApprovalError, ID_RE, LIMITS, redactNotes } from './approvals-validate.js';
 
 // Submit: every attachment at its cap, screenshots base64-inflated, + slack
@@ -36,29 +40,28 @@ const sendError = (res, status, error, detail = null) =>
 const isJsonContentType = (ct) =>
   typeof ct === 'string' && ct.split(';', 1)[0].trim().toLowerCase() === 'application/json';
 
-// Reads a JSON object body under `max` bytes. Over the cap: stop buffering,
-// drain, reject 413 (a declared content-length over the cap rejects at once).
+// Reads a JSON object body under `max` bytes. Over the cap (declared or
+// streamed) it rejects 413 at once; the route answers and then destroys the
+// socket (abortAfter413) so the client cannot keep streaming into us.
 export const readBody = (req, max) => new Promise((resolve, reject) => {
   if (!isJsonContentType(req.headers?.['content-type'])) {
     reject(new ApprovalError(415, 'unsupported_media_type', 'Content-Type must be application/json'));
     return;
   }
   const declared = Number(req.headers?.['content-length']);
-  if (Number.isFinite(declared) && declared > max) {
-    req.resume();
-    reject(new ApprovalError(413, 'body_too_large', `max ${max} bytes`));
-    return;
-  }
+  const tooLarge = () => new ApprovalError(413, 'body_too_large', `max ${max} bytes`);
+  if (Number.isFinite(declared) && declared > max) { reject(tooLarge()); return; }
   let size = 0;
   let over = false;
   const chunks = [];
   req.on('data', (c) => {
+    if (over) return;
     size += c.length;
-    if (size > max) { over = true; chunks.length = 0; return; }
-    if (!over) chunks.push(c);
+    if (size > max) { over = true; chunks.length = 0; reject(tooLarge()); return; }
+    chunks.push(c);
   });
   req.on('end', () => {
-    if (over) { reject(new ApprovalError(413, 'body_too_large', `max ${max} bytes`)); return; }
+    if (over) return;
     let parsed;
     try { parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {
       reject(new ApprovalError(400, 'invalid_json', 'body is not valid JSON'));
@@ -83,10 +86,16 @@ const methodNotAllowed = (res, allow) => {
   res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
 };
 
+// At most RL_APPROVAL_SUBMIT_CONCURRENCY submits buffer at once (each can be
+// tens of MB); the rest get 429 before a byte of body is read.
 const handleSubmit = async (ctx, req, res) => {
-  const body = await readBody(req, SUBMIT_MAX_BYTES);
-  const item = await ctx.store.create(body, { ip: ctx.ipOf(req) });
-  sendJson(res, 201, { ok: true, id: item.id, item_url: itemUrl(ctx.publicDomain, item.id) });
+  const release = ctx.limits ? ctx.limits.acquireSubmit() : () => {};
+  if (!release) { sendTooMany(res, 'too_many_submits', 5); req.resume(); return; }
+  try {
+    const body = await readBody(req, SUBMIT_MAX_BYTES);
+    const item = await ctx.store.create(body, { ip: ctx.ipOf(req) });
+    sendJson(res, 201, { ok: true, id: item.id, item_url: itemUrl(ctx.publicDomain, item.id) });
+  } finally { release(); }
 };
 
 const handleList = async (ctx, req, res) => {
@@ -102,7 +111,10 @@ const handleGet = async (ctx, id, req, res) => {
   const item = await ctx.store.get(id);
   const wantNotes = queryOf(req).get('include_notes') === '1' && ctx.auth.isAgent(req);
   const specMd = typeof ctx.store.readSpec === 'function' ? await ctx.store.readSpec(id) : null;
-  sendJson(res, 200, { ok: true, item: wantNotes ? item : redactNotes(item), spec_md: specMd });
+  const contentUrls = ctx.signer ? contentUrlsFor(ctx.signer, item) : { files: {}, expires_at: null };
+  sendJson(res, 200, {
+    ok: true, item: wantNotes ? item : redactNotes(item), spec_md: specMd, content_urls: contentUrls,
+  });
 };
 
 const handleAction = async (ctx, id, action, req, res) => {
@@ -137,23 +149,38 @@ const route = (ctx, req, res, pathOnly) => {
 };
 
 // Returns an async (req, res, pathOnly) => boolean — true when it answered.
+// After a 413 the rest of the body is never read: answer, then drop the
+// socket so an oversized upload stops costing bandwidth and memory.
+const abortAfter413 = (req, res) => {
+  if (res.writableFinished) req.destroy();
+  else res.once('finish', () => req.destroy());
+};
+
 export const createApprovalRoutes = ({
   store, auth, publicDomain = '', ipOf = () => null, planSteps = async () => [],
+  signer = null, limits = null,
 }) => {
-  const ctx = Object.freeze({ store, auth, publicDomain, ipOf, planSteps });
+  const ctx = Object.freeze({ store, auth, publicDomain, ipOf, planSteps, signer, limits });
   return async (req, res, pathOnly) => {
     if (pathOnly !== '/api/approvals' && !pathOnly.startsWith('/api/approvals/')) return false;
+    const ip = ipOf(req);
+    if (limits && preGate(limits, ip, req, res)) return true;
     const r = route(ctx, req, res, pathOnly);
     if (r.notFound) { sendError(res, 404, 'not_found'); return true; }
     if (r.allow) { methodNotAllowed(res, r.allow); return true; }
     const denial = auth.deny(req, r.need);
-    if (denial) { sendError(res, denial.status, denial.error); return true; }
+    if (denial) {
+      if (limits) noteDenial(limits, ip, denial.status);
+      sendError(res, denial.status, denial.error);
+      return true;
+    }
     if (r.badId) { sendError(res, 400, 'invalid_id', 'malformed approval id'); return true; }
     try {
       await r.run();
     } catch (err) {
       if (!(err instanceof ApprovalError)) throw err;
       sendError(res, err.status, err.code, err.detail);
+      if (err.status === 413) abortAfter413(req, res);
     }
     return true;
   };
