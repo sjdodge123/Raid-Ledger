@@ -296,8 +296,8 @@ describe('reconcileCalendarCopy — tentative (§5 test 8)', () => {
 
 /**
  * F11: put the test user's signup on the bench, or into a role slot — the
- * row shape the app writes (`signup-bench-promote.helpers.ts`
- * ensureBenchFallback: `roster_assignments{signupId, role: 'bench'}`).
+ * row shape the app writes (`signups-promotion.helpers.ts` bench fallback:
+ * `roster_assignments{signupId, role: 'bench'}`).
  * Keyed by user: `POST /events` also signs the creator (admin) up.
  */
 async function assignRole(eventId: number, role: string) {
