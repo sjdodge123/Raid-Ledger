@@ -27,6 +27,7 @@ whose `contract` + `contractVersion` select an entry in the registry
 | `bg3-save` | `1` | `current` | [`bg3-save/v1/`](./bg3-save/v1/CONTRACT.md) | `src/companion-bg3-save.schema.ts` (+ `-raw.schema.ts`, `-normalise.ts`) |
 | `wow-ledgerlink` | `1` | `current` | [`wow-ledgerlink/v1/`](./wow-ledgerlink/v1/CONTRACT.md) | `src/companion-wow-ledgerlink.schema.ts` (wraps an unchanged LedgerLink v1 export string) |
 | *(device-link — HTTP link/poll bodies, not a registry entry)* | `1` | current | [`device-link/v1/`](./device-link/v1/CONTRACT.md) | `src/companion-devices.schema.ts` |
+| *(dev-bridge — LAN developer `/dev/v1/*` bodies + probe grammar, not a registry entry; ROK-2055)* | `1` | current | [`dev-bridge/v1/`](./dev-bridge/v1/CONTRACT.md) | `src/companion-dev-bridge*.ts` (+ generated `allowlist.json`; guard `src/__tests__/companion-dev-bridge-contract.spec.ts`) |
 
 Each `vN/` folder holds `CONTRACT.md` (normative prose), `schema.json`
 (generated JSON Schema, draft 2020-12), `CHANGELOG.md` and `fixtures/` (valid
