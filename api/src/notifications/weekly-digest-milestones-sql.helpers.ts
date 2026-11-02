@@ -1,7 +1,9 @@
 /**
- * ROK-1771 slice L2 — the four "Firsts & milestones" SQL reads (spec §2 table B).
- * Shaping, thresholds and the fetch orchestrator live in
- * `weekly-digest-milestones.helpers.ts`; this file only builds queries.
+ * ROK-1771 slice L2 — the "Firsts & milestones" SQL reads B1, B3 and B4
+ * (spec §2 table B). B2 (first-time games) counts only co-play since ROK-2063
+ * and lives in `weekly-digest-first-coplay.queries.ts`. Shaping, thresholds
+ * and the fetch orchestrator live in `weekly-digest-milestones.helpers.ts`;
+ * this file only builds queries.
  *
  * Window: `[NOW() - 7 days, NOW()]`, the same as the recap. Rollup rows are
  * per-day `date`s, so their side of the window is the half-open date range
@@ -98,53 +100,6 @@ export function buildEventMilestonesQuery(minThreshold: number): SQL {
     GROUP BY u.id, u.display_name, u.username
     HAVING COUNT(*) FILTER (WHERE a.ended_at >= ${WINDOW_START}) > 0
        AND COUNT(DISTINCT a.event_id) >= ${minThreshold}
-  `;
-}
-
-/** B2's games with privacy-visible activity this week, from either source. */
-const RECENT_GAMES_CTE = sql`recent AS (
-      SELECT r.game_id FROM game_activity_rollups r
-      INNER JOIN users u ON u.id = r.user_id
-      WHERE r.period = 'day' AND ${ROLLUP_IN_WINDOW}
-        AND r.total_seconds > 0${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
-        AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
-      UNION
-      SELECT e.game_id FROM event_signups s
-      INNER JOIN events e ON e.id = s.event_id
-      INNER JOIN users u ON u.id = s.user_id
-      WHERE ${ATTENDED_ENDED} AND e.game_id IS NOT NULL
-        AND upper(e.duration) >= ${WINDOW_START}${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
-        AND ${SHOWS_ACTIVITY_SQL('s.user_id')}
-    )`;
-
-/**
- * B2 — games with visible activity this week (presence rollups OR an attended
- * event) and NO activity of any kind before the window. With no rollups the
- * presence half contributes nothing and the event half still works.
- * The NOT EXISTS history checks deliberately count ANY earlier play, guests'
- * and opted-out members' included: a game someone already played is not a
- * community first, even if that someone can't be named (AC10 governs who is
- * shown, not what history exists).
- */
-export function buildFirstGamesQuery(): SQL {
-  return sql`
-    WITH ${RECENT_GAMES_CTE}
-    SELECT g.id AS game_id, g.name AS name
-    FROM recent rc
-    INNER JOIN games g ON g.id = rc.game_id
-    WHERE ${VISIBLE_GAME}
-      AND NOT EXISTS (
-        SELECT 1 FROM game_activity_rollups r2
-        WHERE r2.game_id = rc.game_id AND r2.period = 'day'
-          AND r2.period_start < ${WINDOW_START_DATE} AND r2.total_seconds > 0
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM event_signups s
-        INNER JOIN events e ON e.id = s.event_id
-        WHERE e.game_id = rc.game_id AND ${ATTENDED_ENDED}
-          AND upper(e.duration) < ${WINDOW_START}
-      )
-    ORDER BY g.name ASC, g.id ASC
   `;
 }
 

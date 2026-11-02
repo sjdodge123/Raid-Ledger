@@ -130,7 +130,13 @@ describe('Weekly digest firsts — co-play only (ROK-2063, integration)', () => 
     const brief = await seedGame(testApp, 'Brief Overlap');
     await seedSession(testApp, ann, solo, 2 * DAY, 2 * DAY - 2 * HOUR);
     await seedSession(testApp, ann, brief, 2 * DAY, 2 * DAY - HOUR);
-    await seedSession(testApp, bob, brief, 2 * DAY - 50 * MIN, 2 * DAY - 2 * HOUR);
+    await seedSession(
+      testApp,
+      bob,
+      brief,
+      2 * DAY - 50 * MIN,
+      2 * DAY - 2 * HOUR,
+    );
 
     expect(await firstNames(testApp)).toEqual([]);
   });

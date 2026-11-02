@@ -354,7 +354,12 @@ describe('Weekly digest milestones — first games privacy (AC10, integration)',
     // B2: a game Ann played only with the guest, by event and by session.
     const guestEv = await seedGame(testApp, 'Guest Ev');
     await seedGroupEvent(testApp, [guest, ann], 1, guestEv);
-    await seedCoPlay(testApp, [guest, ann], await seedGame(testApp, 'Guest Ro'), 1);
+    await seedCoPlay(
+      testApp,
+      [guest, ann],
+      await seedGame(testApp, 'Guest Ro'),
+      1,
+    );
     // B4: 90 member hours; the guest's 20 this week would cross 100.
     await seedRollup(testApp, ann, drg, 90, 20);
     await seedRollup(testApp, guest, drg, 20, 2);
@@ -430,22 +435,20 @@ describe('Weekly digest milestones — rollup window edges (ROK-1783, integratio
     expect(announcedIn).toHaveLength(1);
   });
 
-  it('B2: a game first played on the window-start day is a first in exactly one of two consecutive weeks', async () => {
+  it('B2: a co-play starting exactly at the week start is a first in exactly one of two consecutive weeks', async () => {
     const ann = await seedUser(testApp, 'Ann');
-    for (const w of [
-      { name: 'Week N', offset: 0 },
-      { name: 'Week N+1', offset: 7 },
-    ]) {
-      await seedRollup(
-        testApp,
-        ann,
-        await seedGame(testApp, w.name),
-        3,
-        w.offset,
-      );
-    }
+    const bob = await seedUser(testApp, 'Bob');
+    const now = new Date();
+    const game = await seedGame(testApp, 'Boundary');
+    await seedCoPlay(testApp, [ann, bob], game, 7, now);
+    const nextWeek = new Date(now.getTime() + 7 * DAY);
 
-    const { firstGames } = await fetchDigestMilestones(testApp.db);
-    expect(firstGames.map((g) => g.name)).toHaveLength(1);
+    const week = await fetchDigestMilestones(testApp.db, { now });
+    const next = await fetchDigestMilestones(testApp.db, { now: nextWeek });
+    const announcedIn = [
+      ...week.firstGames.map(() => 'week N'),
+      ...next.firstGames.map(() => 'week N+1'),
+    ];
+    expect(announcedIn).toEqual(['week N']);
   });
 });
