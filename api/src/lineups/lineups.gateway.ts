@@ -10,6 +10,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { socketCorsOrigin } from '../cors/socket-cors';
 import {
   LineupGraceScheduledEventSchema,
   LineupRealtimeEventNames,
@@ -33,7 +34,8 @@ import { perfLog } from '../common/perf-logger';
 @WebSocketGateway({
   namespace: '/lineups',
   cors: {
-    origin: process.env.CLIENT_URL || '*',
+    // Decided per handshake from CORS_ORIGIN; never '*' (socket-cors.ts).
+    origin: socketCorsOrigin,
     credentials: true,
   },
 })

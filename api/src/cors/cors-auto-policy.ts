@@ -62,7 +62,8 @@ export interface CorsPolicyOptions {
 
 type CorsDelegateCallback = (err: Error | null, o: CorsOptions) => void;
 
-const readProcessEnv = (): CorsEnv => ({
+/** The CORS env as the process sees it now (read per request). */
+export const readProcessEnv = (): CorsEnv => ({
   corsOrigin: process.env.CORS_ORIGIN,
   autoMode: process.env.CORS_AUTO_MODE,
   clientUrl: process.env.CLIENT_URL,
