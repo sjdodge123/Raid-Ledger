@@ -17,6 +17,7 @@ import type {
   DiscordEmbedFactory,
   EmbedContext,
 } from '../services/discord-embed.factory';
+import { embedComponents } from '../services/discord-embed.factory';
 import type { SettingsService } from '../../settings/settings.service';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
@@ -204,16 +205,14 @@ async function rerenderSingleRecord(
 ): Promise<void> {
   try {
     const state = record.embedState as EmbedState;
-    const { embed, row } = deps.embedFactory.buildEventEmbed(
-      eventData,
-      context,
-      { state },
-    );
+    const built = deps.embedFactory.buildEventEmbed(eventData, context, {
+      state,
+    });
     await deps.clientService.editEmbed(
       record.channelId,
       record.messageId,
-      embed,
-      row,
+      built.embed,
+      embedComponents(built),
     );
   } catch (err) {
     deps.logger.warn(

@@ -13,6 +13,7 @@ import {
 } from './signup-status-tentative.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
+import { offerSeriesDeclineChoice } from './series-signup-decline.handlers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -133,6 +134,7 @@ export async function handleDecline(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<void> {
+  if (await offerSeriesDeclineChoice(interaction, eventId, deps)) return;
   const discordUserId = interaction.user.id;
   const existingSignup = await deps.signupsService.findByDiscordUser(
     eventId,

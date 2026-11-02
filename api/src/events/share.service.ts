@@ -6,6 +6,7 @@ import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import {
   DiscordEmbedFactory,
+  embedComponents,
   type EmbedContext,
   type EmbedEventData,
 } from '../discord-bot/services/discord-embed.factory';
@@ -172,15 +173,15 @@ export class ShareService {
     // ROK-1622: a shared copy is a first post too — derive the state instead
     // of letting the factory's POSTED default paint an imminent event cyan.
     const state = computeEmbedStateForData(eventData);
-    const { embed, row, content } = this.embedFactory.buildEventEmbed(
-      eventData,
-      context,
-      { state },
-    );
+    const built = this.embedFactory.buildEventEmbed(eventData, context, {
+      state,
+    });
+    // ROK-1728 D8: every row (row 1 + Join Series), never just `[row]`.
+    const components = embedComponents(built);
     const message = await channel.send({
-      ...(content ? { content } : {}),
-      embeds: [embed],
-      ...(row ? { components: [row] } : {}),
+      ...(built.content ? { content: built.content } : {}),
+      embeds: [built.embed],
+      ...(components.length ? { components } : {}),
     });
 
     await this.recordPostedMessage(

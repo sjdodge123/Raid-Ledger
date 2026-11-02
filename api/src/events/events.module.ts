@@ -6,6 +6,8 @@ import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
 import { EventGuildTagService } from './event-guild-tag.service';
 import { EventsSeriesController } from './events-series.controller';
+import { EventsSeriesSignupController } from './events-series-signup.controller';
+import { SeriesSignupsService } from './series-signups.service';
 import { SignupsService } from './signups.service';
 import { RunningLateService } from './running-late.service';
 import { SignupsAllocationService } from './signups-allocation.service';
@@ -71,6 +73,7 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
     EventsAttendanceController,
     EventsDetailController,
     EventsSeriesController,
+    EventsSeriesSignupController,
     EventPlansController,
     InviteController,
     TemplatesController,
@@ -79,6 +82,7 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
   providers: [
     EventsService,
     EventSeriesService,
+    SeriesSignupsService,
     SignupsService,
     RunningLateService,
     SignupsAllocationService,
@@ -103,6 +107,8 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
   ],
   exports: [
     EventsService,
+    // ROK-1728: the Discord series-signup handlers call join/leave/getState.
+    SeriesSignupsService,
     SignupsService,
     RunningLateService,
     SignupsRosterService,

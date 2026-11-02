@@ -8,6 +8,7 @@ import type {
   EmbedEventData,
   EmbedContext,
 } from '../services/discord-embed.factory';
+import { embedComponents } from '../services/discord-embed.factory';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
 import { getEphemeralChannelId } from '../services/ephemeral-voice.db-helpers';
@@ -117,19 +118,15 @@ export async function updateEmbedRecord(
   state: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
   eventId: number,
 ): Promise<void> {
-  const { embed, row, content } = deps.embedFactory.buildEventEmbed(
-    eventData,
-    context,
-    {
-      state,
-    },
-  );
+  const built = deps.embedFactory.buildEventEmbed(eventData, context, {
+    state,
+  });
   await deps.clientService.editEmbed(
     record.channelId,
     record.messageId,
-    embed,
-    row,
-    content,
+    built.embed,
+    embedComponents(built),
+    built.content,
   );
   // ROK-1370: persist the resolved state so a RESCHEDULING↔POSTED transition
   // sticks across re-renders (a no-op when state matches the stored value).
@@ -289,19 +286,15 @@ async function updateSingleEmbedState(
   newState: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
   eventId: number,
 ): Promise<void> {
-  const { embed, row, content } = deps.embedFactory.buildEventEmbed(
-    event,
-    context,
-    {
-      state: newState,
-    },
-  );
+  const built = deps.embedFactory.buildEventEmbed(event, context, {
+    state: newState,
+  });
   await deps.clientService.editEmbed(
     record.channelId,
     record.messageId,
-    embed,
-    row,
-    content,
+    built.embed,
+    embedComponents(built),
+    built.content,
   );
   await deps.db
     .update(schema.discordEventMessages)
