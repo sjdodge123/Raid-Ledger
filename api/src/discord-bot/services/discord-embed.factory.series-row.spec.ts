@@ -107,3 +107,19 @@ describe('series embed Join Series row', () => {
     expect(customIds(embedComponents(result))[1]).toEqual(['series_join:42']);
   });
 });
+
+describe('series embed with a hub link (ROK-1728 x ROK-1872)', () => {
+  it('keeps the Hub link on row 1 alongside the Join Series row 2', () => {
+    const result = createFactory().buildEventEmbed(series, hubCtx);
+    const [first, second, ...rest] = embedComponents(result).map(
+      (r) => r.toJSON().components,
+    );
+    expect(rest).toHaveLength(0);
+    expect(first).toContainEqual(
+      expect.objectContaining({ label: 'Hub', url: HUB.url }),
+    );
+    expect(second?.map((c) => ('custom_id' in c ? c.custom_id : ''))).toEqual([
+      'series_join:42',
+    ]);
+  });
+});
