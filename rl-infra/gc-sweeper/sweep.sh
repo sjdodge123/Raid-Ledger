@@ -904,9 +904,11 @@ fi
 # rl-allinone tags, 134 GB, builds starved of disk). Deletes rl-allinone tags
 # that back no container/env, are older than RL_REGISTRY_RETENTION_HOURS (48)
 # and are not among the newest RL_REGISTRY_KEEP_N (5), then runs `registry
-# garbage-collect` in rl-registry only when no image build is admitted.
+# garbage-collect` in rl-registry, all while holding a `registry_gc` entry in
+# admission.json (no image build is admitted meanwhile — ROK-2018).
 # Interval-gated (RL_REGISTRY_GC_INTERVAL_HOURS, 6); forced when the disk
-# ladder just ran. Our rl-net address for the registry, never .env's host one.
+# ladder just ran. RL_REGISTRY_GC_DRY_RUN defaults to 1 (report only).
+# Our rl-net address for the registry, never .env's host one.
 REGISTRY_GC_LIB="${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_registry_gc.sh"
 if [[ -r "$REGISTRY_GC_LIB" ]]; then
     # Read by the sourced _registry_gc.sh, not by this file.
@@ -921,14 +923,20 @@ if [[ -r "$REGISTRY_GC_LIB" ]]; then
     source "$REGISTRY_GC_LIB"
     _rgc_mode=""
     [[ "$(jq -r '.pruned // false' <<<"${DISK_RESULT:-null}" 2>/dev/null)" == "true" ]] && _rgc_mode=force
-    # Non-zero = aborted: docker ps or the env registry was unreadable, so the
-    # protected set was unknown and nothing was deleted. Logged + audited.
+    # Non-zero = aborted: docker ps/images or the env registry was unreadable
+    # (protected_tags_unreadable), or a kept tag's digest was
+    # (protected_digest_unreadable), so the protected set was unknown and
+    # nothing was deleted. Logged + audited.
     if ! REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>/dev/null); then
         log "registry: GC aborted — $(jq -r '.error // "unknown"' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
     fi
     [[ -n "$REGISTRY_GC_RESULT" ]] || REGISTRY_GC_RESULT='{}'
     if [[ "$(jq -r '.skipped // empty' <<<"$REGISTRY_GC_RESULT" 2>/dev/null)" != "interval" ]]; then
         audit registry_gc "$REGISTRY_GC_RESULT"
+        # The ledger the sweep locks must be the orchestrator's own file
+        # (ROK-2018 UNVERIFIED: /state = /srv/rl-infra/state) — confirm on the
+        # first dry-run log.
+        log "registry: admission ledger $RL_ADMISSION_FILE dry_run=$RL_REGISTRY_GC_DRY_RUN"
         log "registry: $(jq -rc '"tags=" + ((.tags_seen // "?")|tostring) + " deleted=" + ((.deleted // [])|length|tostring) + " gc=" + (.gc // "?")' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
     fi
 else

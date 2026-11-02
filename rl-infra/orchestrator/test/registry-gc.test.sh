@@ -386,6 +386,7 @@ test_dry_run_default() {
         "dry_run true c,old" "a default sweep only reports would-delete tags"
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "a default sweep deletes nothing"
     local stripped; stripped=$(grep -v '^[[:space:]]*#' "$TEST_DIR/../../gc-sweeper/sweep.sh")
+    # shellcheck disable=SC2016  # the literal source text, not an expansion
     assert_contains "$stripped" 'registry: admission ledger $RL_ADMISSION_FILE' "sweeper logs which admission.json it locks"
     test_teardown
 }
