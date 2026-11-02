@@ -1,9 +1,9 @@
 /**
  * ROK-1874 — "On the bench" DM for a voter auto-benched by a poll lock-in.
  *
- * Locking a scheduling slot creates the event (POST /events signs the
- * creator up first) and then completes the poll, which signs up every
- * yes-voter on the chosen slot. Past the roster cap the signup lands on the
+ * Locking a scheduling slot (one POST /scheduling-polls/:id/lock-in, ROK-2039)
+ * creates the event (signing the creator up first) and completes the poll,
+ * which signs up every yes-voter on the chosen slot. Past the roster cap the signup lands on the
  * bench, and that voter now gets `On the bench` instead of `Auto-signed up`.
  *
  * Shape: a 2-spot generic roster (`slotConfig.player = 2`, `maxAttendees =
@@ -12,7 +12,7 @@
  * `Auto-signed up`, nobody both.
  *
  * ROK-2025 made the choice deterministic: with no pick the LATEST yes-voter
- * (B) is benched; with `benchUserIds: [A]` on complete the organizer's pick
+ * (B) is benched; with `benchUserIds: [A]` on the lock-in the organizer's pick
  * wins, so A — the EARLIER voter — is benched instead, which proves the pick
  * beats the default.
  *
@@ -29,11 +29,11 @@
  * Deterministic waits only — `pollForCondition` + `awaitProcessing`, never a
  * fixed timer (`npm run lint:no-sleep`).
  */
-import { pollForCondition } from "../../helpers/polling.js";
-import { awaitProcessing, deleteEvent, seedFixtureUser } from "../fixtures.js";
-import type { FixtureUser } from "../fixtures.js";
-import type { SmokeTest, TestContext } from "../types.js";
-import type { ApiClient } from "../api.js";
+import { pollForCondition } from '../../helpers/polling.js';
+import { awaitProcessing, deleteEvent, seedFixtureUser } from '../fixtures.js';
+import type { FixtureUser } from '../fixtures.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import type { ApiClient } from '../api.js';
 
 /**
  * Fixture slots 8 + 9, shared with `scheduling-unanimous-dm.test.ts`. Votes
@@ -45,11 +45,11 @@ const MEMBER_B_SLOT = 9;
 const ROSTER_CAP = 2;
 const TWO_HOURS_MS = 2 * 3_600_000;
 
-const BENCH_TITLE = "On the bench";
+const BENCH_TITLE = 'On the bench';
 const BENCH_MESSAGE_RE = /roster was full/i;
 /** Gap between the two equal reads that prove the DM total stopped moving. */
 const STABLE_GAP_MS = 2_000;
-const AUTO_TITLE = "Auto-signed up";
+const AUTO_TITLE = 'Auto-signed up';
 const AUTO_MESSAGE_RE = /automatically signed up/i;
 
 interface CreatePollResponse {
@@ -73,11 +73,9 @@ interface RosterRow {
 async function resolveGameId(ctx: TestContext): Promise<number> {
   const fromCtx = ctx.games[0]?.id ?? ctx.mmoGameId;
   if (fromCtx) return fromCtx;
-  const res = await ctx.api.get<{ data: { id: number }[] }>(
-    "/games/configured",
-  );
+  const res = await ctx.api.get<{ data: { id: number }[] }>('/games/configured');
   const id = res?.data?.[0]?.id;
-  if (!id) throw new Error("Need at least one configured game for the poll");
+  if (!id) throw new Error('Need at least one configured game for the poll');
   return id;
 }
 
@@ -197,29 +195,25 @@ async function waitForEveryoneNotified(
     { intervalMs: 1500 },
   ).catch(() => {
     const got = [...seen.entries()].map(
-      ([uid, notes]) => `${uid}:[${notes.map((n) => n.title).join("|")}]`,
+      ([uid, notes]) => `${uid}:[${notes.map((n) => n.title).join('|')}]`,
     );
     throw new Error(
       `Not every voter got a lock-in notification for event ${eventId}; ` +
-        `received ${got.join(", ")}`,
+        `received ${got.join(', ')}`,
     );
   });
 }
 
 /** Who sits on the bench of the event's roster (API side of AC5). */
-async function benchedUserIds(
-  api: ApiClient,
-  eventId: number,
-): Promise<number[]> {
-  const roster = await api.get<{
-    assignments?: RosterRow[];
-    pool?: RosterRow[];
-  }>(`/events/${eventId}/roster/assignments`);
+async function benchedUserIds(api: ApiClient, eventId: number): Promise<number[]> {
+  const roster = await api.get<{ assignments?: RosterRow[]; pool?: RosterRow[] }>(
+    `/events/${eventId}/roster/assignments`,
+  );
   const rows = [...(roster?.assignments ?? []), ...(roster?.pool ?? [])];
   return rows
     .filter(
       (r): r is RosterRow & { userId: number } =>
-        r.slot === "bench" && typeof r.userId === "number",
+        r.slot === 'bench' && typeof r.userId === 'number',
     )
     .map((r) => r.userId);
 }
@@ -228,21 +222,20 @@ async function benchedUserIds(
 function assertSingleDm(
   uid: number,
   notes: TestNotification[],
-  kind: "bench" | "auto",
+  kind: 'bench' | 'auto',
 ): void {
   if (notes.length !== 1) {
     throw new Error(
       `User ${uid} should get exactly one lock-in DM, got ` +
-        `[${notes.map((n) => n.title).join(" | ")}]`,
+        `[${notes.map((n) => n.title).join(' | ')}]`,
     );
   }
   const [note] = notes;
-  const title = note?.title ?? "";
-  const message = note?.message ?? "";
-  const ok =
-    kind === "bench"
-      ? title === BENCH_TITLE && BENCH_MESSAGE_RE.test(message)
-      : title === AUTO_TITLE && AUTO_MESSAGE_RE.test(message);
+  const title = note?.title ?? '';
+  const message = note?.message ?? '';
+  const ok = kind === 'bench'
+    ? title === BENCH_TITLE && BENCH_MESSAGE_RE.test(message)
+    : title === AUTO_TITLE && AUTO_MESSAGE_RE.test(message);
   if (!ok) {
     throw new Error(
       `User ${uid} expected the ${kind} DM, got title ` +
@@ -266,16 +259,12 @@ function assertBenchSplit(
   const benched = memberIds.filter(isBench);
   if (benched.length !== 1 || benched[0] !== expectedId) {
     throw new Error(
-      `Expected exactly [${expectedId}] of [${memberIds.join(", ")}] to get ` +
-        `"On the bench" on a ${ROSTER_CAP}-spot roster, got [${benched.join(", ")}]`,
+      `Expected exactly [${expectedId}] of [${memberIds.join(', ')}] to get ` +
+        `"On the bench" on a ${ROSTER_CAP}-spot roster, got [${benched.join(', ')}]`,
     );
   }
   for (const uid of [creatorId, ...memberIds]) {
-    assertSingleDm(
-      uid,
-      notes.get(uid) ?? [],
-      uid === expectedId ? "bench" : "auto",
-    );
+    assertSingleDm(uid, notes.get(uid) ?? [], uid === expectedId ? 'bench' : 'auto');
   }
 }
 
@@ -285,6 +274,8 @@ function assertBenchSplit(
  * the poll, creates the event (creator signed up first), auto-signs-up the
  * slot's yes-voters and sends their DMs.
  * `benchUserIds` is the organizer's bench pick (ROK-2025), omitted when unset.
+ * A pick the lock-in could not honour falls back to the default bench and sets
+ * `benchPickFallback` — that must fail loudly, not as a wrong-member mismatch.
  */
 async function lockIn(
   api: ApiClient,
@@ -293,28 +284,32 @@ async function lockIn(
   start: Date,
   benchUserIds?: number[],
 ): Promise<number> {
-  const res = await api.post<{ event: { id: number } }>(
-    `/scheduling-polls/${matchId}/lock-in`,
-    {
-      event: {
-        title: `smoke-bench-dm-${matchId}`,
-        startTime: start.toISOString(),
-        endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
-        gameId,
-        slotConfig: { type: "generic", player: ROSTER_CAP },
-        maxAttendees: ROSTER_CAP,
-      },
+  const res = await api.post<{
+    event: { id: number };
+    benchPickFallback: boolean;
+  }>(`/scheduling-polls/${matchId}/lock-in`, {
+    event: {
+      title: `smoke-bench-dm-${matchId}`,
       startTime: start.toISOString(),
-      ...(benchUserIds ? { benchUserIds } : {}),
+      endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+      gameId,
+      slotConfig: { type: 'generic', player: ROSTER_CAP },
+      maxAttendees: ROSTER_CAP,
     },
-  );
-  const event = res.event;
+    startTime: start.toISOString(),
+    ...(benchUserIds ? { benchUserIds } : {}),
+  });
+  if (res.benchPickFallback !== false) {
+    throw new Error(
+      `bench pick fell back: lock-in returned benchPickFallback=${String(res.benchPickFallback)} for pick ${JSON.stringify(benchUserIds ?? [])}`,
+    );
+  }
   await awaitProcessing(api);
-  return event.id;
+  return res.event.id;
 }
 
 /** Which member the case benches: the default (latest) or the organizer's pick. */
-type BenchCase = "default-latest" | "pick-earlier";
+type BenchCase = 'default-latest' | 'pick-earlier';
 
 /**
  * Seed the poll (A votes YES, then B), lock in on a 2-spot roster — with
@@ -325,7 +320,7 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
   const gameId = await resolveGameId(ctx);
   const memberA = await seedFixtureUser(ctx.api, 3, MEMBER_A_SLOT);
   const memberB = await seedFixtureUser(ctx.api, 3, MEMBER_B_SLOT);
-  const poll = await ctx.api.post<CreatePollResponse>("/scheduling-polls", {
+  const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
     gameId,
     durationHours: 24,
     memberUserIds: [memberA.userId, memberB.userId],
@@ -336,7 +331,7 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
   try {
     // A unique minute per run so a parallel/previous run's event can't
     // collide with this slot's instant; each case gets its own day.
-    const days = which === "pick-earlier" ? 10 : 9;
+    const days = which === 'pick-earlier' ? 10 : 9;
     const start = new Date(
       Date.now() + days * 86_400_000 + (Date.now() % 600) * 60_000,
     );
@@ -352,9 +347,8 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
     await voteYes(memberB, base, slotId);
     await awaitProcessing(ctx.api);
 
-    const pick = which === "pick-earlier" ? [memberA.userId] : undefined;
-    const expectedId =
-      which === "pick-earlier" ? memberA.userId : memberB.userId;
+    const pick = which === 'pick-earlier' ? [memberA.userId] : undefined;
+    const expectedId = which === 'pick-earlier' ? memberA.userId : memberB.userId;
     const memberIds = [memberA.userId, memberB.userId];
     const voterIds = [ctx.testUserId, ...memberIds];
     // Before the lock-in: event ids repeat across runs (see header).
@@ -371,17 +365,17 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
     if (bench.length !== 1 || bench[0] !== expectedId) {
       throw new Error(
         `"On the bench" went to ${expectedId} (${which}), but the roster's ` +
-          `bench is [${bench.join(", ")}]`,
+          `bench is [${bench.join(', ')}]`,
       );
     }
   } finally {
     // Shared guild — never leave the poll or the event behind. After a
     // lock-in the poll is completed, so cancel no-ops; archive + delete clean up.
     await ctx.api
-      .post(`${base}/cancel`, { reason: "smoke cleanup ROK-1874" })
+      .post(`${base}/cancel`, { reason: 'smoke cleanup ROK-1874' })
       .catch(() => null);
     await ctx.api
-      .patch(`/lineups/${poll.lineupId}/status`, { status: "archived" })
+      .patch(`/lineups/${poll.lineupId}/status`, { status: 'archived' })
       .catch(() => null);
     if (eventId !== null) await deleteEvent(ctx.api, eventId).catch(() => null);
   }
@@ -389,14 +383,14 @@ async function runBenchCase(ctx: TestContext, which: BenchCase): Promise<void> {
 
 const benchDmForOverCapVoter: SmokeTest = {
   name: 'ROK-1874: a voter benched by an over-cap poll lock-in gets "On the bench"',
-  category: "dm",
-  run: (ctx: TestContext) => runBenchCase(ctx, "default-latest"),
+  category: 'dm',
+  run: (ctx: TestContext) => runBenchCase(ctx, 'default-latest'),
 };
 
 const benchDmForPickedVoter: SmokeTest = {
   name: 'ROK-2025: the organizer\'s bench pick beats the default — the earlier voter gets "On the bench"',
-  category: "dm",
-  run: (ctx: TestContext) => runBenchCase(ctx, "pick-earlier"),
+  category: 'dm',
+  run: (ctx: TestContext) => runBenchCase(ctx, 'pick-earlier'),
 };
 
 export const standalonePollBenchDmTests: SmokeTest[] = [
