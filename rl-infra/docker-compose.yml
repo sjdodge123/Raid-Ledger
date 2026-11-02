@@ -331,7 +331,7 @@ services:
       - ./state/perf.log:/state/perf.log:rw
       # ROK-1900: "Pending approval" inbox items. Own RW mount, outside
       # test-plans, so plan-prune / env-destroy never reach it. deploy.sh
-      # creates it rl:rl-fleet 2775 (the container runs as gid 1004).
+      # requires it uid 1000 mode 0700 — agents (rl-fleet) must not reach it.
       - ./state/approvals:/state/approvals:rw
       # Bind-mount public/ + server.js so operator edits to either land
       # immediately without rebuilding the image. The Dockerfile still
@@ -346,6 +346,8 @@ services:
       # ROK-1900: the approvals modules server.js imports mount with it too.
       - ./dashboard/approvals-auth.js:/app/approvals-auth.js:ro
       - ./dashboard/approvals-content.js:/app/approvals-content.js:ro
+      - ./dashboard/approvals-limits.js:/app/approvals-limits.js:ro
+      - ./dashboard/approvals-sign.js:/app/approvals-sign.js:ro
       - ./dashboard/approvals-plan-steps.js:/app/approvals-plan-steps.js:ro
       - ./dashboard/approvals-routes.js:/app/approvals-routes.js:ro
       - ./dashboard/approvals-store.js:/app/approvals-store.js:ro
