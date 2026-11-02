@@ -283,6 +283,20 @@ describe('sections, replays and staleness', () => {
   });
 });
 
+describe('ROK-2066 — a member without a guild grant', () => {
+  it("re-uploading an Export all for the member's existing guild → 202 accepted, char applied", async () => {
+    const a = await member('ll-nogrant');
+    expectAccepted(await post(a.token, companionFixture('guild-3-pages')));
+    const res = await post(
+      a.token,
+      companionFixture('mixed-char-guild3-raid-shuffled'),
+    );
+    expectAccepted(res);
+    expect(await rowCount(schema.characterAddonSnapshots)).toBe(1);
+    expect(await auditResults()).not.toContain('NOT_IN_GUILD');
+  });
+});
+
 describe('rejects → pinned companion codes, nothing written', () => {
   it('a malformed export string → 400 invalid_payload with the addon code, never the string', async () => {
     const a = await member('ll-malformed');
