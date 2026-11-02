@@ -729,6 +729,23 @@ describe('state lists every night leave would cancel (leaveNights)', () => {
     );
   });
 
+  it('a night the member already declined is in neither leaveNights nor the leave result', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await join(s.n2, userId);
+    await signups().cancel(s.n3, userId);
+
+    const state = await series().getState(s.n5, userId);
+
+    // mutation: leaveNights built from every tagged row, ignoring status
+    expect(state.leaveNights?.map((n) => n.eventId)).toEqual([s.n2, s.n5]);
+    const left = await series().leave(s.n5, userId);
+    // mutation: leave cancels tagged rows regardless of status (n3 re-cancelled)
+    expect([...left.cancelledEventIds].sort()).toEqual([s.n2, s.n5].sort());
+    expect(left.cancelledEventIds).not.toContain(s.n3);
+    expect(must(await rowFor(s.n3, userId), 'night 3').status).toBe('declined');
+  });
+
   it('a non-member gets no leaveNights', async () => {
     const s = await seedSeries();
     const userId = await createMember();
