@@ -173,6 +173,7 @@
   const paintList = (res) => {
     const body = $('approvals-body');
     if (!body) return;
+    NS.disposeItemPage?.(); // stop a previous item page's timers/late paints
     const sig = `${ui.mode}|${res.state}|${res.state === 'ok' ? JSON.stringify(res.data) : ''}`;
     if (sig === ui.painted) return; // nothing changed — keep scroll/focus
     ui.painted = sig;
@@ -200,6 +201,7 @@
   const paintItem = (id) => {
     const body = $('approvals-body');
     if (!body) return;
+    NS.disposeItemPage?.();
     paintSeg(null);
     ui.painted = '';
     if (typeof NS.renderItemPage === 'function') { NS.renderItemPage(body, id, ui.key, { fetch: ui.fetch, now: ui.now, timers: ui.poll }); return; }
@@ -216,6 +218,7 @@
     $('tab-fleet')?.classList.toggle('on', onFleet);
     $('tab-approvals')?.classList.toggle('on', !onFleet);
     if (view === 'item') paintItem(id);
+    else NS.disposeItemPage?.();
     return view;
   };
 

@@ -380,3 +380,62 @@ test('an idle page re-fetches the item ~1 min before its signed URLs expire', as
   assert.equal(w.document.querySelector('iframe').getAttribute('src'), fresh);
   assert.equal(must(timers[1], 'next timer').ms, 19 * 60 * 1000, 're-armed for the fresh expiry');
 });
+
+test('round 4: an older saved ruling survives a newer failing one for the same question', async () => {
+  const item = baseItem();
+  const g = gatedPost(item);
+  const { doc } = await open({ item, post: g.post });
+  buttonByText(qCard(doc, 2), /Raid Ledger/).click(); // post 0: choice a
+  buttonByText(qCard(doc, 2), /^Change$/).click();
+  buttonByText(qCard(doc, 2), /LedgerLink/).click(); // post 1: choice b supersedes
+  g.answer(0); // the server saved a
+  await settle();
+  g.answer(1, false); // b is refused
+  await settle();
+  assert.ok(qCard(doc, 2).classList.contains('ruled'), 'Q2 must stay ruled with the saved choice, not roll back to unruled');
+  assert.match(qCard(doc, 2).textContent, /Option a/, 'rollback restores the server-confirmed ruling (a)');
+  assert.ok(doc.querySelector('.approval-alert'), 'the refusal still shows an alert');
+});
+
+test('round 4: leaving item A disposes its URL timer — no repaint of A over the list or item B', async () => {
+  const items = { 'item-A': baseItem({ id: 'item-A', title: 'Item A title' }), 'item-B': baseItem({ id: 'item-B', title: 'Item B title' }) };
+  const gets = [];
+  const fetchFn = async (url) => {
+    const m = /\/api\/approvals\/([^/?]+)$/.exec(url);
+    const it = m ? items[decodeURIComponent(m[1] || '')] : undefined;
+    if (it) { gets.push(it.id); return okJson({ ok: true, item: it, spec_md: '', content_urls: signedUrls() }); }
+    return okJson({ ok: true, items: [], plan_steps: [] });
+  };
+  const html = (await read('index.html')).replace(/<script[\s\S]*?<\/script>/g, '');
+  const w = new JSDOM(html, { url: `https://fleet.example.net/?view=approvals&k=${KEY}`, runScripts: 'outside-only', pretendToBeVisual: true }).window;
+  w.__rlApprovalsNoAutoBoot = true;
+  w.scrollTo = () => {};
+  for (const f of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item-panels.js', 'approvals-item.js', 'approvals-list.js']) {
+    w.eval(await read(`app/${f}`));
+  }
+  const NS = w.__rlApprovals;
+  NS.bootApprovals({ fetchImpl: fetchFn, now: () => NOW, poll: false });
+  await settle();
+  const live = new Set();
+  const fns = [];
+  const opts = { fetch: fetchFn, now: () => NOW,
+    setTimer: (fn) => { fns.push(fn); live.add(fns.length); return fns.length; }, clearTimer: (t) => { live.delete(t); } };
+  const body = w.document.getElementById('approvals-body');
+  await NS.renderItemPage(body, 'item-A', KEY, opts);
+  assert.match(body.textContent, /Item A title/);
+  const timerA = must(fns[0], 'item A timer');
+  w.history.pushState(null, '', '/?view=approvals');
+  w.dispatchEvent(new w.PopStateEvent('popstate'));
+  await settle();
+  assert.equal(live.size, 0, 'navigating to the list must clear item A\'s refresh timer');
+  timerA();
+  await settle();
+  assert.doesNotMatch(body.textContent, /Item A title/, 'a stale timer from A must not repaint A over the list');
+  await NS.renderItemPage(body, 'item-B', KEY, opts);
+  timerA();
+  await settle();
+  assert.match(body.textContent, /Item B title/);
+  assert.doesNotMatch(body.textContent, /Item A title/, 'a stale timer from A must not repaint A over item B');
+  assert.equal(live.size, 1, 'only item B\'s timer is alive');
+  assert.equal(gets.filter((x) => x === 'item-A').length, 1, 'item A is never re-fetched after leaving it');
+});

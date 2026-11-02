@@ -30,6 +30,17 @@
   const URL_REFRESH_MS = 2 * 60 * 1000;
   const URL_TIMER_LEAD_MS = 60 * 1000;
 
+  // One item page owns #approvals-body at a time. Each render stamps a page
+  // token on the body; a load / paint / timer from an older page sees another
+  // token and touches nothing. Navigation (approvals-list.js) disposes it.
+  let pageNonce = 0;
+  let disposeActive = null;
+  NS.disposeItemPage = () => {
+    const d = disposeActive;
+    disposeActive = null;
+    if (d) d();
+  };
+
 
   const rulingOf = (item, n) => (item.rulings || []).find((r) => r.n === n) || null;
   const ruledCount = (item) => (item.questions || []).filter((q) => rulingOf(item, q.n)).length;
@@ -48,9 +59,20 @@
     const clearTimer = opts.clearTimer || ((t) => window.clearTimeout(t));
     const st = { item: null, confirmed: null, spec: null, width: 'desktop', open: null, otherFor: null,
       verdictNote: null, alert: '', urls: {}, urlsExp: 0, refreshing: false, urlTimer: null };
+    NS.disposeItemPage();
+    pageNonce += 1;
+    const token = `${id}#${pageNonce}`;
+    body.dataset.page = token;
+    const live = () => body.dataset.page === token;
+    disposeActive = () => {
+      if (st.urlTimer !== null) clearTimer(st.urlTimer);
+      st.urlTimer = null;
+      if (live()) delete body.dataset.page;
+    };
     // In-flight optimistic writes, one per target ('q<n>' or 'verdict'), with
     // a sequence number so a superseded write's late response is ignored.
     const inflight = new Map();
+    const savedSeq = new Map(); // target -> seq of the newest write the server saved
     let seq = 0;
     const clone = (o) => JSON.parse(JSON.stringify(o));
     // The shown item = last confirmed server state + every pending write.
@@ -83,7 +105,10 @@
 
     // Optimistic write: apply `mutate` locally, POST, then fold the server's
     // item into the confirmed state (or drop just this write and say why).
-    // Other writes still in flight stay applied either way.
+    // Other writes still in flight stay applied either way. A superseded write
+    // the server saved still advances the confirmed state (unless a newer one
+    // for the same target already did), so if the newer write then fails the
+    // rollback lands on the saved ruling, not on what was there before both.
     const write = async (target, path, payload, mutate) => {
       const mine = ++seq;
       inflight.set(target, { seq: mine, mutate });
@@ -91,13 +116,17 @@
       st.open = null; st.otherFor = null; st.verdictNote = null; st.alert = '';
       paint();
       const res = await api(path, 'POST', payload);
-      if (inflight.get(target)?.seq !== mine) return; // superseded by a newer write
-      inflight.delete(target);
-      if (res.ok && res.json?.item) st.confirmed = NS.mergeServerItem(st.confirmed, res.json.item);
-      else st.alert = failText(res);
+      const current = inflight.get(target)?.seq === mine;
+      if (current) inflight.delete(target);
+      const saved = Boolean(res.ok && res.json?.item);
+      if (saved && mine > (savedSeq.get(target) || 0)) {
+        savedSeq.set(target, mine);
+        st.confirmed = NS.mergeServerItem(st.confirmed, res.json.item);
+      } else if (!current) return; // stale: a newer write for this target decides
+      else if (!saved) st.alert = failText(res);
       rebuild();
       paint();
-      if (res.status === 409) void load(true);
+      if (current && res.status === 409) void load(true);
     };
 
     const rule = (q, choice, note) => write(`q${q.n}`, `/api/approvals/${encodeURIComponent(id)}/ruling`,
@@ -213,6 +242,7 @@
     };
 
     function paint() {
+      if (!live()) return;
       if (st.urlsExp && now() > st.urlsExp - URL_REFRESH_MS && !st.refreshing) {
         st.refreshing = true;
         void load(true).finally(() => { st.refreshing = false; });
@@ -247,6 +277,7 @@
     async function load(keepAlert) {
       if (!key) { body.replaceChildren(h('div', 'empty approval-empty', MSG.nokey)); return; }
       const res = await api(`/api/approvals/${encodeURIComponent(id)}`, 'GET');
+      if (!live()) return; // navigated away while loading
       if (!res.ok || !res.json?.item) {
         const state = res.status === 404 ? 'not_found' : NS.classifyStatus(res.status);
         body.replaceChildren(h('div', `empty approval-empty approval-${state}`, MSG[state] || MSG.error));
@@ -264,16 +295,16 @@
     }
 
     // An idle page re-fetches the item ~1 min before its signed URLs expire,
-    // so the mockup and screenshots keep loading. Stops once the page is gone.
+    // so the mockup and screenshots keep loading. Disposed on navigation.
     function scheduleUrlRefresh() {
-      if (!setTimer) return;
+      if (!setTimer || !live()) return;
       if (st.urlTimer !== null) clearTimer(st.urlTimer);
       st.urlTimer = null;
       if (!st.urlsExp) return;
       const wait = Math.max(5000, st.urlsExp - URL_TIMER_LEAD_MS - now());
       st.urlTimer = setTimer(() => {
         st.urlTimer = null;
-        if (body.isConnected && !st.refreshing) void load(true);
+        if (live() && !st.refreshing) void load(true);
       }, wait);
     }
 
