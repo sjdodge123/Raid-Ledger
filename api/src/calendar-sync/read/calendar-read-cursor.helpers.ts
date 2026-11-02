@@ -103,3 +103,20 @@ export function unchangedStillValid(
     keys.every((k) => locked[k] === sent[k])
   );
 }
+
+/**
+ * ROK-1597: the calendars our copies can sit in — the main calendar (alias
+ * and real id) AND the dedicated calendar when known, whatever the CURRENT
+ * write target is. Codex P2: after a primary → dedicated switch the old main
+ * copies stay until the async reconciles finish (or forever, if cleanup
+ * fails), so the copy-id fallback must still recognise them as ours. Bounded
+ * to those two calendars; the adapter caps lookups per calendar.
+ */
+export function copyCalendarIdsOf(
+  conn: { dedicatedCalendarId: string | null },
+  calendars: readonly ProviderCalendar[],
+): string[] {
+  const main = calendars.filter((c) => c.primary).map((c) => c.id);
+  const dedicated = conn.dedicatedCalendarId ? [conn.dedicatedCalendarId] : [];
+  return [...new Set([PRIMARY_ALIAS, ...main, ...dedicated])];
+}

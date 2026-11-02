@@ -1,0 +1,9 @@
+{
+  "saveInfo": "{\"Active Party\":{\"Characters\":[{\"Classes\":[{\"Main\":\"Barbarian\",\"Sub\":\"BerserkerPath\"}],\"Experience Points (Current level)\":5630,\"Experience Points (Total)\":35630,\"Level\":8,\"Origin\":\"Generic\",\"Position\":[0,0,0],\"Race\":\"Elf_WoodElf\",\"Subregion\":\"\"},{\"Experience Points (Current level)\":0,\"Experience Points (Total)\":0,\"Level\":1,\"Origin\":\"DogFamiliar_Scratch_Summon\",\"Position\":[0,0,0],\"Race\":\"Beast\",\"Subregion\":\"\"},{\"Classes\":[{\"Main\":\"Wizard\",\"Sub\":\"NecromancySchool\"}],\"Experience Points (Current level)\":5590,\"Experience Points (Total)\":35590,\"Level\":8,\"Origin\":\"Generic\",\"Position\":[0,0,0],\"Race\":\"Human\",\"Subregion\":\"\"},{\"Classes\":[{\"Main\":\"Ranger\",\"Sub\":\"GloomStalker\"},{\"Main\":\"Rogue\",\"Sub\":\"Thief\"}],\"Experience Points (Current level)\":5390,\"Experience Points (Total)\":35390,\"Level\":8,\"Origin\":\"Generic\",\"Position\":[0,0,0],\"Race\":\"Duergar\",\"Subregion\":\"\"},{\"Classes\":[{\"Main\":\"Paladin\",\"Sub\":\"Vengeance\"}],\"Experience Points (Current level)\":5630,\"Experience Points (Total)\":35630,\"Level\":8,\"Origin\":\"Generic\",\"Position\":[0,0,0],\"Race\":\"Tiefling_Asmodeus\",\"Subregion\":\"\"}]},\"Current Level\":\"SCL_Main_A\",\"Difficulty\":[\"DifficultyHard\",\"RulesetLarian\"],\"Game Version\":\"4.1.1.7631656\",\"Platform\":\"Steam\",\"Save Name\":\"QuickSave_1\"}",
+  "thumbnail": {
+    "byteLength": 1698,
+    "height": 720,
+    "sha256": "8d6272fcaf63cbc49f2eb9be3a83bba29d6464592d55fdfb49a41f1c4af7b9f7",
+    "width": 1280
+  }
+}

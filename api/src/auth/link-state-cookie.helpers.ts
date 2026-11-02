@@ -7,12 +7,12 @@ import {
 
 /**
  * Flows that bind an OAuth state to the browser: the two account links,
- * Calendar Sync's Google connect (ROK-1592 L4) and Discord login (ROK-1808).
+ * Calendar Sync's Google (ROK-1592 L4) and Microsoft (ROK-1597) connects and Discord login (ROK-1808).
  * Neither of the last two has a link-start nonce, so they widen this type,
  * not `LinkProvider` (whose JWT purposes are per link flow).
  */
 export type LinkStateProvider =
-  LinkProvider | 'calendar-google' | 'discord-login';
+  LinkProvider | 'calendar-google' | 'calendar-microsoft' | 'discord-login';
 import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 
 /**

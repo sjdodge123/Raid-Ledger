@@ -18,8 +18,8 @@ import {
   PluginActiveGuard,
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
-import { BG3_PLUGIN_ID } from '../bg3.constants';
-import { BG3_NO_STORE, webp } from '../read/bg3-read.controller';
+import { BG3_NO_STORE, BG3_PLUGIN_ID } from '../bg3.constants';
+import { webp } from '../read/bg3-read.controller';
 import { Bg3MySavesService } from '../read/bg3-my-saves.service';
 import { parseThumbnailSize } from '../read/bg3-thumbnail.encode';
 import { parseOr400 } from './bg3-campaigns.controller';

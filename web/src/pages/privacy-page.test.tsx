@@ -119,10 +119,10 @@ describe('buildPrivacySections — feature-conditional disclosures', () => {
         const ids = buildPrivacySections(ctx, { calendar: true, ai: true, telemetry: true }).map((s) => s.id);
         expect(ids).toContain('google-calendar');
         expect(bulletKeys({ calendar: true, ai: true, telemetry: true }))
-            .toEqual(['discord', 'google', 'errors', 'ai', 'games']);
+            .toEqual(['discord', 'google', 'microsoft', 'errors', 'ai', 'games']);
     });
 
     it('drops the errors bullet while telemetry is off (ROK-1779)', () => {
-        expect(bulletKeys({ calendar: true, ai: true, telemetry: false })).toEqual(['discord', 'google', 'ai', 'games']);
+        expect(bulletKeys({ calendar: true, ai: true, telemetry: false })).toEqual(['discord', 'google', 'microsoft', 'ai', 'games']);
     });
 });

@@ -148,6 +148,7 @@ export const BLIZZARD_SETUP = {
         '1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.',
       required: false,
       appliesTo: ['wow_guild'],
+      rlCompanion: { collector: 'wow-ledgerlink' },
     },
   ],
 } satisfies PluginSetup;
@@ -167,6 +168,7 @@ export const BG3_SETUP = {
         'Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.',
       required: true,
       appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-save' },
     },
     {
       id: 'bind-campaign',

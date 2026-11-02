@@ -1,10 +1,16 @@
-/** ROK-1955 — `/link` entry state: type the 8-letter code from the app. */
+/**
+ * ROK-1955 — `/link` entry state: type the 8-letter code from the app.
+ * ROK-2056 — "Don't have the app? Download it" → the Companion card, only
+ * while a public download exists.
+ */
 import type { FormEvent, JSX } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { LinkCard } from './link-card';
 import { formatUserCodeInput } from './companion-link-code';
+import { COMPANION_CARD_HREF, COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../lib/companion-install';
 
 interface LinkEntryCardProps {
     code: string;
@@ -38,6 +44,19 @@ export function LinkEntryCard(props: LinkEntryCardProps): JSX.Element {
                     <Button type="submit" loading={props.loading} loadingLabel="Checking…">Continue</Button>
                 </div>
             </form>
+            {companionDownloadAvailable() && <DownloadLine />}
         </LinkCard>
+    );
+}
+
+/** One quiet line to the install card on My Integrations. */
+function DownloadLine(): JSX.Element {
+    return (
+        <p data-testid="link-download-line" className="mt-4 text-xs text-muted">
+            {"Don't have the app? "}
+            <Link to={COMPANION_CARD_HREF} className={COMPANION_LINK_CLASS}>
+                Download it
+            </Link>
+        </p>
     );
 }

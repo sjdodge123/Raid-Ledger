@@ -48,6 +48,10 @@ export interface ArmoryCharacterFixtureRequest {
   claimedBy: number | null;
   withCatalog: boolean;
   extraRows: boolean;
+  /** ROK-2058: the character's game version (default the fixture's). */
+  gameVersion?: string;
+  /** ROK-2058: the catalogue's game version (default the fixture's). */
+  catalogGameVersion?: string;
 }
 
 const atlasEntry = (
@@ -127,7 +131,11 @@ async function storePng(
   return sha256;
 }
 
-async function insertCatalog(db: Db, serverId: number): Promise<void> {
+async function insertCatalog(
+  db: Db,
+  serverId: number,
+  gameVersion: string = ARMORY_FIXTURE_GAME_VERSION,
+): Promise<void> {
   const atlasSha256 = await storePng(
     db,
     serverId,
@@ -137,7 +145,7 @@ async function insertCatalog(db: Db, serverId: number): Promise<void> {
   const modSha256 = await storePng(db, serverId, [64, 64], modIconPixel);
   await db.insert(schema.valheimItemCatalogs).values({
     pelicanServerId: serverId,
-    gameVersion: ARMORY_FIXTURE_GAME_VERSION,
+    gameVersion,
     locale: 'English',
     atlasSha256,
     atlasWidth: ATLAS_W,
@@ -147,16 +155,20 @@ async function insertCatalog(db: Db, serverId: number): Promise<void> {
   });
 }
 
-/** Drop the server's fixture catalogue (shared by every key). */
-async function resetCatalog(db: Db, serverId: number): Promise<void> {
+/**
+ * Drop the server's fixture catalogue for `gameVersion` (shared by every
+ * key); catalogues of other versions survive (ROK-2058 fallback fixture).
+ */
+async function resetCatalog(
+  db: Db,
+  serverId: number,
+  gameVersion: string,
+): Promise<void> {
   const C = schema.valheimItemCatalogs;
   await db
     .delete(C)
     .where(
-      and(
-        eq(C.pelicanServerId, serverId),
-        eq(C.gameVersion, ARMORY_FIXTURE_GAME_VERSION),
-      ),
+      and(eq(C.pelicanServerId, serverId), eq(C.gameVersion, gameVersion)),
     );
 }
 
@@ -192,7 +204,7 @@ function profileValues(
     claimedBy,
     claimSource: claimedBy === null ? null : 'admin',
     claimedAt: claimedBy === null ? null : new Date(),
-    gameVersion: ARMORY_FIXTURE_GAME_VERSION,
+    gameVersion: req.gameVersion ?? ARMORY_FIXTURE_GAME_VERSION,
     modVersion: '1.0.0',
     capturedAt: new Date(),
     sourceSnapshotId: null,
@@ -204,16 +216,18 @@ function profileValues(
 
 /**
  * Reset `req.key`'s character (idempotent per key) and the server's
- * fixture catalogue (re-inserted with its atlas when `withCatalog`, so the
- * last call decides it for every key); returns the profile id.
+ * fixture catalogue for `req.catalogGameVersion` (re-inserted with its atlas
+ * when `withCatalog`, so the last call decides it for every key); returns
+ * the profile id.
  */
 export async function seedArmoryCharacter(
   db: Db,
   serverId: number,
   req: ArmoryCharacterFixtureRequest,
 ): Promise<number> {
-  await resetCatalog(db, serverId);
-  if (req.withCatalog) await insertCatalog(db, serverId);
+  const catalogVersion = req.catalogGameVersion ?? ARMORY_FIXTURE_GAME_VERSION;
+  await resetCatalog(db, serverId, catalogVersion);
+  if (req.withCatalog) await insertCatalog(db, serverId, catalogVersion);
   return seedArmoryProfile(db, serverId, req);
 }
 

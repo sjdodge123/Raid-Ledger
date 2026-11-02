@@ -106,6 +106,10 @@ function AddCalendar({ data, shown }: { data: CalendarsOverview; shown: Calendar
     return (
         <Section heading={C.addHeading}>
             <CalendarProviderRow available={data.providers.google.available} another={countOf(shown, 'google') > 0} />
+            {/* ROK-1597 §8 Q8: Outlook is hidden until an admin configures the Microsoft client. */}
+            {data.providers.microsoft.available && (
+                <CalendarProviderRow provider="microsoft" available another={countOf(shown, 'microsoft') > 0} />
+            )}
             <AppleProviderRow available={data.providers.apple.available} another={countOf(shown, 'apple') > 0} />
         </Section>
     );

@@ -1,0 +1,7 @@
+{
+  "token_type": "Bearer",
+  "scope": "https://graph.microsoft.com/User.Read",
+  "expires_in": 3599,
+  "access_token": "EwB-FAKE-MS-ACCESS-TOKEN-partial",
+  "refresh_token": "M.C-FAKE-MS-REFRESH-TOKEN-partial"
+}

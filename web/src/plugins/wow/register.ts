@@ -28,6 +28,8 @@ import { recentDingsWidget } from './hub-widgets/recent-dings.register';
 import { lastSeenWidget } from './hub-widgets/last-seen.register';
 import { gearReadinessWidget } from './hub-widgets/gear-readiness.register';
 import { raidProgressWidget } from './hub-widgets/raid-progress.register';
+import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
+import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -61,7 +63,20 @@ registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
+registerReadyCheckWidget(blizzard);
 blizzard.registerHubWidget(recentDingsWidget);
 blizzard.registerHubWidget(lastSeenWidget);
 blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
+
+// ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild
+// hubs (the same game scope as every Forever widget). Requirement
+// `ledgerlink-companion` in BLIZZARD_SETUP carries `rlCompanion: wow-ledgerlink`.
+blizzard.registerHubCompanionPrompt({
+    requirementId: 'ledgerlink-companion',
+    games: [WOW_FOREVER_GAME_SLUG],
+    kinds: ['wow_guild'],
+    heading: 'Upload your LedgerLink exports automatically',
+    body: 'This hub reads LedgerLink exports. Install the Raid Ledger Companion on the PC you play WoW on and your exports upload when you log out, or keep pasting them.',
+    shortBody: 'Install the Raid Ledger Companion on the PC you play WoW on, or keep pasting exports.',
+});

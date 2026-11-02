@@ -1,0 +1,33 @@
+{
+  "value": [
+    {
+      "id": "AAMkAD-private=",
+      "subject": "Dentist (private)",
+      "location": { "displayName": "12 Example Street" },
+      "attendees": [{ "emailAddress": { "address": "someone@example.test" } }],
+      "bodyPreview": "secret notes",
+      "showAs": "busy",
+      "isAllDay": false,
+      "isCancelled": false,
+      "responseStatus": { "response": "accepted" },
+      "originalStartTimeZone": "UTC",
+      "start": { "dateTime": "2026-11-03T18:00:00.0000000", "timeZone": "UTC" },
+      "end": { "dateTime": "2026-11-03T19:30:00.0000000", "timeZone": "UTC" }
+    },
+    {
+      "id": "AAMkAD-copy=",
+      "showAs": "busy",
+      "isAllDay": false,
+      "isCancelled": false,
+      "responseStatus": { "response": "organizer" },
+      "start": { "dateTime": "2026-11-05T19:00:00.0000000", "timeZone": "UTC" },
+      "end": { "dateTime": "2026-11-05T22:00:00.0000000", "timeZone": "UTC" },
+      "singleValueExtendedProperties": [
+        {
+          "id": "String {5ee82885-bb24-48df-8d4a-123f14548871} Name rlCopyId",
+          "value": "rl:0123456789ab:42:7"
+        }
+      ]
+    }
+  ]
+}

@@ -27,6 +27,7 @@ import {
 } from './providers/apple/apple.adapter';
 import { CalendarAppleController } from './controllers/calendar-apple.controller';
 import { createCalDavCredentialPersister } from './services/calendar-connect-password.helpers';
+import { MicrosoftCalendarAdapter } from './providers/microsoft/microsoft.adapter';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 import { CalendarReadCron } from './read/calendar-read.cron';
@@ -98,6 +99,7 @@ const caldavPersister = {
     GoogleCalendarAdapter,
     caldavPersister,
     AppleCalendarAdapter,
+    MicrosoftCalendarAdapter,
     CalendarProviderRegistry,
     fakeProvider,
     CalendarWriteProcessor,

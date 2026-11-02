@@ -31,6 +31,8 @@ import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { EventQuestReadinessController } from './event-quest-readiness.controller';
 import { EventQuestReadinessService } from './event-quest-readiness.service';
+import { EventRaidReadinessController } from './event-raid-readiness.controller';
+import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -79,6 +81,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     BossEncountersController,
     QuestProgressController,
     EventQuestReadinessController,
+    EventRaidReadinessController,
     AddonImportController,
     AddonImportAdminController,
     CharacterQuestsController,
@@ -103,6 +106,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     QuestProgressService,
     QuestProgressReadService,
     EventQuestReadinessService,
+    EventRaidReadinessService,
     AddonImportService,
     AddonCharacterUnlinkService,
     AddonImportCreateService,

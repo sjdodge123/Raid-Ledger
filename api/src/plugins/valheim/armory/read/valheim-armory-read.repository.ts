@@ -87,6 +87,15 @@ export const atlasReady = sql<boolean>`EXISTS (
   WHERE b.pelican_server_id = ${cat.pelicanServerId}
     AND b.sha256 = ${cat.atlasSha256})`;
 
+/**
+ * ROK-2058: the `(server, game version)` catalogue first, else the server's
+ * newest one — a patch must not blank item names until a client re-sends.
+ */
+export function cataloguePreference(gameVersion: string) {
+  const exact = sql<boolean>`${cat.gameVersion} = ${gameVersion}`;
+  return { exact, order: [desc(exact), desc(cat.capturedAt), desc(cat.id)] };
+}
+
 /** Only the referenced prefabs leave the database — never the whole jsonb. */
 export function itemsSubset(prefabs: readonly string[]) {
   if (prefabs.length === 0) return sql`'{}'::jsonb`.mapWith(cat.items);
@@ -255,27 +264,28 @@ export class ValheimArmoryReadRepository {
     return row ?? null;
   }
 
-  /** The catalogue subset for `(server, game version)`, or null (D4). */
+  /**
+   * The catalogue subset for `(server, game version)`, else the server's
+   * newest catalogue (ROK-2058); null when the server has none (D4).
+   */
   async findCatalog(
     serverId: number,
     gameVersion: string,
     prefabs: readonly string[],
   ): Promise<ArmoryCatalogReadRow | null> {
+    const { order } = cataloguePreference(gameVersion);
     const [row] = await this.db
       .select({
         items: itemsSubset(prefabs),
+        gameVersion: cat.gameVersion,
         atlasSha256: cat.atlasSha256,
         atlasWidth: cat.atlasWidth,
         atlasHeight: cat.atlasHeight,
         atlasReady,
       })
       .from(cat)
-      .where(
-        and(
-          eq(cat.pelicanServerId, serverId),
-          eq(cat.gameVersion, gameVersion),
-        ),
-      )
+      .where(eq(cat.pelicanServerId, serverId))
+      .orderBy(...order)
       .limit(1);
     return row ?? null;
   }

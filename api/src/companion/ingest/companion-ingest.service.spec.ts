@@ -83,6 +83,7 @@ interface SetupOver {
   held?: boolean;
   advanced?: boolean;
   refs?: CompanionWebpRef[];
+  lockLatestWins?: jest.Mock<Promise<void>, [CompanionDeviceTx, number]>;
   stored?: Array<{
     sha256: string;
     byteLength: number;
@@ -105,6 +106,7 @@ function setup(over: SetupOver = {}) {
     }),
     handle,
     ...(over.refs ? { blobRefs: () => over.refs ?? [] } : {}),
+    ...(over.lockLatestWins ? { lockLatestWins: over.lockLatestWins } : {}),
   };
   const registry = new CompanionHandlerRegistry(
     { isActive: () => true },
@@ -278,5 +280,31 @@ describe('CompanionIngestService — shared blob lock (ROK-1956 R1)', () => {
     const { service, repo } = setup();
     await service.ingest(DEVICE, 'test-save', body(), NOW);
     expect(repo.lockUserBlobs).not.toHaveBeenCalled();
+  });
+});
+
+describe('CompanionIngestService — handler marker lock (ROK-1960 P2-3)', () => {
+  const lockMock = () =>
+    jest.fn<Promise<void>, [CompanionDeviceTx, number]>(() =>
+      Promise.resolve(),
+    );
+  const order = (f: jest.Mock): number =>
+    f.mock.invocationCallOrder[0] ?? Number.NaN;
+
+  it('takes lockLatestWins on the tx after the blob lock and before the marker upsert', async () => {
+    const lockLatestWins = lockMock();
+    const { service, repo } = setup({ refs: [REF], lockLatestWins });
+    await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(lockLatestWins).toHaveBeenCalledWith(TX, 7);
+    expect(order(lockLatestWins)).toBeGreaterThan(order(repo.lockUserBlobs));
+    expect(order(lockLatestWins)).toBeLessThan(order(repo.advance));
+  });
+
+  it('without refs it still takes the marker lock before the upsert', async () => {
+    const lockLatestWins = lockMock();
+    const { service, repo } = setup({ lockLatestWins });
+    await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(repo.lockUserBlobs).not.toHaveBeenCalled();
+    expect(order(lockLatestWins)).toBeLessThan(order(repo.advance));
   });
 });

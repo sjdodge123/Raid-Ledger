@@ -6,6 +6,7 @@
  */
 import { http, HttpResponse } from 'msw';
 import type {
+    Bg3CrossHubMove,
     Bg3CampaignSummary,
     Bg3HubCampaignsResponse,
     Bg3MySavesResponse,
@@ -86,6 +87,15 @@ export const bg3UpdateCampaignHandler = (summary: Bg3CampaignSummary = buildBg3C
     writeHandler('patch', BG3_CAMPAIGN_URL, () => HttpResponse.json(summary), spy);
 export const bg3DefaultCampaignHandler = (spy?: Bg3Spy) => writeHandler('put', BG3_DEFAULT_URL, noContent, spy);
 export const bg3BindKeyHandler = (spy?: Bg3Spy) => writeHandler('put', BG3_KEY_URL, noContent, spy);
+/** ROK-1960 F4: the server's cross-hub guard — 409 `move` unless the body says `confirmCrossHub: true`. */
+export function bg3BindKeyCrossHubHandler(move: Bg3CrossHubMove, spy?: Bg3Spy) {
+    return http.put(BG3_KEY_URL, async ({ request, params }) => {
+        const body: unknown = await request.json();
+        spy?.(body, params);
+        const confirmed = typeof body === 'object' && body !== null && 'confirmCrossHub' in body && body.confirmCrossHub === true;
+        return confirmed ? noContent() : HttpResponse.json(move, { status: 409 });
+    });
+}
 export const bg3HubSettingsHandler = (
     settings: Bg3HubCampaignsResponse['settings'] = { hideLocationAndScreenshots: true, activeCampaignId: null },
     spy?: Bg3Spy,

@@ -38,7 +38,8 @@ function errorAction(error: Error): 'consent' | 'alreadyEnabled' | 'saveFailed' 
  */
 function useWriteSettings(connection: CalendarConnection) {
     const update = useUpdateConnection();
-    const consent = useStartOAuth('primary');
+    /* A 409 needs_consent re-runs THIS connection's provider consent (ROK-1597 Q4). */
+    const consent = useStartOAuth('primary', undefined, connection.provider === 'microsoft' ? 'microsoft' : 'google');
     const [error, setError] = useState<string | null>(null);
     const [picked, setPicked] = useState<Partial<Write> | null>(null);
     const save = (next: Partial<Write>): void => {

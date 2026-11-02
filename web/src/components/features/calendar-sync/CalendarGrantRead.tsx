@@ -6,11 +6,12 @@
  */
 import type { JSX } from 'react';
 import { Button } from '../../ui/button';
-import { useStartOAuth } from '../../../hooks/use-calendar-sync';
+import { useStartOAuth, type OAuthCalendarProvider } from '../../../hooks/use-calendar-sync';
 import { READ_COPY as R } from './calendar-sync.copy';
 
-export function GrantRead(): JSX.Element {
-    const grant = useStartOAuth('read');
+/** `provider`: whose consent to re-run — the card passes its own (Outlook, ROK-1597); the section defaults to Google. */
+export function GrantRead({ provider = 'google' }: { provider?: OAuthCalendarProvider }): JSX.Element {
+    const grant = useStartOAuth('read', undefined, provider);
     return (
         <div className="flex flex-wrap items-center justify-between gap-3" data-testid="calendar-read-grant">
             <p className="text-sm text-secondary">{R.grantTitle}</p>

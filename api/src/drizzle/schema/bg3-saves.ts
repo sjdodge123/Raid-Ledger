@@ -26,7 +26,7 @@ import { bg3Campaigns } from './bg3';
 
 const tsz = (name: string) => timestamp(name, { withTimezone: true });
 /** Where a save's `campaignKey` came from (`bg3-save/v1`). */
-export type Bg3CampaignKeySourceRow = 'save-folder' | 'game-id';
+export type Bg3CampaignKeySourceRow = 'save-folder' | 'game-id' | 'file-name';
 
 /**
  * Save history. `campaign_id` NULL = unassigned (kept under the same
@@ -90,7 +90,7 @@ export const bg3Saves = pgTable(
     check('bg3_saves_key_chk', sql`${t.campaignKey} ~ '^[0-9a-f]{64}$'`),
     check(
       'bg3_saves_key_source_chk',
-      sql`${t.campaignKeySource} IN ('save-folder', 'game-id')`,
+      sql`${t.campaignKeySource} IN ('save-folder', 'game-id', 'file-name')`,
     ),
     check(
       'bg3_saves_thumbnail_sha_chk',

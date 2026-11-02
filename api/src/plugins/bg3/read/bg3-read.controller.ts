@@ -27,13 +27,12 @@ import {
   PluginActiveGuard,
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
-import { BG3_PLUGIN_ID } from '../bg3.constants';
+import { BG3_NO_STORE, BG3_PLUGIN_ID } from '../bg3.constants';
 import { parseOr400 } from '../campaigns/bg3-campaigns.controller';
 import { bg3IdPipe } from '../campaigns/bg3-id.pipe';
 import { Bg3ReadService } from './bg3-read.service';
 import { parseThumbnailSize } from './bg3-thumbnail.encode';
 
-export const BG3_NO_STORE = 'private, no-store';
 const OptionalId = z.coerce.number().int().positive().optional();
 const Limit = z.coerce.number().int().min(1).max(20).default(20);
 

@@ -87,12 +87,17 @@ export class Bg3CampaignsController {
     @Req() req: AuthenticatedExpressRequest,
   ): Promise<void> {
     const k = parseOr400(Bg3CampaignKeySchema, key, 'Invalid campaign key');
-    const { campaignId } = parseOr400(
+    const { campaignId, confirmCrossHub } = parseOr400(
       Bg3BindKeyBodySchema,
       body,
       'Invalid body',
     );
-    await this.campaigns.bindKey(req.user, k, campaignId);
+    await this.campaigns.bindKey(
+      req.user,
+      k,
+      campaignId,
+      confirmCrossHub ?? false,
+    );
   }
 
   @Delete('me/campaign-keys/:campaignKey')

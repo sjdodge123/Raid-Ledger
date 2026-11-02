@@ -93,11 +93,10 @@ describe('CalendarsPage — Google + Apple', () => {
         expect(await screen.findByTestId('calendar-provider-apple-hint')).toHaveTextContent(A.hint);
     });
 
-    it('a Microsoft connection never renders — no card, no Outlook row', async () => {
+    it('a Microsoft connection renders its card (ROK-1597); the Outlook row stays hidden while Microsoft is unconfigured', async () => {
         renderWith([buildAppleConnection(), { ...calendarConnectionFixture, id: 31, provider: 'microsoft' }]);
         const cards = await screen.findAllByTestId('calendar-connection-card');
-        expect(cards.map((el) => el.dataset.provider)).toEqual(['apple']);
-        expect(screen.queryByText(/outlook/i)).toBeNull();
+        expect(cards.map((el) => el.dataset.provider)).toEqual(['apple', 'microsoft']);
         expect(screen.queryByTestId('calendar-provider-microsoft')).toBeNull();
     });
 });

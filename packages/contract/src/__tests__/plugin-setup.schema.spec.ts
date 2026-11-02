@@ -12,6 +12,8 @@ import {
   type PluginSetupRequirement,
 } from '../plugin-setup.schema.js';
 import { PluginInfoSchema } from '../plugins.schema.js';
+import { COMPANION_CONTRACTS } from '../companion-registry.js';
+import { HubOnboardingKeySchema } from '../hub-onboarding.schema.js';
 
 function must<T>(value: T | undefined, label: string): T {
   if (value === undefined) throw new Error(`missing ${label}`);
@@ -123,5 +125,48 @@ describe('PluginInfo setup status (§3.5, L2)', () => {
   it('accepts met / unmet / unknown and nothing else', () => {
     expect(PluginSetupStatusSchema.safeParse({ id: 'link-token', state: 'met' }).success).toBe(true);
     expect(PluginSetupStatusSchema.safeParse({ id: 'link-token', state: 'done' }).success).toBe(false);
+  });
+});
+
+describe('Raid Ledger Companion marker (ROK-2056)', () => {
+  const companion = {
+    id: 'upload-saves',
+    kind: 'companion_app',
+    title: 'Players upload their saves',
+    instructions: 'Install the Raid Ledger Companion and link it.',
+    required: false,
+    rlCompanion: { collector: 'bg3-save' },
+  };
+  const all = Object.values(HUB_PLUGIN_MANIFESTS).flatMap(
+    (m): readonly PluginSetupRequirement[] => m.setup.requirements,
+  );
+
+  it('accepts the marker on a companion_app requirement only', () => {
+    expect(messages(companion)).toEqual([]);
+    expect(messages({ ...companion, kind: 'other' })).toEqual([
+      'rlCompanion: Only a companion_app requirement can be fulfilled by the Raid Ledger Companion',
+    ]);
+    expect(messages({ ...companion, rlCompanion: { collector: 'bg3-save', extra: 1 } })).not.toEqual([]);
+  });
+
+  it('marks exactly the BG3 save upload and the LedgerLink auto-upload', () => {
+    const marked = all.filter((r) => r.rlCompanion !== undefined).map((r) => [r.id, r.rlCompanion?.collector]);
+    expect(marked).toEqual([
+      ['ledgerlink-companion', 'wow-ledgerlink'],
+      ['upload-saves', 'bg3-save'],
+    ]);
+    const addon = must(all.find((r) => r.id === 'ledgerlink-addon'), 'ledgerlink-addon');
+    expect(addon.rlCompanion).toBeUndefined();
+  });
+
+  it('every marker names a shipped Companion contract', () => {
+    for (const r of all) {
+      if (r.rlCompanion === undefined) continue;
+      expect(Object.keys(COMPANION_CONTRACTS)).toContain(r.rlCompanion.collector);
+    }
+  });
+
+  it('the hub install prompt can be dismissed per hub', () => {
+    expect(HubOnboardingKeySchema.safeParse('companion-install').success).toBe(true);
   });
 });

@@ -62,9 +62,9 @@ describe('useConditionalStepFlags — needsCalendarConnect (ROK-2022)', () => {
         expect(flagsFor().result.current.needsCalendarConnect, 'a connected user must never see it').toBe(false);
     });
 
-    it('ignores a Microsoft-only or a disconnecting connection (not shipped / on its way out)', () => {
+    it('counts a Microsoft connection (shipped in ROK-1597) but ignores a disconnecting one', () => {
         serve(withConnections({ ...calendarConnectionFixture, provider: 'microsoft' }));
-        expect(flagsFor().result.current.needsCalendarConnect, 'microsoft is not shipped').toBe(true);
+        expect(flagsFor().result.current.needsCalendarConnect, 'an Outlook connection is a connection').toBe(false);
         serve(withConnections({ ...calendarConnectionFixture, status: 'disconnecting' }));
         expect(flagsFor().result.current.needsCalendarConnect, 'a disconnecting row is not a connection').toBe(true);
     });

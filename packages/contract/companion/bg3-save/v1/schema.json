@@ -53,7 +53,8 @@
           "type": "string",
           "enum": [
             "save-folder",
-            "game-id"
+            "game-id",
+            "file-name"
           ]
         },
         "gameVersion": {

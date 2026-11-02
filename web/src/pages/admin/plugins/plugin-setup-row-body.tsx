@@ -5,7 +5,9 @@
  * Ledger and never shown here) with "Issue token…" linking to the existing
  * Pelican server row — only when the row carries a `pelican` hint, so a
  * non-Pelican secret never points admins at the Pelican page. "Apply on
- * Pelican" is shown disabled — coming later.
+ * Pelican" is shown disabled — coming later. A requirement fulfilled by the
+ * Raid Ledger Companion (`rlCompanion`, ROK-2056) links to the players' install
+ * card, only while a public download exists.
  */
 import { useId, type JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -14,6 +16,7 @@ import { MarkdownBlock } from '../../../components/ui/markdown-block';
 import { Button } from '../../../components/ui/button';
 import { buttonClass } from '../../../components/ui/button-classes';
 import { SECTION_LABEL } from './plugin-hub-contributions';
+import { COMPANION_CARD_HREF, COMPANION_LINK_CLASS, companionDownloadAvailable } from '../../../lib/companion-install';
 
 /** Integrations › Pelican Panel — where a server's token is issued today (ITEM Q4). */
 export const PELICAN_SERVER_ROWS_URL = '/admin/settings/integrations/plugin/pelican/pelican-panel';
@@ -26,6 +29,7 @@ export function PluginSetupRowBody({ req }: { req: PluginSetupRequirement }): JS
             {req.pelican && <WhereItGoes pelican={req.pelican} />}
             {req.kind === 'server_secret' && <SecretTemplate pelican={req.pelican} />}
             <SetupLinks links={req.links ?? []} />
+            {req.rlCompanion && companionDownloadAvailable() && <HowPlayersInstall />}
             {req.pelican && <ApplyOnPelican />}
         </div>
     );
@@ -68,6 +72,16 @@ function IssueTokenLink(): JSX.Element {
             <Link to={PELICAN_SERVER_ROWS_URL} className={buttonClass({ variant: 'secondary', size: 'sm' })}>Issue token…</Link>
             <span className="text-xs text-dim">Opens the server’s row in Integrations › Pelican Panel.</span>
         </div>
+    );
+}
+
+/** In-app link to the Companion card on My Integrations, where players install it. */
+function HowPlayersInstall(): JSX.Element {
+    return (
+        <Link to={COMPANION_CARD_HREF} data-testid="setup-companion-install"
+            className={`inline-block text-sm ${COMPANION_LINK_CLASS}`}>
+            How players install it
+        </Link>
     );
 }
 

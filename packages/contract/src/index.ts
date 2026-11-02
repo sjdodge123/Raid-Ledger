@@ -259,6 +259,7 @@ export * from './companion-bg3-save-normalise.js';
 // Companion `wow-ledgerlink` v1 — wraps a LedgerLink v1 export string (ROK-1964).
 export * from './companion-wow-ledgerlink.schema.js';
 export * from './companion-registry.js';
+export * from './companion-install.js';
 export * from './companion-bg3-display.js';
 export * from './companion-json-schema.js';
 // BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).
@@ -281,6 +282,7 @@ export * from './wow-roster-gear.schema.js';
 export * from './wow-roster-raid-progress.schema.js';
 export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
+export * from './wow-event-raid-readiness.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';

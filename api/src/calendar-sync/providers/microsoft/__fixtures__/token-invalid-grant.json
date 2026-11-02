@@ -1,0 +1,5 @@
+{
+  "error": "invalid_grant",
+  "error_description": "AADSTS70008: The provided authorization code or refresh token has expired. Trace ID: 00000000-0000-0000-0000-000000000000",
+  "error_codes": [70008]
+}

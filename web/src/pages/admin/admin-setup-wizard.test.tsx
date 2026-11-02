@@ -87,17 +87,22 @@ function createQueryClient() {
     return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderWithRouter(ui: React.ReactElement) {
-    return render(
-        <QueryClientProvider client={createQueryClient()}>
+function routerTree(ui: React.ReactElement, client: QueryClient) {
+    return (
+        <QueryClientProvider client={client}>
             <MemoryRouter initialEntries={['/admin/setup']}>
                 <Routes>
                     <Route path="/admin/setup" element={ui} />
                     <Route path="/calendar" element={<div>Calendar</div>} />
+                    <Route path="/admin/settings/discord" element={<div>Discord settings</div>} />
                 </Routes>
             </MemoryRouter>
         </QueryClientProvider>
     );
+}
+
+function renderWithRouter(ui: React.ReactElement) {
+    return render(routerTree(ui, createQueryClient()));
 }
 
 describe('AdminSetupWizard — part 1', () => {
@@ -337,5 +342,20 @@ describe('AdminSetupWizard — Finish later (ROK-1703 D-9)', () => {
         expect(mutate).toHaveBeenCalledTimes(1);
         expect(toast.info).toHaveBeenCalledWith('Pick a default channel any time in Admin \u2192 Discord');
         expect(mockNavigate).toHaveBeenCalledWith('/admin/settings/discord', { replace: true });
+    });
+
+    it('lands on Admin → Discord, not Calendar, when the completed status arrives while the wizard is still mounted', async () => {
+        // The real navigate runs in a transition and the lazy Discord page suspends, so the refetched
+        // `completed: true` reaches the still-mounted wizard first — model that with a pending mutate.
+        const mutate = vi.fn();
+        const pending = { ...defaultOnboarding, statusQuery: { isLoading: false, data: { currentStep: 2, completed: false, steps: {} } }, completeOnboarding: { mutate, isPending: true } };
+        mockUseOnboarding.mockReturnValue(pending);
+        const client = createQueryClient();
+        const view = render(routerTree(<AdminSetupWizard />, client));
+        fireEvent.click(await screen.findByRole('button', { name: 'Finish later' }));
+        mockUseOnboarding.mockReturnValue({ ...pending, statusQuery: { isLoading: false, data: { currentStep: 2, completed: true, steps: {} } } });
+        view.rerender(routerTree(<AdminSetupWizard />, client));
+        expect(await screen.findByText('Discord settings')).toBeInTheDocument();
+        expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
     });
 });
