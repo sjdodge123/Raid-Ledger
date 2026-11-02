@@ -6,13 +6,15 @@
  * reads (`CORS_ORIGIN`, `CORS_AUTO_MODE` — see `cors-auto-policy.ts`) and
  * reuses its pure decisions; there is no `'*'` fallback.
  *
- * Nest's gateway `cors.origin` callback sees only the Origin, not the Host,
- * so `CORS_ORIGIN=auto` (same-origin only) grants no cross-origin access:
- * a same-origin browser client needs no CORS grant, and dev localhost keeps
- * working outside production. `CORS_AUTO_MODE=report` mirrors the HTTP
+ * `CORS_ORIGIN=auto` reads the raw `Host` header exactly like the HTTP gate
+ * (`decideRequest` in `cors-auto-policy.ts`), so a same-hostname Origin on
+ * another port is allowed on the polling transport too. That needs the
+ * request, which Nest's typed `GatewayMetadata.cors` (`CorsOptions`) cannot
+ * give, so `SocketCorsIoAdapter` installs `socketCorsDelegate` as socket.io's
+ * own typed `ServerOptions.cors`. `CORS_AUTO_MODE=report` mirrors the HTTP
  * rollback and allows.
  */
-import type { CustomOrigin } from '@nestjs/common/interfaces/external/cors-options.interface';
+import type { ServerOptions } from 'socket.io';
 import {
   decideAutoOrigin,
   decideExplicitOrigin,
@@ -20,27 +22,44 @@ import {
 } from './cors-auto-decision';
 import { readProcessEnv, type CorsEnv } from './cors-auto-policy';
 
-/** Whether a socket handshake from `origin` gets a CORS grant. */
+/** The delegate form of socket.io's (engine.io's) `cors` option. */
+export type SocketCorsDelegate = Extract<
+  ServerOptions['cors'],
+  (...args: never[]) => void
+>;
+
+/**
+ * Whether a socket handshake from `origin` gets a CORS grant. `hostHeader` is
+ * the raw `Host` request header — never X-Forwarded-Host (see the HTTP gate).
+ */
 export function socketOriginAllowed(
   origin: string | undefined,
   env: CorsEnv,
   isProduction: boolean,
+  hostHeader?: string,
 ): boolean {
   const withOrigin = origin === undefined ? {} : { origin };
   if (env.corsOrigin === 'auto') {
     if (parseCorsAutoMode(env.autoMode) === 'report') return true;
-    return decideAutoOrigin({ ...withOrigin, isProduction }).allow;
+    const host = hostHeader === undefined ? {} : { hostHeader };
+    return decideAutoOrigin({ ...withOrigin, ...host, isProduction }).allow;
   }
   const corsOrigin = env.corsOrigin ? { corsOrigin: env.corsOrigin } : {};
   return decideExplicitOrigin({ ...withOrigin, ...corsOrigin, isProduction })
     .allow;
 }
 
-/** Gateway `cors.origin`: decided at handshake time from `process.env`. */
-export const socketCorsOrigin: CustomOrigin = (requestOrigin, callback) => {
+/**
+ * socket.io `cors` delegate: decided per request from `process.env` and the
+ * request's own Origin + Host headers. A denied Origin gets no ACAO header.
+ */
+export const socketCorsDelegate: SocketCorsDelegate = (req, callback) => {
   const isProduction = process.env.NODE_ENV === 'production';
-  callback(
-    null,
-    socketOriginAllowed(requestOrigin, readProcessEnv(), isProduction),
+  const allowed = socketOriginAllowed(
+    req.headers.origin,
+    readProcessEnv(),
+    isProduction,
+    req.headers.host,
   );
+  callback(null, { origin: allowed, credentials: true });
 };

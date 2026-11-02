@@ -10,7 +10,6 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { socketCorsOrigin } from '../cors/socket-cors';
 import {
   LineupGraceScheduledEventSchema,
   LineupRealtimeEventNames,
@@ -31,14 +30,8 @@ import { perfLog } from '../common/perf-logger';
  * Auth: JWT from socket.handshake.auth.token (validated on connection).
  * Note: Single-instance only for v1. Redis adapter is optional and documented.
  */
-@WebSocketGateway({
-  namespace: '/lineups',
-  cors: {
-    // Decided per handshake from CORS_ORIGIN; never '*' (socket-cors.ts).
-    origin: socketCorsOrigin,
-    credentials: true,
-  },
-})
+// CORS is decided per handshake by SocketCorsIoAdapter (cors/socket-cors.ts).
+@WebSocketGateway({ namespace: '/lineups' })
 export class LineupsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
