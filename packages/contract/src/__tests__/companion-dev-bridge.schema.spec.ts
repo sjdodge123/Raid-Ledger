@@ -13,17 +13,48 @@ import { DevBridgeLogLineSchema } from '../companion-dev-bridge-endpoints.schema
 
 const call = (fn: string) => ({ title: 'probe', calls: [{ id: 'a', fn }] });
 
-describe('devBridgeSegmentWords', () => {
-    it.each([
-        ['GetCVar', ['Get', 'C', 'Var']],
-        ['IsAddOnLoaded', ['Is', 'Add', 'On', 'Loaded']],
-        ['C_TradeSkillUI', ['C', 'Trade', 'Skill', 'UI']],
-        ['GUIDSetThing', ['GUID', 'Set', 'Thing']],
-        ['loadstring', ['loadstring']],
-        ['Get2Money', ['Get2', 'Money']],
-    ])('%s → %j', (segment, words) => {
-        expect(devBridgeSegmentWords(segment)).toEqual(words);
+describe('devBridgeSegmentWords — shared tokenizer vectors (allowlist.json examples.tokenizer)', () => {
+    it.each(DEV_BRIDGE_PROBE_ALLOWLIST.examples.tokenizer.map((v) => [v.segment, v.words] as const))(
+        '%s → %j',
+        (segment, words) => {
+            expect(devBridgeSegmentWords(segment)).toEqual(words);
+        },
+    );
+
+    it('pins acronym runs, digits and "_" for the Lua/Rust tokenizers', () => {
+        const segments = DEV_BRIDGE_PROBE_ALLOWLIST.examples.tokenizer.map((v) => v.segment);
+        expect(segments).toEqual(
+            expect.arrayContaining(['GetCVar', 'C_TradeSkillUI', 'GUIDSetThing', 'Get2Money', 'UnitPopup_OnClick']),
+        );
     });
+});
+
+describe('deny list vectors (MAJOR-3) — only the deny rules can refuse these', () => {
+    const listed: readonly string[] = DEV_BRIDGE_PROBE_ALLOWLIST.examples.denyListed;
+
+    it.each(listed)('%s is refused with reason "denied"', (fn) => {
+        expect(checkDevBridgeProbeFunction(fn)).toEqual({ allowed: false, reason: 'denied' });
+    });
+
+    it.each(listed)('%s starts with an allowed read prefix', (fn) => {
+        const last = fn.split('.').pop() ?? '';
+        const first = devBridgeSegmentWords(last)[0] ?? '';
+        expect(DEV_BRIDGE_PROBE_ALLOWLIST.allowPrefixes).toContain(first);
+    });
+
+    it.each([...DEV_BRIDGE_PROBE_ALLOWLIST.denyWords, ...DEV_BRIDGE_PROBE_ALLOWLIST.denyExact])(
+        'has a vector for deny entry %s',
+        (word) => {
+            const hit = listed.some((fn) =>
+                fn.split('.').some(
+                    (seg) =>
+                        seg.toLowerCase() === word.toLowerCase() ||
+                        devBridgeSegmentWords(seg).some((w) => w.toLowerCase() === word.toLowerCase()),
+                ),
+            );
+            expect(hit).toBe(true);
+        },
+    );
 });
 
 describe('checkDevBridgeProbeFunction — shared example vectors', () => {
@@ -38,6 +69,19 @@ describe('checkDevBridgeProbeFunction — shared example vectors', () => {
     it('deny wins over a read prefix', () => {
         expect(checkDevBridgeProbeFunction('GetSendMailItem')).toEqual({ allowed: false, reason: 'denied' });
         expect(checkDevBridgeProbeFunction('C_GuildInfo.GetGuildDisbandInfo')).toEqual({ allowed: false, reason: 'denied' });
+    });
+
+    it.each(['UnitPopup_OnClick', 'UnitFrame_OnEvent', 'UnitPopup_ShowMenu', 'GetThing_OnClick'])(
+        'refuses the FrameXML handler %s (a prefix-matched last segment holding "_")',
+        (fn) => {
+            expect(checkDevBridgeProbeFunction(fn)).toEqual({ allowed: false, reason: 'not_read_verb' });
+        },
+    );
+
+    it('matches allowExact against the whole path, not the last segment', () => {
+        expect(checkDevBridgeProbeFunction('time')).toEqual({ allowed: true });
+        expect(checkDevBridgeProbeFunction('SomeAddon.time')).toEqual({ allowed: false, reason: 'not_read_verb' });
+        expect(checkDevBridgeProbeFunction('AnyAddon.Any.date')).toEqual({ allowed: false, reason: 'not_read_verb' });
     });
 
     it('needs the read prefix as a whole first word, case-sensitively', () => {
@@ -85,7 +129,7 @@ describe('DevBridgeProbeValueSchema', () => {
 describe('DevBridgeLogLineSchema', () => {
     const line = (msg: string) => ({ at: '2026-11-01T18:30:00Z', level: 'info', target: 't', msg });
 
-    it.each(['token rlcd_AAAA', 'token rlcdev_AAAA', 'Authorization: Bearer abc'])('refuses %s', (msg) => {
+    it.each(['token rlcd_AAAA', 'token rlcdev_AAAA', 'Authorization: Bearer abc', 'Bearer <redacted>abc'])('refuses %s', (msg) => {
         expect(DevBridgeLogLineSchema.safeParse(line(msg)).success).toBe(false);
     });
 

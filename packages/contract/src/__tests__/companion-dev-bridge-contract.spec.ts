@@ -13,7 +13,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { serializeDevBridgeAllowlist } from '../companion-dev-bridge-allowlist.js';
+import {
+    checkDevBridgeProbeFunction,
+    isDevBridgeReadVerb,
+    serializeDevBridgeAllowlist,
+} from '../companion-dev-bridge-allowlist.js';
 import { DEV_BRIDGE_MESSAGES, serializeDevBridgeJsonSchema } from '../companion-dev-bridge-json-schema.js';
 
 const V1 = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'companion', 'dev-bridge', 'v1');
@@ -28,8 +32,11 @@ const namesIn = (dir: string): string[] =>
         .map((f) => f.slice(0, -'.json'.length))
         .sort();
 
+/** Just enough of a probe-request fixture to read its first call's `fn`. */
+const DeniedFixture = z.object({ calls: z.array(z.object({ fn: z.string().optional() })).min(1) });
+
 /** The message schema a fixture name's prefix (`<key>` or `<key>--<case>`) names; unknown → fails loudly. */
-function schemaFor(name: string) {
+function schemaFor(name: string): z.ZodType {
     const key = name.split('--')[0] ?? '';
     const hit = Object.entries(DEV_BRIDGE_MESSAGES).find(([k]) => k === key);
     if (hit === undefined) throw new Error(`fixture ${name} names no dev-bridge message`);
@@ -72,6 +79,16 @@ describe('dev-bridge v1 invalid fixtures', () => {
         const denied = namesIn(INVALID).filter((n) => n.startsWith('probe-request--deny-'));
         expect(denied.length).toBeGreaterThanOrEqual(8);
     });
+
+    it.each(namesIn(INVALID).filter((n) => n.startsWith('probe-request--deny-')))(
+        '%s is read-prefixed, so only the deny list refuses it (MAJOR-3)',
+        (name) => {
+            const fixture = DeniedFixture.parse(readJson(INVALID, `${name}.json`));
+            const fn = fixture.calls[0]?.fn ?? '';
+            expect({ fn, readVerb: isDevBridgeReadVerb(fn) }).toEqual({ fn, readVerb: true });
+            expect(checkDevBridgeProbeFunction(fn)).toEqual({ allowed: false, reason: 'denied' });
+        },
+    );
 });
 
 describe('dev-bridge v1 drift guards (AC-1)', () => {

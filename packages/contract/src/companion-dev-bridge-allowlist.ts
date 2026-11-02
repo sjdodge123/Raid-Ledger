@@ -11,24 +11,30 @@
 const TOKENIZER_RULE =
     'Split the segment at every "_". Inside each piece start a new word before an uppercase letter that follows a lowercase letter or a digit, and before an uppercase letter that is followed by a lowercase letter and preceded by an uppercase letter. Drop empty words. Deny words, deny pairs and deny-exact names compare case-insensitively; allow prefixes and allow-exact names compare case-sensitively.';
 
+/** Whole camel-case words that refuse a path wherever they appear (case-insensitive). */
+const DENY_WORDS = [
+    'send', 'set', 'delete', 'destroy', 'buy', 'sell', 'accept', 'decline', 'confirm', 'use', 'cast',
+    'pickup', 'place', 'drop', 'repair', 'learn', 'unlearn', 'abandon', 'leave', 'invite', 'uninvite',
+    'promote', 'demote', 'kick', 'run', 'load', 'reload', 'logout', 'quit', 'create', 'hook', 'register',
+    'secure', 'macro', 'chat', 'mail', 'auction', 'trade', 'getfenv', 'setfenv', 'rawset', 'loadstring',
+    'pcall', 'cancel', 'clear', 'remove', 'reset', 'toggle', 'equip', 'disband',
+] as const;
+
+/** `send` → `GetSendInfo`: a read-prefixed name only the deny word can refuse. */
+const denyWordVector = (word: string): string => `Get${word.charAt(0).toUpperCase()}${word.slice(1)}Info`;
+
 /** The shared allowlist table (serialised verbatim into `allowlist.json`). */
 export const DEV_BRIDGE_PROBE_ALLOWLIST = {
     allowlistVersion: 1,
     segmentPattern: '^[A-Za-z_][A-Za-z0-9_]*$',
     maxSegments: 3,
     tokenizer: TOKENIZER_RULE,
-    /** The FIRST word of the LAST segment must equal one of these (case-sensitive)… */
+    /** The FIRST word of the LAST segment must equal one of these (case-sensitive) and that segment must hold no "_"… */
     allowPrefixes: ['Get', 'Is', 'Has', 'Can', 'Unit', 'Num'],
-    /** …or the whole last segment must equal one of these (case-sensitive). */
+    /** …or the WHOLE path must equal one of these (case-sensitive). */
     allowExact: ['InCombatLockdown', 'time', 'date'],
     /** Denied when ANY word of ANY segment equals one of these (case-insensitive). */
-    denyWords: [
-        'send', 'set', 'delete', 'destroy', 'buy', 'sell', 'accept', 'decline', 'confirm', 'use', 'cast',
-        'pickup', 'place', 'drop', 'repair', 'learn', 'unlearn', 'abandon', 'leave', 'invite', 'uninvite',
-        'promote', 'demote', 'kick', 'run', 'load', 'reload', 'logout', 'quit', 'create', 'hook', 'register',
-        'secure', 'macro', 'chat', 'mail', 'auction', 'trade', 'getfenv', 'setfenv', 'rawset', 'loadstring',
-        'pcall', 'cancel', 'clear', 'remove', 'reset', 'toggle', 'equip', 'disband',
-    ],
+    denyWords: DENY_WORDS,
     /** Denied when one segment holds BOTH words of a pair (case-insensitive). */
     denyWordPairs: [
         ['guild', 'set'],
@@ -52,6 +58,28 @@ export const DEV_BRIDGE_PROBE_ALLOWLIST = {
             'C_Container.UseContainerItem', 'GetQuestReward', 'CancelUnitBuff', 'DoEmote', 'GuildSetMOTD',
             'C_ChatInfo.GetRegisteredAddonMessagePrefixes', 'GetTradeSkillLine', 'C_GuildInfo.RemoveFromGuild',
             'UnitSetRole', 'A.B.C.GetMoney', '1Get', 'Get-Money', 'Get..Money',
+            'UnitPopup_OnClick', 'UnitFrame_OnEvent', 'UnitPopup_ShowMenu', 'SomeAddon.time',
+        ],
+        /** Read-prefixed, so ONLY the deny rules refuse them: one per deny word and deny-exact name. */
+        denyListed: [
+            'GetSendMailItem', 'UnitSetRole', 'GetQuestReward', 'GetInboxText', 'C_GuildInfo.GetGuildDisbandInfo',
+            'GetTradeSkillLine', 'C_ChatInfo.GetRegisteredAddonMessagePrefixes', 'GetMacroInfo',
+            'GetAuctionItemInfo', 'CanGuildInvite', 'IsAddOnLoadOnDemand',
+            ...DENY_WORDS.map(denyWordVector),
+        ],
+        /** Tokenizer vectors: `segment` must split into exactly `words`. */
+        tokenizer: [
+            { segment: 'GetCVar', words: ['Get', 'C', 'Var'] },
+            { segment: 'IsAddOnLoaded', words: ['Is', 'Add', 'On', 'Loaded'] },
+            { segment: 'C_TradeSkillUI', words: ['C', 'Trade', 'Skill', 'UI'] },
+            { segment: 'GUIDSetThing', words: ['GUID', 'Set', 'Thing'] },
+            { segment: 'UnitIsAFK', words: ['Unit', 'Is', 'AFK'] },
+            { segment: 'GetHTTPResponse2Code', words: ['Get', 'HTTP', 'Response2', 'Code'] },
+            { segment: 'Get2Money', words: ['Get2', 'Money'] },
+            { segment: 'Get2FA', words: ['Get2', 'FA'] },
+            { segment: 'UnitPopup_OnClick', words: ['Unit', 'Popup', 'On', 'Click'] },
+            { segment: '__index', words: ['index'] },
+            { segment: 'loadstring', words: ['loadstring'] },
         ],
     },
 } as const;
@@ -95,9 +123,15 @@ function isDenied(segments: readonly string[]): boolean {
     });
 }
 
-/** Allow rules: the last segment's first word is a read prefix, or the segment is allow-exact. */
-function isReadVerb(last: string): boolean {
-    if (has(DEV_BRIDGE_PROBE_ALLOWLIST.allowExact, last)) return true;
+/**
+ * Allow rules alone (no deny check): the whole path is allow-exact, or the last
+ * segment's first word is a read prefix AND that segment holds no "_" (real C API
+ * leaf names never do; FrameXML handlers like `UnitPopup_OnClick` always do).
+ */
+export function isDevBridgeReadVerb(path: string): boolean {
+    if (has(DEV_BRIDGE_PROBE_ALLOWLIST.allowExact, path)) return true;
+    const last = path.split('.').pop() ?? '';
+    if (last.includes('_')) return false;
     const first = devBridgeSegmentWords(last)[0];
     return first !== undefined && has(DEV_BRIDGE_PROBE_ALLOWLIST.allowPrefixes, first);
 }
@@ -107,8 +141,7 @@ export function checkDevBridgeProbeFunction(path: string): DevBridgeFunctionVerd
     if (!isDevBridgePathGrammatical(path)) return { allowed: false, reason: 'grammar' };
     const segments = path.split('.');
     if (isDenied(segments)) return { allowed: false, reason: 'denied' };
-    const last = segments[segments.length - 1];
-    if (last === undefined || !isReadVerb(last)) return { allowed: false, reason: 'not_read_verb' };
+    if (!isDevBridgeReadVerb(path)) return { allowed: false, reason: 'not_read_verb' };
     return { allowed: true };
 }
 
