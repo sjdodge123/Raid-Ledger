@@ -5,7 +5,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 import {
-  HUB_PLUGIN_MANIFESTS,
+  hubManifestFor,
   type CompanionConfigGame,
   type CompanionConfigPlugin,
 } from '@raid-ledger/contract';
@@ -20,10 +20,7 @@ import {
 
 /** The hub manifest's game slugs for `pluginId` (its first is the primary). */
 function hubGameSlugs(pluginId: string): readonly string[] {
-  const hub = Object.entries(HUB_PLUGIN_MANIFESTS).find(
-    ([slug]) => slug === pluginId,
-  )?.[1];
-  return hub && 'gameSlugs' in hub ? hub.gameSlugs : [];
+  return hubManifestFor(pluginId)?.gameSlugs ?? [];
 }
 
 @Injectable()
