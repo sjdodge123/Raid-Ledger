@@ -926,9 +926,22 @@ if [[ -r "$REGISTRY_GC_LIB" ]]; then
     # Non-zero = aborted: docker ps/images or the env registry was unreadable
     # (protected_tags_unreadable), or a kept tag's digest was
     # (protected_digest_unreadable), so the protected set was unknown and
-    # nothing was deleted. Logged + audited.
-    if ! REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>/dev/null); then
-        log "registry: GC aborted — $(jq -r '.error // "unknown"' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
+    # nothing was deleted; tags/list was unreadable (tags_unreadable); or a
+    # timed-out garbage-collect could not be confirmed dead
+    # (gc=timed_out_cleanup_failed — the registry_gc entry is kept until it
+    # expires, so builds stay blocked). Logged + audited.
+    # The lib's stderr (which digest was unreadable, a timeout, a failed
+    # cleanup) goes to the sweeper log, line by line.
+    _rgc_err=$(mktemp)
+    if ! REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>"$_rgc_err"); then
+        _rgc_failed=1
+    else
+        _rgc_failed=0
+    fi
+    while IFS= read -r _rgc_line; do log "registry: $_rgc_line"; done < "$_rgc_err"
+    rm -f "$_rgc_err"
+    if (( _rgc_failed )); then
+        log "registry: GC aborted — $(jq -r '.error // .gc // "unknown"' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
     fi
     [[ -n "$REGISTRY_GC_RESULT" ]] || REGISTRY_GC_RESULT='{}'
     if [[ "$(jq -r '.skipped // empty' <<<"$REGISTRY_GC_RESULT" 2>/dev/null)" != "interval" ]]; then

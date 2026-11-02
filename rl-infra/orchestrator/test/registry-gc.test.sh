@@ -407,7 +407,7 @@ test_untagged_pin_keeps_untagged() {
     assert_contains "$err" "sha256:orphan" "the log says which pin forced it"
     : > "$CALL_LOG"; PS_IMAGES="rl-allinone@sha256:a"
     registry_gc::sweep force >/dev/null 2>&1
-    assert_eq "$(grep -c -- '--delete-untagged' "$CALL_LOG")" "1" "a pin carried by a kept tag keeps --delete-untagged"
+    assert_eq "$(grep -c '^docker exec .*--delete-untagged' "$CALL_LOG")" "1" "a pin carried by a kept tag keeps --delete-untagged"
     test_teardown
 }
 

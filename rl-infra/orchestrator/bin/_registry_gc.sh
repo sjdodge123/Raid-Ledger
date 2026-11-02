@@ -114,14 +114,16 @@ registry_gc::select_doomed() {
 # _state.sh: refuse invalid JSON; the precondition variant returns 1 when the
 # filter left the file unchanged.
 registry_gc::_define_state_shims() {
-    command -v flock >/dev/null 2>&1 || flock() { return 0; }
+    # No flock = no mutual exclusion with builds: fail closed, never no-op.
+    command -v flock >/dev/null 2>&1 \
+        || flock() { echo "registry_gc: flock not found — not touching the ledger unlocked" >&2; return 1; }
     state::mutate() { registry_gc::_mutate 0 "$@"; }
     state::mutate_with_precondition() { registry_gc::_mutate 1 "$@"; }
 }
 registry_gc::_mutate() {
     local pre="$1" file="$2"; shift 2
     (
-        flock -x 200
+        flock -x 200 || exit 1
         jq empty "$file" 2>/dev/null || { echo "registry_gc: $file is not valid JSON" >&2; exit 1; }
         local tmp; tmp=$(mktemp "${file}.XXXXXX") || exit 1
         jq "$@" "$file" > "$tmp" || { rm -f "$tmp"; exit 1; }
@@ -149,22 +151,44 @@ registry_gc::_load_admission() {
 
 # `registry garbage-collect` inside the registry container, bounded by
 # RL_REGISTRY_GC_TIMEOUT_SECONDS (coreutils `timeout`, present in the
-# sweeper's debian image). A timeout kills the `docker exec` client only, so
-# on 124 (TERM) or 137 (the -k KILL escalation) the in-container process is
-# pkill'd too, itself bounded by RL_REGISTRY_GC_CLEANUP_TIMEOUT_SECONDS
-# (best-effort, logged to stderr): left running, its sweep phase would race
-# the next build's pushes. Echoes ran|timed_out|failed|dry_run.
+# sweeper's debian image). `--delete-untagged` is dropped (and the reason
+# logged) when <$1>, the `@sha256:` pins no kept tag carries, is non-empty:
+# it would delete those pinned manifests (AC-1(d)). A timeout kills the
+# `docker exec` client only, so on 124 (TERM) or 137 (the -k KILL escalation)
+# the in-container process is killed too (_kill_collector). Echoes
+# ran|timed_out|failed|dry_run, or timed_out_cleanup_failed with rc 2 when the
+# collector may still be running — the caller must then KEEP the registry_gc
+# entry (until it expires) so no build pushes into its sweep phase.
 registry_gc::collect() {
     [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && { echo dry_run; return 0; }
-    local rc=0
+    local rc=0 untagged=--delete-untagged
+    if [[ -n "${1:-}" ]]; then
+        untagged=""
+        echo "registry_gc: pinned digest(s) carried by no kept tag ($1) — garbage-collect without --delete-untagged" >&2
+    fi
+    # shellcheck disable=SC2086  # $untagged is one flag or nothing
     timeout -k 10 "$RL_REGISTRY_GC_TIMEOUT_SECONDS" docker exec "$RL_REGISTRY_CONTAINER" \
-        registry garbage-collect --delete-untagged /etc/docker/registry/config.yml >/dev/null 2>&1 || rc=$?
+        registry garbage-collect $untagged /etc/docker/registry/config.yml >/dev/null 2>&1 || rc=$?
     case "$rc" in 0) echo ran; return 0 ;; 124|137) ;; *) echo failed; return 0 ;; esac
     echo "registry_gc: garbage-collect timed out after ${RL_REGISTRY_GC_TIMEOUT_SECONDS}s (rc $rc) — killing it in $RL_REGISTRY_CONTAINER" >&2
-    timeout -k 5 "$RL_REGISTRY_GC_CLEANUP_TIMEOUT_SECONDS" docker exec "$RL_REGISTRY_CONTAINER" \
-        pkill -f garbage-collect >/dev/null 2>&1 \
-        || echo "registry_gc: pkill garbage-collect in $RL_REGISTRY_CONTAINER failed" >&2
-    echo timed_out
+    registry_gc::_kill_collector && { echo timed_out; return 0; }
+    echo timed_out_cleanup_failed; return 2
+}
+
+# pkill the in-container garbage-collect, then confirm with pgrep (rc 1 = no
+# such process). Each exec is bounded by RL_REGISTRY_GC_CLEANUP_TIMEOUT_SECONDS.
+# 0 only when the collector is confirmed gone.
+registry_gc::_kill_collector() {
+    local krc=0 prc=0 bound="$RL_REGISTRY_GC_CLEANUP_TIMEOUT_SECONDS" c="$RL_REGISTRY_CONTAINER"
+    timeout -k 5 "$bound" docker exec "$c" pkill -f garbage-collect >/dev/null 2>&1 || krc=$?
+    if (( krc > 1 )); then
+        echo "registry_gc: pkill garbage-collect in $c failed (rc $krc) — keeping the registry_gc entry until it expires" >&2
+        return 1
+    fi
+    timeout -k 5 "$bound" docker exec "$c" pgrep -f garbage-collect >/dev/null 2>&1 || prc=$?
+    (( prc == 1 )) && return 0
+    echo "registry_gc: garbage-collect in $c not confirmed dead (pgrep rc $prc) — keeping the registry_gc entry until it expires" >&2
+    return 1
 }
 
 # Tags of <inventory> not in <doomed> (newline list), one per line.
@@ -172,13 +196,22 @@ registry_gc::_kept() {
     jq -r --arg d "$2" '($d | split("\n")) as $x | .[].tag | select(IN($x[]) | not)' <<<"$1"
 }
 
-# [{tag, created}] for every tag in the repo.
+# [{tag, created}] for every tag in the repo; a tag whose build time cannot be
+# read stays in with created:null (never doomed, still digest-protected).
+# Calls <$1> (a renew callback, optional) before each tag. rc 2 = tags/list
+# unreadable, 3 = the callback failed (admission lost).
 registry_gc::_inventory() {
-    local tag
-    for tag in $(registry_gc::list_tags); do
-        jq -nc --arg t "$tag" --argjson c "$(registry_gc::created_epoch "$tag")" '{tag:$t, created:$c}'
-    done | jq -sc .
+    local tags tag c rows=''
+    tags=$(registry_gc::list_tags) || return 2
+    for tag in $tags; do
+        if [[ -n "${1:-}" ]] && ! "$1"; then return 3; fi
+        c=$(registry_gc::created_epoch "$tag"); [[ "$c" =~ ^[0-9]+$ ]] || c=null
+        rows+="$(jq -nc --arg t "$tag" --argjson c "$c" '{tag:$t, created:$c}')"$'\n' || return 2
+    done
+    jq -sc . <<<"$rows"
 }
+
+registry_gc::_renew() { admission::gc_renew "$RL_REGISTRY_GC_KEY"; }
 
 registry_gc::_dry() { if [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]]; then echo true; else echo false; fi; }
 
@@ -212,7 +245,7 @@ registry_gc::_record() {
 # protected_tags_unreadable (docker / env registry) or
 # protected_digest_unreadable (a kept tag's digest HEAD failed).
 registry_gc::sweep() {
-    local now last reason rc=0 key="$RL_REGISTRY_GC_KEY"
+    local now last reason rc=0 hrc=0 key="$RL_REGISTRY_GC_KEY"
     now=$(registry_gc::_now); last=$(registry_gc::_last_run)
     if [[ "${1:-}" != "force" ]] && (( now - ${last:-0} < RL_REGISTRY_GC_INTERVAL_HOURS * 3600 )); then
         echo '{"skipped":"interval"}'; return 0
@@ -228,31 +261,55 @@ registry_gc::sweep() {
     (
         trap 'admission::release "$key"' EXIT
         trap 'exit 143' TERM INT HUP
-        registry_gc::_sweep_held "$now"
+        registry_gc::_sweep_held "$now"; hrc=$?
+        (( hrc == 3 )) && trap - EXIT
+        exit "$hrc"
     ) || rc=$?
+    # 3 = the collector may still run: keep the entry until it expires.
+    (( rc == 3 )) && return 1
     admission::release "$key"
     return "$rc"
 }
 
-# The sweep body, run while the admission entry is held. Re-arms the entry's
-# expiry right before garbage-collect; if the entry is gone by then (expired
-# and pruned) a build may already be pushing, so garbage-collect is skipped.
+# The sweep body, run while the admission entry is held. The entry is renewed
+# before every tag it processes and before garbage-collect; once a renewal
+# fails (expired, or a build got admitted) it stops: skipped_lock_lost.
+# rc 1 = aborted ({"error":…}); rc 3 = the collector may still run.
 registry_gc::_sweep_held() {
-    local now="$1" refs prot inv doomed avoid tag deleted='[]' gc
+    local now="$1" refs prot inv doomed kd irc=0
     if ! refs=$(registry_gc::protected_refs); then
         echo "registry_gc: docker ps, docker images or $RL_ENVS_FILE unreadable — sweep aborted" >&2
         echo '{"error":"protected_tags_unreadable"}'; return 1
     fi
     prot=$(registry_gc::_tags_of <<<"$refs" | sort -u | jq -Rnc '[inputs]')
-    inv=$(registry_gc::_inventory); doomed=$(registry_gc::select_doomed "$inv" "$prot")
-    if ! avoid=$(registry_gc::avoid_digests "$(registry_gc::_kept "$inv" "$doomed")" "$refs"); then
+    inv=$(registry_gc::_inventory registry_gc::_renew) || irc=$?
+    if (( irc == 3 )); then registry_gc::_record "$now" '[]' '[]' skipped_lock_lost; return 0; fi
+    if (( irc != 0 )); then
+        echo "registry_gc: $(registry_gc::_api)/tags/list unreadable — sweep aborted" >&2
+        echo '{"error":"tags_unreadable"}'; return 1
+    fi
+    doomed=$(registry_gc::select_doomed "$inv" "$prot")
+    if ! kd=$(registry_gc::avoid_digests "$(registry_gc::_kept "$inv" "$doomed")" ""); then
         echo '{"error":"protected_digest_unreadable"}'; return 1
     fi
+    registry_gc::_delete_and_collect "$now" "$inv" "$doomed" "$kd" "$(registry_gc::_pins_of <<<"$refs")"
+}
+
+# Delete <doomed> sparing <kept digests> + <pins>, then garbage-collect
+# (without --delete-untagged when a pin is carried by no kept tag).
+registry_gc::_delete_and_collect() {
+    local now="$1" inv="$2" doomed="$3" kd="$4" pins="$5" tag deleted='[]' gc grc=0 orphans
     for tag in $doomed; do
-        registry_gc::delete_tag "$tag" "$avoid" && deleted=$(jq -c --arg t "$tag" '. + [$t]' <<<"$deleted")
+        registry_gc::_renew || { registry_gc::_record "$now" "$inv" "$deleted" skipped_lock_lost; return 0; }
+        registry_gc::delete_tag "$tag" "$(printf '%s\n%s' "$kd" "$pins")" \
+            && deleted=$(jq -c --arg t "$tag" '. + [$t]' <<<"$deleted")
     done
-    if admission::gc_renew "$RL_REGISTRY_GC_KEY"; then gc=$(registry_gc::collect); else gc="skipped_lock_lost"; fi
+    registry_gc::_renew || { registry_gc::_record "$now" "$inv" "$deleted" skipped_lock_lost; return 0; }
+    orphans=$(sed '/^$/d' <<<"$pins" | grep -vxF -f <(printf '%s\n' "$kd") | sort -u | tr '\n' ' ')
+    gc=$(registry_gc::collect "${orphans% }") || grc=$?
     registry_gc::_record "$now" "$inv" "$deleted" "$gc"
+    (( grc == 2 )) && return 3
+    return 0
 }
 
 # env-destroy hook: delete the destroyed env's own `rl-allinone:<tag>` — the

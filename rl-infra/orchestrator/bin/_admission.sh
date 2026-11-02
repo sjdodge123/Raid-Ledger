@@ -449,72 +449,10 @@ admission::release() {
         }' 2>/dev/null || true
 }
 
-# ROK-2018 — registry GC admission. `registry garbage-collect` marks blobs and
-# then sweeps the unmarked ones; a push landing in that window can lose a layer,
-# and image builds are the only pushers. So a GC run holds a `registry_gc` entry
-# in THIS ledger, taken under the same flock as a build's admit: the ledger
-# refuses an image build while a live GC entry exists (`registry_gc_running`),
-# and a GC is admitted only when no image build is running OR waiting (GC
-# yields; it is never urgent enough to starve a build). The entry reserves 0 MB
-# and counts toward no cap or budget (GC is I/O, not memory).
-#
-# The holder is the gc-sweeper container, whose pid prune_dead cannot see from
-# the orchestrator host, so the entry carries `expires_epoch` (now +
-# RL_REGISTRY_GC_TIMEOUT_SECONDS + RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS). Past it
-# the ledger ignores the entry and prune_stale drops it: a sweeper killed
-# mid-GC blocks builds for at most that long. gc_renew pushes the expiry out
-# again right before garbage-collect starts.
-RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS="${RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS:-120}"
-
-admission::_gc_ttl() { echo $(( ${RL_REGISTRY_GC_TIMEOUT_SECONDS:-1800} + RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS )); }
-
-admission::_gc_held() {
-    jq -e --arg k "$1" 'any((.heavy_running // [])[]; .key == $k and .kind == "registry_gc")' \
-        "$RL_ADMISSION_FILE" >/dev/null 2>&1
-}
-
-# admission::gc_try_acquire <key> [pid] — non-blocking. 0 = admitted (entry
-# written); 1 = refused, the reason on stdout (image_build_running,
-# image_build_waiting, registry_gc_running, or admission_unreadable — an
-# unreadable ledger is treated as busy: GC is the side that must not race).
-admission::gc_try_acquire() {
-    local key="$1" pid="${2:-$$}" now ts host reason
-    # ledger_reason (in the shared defs) references these knobs: always bind them.
-    local -a jargs=(--argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" --argjson budget 0
-        --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS")
-    admission::ensure_file
-    now=$(date +%s); ts=$(date -u +%FT%TZ); host="$(hostname 2>/dev/null || echo unknown)"
-    state::mutate_with_precondition "$RL_ADMISSION_FILE" "${jargs[@]}" \
-        --arg k "$key" --arg ts "$ts" --arg host "$host" --arg pid "$pid" \
-        --argjson now "$now" --argjson exp "$(( now + $(admission::_gc_ttl) ))" \
-        "$_ADMISSION_JQ_DEFS"'
-        if gc_reason($now) == ""
-        then .heavy_running = (ents + [{key: $k, task_id: $k, admitted_at: $ts, admitted_epoch: $now,
-                 mb: 0, weight: "light", kind: "registry_gc", reserve_mb: 0, expires_epoch: $exp,
-                 pid: ($pid | tonumber? // null), host: $host}])
-        else . end' 2>/dev/null
-    # Ours only if THIS call wrote it: a same-key entry of a still-live earlier
-    # sweep must read as registry_gc_running, not as our admission.
-    jq -e --arg k "$key" --arg pid "$pid" --arg host "$host" --argjson now "$now" \
-        'any((.heavy_running // [])[]; .key == $k and .kind == "registry_gc"
-             and (.pid | tostring) == $pid and .host == $host and .admitted_epoch == $now)' \
-        "$RL_ADMISSION_FILE" >/dev/null 2>&1 && return 0
-    reason=$(jq -r "${jargs[@]}" --argjson now "$now" "$_ADMISSION_JQ_DEFS"'gc_reason($now)' \
-        "$RL_ADMISSION_FILE" 2>/dev/null)
-    echo "${reason:-admission_unreadable}"
-    return 1
-}
-
-# admission::gc_renew <key> — re-arm the entry's expiry; 1 when it is gone
-# (expired and pruned, or released): the caller must not garbage-collect then.
-admission::gc_renew() {
-    local key="$1" exp
-    exp=$(( $(date +%s) + $(admission::_gc_ttl) ))
-    state::mutate "$RL_ADMISSION_FILE" --arg k "$1" --argjson exp "$exp" \
-        '.heavy_running = [ (.heavy_running // [])[]
-            | if .key == $k and .kind == "registry_gc" then .expires_epoch = $exp else . end ]' 2>/dev/null
-    admission::_gc_held "$key"
-}
+# ROK-2018 — the `registry_gc` admission kind (gc_try_acquire / gc_renew)
+# lives in _admission_gc.sh; it needs _ADMISSION_JQ_DEFS above.
+# shellcheck source=SCRIPTDIR/_admission_gc.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_admission_gc.sh"
 
 # Append one line to the task log (when given) and mirror it to stderr so an
 # interactive caller sees the wait too.
@@ -579,12 +517,15 @@ admission::acquire() {
             return 2
         fi
         avail="$(admission::mem_available_mb)"
-        if [[ -z "$avail" ]]; then
+        if [[ -z "$avail" && "$kind" != image_build ]]; then
             admission::_log "$log_path" \
                 "[admission] MemAvailable unreadable at $RL_MEMINFO_PATH — admitted ungated"
             admission::_register_running "$key" "$task_id" "$floor" "$weight" "$kind" "$$"
             return 0
         fi
+        # ROK-2018: an image build still goes through the ledger (registry GC
+        # exclusion, build cap) — only the memory floor is waived.
+        [[ -z "$avail" ]] && avail=1073741824
         if admission::_try_admit "$key" "$task_id" "$avail" "$floor" "$weight" "$kind" "$$"; then
             admission::_log "$log_path" \
                 "[admission] admitted: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"
