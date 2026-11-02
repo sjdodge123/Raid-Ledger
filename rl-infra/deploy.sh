@@ -13,6 +13,8 @@
 #   3. Re-asserts the canonical rl-fleet group-write + setgid on the dirs
 #      rl-agent must write (traefik/conf.d — matches the state/ pattern),
 #      plus 640 root:rl-fleet on .env (bot tokens — group-readable, never o+r).
+#   3b. Creates the rl-docker-proxy socket dir and applies the proxy's compose
+#      config, failing loudly if its unix socket does not appear (ROK-2049).
 #   4. Rebuilds + restarts gc-sweeper (its sweep.sh is COPY'd at image build)
 #      and the dashboard (ROK-1847: a bind-mounted server.js edit is not live
 #      until the node process restarts, and the image must carry every module
@@ -52,6 +54,37 @@ if [[ -d settings ]]; then
     chmod 2750 settings 2>/dev/null || true
     chmod 640 settings/bundle.enc 2>/dev/null || true
 fi
+# ROK-2049 — rl-docker-proxy listens on a unix socket in this dir (no TCP).
+# rl:rl-fleet 3770: the proxy (uid 65532, primary gid rl-fleet) creates its 0660
+# socket here; rl-agent + rl reach it through the group; sticky stops anyone
+# but the proxy from unlinking it. Must exist BEFORE the proxy starts, or the
+# daemon mkdirs the bind source root:root 0755 and the proxy cannot bind.
+# Fails LOUDLY (unlike the dirs above): a silent no-op leaves rl:rl 3770, the
+# proxy cannot create its socket (crash loop) and rl-agent cannot traverse.
+mkdir -p run/docker-proxy
+if ! chgrp rl-fleet run/docker-proxy || ! chmod 3770 run/docker-proxy; then
+    echo "ERROR: could not set run/docker-proxy to rl:rl-fleet 3770. The deploy user must be in rl-fleet: sudo usermod -aG rl-fleet rl, then re-run deploy.sh (new SSH session)." >&2
+    exit 1
+fi
+# ROK-2049 (Codex P1) — apply the proxy's compose config on every deploy. Nothing
+# else depends on docker-socket-proxy, so without this a fleet keeps the old
+# host-TCP 127.0.0.1:2375 listener (the exposure stays open) while the rsynced
+# _state.sh and MCP tools look for a socket that does not exist. `up -d` is a
+# no-op when the service is unchanged (and pulls the pinned tag if missing).
+# Runs on the raw socket (rl is in docker). Readiness is a real _ping, not -S:
+# a socket file left by a killed old container would pass -S before the new
+# process binds.
+docker compose up -d docker-socket-proxy
+proxy_ready() { curl -fsS --max-time 1 --unix-socket run/docker-proxy/docker.sock http://localhost/_ping >/dev/null 2>&1; }
+for _ in $(seq 1 30); do
+    proxy_ready && break
+    sleep 0.5
+done
+if ! proxy_ready; then
+    echo "ERROR: rl-docker-proxy is not answering _ping on run/docker-proxy/docker.sock within 15s. Check: docker logs --tail 30 rl-docker-proxy" >&2
+    exit 1
+fi
+echo "docker-socket-proxy up (unix socket ready)"
 # A3-B P3 — scaffold /srv/rl-infra/runners/slot-{1..4}/worktree + state/locks
 # with the rl-agent:rl-fleet 2775 the Mutagen beta needs. Nothing created the
 # slot-3/4 dirs before, so the Docker daemon mkdir'd the bind-mount sources as

@@ -5,13 +5,14 @@
 // services). This tool answers "what is THIS env actually serving / running?"
 // by cat'ing two operator-locked config-file paths inside the per-env
 // rl-env-<slug>-allinone container, routed through the rl-docker-proxy at
-// loopback 2375 (rl-agent is not in the host docker group).
+// its unix socket (ROK-2049; rl-agent is not in the host docker group).
 //
 // No `worktree_path` parameter — read-only inspection only, no Mutagen sync
 // or RL_AGENT_ID hashing required. Mirrors the rl_infra_logs / rl_task_inspect
 // intentional omission.
 
 import { z } from 'zod';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 import {
   buildSshArgs,
   classifySshFailure,
@@ -89,7 +90,7 @@ const MAX_BUFFER = 64 * 1024;
 
 /**
  * Execute rl_env_inspect: SSH to the rl-infra VM, route a docker exec cat
- * through rl-docker-proxy (loopback 2375), and return the file contents
+ * through rl-docker-proxy (unix socket, ROK-2049), and return the file contents
  * capped at 64KB. Structured error codes: `env_not_found` (no container),
  * `config_file_not_found` (cat: no such file), `env_inspect_failed` (any
  * other SSH/docker failure).
@@ -132,7 +133,7 @@ export async function execute(params: EnvInspectParams): Promise<EnvInspectResul
   // arrives on stderr, but with 2>&1 it merges into stdout so the executor
   // gets a unified stream to classify regardless of which side cat or
   // docker emitted on. The catch-block reads both streams anyway.
-  const remote = `DOCKER_HOST=tcp://127.0.0.1:2375 docker exec ${container} cat ${path} 2>&1`;
+  const remote = `DOCKER_HOST=${VM_DOCKER_HOST} docker exec ${container} cat ${path} 2>&1`;
   // buildSshArgs forces user=rl-agent + DNS-resolves host with .env fallback
   // (closes Codex round-5 P1 holes shared by all direct-SSH tools).
   const args = await buildSshArgs(remote);

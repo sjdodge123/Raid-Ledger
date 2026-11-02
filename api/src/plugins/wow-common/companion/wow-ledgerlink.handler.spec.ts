@@ -13,7 +13,6 @@ import type {
 import type { CompanionAfterCommitContext } from '../../../companion/ingest/companion-handler.registry';
 import type { AddonImportCreateService } from '../addon-import/addon-import-create.service';
 import { AddonImportError } from '../addon-import/addon-import.errors';
-import { RosterHeldError } from '../addon-import/addon-import-guild.guard';
 import { WowLedgerlinkHandler } from './wow-ledgerlink.handler';
 import {
   WOW_LEDGERLINK_EXPORT_PATH,
@@ -132,8 +131,11 @@ describe('WowLedgerlinkHandler — reject mapping (§6.2)', () => {
     },
   );
 
-  it('a held roster (RosterHeldError) → 400 invalid_payload, not its roster copy', async () => {
-    const held = new RosterHeldError(1, 40, 50, false);
+  it('an INVALID_PAYLOAD reject with server copy → 400 invalid_payload, not that copy', async () => {
+    const held = new AddonImportError(
+      'INVALID_PAYLOAD',
+      'Roster copy for 40 of 50 members that must not reach the device.',
+    );
     const importNew = jest.fn().mockRejectedValue(held);
     const got = await rejection(handlerWith(importNew).handle(ctx, msg));
     expect(got).toEqual({
