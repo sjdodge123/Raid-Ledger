@@ -161,7 +161,7 @@ const ACTION_MAP: Record<string, ActionDisplay> = {
             const status =
                 typeof meta?.status === 'string' ? meta.status : null;
             return status
-                ? `${actor ?? 'Someone'} changed their status to ${status.replace('_', ' ')}`
+                ? `${actor ?? 'Someone'} changed their status to ${status.replace(/_/g, ' ')}`
                 : `${actor ?? 'Someone'} changed their status`;
         },
     },
