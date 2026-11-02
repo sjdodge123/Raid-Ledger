@@ -50,7 +50,12 @@ export const SteamHubMemberStatsSchema = z
   .object({
     userId: z.number().int().positive(),
     displayName: z.string(),
+    /** Legacy: an absolute custom avatar URL or null. Render through the trio below (ROK-2069). */
     avatarUrl: z.string().nullable(),
+    /** ROK-2069 — avatar inputs for `toAvatarUser` (Discord hash + id + custom path). Optional: older payloads parse. */
+    avatar: z.string().nullable().optional(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
     status: SteamStatsStatusSchema,
     /** `null` unless `status` is `ok`. */
     unlockedCount: z.number().int().min(0).nullable(),
