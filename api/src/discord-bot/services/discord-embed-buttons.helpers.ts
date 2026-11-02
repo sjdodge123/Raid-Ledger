@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { hubLinkButton, type HubLink } from '../embeds/hub-link-button.helpers';
+import { SERIES_BUTTON_IDS } from '../series-signup/series-signup.constants';
 
 /**
  * Build the standard signup action row (Sign Up, Tentative, Decline, View
@@ -46,4 +47,20 @@ function appendLinkButtons(
   }
   const hub = hubLinkButton(hubLink);
   if (hub) row.addComponents(hub);
+}
+
+/**
+ * ROK-1728 (D8, §8 Q2 option a): the SECOND action row on a series embed,
+ * holding only a blurple `Join Series` button (`series_join:<eventId>`).
+ * Row 1 is already full (5) on hub-linked events, so it cannot go there.
+ */
+export function buildSeriesJoinRow(
+  eventId: number,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${SERIES_BUTTON_IDS.JOIN}:${eventId}`)
+      .setLabel('Join Series')
+      .setStyle(ButtonStyle.Primary),
+  );
 }
