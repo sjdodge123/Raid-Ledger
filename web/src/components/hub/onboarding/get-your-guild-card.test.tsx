@@ -191,4 +191,15 @@ describe('PlayersGuildCard', () => {
             'Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.',
         );
     });
+
+    // ROK-2064: the steps end with a link to the public setup guide.
+    it('links the full WoW: Forever setup guide after the steps', async () => {
+        serveOnboarding();
+        server.use(http.get(MINE, () => HttpResponse.json({ guilds: [] } satisfies MyGuilds)));
+        renderWithProviders(<PlayersGuildCard />);
+        await userEvent.click(await screen.findByTestId('get-your-guild-how-toggle'));
+        const link = screen.getByRole('link', { name: 'Full setup guide' });
+        expect(link).toHaveAttribute('href', 'https://sjdodge123.github.io/Raid-Ledger/guides/wow-forever/');
+        expect(link).toHaveAttribute('target', '_blank');
+    });
 });
