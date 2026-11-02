@@ -1,0 +1,42 @@
+{
+  "flavor": "_anniversary_",
+  "next": null,
+  "files": [
+    {
+      "scope": "account",
+      "account": "TESTACCOUNT",
+      "mtime": "2026-11-01T18:30:00Z",
+      "topKeys": [
+        "version",
+        "outbox"
+      ],
+      "outbox": [
+        {
+          "guidHash": "a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1",
+          "section": "roster",
+          "source": "guild",
+          "at": "2026-11-01T18:30:00Z",
+          "exportedAt": null,
+          "pages": 2,
+          "bytes": 6100,
+          "decodes": true
+        }
+      ],
+      "blockedCount": 0,
+      "region": "EU"
+    },
+    {
+      "scope": "character",
+      "account": "TESTACCOUNT",
+      "realm": "Testrealm",
+      "character": "Testchar",
+      "mtime": "2026-11-01T18:30:00Z",
+      "topKeys": [
+        "settings"
+      ],
+      "outbox": [],
+      "blockedCount": 1,
+      "region": null
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "probe-request--deny-get-send-mail-item": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-unit-set-role": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-quest-reward": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-inbox-text": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-guild-disband-info": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-trade-skill-line": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-registered-addon-prefixes": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-macro-info": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-can-guild-invite": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-auction-item-info": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--framexml-handler": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--not-read-verb-send-chat-message": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--over-size": {
+    "path": "",
+    "code": "custom"
+  },
+  "probe-result--item-too-big": {
+    "path": "calls.1",
+    "code": "custom"
+  },
+  "probe-detail--over-page": {
+    "path": "",
+    "code": "custom"
+  },
+  "probe-detail--echo-flavor-auto": {
+    "path": "request.flavor",
+    "code": "invalid_format"
+  },
+  "probe-queue--flavor-auto": {
+    "path": "probes.0.flavor",
+    "code": "invalid_format"
+  },
+  "probe-queue--missing-probe-id": {
+    "path": "probes.1.probeId",
+    "code": "invalid_type"
+  },
+  "probe-queue--missing-ttl": {
+    "path": "probes.0.ttlHours",
+    "code": "invalid_type"
+  },
+  "probe-request--not-read-verb": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--fn-four-segments": {
+    "path": "calls.0.fn",
+    "code": "invalid_format"
+  },
+  "probe-request--arg-table": {
+    "path": "calls.0.args.0",
+    "code": "invalid_union"
+  },
+  "probe-request--loop-token-without-foreach": {
+    "path": "calls.0.args",
+    "code": "custom"
+  },
+  "probe-request--foreach-forward-ref": {
+    "path": "calls.2.forEach.countFrom",
+    "code": "custom"
+  },
+  "probe-request--duplicate-call-id": {
+    "path": "calls.1.id",
+    "code": "custom"
+  },
+  "probe-request--fn-and-presence": {
+    "path": "calls.0",
+    "code": "custom"
+  },
+  "probe-request--ttl-too-long": {
+    "path": "ttlHours",
+    "code": "too_big"
+  },
+  "probe-request--calls-empty": {
+    "path": "calls",
+    "code": "too_small"
+  },
+  "probe-request--after-unknown-event": {
+    "path": "after",
+    "code": "invalid_value"
+  },
+  "probe-request--lua-source-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "probe-result--string-too-long": {
+    "path": "calls.1.values.0",
+    "code": "too_big"
+  },
+  "probe-result--unknown-status": {
+    "path": "calls.0.status",
+    "code": "invalid_value"
+  },
+  "health--bridge-version-2": {
+    "path": "bridgeVersion",
+    "code": "invalid_value"
+  },
+  "sv-raw--parent-path": {
+    "path": "path",
+    "code": "custom"
+  },
+  "probe-list--missing-next": {
+    "path": "next",
+    "code": "invalid_type"
+  },
+  "logs--unredacted-token": {
+    "path": "lines.1.msg",
+    "code": "custom"
+  },
+  "logs--unredacted-bearer-lowercase": {
+    "path": "lines.1.msg",
+    "code": "custom"
+  },
+  "logs--unredacted-bearer-uppercase": {
+    "path": "lines.1.msg",
+    "code": "custom"
+  },
+  "error--unknown-code": {
+    "path": "error",
+    "code": "invalid_value"
+  }
+}

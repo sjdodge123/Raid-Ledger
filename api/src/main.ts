@@ -11,6 +11,7 @@ import cookieParser from 'cookie-parser';
 import * as path from 'path';
 import { AppModule } from './app.module';
 import { applyCorsPolicy } from './cors/cors-auto-policy';
+import { SocketCorsIoAdapter } from './cors/socket-cors-io.adapter';
 import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 import {
@@ -96,6 +97,8 @@ async function bootstrap() {
   // ROK-1732: CORS_ORIGIN=auto is same-origin only (CORS_AUTO_MODE picks
   // report vs enforce); an explicit-origin mismatch is a 403, not a 500.
   applyCorsPolicy(app, { isProduction });
+  // The socket.io polling transport gets the same Host-aware decision.
+  app.useWebSocketAdapter(new SocketCorsIoAdapter(app));
   // ROK-1665: trust private hops (TRUST_PROXY overrides), not a hop count.
   applyTrustProxy(app, isProduction, process.env.TRUST_PROXY);
   // ROK-1627: CLIENT_URL is seeded from trusted configuration by
