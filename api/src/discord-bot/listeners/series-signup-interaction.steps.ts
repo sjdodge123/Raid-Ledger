@@ -2,11 +2,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
   type ButtonInteraction,
 } from 'discord.js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
+import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
 import { SERIES_BUTTON_IDS } from '../series-signup/series-signup.constants';
 import {
   showCharacterSelect,
@@ -102,15 +102,22 @@ async function showRoleStep(
   });
 }
 
-/** The summary as an embed for the pick steps; null when nothing is joinable. */
+/**
+ * The summary as an embed for the pick steps; null when nothing is joinable.
+ * Built through the shared chrome (ROK-1477 AC4). The pick steps are an
+ * ephemeral reply only the clicker sees, so it takes the reader-only `dm`
+ * surface; `needs_you` because the reader still has a pick to make.
+ */
 async function summaryEmbed(
   eventId: number,
   userId: number,
   deps: SeriesInteractionDeps,
-): Promise<EmbedBuilder | null> {
+): Promise<DmEmbed | null> {
   const state = await deps.seriesSignupsService.getState(eventId, userId);
   if (state.joinableCount === 0) return null;
-  return new EmbedBuilder().setDescription(formatJoinSummary(state));
+  return createDmEmbed({ state: 'needs_you', timestamp: false }).setDescription(
+    formatJoinSummary(state),
+  );
 }
 
 async function noNights(interaction: SeriesInteraction): Promise<void> {
