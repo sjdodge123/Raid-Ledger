@@ -27,7 +27,7 @@ function RosterSlotHeader({ event, canManageRoster, canJoinSlot, isMMOGame, isAu
             <div className="flex items-center gap-2">
                 {canManageRoster && !isMMOGame && <AutoSubToggle event={event} handlers={handlers} />}
                 {!isAuthenticated && <Link to="/login" className="btn btn-primary btn-sm">Login to Join</Link>}
-                {canJoinSlot && <Button size="sm" onClick={handlers.handleSignup} disabled={handlers.signup.isPending}>{handlers.signup.isPending ? 'Joining...' : 'Join Event'}</Button>}
+                {canJoinSlot && <Button size="sm" className="whitespace-nowrap" onClick={handlers.handleSignup} disabled={handlers.signup.isPending}>{handlers.signup.isPending ? 'Joining...' : 'Join Event'}</Button>}
                 {canJoinSlot && <SeriesNotSignedUpSlot event={event} />}
                 {isSignedUp && <SignedUpActions event={event} userSignup={userSignup} handlers={handlers} />}
             </div>
