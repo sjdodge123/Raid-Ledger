@@ -1,7 +1,8 @@
 /**
  * ROK-1596 D1: the calendar write worker. Thin — it unpacks the job and calls
  * the reconcile function, which records terminal failures itself and
- * rethrows only retryable ones (BullMQ then backs off: attempts 6, 30s exp).
+ * rethrows only retryable ones (BullMQ then backs off: attempts 6, 30s exp,
+ * raised to a provider's Retry-After — `calendarRetryBackoff`).
  * `write-off` runs `runCalendarWriteOff` (A5); `disconnect` runs
  * `runCalendarDisconnect` (A7, D7 — cleanup kinds run with the kill switch off).
  * ROK-1593 — a `failed` reconcile / write-off that left the
@@ -21,6 +22,7 @@ import {
   CALENDAR_READ_QUEUE,
   CALENDAR_WRITE_QUEUE,
 } from '../calendar-sync.constants';
+import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { deriveIfNeedsReconnect } from '../read/calendar-away-heal.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import type { CalendarWriteJobData } from './calendar-write.enqueue.helpers';
@@ -39,7 +41,10 @@ import {
   type WriteOffOutcome,
 } from './calendar-write-off.helpers';
 
-@Processor(CALENDAR_WRITE_QUEUE, { concurrency: 2 })
+@Processor(CALENDAR_WRITE_QUEUE, {
+  concurrency: 2,
+  settings: { backoffStrategy: calendarRetryBackoff },
+})
 export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
   constructor(
     @Inject(DrizzleAsyncProvider)

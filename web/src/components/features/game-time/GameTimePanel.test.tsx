@@ -405,3 +405,19 @@ describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
         expect(screen.queryByText(/· away/)).not.toBeInTheDocument();
     });
 });
+
+describe('GameTimePanel - waits for auth before drawing the grid', () => {
+    beforeEach(() => {
+        setupDefaultEditorMock();
+    });
+
+    it('shows the spinner, not an editable grid, while not yet enabled', () => {
+        renderPanel({ enabled: false });
+        expect(screen.queryByTestId('day-header-0')).not.toBeInTheDocument();
+    });
+
+    it('draws the grid once enabled', () => {
+        renderPanel({ enabled: true });
+        expect(screen.getByTestId('day-header-0')).toBeInTheDocument();
+    });
+});

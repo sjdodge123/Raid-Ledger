@@ -4,6 +4,7 @@
  * may retry. The runner is mocked to throw. Also the `derive`
  * job kind and the sync's `afterBlocks` hook, with `runCalendarDerive` mocked.
  */
+import { WORKER_METADATA } from '@nestjs/bullmq/dist/bull.constants';
 import { UnrecoverableError, type Job, type Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
 import type { SettingsService } from '../../settings/settings.service';
@@ -15,6 +16,7 @@ import {
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import type { CalendarReadJobData } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
+import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { runCalendarReadSync } from './calendar-read-sync.helpers';
 import { runCalendarDerive } from './calendar-away-persist.helpers';
 
@@ -213,4 +215,18 @@ describe('CalendarReadProcessor in-sync derive failure', () => {
       expect(queue.add).not.toHaveBeenCalled();
     },
   );
+});
+
+/** The `@Processor` worker options `@nestjs/bullmq` stores. */
+type WorkerMeta = { settings?: { backoffStrategy?: unknown } } | undefined;
+
+describe('CalendarReadProcessor worker registration', () => {
+  it('registers the Retry-After-aware backoff strategy on the worker', () => {
+    // Without it BullMQ throws "Unknown backoff strategy" on the first retry.
+    const opts = Reflect.getMetadata(
+      WORKER_METADATA,
+      CalendarReadProcessor,
+    ) as WorkerMeta;
+    expect(opts?.settings?.backoffStrategy).toBe(calendarRetryBackoff);
+  });
 });

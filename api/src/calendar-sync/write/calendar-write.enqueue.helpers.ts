@@ -19,6 +19,7 @@
  * are cleanup and always run (spec §8).
  */
 import type { JobsOptions, Queue } from 'bullmq';
+import { CALENDAR_RETRY_BACKOFF_TYPE } from '../calendar-retry-backoff.helpers';
 import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
 import {
   WRITE_DEBOUNCE_MS,
@@ -71,7 +72,8 @@ export interface EnqueueResult {
 
 export const CALENDAR_WRITE_JOB_OPTIONS = {
   attempts: 6,
-  backoff: { type: 'exponential', delay: 30_000 },
+  // Exponential 30 s, raised to a provider's Retry-After (see helper).
+  backoff: { type: CALENDAR_RETRY_BACKOFF_TYPE, delay: 30_000 },
   removeOnComplete: true,
 } as const satisfies JobsOptions;
 
