@@ -1,9 +1,9 @@
 /**
  * ROK-1874 — "On the bench" DM for a voter auto-benched by a poll lock-in.
  *
- * Locking a scheduling slot creates the event (POST /events signs the
- * creator up first) and then completes the poll, which signs up every
- * yes-voter on the chosen slot. Past the roster cap the signup lands on the
+ * Locking a scheduling slot (one POST /scheduling-polls/:id/lock-in, ROK-2039)
+ * creates the event (signing the creator up first) and completes the poll,
+ * which signs up every yes-voter on the chosen slot. Past the roster cap the signup lands on the
  * bench, and that voter now gets `On the bench` instead of `Auto-signed up`.
  *
  * Shape: a 2-spot generic roster (`slotConfig.player = 2`, `maxAttendees =
@@ -12,7 +12,7 @@
  * `Auto-signed up`, nobody both.
  *
  * ROK-2025 made the choice deterministic: with no pick the LATEST yes-voter
- * (B) is benched; with `benchUserIds: [A]` on complete the organizer's pick
+ * (B) is benched; with `benchUserIds: [A]` on the lock-in the organizer's pick
  * wins, so A — the EARLIER voter — is benched instead, which proves the pick
  * beats the default.
  *
@@ -269,10 +269,13 @@ function assertBenchSplit(
 }
 
 /**
- * "Lock this time", as the web does it: POST /events on a 2-spot generic
- * roster with `schedulingMatchId` (signs the creator up first), then complete
- * the poll, which auto-signs-up the slot's yes-voters and sends their DMs.
+ * "Lock this time", as the web does it (ROK-2032/2039): one
+ * POST /scheduling-polls/:matchId/lock-in on a 2-spot generic roster — claims
+ * the poll, creates the event (creator signed up first), auto-signs-up the
+ * slot's yes-voters and sends their DMs.
  * `benchUserIds` is the organizer's bench pick (ROK-2025), omitted when unset.
+ * A pick the lock-in could not honour falls back to the default bench and sets
+ * `benchPickFallback` — that must fail loudly, not as a wrong-member mismatch.
  */
 async function lockIn(
   api: ApiClient,
@@ -281,22 +284,30 @@ async function lockIn(
   start: Date,
   benchUserIds?: number[],
 ): Promise<number> {
-  const event = await api.post<{ id: number }>('/events', {
-    title: `smoke-bench-dm-${matchId}`,
-    startTime: start.toISOString(),
-    endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
-    gameId,
-    slotConfig: { type: 'generic', player: ROSTER_CAP },
-    maxAttendees: ROSTER_CAP,
-    schedulingMatchId: matchId,
-  });
-  await api.post(`/scheduling-polls/${matchId}/complete`, {
-    eventId: event.id,
+  const res = await api.post<{
+    event: { id: number };
+    benchPickFallback: boolean;
+  }>(`/scheduling-polls/${matchId}/lock-in`, {
+    event: {
+      title: `smoke-bench-dm-${matchId}`,
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+      gameId,
+      slotConfig: { type: 'generic', player: ROSTER_CAP },
+      maxAttendees: ROSTER_CAP,
+    },
     startTime: start.toISOString(),
     ...(benchUserIds ? { benchUserIds } : {}),
   });
+  if (res.benchPickFallback !== false) {
+    // The event already exists — delete it before throwing, or it lingers in the shared guild.
+    await deleteEvent(api, res.event.id).catch(() => null);
+    throw new Error(
+      `bench pick fell back: lock-in returned benchPickFallback=${String(res.benchPickFallback)} for pick ${JSON.stringify(benchUserIds ?? [])}`,
+    );
+  }
   await awaitProcessing(api);
-  return event.id;
+  return res.event.id;
 }
 
 /** Which member the case benches: the default (latest) or the organizer's pick. */

@@ -2,6 +2,7 @@
  * ROK-1593 D-R5: the read queue's fixed-id rules, against an in-memory queue
  * that — like BullMQ — ignores an `add` whose id exists in any state.
  */
+import { CALENDAR_RETRY_BACKOFF_TYPE } from '../calendar-retry-backoff.helpers';
 import { CALENDAR_READ_QUEUE, readSyncJobId } from '../calendar-sync.constants';
 import {
   CALENDAR_READ_JOB_OPTIONS,
@@ -62,7 +63,7 @@ describe('enqueueCalendarReadSync', () => {
     ]);
     expect(CALENDAR_READ_JOB_OPTIONS).toMatchObject({
       attempts: 4,
-      backoff: { type: 'exponential', delay: 60_000 },
+      backoff: { type: CALENDAR_RETRY_BACKOFF_TYPE, delay: 60_000 },
       removeOnComplete: true,
     });
     expect(typeof CALENDAR_READ_JOB_OPTIONS.removeOnFail).toBe('number');

@@ -14,6 +14,7 @@
  *   the slot's yes-voters get no EVENT CREATED DM while the rest do.
  */
 import { and, eq } from 'drizzle-orm';
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -161,20 +162,15 @@ async function addSlot(
   return slot.id;
 }
 
-/** The create form's first call, as admin: `POST /events {schedulingMatchId}`. */
+/** The poll's event, created as admin by the direct fixture (ROK-2039: `POST /events` refuses `schedulingMatchId`). */
 async function postEvent(schedulingMatchId: number): Promise<number> {
-  const created = await testApp.request
-    .post('/events')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({
-      title: 'Guarded Lock-in Night',
-      startTime: SLOT.toISOString(),
-      endTime: new Date(SLOT.getTime() + TWO_HOURS_MS).toISOString(),
-      gameId: testApp.seed.game.id,
-      schedulingMatchId,
-    });
-  expect(created.status).toBe(201);
-  return created.body.id as number;
+  return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+    title: 'Guarded Lock-in Night',
+    startTime: SLOT.toISOString(),
+    endTime: new Date(SLOT.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId: testApp.seed.game.id,
+    schedulingMatchId,
+  });
 }
 
 /** An event row created FROM poll `fromPollId` (bypasses the past-time and

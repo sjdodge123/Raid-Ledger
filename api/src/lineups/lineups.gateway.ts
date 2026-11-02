@@ -30,13 +30,8 @@ import { perfLog } from '../common/perf-logger';
  * Auth: JWT from socket.handshake.auth.token (validated on connection).
  * Note: Single-instance only for v1. Redis adapter is optional and documented.
  */
-@WebSocketGateway({
-  namespace: '/lineups',
-  cors: {
-    origin: process.env.CLIENT_URL || '*',
-    credentials: true,
-  },
-})
+// CORS is decided per handshake by SocketCorsIoAdapter (cors/socket-cors.ts).
+@WebSocketGateway({ namespace: '/lineups' })
 export class LineupsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {

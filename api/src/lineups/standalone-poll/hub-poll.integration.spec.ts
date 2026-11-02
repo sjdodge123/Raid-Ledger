@@ -336,21 +336,27 @@ describe('hub polls — lock-in', () => {
     expect(poll.status).toBe(201);
     const start = new Date(Date.now() + 3 * 864e5);
     const res = await testApp.request
-      .post('/events')
+      .post(`/scheduling-polls/${pollIds(poll.body).matchId}/lock-in`)
       .set('Authorization', `Bearer ${member.token}`)
       .send({
-        title: 'Member lock-in',
-        gameId: testApp.seed.game.id,
-        startTime: start.toISOString(),
-        endTime: new Date(start.getTime() + 72e5).toISOString(),
-        schedulingMatchId: pollIds(poll.body).matchId,
+        event: {
+          title: 'Member lock-in',
+          gameId: testApp.seed.game.id,
+          startTime: start.toISOString(),
+          endTime: new Date(start.getTime() + 72e5).toISOString(),
+        },
       });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const [row] = nonEmpty(
       await testApp.db
         .select({ guildId: schema.events.guildId })
         .from(schema.events)
-        .where(eq(schema.events.id, (res.body as { id: number }).id)),
+        .where(
+          eq(
+            schema.events.id,
+            (res.body as { event: { id: number } }).event.id,
+          ),
+        ),
       'event',
     );
     expect(row.guildId).toBe(hub.id);
@@ -362,28 +368,34 @@ describe('hub polls — lock-in', () => {
     const poll = await createPoll(leader.token, { hubId: hub.id });
     const start = new Date(Date.now() + 3 * 864e5);
     const res = await testApp.request
-      .post('/events')
+      .post(`/scheduling-polls/${pollIds(poll.body).matchId}/lock-in`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        title: 'From the poll',
-        gameId: testApp.seed.game.id,
-        startTime: start.toISOString(),
-        endTime: new Date(start.getTime() + 72e5).toISOString(),
-        schedulingMatchId: pollIds(poll.body).matchId,
+        event: {
+          title: 'From the poll',
+          gameId: testApp.seed.game.id,
+          startTime: start.toISOString(),
+          endTime: new Date(start.getTime() + 72e5).toISOString(),
+        },
       });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const [row] = nonEmpty(
       await testApp.db
         .select({ guildId: schema.events.guildId })
         .from(schema.events)
-        .where(eq(schema.events.id, (res.body as { id: number }).id)),
+        .where(
+          eq(
+            schema.events.id,
+            (res.body as { event: { id: number } }).event.id,
+          ),
+        ),
       'event',
     );
     expect(row.guildId).toBe(hub.id);
   });
 });
 
-/** POST /events from the poll's match as `token`; returns the stored guild_id. */
+/** Lock the poll's match in as `token` (ROK-2039: the only door); returns the stored guild_id. */
 async function lockInGuildId(
   token: string,
   matchId: number,
@@ -391,22 +403,25 @@ async function lockInGuildId(
 ): Promise<number | null> {
   const start = new Date(Date.now() + 3 * 864e5);
   const res = await testApp.request
-    .post('/events')
+    .post(`/scheduling-polls/${matchId}/lock-in`)
     .set('Authorization', `Bearer ${token}`)
     .send({
-      title: 'Hub lock-in',
-      gameId: testApp.seed.game.id,
-      startTime: start.toISOString(),
-      endTime: new Date(start.getTime() + 72e5).toISOString(),
-      schedulingMatchId: matchId,
-      ...extra,
+      event: {
+        title: 'Hub lock-in',
+        gameId: testApp.seed.game.id,
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 72e5).toISOString(),
+        ...extra,
+      },
     });
-  expect(res.status).toBe(201);
+  expect(res.status).toBe(200);
   const [row] = nonEmpty(
     await testApp.db
       .select({ guildId: schema.events.guildId })
       .from(schema.events)
-      .where(eq(schema.events.id, (res.body as { id: number }).id)),
+      .where(
+        eq(schema.events.id, (res.body as { event: { id: number } }).event.id),
+      ),
     'event',
   );
   return row.guildId;
