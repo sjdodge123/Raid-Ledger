@@ -74,6 +74,12 @@ describe('SeriesSignupStateSchema', () => {
         expect(SeriesSignupStateSchema.parse(state).joinableCount).toBe(1);
     });
 
+    it('accepts an optional leaveNights list (additive, ROK-1728 web fix)', () => {
+        const state = { membership: null, nights: [night], joinableCount: 1, firstNight: night.startTime, lastNight: night.startTime,
+            leaveNights: [{ eventId: 2, startTime: '2026-11-01T20:00:00.000Z' }] };
+        expect(SeriesSignupStateSchema.parse(state).leaveNights).toEqual(state.leaveNights);
+    });
+
     it('refuses a negative joinableCount', () => {
         const state = { membership: null, nights: [], joinableCount: -1, firstNight: null, lastNight: null };
         expect(SeriesSignupStateSchema.safeParse(state).success).toBe(false);

@@ -5,6 +5,7 @@
  */
 import {
   buildSeriesState,
+  toLeaveNights,
   classifyNights,
   isLateCancel,
   selectJoinableNights,
@@ -234,5 +235,19 @@ describe('isLateCancel', () => {
 
   it('is NOT late at exactly 23h before start (same >= 23 rule as determineCancelStatus)', () => {
     expect(isLateCancel(at(23), NOW)).toBe(false);
+  });
+});
+
+describe('toLeaveNights', () => {
+  it('lists the tagged nights earliest first as ISO starts', () => {
+    expect(
+      toLeaveNights([
+        { eventId: 9, startTime: at(96) },
+        { eventId: 4, startTime: at(5) },
+      ]),
+    ).toEqual([
+      { eventId: 4, startTime: at(5).toISOString() },
+      { eventId: 9, startTime: at(96).toISOString() },
+    ]);
   });
 });

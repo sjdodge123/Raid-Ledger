@@ -29,10 +29,12 @@ import {
   clearFutureTagsForMemberships,
   endMembership,
   findActiveMembership,
+  findTaggedFutureActiveSignups,
   type SeriesSignupRow,
 } from './series-signups.queries';
 import {
   buildSeriesState,
+  toLeaveNights,
   toSeriesSignupDto,
   type ClassifiedNights,
 } from './series-signups-plan.helpers';
@@ -70,14 +72,23 @@ export class SeriesSignupsService {
       anchor.groupId,
       userId,
     );
+    const now = new Date();
     const { nights, classified } = await planNights(
       this.db,
       anchor,
       userId,
       membership?.id,
-      new Date(),
+      now,
     );
-    return buildSeriesState(nights, classified, membership);
+    const state = buildSeriesState(nights, classified, membership);
+    if (!membership) return state;
+    // Leave cancels every tagged future night, not just the ones from :id on.
+    const tagged = await findTaggedFutureActiveSignups(
+      this.db,
+      membership.id,
+      now,
+    );
+    return { ...state, leaveNights: toLeaveNights(tagged) };
   }
 
   /**

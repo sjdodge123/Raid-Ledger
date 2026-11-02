@@ -56,6 +56,8 @@ export const SeriesNightSchema = z.object({
     signupStatus: SignupStatusSchema.nullable(),
 });
 export type SeriesNightDto = z.infer<typeof SeriesNightSchema>;
+/** A night Leave would cancel: just the id and start. */
+export type SeriesLeaveNightDto = Pick<SeriesNightDto, 'eventId' | 'startTime'>;
 
 /** GET /events/:id/series/signup — membership + the nights from `:id` forward. */
 export const SeriesSignupStateSchema = z.object({
@@ -66,6 +68,12 @@ export const SeriesSignupStateSchema = z.object({
     /** Span of the joinable nights only. */
     firstNight: z.string().datetime().nullable(),
     lastNight: z.string().datetime().nullable(),
+    /**
+     * Active members only: every future night Leave would cancel (all tagged
+     * active signups from now, not only from `:id` forward), by start time.
+     * Additive and optional — absent for a non-member.
+     */
+    leaveNights: z.array(SeriesNightSchema.pick({ eventId: true, startTime: true })).optional(),
 });
 export type SeriesSignupStateDto = z.infer<typeof SeriesSignupStateSchema>;
 

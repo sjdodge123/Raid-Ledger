@@ -5,6 +5,7 @@
 import {
   SeriesSignupSchema,
   SignupStatusSchema,
+  type SeriesLeaveNightDto,
   type SeriesNightDto,
   type SeriesNightState,
   type SeriesSignupDto,
@@ -147,6 +148,15 @@ export function buildSeriesState(
     firstNight: joinable[0]?.startTime ?? null,
     lastNight: joinable[joinable.length - 1]?.startTime ?? null,
   };
+}
+
+/** Tagged future signups → the state's `leaveNights`, earliest first. */
+export function toLeaveNights(
+  rows: readonly { eventId: number; startTime: Date }[],
+): SeriesLeaveNightDto[] {
+  return [...rows]
+    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+    .map((r) => ({ eventId: r.eventId, startTime: r.startTime.toISOString() }));
 }
 
 /** Membership row → DTO (Dates → ISO; enum columns validated). */

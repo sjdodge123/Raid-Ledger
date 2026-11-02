@@ -718,7 +718,11 @@ describe('state lists every night leave would cancel (leaveNights)', () => {
     const state = await series().getState(s.n3, userId);
 
     // mutation: leaveNights built from `nights` (from :id forward) drops n2
-    expect(state.leaveNights?.map((n) => n.eventId)).toEqual([s.n2, s.n3, s.n5]);
+    expect(state.leaveNights?.map((n) => n.eventId)).toEqual([
+      s.n2,
+      s.n3,
+      s.n5,
+    ]);
     const left = await series().leave(s.n3, userId);
     expect([...left.cancelledEventIds].sort()).toEqual(
       (state.leaveNights ?? []).map((n) => n.eventId).sort(),
