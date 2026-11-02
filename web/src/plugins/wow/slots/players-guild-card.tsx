@@ -10,6 +10,8 @@ import type { JSX } from 'react';
 import type { MyGuild } from '@raid-ledger/contract';
 import { NavChip } from '../../../components/ui/nav-chip';
 import { GetYourGuildCard } from '../../../components/hub/onboarding/get-your-guild-card';
+import { COMPANION_LINK_CLASS } from '../../../lib/companion-install';
+import { WOW_FOREVER_GUIDE_URL } from '../lib/forever-guide-url';
 import { guildRealm } from '../hub/wow-guild.helpers';
 import { GuildCrest } from './guild-entry-bits';
 import { guildHref, memberCountLabel, useMyGuildsQuery } from './guild-queries';
@@ -40,11 +42,20 @@ function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
  * card's "How to import" toggle, rather than showing one always-on line.
  */
 const WOW_HOW = (
-    <ol className="ml-4 list-decimal space-y-1" data-testid="players-guild-how-steps">
-        <li>Install LedgerLink from CurseForge or GitHub.</li>
-        <li>In game, open LedgerLink and copy your guild export.</li>
-        <li>Paste it under Guilds → Import guild here. Your roster, ranks and raid schedule come with it.</li>
-    </ol>
+    <>
+        <ol className="ml-4 list-decimal space-y-1" data-testid="players-guild-how-steps">
+            <li>Install LedgerLink from CurseForge or GitHub.</li>
+            <li>In game, open LedgerLink and copy your guild export.</li>
+            <li>Paste it on your character's page under <strong>Import string</strong> (or Add Character → <strong>Import LedgerLink character</strong>). Your roster, ranks and raid schedule come with it.</li>
+        </ol>
+        {/* ROK-2064: the public step-by-step guide (officers + members, Companion). */}
+        <p className="mt-2">
+            <a href={WOW_FOREVER_GUIDE_URL} target="_blank" rel="noopener noreferrer"
+                className={COMPANION_LINK_CLASS} data-testid="players-guild-guide-link">
+                Full setup guide
+            </a>
+        </p>
+    </>
 );
 
 export function PlayersGuildCard(): JSX.Element | null {
