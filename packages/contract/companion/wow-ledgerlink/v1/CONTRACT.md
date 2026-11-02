@@ -54,7 +54,7 @@ The server applies the export as the device's user with no preview (spec D2:
 stale (older than what is stored) import all ack `202 { "status": "accepted" }`.
 A rejected import writes nothing and answers with fixed copy plus **one**
 `issues` entry `{ "path": "payload.exportString", "code": <LedgerLink import
-code> }` — the code (`BAD_HEADER`, `RULESET_REQUIRED`, `ROSTER_HELD`, …),
+code> }` — the code (`BAD_HEADER`, `RULESET_REQUIRED`, `NOT_IN_GUILD`, …),
 never the import's message text or the string:
 
 | Status | `code` | Retry? | When |
