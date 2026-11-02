@@ -38,9 +38,9 @@ export const WITHDRAW_DESC =
 type Json = Record<string, unknown>;
 const asObj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {});
 
-async function call(method: 'GET' | 'POST', path: string, body?: unknown) {
+async function call(method: 'GET' | 'POST', path: string, body?: unknown, timeoutMs?: number) {
   try {
-    return await approvalRequest(method, path, body);
+    return await approvalRequest(method, path, body, timeoutMs);
   } catch (err) {
     if (err instanceof AgentTokenMissingError) return { error: { ok: false, error: 'agent_token_missing', message: err.message } };
     return { error: { ok: false, error: 'curl_failed', message: (err as Error).message } };
@@ -147,11 +147,14 @@ export function extractNotes(raw: unknown): Array<{ n: unknown; text: string }> 
     .map(([n, o]) => ({ n, text: wrapNote(o.note as string) }));
 }
 
-export async function executeStatus(p: { approval_id: string; include_notes?: boolean | undefined }) {
+export async function executeStatus(
+  p: { approval_id: string; include_notes?: boolean | undefined },
+  timeoutMs?: number,
+) {
   if (typeof p.approval_id !== 'string' || !APPROVAL_ID_RE.test(p.approval_id)) return badId(p.approval_id);
   const includeNotes = p.include_notes === true;
   const path = `/api/approvals/${p.approval_id}${includeNotes ? '?include_notes=1' : ''}`;
-  const r = await call('GET', path);
+  const r = await call('GET', path, undefined, timeoutMs);
   if ('error' in r) return r.error;
   if (r.status !== 200) return httpError(r.status, r.body);
   const raw = asObj(r.body).item;
@@ -183,13 +186,16 @@ export async function executeWait(p: { approval_id: string; timeout_seconds?: nu
   if (typeof p.approval_id !== 'string' || !APPROVAL_ID_RE.test(p.approval_id)) return badId(p.approval_id);
   const startedAt = waitDeps.now();
   const deadline = startedAt + Math.max(5, Math.min(120, p.timeout_seconds ?? 110)) * 1000;
-  const pre = await executeStatus({ approval_id: p.approval_id });
+  // Each status request is bounded by what is left of the deadline (≤30 s),
+  // so a stalled ssh cannot carry the call past the 120 s cap (ROK-1362).
+  const left = () => Math.max(1, Math.min(30_000, deadline - waitDeps.now()));
+  const pre = await executeStatus({ approval_id: p.approval_id }, left());
   if (pre.ok !== true) return pre;
   if (asObj(asObj(pre).item).status !== 'pending') return pre;
   const baseline = fingerprint(pre);
   while (waitDeps.now() + waitDeps.pollMs < deadline) {
     await waitDeps.sleep(waitDeps.pollMs);
-    const post = await executeStatus({ approval_id: p.approval_id });
+    const post = await executeStatus({ approval_id: p.approval_id }, left());
     // A transient ssh blip keeps waiting; a real answer (changed item, 404) settles.
     const changed = post.ok === true ? fingerprint(post) !== baseline : post.error !== 'curl_failed';
     if (changed) return post;

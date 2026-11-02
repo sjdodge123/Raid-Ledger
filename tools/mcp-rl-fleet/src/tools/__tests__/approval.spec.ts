@@ -8,9 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface Call { args: string[]; stdin: string | null }
 interface FakeChild extends EventEmitter {
-  stdout: EventEmitter; stderr: EventEmitter; stdin: { end: (s: string) => void }; kill: () => boolean;
+  stdout: EventEmitter; stderr: EventEmitter; stdin: EventEmitter & { end: (s: string) => void }; kill: () => boolean;
 }
 const calls: Call[] = [];
+// A stream 'error' emitted with no listener throws — in the real MCP server
+// that is an uncaught exception that kills the process. Recorded, not thrown.
+const crashes: string[] = [];
 let replies: string[] = [];
 let watchChild: FakeChild | null = null;
 
@@ -31,16 +34,29 @@ vi.mock('node:child_process', () => ({
       watchChild = child;
       return child;
     }
-    child.stdin = {
-      end: (s: string) => {
-        call.stdin = s;
-        const out = replies.shift() ?? '{}\nRL_STATUS:500';
-        setImmediate(() => {
-          child.stdout.emit('data', Buffer.from(out));
-          child.emit('close', 0);
-        });
-      },
+    const stdin = new EventEmitter() as FakeChild['stdin'];
+    stdin.end = (s: string) => {
+      call.stdin = s;
+      const out = replies.shift() ?? '{}\nRL_STATUS:500';
+      setImmediate(() => {
+        if (out === 'STALL') return; // ssh hangs: never answers, never exits
+        if (out === 'SPAWN_ERROR') {
+          if (child.listenerCount('error') === 0) crashes.push('child error with no listener');
+          else child.emit('error', Object.assign(new Error('spawn ssh ENOENT'), { code: 'ENOENT' }));
+          return;
+        }
+        if (out === 'EPIPE') {
+          // ssh exited (auth/connection failure) while the upload was queued.
+          if (stdin.listenerCount('error') === 0) crashes.push('stdin EPIPE with no listener');
+          else stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+          child.emit('close', 255);
+          return;
+        }
+        child.stdout.emit('data', Buffer.from(out));
+        child.emit('close', 0);
+      });
     };
+    child.stdin = stdin;
     return child;
   },
 }));
@@ -79,6 +95,7 @@ const item = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   calls.length = 0;
+  crashes.length = 0;
   replies = [];
   watchChild = null;
   process.env.RL_AGENT_TOKEN = TOKEN;
@@ -271,5 +288,43 @@ describe('rl_approval_wait', () => {
     } finally {
       clock.restore();
     }
+  });
+
+  // ROK-1900 codex P2: a status request that stalls near the deadline must be
+  // cut at the remaining budget, not after the transport's own 30 s.
+  it('bounds every status request by the remaining deadline (never past timeout_seconds)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      for (let i = 0; i < 3; i += 1) replies.push(reply(200, { ok: true, item: item() }));
+      replies.push('STALL'); // the 4th request (t = 30 s, 5 s left) hangs
+      let res: unknown = null;
+      const p = executeWait({ approval_id: ID, timeout_seconds: 35 }).then((r) => { res = r; });
+      for (let i = 0; i < 120 && res === null; i += 1) {
+        await new Promise((r) => setImmediate(r));
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      await p;
+      expect(res, 'wait must finish within its 35 s deadline').toEqual({ ok: true, timed_out: true, waited_seconds: 35 });
+      expect(calls).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('transport failure paths (codex P1: never crash the MCP server)', () => {
+  it('stdin EPIPE when ssh exits mid-upload returns curl_failed and nothing goes uncaught', async () => {
+    replies.push('EPIPE');
+    const res = await executeSubmit({ ...baseSubmit });
+    expect(crashes, 'an EPIPE on ssh stdin must be handled, not thrown').toEqual([]);
+    expect(res).toMatchObject({ ok: false, error: 'curl_failed' });
+    expect(String((res as { message?: unknown }).message)).toMatch(/EPIPE/);
+  });
+
+  it('a spawn error returns curl_failed', async () => {
+    replies.push('SPAWN_ERROR');
+    const res = await executeStatus({ approval_id: ID });
+    expect(crashes).toEqual([]);
+    expect(res).toMatchObject({ ok: false, error: 'curl_failed', message: expect.stringMatching(/ENOENT/) });
   });
 });

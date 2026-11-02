@@ -79,27 +79,41 @@ export function parseCurlOutput(stdout: string): ApprovalResponse {
   }
 }
 
+// Every failure path (spawn error, stdin EPIPE when ssh exits mid-upload,
+// non-zero exit, timeout) settles the promise exactly once — an unhandled
+// stream 'error' would otherwise crash the whole MCP server (ROK-1900 P1).
 function runSsh(args: string[], stdin: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('ssh', args, { stdio: ['pipe', 'pipe', 'pipe'] });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     let size = 0;
-    const timer = setTimeout(() => {
+    let settled = false;
+    const fail = (e: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       child.kill('SIGTERM');
-      reject(new Error(`ssh timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+      reject(e);
+    };
+    const timer = setTimeout(() => fail(new Error(`ssh timed out after ${timeoutMs}ms`)), timeoutMs);
     child.stdout.on('data', (d: Buffer) => {
       size += d.length;
       if (size > MAX_STDOUT) { child.kill('SIGTERM'); return; }
       out.push(d);
     });
     child.stderr.on('data', (d: Buffer) => { if (err.length < 64) err.push(d); });
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
+    child.on('error', (e) => fail(e));
+    child.stdin.on('error', (e: NodeJS.ErrnoException) => fail(new Error(`ssh stdin ${e.code ?? 'error'}: ${e.message}`)));
     child.on('close', (code) => {
+      if (settled) return;
+      if (code !== 0) {
+        fail(new Error(`ssh exited with code ${code}: ${Buffer.concat(err).toString('utf8').slice(0, 2000)}`));
+        return;
+      }
+      settled = true;
       clearTimeout(timer);
-      if (code === 0) resolve(Buffer.concat(out).toString('utf8'));
-      else reject(new Error(`ssh exited with code ${code}: ${Buffer.concat(err).toString('utf8').slice(0, 2000)}`));
+      resolve(Buffer.concat(out).toString('utf8'));
     });
     child.stdin.end(stdin);
   });
@@ -108,18 +122,23 @@ function runSsh(args: string[], stdin: string, timeoutMs: number): Promise<strin
 /**
  * One dashboard request with the agent token. Throws AgentTokenMissingError
  * when RL_AGENT_TOKEN is unset (every approval route needs it), any other
- * Error on an ssh/transport failure.
+ * Error on an ssh/transport failure. `timeoutMs` (optional) lowers the
+ * per-request cap, never raises it.
  */
 export async function approvalRequest(
   method: ApprovalMethod,
   path: string,
   body?: unknown,
+  timeoutMs?: number,
 ): Promise<ApprovalResponse> {
   const token = process.env.RL_AGENT_TOKEN;
   if (typeof token !== 'string' || token.length === 0) throw new AgentTokenMissingError();
   const hasBody = body !== undefined;
   const remote = buildRemoteCommand(method, path, hasBody);
   const args = await buildSshArgs(remote);
-  const stdout = await runSsh(args, buildStdin(token, body), hasBody ? BODY_TIMEOUT_MS : SMALL_TIMEOUT_MS);
+  const cap = hasBody ? BODY_TIMEOUT_MS : SMALL_TIMEOUT_MS;
+  // A caller with a deadline (rl_approval_wait) passes what is left of it.
+  const budget = timeoutMs !== undefined ? Math.max(1, Math.min(cap, Math.floor(timeoutMs))) : cap;
+  const stdout = await runSsh(args, buildStdin(token, body), budget);
   return parseCurlOutput(stdout);
 }
