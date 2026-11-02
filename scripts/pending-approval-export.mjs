@@ -74,6 +74,19 @@ function findSpec(root, folderAbs, where, warnings) {
   return md[0] ? join(folderAbs, md[0]) : undefined;
 }
 
+const REVIEW_Q = 'Review this item';
+const REVIEW_REC = 'See the attached ITEM.md — its questions could not be parsed, so rule on the item as a whole.';
+const DECIDE_REC = 'See the attached spec for the recommendation.';
+
+/** The single question of a folder-less INDEX row: its "What to decide" text (Rec: split off if present). */
+function decideQuestion(decide) {
+  const text = decide ?? '';
+  const m = REC.exec(text);
+  const question = strip(m ? text.slice(0, m.index) : text) || REVIEW_Q;
+  const recommendation = (m ? strip(text.slice(m.index + m[0].length)) : '') || DECIDE_REC;
+  return { text: question, recommendation };
+}
+
 /** Build one submit payload from an INDEX row. */
 export function buildItem(root, row) {
   const warnings = [];
@@ -84,16 +97,25 @@ export function buildItem(root, row) {
   const files = folderAbs ? readdirSync(folderAbs) : [];
   const mockup = files.includes('mockup.html') ? join(folderAbs, 'mockup.html') : undefined;
   const shots = files.filter((f) => IMG.test(f)).sort().map((f) => join(folderAbs, f));
-  const specPath = findSpec(root, folderAbs, row.where, warnings);
+  let specPath = findSpec(root, folderAbs, row.where, warnings);
+  const itemMd = folderAbs ? join(folderAbs, 'ITEM.md') : null;
   let questions = [];
-  if (folderAbs && existsSync(join(folderAbs, 'ITEM.md'))) {
-    questions = parseQuestions(readFileSync(join(folderAbs, 'ITEM.md'), 'utf8'));
+  if (itemMd && existsSync(itemMd)) {
+    questions = parseQuestions(readFileSync(itemMd, 'utf8'));
+    if (questions.length === 0) {
+      // AC12: never drop an item — the operator reviews the whole ITEM.md instead.
+      questions = [{ text: REVIEW_Q, recommendation: REVIEW_REC }];
+      if (specPath) warnings.push(`spec ${basename(specPath)} replaced by ITEM.md (questions unparseable)`);
+      specPath = itemMd;
+      warnings.push('no numbered questions parsed: one "Review this item" question, ITEM.md attached as the spec');
+    }
   } else {
-    warnings.push('no ITEM.md folder: questions live in the spec; the Lead must write them by hand');
+    // AC12: a folder-less INDEX row is a ruling on its "What to decide" text.
+    questions = [decideQuestion(row.decide)];
+    warnings.push('no ITEM.md folder: the question is the INDEX row\'s "What to decide" text');
   }
-  if (questions.length === 0) warnings.push('no numbered questions parsed');
   questions.forEach((q, i) => { if (!q.recommendation) warnings.push(`question ${i + 1} has no "Rec:" recommendation`); });
-  const kind = mockup ? 'mockup' : /\bspike\b/i.test(title) ? 'spike' : 'ruling';
+  const kind = mockup ? 'mockup' : folderAbs && /\bspike\b/i.test(title) ? 'spike' : 'ruling';
   const payload = {
     story, title, kind, summary: strip(row.decide), questions,
     ...(mockup ? { mockup_path: mockup } : {}),

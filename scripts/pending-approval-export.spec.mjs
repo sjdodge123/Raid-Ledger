@@ -101,3 +101,53 @@ describe('exportPending', () => {
     assert.ok(!JSON.stringify(exportPending(root)).includes('ROK-0001'));
   });
 });
+
+// AC12 — rl_approval_submit rejects `questions: []` (min 1), so neither an
+// unparseable ITEM.md nor a folder-less INDEX row may export an empty list.
+describe('exportPending — AC12 fallbacks', () => {
+  let b2;
+  let r2;
+  before(() => {
+    b2 = mkdtempSync(join(tmpdir(), 'pending-approval-ac12-'));
+    r2 = join(b2, 'pending-approval');
+    mkdirSync(join(b2, 'specs'), { recursive: true });
+    mkdirSync(join(r2, 'ROK-3333-messy'), { recursive: true });
+    writeFileSync(join(b2, 'specs', 'ROK-4444.md'), '# spec\n');
+    writeFileSync(join(r2, 'ROK-3333-messy', 'ITEM.md'), '# Messy\n\nJust prose, no numbered questions at all.\n');
+    writeFileSync(join(r2, 'INDEX.md'), [
+      '## Pending', '',
+      '| Item | What to decide | Where to look | Since |', '|---|---|---|---|',
+      '| **ROK-3333 Messy item** | look at it | `ROK-3333-messy/ITEM.md` | 2026-10-30 |',
+      '| **ROK-4444 Bare spec** | Ship the compact layout? **Rec:** yes, compact. | `specs/ROK-4444.md` | 2026-10-31 |',
+      '| **ROK-5555 No rec** | Keep the old badge | `specs/ROK-4444.md` | 2026-10-31 |', '',
+    ].join('\n'));
+  });
+  after(() => rmSync(b2, { recursive: true, force: true }));
+  const byStory = (story) => {
+    const hit = exportPending(r2).items.find((i) => i.payload.story === story);
+    if (!hit) throw new Error(`no payload for ${story}`);
+    return hit.payload;
+  };
+
+  it('an unparseable ITEM.md yields one "Review this item" question with ITEM.md as the spec', () => {
+    const p = byStory('ROK-3333');
+    assert.deepEqual(p.questions.map((q) => q.text), ['Review this item']);
+    assert.match(p.questions[0]?.recommendation ?? '', /ITEM\.md/);
+    assert.equal(p.spec_path, join(r2, 'ROK-3333-messy', 'ITEM.md'));
+  });
+
+  it('a folder-less row is a ruling whose question is its "What to decide" text', () => {
+    const p = byStory('ROK-4444');
+    assert.equal(p.kind, 'ruling');
+    assert.deepEqual(p.questions, [{ text: 'Ship the compact layout?', recommendation: 'yes, compact.' }]);
+    assert.equal(p.spec_path, join(b2, 'specs', 'ROK-4444.md'));
+    const bare = byStory('ROK-5555');
+    assert.equal(bare.questions.length, 1);
+    assert.equal(bare.questions[0]?.text, 'Keep the old badge');
+    assert.ok((bare.questions[0]?.recommendation ?? '').length > 0, 'recommendation is never empty');
+  });
+
+  it('no exported payload has an empty question list', () => {
+    for (const { payload } of exportPending(r2).items) assert.ok(payload.questions.length >= 1, payload.story);
+  });
+});
