@@ -259,7 +259,10 @@ registry_gc::sweep() {
         return 0
     fi
     (
-        trap 'admission::release "$key"' EXIT
+        # Key baked in now: `exit` unwinds the function's locals before an
+        # EXIT trap runs, so the trap must not read $key.
+        # shellcheck disable=SC2064
+        trap "admission::release $(printf '%q' "$key")" EXIT
         trap 'exit 143' TERM INT HUP
         registry_gc::_sweep_held "$now"; hrc=$?
         (( hrc == 3 )) && trap - EXIT

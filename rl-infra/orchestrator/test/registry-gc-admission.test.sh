@@ -292,6 +292,10 @@ _start_build() {
 test_light_build_respects_gc() {
     CURRENT_TEST_NAME="G11: a light-weight image build takes admission and waits on a live GC"
     _setup_adm
+    # G6 wraps admission::_mark_waiting around its own locals; restore the original.
+    if declare -F _orig_mark_waiting >/dev/null; then
+        eval "$(declare -f _orig_mark_waiting | sed '1s/_orig_mark_waiting/admission::_mark_waiting/')"
+    fi
     export RL_DISK_GATE=0 RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=2 RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS=2
     _seed "[{key:\"registry-gc\", kind:\"registry_gc\", weight:\"light\", mb:0, reserve_mb:0,
              host:\"sweeper\", pid:1, expires_epoch:$(( $(date +%s) + 600 ))}]"

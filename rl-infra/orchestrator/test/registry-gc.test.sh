@@ -440,6 +440,7 @@ test_minor_fail_closed() {
     registry_gc::created_epoch() { echo ""; }
     assert_eq "$(registry_gc::_inventory | jq -c 'map(.created)')" "[null,null]" "R-x: an empty build time stays in the inventory as null"
     _setup_gc
+    # shellcheck disable=SC2123  # emptying the search path is the point
     ( unset -f flock; PATH=/nonexistent; registry_gc::_define_state_shims; flock -x 200 ); rc=$?
     assert_neq "$rc" "0" "R-y: without flock the ledger lock fails instead of no-op'ing"
     local stripped; stripped=$(grep -v '^[[:space:]]*#' "$TEST_DIR/../../gc-sweeper/sweep.sh")
