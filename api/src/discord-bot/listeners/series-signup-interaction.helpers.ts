@@ -106,7 +106,10 @@ export function formatJoinedReply(
 
 /** "You've left the series — N nights cancelled." plus the <23h warning. */
 export function formatLeftReply(
-  res: Pick<LeaveSeriesResponseDto, 'cancelledEventIds' | 'lateCancelledEventIds'>,
+  res: Pick<
+    LeaveSeriesResponseDto,
+    'cancelledEventIds' | 'lateCancelledEventIds'
+  >,
 ): string {
   const head = `You've left the series — ${plural(res.cancelledEventIds.length, 'night')} cancelled.`;
   const late = res.lateCancelledEventIds.length;

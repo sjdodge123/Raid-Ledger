@@ -23,10 +23,8 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
-import {
-  embedComponents,
-  type EmbedResult,
-} from '../services/discord-embed.factory';
+import { type EmbedResult } from '../services/discord-embed.factory';
+import { capActionRows, unfurlRowEntries } from './event-link-rows.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
@@ -130,23 +128,23 @@ export class EventLinkListener {
     clientUrl: string,
   ): Promise<UnfurlResult> {
     const embeds: EmbedBuilder[] = [];
-    const rows: ActionRowType<ButtonType>[] = [];
+    const rows: Parameters<typeof capActionRows<UnfurlRow>>[0][number][] = [];
     const eventIds: number[] = [];
     for (const id of parsed.eventIds) {
       const r = await this.unfurlEventLink(id, ctx);
       if (!r) continue;
       embeds.push(r.embed);
-      rows.push(...embedComponents(r));
+      rows.push(...unfurlRowEntries(r));
       eventIds.push(id);
     }
     for (const code of parsed.inviteCodes) {
       const r = await this.unfurlInviteLink(code, ctx, clientUrl);
       if (!r) continue;
       embeds.push(r.embed);
-      rows.push(r.row);
+      rows.push({ row: r.row, series: false });
       if (!eventIds.includes(r.eventId)) eventIds.push(r.eventId);
     }
-    return { embeds, rows, eventIds };
+    return { embeds, rows: capActionRows(rows), eventIds };
   }
 
   /** Unfurl a single event link. */
@@ -253,9 +251,10 @@ interface ParsedLinks {
   inviteCodes: string[];
 }
 
+type UnfurlRow = ActionRowType<ButtonType>;
 interface UnfurlResult {
   embeds: EmbedBuilder[];
-  rows: ActionRowType<ButtonType>[];
+  rows: UnfurlRow[];
   eventIds: number[];
 }
 

@@ -120,7 +120,10 @@ describe('reply copy', () => {
 
   it('adds the <23h warning on leave when a cancelled night is late', () => {
     expect(
-      formatLeftReply({ cancelledEventIds: [1, 2], lateCancelledEventIds: [1] }),
+      formatLeftReply({
+        cancelledEventIds: [1, 2],
+        lateCancelledEventIds: [1],
+      }),
     ).toBe(
       "You've left the series — 2 nights cancelled.\n**Heads up:** 1 of them starts within 23 hours, so it counts as a late cancellation.",
     );
