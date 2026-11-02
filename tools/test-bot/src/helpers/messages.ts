@@ -45,6 +45,13 @@ export interface SimpleComponent {
   url?: string | null;
 }
 
+/** Components per action row, in order (ROK-1728). */
+function rowSizesOf(msg: Message): number[] {
+  return msg.components.map((row) =>
+    'components' in row ? (row.components as unknown[]).length : 0,
+  );
+}
+
 /** Convert a discord.js Message to a plain-object SimpleMessage. */
 export function toSimpleMessage(msg: Message): SimpleMessage {
   return {
@@ -76,9 +83,7 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
         url: c.url ?? null,
       }));
     }),
-    rowSizes: msg.components.map((row) =>
-      'components' in row ? (row.components as unknown[]).length : 0,
-    ),
+    rowSizes: rowSizesOf(msg),
     timestamp: msg.createdAt,
     editedAt: msg.editedAt,
   };
