@@ -311,7 +311,9 @@ registry_gc::_delete_and_collect() {
     orphans=$(sed '/^$/d' <<<"$pins" | grep -vxF -f <(printf '%s\n' "$kd") | sort -u | tr '\n' ' ')
     gc=$(registry_gc::collect "${orphans% }") || grc=$?
     registry_gc::_record "$now" "$inv" "$deleted" "$gc"
-    (( grc == 2 )) && return 3
+    # The collector may still be running: re-arm the entry so builds stay out
+    # until its TTL instead of the original expiry (review R2-1).
+    (( grc == 2 )) && { registry_gc::_renew || true; return 3; }
     return 0
 }
 

@@ -54,19 +54,11 @@ FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
 # OPEN whenever df or the ladder library is unavailable.
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_admission.sh"
-# ROK-2018 — a build started outside task-start (direct CLI) holds no ledger
-# entry, so nothing would keep its `docker push` out of a registry GC. Take
-# an image_build admission here (it waits on registry_gc_running) and release
-# it on exit. Under task-start RL_ADMISSION_HELD is set and this is skipped.
-if [[ -z "${RL_ADMISSION_HELD:-}" ]]; then
-    BUILD_ADM_KEY="build-${TAG}-$$"
-    if ! admission::acquire "$BUILD_ADM_KEY" "$BUILD_ADM_KEY" "" "" \
-        "$(admission::need_mb_for medium)" medium image_build; then
-        jq -nc --arg tag "$TAG" '{ok: false, error: "admission_timeout", tag: $tag}'
-        exit 75
-    fi
-    trap 'admission::release "$BUILD_ADM_KEY"' EXIT
-    export RL_ADMISSION_HELD="$BUILD_ADM_KEY"
+# ROK-2018 — a direct-CLI build takes its own image_build ledger entry so a
+# registry GC can't run during its push (no-op under task-start).
+if ! admission::hold_image_build "$TAG"; then
+    jq -nc --arg tag "$TAG" '{ok: false, error: "admission_timeout", tag: $tag}'
+    exit 75
 fi
 if [[ -z "${RL_ADMISSION_DISK_HELD:-}" ]]; then
     if ! admission::acquire_disk "${RL_TASK_ID:-build-${TAG}}" "" ""; then
