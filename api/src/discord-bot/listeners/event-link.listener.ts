@@ -23,6 +23,10 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import {
+  embedComponents,
+  type EmbedResult,
+} from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
@@ -132,7 +136,7 @@ export class EventLinkListener {
       const r = await this.unfurlEventLink(id, ctx);
       if (!r) continue;
       embeds.push(r.embed);
-      if (r.row) rows.push(r.row);
+      rows.push(...embedComponents(r));
       eventIds.push(id);
     }
     for (const code of parsed.inviteCodes) {
@@ -149,7 +153,7 @@ export class EventLinkListener {
   private async unfurlEventLink(
     eventId: number,
     ctx: EmbedContext,
-  ): Promise<{ embed: EmbedBuilder; row?: ActionRowType<ButtonType> } | null> {
+  ): Promise<EmbedResult | null> {
     try {
       const event = await this.eventsService.findOne(eventId);
       if (event.cancelledAt) return null;

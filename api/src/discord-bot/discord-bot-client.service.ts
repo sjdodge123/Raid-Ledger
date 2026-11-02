@@ -39,6 +39,27 @@ export type {
   PermissionCheckResult,
 } from './discord-bot-client.helpers';
 
+/**
+ * ROK-1728: an embed's action rows — a single row (legacy callers) or the
+ * ordered list from `embedComponents()` (row 1 + the series Join row).
+ */
+export type EmbedRows =
+  ActionRowBuilder<ButtonBuilder> | readonly ActionRowBuilder<ButtonBuilder>[];
+
+/** Normalise {@link EmbedRows} to the mutable array discord.js expects. */
+function toRows(
+  rows: EmbedRows | undefined,
+): ActionRowBuilder<ButtonBuilder>[] {
+  if (!rows) return [];
+  return isRowList(rows) ? [...rows] : [rows];
+}
+
+function isRowList(
+  rows: EmbedRows,
+): rows is readonly ActionRowBuilder<ButtonBuilder>[] {
+  return Array.isArray(rows);
+}
+
 @Injectable()
 export class DiscordBotClientService {
   private readonly logger = new Logger(DiscordBotClientService.name);
@@ -186,11 +207,11 @@ export class DiscordBotClientService {
     return this.client.user?.id ?? null;
   }
 
-  /** Send an embed message to a channel. */
+  /** Send an embed message to a channel (one row, or several in order). */
   async sendEmbed(
     channelId: string,
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
@@ -198,7 +219,7 @@ export class DiscordBotClientService {
     const result = await channel.send({
       ...(content ? { content } : {}),
       embeds: [embed],
-      ...(row ? { components: [row] } : {}),
+      ...(toRows(row).length ? { components: toRows(row) } : {}),
     });
     if (start) {
       perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
@@ -208,12 +229,12 @@ export class DiscordBotClientService {
     return result;
   }
 
-  /** Edit an existing embed message in a channel. */
+  /** Edit an existing embed message (one row, or several in order). */
   async editEmbed(
     channelId: string,
     messageId: string,
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     content?: string,
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
@@ -223,7 +244,7 @@ export class DiscordBotClientService {
     const result = await message.edit({
       ...(content ? { content } : {}),
       embeds: [embed],
-      components: row ? [row] : [],
+      components: toRows(row),
     });
 
     if (start) {

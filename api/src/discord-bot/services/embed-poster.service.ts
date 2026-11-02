@@ -10,6 +10,8 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from './discord-embed.factory';
+import { embedComponents } from './discord-embed.factory';
+import type { EmbedRows } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { getEphemeralChannelId } from './ephemeral-voice.db-helpers';
@@ -169,28 +171,26 @@ export class EmbedPosterService {
     // on a later embed-sync pass to correct itself — and that correction was
     // silently dropped whenever the sync beat the tracking-row insert.
     const state = computeEmbedStateForData(enrichedEvent);
-    const { embed, row, content } = this.embedFactory.buildEventEmbed(
-      enrichedEvent,
-      context,
-      { state },
-    );
+    const built = this.embedFactory.buildEventEmbed(enrichedEvent, context, {
+      state,
+    });
     if (existing)
       return this.editExistingEmbed(
         eventId,
         existing,
-        embed,
-        row,
+        built.embed,
+        embedComponents(built),
         opts,
-        content,
+        built.content,
       );
     return this.postNewEmbed(
       eventId,
       channelId,
       guildId,
-      embed,
+      built.embed,
       state,
-      row,
-      content,
+      embedComponents(built),
+      built.content,
     );
   }
 
@@ -215,7 +215,7 @@ export class EmbedPosterService {
     guildId: string,
     embed: EmbedBuilder,
     state: EmbedState,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     content?: string,
   ): Promise<boolean> {
     const message = await this.clientService.sendEmbed(
@@ -253,7 +253,7 @@ export class EmbedPosterService {
     eventId: number,
     record: { id: string; channelId: string; messageId: string },
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     opts?: ChannelOpts,
     content?: string,
   ): Promise<boolean> {
@@ -299,7 +299,7 @@ export class EmbedPosterService {
     eventId: number,
     recordId: string,
     embed: EmbedBuilder,
-    row?: ActionRowBuilder<ButtonBuilder>,
+    row?: EmbedRows,
     opts?: ChannelOpts,
     content?: string,
   ): Promise<boolean> {

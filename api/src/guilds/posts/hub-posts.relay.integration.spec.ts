@@ -66,7 +66,9 @@ function sentEmbed(n = 0): { description: string; buttonUrls: string[] } {
   const [channelId, embed, row, content] = args;
   expect(channelId).toBe(CHANNEL_ID);
   expect(content).toBeUndefined();
-  const components = row?.toJSON().components ?? [];
+  // ROK-1728: `sendEmbed` takes one row or an ordered row list.
+  const rows = row === undefined ? [] : 'toJSON' in row ? [row] : [...row];
+  const components = rows.flatMap((r) => r.toJSON().components);
   const buttonUrls = components.map((c) => ('url' in c ? (c.url ?? '') : ''));
   return { description: embed.toJSON().description ?? '', buttonUrls };
 }
