@@ -42,17 +42,25 @@ const baseItem = (over = {}) => ({
   status: 'pending', rulings: [], verdict: null, decided_at: null, ...over,
 });
 
+// What GET /api/approvals/<id> returns for attachments: signed single-file
+// URLs (approvals-sign.js). The page must use these and never build its own.
+const SIGNED = {
+  'mockup.html': `/approvals-content/${ID}/mockup.html?t=1762023000.SIGNEDmockupAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+  'shot-1.png': `/approvals-content/${ID}/shot-1.png?t=1762023000.SIGNEDshotAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+};
+const signedUrls = (expMs = NOW + 10 * 60 * 1000) => ({ files: { ...SIGNED }, expires_at: new Date(expMs).toISOString() });
+
 const okJson = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
 // Fake fetch. `post` decides each write's response (default: echo success).
-const fakeFetch = ({ item = baseItem(), spec = XSS_SPEC, getStatus = 200, post } = {}) => {
+const fakeFetch = ({ item = baseItem(), spec = XSS_SPEC, getStatus = 200, post, urls = () => signedUrls() } = {}) => {
   const calls = [];
   const fn = async (url, opts = {}) => {
     const body = opts.body ? JSON.parse(opts.body) : null;
     calls.push({ url, method: opts.method || 'GET', headers: opts.headers || {}, body });
     if ((opts.method || 'GET') === 'GET') {
       if (getStatus !== 200) return okJson({ ok: false }, getStatus);
-      return okJson({ ok: true, item, spec_md: spec });
+      return okJson({ ok: true, item, spec_md: spec, content_urls: urls() });
     }
     if (post) return post(url, body);
     if (url.endsWith('/ruling')) {
@@ -86,14 +94,14 @@ const $$ = (doc, sel) => [...doc.querySelectorAll(sel)];
 const buttonByText = (root, re) => $$(root, 'button').find((b) => re.test(b.textContent));
 const qCard = (doc, n) => doc.querySelector(`.approval-q[data-n="${n}"]`);
 
-test('AC6: the mockup iframe is sandboxed with allow-scripts ONLY, no referrer, key on the src', async () => {
+test('AC6: the mockup iframe is sandboxed with allow-scripts ONLY, no referrer, signed URL on the src', async () => {
   const { doc, calls } = await open();
   const frames = $$(doc, 'iframe');
   assert.equal(frames.length, 1);
   const f = frames[0];
   assert.equal(f.getAttribute('sandbox'), 'allow-scripts', `sandbox must be exactly allow-scripts, got "${f.getAttribute('sandbox')}"`);
   assert.equal(f.getAttribute('referrerpolicy'), 'no-referrer');
-  assert.equal(f.getAttribute('src'), `/approvals-content/${ID}/mockup.html?k=${KEY}`);
+  assert.equal(f.getAttribute('src'), SIGNED['mockup.html']);
   for (const attr of ['allow', 'allowfullscreen', 'srcdoc']) assert.equal(f.hasAttribute(attr), false, `iframe has ${attr}`);
   const full = $$(doc, 'a').find((a) => /Open full screen/.test(a.textContent));
   assert.equal(full.getAttribute('href'), f.getAttribute('src'));
@@ -118,7 +126,7 @@ test('width switcher sets the frame box to 390 / 820 / 1280 px', async () => {
 test('screenshots load through the content route; spec panel renders the safe markdown', async () => {
   const { doc } = await open();
   const img = doc.querySelector('.approval-shot img');
-  assert.equal(img.getAttribute('src'), `/approvals-content/${ID}/shot-1.png?k=${KEY}`);
+  assert.equal(img.getAttribute('src'), SIGNED['shot-1.png']);
   assert.equal(img.alt, 'Phone, dark');
   img.parentElement.click();
   assert.ok(img.parentElement.classList.contains('zoomed'), 'tap zooms');
@@ -250,4 +258,45 @@ test('static: item + markdown modules never use innerHTML; scripts load before t
   assert.ok(at('/app/approvals-state.js') < at('/app/approvals-markdown.js')
     && at('/app/approvals-markdown.js') < at('/app/approvals-item.js')
     && at('/app/approvals-item.js') < at('/app/approvals-list.js'), 'state → markdown → item → list');
+});
+
+// BLOCKER regression (server review): the mockup can read its own URL, so no
+// URL the page hands to the frame, a screenshot or "Open full screen" may
+// carry a credential.
+test('no credential in any frame / screenshot / full-screen URL', async () => {
+  const { doc } = await open();
+  const f = doc.querySelector('iframe');
+  const img = doc.querySelector('.approval-shot img');
+  const full = $$(doc, 'a').find((a) => /Open full screen/.test(a.textContent));
+  for (const [what, u] of [['iframe src', f?.getAttribute('src')], ['screenshot src', img?.getAttribute('src')],
+    ['full-screen href', full?.getAttribute('href')]]) {
+    assert.equal(typeof u, 'string', `${what} rendered`);
+    assert.ok(!/[?&]k=/.test(u), `${what} carries a ?k= param: ${u}`);
+    assert.ok(!u.includes(KEY), `${what} contains the inbox key: ${u}`);
+    assert.match(u, /\?t=/, `${what} is a signed URL: ${u}`);
+  }
+});
+
+test('an attachment with no signed URL is not rendered (never falls back to a key URL)', async () => {
+  const { doc } = await open({ urls: () => ({ files: {}, expires_at: null }) });
+  assert.equal($$(doc, 'iframe').length, 0, 'no frame without a signed url');
+  assert.equal($$(doc, '.approval-shot img').length, 0, 'no screenshot without a signed url');
+});
+
+test('a render near expiry re-fetches the item for fresh signed URLs, once', async () => {
+  const fresh = `/approvals-content/${ID}/mockup.html?t=1762023600.FRESHmockupAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+  let n = 0;
+  const { doc, calls } = await open({
+    urls: () => {
+      n += 1;
+      if (n === 1) return signedUrls(NOW + 60 * 1000);
+      return { files: { ...SIGNED, 'mockup.html': fresh }, expires_at: new Date(NOW + 600000).toISOString() };
+    },
+  });
+  const gets = () => calls.filter((c) => c.method === 'GET').length;
+  assert.equal(gets(), 2, 'urls 60 s from expiry trigger one re-fetch');
+  assert.equal(doc.querySelector('iframe').getAttribute('src'), fresh, 'the frame uses the fresh url');
+  buttonByText(doc.querySelector('.approval-width-seg'), /^Phone$/).click();
+  await settle();
+  assert.equal(gets(), 2, 'fresh urls are not re-fetched on the next paint');
 });

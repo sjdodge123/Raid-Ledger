@@ -5,7 +5,9 @@
 // Every piece of server text goes in through textContent; the spec goes
 // through the safe markdown renderer. The mockup runs in an iframe with
 // sandbox="allow-scripts" ONLY (no same-origin, no top navigation, no
-// popups), no referrer, and its key on the src — iframes cannot send headers.
+// popups), no referrer. Its src (and every screenshot / "Open full screen"
+// URL) is a signed, single-file, ~10-minute URL from GET /api/approvals/<id>
+// — NEVER the inbox key: the mockup can read its own URL.
 // Writes are optimistic: the page updates at once, rolls back and shows an
 // alert line if the server refuses.
 
@@ -35,8 +37,8 @@
     return b;
   };
 
-  const contentUrl = (id, file, key) =>
-    `/approvals-content/${encodeURIComponent(id)}/${encodeURIComponent(file)}?k=${encodeURIComponent(key)}`;
+  // Re-fetch signed URLs when a paint happens within this long of expiry.
+  const URL_REFRESH_MS = 2 * 60 * 1000;
 
   // The one place the mockup iframe is built — attributes are the security
   // boundary (spec D5), so nothing else may add to them.
@@ -63,7 +65,10 @@
   NS.renderItemPage = (body, id, key, opts = {}) => {
     const fetchImpl = opts.fetch || window.fetch.bind(window);
     const now = opts.now || (() => Date.now());
-    const st = { item: null, spec: null, width: 'desktop', open: null, otherFor: null, verdictNote: null, alert: '' };
+    const st = { item: null, spec: null, width: 'desktop', open: null, otherFor: null, verdictNote: null, alert: '',
+      urls: {}, urlsExp: 0, refreshing: false };
+    // Signed URL for an attachment, or null (then the attachment is not shown).
+    const contentUrl = (file) => (typeof st.urls[file] === 'string' ? st.urls[file] : null);
 
     const api = async (path, method, payload) => {
       try {
@@ -147,7 +152,8 @@
 
     const mockupPanel = (item) => {
       const panel = h('div', 'approval-mockup');
-      const src = contentUrl(id, item.attachments.mockup, key);
+      const src = contentUrl(item.attachments.mockup);
+      if (!src) return panel;
       const bar = h('div', 'approval-frame-bar');
       const seg = h('div', 'approvals-seg approval-width-seg');
       seg.setAttribute('role', 'group');
@@ -177,8 +183,10 @@
       for (const s of item.attachments.screenshots) {
         const fig = h('button', 'approval-shot');
         fig.type = 'button';
+        const src = contentUrl(s.file);
+        if (!src) continue;
         const img = h('img');
-        img.src = contentUrl(id, s.file, key);
+        img.src = src;
         img.alt = s.caption || s.file;
         img.referrerPolicy = 'no-referrer';
         fig.append(img);
@@ -263,6 +271,10 @@
     };
 
     function paint() {
+      if (st.urlsExp && now() > st.urlsExp - URL_REFRESH_MS && !st.refreshing) {
+        st.refreshing = true;
+        void load(true).finally(() => { st.refreshing = false; });
+      }
       const item = st.item;
       const page = h('div', 'approval-page');
       const back = h('a', 'approval-back', '← Pending approval');
@@ -300,6 +312,9 @@
       }
       st.item = res.json.item;
       st.spec = typeof res.json.spec_md === 'string' ? res.json.spec_md : null;
+      const cu = res.json.content_urls || {};
+      st.urls = cu.files && typeof cu.files === 'object' ? cu.files : {};
+      st.urlsExp = Date.parse(cu.expires_at || '') || 0;
       if (!keepAlert) st.alert = '';
       paint();
     }
