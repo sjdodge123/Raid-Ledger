@@ -321,8 +321,7 @@ admission::snapshot() {
             admission: {
                 running: ($st.heavy_running // []),
                 waiting: ($st.heavy_waiting // []),
-                categories: {heavy: $h, medium: $m, image_build: $b,
-                             registry_gc: ([$st | ents[] | select(kd == "registry_gc")] | length)},
+                categories: {heavy: $h, medium: $m, image_build: $b},
                 reserved_mb: $r,
                 env_reserved_mb: $envmb,
                 committed_mb: ($r + $envmb),
