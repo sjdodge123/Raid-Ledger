@@ -195,7 +195,7 @@
     if (!body) return;
     paintSeg(null);
     ui.painted = '';
-    if (typeof NS.renderItemPage === 'function') { NS.renderItemPage(body, id, ui.key); return; }
+    if (typeof NS.renderItemPage === 'function') { NS.renderItemPage(body, id, ui.key, { fetch: ui.fetch, now: ui.now }); return; }
     body.replaceChildren(h('div', 'empty approval-empty', `Opening item ${id}…`));
   };
 

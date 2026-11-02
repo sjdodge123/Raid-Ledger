@@ -1,0 +1,310 @@
+// ROK-1900 — approvals inbox item page (`?approval=<id>`).
+//
+// Plain <script> on window.__rlApprovals (needs approvals-state.js and
+// approvals-markdown.js). approvals-list.js hands over via NS.renderItemPage.
+// Every piece of server text goes in through textContent; the spec goes
+// through the safe markdown renderer. The mockup runs in an iframe with
+// sandbox="allow-scripts" ONLY (no same-origin, no top navigation, no
+// popups), no referrer, and its key on the src — iframes cannot send headers.
+// Writes are optimistic: the page updates at once, rolls back and shows an
+// alert line if the server refuses.
+
+(function attachApprovalsItem() {
+  const NS = (window.__rlApprovals = window.__rlApprovals || {});
+  const WIDTHS = [['phone', 'Phone', 390], ['tablet', 'Tablet', 820], ['desktop', 'Desktop', 1280]];
+  const DONE = { approved: 'Approved', changes_requested: 'Changes requested', rejected: 'Rejected',
+    withdrawn: 'Withdrawn by the agent', superseded: 'Superseded by a newer item' };
+  const MSG = {
+    nokey: 'Open your approval link once on this device to rule on this item.',
+    bad_key: "This device's approval key was refused. Open your approval link again.",
+    unconfigured: 'The approvals inbox is not switched on for this fleet yet.',
+    not_found: 'This item does not exist.',
+    error: "Couldn't load this item. Reload to try again.",
+  };
+
+  const h = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  };
+  const btn = (label, cls, onClick) => {
+    const b = h('button', `approval-btn ${cls || ''}`.trim(), label);
+    b.type = 'button';
+    b.addEventListener('click', onClick);
+    return b;
+  };
+
+  const contentUrl = (id, file, key) =>
+    `/approvals-content/${encodeURIComponent(id)}/${encodeURIComponent(file)}?k=${encodeURIComponent(key)}`;
+
+  // The one place the mockup iframe is built — attributes are the security
+  // boundary (spec D5), so nothing else may add to them.
+  const mockupFrame = (src) => {
+    const f = document.createElement('iframe');
+    f.className = 'approval-frame';
+    f.setAttribute('sandbox', 'allow-scripts');
+    f.setAttribute('referrerpolicy', 'no-referrer');
+    f.setAttribute('title', 'Mockup (sandboxed — cannot reach the network or this page)');
+    f.src = src;
+    return f;
+  };
+
+  const rulingOf = (item, n) => (item.rulings || []).find((r) => r.n === n) || null;
+  const ruledCount = (item) => (item.questions || []).filter((q) => rulingOf(item, q.n)).length;
+
+  const rulingText = (q, r) => {
+    if (r.choice === 'accept') return '✓ Accepted recommendation';
+    if (r.choice === 'other') return 'Other';
+    const opt = (q.options || []).find((o) => o.key === r.choice);
+    return `Option ${r.choice}${opt ? ` · ${opt.label}` : ''}`;
+  };
+
+  NS.renderItemPage = (body, id, key, opts = {}) => {
+    const fetchImpl = opts.fetch || window.fetch.bind(window);
+    const now = opts.now || (() => Date.now());
+    const st = { item: null, spec: null, width: 'desktop', open: null, otherFor: null, verdictNote: null, alert: '' };
+
+    const api = async (path, method, payload) => {
+      try {
+        const r = await fetchImpl(path, {
+          method, cache: 'no-store',
+          headers: { 'X-Approval-Token': key, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
+          ...(payload ? { body: JSON.stringify(payload) } : {}),
+        });
+        const json = await r.json().catch(() => ({}));
+        return { ok: r.ok, status: r.status, json };
+      } catch { return { ok: false, status: 0, json: {} }; }
+    };
+
+    const failText = (res) => {
+      if (res.status === 409) return 'This item was already decided — showing the latest state.';
+      if (res.status === 401 || res.status === 403) return MSG.bad_key;
+      if (res.status === 400 && res.json?.detail) return `Not saved: ${res.json.detail}`;
+      return 'Not saved — the fleet did not answer. Try again.';
+    };
+
+    // Optimistic write: apply `mutate` locally, POST, then keep the server's
+    // item or roll back to the snapshot and show why.
+    const write = async (path, payload, mutate) => {
+      const snapshot = JSON.parse(JSON.stringify(st.item));
+      mutate(st.item);
+      st.open = null; st.otherFor = null; st.verdictNote = null; st.alert = '';
+      paint();
+      const res = await api(path, 'POST', payload);
+      if (res.ok && res.json?.item) { st.item = res.json.item; paint(); return; }
+      st.item = snapshot;
+      st.alert = failText(res);
+      paint();
+      if (res.status === 409) void load(true);
+    };
+
+    const rule = (q, choice, note) => write(`/api/approvals/${encodeURIComponent(id)}/ruling`,
+      { n: q.n, choice, ...(note ? { note } : {}) }, (item) => {
+        const ts = new Date(now()).toISOString();
+        item.rulings = [...(item.rulings || []).filter((r) => r.n !== q.n), { n: q.n, choice, note: note || null, ts }];
+      });
+
+    const verdict = (value, note) => write(`/api/approvals/${encodeURIComponent(id)}/verdict`,
+      { value, ...(note ? { note } : {}) }, (item) => {
+        const ts = new Date(now()).toISOString();
+        if (value === 'approve') {
+          for (const q of item.questions || []) {
+            if (!rulingOf(item, q.n)) item.rulings.push({ n: q.n, choice: 'accept', note: null, ts });
+          }
+        }
+        const status = { approve: 'approved', changes: 'changes_requested', reject: 'rejected' }[value];
+        Object.assign(item, { status, verdict: { value, note: note || null, ts }, decided_at: ts });
+      });
+
+    // A note box with Send; Send stays disabled until the note has text.
+    const noteBox = (placeholder, sendLabel, onSend, onCancel) => {
+      const wrap = h('div', 'approval-note-box');
+      const ta = h('textarea', 'approval-note');
+      ta.placeholder = placeholder;
+      ta.maxLength = 1000;
+      const send = btn(sendLabel, 'approval-btn-primary', () => { const v = ta.value.trim(); if (v) onSend(v); });
+      send.disabled = true;
+      ta.addEventListener('input', () => { send.disabled = !ta.value.trim(); });
+      const row = h('div', 'approval-btns');
+      row.append(btn('Cancel', '', onCancel), send);
+      wrap.append(ta, row);
+      return wrap;
+    };
+
+    const headRow = (item) => {
+      const row = h('div', 'approval-head');
+      row.append(h('span', 'approval-chip', item.story || '—'));
+      row.append(h('span', `approval-pill ${NS.kindClass(item.kind)}`.trim(), item.kind || 'item'));
+      if (item.status !== 'pending') {
+        const p = NS.statusPill(item.status);
+        row.append(h('span', `approval-pill ${p.cls}`.trim(), p.label));
+      }
+      const asked = [item.asked_by && `asked by ${item.asked_by}`, NS.fmtAge(item.created_at, now())].filter(Boolean);
+      if (asked.length) row.append(h('span', 'approval-pill', asked.join(' · ')));
+      return row;
+    };
+
+    const mockupPanel = (item) => {
+      const panel = h('div', 'approval-mockup');
+      const src = contentUrl(id, item.attachments.mockup, key);
+      const bar = h('div', 'approval-frame-bar');
+      const seg = h('div', 'approvals-seg approval-width-seg');
+      seg.setAttribute('role', 'group');
+      seg.setAttribute('aria-label', 'Mockup width');
+      for (const [name, label, px] of WIDTHS) {
+        const b = btn(label, name === st.width ? 'on' : '', () => { st.width = name; paint(); });
+        b.className = name === st.width ? 'on' : '';
+        b.dataset.width = String(px);
+        b.setAttribute('aria-pressed', String(name === st.width));
+        seg.append(b);
+      }
+      const full = h('a', 'approval-btn', 'Open full screen ↗');
+      full.href = src;
+      full.target = '_blank';
+      full.rel = 'noopener noreferrer';
+      full.referrerPolicy = 'no-referrer';
+      bar.append(seg, full);
+      const box = h('div', 'approval-frame-box');
+      box.style.maxWidth = `${(WIDTHS.find((w) => w[0] === st.width) || WIDTHS[2])[2]}px`;
+      box.append(h('span', 'approval-lock', "sandboxed · no network · can't see this page"), mockupFrame(src));
+      panel.append(bar, box);
+      return panel;
+    };
+
+    const shotsStrip = (item) => {
+      const strip = h('div', 'approval-shots');
+      for (const s of item.attachments.screenshots) {
+        const fig = h('button', 'approval-shot');
+        fig.type = 'button';
+        const img = h('img');
+        img.src = contentUrl(id, s.file, key);
+        img.alt = s.caption || s.file;
+        img.referrerPolicy = 'no-referrer';
+        fig.append(img);
+        if (s.caption) fig.append(h('span', 'approval-shot-cap', s.caption));
+        fig.addEventListener('click', () => fig.classList.toggle('zoomed'));
+        strip.append(fig);
+      }
+      return strip;
+    };
+
+    const specPanel = (item) => {
+      const d = h('details', 'approval-spec');
+      const name = (item.spec_path || '').split('/').pop() || 'spec.md';
+      d.append(h('summary', null, `Spec — ${name}`));
+      const md = h('div', 'approval-md');
+      md.append(NS.renderMarkdown(st.spec, document));
+      d.append(md);
+      return d;
+    };
+
+    const questionCard = (item, q, pending) => {
+      const r = rulingOf(item, q.n);
+      const card = h('div', `card approval-q${r ? ' ruled' : ''}`);
+      card.dataset.n = String(q.n);
+      card.append(h('div', 'approval-qn', `QUESTION ${q.n}`), h('div', 'approval-qt', q.text));
+      const rec = h('div', 'approval-rec');
+      rec.append(h('b', null, 'Recommended: '), document.createTextNode(q.recommendation || ''));
+      card.append(rec);
+      const editing = pending && st.open === q.n;
+      if (r && !editing) {
+        const line = h('div', 'approval-ruling');
+        line.append(h('span', r.choice === 'accept' ? 'ok' : 'chg', rulingText(q, r)));
+        if (r.note) line.append(h('div', 'approval-ruling-note', r.note));
+        else if (r.has_note) line.append(h('span', 'approval-muted', ' · note on file'));
+        if (pending) line.append(btn('Change', 'approval-link', () => { st.open = q.n; paint(); }));
+        card.append(line);
+        return card;
+      }
+      if (!pending) { card.append(h('div', 'approval-muted', 'Not ruled')); return card; }
+      if (Array.isArray(q.options) && q.options.length) {
+        const opts = h('div', 'approval-opts');
+        for (const o of q.options) opts.append(btn(`${o.key} · ${o.label}`, 'approval-opt', () => rule(q, o.key)));
+        card.append(opts);
+      }
+      if (editing && st.otherFor === q.n) {
+        card.append(noteBox('What should happen instead?', 'Save', (note) => rule(q, 'other', note),
+          () => { st.open = null; st.otherFor = null; paint(); }));
+        return card;
+      }
+      const row = h('div', 'approval-btns');
+      row.append(btn('Accept', 'approval-btn-primary', () => rule(q, 'accept')),
+        btn('Other…', '', () => { st.open = q.n; st.otherFor = q.n; paint(); }));
+      card.append(row);
+      return card;
+    };
+
+    const verdictBar = (item) => {
+      const bar = h('div', 'approval-sticky');
+      const n = (item.questions || []).length;
+      bar.append(h('span', 'approval-muted', `${ruledCount(item)} of ${n} ruled · Approve accepts every unruled recommendation`));
+      if (st.verdictNote) {
+        const label = st.verdictNote === 'reject' ? 'Reject' : 'Send changes';
+        bar.append(noteBox('Say what needs to change (required)', label, (note) => verdict(st.verdictNote, note),
+          () => { st.verdictNote = null; paint(); }));
+        return bar;
+      }
+      const row = h('div', 'approval-btns');
+      row.append(btn('Reject', 'approval-btn-fail', () => { st.verdictNote = 'reject'; paint(); }),
+        btn('Changes requested', 'approval-btn-chg', () => { st.verdictNote = 'changes'; paint(); }),
+        btn('Approve', 'approval-btn-primary', () => verdict('approve')));
+      bar.append(row);
+      return bar;
+    };
+
+    const decidedLine = (item) => {
+      const line = h('div', 'card approval-decided');
+      const when = item.decided_at ? ` · ${NS.fmtDate(item.decided_at)}` : '';
+      line.append(h('b', null, `${DONE[item.status] || item.status}${when}`));
+      if (item.verdict?.note) line.append(h('div', 'approval-ruling-note', item.verdict.note));
+      else if (item.verdict?.has_note) line.append(h('span', 'approval-muted', ' · note on file'));
+      return line;
+    };
+
+    function paint() {
+      const item = st.item;
+      const page = h('div', 'approval-page');
+      const back = h('a', 'approval-back', '← Pending approval');
+      back.href = '/?view=approvals';
+      page.append(back);
+      if (st.alert) {
+        const a = h('div', 'approval-alert', st.alert);
+        a.setAttribute('role', 'alert');
+        page.append(a);
+      }
+      const pending = item.status === 'pending';
+      page.append(headRow(item), h('h2', 'approval-item-title', item.title), h('p', 'approval-summary', item.summary || ''));
+      if (!pending) page.append(decidedLine(item));
+      const cols = h('div', 'approval-cols');
+      const left = h('div');
+      const att = item.attachments || {};
+      if (att.mockup) left.append(mockupPanel(item));
+      if (Array.isArray(att.screenshots) && att.screenshots.length) left.append(shotsStrip(item));
+      if (typeof st.spec === 'string' && st.spec) left.append(specPanel(item));
+      const right = h('div', 'approval-questions');
+      for (const q of item.questions || []) right.append(questionCard(item, q, pending));
+      cols.append(left, right);
+      page.append(cols);
+      if (pending) page.append(verdictBar(item));
+      body.replaceChildren(page);
+    }
+
+    async function load(keepAlert) {
+      if (!key) { body.replaceChildren(h('div', 'empty approval-empty', MSG.nokey)); return; }
+      const res = await api(`/api/approvals/${encodeURIComponent(id)}`, 'GET');
+      if (!res.ok || !res.json?.item) {
+        const state = res.status === 404 ? 'not_found' : NS.classifyStatus(res.status);
+        body.replaceChildren(h('div', `empty approval-empty approval-${state}`, MSG[state] || MSG.error));
+        return;
+      }
+      st.item = res.json.item;
+      st.spec = typeof res.json.spec_md === 'string' ? res.json.spec_md : null;
+      if (!keepAlert) st.alert = '';
+      paint();
+    }
+
+    body.replaceChildren(h('div', 'empty approval-empty', 'Loading…'));
+    return load(false);
+  };
+})();
