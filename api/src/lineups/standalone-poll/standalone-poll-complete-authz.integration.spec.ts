@@ -516,6 +516,44 @@ async function eventsFromPoll(matchId: number): Promise<number> {
   return rows.length;
 }
 
+/** POST /scheduling-polls/:matchId/lock-in as `token` for a poll slot. */
+function lockIn(
+  token: string,
+  matchId: number,
+  slotTime: Date,
+  extra: Record<string, unknown> = {},
+) {
+  return testApp.request
+    .post(`/scheduling-polls/${matchId}/lock-in`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      event: {
+        title: 'From Poll',
+        startTime: slotTime.toISOString(),
+        endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
+        gameId: testApp.seed.game.id,
+        ...extra,
+      },
+    });
+}
+
+/** The lock-in claim columns of a match: status, claim token, linked event. */
+async function claimState(matchId: number) {
+  const m = schema.communityLineupMatches;
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({
+        status: m.status,
+        lockInClaimedAt: m.lockInClaimedAt,
+        linkedEventId: m.linkedEventId,
+      })
+      .from(m)
+      .where(eq(m.id, matchId)),
+    'match',
+  );
+  return row;
+}
+
 /** The provenance check the lock-in binds (ROK-2039: POST /events refuses the field). */
 function provenance(
   creatorId: number,
@@ -539,17 +577,7 @@ function describeAc6() {
   it('stamps created_from_poll_id for the poll owner locking in a same-game event', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6ok');
 
-    const res = await testApp.request
-      .post(`/scheduling-polls/${matchId}/lock-in`)
-      .set('Authorization', `Bearer ${creator.token}`)
-      .send({
-        event: {
-          title: 'From Poll',
-          startTime: slotTime.toISOString(),
-          endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
-          gameId: testApp.seed.game.id,
-        },
-      });
+    const res = await lockIn(creator.token, matchId, slotTime);
 
     expect(res.status).toBe(200);
     expect(await eventsFromPoll(matchId)).toBe(2);
@@ -568,8 +596,14 @@ function describeAc6() {
     );
     expect(await eventsFromPoll(matchId)).toBe(1);
   });
+}
+describe(
+  'ROK-1844 AC6 — schedulingMatchId provenance is validated (lock-in door only, ROK-2039)',
+  describeAc6,
+);
 
-  it("400s an event whose game is not the poll's game", async () => {
+function describeAc6Game() {
+  it("400s a lock-in whose event game is not the poll's game — poll stays unclaimed, no event", async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6game');
     const [other] = nonEmpty(
       await testApp.db
@@ -579,15 +613,27 @@ function describeAc6() {
       'other game',
     );
 
-    await expect(
-      provenance(creator.userId, slotTime, {
-        gameId: other.id,
-        schedulingMatchId: matchId,
-      }),
-    ).rejects.toThrow(/game must match/);
-    expect(await eventsFromPoll(matchId)).toBe(1);
-  });
+    const res = await lockIn(creator.token, matchId, slotTime, {
+      gameId: other.id,
+    });
 
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/game must match/);
+    expect(await eventsFromPoll(matchId)).toBe(1);
+    expect(await claimState(matchId)).toEqual({
+      status: 'scheduling',
+      lockInClaimedAt: null,
+      linkedEventId: null,
+    });
+  });
+}
+describe(
+  'ROK-1844 AC6 — the lock-in refuses a cross-game event',
+  describeAc6Game,
+);
+
+function describeAc6Provenance() {
+  // Helper-level: /lock-in 403s a non-owner before provenance runs.
   it("400s a member tagging their event with someone else's poll", async () => {
     const { matchId, slotTime } = await seedOwnPoll('ac6foreign');
     const stranger = await loginAsMember('ac6foreign-stranger');
@@ -597,6 +643,7 @@ function describeAc6() {
     ).rejects.toThrow(/your own poll/);
   });
 
+  // Helper-level: /lock-in turns a closed poll into its claim 409 and an unknown id into a 404.
   it('400s a poll that is no longer open, and an unknown poll id', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6closed');
     expect((await complete(creator.token, matchId, {})).status).toBe(200);
@@ -610,6 +657,6 @@ function describeAc6() {
   });
 }
 describe(
-  'ROK-1844 AC6 — schedulingMatchId provenance is validated (lock-in door only, ROK-2039)',
-  describeAc6,
+  'ROK-1844 AC6 — provenance reasons /lock-in cannot reach (helper level)',
+  describeAc6Provenance,
 );
