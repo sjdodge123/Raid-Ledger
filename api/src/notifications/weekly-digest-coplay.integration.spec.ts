@@ -22,6 +22,8 @@ const DAY = 24 * HOUR;
 interface UserOpts {
   seenInGuild?: boolean;
   deactivated?: boolean;
+  /** Sets the `show_activity = false` preference. */
+  optedOut?: boolean;
 }
 
 let seq = 0;
@@ -41,6 +43,11 @@ async function seedUser(t: TestApp, opts: UserOpts = {}): Promise<number> {
       .returning(),
     'user',
   );
+  if (opts.optedOut) {
+    await t.db
+      .insert(schema.userPreferences)
+      .values({ userId: u.id, key: 'show_activity', value: false });
+  }
   return u.id;
 }
 
@@ -218,6 +225,59 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
     for (const u of [member, guest, gone]) {
       await seedSession(testApp, now, u, game, 2 * DAY, 2 * DAY - 2 * HOUR);
     }
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('lets an opted-out member complete a pair but counts only visible players', async () => {
+    const ann = await seedUser(testApp);
+    const hidden = await seedUser(testApp, { optedOut: true });
+    const hidden2 = await seedUser(testApp, { optedOut: true });
+    const shared = await seedGame(testApp, 'Shared');
+    const secret = await seedGame(testApp, 'Secret');
+    for (const u of [ann, hidden]) {
+      await seedSession(testApp, now, u, shared, 2 * DAY, 2 * DAY - HOUR);
+    }
+    // Only opted-out members: qualifies, but 0 visible players → not listed.
+    for (const u of [hidden, hidden2]) {
+      await seedSession(testApp, now, u, secret, 3 * DAY, 3 * DAY - HOUR);
+    }
+    await expect(read()).resolves.toEqual([
+      { gameId: shared, name: 'Shared', slug: 'shared', players: 1 },
+    ]);
+  });
+
+  it('caps an open session at the window end when the window ends before now', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const [c, d] = [await seedUser(testApp), await seedUser(testApp)];
+    const capped = await seedGame(testApp, 'Capped');
+    const control = await seedGame(testApp, 'Control');
+    // Both open; only 10 (capped) vs 30 (control) minutes fall before `end`.
+    for (const u of [a, b]) {
+      await seedSession(testApp, now, u, capped, DAY + 10 * MIN, null);
+    }
+    for (const u of [c, d]) {
+      await seedSession(testApp, now, u, control, DAY + 30 * MIN, null);
+    }
+    const window = {
+      start: new Date(now.getTime() - 7 * DAY),
+      end: new Date(now.getTime() - DAY),
+    };
+    const games = await fetchCoPlayGames(testApp.db, window, { now });
+    expect(games.map((g) => [g.gameId, g.players])).toEqual([[control, 2]]);
+  });
+
+  it('never pairs a member with their own overlapping sessions', async () => {
+    const a = await seedUser(testApp);
+    const game = await seedGame(testApp, 'Two Clients');
+    await seedSession(testApp, now, a, game, 2 * DAY, 2 * DAY - 2 * HOUR);
+    await seedSession(
+      testApp,
+      now,
+      a,
+      game,
+      2 * DAY - HOUR,
+      2 * DAY - 3 * HOUR,
+    );
     await expect(read()).resolves.toEqual([]);
   });
 });

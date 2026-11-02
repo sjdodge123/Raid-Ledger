@@ -17,8 +17,8 @@ const DAY = 24 * HOUR;
 
 let seq = 0;
 
-/** An active, guild-seen member who shows activity. */
-async function seedUser(t: TestApp): Promise<number> {
+/** A guild-seen member who shows activity; `left` = deactivated since. */
+async function seedUser(t: TestApp, left = false): Promise<number> {
   seq += 1;
   const [u] = nonEmpty(
     await t.db
@@ -29,6 +29,7 @@ async function seedUser(t: TestApp): Promise<number> {
         displayName: `Member ${seq}`,
         role: 'member',
         guildMemberSeenAt: new Date(),
+        ...(left ? { deactivatedAt: new Date() } : {}),
       })
       .returning(),
     'user',
@@ -62,6 +63,23 @@ async function seedSession(
     discordActivityName: 'game',
     startedAt: new Date(now - startAgo),
     endedAt: new Date(now - endAgo),
+  });
+}
+
+/** A closed session between two absolute instants. */
+async function seedSessionAt(
+  t: TestApp,
+  userId: number,
+  gameId: number,
+  from: Date,
+  to: Date,
+): Promise<void> {
+  await t.db.insert(schema.gameActivitySessions).values({
+    userId,
+    gameId,
+    discordActivityName: 'game',
+    startedAt: from,
+    endedAt: to,
   });
 }
 
@@ -105,8 +123,8 @@ async function seedEvent(
 }
 
 /** Names of this week's first-time games. */
-async function firstNames(t: TestApp): Promise<string[]> {
-  const { firstGames } = await fetchDigestMilestones(t.db);
+async function firstNames(t: TestApp, now?: Date): Promise<string[]> {
+  const { firstGames } = await fetchDigestMilestones(t.db, now ? { now } : {});
   return firstGames.map((g) => g.name);
 }
 
@@ -172,5 +190,37 @@ describe('Weekly digest firsts — co-play only (ROK-2063, integration)', () => 
     await seedEvent(testApp, alone, 1, [ann]);
 
     expect(await firstNames(testApp)).toEqual(['World of Warcraft']);
+  });
+
+  it('a game co-played before the week by members who have since left is no first', async () => {
+    const [gone1, gone2] = [
+      await seedUser(testApp, true),
+      await seedUser(testApp, true),
+    ];
+    const drg = await seedGame(testApp, 'Deep Rock Galactic');
+    await seedPair(testApp, [gone1, gone2], drg, 20);
+    await seedPair(testApp, [ann, bob], drg, 2);
+
+    expect(await firstNames(testApp)).toEqual([]);
+  });
+
+  it('a co-play straddling the week start is a first in exactly one week', async () => {
+    const now = new Date();
+    const weekStart = new Date(now.getTime() - 7 * DAY);
+    const at = (offset: number): Date => new Date(weekStart.getTime() + offset);
+    const overnight = await seedGame(testApp, 'Overnight');
+    const lateNight = await seedGame(testApp, 'Late Night');
+    // Ann starts 24h before the week; Bob joins 10 min (Overnight) or 30 min
+    // (Late Night) before it; both play on 1h into the week.
+    for (const [game, joined] of [
+      [overnight, 10 * MIN],
+      [lateNight, 30 * MIN],
+    ] as const) {
+      await seedSessionAt(testApp, ann, game, at(-24 * HOUR), at(HOUR));
+      await seedSessionAt(testApp, bob, game, at(-joined), at(HOUR));
+    }
+
+    expect(await firstNames(testApp, now)).toEqual(['Overnight']);
+    expect(await firstNames(testApp, weekStart)).toEqual(['Late Night']);
   });
 });
