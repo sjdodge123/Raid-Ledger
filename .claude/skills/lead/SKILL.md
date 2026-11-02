@@ -22,7 +22,7 @@ date -u && git fetch -q origin && git log --oneline -3 origin/main && gh pr list
 curl -s https://raid.gamernight.net/api/system/version
 ```
 
-Plus `mcp__mcp-rl-fleet__rl_status` (slots, envs, queue). If the `rl_*` tools are missing: `sh scripts/mcp-launch.sh mcp-rl-fleet --self-check`, then restart the session.
+Plus `mcp__mcp-rl-fleet__rl_status` (slots, envs, queue) and `mcp__mcp-rl-fleet__rl_approval_list` (open items in the operator's Pending approval inbox; the default read carries no operator note text, and the Lead never sets `include_notes`). If the `rl_*` tools are missing: `sh scripts/mcp-launch.sh mcp-rl-fleet --self-check`, then restart the session.
 
 Read, in order:
 1. `planning-artifacts/CURRENT-STATE.md` — the one file the operator reads (checklist first).

@@ -13,10 +13,10 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 
 ## Phase A — plan the night (operator awake, aim for ≤30 min, ≤6 Lead turns)
 
-1. **Boot** exactly as `/lead` §1, in one batched turn. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), pending-approval `INDEX.md`.
+1. **Boot** exactly as `/lead` §1, in one batched turn. Add: `rl_status` disk/memory, open PRs with their CI state, envs and their death times (created + 24 h), open approvals via `rl_approval_list` (interim `pending-approval/INDEX.md` only if the dashboard is unreachable).
 2. **Draft `planning-artifacts/NIGHT-PLAN-YYYY-MM-DD.md`** in the MAIN checkout (format: `NIGHT-PLAN-2026-10-24.md`). Sections:
    - **Window:** start → operator wake time (ask in step 3 if unknown), and a wind-down mark at wake − 45 min.
-   - **§1 Ranking:** every candidate with a verdict: **RUN to PR** / **RUN to gate** (no PR) / **spec + mockup only** / **DEFER**, and a one-line why. Candidates come from the live state, in sprint order (fix → tech-debt → small → feature unless the state files say otherwise). A story may be RUN only if nothing in it waits on a ruling the operator has not given tonight. Unruled design work = spec + mockup only (to pending-approval).
+   - **§1 Ranking:** every candidate with a verdict: **RUN to PR** / **RUN to gate** (no PR) / **spec + mockup only** / **DEFER**, and a one-line why. Candidates come from the live state, in sprint order (fix → tech-debt → small → feature unless the state files say otherwise). A story may be RUN only if nothing in it waits on a ruling the operator has not given tonight. Unruled design work = spec + mockup only (submitted with `rl_approval_submit`).
    - **§2 Waves:** hour-sized blocks × fleet slots. Respect: max 2 heavy fleet tasks, 1 image build, ONE Playwright tier, ONE verify lane at a time (they share the Browser pane), ≤4–6 dev lanes in parallel, Discord smokes serialised (shared guild).
    - **§3 Per-story lanes:** lane (model, turn budget) → gate tier → test plan yes/no → Discord smoke yes/no.
    - **§4 File-conflict guards:** which stories share files and in what order they go.
@@ -79,7 +79,7 @@ Stop starting lanes. Let running lanes finish or checkpoint (WIP commits + hando
 
 1. **`CURRENT-STATE.md`** (main checkout, ≤80 lines, checklist first): shipped overnight (PR links), open PRs and their state, parked stories and why, envs still up and their death times, the ruling batch count.
 2. **Morning brief artifact:** load the `artifact-design` skill, write the page to the scratchpad, publish it with the Artifact tool (private by default; icon `moon`). Contents: shipped list with PR links; open PRs; test plans with their fleet dashboard links, plus QR codes for any phone step (memory: tester links go to the operator as QR codes); parked items; the ruling batch with recommendations; fleet state. Put the link at the top of `CURRENT-STATE.md`.
-3. **`planning-artifacts/MORNING-QUESTIONS-YYYY-MM-DD.md`:** the §7 batch pre-written as `AskUserQuestion` payloads: ≤4 questions per block, each with the context inside the question, the recommendation first and labelled, the mockup path, and whether it is APPLY (already applied; veto) or WAIT (blocking). When the operator's first message of the day is "go", "morning", "I'm up" or similar, the Lead (this one or the relay) runs those blocks first, then records the answers per `/lead` (spec + Linear + pending-approval `_approved/`).
+3. **`planning-artifacts/MORNING-QUESTIONS-YYYY-MM-DD.md`:** the §7 batch pre-written as `AskUserQuestion` payloads: ≤4 questions per block, each with the context inside the question, the recommendation first and labelled, the mockup path, and whether it is APPLY (already applied; veto) or WAIT (blocking). When the operator's first message of the day is "go", "morning", "I'm up" or similar, the Lead (this one or the relay) runs those blocks first, then records the answers per `/lead` (spec + Linear; the inbox item is already ruled in the dashboard).
 4. Release fleet claims this night holds (`rl_release`, preserving envs with an open OPERATOR step), and end with a ≤10-line chat summary pointing at the artifact.
 
 ## Resume (`--resume <plan>`)
