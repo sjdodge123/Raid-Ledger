@@ -3,12 +3,15 @@ import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { SERIES_ERRORS } from '../../events/series-signups-join.helpers';
 import {
   handleJoinSeries,
+  handleSeriesCharacterPick,
   handleSeriesConfirm,
   handleSeriesRolePick,
   type SeriesInteractionDeps,
 } from './series-signup-interaction.handlers';
+import type { ParsedSeriesCustomId } from './series-signup-interaction.helpers';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { findActiveMembership } from '../../events/series-signups.queries';
 
@@ -51,7 +54,10 @@ function makeDeps(): SeriesInteractionDeps & {
     charactersService: {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
     },
-    emojiService: { getRoleEmojiComponent: jest.fn() } as never,
+    emojiService: {
+      getRoleEmojiComponent: jest.fn(),
+      getClassEmojiComponent: jest.fn(),
+    } as never,
   };
 }
 
@@ -61,6 +67,7 @@ function makeInteraction(values: string[] = []): ButtonInteraction & {
   return {
     user: { id: 'discord-1' },
     values,
+    isButton: () => values.length === 0,
     editReply: jest.fn().mockResolvedValue(undefined),
   } as unknown as ButtonInteraction & { editReply: jest.Mock };
 }
@@ -80,6 +87,15 @@ function customIds(i: { editReply: jest.Mock }): unknown[] {
     r.toJSON().components.map((c) => c.custom_id ?? c.url),
   );
 }
+
+const THORIN = {
+  id: CHAR,
+  name: 'Thorin',
+  class: null,
+  spec: null,
+  level: null,
+  isMain: false,
+};
 
 const seriesEvent = {
   id: 42,
@@ -158,6 +174,57 @@ describe('handleJoinSeries', () => {
     await handleJoinSeries(i, 42, makeDeps());
     expect(customIds(i)).toEqual(['series_role:42']);
   });
+
+  it('offers the series_char menu to a player with characters for the game', async () => {
+    mockedEvent.mockResolvedValue({ ...seriesEvent, gameId: 3 });
+    const deps = makeDeps();
+    deps.charactersService.findAllForUser.mockResolvedValue({
+      data: [THORIN],
+    });
+    const i = makeInteraction();
+    await handleJoinSeries(i, 42, deps);
+    expect(deps.charactersService.findAllForUser).toHaveBeenCalledWith(5, 3);
+    expect(lastReply(i).content).toContain('Pick a character');
+    expect(customIds(i)).toEqual(['series_char:42']);
+    expect(deps.seriesSignupsService.join).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleSeriesCharacterPick', () => {
+  const pick: ParsedSeriesCustomId = {
+    action: 'series_char',
+    eventId: 42,
+    characterId: null,
+    roles: null,
+  };
+
+  it('goes straight to a Confirm carrying the character for a non-MMO game', async () => {
+    mockedEvent.mockResolvedValue({ ...seriesEvent, gameId: 3 });
+    const deps = makeDeps();
+    const i = makeInteraction([CHAR]);
+    await handleSeriesCharacterPick(
+      i as unknown as StringSelectMenuInteraction,
+      pick,
+      deps,
+    );
+    expect(deps.charactersService.findAllForUser).not.toHaveBeenCalled();
+    expect(customIds(i)).toEqual([`series_confirm:42:${CHAR}:-`]);
+  });
+
+  it('asks for roles next, carrying the character, for an MMO game', async () => {
+    mockedEvent.mockResolvedValue({
+      ...seriesEvent,
+      gameId: 3,
+      slotConfig: { type: 'mmo' },
+    });
+    const i = makeInteraction([CHAR]);
+    await handleSeriesCharacterPick(
+      i as unknown as StringSelectMenuInteraction,
+      pick,
+      makeDeps(),
+    );
+    expect(customIds(i)).toEqual([`series_role:42:${CHAR}`]);
+  });
 });
 
 describe('handleSeriesRolePick', () => {
@@ -215,6 +282,21 @@ describe('handleSeriesConfirm', () => {
       content: 'No upcoming nights to join',
       components: [],
     });
+  });
+
+  it('answers a repeat Confirm (already a member) with the member reply, not the 409 text', async () => {
+    const deps = makeDeps();
+    deps.seriesSignupsService.join.mockRejectedValue(
+      new ConflictException(SERIES_ERRORS.ALREADY_MEMBER),
+    );
+    const i = makeInteraction();
+    await handleSeriesConfirm(
+      i,
+      { action: 'series_confirm', eventId: 42, characterId: null, roles: null },
+      deps,
+    );
+    expect(lastReply(i).content).toBe("You're in for the series.");
+    expect(customIds(i)).toEqual(['series_leave:42']);
   });
 
   it('never calls join for an unlinked user', async () => {

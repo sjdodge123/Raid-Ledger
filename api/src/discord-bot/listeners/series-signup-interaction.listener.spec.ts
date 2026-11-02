@@ -1,6 +1,10 @@
+import { NotFoundException } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import { SeriesSignupInteractionListener } from './series-signup-interaction.listener';
-import { handleJoinSeries } from './series-signup-interaction.handlers';
+import {
+  handleJoinSeries,
+  handleSeriesConfirm,
+} from './series-signup-interaction.handlers';
 import { handleSeriesSkip } from './series-signup-decline.handlers';
 
 jest.mock('./series-signup-interaction.handlers', () => ({
@@ -28,6 +32,7 @@ function button(customId: string): Record<string, jest.Mock | string> & {
 } {
   return {
     customId,
+    user: { id: 'discord-1' } as never,
     isButton: jest.fn().mockReturnValue(true),
     isStringSelectMenu: jest.fn().mockReturnValue(false),
     deferReply: jest.fn().mockResolvedValue(undefined),
@@ -71,5 +76,45 @@ describe('SeriesSignupInteractionListener', () => {
       content: 'Something went wrong. Please try again.',
       components: [],
     });
+  });
+
+  it('replies with the service message when a handler throws an HttpException', async () => {
+    (handleJoinSeries as jest.Mock).mockRejectedValueOnce(
+      new NotFoundException('Event not found'),
+    );
+    const i = button('series_join:42');
+    await makeListener().handleInteraction(i as never);
+    expect(i.editReply).toHaveBeenCalledWith({
+      content: 'Event not found',
+      components: [],
+    });
+  });
+
+  it('drops a second Confirm while the first is still running, then accepts the next', async () => {
+    let finish: () => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = () => resolve();
+    });
+    (handleSeriesConfirm as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = () => resolve();
+          markStarted();
+        }),
+    );
+    const listener = makeListener();
+    const first = button('series_confirm:42:-:-');
+    const second = button('series_confirm:42:-:-');
+    const running = listener.handleInteraction(first as never);
+    await started;
+    await listener.handleInteraction(second as never);
+    expect(second.deferUpdate).toHaveBeenCalled();
+    expect(handleSeriesConfirm).toHaveBeenCalledTimes(1);
+    expect(second.editReply).not.toHaveBeenCalled();
+    finish();
+    await running;
+    await listener.handleInteraction(button('series_confirm:42:-:-') as never);
+    expect(handleSeriesConfirm).toHaveBeenCalledTimes(2);
   });
 });
