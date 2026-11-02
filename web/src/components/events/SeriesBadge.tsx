@@ -23,7 +23,7 @@ export function SeriesBadge({ className = '', showLabel = false, title = 'Recurr
     return (
         <span
             data-testid="series-badge"
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 ${className}`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 ${className}`}
             title={title}
         >
             {REPEAT_ICON}
