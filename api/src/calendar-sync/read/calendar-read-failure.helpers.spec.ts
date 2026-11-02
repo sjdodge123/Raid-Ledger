@@ -9,6 +9,7 @@ import {
   TransientError,
 } from '../providers/calendar-provider.errors';
 import {
+  READ_ERROR_BACKOFF_CAP_MS,
   recordReadSyncFailure,
   type ReadFailureConnection,
 } from './calendar-read-failure.helpers';
@@ -54,5 +55,26 @@ describe('recordReadSyncFailure — final attempt next_sync_at', () => {
 
   it('a Retry-After shorter than the backoff never syncs sooner', async () => {
     expect(await finalNextSync(new RateLimitError(60_000))).toBe(HOUR);
+  });
+
+  it('a one-year Retry-After is clamped to the 6 h backoff cap', async () => {
+    const year = 365 * 24 * HOUR;
+    expect(await finalNextSync(new RateLimitError(year))).toBe(
+      READ_ERROR_BACKOFF_CAP_MS,
+    );
+  });
+
+  it('a Retry-After of 1e300 clamps instead of an Invalid Date', async () => {
+    expect(await finalNextSync(new RateLimitError(1e300))).toBe(
+      READ_ERROR_BACKOFF_CAP_MS,
+    );
+  });
+
+  it.each([
+    ['Infinity', Infinity],
+    ['NaN', NaN],
+    ['negative', -5 * HOUR],
+  ])('a %s Retry-After falls back to the 1 h backoff', async (_n, ms) => {
+    expect(await finalNextSync(new RateLimitError(ms))).toBe(HOUR);
   });
 });

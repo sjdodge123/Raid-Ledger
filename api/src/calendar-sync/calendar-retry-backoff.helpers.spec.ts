@@ -11,6 +11,7 @@ import {
   CALENDAR_RETRY_AFTER_MAX_MS,
   CALENDAR_RETRY_BACKOFF_TYPE,
   calendarRetryBackoff,
+  validRetryAfterMs,
 } from './calendar-retry-backoff.helpers';
 import { CALENDAR_READ_JOB_OPTIONS } from './read/calendar-read.enqueue.helpers';
 
@@ -57,6 +58,14 @@ describe('calendarRetryBackoff', () => {
 
   it('a non-finite Retry-After falls back to the backoff', () => {
     expect(next(2, new RateLimitError(Number.NaN))).toBe(2 * MIN);
+  });
+
+  it('validRetryAfterMs: finite positive waits only, clamped to the cap', () => {
+    expect(validRetryAfterMs(5 * MIN, 60 * MIN)).toBe(5 * MIN);
+    expect(validRetryAfterMs(1e300, 60 * MIN)).toBe(60 * MIN);
+    expect(validRetryAfterMs(Infinity, 60 * MIN)).toBe(0);
+    expect(validRetryAfterMs(-MIN, 60 * MIN)).toBe(0);
+    expect(validRetryAfterMs(undefined, 60 * MIN)).toBe(0);
   });
 
   it('honours the job base delay (write queue: 30 s)', () => {

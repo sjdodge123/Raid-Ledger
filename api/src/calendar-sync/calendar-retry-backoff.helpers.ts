@@ -25,12 +25,24 @@ function baseDelayMs(job: MinimalJob | undefined): number {
   return backoff?.delay ?? 0;
 }
 
+/**
+ * The one definition of a usable `Retry-After` wait: a finite, positive
+ * number of ms, clamped to `capMs`. Anything else (absent, NaN, Infinity,
+ * zero, negative) is 0, so callers fall back to their own backoff and a
+ * provider value can never push a date out of range.
+ */
+export function validRetryAfterMs(
+  wait: number | undefined,
+  capMs: number,
+): number {
+  if (wait === undefined || !Number.isFinite(wait) || wait <= 0) return 0;
+  return Math.min(wait, capMs);
+}
+
 /** The `Retry-After` wait a rate-limit error asks for, capped; else 0. */
 function retryAfterWaitMs(err: Error | undefined): number {
   if (!(err instanceof RateLimitError)) return 0;
-  const wait = err.retryAfterMs;
-  if (!Number.isFinite(wait) || wait <= 0) return 0;
-  return Math.min(wait, CALENDAR_RETRY_AFTER_MAX_MS);
+  return validRetryAfterMs(err.retryAfterMs, CALENDAR_RETRY_AFTER_MAX_MS);
 }
 
 /**
