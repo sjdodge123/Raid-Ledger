@@ -156,14 +156,12 @@ export class SignupsService {
     eventId: number,
     id: { userId?: number; discordUserId?: string },
     dto: UpdateSignupStatusDto,
+    opts: statusH.StatusChangeOptions = {},
   ): Promise<SignupResponseDto> {
     const signup = await cancelH.findSignupByIdentifier(this.db, eventId, id);
     const updated = await signupRowH.updateSignupById(this.db, signup.id, {
       status: dto.status,
     });
-    this.logger.log(
-      `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
-    );
     this.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: updated.userId,
@@ -175,7 +173,7 @@ export class SignupsService {
       this.allocationService,
       this.logger,
       updated,
-      dto.status,
+      { status: dto.status, ...opts },
     );
     return discordH.buildStatusUpdateResponse(this.db, updated);
   }
