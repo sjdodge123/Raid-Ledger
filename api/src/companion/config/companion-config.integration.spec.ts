@@ -34,6 +34,7 @@ import {
 } from '../ingest/companion-handler.registry';
 import { shadowBg3SaveHandler } from '../ingest/testing/shadow-bg3-save-handler';
 import { CompanionConfigOwners } from './companion-config-owners.service';
+import { loadConfigGameRows } from './companion-config-game.helpers';
 import { CompanionConfigService } from './companion-config.service';
 
 const CONFIG = '/companion/v1/config';
@@ -274,6 +275,27 @@ describe('ROK-2067 D13 game', () => {
       slug: 'baldurs-gate-iii',
       name: 'Game baldurs-gate-iii',
       coverUrl: 'https://itad.example/iii.jpg',
+    });
+  });
+
+  it('an empty-string cover counts as no cover (falls through to ITAD, else null)', async () => {
+    await seedBg3Games([
+      {
+        slug: 'baldurs-gate-iii',
+        coverUrl: '',
+        itadBoxartUrl: 'https://itad.example/iii.jpg',
+        hubs: 0,
+      },
+      { slug: 'baldurs-gate-3', coverUrl: '', itadBoxartUrl: '', hubs: 0 },
+    ]);
+    const rows = await loadConfigGameRows(testApp.db, [
+      'baldurs-gate-iii',
+      'baldurs-gate-3',
+    ]);
+    const covers = Object.fromEntries(rows.map((r) => [r.slug, r.coverUrl]));
+    expect(covers).toEqual({
+      'baldurs-gate-iii': 'https://itad.example/iii.jpg',
+      'baldurs-gate-3': null,
     });
   });
 

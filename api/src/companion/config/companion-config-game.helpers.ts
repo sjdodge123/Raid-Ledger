@@ -16,7 +16,10 @@ export interface ConfigGameRow {
   hubs: number;
 }
 
-/** `games` rows for `slugs` (cover = IGDB, else ITAD boxart) + hub counts. */
+/**
+ * `games` rows for `slugs` (cover = IGDB, else ITAD boxart; an empty string
+ * counts as no cover — `coverUrl` is `min(1)`) + hub counts.
+ */
 export async function loadConfigGameRows(
   db: PostgresJsDatabase<typeof schema>,
   slugs: readonly string[],
@@ -29,7 +32,7 @@ export async function loadConfigGameRows(
       name: games.name,
       coverUrl: sql<
         string | null
-      >`coalesce(${games.coverUrl}, ${games.itadBoxartUrl})`,
+      >`coalesce(nullif(${games.coverUrl}, ''), nullif(${games.itadBoxartUrl}, ''))`,
       hubs: sql<number>`count(${guilds.id})::int`,
     })
     .from(games)
