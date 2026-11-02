@@ -16,7 +16,7 @@ import { plugins } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { isMissingTableError } from '../../common/pg-error.helpers';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
-import { CORE_PLUGIN_ID, type PluginInfoDto } from '@raid-ledger/contract';
+import { type PluginInfoDto } from '@raid-ledger/contract';
 import {
   buildPluginInfo,
   resolveIntegrationInfo,
@@ -31,6 +31,10 @@ import {
   type AdapterOptionsFor,
   type HubOwnerRecord,
 } from './hub-ownership.helpers';
+import {
+  PluginStateCache,
+  type PluginInstallState,
+} from './plugin-state.cache';
 import {
   PluginAdapterStore,
   type AdapterRegistrationOptions,
@@ -48,8 +52,8 @@ export class PluginRegistryService
 {
   private readonly logger = new Logger(PluginRegistryService.name);
   private manifests = new Map<string, PluginManifest>();
-  /** Core is active even before its row exists (ROK-1969 D3). */
-  private activeSlugs = new Set<string>([CORE_PLUGIN_ID]);
+  /** Active + installed slugs, one refresh point (ROK-1969 D3, ROK-2067 D2). */
+  private readonly states = new PluginStateCache();
   private readonly hubOwners: HubOwnerRecord[] = [];
   private readonly store = new PluginAdapterStore((id) => this.isActive(id));
 
@@ -306,28 +310,29 @@ export class PluginRegistryService
     if (isAlwaysActive(slug) || this.manifests.get(slug)?.builtIn === true) {
       return true;
     }
-    return this.activeSlugs.has(slug);
+    return this.states.active.has(slug);
   }
   getActiveSlugsSync(): ReadonlySet<string> {
-    return this.activeSlugs;
+    return this.states.active;
+  }
+  /** Sync `active` / `inactive` / `not_installed` from the cache (ROK-2067). */
+  getPluginState(slug: string): PluginInstallState {
+    return this.states.stateOf(slug, this.isActive(slug));
   }
 
   private async refreshActiveCache(): Promise<void> {
     try {
-      const activeRecords = await this.db
-        .select({ slug: plugins.slug })
-        .from(plugins)
-        .where(eq(plugins.active, true));
-      this.activeSlugs = new Set([
-        CORE_PLUGIN_ID,
-        ...activeRecords.map((r) => r.slug),
-      ]);
+      this.states.replace(
+        await this.db
+          .select({ slug: plugins.slug, active: plugins.active })
+          .from(plugins),
+      );
     } catch (error: unknown) {
       if (isMissingTableError(error)) {
         this.logger.warn(
           'plugins table not found — plugin system disabled until migration is applied',
         );
-        this.activeSlugs = new Set<string>([CORE_PLUGIN_ID]);
+        this.states.replace([]);
       } else throw error;
     }
     // Adapters registered before their owner was known active (ROK-268).

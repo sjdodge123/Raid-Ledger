@@ -17,6 +17,7 @@ import {
   CompanionIngestErrorSchema,
   type CompanionConfig,
 } from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
@@ -32,10 +33,12 @@ import {
   type CompanionContractHandler,
 } from '../ingest/companion-handler.registry';
 import { shadowBg3SaveHandler } from '../ingest/testing/shadow-bg3-save-handler';
+import { CompanionConfigOwners } from './companion-config-owners.service';
 import { CompanionConfigService } from './companion-config.service';
 
 const CONFIG = '/companion/v1/config';
 const OWNER = BG3_PLUGIN_ID;
+const PLUGIN_NAME = "Baldur's Gate 3";
 
 let testApp: TestApp;
 let restoreHandler: (() => void) | undefined;
@@ -140,6 +143,8 @@ describe('I-23 authenticated callers', () => {
       maxBytes: expect.any(Number) as unknown,
       blobSlots: ['thumbnail'],
       cadence: { minIntervalSec: 300 },
+      plugin: { id: OWNER, name: PLUGIN_NAME, state: 'active' },
+      game: null,
     });
   });
 
@@ -149,24 +154,29 @@ describe('I-23 authenticated callers', () => {
     await plugins.deactivate(OWNER);
     try {
       const config = expectConfig(await getConfig(headers));
-      expect(bg3Of(config)?.enabled).toBe(false);
+      expect(bg3Of(config)).toMatchObject({
+        enabled: false,
+        plugin: { id: OWNER, name: PLUGIN_NAME, state: 'inactive' },
+      });
     } finally {
       await plugins.activate(OWNER);
     }
   });
 
-  it('no handler registered → bg3-save enabled:false with the default cadence', () => {
+  it('no handler registered → bg3-save enabled:false, default cadence, plugin + game null', async () => {
     const plugins = testApp.app.get(PluginRegistryService);
     const empty = new CompanionHandlerRegistry(plugins);
-    const config = new CompanionConfigService(empty).build({
-      userId: 1,
-      via: 'device',
-      deviceId: 1,
-      tokenHash: 'h',
-    });
+    const owners = testApp.app.get(CompanionConfigOwners);
+    const config = await new CompanionConfigService(
+      empty,
+      undefined,
+      owners,
+    ).build({ userId: 1, via: 'device', deviceId: 1, tokenHash: 'h' });
     expect(bg3Of(config)).toMatchObject({
       enabled: false,
       cadence: { minIntervalSec: 120 },
+      plugin: null,
+      game: null,
     });
   });
 
@@ -183,5 +193,106 @@ describe('I-23 authenticated callers', () => {
   it('a JWT-shaped garbage bearer → 401', async () => {
     const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOjF9.not-a-signature';
     expectUnauthorized(await getConfig(bearer(token)));
+  });
+});
+
+describe('ROK-2067 plugin state', () => {
+  it('owner uninstalled → plugin.state not_installed; reinstalled → active + enabled', async () => {
+    const headers = await deviceHeaders('ci-cfg-uninst');
+    const plugins = testApp.app.get(PluginRegistryService);
+    await plugins.deactivate(OWNER);
+    await plugins.uninstall(OWNER);
+    const off = bg3Of(expectConfig(await getConfig(headers)));
+    expect({ enabled: off?.enabled, plugin: off?.plugin }).toEqual({
+      enabled: false,
+      plugin: { id: OWNER, name: PLUGIN_NAME, state: 'not_installed' },
+    });
+    await plugins.ensureInstalled(OWNER);
+    await plugins.activate(OWNER);
+    const on = bg3Of(expectConfig(await getConfig(headers)));
+    expect({ enabled: on?.enabled, state: on?.plugin?.state }).toEqual({
+      enabled: true,
+      state: 'active',
+    });
+  });
+});
+
+interface Bg3GameSeed {
+  slug: string;
+  coverUrl: string | null;
+  itadBoxartUrl?: string;
+  hubs: number;
+}
+
+/** Insert one `games` row per seed, plus `hubs` active community hubs each. */
+async function seedBg3Games(seeds: Bg3GameSeed[]): Promise<void> {
+  for (const seed of seeds) {
+    const [game] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: `Game ${seed.slug}`,
+        slug: seed.slug,
+        coverUrl: seed.coverUrl,
+        itadBoxartUrl: seed.itadBoxartUrl ?? null,
+      })
+      .returning({ id: schema.games.id });
+    if (!game) throw new Error(`seed game ${seed.slug} not inserted`);
+    for (let i = 0; i < seed.hubs; i++) {
+      const name = `Hub ${seed.slug} ${i}`;
+      await testApp.db.insert(schema.guilds).values({
+        gameId: game.id,
+        kind: 'game_community',
+        region: 'community',
+        source: 'community',
+        name,
+        nameKey: name.toLowerCase(),
+        status: 'active',
+      });
+    }
+  }
+}
+
+describe('ROK-2067 D13 game', () => {
+  it('no hubs → the hub-manifest primary (baldurs-gate-iii), cover = ITAD boxart when IGDB is null', async () => {
+    await seedBg3Games([
+      {
+        slug: 'baldurs-gate-iii',
+        coverUrl: null,
+        itadBoxartUrl: 'https://itad.example/iii.jpg',
+        hubs: 0,
+      },
+      {
+        slug: 'baldurs-gate-3',
+        coverUrl: 'https://igdb.example/3.jpg',
+        hubs: 0,
+      },
+    ]);
+    const config = expectConfig(
+      await getConfig(await deviceHeaders('ci-cfg-g1')),
+    );
+    expect(bg3Of(config)?.game).toEqual({
+      slug: 'baldurs-gate-iii',
+      name: 'Game baldurs-gate-iii',
+      coverUrl: 'https://itad.example/iii.jpg',
+    });
+  });
+
+  it('most hubs wins; a coverless pick borrows the sibling cover, keeps its own name', async () => {
+    await seedBg3Games([
+      {
+        slug: 'baldurs-gate-iii',
+        coverUrl: 'https://igdb.example/iii.jpg',
+        hubs: 1,
+      },
+      { slug: 'baldurs-gate-3', coverUrl: null, hubs: 2 },
+    ]);
+    const config = expectConfig(
+      await getConfig(await deviceHeaders('ci-cfg-g2')),
+    );
+    expect(bg3Of(config)?.game).toEqual({
+      slug: 'baldurs-gate-3',
+      name: 'Game baldurs-gate-3',
+      coverUrl: 'https://igdb.example/iii.jpg',
+    });
   });
 });
