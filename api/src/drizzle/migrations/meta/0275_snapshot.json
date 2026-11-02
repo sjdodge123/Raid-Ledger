@@ -19896,7 +19896,7 @@
         },
         "bg3_saves_key_source_chk": {
           "name": "bg3_saves_key_source_chk",
-          "value": "\"bg3_saves\".\"campaign_key_source\" IN ('save-folder', 'game-id')"
+          "value": "\"bg3_saves\".\"campaign_key_source\" IN ('save-folder', 'game-id', 'file-name')"
         },
         "bg3_saves_thumbnail_sha_chk": {
           "name": "bg3_saves_thumbnail_sha_chk",
