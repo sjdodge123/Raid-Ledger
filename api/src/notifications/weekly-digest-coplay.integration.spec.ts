@@ -1,0 +1,259 @@
+/**
+ * ROK-2063 — the digest's co-play read against a real database. A game is
+ * "played together" when 2+ active guild members' `game_activity_sessions`
+ * overlap by ≥ 15 minutes inside the window, or an attended event for it had
+ * 2+ attended (active-member) signups. Solo play, short overlaps, sessions
+ * outside the window and non-members never qualify.
+ */
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { truncateAllTables } from '../common/testing/integration-helpers';
+import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
+import {
+  CO_PLAY_MIN_OVERLAP_MINUTES,
+  fetchCoPlayGames,
+  type CoPlayWindow,
+} from './weekly-digest-coplay.queries';
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+
+interface UserOpts {
+  seenInGuild?: boolean;
+  deactivated?: boolean;
+}
+
+let seq = 0;
+
+async function seedUser(t: TestApp, opts: UserOpts = {}): Promise<number> {
+  seq += 1;
+  const [u] = nonEmpty(
+    await t.db
+      .insert(schema.users)
+      .values({
+        discordId: `d:cp-${seq}`,
+        username: `cp-${seq}`,
+        role: 'member',
+        guildMemberSeenAt: opts.seenInGuild === false ? null : new Date(),
+        ...(opts.deactivated ? { deactivatedAt: new Date() } : {}),
+      })
+      .returning(),
+    'user',
+  );
+  return u.id;
+}
+
+async function seedGame(t: TestApp, name: string): Promise<number> {
+  const [g] = nonEmpty(
+    await t.db
+      .insert(schema.games)
+      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+      .returning(),
+    'game',
+  );
+  return g.id;
+}
+
+/** A session `startAgo` ms before `now`, ending `endAgo` ms before it (null = open). */
+async function seedSession(
+  t: TestApp,
+  now: Date,
+  userId: number,
+  gameId: number,
+  startAgo: number,
+  endAgo: number | null,
+): Promise<void> {
+  await t.db.insert(schema.gameActivitySessions).values({
+    userId,
+    gameId,
+    discordActivityName: 'game',
+    startedAt: new Date(now.getTime() - startAgo),
+    endedAt: endAgo === null ? null : new Date(now.getTime() - endAgo),
+  });
+}
+
+/** An event for `gameId` that ended `endAgo` ms ago, every user `attended`. */
+async function seedEvent(
+  t: TestApp,
+  now: Date,
+  gameId: number,
+  endAgo: number,
+  attendees: number[],
+): Promise<void> {
+  const creator = nonEmpty(attendees, 'attendees')[0];
+  const end = new Date(now.getTime() - endAgo);
+  const [e] = nonEmpty(
+    await t.db
+      .insert(schema.events)
+      .values({
+        title: `cp event ${String(endAgo)}`,
+        creatorId: creator,
+        gameId,
+        duration: [new Date(end.getTime() - 2 * HOUR), end],
+      })
+      .returning(),
+    'event',
+  );
+  for (const userId of attendees) {
+    await t.db
+      .insert(schema.eventSignups)
+      .values({ eventId: e.id, userId, attendanceStatus: 'attended' });
+  }
+}
+
+/** The digest's own week: the seven days ending at `now`. */
+function weekEnding(now: Date): CoPlayWindow {
+  return { start: new Date(now.getTime() - 7 * DAY), end: now };
+}
+
+describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
+  let testApp: TestApp;
+  let now: Date;
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+  beforeEach(() => {
+    now = new Date();
+  });
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  const read = () => fetchCoPlayGames(testApp.db, weekEnding(now), { now });
+
+  it('uses a 15-minute minimum overlap', () => {
+    expect(CO_PLAY_MIN_OVERLAP_MINUTES).toBe(15);
+  });
+
+  it('leaves out a game only one member played', async () => {
+    const solo = await seedUser(testApp);
+    const game = await seedGame(testApp, 'Solo Quest');
+    await seedSession(testApp, now, solo, game, 2 * DAY, 2 * DAY - 3 * HOUR);
+    await seedSession(testApp, now, solo, game, 1 * DAY, 1 * DAY - 3 * HOUR);
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('leaves out two members who overlapped for only 10 minutes', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const game = await seedGame(testApp, 'Short Overlap');
+    await seedSession(testApp, now, a, game, 2 * DAY, 2 * DAY - 60 * MIN);
+    await seedSession(testApp, now, b, game, 2 * DAY - 50 * MIN, 2 * DAY - 120 * MIN);
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('includes two members who overlapped for 20 minutes, players = 2', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const game = await seedGame(testApp, 'Valheim');
+    await seedSession(testApp, now, a, game, 2 * DAY, 2 * DAY - 60 * MIN);
+    await seedSession(testApp, now, b, game, 2 * DAY - 40 * MIN, 2 * DAY - 120 * MIN);
+    await expect(read()).resolves.toEqual([
+      { gameId: game, name: 'Valheim', slug: 'valheim', players: 2 },
+    ]);
+  });
+
+  it('counts only the members who overlapped: three played, two together', async () => {
+    const [a, b, c] = [
+      await seedUser(testApp),
+      await seedUser(testApp),
+      await seedUser(testApp),
+    ];
+    const game = await seedGame(testApp, 'Trio');
+    await seedSession(testApp, now, a, game, 3 * DAY, 3 * DAY - 2 * HOUR);
+    await seedSession(testApp, now, b, game, 3 * DAY - HOUR, 3 * DAY - 3 * HOUR);
+    await seedSession(testApp, now, c, game, 1 * DAY, 1 * DAY - 2 * HOUR);
+    const games = await read();
+    expect(games.map((g) => [g.gameId, g.players])).toEqual([[game, 2]]);
+  });
+
+  it('treats an open session (ended_at null) as running until now', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const game = await seedGame(testApp, 'Still Playing');
+    await seedSession(testApp, now, a, game, 2 * HOUR, null);
+    await seedSession(testApp, now, b, game, 30 * MIN, null);
+    const games = await read();
+    expect(games.map((g) => [g.gameId, g.players])).toEqual([[game, 2]]);
+  });
+
+  it('ignores co-play outside the window, and clips overlap at its start', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const old = await seedGame(testApp, 'Last Month');
+    const edge = await seedGame(testApp, 'Edge Case');
+    await seedSession(testApp, now, a, old, 20 * DAY, 20 * DAY - 2 * HOUR);
+    await seedSession(testApp, now, b, old, 20 * DAY, 20 * DAY - 2 * HOUR);
+    // 2 h together, but only the last 10 minutes fall inside the window.
+    const start = 7 * DAY + 110 * MIN;
+    const end = 7 * DAY - 10 * MIN;
+    await seedSession(testApp, now, a, edge, start, end);
+    await seedSession(testApp, now, b, edge, start, end);
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('does not let a non-member or a deactivated user complete a pair', async () => {
+    const member = await seedUser(testApp);
+    const guest = await seedUser(testApp, { seenInGuild: false });
+    const gone = await seedUser(testApp, { deactivated: true });
+    const game = await seedGame(testApp, 'Lonely');
+    for (const u of [member, guest, gone]) {
+      await seedSession(testApp, now, u, game, 2 * DAY, 2 * DAY - 2 * HOUR);
+    }
+    await expect(read()).resolves.toEqual([]);
+  });
+});
+
+describe('fetchCoPlayGames — events (ROK-2063, integration)', () => {
+  let testApp: TestApp;
+  let now: Date;
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+  beforeEach(() => {
+    now = new Date();
+  });
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  const read = () => fetchCoPlayGames(testApp.db, weekEnding(now), { now });
+
+  it('includes a game whose attended event had 2 attendees', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const game = await seedGame(testApp, 'Raid Night');
+    await seedEvent(testApp, now, game, 2 * DAY, [a, b]);
+    await expect(read()).resolves.toEqual([
+      { gameId: game, name: 'Raid Night', slug: 'raid-night', players: 2 },
+    ]);
+  });
+
+  it('leaves out a game whose event had a single attendee', async () => {
+    const a = await seedUser(testApp);
+    const game = await seedGame(testApp, 'Party Of One');
+    await seedEvent(testApp, now, game, 2 * DAY, [a]);
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('does not count a deactivated attendee toward the two', async () => {
+    const a = await seedUser(testApp);
+    const gone = await seedUser(testApp, { deactivated: true });
+    const game = await seedGame(testApp, 'Half Party');
+    await seedEvent(testApp, now, game, 2 * DAY, [a, gone]);
+    await expect(read()).resolves.toEqual([]);
+  });
+
+  it('ranks by players, most first', async () => {
+    const [a, b, c] = [
+      await seedUser(testApp),
+      await seedUser(testApp),
+      await seedUser(testApp),
+    ];
+    const duo = await seedGame(testApp, 'Duo Game');
+    const trio = await seedGame(testApp, 'Trio Game');
+    await seedEvent(testApp, now, duo, 2 * DAY, [a, b]);
+    await seedEvent(testApp, now, trio, 3 * DAY, [a, b, c]);
+    const games = await read();
+    expect(games.map((g) => [g.gameId, g.players])).toEqual([
+      [trio, 3],
+      [duo, 2],
+    ]);
+  });
+});

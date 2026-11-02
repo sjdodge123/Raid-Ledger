@@ -7,11 +7,12 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
-import type { GameDetailDto, GameDiscoverRowDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import type { LfgGroupAggregate } from '../lfg/lfg-query.helpers';
 import * as lfgQuery from '../lfg/lfg-query.helpers';
-import * as communityPlaying from '../igdb/igdb-discover-community-playing.helpers';
+import * as coPlayQueries from './weekly-digest-coplay.queries';
+import type { CoPlayGame } from './weekly-digest-coplay.queries';
+import { nonEmpty } from '../common/testing/narrow';
 import * as bestPriceHelpers from './weekly-digest-best-price.helpers';
 import * as recapHelpers from './weekly-digest-recap.helpers';
 import * as spotlightSources from './weekly-digest-spotlight-sources.helpers';
@@ -60,12 +61,9 @@ const UPCOMING: WeeklyUpcoming = {
   polls: [],
 };
 
-const PLAYING_ROW: GameDiscoverRowDto = {
-  category: 'c',
-  slug: 's',
-  games: [{ id: 1, name: 'Game 1', slug: 'game-1' } as GameDetailDto],
-  metadata: { '1': { playerCount: 2, totalSeconds: 1 } },
-};
+const CO_PLAY: CoPlayGame[] = [
+  { gameId: 1, name: 'Game 1', slug: 'game-1', players: 2 },
+];
 
 function group(): LfgGroupAggregate {
   return {
@@ -86,7 +84,7 @@ const none = () => Promise.resolve(null);
 
 function sources(overrides: Partial<DigestSources> = {}): DigestSources {
   return {
-    communityPlaying: () => Promise.resolve(PLAYING_ROW),
+    coPlayGames: () => Promise.resolve(CO_PLAY),
     recap: () => Promise.resolve(RECAP),
     priorRecap: () => Promise.resolve(PRIOR),
     milestones: () => Promise.resolve(emptyDigestMilestones()),
@@ -220,24 +218,21 @@ describe('buildDigestSources — production wiring (v2)', () => {
     expect(spy).toHaveBeenCalledWith(db);
   });
 
-  it('keeps LFG viewer-free and Been playing on the discover cache TTL', async () => {
+  it('keeps LFG viewer-free and reads Been playing from co-play over the last 7 days (ROK-2063)', async () => {
     const channel = jest
       .spyOn(lfgQuery, 'listActiveGroupsForChannel')
       .mockResolvedValue([]);
     const perViewer = jest.spyOn(lfgQuery, 'listActiveGroups');
     const playing = jest
-      .spyOn(communityPlaying, 'fetchCommunityPlayingRow')
-      .mockResolvedValue(PLAYING_ROW);
+      .spyOn(coPlayQueries, 'fetchCoPlayGames')
+      .mockResolvedValue(CO_PLAY);
     const built = buildDigestSources(db, redis);
     await built.lfgGroups();
-    await built.communityPlaying();
+    await expect(built.coPlayGames()).resolves.toEqual(CO_PLAY);
     expect(channel).toHaveBeenCalledWith(db);
     expect(perViewer).not.toHaveBeenCalled();
-    expect(playing).toHaveBeenCalledWith(
-      db,
-      redis,
-      expect.objectContaining({ slug: 'community-has-been-playing' }),
-      3600,
-    );
+    const [[calledDb, window]] = nonEmpty(playing.mock.calls, 'co-play call');
+    expect(calledDb).toBe(db);
+    expect(window.end.getTime() - window.start.getTime()).toBe(7 * 86_400_000);
   });
 });
