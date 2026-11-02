@@ -10,6 +10,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { TaggableHubsSchema, type TaggableHubs } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
+import { TAGGABLE_HUBS_PREFIX } from '../../../components/hub/community/invalidate-hub-membership';
 
 const STALE_MS = 60_000;
 
@@ -23,7 +24,7 @@ export function useTaggableHubsQuery(gameId: number | undefined): UseQueryResult
     const { isAuthenticated } = useAuth();
     const viewer = useViewerCacheScope();
     return useQuery({
-        queryKey: ['guilds', 'taggable', gameId, viewer],
+        queryKey: [...TAGGABLE_HUBS_PREFIX, gameId, viewer],
         queryFn: () => fetchTaggableHubs(gameId ?? 0),
         enabled: isAuthenticated && !!gameId,
         staleTime: STALE_MS,
