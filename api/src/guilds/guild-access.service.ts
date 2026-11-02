@@ -113,7 +113,9 @@ export class GuildAccessService {
     kind: GuildKind,
   ): Promise<boolean> {
     if (isStaff(actor)) return true;
-    const role = await this.hubKinds.require(kind).resolveLadder(actor, guildId);
+    const role = await this.hubKinds
+      .require(kind)
+      .resolveLadder(actor, guildId);
     return ladderCanEdit(role);
   }
 
