@@ -1,3 +1,5 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+
 /** Discord rejects a message with more than 5 action rows (error 50035). */
 export const MAX_ACTION_ROWS = 5;
 
@@ -31,4 +33,22 @@ export function capActionRows<T>(
     if (kept[i]?.series) kept.splice(i, 1);
   }
   return kept.slice(0, max).map((e) => e.row);
+}
+
+/** PUG invite unfurl row: "Join Event" (pug_join) + a "View Event" link. */
+export function buildInviteButtonRow(
+  code: string,
+  clientUrl: string,
+  eventId: number,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`pug_join:${code}`)
+      .setLabel('Join Event')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setLabel('View Event')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/events/${eventId}`),
+  );
 }

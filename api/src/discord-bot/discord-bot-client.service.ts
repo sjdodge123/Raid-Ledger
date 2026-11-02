@@ -33,32 +33,19 @@ import {
   listGuildTextChannels as listGuildTextChannelsHelper,
   listGuildVoiceChannels as listGuildVoiceChannelsHelper,
 } from './discord-bot-client.guild.helpers';
+import {
+  buildDmRows,
+  fetchReadyTextChannel,
+  toRows,
+  type EmbedRows,
+} from './discord-bot-client-message.helpers';
 
 export type {
   GuildInfo,
   PermissionCheckResult,
 } from './discord-bot-client.helpers';
 
-/**
- * ROK-1728: an embed's action rows — a single row (legacy callers) or the
- * ordered list from `embedComponents()` (row 1 + the series Join row).
- */
-export type EmbedRows =
-  ActionRowBuilder<ButtonBuilder> | readonly ActionRowBuilder<ButtonBuilder>[];
-
-/** Normalise {@link EmbedRows} to the mutable array discord.js expects. */
-function toRows(
-  rows: EmbedRows | undefined,
-): ActionRowBuilder<ButtonBuilder>[] {
-  if (!rows) return [];
-  return isRowList(rows) ? [...rows] : [rows];
-}
-
-function isRowList(
-  rows: EmbedRows,
-): rows is readonly ActionRowBuilder<ButtonBuilder>[] {
-  return Array.isArray(rows);
-}
+export type { EmbedRows } from './discord-bot-client-message.helpers';
 
 @Injectable()
 export class DiscordBotClientService {
@@ -163,10 +150,7 @@ export class DiscordBotClientService {
     }
     const start = isPerfEnabled() ? performance.now() : 0;
     const user = await this.client.users.fetch(discordId);
-
-    const components: ActionRowBuilder<ButtonBuilder>[] = [];
-    if (extraRows) components.push(...extraRows);
-    if (row) components.push(row);
+    const components = buildDmRows(row, extraRows);
 
     await user.send({
       ...(content ? { content } : {}),
@@ -385,14 +369,7 @@ export class DiscordBotClientService {
     );
   }
 
-  private async fetchTextChannel(channelId: string): Promise<TextChannel> {
-    if (!this.client?.isReady()) {
-      throw new Error('Discord bot is not connected');
-    }
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !('send' in channel)) {
-      throw new Error(`Channel ${channelId} not found or not a text channel`);
-    }
-    return channel as TextChannel;
+  private fetchTextChannel(channelId: string): Promise<TextChannel> {
+    return fetchReadyTextChannel(this.client, channelId);
   }
 }

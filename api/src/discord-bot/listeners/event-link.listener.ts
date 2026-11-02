@@ -3,9 +3,6 @@ import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
   ChannelType,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   type Message,
   type EmbedBuilder,
   type ActionRowBuilder as ActionRowType,
@@ -24,7 +21,12 @@ import {
   type EmbedContext,
 } from '../services/discord-embed.factory';
 import { type EmbedResult } from '../services/discord-embed.factory';
-import { capActionRows, unfurlRowEntries } from './event-link-rows.helpers';
+import {
+  buildInviteButtonRow,
+  capActionRows,
+  unfurlRowEntries,
+  type UnfurlRowEntry,
+} from './event-link-rows.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
@@ -128,7 +130,7 @@ export class EventLinkListener {
     clientUrl: string,
   ): Promise<UnfurlResult> {
     const embeds: EmbedBuilder[] = [];
-    const rows: Parameters<typeof capActionRows<UnfurlRow>>[0][number][] = [];
+    const rows: UnfurlRowEntry<UnfurlRow>[] = [];
     const eventIds: number[] = [];
     for (const id of parsed.eventIds) {
       const r = await this.unfurlEventLink(id, ctx);
@@ -325,21 +327,4 @@ interface InviteUnfurl {
   embed: EmbedBuilder;
   row: ActionRowType<ButtonType>;
   eventId: number;
-}
-
-function buildInviteButtonRow(
-  code: string,
-  clientUrl: string,
-  eventId: number,
-): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`pug_join:${code}`)
-      .setLabel('Join Event')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setLabel('View Event')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${clientUrl}/events/${eventId}`),
-  );
 }

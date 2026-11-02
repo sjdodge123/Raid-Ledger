@@ -27,7 +27,7 @@ function makeDeps(): SeriesInteractionDeps & {
 } {
   return {
     db: {} as SeriesInteractionDeps['db'],
-    logger: { warn: jest.fn(), log: jest.fn(), error: jest.fn() } as never,
+    logger: { warn: jest.fn(), log: jest.fn(), error: jest.fn() },
     seriesSignupsService: {
       getState: jest.fn(),
       join: jest.fn(),
