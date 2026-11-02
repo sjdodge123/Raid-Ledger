@@ -132,7 +132,7 @@ Write **why** for every degraded row. A widget that throws an error or shows wro
 There is **no global per-widget kill switch** on main. These are the real levers, smallest first:
 
 1. **It hides itself.** Every Forever widget has a `useVisible` gate (§4). No data means no card. Nothing to do.
-2. **Hide it on one hub.** A leader, officer or staff member uses **arrange mode** on the hub Overview to hide the widget (ROK-1918). API: `PATCH /api/guilds/:id/widget-prefs` (`api/src/guilds/hub.controller.ts:99`; service `api/src/guilds/hub-widget-prefs.service.ts`, guarded by `GuildEditorGuard`). Owner: Officer, or the Operator as admin.
+2. **Hide it on one hub.** A page editor (granted by name under **Page editors**; Guild Master rank alone is not enough, `GM_RANK_IMPLIES_EDIT = false` in `api/src/plugins/wow-common/guilds/wow-hub-kind.adapter.ts`) or an admin uses **arrange mode** on the hub Overview to hide the widget (ROK-1918). API: `PATCH /api/guilds/:id/widget-prefs` (`api/src/guilds/hub.controller.ts:99`; service `api/src/guilds/hub-widget-prefs.service.ts`, guarded by `GuildEditorGuard`). Owner: Officer, or the Operator as admin.
 3. **Revert the commit** that broke it. It reaches prod at the next 5 AM pull (§1.1). Do not stack a second fix (§1.2). Owner: Lead session opens the revert PR, Operator approves.
 4. **Last resort: deactivate the `blizzard` plugin** (`POST /api/admin/plugins/blizzard/deactivate`, `api/src/plugins/plugin-host/plugin-admin.controller.ts:77`; UI at `/admin/settings/plugins`). This hides **every** WoW guild-hub widget and stops its cron jobs, the probe included (`forever-namespace-probe.controller.ts:30-31`, `RequirePlugin('blizzard')`). Only the Operator decides this.
 
@@ -175,7 +175,7 @@ Paste into `rl_test_plan_create` on a main-built env. Seed **after** the fleet g
 | 3 | Check Who's saved and Recent dings. | Who's saved lists the seeded lockouts. Recent dings lists two rows (Aldren and Corvin). Dainel's ding is seeded 31 days ago, outside the 30-day feed, so it must NOT show. | `member` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 4 | Check Dungeon quests. | Shows for the seeded content event, or stays hidden with no error if none is upcoming. | `officer` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 5 | Visitor view. | Dungeon quests is hidden for the visitor. Nothing errors. | `outsider` | `https://slot-N.gamernight.net/hubs/<guildId>` |
-| 6 | Arrange mode: hide Recent dings, then show it again. | The card disappears and comes back. **reset_hint:** show the widget again. | `gm` | `https://slot-N.gamernight.net/hubs/<guildId>` |
+| 6 | Arrange mode: hide Recent dings, then show it again. | The card disappears and comes back. **reset_hint:** show the widget again. | `officer` (the seeded editor; `gm` has no Arrange until staff grant them by name) | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 7 | Admin: open the Blizzard card, add a realm ruleset row, run the probe. | The row saves. The probe returns a result with no 500. **reset_hint:** delete the row. | `admin@local` | `https://slot-N.gamernight.net/admin/settings/integrations` |
 | 8 | Admin: cron jobs page. | `forever-namespace-probe` and `forever-namespace-probe-launch` are listed. | `admin@local` | `https://slot-N.gamernight.net/admin/settings/general/cron-jobs` |
 

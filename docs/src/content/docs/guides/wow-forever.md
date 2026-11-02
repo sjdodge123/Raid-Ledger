@@ -111,6 +111,11 @@ If a roster changes a lot at once, Raid Ledger tells the guild's staff so they
 can check it.
 :::
 
+**Arranging the hub.** Only a page editor can move or hide the hub's cards.
+Being Guild Master in game doesn't make you one on its own, because anyone could
+paste an export that claims to be you. Ask your Raid Ledger admin to add you by
+name under **Page editors** on the guild hub.
+
 ## 5. Members: export your character
 
 1. Type `/rl export char`, or click **Export to Raid Ledger** in the LedgerLink panel
