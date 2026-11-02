@@ -20,6 +20,10 @@ export interface MemberInput {
   userId: number;
   displayName: string;
   avatarUrl: string | null;
+  /** ROK-2069: avatar inputs for the web's `toAvatarUser` (members-only route). */
+  avatar: string | null;
+  discordId: string | null;
+  customAvatarUrl: string | null;
   steamId: string | null;
   stats: StoredMemberStats | undefined;
   playtimeMinutes: number | null;
@@ -45,6 +49,9 @@ export function toMemberStats(m: MemberInput): SteamHubMemberStats {
     userId: m.userId,
     displayName: m.displayName,
     avatarUrl: m.avatarUrl,
+    avatar: m.avatar,
+    discordId: m.discordId,
+    customAvatarUrl: m.customAvatarUrl,
     status,
     unlockedCount: status === 'ok' ? (m.stats?.unlockedCount ?? 0) : null,
     playtimeMinutes: linked ? m.playtimeMinutes : null,

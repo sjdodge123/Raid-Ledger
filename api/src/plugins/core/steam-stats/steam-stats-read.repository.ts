@@ -30,6 +30,9 @@ export interface MemberRow {
   username: string;
   displayName: string | null;
   customAvatarUrl: string | null;
+  /** ROK-2069: Discord avatar hash + id for `toAvatarUser`. */
+  avatar: string | null;
+  discordId: string | null;
   steamId: string | null;
   stats: StoredMemberStats | undefined;
   playtimeMinutes: number | null;
@@ -62,6 +65,8 @@ const MEMBER_COLUMNS = {
   username: u.username,
   displayName: u.displayName,
   customAvatarUrl: u.customAvatarUrl,
+  avatar: u.avatar,
+  discordId: u.discordId,
   steamId: u.steamId,
   status: s.status,
   unlockedCount: s.unlockedCount,
@@ -193,6 +198,8 @@ function toMemberRow(r: {
   username: string;
   displayName: string | null;
   customAvatarUrl: string | null;
+  avatar: string | null;
+  discordId: string | null;
   steamId: string | null;
   status: StoredMemberStats['status'] | null;
   unlockedCount: number | null;
