@@ -43,10 +43,18 @@ describe('socketOriginAllowed', () => {
   });
 });
 
+/** Put one env key back as it was (deleting it when it was unset). */
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}
+
 describe('socketCorsOrigin', () => {
-  const saved = { ...process.env };
+  const savedOrigin = process.env.CORS_ORIGIN;
+  const savedMode = process.env.CORS_AUTO_MODE;
   afterEach(() => {
-    process.env = { ...saved };
+    restoreEnv('CORS_ORIGIN', savedOrigin);
+    restoreEnv('CORS_AUTO_MODE', savedMode);
   });
 
   it('reads CORS_ORIGIN at handshake time, not at module load', () => {
