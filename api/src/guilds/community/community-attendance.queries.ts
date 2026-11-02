@@ -14,6 +14,12 @@ import * as schema from '../../drizzle/schema';
 type Db = PostgresJsDatabase<typeof schema>;
 const { eventSignups, users } = schema;
 
+/**
+ * Row cap for the leaderboard. A community hub has no roster to bound the
+ * row count and the Events tab renders every row, so only the top N ship.
+ */
+export const COMMUNITY_ATTENDANCE_ROW_CAP = 50;
+
 /** Same order as the guild leaderboard: attended desc, then name (case-blind). */
 function compareAttendance(
   a: GuildAttendanceRowDto,
@@ -51,7 +57,16 @@ export async function loadCommunityAttendanceRows(
     )
     .groupBy(users.id);
   const of = eventIds.length;
-  return rows
-    .map((r) => ({ ...r, characterId: null, of }))
-    .sort(compareAttendance);
+  return rankAttendanceRows(rows.map((r) => ({ ...r, characterId: null, of })));
+}
+
+/**
+ * Sorts rows by attended desc then name (case-blind) and keeps the top
+ * `cap` — the cap applies AFTER the sort, so it keeps the leaders.
+ */
+export function rankAttendanceRows(
+  rows: GuildAttendanceRowDto[],
+  cap: number = COMMUNITY_ATTENDANCE_ROW_CAP,
+): GuildAttendanceRowDto[] {
+  return [...rows].sort(compareAttendance).slice(0, cap);
 }

@@ -10,6 +10,10 @@ import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { insertCommunityHub } from './community-proposals.queries';
 import { loadCommunityHubEvents } from './community-events.queries';
+import {
+  insertDecidedLineup,
+  insertSchedulingMatch,
+} from '../../lineups/standalone-poll/standalone-poll-query.helpers';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -59,6 +63,8 @@ interface EvOpts {
   /** Event end relative to now (negative = in the past). */
   endsInMs: number;
   cancelled?: boolean;
+  /** A real lineup match id — the event is mid-reschedule. */
+  reschedulingPollId?: number;
 }
 
 async function mkEvent(creatorId: number, e: EvOpts): Promise<number> {
@@ -73,6 +79,7 @@ async function mkEvent(creatorId: number, e: EvOpts): Promise<number> {
         duration: [new Date(end.getTime() - 3 * HOUR), end],
         guildId: e.hubId,
         cancelledAt: e.cancelled ? new Date() : null,
+        reschedulingPollId: e.reschedulingPollId ?? null,
       })
       .returning(),
     'event',
@@ -90,6 +97,34 @@ async function signup(
   await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId, userId, attendanceStatus });
+}
+
+/** An 'attended' signup with no user — an anonymous Discord participant. */
+async function anonymousSignup(eventId: number): Promise<void> {
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId,
+    userId: null,
+    discordUserId: next('anon-discord'),
+    discordUsername: 'anon',
+    attendanceStatus: 'attended',
+  });
+}
+
+/** A real scheduling-poll match, so an event can point `reschedulingPollId` at it. */
+async function mkPollId(creatorId: number): Promise<number> {
+  const lineup = await insertDecidedLineup(
+    testApp.db,
+    creatorId,
+    undefined,
+    null,
+  );
+  const match = await insertSchedulingMatch(
+    testApp.db,
+    lineup.id,
+    testApp.seed.game.id,
+    undefined,
+  );
+  return match.id;
 }
 
 beforeAll(async () => {
@@ -146,7 +181,7 @@ describe('community hub attendance leaderboard — ranking (ROK-2062)', () => {
 });
 
 describe('community hub attendance leaderboard — exclusions (ROK-2062)', () => {
-  it('excludes cancelled, unrecorded, out-of-window, other-hub and upcoming events and deactivated users', async () => {
+  it('excludes cancelled, rescheduling, unrecorded, out-of-window, other-hub and upcoming events, deactivated users and anonymous signups', async () => {
     const lead = await mkUser();
     const gone = await mkUser({ deactivated: true });
     const elsewhere = await mkUser();
@@ -155,6 +190,7 @@ describe('community hub attendance leaderboard — exclusions (ROK-2062)', () =>
     const counted = await mkEvent(lead, { hubId, endsInMs: -DAY });
     await signup(counted, lead, 'attended');
     await signup(counted, gone, 'attended');
+    await anonymousSignup(counted);
     const unrecorded = await mkEvent(lead, { hubId, endsInMs: -2 * DAY });
     await signup(unrecorded, lead, null);
     const excluded = [
@@ -162,6 +198,11 @@ describe('community hub attendance leaderboard — exclusions (ROK-2062)', () =>
       await mkEvent(lead, { hubId, endsInMs: -10 * WEEK }),
       await mkEvent(lead, { hubId: otherHub, endsInMs: -DAY }),
       await mkEvent(lead, { hubId, endsInMs: 2 * DAY }),
+      await mkEvent(lead, {
+        hubId,
+        endsInMs: -4 * DAY,
+        reschedulingPollId: await mkPollId(lead),
+      }),
     ];
     for (const id of excluded) {
       await signup(id, lead, 'attended');
