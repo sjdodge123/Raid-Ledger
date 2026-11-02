@@ -4,7 +4,7 @@
  * gets the same Host-aware policy as HTTP (see `socket-cors.ts`).
  */
 import { IoAdapter } from '@nestjs/platform-socket.io';
-import type { Server, ServerOptions } from 'socket.io';
+import type { ServerOptions } from 'socket.io';
 import { socketCorsDelegate } from './socket-cors';
 
 /** `IoAdapter` whose server always uses the handshake-time CORS delegate. */
@@ -13,11 +13,11 @@ export class SocketCorsIoAdapter extends IoAdapter {
   override createIOServer(
     port: number,
     options?: Partial<ServerOptions>,
-  ): Server {
-    const server: Server = super.createIOServer(port, {
+  ): unknown {
+    // IoAdapter types this as `any`; `unknown` keeps it from leaking.
+    return super.createIOServer(port, {
       ...options,
       cors: socketCorsDelegate,
     });
-    return server;
   }
 }

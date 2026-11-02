@@ -38,9 +38,9 @@ describe('socketOriginAllowed', () => {
   it('auto allows the same hostname on another port, like HTTP auto', () => {
     const env = { corsOrigin: 'auto' };
     const origin = 'http://raid.example.com:8080';
-    expect(socketOriginAllowed(origin, env, true, 'raid.example.com:3000')).toBe(
-      true,
-    );
+    expect(
+      socketOriginAllowed(origin, env, true, 'raid.example.com:3000'),
+    ).toBe(true);
     expect(socketOriginAllowed(SITE, env, true, 'raid.example.com')).toBe(true);
   });
 
@@ -106,10 +106,13 @@ describe('socketCorsDelegate', () => {
   it.each([
     ['LineupsGateway', LineupsGateway],
     ['AdHocEventsGateway', AdHocEventsGateway],
-  ])('%s leaves CORS to SocketCorsIoAdapter (no per-gateway cors)', (_n, gw) => {
-    const opts = Reflect.getMetadata(GATEWAY_OPTIONS, gw) as {
-      cors?: unknown;
-    };
-    expect(opts.cors).toBeUndefined();
-  });
+  ])(
+    '%s leaves CORS to SocketCorsIoAdapter (no per-gateway cors)',
+    (_n, gw) => {
+      const opts = Reflect.getMetadata(GATEWAY_OPTIONS, gw) as {
+        cors?: unknown;
+      };
+      expect(opts.cors).toBeUndefined();
+    },
+  );
 });

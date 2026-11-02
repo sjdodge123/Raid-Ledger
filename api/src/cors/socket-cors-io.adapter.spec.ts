@@ -4,7 +4,7 @@
  * engine.io polling handshake through `SocketCorsIoAdapter` and reads ACAO.
  */
 import { createServer } from 'http';
-import type { Server } from 'socket.io';
+import { Server } from 'socket.io';
 import request from 'supertest';
 import { SocketCorsIoAdapter } from './socket-cors-io.adapter';
 
@@ -27,9 +27,12 @@ describe('SocketCorsIoAdapter — polling handshake CORS', () => {
   beforeEach(() => {
     httpServer = createServer();
     // A gateway-supplied wildcard must not survive: the adapter owns `cors`.
-    io = new SocketCorsIoAdapter(httpServer).createIOServer(0, {
+    const created = new SocketCorsIoAdapter(httpServer).createIOServer(0, {
       cors: { origin: '*' },
     });
+    if (!(created instanceof Server))
+      throw new Error('expected a socket.io Server');
+    io = created;
   });
 
   afterEach(async () => {
