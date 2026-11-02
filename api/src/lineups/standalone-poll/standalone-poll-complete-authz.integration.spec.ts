@@ -32,6 +32,8 @@ import {
 import * as schema from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { nonEmpty } from '../../common/testing/narrow';
+import { CreateEventSchema } from '@raid-ledger/contract';
+import { assertSchedulingMatchUsable } from '../../events/event-poll-provenance.helpers';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -514,16 +516,57 @@ async function eventsFromPoll(matchId: number): Promise<number> {
   return rows.length;
 }
 
+/** The provenance check the lock-in binds (ROK-2039: POST /events refuses the field). */
+function provenance(
+  creatorId: number,
+  slotTime: Date,
+  extra: Record<string, unknown>,
+) {
+  const dto = CreateEventSchema.parse({
+    title: 'From Poll',
+    startTime: slotTime.toISOString(),
+    endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId: testApp.seed.game.id,
+    ...extra,
+  });
+  return assertSchedulingMatchUsable(testApp.db, dto, {
+    id: creatorId,
+    isStaff: false,
+  });
+}
+
 function describeAc6() {
-  it('stamps created_from_poll_id for the poll owner creating a same-game event', async () => {
+  it('stamps created_from_poll_id for the poll owner locking in a same-game event', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6ok');
+
+    const res = await testApp.request
+      .post(`/scheduling-polls/${matchId}/lock-in`)
+      .set('Authorization', `Bearer ${creator.token}`)
+      .send({
+        event: {
+          title: 'From Poll',
+          startTime: slotTime.toISOString(),
+          endTime: new Date(slotTime.getTime() + TWO_HOURS_MS).toISOString(),
+          gameId: testApp.seed.game.id,
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(await eventsFromPoll(matchId)).toBe(2);
+  });
+
+  it('ROK-2039: 400s POST /events carrying schedulingMatchId, pointing at lock-in, stamping nothing', async () => {
+    const { creator, matchId, slotTime } = await seedOwnPoll('ac6door');
 
     const res = await createEventFromPoll(creator.token, slotTime, {
       schedulingMatchId: matchId,
     });
 
-    expect(res.status).toBe(201);
-    expect(await eventsFromPoll(matchId)).toBe(2);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(
+      new RegExp(`/scheduling-polls/${matchId}/lock-in`),
+    );
+    expect(await eventsFromPoll(matchId)).toBe(1);
   });
 
   it("400s an event whose game is not the poll's game", async () => {
@@ -536,13 +579,12 @@ function describeAc6() {
       'other game',
     );
 
-    const res = await createEventFromPoll(creator.token, slotTime, {
-      gameId: other.id,
-      schedulingMatchId: matchId,
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/game must match/);
+    await expect(
+      provenance(creator.userId, slotTime, {
+        gameId: other.id,
+        schedulingMatchId: matchId,
+      }),
+    ).rejects.toThrow(/game must match/);
     expect(await eventsFromPoll(matchId)).toBe(1);
   });
 
@@ -550,33 +592,24 @@ function describeAc6() {
     const { matchId, slotTime } = await seedOwnPoll('ac6foreign');
     const stranger = await loginAsMember('ac6foreign-stranger');
 
-    const res = await createEventFromPoll(stranger.token, slotTime, {
-      schedulingMatchId: matchId,
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/your own poll/);
-    expect(await eventsFromPoll(matchId)).toBe(1);
+    await expect(
+      provenance(stranger.userId, slotTime, { schedulingMatchId: matchId }),
+    ).rejects.toThrow(/your own poll/);
   });
 
   it('400s a poll that is no longer open, and an unknown poll id', async () => {
     const { creator, matchId, slotTime } = await seedOwnPoll('ac6closed');
     expect((await complete(creator.token, matchId, {})).status).toBe(200);
 
-    const closed = await createEventFromPoll(creator.token, slotTime, {
-      schedulingMatchId: matchId,
-    });
-    const unknown = await createEventFromPoll(creator.token, slotTime, {
-      schedulingMatchId: 999_999,
-    });
-
-    expect(closed.status).toBe(400);
-    expect(closed.body.message).toMatch(/no longer open/);
-    expect(unknown.status).toBe(400);
-    expect(unknown.body.message).toMatch(/not found/);
+    await expect(
+      provenance(creator.userId, slotTime, { schedulingMatchId: matchId }),
+    ).rejects.toThrow(/no longer open/);
+    await expect(
+      provenance(creator.userId, slotTime, { schedulingMatchId: 999_999 }),
+    ).rejects.toThrow(/not found/);
   });
 }
 describe(
-  'ROK-1844 AC6 — schedulingMatchId on event create is validated',
+  'ROK-1844 AC6 — schedulingMatchId provenance is validated (lock-in door only, ROK-2039)',
   describeAc6,
 );
