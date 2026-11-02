@@ -18,6 +18,8 @@ import {
   withoutSecrets,
 } from './plan-auth.js';
 import { createApprovalAuth } from './approvals-auth.js';
+import { createApprovalContent } from './approvals-content.js';
+import { createPlanStepSource } from './approvals-plan-steps.js';
 import { createApprovalRoutes } from './approvals-routes.js';
 import { createApprovalStore } from './approvals-store.js';
 
@@ -141,11 +143,30 @@ const clientIp = (req) => {
 // ROK-1900 — "Pending approval" inbox. Its own RW mount (never under
 // test-plans, so plan-prune cannot reach it); fails closed without
 // RL_APPROVAL_TOKEN_SHA256 (approvals-auth.js).
+const approvalStore = createApprovalStore({ root: process.env.RL_APPROVALS_ROOT || join(STATE_DIR, 'approvals') });
+const approvalAuth = createApprovalAuth({
+  agentToken: RL_AGENT_TOKEN, inboxHashHex: process.env.RL_APPROVAL_TOKEN_SHA256,
+});
 const handleApprovals = createApprovalRoutes({
-  store: createApprovalStore({ root: process.env.RL_APPROVALS_ROOT || join(STATE_DIR, 'approvals') }),
-  auth: createApprovalAuth({ agentToken: RL_AGENT_TOKEN, inboxHashHex: process.env.RL_APPROVAL_TOKEN_SHA256 }),
+  store: approvalStore,
+  auth: approvalAuth,
   publicDomain: PUBLIC_DOMAIN,
   ipOf: clientIp,
+  // Unverdicted design/operator plan steps (D9). Called per request, after
+  // the plan loader below is initialised.
+  planSteps: (...a) => planStepSource(...a),
+});
+const handleApprovalContent = createApprovalContent({ store: approvalStore, auth: approvalAuth });
+const planStepSource = createPlanStepSource({
+  listSlugs: async () => {
+    try {
+      const ds = await readdir(TEST_PLANS_DIR, { withFileTypes: true });
+      return ds.filter((d) => d.isDirectory() && validSlug(d.name)).map((d) => d.name);
+    } catch (err) { if (err.code === 'ENOENT') return []; throw err; }
+  },
+  listPlans: (slug) => listPlans(slug),
+  publicDomain: PUBLIC_DOMAIN,
+  clean: (v) => stripWrapMaybe(v),
 });
 
 // Returns true if the IP's cumulative byte usage in the trailing
@@ -2089,7 +2110,7 @@ const gateTester = async (slug, planId, req, res) => {
     else sendJson(res, 500, { ok: false, error: 'plan_unreadable' });
     return false;
   }
-  if (testerAllowed(req, plan, RL_AGENT_TOKEN)) return true;
+  if (testerAllowed(req, plan, RL_AGENT_TOKEN, approvalAuth.keyOk)) return true;
   sendJson(res, 401, {
     ok: false,
     error: 'tester_token_required',
@@ -2158,6 +2179,7 @@ const dispatch = async (req, res) => {
     if (!rateLimitOk(req, res)) return;
   }
   if (await handleApprovals(req, res, pathOnly)) return;
+  if (await handleApprovalContent(req, res, pathOnly)) return;
   if (pathOnly === '/api/state') {
     await handleApiState(res);
     return;

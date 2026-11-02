@@ -42,9 +42,16 @@ export const agentDenial = (req, agentToken) => {
   return null;
 };
 
-export const testerAllowed = (req, plan, agentToken) =>
+// ROK-1900 D10: the operator's inbox key is also a tester credential on
+// every plan, so design/operator steps can be ruled from the inbox. It is
+// checked by the injected `inboxKeyOk(presented)` (approvals-auth keyOk —
+// digest compare against RL_APPROVAL_TOKEN_SHA256), from either the inbox
+// header or the tester header (a plan link opened with ?k=<inbox key>).
+export const testerAllowed = (req, plan, agentToken, inboxKeyOk = () => false) =>
   agentTokenOk(req, agentToken)
-  || tokenMatches(header(req, 'x-tester-token'), plan?.tester_token);
+  || tokenMatches(header(req, 'x-tester-token'), plan?.tester_token)
+  || [header(req, 'x-approval-token'), header(req, 'x-tester-token')]
+    .some((v) => typeof v === 'string' && v.length > 0 && inboxKeyOk(v) === true);
 
 // Drop server-only secrets from a plan before it is serialised.
 export const withoutSecrets = (plan) => {

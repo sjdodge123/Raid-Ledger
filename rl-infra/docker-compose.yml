@@ -345,6 +345,8 @@ services:
       - ./dashboard/plan-auth.js:/app/plan-auth.js:ro
       # ROK-1900: the approvals modules server.js imports mount with it too.
       - ./dashboard/approvals-auth.js:/app/approvals-auth.js:ro
+      - ./dashboard/approvals-content.js:/app/approvals-content.js:ro
+      - ./dashboard/approvals-plan-steps.js:/app/approvals-plan-steps.js:ro
       - ./dashboard/approvals-routes.js:/app/approvals-routes.js:ro
       - ./dashboard/approvals-store.js:/app/approvals-store.js:ro
       - ./dashboard/approvals-validate.js:/app/approvals-validate.js:ro
