@@ -31,6 +31,7 @@ import * as flowH from './signups-flow.helpers';
 import * as discordSignupH from './signups-discord-signup.helpers';
 import * as reconfirmH from './signups-reconfirm.helpers';
 import * as signupRowH from './signups-row.helpers';
+import * as statusH from './signups-status.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
@@ -169,15 +170,13 @@ export class SignupsService {
       signupId: updated.id,
       action: `status_changed_to_${dto.status}`,
     });
-    if (dto.status === 'tentative') {
-      this.allocationService
-        .checkTentativeDisplacement(eventId, signup.id)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
-    }
+    await statusH.afterStatusChange(
+      this.activityLog,
+      this.allocationService,
+      this.logger,
+      updated,
+      dto.status,
+    );
     return discordH.buildStatusUpdateResponse(this.db, updated);
   }
 

@@ -43,14 +43,17 @@ export function cancelledEventIdsOf(metadata: unknown): number[] {
   return value.filter((v: unknown): v is number => Number.isInteger(v));
 }
 
-/** The `series_left` audit of one membership: cancelled nights + its time. */
+/**
+ * The `series_left` audit of one membership: cancelled nights + its row id.
+ * Leave writes it AFTER its per-night `signup_cancelled` rows.
+ */
 async function findLeaveAudit(
   db: Tx,
   membershipId: number,
   userId: number,
-): Promise<{ eventIds: number[]; at: Date } | undefined> {
+): Promise<{ eventIds: number[]; auditId: number } | undefined> {
   const [row] = await db
-    .select({ metadata: al.metadata, createdAt: al.createdAt })
+    .select({ id: al.id, metadata: al.metadata })
     .from(al)
     .where(
       and(
@@ -59,18 +62,22 @@ async function findLeaveAudit(
         sql`${al.metadata}->>'seriesSignupId' = ${String(membershipId)}`,
       ),
     )
-    .orderBy(desc(al.createdAt))
+    .orderBy(desc(al.id))
     .limit(1);
   if (!row) return undefined;
-  return { eventIds: cancelledEventIdsOf(row.metadata), at: row.createdAt };
+  return { eventIds: cancelledEventIdsOf(row.metadata), auditId: row.id };
 }
 
-/** Nights the user acted on themselves after `since` (their own decision). */
+/**
+ * Nights the user acted on themselves after the leave audit (their own
+ * decision). Ordered by the serial id, not `created_at`: a JS Date truncates
+ * the µs timestamp, so a cancel in the leave's millisecond would read as later.
+ */
 async function findNightsTouchedSince(
   db: Tx,
   userId: number,
   eventIds: number[],
-  since: Date,
+  afterAuditId: number,
 ): Promise<Set<number>> {
   if (eventIds.length === 0) return new Set();
   const rows = await db
@@ -82,7 +89,7 @@ async function findNightsTouchedSince(
         eq(al.actorId, userId),
         inArray(al.entityId, eventIds),
         notInArray(al.action, SERIES_ACTIONS),
-        gt(al.createdAt, since),
+        gt(al.id, afterAuditId),
       ),
     );
   return new Set(rows.map((r) => r.eventId));
@@ -107,7 +114,7 @@ export async function findRevivableEventIds(
     db,
     userId,
     audit.eventIds,
-    audit.at,
+    audit.auditId,
   );
   return new Set(audit.eventIds.filter((id) => !touched.has(id)));
 }

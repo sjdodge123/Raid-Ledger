@@ -51,6 +51,7 @@ async function reviveOne(
   const signup = await deps.signups.signup(planned.eventId, userId, dto);
   if (signup.id !== planned.id || !isActiveStatus(signup.status))
     return SERIES_ERRORS.CHANGED;
+  // Re-signed but tag failed: the night stays active + untagged and is reported failed (as materializeNights).
   const tagged = await tagSignup(deps.db, signup.id, membership.id);
   return tagged ? null : SERIES_ERRORS.CHANGED;
 }
