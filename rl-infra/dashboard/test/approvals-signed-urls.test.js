@@ -43,6 +43,15 @@ const submit = (port) => call(port, 'POST', '/api/approvals', {
   },
 }).then((r) => { assert.equal(r.status, 201, `submit: ${r.text}`); return r.json.id; });
 
+// Flip one bit of the decoded MAC and re-encode. Editing the last base64url
+// character is NOT a tamper: for a 32-byte MAC its low 2 bits are padding, so
+// e.g. ...A and ...B decode to the same bytes (a 1-in-16 flake, ROK-1900).
+const tamperSig = (sig) => {
+  const bytes = Buffer.from(sig, 'base64url');
+  bytes[0] ^= 0x01;
+  return bytes.toString('base64url');
+};
+
 const signedFor = async (port, id) => {
   const r = await call(port, 'GET', `/api/approvals/${id}`, { headers: INBOX });
   assert.equal(r.status, 200);
@@ -58,7 +67,8 @@ test('signer: valid only for its own id + file, until exp; tamper/expiry/other f
   assert.equal(s.verify(ID_B, 'mockup.html', tok), false, 'same file name on another item');
   const [exp, sig] = tok.split('.');
   assert.equal(s.verify(ID_A, 'mockup.html', `${Number(exp) + 3600}.${sig}`), false, 'exp pushed out');
-  const flipped = `${sig.slice(0, -1)}${sig.endsWith('A') ? 'B' : 'A'}`;
+  const flipped = tamperSig(sig);
+  assert.notDeepEqual(Buffer.from(flipped, 'base64url'), Buffer.from(sig, 'base64url'), 'tamper changed the MAC bytes');
   assert.equal(s.verify(ID_A, 'mockup.html', `${exp}.${flipped}`), false, 'signature tampered');
   assert.equal(s.verify(ID_A, 'mockup.html', 'garbage'), false, 'malformed');
   assert.equal(createContentSigner({ now: () => t }).verify(ID_A, 'mockup.html', tok), false, 'other boot secret');
@@ -83,7 +93,8 @@ test('GET item mints signed URLs that carry no credential and serve only their o
   const t = mockup.split('?t=')[1];
   assert.equal((await raw(port, 'GET', `/approvals-content/${id}/shot-1.png?t=${t}`)).status, 403, 'other file');
   assert.equal((await raw(port, 'GET', `/approvals-content/${other}/mockup.html?t=${t}`)).status, 403, 'other item');
-  const tampered = `${t.slice(0, -2)}${t.endsWith('AA') ? 'BB' : 'AA'}`;
+  const [tExp, tSig] = t.split('.');
+  const tampered = `${tExp}.${tamperSig(tSig)}`;
   assert.equal((await raw(port, 'GET', `/approvals-content/${id}/mockup.html?t=${tampered}`)).status, 403, 'tampered');
   assert.equal((await raw(port, 'POST', mockup)).status, 405, 'read-only');
 });
