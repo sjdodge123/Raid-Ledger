@@ -44,7 +44,7 @@ import {
   withRulesetInference,
 } from './addon-import.service.helpers';
 import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
-import { flagIfRosterHeld } from './addon-import-guild.flag';
+import { flagIfRosterChanged } from './addon-import-guild.flag';
 import { readRaidPullScope } from './addon-import-raid.scope';
 import type { PullScope } from '../guilds/roster-insights/roster-insights.pull-scope';
 
@@ -91,12 +91,12 @@ export class AddonImportCreateService {
       // create's id only exists once `attempt` resolved).
       if (!facts.dryRun) {
         await this.afterApply(res.target.characterId, readRaidPullScope(res));
+        // ROK-2066: a wholesale roster change applied — tell staff.
+        await flagIfRosterChanged(this.db, userId, res, this.logger);
       }
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
-      // ROK-1794 AC4: both routes flag a held roster (Codex P2).
-      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await finishAttempt(this.audit, outcome);

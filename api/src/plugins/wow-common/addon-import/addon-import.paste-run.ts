@@ -7,7 +7,7 @@ import type {
   DecodedAddonImport,
   DecodedAddonPaste,
 } from './addon-import.decoder';
-import type { AddonApplyContext } from './addon-import-apply.types';
+import type { AddonApplyContext, RosterFlag } from './addon-import-apply.types';
 import { buildResult, runSection } from './addon-import.service.helpers';
 
 /**
@@ -115,11 +115,30 @@ export function buildPasteResult(
     buildResult(first.decoded, binding, first.outcome),
     runs,
   );
-  if (runs.length === 1) return top;
+  if (runs.length === 1) return withRosterFlag(top, runs);
   const anyStale = runs.some((r) => r.outcome.status === 'stale');
   const staleWarned = top.warnings.some((w) => w.code === 'STALE_EXPORT');
   if (anyStale && !staleWarned) top.warnings.push({ code: 'STALE_EXPORT' });
-  return { ...top, sections: runs.map(sectionResult) };
+  return withRosterFlag({ ...top, sections: runs.map(sectionResult) }, runs);
+}
+
+/**
+ * ROK-2066 — the applied guild section's wholesale-change flag. Symbol-keyed
+ * (off the JSON body); the services raise it to staff after commit.
+ */
+export const ROSTER_FLAG = Symbol('addon-import.rosterFlag');
+
+function withRosterFlag(
+  res: AddonImportResultDto,
+  runs: PasteSectionRun[],
+): AddonImportResultDto {
+  const flag = runs.find((r) => r.outcome.rosterFlag)?.outcome.rosterFlag;
+  if (!flag) return res;
+  const flagged: AddonImportResultDto & { [ROSTER_FLAG]: RosterFlag } = {
+    ...res,
+    [ROSTER_FLAG]: flag,
+  };
+  return flagged;
 }
 
 function markSnapshotUnchanged(
