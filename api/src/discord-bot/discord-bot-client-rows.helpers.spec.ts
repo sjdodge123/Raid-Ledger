@@ -3,7 +3,7 @@ import {
   buildDmRows,
   fetchReadyTextChannel,
   toRows,
-} from './discord-bot-client-message.helpers';
+} from './discord-bot-client-rows.helpers';
 
 const row = (n: number): ActionRowBuilder<ButtonBuilder> =>
   ({ n }) as unknown as ActionRowBuilder<ButtonBuilder>;

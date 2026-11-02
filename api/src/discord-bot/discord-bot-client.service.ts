@@ -38,14 +38,14 @@ import {
   fetchReadyTextChannel,
   toRows,
   type EmbedRows,
-} from './discord-bot-client-message.helpers';
+} from './discord-bot-client-rows.helpers';
 
 export type {
   GuildInfo,
   PermissionCheckResult,
 } from './discord-bot-client.helpers';
 
-export type { EmbedRows } from './discord-bot-client-message.helpers';
+export type { EmbedRows } from './discord-bot-client-rows.helpers';
 
 @Injectable()
 export class DiscordBotClientService {
@@ -200,10 +200,11 @@ export class DiscordBotClientService {
   ): Promise<Message> {
     const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
+    const components = toRows(row);
     const result = await channel.send({
       ...(content ? { content } : {}),
       embeds: [embed],
-      ...(toRows(row).length ? { components: toRows(row) } : {}),
+      ...(components.length ? { components } : {}),
     });
     if (start) {
       perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
