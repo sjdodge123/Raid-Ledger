@@ -9,6 +9,7 @@ import type { JSX } from 'react';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 import type { SteamHubMemberStats, SteamHubUnlock } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
+import { toAvatarUser } from '../../../lib/avatar';
 import { StatusChip } from '../../ui/status-chip';
 import { GuildMeter } from '../events/guild-meter';
 import { achievementA11y, achievementName, isRare, pctLabel, type SteamStatsRow } from './steam-stats.helpers';
@@ -22,8 +23,17 @@ export function SteamStatsSkeleton(): JSX.Element {
     );
 }
 
+/** ROK-2069: custom → Discord CDN → initials. `avatarUrl` (absolute custom URL) is the legacy fallback. */
 function Avatar({ member }: { member: SteamHubMemberStats | undefined }): JSX.Element {
-    return <AvatarWithFallback avatarUrl={member?.avatarUrl ?? null} username={member?.displayName ?? '?'} sizeClassName="h-6 w-6" alt="" />;
+    const user = member
+        ? toAvatarUser({
+            id: member.userId,
+            avatar: member.avatar ?? member.avatarUrl,
+            discordId: member.discordId,
+            customAvatarUrl: member.customAvatarUrl,
+        })
+        : null;
+    return <AvatarWithFallback user={user} username={member?.displayName ?? '?'} sizeClassName="h-6 w-6" alt="" />;
 }
 
 /** A ranked member list; `meterLabel` names each meter ("Karlach: 24 of 54 achievements"). */
