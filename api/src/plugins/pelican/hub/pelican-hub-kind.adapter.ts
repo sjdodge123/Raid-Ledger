@@ -107,7 +107,8 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
 
   /**
    * Events tagged to the hub (`events.guild_id`), same lists as a community
-   * hub. A server hub still has no roster, schedule or attendance widgets.
+   * hub (incl. the attendance leaderboard, ROK-2062). A server hub still has
+   * no roster or schedule widgets.
    * Before this it always answered empty, so a tagged Valheim session never
    * showed on its hub (prod, event 283, 2026-10-22).
    */
