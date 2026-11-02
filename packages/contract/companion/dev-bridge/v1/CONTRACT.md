@@ -31,6 +31,11 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Every response body, serialised, is **≤ 16 KiB** (`DEV_BRIDGE_PAGE_MAX_BYTES`).
   A list or text that would not fit is paged: the client passes `?cursor=` and
   the body carries `next` (an opaque cursor, or `null` on the last page).
+- **Every byte cap is UTF-8 bytes of the JSON serialisation**
+  (`devBridgeJsonBytes`), never characters — escaping (`"`, `\n`, `\u0001`) and
+  multi-byte text count. The schemas enforce each cap (a root-level `custom`
+  issue). Producers page `sv-raw.text` by serialised bytes, and `error.issues`
+  drops trailing issues to fit.
 
 ## Endpoints
 
@@ -56,10 +61,20 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
   accepts a filesystem path, URL, shell string or Lua.
 - `sv-parsed` hashes GUIDs (`guidHash`, lowercase hex) and reports counts, not
   names. `sv-raw` returns the file text as-is (operator's own LAN tool).
-- `probe-detail` pages a large result by `result.calls`: each page repeats the
-  other fields and carries a slice of the calls.
+- `probe-detail` pages a large result by **item** — a call result without its
+  `iterations`, or one iteration. Each page repeats the other fields (summary,
+  `request`, `error`) and carries the next items; a `forEach` call whose
+  iterations span pages repeats its `id`/`status`/`values` with the next slice
+  of `iterations` (clients merge by call `id`, iterations by `i`). One page
+  always fits: request ≤ 4 KiB + call head ≤ 3 KiB + one iteration ≤ 3 KiB +
+  the other fields at their maxima is ≤ 14,171 bytes
+  (`fixtures/probe-detail--max-page.json`).
+- `probe-detail.request` is the request in output form (defaults filled),
+  checked for shape only — NOT against the allowlist, so a stored probe stays
+  readable after the deny list grows.
 - `logs` lines are already redacted: a line holding `rlcd_…`, `rlcdev_…` or a
-  `Bearer` value other than `<redacted>` is invalid.
+  bearer value other than exactly `<redacted>` is invalid, in any letter case
+  (`bearer`, `BEARER`, `RLCDEV_`).
 - Probe `status`: `queued` → `answered` | `expired` (past `ttlHours`) |
   `rejected` (the stored result failed `probe-result`; `error` says why) |
   `cancelled` (after DELETE).
@@ -79,6 +94,9 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
   the flavor LedgerLink SavedVariables was last seen in) or a flavor folder
   name. `after` `PLAYER_LOGIN` (default) | `PLAYER_ENTERING_WORLD` |
   `GUILD_ROSTER_UPDATE`. `ttlHours` 1–168 (default 72). `calls` 1–40.
+- The whole request in output form (defaults filled), serialised, is
+  **≤ 4 KiB** (`DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES`) — it is echoed on every
+  `probe-detail` page.
 - Each call has an `id` (unique, `^[A-Za-z][A-Za-z0-9_]{0,31}$`) and **exactly
   one** of `fn` (call it) or `presence` (report `type()` of the path; nothing
   is called, takes no `args`/`forEach`).
@@ -101,12 +119,28 @@ same table. **Deny wins.** Words come from the `tokenizer` rule (camel-case +
    name (case-insensitive) — e.g. `GetQuestReward`, which completes a quest.
 3. Otherwise allowed only when the **first word of the last segment** is in
    `allowPrefixes` (`Get`, `Is`, `Has`, `Can`, `Unit`, `Num`; case-sensitive,
-   so `Cancel…`/`Isolate`/`getfenv` do not qualify) or the last segment is in
-   `allowExact`.
+   so `Cancel…`/`Isolate`/`getfenv` do not qualify) **and that segment holds
+   no `_`** (FrameXML handlers such as `UnitPopup_OnClick` are refused; real C
+   API leaf names never hold one), or the **whole path** is in `allowExact`
+   (so `time` is allowed, `SomeAddon.time` is not).
 4. `redact`: listed 1-based return slots (officer note of
    `GetGuildRosterInfo`) are replaced by `replacement` before storing.
 5. `examples.allowed` / `examples.denied` are shared test vectors every
-   implementation must agree on.
+   implementation must agree on. `examples.denyListed` all start with a read
+   prefix, so only the deny rules refuse them — one per `denyWords` /
+   `denyExact` entry; an implementation without a deny list fails them.
+   `examples.tokenizer` pins the word split (`segment` → `words`), including
+   acronym runs, digits and `_`.
+6. `denyWordPairs` is currently subsumed by `denyWords` (every pair word is
+   denied alone); it stays so a future pair whose words are harmless alone
+   needs no shape change. Implementations still apply it.
+7. Whole-word denies refuse some harmless reads, e.g. `GetTradeSkillInfo` /
+   `GetNumTradeSkills` (`trade`) and `IsAddOnLoadOnDemand` (`load`). Use
+   `presence`, or ask for an `allowlistVersion` change; do not spend a POST
+   discovering it.
+8. `allowlistVersion` bumps whenever any list changes. Adding a deny word or
+   `denyExact` name stays in v1 (deny wins on either side, so mixed pins stay
+   safe); removing one, or adding an allow prefix, needs an operator ruling.
 
 ## Probe result (`probe-result`)
 
@@ -119,15 +153,26 @@ What LedgerLinkProbe stores as a JSON string in
 - Values: leaves (string ≤512, number, boolean, null) or Lua tables as JSON
   arrays/objects, nested **at most 3 deep**, ≤40 entries per table, ≤40 return
   values per call. `presence` reports `values: ["<lua type>"]`.
-- The whole serialised result is ≤ 64 KiB (`DEV_BRIDGE_PROBE_RESULT_MAX_BYTES`);
-  anything cut sets `truncated`.
+- The whole serialised result is ≤ 64 KiB (`DEV_BRIDGE_PROBE_RESULT_MAX_BYTES`)
+  and each item — a call result without `iterations`, or one iteration — is
+  ≤ 3 KiB (`DEV_BRIDGE_RESULT_ITEM_MAX_BYTES`). The addon cuts trailing values
+  to meet them and sets `truncated` (on the call and the result).
+- A `forEach` call's top-level `status` is `ok` when `countFrom` returned a
+  number (its own `values` omitted, per-index outcomes in `iterations`), and
+  `error` with no `iterations` when it did not.
 
 ## Queue file (data, never code)
 
 rl-companion writes `<flavor>/Interface/AddOns/LedgerLinkProbe/Queue.lua` as
-the single assignment `RaidLedgerProbeQueue = [==[<json array of pending
-probe-request bodies, each with its probeId>]==]`, choosing the long-bracket
-level so the JSON cannot close it, written atomically (temp + rename).
+the single assignment `RaidLedgerProbeQueue = [==[<JSON>]==]`, choosing the
+long-bracket level so the JSON cannot close it, written atomically (temp +
+rename). The JSON is `$defs/probe-queue`:
+`{ "queueVersion": 1, "probes": [ … ≤50 … ] }`, oldest first. Each entry is the
+POST body in **output form** (`title`, `flavor`, `after`, `ttlHours`, `calls` all
+present), `flavor` resolved to the folder the file sits in (never `auto`),
+plus the companion-assigned `probeId`; the allowlist and the 4 KiB request cap
+apply. `fixtures/probe-queue.json` carries an arg holding `]]`, `]==]`, a
+quote, a backslash and a newline.
 
 ## Fixtures
 
