@@ -8,11 +8,13 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { toContentInstanceCards } from '../../events/event-content-cards.helpers';
+import { loadCommunityAttendanceRows } from './community-attendance.queries';
 
 /**
  * ROK-1870 L3 — the core "events tagged to this hub" read (`events.guild_id`)
  * behind a community hub's Events tab. A core port of the WoW plugin's
- * upcoming/recent lists (no roster, so no schedule/composition/attendance).
+ * upcoming/recent lists and attendance leaderboard (ROK-2062). No roster, so
+ * no schedule/composition.
  */
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -35,6 +37,13 @@ const signupCount = (where: SQL): SQL<number> =>
 
 const LIVE = sql.raw(`s.status in ('signed_up', 'tentative')`);
 const SIGNED = sql.raw(`s.status in ('signed_up', 'tentative', 'departed')`);
+
+/** Ended in the look-back window `(since, now]`. */
+const endedBetween = (since: Date, now: Date): SQL =>
+  sql`${ends} <= ${at(now)} and ${ends} > ${at(since)}`;
+
+const windowStart = (now: Date): Date =>
+  new Date(now.getTime() - WINDOW_WEEKS * WEEK_MS);
 
 function hubEvents(guildId: number): SQL | undefined {
   return and(
@@ -97,7 +106,6 @@ async function loadRecent(
   guildId: number,
   now: Date,
 ): Promise<GuildRecentEventDto[]> {
-  const since = new Date(now.getTime() - WINDOW_WEEKS * WEEK_MS);
   const rows = await db
     .select({
       id: events.id,
@@ -108,12 +116,7 @@ async function loadRecent(
       recorded: signupCount(sql.raw(`s.attendance_status is not null`)),
     })
     .from(events)
-    .where(
-      and(
-        hubEvents(guildId),
-        sql`${ends} <= ${at(now)} and ${ends} > ${at(since)}`,
-      ),
-    )
+    .where(and(hubEvents(guildId), endedBetween(windowStart(now), now)))
     .orderBy(desc(ends))
     .limit(HUB_EVENTS_LIMIT);
   return rows.map((r) => ({
@@ -125,23 +128,48 @@ async function loadRecent(
   }));
 }
 
-/** The hub's Events tab payload: upcoming + recent tagged events. */
+/**
+ * The hub's window events where attendance was taken (≥1 signup with a
+ * recorded `attendance_status`) — the leaderboard's `of` (guild P9 parity).
+ */
+async function recordedEventIds(
+  db: Db,
+  guildId: number,
+  now: Date,
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        hubEvents(guildId),
+        endedBetween(windowStart(now), now),
+        sql`exists (select 1 from ${eventSignups} s where s.event_id = ${outerEventId} and s.attendance_status is not null)`,
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
+/** The hub's Events tab payload: upcoming + recent tagged events + attendance. */
 export async function loadCommunityHubEvents(
   db: Db,
   guildId: number,
   viewerId: number,
   now: Date = new Date(),
 ): Promise<GuildRaidsDto> {
-  const [upcoming, recent] = await Promise.all([
+  const [upcoming, recent, attendanceRows] = await Promise.all([
     loadUpcoming(db, guildId, viewerId, now),
     loadRecent(db, guildId, now),
+    recordedEventIds(db, guildId, now).then((ids) =>
+      loadCommunityAttendanceRows(db, ids),
+    ),
   ]);
   return {
     upcoming,
     recent,
     schedule: [],
     composition: null,
-    attendance: { windowWeeks: WINDOW_WEEKS, rows: [] },
+    attendance: { windowWeeks: WINDOW_WEEKS, rows: attendanceRows },
     nextRaid: upcoming.find((c) => new Date(c.startTime) > now) ?? null,
   };
 }

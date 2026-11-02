@@ -96,7 +96,7 @@ beforeAll(async () => {
   testApp = await getTestApp();
 });
 
-describe('community hub attendance leaderboard (ROK-2062)', () => {
+describe('community hub attendance leaderboard — ranking (ROK-2062)', () => {
   it('ranks attendees by attended desc then name over ended attendance-taken events', async () => {
     const tag = next('n');
     const alpha = await mkUser({ displayName: `Alpha ${tag}` });
@@ -112,16 +112,40 @@ describe('community hub attendance leaderboard (ROK-2062)', () => {
     await signup(e2, charlie, 'no_show');
     await signup(e2, bravo, 'attended');
 
-    const { attendance } = await loadCommunityHubEvents(testApp.db, hubId, alpha);
+    const { attendance } = await loadCommunityHubEvents(
+      testApp.db,
+      hubId,
+      alpha,
+    );
 
     expect(attendance.windowWeeks).toBe(8);
     expect(attendance.rows).toEqual([
-      { userId: alpha, characterId: null, name: `Alpha ${tag}`, attended: 2, of: 2 },
-      { userId: bravo, characterId: null, name: `bravo-${tag}`, attended: 1, of: 2 },
-      { userId: charlie, characterId: null, name: `Charlie ${tag}`, attended: 1, of: 2 },
+      {
+        userId: alpha,
+        characterId: null,
+        name: `Alpha ${tag}`,
+        attended: 2,
+        of: 2,
+      },
+      {
+        userId: bravo,
+        characterId: null,
+        name: `bravo-${tag}`,
+        attended: 1,
+        of: 2,
+      },
+      {
+        userId: charlie,
+        characterId: null,
+        name: `Charlie ${tag}`,
+        attended: 1,
+        of: 2,
+      },
     ]);
   });
+});
 
+describe('community hub attendance leaderboard — exclusions (ROK-2062)', () => {
   it('excludes cancelled, unrecorded, out-of-window, other-hub and upcoming events and deactivated users', async () => {
     const lead = await mkUser();
     const gone = await mkUser({ deactivated: true });
@@ -144,10 +168,20 @@ describe('community hub attendance leaderboard (ROK-2062)', () => {
       await signup(id, elsewhere, 'attended');
     }
 
-    const { attendance } = await loadCommunityHubEvents(testApp.db, hubId, lead);
+    const { attendance } = await loadCommunityHubEvents(
+      testApp.db,
+      hubId,
+      lead,
+    );
 
     expect(attendance.rows).toEqual([
-      { userId: lead, characterId: null, name: expect.any(String), attended: 1, of: 1 },
+      {
+        userId: lead,
+        characterId: null,
+        name: expect.any(String),
+        attended: 1,
+        of: 1,
+      },
     ]);
   });
 
@@ -157,7 +191,11 @@ describe('community hub attendance leaderboard (ROK-2062)', () => {
     const ev = await mkEvent(lead, { hubId, endsInMs: -DAY });
     await signup(ev, lead, null);
 
-    const { attendance } = await loadCommunityHubEvents(testApp.db, hubId, lead);
+    const { attendance } = await loadCommunityHubEvents(
+      testApp.db,
+      hubId,
+      lead,
+    );
 
     expect(attendance).toEqual({ windowWeeks: 8, rows: [] });
   });
