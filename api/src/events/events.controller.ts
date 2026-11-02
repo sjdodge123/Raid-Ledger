@@ -40,7 +40,7 @@ import {
 import type { PublicEventResponseDto } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
-import { assertSchedulingMatchUsable } from './event-poll-provenance.helpers';
+import { rejectSchedulingMatchOnCreate } from './event-create-scheduling-match.guard';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import {
   findEventsForViewer,
@@ -78,11 +78,8 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = CreateEventSchema.parse(body);
+      rejectSchedulingMatchOnCreate(dto);
       await this.guildTag.assertCreate(req.user, dto);
-      await assertSchedulingMatchUsable(this.db, dto, {
-        id: req.user.id,
-        isStaff: isOperatorOrAdmin(req.user.role),
-      });
       const deps = {
         eventsService: this.eventsService,
         signupsService: this.signupsService,
