@@ -300,6 +300,8 @@ async function lockIn(
     ...(benchUserIds ? { benchUserIds } : {}),
   });
   if (res.benchPickFallback !== false) {
+    // The event already exists — delete it before throwing, or it lingers in the shared guild.
+    await deleteEvent(api, res.event.id).catch(() => null);
     throw new Error(
       `bench pick fell back: lock-in returned benchPickFallback=${String(res.benchPickFallback)} for pick ${JSON.stringify(benchUserIds ?? [])}`,
     );
