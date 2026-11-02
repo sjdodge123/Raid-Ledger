@@ -6,8 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import { call, makeStateDir, startServer } from './auth-harness.js';
-import { createClientIp } from '../client-ip.js';
-import { createApprovalLimits } from '../approvals-limits.js';
+import { createClientIp, touchBucket } from '../client-ip.js';
+import { createApprovalLimits, preGate } from '../approvals-limits.js';
 import { createApprovalContent } from '../approvals-content.js';
 import { createContentSigner } from '../approvals-sign.js';
 
@@ -54,11 +54,11 @@ test('behind a trusted proxy each CF-Connecting-IP has its own auth-failure and 
   assert.equal((await guess(port, '203.0.113.1', 9)).status, 429, 'the guessing visitor is locked out');
   const other = await guess(port, '203.0.113.2', 9);
   assert.equal(other.status, 401, `another visitor behind the same proxy is not locked out: ${other.text}`);
-  // Reads: 203.0.113.1 has used 2 of 4 (the locked-out guess is answered
-  // before the read cap); two more pass, the next is capped, while
-  // 203.0.113.3 is untouched.
+  // Reads: 203.0.113.1 has used 3 of 4 (the read cap runs before the
+  // lockout, so the locked-out guess counts too); one more passes, the next
+  // is capped, while 203.0.113.3 is untouched.
   const read = (cf) => call(port, 'GET', '/api/approvals', { headers: { 'x-approval-token': INBOX_KEY, 'cf-connecting-ip': cf } });
-  for (let i = 0; i < 2; i += 1) assert.equal((await read('203.0.113.1')).status, 200, 'valid key on a locked-out visitor');
+  assert.equal((await read('203.0.113.1')).status, 200, 'valid key on a locked-out visitor');
   assert.equal((await read('203.0.113.1')).status, 429, 'read cap is per visitor');
   assert.equal((await read('203.0.113.3')).status, 200, 'other visitor reads freely');
 });
@@ -90,4 +90,58 @@ test('an expired-but-genuine ?t= is 403 content_token_expired and is not counted
   const forged = await get(url.replace(/\.[^.]+$/, `.${'A'.repeat(43)}`));
   assert.match(forged.body, /content_token_invalid/);
   assert.equal(limits.lockedOut('203.0.113.9'), true, 'a forged token counts');
+});
+
+// Round-4 MINOR: the read cap runs before the valid-header-auth lockout
+// exemption, so a locked-out IP cannot try keys unthrottled and read
+// 429-vs-200 as an oracle.
+const fakeRes = () => {
+  const r = { status: 0, body: '' };
+  r.writeHead = (st) => { r.status = st; };
+  r.end = (b) => { r.body = String(b ?? ''); };
+  return r;
+};
+test('a locked-out IP spends its read budget on every guess, so the valid key is no unthrottled oracle', () => {
+  const ip = '198.51.100.9';
+  const limits = createApprovalLimits({ env: { RL_APPROVAL_READ_MAX: '3', RL_APPROVAL_AUTH_FAIL_MAX: '1' } });
+  limits.recordFailure(ip);
+  const auth = { isOperator: (req) => req.headers['x-approval-token'] === 'the-real-key', isAgent: () => false };
+  const get = (tok) => {
+    const r = fakeRes();
+    const answered = preGate(limits, ip, { method: 'GET', headers: { 'x-approval-token': tok } }, r, auth);
+    return { answered, ...r };
+  };
+  for (let i = 0; i < 3; i += 1) assert.match(get(`guess-${i}`).body, /too_many_auth_failures/);
+  const probe = get('the-real-key');
+  assert.equal(probe.status, 429, 'the locked-out guesses must have used the read cap; the valid key must not get through');
+  assert.match(probe.body, /rate_limit_exceeded/);
+});
+
+test('a LAN client connecting directly and rotating CF-Connecting-IP / XFF gets ONE bucket', () => {
+  for (const env of [{}, { RL_TRUSTED_PROXY_CIDRS: '172.18.0.0/16' }]) {
+    const ips = createClientIp({ env });
+    const limits = createApprovalLimits({ env: { RL_APPROVAL_AUTH_FAIL_MAX: '3' } });
+    const keys = new Set();
+    for (let i = 0; i < 5; i += 1) {
+      const ip = ips.clientIp(reqFrom('192.168.0.50', { 'cf-connecting-ip': `203.0.113.${i}`, 'x-forwarded-for': `198.51.100.${i}` }));
+      keys.add(ip);
+      limits.recordFailure(ip);
+    }
+    assert.deepEqual([...keys], ['192.168.0.50'], 'keyed by the socket peer only');
+    assert.equal(limits.lockedOut('192.168.0.50'), true, 'all rotated guesses land in the one bucket');
+  }
+});
+
+test('bucket maps are bounded with O(1) least-recently-touched eviction', () => {
+  const m = new Map();
+  for (const k of ['a', 'b', 'c']) touchBucket(m, k, [1], 3);
+  touchBucket(m, 'a', [2], 3); // a becomes newest
+  touchBucket(m, 'd', [1], 3); // evicts b, the oldest
+  assert.deepEqual([...m.keys()], ['c', 'a', 'd']);
+  const limits = createApprovalLimits({ env: { RL_APPROVAL_READ_MAX: '1' }, bucketCap: 2 });
+  assert.equal(limits.readOk('ip-1'), true);
+  assert.equal(limits.readOk('ip-1'), false, 'ip-1 is capped');
+  limits.readOk('ip-2');
+  limits.readOk('ip-3'); // third key past cap 2: ip-1 (least recent) is evicted
+  assert.equal(limits.readOk('ip-1'), true, 'the evicted bucket starts fresh — the map never exceeds the cap');
 });

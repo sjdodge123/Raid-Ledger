@@ -13,6 +13,8 @@
 //
 // Caps come from env (RL_APPROVAL_*) so tests can shrink them; defaults suit
 // one operator plus a handful of agents.
+import { touchBucket } from './client-ip.js';
+
 const MAP_CAP = 10_000;
 
 const intEnv = (v, d) => {
@@ -21,18 +23,16 @@ const intEnv = (v, d) => {
 };
 
 // Sliding-window counter per key. hit() records and reports whether the key
-// is still within `max`; over() only checks.
-const windowCounter = (max, windowMs, now) => {
+// is still within `max`; over() only checks. At most `cap` keys, evicted
+// least-recently-touched first in O(1) (client-ip.js touchBucket).
+const windowCounter = (max, windowMs, now, cap) => {
   const buckets = new Map();
   const fresh = (key) => {
     const cutoff = now() - windowMs;
     const stamps = (buckets.get(key) ?? []).filter((t) => t > cutoff);
-    buckets.set(key, stamps);
+    if (stamps.length) touchBucket(buckets, key, stamps, cap);
+    else buckets.delete(key);
     return stamps;
-  };
-  const sweep = () => {
-    if (buckets.size <= MAP_CAP) return;
-    for (const k of [...buckets.keys()]) if (fresh(k).length === 0) buckets.delete(k);
   };
   return {
     over: (key) => fresh(key).length >= max,
@@ -40,17 +40,17 @@ const windowCounter = (max, windowMs, now) => {
       const stamps = fresh(key);
       if (stamps.length >= max) return false;
       stamps.push(now());
-      sweep();
+      touchBucket(buckets, key, stamps, cap);
       return true;
     },
   };
 };
 
 export const createApprovalLimits = ({
-  env = process.env, now = () => Date.now(),
+  env = process.env, now = () => Date.now(), bucketCap = MAP_CAP,
 } = {}) => {
-  const reads = windowCounter(intEnv(env.RL_APPROVAL_READ_MAX, 240), 60_000, now);
-  const fails = windowCounter(intEnv(env.RL_APPROVAL_AUTH_FAIL_MAX, 20), 10 * 60_000, now);
+  const reads = windowCounter(intEnv(env.RL_APPROVAL_READ_MAX, 240), 60_000, now, bucketCap);
+  const fails = windowCounter(intEnv(env.RL_APPROVAL_AUTH_FAIL_MAX, 20), 10 * 60_000, now, bucketCap);
   const submitMax = intEnv(env.RL_APPROVAL_SUBMIT_CONCURRENCY, 2);
   let inFlight = 0;
   return Object.freeze({
@@ -80,14 +80,16 @@ export const sendTooMany = (res, error, retryAfter) => {
 const headerAuthed = (auth, req) => Boolean(auth && (auth.isOperator(req) || auth.isAgent(req)));
 
 // Shared gate for both approval handlers. Returns true when it already answered.
-// The read cap still applies to everyone, per client IP (client-ip.js).
+// The read cap runs FIRST, for everyone, per client IP (client-ip.js): a
+// locked-out IP's guesses spend its read budget too, so it cannot try keys
+// unthrottled and read 429-vs-200 as an oracle for the valid-auth exemption.
 export const preGate = (limits, ip, req, res, auth = null) => {
+  const isRead = req.method === 'GET' || req.method === 'HEAD';
+  if (isRead && !limits.readOk(ip)) { sendTooMany(res, 'rate_limit_exceeded', 60); return true; }
   if (limits.lockedOut(ip) && !headerAuthed(auth, req)) {
     sendTooMany(res, 'too_many_auth_failures', 600);
     return true;
   }
-  const isRead = req.method === 'GET' || req.method === 'HEAD';
-  if (isRead && !limits.readOk(ip)) { sendTooMany(res, 'rate_limit_exceeded', 60); return true; }
   return false;
 };
 

@@ -18,7 +18,7 @@ import {
   withoutSecrets,
 } from './plan-auth.js';
 import { createApprovalAuth } from './approvals-auth.js';
-import { createClientIp } from './client-ip.js';
+import { createClientIp, touchBucket } from './client-ip.js';
 import { createApprovalContent } from './approvals-content.js';
 import { createApprovalLimits } from './approvals-limits.js';
 import { createContentSigner } from './approvals-sign.js';
@@ -175,14 +175,7 @@ const byteQuotaOk = (req, res, nextBytes) => {
     return false;
   }
   samples.push({ ts: now, bytes: nextBytes });
-  byteBuckets.set(ip, samples);
-  if (byteBuckets.size > RATE_LIMIT_MAP_CAP) {
-    for (const [k, v] of byteBuckets) {
-      const fresh = v.filter((s) => s.ts > cutoff);
-      if (fresh.length === 0) byteBuckets.delete(k);
-      else byteBuckets.set(k, fresh);
-    }
-  }
+  touchBucket(byteBuckets, ip, samples, RATE_LIMIT_MAP_CAP);
   return true;
 };
 
@@ -202,14 +195,7 @@ const rateLimitOk = (req, res) => {
     return false;
   }
   stamps.push(now);
-  rateBuckets.set(ip, stamps);
-  if (rateBuckets.size > RATE_LIMIT_MAP_CAP) {
-    for (const [k, v] of rateBuckets) {
-      const fresh = v.filter((t) => t > cutoff);
-      if (fresh.length === 0) rateBuckets.delete(k);
-      else rateBuckets.set(k, fresh);
-    }
-  }
+  touchBucket(rateBuckets, ip, stamps, RATE_LIMIT_MAP_CAP);
   return true;
 };
 

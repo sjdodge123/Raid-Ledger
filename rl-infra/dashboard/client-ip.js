@@ -8,7 +8,8 @@
 //   1. `CF-Connecting-IP` (Cloudflare's original-client header) when it is a
 //      valid IP literal, else
 //   2. X-Forwarded-For walked right-to-left, skipping trusted hops.
-// From any other peer both headers are ignored — the peer IS the client.
+// From any other peer both headers are ignored — the peer IS the client, so a
+// LAN client rotating CF-Connecting-IP while connecting directly is one bucket.
 //
 // Trusted proxies come from:
 //   - RL_TRUSTED_PROXY_CIDRS: comma-separated IPs or CIDRs (e.g. 172.18.0.0/16).
@@ -31,6 +32,15 @@ const list = (raw) => String(raw ?? '').split(',').map((s) => s.trim()).filter(B
 const unmap = (ip) => (typeof ip === 'string' && /^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(ip) ? ip.slice(7) : ip);
 
 const famOf = (ip) => (isIP(ip) === 6 ? 'ipv6' : 'ipv4');
+
+// Per-client bucket maps (keyed by clientIp()) stay bounded in O(1): a Map
+// keeps insertion order, so re-inserting moves the key to the newest end and,
+// past `cap`, the least-recently-touched key (the first one) is dropped.
+export const touchBucket = (map, key, value, cap) => {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > cap) map.delete(map.keys().next().value);
+};
 
 export const parseTrusted = (raw) => {
   const literals = new Set();
