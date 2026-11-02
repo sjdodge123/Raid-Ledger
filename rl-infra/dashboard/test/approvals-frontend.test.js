@@ -204,3 +204,24 @@ test('static wiring: script order, mount points, ROK-1900 CSS block with 44px ta
   const code = (await read('app/approvals-list.js')).replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(code, /innerHTML|insertAdjacentHTML|outerHTML/);
 });
+
+test('a plan step blocked by an earlier unverdicted step offers no Pass/Fail and says which step', async () => {
+  const w = await load(`https://fleet.example.net/?view=approvals&k=${KEY}`);
+  const blocked = [{ ...STEPS[0], blocked_by: 3 }];
+  const calls = [];
+  w.__rlApprovals.bootApprovals({
+    fetchImpl: async (url, opts = {}) => {
+      calls.push({ url, opts });
+      return okJson({ ok: true, items: ITEMS, plan_steps: blocked, counts: { pending: 2, decided: 0 } });
+    },
+    now: () => NOW, poll: false,
+  });
+  await flush();
+  await flush();
+  const card = w.document.querySelector('.approval-step-card');
+  assert.ok(card, 'the step card renders');
+  assert.equal(card.querySelectorAll('.approval-btn-pass, .approval-btn-fail').length, 0, 'no verdict buttons on a blocked step');
+  assert.match(card.querySelector('.approval-step-blocked')?.textContent ?? '', /Waiting on step 3/);
+  assert.ok(card.querySelector('a.approval-btn'), 'Open ↗ is still offered');
+  assert.equal(calls.filter((c) => c.opts.method === 'POST').length, 0);
+});

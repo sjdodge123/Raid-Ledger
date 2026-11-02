@@ -112,9 +112,11 @@ test('AC6: the mockup iframe is sandboxed with allow-scripts ONLY, no referrer, 
   assert.match(doc.querySelector('.approval-item-title').textContent, /<img src=x/);
 });
 
-test('width switcher sets the frame box to 390 / 820 / 1280 px', async () => {
+test('width switcher gives the frame box a 390 / 820 / 1280 px WIDTH (Tablet and Desktop differ)', async () => {
   const { doc } = await open();
-  const box = () => doc.querySelector('.approval-frame-box').style.maxWidth;
+  const box = () => doc.querySelector('.approval-frame-box').style.width;
+  assert.equal(doc.querySelector('.approval-frame-box').style.maxWidth, '', 'a max-width capped by the column made Tablet = Desktop');
+  assert.ok(doc.querySelector('.approval-frame-viewport > .approval-frame-box > iframe'), 'frame sits in a scrolling viewport');
   assert.equal(box(), '1280px', 'desktop is the default');
   for (const [label, px] of [['Phone', '390px'], ['Tablet', '820px'], ['Desktop', '1280px']]) {
     buttonByText(doc.querySelector('.approval-width-seg'), new RegExp(`^${label}$`)).click();
@@ -299,4 +301,81 @@ test('a render near expiry re-fetches the item for fresh signed URLs, once', asy
   buttonByText(doc.querySelector('.approval-width-seg'), /^Phone$/).click();
   await settle();
   assert.equal(gets(), 2, 'fresh urls are not re-fetched on the next paint');
+});
+
+// ROK-1900 codex P2: responses can land out of order; an older one must not
+// overwrite a newer ruling, and a late failure must not roll back others.
+const gatedPost = (item) => {
+  const gates = [];
+  const post = (url, body) => new Promise((res) => { gates.push({ body, res }); });
+  const answer = (i, ok = true) => {
+    const g = must(gates[i], `post ${i}`);
+    g.res(ok ? okJson({ ok: true, item: { ...item, rulings: [{ n: g.body.n, choice: g.body.choice, note: null, ts: `T${i}` }] } })
+      : okJson({ ok: false, error: 'x' }, 500));
+  };
+  return { post, answer };
+};
+const must = (v, label) => { if (v === undefined || v === null) throw new Error(`missing ${label}`); return v; };
+
+test('an older ruling response arriving last does not erase a newer ruling', async () => {
+  const item = baseItem();
+  const g = gatedPost(item);
+  const { doc } = await open({ item, post: g.post });
+  buttonByText(qCard(doc, 1), /^Accept$/).click();
+  buttonByText(qCard(doc, 2), /Raid Ledger/).click();
+  g.answer(1); // Q2 answers first (server snapshot: Q2 only)
+  await settle();
+  g.answer(0); // then Q1's older snapshot (Q1 only)
+  await settle();
+  assert.ok(qCard(doc, 1).classList.contains('ruled'), 'Q1 stays ruled');
+  assert.ok(qCard(doc, 2).classList.contains('ruled'), 'Q2 must survive the older Q1 response');
+  assert.match(doc.querySelector('.approval-sticky').textContent, /2 of 2 ruled/);
+});
+
+test('a late failure rolls back only its own ruling; a superseded response for the same question is ignored', async () => {
+  const item = baseItem();
+  const g = gatedPost(item);
+  const { doc } = await open({ item, post: g.post });
+  buttonByText(qCard(doc, 1), /^Accept$/).click(); // post 0
+  buttonByText(qCard(doc, 2), /Raid Ledger/).click(); // post 1
+  g.answer(1);
+  await settle();
+  g.answer(0, false);
+  await settle();
+  assert.ok(!qCard(doc, 1).classList.contains('ruled'), 'Q1 (refused) rolled back');
+  assert.ok(qCard(doc, 2).classList.contains('ruled'), 'Q2 (saved) must not be rolled back by Q1 failing');
+  buttonByText(qCard(doc, 2), /^Change$/).click();
+  buttonByText(qCard(doc, 2), /LedgerLink/).click(); // post 2 supersedes Q2
+  buttonByText(qCard(doc, 2), /^Change$/).click();
+  buttonByText(qCard(doc, 2), /Raid Ledger/).click(); // post 3 supersedes post 2
+  g.answer(3);
+  await settle();
+  g.answer(2); // stale: same question, older write
+  await settle();
+  assert.match(qCard(doc, 2).textContent, /Option a/, 'the newest choice for Q2 stays shown');
+});
+
+test('an idle page re-fetches the item ~1 min before its signed URLs expire', async () => {
+  const fresh = `/approvals-content/${ID}/mockup.html?t=1762023600.FRESHmockupAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+  let n = 0;
+  const f = fakeFetch({ urls: () => {
+    n += 1;
+    return n === 1 ? signedUrls(NOW + 10 * 60 * 1000)
+      : { files: { ...SIGNED, 'mockup.html': fresh }, expires_at: new Date(NOW + 20 * 60 * 1000).toISOString() };
+  } });
+  const html = (await read('index.html')).replace(/<script[\s\S]*?<\/script>/g, '');
+  const w = new JSDOM(html, { url: `https://fleet.example.net/?approval=${ID}`, runScripts: 'outside-only' }).window;
+  for (const file of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item.js']) w.eval(await read(`app/${file}`));
+  const timers = [];
+  const body = w.document.getElementById('approvals-body');
+  await w.__rlApprovals.renderItemPage(body, ID, KEY, {
+    fetch: f.fn, now: () => NOW, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimer: () => {},
+  });
+  assert.equal(timers.length, 1, 'one refresh timer is armed');
+  assert.equal(must(timers[0], 'timer').ms, 9 * 60 * 1000, 'fires 1 min before the 10 min expiry');
+  must(timers[0], 'timer').fn();
+  await settle();
+  assert.equal(f.calls.filter((c) => c.method === 'GET').length, 2, 'the timer re-fetched the item');
+  assert.equal(w.document.querySelector('iframe').getAttribute('src'), fresh);
+  assert.equal(must(timers[1], 'next timer').ms, 19 * 60 * 1000, 're-armed for the fresh expiry');
 });

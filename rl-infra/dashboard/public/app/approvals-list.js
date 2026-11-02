@@ -8,7 +8,7 @@
 
 (function attachApprovalsList() {
   const NS = (window.__rlApprovals = window.__rlApprovals || {});
-  const ui = { key: null, mode: 'pending', fetch: null, now: () => Date.now(), busy: false, painted: '' };
+  const ui = { key: null, mode: 'pending', fetch: null, now: () => Date.now(), busy: false, painted: '', poll: true };
 
   const $ = (id) => document.getElementById(id);
   const h = (tag, cls, text) => {
@@ -110,8 +110,15 @@
       open.rel = 'noopener noreferrer';
       btns.append(open);
     }
-    const all = [];
-    btns.append(verdictButton(step, 'pass', 'Pass', all), verdictButton(step, 'fail', 'Fail', all));
+    // An earlier step of the plan has no verdict yet: the server would refuse
+    // this one (sequential rule, 409), so say why instead of offering it.
+    if (Number.isInteger(step.blocked_by)) {
+      btns.append(h('span', 'approval-muted approval-step-blocked',
+        `Waiting on step ${step.blocked_by} — open the plan to rule it first`));
+    } else {
+      const all = [];
+      btns.append(verdictButton(step, 'pass', 'Pass', all), verdictButton(step, 'fail', 'Fail', all));
+    }
     row.append(text, btns);
     card.append(row);
     return card;
@@ -195,7 +202,7 @@
     if (!body) return;
     paintSeg(null);
     ui.painted = '';
-    if (typeof NS.renderItemPage === 'function') { NS.renderItemPage(body, id, ui.key, { fetch: ui.fetch, now: ui.now }); return; }
+    if (typeof NS.renderItemPage === 'function') { NS.renderItemPage(body, id, ui.key, { fetch: ui.fetch, now: ui.now, timers: ui.poll }); return; }
     body.replaceChildren(h('div', 'empty approval-empty', `Opening item ${id}…`));
   };
 
@@ -256,6 +263,7 @@
   NS.bootApprovals = ({ fetchImpl, now, poll = true } = {}) => {
     ui.fetch = fetchImpl || window.fetch.bind(window);
     if (now) ui.now = now;
+    ui.poll = poll;
     ui.key = NS.captureKey(window);
     wire();
     applyView();

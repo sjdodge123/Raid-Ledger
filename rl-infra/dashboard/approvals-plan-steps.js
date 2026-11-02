@@ -6,7 +6,10 @@
 // dashboard's own plan loader (injected), never a second storage path.
 //
 // PlanStepSummary = {slug, plan_id, story_id, goal, step_id, description,
-//                    category, plan_url}
+//                    category, plan_url, blocked_by}
+// blocked_by is the id of the earliest LOWER-numbered step with no verdict
+// (the submit route's sequential rule would 409 this step until it has one),
+// or null when the step can be ruled now.
 // plan_url is the token-less plan link (same shape rl_test_plan_create
 // returns); the operator's inbox key is accepted as the tester credential on
 // every plan (D10), so no per-plan `k` is ever put in it.
@@ -23,6 +26,15 @@ export const isOperatorStep = (step) =>
   && typeof step.category === 'string'
   && PLAN_STEP_CATEGORY_RE.test(step.category.trim())
   && !hasVerdict(step);
+
+export const blockingStepId = (steps, step) => {
+  let min = null;
+  for (const s of steps) {
+    if (!s || !Number.isInteger(s.id) || s.id >= step.id || hasVerdict(s)) continue;
+    if (min === null || s.id < min) min = s.id;
+  }
+  return min;
+};
 
 export const planUrl = (publicDomain, slug, planId) =>
   `${publicDomain ? `https://fleet.${publicDomain}` : 'http://fleet.rl.lan'}`
@@ -47,6 +59,7 @@ export const collectPlanSteps = (plans, { publicDomain = '', clean = (s) => s } 
         description: text(step.description, clean),
         category: step.category.trim().toLowerCase(),
         plan_url: planUrl(publicDomain, plan.slug, plan.plan_id),
+        blocked_by: blockingStepId(plan.steps, step),
       });
     }
   }

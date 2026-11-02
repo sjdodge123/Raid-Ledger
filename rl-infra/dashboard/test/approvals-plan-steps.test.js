@@ -30,7 +30,7 @@ test('collectPlanSteps returns the PlanStepSummary shape with a token-less plan_
   assert.deepEqual(out, [{
     slug: 'foo', plan_id: PLAN_A, story_id: 'ROK-1900', goal: 'rule the design', step_id: 2,
     description: 'step 2', category: 'design',
-    plan_url: `https://fleet.gamernight.net/?slug=foo&plan=${PLAN_A}`,
+    plan_url: `https://fleet.gamernight.net/?slug=foo&plan=${PLAN_A}`, blocked_by: 1,
   }]);
   assert.ok(!JSON.stringify(out).includes('SECRET'), 'no tester token leaks');
 });
@@ -69,4 +69,13 @@ test('GET /api/approvals lists unverdicted design/operator steps; a verdict remo
     await srv.kill();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// ROK-1900 codex P2: the submit route 409s a step while a lower-numbered step
+// has no verdict, so the inbox is told which step blocks it.
+test('blocked_by names the earliest unverdicted lower step, null once every earlier step has a verdict', () => {
+  const [blocked] = collectPlanSteps([plan(PLAN_A, [step(1, 'smoke'), step(2, 'smoke'), step(3, 'design')])]);
+  assert.equal(blocked.blocked_by, 1, 'step 1 (no verdict) blocks step 3');
+  const [free] = collectPlanSteps([plan(PLAN_A, [step(1, 'smoke', [{ verdict: 'pass' }]), step(2, 'operator')])]);
+  assert.equal(free.blocked_by, null, 'every earlier step has a verdict');
 });

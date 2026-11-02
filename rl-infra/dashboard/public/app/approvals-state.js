@@ -16,6 +16,25 @@
 (function attachApprovalsState() {
   const NS = (window.__rlApprovals = window.__rlApprovals || {});
 
+  // Merge a write response into the last confirmed item. Responses can land
+  // out of order, and an older snapshot must not drop a newer ruling or
+  // un-decide a decided item: rulings are only ever added or replaced on a
+  // pending item, so union them by question (newer ts wins), and a decided
+  // state beats a pending snapshot. Pure.
+  const mergeServerItem = (confirmed, incoming) => {
+    if (!confirmed) return incoming;
+    const byN = new Map();
+    for (const r of [...(confirmed.rulings || []), ...(incoming.rulings || [])]) {
+      const prev = byN.get(r.n);
+      if (!prev || String(r.ts || '') >= String(prev.ts || '')) byN.set(r.n, r);
+    }
+    const out = { ...incoming, rulings: [...byN.values()].sort((a, b) => a.n - b.n) };
+    if (confirmed.status !== 'pending' && incoming.status === 'pending') {
+      Object.assign(out, { status: confirmed.status, verdict: confirmed.verdict, decided_at: confirmed.decided_at });
+    }
+    return out;
+  };
+
   const STORAGE_KEY = 'rl-approval-key';
   const POLL_MS = 5000; // spec: the badge/list poll on the 5 s loop
   // Printable, no whitespace, bounded — anything else is not a key.
@@ -156,6 +175,6 @@
   Object.assign(NS, {
     STORAGE_KEY, POLL_MS, parseKeyFromUrl, loadKey, saveKey, forgetKey, captureKey,
     getView, itemHref, safeHref, fmtAge, fmtDate, kindClass, statusPill,
-    questionsMeta, progressPct, sortItems, badgeCount, classifyStatus,
+    questionsMeta, progressPct, sortItems, badgeCount, classifyStatus, mergeServerItem,
   });
 })();

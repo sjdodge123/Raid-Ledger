@@ -1229,7 +1229,11 @@ footer {
 .approval-frame-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .approval-width-seg { margin: 0; }
 @media (max-width: 639px) { .approval-width-seg { display: none; } }
-.approval-frame-box { position: relative; width: 100%; margin: 0 auto; }
+.approval-frame-viewport { width: 100%; overflow-x: auto; }
+.approval-frame-box { position: relative; margin: 0 auto; }
+/* Phones hide the width switcher: there the frame just fills the screen. */
+@media (max-width: 639px) { .approval-frame-box { width: 100% !important; } }
+.approval-step-blocked { font-size: 13px; max-width: 220px; }
 .approval-frame {
   display: block; width: 100%; height: 70vh; min-height: 360px;
   border: 1px solid var(--border); border-radius: 10px; background: var(--bg);

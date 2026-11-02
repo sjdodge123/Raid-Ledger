@@ -37,8 +37,10 @@
     return b;
   };
 
-  // Re-fetch signed URLs when a paint happens within this long of expiry.
+  // Re-fetch signed URLs when a paint happens within this long of expiry, and
+  // on a timer this long before expiry while the page sits idle.
   const URL_REFRESH_MS = 2 * 60 * 1000;
+  const URL_TIMER_LEAD_MS = 60 * 1000;
 
   // The one place the mockup iframe is built — attributes are the security
   // boundary (spec D5), so nothing else may add to them.
@@ -65,8 +67,20 @@
   NS.renderItemPage = (body, id, key, opts = {}) => {
     const fetchImpl = opts.fetch || window.fetch.bind(window);
     const now = opts.now || (() => Date.now());
-    const st = { item: null, spec: null, width: 'desktop', open: null, otherFor: null, verdictNote: null, alert: '',
-      urls: {}, urlsExp: 0, refreshing: false };
+    const setTimer = opts.setTimer || (opts.timers === false ? null : (fn, ms) => window.setTimeout(fn, ms));
+    const clearTimer = opts.clearTimer || ((t) => window.clearTimeout(t));
+    const st = { item: null, confirmed: null, spec: null, width: 'desktop', open: null, otherFor: null,
+      verdictNote: null, alert: '', urls: {}, urlsExp: 0, refreshing: false, urlTimer: null };
+    // In-flight optimistic writes, one per target ('q<n>' or 'verdict'), with
+    // a sequence number so a superseded write's late response is ignored.
+    const inflight = new Map();
+    let seq = 0;
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+    // The shown item = last confirmed server state + every pending write.
+    const rebuild = () => {
+      st.item = clone(st.confirmed);
+      for (const w of inflight.values()) w.mutate(st.item);
+    };
     // Signed URL for an attachment, or null (then the attachment is not shown).
     const contentUrl = (file) => (typeof st.urls[file] === 'string' ? st.urls[file] : null);
 
@@ -89,28 +103,32 @@
       return 'Not saved — the fleet did not answer. Try again.';
     };
 
-    // Optimistic write: apply `mutate` locally, POST, then keep the server's
-    // item or roll back to the snapshot and show why.
-    const write = async (path, payload, mutate) => {
-      const snapshot = JSON.parse(JSON.stringify(st.item));
+    // Optimistic write: apply `mutate` locally, POST, then fold the server's
+    // item into the confirmed state (or drop just this write and say why).
+    // Other writes still in flight stay applied either way.
+    const write = async (target, path, payload, mutate) => {
+      const mine = ++seq;
+      inflight.set(target, { seq: mine, mutate });
       mutate(st.item);
       st.open = null; st.otherFor = null; st.verdictNote = null; st.alert = '';
       paint();
       const res = await api(path, 'POST', payload);
-      if (res.ok && res.json?.item) { st.item = res.json.item; paint(); return; }
-      st.item = snapshot;
-      st.alert = failText(res);
+      if (inflight.get(target)?.seq !== mine) return; // superseded by a newer write
+      inflight.delete(target);
+      if (res.ok && res.json?.item) st.confirmed = NS.mergeServerItem(st.confirmed, res.json.item);
+      else st.alert = failText(res);
+      rebuild();
       paint();
       if (res.status === 409) void load(true);
     };
 
-    const rule = (q, choice, note) => write(`/api/approvals/${encodeURIComponent(id)}/ruling`,
+    const rule = (q, choice, note) => write(`q${q.n}`, `/api/approvals/${encodeURIComponent(id)}/ruling`,
       { n: q.n, choice, ...(note ? { note } : {}) }, (item) => {
         const ts = new Date(now()).toISOString();
         item.rulings = [...(item.rulings || []).filter((r) => r.n !== q.n), { n: q.n, choice, note: note || null, ts }];
       });
 
-    const verdict = (value, note) => write(`/api/approvals/${encodeURIComponent(id)}/verdict`,
+    const verdict = (value, note) => write('verdict', `/api/approvals/${encodeURIComponent(id)}/verdict`,
       { value, ...(note ? { note } : {}) }, (item) => {
         const ts = new Date(now()).toISOString();
         if (value === 'approve') {
@@ -171,10 +189,15 @@
       full.rel = 'noopener noreferrer';
       full.referrerPolicy = 'no-referrer';
       bar.append(seg, full);
+      // The frame gets the selected layout WIDTH (not a max): the column is
+      // narrower than 1280 px, so a max-width made Tablet and Desktop render
+      // alike. The viewport scrolls sideways instead (codex P2).
       const box = h('div', 'approval-frame-box');
-      box.style.maxWidth = `${(WIDTHS.find((w) => w[0] === st.width) || WIDTHS[2])[2]}px`;
-      box.append(h('span', 'approval-lock', "sandboxed · no network · can't see this page"), mockupFrame(src));
-      panel.append(bar, box);
+      box.style.width = `${(WIDTHS.find((w) => w[0] === st.width) || WIDTHS[2])[2]}px`;
+      box.append(mockupFrame(src));
+      const viewport = h('div', 'approval-frame-viewport');
+      viewport.append(box);
+      panel.append(bar, h('span', 'approval-lock', "sandboxed · no network · can't see this page"), viewport);
       return panel;
     };
 
@@ -310,13 +333,29 @@
         body.replaceChildren(h('div', `empty approval-empty approval-${state}`, MSG[state] || MSG.error));
         return;
       }
-      st.item = res.json.item;
+      st.confirmed = res.json.item;
+      rebuild();
       st.spec = typeof res.json.spec_md === 'string' ? res.json.spec_md : null;
       const cu = res.json.content_urls || {};
       st.urls = cu.files && typeof cu.files === 'object' ? cu.files : {};
       st.urlsExp = Date.parse(cu.expires_at || '') || 0;
       if (!keepAlert) st.alert = '';
+      scheduleUrlRefresh();
       paint();
+    }
+
+    // An idle page re-fetches the item ~1 min before its signed URLs expire,
+    // so the mockup and screenshots keep loading. Stops once the page is gone.
+    function scheduleUrlRefresh() {
+      if (!setTimer) return;
+      if (st.urlTimer !== null) clearTimer(st.urlTimer);
+      st.urlTimer = null;
+      if (!st.urlsExp) return;
+      const wait = Math.max(5000, st.urlsExp - URL_TIMER_LEAD_MS - now());
+      st.urlTimer = setTimer(() => {
+        st.urlTimer = null;
+        if (body.isConnected && !st.refreshing) void load(true);
+      }, wait);
     }
 
     body.replaceChildren(h('div', 'empty approval-empty', 'Loading…'));
