@@ -21,6 +21,34 @@ export const DEV_BRIDGE_PAGE_MAX_BYTES = 16_384;
 /** A whole ProbeResult as the addon stores it, serialised, stays at or under this. */
 export const DEV_BRIDGE_PROBE_RESULT_MAX_BYTES = 65_536;
 
+/** A probe request (output form, defaults filled), serialised, stays at or under this — it is echoed on every probe-detail page. */
+export const DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES = 4_096;
+
+/**
+ * One probe-result item, serialised, stays at or under this: a call result
+ * WITHOUT its `iterations`, and each single iteration. The addon cuts values
+ * (and sets `truncated`) to meet it, so any one item fits a probe-detail page.
+ */
+export const DEV_BRIDGE_RESULT_ITEM_MAX_BYTES = 3_072;
+
+/** UTF-8 byte length of `JSON.stringify(value)` — the unit every size cap here is measured in. */
+export function devBridgeJsonBytes(value: unknown): number {
+    let bytes = 0;
+    for (const ch of JSON.stringify(value) ?? '') {
+        const cp = ch.codePointAt(0) ?? 0;
+        bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    }
+    return bytes;
+}
+
+/** Adds a root-level `custom` issue when the value serialises to more than `max` bytes. */
+export function devBridgeMaxBytes(max: number, what: string) {
+    return (value: unknown, ctx: z.RefinementCtx): void => {
+        const bytes = devBridgeJsonBytes(value);
+        if (bytes > max) ctx.addIssue({ code: 'custom', path: [], message: `${what} is ${bytes} bytes; the cap is ${max}` });
+    };
+}
+
 /** Default port of the dev bridge listener (changeable in the companion window). */
 export const DEV_BRIDGE_DEFAULT_PORT = 47_655;
 
@@ -76,13 +104,23 @@ const ProbeCallBase = z
 type ProbeCallShape = z.output<typeof ProbeCallBase>;
 
 /** One call, with the shape + allowlist refinements (issue path `fn` when the allowlist refuses it). */
-export const DevBridgeProbeCallSchema = ProbeCallBase.superRefine(checkCallShape);
+export const DevBridgeProbeCallSchema = ProbeCallBase.superRefine((call, ctx) => {
+    if (checkCallShape(call, ctx)) checkCallAllowed(call, ctx);
+});
 
-/** Exactly one of fn/presence; presence takes no args; `$i` needs forEach; fn must pass the allowlist. */
-function checkCallShape(call: ProbeCallShape, ctx: z.RefinementCtx): void {
+/**
+ * One call as echoed back in probe-detail: shape rules only, NOT the allowlist,
+ * so a stored probe stays readable after the deny list grows.
+ */
+export const DevBridgeEchoedProbeCallSchema = ProbeCallBase.superRefine((call, ctx) => {
+    checkCallShape(call, ctx);
+});
+
+/** Exactly one of fn/presence; presence takes no args; `$i` needs forEach. False when fn/presence is malformed. */
+function checkCallShape(call: ProbeCallShape, ctx: z.RefinementCtx): boolean {
     if ((call.fn === undefined) === (call.presence === undefined)) {
         ctx.addIssue({ code: 'custom', path: [], message: 'Exactly one of fn or presence is required' });
-        return;
+        return false;
     }
     if (call.presence !== undefined && (call.args !== undefined || call.forEach !== undefined)) {
         ctx.addIssue({ code: 'custom', path: ['presence'], message: 'presence takes no args or forEach' });
@@ -91,6 +129,11 @@ function checkCallShape(call: ProbeCallShape, ctx: z.RefinementCtx): void {
     if (usesLoop && call.forEach === undefined) {
         ctx.addIssue({ code: 'custom', path: ['args'], message: '"$i" is only valid with forEach' });
     }
+    return true;
+}
+
+/** `fn` must pass the allowlist (deny wins). */
+function checkCallAllowed(call: ProbeCallShape, ctx: z.RefinementCtx): void {
     if (call.fn === undefined) return;
     const verdict = checkDevBridgeProbeFunction(call.fn);
     if (!verdict.allowed) {
@@ -98,17 +141,37 @@ function checkCallShape(call: ProbeCallShape, ctx: z.RefinementCtx): void {
     }
 }
 
-/** POST /dev/v1/probes body (strict). Defaults: flavor `auto`, after `PLAYER_LOGIN`, ttlHours 72. */
-export const DevBridgeProbeRequestSchema = z
-    .object({
+/** Probe lifetime in hours. */
+export const DevBridgeTtlHoursSchema = z.number().int().min(1).max(168);
+
+/** The request fields, over a given call schema (allowlisted on POST/queue, shape-only when echoed). */
+export function devBridgeProbeRequestFields<C extends z.ZodType<ProbeCallShape>>(call: C) {
+    return {
         title: companionDisplayTextSchema(120),
         flavor: DevBridgeFlavorChoiceSchema.default('auto'),
         after: DevBridgeProbeAfterSchema.default('PLAYER_LOGIN'),
-        ttlHours: z.number().int().min(1).max(168).default(72),
-        calls: z.array(DevBridgeProbeCallSchema).min(1).max(40),
-    })
+        ttlHours: DevBridgeTtlHoursSchema.default(72),
+        calls: z.array(call).min(1).max(40),
+    };
+}
+
+/** Unique call ids, backward countFrom, and ≤ DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES serialised. */
+export function checkDevBridgeProbeRequest(req: { calls: readonly ProbeCallShape[] }, ctx: z.RefinementCtx): void {
+    checkCallIds(req.calls, ctx);
+    devBridgeMaxBytes(DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES, 'Probe request')(req, ctx);
+}
+
+/** POST /dev/v1/probes body (strict). Defaults: flavor `auto`, after `PLAYER_LOGIN`, ttlHours 72. */
+export const DevBridgeProbeRequestSchema = z
+    .object(devBridgeProbeRequestFields(DevBridgeProbeCallSchema))
     .strict()
-    .superRefine((req, ctx) => checkCallIds(req.calls, ctx));
+    .superRefine(checkDevBridgeProbeRequest);
+
+/** The request as probe-detail echoes it (output form; shape rules, no allowlist). */
+export const DevBridgeEchoedProbeRequestSchema = z
+    .object(devBridgeProbeRequestFields(DevBridgeEchoedProbeCallSchema))
+    .strict()
+    .superRefine(checkDevBridgeProbeRequest);
 
 /** Call ids are unique; `forEach.countFrom` names an EARLIER `fn` call. */
 function checkCallIds(calls: readonly ProbeCallShape[], ctx: z.RefinementCtx): void {
@@ -130,6 +193,7 @@ function checkCallIds(calls: readonly ProbeCallShape[], ctx: z.RefinementCtx): v
 }
 
 export type DevBridgeProbeRequest = z.output<typeof DevBridgeProbeRequestSchema>;
+export type DevBridgeEchoedProbeRequest = z.output<typeof DevBridgeEchoedProbeRequestSchema>;
 export type DevBridgeProbeRequestInput = z.input<typeof DevBridgeProbeRequestSchema>;
 
 // ------------------------------------------------------------
@@ -182,7 +246,25 @@ export const DevBridgeProbeResultSchema = z
         calls: z.array(DevBridgeProbeCallResultSchema).max(40),
         truncated: z.boolean(),
     })
-    .strict();
+    .strict()
+    .superRefine(checkResultSizes);
+
+type CallResultShape = z.output<typeof DevBridgeProbeCallResultSchema>;
+
+/** Each item ≤ DEV_BRIDGE_RESULT_ITEM_MAX_BYTES; the whole result ≤ DEV_BRIDGE_PROBE_RESULT_MAX_BYTES. */
+function checkResultSizes(result: { calls: readonly CallResultShape[] }, ctx: z.RefinementCtx): void {
+    const tooBig = (value: unknown, path: (string | number)[]): void => {
+        const bytes = devBridgeJsonBytes(value);
+        if (bytes <= DEV_BRIDGE_RESULT_ITEM_MAX_BYTES) return;
+        ctx.addIssue({ code: 'custom', path, message: `Result item is ${bytes} bytes; the cap is ${DEV_BRIDGE_RESULT_ITEM_MAX_BYTES}` });
+    };
+    result.calls.forEach((call, c) => {
+        const { iterations, ...head } = call;
+        tooBig(head, ['calls', c]);
+        (iterations ?? []).forEach((it, i) => tooBig(it, ['calls', c, 'iterations', i]));
+    });
+    devBridgeMaxBytes(DEV_BRIDGE_PROBE_RESULT_MAX_BYTES, 'Probe result')(result, ctx);
+}
 
 export type DevBridgeProbeValue = z.output<typeof DevBridgeProbeValueSchema>;
 export type DevBridgeProbeCallResult = z.output<typeof DevBridgeProbeCallResultSchema>;

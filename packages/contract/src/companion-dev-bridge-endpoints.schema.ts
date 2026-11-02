@@ -1,10 +1,13 @@
 import { z } from 'zod';
-import { CompanionTimestampSchema, CompanionVersionStringSchema } from './companion-common.schema.js';
+import { companionDisplayTextSchema, CompanionTimestampSchema, CompanionVersionStringSchema } from './companion-common.schema.js';
 import {
+    DEV_BRIDGE_CONTRACT_VERSION,
+    DEV_BRIDGE_PAGE_MAX_BYTES,
+    devBridgeMaxBytes,
+    DevBridgeEchoedProbeRequestSchema,
     DevBridgeFlavorSchema,
     DevBridgeNextSchema,
     DevBridgeProbeIdSchema,
-    DevBridgeProbeRequestSchema,
     DevBridgeProbeResultSchema,
 } from './companion-dev-bridge.schema.js';
 
@@ -27,6 +30,9 @@ export const DevBridgeRelativePathSchema = z
     });
 
 const Name = z.string().min(1).max(128);
+
+/** Every response body: ≤ DEV_BRIDGE_PAGE_MAX_BYTES serialised (UTF-8), a root-level `custom` issue otherwise. */
+const fitsPage = devBridgeMaxBytes(DEV_BRIDGE_PAGE_MAX_BYTES, 'Response body');
 const Count = z.number().int().min(0);
 
 /** GET /dev/v1/health */
@@ -34,7 +40,7 @@ export const DevBridgeHealthSchema = z
     .object({
         app: z.literal('rl-companion'),
         appVersion: CompanionVersionStringSchema,
-        bridgeVersion: z.literal(1),
+        bridgeVersion: z.literal(DEV_BRIDGE_CONTRACT_VERSION),
         devMode: z.literal(true),
         probesEnabled: z.boolean(),
         wowDir: z.string().max(512).nullable(),
@@ -43,7 +49,8 @@ export const DevBridgeHealthSchema = z
         uptimeSec: Count,
         now: CompanionTimestampSchema,
     })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** One addon, from its `.toc` header only. `interface` is the raw `## Interface:` value (may list several). */
 export const DevBridgeAddonSchema = z
@@ -60,7 +67,8 @@ export const DevBridgeAddonSchema = z
 /** GET /dev/v1/addons?flavor=&cursor= */
 export const DevBridgeAddonsSchema = z
     .object({ flavor: DevBridgeFlavorSchema, addons: z.array(DevBridgeAddonSchema).max(200), next: DevBridgeNextSchema })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** Which LedgerLink SavedVariables file: the account-wide one or a per-character one. */
 export const DevBridgeSvScopeSchema = z.enum(['account', 'character']);
@@ -76,7 +84,8 @@ export const DevBridgeSvRawSchema = z
         text: z.string().max(12_288),
         next: DevBridgeNextSchema,
     })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** One outbox entry of a parsed LedgerLink SavedVariables file — GUIDs hashed, no names. */
 export const DevBridgeSvOutboxEntrySchema = z
@@ -110,7 +119,8 @@ export const DevBridgeSvFileSchema = z
 /** GET /dev/v1/ledgerlink/sv/parsed?flavor=&cursor= */
 export const DevBridgeSvParsedSchema = z
     .object({ flavor: DevBridgeFlavorSchema, files: z.array(DevBridgeSvFileSchema).max(50), next: DevBridgeNextSchema })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** Probe lifecycle. `cancelled` only after DELETE; `rejected` when the result failed ProbeResult. */
 export const DevBridgeProbeStatusSchema = z.enum(['queued', 'answered', 'expired', 'rejected', 'cancelled']);
@@ -123,13 +133,14 @@ export const DevBridgeProbeQueuedSchema = z
         flavor: DevBridgeFlavorSchema,
         answersOn: z.string().min(1).max(200),
     })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** One row of GET /dev/v1/probes. */
 export const DevBridgeProbeSummarySchema = z
     .object({
         probeId: DevBridgeProbeIdSchema,
-        title: z.string().min(1).max(120),
+        title: companionDisplayTextSchema(120),
         status: DevBridgeProbeStatusSchema,
         submittedAt: CompanionTimestampSchema,
         answeredAt: CompanionTimestampSchema.optional(),
@@ -139,23 +150,32 @@ export const DevBridgeProbeSummarySchema = z
 /** GET /dev/v1/probes?status=&cursor= */
 export const DevBridgeProbeListSchema = z
     .object({ probes: z.array(DevBridgeProbeSummarySchema).max(100), next: DevBridgeNextSchema })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
-/** GET /dev/v1/probes/:id?cursor= — `result.calls` is paged; each page repeats the other fields. */
+/**
+ * GET /dev/v1/probes/:id?cursor= — paged by result ITEM (a call without its
+ * iterations, or one iteration): each page repeats the other fields; a forEach
+ * call whose iterations span pages repeats its `id` and status with the next
+ * slice of `iterations`. Request ≤4 KiB + one item ≤3 KiB always fits.
+ */
 export const DevBridgeProbeDetailSchema = DevBridgeProbeSummarySchema.extend({
-    request: DevBridgeProbeRequestSchema,
+    request: DevBridgeEchoedProbeRequestSchema,
     result: DevBridgeProbeResultSchema.optional(),
     error: z.string().max(512).optional(),
     next: DevBridgeNextSchema,
-}).strict();
+})
+    .strict()
+    .superRefine(fitsPage);
 
 /** DELETE /dev/v1/probes/:id → 200 */
 export const DevBridgeProbeCancelledSchema = z
     .object({ probeId: DevBridgeProbeIdSchema, status: z.literal('cancelled') })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** A secret that must never reach a log line: a device/dev token, or a bearer value. */
-const LOG_SECRET_RE = /rlcd(ev)?_[A-Za-z0-9_-]|Bearer\s+[^<\s]/;
+const LOG_SECRET_RE = /rlcd(ev)?_[A-Za-z0-9_-]|bearer\s+(?!<redacted>(?![A-Za-z0-9_-]))\S/i;
 
 /** One companion log line, already redacted (`<redacted>` replaces every token). */
 export const DevBridgeLogLineSchema = z
@@ -170,7 +190,8 @@ export const DevBridgeLogLineSchema = z
 /** GET /dev/v1/logs?since=&level=&cursor= */
 export const DevBridgeLogsSchema = z
     .object({ lines: z.array(DevBridgeLogLineSchema).max(500), next: DevBridgeNextSchema })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 /** One collector, the same data as the app's `get_collector_status`. */
 export const DevBridgeCollectorSchema = z
@@ -186,7 +207,10 @@ export const DevBridgeCollectorSchema = z
     .strict();
 
 /** GET /dev/v1/collectors */
-export const DevBridgeCollectorsSchema = z.object({ collectors: z.array(DevBridgeCollectorSchema).max(32) }).strict();
+export const DevBridgeCollectorsSchema = z
+    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32) })
+    .strict()
+    .superRefine(fitsPage);
 
 /** One request-validation issue (400 `invalid_request`). */
 export const DevBridgeIssueSchema = z
@@ -203,7 +227,8 @@ export const DevBridgeErrorSchema = z
         error: z.enum(['invalid_request', 'unauthorized', 'forbidden', 'rate_limited', 'not_found', 'probes_disabled']),
         issues: z.array(DevBridgeIssueSchema).max(50).optional(),
     })
-    .strict();
+    .strict()
+    .superRefine(fitsPage);
 
 export type DevBridgeHealth = z.output<typeof DevBridgeHealthSchema>;
 export type DevBridgeProbeDetail = z.output<typeof DevBridgeProbeDetailSchema>;

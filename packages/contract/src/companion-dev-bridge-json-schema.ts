@@ -13,6 +13,7 @@ import {
     DevBridgeSvParsedSchema,
     DevBridgeSvRawSchema,
 } from './companion-dev-bridge-endpoints.schema.js';
+import { DevBridgeProbeQueueFileSchema } from './companion-dev-bridge-queue.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 JSON Schema (ROK-2055).
@@ -30,11 +31,13 @@ export const DEV_BRIDGE_SCHEMA_ID =
  * Every body on the bridge, keyed by its `$defs` name — also the fixture
  * filename prefix (`<key>.json` or `<key>--<case>.json`). Bodies the companion
  * RECEIVES (`probe-request` from agents, `probe-result` from the addon) are
- * generated in input mode; everything the companion SENDS in output mode.
+ * generated in input mode; everything the companion SENDS (including the
+ * Queue.lua JSON, `probe-queue`) in output mode.
  */
 export const DEV_BRIDGE_MESSAGES = {
     'probe-request': DevBridgeProbeRequestSchema,
     'probe-result': DevBridgeProbeResultSchema,
+    'probe-queue': DevBridgeProbeQueueFileSchema,
     health: DevBridgeHealthSchema,
     addons: DevBridgeAddonsSchema,
     'sv-raw': DevBridgeSvRawSchema,
@@ -78,7 +81,7 @@ export function buildDevBridgeJsonSchema(): Record<string, unknown> {
         $id: DEV_BRIDGE_SCHEMA_ID,
         title: `RL Companion dev bridge v${DEV_BRIDGE_CONTRACT_VERSION}`,
         description:
-            'GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; "$i" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no "..", drive or backslash; log lines hold no unredacted token. Size caps (16 KiB per page, 64 KiB per probe result) are producer rules; see CONTRACT.md.',
+            'GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; "$i" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no "..", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request (output form) ≤4 KiB, each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB; see CONTRACT.md.',
         $defs: buildDefs(),
         not: {},
     };
