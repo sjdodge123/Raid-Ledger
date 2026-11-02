@@ -9,6 +9,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import {
+  RECAP_MIN_ATTENDEES,
   RECAP_WINDOW_DAYS,
   SHOWS_ACTIVITY_SQL,
   buildWeeklyRecapQuery,
@@ -79,6 +80,35 @@ describe('buildWeeklyRecapQuery', () => {
     expect(text).toContain('COUNT(DISTINCT event_id)::int AS events_run');
     expect(text).toContain('COUNT(DISTINCT user_id)::int AS players_attended');
     expect(text).toContain('COUNT(*)::int AS attendances');
+  });
+
+  it('counts only events with 2+ attended signups (ROK-2063)', () => {
+    expect(RECAP_MIN_ATTENDEES).toBe(2);
+    const text = render();
+    expect(text).toContain(
+      'group_events AS ( SELECT event_id FROM attended GROUP BY event_id HAVING COUNT(DISTINCT user_id) >= 2 )',
+    );
+    expect(text).toContain(
+      'WHERE a.event_id IN (SELECT event_id FROM group_events)',
+    );
+  });
+
+  it('decides the 2+ rule before the opt-out filter, in both privacy modes', () => {
+    for (const respect of [true, false]) {
+      const text = render(respect);
+      expect(text.indexOf('group_events AS')).toBeGreaterThan(-1);
+      expect(text.indexOf('group_events AS')).toBeLessThan(
+        text.indexOf('filtered AS'),
+      );
+      expect(text).toContain('IN (SELECT event_id FROM group_events)');
+    }
+  });
+
+  it('applies the 2+ rule to the prior-week window too', () => {
+    const text = new PgDialect()
+      .sqlToQuery(buildWeeklyRecapQuery({ endOffsetDays: 7 }))
+      .sql.replace(/\s+/g, ' ');
+    expect(text).toContain('HAVING COUNT(DISTINCT user_id) >= 2');
   });
 
   it('binds no parameters (the window is a constant, not user input)', () => {
