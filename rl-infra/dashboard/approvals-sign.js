@@ -38,18 +38,23 @@ export const createContentSigner = ({
     return { url, expires_at: new Date(exp * 1000).toISOString() };
   };
 
-  // true only for an unexpired token minted for exactly (id, file).
-  const verify = (id, file, presented) => {
+  // 'ok' | 'expired' | 'bad'. The MAC is checked BEFORE the expiry, so
+  // 'expired' always means a genuine token minted for exactly (id, file).
+  const check = (id, file, presented) => {
     const m = typeof presented === 'string' ? presented.match(TOKEN_RE) : null;
-    if (!m) return false;
+    if (!m) return 'bad';
     const exp = Number(m[1]);
-    if (!Number.isSafeInteger(exp) || exp * 1000 <= now()) return false;
+    if (!Number.isSafeInteger(exp)) return 'bad';
     const got = Buffer.from(m[2], 'base64url');
     const want = mac(id, file, exp);
-    return got.length === want.length && timingSafeEqual(got, want);
+    if (got.length !== want.length || !timingSafeEqual(got, want)) return 'bad';
+    return exp * 1000 <= now() ? 'expired' : 'ok';
   };
 
-  return Object.freeze({ sign, verify });
+  // true only for an unexpired token minted for exactly (id, file).
+  const verify = (id, file, presented) => check(id, file, presented) === 'ok';
+
+  return Object.freeze({ sign, verify, check });
 };
 
 // The signed URL set for an item's servable attachments (mockup + screenshots;

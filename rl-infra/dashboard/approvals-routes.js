@@ -164,7 +164,7 @@ export const createApprovalRoutes = ({
   return async (req, res, pathOnly) => {
     if (pathOnly !== '/api/approvals' && !pathOnly.startsWith('/api/approvals/')) return false;
     const ip = ipOf(req);
-    if (limits && preGate(limits, ip, req, res)) return true;
+    if (limits && preGate(limits, ip, req, res, auth)) return true;
     const r = route(ctx, req, res, pathOnly);
     if (r.notFound) { sendError(res, 404, 'not_found'); return true; }
     if (r.allow) { methodNotAllowed(res, r.allow); return true; }

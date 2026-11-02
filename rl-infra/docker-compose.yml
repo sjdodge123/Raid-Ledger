@@ -310,6 +310,12 @@ services:
       # When set in .env, dashboard renders external (share-with-tester) URLs
       # per env in addition to the internal http://{slug}.rl.lan link.
       RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
+      # ROK-1900: per-IP limits key on the real client. Browsers arrive via
+      # Cloudflare -> Traefik, so trust Traefik (its compose service name,
+      # re-resolved every minute — its rl-net IP is dynamic) and read
+      # CF-Connecting-IP from it. Never trust the whole rl-net subnet: env
+      # containers share it. Extra literal IPs/CIDRs: RL_TRUSTED_PROXY_CIDRS.
+      RL_TRUSTED_PROXY_HOSTS: ${RL_TRUSTED_PROXY_HOSTS:-traefik}
     volumes:
       - ./state:/state:ro
       # ROK-1331 M1: explicit task state mount. The ./state:/state:ro mount
@@ -352,6 +358,7 @@ services:
       - ./dashboard/approvals-routes.js:/app/approvals-routes.js:ro
       - ./dashboard/approvals-store.js:/app/approvals-store.js:ro
       - ./dashboard/approvals-validate.js:/app/approvals-validate.js:ro
+      - ./dashboard/client-ip.js:/app/client-ip.js:ro
     labels:
       rl.role: infra
 

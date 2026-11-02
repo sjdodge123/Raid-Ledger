@@ -18,6 +18,7 @@ import {
   withoutSecrets,
 } from './plan-auth.js';
 import { createApprovalAuth } from './approvals-auth.js';
+import { createClientIp } from './client-ip.js';
 import { createApprovalContent } from './approvals-content.js';
 import { createApprovalLimits } from './approvals-limits.js';
 import { createContentSigner } from './approvals-sign.js';
@@ -105,42 +106,13 @@ const rateBuckets = new Map();
 // on every access.
 const byteBuckets = new Map();
 
-// Trusted-proxy chain for X-Forwarded-For interpretation. Without this, all
-// requests behind Traefik / Cloudflare collapse into the single proxy peer's
-// IP and the per-IP quota becomes a global quota — one bad actor exhausts
-// 100 MB / 24h for every other tester. With RL_TRUSTED_PROXY_CIDRS set to
-// the proxy's IP(s), we walk X-Forwarded-For right-to-left, skipping
-// trusted hops, and key the limiter on the first untrusted hop (the real
-// client). Default is empty (no proxies trusted) so dev/local stays exactly
-// as before. Comma-separated list of literal IPs (CIDR is overkill for the
-// 1-2 known proxies we deploy behind).
-const RL_TRUSTED_PROXIES = new Set(
-  (process.env.RL_TRUSTED_PROXY_CIDRS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
-
-// Returns the real client IP, considering X-Forwarded-For only when the
-// immediate socket peer is in the trusted-proxy allowlist. Otherwise the
-// socket peer is the client (forging XFF requires impersonating a trusted
-// proxy, which on the LAN you can't do without already controlling that
-// host).
-const clientIp = (req) => {
-  const peer = req.socket?.remoteAddress || 'unknown';
-  if (!RL_TRUSTED_PROXIES.has(peer)) return peer;
-  // Walk X-Forwarded-For right-to-left, skipping trusted-proxy entries,
-  // and return the first untrusted IP (the original client).
-  const xff = req.headers?.['x-forwarded-for'];
-  if (typeof xff !== 'string' || xff.length === 0) return peer;
-  const hops = xff.split(',').map((s) => s.trim()).filter(Boolean);
-  for (let i = hops.length - 1; i >= 0; i--) {
-    if (!RL_TRUSTED_PROXIES.has(hops[i])) return hops[i];
-  }
-  // Every hop was trusted — fall back to the socket peer rather than
-  // returning a "trusted" identity as the client.
-  return peer;
-};
+// Real client IP behind Cloudflare -> Traefik (client-ip.js): CF-Connecting-IP
+// / X-Forwarded-For are honoured ONLY from a trusted proxy peer
+// (RL_TRUSTED_PROXY_CIDRS literals/CIDRs, RL_TRUSTED_PROXY_HOSTS resolved by
+// DNS — compose sets `traefik`). Without either, the socket peer is the client.
+const clientIps = createClientIp();
+clientIps.start();
+const clientIp = (req) => clientIps.clientIp(req);
 
 // ROK-1900 — "Pending approval" inbox. Its own RW mount (never under
 // test-plans, so plan-prune cannot reach it); fails closed without

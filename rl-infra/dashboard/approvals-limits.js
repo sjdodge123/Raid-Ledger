@@ -3,9 +3,11 @@
 //   - reads: GET/HEAD on /api/approvals* and /approvals-content/* are
 //     rate-limited per client IP (the dispatcher's rateLimitOk only covers
 //     writes, and is too tight for a page that polls every 5 s).
-//   - failed auth: every 401/403 on an approval route counts against the IP;
-//     past the cap the IP gets 429 on every approval route until the window
-//     slides, so inbox-key guessing (or ?t= forging) is throttled.
+//   - failed auth: every 401/403 on an approval route counts against the IP
+//     (an expired-but-genuine ?t= does not); past the cap the IP gets 429 on
+//     every approval route until the window slides, so inbox-key guessing
+//     (or ?t= forging) is throttled — except for a request carrying valid
+//     header auth, which is never locked out.
 //   - submits: at most `submitMax` in flight at once (each can buffer tens of
 //     MB); the next gets 429 instead of piling more bodies into memory.
 //
@@ -72,9 +74,18 @@ export const sendTooMany = (res, error, retryAfter) => {
   res.end(JSON.stringify({ ok: false, error }));
 };
 
+// Valid HEADER auth (inbox key or agent token). A 256-bit key carries no
+// guessing risk, so its holder is never locked out by other clients' failures
+// (several visitors can share one IP behind a proxy).
+const headerAuthed = (auth, req) => Boolean(auth && (auth.isOperator(req) || auth.isAgent(req)));
+
 // Shared gate for both approval handlers. Returns true when it already answered.
-export const preGate = (limits, ip, req, res) => {
-  if (limits.lockedOut(ip)) { sendTooMany(res, 'too_many_auth_failures', 600); return true; }
+// The read cap still applies to everyone, per client IP (client-ip.js).
+export const preGate = (limits, ip, req, res, auth = null) => {
+  if (limits.lockedOut(ip) && !headerAuthed(auth, req)) {
+    sendTooMany(res, 'too_many_auth_failures', 600);
+    return true;
+  }
   const isRead = req.method === 'GET' || req.method === 'HEAD';
   if (isRead && !limits.readOk(ip)) { sendTooMany(res, 'rate_limit_exceeded', 60); return true; }
   return false;

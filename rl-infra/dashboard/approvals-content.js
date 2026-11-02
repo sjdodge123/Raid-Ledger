@@ -54,17 +54,23 @@ const sendError = (res, status, error, extra = {}) => {
 const queryToken = (req) => new URLSearchParams((req.url || '').split('?')[1] ?? '').get('t');
 
 const BAD_TOKEN = Object.freeze({ status: 403, error: 'content_token_invalid' });
+// A genuine token past its expiry (a page left open > 10 min) is not a
+// guessing attempt, so it is not counted towards the auth-failure lockout.
+const EXPIRED_TOKEN = Object.freeze({ status: 403, error: 'content_token_expired', uncounted: true });
 
 // null when allowed, else { status, error }. Header auth first; otherwise a
-// `?t=` must verify for exactly (id, name) — expired, tampered, or minted for
-// another file/item is 403. Neither the inbox key nor the agent token is
+// `?t=` must verify for exactly (id, name) — tampered or minted for another
+// file/item is 403 content_token_invalid (counted); a genuine but expired one
+// is 403 content_token_expired (not counted). Neither the inbox key nor the agent token is
 // ever read from the query string.
 const denial = (auth, signer, req, id, name) => {
   const viaHeader = auth.deny(req, 'read');
   if (!viaHeader || viaHeader.status === 503) return viaHeader;
   const t = queryToken(req);
-  if (t === null) return viaHeader;
-  return signer && signer.verify(id, name, t) ? null : BAD_TOKEN;
+  if (t === null || !signer) return t === null ? viaHeader : BAD_TOKEN;
+  const verdict = signer.check(id, name, t);
+  if (verdict === 'ok') return null;
+  return verdict === 'expired' ? EXPIRED_TOKEN : BAD_TOKEN;
 };
 
 // Content type from the bytes for images (never the name); html as uploaded.
@@ -93,7 +99,7 @@ export const createApprovalContent = ({
     return true;
   }
   const ip = ipOf(req);
-  if (limits && preGate(limits, ip, req, res)) return true;
+  if (limits && preGate(limits, ip, req, res, auth)) return true;
   const m = pathOnly.match(PATH_RE);
   const [, rawId = '', rawName = ''] = m ?? [];
   let id = rawId;
@@ -101,7 +107,7 @@ export const createApprovalContent = ({
   try { id = decodeURIComponent(rawId); name = decodeURIComponent(rawName); } catch { /* checked below */ }
   const denied = denial(auth, signer, req, id, name);
   if (denied) {
-    if (limits) noteDenial(limits, ip, denied.status);
+    if (limits && !denied.uncounted) noteDenial(limits, ip, denied.status);
     sendError(res, denied.status, denied.error);
     return true;
   }
