@@ -10,6 +10,12 @@ export interface SimpleMessage {
   content: string;
   embeds: SimpleEmbed[];
   components: SimpleComponent[];
+  /**
+   * Components per action row, in order (ROK-1728): `components` is flat, so
+   * this is how a test tells rows apart. Optional so hand-built fixtures stay
+   * valid; `toSimpleMessage` always sets it.
+   */
+  rowSizes?: number[] | undefined;
   timestamp: Date;
   editedAt: Date | null;
 }
@@ -70,6 +76,9 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
         url: c.url ?? null,
       }));
     }),
+    rowSizes: msg.components.map((row) =>
+      'components' in row ? (row.components as unknown[]).length : 0,
+    ),
     timestamp: msg.createdAt,
     editedAt: msg.editedAt,
   };
