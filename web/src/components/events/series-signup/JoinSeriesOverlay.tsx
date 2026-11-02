@@ -20,23 +20,25 @@ export function JoinSeriesOverlay({ event, state, onClose }: {
 }): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const gameId = event.game?.id ?? undefined;
-    const { data } = useMyCharacters(gameId, gameId !== undefined);
+    const { data, isLoading } = useMyCharacters(gameId, gameId !== undefined);
     const characters = data?.data ?? [];
-    const selection = useJoinSeriesSelection(true, characters);
+    const hasRoles = event.game?.hasRoles ?? false;
+    const selection = useJoinSeriesSelection(true, characters, hasRoles);
     const join = useJoinSeries(event.id);
     const tonight = nightFor(state, event.id)?.state;
     const title = `Join “${event.title}”`;
     const footer = (
         <>
             <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" data-testid="join-series-confirm" loading={join.isPending} loadingLabel="Joining the series"
+            <Button size="sm" data-testid="join-series-confirm" loading={join.isPending || isLoading}
+                loadingLabel={isLoading ? 'Loading your characters' : 'Joining the series'}
                 onClick={() => join.mutate(selection.dto, { onSuccess: onClose })}>
                 {`Join ${nightsLabel(state.joinableCount)}`}
             </Button>
         </>
     );
     const body = (
-        <JoinSeriesBody state={state} characters={characters} selection={selection} hasRoles={event.game?.hasRoles ?? false}
+        <JoinSeriesBody state={state} characters={characters} selection={selection} hasRoles={hasRoles}
             startsTonight={tonight === 'will_create' || tonight === 'will_attach'} />
     );
     if (isDesktop) return <Modal isOpen onClose={onClose} title={title} maxWidth="max-w-md" footer={footer}>{body}</Modal>;

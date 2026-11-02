@@ -78,7 +78,7 @@ export function EventDetailFallbackSignup({ event, rosterAssignments, isAuthenti
 }) {
     if (rosterAssignments || !isAuthenticated || isSignedUp || isCancelled) return null;
     return (
-        <div className="event-detail-signup-fallback flex flex-wrap items-center gap-2">
+        <div className="event-detail-signup-fallback flex flex-wrap items-center justify-center gap-2">
             <Button onClick={onSignup} disabled={isPending}>{isPending ? 'Signing up...' : 'Sign Up for Event'}</Button>
             <SeriesNotSignedUpSlot event={event} />
         </div>

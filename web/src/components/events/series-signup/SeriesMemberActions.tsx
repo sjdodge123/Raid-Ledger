@@ -4,7 +4,7 @@ import type { EventResponseDto, SeriesSignupStateDto } from '@raid-ledger/contra
 import { Button } from '../../ui/button';
 import { useLeaveSeries } from '../../../hooks/use-series-signup';
 import { LeaveSeriesConfirm } from './LeaveSeriesConfirm';
-import { formatNightDate, memberNights, nightsLabel } from './series-signup-format';
+import { formatNightDate, leaveNights, memberNights, nightsLabel } from './series-signup-format';
 
 /** "In for the series" plus a muted note. */
 function InForSeries({ note }: { note: string }): JSX.Element {
@@ -27,7 +27,7 @@ function LeaveSeriesButton({ event, state }: { event: EventResponseDto; state: S
         <>
             <Button variant="destructive-soft" size="sm" onClick={() => setOpen(true)} data-testid="leave-series">Leave series</Button>
             {open && (
-                <LeaveSeriesConfirm seriesTitle={event.title} nights={memberNights(state)} isPending={leave.isPending}
+                <LeaveSeriesConfirm seriesTitle={event.title} nights={leaveNights(state)} isPending={leave.isPending}
                     onClose={() => setOpen(false)} onConfirm={() => leave.mutate(undefined, { onSuccess: () => setOpen(false) })} />
             )}
         </>

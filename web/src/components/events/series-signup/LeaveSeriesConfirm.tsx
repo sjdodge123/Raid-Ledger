@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { SeriesNightDto } from '@raid-ledger/contract';
+import type { SeriesLeaveNightDto } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
@@ -7,7 +7,7 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { formatNightDate, lateCancelNight, nightsLabel } from './series-signup-format';
 
-function LeaveSeriesBody({ nights }: { nights: readonly SeriesNightDto[] }): JSX.Element {
+function LeaveSeriesBody({ nights }: { nights: readonly SeriesLeaveNightDto[] }): JSX.Element {
     const first = nights[0];
     const last = nights[nights.length - 1];
     const late = lateCancelNight(nights);
@@ -30,7 +30,7 @@ function LeaveSeriesBody({ nights }: { nights: readonly SeriesNightDto[] }): JSX
 
 /** The Leave-series confirm: names the nights it removes and flags a late cancel (<23h). */
 export function LeaveSeriesConfirm({ seriesTitle, nights, isPending, onClose, onConfirm }: {
-    seriesTitle: string; nights: readonly SeriesNightDto[]; isPending: boolean; onClose: () => void; onConfirm: () => void;
+    seriesTitle: string; nights: readonly SeriesLeaveNightDto[]; isPending: boolean; onClose: () => void; onConfirm: () => void;
 }): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const title = `Leave “${seriesTitle}”?`;

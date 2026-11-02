@@ -54,6 +54,7 @@ export function JoinSeriesBody({ state, startsTonight, characters, selection, ha
             {characters.length > 0 && (
                 <Field label="Character">
                     <Select value={selection.characterId ?? ''} onChange={(e) => selection.selectCharacter(e.target.value)}>
+                        <option value="">No character</option>
                         {characters.map((c) => <option key={c.id} value={c.id}>{c.class ? `${c.name} · ${c.class}` : c.name}</option>)}
                     </Select>
                 </Field>

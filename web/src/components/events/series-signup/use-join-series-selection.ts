@@ -6,10 +6,10 @@ import { useSignupSelection } from '../use-signup-selection';
  * `useSignupSelection` (design Q6): the main character and its role are the
  * defaults, and picking a character resets the roles to that character's.
  */
-export function useJoinSeriesSelection(isOpen: boolean, characters: CharacterDto[]) {
+export function useJoinSeriesSelection(isOpen: boolean, characters: CharacterDto[], hasRoles: boolean) {
     const sel = useSignupSelection(isOpen, characters);
     const selectCharacter = (id: string) => {
-        sel.setSelectedCharacterId(id);
+        sel.setSelectedCharacterId(id || null);
         const role = characters.find((c) => c.id === id)?.effectiveRole ?? null;
         sel.setSelectedRoles(role ? [role] : []);
     };
@@ -19,7 +19,7 @@ export function useJoinSeriesSelection(isOpen: boolean, characters: CharacterDto
     };
     const dto: JoinSeriesDto = {
         ...(sel.selectedCharacterId ? { characterId: sel.selectedCharacterId } : {}),
-        ...(sel.selectedRoles.length > 0 ? { preferredRoles: sel.selectedRoles } : {}),
+        ...(hasRoles && sel.selectedRoles.length > 0 ? { preferredRoles: sel.selectedRoles } : {}),
     };
     return { characterId: sel.selectedCharacterId, roles: sel.selectedRoles, selectCharacter, toggleRole, dto };
 }

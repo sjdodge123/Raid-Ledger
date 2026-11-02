@@ -5,11 +5,11 @@ import { JoinSeriesButton } from './JoinSeriesButton';
 import { SeriesMemberActions, SeriesSkippedNight } from './SeriesMemberActions';
 import { isSeriesJoinCandidate, isSeriesMember, nightFor } from './series-signup-format';
 
-/** Beside "Sign Up" / "Join Event": Join series, or the skipped-night note for a member. */
+/** Beside "Sign Up" / "Join Event": Join series, or the skipped-night note for a member who declined this night. */
 export function SeriesNotSignedUpSlot({ event }: { event: EventResponseDto }): JSX.Element | null {
     const candidate = isSeriesJoinCandidate(event);
     const { data: state } = useSeriesSignupState(event.id, candidate);
-    if (candidate && state && isSeriesMember(state) && nightFor(state, event.id)) return <SeriesSkippedNight event={event} state={state} />;
+    if (candidate && state && isSeriesMember(state) && nightFor(state, event.id)?.state === 'stays_inactive') return <SeriesSkippedNight event={event} state={state} />;
     return <JoinSeriesButton event={event} />;
 }
 
