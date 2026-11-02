@@ -851,7 +851,7 @@ run_lint() {
   # Check-only by design (ROK-1404): `lint` must never mutate the tree, so the
   # lint → prettier:check order is irrelevant; use `lint:fix` for auto-fixes.
   if [ "$effective_scope" != "web" ]; then
-    NODE_OPTIONS="$(_lint_node_opts)" npm run lint -w api || return $?
+    run_api_lint || return $?
     npm run prettier:check -w api || return $?
   fi
   if [ "$effective_scope" != "api" ]; then
@@ -1120,6 +1120,20 @@ _lint_node_opts() {
   else
     _repin_heap "$opts" 8192
   fi
+}
+
+# `npm run lint -w api` as two eslint processes (fleet heap OOM, 2026-11-02).
+# api/tsconfig.json has no `include`, so projectService puts every api file in
+# ONE program, and the type checker's caches for every linted file pile up in
+# that one process. Splitting the file list caps each process's share: pass 1
+# is the npm script's own glob minus `*.spec.ts`, pass 2 is exactly the
+# `*.spec.ts` files of that glob, so the union is the original file set. The
+# step fails if either pass fails.
+run_api_lint() {
+  local opts
+  opts="$(_lint_node_opts)"
+  NODE_OPTIONS="$opts" npm run lint -w api -- --ignore-pattern '**/*.spec.ts' || return $?
+  (cd "$REPO_ROOT/api" && NODE_OPTIONS="$opts" npx eslint '{src,apps,libs,test}/**/*.spec.ts') || return $?
 }
 
 run_unit_tests() {
@@ -2711,7 +2725,7 @@ run_scoped_typecheck() {
 run_scoped_lint() {
   local ran=false
   if _scoped_has api; then
-    NODE_OPTIONS="$(_lint_node_opts)" npm run lint -w api || return $?
+    run_api_lint || return $?
     npm run prettier:check -w api || return $?
     ran=true
   fi
