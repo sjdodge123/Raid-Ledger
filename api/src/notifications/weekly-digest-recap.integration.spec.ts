@@ -115,7 +115,9 @@ describe('Weekly digest recap — 2+ attendees only (ROK-2063, integration)', ()
 
     expect(await fetchWeeklyRecap(testApp.db)).toEqual(ZERO);
   });
+});
 
+describe('Weekly digest recap — prior week and opt-out (ROK-2063, integration)', () => {
   it('applies the same rule to the prior week used by the deltas', async () => {
     const [dave, erin, frank] = [
       await seedUser('dave'),

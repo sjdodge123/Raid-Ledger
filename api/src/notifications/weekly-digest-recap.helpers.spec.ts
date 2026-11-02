@@ -82,6 +82,13 @@ describe('buildWeeklyRecapQuery', () => {
     expect(text).toContain('COUNT(*)::int AS attendances');
   });
 
+  it('binds no parameters (the window is a constant, not user input)', () => {
+    const { params } = new PgDialect().sqlToQuery(buildWeeklyRecapQuery());
+    expect(params).toEqual([]);
+  });
+});
+
+describe('buildWeeklyRecapQuery — 2+ attendees only (ROK-2063)', () => {
   it('counts only events with 2+ attended signups (ROK-2063)', () => {
     expect(RECAP_MIN_ATTENDEES).toBe(2);
     const text = render();
@@ -109,11 +116,6 @@ describe('buildWeeklyRecapQuery', () => {
       .sqlToQuery(buildWeeklyRecapQuery({ endOffsetDays: 7 }))
       .sql.replace(/\s+/g, ' ');
     expect(text).toContain('HAVING COUNT(DISTINCT user_id) >= 2');
-  });
-
-  it('binds no parameters (the window is a constant, not user input)', () => {
-    const { params } = new PgDialect().sqlToQuery(buildWeeklyRecapQuery());
-    expect(params).toEqual([]);
   });
 });
 
