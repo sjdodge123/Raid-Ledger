@@ -113,7 +113,8 @@ admission::prune_stale() {
         --argjson waitmax "$(admission::max_wait_seconds)" \
         '{
             heavy_running: [ (.heavy_running // [])[]
-                | select(($now - (.admitted_epoch // $now)) < $hold) ],
+                | select(($now - (.admitted_epoch // $now)) < $hold)
+                | select((.kind // "") != "registry_gc" or (.expires_epoch // 0) > $now) ],
             heavy_waiting: [ (.heavy_waiting // [])[]
                 | select(($now - (.since_epoch // $now)) < ($waitmax + 60)) ]
         }' 2>/dev/null || true
@@ -187,6 +188,12 @@ def medium_n: [ents[] | select(wt == "medium" and kd != "image_build")] | length
 def build_n: [ents[] | select(kd == "image_build")] | length;
 def reserved: [ents[] | (.reserve_mb // .mb // $floor)] | add // 0;
 def waits: (.heavy_waiting // []);
+def gc_live($now): [ents[] | select(kd == "registry_gc" and (.expires_epoch // 0) > $now)] | length;
+def gc_reason($now):
+    if build_n > 0 then "image_build_running"
+    elif any(waits[]; kd == "image_build") then "image_build_waiting"
+    elif gc_live($now) > 0 then "registry_gc_running"
+    else "" end;
 def since_of($k; $now): (first(waits[] | select(.key == $k) | .since_epoch) // $now);
 def ahead($k; $now): since_of($k; $now) as $s
     | [waits[] | select(.key != $k and (.since_epoch // $now) < $s)];
@@ -195,8 +202,10 @@ def ledger_reason($w; $kind; $reserve; $envmb; $k; $now):
     | ([$a[] | select(wt == "heavy" and kd != "image_build")] | length) as $ah
     | ([$a[] | select(kd == "image_build")] | length) as $ab
     | ([$a[] | (.reserve_mb // $floor)] | add // 0) as $ar
-    | (ents | length) as $n
-    | if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
+    | ([ents[] | select(kd != "registry_gc")] | length) as $n
+    | if ($kind == "image_build" and gc_live($now) > 0)
+      then "registry_gc_running"
+      elif ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
       then "heavy_cap \(heavy_n)/\($maxheavy)"
       elif ($kind == "image_build" and $maxbuilds > 0 and build_n >= $maxbuilds)
       then "image_build_cap \(build_n)/\($maxbuilds)"
@@ -312,7 +321,8 @@ admission::snapshot() {
             admission: {
                 running: ($st.heavy_running // []),
                 waiting: ($st.heavy_waiting // []),
-                categories: {heavy: $h, medium: $m, image_build: $b},
+                categories: {heavy: $h, medium: $m, image_build: $b,
+                             registry_gc: ([$st | ents[] | select(kd == "registry_gc")] | length)},
                 reserved_mb: $r,
                 env_reserved_mb: $envmb,
                 committed_mb: ($r + $envmb),
@@ -438,6 +448,73 @@ admission::release() {
             heavy_running: [ (.heavy_running // [])[] | select(.key != $k) ],
             heavy_waiting: [ (.heavy_waiting // [])[] | select(.key != $k) ]
         }' 2>/dev/null || true
+}
+
+# ROK-2018 — registry GC admission. `registry garbage-collect` marks blobs and
+# then sweeps the unmarked ones; a push landing in that window can lose a layer,
+# and image builds are the only pushers. So a GC run holds a `registry_gc` entry
+# in THIS ledger, taken under the same flock as a build's admit: the ledger
+# refuses an image build while a live GC entry exists (`registry_gc_running`),
+# and a GC is admitted only when no image build is running OR waiting (GC
+# yields; it is never urgent enough to starve a build). The entry reserves 0 MB
+# and counts toward no cap or budget (GC is I/O, not memory).
+#
+# The holder is the gc-sweeper container, whose pid prune_dead cannot see from
+# the orchestrator host, so the entry carries `expires_epoch` (now +
+# RL_REGISTRY_GC_TIMEOUT_SECONDS + RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS). Past it
+# the ledger ignores the entry and prune_stale drops it: a sweeper killed
+# mid-GC blocks builds for at most that long. gc_renew pushes the expiry out
+# again right before garbage-collect starts.
+RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS="${RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS:-120}"
+
+admission::_gc_ttl() { echo $(( ${RL_REGISTRY_GC_TIMEOUT_SECONDS:-1800} + RL_REGISTRY_GC_EXPIRY_GRACE_SECONDS )); }
+
+admission::_gc_held() {
+    jq -e --arg k "$1" 'any((.heavy_running // [])[]; .key == $k and .kind == "registry_gc")' \
+        "$RL_ADMISSION_FILE" >/dev/null 2>&1
+}
+
+# admission::gc_try_acquire <key> [pid] — non-blocking. 0 = admitted (entry
+# written); 1 = refused, the reason on stdout (image_build_running,
+# image_build_waiting, registry_gc_running, or admission_unreadable — an
+# unreadable ledger is treated as busy: GC is the side that must not race).
+admission::gc_try_acquire() {
+    local key="$1" pid="${2:-$$}" now ts host reason
+    # ledger_reason (in the shared defs) references these knobs: always bind them.
+    local -a jargs=(--argjson floor "$RL_HEAVY_TASK_MIN_FREE_MB" --argjson budget 0
+        --argjson maxheavy "$RL_MAX_HEAVY_CONCURRENT" --argjson maxbuilds "$RL_MAX_IMAGE_BUILDS")
+    admission::ensure_file
+    now=$(date +%s); ts=$(date -u +%FT%TZ); host="$(hostname 2>/dev/null || echo unknown)"
+    state::mutate_with_precondition "$RL_ADMISSION_FILE" "${jargs[@]}" \
+        --arg k "$key" --arg ts "$ts" --arg host "$host" --arg pid "$pid" \
+        --argjson now "$now" --argjson exp "$(( now + $(admission::_gc_ttl) ))" \
+        "$_ADMISSION_JQ_DEFS"'
+        if gc_reason($now) == ""
+        then .heavy_running = (ents + [{key: $k, task_id: $k, admitted_at: $ts, admitted_epoch: $now,
+                 mb: 0, weight: "light", kind: "registry_gc", reserve_mb: 0, expires_epoch: $exp,
+                 pid: ($pid | tonumber? // null), host: $host}])
+        else . end' 2>/dev/null
+    # Ours only if THIS call wrote it: a same-key entry of a still-live earlier
+    # sweep must read as registry_gc_running, not as our admission.
+    jq -e --arg k "$key" --arg pid "$pid" --arg host "$host" --argjson now "$now" \
+        'any((.heavy_running // [])[]; .key == $k and .kind == "registry_gc"
+             and (.pid | tostring) == $pid and .host == $host and .admitted_epoch == $now)' \
+        "$RL_ADMISSION_FILE" >/dev/null 2>&1 && return 0
+    reason=$(jq -r "${jargs[@]}" --argjson now "$now" "$_ADMISSION_JQ_DEFS"'gc_reason($now)' \
+        "$RL_ADMISSION_FILE" 2>/dev/null)
+    echo "${reason:-admission_unreadable}"
+    return 1
+}
+
+# admission::gc_renew <key> — re-arm the entry's expiry; 1 when it is gone
+# (expired and pruned, or released): the caller must not garbage-collect then.
+admission::gc_renew() {
+    local key="$1" exp
+    exp=$(( $(date +%s) + $(admission::_gc_ttl) ))
+    state::mutate "$RL_ADMISSION_FILE" --arg k "$1" --argjson exp "$exp" \
+        '.heavy_running = [ (.heavy_running // [])[]
+            | if .key == $k and .kind == "registry_gc" then .expires_epoch = $exp else . end ]' 2>/dev/null
+    admission::_gc_held "$key"
 }
 
 # Append one line to the task log (when given) and mirror it to stderr so an

@@ -15,11 +15,12 @@
 # disk by itself: blobs go only when `registry garbage-collect` runs inside
 # the registry container. The distribution docs want the registry read-only
 # for that, because a push racing the mark phase can lose blobs. We cannot
-# flip it read-only without a restart, so GC runs only when NO image build is
-# admitted (admission.json heavy_running kind=image_build) — builds are the
-# only pushers. Residual risk: a build admitted during the GC window itself
-# (seconds) could push a layer GC sweeps; that build's env then fails
-# image_not_found and a rebuild fixes it. Single-arch v2 manifests only —
+# flip it read-only without a restart, so the sweep holds a `registry_gc`
+# entry in the admission ledger (admission.json, same flock as an image
+# build's admit) for its WHOLE run — tag deletes and garbage-collect. While it
+# is held no image build (the only pushers) is admitted; it is taken only when
+# no build runs or waits, and it expires on a timer so a killed sweeper cannot
+# wedge builds (ROK-2018, see _admission.sh). Single-arch v2 manifests only —
 # --delete-untagged is unsafe for multi-arch indexes (distribution#3178).
 #
 # Env knobs:
@@ -33,6 +34,7 @@
 #   RL_REGISTRY_GC_DRY_RUN        0    1 = report, delete nothing (sweeper AND
 #                                      env-destroy — both read /srv/rl-infra/.env)
 #   RL_REGISTRY_GC_TIMEOUT_SECONDS 1800 bound on `registry garbage-collect`
+#   RL_REGISTRY_GC_KEY            registry-gc  the sweep's admission-ledger key
 
 RL_REGISTRY_URL="${RL_REGISTRY_URL:-http://127.0.0.1:5000}"
 RL_REGISTRY_REPO="${RL_REGISTRY_REPO:-rl-allinone}"
@@ -43,6 +45,8 @@ RL_REGISTRY_GC_INTERVAL_HOURS="${RL_REGISTRY_GC_INTERVAL_HOURS:-6}"
 RL_REGISTRY_GC_STATE_FILE="${RL_REGISTRY_GC_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/registry-gc.json}"
 RL_REGISTRY_GC_DRY_RUN="${RL_REGISTRY_GC_DRY_RUN:-0}"
 RL_REGISTRY_GC_TIMEOUT_SECONDS="${RL_REGISTRY_GC_TIMEOUT_SECONDS:-1800}"
+RL_REGISTRY_GC_KEY="${RL_REGISTRY_GC_KEY:-registry-gc}"
+_REGISTRY_GC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 _REGISTRY_ACCEPT="Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
 
@@ -121,14 +125,43 @@ registry_gc::select_doomed() {
          | sort_by(-.created) | .[$keep:][] | select(($now - .created) > $ret) | .tag' <<<"$1"
 }
 
-# 0 when an image build is admitted, or when admission state is unreadable
-# (unknown is treated as busy: GC is the operation that must not race).
-registry_gc::build_admitted() {
-    local f="${RL_ADMISSION_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/admission.json}"
-    [[ -r "$f" ]] || return 0
-    jq -e '[(.heavy_running // [])[] | select(.kind == "image_build")] | length > 0' "$f" >/dev/null 2>&1 && return 0
-    jq -e . "$f" >/dev/null 2>&1 || return 0
-    return 1
+# Minimal flock+jq writers for the admission ledger, used only where
+# _state.sh is not sourced (the gc-sweeper must not source it: it re-sources
+# the stack .env and points DOCKER_HOST at the socket proxy). Same contract as
+# _state.sh: refuse invalid JSON; the precondition variant returns 1 when the
+# filter left the file unchanged.
+registry_gc::_define_state_shims() {
+    command -v flock >/dev/null 2>&1 || flock() { return 0; }
+    state::mutate() { registry_gc::_mutate 0 "$@"; }
+    state::mutate_with_precondition() { registry_gc::_mutate 1 "$@"; }
+}
+registry_gc::_mutate() {
+    local pre="$1" file="$2"; shift 2
+    (
+        flock -x 200
+        jq empty "$file" 2>/dev/null || { echo "registry_gc: $file is not valid JSON" >&2; exit 1; }
+        local tmp; tmp=$(mktemp "${file}.XXXXXX") || exit 1
+        jq "$@" "$file" > "$tmp" || { rm -f "$tmp"; exit 1; }
+        if [[ "$pre" == 1 ]] && cmp -s "$file" "$tmp"; then rm -f "$tmp"; exit 1; fi
+        mv "$tmp" "$file"; chmod 664 "$file" 2>/dev/null || true
+    ) 200>"$RL_LOCK_DIR/$(basename "$file").lock"
+}
+
+# Load _admission.sh (gc_try_acquire / gc_renew / release) once. The lock dir
+# defaults to <admission dir>/locks — the orchestrator's RL_LOCK_DIR for the
+# same file, so the sweeper and task-start take the SAME flock. 1 when the
+# library is missing (the caller then skips the sweep: no lock, no GC).
+registry_gc::_load_admission() {
+    declare -F admission::gc_try_acquire >/dev/null 2>&1 && return 0
+    [[ -r "$_REGISTRY_GC_LIB_DIR/_admission.sh" ]] || return 1
+    : "${RL_STATE_DIR:=${STATE_DIR:-/state}}"
+    : "${RL_ADMISSION_FILE:=${RL_STATE_DIR}/admission.json}"
+    : "${RL_LOCK_DIR:=$(dirname "$RL_ADMISSION_FILE")/locks}"
+    mkdir -p "$RL_LOCK_DIR" 2>/dev/null || true
+    declare -F state::mutate_with_precondition >/dev/null 2>&1 || registry_gc::_define_state_shims
+    # shellcheck disable=SC1091
+    source "$_REGISTRY_GC_LIB_DIR/_admission.sh"
+    declare -F admission::gc_try_acquire >/dev/null 2>&1
 }
 
 # `registry garbage-collect` inside the registry container, bounded by
@@ -187,28 +220,50 @@ registry_gc::_record() {
 }
 
 # The gc-sweeper entry. Interval-gated by RL_REGISTRY_GC_STATE_FILE unless
-# $1 == force (the sweeper forces it under disk pressure). Skips everything
-# while an image build is admitted (a build is the only pusher, and a fresh
-# cached-build tag has an old config.created and maybe no env row yet). Deletes
-# doomed tags, then garbage-collects if still no build is admitted. Echoes a
-# JSON summary. Returns 1 ({"error":…}) when the protected set is unreadable.
+# $1 == force (the sweeper forces it under disk pressure). Takes the
+# `registry_gc` admission entry first and skips everything when refused (a
+# build is running or waiting — it is the only pusher, and a fresh cached-build
+# tag has an old config.created and maybe no env row yet); a skipped sweep
+# writes no state, so it retries next tick. The entry is released on every
+# exit of the held part (trap + an explicit release). Echoes a JSON summary.
+# Returns 1 ({"error":…}) when the protected set is unreadable.
 registry_gc::sweep() {
-    local now last prot
+    local now last reason rc=0 key="$RL_REGISTRY_GC_KEY"
     now=$(registry_gc::_now); last=$(registry_gc::_last_run)
     if [[ "${1:-}" != "force" ]] && (( now - ${last:-0} < RL_REGISTRY_GC_INTERVAL_HOURS * 3600 )); then
         echo '{"skipped":"interval"}'; return 0
     fi
-    if registry_gc::build_admitted; then echo '{"skipped":"build_admitted"}'; return 0; fi
+    if ! registry_gc::_load_admission; then
+        echo '{"skipped":"admission_lib_missing"}'; return 0
+    fi
+    if ! reason=$(admission::gc_try_acquire "$key"); then
+        jq -nc --arg r "$reason" '{skipped: (if ($r | startswith("image_build")) then "build_admitted"
+            else "admission_refused" end), blocked_by: $r}'
+        return 0
+    fi
+    (
+        trap 'admission::release "$key"' EXIT
+        trap 'exit 143' TERM INT HUP
+        registry_gc::_sweep_held "$now"
+    ) || rc=$?
+    admission::release "$key"
+    return "$rc"
+}
+
+# The sweep body, run while the admission entry is held. Re-arms the entry's
+# expiry right before garbage-collect; if the entry is gone by then (expired
+# and pruned) a build may already be pushing, so garbage-collect is skipped.
+registry_gc::_sweep_held() {
+    local now="$1" prot inv avoid tag deleted='[]' gc
     if ! prot=$(registry_gc::protected_tags); then
         echo "registry_gc: docker ps, docker images or $RL_ENVS_FILE unreadable — sweep aborted" >&2
         echo '{"error":"protected_tags_unreadable"}'; return 1
     fi
-    local inv avoid tag deleted='[]' gc
     inv=$(registry_gc::_inventory); avoid=$(registry_gc::_protected_digests "$prot")
     for tag in $(registry_gc::select_doomed "$inv" "$prot"); do
         registry_gc::delete_tag "$tag" "$avoid" && deleted=$(jq -c --arg t "$tag" '. + [$t]' <<<"$deleted")
     done
-    if registry_gc::build_admitted; then gc="skipped_build_admitted"; else gc=$(registry_gc::collect); fi
+    if admission::gc_renew "$RL_REGISTRY_GC_KEY"; then gc=$(registry_gc::collect); else gc="skipped_lock_lost"; fi
     registry_gc::_record "$now" "$inv" "$deleted" "$gc"
 }
 
