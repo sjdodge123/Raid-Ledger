@@ -851,7 +851,7 @@ run_lint() {
   # Check-only by design (ROK-1404): `lint` must never mutate the tree, so the
   # lint → prettier:check order is irrelevant; use `lint:fix` for auto-fixes.
   if [ "$effective_scope" != "web" ]; then
-    npm run lint -w api || return $?
+    NODE_OPTIONS="$(_lint_node_opts)" npm run lint -w api || return $?
     npm run prettier:check -w api || return $?
   fi
   if [ "$effective_scope" != "api" ]; then
@@ -1103,6 +1103,23 @@ _cgroup_heap_mb() {
     limit_bytes=$(cat "$cgroup_max" 2>/dev/null || true)
   fi
   resolve_heap_mb "$limit_bytes"
+}
+
+# NODE_OPTIONS for the type-aware api lint. It outgrew the runner's injected
+# 4608 MB ceiling (rl-infra/docker-compose.yml; heap OOM on a 6 GiB runner,
+# 2026-11-02), and GitHub CI already pins 8192 for the same growth. Lint runs
+# alone, so a capped cgroup gets 7/8 of its limit instead of jest's 3/4; with
+# no usable limit a caller-set heap wins, else GitHub's 8192.
+_lint_node_opts() {
+  local opts="${NODE_OPTIONS:-}" heap_mb
+  heap_mb="$(_cgroup_heap_mb)"
+  if [ -n "$heap_mb" ]; then
+    _repin_heap "$opts" $(( heap_mb * 7 / 6 ))
+  elif printf '%s' "$opts" | grep -Eq -- '--max[-_]old[-_]space[-_]size='; then
+    printf '%s' "$opts"
+  else
+    _repin_heap "$opts" 8192
+  fi
 }
 
 run_unit_tests() {
@@ -2694,7 +2711,7 @@ run_scoped_typecheck() {
 run_scoped_lint() {
   local ran=false
   if _scoped_has api; then
-    npm run lint -w api || return $?
+    NODE_OPTIONS="$(_lint_node_opts)" npm run lint -w api || return $?
     npm run prettier:check -w api || return $?
     ran=true
   fi
