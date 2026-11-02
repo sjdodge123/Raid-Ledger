@@ -3,6 +3,19 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-02 — a newer guild snapshot from any roster member applies — **additive** (server acceptance rule)
+
+- **Wire format unchanged; stays v1** — no `schema.json` or fixture change
+  (operator ruling 2026-11-02, ROK-2066). Once a guild exists, a non-staff
+  importer no longer needs an admin-made editor grant: a guild section whose
+  exporter is in the roster and whose `data.snapshotAt` is not older than the
+  stored one replaces the roster. A wholesale change (≥ 5 and > 25% of the
+  roster added or removed within 24 h) is no longer refused with
+  `INVALID_PAYLOAD`; it applies and Raid Ledger staff get a notice. So an
+  "Export all" (LedgerLink's logout auto-export) from a plain member no
+  longer loses its `char` section to a guild reject. `NOT_IN_GUILD` now means
+  only "the exporter is not in the roster". See `CONTRACT.md` §5.1.
+
 ## v1 — 2026-10-10 — Export clock window — **additive** (server acceptance rule)
 
 - **Wire format unchanged; stays v1** (operator ruling 2026-10-10, ROK-1756).
