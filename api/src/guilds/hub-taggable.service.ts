@@ -57,7 +57,7 @@ export class HubTaggableService {
     rows: schema.GuildSelect[],
   ): Promise<schema.GuildSelect[]> {
     const rights = await Promise.all(
-      rows.map((r) => this.access.canEdit(actor, r.id)),
+      rows.map((r) => this.access.canEditOfKind(actor, r.id, r.kind)),
     );
     return rows.filter((_, i) => rights[i] === true);
   }

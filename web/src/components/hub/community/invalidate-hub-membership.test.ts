@@ -21,6 +21,13 @@ describe('invalidateHubMembership', () => {
         for (const key of KEYS) expect(qc.getQueryState(key)?.isInvalidated, JSON.stringify(key)).toBe(true);
         expect(qc.getQueryState(guildPageKey(42))?.isInvalidated, 'another hub page is untouched').toBe(false);
     });
+
+    it('also refetches the event-form Hub picker (ROK-2071): a left hub must drop out of it', async () => {
+        const qc = new QueryClient();
+        qc.setQueryData(['guilds', 'taggable', 7, 1], { seeded: true });
+        await invalidateHubMembership(qc, 41);
+        expect(qc.getQueryState(['guilds', 'taggable', 7, 1])?.isInvalidated).toBe(true);
+    });
 });
 
 describe('invalidateAllHubMemberships (character delete / addon import)', () => {

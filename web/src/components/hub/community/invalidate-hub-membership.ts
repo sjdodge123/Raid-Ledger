@@ -15,6 +15,9 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
         qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
         qc.invalidateQueries({ queryKey: ['game-hubs'] }),
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
+        // ROK-2071 (Codex P2): leaving or joining a hub changes which hubs the
+        // event form's Hub picker offers (a stale one 403s on save).
+        qc.invalidateQueries({ queryKey: TAGGABLE_HUBS_PREFIX }),
     ]);
 }
 
