@@ -42,13 +42,13 @@ import {
   assertEligibleUser,
   insertMembershipOrConflict,
   loadSeriesAnchor,
-  materializeNights,
   planNights,
   SERIES_ERRORS,
   type MaterializeMembership,
   type SeriesAnchor,
 } from './series-signups-join.helpers';
 import { cancelTaggedNights } from './series-signups-lifecycle.helpers';
+import { createAndReviveNights } from './series-signups-rejoin.helpers';
 
 @Injectable()
 export class SeriesSignupsService {
@@ -114,7 +114,8 @@ export class SeriesSignupsService {
       undefined,
       new Date(),
     );
-    if (classified.attach.length + classified.create.length === 0)
+    const { attach, create, revive } = classified;
+    if (attach.length + create.length + revive.length === 0)
       throw new ConflictException(SERIES_ERRORS.NO_NIGHTS);
     const membership = await insertMembershipOrConflict(this.db, {
       groupId: anchor.groupId,
@@ -147,7 +148,10 @@ export class SeriesSignupsService {
     };
   }
 
-  /** Attaches the active rows in place, then creates the missing nights. */
+  /**
+   * Attaches the active rows in place, creates the missing nights, then signs
+   * up again on the nights the user's last leave declined (Q6).
+   */
   private async applyPlan(
     userId: number,
     dto: JoinSeriesDto,
@@ -159,14 +163,14 @@ export class SeriesSignupsService {
       classified.attach.map((r) => r.id),
       membership.id,
     );
-    const materialized = await materializeNights(
+    const created = await createAndReviveNights(
       { db: this.db, signups: this.signupsService },
-      classified.create,
+      classified,
       userId,
       membership,
       dto,
     );
-    return { attachedEventIds, ...materialized };
+    return { attachedEventIds, ...created };
   }
 
   /** Audits a join on the anchor event (Q8: per-night `signup_added` too). */
@@ -186,6 +190,23 @@ export class SeriesSignupsService {
         nights,
       },
     );
+  }
+
+  /**
+   * Audits a leave on the anchor. `cancelledEventIds` is read back by a later
+   * re-join (Q6): those nights become joinable again.
+   */
+  private async logLeft(
+    anchorEventId: number,
+    userId: number,
+    seriesSignupId: number,
+    cancelledEventIds: number[],
+  ): Promise<void> {
+    await this.activityLog.log('event', anchorEventId, 'series_left', userId, {
+      seriesSignupId,
+      cancelled: cancelledEventIds.length,
+      cancelledEventIds,
+    });
   }
 
   /**
@@ -210,15 +231,11 @@ export class SeriesSignupsService {
       now,
     );
     await clearFutureTagsForMemberships(this.db, [ended.id], now);
-    await this.activityLog.log(
-      'event',
+    await this.logLeft(
       anchor.event.id,
-      'series_left',
       userId,
-      {
-        seriesSignupId: ended.id,
-        cancelled: cancelled.cancelledEventIds.length,
-      },
+      ended.id,
+      cancelled.cancelledEventIds,
     );
     return { membership: toSeriesSignupDto(ended), ...cancelled };
   }

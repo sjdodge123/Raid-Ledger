@@ -28,6 +28,7 @@ import {
   type ClassifiedNights,
   type JoinableNight,
 } from './series-signups-plan.helpers';
+import { findRevivableEventIds } from './series-signups-rejoin.queries';
 
 /** User-facing error messages (L6 surfaces them in Discord replies). */
 export const SERIES_ERRORS = {
@@ -109,7 +110,15 @@ export async function planNights(
     userId,
     nights.map((n) => n.eventId),
   );
-  return { nights, classified: classifyNights(nights, rows, membershipId) };
+  // Q6: only a non-member re-joining revives the nights their leave declined.
+  const revivable =
+    membershipId === undefined
+      ? await findRevivableEventIds(db, anchor.groupId, userId)
+      : new Set<number>();
+  return {
+    nights,
+    classified: classifyNights(nights, rows, membershipId, revivable),
+  };
 }
 
 /** True for a Postgres unique violation, possibly wrapped by Drizzle. */

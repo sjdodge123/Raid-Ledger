@@ -48,6 +48,8 @@ export interface ClassifiedNights {
   keep: UserSeriesRow[];
   /** Active + already tagged → nothing to do. */
   inSeries: UserSeriesRow[];
+  /** Inactive + untagged, cancelled by the user's last leave → sign up again (Q6). */
+  revive: UserSeriesRow[];
 }
 
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -81,12 +83,14 @@ function isActiveStatus(status: string): boolean {
  * tagged by another membership as joinable would promise a night the write
  * skips (unreachable under D9, which untags on every end).
  * `membershipId` is accepted for the tabled contract; the bucket does not
- * depend on it for that reason.
+ * depend on it for that reason. An inactive, untagged row whose night is in
+ * `revivable` (the nights the user's last leave cancelled) lands in `revive`.
  */
 export function classifyNights(
   nights: JoinableNight[],
   rows: UserSeriesRow[],
   membershipId?: number,
+  revivable: ReadonlySet<number> = new Set(),
 ): ClassifiedNights {
   void membershipId;
   const byEvent = new Map(rows.map((r) => [r.eventId, r]));
@@ -95,18 +99,28 @@ export function classifyNights(
     create: [],
     keep: [],
     inSeries: [],
+    revive: [],
   };
   for (const night of nights) {
     const row = byEvent.get(night.eventId);
     if (row === undefined) out.create.push(night);
-    else if (!isActiveStatus(row.status)) out.keep.push(row);
+    else if (!isActiveStatus(row.status))
+      (isRevivable(row, revivable) ? out.revive : out.keep).push(row);
     else if (row.seriesSignupId === null) out.attach.push(row);
     else out.inSeries.push(row);
   }
   return out;
 }
 
-/** The preview state of one night given its bucket. */
+/** An inactive row the last leave cancelled and nothing re-tagged since. */
+function isRevivable(
+  row: UserSeriesRow,
+  revivable: ReadonlySet<number>,
+): boolean {
+  return row.seriesSignupId === null && revivable.has(row.eventId);
+}
+
+/** The preview state of one night given its bucket (`revive` → will_create). */
 function nightState(eventId: number, c: ClassifiedNights): SeriesNightState {
   if (c.attach.some((r) => r.eventId === eventId)) return 'will_attach';
   if (c.keep.some((r) => r.eventId === eventId)) return 'stays_inactive';
@@ -119,7 +133,7 @@ function rowStatus(
   eventId: number,
   c: ClassifiedNights,
 ): SeriesNightDto['signupStatus'] {
-  const row = [...c.attach, ...c.keep, ...c.inSeries].find(
+  const row = [...c.attach, ...c.keep, ...c.inSeries, ...c.revive].find(
     (r) => r.eventId === eventId,
   );
   const parsed = SignupStatusSchema.safeParse(row?.status);

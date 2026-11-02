@@ -139,11 +139,7 @@ describe('classifyNights', () => {
 
 describe('classifyNights — revive (Q6 re-join after leave)', () => {
   const nights = [1, 2, 3].map((id) => night(id, id * 24));
-  const rows = [
-    row(1, 'declined'),
-    row(2, 'roached_out'),
-    row(3, 'declined'),
-  ];
+  const rows = [row(1, 'declined'), row(2, 'roached_out'), row(3, 'declined')];
   const c = classifyNights(nights, rows, undefined, new Set([1, 2]));
 
   it('puts inactive untagged rows the last leave cancelled in revive', () => {

@@ -506,10 +506,8 @@ describe('skip and leave (I8–I9)', () => {
     // mutation: the series_left audit dropped
     expect(logs).toHaveLength(1);
     expect(logs[0]?.entityId).toBe(s.n2);
-    expect(logs[0]?.metadata).toMatchObject({
-      seriesSignupId: m.id,
-      cancelled: 3,
-    });
+    const meta = must(logs[0], 'series_left log').metadata;
+    expect(meta).toMatchObject({ seriesSignupId: m.id, cancelled: 3 });
   });
 
   it('I9b: leave without an active membership is 404', async () => {
