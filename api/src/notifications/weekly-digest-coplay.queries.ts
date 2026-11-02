@@ -62,7 +62,7 @@ export const SESSION_SPAN_SQL = sql.raw(
   `interval '${MAX_SESSION_SPAN_HOURS} hours'`,
 );
 
-/** A closed time window, `start` ≤ t ≤ `end`. */
+/** A digest week. Session co-play is credited half-open (`start` ≤ t < `end`); event attendance still uses `≤ end`. */
 export interface CoPlayWindow {
   start: Date;
   end: Date;
