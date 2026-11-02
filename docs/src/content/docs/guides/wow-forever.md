@@ -139,7 +139,7 @@ exports for you after you log out of the game.
 2. Install it and open it.
 
    :::note
-   **Unsigned test build.** The current build (v0.1.0-test.1) isn't signed yet.
+   **Unsigned test build.** The current build (v0.1.0-test.2) isn't signed yet.
    Windows may say "Windows protected your PC": choose **More info**, then
    **Run anyway**. On a Mac, right-click the app and choose **Open** the first time.
    :::
