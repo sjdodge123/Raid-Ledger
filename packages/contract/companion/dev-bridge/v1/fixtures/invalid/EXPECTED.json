@@ -1,0 +1,106 @@
+{
+  "probe-request--deny-send-chat-message": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-set-cvar": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-loadstring": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-run-script": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-guild-uninvite": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-use-container-item": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-get-quest-reward": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--deny-cancel-unit-buff": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--not-read-verb": {
+    "path": "calls.0.fn",
+    "code": "custom"
+  },
+  "probe-request--fn-four-segments": {
+    "path": "calls.0.fn",
+    "code": "invalid_format"
+  },
+  "probe-request--arg-table": {
+    "path": "calls.0.args.0",
+    "code": "invalid_union"
+  },
+  "probe-request--loop-token-without-foreach": {
+    "path": "calls.0.args",
+    "code": "custom"
+  },
+  "probe-request--foreach-forward-ref": {
+    "path": "calls.2.forEach.countFrom",
+    "code": "custom"
+  },
+  "probe-request--duplicate-call-id": {
+    "path": "calls.1.id",
+    "code": "custom"
+  },
+  "probe-request--fn-and-presence": {
+    "path": "calls.0",
+    "code": "custom"
+  },
+  "probe-request--ttl-too-long": {
+    "path": "ttlHours",
+    "code": "too_big"
+  },
+  "probe-request--calls-empty": {
+    "path": "calls",
+    "code": "too_small"
+  },
+  "probe-request--after-unknown-event": {
+    "path": "after",
+    "code": "invalid_value"
+  },
+  "probe-request--lua-source-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "probe-result--string-too-long": {
+    "path": "calls.1.values.0",
+    "code": "too_big"
+  },
+  "probe-result--unknown-status": {
+    "path": "calls.0.status",
+    "code": "invalid_value"
+  },
+  "health--bridge-version-2": {
+    "path": "bridgeVersion",
+    "code": "invalid_value"
+  },
+  "sv-raw--parent-path": {
+    "path": "path",
+    "code": "custom"
+  },
+  "probe-list--missing-next": {
+    "path": "next",
+    "code": "invalid_type"
+  },
+  "logs--unredacted-token": {
+    "path": "lines.1.msg",
+    "code": "custom"
+  },
+  "error--unknown-code": {
+    "path": "error",
+    "code": "invalid_value"
+  }
+}

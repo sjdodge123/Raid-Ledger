@@ -1,0 +1,14 @@
+{
+  "error": "invalid_request",
+  "issues": [
+    {
+      "path": [
+        "calls",
+        0,
+        "fn"
+      ],
+      "code": "custom",
+      "message": "Function not allowed (denied)"
+    }
+  ]
+}

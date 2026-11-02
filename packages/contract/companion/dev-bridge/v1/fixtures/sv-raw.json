@@ -1,0 +1,9 @@
+{
+  "flavor": "_anniversary_",
+  "scope": "account",
+  "path": "_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/LedgerLink.lua",
+  "bytes": 18342,
+  "mtime": "2026-11-01T18:30:00Z",
+  "text": "LedgerLinkDB = {\n\t[\"version\"] = 1,\n",
+  "next": null
+}
