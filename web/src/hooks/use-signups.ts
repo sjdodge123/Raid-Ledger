@@ -3,11 +3,13 @@ import { signupForEvent, cancelSignup, confirmSignup, updateSignupStatus } from 
 import type { UpdateSignupStatusDto } from '@raid-ledger/contract';
 import { invalidateRosterQueries } from './use-roster';
 import { eventCopyKey } from './use-calendar-sync';
+import { seriesSignupKey } from './use-series-signup';
 import { HUB_JOIN_PROMPTS_KEY, watchHubJoinPrompts } from '../components/hub/community/hub-join-prompts-keys';
 
-/** Roster + this viewer's calendar copy (ROK-1596: a sign-up/cancel changes the copy's state). */
+/** Roster + this viewer's calendar copy (ROK-1596) + this night's series state (ROK-1728: a skip or re-signup moves it). */
 function invalidateAfterSignupChange(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
     invalidateRosterQueries(queryClient, eventId);
+    void queryClient.invalidateQueries({ queryKey: seriesSignupKey(eventId) });
     void queryClient.invalidateQueries({ queryKey: eventCopyKey(eventId) });
 }
 
