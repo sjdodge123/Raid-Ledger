@@ -89,6 +89,9 @@ test('create stores files under files/ with server-side names (magic-byte ext)',
   assert.deepEqual(files, ['mockup.html', 'shot-1.png', 'shot-2.jpg', 'shot-3.webp', 'spec.md']);
   assert.deepEqual(await readFile(await store.filePath(item.id, 'shot-1.png')), PNG);
   assert.equal(await readFile(await store.filePath(item.id, 'mockup.html'), 'utf8'), '<!doctype html><p>hi</p>');
+  assert.equal(await store.readSpec(item.id), '# Spec', 'readSpec returns the stored spec.md text');
+  const bare = await store.create(itemBody());
+  assert.equal(await store.readSpec(bare.id), null, 'no spec attachment → null');
 });
 
 test('size caps: 300 KB mockup ok, 600 KB mockup → 413 mockup_too_large', async () => {
@@ -265,10 +268,12 @@ test('AC11: list splits pending vs decided (archive), newest first, with counts'
   assert.deepEqual(pending.items.map((i) => i.title), ['B']);
   assert.deepEqual(pending.counts, { pending: 1, decided: 2 });
   assert.deepEqual(pending.items[0], { id: b.id, story: 'ROK-1900', title: 'B', kind: 'mockup',
-    asked_by: 'rok1900-spec', created_at: b.created_at, status: 'pending', question_count: 3,
+    asked_by: 'rok1900-spec', created_at: b.created_at, status: 'pending', decided_at: null, question_count: 3,
     ruled_count: 0, has_mockup: true, screenshot_count: 1 });
   assert.deepEqual((await store.list({ status: 'decided' })).items.map((i) => [i.title, i.status]),
     [['C', 'withdrawn'], ['A', 'approved']]);
+  const archived = (await store.list({ status: 'decided' })).items;
+  assert.ok(archived.every((i) => /Z$/.test(i.decided_at ?? '')), `archive summaries carry decided_at: ${JSON.stringify(archived)}`);
   assert.deepEqual((await store.list({ status: 'all' })).items.map((i) => i.title), ['C', 'B', 'A']);
   await rejects(store.list({ status: 'deleted' }), 400, 'invalid_request');
 });

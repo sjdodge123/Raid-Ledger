@@ -195,6 +195,15 @@ test('approvals API — auth matrix, routes, redaction, persistence', async (t) 
     assert.equal(big.status, 413, big.text);
   });
 
+  await t.test('GET item carries spec_md for the page to render (null without a spec)', async () => {
+    const withSpec = await submit(port, { files: { spec_md: '# Heading\n<script>x</script>' } });
+    const r = await call(port, 'GET', `/api/approvals/${withSpec}`, { headers: inbox });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json.spec_md, '# Heading\n<script>x</script>');
+    const bare = await call(port, 'GET', `/api/approvals/${id}`, { headers: inbox });
+    assert.equal(bare.json.spec_md, null);
+  });
+
   await t.test('notes are redacted on every read except agent + include_notes=1', async () => {
     const get = (suffix, headers) => call(port, 'GET', `/api/approvals/${id}${suffix}`, { headers });
     for (const [who, suffix, headers] of [['inbox', '', inbox], ['inbox+include', '?include_notes=1', inbox],

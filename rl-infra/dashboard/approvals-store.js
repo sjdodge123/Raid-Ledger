@@ -132,6 +132,7 @@ const create = async (cfg, body, meta) => {
 export const summarize = (item) => ({
   id: item.id, story: item.story, title: item.title, kind: item.kind,
   asked_by: item.asked_by, created_at: item.created_at, status: item.status,
+  decided_at: item.decided_at ?? null,
   question_count: item.questions.length, ruled_count: item.rulings.length,
   has_mockup: item.attachments.mockup !== null,
   screenshot_count: item.attachments.screenshots.length,
@@ -219,6 +220,14 @@ const filePath = async (cfg, id, name) => {
   return join(cfg.root, id, 'files', name);
 };
 
+// The item's spec.md as text (null when it has none). The page renders it
+// from GET /api/approvals/<id>; the raw file is never served (spec D8).
+const readSpec = async (cfg, id) => {
+  const item = await readItem(cfg, id);
+  if (!item.attachments.spec) return null;
+  return readFile(join(cfg.root, id, 'files', item.attachments.spec), 'utf8');
+};
+
 const readEvents = async (cfg) => {
   let raw;
   try { raw = await readFile(join(cfg.root, EVENTS_FILE), 'utf8'); } catch (err) {
@@ -244,6 +253,7 @@ export const createApprovalStore = ({
     verdict: (id, body, meta) => verdict(cfg, id, body, meta),
     withdraw: (id, body, meta) => withdraw(cfg, id, body, meta),
     filePath: (id, name) => filePath(cfg, id, name),
+    readSpec: (id) => readSpec(cfg, id),
     readEvents: () => readEvents(cfg),
   });
 };

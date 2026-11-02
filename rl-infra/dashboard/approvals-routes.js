@@ -101,7 +101,8 @@ const handleList = async (ctx, req, res) => {
 const handleGet = async (ctx, id, req, res) => {
   const item = await ctx.store.get(id);
   const wantNotes = queryOf(req).get('include_notes') === '1' && ctx.auth.isAgent(req);
-  sendJson(res, 200, { ok: true, item: wantNotes ? item : redactNotes(item) });
+  const specMd = typeof ctx.store.readSpec === 'function' ? await ctx.store.readSpec(id) : null;
+  sendJson(res, 200, { ok: true, item: wantNotes ? item : redactNotes(item), spec_md: specMd });
 };
 
 const handleAction = async (ctx, id, action, req, res) => {
