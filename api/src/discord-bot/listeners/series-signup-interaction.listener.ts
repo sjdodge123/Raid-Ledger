@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -45,6 +45,8 @@ export class SeriesSignupInteractionListener {
     this.logger,
     'Series signup interactions',
   );
+  /** `<discordUserId>:<eventId>` of Confirms still running (double-click guard). */
+  private readonly inFlight = new Set<string>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -83,24 +85,57 @@ export class SeriesSignupInteractionListener {
     this.binding.detach();
   }
 
-  /** Parse → defer → route; any non-HTTP failure gets the generic reply. */
+  /**
+   * Parse → defer → route. A second Confirm while the first is still running
+   * is acknowledged and dropped, so it never overwrites the first's reply.
+   */
   async handleInteraction(interaction: SeriesInteraction): Promise<void> {
     const parsed = parseSeriesCustomId(interaction.customId);
     if (!parsed) return;
     if (!(await this.defer(interaction, parsed))) return;
+    const key = this.inFlightKey(interaction, parsed);
+    if (key !== null && this.inFlight.has(key)) return;
+    if (key !== null) this.inFlight.add(key);
     try {
       await this.route(interaction, parsed);
     } catch (error) {
-      this.logger.error(
-        `Series signup ${parsed.action} failed for event ${parsed.eventId}`,
-        errorStack(error),
-      );
+      await this.replyFailure(interaction, parsed, error);
+    } finally {
+      if (key !== null) this.inFlight.delete(key);
+    }
+  }
+
+  private inFlightKey(
+    interaction: SeriesInteraction,
+    parsed: ParsedSeriesCustomId,
+  ): string | null {
+    if (parsed.action !== SERIES_BUTTON_IDS.CONFIRM) return null;
+    return `${interaction.user.id}:${parsed.eventId}`;
+  }
+
+  /** A service HttpException shows its message; anything else is generic. */
+  private async replyFailure(
+    interaction: SeriesInteraction,
+    parsed: ParsedSeriesCustomId,
+    error: unknown,
+  ): Promise<void> {
+    if (error instanceof HttpException) {
       await safeEditReply(
         interaction,
-        { content: 'Something went wrong. Please try again.', components: [] },
+        { content: error.message, components: [] },
         this.logger,
       );
+      return;
     }
+    this.logger.error(
+      `Series signup ${parsed.action} failed for event ${parsed.eventId}`,
+      errorStack(error),
+    );
+    await safeEditReply(
+      interaction,
+      { content: 'Something went wrong. Please try again.', components: [] },
+      this.logger,
+    );
   }
 
   /** The embed button opens a new ephemeral; later steps edit that one. */

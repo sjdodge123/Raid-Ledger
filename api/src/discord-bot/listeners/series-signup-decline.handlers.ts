@@ -25,6 +25,21 @@ export async function offerSeriesDeclineChoice(
   eventId: number,
   deps: Pick<SeriesInteractionDeps, 'db'>,
 ): Promise<boolean> {
+  if (!(await isSeriesMember(interaction, eventId, deps))) return false;
+  await interaction.editReply({
+    content:
+      "You're in for the series. Skip just this night, or leave the series?",
+    components: [buildSkipOrLeaveRow(eventId)],
+  });
+  return true;
+}
+
+/** True when the clicker is linked and an active member of this event's series. */
+async function isSeriesMember(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: Pick<SeriesInteractionDeps, 'db'>,
+): Promise<boolean> {
   const user = await findLinkedUser(interaction.user.id, deps);
   if (!user) return false;
   const event = await fetchEvent(eventId, deps);
@@ -34,22 +49,19 @@ export async function offerSeriesDeclineChoice(
     event.recurrenceGroupId,
     user.id,
   );
-  if (!member) return false;
+  return !!member;
+}
+
+/** Secondary "Skip this night" + Danger "Leave series". */
+function buildSkipOrLeaveRow(eventId: number): ActionRowBuilder<ButtonBuilder> {
   const skip = new ButtonBuilder()
     .setCustomId(`${SERIES_BUTTON_IDS.SKIP}:${eventId}`)
     .setLabel('Skip this night')
     .setStyle(ButtonStyle.Secondary);
-  await interaction.editReply({
-    content:
-      "You're in for the series. Skip just this night, or leave the series?",
-    components: [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        skip,
-        buildLeaveButton(eventId),
-      ),
-    ],
-  });
-  return true;
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    skip,
+    buildLeaveButton(eventId),
+  );
 }
 
 /** Skip one night: cancel this event's signup; the membership stays. */
