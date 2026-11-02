@@ -13,11 +13,20 @@ import {
   CompanionConfigSchema,
   type CompanionContractTable,
 } from '@raid-ledger/contract';
+import { Logger } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import {
   CompanionHandlerRegistry,
   type CompanionContractHandler,
 } from '../ingest/companion-handler.registry';
 import type { CompanionIngestAuth } from '../ingest/companion-ingest-request';
+import { CompanionConfigOwners } from './companion-config-owners.service';
 import {
   CompanionConfigService,
   DEFAULT_COMPANION_MIN_APP_VERSION,
@@ -169,5 +178,78 @@ describe('authenticated', () => {
     const shipped = new CompanionConfigService(registry);
     const ids = (await shipped.build(DEVICE)).contracts?.map((c) => c.id);
     expect(ids).toEqual([BG3_SAVE_CONTRACT_ID, WOW_LEDGERLINK_CONTRACT_ID]);
+  });
+});
+
+describe('ROK-2067 plugin + game (owners wired)', () => {
+  let state: 'active' | 'inactive' | 'not_installed';
+  let manifest: { name: string; gameSlugs: string[] } | undefined;
+  let db: MockDb;
+  let owned: CompanionConfigService;
+
+  beforeEach(async () => {
+    state = 'active';
+    manifest = { name: 'Test Plugin', gameSlugs: [] };
+    db = createDrizzleMock();
+    const module = await Test.createTestingModule({
+      providers: [
+        CompanionConfigOwners,
+        { provide: DrizzleAsyncProvider, useValue: db },
+        {
+          provide: PluginRegistryService,
+          useValue: {
+            getManifest: () => manifest,
+            getPluginState: () => state,
+          },
+        },
+      ],
+    }).compile();
+    owned = new CompanionConfigService(
+      registry,
+      TABLE,
+      module.get(CompanionConfigOwners),
+    );
+  });
+
+  const pluginOf = async () => (await owned.build(DEVICE)).contracts?.[0];
+
+  it.each(['active', 'inactive', 'not_installed'] as const)(
+    'plugin.state %s comes from the registry',
+    async (s) => {
+      registry.register(OWNER, handler());
+      state = s;
+      expect((await pluginOf())?.plugin).toEqual({
+        id: OWNER,
+        name: 'Test Plugin',
+        state: s,
+      });
+    },
+  );
+
+  it('no handler registered → plugin null, game null', async () => {
+    expect(await pluginOf()).toMatchObject({ plugin: null, game: null });
+  });
+
+  it('no plugin manifest → plugin name falls back to its id', async () => {
+    registry.register(OWNER, handler());
+    manifest = undefined;
+    expect((await pluginOf())?.plugin?.name).toBe(OWNER);
+  });
+
+  it('a failed games query → game null and a warning, never a failed /config', async () => {
+    registry.register(OWNER, handler());
+    manifest = { name: 'Test Plugin', gameSlugs: ['baldurs-gate-3'] };
+    db.groupBy.mockRejectedValueOnce(new Error('db down'));
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await expect(owned.build(DEVICE)).resolves.toMatchObject({
+        contracts: [{ plugin: { id: OWNER, state: 'active' }, game: null }],
+      });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

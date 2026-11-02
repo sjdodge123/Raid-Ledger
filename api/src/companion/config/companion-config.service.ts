@@ -139,9 +139,25 @@ export class CompanionConfigService {
     const owners = this.owners;
     if (!owners) return {};
     const key = ownerId ?? '';
-    const game = games.get(key) ?? owners.game(ownerId);
+    const game = games.get(key) ?? this.safeGame(owners, ownerId);
     games.set(key, game);
     return { plugin: owners.plugin(ownerId), game: await game };
+  }
+
+  /** The owner's game; a failed lookup is `null` art, never a failed `/config`. */
+  private async safeGame(
+    owners: CompanionConfigOwners,
+    ownerId: string | undefined,
+  ): Promise<CompanionConfigGame | null> {
+    try {
+      return await owners.game(ownerId);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `/config game lookup for ${ownerId ?? 'no owner'} failed: ${reason}`,
+      );
+      return null;
+    }
   }
 
   /** One contract as served now; `enabled` = its current version resolves. */
