@@ -10,6 +10,12 @@ export interface SimpleMessage {
   content: string;
   embeds: SimpleEmbed[];
   components: SimpleComponent[];
+  /**
+   * Components per action row, in order (ROK-1728): `components` is flat, so
+   * this is how a test tells rows apart. Optional so hand-built fixtures stay
+   * valid; `toSimpleMessage` always sets it.
+   */
+  rowSizes?: number[] | undefined;
   timestamp: Date;
   editedAt: Date | null;
 }
@@ -37,6 +43,13 @@ export interface SimpleComponent {
   emoji?: string | null;
   /** A link button's URL (ROK-1740). Optional so hand-built fixtures stay valid. */
   url?: string | null;
+}
+
+/** Components per action row, in order (ROK-1728). */
+function rowSizesOf(msg: Message): number[] {
+  return msg.components.map((row) =>
+    'components' in row ? (row.components as unknown[]).length : 0,
+  );
 }
 
 /** Convert a discord.js Message to a plain-object SimpleMessage. */
@@ -70,6 +83,7 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
         url: c.url ?? null,
       }));
     }),
+    rowSizes: rowSizesOf(msg),
     timestamp: msg.createdAt,
     editedAt: msg.editedAt,
   };

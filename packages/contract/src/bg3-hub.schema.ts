@@ -84,7 +84,16 @@ export type Bg3HubCampaignsResponse = z.infer<typeof Bg3HubCampaignsResponseSche
 export const Bg3PartyClaimSchema = z.object({
     userId: id,
     displayName: z.string().min(1),
+    /** Legacy: the raw custom upload path only. Render through the trio below (ROK-2069). */
     avatarUrl: z.string().nullable(),
+    /**
+     * ROK-2069 — the same avatar inputs as `LineupParticipantSchema`: Discord
+     * avatar hash + `discordId` + custom upload path, resolved client-side by
+     * `toAvatarUser` / `resolveAvatar`. Optional so an older server's payload parses.
+     */
+    avatar: z.string().nullable().optional(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
 }).strict();
 export type Bg3PartyClaim = z.infer<typeof Bg3PartyClaimSchema>;
 

@@ -54,7 +54,11 @@ export interface Bg3ClaimView {
   slotKey: string;
   userId: number;
   displayName: string;
+  /** Raw `users.custom_avatar_url` — kept on the wire as legacy `avatarUrl`. */
   avatarUrl: string | null;
+  /** ROK-2069: Discord avatar hash + id, resolved client-side by `toAvatarUser`. */
+  avatar: string | null;
+  discordId: string | null;
 }
 
 export const SAVE_LITE_COLS = {
@@ -204,6 +208,8 @@ export class Bg3ReadRepository {
         displayName: u.displayName,
         username: u.username,
         avatarUrl: u.customAvatarUrl,
+        avatar: u.avatar,
+        discordId: u.discordId,
       })
       .from(k)
       .innerJoin(u, eq(u.id, k.userId))

@@ -13,6 +13,8 @@ import { LiveBadge } from '../../components/events/LiveBadge';
 import { ServerGuestRoster, VoiceRoster } from '../../components/events/VoiceRoster';
 import { serverGuestParticipants, voiceParticipants } from '../../components/events/voice-participants';
 import { toast } from '../../lib/toast';
+import { Button } from '../../components/ui/button';
+import { SeriesNotSignedUpSlot, SeriesSignedUpActions } from '../../components/events/series-signup/SeriesSignupSlots';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 import { isRosterShownSignup } from './event-detail-helpers';
 
@@ -71,13 +73,14 @@ export function EventDetailSoftError({ onRetry, onBack }: { onRetry: () => void;
     );
 }
 
-export function EventDetailFallbackSignup({ rosterAssignments, isAuthenticated, isSignedUp, isCancelled, onSignup, isPending }: {
-    rosterAssignments: unknown; isAuthenticated: boolean; isSignedUp: boolean; isCancelled: boolean; onSignup: () => void; isPending: boolean;
+export function EventDetailFallbackSignup({ event, rosterAssignments, isAuthenticated, isSignedUp, isCancelled, onSignup, isPending }: {
+    event: EventResponseDto; rosterAssignments: unknown; isAuthenticated: boolean; isSignedUp: boolean; isCancelled: boolean; onSignup: () => void; isPending: boolean;
 }) {
     if (rosterAssignments || !isAuthenticated || isSignedUp || isCancelled) return null;
     return (
-        <div className="event-detail-signup-fallback">
-            <button onClick={onSignup} disabled={isPending} className="btn btn-primary">{isPending ? 'Signing up...' : 'Sign Up for Event'}</button>
+        <div className="event-detail-signup-fallback flex flex-wrap items-center justify-center gap-2">
+            <Button onClick={onSignup} disabled={isPending}>{isPending ? 'Signing up...' : 'Sign Up for Event'}</Button>
+            <SeriesNotSignedUpSlot event={event} />
         </div>
     );
 }
@@ -306,13 +309,11 @@ export function AutoSubToggle({ event, handlers }: { event: EventResponseDto; ha
     );
 }
 
-export function SignedUpActions({ userSignup, handlers }: { userSignup: { status: string } | undefined; handlers: ReturnType<typeof useEventDetailHandlers> }) {
-    return (
-        <div className="flex items-center gap-1.5">
-            {userSignup?.status === 'tentative'
-                ? <button onClick={() => handlers.updateStatus.mutate('signed_up')} disabled={handlers.updateStatus.isPending} className="btn btn-primary btn-sm">Confirm</button>
-                : <button onClick={() => { handlers.updateStatus.mutate('tentative'); toast.info('Marked as tentative'); }} disabled={handlers.updateStatus.isPending} className="btn btn-secondary btn-sm" title="Mark as tentative">Tentative</button>}
-            <button onClick={handlers.handleCancel} disabled={handlers.cancelSignup.isPending} className="btn btn-danger btn-sm">{handlers.cancelSignup.isPending ? 'Leaving...' : 'Leave'}</button>
-        </div>
-    );
+/** Tentative/Confirm + Leave; a series member in for this night gets Skip this night / Leave series instead (ROK-1728). */
+export function SignedUpActions({ event, userSignup, handlers }: { event: EventResponseDto; userSignup: { status: string } | undefined; handlers: ReturnType<typeof useEventDetailHandlers> }) {
+    const statusToggle = userSignup?.status === 'tentative'
+        ? <Button size="sm" onClick={() => handlers.updateStatus.mutate('signed_up')} disabled={handlers.updateStatus.isPending}>Confirm</Button>
+        : <Button variant="secondary" size="sm" onClick={() => { handlers.updateStatus.mutate('tentative'); toast.info('Marked as tentative'); }} disabled={handlers.updateStatus.isPending} title="Mark as tentative">Tentative</Button>;
+    const leave = <Button variant="destructive-soft" size="sm" onClick={handlers.handleCancel} disabled={handlers.cancelSignup.isPending}>{handlers.cancelSignup.isPending ? 'Leaving...' : 'Leave'}</Button>;
+    return <SeriesSignedUpActions event={event} statusToggle={statusToggle} leave={leave} onSkip={handlers.handleCancel} isSkipping={handlers.cancelSignup.isPending} />;
 }

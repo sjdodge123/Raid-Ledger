@@ -59,6 +59,9 @@ export async function findSignupForCancel(
   return findByDiscordFallback(db, userId, activeFilter);
 }
 
+/** Hours before start at which a cancel is still a graceful `declined` (else `roached_out`). */
+export const GRACEFUL_DECLINE_HOURS = 23;
+
 export async function determineCancelStatus(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -75,7 +78,7 @@ export async function determineCancelStatus(
   const hoursUntilEvent = eventStartTime
     ? (eventStartTime.getTime() - Date.now()) / (1000 * 60 * 60)
     : 0;
-  const isGracefulDecline = hoursUntilEvent >= 23;
+  const isGracefulDecline = hoursUntilEvent >= GRACEFUL_DECLINE_HOURS;
   return {
     cancelStatus: isGracefulDecline ? 'declined' : 'roached_out',
     isGracefulDecline,

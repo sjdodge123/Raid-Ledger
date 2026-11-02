@@ -192,6 +192,29 @@ describe('PlayerCard — running-late badge (ROK-1379 follow-up)', () => {
     });
 });
 
+describe('PlayerCard — series marker (ROK-1728 AC7)', () => {
+    it('renders the labelled Series badge when the player is in the series', () => {
+        renderCard({ player: createMockPlayer({ inSeries: true }) });
+        const badge = screen.getByTestId('series-badge');
+        expect(badge).toHaveAttribute('title', 'Signed up for the series');
+        expect(badge).toHaveTextContent('Series');
+    });
+
+    it('renders no Series badge when inSeries is false or absent', () => {
+        renderCard({ player: createMockPlayer({ inSeries: false }) });
+        renderCard({ player: createMockPlayer({ id: 2, signupId: 2 }) });
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+
+    it('is raised above the stretched action under raiseControls, and untouched otherwise', () => {
+        const raised = renderCard({ player: createMockPlayer({ inSeries: true }), raiseControls: true });
+        expect(raised.getByTestId('series-badge')).toHaveClass('relative', 'cursor-default');
+        raised.unmount();
+        renderCard({ player: createMockPlayer({ inSeries: true }) });
+        expect(screen.getByTestId('series-badge')).not.toHaveClass('relative');
+    });
+});
+
 function ProfileProbe() {
     const location = useLocation();
     return (

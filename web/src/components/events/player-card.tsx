@@ -17,6 +17,7 @@ import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
 import { CharacterPortraitFallback } from '../../plugins/character-portrait';
+import { SeriesBadge } from './SeriesBadge';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments — `discordId` is absent for anonymous viewers (ROK-1629) */
@@ -140,6 +141,7 @@ function PlayerCardBody({ player, raised }: { player: ViewerRosterAssignment; ra
                 {isRunningLate && (
                     <span className={`shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning${raiseBadge(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
                 )}
+                {player.inSeries === true && <SeriesBadge showLabel title="Signed up for the series" className={`shrink-0${raiseBadge(raised)}`} />}
                 {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} raised={raised} />}
             </div>
             <PlayerCharacterInfo player={player} raised={raised} />

@@ -151,6 +151,9 @@ export * from './logs.schema.js';
 // Event Series (ROK-429)
 export * from './event-series.schema.js';
 
+// Series Signup (ROK-1728)
+export * from './series-signups.schema.js';
+
 // AI Features (ROK-542)
 export * from './ai.schema.js';
 
