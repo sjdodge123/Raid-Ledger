@@ -42,7 +42,7 @@ import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { readRaidPullScope } from './addon-import-raid.scope';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
-import { flagIfRosterHeld } from './addon-import-guild.flag';
+import { flagIfRosterChanged } from './addon-import-guild.flag';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -84,9 +84,6 @@ export class AddonImportService {
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
-      // ROK-1794 AC4: the tx rolled back — flag a held roster to staff
-      // (apply only — a preview flags no one).
-      await flagIfRosterHeld(this.db, userId, err, this.logger, facts.dryRun);
       throw err;
     } finally {
       await this.finish(userId, characterId, facts, result, perSection);
@@ -119,20 +116,23 @@ export class AddonImportService {
       await this.run(userId, character, paste, binding, request),
       inference,
     );
-    if (!request.dryRun) await this.afterApply(paste, res, characterId);
+    if (!request.dryRun) await this.afterApply(paste, res, characterId, userId);
     return res;
   }
 
   /**
-   * AFTER the tx committed: fire-and-forget gear resolution (ROK-1727) and
-   * drop the guild's cached roster insights (ROK-1913).
+   * AFTER the tx committed: fire-and-forget gear resolution (ROK-1727),
+   * drop the guild's cached roster insights (ROK-1913) and flag a wholesale
+   * roster change to staff (ROK-2066).
    */
   private async afterApply(
     paste: DecodedAddonPaste,
     res: AddonImportResultDto,
     characterId: string,
+    userId: number,
   ): Promise<void> {
     enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    await flagIfRosterChanged(this.db, userId, res, this.logger);
     await invalidateRosterInsights(
       this.insightsCache,
       characterId,

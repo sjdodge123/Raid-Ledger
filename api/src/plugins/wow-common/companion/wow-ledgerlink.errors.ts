@@ -48,8 +48,7 @@ export function companionErrorForImportCode(
 }
 
 /**
- * What the handler rethrows: an `AddonImportError` (incl. `RosterHeldError`)
- * becomes its companion error; anything else passes through unchanged (the
+ * What the handler rethrows: an `AddonImportError` becomes its companion error; anything else passes through unchanged (the
  * global filter answers 500 without echoing it).
  */
 export function companionErrorForImport(err: unknown): unknown {

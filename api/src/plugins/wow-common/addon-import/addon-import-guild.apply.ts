@@ -14,11 +14,11 @@ import {
 } from './addon-import-guild.dings';
 import { AddonImportError } from './addon-import.errors';
 import {
-  assertMayReplaceRoster,
   auditRosterReplaced,
+  checkRosterReplace,
   lockGuildImport,
   receivedSnapshotAt,
-  type RosterDelta,
+  type RosterCheck,
 } from './addon-import-guild.guard';
 import {
   guildNameKey,
@@ -37,10 +37,9 @@ export type AddonGuildSummary = z.infer<typeof AddonGuildImportSummarySchema>;
 type GuildOutcome = AddonSectionOutcome<AddonGuildSummary>;
 
 /**
- * Shape check only: the exporter must appear in the roster they export. It
- * authorises nothing — being listed (by your own upload) earns no right to
- * update an existing guild; `assertMayReplaceRoster` gates that (staff or an
- * explicit member grant, ROK-1794). A brand-new guild needs only this.
+ * The exporter must appear in the roster they export. Since ROK-2066 this,
+ * plus a NEWER snapshot (`isStaleGuildSnapshot`) and the clock rule, is all
+ * an importer needs to replace a guild's roster — no grant.
  */
 export function assertExporterInGuild(payload: AddonGuildExport): void {
   const guid = payload.who.guid;
@@ -136,26 +135,26 @@ async function countKnownMembers(
 type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
 
 /**
- * ROK-1794 AC2/AC4: an existing guild's roster is only replaced by staff or
- * a member-grant holder, never wholesale. Returns whether the snapshot is stale and
- * the members it removes and adds (audited for the rolling window). The
+ * ROK-2066: whether the snapshot is stale, the members it removes and adds
+ * (audited for the rolling window) and any wholesale flag for staff. The
  * guild-creating import counts 0/0: it is the window's baseline.
  */
 async function guardExisting(
   ctx: AddonApplyContext,
   guild: StoredGuild,
   payload: AddonGuildExport,
-): Promise<{ stale: boolean; delta: RosterDelta }> {
-  if (!guild) return { stale: false, delta: { removed: 0, added: 0 } };
+): Promise<RosterCheck & { stale: boolean }> {
+  const none = { removed: 0, added: 0 };
+  if (!guild) return { stale: false, delta: none, flag: null };
   const stale = isStaleGuildSnapshot(
     guild.lastSnapshotAt,
     payload.data.snapshotAt,
   );
-  const delta = await assertMayReplaceRoster(ctx, guild.id, payload, !stale);
-  return { stale, delta };
+  const check = await checkRosterReplace(ctx, guild.id, payload, !stale);
+  return { stale, ...check };
 }
 
-/** Dry run: NOT_IN_GUILD / guard / stale checks + new-vs-updated counts. */
+/** Dry run: NOT_IN_GUILD / stale checks + new-vs-updated counts (no flag). */
 export async function previewGuild(
   ctx: AddonApplyContext,
   payload: AddonGuildExport,
@@ -298,9 +297,10 @@ async function upsertMembersLoggingDings(
 }
 
 /**
- * Apply: NOT_IN_GUILD / guard → reject; stale → nothing written; else upsert
- * all, stamped with ONE received instant (guild + members must match for
- * `inLatestSnapshot`), and audit who replaced the roster.
+ * Apply: NOT_IN_GUILD → reject; stale → nothing written; else upsert all,
+ * stamped with ONE received instant (guild + members must match for
+ * `inLatestSnapshot`), audit who replaced the roster, and hand any wholesale
+ * flag back for the post-commit staff notice (ROK-2066).
  */
 export async function applyGuild(
   ctx: AddonApplyContext,
@@ -310,7 +310,7 @@ export async function applyGuild(
   assertExporterInGuild(payload);
   await lockGuildImport(ctx, guildNameKey(payload.data.name));
   const guild = await loadGuild(ctx, payload.data.name);
-  const { delta } = await guardExisting(ctx, guild, payload);
+  const { delta, flag } = await guardExisting(ctx, guild, payload);
   const seenAt = receivedSnapshotAt(payload.data.snapshotAt);
   const guildId = await upsertGuild(ctx, payload, seenAt);
   if (guildId === undefined) {
@@ -328,5 +328,6 @@ export async function applyGuild(
   return {
     status: 'applied',
     summary: buildGuildSummary(payload, pages, inserted),
+    ...(flag ? { rosterFlag: flag } : {}),
   };
 }

@@ -2,22 +2,24 @@ import { Logger } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { AddonGuildExport } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import { hasConfirmedMemberGrant } from '../guilds/guild-delegation.helpers';
-import {
-  findLinkedMemberRows,
-  inLatestSnapshot,
-} from '../guilds/guild-membership.helpers';
+import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
-import { AddonImportError } from './addon-import.errors';
 import { lockGuildName } from './addon-import.locks';
-import { fromUnix, type AddonApplyContext } from './addon-import-apply.types';
+import {
+  fromUnix,
+  type AddonApplyContext,
+  type RosterFlag,
+} from './addon-import-apply.types';
 
 /**
- * SECURITY (ROK-1794, 2026-10-18 review) — guild exports are unsigned, so
- * the roster a snapshot carries proves nothing about who sent it. After a
- * guild's first import its roster is replaced only by staff or by the holder
- * of an explicit, staff-made member grant ("explicit grants only", operator
- * ruling 2026-10-19), and never wholesale.
+ * ROK-1794, relaxed by ROK-2066 (operator ruling 2026-11-02: "accept the
+ * updated data if [the member's] data set is newer … worst case the hub
+ * displays weird data until staff log in and update it"). Guild exports are
+ * unsigned, so a roster proves nothing about who sent it. Any importer listed
+ * in a NEWER snapshot replaces the roster — no grant needed (the exporter
+ * check and the stale rule live in `addon-import-guild.apply.ts`). A
+ * wholesale change applies too, and is flagged to staff after commit
+ * (`addon-import-guild.flag.ts`); every non-staff replace is audited.
  */
 
 const { guilds, guildMembers, guildEditors, users, activityLog } = schema;
@@ -34,34 +36,12 @@ export const MASS_REMOVAL_SHARE = 0.25;
 export const REMOVAL_WINDOW_HOURS = 24;
 const WINDOW = sql.raw(`interval '${REMOVAL_WINDOW_HOURS} hours'`);
 
-export const NOT_AN_EDITOR_MESSAGE =
-  'Only an admin, or a member an admin has made a guild editor, can update this roster.';
-export const ROSTER_HELD_MESSAGE =
-  'This roster would remove many members, or a member with editor rights, at once — ask an admin to import it.';
-
 /** min(snapshotAt, server now): a post-dated snapshot can't outrank later ones. */
 export function receivedSnapshotAt(
   snapshotAt: number,
   nowMs: number = exportClock.nowMs(),
 ): Date {
   return new Date(Math.min(fromUnix(snapshotAt).getTime(), nowMs));
-}
-
-/**
- * AC4 — a held snapshot. The wire body is the plain `INVALID_PAYLOAD` one
- * (no contract change); the extra facts drive the admin flag, written after
- * the import transaction has rolled back (`addon-import-guild.flag.ts`).
- */
-export class RosterHeldError extends AddonImportError {
-  constructor(
-    readonly guildId: number,
-    readonly removed: number,
-    readonly live: number,
-    readonly dropsEditor: boolean,
-    readonly added: number = 0,
-  ) {
-    super('INVALID_PAYLOAD', ROSTER_HELD_MESSAGE);
-  }
 }
 
 export function isMassRemoval(live: number, removed: number): boolean {
@@ -90,23 +70,6 @@ export async function lockGuildImport(
   nameKey: string,
 ): Promise<void> {
   await lockGuildName(ctx.tx, ctx.gameId, ctx.region, nameKey);
-}
-
-/**
- * ROK-1794 "explicit grants only" (operator ruling 2026-10-19): being on the
- * stored roster proves nothing — the importer may have claimed that GUID with
- * a forged character export. Only a staff-made `kind='member'` grant on a
- * CONFIRMED link counts (the linking character existed at grant time and has
- * claimed no GUID since). That includes the guild's own creator. Rank grants
- * never count here: their `rank_index` is self-reported by unsigned exports.
- */
-export async function importerHoldsMemberGrant(
-  ctx: AddonApplyContext,
-  guildId: number,
-): Promise<boolean> {
-  const rows = await findLinkedMemberRows(ctx.tx, ctx.userId, guildId);
-  if (rows.length === 0) return false;
-  return hasConfirmedMemberGrant(ctx.tx, guildId, rows);
 }
 
 /** Live roster GUIDs, each flagged when it holds a member-kind grant. */
@@ -173,47 +136,69 @@ export function windowVerdict(
   return { base, removed, added, held };
 }
 
-/** Held when this import plus the window's earlier changes is wholesale. */
-async function assertNoWholesaleChange(
+/** A roster check's result: the audited delta and any staff flag. */
+export interface RosterCheck {
+  delta: RosterDelta;
+  flag: RosterFlag | null;
+}
+const UNCHECKED: RosterCheck = { delta: NO_DELTA, flag: null };
+
+/**
+ * ROK-2066 — the staff flag for a wholesale window (or a dropped member who
+ * held editor rights), else null. It no longer blocks the import.
+ */
+export function wholesaleFlag(
+  guildId: number,
+  v: ReturnType<typeof windowVerdict>,
+  dropsEditor: boolean,
+): RosterFlag | null {
+  if (!dropsEditor && !v.held) return null;
+  const { removed, added, base: live } = v;
+  return { guildId, removed, added, live, dropsEditor };
+}
+
+/** This import's delta plus the flag its window earns (never throws). */
+async function measureRosterChange(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
-): Promise<RosterDelta> {
+): Promise<RosterCheck> {
   const incoming = new Set(payload.data.members.map((m) => m.guid));
   // Legacy rows without a GUID can't be matched to a snapshot: not counted.
   const live = (await liveRoster(ctx, guildId)).filter((r) => r.guid !== null);
   const liveGuids = new Set(live.map((r) => r.guid));
   const gone = live.filter((r) => r.guid !== null && !incoming.has(r.guid));
   const added = [...incoming].filter((g) => !liveGuids.has(g)).length;
-  const now = { removed: gone.length, added };
+  const delta = { removed: gone.length, added };
   const dropsEditor = gone.some((r) => r.grantId !== null);
-  const v = windowVerdict(live.length, await recentChanges(ctx, guildId), now);
-  if (!dropsEditor && !v.held) return now;
-  logger.warn(
-    `Held guild snapshot: guild=${guildId} user=${ctx.userId} removes ${now.removed}, adds ${added} of ${live.length} (${v.removed}/${v.added} of ${v.base} in ${REMOVAL_WINDOW_HOURS}h)${dropsEditor ? ' incl. an editor' : ''}`,
+  const v = windowVerdict(
+    live.length,
+    await recentChanges(ctx, guildId),
+    delta,
   );
-  throw new RosterHeldError(guildId, v.removed, v.base, dropsEditor, v.added);
+  const flag = wholesaleFlag(guildId, v, dropsEditor);
+  if (flag) {
+    logger.warn(
+      `Wholesale guild snapshot applied: guild=${guildId} user=${ctx.userId} removes ${delta.removed}, adds ${added} of ${live.length} (${v.removed}/${v.added} of ${v.base} in ${REMOVAL_WINDOW_HOURS}h)${dropsEditor ? ' incl. an editor' : ''}`,
+    );
+  }
+  return { delta, flag };
 }
 
 /**
- * Gate a snapshot of an EXISTING guild (a brand-new guild has no roster to
- * protect). Staff pass; anyone else must hold a confirmed member grant
- * (`importerHoldsMemberGrant`), and a fresh snapshot may not change the
- * roster wholesale. `fresh` = not stale (a stale
- * snapshot writes nothing, so only membership is checked). Returns the
- * members this snapshot removes and adds (0/0 for staff — they never count).
+ * Measure a snapshot of an EXISTING guild (a brand-new guild has no roster
+ * to protect). Staff count 0/0 and are never flagged; anyone else's FRESH
+ * snapshot returns its delta and any wholesale flag. A stale snapshot writes
+ * nothing, so it measures nothing. Never refuses (ROK-2066).
  */
-export async function assertMayReplaceRoster(
+export async function checkRosterReplace(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
   fresh: boolean,
-): Promise<RosterDelta> {
-  if (await importerIsStaff(ctx)) return NO_DELTA;
-  if (!(await importerHoldsMemberGrant(ctx, guildId))) {
-    throw new AddonImportError('NOT_IN_GUILD', NOT_AN_EDITOR_MESSAGE);
-  }
-  return fresh ? assertNoWholesaleChange(ctx, guildId, payload) : NO_DELTA;
+): Promise<RosterCheck> {
+  if (!fresh || (await importerIsStaff(ctx))) return UNCHECKED;
+  return measureRosterChange(ctx, guildId, payload);
 }
 
 /** AC6 — which user's import replaced a guild's roster (shared activity_log). */

@@ -24,10 +24,24 @@ export interface AddonApplyContext {
   pendingGuid?: string | null;
 }
 
+/**
+ * ROK-2066 — an applied roster change big enough for staff to see: window
+ * totals against the guild's roster at the window's start (`live`).
+ */
+export interface RosterFlag {
+  guildId: number;
+  removed: number;
+  added: number;
+  live: number;
+  dropsEditor: boolean;
+}
+
 /** A section's outcome: `preview` on dry runs, else applied/noop/stale. */
 export interface AddonSectionOutcome<S> {
   status: AddonImportStatus;
   summary: S;
+  /** Set by an applied guild section; flagged to staff after commit. */
+  rosterFlag?: RosterFlag;
 }
 
 /** Unix seconds (addon) → Date. */

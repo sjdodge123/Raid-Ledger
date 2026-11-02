@@ -305,7 +305,10 @@ describe('addon import — mixed paste apply', () => {
  * one writes nothing for the guild, and an exporter missing from the roster
  * still rejects the whole paste.
  */
-const ROSTER = [buildMember(0xabcdef0), ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => buildMember(i))];
+const ROSTER = [
+  buildMember(0xabcdef0),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => buildMember(i)),
+];
 const guildAt = (step: number, members = ROSTER, guid = FIXTURE_GUID) => {
   const p = buildGuildPayload(members);
   p.who = { ...p.who, guid };
@@ -320,15 +323,25 @@ const rosterAudits = () =>
     .from(schema.activityLog)
     .where(eq(schema.activityLog.action, 'guild_roster_replaced'))
     .orderBy(schema.activityLog.id);
-const sectionStatuses = (res: { body: { sections?: Array<{ status: string }> } }) =>
-  (res.body.sections ?? []).map((x) => x.status);
+const sectionStatuses = (res: {
+  body: { sections?: Array<{ status: string }> };
+}) => (res.body.sections ?? []).map((x) => x.status);
 
 describe('ROK-2066 — Export all from a member without a grant', () => {
   it('a newer guild snapshot → char applied AND roster replaced, with an audit row', async () => {
     const { userId, token, charId } = await memberWithChar('r2066newer');
     expect((await post(token, charId, guildAt(0), false)).status).toBe(200);
-    const res = await post(token, charId, exportAll(1, ROSTER.slice(0, 11)), false);
-    expect([res.status, ...sectionStatuses(res)]).toEqual([200, 'applied', 'applied']);
+    const res = await post(
+      token,
+      charId,
+      exportAll(1, ROSTER.slice(0, 11)),
+      false,
+    );
+    expect([res.status, ...sectionStatuses(res)]).toEqual([
+      200,
+      'applied',
+      'applied',
+    ]);
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(1);
     const [guild] = await testApp.db.select().from(schema.guilds);
     expect(guild?.memberCount).toBe(11);
@@ -343,8 +356,17 @@ describe('ROK-2066 — Export all from a member without a grant', () => {
     const { token, charId } = await memberWithChar('r2066stale');
     expect((await post(token, charId, guildAt(5), false)).status).toBe(200);
     const [before] = await testApp.db.select().from(schema.guilds);
-    const res = await post(token, charId, exportAll(1, ROSTER.slice(0, 6)), false);
-    expect([res.status, ...sectionStatuses(res)]).toEqual([200, 'applied', 'stale']);
+    const res = await post(
+      token,
+      charId,
+      exportAll(1, ROSTER.slice(0, 6)),
+      false,
+    );
+    expect([res.status, ...sectionStatuses(res)]).toEqual([
+      200,
+      'applied',
+      'stale',
+    ]);
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(1);
     const [after] = await testApp.db.select().from(schema.guilds);
     expect(after).toEqual(before);
@@ -353,7 +375,9 @@ describe('ROK-2066 — Export all from a member without a grant', () => {
 
   it("an exporter whose GUID isn't in the roster → NOT_IN_GUILD, nothing written", async () => {
     const seed = await memberWithChar('r2066seed');
-    expect((await post(seed.token, seed.charId, guildAt(0), false)).status).toBe(200);
+    expect(
+      (await post(seed.token, seed.charId, guildAt(0), false)).status,
+    ).toBe(200);
     const { token, charId } = await memberWithChar('r2066out', 'Bob Forever');
     const who = buildWho({
       guid: 'Player-4395-0000BEEF',
@@ -362,8 +386,16 @@ describe('ROK-2066 — Export all from a member without a grant', () => {
     });
     const g = buildGuildPayload(ROSTER);
     g.data.snapshotAt += 60;
-    const parts = [{ ...buildCharPayload(), who }, { ...g, who }];
-    const res = await post(token, charId, parts.map((p) => buildImportString(p)).join('\n'), false);
+    const parts = [
+      { ...buildCharPayload(), who },
+      { ...g, who },
+    ];
+    const res = await post(
+      token,
+      charId,
+      parts.map((p) => buildImportString(p)).join('\n'),
+      false,
+    );
     expect([res.status, res.body.code]).toEqual([422, 'NOT_IN_GUILD']);
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(0);
     expect(await rosterAudits()).toHaveLength(1);
@@ -372,8 +404,17 @@ describe('ROK-2066 — Export all from a member without a grant', () => {
   it('a wholesale roster change → applied, with the staff flag raised', async () => {
     const { token, charId } = await memberWithChar('r2066big');
     expect((await post(token, charId, guildAt(0), false)).status).toBe(200);
-    const res = await post(token, charId, exportAll(1, ROSTER.slice(0, 6)), false);
-    expect([res.status, ...sectionStatuses(res)]).toEqual([200, 'applied', 'applied']);
+    const res = await post(
+      token,
+      charId,
+      exportAll(1, ROSTER.slice(0, 6)),
+      false,
+    );
+    expect([res.status, ...sectionStatuses(res)]).toEqual([
+      200,
+      'applied',
+      'applied',
+    ]);
     const [guild] = await testApp.db.select().from(schema.guilds);
     expect(guild?.memberCount).toBe(6);
     const flags = await testApp.db

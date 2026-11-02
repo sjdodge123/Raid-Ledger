@@ -482,7 +482,11 @@ describe(`${R2066} — grants no longer gate a roster import (supersedes ROK-179
     const y = rosterGuid(1);
     const member = await linkRosterMember('claimer', y, OTHER_NAME);
     applied(
-      await apply(member.token, member.id, rosterAs(y, OTHER_NAME, 1, promote(y))),
+      await apply(
+        member.token,
+        member.id,
+        rosterAs(y, OTHER_NAME, 1, promote(y)),
+      ),
     );
     expect(await memberRank(y)).toBe(0);
   });
@@ -524,7 +528,11 @@ describe(`${R2066} — member grants and the editor flag`, () => {
     const officer = await linkRosterMember('officer', y, OTHER_NAME);
     await grantMemberEditor(testApp.db, y);
     const at = (step: number, n: number) =>
-      apply(officer.token, officer.id, rosterAs(y, OTHER_NAME, step, dropOthers(n, y)));
+      apply(
+        officer.token,
+        officer.id,
+        rosterAs(y, OTHER_NAME, step, dropOthers(n, y)),
+      );
     applied(await at(1, 4));
     expect(await liveCount()).toBe(36);
     applied(await at(2, 30));
