@@ -15,7 +15,6 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
         qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
         qc.invalidateQueries({ queryKey: ['game-hubs'] }),
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
-        qc.invalidateQueries({ queryKey: TAGGABLE_HUBS_PREFIX }),
     ]);
 }
 
