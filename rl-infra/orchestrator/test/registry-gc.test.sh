@@ -41,6 +41,9 @@ LIB="$(cd "$TEST_DIR/../bin" && pwd)/_registry_gc.sh"
 DESTROY="$(cd "$TEST_DIR/../bin" && pwd)/env-destroy"
 NOW=1800000000
 
+# The gc-sweeper image has flock; macOS may not. Stub it explicitly — the lib
+# itself refuses to run without one (fail closed, R-y).
+command -v flock >/dev/null 2>&1 || flock() { return 0; }
 # curl stub: tags/list → $TAGS; HEAD manifest → digest sha256:<tag>;
 # ($DIGESTS "tag=d" overrides it to sha256:d); GET manifest → config digest
 # cfg-<tag>; GET blob → created from $AGES (tag=hours).
@@ -65,6 +68,7 @@ curl() {
 }
 docker() {
     echo "docker $*" >> "$CALL_LOG"
+    [[ "$1" == exec && "$*" == *pgrep* ]] && return "${PGREP_RC:-1}"
     # shellcheck disable=SC2086  # PS_IMAGES is a space-separated list on purpose
     if [[ "$1" == ps ]]; then [[ -n "${DOCKER_PS_FAIL:-}" ]] && return 1; printf '%s\n' ${PS_IMAGES:-}; fi
     # shellcheck disable=SC2086  # LOCAL_IMAGES is a space-separated list on purpose
@@ -82,6 +86,7 @@ timeout() {
     echo "timeout $*" >> "$CALL_LOG"
     [[ "$1" == -k ]] && shift 2; shift
     if [[ "$*" == *pkill* ]]; then [[ -n "${CLEANUP_TIMEOUT_RC:-}" ]] && return "$CLEANUP_TIMEOUT_RC"
+    elif [[ "$*" == *pgrep* ]]; then :
     elif [[ -n "${TIMEOUT_RC:-}" ]]; then return "$TIMEOUT_RC"; fi
     "$@"
 }
@@ -95,7 +100,7 @@ _setup_gc() {
     echo '[]' > "$RL_ENVS_FILE"; echo '{"heavy_running":[]}' > "$RL_ADMISSION_FILE"
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
     LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""; CLEANUP_TIMEOUT_RC=""
-    TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""
+    TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""; PGREP_RC=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -391,6 +396,57 @@ test_dry_run_default() {
     test_teardown
 }
 
+test_untagged_pin_keeps_untagged() {
+    CURRENT_TEST_NAME="R-u: a pin no kept tag carries → garbage-collect without --delete-untagged"
+    _setup_gc
+    TAGS="a b old"; AGES="a=1 b=2 old=200"; PS_IMAGES="rl-allinone@sha256:orphan"
+    local err; err=$(registry_gc::sweep force 2>&1 >/dev/null)
+    assert_contains "$(grep 'garbage-collect' "$CALL_LOG")" "registry garbage-collect /etc/docker/registry/config.yml" \
+        "collect still runs (deleted manifests are swept)"
+    assert_eq "$(grep -c -- '--delete-untagged' "$CALL_LOG")" "0" "an untagged pinned manifest is not collected"
+    assert_contains "$err" "sha256:orphan" "the log says which pin forced it"
+    : > "$CALL_LOG"; PS_IMAGES="rl-allinone@sha256:a"
+    registry_gc::sweep force >/dev/null 2>&1
+    assert_eq "$(grep -c -- '--delete-untagged' "$CALL_LOG")" "1" "a pin carried by a kept tag keeps --delete-untagged"
+    test_teardown
+}
+
+test_cleanup_failure_keeps_lock() {
+    CURRENT_TEST_NAME="R-v: a collector that may still run keeps the GC entry and fails the sweep"
+    _setup_gc
+    TAGS="a"; AGES="a=1"; TIMEOUT_RC=124; CLEANUP_TIMEOUT_RC=124
+    local out rc; out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$(jq -r '.gc' <<<"$out")" "timed_out_cleanup_failed" "the result names the failed cleanup"
+    assert_eq "$rc" "1" "non-success"
+    assert_eq "$(jq '[.heavy_running[] | select(.kind == "registry_gc")] | length' "$RL_ADMISSION_FILE")" "1" \
+        "the entry stays until its TTL, so builds stay blocked"
+    echo '{"heavy_running":[]}' > "$RL_ADMISSION_FILE"; CLEANUP_TIMEOUT_RC=""; PGREP_RC=0
+    assert_eq "$(registry_gc::collect 2>/dev/null)" "timed_out_cleanup_failed" "pkill ran but the collector is still alive"
+    PGREP_RC=1
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$(jq -r '.gc' <<<"$out") $rc" "timed_out 0" "a confirmed-dead collector is a plain timeout"
+    assert_eq "$(jq '.heavy_running | length' "$RL_ADMISSION_FILE")" "0" "and the entry is released"
+    test_teardown
+}
+
+test_minor_fail_closed() {
+    CURRENT_TEST_NAME="R-w..R-z: unreadable tags/list, empty created, missing flock, sweeper stderr"
+    _setup_gc
+    TAGS="a"; LIST_FAIL=1
+    local out rc; out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$(jq -r '.error' <<<"$out") $rc" "tags_unreadable 1" "R-w: an unreadable tags/list aborts"
+    assert_eq "$(grep -c 'garbage-collect' "$CALL_LOG")" "0" "R-w: and runs no garbage-collect"
+    LIST_FAIL=""; TAGS="a b"
+    registry_gc::created_epoch() { echo ""; }
+    assert_eq "$(registry_gc::_inventory | jq -c 'map(.created)')" "[null,null]" "R-x: an empty build time stays in the inventory as null"
+    _setup_gc
+    ( unset -f flock; PATH=/nonexistent; registry_gc::_define_state_shims; flock -x 200 ); rc=$?
+    assert_neq "$rc" "0" "R-y: without flock the ledger lock fails instead of no-op'ing"
+    local stripped; stripped=$(grep -v '^[[:space:]]*#' "$TEST_DIR/../../gc-sweeper/sweep.sh")
+    assert_eq "$(grep -c 'registry_gc::sweep.*2>/dev/null' <<<"$stripped")" "0" "R-z: the sweeper keeps the lib's stderr"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
@@ -411,4 +467,7 @@ run_test "r-q-digest-pins" test_digest_pinned_refs_protect
 run_test "r-r-survivor-digest" test_survivors_share_digest
 run_test "r-s-137-cleanup" test_collect_137_and_bounded_cleanup
 run_test "r-t-dry-run-default" test_dry_run_default
+run_test "r-u-untagged-pin" test_untagged_pin_keeps_untagged
+run_test "r-v-cleanup-keeps-lock" test_cleanup_failure_keeps_lock
+run_test "r-w-minor-fail-closed" test_minor_fail_closed
 print_test_summary
