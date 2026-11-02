@@ -11,6 +11,8 @@ Newest first. Every entry states **additive** or **breaking** (see
   is registered) and `game` (`CompanionConfigGameSchema`:
   `{slug, name, coverUrl}`, or `null`). Older servers omit both; the app MUST
   ignore unknown keys and treat an absent key as "unknown". CONTRACT §4.2.
+- `game.coverUrl` may be protocol-relative (`//images.igdb.com/...`); the
+  app resolves it against `https:`.
 - `enabled` is unchanged. The anonymous answer is unchanged (no `contracts`).
 - The message envelope and `schema.json` are unchanged.
 
