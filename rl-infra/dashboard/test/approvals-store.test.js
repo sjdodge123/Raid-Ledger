@@ -147,6 +147,8 @@ const invalidBodies = [
   ['6 links', { links: Array.from({ length: 6 }, () => ({ label: 'x', url: 'https://a.b' })) }, /at most 5/],
   ['bad supersedes', { supersedes: '../2026' }, /supersedes has an invalid format/],
   ['spec_path traversal', { spec_path: '../../etc/passwd' }, /spec_path/],
+  ['absolute spec_path', { spec_path: '/etc/passwd' }, /spec_path must be repo-relative/],
+  ['mid-path traversal', { spec_path: 'docs/../../x.md' }, /spec_path must not contain/],
   ['non-object body', null, /item must be an object/],
 ];
 
@@ -318,6 +320,8 @@ test('list skips stray dirs, corrupt items and tmp files; writes leave no tmp be
   await mkdir(join(root, '2026-01-01-0000-dead'));
   await writeFile(join(root, '2026-01-01-0000-dead', 'item.json'), '{half');
   assert.deepEqual((await store.list({ status: 'all' })).items.map((i) => i.id), [id]);
+  await rejects(store.get('2026-01-01-0000-dead'), 422, 'corrupt_item');
+  await rejects(store.rule('2026-01-01-0000-dead', { n: 1, choice: 'accept' }), 422, 'corrupt_item');
 });
 
 test('concurrent rulings on one item are serialised (no lost update)', async () => {

@@ -133,6 +133,8 @@ export const validateNewItem = (body) => {
     links: body.links === undefined ? [] : array(body.links, LIMITS.links, 'links').map(validateLink),
     supersedes: matching(body.supersedes, ID_RE, 20, 'supersedes', false),
   };
+  // Repo-relative only: the MCP tool sends it relative to the repo root.
+  if (fields.spec_path?.startsWith('/')) throw bad('spec_path must be repo-relative, not absolute');
   if (fields.spec_path?.split('/').includes('..')) throw bad('spec_path must not contain ".."');
   return { fields, files: validateFiles(body.files) };
 };

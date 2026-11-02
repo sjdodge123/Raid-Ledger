@@ -62,7 +62,12 @@ const readItem = async (cfg, id) => {
     if (err.code === 'ENOENT') throw new ApprovalError(404, 'not_found', id);
     throw err;
   }
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // A corrupt item is the caller's 422, never a 500; list() skips it.
+    throw new ApprovalError(422, 'corrupt_item', id);
+  }
 };
 
 const saveItem = (cfg, item) => writeJsonAtomic(join(cfg.root, item.id), ITEM_FILE, item);
