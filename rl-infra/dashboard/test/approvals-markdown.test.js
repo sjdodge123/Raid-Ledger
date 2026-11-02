@@ -24,10 +24,18 @@ const load = async () => {
   return { render, MAX_LINE };
 };
 
-const timed = (fn) => {
-  const t0 = performance.now();
-  const out = fn();
-  return { out, ms: performance.now() - t0 };
+// Best of REPS wall-clock runs. node --test runs files in parallel, so one
+// sample can absorb a 100+ ms preemption/GC pause (seen 1-in-10 suite runs);
+// a super-linear parser is slow on EVERY rep, so the minimum still fails it.
+const REPS = 5;
+const bestOf = (fn) => {
+  let ms = Infinity;
+  for (let i = 0; i < REPS; i += 1) {
+    const t0 = performance.now();
+    fn();
+    ms = Math.min(ms, performance.now() - t0);
+  }
+  return ms;
 };
 
 const WORST = {
@@ -45,8 +53,8 @@ for (const [name, md] of Object.entries(WORST)) {
   test(`worst case renders in < 100 ms — ${name}`, async () => {
     const { render } = await load();
     render('# warm *up* [a](https://x.test)');
-    const { ms } = timed(() => render(md));
-    assert.ok(ms < 100, `${name} took ${ms.toFixed(1)} ms (budget 100 ms)`);
+    const ms = bestOf(() => render(md));
+    assert.ok(ms < 100, `${name} took ${ms.toFixed(1)} ms, best of ${REPS} (budget 100 ms)`);
   });
 }
 
