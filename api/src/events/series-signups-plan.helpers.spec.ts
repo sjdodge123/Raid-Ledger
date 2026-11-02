@@ -137,6 +137,47 @@ describe('classifyNights', () => {
   });
 });
 
+describe('classifyNights — revive (Q6 re-join after leave)', () => {
+  const nights = [1, 2, 3].map((id) => night(id, id * 24));
+  const rows = [
+    row(1, 'declined'),
+    row(2, 'roached_out'),
+    row(3, 'declined'),
+  ];
+  const c = classifyNights(nights, rows, undefined, new Set([1, 2]));
+
+  it('puts inactive untagged rows the last leave cancelled in revive', () => {
+    expect(ids(c.revive)).toEqual([1, 2]);
+  });
+
+  it('keeps an inactive row the leave did not cancel', () => {
+    expect(ids(c.keep)).toEqual([3]);
+  });
+
+  it('never revives a tagged inactive row (a skip during a live membership)', () => {
+    const tagged = classifyNights(
+      [night(1, 24)],
+      [row(1, 'declined', MEMBERSHIP_ID)],
+      undefined,
+      new Set([1]),
+    );
+    expect({ revive: ids(tagged.revive), keep: ids(tagged.keep) }).toEqual({
+      revive: [],
+      keep: [1],
+    });
+  });
+
+  it('counts revived nights as joinable will_create in the state', () => {
+    const state = buildSeriesState(nights, c, undefined);
+    expect(state.joinableCount).toBe(2);
+    expect(state.nights.map((n) => n.state)).toEqual([
+      'will_create',
+      'will_create',
+      'stays_inactive',
+    ]);
+  });
+});
+
 describe('buildSeriesState', () => {
   const nights = [night(1, 24), night(2, 48), night(3, 72), night(4, 96)];
   const rows = [

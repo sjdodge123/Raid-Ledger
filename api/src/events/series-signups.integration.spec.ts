@@ -362,14 +362,16 @@ describe('join conflicts (I6–I7)', () => {
     await join(s.n2, userId);
 
     await series().leave(s.n2, userId);
-    // leave cancelled 2/3/5, so a fresh night is the joinable one.
+    // Q6: the nights leave declined re-join, beside a fresh night 6.
     const n6 = await insertNight(s.groupId, 120);
     const rejoin = await join(s.n2, userId);
 
     // mutation: drop the partial index WHERE (left + new active collide)
     const rows = await membershipsOf(userId);
     expect(rows.map((m) => m.status)).toEqual(['left', 'active']);
-    expect(rejoin.createdEventIds).toEqual([n6]);
+    expect([...rejoin.createdEventIds].sort()).toEqual(
+      [s.n2, s.n3, s.n5, n6].sort(),
+    );
   });
 
   it('I7: every future night already inactive → 409 and no membership row', async () => {
@@ -384,6 +386,57 @@ describe('join conflicts (I6–I7)', () => {
       message: 'No upcoming nights to join',
     });
     expect(await membershipsOf(userId)).toHaveLength(0);
+  });
+});
+
+// ── Q6 / I6: re-join after leave ────────────────────────────────────────────
+
+describe('re-join after leave (Q6, I6)', () => {
+  it('join → leave → join again re-signs the future nights; a night declined before the first join stays declined', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await insertSignup(s.n5, userId, { status: 'declined' });
+    await join(s.n2, userId);
+    await series().leave(s.n2, userId);
+
+    const state = await series().getState(s.n2, userId);
+    // mutation: leave-declined nights classified as stays_inactive (button hides)
+    expect(state.joinableCount).toBe(2);
+    expect(state.nights.map((n) => [n.eventId, n.state])).toEqual([
+      [s.n2, 'will_create'],
+      [s.n3, 'will_create'],
+      [s.n5, 'stays_inactive'],
+    ]);
+
+    const rejoin = await join(s.n2, userId);
+    const active = must((await membershipsOf(userId))[1], 'new membership');
+    expect(active.status).toBe('active');
+    expect([...rejoin.createdEventIds].sort()).toEqual([s.n2, s.n3].sort());
+    expect(rejoin.keptEventIds).toEqual([s.n5]);
+    for (const night of [s.n2, s.n3]) {
+      const row = must(await rowFor(night, userId), `night ${night}`);
+      expect(row.status).toBe('signed_up');
+      expect(row.seriesSignupId).toBe(active.id);
+    }
+    // mutation: revive every inactive row (the pre-join decline must stay)
+    const n5 = must(await rowFor(s.n5, userId), 'night 5');
+    expect(n5.status).toBe('declined');
+    expect(n5.seriesSignupId).toBeNull();
+  });
+
+  it('a night re-signed and declined on its own after the leave stays declined on re-join', async () => {
+    const s = await seedSeries();
+    const userId = await createMember();
+    await join(s.n2, userId);
+    await series().leave(s.n2, userId);
+    await signups().signup(s.n3, userId, {});
+    await signups().cancel(s.n3, userId);
+
+    const rejoin = await join(s.n2, userId);
+    // mutation: drop the later-decline check (night 3 would be re-signed)
+    expect([...rejoin.createdEventIds].sort()).toEqual([s.n2, s.n5].sort());
+    expect(rejoin.keptEventIds).toEqual([s.n3]);
+    expect(must(await rowFor(s.n3, userId), 'night 3').status).toBe('declined');
   });
 });
 
@@ -453,7 +506,10 @@ describe('skip and leave (I8–I9)', () => {
     // mutation: the series_left audit dropped
     expect(logs).toHaveLength(1);
     expect(logs[0]?.entityId).toBe(s.n2);
-    expect(logs[0]?.metadata).toEqual({ seriesSignupId: m.id, cancelled: 3 });
+    expect(logs[0]?.metadata).toMatchObject({
+      seriesSignupId: m.id,
+      cancelled: 3,
+    });
   });
 
   it('I9b: leave without an active membership is 404', async () => {
