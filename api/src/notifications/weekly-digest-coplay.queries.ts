@@ -2,8 +2,11 @@
  * ROK-2063 — what the digest counts as "played together". A game qualifies
  * when either:
  *  (a) 2+ distinct active guild members' `game_activity_sessions` on it
- *      overlap by ≥ {@link CO_PLAY_MIN_OVERLAP_MINUTES}, measured inside the
- *      bounds (an open session runs until `now`, capped at the bound's end); or
+ *      overlap by ≥ {@link CO_PLAY_MIN_OVERLAP_MINUTES}, and the instant the
+ *      overlap reaches that minimum (`GREATEST(starts) + 15 min`) falls in the
+ *      half-open bounds `[start, end)` — so an overlap straddling a boundary
+ *      is credited to exactly one week, never split into two short halves (an
+ *      open session runs until `now`, capped at the bound's end); or
  *  (b) an attended event for it, ending inside the bounds, had 2+ attended
  *      signups by active guild members.
  * "Active guild member" = guild-seen and not deactivated/banned/kicked.
@@ -34,6 +37,11 @@ import {
 
 /** Shortest session overlap between two members that counts as co-play. */
 export const CO_PLAY_MIN_OVERLAP_MINUTES = 15;
+
+/** {@link CO_PLAY_MIN_OVERLAP_MINUTES} as a SQL interval. */
+export const MIN_OVERLAP_SQL = sql.raw(
+  `interval '${CO_PLAY_MIN_OVERLAP_MINUTES} minutes'`,
+);
 
 /** Days in the digest's co-play week. */
 export const CO_PLAY_WINDOW_DAYS = 7;
@@ -109,8 +117,12 @@ function memberFilter(b: CoPlayBounds): SQL {
   return b.members === 'visible' ? VISIBLE_MEMBER : ACTIVE_MEMBER;
 }
 
-/** Rule (a) input: active members' sessions on a game, clipped to the bounds. */
-function clippedSessionsCte(b: CoPlayBounds): SQL {
+/**
+ * Rule (a) input: active members' sessions that could reach the minimum
+ * overlap inside the bounds. Ends are capped (open → `now`/`end`, 25h span);
+ * starts are NOT clipped to `start`, so the overlap is measured in full.
+ */
+function boundedSessionsCte(b: CoPlayBounds): SQL {
   const openEnd = pgTimestamp(
     b.now.getTime() < b.end.getTime() ? b.now : b.end,
   );
@@ -118,28 +130,35 @@ function clippedSessionsCte(b: CoPlayBounds): SQL {
   const sessionEnd = sql`LEAST(COALESCE(gs.ended_at, ${openEnd}), gs.started_at + ${SESSION_SPAN_SQL})`;
   return sql`
   cp_sessions AS (
-    SELECT gs.user_id, gs.game_id, GREATEST(gs.started_at, ${start}) AS s_from,
-           LEAST(${sessionEnd}, ${pgTimestamp(b.end)}) AS s_to
+    SELECT gs.user_id, gs.game_id, gs.started_at AS s_from,
+           ${sessionEnd} AS s_to
     FROM game_activity_sessions gs
     INNER JOIN users u ON u.id = gs.user_id
     WHERE gs.game_id IS NOT NULL
       AND gs.started_at < ${pgTimestamp(b.end)}
       AND gs.started_at >= ${start} - ${SESSION_SPAN_SQL}
-      AND ${sessionEnd} > ${start}${memberFilter(b)}
+      AND ${sessionEnd} >= ${start}${memberFilter(b)}
   )`;
 }
 
-/** Rule (a): each member of a pair whose sessions overlapped ≥ the minimum. */
-const SESSION_PAIRS_CTE = sql`
+/**
+ * Rule (a): each member of a pair whose overlap reached the minimum, at an
+ * instant (`co_played_at`) inside `[start, end)`.
+ */
+function sessionPairsCte(bounds: CoPlayBounds): SQL {
+  const reached = sql`GREATEST(a.s_from, b.s_from) + ${MIN_OVERLAP_SQL}`;
+  return sql`
   cp_pairs AS (
-    SELECT a.game_id, a.user_id, GREATEST(a.s_from, b.s_from) AS co_played_at
+    SELECT a.game_id, a.user_id, ${reached} AS co_played_at
     FROM cp_sessions a
     INNER JOIN cp_sessions b
       ON b.game_id = a.game_id AND b.user_id <> a.user_id
      AND b.s_from < a.s_to AND a.s_from < b.s_to
-    WHERE LEAST(a.s_to, b.s_to) - GREATEST(a.s_from, b.s_from)
-          >= make_interval(mins => ${sql.raw(String(CO_PLAY_MIN_OVERLAP_MINUTES))})
+    WHERE ${reached} <= LEAST(a.s_to, b.s_to)
+      AND ${reached} >= ${pgTimestamp(bounds.start)}
+      AND ${reached} < ${pgTimestamp(bounds.end)}
   )`;
+}
 
 /** Rule (b) input: active members' attended signups on game events in bounds. */
 function attendedEventsCte(b: CoPlayBounds): SQL {
@@ -163,8 +182,8 @@ function attendedEventsCte(b: CoPlayBounds): SQL {
  */
 export function coPlayParticipationSql(bounds: CoPlayBounds): SQL {
   return sql`
-  WITH ${clippedSessionsCte(bounds)},
-  ${SESSION_PAIRS_CTE},
+  WITH ${boundedSessionsCte(bounds)},
+  ${sessionPairsCte(bounds)},
   ${attendedEventsCte(bounds)}
   SELECT p.game_id, p.user_id, p.co_played_at FROM cp_pairs p
   UNION ALL

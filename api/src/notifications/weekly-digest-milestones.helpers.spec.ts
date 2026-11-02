@@ -202,10 +202,17 @@ describe('B2 first co-play query (ROK-2063)', () => {
   });
 
   it('takes candidates from the bounded week, never solo rollups', () => {
-    expect(text).toContain('GREATEST(gs.started_at');
     expect(text).toContain('gs.started_at >= $');
     expect(text).not.toContain('game_activity_rollups');
-    expect(text).toContain('make_interval(mins => 15)');
+    // Sessions are not clipped to the week start: an overlap is credited to
+    // the week holding the instant it reaches 15 minutes.
+    expect(text).not.toContain('GREATEST(gs.started_at');
+    expect(text).toContain(
+      "GREATEST(a.s_from, b.s_from) + interval '15 minutes' <= LEAST(a.s_to, b.s_to)",
+    );
+    expect(text).toMatch(
+      /GREATEST\(a\.s_from, b\.s_from\) \+ interval '15 minutes' < \$/,
+    );
   });
 
   it('rules out earlier co-play with index-bounded NOT EXISTS lookups', () => {
@@ -214,6 +221,9 @@ describe('B2 first co-play query (ROK-2063)', () => {
     );
     expect(text).toMatch(
       /hb\.started_at BETWEEN ha\.started_at - interval '25 hours' AND /,
+    );
+    expect(text).toMatch(
+      /GREATEST\(ha\.started_at, hb\.started_at\) \+ interval '15 minutes' < \$/,
     );
     expect(text).toContain('NOT EXISTS ( SELECT 1 FROM events he');
     expect(text).not.toContain('WITH cp_history');

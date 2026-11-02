@@ -203,13 +203,13 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
     expect(games.map((g) => [g.gameId, g.players])).toEqual([[game, 2]]);
   });
 
-  it('ignores co-play outside the window, and clips overlap at its start', async () => {
+  it('ignores co-play outside the window, including overlap that reached 15 min before it', async () => {
     const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
     const old = await seedGame(testApp, 'Last Month');
     const edge = await seedGame(testApp, 'Edge Case');
     await seedSession(testApp, now, a, old, 20 * DAY, 20 * DAY - 2 * HOUR);
     await seedSession(testApp, now, b, old, 20 * DAY, 20 * DAY - 2 * HOUR);
-    // 2 h together, but only the last 10 minutes fall inside the window.
+    // 2 h together, but the 15-minute mark falls before the window starts.
     const start = 7 * DAY + 110 * MIN;
     const end = 7 * DAY - 10 * MIN;
     await seedSession(testApp, now, a, edge, start, end);
@@ -279,6 +279,52 @@ describe('fetchCoPlayGames — sessions (ROK-2063, integration)', () => {
       2 * DAY - 3 * HOUR,
     );
     await expect(read()).resolves.toEqual([]);
+  });
+});
+
+describe('fetchCoPlayGames — window-start credit (ROK-2063, integration)', () => {
+  let testApp: TestApp;
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  // Overlap credited to the window holding its 15th minute (`from + 15 min`).
+  it('counts a straddling overlap once, in the window its 15th minute falls in', async () => {
+    const now = new Date();
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const cases = [
+      ['Never Reached', 10 * MIN, -4 * MIN], // 14 min in all
+      ['Straddle', 10 * MIN, -10 * MIN], // reaches 15 min 5 min inside
+      ['Before Window', 30 * MIN, 5 * MIN], // reaches 15 min before it
+    ] as const;
+    const ids = new Map<string, number>();
+    for (const [name, before, after] of cases) {
+      const game = await seedGame(testApp, name);
+      ids.set(name, game);
+      for (const u of [a, b]) {
+        await seedSession(
+          testApp,
+          now,
+          u,
+          game,
+          7 * DAY + before,
+          7 * DAY + after,
+        );
+      }
+    }
+    const games = await fetchCoPlayGames(testApp.db, weekEnding(now), { now });
+    expect(games.map((g) => [g.gameId, g.players])).toEqual([
+      [ids.get('Straddle'), 2],
+    ]);
+    const prior = {
+      start: new Date(now.getTime() - 14 * DAY),
+      end: new Date(now.getTime() - 7 * DAY),
+    };
+    const earlier = await fetchCoPlayGames(testApp.db, prior, { now });
+    expect(earlier.map((g) => g.gameId)).toEqual([ids.get('Before Window')]);
   });
 });
 

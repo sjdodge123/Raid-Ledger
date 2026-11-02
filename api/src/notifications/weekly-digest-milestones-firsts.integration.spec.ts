@@ -224,3 +224,41 @@ describe('Weekly digest firsts — co-play only (ROK-2063, integration)', () => 
     expect(await firstNames(testApp, weekStart)).toEqual(['Late Night']);
   });
 });
+
+describe('Weekly digest firsts — boundary co-play credit (ROK-2063, integration)', () => {
+  let testApp: TestApp;
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  // Each game: two members playing together from `from` to `to`, relative to
+  // the week boundary. A co-play is credited to the week holding the instant
+  // its overlap reaches 15 minutes (`from + 15 min`).
+  it('credits a boundary-straddling co-play to the week its 15th minute falls in', async () => {
+    const now = new Date();
+    const boundary = new Date(now.getTime() - 7 * DAY);
+    const at = (offset: number): Date => new Date(boundary.getTime() + offset);
+    const ann = await seedUser(testApp);
+    const bob = await seedUser(testApp);
+    const cases = [
+      ['Never Reached', -10 * MIN, 4 * MIN], // 14 min in all: no week
+      ['Codex Straddle', -10 * MIN, 10 * MIN], // reaches 15 min at +5
+      ['Later Week', -10 * MIN, 20 * MIN], // reaches 15 min at +5
+      ['Earlier Week', -30 * MIN, -5 * MIN], // reaches 15 min at −15
+    ] as const;
+    for (const [name, from, to] of cases) {
+      const game = await seedGame(testApp, name);
+      await seedSessionAt(testApp, ann, game, at(from), at(to));
+      await seedSessionAt(testApp, bob, game, at(from), at(to));
+    }
+
+    expect(await firstNames(testApp, now)).toEqual([
+      'Codex Straddle',
+      'Later Week',
+    ]);
+    expect(await firstNames(testApp, boundary)).toEqual(['Earlier Week']);
+  });
+});

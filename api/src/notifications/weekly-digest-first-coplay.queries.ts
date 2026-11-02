@@ -18,18 +18,20 @@
  *
  * History is deliberately NOT filtered by current membership or opt-out:
  * co-play by people who have since left still happened, so it is no first.
- * Overlap before `start` is clipped at `start`, so a co-play straddling the
- * week boundary is a first in exactly one week (the one holding its first
- * 15 minutes). The week is half-open: an event ending exactly at `end` is the
- * next week's first, never both.
+ * An overlap is credited to the week holding the instant it reaches 15 min
+ * (`GREATEST(starts) + 15 min`): this week's candidates need that instant in
+ * `[start, end)`, the history probe needs it before `start`. So a co-play
+ * straddling the boundary is a first in exactly one week and never suppresses
+ * itself. The week is half-open: an event ending exactly at `end` is the next
+ * week's first, never both.
  *
  * Lives outside `weekly-digest-milestones-sql.helpers.ts` because the co-play
  * query imports that file's predicates — a builder here avoids the cycle.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import {
-  CO_PLAY_MIN_OVERLAP_MINUTES,
   coPlayParticipationSql,
+  MIN_OVERLAP_SQL,
   pgTimestamp,
   SESSION_SPAN_SQL,
   type CoPlayWindow,
@@ -37,30 +39,27 @@ import {
 import { VISIBLE_GAME } from './weekly-digest-milestones-sql.helpers';
 import { ATTENDED_SIGNUP_SQL } from './weekly-digest-recap.helpers';
 
-const MIN_OVERLAP_SQL = sql.raw(
-  `interval '${CO_PLAY_MIN_OVERLAP_MINUTES} minutes'`,
-);
-
-/** `alias`'s session end, open → `before`, clipped to the 25h span and `before`. */
+/** `alias`'s session end: open → `before`, capped at the 25h span. */
 function historyEnd(alias: 'ha' | 'hb', before: SQL): SQL {
   const a = sql.raw(alias);
-  return sql`LEAST(COALESCE(${a}.ended_at, ${before}), ${a}.started_at + ${SESSION_SPAN_SQL}, ${before})`;
+  return sql`LEAST(COALESCE(${a}.ended_at, ${before}), ${a}.started_at + ${SESSION_SPAN_SQL})`;
 }
 
-/** No two people's sessions on `g.id` overlapped ≥ 15 min before `before`. */
+/** No two people's sessions on `g.id` reached a 15-min overlap before `before`. */
 function noEarlierSessionCoPlay(before: SQL): SQL {
   const aEnd = historyEnd('ha', before);
+  const reached = sql`GREATEST(ha.started_at, hb.started_at) + ${MIN_OVERLAP_SQL}`;
   return sql`NOT EXISTS (
       SELECT 1 FROM game_activity_sessions ha
       WHERE ha.game_id = g.id
-        AND ha.started_at < ${before}
+        AND ha.started_at < ${before} - ${MIN_OVERLAP_SQL}
         AND EXISTS (
           SELECT 1 FROM game_activity_sessions hb
           WHERE hb.game_id = ha.game_id
             AND hb.user_id <> ha.user_id
             AND hb.started_at BETWEEN ha.started_at - ${SESSION_SPAN_SQL} AND ${aEnd} - ${MIN_OVERLAP_SQL}
-            AND LEAST(${aEnd}, ${historyEnd('hb', before)})
-                - GREATEST(ha.started_at, hb.started_at) >= ${MIN_OVERLAP_SQL}
+            AND ${reached} < ${before}
+            AND ${reached} <= LEAST(${aEnd}, ${historyEnd('hb', before)})
         )
     )`;
 }
