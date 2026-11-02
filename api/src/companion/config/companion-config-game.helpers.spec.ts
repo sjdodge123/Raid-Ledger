@@ -39,6 +39,34 @@ describe('pickConfigGame', () => {
     );
   });
 
+  it('a tie between non-primary slugs still goes to the primary outside the tie', () => {
+    const rows = [
+      row('wow', 1, 'a'),
+      row('wow-classic', 1, 'b'),
+      row('wow-forever', 0, 'c'),
+    ];
+    expect(pickConfigGame(SLUGS, 'wow-forever', rows)?.slug).toBe(
+      'wow-forever',
+    );
+  });
+
+  it('a single clear winner beats the primary even when the primary has hubs', () => {
+    const rows = [row('wow', 2, 'a'), row('wow-forever', 1, 'c')];
+    expect(pickConfigGame(SLUGS, 'wow-forever', rows)?.slug).toBe('wow');
+  });
+
+  it('no hubs anywhere → the primary, even when it is last in manifest order', () => {
+    const rows = [row('wow', 0, 'a'), row('wow-forever', 0, 'c')];
+    expect(pickConfigGame(SLUGS, 'wow-forever', rows)?.slug).toBe(
+      'wow-forever',
+    );
+  });
+
+  it('a tie with no games row for the primary → the first tied leader in manifest order', () => {
+    const rows = [row('wow-classic', 1, 'b'), row('wow', 1, 'a')];
+    expect(pickConfigGame(SLUGS, 'wow-forever', rows)?.slug).toBe('wow');
+  });
+
   it('a picked row without a cover borrows the first sibling cover in manifest order', () => {
     const rows = [
       row('wow-forever', 0, null),

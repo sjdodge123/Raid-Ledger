@@ -50,8 +50,9 @@ function inSlugOrder(
 }
 
 /**
- * Most hubs wins; a tie or no hubs goes to `primary` (else the first slug in
- * manifest order). A picked row with no cover borrows the first sibling cover.
+ * One slug with strictly the most hubs wins. A tie or no hubs goes to
+ * `primary` among ALL rows (CONTRACT §4.2), else the first tied leader in
+ * manifest order. A picked row with no cover borrows the first sibling cover.
  */
 export function pickConfigGame(
   slugs: readonly string[],
@@ -61,10 +62,10 @@ export function pickConfigGame(
   const ordered = inSlugOrder(slugs, rows);
   const most = Math.max(0, ...ordered.map((r) => r.hubs));
   const leaders = ordered.filter((r) => r.hubs === most);
+  const clearWinner =
+    most > 0 && leaders.length === 1 ? leaders[0] : undefined;
   const picked =
-    (leaders.length === 1 ? leaders[0] : undefined) ??
-    leaders.find((r) => r.slug === primary) ??
-    leaders[0];
+    clearWinner ?? ordered.find((r) => r.slug === primary) ?? leaders[0];
   if (!picked) return null;
   const coverUrl =
     picked.coverUrl ?? ordered.find((r) => r.coverUrl !== null)?.coverUrl;
