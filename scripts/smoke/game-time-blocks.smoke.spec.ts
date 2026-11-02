@@ -90,7 +90,20 @@ function onPhone(): boolean {
 }
 
 async function openGameTime(page: Page): Promise<void> {
+    // Wait for the viewer's week itself, not just a grid. On desktop
+    // `GameTimePanel` gets `enabled={isAuthenticated}`, and a DISABLED query is
+    // not `isLoading` (TanStack v5), so before `/auth/me` lands the panel renders
+    // a measured, editable grid over an empty week. Once auth lands the query
+    // starts, the spinner replaces the grid, and a block tapped on that first
+    // grid loses its selection (it lives in `useBlockEditor`, inside the grid)
+    // — the inspector never appears. Registered before `goto` so a fast
+    // response is not missed; the grid asserted below is then the loaded one.
+    const week = page.waitForResponse(
+        (r) => r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith('/users/me/game-time'),
+        { timeout: 15_000 },
+    );
     await page.goto('/profile/gaming/game-time');
+    expect((await week).status(), 'GET /users/me/game-time').toBe(200);
     if (onPhone()) {
         // ROK-1584 §3: the route MOUNTS the "My game time" drawer — there is no
         // card and no "Edit my week" to tap, and the page's own h1 below the

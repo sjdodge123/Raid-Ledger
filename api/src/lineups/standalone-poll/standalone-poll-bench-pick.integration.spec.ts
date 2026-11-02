@@ -1,9 +1,11 @@
 /**
  * ROK-2025 — on a scheduling lock, the organizer picks who goes to the bench.
  *
- * The flow is the create form's: POST /events {schedulingMatchId} (signs the
- * creator up, taking one spot), then POST /scheduling-polls/:matchId/complete
- * with `benchUserIds`. The roster is a 2-spot generic one, so with the creator
+ * The flow is the legacy two-step one, kept live for `/complete`: the poll's
+ * event is created by the direct fixture `createPollEventDirect` (signs the
+ * creator up, taking one spot; ROK-2039 made `POST /events` refuse
+ * `schedulingMatchId`, and the form now uses `/lock-in`), then
+ * POST /scheduling-polls/:matchId/complete with `benchUserIds`. The roster is a 2-spot generic one, so with the creator
  * plus three other yes-voters (A, B, C) exactly two of A/B/C overflow.
  *
  * Vote order (D1) = COALESCE(updated_at, created_at), id. The seed makes it
@@ -19,6 +21,7 @@
  * voter's poll DM has landed.
  */
 import { and, eq } from 'drizzle-orm';
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -154,22 +157,17 @@ async function seedVotes(matchId: number, ids: number[]): Promise<void> {
   }
 }
 
-/** POST /events from the poll on a 2-spot generic roster. */
+/** The poll's event (direct fixture) on a 2-spot generic roster. */
 async function createEventFromPoll(matchId: number): Promise<number> {
-  const res = await testApp.request
-    .post('/events')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({
-      title: 'Bench pick lock',
-      startTime: SLOT.toISOString(),
-      endTime: SLOT_END.toISOString(),
-      gameId: testApp.seed.game.id,
-      slotConfig: { type: 'generic', player: ROSTER_CAP },
-      maxAttendees: ROSTER_CAP,
-      schedulingMatchId: matchId,
-    });
-  expect(res.status).toBe(201);
-  return res.body.id;
+  return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+    title: 'Bench pick lock',
+    startTime: SLOT.toISOString(),
+    endTime: SLOT_END.toISOString(),
+    gameId: testApp.seed.game.id,
+    slotConfig: { type: 'generic', player: ROSTER_CAP },
+    maxAttendees: ROSTER_CAP,
+    schedulingMatchId: matchId,
+  });
 }
 
 /** Seed the poll + votes + event; nothing is completed yet. */
@@ -336,7 +334,7 @@ describe('ROK-2025 (d) a refused pick is a 400 that leaves the poll open', () =>
         message: copy,
       });
       expect(await matchStatus(lock.matchId)).toBe('scheduling');
-      // Nothing ran: only the creator (signed up by POST /events) is on it.
+      // Nothing ran: only the creator (signed up by the event fixture) is on it.
       expect(await signedUpUserIds(lock.eventId)).toEqual([lock.creator]);
     },
   );

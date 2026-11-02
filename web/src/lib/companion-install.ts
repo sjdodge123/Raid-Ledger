@@ -2,7 +2,7 @@
  * ROK-2056 — the web's single read of the Companion download flag and the
  * in-app href every install entry point links to. Kept as a tiny module so
  * tests can `vi.mock('…/lib/companion-install')` and exercise both states of
- * `COMPANION_DOWNLOAD_AVAILABLE` (which is `false` until ROK-2057's first
+ * `COMPANION_DOWNLOAD_AVAILABLE` (`true` since ROK-2060 — ROK-2057's first
  * public release).
  */
 import { COMPANION_DOWNLOAD_AVAILABLE } from '@raid-ledger/contract';

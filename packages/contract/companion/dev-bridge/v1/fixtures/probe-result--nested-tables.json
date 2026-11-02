@@ -1,0 +1,25 @@
+{
+  "probeId": "01JBX7Q2M3N4P5R6S7T8V9W0XY",
+  "capturedAt": "2026-11-01T19:02:11Z",
+  "addonVersion": "0.1.0",
+  "truncated": false,
+  "calls": [
+    {
+      "id": "roster",
+      "status": "ok",
+      "values": [
+        "Tester",
+        {
+          "rank": "Officer",
+          "note": "<redacted>",
+          "tags": [
+            "raider",
+            {
+              "main": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
