@@ -8,6 +8,7 @@
  * builds its own users + hubs with unique names, so cases never share state.
  */
 import { eq } from 'drizzle-orm';
+import { TaggableHubsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -125,8 +126,9 @@ async function storedGuildId(eventId: number): Promise<number | null> {
   return row.guildId;
 }
 
-function hubIds(body: { hubs: Array<{ id: number }> }): number[] {
-  return body.hubs.map((h) => h.id);
+/** Parses the body against the contract, then lists the hub ids. */
+function hubIds(body: unknown): number[] {
+  return TaggableHubsSchema.parse(body).hubs.map((h) => h.id);
 }
 
 beforeAll(async () => {
@@ -196,7 +198,9 @@ describe('GET guilds/taggable?gameId=', () => {
     );
     expect(hubIds(wow.body)).not.toContain(hubId);
   });
+});
 
+describe('GET guilds/taggable — WoW alias + validation', () => {
   it('keeps the WoW-only plugins/wow/guilds?gameId= list working', async () => {
     const wowId = await mkWowGuild();
     const res = await testApp.request
