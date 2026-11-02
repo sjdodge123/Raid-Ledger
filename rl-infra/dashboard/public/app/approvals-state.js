@@ -6,7 +6,8 @@
 // never break the page) and captureKey (which also rewrites the URL).
 //
 // The inbox key arrives once via the bookmarked link
-//   https://fleet.<domain>/?view=approvals&k=<key>   (or #k=<key>)
+//   https://fleet.<domain>/?view=approvals#k=<key>   — use the #fragment: it never
+//   reaches the server or its access log. `?k=` is still read for old links.
 // It is copied into localStorage on this device and stripped from the
 // visible URL with history.replaceState, so it does not linger in the
 // address bar, history entries or screenshots. The key is only ever sent
