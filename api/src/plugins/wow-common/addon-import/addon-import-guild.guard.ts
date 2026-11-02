@@ -44,6 +44,19 @@ export function receivedSnapshotAt(
   return new Date(Math.min(fromUnix(snapshotAt).getTime(), nowMs));
 }
 
+/**
+ * Strictly newer than the stored snapshot (compared at its received instant).
+ * An equal-instant re-import moves no member's liveness, so it is not measured
+ * or flagged — a re-import of the same snapshot must not alarm staff.
+ */
+export function isNewerGuildSnapshot(
+  lastSnapshotAt: Date | null | undefined,
+  snapshotAt: number,
+): boolean {
+  if (!lastSnapshotAt) return true;
+  return receivedSnapshotAt(snapshotAt).getTime() > lastSnapshotAt.getTime();
+}
+
 export function isMassRemoval(live: number, removed: number): boolean {
   return removed >= MASS_REMOVAL_MIN && removed > live * MASS_REMOVAL_SHARE;
 }
@@ -187,17 +200,18 @@ async function measureRosterChange(
 
 /**
  * Measure a snapshot of an EXISTING guild (a brand-new guild has no roster
- * to protect). Staff count 0/0 and are never flagged; anyone else's FRESH
- * snapshot returns its delta and any wholesale flag. A stale snapshot writes
- * nothing, so it measures nothing. Never refuses (ROK-2066).
+ * to protect). Staff count 0/0 and are never flagged; anyone else's strictly
+ * NEWER snapshot (`isNewerGuildSnapshot`) returns its delta and any wholesale
+ * flag. A stale snapshot writes nothing and an equal-instant one moves no
+ * liveness, so neither measures anything. Never refuses (ROK-2066).
  */
 export async function checkRosterReplace(
   ctx: AddonApplyContext,
   guildId: number,
   payload: AddonGuildExport,
-  fresh: boolean,
+  newer: boolean,
 ): Promise<RosterCheck> {
-  if (!fresh || (await importerIsStaff(ctx))) return UNCHECKED;
+  if (!newer || (await importerIsStaff(ctx))) return UNCHECKED;
   return measureRosterChange(ctx, guildId, payload);
 }
 

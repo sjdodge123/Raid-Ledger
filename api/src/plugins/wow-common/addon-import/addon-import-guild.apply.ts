@@ -16,6 +16,7 @@ import { AddonImportError } from './addon-import.errors';
 import {
   auditRosterReplaced,
   checkRosterReplace,
+  isNewerGuildSnapshot,
   lockGuildImport,
   receivedSnapshotAt,
   type RosterCheck,
@@ -150,7 +151,11 @@ async function guardExisting(
     guild.lastSnapshotAt,
     payload.data.snapshotAt,
   );
-  const check = await checkRosterReplace(ctx, guild.id, payload, !stale);
+  const newer = isNewerGuildSnapshot(
+    guild.lastSnapshotAt,
+    payload.data.snapshotAt,
+  );
+  const check = await checkRosterReplace(ctx, guild.id, payload, newer);
   return { stale, ...check };
 }
 

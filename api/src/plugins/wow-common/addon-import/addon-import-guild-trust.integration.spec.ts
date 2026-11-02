@@ -251,8 +251,7 @@ describe(`${R2066} — a newer snapshot from any roster member applies`, () => {
 
   it(`${R2066}: a one-member roster from a real member applies and is flagged to staff`, async () => {
     const { token, id } = await seedRealGuild();
-    const self = roster().filter((m) => m.guid === FIXTURE_GUID);
-    applied(await apply(token, id, buildImportString(buildGuildPayload(self))));
+    applied(await apply(token, id, selfOnly(1)));
     expect(await liveCount()).toBe(1);
     const g = await guildRow();
     const flags = (await flagRows()).filter(
@@ -269,7 +268,25 @@ describe(`${R2066} — a newer snapshot from any roster member applies`, () => {
       }),
     ]);
   });
+
+  it(`${R2066}: re-importing an equal-instant roster that drops members flags no one`, async () => {
+    const { token, id } = await seedRealGuild();
+    // Same snapshotAt as the seed: every row keeps its seenAt, so all 40
+    // stay live and staff must not get a false "39 removed" alarm.
+    applied(await apply(token, id, selfOnly(0)));
+    expect(await liveCount()).toBe(40);
+    expect(await flagRows()).toEqual([]);
+  });
 });
+
+/** Only the GM's own row, `step` minutes after the seed snapshot. */
+function selfOnly(step: number): string {
+  const payload = buildGuildPayload(
+    roster().filter((m) => m.guid === FIXTURE_GUID),
+  );
+  payload.data.snapshotAt += step * 60;
+  return buildImportString(payload);
+}
 
 /** The real roster minus the first `n` other members, `step` minutes later. */
 function sliced(n: number, step: number): string {
@@ -413,14 +430,10 @@ describe('ROK-1794 — concurrent imports and the character-less route (Codex P2
 
   it(`${R2066}: a wholesale roster on the character-less route applies and notifies admins`, async () => {
     const { token } = await seedRealGuild();
-    const self = roster().filter((m) => m.guid === FIXTURE_GUID);
     const res = await testApp.request
       .post('/plugins/wow/characters/addon-import')
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        importString: buildImportString(buildGuildPayload(self)),
-        dryRun: false,
-      });
+      .send({ importString: selfOnly(1), dryRun: false });
     applied(res);
     expect(await liveCount()).toBe(1);
     const flags = (await flagRows()).filter(
@@ -538,7 +551,8 @@ describe(`${R2066} — member grants and the editor flag`, () => {
     applied(await at(2, 30));
     expect(await liveCount()).toBe(10);
     expect(await flagPayloads()).toContainEqual(
-      expect.objectContaining({ removed: 34, live: 40, dropsEditor: false }),
+      // The second slice re-drops the first 4: 4 + 26 = 30 in the window.
+      expect.objectContaining({ removed: 30, live: 40, dropsEditor: false }),
     );
   });
 
@@ -599,8 +613,7 @@ describe(`${R2066} — wholesale-change flag recipients`, () => {
         .returning(),
       'operator',
     );
-    const self = roster().filter((m) => m.guid === FIXTURE_GUID);
-    const big = buildImportString(buildGuildPayload(self));
+    const big = selfOnly(1);
     const flagged = async () =>
       (await flagRows()).map((r) => r.userId).sort((a, b) => a - b);
     const preview = await post(token, id, big, { dryRun: true });
