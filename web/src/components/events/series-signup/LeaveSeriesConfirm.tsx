@@ -7,24 +7,11 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { formatNightDate, lateCancelNight, nightsLabel } from './series-signup-format';
 
-/** The Leave-series confirm: names the nights it removes and flags a late cancel (<23h). */
-export function LeaveSeriesConfirm({ seriesTitle, nights, isPending, onClose, onConfirm }: {
-    seriesTitle: string; nights: readonly SeriesNightDto[]; isPending: boolean; onClose: () => void; onConfirm: () => void;
-}): JSX.Element {
-    const isDesktop = useMediaQuery(DESKTOP_MQ);
+function LeaveSeriesBody({ nights }: { nights: readonly SeriesNightDto[] }): JSX.Element {
     const first = nights[0];
     const last = nights[nights.length - 1];
     const late = lateCancelNight(nights);
-    const title = `Leave “${seriesTitle}”?`;
-    const footer = (
-        <>
-            <Button variant="secondary" size="sm" onClick={onClose}>Stay in series</Button>
-            <Button variant="destructive" size="sm" data-testid="leave-series-confirm" loading={isPending} loadingLabel="Leaving the series" onClick={onConfirm}>
-                Leave series
-            </Button>
-        </>
-    );
-    const body = (
+    return (
         <div className="space-y-3 text-sm">
             <p className="text-foreground">
                 You&apos;ll be taken off the {nightsLabel(nights.length)} you&apos;re signed up for
@@ -39,6 +26,23 @@ export function LeaveSeriesConfirm({ seriesTitle, nights, isPending, onClose, on
             <p className="text-muted">Past nights stay as they are. To miss just one night, use Skip this night.</p>
         </div>
     );
+}
+
+/** The Leave-series confirm: names the nights it removes and flags a late cancel (<23h). */
+export function LeaveSeriesConfirm({ seriesTitle, nights, isPending, onClose, onConfirm }: {
+    seriesTitle: string; nights: readonly SeriesNightDto[]; isPending: boolean; onClose: () => void; onConfirm: () => void;
+}): JSX.Element {
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const title = `Leave “${seriesTitle}”?`;
+    const footer = (
+        <>
+            <Button variant="secondary" size="sm" onClick={onClose}>Stay in series</Button>
+            <Button variant="destructive" size="sm" data-testid="leave-series-confirm" loading={isPending} loadingLabel="Leaving the series" onClick={onConfirm}>
+                Leave series
+            </Button>
+        </>
+    );
+    const body = <LeaveSeriesBody nights={nights} />;
     if (isDesktop) return <Modal isOpen onClose={onClose} title={title} maxWidth="max-w-md" footer={footer}>{body}</Modal>;
     return <BottomSheet isOpen onClose={onClose} title={title} footer={footer}>{body}</BottomSheet>;
 }

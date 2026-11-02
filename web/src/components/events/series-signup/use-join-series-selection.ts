@@ -1,5 +1,5 @@
 import type { CharacterDto, CharacterRole, JoinSeriesDto } from '@raid-ledger/contract';
-import { useSignupSelection } from '../signup-confirmation-modal';
+import { useSignupSelection } from '../use-signup-selection';
 
 /**
  * Character + role picks for the series join, on top of the signup modal's
