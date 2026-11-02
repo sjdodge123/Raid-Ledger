@@ -64,7 +64,8 @@ describe('CompanionDevicesSection (ROK-1955 T-WEB-5)', () => {
         const { container } = renderWithProviders(<CompanionDevicesSection />);
         expect(await screen.findByText(/No computers linked/)).toBeInTheDocument();
         expect(container.querySelector('#companion-devices')).not.toBeNull();
-        expect(screen.getByRole('heading', { name: 'Companion devices' })).toBeInTheDocument();
+        // ROK-2060: the download switch is on, so the card carries its released heading.
+        expect(screen.getByRole('heading', { name: 'Raid Ledger Companion' })).toBeInTheDocument();
     });
 
     it('lists an active device with chip, last seen, linked date and token hint', async () => {
