@@ -329,6 +329,10 @@ services:
       # Single-file RW override keeps the rest of /state RO. Safe with
       # logrotate copytruncate (inode preserved across rotation).
       - ./state/perf.log:/state/perf.log:rw
+      # ROK-1900: "Pending approval" inbox items. Own RW mount, outside
+      # test-plans, so plan-prune / env-destroy never reach it. deploy.sh
+      # creates it rl:rl-fleet 2775 (the container runs as gid 1004).
+      - ./state/approvals:/state/approvals:rw
       # Bind-mount public/ + server.js so operator edits to either land
       # immediately without rebuilding the image. The Dockerfile still
       # COPY's both as a fallback for fresh-deploy scenarios where the
@@ -339,6 +343,11 @@ services:
       # together — a server.js-only mount loads new code against the image's
       # (missing or stale) plan-auth.js and crash-loops on ERR_MODULE_NOT_FOUND.
       - ./dashboard/plan-auth.js:/app/plan-auth.js:ro
+      # ROK-1900: the approvals modules server.js imports mount with it too.
+      - ./dashboard/approvals-auth.js:/app/approvals-auth.js:ro
+      - ./dashboard/approvals-routes.js:/app/approvals-routes.js:ro
+      - ./dashboard/approvals-store.js:/app/approvals-store.js:ro
+      - ./dashboard/approvals-validate.js:/app/approvals-validate.js:ro
     labels:
       rl.role: infra
 

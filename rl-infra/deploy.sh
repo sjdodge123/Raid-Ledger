@@ -44,6 +44,13 @@ chmod 2775 traefik/conf.d 2>/dev/null || true
 # the rl-fleet group, so it must be 640 root:rl-fleet — never world-readable.
 chgrp rl-fleet .env 2>/dev/null || true
 chmod 640 .env 2>/dev/null || true
+# ROK-1900: the dashboard (uid 1000, gid rl-fleet) writes approval items here.
+# Create it BEFORE the dashboard recreate — otherwise Docker mkdirs the bind
+# source as root and every submit EACCESs. Same 2775 rl-fleet as test-plans.
+install -d -m 2775 -g rl-fleet state/approvals 2>/dev/null \
+    || echo "WARN: could not create state/approvals rl-fleet 2775"
+chgrp rl-fleet state/approvals 2>/dev/null || echo "WARN: chgrp rl-fleet state/approvals failed"
+chmod 2775 state/approvals 2>/dev/null || echo "WARN: chmod 2775 state/approvals failed"
 # ROK-1469: same treatment for the settings bundle rl-agent must READ. rsync
 # resets these on every deploy, and an unreadable bundle costs each env its
 # shared API keys.

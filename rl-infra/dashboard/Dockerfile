@@ -1,6 +1,6 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY server.js plan-auth.js ./
+COPY server.js plan-auth.js approvals-auth.js approvals-routes.js approvals-store.js approvals-validate.js ./
 COPY public/ public/
 ENV NODE_ENV=production STATE_DIR=/state PUBLIC_DIR=/app/public PORT=8080
 EXPOSE 8080

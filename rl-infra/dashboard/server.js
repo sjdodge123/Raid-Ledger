@@ -17,6 +17,9 @@ import {
   agentDenial, agentTokenOk, checkTestUrl, mintTesterToken, sanitizePlanTestUrls, testerAllowed,
   withoutSecrets,
 } from './plan-auth.js';
+import { createApprovalAuth } from './approvals-auth.js';
+import { createApprovalRoutes } from './approvals-routes.js';
+import { createApprovalStore } from './approvals-store.js';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
@@ -134,6 +137,16 @@ const clientIp = (req) => {
   // returning a "trusted" identity as the client.
   return peer;
 };
+
+// ROK-1900 — "Pending approval" inbox. Its own RW mount (never under
+// test-plans, so plan-prune cannot reach it); fails closed without
+// RL_APPROVAL_TOKEN_SHA256 (approvals-auth.js).
+const handleApprovals = createApprovalRoutes({
+  store: createApprovalStore({ root: process.env.RL_APPROVALS_ROOT || join(STATE_DIR, 'approvals') }),
+  auth: createApprovalAuth({ agentToken: RL_AGENT_TOKEN, inboxHashHex: process.env.RL_APPROVAL_TOKEN_SHA256 }),
+  publicDomain: PUBLIC_DOMAIN,
+  ipOf: clientIp,
+});
 
 // Returns true if the IP's cumulative byte usage in the trailing
 // BYTE_LIMIT_WINDOW_MS is under BYTE_LIMIT_MAX after `nextBytes` is added.
@@ -2144,6 +2157,7 @@ const dispatch = async (req, res) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
     if (!rateLimitOk(req, res)) return;
   }
+  if (await handleApprovals(req, res, pathOnly)) return;
   if (pathOnly === '/api/state') {
     await handleApiState(res);
     return;
