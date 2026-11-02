@@ -82,7 +82,7 @@ const open = async (fetchOpts, url = `https://fleet.example.net/?approval=${ID}&
   const w = dom.window;
   w.__rlApprovalsNoAutoBoot = true;
   w.scrollTo = () => {};
-  for (const f of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item.js', 'approvals-list.js']) {
+  for (const f of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item-panels.js', 'approvals-item.js', 'approvals-list.js']) {
     w.eval(await read(`app/${f}`));
   }
   const f = fakeFetch(fetchOpts);
@@ -250,7 +250,7 @@ test('error states: unknown item, refused key, no key on this device', async () 
 });
 
 test('static: item + markdown modules never use innerHTML; scripts load before the list', async () => {
-  for (const f of ['app/approvals-item.js', 'app/approvals-markdown.js']) {
+  for (const f of ['app/approvals-item.js', 'app/approvals-item-panels.js', 'app/approvals-markdown.js']) {
     const code = (await read(f)).replace(/\/\/.*$/gm, '');
     assert.doesNotMatch(code, /innerHTML|insertAdjacentHTML|outerHTML|document\.write/, f);
     assert.doesNotMatch(code, /allow-same-origin|allow-top-navigation|allow-popups/, `${f} widens the sandbox`);
@@ -258,7 +258,8 @@ test('static: item + markdown modules never use innerHTML; scripts load before t
   const html = await read('index.html');
   const at = (s) => html.indexOf(s);
   assert.ok(at('/app/approvals-state.js') < at('/app/approvals-markdown.js')
-    && at('/app/approvals-markdown.js') < at('/app/approvals-item.js')
+    && at('/app/approvals-markdown.js') < at('/app/approvals-item-panels.js')
+    && at('/app/approvals-item-panels.js') < at('/app/approvals-item.js')
     && at('/app/approvals-item.js') < at('/app/approvals-list.js'), 'state → markdown → item → list');
 });
 
@@ -365,7 +366,7 @@ test('an idle page re-fetches the item ~1 min before its signed URLs expire', as
   } });
   const html = (await read('index.html')).replace(/<script[\s\S]*?<\/script>/g, '');
   const w = new JSDOM(html, { url: `https://fleet.example.net/?approval=${ID}`, runScripts: 'outside-only' }).window;
-  for (const file of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item.js']) w.eval(await read(`app/${file}`));
+  for (const file of ['approvals-state.js', 'approvals-markdown.js', 'approvals-item-panels.js', 'approvals-item.js']) w.eval(await read(`app/${file}`));
   const timers = [];
   const body = w.document.getElementById('approvals-body');
   await w.__rlApprovals.renderItemPage(body, ID, KEY, {
