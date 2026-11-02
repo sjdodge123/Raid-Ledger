@@ -82,6 +82,30 @@ export async function endSeriesMembershipsForUser(
   return ids;
 }
 
+/**
+ * AC5 best-effort wrapper shared by deactivation and ban: ends every active
+ * membership of the user (reason `deactivated`) and untags future nights. A
+ * failure is logged, never thrown, so it cannot block the caller's cascade.
+ */
+export async function endSeriesMembershipsForUserBestEffort(
+  db: Tx,
+  userId: number,
+  logger: Logger,
+  who: string,
+): Promise<void> {
+  try {
+    const ids = await endSeriesMembershipsForUser(db, userId);
+    if (ids.length > 0)
+      logger.log(
+        `ROK-1728: ended ${ids.length} series membership(s) for ${who} ${userId}`,
+      );
+  } catch (err: unknown) {
+    logger.warn(
+      `ROK-1728: series membership end for ${who} ${userId} failed: ${errMessage(err)}`,
+    );
+  }
+}
+
 /** D6: ends the group's memberships only when no future night remains. */
 export async function endMembershipsIfSeriesFinished(
   db: Tx,

@@ -7,7 +7,7 @@ import { UsersService } from '../users/users.service';
 import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
-import { endSeriesMembershipsForUser } from '../events/series-signups-lifecycle.helpers';
+import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-lifecycle.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
@@ -224,7 +224,12 @@ async function runCascade(
   userId: number,
 ): Promise<void> {
   // ROK-1728 AC5: end series memberships BEFORE the signup cascade.
-  await endUserSeriesMemberships(deps, userId);
+  await endSeriesMembershipsForUserBestEffort(
+    deps.db,
+    userId,
+    deps.logger,
+    'deactivated user',
+  );
   try {
     const count = await cancelAllUpcomingSignupsForUser(
       deps.db,
@@ -293,22 +298,4 @@ export async function isGuildMemberSeen(
     )
     .limit(1);
   return !!row;
-}
-
-/** ROK-1728 AC5: best-effort — a failure never blocks the signup cascade. */
-async function endUserSeriesMemberships(
-  deps: { db: PostgresJsDatabase<typeof schema>; logger: Logger },
-  userId: number,
-): Promise<void> {
-  try {
-    const ids = await endSeriesMembershipsForUser(deps.db, userId);
-    if (ids.length > 0)
-      deps.logger.log(
-        `ROK-1728: ended ${ids.length} series membership(s) for deactivated user ${userId}`,
-      );
-  } catch (err: unknown) {
-    deps.logger.warn(
-      `ROK-1728: series membership end for user ${userId} failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-    );
-  }
 }
