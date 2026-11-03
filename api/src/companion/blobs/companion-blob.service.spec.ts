@@ -368,3 +368,66 @@ describe('CompanionBlobService.upload — review round 1', () => {
     expect(calls).not.toContain('commit');
   });
 });
+
+describe('CompanionBlobService.upload — live holds count against the user quota (tech-debt 2026-10-27)', () => {
+  const OTHER: CompanionIngestAuth = { ...DEVICE, userId: 8 };
+
+  /** First read parks until `finish()`, so its upload stays in flight. */
+  function parkFirstRead(): { finish: () => void } {
+    let finish = (): void => undefined;
+    const parked = new Promise<typeof GOT>((resolve) => {
+      finish = () => resolve(GOT);
+    });
+    m.read.mockImplementationOnce(() => parked);
+    return { finish: () => finish() };
+  }
+
+  beforeEach(() => {
+    process.env.COMPANION_BLOB_QUOTA_BYTES_PER_USER = '150';
+  });
+  afterEach(() => {
+    delete process.env.COMPANION_BLOB_QUOTA_BYTES_PER_USER;
+  });
+
+  it('a second upload whose bytes would overrun the quota while the first is live is 413', async () => {
+    const { service } = setup();
+    const gate = parkFirstRead();
+    const first = service.upload(DEVICE, SHA, REQ);
+    await new Promise((r) => setImmediate(r));
+    await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+      413,
+      'blob_quota_exceeded',
+    ]);
+    gate.finish();
+    await expect(first).resolves.toEqual({ status: 'stored', sha256: SHA });
+  });
+
+  it('another user is not blocked, and the hold is released once the upload ends', async () => {
+    const { service } = setup();
+    const gate = parkFirstRead();
+    const first = service.upload(DEVICE, SHA, REQ);
+    await new Promise((r) => setImmediate(r));
+    await expect(service.upload(OTHER, SHA, REQ)).resolves.toEqual({
+      status: 'stored',
+      sha256: SHA,
+    });
+    gate.finish();
+    await first;
+    await expect(service.upload(DEVICE, SHA, REQ)).resolves.toEqual({
+      status: 'stored',
+      sha256: SHA,
+    });
+  });
+
+  it('a failed upload releases its hold too', async () => {
+    const { service } = setup({ insert: 'ref_mismatch' });
+    await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+      409,
+      'blob_ref_mismatch',
+    ]);
+    await expect(codeOf(service.upload(DEVICE, SHA, REQ))).resolves.toEqual([
+      409,
+      'blob_ref_mismatch',
+    ]);
+  });
+});

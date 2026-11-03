@@ -1634,7 +1634,10 @@ name + `tabular-nums` count line over a §3.2 `GuildMeter` scaled to the top row
 target, the **name** and the **count + `MapPinIcon`** are two separate 44px `Link`s (`hover:underline`, distinct
 accessible names — "Open <name>'s character page" / "Show <name>'s N deaths on the map"), never one row-wide link;
 plain text when not. A "Show all" header `action`, and a `text-xs text-muted` footnote ("Counted
-since <date>", viewer timezone). Copy this shape for any future ranked-count widget; `useVisible` hides it when
+since <date>", viewer timezone). ROK-1931: a death comes from the server log, a Discord death message or the mod's own report (which
+alone carries a position); a mod-reported death with no player pin nearby draws as a synthetic Death pin labelled
+"Death · 2 Nov 21:14" (viewer timezone), and the character page header adds a `text-xs text-muted` "Deaths (all
+worlds): N" line from the game's lifetime stat. Copy this shape for any future ranked-count widget; `useVisible` hides it when
 the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, order 47, span 2): the body is
 CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` shows it to every hub
 member, empty too (ROK-1965 D15: "No pictures yet. Add the first one." so someone can add the first picture); a visitor's

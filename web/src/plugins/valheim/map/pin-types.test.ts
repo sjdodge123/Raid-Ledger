@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     PIN_CHECKED_CLASS,
     PIN_DISC_CLASS,
+    deathPinLabel,
     pinAccessibleName,
     pinDisplayLabel,
     pinStyleFor,
@@ -140,5 +141,18 @@ describe('scanned portal style (ROK-1946 D9)', () => {
             .toEqual(['Scanned portal', 'arrows-right-left', 'text-success', true]);
         const player = pinStyleFor('Icon4');
         expect([player.typeLabel, player.iconName, player.ring]).toEqual(['Portal', 'sparkles', undefined]);
+    });
+});
+
+describe('deathPinLabel (ROK-1931 Q6 = A)', () => {
+    // Local parts, so the text holds in any test-runner timezone.
+    const now = new Date(2026, 10, 3, 9, 0);
+
+    it('this year reads "Death · d MMM HH:mm"', () => {
+        expect(deathPinLabel(new Date(2026, 10, 2, 21, 14).toISOString(), now)).toBe('Death · 2 Nov 21:14');
+    });
+
+    it('another year adds the year: "Death · d MMM yyyy HH:mm"', () => {
+        expect(deathPinLabel(new Date(2025, 10, 2, 21, 14).toISOString(), now)).toBe('Death · 2 Nov 2025 21:14');
     });
 });

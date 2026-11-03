@@ -401,6 +401,8 @@ describe('POST /admin/test/wow/seed-guild — withLockouts (ROK-1914)', () => {
       [SEED_LOCKOUT_SHARED.name, ['Aldren 10', 'Brisa 4']],
       [SEED_LOCKOUT_SOLO.name, ['Dainel 1']],
     ]);
+    // gm, officer and the solo member each reported saves (linked chars).
+    expect(res.body.lockoutReporters).toBe(3);
   });
 
   it('without the flag: no lockouts key and no snapshots', async () => {

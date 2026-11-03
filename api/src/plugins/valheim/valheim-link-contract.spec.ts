@@ -100,6 +100,7 @@ describe('Valheim Link v1 golden fixtures — valid', () => {
 
   it('ships the agreed valid cases', () => {
     expect(names).toEqual([
+      'character-deaths',
       'character-eaqs',
       'character-vanilla',
       'containers-basic',

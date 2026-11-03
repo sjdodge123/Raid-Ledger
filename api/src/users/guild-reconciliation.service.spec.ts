@@ -9,9 +9,11 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { seedDiscordId } from '../admin/demo-test-community-hubs.snowflakes';
 
 type Row = {
   id: number;
+  username?: string;
   discordId: string;
   avatar: string | null;
   guildMemberSeenAt: Date | null;
@@ -96,6 +98,46 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
     expect(h.deactivateUser).toHaveBeenCalledTimes(1);
     expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep', {
       seenBefore: expect.any(Date),
+    });
+  });
+
+  describe('hub-seed users on their synthetic snowflakes', () => {
+    const seen = { avatar: null, guildMemberSeenAt: OLD };
+    const seedRows = () => [
+      {
+        id: 7,
+        username: 'community-leader',
+        discordId: seedDiscordId('community-leader'),
+        ...seen,
+      },
+      {
+        id: 8,
+        username: 'community-officer-t1',
+        discordId: seedDiscordId('community-officer-t1'),
+        ...seen,
+      },
+      { id: 5, username: 'community-member-1', discordId: '999', ...seen },
+    ];
+    const sweptIds = (h: Harness) =>
+      h.deactivateUser.mock.calls.map(([id]: [number]) => id);
+    const originalDemoMode = process.env.DEMO_MODE;
+    afterEach(() => {
+      if (originalDemoMode === undefined) delete process.env.DEMO_MODE;
+      else process.env.DEMO_MODE = originalDemoMode;
+    });
+
+    it('DEMO_MODE on: spares them; a seed name on a real id is still swept', async () => {
+      process.env.DEMO_MODE = 'true';
+      const h = setup(['111'], seedRows());
+      await h.run();
+      expect(sweptIds(h)).toEqual([5]);
+    });
+
+    it('DEMO_MODE off: sweeps them like any other leaver', async () => {
+      delete process.env.DEMO_MODE;
+      const h = setup(['111'], seedRows());
+      await h.run();
+      expect(sweptIds(h)).toEqual([7, 8, 5]);
     });
   });
 

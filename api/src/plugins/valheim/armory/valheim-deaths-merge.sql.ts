@@ -1,7 +1,9 @@
 /**
  * ROK-1941 SQL B: a console death merges into the nearest `discord` death
- * inferred from a death post (same server, name case-insensitive, within
- * the D7 window) or is inserted once per `(server, character, loggedAt)`.
+ * inferred from a death post — or (ROK-1931) a `mod` death the mod
+ * reported — (same server, name case-insensitive, never another known
+ * SteamID (ROK-1931 D6), within the D7 window) or
+ * is inserted once per `(server, character, loggedAt)`.
  * Runs under `withDeathNameLock`; ONE statement that cannot violate
  * `valheim_player_deaths_log_uq` (the merge is skipped when the log row
  * exists, and the lock stops a concurrent writer creating it).
@@ -23,7 +25,9 @@ export async function mergeOrInsertLogDeath(
   death: LogDeathInput,
   windowSec: number,
 ): Promise<boolean> {
-  const rows = await tx.execute(mergeSql(pelicanServerId, death, windowSec));
+  const rows = await tx.execute(
+    logDeathMergeSql(pelicanServerId, death, windowSec),
+  );
   return rows.length > 0;
 }
 
@@ -35,8 +39,22 @@ function existingLogSql(s: SQL, death: LogDeathInput): SQL {
     AND e.character_name = ${death.characterName} AND e.logged_at = ${death.loggedAt}`;
 }
 
-/** SQL B's single statement (spec "Correlation SQL" B). */
-function mergeSql(
+/**
+ * SQL B's "same character" (ROK-1931 D6): name case-insensitive, and never a
+ * row attributed to another SteamID — two players can share a name.
+ */
+function sameCharacterSql(death: LogDeathInput): SQL {
+  const steam = sql`${death.steamId}::text`;
+  return sql`lower(d.character_name) = lower(${death.characterName})
+    AND (d.steam_id IS NULL OR ${steam} IS NULL OR d.steam_id = ${steam})`;
+}
+
+/**
+ * SQL B's single statement (spec "Correlation SQL" B). ROK-1931: the merge
+ * also takes a reported (`mod`) death; the SET leaves its position,
+ * `player_id`, `world_uid` and `reported_at` alone. Exported for the unit spec.
+ */
+export function logDeathMergeSql(
   pelicanServerId: number,
   death: LogDeathInput,
   windowSec: number,
@@ -47,8 +65,9 @@ function mergeSql(
 WITH existing AS (${existingLogSql(s, death)}),
 cand AS (
   SELECT d.id FROM valheim_player_deaths d
-  WHERE d.pelican_server_id = ${s} AND d.source = 'discord'
-    AND lower(d.character_name) = lower(${death.characterName})
+  WHERE d.pelican_server_id = ${s} AND d.source IN ('discord', 'mod')
+    AND (d.source = 'discord' OR d.logged_at IS NULL)
+    AND ${sameCharacterSql(death)}
     AND d.occurred_at BETWEEN ${o} - make_interval(secs => ${windowSec}::int)
                           AND ${o} + make_interval(secs => ${windowSec}::int)
     AND NOT EXISTS (SELECT 1 FROM existing)

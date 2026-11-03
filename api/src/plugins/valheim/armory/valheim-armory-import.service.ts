@@ -23,6 +23,7 @@ import {
 } from './valheim-armory.repository';
 import { SettingsService } from '../../../settings/settings.service';
 import { ValheimSkillDaysRepository } from './valheim-skill-days.repository';
+import { ValheimDeathsRepository } from './valheim-deaths.repository';
 
 /** Snapshots per drain (D1, FLAG Q12). */
 export const ARMORY_DRAIN_BATCH = 50;
@@ -53,6 +54,7 @@ export class ValheimArmoryImportService {
     private readonly hook: ValheimProfileUpsertedHook,
     private readonly skillDays: ValheimSkillDaysRepository,
     private readonly settings: SettingsService,
+    private readonly deaths: ValheimDeathsRepository,
   ) {}
 
   /** One drain pass over up to `limit` importable snapshots (specs call this). */
@@ -160,8 +162,13 @@ export class ValheimArmoryImportService {
     );
     await this.repo.backfillMapProfile(tx, profile);
     await this.hook.onProfileUpserted(tx, profile);
-    const detail = truncated.length ? `truncated:${truncated.join(',')}` : null;
-    return { status: 'imported', detail };
+    // ROK-1931 (D9): a stale snapshot never gets here; the newer one carries a superset.
+    const { foreign } = await this.deaths.recordReportedDeaths(
+      tx,
+      profile,
+      msg.deaths ?? [],
+    );
+    return { status: 'imported', detail: characterDetail(truncated, foreign) };
   }
 
   /** Map rows are stored even before the base-map PNG lands (`waiting_blob`). */
@@ -206,6 +213,17 @@ export class ValheimArmoryImportService {
 }
 
 const IMPORTED: Applied = { status: 'imported', detail: null };
+
+/** A character import's detail: truncated known lists, ignored foreign deaths (D3). */
+export function characterDetail(
+  truncated: readonly string[],
+  foreignDeaths: number,
+): string | null {
+  const parts: string[] = [];
+  if (truncated.length) parts.push(`truncated:${truncated.join(',')}`);
+  if (foreignDeaths > 0) parts.push(`deaths_foreign:${foreignDeaths}`);
+  return parts.length ? parts.join(';') : null;
+}
 const STALE: Applied = { status: 'skipped_stale', detail: null };
 
 /** ROK-1853: a world's containers, latest scan wins (D3). */
