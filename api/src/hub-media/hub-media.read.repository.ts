@@ -136,3 +136,20 @@ export async function setHidden(
     .returning();
   return row ?? null;
 }
+
+/**
+ * ROK-2074 — the id of the row with `provenanceKey` this viewer scope can
+ * see (a source's own key, e.g. `bg3-save:sha256:<hex>`), or null.
+ */
+export async function findVisibleIdByProvenance(
+  db: Db,
+  scope: HubMediaScope,
+  provenanceKey: string,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ id: M.id })
+    .from(M)
+    .where(and(visible(scope), eq(M.provenanceKey, provenanceKey)))
+    .limit(1);
+  return row?.id ?? null;
+}

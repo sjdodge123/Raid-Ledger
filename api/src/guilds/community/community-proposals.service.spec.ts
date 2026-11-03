@@ -71,6 +71,7 @@ const hubRow: schema.GuildSelect = {
   crestSetAt: null,
   crestRemovedBy: null,
   crestRemovedAt: null,
+  crestMediaId: null,
   autoMembership: 'off',
   createdAt: SEEN,
   updatedAt: SEEN,

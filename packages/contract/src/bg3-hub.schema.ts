@@ -124,6 +124,13 @@ export const Bg3SnapshotSchema = z.object({
     party: z.array(Bg3PartySlotSchema),
     thumbnailUrl,
     spoilersHidden: z.boolean(),
+    /**
+     * ROK-2074 — the visible hub Gallery picture of this save's screenshot
+     * (`hub_media` provenance `bg3-save:sha256:<thumbnail sha>`); null when
+     * none (not imported, removed, hidden, or spoilers hidden). Optional so
+     * older fixtures parse.
+     */
+    galleryMediaId: id.nullable().optional(),
 }).strict();
 export type Bg3Snapshot = z.infer<typeof Bg3SnapshotSchema>;
 

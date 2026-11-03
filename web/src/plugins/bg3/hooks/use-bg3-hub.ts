@@ -3,6 +3,7 @@
  * are and their probes. 403/404 never retry (the widgets hide, D-10).
  */
 import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { hubPictureLinkMeta } from '../../../lib/hub-media-query';
 import type { Bg3HubCampaignsResponse, Bg3MySavesResponse, Bg3SessionsResponse, Bg3SnapshotResponse } from '@raid-ledger/contract';
 import {
     BG3_SESSIONS_PAGE_LIMIT,
@@ -35,6 +36,8 @@ export function useBg3Snapshot(hubId: number, enabled = true): UseQueryResult<Bg
     return useQuery({
         queryKey: bg3Keys.snapshot(hubId),
         queryFn: () => fetchBg3Snapshot(hubId),
+        // ROK-2074: `galleryMediaId` links a Gallery picture — Gallery moderation refreshes it.
+        meta: hubPictureLinkMeta(hubId),
         enabled: enabled && hubId > 0,
         staleTime: STALE_MS,
         retry,

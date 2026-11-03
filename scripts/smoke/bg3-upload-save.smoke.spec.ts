@@ -14,6 +14,12 @@
  * The file is sent under a per-run name, so its `file-name` campaign key never
  * matches an earlier run's. Every write is confirmed against
  * `GET /plugins/bg3/hubs/:id/snapshot` with `pollForCondition`. No sleeps.
+ *
+ * ROK-2074: the uploaded save carries a screenshot, so "Where we are" shows it
+ * as a button. It opens the save's Gallery picture when the snapshot names one
+ * (`galleryMediaId`, set once the 15-minute gallery-sync cron has copied it),
+ * else the screenshot alone ("Picture"). The spec reads which from the snapshot
+ * the PAGE fetched, so the asserted mode is the one the widget rendered.
  */
 import { createHash } from 'node:crypto';
 import { copyFileSync, mkdtempSync, rmSync, utimesSync } from 'node:fs';
@@ -184,6 +190,31 @@ async function closeWithDone(page: Page): Promise<void> {
     await expect(sheet, 'Done closes the sheet').toHaveCount(0);
 }
 
+/**
+ * ROK-2074 — open the hub page and return the `galleryMediaId` of the snapshot
+ * THAT navigation fetched (armed before the goto, so an earlier page's
+ * snapshot response can never answer for it).
+ */
+async function gotoHubReadingGalleryId(page: Page, hubId: number): Promise<number | null> {
+    const snapshot = page.waitForResponse(
+        (r) => r.request().method() === 'GET' && r.ok() && new URL(r.url()).pathname.endsWith(`/plugins/bg3/hubs/${hubId}/snapshot`),
+        { timeout: UI_TIMEOUT },
+    );
+    await page.goto(`/hubs/${hubId}`);
+    const body = (await (await snapshot).json()) as { galleryMediaId?: number | null };
+    return body.galleryMediaId ?? null;
+}
+
+async function waitForThumbnail(jwt: string, hubId: number): Promise<void> {
+    await pollForCondition(
+        async () => {
+            const s = (await apiGet(jwt, `/plugins/bg3/hubs/${hubId}/snapshot`)) as { thumbnailUrl?: string | null } | null;
+            return typeof s?.thumbnailUrl === 'string' ? true : null;
+        },
+        { timeoutMs: 15_000, description: `bg3 snapshot for hub ${hubId} has a screenshot` },
+    );
+}
+
 function partyList(page: Page): Locator {
     return page.getByRole('list', { name: 'Party', exact: true });
 }
@@ -258,5 +289,37 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         });
         await expect(sheet.getByTestId('bg3-upload-banner-success'), 'no success banner on a replay').toHaveCount(0);
         await closeWithDone(page);
+    });
+
+    test('Where we are: the save screenshot opens in the Gallery viewer; Escape returns focus (ROK-2074)', async ({ page }, testInfo) => {
+        const seed = await seedHub(testInfo);
+        const file = uploadFile(testInfo);
+        const jwt = await signInOnboardedMember(page, seed.memberId);
+        await page.goto(`/hubs/${seed.hubId}#campaign`);
+        const openSheet = page.getByTestId('bg3-campaign-tab').getByRole('button', { name: 'Upload a save' });
+        await expect(openSheet, 'a member sees Upload a save under Your saves').toBeVisible({ timeout: UI_TIMEOUT });
+        await openSheet.click();
+        await pickSave(page, file);
+        await expect((await submitUpload(page)).getByTestId('bg3-upload-banner-success'), 'the upload lands').toBeVisible({
+            timeout: UI_TIMEOUT,
+        });
+        await waitForParty(jwt, seed.hubId, PARTY_SIZE);
+        await waitForThumbnail(jwt, seed.hubId);
+        await closeWithDone(page);
+
+        const mediaId = await gotoHubReadingGalleryId(page, seed.hubId);
+        const shot = page.getByRole('button', { name: 'View the latest save screenshot', exact: true });
+        await expect(shot, 'Where we are shows the save screenshot as a button').toBeVisible({ timeout: UI_TIMEOUT });
+        const inGallery = typeof mediaId === 'number';
+        await shot.click();
+        const dialog = page.getByRole('dialog', { name: inGallery ? 'Gallery' : 'Picture' });
+        await expect(dialog, `the screenshot opens the ${inGallery ? 'Gallery' : 'single-picture'} viewer`).toBeVisible({ timeout: UI_TIMEOUT });
+        const shown = inGallery
+            ? `[data-testid="hub-gallery-viewer"][data-media-id="${String(mediaId)}"]`
+            : '[data-testid="hub-gallery-single"] img[alt="Latest save screenshot"]';
+        await expect(dialog.locator(shown), 'the viewer shows the save\'s own picture').toBeVisible({ timeout: UI_TIMEOUT });
+        await page.keyboard.press('Escape');
+        await expect(dialog, 'Escape closes the viewer').toHaveCount(0);
+        await expect(shot, 'focus returns to the screenshot').toBeFocused();
     });
 });

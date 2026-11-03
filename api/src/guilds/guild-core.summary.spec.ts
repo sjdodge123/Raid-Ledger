@@ -41,6 +41,7 @@ const ROW: schema.GuildSelect = {
   crestSetAt: null,
   crestRemovedBy: null,
   crestRemovedAt: null,
+  crestMediaId: null,
   autoMembership: 'off',
   createdAt: AT,
   updatedAt: AT,

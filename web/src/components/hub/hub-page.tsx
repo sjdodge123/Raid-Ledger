@@ -18,6 +18,7 @@ import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
 import { type HubCtx, type HubModSource, type HubModule, useHubModule, useHubModuleLoadError, useHubModulePending, retryHubModuleLoad } from '../../plugins/hub-module';
+import { HubGalleryDialogMount } from './gallery/hub-gallery-dialog-mount';
 import { HubHero } from './hub-hero';
 import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
@@ -235,6 +236,8 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
                 <TabRow tabs={tabs} activeId={active} label={hubSectionsLabel(ctx.page.guild.kind)} className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
+                {/* ROK-2074: page-level (was the Overview's), so the hero crest opens it from every tab. */}
+                <HubGalleryDialogMount guildId={ctx.page.guild.id} canEdit={ctx.page.viewer.canEdit} />
             </div>
         </HubSettingsProvider>
     );
