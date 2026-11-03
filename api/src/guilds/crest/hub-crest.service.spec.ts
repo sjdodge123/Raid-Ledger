@@ -283,7 +283,9 @@ describe('HubCrestService.removeUpload', () => {
 
 describe('ROK-2074 crestMediaId — only a gallery pick links a picture', () => {
   it('fromGallery stores the picked media id', async () => {
-    jest.mocked(findGalleryStorageName).mockResolvedValue('0f8fad5b-d9cb-469f-a165-70867728950e');
+    jest
+      .mocked(findGalleryStorageName)
+      .mockResolvedValue('0f8fad5b-d9cb-469f-a165-70867728950e');
     jest.mocked(readFile).mockResolvedValue(Buffer.from('webp'));
     await svc.fromGallery(editor, 5, { mediaId: 3 });
     expect(row.crestMediaId).toBe(3);

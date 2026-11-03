@@ -555,3 +555,63 @@ describe('rank 0 that does not admit a crest editor', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('ROK-2074 GuildSummary.crestMediaId', () => {
+  const pageCrestMediaId = async (): Promise<number | null | undefined> => {
+    const res = await testApp.request
+      .get(`/guilds/${hubId}`)
+      .set(auth('member'));
+    expect(res.status).toBe(200);
+    return GuildPageSchema.parse(res.body).guild.crestMediaId;
+  };
+  const storedMediaId = async (): Promise<number | null | undefined> => {
+    const [row] = await testApp.db
+      .select({ mediaId: schema.guilds.crestMediaId })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, hubId));
+    return row?.mediaId;
+  };
+  const pick = async (): Promise<number> => {
+    const mediaId = await galleryItem(hubId);
+    const res = await testApp.request
+      .post(`${url()}/from-gallery`)
+      .set(auth('leader'))
+      .send({ mediaId });
+    expect(res.status).toBe(200);
+    return mediaId;
+  };
+
+  it('a gallery pick is remembered and sent on the hub page', async () => {
+    const mediaId = await pick();
+    expect(await storedMediaId()).toBe(mediaId);
+    expect(await pageCrestMediaId()).toBe(mediaId);
+  });
+
+  it('a direct upload or a preset unlinks the picture', async () => {
+    await pick();
+    await upload('leader');
+    expect([await storedMediaId(), await pageCrestMediaId()]).toEqual([
+      null,
+      null,
+    ]);
+    await pick();
+    await put('leader', { active: 'preset', preset: PRESET });
+    expect([await storedMediaId(), await pageCrestMediaId()]).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('a picture hidden or gated after the pick is not sent (the link stays)', async () => {
+    const mediaId = await pick();
+    gateUploads = true;
+    expect(await pageCrestMediaId()).toBeNull();
+    gateUploads = false;
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    expect(await pageCrestMediaId()).toBeNull();
+    expect(await storedMediaId()).toBe(mediaId);
+  });
+});

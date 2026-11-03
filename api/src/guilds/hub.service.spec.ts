@@ -45,7 +45,9 @@ function serviceFor(
     isMember: jest.fn().mockResolvedValue(member),
     holdsTopRank: jest.fn().mockResolvedValue(topRank),
   };
-  const moduleRef: unknown = { get: () => ({ hiddenSources: async () => [] }) };
+  const moduleRef: unknown = {
+    get: () => ({ hiddenSources: () => Promise.resolve([]) }),
+  };
   return new HubService(
     db as PostgresJsDatabase<typeof schema>,
     registry as HubKindRegistry,

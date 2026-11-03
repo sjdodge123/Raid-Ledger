@@ -5,7 +5,7 @@
  * gallery feed. Blobs live in a per-file tmpdir (`COMPANION_BLOB_DIR`);
  * every WebP is generated in-test with sharp.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
@@ -515,5 +515,56 @@ describe('Bg3GalleryFeed (§5.7)', () => {
       await feed.canonicalThumbnails(hub),
       await feed.openRawThumbnail(hub, hostTwin.id),
     ]).toEqual([[], null]);
+  });
+});
+
+describe('ROK-2074 snapshot galleryMediaId', () => {
+  /** A `bg3-save` Gallery row of `h` for screenshot `sha` (D-4 provenance). */
+  async function galleryRow(h: number, sha: string): Promise<number> {
+    const [row] = await testApp.db
+      .insert(schema.hubMedia)
+      .values({
+        guildId: h,
+        source: 'bg3-save',
+        kind: 'save',
+        provenanceKey: `bg3-save:sha256:${sha}`,
+        capturedAt: new Date('2026-10-24T12:00:00.000Z'),
+        storageName: randomUUID(),
+        width: 480,
+        height: 270,
+        bytes: 100,
+      })
+      .returning({ id: schema.hubMedia.id });
+    if (!row) throw new Error('expected a hub_media row');
+    return row.id;
+  }
+  const galleryIdOf = async (): Promise<number | null | undefined> => {
+    const res = await get(`${base(hub)}/snapshot?campaignId=${camp}`, guest);
+    const snap = Bg3SnapshotResponseSchema.parse(res.body);
+    if (snap.empty) throw new Error('expected a snapshot');
+    return snap.galleryMediaId;
+  };
+
+  it("matches this hub's visible Gallery picture of the save screenshot", async () => {
+    const { sha } = await pictured();
+    await galleryRow(otherHub, sha);
+    const mediaId = await galleryRow(hub, sha);
+    expect(await galleryIdOf()).toBe(mediaId);
+  });
+
+  it('is null when no Gallery picture matches (only another hub has it)', async () => {
+    const { sha } = await pictured();
+    await galleryRow(otherHub, sha);
+    expect(await galleryIdOf()).toBeNull();
+  });
+
+  it('is null once the matching picture is hidden', async () => {
+    const { sha } = await pictured();
+    const mediaId = await galleryRow(hub, sha);
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    expect(await galleryIdOf()).toBeNull();
   });
 });
