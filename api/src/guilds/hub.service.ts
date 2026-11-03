@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HubHideSchema,
@@ -13,6 +14,7 @@ import {
   type MyGuilds,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { HubMediaSourceGateRegistry } from '../hub-media/hub-media.source-gates';
 import { isHubMuted } from '../notifications/hub-notification-mute.helpers';
 import * as schema from '../drizzle/schema';
 import type {
@@ -24,6 +26,7 @@ import {
   isStaff,
   type GuildActor,
 } from './guild-access.service';
+import { crestMediaIdFor } from './crest/hub-crest-media';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
@@ -47,6 +50,7 @@ export class HubService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly hubKinds: HubKindRegistry,
     private readonly access: GuildAccessService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** The hub page, built by the guild kind's adapter, plus the core extras. */
@@ -66,15 +70,30 @@ export class HubService {
     guildId: number,
     page: GuildPage,
   ): Promise<GuildPage> {
-    const [widgetPrefs, viewer] = await Promise.all([
+    const [widgetPrefs, viewer, crestMediaId] = await Promise.all([
       readWidgetPrefs(this.db, guildId),
       this.withCrestRights(actor, guildId, page.viewer),
+      crestMediaIdFor(this.db, this.mediaGates(), page.guild),
     ]);
     return this.withViewerMute(actor, guildId, {
       ...page,
+      guild: { ...page.guild, crestMediaId },
       widgetPrefs,
       viewer,
     });
+  }
+
+  /**
+   * ROK-2074: the media source gates, resolved lazily — `HubMediaModule`
+   * imports `GuildsCoreModule`, so it cannot be a constructor dependency.
+   * Null (crest picture not linked) when the module is not loaded.
+   */
+  private mediaGates(): HubMediaSourceGateRegistry | null {
+    try {
+      return this.moduleRef.get(HubMediaSourceGateRegistry, { strict: false });
+    } catch {
+      return null;
+    }
   }
 
   /**

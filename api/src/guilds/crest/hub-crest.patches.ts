@@ -3,14 +3,20 @@ import type { CrestPatch, CrestRow } from './hub-crest.queries';
 
 /** ROK-1814 — pure patch builders for the crest columns. */
 
-/** A new upload: point at it and clear any staff removal. */
+/**
+ * A new upload: point at it and clear any staff removal. ROK-2074:
+ * `galleryMediaId` is the gallery picture it was picked from (null for a
+ * direct upload).
+ */
 export function uploadPatch(
   key: string,
   actorId: number,
   now: Date,
+  galleryMediaId: number | null = null,
 ): CrestPatch {
   return {
     crestUploadKey: key,
+    crestMediaId: galleryMediaId,
     crestActive: 'upload',
     crestSetBy: actorId,
     crestSetAt: now,
@@ -30,7 +36,9 @@ export function setPatch(
   now: Date,
 ): CrestPatch | null {
   // Operator ruling 2026-10-30: any editor change clears "removed by an admin".
+  // ROK-2074: only a gallery pick links a picture; any other change unlinks.
   const stamp = {
+    crestMediaId: null,
     crestSetBy: actorId,
     crestSetAt: now,
     crestRemovedBy: null,
@@ -59,6 +67,7 @@ export function removeUploadPatch(
   const fallback = row.crestPreset ? 'preset' : null;
   return {
     crestUploadKey: null,
+    crestMediaId: null,
     crestRemovedBy: actorId,
     crestRemovedAt: now,
     crestActive: row.crestActive === 'upload' ? fallback : row.crestActive,

@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   check,
   jsonb,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type { GuildCrestPreset } from '@raid-ledger/contract';
@@ -151,7 +152,8 @@ export const guilds = pgTable(
      * away (hard delete) nulls it.
      */
     crestMediaId: bigint('crest_media_id', { mode: 'number' }).references(
-      () => hubMedia.id,
+      // Annotated: hub_media.guild_id references guilds (a type cycle).
+      (): AnyPgColumn => hubMedia.id,
       { onDelete: 'set null' },
     ),
     createdAt: timestamp('created_at', { withTimezone: true })

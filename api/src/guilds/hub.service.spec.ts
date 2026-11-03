@@ -3,6 +3,7 @@
  * (never per adapter), and only for a viewer who is a member of the group —
  * a visitor or a staff non-member (leader rung, no roster seat) cannot mute.
  */
+import type { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LadderRole } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
@@ -44,10 +45,12 @@ function serviceFor(
     isMember: jest.fn().mockResolvedValue(member),
     holdsTopRank: jest.fn().mockResolvedValue(topRank),
   };
+  const moduleRef: unknown = { get: () => ({ hiddenSources: async () => [] }) };
   return new HubService(
     db as PostgresJsDatabase<typeof schema>,
     registry as HubKindRegistry,
     access as GuildAccessService,
+    moduleRef as ModuleRef,
   );
 }
 
@@ -118,5 +121,12 @@ describe('ROK-1918 HubService.page widgetPrefs', () => {
   it('a hub that never saved carries widgetPrefs: null', async () => {
     const page = await serviceFor('member').page(actor, 7);
     expect(page.widgetPrefs).toBeNull();
+  });
+});
+
+describe('ROK-2074 HubService.page guild.crestMediaId', () => {
+  it('core always sends the key (null for a hub without an upload crest)', async () => {
+    const page = await serviceFor('member').page(actor, 7);
+    expect(page.guild.crestMediaId).toBeNull();
   });
 });
