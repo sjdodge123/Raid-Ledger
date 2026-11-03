@@ -1933,6 +1933,13 @@
       "when": 1793685229698,
       "tag": "0276_event_signups_attendance_source",
       "breakpoints": true
+    },
+    {
+      "idx": 277,
+      "version": "7",
+      "when": 1793685314638,
+      "tag": "0277_voice_attendance_late_backfill",
+      "breakpoints": true
     }
   ]
 }
