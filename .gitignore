@@ -45,6 +45,7 @@ scripts/*
 # Renumber a branch's migrations after origin/main + the index-collision guard.
 !scripts/renumber-branch-migrations.sh
 !scripts/renumber-branch-migrations.mjs
+!scripts/snapshot-three-way-merge.mjs
 !scripts/renumber-branch-migrations.spec.mjs
 !scripts/check-migration-index-collision.mjs
 !scripts/validate-ci.sh
