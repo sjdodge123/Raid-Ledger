@@ -5,8 +5,8 @@
  * Seed: `POST /admin/test/valheim/deaths-fixture { worker }` (DEMO_MODE,
  * ROK-1930 L5) resets THIS worker's own server hub to two characters with a
  * map each on one world — `top` (5 deaths; Death pins "Day 12" + "Day 31", a
- * "Camp" pin and a shared cartography-table pin) and `second` (3 deaths; one
- * Death pin) — plus a name-only player (1 death, no character → not a link),
+ * "Camp" pin and a shared cartography-table pin) and `second` (3 log deaths + 1 mod-reported
+ * death off its one Death pin → 4, ROK-1931) — plus a name-only player (1 death, no character → not a link),
  * a hub member and a signed-in non-member visitor. The slot is the worker's
  * `parallelIndex`, so projects never share a server.
  *
@@ -29,9 +29,8 @@ import {
   closeFilters,
   mapApp,
   openFilters,
-  pinNames,
   pins,
-  playerPinName,
+  expectEveryDeathPin,
   responseTo,
   seedDeathsFixture as seed,
   serverPinsPath,
@@ -142,16 +141,38 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     await expect(page).not.toHaveURL(/[?&]vc=/);
     const map = mapApp(page);
     await expect(map).toBeVisible({ timeout: 15_000 });
-    const total = top.deathPinLabels.length + second.deathPinLabels.length;
-    await expect(pins(map)).toHaveCount(total);
-    expect(await pinNames(map)).toEqual(
-      [
-        ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
-        ...second.deathPinLabels.map((l) =>
-          playerPinName(l, second.name, "Death"),
-        ),
-      ].sort(),
+    await expectEveryDeathPin(map, f);
+  });
+
+  test('member: a mod-reported death draws as a synthetic "Death · <date time>" pin (ROK-1931)', async ({
+    page,
+  }, testInfo) => {
+    const f = await seed(testInfo.parallelIndex);
+    const { second } = f.characters;
+    const reported = f.reportedDeath;
+    expect(reported, "deaths fixture seeds a reported death").toEqual({
+      characterId: second.id,
+      diedAt: expect.any(String),
+    });
+    await signInContextAs(page.context(), f.users.member.id);
+    const mapRead = responseTo(
+      page,
+      `/characters/${second.id}/maps/${second.mapId}`,
     );
+    await page.goto(`/hubs/${f.guildId}?pins=death&vc=${second.id}#map`);
+    const res = await mapRead;
+    expect(res.status(), `character map read answered ${res.status()}`).toBe(
+      200,
+    );
+    const map = mapApp(page);
+    await expect(map).toBeVisible({ timeout: 15_000 });
+    // Its own Death pins plus the synthetic one; the label is viewer-local time.
+    await expect(pins(map)).toHaveCount(second.deathPinLabels.length + 1);
+    await expect(
+      map.getByRole("button", {
+        name: /^Death · \d{1,2} [A-Z][a-z]{2}(?: \d{4})? \d{2}:\d{2} \(Death\)$/,
+      }),
+    ).toHaveCount(1);
   });
 
   test("visitor: no Deaths card on the Overview, and the deaths read is a 404", async ({
