@@ -356,6 +356,15 @@ describe('CompanionIngestService — handler "already held" check (ROK-2070 M1)'
     expect(order(alreadyHeld)).toBeLessThan(order(repo.advance));
     expect(handle).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('CompanionIngestService — "already held" without a latestWins marker (ROK-2070 MINOR)', () => {
+  const heldMock = (held: boolean) =>
+    jest.fn<Promise<boolean>, [CompanionDeviceTx, number, SaveMsg]>(() =>
+      Promise.resolve(held),
+    );
+  const order = (f: jest.Mock): number =>
+    f.mock.invocationCallOrder[0] ?? Number.NaN;
 
   it('runs without a latestWins marker: a held message is stale and stores nothing', async () => {
     const alreadyHeld = heldMock(true);

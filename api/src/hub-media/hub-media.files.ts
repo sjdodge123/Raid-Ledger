@@ -56,9 +56,10 @@ export async function unlinkMediaFiles(
       rm(mediaFilePath(guildId, storageName, kind), { force: true }),
     ),
   );
-  const failures: unknown[] = results.flatMap((r) =>
-    r.status === 'rejected' ? [r.reason] : [],
-  );
+  const failures: unknown[] = [];
+  for (const r of results) {
+    if (r.status === 'rejected') failures.push(r.reason);
+  }
   for (const err of failures) {
     Sentry.captureException(err, {
       tags: { context: 'hub-media-unlink' },
