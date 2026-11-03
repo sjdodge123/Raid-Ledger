@@ -7,6 +7,7 @@ import {
 import { CompanionIngestModule } from '../ingest/companion-ingest.module';
 import { CompanionConfigAuthGuard } from './companion-config-auth.guard';
 import { CompanionConfigController } from './companion-config.controller';
+import { CompanionConfigOwners } from './companion-config-owners.service';
 import { CompanionConfigService } from './companion-config.service';
 
 /**
@@ -28,6 +29,7 @@ import { CompanionConfigService } from './companion-config.service';
     CompanionSessionJwtGuard,
     CompanionConfigAuthGuard,
     CompanionConfigService,
+    CompanionConfigOwners,
   ],
 })
 export class CompanionConfigModule {}

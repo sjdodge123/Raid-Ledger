@@ -252,10 +252,9 @@ function missingPluginsTable(): Error {
 function makeFailDb(pgError: Error = missingPluginsTable()) {
   return {
     ...mockDb,
+    // refreshActiveCache reads every row with no `.where()` (ROK-2067 D2).
     select: jest.fn().mockImplementation(() => ({
-      from: jest.fn().mockImplementation(() => ({
-        where: jest.fn().mockRejectedValue(pgError),
-      })),
+      from: jest.fn().mockRejectedValue(pgError),
     })),
   };
 }
@@ -321,9 +320,7 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) table missing',
     };
     otherError.code = '08006';
     mockDb.select.mockImplementation(() => ({
-      from: jest.fn().mockImplementation(() => ({
-        where: jest.fn().mockRejectedValue(otherError),
-      })),
+      from: jest.fn().mockRejectedValue(otherError),
     }));
     await expect(service.onModuleInit()).rejects.toThrow('connection refused');
   });
@@ -332,6 +329,34 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) table missing',
     testLogWarningOnMissingTable());
 });
 
+/** Every `plugins` row: two active, one installed but inactive. */
+const POPULATED_ROWS = [
+  { slug: 'plugin-a', active: true },
+  { slug: 'plugin-b', active: true },
+  { slug: 'plugin-c', active: false },
+];
+
+/** refreshActiveCache's bare `select({slug, active}).from(plugins)` resolves to `rows`. */
+function mockRefreshRows(rows: unknown[]): void {
+  mockDb.select.mockImplementation(() => ({
+    from: jest.fn().mockImplementation(() => thenableResult(rows)),
+  }));
+}
+
+/**
+ * The existence lookup (`.where().limit()`) sees the pre-update row; the bare
+ * refresh `from()` sees every row after the update.
+ */
+function mockLookupThenRefresh(lookup: unknown[], refresh: unknown[]): void {
+  mockDb.select.mockImplementation(() => ({
+    from: jest.fn().mockImplementation(() => {
+      const all = thenableResult(refresh);
+      all.where = jest.fn().mockImplementation(() => thenableResult(lookup));
+      return all;
+    }),
+  }));
+}
+
 describe('PluginRegistryService — refreshActiveCache (ROK-363) error handling', () => {
   beforeEach(() => setupAdaptersEach());
   afterEach(() => jest.clearAllMocks());
@@ -339,9 +364,7 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) error handling'
   it('should re-throw a plain Error that has no code property', async () => {
     const plainError = new Error('unexpected query error');
     mockDb.select.mockImplementation(() => ({
-      from: jest.fn().mockImplementation(() => ({
-        where: jest.fn().mockRejectedValue(plainError),
-      })),
+      from: jest.fn().mockRejectedValue(plainError),
     }));
     await expect(service.onModuleInit()).rejects.toThrow(
       'unexpected query error',
@@ -350,21 +373,13 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) error handling'
 
   it('should re-throw a non-Error thrown value (e.g. a string)', async () => {
     mockDb.select.mockImplementation(() => ({
-      from: jest.fn().mockImplementation(() => ({
-        where: jest.fn().mockRejectedValue('string error'),
-      })),
+      from: jest.fn().mockRejectedValue('string error'),
     }));
     await expect(service.onModuleInit()).rejects.toBe('string error');
   });
 
   it('should populate activeSlugs normally when plugins table exists', async () => {
-    mockDb.select.mockImplementation(() => ({
-      from: jest.fn().mockImplementation(() => ({
-        where: jest
-          .fn()
-          .mockResolvedValue([{ slug: 'plugin-a' }, { slug: 'plugin-b' }]),
-      })),
-    }));
+    mockRefreshRows(POPULATED_ROWS);
     await service.onModuleInit();
     expect(service.isActive('plugin-a')).toBe(true);
     expect(service.isActive('plugin-b')).toBe(true);
@@ -374,6 +389,15 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) error handling'
       'plugin-a',
       'plugin-b',
     ]);
+  });
+
+  it('getPluginState reads active / inactive / not_installed off the cache (ROK-2067)', async () => {
+    mockRefreshRows(POPULATED_ROWS);
+    await service.onModuleInit();
+    expect(service.getPluginState('plugin-a')).toBe('active');
+    expect(service.getPluginState('plugin-c')).toBe('inactive');
+    expect(service.getPluginState('plugin-z')).toBe('not_installed');
+    expect(service.getPluginState('core')).toBe('active');
   });
 });
 
@@ -503,7 +527,10 @@ describe('PluginRegistryService — owner-scoped adapters (ROK-268)', () => {
       if (event === PLUGIN_EVENTS.ACTIVATED)
         seenAtEmit = [...service.getMultiAdapters(POINT, KEY)];
     });
-    selectResults = [{ slug: 'no-game-plugin', active: false }];
+    mockLookupThenRefresh(
+      [{ slug: 'no-game-plugin', active: false }],
+      [{ slug: 'no-game-plugin', active: true }],
+    );
     await service.activate('no-game-plugin');
     service.registerMultiAdapter(POINT, KEY, provider, {
       ownerPluginId: 'no-game-plugin',

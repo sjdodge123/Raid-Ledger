@@ -62,6 +62,22 @@ export const CompanionConfigRateSchema = z.object({
 }).strict();
 export type CompanionConfigRate = z.infer<typeof CompanionConfigRateSchema>;
 
+/** ROK-2067 D1/D2 — the contract's owner plugin and its state on this server. */
+export const CompanionConfigPluginSchema = z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    state: z.enum(['active', 'inactive', 'not_installed']),
+}).strict();
+export type CompanionConfigPlugin = z.infer<typeof CompanionConfigPluginSchema>;
+
+/** ROK-2067 D13 — the owner plugin's game, for the app's tile art. */
+export const CompanionConfigGameSchema = z.object({
+    slug: z.string().min(1),
+    name: z.string().min(1),
+    coverUrl: z.string().min(1).nullable(),
+}).strict();
+export type CompanionConfigGame = z.infer<typeof CompanionConfigGameSchema>;
+
 /** One registry contract as the server currently serves it. */
 export const CompanionConfigContractSchema = z.object({
     id: CompanionContractIdSchema,
@@ -75,6 +91,10 @@ export const CompanionConfigContractSchema = z.object({
     maxBytes: z.number().int().positive(),
     blobSlots: z.array(z.enum(['thumbnail'])),
     cadence: z.object({ minIntervalSec: z.number().int().positive() }).strict(),
+    /** Owner plugin; `null` = no handler registered. Absent from older servers. */
+    plugin: CompanionConfigPluginSchema.nullable().optional(),
+    /** Owner plugin's game; `null` = no `games` row. Absent from older servers. */
+    game: CompanionConfigGameSchema.nullable().optional(),
 }).strict();
 export type CompanionConfigContract = z.infer<typeof CompanionConfigContractSchema>;
 
