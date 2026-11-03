@@ -65,19 +65,24 @@ export async function loadCommunityAxisStats(
 
 /** Every vector row (with its owner's active flag), locked FOR UPDATE. */
 function lockVectorRows(tx: Tx) {
-  return tx
-    .select({
-      userId: schema.playerTasteVectors.userId,
-      dimensions: schema.playerTasteVectors.dimensions,
-      intensityMetrics: schema.playerTasteVectors.intensityMetrics,
-      active: sql<boolean>`${schema.users.deactivatedAt} IS NULL`,
-    })
-    .from(schema.playerTasteVectors)
-    .innerJoin(
-      schema.users,
-      eq(schema.users.id, schema.playerTasteVectors.userId),
-    )
-    .for('update', { of: schema.playerTasteVectors });
+  return (
+    tx
+      .select({
+        userId: schema.playerTasteVectors.userId,
+        dimensions: schema.playerTasteVectors.dimensions,
+        intensityMetrics: schema.playerTasteVectors.intensityMetrics,
+        active: sql<boolean>`${schema.users.deactivatedAt} IS NULL`,
+      })
+      .from(schema.playerTasteVectors)
+      .innerJoin(
+        schema.users,
+        eq(schema.users.id, schema.playerTasteVectors.userId),
+      )
+      // A fixed lock order: two concurrent runs (cron + admin Run-now) then
+      // queue on the same first row instead of deadlocking.
+      .orderBy(schema.playerTasteVectors.userId)
+      .for('update', { of: schema.playerTasteVectors })
+  );
 }
 
 /**
@@ -85,7 +90,9 @@ function lockVectorRows(tx: Tx) {
  * One transaction: the rows are locked `FOR UPDATE` before they are read,
  * so a concurrent weekly-intensity write cannot be overwritten with stale
  * metrics, and all titles land in one batched `UPDATE … FROM (VALUES …)`.
- * Returns the number of rows re-titled.
+ * A row whose title is unchanged is not rewritten (`IS DISTINCT FROM`), so
+ * the daily run leaves no dead tuples for a stable community.
+ * Returns the number of rows re-derived (locked), not the number rewritten.
  */
 export async function retitleAllArchetypes(db: Db): Promise<number> {
   return db.transaction(async (tx) => {
@@ -107,6 +114,7 @@ export async function retitleAllArchetypes(db: Db): Promise<number> {
       SET archetype = v.archetype
       FROM (VALUES ${sql.join(valueTuples, sql`, `)}) AS v(user_id, archetype)
       WHERE t.user_id = v.user_id
+        AND t.archetype IS DISTINCT FROM v.archetype
     `);
     return rows.length;
   });

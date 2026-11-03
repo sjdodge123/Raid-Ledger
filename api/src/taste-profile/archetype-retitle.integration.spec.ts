@@ -9,7 +9,7 @@
  *   re-titles EVERY profile (signal hash unchanged included) and the weekly
  *   job uses the same rule.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   TASTE_PROFILE_AXIS_POOL,
   type ArchetypeDto,
@@ -21,6 +21,7 @@ import * as schema from '../drizzle/schema';
 import { deriveArchetype, deriveTier } from './archetype.helpers';
 import { TIER_DESCRIPTIONS, VECTOR_TITLE_DESCRIPTIONS } from './archetype-copy';
 import { currentWeekStart } from './pipelines/weekly-intensity';
+import { retitleAllArchetypes } from './archetype-retitle-all.helpers';
 import { TasteProfileService } from './taste-profile.service';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -245,6 +246,26 @@ describe('Archetype re-titling (ROK-1935)', () => {
     expect(row.archetype?.descriptions.titles).toEqual([
       VECTOR_TITLE_DESCRIPTIONS.Nightcrawler,
     ]);
+  });
+
+  it('a re-title pass leaves an unchanged title untouched (ROK-1939 IS DISTINCT FROM)', async () => {
+    const x = await seedPvpCommunity();
+    const xminOf = async (): Promise<string> => {
+      const rows = await testApp.db.execute<{ xmin: string }>(
+        sql`SELECT xmin::text AS xmin FROM player_taste_vectors WHERE user_id = ${x}`,
+      );
+      return nonEmpty([...rows], 'xmin row')[0].xmin;
+    };
+
+    await retitleAllArchetypes(testApp.db);
+    const settled = await xminOf();
+    expect((await loadVector(x)).archetype?.vectorTitles).toEqual([
+      'Nightcrawler',
+    ]);
+
+    await retitleAllArchetypes(testApp.db);
+    // A rewritten row gets a new xmin; an unchanged title must not be rewritten.
+    expect(await xminOf()).toBe(settled);
   });
 
   it('the weekly job re-titles with the same community-relative rule (ROK-1939 D8)', async () => {

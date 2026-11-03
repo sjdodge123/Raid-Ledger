@@ -101,6 +101,10 @@ async function upsertVector(
   // ROK-1935: metrics + archetype come from the shared re-title helper and
   // are written in the same upsert. The jsonb column persists the composed
   // ArchetypeDto as-is (ROK-1083).
+  // ROK-1939: no community is passed, so this interim title uses the raw
+  // rule — the community is not settled until the loop ends. It is live
+  // only until `retitleAllArchetypes` (D7) overwrites every title at the
+  // end of the run; if that pass throws, the next daily run corrects it.
   const { archetype } = retitleFromIntensity(
     intensityMetrics,
     dimensions,
