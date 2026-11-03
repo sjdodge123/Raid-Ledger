@@ -11,6 +11,7 @@ import {
   loadPresenceUserIds,
   retitleFromIntensity,
 } from '../archetype-retitle.helpers';
+import { retitleAllArchetypes } from '../archetype-retitle-all.helpers';
 import { computeSignalHash } from '../signal-hash.helpers';
 import {
   groupBy,
@@ -72,6 +73,9 @@ export async function runAggregateVectors(db: Db): Promise<void> {
 
     await upsertVector(db, userId, signals, signalHash, batch, axisIdf);
   }
+  // ROK-1939 D7: the noun is community-relative, so re-title EVERY profile
+  // (hash-unchanged ones included) once the loop has settled the community.
+  await retitleAllArchetypes(db);
 }
 
 async function upsertVector(
