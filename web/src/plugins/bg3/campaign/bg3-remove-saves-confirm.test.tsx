@@ -1,4 +1,4 @@
-/** ROK-2068 — the Manage my saves confirm step (Q3 ruling: markers cleared, so a re-sent save is added again). */
+/** ROK-2068 — the Manage my saves confirm step (Q3 ruling: a re-sent save is added again; MINOR-1 ruling: its picture is not). */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,7 +10,7 @@ describe('Bg3RemoveSavesConfirm', () => {
         const body = screen.getByTestId('bg3-remove-saves-confirm');
         expect(body).toHaveTextContent("This deletes 1 save you uploaded and their pictures in hub Galleries. It can't be undone.");
         expect(body).toHaveTextContent(BG3_REMOVE_SAVES_RESEND_NOTE);
-        expect(BG3_REMOVE_SAVES_RESEND_NOTE).toMatch(/added again/);
+        expect(BG3_REMOVE_SAVES_RESEND_NOTE).toBe("If your Companion sends one of these saves again, it will be added again, but its Gallery picture won't come back.");
         expect(body).not.toHaveTextContent(/won't be added|stay removed|stay gone/);
     });
 

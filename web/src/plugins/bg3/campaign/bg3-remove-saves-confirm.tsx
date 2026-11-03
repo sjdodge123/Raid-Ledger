@@ -3,13 +3,15 @@
  * overlay (no stacked dialog). Operator ruling 2026-11-03 (Q3 = clear the
  * latest-wins markers): a re-sent copy of a removed save is accepted again, so
  * the copy says it would be added again — never that removed saves stay gone.
+ * Ruling on review MINOR-1: its Gallery picture does NOT come back, and the
+ * copy says that too.
  */
 import type { JSX } from 'react';
 import { Button } from '../../../components/ui/button';
 import { saveCountLabel } from '../lib/bg3-playthroughs';
 
 export const BG3_REMOVE_SAVES_CONFIRM_LABEL = 'Remove saves';
-export const BG3_REMOVE_SAVES_RESEND_NOTE = 'If your Companion sends one of these saves again, it will be added again.';
+export const BG3_REMOVE_SAVES_RESEND_NOTE = "If your Companion sends one of these saves again, it will be added again, but its Gallery picture won't come back.";
 
 export interface Bg3RemoveSavesConfirmProps {
     /** Saves the picked playthroughs hold. */
