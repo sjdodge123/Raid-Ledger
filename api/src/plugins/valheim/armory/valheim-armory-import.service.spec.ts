@@ -7,7 +7,11 @@ import { loadValheimFixture } from '../link/ingest/valheim-link-ingest.testing';
 import { valheimSnapshotRow } from '../link/ingest/valheim-link-snapshot.helpers';
 import type { ArmorySnapshot } from './valheim-armory.mappers';
 import type { ValheimArmoryRepository } from './valheim-armory.repository';
-import { ValheimArmoryImportService } from './valheim-armory-import.service';
+import {
+  ValheimArmoryImportService,
+  characterDetail,
+} from './valheim-armory-import.service';
+import type { ValheimDeathsRepository } from './valheim-deaths.repository';
 import type { ValheimSkillDaysRepository } from './valheim-skill-days.repository';
 import type { SettingsService } from '../../../settings/settings.service';
 
@@ -50,13 +54,19 @@ function setup(locked: ArmorySnapshot | null) {
   const settings = {
     getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
   };
+  const deaths = {
+    recordReportedDeaths: jest
+      .fn()
+      .mockResolvedValue({ inserted: 0, foreign: 0 }),
+  };
   const svc = new ValheimArmoryImportService(
     repo as unknown as ValheimArmoryRepository,
     hook,
     skillDays as unknown as ValheimSkillDaysRepository,
     settings as unknown as SettingsService,
+    deaths as unknown as ValheimDeathsRepository,
   );
-  return { repo, hook, skillDays, settings, svc };
+  return { repo, hook, skillDays, settings, deaths, svc };
 }
 
 describe('ValheimArmoryImportService', () => {
@@ -87,12 +97,37 @@ describe('ValheimArmoryImportService', () => {
     );
   });
 
+  it('stores the reported deaths on the upserted profile in-tx and counts foreign ones (ROK-1931)', async () => {
+    const msg = loadValheimFixture('character-deaths');
+    const { repo, deaths, svc } = setup(snap('character-deaths'));
+    deaths.recordReportedDeaths.mockResolvedValue({ inserted: 2, foreign: 1 });
+    expect(await svc.importOne(CAND)).toBe('imported');
+    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(
+      tx,
+      { id: 9 },
+      msg.deaths,
+    );
+    expect(repo.markStatus).toHaveBeenCalledWith(
+      tx,
+      CAND,
+      'imported',
+      'deaths_foreign:1',
+    );
+  });
+
+  it('passes an empty death list for a snapshot without deaths (ROK-1931)', async () => {
+    const { deaths, svc } = setup(snap('character-vanilla'));
+    await svc.drainOnce();
+    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(tx, { id: 9 }, []);
+  });
+
   it('marks an older snapshot skipped_stale and skips the hook', async () => {
-    const { repo, hook, skillDays, svc } = setup(snap('character-eaqs'));
+    const { repo, hook, skillDays, deaths, svc } = setup(snap('character-eaqs'));
     repo.upsertProfile.mockResolvedValue(null);
     expect(await svc.importOne(CAND)).toBe('skipped_stale');
     expect(hook.onProfileUpserted).not.toHaveBeenCalled();
     expect(skillDays.recordDay).not.toHaveBeenCalled();
+    expect(deaths.recordReportedDeaths).not.toHaveBeenCalled();
     expect(repo.markStatus).toHaveBeenCalledWith(
       tx,
       CAND,
@@ -144,5 +179,19 @@ describe('ValheimArmoryImportService', () => {
     const { repo, svc } = setup(null);
     expect(await svc.importOne(CAND)).toBe('busy');
     expect(repo.markStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('characterDetail (ROK-1931)', () => {
+  it('is null when nothing was truncated or ignored', () => {
+    expect(characterDetail([], 0)).toBeNull();
+  });
+
+  it('names truncated lists and ignored foreign deaths together', () => {
+    expect(characterDetail(['knownItems'], 0)).toBe('truncated:knownItems');
+    expect(characterDetail([], 2)).toBe('deaths_foreign:2');
+    expect(characterDetail(['knownItems', 'knownRecipes'], 3)).toBe(
+      'truncated:knownItems,knownRecipes;deaths_foreign:3',
+    );
   });
 });

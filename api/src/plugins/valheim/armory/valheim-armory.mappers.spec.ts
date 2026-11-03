@@ -117,6 +117,31 @@ describe('toProfileValues', () => {
     },
   );
 
+  it('stores deathCount with death_count_at = capturedAt (ROK-1931 D7)', () => {
+    const snap = snapshotOf('character-deaths');
+    const msg = ValheimCharacterMessageSchema.parse(snap.payload);
+    const { values } = toProfileValues(snap, msg);
+    expect(msg.deathCount).toBe(7);
+    expect(values.deathCount).toBe(7);
+    expect(values.deathCountAt).toEqual(new Date(msg.capturedAt));
+  });
+
+  it('stores no deathCount when the message omits it (ROK-1931 Q3)', () => {
+    const snap = snapshotOf('character-vanilla');
+    const msg = ValheimCharacterMessageSchema.parse(snap.payload);
+    const { values } = toProfileValues(snap, msg);
+    expect(values.deathCount).toBeNull();
+    expect(values.deathCountAt).toBeNull();
+  });
+
+  it('stores a deathCount of 0 with its timestamp', () => {
+    const snap = snapshotOf('character-vanilla');
+    const msg = ValheimCharacterMessageSchema.parse(snap.payload);
+    const { values } = toProfileValues(snap, { ...msg, deathCount: 0 });
+    expect(values.deathCount).toBe(0);
+    expect(values.deathCountAt).toEqual(new Date(msg.capturedAt));
+  });
+
   it('truncates an over-long known list and names it', () => {
     const snap = snapshotOf('character-vanilla');
     const msg = ValheimCharacterMessageSchema.parse(snap.payload);

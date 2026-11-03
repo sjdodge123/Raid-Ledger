@@ -240,6 +240,8 @@ const PROFILE_SHEET_COLUMNS = {
   trophies: profiles.trophies,
   knownItems: profiles.knownItems,
   knownRecipes: profiles.knownRecipes,
+  deathCount: profiles.deathCount,
+  deathCountAt: profiles.deathCountAt,
   sourceSnapshotId: profiles.sourceSnapshotId,
 };
 /** `profile_id` is COALESCEd separately (kept when the new map has none). */

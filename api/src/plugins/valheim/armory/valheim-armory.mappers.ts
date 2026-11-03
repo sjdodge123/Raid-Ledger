@@ -124,6 +124,7 @@ export function toProfileValues(
 ): { values: NewValheimProfile; truncated: string[] } {
   const { items, recipes, truncated } = capKnownLists(msg);
   const c = msg.character;
+  const capturedAt = new Date(msg.capturedAt);
   const values: NewValheimProfile = {
     pelicanServerId: snap.pelicanServerId,
     steamId: c.steamId,
@@ -133,13 +134,16 @@ export function toProfileValues(
     name: c.name,
     gameVersion: msg.gameVersion,
     modVersion: msg.modVersion,
-    capturedAt: new Date(msg.capturedAt),
+    capturedAt,
     equipment: msg.equipment,
     inventory: msg.inventory,
     skills: msg.skills,
     trophies: msg.trophies,
     knownItems: items,
     knownRecipes: recipes,
+    // ROK-1931 (D7): stored, never the bar count; latest snapshot wins.
+    deathCount: msg.deathCount ?? null,
+    deathCountAt: msg.deathCount === undefined ? null : capturedAt,
     sourceSnapshotId: snap.id,
   };
   return { values, truncated };
