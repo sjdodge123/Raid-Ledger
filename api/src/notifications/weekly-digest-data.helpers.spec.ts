@@ -4,8 +4,8 @@
  * (AC5/AC10). Source wiring and the v2 assembly are pinned in
  * `weekly-digest-assembly.helpers.spec.ts`.
  */
-import type { GameDetailDto, GameDiscoverRowDto } from '@raid-ledger/contract';
 import type { LfgGroupAggregate } from '../lfg/lfg-query.helpers';
+import type { CoPlayGame } from './weekly-digest-coplay.queries';
 import {
   DIGEST_PLAYING_LIMIT,
   shapeLfg,
@@ -14,20 +14,8 @@ import {
 } from './weekly-digest-data.helpers';
 import { nonEmpty } from '../common/testing/narrow';
 
-function game(id: number, extra: Partial<GameDetailDto> = {}): GameDetailDto {
-  return {
-    id,
-    name: `Game ${id}`,
-    slug: `game-${id}`,
-    ...extra,
-  } as GameDetailDto;
-}
-
-function row(
-  games: GameDetailDto[],
-  metadata?: GameDiscoverRowDto['metadata'],
-): GameDiscoverRowDto {
-  return { category: 'c', slug: 's', games, metadata };
+function coPlay(id: number, players: number): CoPlayGame {
+  return { gameId: id, name: `Game ${id}`, slug: `game-${id}`, players };
 }
 
 function group(overrides: Partial<LfgGroupAggregate> = {}): LfgGroupAggregate {
@@ -50,15 +38,9 @@ const RECAP = { eventsRun: 3, playersAttended: 5, attendances: 9 };
 const EMPTY_RECAP = { eventsRun: 0, playersAttended: 0, attendances: 0 };
 
 describe('shapePlaying', () => {
-  it('keeps rank order, caps at the top 5, and reports the full total', () => {
-    const games = [1, 2, 3, 4, 5, 6, 7].map((id) => game(id));
-    const metadata = Object.fromEntries(
-      games.map((g) => [
-        String(g.id),
-        { playerCount: 10 - g.id, totalSeconds: 60 },
-      ]),
-    );
-    const section = shapePlaying(row(games, metadata));
+  it('keeps the co-play rank order, caps at the top 5, and totals the filtered set', () => {
+    const games = [1, 2, 3, 4, 5, 6, 7].map((id) => coPlay(id, 10 - id));
+    const section = shapePlaying(games);
     expect(DIGEST_PLAYING_LIMIT).toBe(5);
     expect(section.items.map((l) => l.gameId)).toEqual([1, 2, 3, 4, 5]);
     expect(section.items[0]).toEqual({
@@ -70,16 +52,14 @@ describe('shapePlaying', () => {
     expect(section.total).toBe(7);
   });
 
-  it('drops games with no player metadata', () => {
-    const section = shapePlaying(
-      row([game(1), game(2)], { '2': { playerCount: 3, totalSeconds: 1 } }),
-    );
+  it('drops a game with no co-players', () => {
+    const section = shapePlaying([coPlay(1, 0), coPlay(2, 3)]);
     expect(section.items.map((l) => l.gameId)).toEqual([2]);
     expect(section.total).toBe(1);
   });
 
-  it('is empty for an empty row with no metadata', () => {
-    expect(shapePlaying(row([]))).toEqual({ items: [], total: 0 });
+  it('is empty when nothing was played together', () => {
+    expect(shapePlaying([])).toEqual({ items: [], total: 0 });
   });
 });
 
