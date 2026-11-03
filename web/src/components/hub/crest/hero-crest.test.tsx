@@ -31,7 +31,11 @@ describe('HeroCrest — view vs change (ROK-2074)', () => {
         const { returnFocus, ...rest } = request() ?? { returnFocus: null };
         // Compared by identity: a failing deep-equal on a DOM node would print its whole React fiber.
         expect(returnFocus === view, 'focus returns to the crest').toBe(true);
-        expect(rest).toEqual({ guildId: 7, mode: 'viewer', filter: 'all', index: 0, mediaId: 42 });
+        // ROK-2074 (Codex P2): a stale link (picture removed since) falls back to the crest image alone.
+        expect(rest).toEqual({
+            guildId: 7, mode: 'viewer', filter: 'all', index: 0, mediaId: 42,
+            missing: { url: crestAssetUrl(UPLOAD.source === 'upload' ? UPLOAD.urlLg : ''), alt: 'Iron Vanguard crest' },
+        });
     });
 
     it('an uploaded crest with no Gallery picture opens its large image as a single picture', () => {

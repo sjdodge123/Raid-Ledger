@@ -89,7 +89,10 @@ function useSeekAnchor(pages: HubGalleryPages, anchorId: number | null, found: b
     return seeking;
 }
 
-/** The viewer's index: the requested picture's id resolved in THIS list until the viewer moves, else the clamped index. */
+/**
+ * The viewer's index: the requested picture's id resolved in THIS list until the viewer moves, else the clamped index.
+ * ROK-2074: `missing` — a stored link (`request.missing` set) whose id is in no loaded page: never the index fallback.
+ */
 function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) {
     const [anchorId, setAnchorId] = useState<number | null>(request.mediaId ?? null);
     const [rawIndex, setRawIndex] = useState(request.index);
@@ -97,7 +100,8 @@ function useViewerIndex(request: HubGalleryOpenRequest, pages: HubGalleryPages) 
     const seeking = useSeekAnchor(pages, anchorId, anchored >= 0);
     const index = anchored >= 0 ? anchored : Math.max(0, Math.min(rawIndex, pages.items.length - 1));
     const setIndex = useCallback((i: number) => { setAnchorId(null); setRawIndex(i); }, []);
-    return { index, setIndex, seeking };
+    const missing = request.missing !== undefined && anchorId !== null && anchored < 0 && !seeking;
+    return { index, setIndex, seeking, missing };
 }
 
 /** A chip the refreshed `kinds` no longer justify (staff removed its last picture) falls back to All. Not while scoped: no chips show. */
@@ -140,10 +144,13 @@ interface GalleryBodyProps {
     scope: RefObject<HTMLDivElement | null>;
     /** Paging in for a requested picture: show "Loading", never a different picture first. */
     seeking: boolean;
+    /** ROK-2074: the requested picture is no longer in the Gallery (and there is no fallback to show). */
+    missing: boolean;
 }
 
-function GalleryBody({ mode, filter, onFilter, subject, onClearSubject, pages, index, nav, onOpen, scope, seeking }: GalleryBodyProps): JSX.Element {
-    const item = seeking ? undefined : pages.items[index];
+function GalleryBody({ mode, filter, onFilter, subject, onClearSubject, pages, index, nav, onOpen, scope, seeking, missing }: GalleryBodyProps): JSX.Element {
+    const gone = missing && mode === 'viewer';
+    const item = seeking || gone ? undefined : pages.items[index];
     const loading = pages.loading || seeking;
     return (
         <div ref={scope} className="flex flex-col gap-3">
@@ -151,7 +158,8 @@ function GalleryBody({ mode, filter, onFilter, subject, onClearSubject, pages, i
                 ? <HubGallerySubjectChip label={subject.label} onClear={onClearSubject} />
                 : <HubGalleryChips filters={availableFilters(pages.kinds)} value={filter} onChange={onFilter} />}
             {loading && <p className="py-8 text-center text-sm text-muted">Loading pictures…</p>}
-            {!loading && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
+            {gone && <p data-testid="hub-gallery-missing" className="py-8 text-center text-sm text-muted">This picture is no longer in the Gallery.</p>}
+            {!loading && !gone && pages.items.length === 0 && <p className="py-8 text-center text-sm text-muted">No pictures here yet.</p>}
             {mode === 'grid' && !seeking && pages.items.length > 0 && <HubGalleryGrid items={pages.items} total={pages.total} onOpen={onOpen} />}
             {mode === 'viewer' && item !== undefined && (
                 <HubGalleryViewer item={item} position={index + 1} total={pages.total} onPrev={nav.prev} onNext={nav.next} />
@@ -179,20 +187,23 @@ function GalleryListDialog({ request, canEdit }: HubGalleryDialogProps): JSX.Ele
     const { guildId } = request;
     const desktop = useMediaQuery(DESKTOP_MQ);
     const [mode, setMode] = useState(request.mode);
-    const { index, setIndex, seeking, pages, filter, subject, changeFilter, clearSubject } = useGalleryList(request);
-    const item = pages.items[index];
+    const { index, setIndex, seeking, missing, pages, filter, subject, changeFilter, clearSubject } = useGalleryList(request);
+    const gone = missing && mode === 'viewer';
+    const item = gone ? undefined : pages.items[index];
     const nav = useViewerNav(pages, index, setIndex);
     const scope = useRef<HTMLDivElement>(null);
     useArrowKeys(scope, mode === 'viewer' && item !== undefined && !seeking, nav.prev, nav.next);
     const close = useCloseGalleryAndReturnFocus(request);
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} subject={subject} onClearSubject={clearSubject} pages={pages} index={index}
-            nav={nav} scope={scope} seeking={seeking} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
+            nav={nav} scope={scope} seeking={seeking} missing={missing} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />
     );
     const footer = (
         <HubGalleryFooter guildId={guildId} mode={mode} item={mode === 'viewer' && !seeking ? item : undefined} pages={pages}
             canEdit={canEdit} onBack={() => setMode('grid')} />
     );
+    // ROK-2074: a stale link with a fallback (the crest, the save shot) shows that picture alone instead.
+    if (gone && request.missing != null) return <SinglePictureDialog request={request} picture={request.missing} />;
     if (desktop) {
         return <Modal isOpen onClose={close} title="Gallery" maxWidth="max-w-3xl" footer={footer}>{body}</Modal>;
     }

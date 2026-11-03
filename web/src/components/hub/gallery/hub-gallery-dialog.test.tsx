@@ -8,6 +8,7 @@ import { server } from '../../../test/mocks/server';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { HUB_MEDIA_LIST_URL, hubMediaFileHandler, hubMediaItem } from '../../../test/mocks/hub-media-handlers';
+import { hubPictureLinkMeta } from '../../../lib/hub-media-query';
 import { HubGalleryDialog } from './hub-gallery-dialog';
 import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
 
@@ -447,3 +448,49 @@ describe('HubGalleryDialog — single picture', () => {
     });
 });
 
+
+/** ROK-2074 (Codex P2) — a stored picture link (crest, BG3 save shot) can outlive its Gallery picture. */
+describe('HubGalleryDialog — stale picture links', () => {
+    const crest = { url: 'https://cdn.test/crest-lg.webp', alt: 'Iron Vanguard crest' };
+
+    it('a linked id no longer in the Gallery shows the fallback picture alone, never the first Gallery picture', async () => {
+        open({ mediaId: 999, missing: crest });
+        await waitFor(() => expect(screen.queryByText('Loading pictures…')).toBeNull());
+        expect(screen.queryByTestId('hub-gallery-caption'), 'never another Gallery picture').toBeNull();
+        expect(await screen.findByRole('img', { name: 'Iron Vanguard crest' })).toHaveAttribute('src', crest.url);
+        expect(screen.getByRole('dialog', { name: 'Picture' })).toBeInTheDocument();
+        expect(screen.queryByTestId('hub-gallery-caption')).toBeNull();
+    });
+
+    it('with no fallback it says the picture is gone instead of opening another one', async () => {
+        open({ mediaId: 999, missing: null });
+        await waitFor(() => expect(screen.queryByText('Loading pictures…')).toBeNull());
+        expect(screen.queryByTestId('hub-gallery-caption'), 'never another Gallery picture').toBeNull();
+        expect(screen.getByTestId('hub-gallery-missing')).toHaveTextContent('This picture is no longer in the Gallery.');
+        expect(screen.queryByRole('button', { name: 'Next picture' })).toBeNull();
+    });
+
+    it('a linked id that IS in the Gallery still opens that picture', async () => {
+        open({ mediaId: 3, missing: crest });
+        expect(await caption()).toMatch(who(3));
+    });
+
+    it('a moderation write refreshes this hub\'s picture-link queries (hub page, plugin snapshots), not another hub\'s', async () => {
+        server.use(pagedHandler(removable(ITEMS)), http.delete('http://localhost:3000/hubs/:guildId/media/:id', () => new HttpResponse(null, { status: 204 })));
+        const queryClient = createTestQueryClient();
+        const build = (key: readonly unknown[], guildId: number) => {
+            queryClient.getQueryCache().build(queryClient, { queryKey: key, meta: hubPictureLinkMeta(guildId) });
+            queryClient.setQueryData(key, { linked: true });
+        };
+        build(['hub-page', 5], 5);
+        build(['plugin-snapshot', 5], 5);
+        build(['hub-page', 6], 6);
+        open({}, {}, queryClient);
+        await caption();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove for good' }));
+        await waitFor(() => expect(queryClient.getQueryState(['hub-page', 5])?.isInvalidated, 'hub 5 page').toBe(true));
+        expect(queryClient.getQueryState(['plugin-snapshot', 5])?.isInvalidated, 'hub 5 plugin snapshot').toBe(true);
+        expect(queryClient.getQueryState(['hub-page', 6])?.isInvalidated, 'hub 6 page untouched').toBe(false);
+    });
+});

@@ -30,6 +30,20 @@ export function isHubGalleryListQuery({ queryKey }: { queryKey: readonly unknown
     return queryKey[0] === 'hub-media' && typeof queryKey[1] === 'number';
 }
 
+/**
+ * ROK-2074 — a query whose payload carries a link to one of this hub's Gallery
+ * pictures (the hub page's `crestMediaId`, a plugin's `galleryMediaId`) tags
+ * itself with this `meta`, so a Gallery moderation write (hide / remove)
+ * refreshes it without core naming the plugin's query key.
+ */
+export function hubPictureLinkMeta(guildId: number): { hubPictureLink: number } {
+    return { hubPictureLink: guildId };
+}
+
+export function isHubPictureLinkQuery({ meta }: { meta?: Record<string, unknown> | undefined }, guildId: number): boolean {
+    return meta?.['hubPictureLink'] === guildId;
+}
+
 export function kindForFilter(filter: HubMediaFilter): HubMediaKind | undefined {
     return filter === 'all' ? undefined : filter;
 }

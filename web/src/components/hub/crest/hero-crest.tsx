@@ -32,8 +32,9 @@ interface HeroCrestProps {
 function heroCrestPicture(crest: GuildCrest | null | undefined, crestMediaId: number | null | undefined, name: string): HubPictureTarget | null {
     const upload = asCrestUpload(crest);
     if (upload === null) return null;
-    if (crestMediaId != null) return { mediaId: crestMediaId };
-    return { url: crestAssetUrl(upload.urlLg), alt: `${name} crest` };
+    const single = { url: crestAssetUrl(upload.urlLg), alt: `${name} crest` };
+    // The link can go stale (the Gallery picture removed): the crest itself is the fallback.
+    return crestMediaId != null ? { mediaId: crestMediaId, fallback: single } : single;
 }
 
 /** A 44px hit area (and its token focus ring) centred on the 24px badge, where the old decoration sat. */

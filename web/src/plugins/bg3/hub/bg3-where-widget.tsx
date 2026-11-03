@@ -44,7 +44,8 @@ const SHOT_ALT = 'Latest save screenshot';
 
 /** ROK-2074 — the save's Gallery picture when it has one, else the save shot alone. */
 function shotPicture(path: string, galleryMediaId: number | null | undefined): HubPictureTarget {
-    return galleryMediaId != null ? { mediaId: galleryMediaId } : { url: path, alt: SHOT_ALT, auth: true };
+    const single = { url: path, alt: SHOT_ALT, auth: true };
+    return galleryMediaId != null ? { mediaId: galleryMediaId, fallback: single } : single;
 }
 
 /** ROK-2074 — a button that opens the picture in the Gallery viewer. */

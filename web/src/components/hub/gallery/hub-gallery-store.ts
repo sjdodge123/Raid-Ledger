@@ -35,6 +35,12 @@ export interface HubGalleryOpenRequest {
      * per-media actions — just the picture, close and focus return.
      */
     single?: HubGallerySinglePicture;
+    /**
+     * ROK-2074 — set (by `openHubPicture`) when `mediaId` is a stored link that
+     * may be stale: an id no longer in the Gallery shows this picture alone,
+     * or (null) says the picture is gone — never falls back to `index`.
+     */
+    missing?: HubGallerySinglePicture | null;
     returnFocus: HTMLElement | null;
 }
 
@@ -46,7 +52,8 @@ export interface HubGallerySinglePicture {
 }
 
 /** What `openHubPicture` opens: a Gallery item by id, or a lone picture. */
-export type HubPictureTarget = { mediaId: number } | HubGallerySinglePicture;
+/** `fallback`: what to show alone if the id is no longer in the Gallery. */
+export type HubPictureTarget = { mediaId: number; fallback?: HubGallerySinglePicture } | HubGallerySinglePicture;
 
 interface HubGalleryState {
     filters: Record<number, HubMediaFilter>;
@@ -79,15 +86,22 @@ export function isSameOriginApiPath(url: string): boolean {
     return url.startsWith('/') && !url.startsWith('//') && !url.includes('\\');
 }
 
+/** The bearer token only goes with a same-origin API path. */
+function isSafePicture(picture: HubGallerySinglePicture): boolean {
+    return picture.auth !== true || isSameOriginApiPath(picture.url);
+}
+
 /**
  * ROK-2074 — open one hub picture in the Gallery viewer: a Gallery item by
  * `mediaId` (Prev/Next walk All from there), or `{ url, alt }` alone. The
  * hub page mounts the dialog, so any widget — core or plugin — can call this.
  */
 export function openHubPicture(guildId: number, target: HubPictureTarget, returnFocus: HTMLElement | null): void {
-    if ('url' in target && target.auth === true && !isSameOriginApiPath(target.url)) return;
+    if ('url' in target && !isSafePicture(target)) return;
     const base = { guildId, mode: 'viewer', filter: 'all', index: 0, returnFocus } as const;
-    useHubGalleryStore.getState().openGallery('mediaId' in target ? { ...base, mediaId: target.mediaId } : { ...base, single: target });
+    if (!('mediaId' in target)) { useHubGalleryStore.getState().openGallery({ ...base, single: target }); return; }
+    const fallback = target.fallback !== undefined && isSafePicture(target.fallback) ? target.fallback : null;
+    useHubGalleryStore.getState().openGallery({ ...base, mediaId: target.mediaId, missing: fallback });
 }
 
 /** Close the dialog, then refocus the element that opened it (after the overlay's own focus restore). */

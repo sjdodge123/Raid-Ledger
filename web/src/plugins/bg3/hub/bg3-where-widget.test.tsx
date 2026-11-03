@@ -127,14 +127,19 @@ describe('Bg3WhereWidget — the screenshot opens the Gallery viewer (ROK-2074)'
 
     it('opens the matching Gallery picture when the save has one', async () => {
         stubObjectUrl();
-        serve(buildBg3Snapshot({ galleryMediaId: 812 }));
+        const snap = buildBg3Snapshot({ galleryMediaId: 812 });
+        serve(snap);
         await renderWhere();
         const shot = await screen.findByRole('button', { name: 'View the latest save screenshot' });
         fireEvent.click(shot);
         const { returnFocus, ...request } = useHubGalleryStore.getState().request ?? { returnFocus: null };
         // Compared by identity: a failing deep-equal on a DOM node would print its whole React fiber.
         expect(returnFocus === shot, 'focus returns to the screenshot').toBe(true);
-        expect(request).toEqual({ guildId: BG3_HUB_ID, mode: 'viewer', filter: 'all', index: 0, mediaId: 812 });
+        // ROK-2074 (Codex P2): a stale link (picture removed since) falls back to the save shot alone.
+        expect(request).toEqual({
+            guildId: BG3_HUB_ID, mode: 'viewer', filter: 'all', index: 0, mediaId: 812,
+            missing: { url: snap.thumbnailUrl, alt: 'Latest save screenshot', auth: true },
+        });
     });
 
     it('opens the save picture alone (fetched with the token) when it has no Gallery twin', async () => {
