@@ -13,6 +13,10 @@ describe('similar-players helpers (ROK-1939 zero-norm guard)', () => {
       expect(hasVectorSignal([])).toBe(false);
     });
 
+    it('is false when any axis is NaN, even beside a non-zero axis', () => {
+      expect(hasVectorSignal([Number.NaN, 0.4, 0, 0, 0, 0, 0])).toBe(false);
+    });
+
     it('is true when any axis is non-zero', () => {
       expect(hasVectorSignal([0, 0, 0.4, 0, 0, 0, 0])).toBe(true);
     });

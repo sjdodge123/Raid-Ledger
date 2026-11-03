@@ -12,7 +12,7 @@
 
 /** True when the vector carries any signal (non-zero norm). */
 export function hasVectorSignal(vector: readonly number[]): boolean {
-  return vector.some((v) => Number.isFinite(v) && v !== 0);
+  return vector.every(Number.isFinite) && vector.some((v) => v !== 0);
 }
 
 /** pg cosine distance → similarity in [0, 1]; 0 when the distance is undefined. */

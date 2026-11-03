@@ -1,4 +1,4 @@
-import { inArray, sql } from 'drizzle-orm';
+import { inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SimilarGameDto,
@@ -129,6 +129,18 @@ export function elementwiseMean(vectors: number[][]): number[] {
   });
 }
 
+/**
+ * ROK-1939: after D9 a game's 7-dim core vector can be all-zero (e.g. a pure
+ * FPS/Shooter/Multiplayer title). pgvector's cosine distance to it is NaN,
+ * and Postgres sorts NaN above every number. Zero-norm candidates are kept —
+ * the lineup pool still needs them via multiplayer metadata — but reported at
+ * distance 1 (similarity 0) and ordered after every positive-norm candidate.
+ */
+function distanceSql(targetLiteral: string): SQL {
+  return sql`CASE WHEN vector_norm(gtv.vector) = 0 THEN 1::float8
+    ELSE (gtv.vector <=> ${targetLiteral}::vector) END`;
+}
+
 export async function executeSimilarityQuery(
   db: Db,
   target: number[],
@@ -148,20 +160,18 @@ export async function executeSimilarityQuery(
     : sql``;
   // No HNSW index on `vector` yet — the spec defers it until the corpus
   // exceeds ~500 games. A seqscan + in-memory sort over ~2K rows is still
-  // sub-ms; revisit if the corpus grows much past 5K or if the confidence
-  // + banned/hidden filters start dominating plan cost.
+  // sub-ms; revisit if the corpus grows much past 5K.
   return db.execute<SimilarityRow>(sql`
     SELECT g.id AS game_id, g.name, g.cover_url,
-           (gtv.vector <=> ${targetLiteral}::vector) AS distance
+           ${distanceSql(targetLiteral)} AS distance
     FROM game_taste_vectors gtv
     JOIN games g ON g.id = gtv.game_id
     WHERE g.banned = false
       AND g.hidden = false
       AND gtv.confidence >= ${minConfidence}
-      AND vector_norm(gtv.vector) > 0
       ${excludeClause}
       ${multiplayerClause}
-    ORDER BY gtv.vector <=> ${targetLiteral}::vector ASC
+    ORDER BY (vector_norm(gtv.vector) = 0) ASC, distance ASC, g.id ASC
     LIMIT ${limit}
   `);
 }

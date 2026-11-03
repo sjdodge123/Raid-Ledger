@@ -59,19 +59,24 @@ describe('findSimilarGames — zero-norm guard (ROK-1939)', () => {
     expect(row?.similarity).toBe(0);
   });
 
-  it('excludes zero-norm candidate vectors in SQL', async () => {
-    mockDb.execute.mockResolvedValueOnce([]);
+  it('returns [] for a centroid holding NaN without running the query', async () => {
+    // A shorter member vector makes the element-wise mean NaN on that axis;
+    // pgvector would reject the literal outright.
+    mockDb.where.mockResolvedValueOnce([
+      { vector: [1, 0, 0, 0, 0, 0, 0] },
+      { vector: [1, 0, 0, 0, 0, 0] },
+    ]);
+    mockDb.execute.mockResolvedValueOnce([
+      { game_id: 9, name: 'Peer', cover_url: null, distance: '0.1' },
+    ]);
 
-    await executeSimilarityQuery(
-      mockDb as never,
-      [1, 0, 0, 0, 0, 0, 0],
-      5,
-      0,
-      null,
-      false,
-    );
+    const result = await findSimilarGames(mockDb as never, {
+      userIds: [1, 2],
+      limit: 10,
+    });
 
-    expect(executedQuery(mockDb).sql).toContain('vector_norm(gtv.vector) > 0');
+    expect(result).toEqual([]);
+    expect(mockDb.execute).not.toHaveBeenCalled();
   });
 });
 
@@ -81,22 +86,6 @@ describe('executeSimilarityQuery — multiplayer eligibility (ROK-1939)', () => 
   beforeEach(() => {
     mockDb = createDrizzleMock();
     mockDb.execute.mockResolvedValueOnce([]);
-  });
-
-  it('keeps games by IGDB multiplayer mode and Multiplayer tag, not only pvp', async () => {
-    await executeSimilarityQuery(
-      mockDb as never,
-      [1, 0, 0, 0, 0, 0, 0],
-      5,
-      0,
-      null,
-      true,
-    );
-
-    const { sql, params } = executedQuery(mockDb);
-    expect(sql).toContain('g.game_modes @>');
-    expect(sql).toContain('g.itad_tags');
-    expect(params).toEqual(expect.arrayContaining(['[2]', 'multiplayer']));
   });
 
   it('adds no multiplayer predicate when multiplayerOnly is false', async () => {
@@ -109,8 +98,10 @@ describe('executeSimilarityQuery — multiplayer eligibility (ROK-1939)', () => 
       false,
     );
 
-    const { sql } = executedQuery(mockDb);
-    expect(sql).not.toContain('g.game_modes');
-    expect(sql).not.toContain('g.itad_tags');
+    // Behaviour of each eligibility signal is covered against a real DB in
+    // similar-games-zero-norm.integration.spec.ts; here only its absence.
+    const { params } = executedQuery(mockDb);
+    expect(params).not.toContain('multiplayer');
+    expect(params).not.toContain('[2]');
   });
 });
