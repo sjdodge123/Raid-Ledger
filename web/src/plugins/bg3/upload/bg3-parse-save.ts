@@ -52,13 +52,17 @@ export async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
- * The campaign key (CONTRACT §3.3): the hash of the save-folder name
- * (`save-folder`), or for a bare `.lsv` the hash of its file stem
- * (`file-name`, operator ruling). BG3 names the `.lsv` after its folder, so the
- * two usually give the same key; the source records which one was seen. The
- * raw name never leaves this function.
+ * The campaign key (CONTRACT §3.3), first match wins (ROK-2070 OQ7): the
+ * reader's hashed `meta.lsf` GameID (`game-id`), already SHA-256 hex, so it
+ * is used as-is; else the hash of the save-folder name (`save-folder`); else,
+ * for a bare `.lsv`, the hash of its file stem (`file-name`, operator ruling).
+ * Neither the raw GameID nor the raw name ever leaves this function.
  */
-async function campaignKeyOf(source: Bg3SaveSource): Promise<Pick<Bg3SavePayload, 'campaignKey' | 'campaignKeySource'>> {
+async function campaignKeyOf(
+    source: Bg3SaveSource,
+    gameIdKey: string | null,
+): Promise<Pick<Bg3SavePayload, 'campaignKey' | 'campaignKeySource'>> {
+    if (gameIdKey !== null) return { campaignKey: gameIdKey, campaignKeySource: 'game-id' };
     if (source.folderName !== null) return { campaignKey: await sha256Hex(source.folderName), campaignKeySource: 'save-folder' };
     return { campaignKey: await sha256Hex(source.file.name.replace(/\.lsv$/i, '')), campaignKeySource: 'file-name' };
 }
@@ -105,7 +109,7 @@ export async function parseBg3Save(source: Bg3SaveSource): Promise<Bg3ParsedSave
     const thumb = thumbnailOf(inspection);
     const normalised = normaliseBg3SaveInfo(raw.data, {
         savedAt: new Date(source.file.lastModified).toISOString(),
-        ...(await campaignKeyOf(source)),
+        ...(await campaignKeyOf(source, inspection.gameIdKey)),
         thumbnail: thumb?.ref ?? null,
     });
     const payload = Bg3SavePayloadSchema.safeParse(normalised);

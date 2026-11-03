@@ -13,7 +13,7 @@ vi.mock('./bg3-parse-protocol', () => ({ handleBg3ParseRequest: (r: Bg3ParseRequ
 
 const REQUEST: Bg3ParseRequest = { id: 7, bytes: new ArrayBuffer(4) };
 function OK_REPLY(): Bg3ParseReply {
-    return { response: { id: 7, ok: true, inspection: { saveInfo: '{}', webp: null, thumbnail: null } }, transfer: [] };
+    return { response: { id: 7, ok: true, inspection: { saveInfo: '{}', webp: null, thumbnail: null, gameIdKey: null } }, transfer: [] };
 }
 const OK = OK_REPLY();
 

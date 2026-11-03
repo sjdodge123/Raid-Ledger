@@ -8,6 +8,10 @@
  * The fixture and `synthetic-act2.expected.json` were produced by the
  * rl-companion reader at e767eadf (writer.rs; no real save data). Flipping
  * the normaliser's summon rule turns the party golden red.
+ *
+ * ROK-2070: `synthetic-act2-game-id.lsv` (rl-companion 4deba4b) adds an
+ * anonymised `meta.lsf` GameID; the reader's `gameIdKey` then keys the
+ * campaign (`game-id`). `synthetic-act2.lsv` has none and stays non-`game-id`.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -33,21 +37,22 @@ vi.mock('./bg3-parse-client', async () => {
 });
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const LSV = readFileSync(resolve(HERE, 'fixtures/synthetic-act2.lsv'));
-const EXPECTED = JSON.parse(
-    readFileSync(
-        resolve(HERE, 'fixtures/synthetic-act2.expected.json'),
-        'utf8',
-    ),
-) as {
+interface Expected {
     saveInfo: string;
+    gameIdKey: string | null;
     thumbnail: {
         sha256: string;
         byteLength: number;
         width: number;
         height: number;
     };
-};
+}
+const readExpected = (stem: string): Expected =>
+    JSON.parse(readFileSync(resolve(HERE, `fixtures/${stem}.expected.json`), 'utf8')) as Expected;
+const LSV = readFileSync(resolve(HERE, 'fixtures/synthetic-act2.lsv'));
+const EXPECTED = readExpected('synthetic-act2');
+const GAME_ID_LSV = readFileSync(resolve(HERE, 'fixtures/synthetic-act2-game-id.lsv'));
+const GAME_ID_EXPECTED = readExpected('synthetic-act2-game-id');
 const MTIME = Date.parse('2026-10-24T12:00:00.000Z');
 
 /** A fresh copy each time: the parse path transfers (detaches) the buffer. */
@@ -149,6 +154,8 @@ describe('the real WASM reader on the synthetic Act 2 save', () => {
             throw new Error(`expected ok, got code ${String(response.code)}`);
         expect(response.inspection.saveInfo).toBe(EXPECTED.saveInfo);
         expect(response.inspection.thumbnail).toEqual(EXPECTED.thumbnail);
+        expect(response.inspection.gameIdKey).toBe(EXPECTED.gameIdKey);
+        expect(EXPECTED.gameIdKey).toBeNull();
         const webp = response.inspection.webp;
         if (!webp) throw new Error('expected a WebP thumbnail');
         expect(webp.byteLength).toBe(EXPECTED.thumbnail.byteLength);
@@ -179,5 +186,31 @@ describe('the real WASM reader on the synthetic Act 2 save', () => {
         const result = await outcome({ file: lsvFile(), folderName: 'Tav-1234__QuickSave_1' });
         const key = result.ok ? [result.payload.campaignKey, result.payload.campaignKeySource] : result;
         expect(key).toEqual([await sha256Hex('Tav-1234__QuickSave_1'), 'save-folder']);
+    });
+});
+
+describe('the real WASM reader on the synthetic Act 2 save with a GameID (ROK-2070)', () => {
+    const gameIdFile = (): File =>
+        new File([new Uint8Array(GAME_ID_LSV)], 'QuickSave_1.lsv', { lastModified: MTIME });
+
+    it('handleBg3ParseRequest returns the gameIdKey, SaveInfo and thumbnail the rl-companion reader produced', async () => {
+        const { response } = await handleBg3ParseRequest({ id: 8, bytes: new Uint8Array(GAME_ID_LSV).buffer });
+        if (!response.ok) throw new Error(`expected ok, got code ${String(response.code)}`);
+        expect(GAME_ID_EXPECTED.gameIdKey).toMatch(/^ef3c8a8d[0-9a-f]{52}299c$/);
+        expect(response.inspection.gameIdKey).toBe(GAME_ID_EXPECTED.gameIdKey);
+        expect(response.inspection.saveInfo).toBe(GAME_ID_EXPECTED.saveInfo);
+        expect(response.inspection.thumbnail).toEqual(GAME_ID_EXPECTED.thumbnail);
+    });
+
+    it('keys the campaign by the GameID hash (source game-id), for a dropped folder and a bare .lsv alike', async () => {
+        const keys = [];
+        for (const folderName of ['Tav-1234__QuickSave_1', null]) {
+            const result = await outcome({ file: gameIdFile(), folderName });
+            keys.push(result.ok ? [result.payload.campaignKey, result.payload.campaignKeySource, result.schemaValid] : result);
+        }
+        expect(keys).toEqual([
+            [GAME_ID_EXPECTED.gameIdKey, 'game-id', true],
+            [GAME_ID_EXPECTED.gameIdKey, 'game-id', true],
+        ]);
     });
 });
