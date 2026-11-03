@@ -4,8 +4,11 @@
  * message back), never on the outer db.
  */
 import { Injectable } from '@nestjs/common';
-import type { Bg3SaveMessage } from '@raid-ledger/contract';
-import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  BG3_SAVE_CONTRACT_ID,
+  type Bg3SaveMessage,
+} from '@raid-ledger/contract';
+import { and, eq, gte, isNull, ne, or, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
@@ -64,6 +67,38 @@ export async function saveAlreadyHeld(
     )
     .limit(1);
   return held !== undefined;
+}
+
+/**
+ * ROK-2070 Codex P2: a latest-wins marker from BEFORE B1 — keyed by the bare
+ * `campaignKey` — that already holds this save (`at >= savedAt`, the same
+ * "not strictly newer" rule `CompanionIngestLatestRepository.advance` uses).
+ * It keeps the old replay protection for a pre-upgrade save whose row the
+ * retention cron has since pruned: neither its new per-save marker nor
+ * {@link saveAlreadyHeld} can see it, and re-storing it would double-count
+ * the retained session summary. No migration: new saves never write a bare
+ * key, so this only ever matches pre-upgrade data (folder / file-name keys —
+ * a GameID key has none), and "Delete my BG3 data" clears it with the rest.
+ */
+export async function legacyMarkerHolds(
+  tx: CompanionDeviceTx,
+  userId: number,
+  p: Pick<Bg3SaveIdentity, 'campaignKey' | 'savedAt'>,
+): Promise<boolean> {
+  const m = schema.companionIngestLatest;
+  const [hit] = await tx
+    .select({ at: m.latestAt })
+    .from(m)
+    .where(
+      and(
+        eq(m.userId, userId),
+        eq(m.contract, BG3_SAVE_CONTRACT_ID),
+        eq(m.latestKey, p.campaignKey),
+        gte(m.latestAt, new Date(p.savedAt)),
+      ),
+    )
+    .limit(1);
+  return hit !== undefined;
 }
 
 @Injectable()

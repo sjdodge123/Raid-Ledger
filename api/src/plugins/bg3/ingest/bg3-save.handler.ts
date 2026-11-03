@@ -22,6 +22,7 @@ import type { CompanionDeviceTx } from '../../../companion/devices/companion-dev
 import { lockBg3UserMarkers } from './bg3-marker-lock';
 import {
   Bg3SavesWriteRepository,
+  legacyMarkerHolds,
   saveAlreadyHeld,
   type Bg3SaveInsert,
 } from './bg3-saves.write.repository';
@@ -32,9 +33,9 @@ import {
  * so a marker on the bare key would refuse any older save sent after a newer
  * one; hashing in `saveName` restores the per-save scope a folder key had.
  * 64 hex chars (under the 128-char marker cap). Markers written before this
- * change (keyed by the bare campaign key) simply go unused; a replay of such
- * an old save is still deduped by {@link Bg3SaveHandler.alreadyHeld} and the
- * `(uploader, campaignKey, savedAt)` unique index. Exported so a delete path
+ * change (keyed by the bare campaign key) are never advanced again, but
+ * {@link Bg3SaveHandler.alreadyHeld} still honours them (Codex P2), so a
+ * replay of an old save is refused even after retention pruned its row. Exported so a delete path
  * can compute the same key for the rows it removes.
  */
 export function bg3LatestMarkerKey(
@@ -117,7 +118,8 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
   /**
    * ROK-2070 M1: is this save already stored for the uploader (the same
    * `(campaignKey, savedAt)`, or the same save under another key — see
-   * {@link saveAlreadyHeld})? `CompanionIngestService.commit` calls it after
+   * {@link saveAlreadyHeld}) or held by a pre-B1 bare-key marker ({@link
+   * legacyMarkerHolds}, Codex P2)? `CompanionIngestService.commit` calls it after
    * {@link lockLatestWins} and before the marker upsert; true acks `stale`.
    *
    * The per-user MARKERS lock is enough here, and the campaign lock is not
@@ -127,13 +129,15 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
    * the markers lock first and holds it to commit, so the read is serialised
    * with them; bind / unbind / default changes only re-file `campaign_id`,
    * which the read ignores. Lock order is unchanged (blob → markers →
-   * campaign).
+   * campaign). The marker read is covered by the same lock: every marker
+   * writer or deleter for this contract holds it.
    */
-  alreadyHeld(
+  async alreadyHeld(
     tx: CompanionDeviceTx,
     userId: number,
     msg: Bg3SaveMessage,
   ): Promise<boolean> {
+    if (await legacyMarkerHolds(tx, userId, msg.payload)) return true;
     return saveAlreadyHeld(tx, userId, msg.payload);
   }
 
