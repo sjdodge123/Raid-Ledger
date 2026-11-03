@@ -15,7 +15,6 @@ import {
 import type { AuthenticatedExpressRequest } from '../../../auth/types';
 import { HubMediaService } from '../../../hub-media/hub-media.service';
 import { parseOr400 } from '../campaigns/bg3-campaigns.controller';
-import { galleryProvenanceKey } from '../gallery/bg3-gallery-sync.helpers';
 import {
   Bg3MyDataRepository,
   type Bg3MyDataDeleted,
@@ -29,7 +28,9 @@ import { Bg3RemoveSavesRepository } from './bg3-remove-saves.repository';
  * `Bg3MeController`, whose class-level guard 403s when the plugin is off.
  * ROK-1959 D-9: after the bg3 tx commits, the caller's save pictures in hub
  * Galleries are tombstoned and their files unlinked too.
- * ROK-2068: `POST saves/remove` does the same for chosen campaign keys only.
+ * ROK-2068: `POST saves/remove` does the same for chosen campaign keys only,
+ * tombstoning the pictures inside the bg3 tx (a failure leaves a retryable
+ * state); only the file unlinks run after commit.
  */
 @Controller('plugins/bg3/me')
 @UseGuards(AuthGuard('jwt'))
@@ -62,16 +63,12 @@ export class Bg3MyDataController {
       'Invalid remove-saves body',
     );
     const keys = [...new Set(campaignKeys)];
-    const { galleryShas, ...counts } = await this.removeRepo.removeKeysFor(
+    const { galleryFiles, ...counts } = await this.removeRepo.removeKeysFor(
       req.user.id,
       keys,
     );
-    // After the bg3 tx commits: only pictures no kept save still shows.
-    const galleryPictures = await this.hubMedia.removeSourceRowsByKeys(
-      'bg3-save',
-      req.user.id,
-      galleryShas.map(galleryProvenanceKey),
-    );
-    return { removed: { ...counts, galleryPictures } };
+    // The tombstones committed with the saves; the files go after commit.
+    await this.hubMedia.unlinkRemovedFiles(galleryFiles);
+    return { removed: { ...counts, galleryPictures: galleryFiles.length } };
   }
 }

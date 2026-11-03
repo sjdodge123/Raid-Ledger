@@ -17,6 +17,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import * as schema from '../../../drizzle/schema';
+import * as hubMediaRepo from '../../../hub-media/hub-media.repository';
 import { CompanionIngestLatestRepository } from '../../../companion/ingest/companion-ingest-latest.repository';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -389,6 +390,45 @@ describe('POST plugins/bg3/me/saves/remove — latest-wins markers (Q3: cleared)
     expect(await advance(a.id, OLD)).toBe(true);
     expect(await advance(a.id, KEEP)).toBe(false);
     expect(await advance(b.id, OLD)).toBe(false);
+  });
+});
+
+describe('POST plugins/bg3/me/saves/remove — a failed Gallery cleanup is retryable (review P2-1)', () => {
+  it('a forced tombstone failure keeps every save and picture; the retry removes both', async () => {
+    const { a, hubId } = await seedWorld();
+    const all = [OLD, OLD, OLD2, KEEP].map((k) => k.slice(0, 4)).sort();
+    const live = [
+      `${SHA_SHARED.slice(0, 4)}:live:${a.id}`,
+      `${SHA_GONE.slice(0, 4)}:live:${a.id}`,
+    ].sort();
+    const spy = jest
+      .spyOn(hubMediaRepo, 'tombstoneSourceRowsByKeys')
+      .mockRejectedValueOnce(new Error('forced Gallery cleanup failure'));
+    try {
+      expect((await post(a.token, { campaignKeys: [OLD] })).status).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+    // The tombstone failed, so the whole removal rolled back.
+    expect(await savesByKey(a.id)).toEqual(all);
+    expect(await pictures(hubId)).toEqual(live);
+
+    const retry = await post(a.token, { campaignKeys: [OLD] });
+    expect(retry.status).toBe(200);
+    expect(retry.body).toEqual({
+      removed: {
+        saves: 2,
+        campaignKeys: 1,
+        thumbnailRefs: 1,
+        galleryPictures: 1,
+      },
+    });
+    expect(await pictures(hubId)).toEqual(
+      [
+        `${SHA_SHARED.slice(0, 4)}:live:${a.id}`,
+        `${SHA_GONE.slice(0, 4)}:gone:null`,
+      ].sort(),
+    );
   });
 });
 

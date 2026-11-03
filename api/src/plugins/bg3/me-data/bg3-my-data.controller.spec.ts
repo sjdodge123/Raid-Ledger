@@ -57,20 +57,24 @@ describe('Bg3MyDataController', () => {
 describe('Bg3MyDataController.removeSaves (ROK-2068)', () => {
   const KEY_A = 'aa'.repeat(32);
   const KEY_B = 'bb'.repeat(32);
-  const SHA = 'cc'.repeat(32);
   const req = { user: { id: 42 } } as AuthenticatedExpressRequest;
 
-  function build(galleryShas: string[]) {
+  const FILES = [
+    { guildId: 7, storageName: 'd.webp' },
+    { guildId: 9, storageName: 'e.webp' },
+  ];
+
+  function build(galleryFiles: typeof FILES) {
     const removeRepo = {
       removeKeysFor: jest.fn().mockResolvedValue({
         saves: 3,
         campaignKeys: 1,
         thumbnailRefs: 1,
-        galleryShas,
+        galleryFiles,
       }),
     };
     const hubMedia = {
-      removeSourceRowsByKeys: jest.fn().mockResolvedValue(2),
+      unlinkRemovedFiles: jest.fn().mockResolvedValue(undefined),
     };
     const ctrl = new Bg3MyDataController(
       {} as Bg3MyDataRepository,
@@ -80,8 +84,8 @@ describe('Bg3MyDataController.removeSaves (ROK-2068)', () => {
     return { ctrl, removeRepo, hubMedia };
   }
 
-  it('dedupes the keys, removes them, then tombstones the gallery pictures', async () => {
-    const { ctrl, removeRepo, hubMedia } = build([SHA]);
+  it('dedupes the keys, removes them, then unlinks the tombstoned pictures', async () => {
+    const { ctrl, removeRepo, hubMedia } = build(FILES);
     const body = { campaignKeys: [KEY_A, KEY_B, KEY_A] };
     await expect(ctrl.removeSaves(req, body)).resolves.toEqual({
       removed: {
@@ -92,14 +96,10 @@ describe('Bg3MyDataController.removeSaves (ROK-2068)', () => {
       },
     });
     expect(removeRepo.removeKeysFor).toHaveBeenCalledWith(42, [KEY_A, KEY_B]);
-    expect(hubMedia.removeSourceRowsByKeys).toHaveBeenCalledWith(
-      'bg3-save',
-      42,
-      [`bg3-save:sha256:${SHA}`],
-    );
-    // The Gallery tombstones run AFTER the bg3 tx has committed.
+    expect(hubMedia.unlinkRemovedFiles).toHaveBeenCalledWith(FILES);
+    // The file unlinks run AFTER the tx (which tombstoned the rows) commits.
     expect(removeRepo.removeKeysFor.mock.invocationCallOrder[0]).toBeLessThan(
-      hubMedia.removeSourceRowsByKeys.mock.invocationCallOrder[0] ?? 0,
+      hubMedia.unlinkRemovedFiles.mock.invocationCallOrder[0] ?? 0,
     );
   });
 

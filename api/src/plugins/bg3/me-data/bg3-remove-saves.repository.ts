@@ -4,7 +4,10 @@
  * the caller's `bg3-save` latest-wins markers for those keys (operator ruling
  * 2026-11-03: a re-sent copy of a removed save is accepted again), their key
  * bindings and their saves, then releases thumbnail refs no remaining save of
- * theirs still uses. Default campaign and party claims are not per key and
+ * theirs still uses, and tombstones + scrubs their Gallery pictures (every
+ * hub) that no remaining save shows — in the SAME transaction, so a failure
+ * anywhere rolls back everything and a retry finds the keys again (review
+ * P2-1). Only the picture-file unlinks run after commit. Default campaign and party claims are not per key and
  * stay (D-5). Every statement is scoped to the caller and cannot violate a
  * constraint, so nothing is caught and retried (postgres.js poisons the tx).
  */
@@ -13,10 +16,15 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import {
+  tombstoneSourceRowsByKeys,
+  type HubMediaRemovedFile,
+} from '../../../hub-media/hub-media.repository';
 import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-lock';
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
 import { lockBg3Gallery } from '../gallery/bg3-gallery-lock';
+import { galleryProvenanceKey } from '../gallery/bg3-gallery-sync.helpers';
 import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
 import { lockBg3UserMarkers } from '../ingest/bg3-marker-lock';
 
@@ -24,12 +32,12 @@ type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 const s = schema.bg3Saves;
 
-/** What one removal did; `galleryShas` = removed shas no kept save uses. */
+/** What one removal did; `galleryFiles` = tombstoned pictures to unlink. */
 export interface Bg3RemovedSaves {
   saves: number;
   campaignKeys: number;
   thumbnailRefs: number;
-  galleryShas: string[];
+  galleryFiles: HubMediaRemovedFile[];
 }
 
 /** The caller's `bg3-save` markers for `keys` (latest_key IS the key). */
@@ -136,7 +144,13 @@ export class Bg3RemoveSavesRepository {
         stillUsed: remainingShas(tx, userId),
       });
       const galleryShas = await unusedShas(tx, userId, saves.shas);
-      return { saves: saves.count, campaignKeys, thumbnailRefs, galleryShas };
+      const galleryFiles = await tombstoneSourceRowsByKeys(
+        tx,
+        'bg3-save',
+        userId,
+        galleryShas.map(galleryProvenanceKey),
+      );
+      return { saves: saves.count, campaignKeys, thumbnailRefs, galleryFiles };
     });
   }
 }

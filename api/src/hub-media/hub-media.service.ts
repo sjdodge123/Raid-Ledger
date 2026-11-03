@@ -13,8 +13,8 @@ import {
   bytesUsed,
   findByKey,
   liveRowsBySourceAndUploader,
-  liveRowsBySourceUploaderAndKeys,
   markRemoved,
+  type HubMediaRemovedFile,
 } from './hub-media.repository';
 import {
   encodeAndStore,
@@ -136,22 +136,14 @@ export class HubMediaService {
   }
 
   /**
-   * ROK-2068 — the member removed some of their `source` data: tombstone +
-   * scrub + unlink only their live rows whose provenance key is in
-   * `provenanceKeys`, on every hub. Returns how many rows were removed.
+   * ROK-2068 — unlink the files of rows the caller already tombstoned inside
+   * its own transaction (`tombstoneSourceRowsByKeys`), once it has committed.
    */
-  async removeSourceRowsByKeys(
-    source: HubMediaPluginSource,
-    userId: number,
-    provenanceKeys: readonly string[],
-  ): Promise<number> {
-    const rows = await liveRowsBySourceUploaderAndKeys(
-      this.db,
-      source,
-      userId,
-      provenanceKeys,
-    );
-    return this.tombstoneScrubbed(rows);
+  async unlinkRemovedFiles(
+    rows: readonly HubMediaRemovedFile[],
+  ): Promise<void> {
+    for (const { guildId, storageName } of rows)
+      await unlinkMediaFiles(guildId, storageName);
   }
 
   private async tombstoneScrubbed(
