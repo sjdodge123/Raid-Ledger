@@ -27,7 +27,6 @@ import { insertSuppression } from './channel-lifecycle.store';
 import { unlinkAutoHubsForChannel } from './hub-channel-link.queries';
 import type {
   ApplyContext,
-  HubLinkResult,
   ItemOutcome,
   PlannedGame,
 } from './channel-lifecycle.types';
@@ -130,6 +129,20 @@ async function linkCreated(
   });
 }
 
+/** The create's outcome + the hubs its post-commit link tx linked. */
+function withLink(
+  item: ItemOutcome,
+  created: CreatedChannel,
+  { linked, refreshTopic }: LinkedHubs,
+): ItemOutcome {
+  return {
+    ...item,
+    linkedHubs: linked.guildIds.length,
+    linked,
+    ...topicField(created.channelId, refreshTopic),
+  };
+}
+
 /**
  * Link a just-created channel's hubs in a tx of its own, after the create
  * committed (Codex r5 P1). A failure never undoes the create: the binding
@@ -145,14 +158,7 @@ async function linkAfterCreate(
     const res = await ctx.db.transaction((tx) =>
       linkCreated({ ...ctx, db: tx }, game, created),
     );
-    if (res === null) return item;
-    const { linked, refreshTopic } = res;
-    return {
-      ...item,
-      linkedHubs: linked.guildIds.length,
-      linked,
-      ...topicField(created.channelId, refreshTopic),
-    };
+    return res === null ? item : withLink(item, created, res);
   } catch (err) {
     if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
     Sentry.captureException(err, {
@@ -252,7 +258,10 @@ async function runOne(
     created === undefined
       ? item
       : await linkAfterCreate(ctx, game, created, rest);
-  return announceCommitted(ctx, await refreshTopicAfterCommit(ctx, game, final));
+  return announceCommitted(
+    ctx,
+    await refreshTopicAfterCommit(ctx, game, final),
+  );
 }
 
 /**

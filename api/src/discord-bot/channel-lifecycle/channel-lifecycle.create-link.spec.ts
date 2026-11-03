@@ -22,6 +22,7 @@ jest.mock('@sentry/nestjs', () => ({
 }));
 jest.mock('./channel-lifecycle.discord-ops');
 jest.mock('./channel-lifecycle.store.queries');
+jest.mock('./hub-link.resolver');
 
 interface FakeTx {
   log: string[];
@@ -206,14 +207,45 @@ describe('Codex P2: LINKED is announced only after the link tx commits', () => {
   });
 
   it('a rolled-back link announces nothing', async () => {
-    jest.mocked(ops.setTopic).mockRejectedValueOnce(new Error('topic boom'));
-    const { pool } = fakePool();
+    const { pool, committed } = fakePool();
     const { ctx, link } = makeCtx(pool, new Error('unused'));
-    link.mockResolvedValue(LINKED);
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.reject(new Error('link boom'));
+    });
     const announce = jest.fn();
     ctx.hubLinker.announceLinked = announce;
     await executePlan(ctx, PLAN);
     expect(link).toHaveBeenCalledTimes(1);
+    expect(committed).toEqual(['bind new-ch']);
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe('tech-debt 2026-10-22: the topic refresh runs after the link commits', () => {
+  const LINKED = { channelId: 'new-ch', guildIds: [11] };
+  const PLAN = { run: [CREATE], deferred: [], skipped: 0, verify: [] };
+
+  it('a Discord topic failure keeps the committed hub link', async () => {
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.resolve(LINKED);
+    });
+    const seenAtTopic: string[][] = [];
+    jest.mocked(ops.setTopic).mockImplementation(() => {
+      seenAtTopic.push([...committed]);
+      return Promise.reject(new Error('topic boom'));
+    });
+    const announce = jest.fn();
+    ctx.hubLinker.announceLinked = announce;
+    const res = await executePlan(ctx, PLAN);
+    expect(committed).toEqual(['bind new-ch', 'link 11']);
+    expect(seenAtTopic).toEqual([['bind new-ch', 'link 11']]);
+    expect(announce.mock.calls).toEqual([[LINKED]]);
+    expect(res.items.map((i) => [i.action, i.outcome])).toEqual([
+      ['create', 'done'],
+    ]);
   });
 });
