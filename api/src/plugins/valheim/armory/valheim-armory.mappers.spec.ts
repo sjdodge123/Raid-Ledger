@@ -117,6 +117,23 @@ describe('toProfileValues', () => {
     },
   );
 
+  it('truncates an over-long known list and names it', () => {
+    const snap = snapshotOf('character-vanilla');
+    const msg = ValheimCharacterMessageSchema.parse(snap.payload);
+    const long = Array.from(
+      { length: ARMORY_KNOWN_LIST_MAX + 5 },
+      (_, i) => `Item${i}`,
+    );
+    const { values, truncated } = toProfileValues(snap, {
+      ...msg,
+      knownRecipes: long,
+    });
+    expect(values.knownRecipes).toHaveLength(ARMORY_KNOWN_LIST_MAX);
+    expect(truncated).toEqual(['knownRecipes']);
+  });
+});
+
+describe('toProfileValues death count (ROK-1931)', () => {
   it('stores deathCount with death_count_at = capturedAt (ROK-1931 D7)', () => {
     const snap = snapshotOf('character-deaths');
     const msg = ValheimCharacterMessageSchema.parse(snap.payload);
@@ -140,21 +157,6 @@ describe('toProfileValues', () => {
     const { values } = toProfileValues(snap, { ...msg, deathCount: 0 });
     expect(values.deathCount).toBe(0);
     expect(values.deathCountAt).toEqual(new Date(msg.capturedAt));
-  });
-
-  it('truncates an over-long known list and names it', () => {
-    const snap = snapshotOf('character-vanilla');
-    const msg = ValheimCharacterMessageSchema.parse(snap.payload);
-    const long = Array.from(
-      { length: ARMORY_KNOWN_LIST_MAX + 5 },
-      (_, i) => `Item${i}`,
-    );
-    const { values, truncated } = toProfileValues(snap, {
-      ...msg,
-      knownRecipes: long,
-    });
-    expect(values.knownRecipes).toHaveLength(ARMORY_KNOWN_LIST_MAX);
-    expect(truncated).toEqual(['knownRecipes']);
   });
 });
 

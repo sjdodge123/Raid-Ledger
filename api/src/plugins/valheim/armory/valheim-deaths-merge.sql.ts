@@ -24,7 +24,9 @@ export async function mergeOrInsertLogDeath(
   death: LogDeathInput,
   windowSec: number,
 ): Promise<boolean> {
-  const rows = await tx.execute(logDeathMergeSql(pelicanServerId, death, windowSec));
+  const rows = await tx.execute(
+    logDeathMergeSql(pelicanServerId, death, windowSec),
+  );
   return rows.length > 0;
 }
 

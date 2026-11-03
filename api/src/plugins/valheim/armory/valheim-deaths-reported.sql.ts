@@ -68,18 +68,23 @@ interface Bound {
   at: SQL;
 }
 
+/** Cast the shared parameters once. */
+function bind(owner: ReportedDeathOwner, death: ValheimDeathRecord): Bound {
+  return {
+    s: sql`${owner.pelicanServerId}::int`,
+    steam: sql`${owner.steamId}::text`,
+    pid: sql`${owner.playerId}::text`,
+    at: sql`${death.at}::timestamptz`,
+  };
+}
+
 /** SQL R's single statement (spec §5 "SQL R"); exported for the unit spec. */
 export function reportedDeathSql(
   owner: ReportedDeathOwner,
   death: ValheimDeathRecord,
   windowSec: number,
 ): SQL {
-  const o: Bound = {
-    s: sql`${owner.pelicanServerId}::int`,
-    steam: sql`${owner.steamId}::text`,
-    pid: sql`${owner.playerId}::text`,
-    at: sql`${death.at}::timestamptz`,
-  };
+  const o = bind(owner, death);
   const w = sql`${death.worldUid}::text`;
   const x = sql`${death.x}::double precision`;
   const z = sql`${death.z}::double precision`;

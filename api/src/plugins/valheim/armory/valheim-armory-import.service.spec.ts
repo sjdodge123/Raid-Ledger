@@ -97,32 +97,10 @@ describe('ValheimArmoryImportService', () => {
     );
   });
 
-  it('stores the reported deaths on the upserted profile in-tx and counts foreign ones (ROK-1931)', async () => {
-    const msg = loadValheimFixture('character-deaths');
-    const { repo, deaths, svc } = setup(snap('character-deaths'));
-    deaths.recordReportedDeaths.mockResolvedValue({ inserted: 2, foreign: 1 });
-    expect(await svc.importOne(CAND)).toBe('imported');
-    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(
-      tx,
-      { id: 9 },
-      msg.deaths,
-    );
-    expect(repo.markStatus).toHaveBeenCalledWith(
-      tx,
-      CAND,
-      'imported',
-      'deaths_foreign:1',
-    );
-  });
-
-  it('passes an empty death list for a snapshot without deaths (ROK-1931)', async () => {
-    const { deaths, svc } = setup(snap('character-vanilla'));
-    await svc.drainOnce();
-    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(tx, { id: 9 }, []);
-  });
-
   it('marks an older snapshot skipped_stale and skips the hook', async () => {
-    const { repo, hook, skillDays, deaths, svc } = setup(snap('character-eaqs'));
+    const { repo, hook, skillDays, deaths, svc } = setup(
+      snap('character-eaqs'),
+    );
     repo.upsertProfile.mockResolvedValue(null);
     expect(await svc.importOne(CAND)).toBe('skipped_stale');
     expect(hook.onProfileUpserted).not.toHaveBeenCalled();
@@ -179,6 +157,32 @@ describe('ValheimArmoryImportService', () => {
     const { repo, svc } = setup(null);
     expect(await svc.importOne(CAND)).toBe('busy');
     expect(repo.markStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('ValheimArmoryImportService reported deaths (ROK-1931)', () => {
+  it('stores the reported deaths on the upserted profile in-tx and counts foreign ones (ROK-1931)', async () => {
+    const msg = loadValheimFixture('character-deaths');
+    const { repo, deaths, svc } = setup(snap('character-deaths'));
+    deaths.recordReportedDeaths.mockResolvedValue({ inserted: 2, foreign: 1 });
+    expect(await svc.importOne(CAND)).toBe('imported');
+    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(
+      tx,
+      { id: 9 },
+      msg.deaths,
+    );
+    expect(repo.markStatus).toHaveBeenCalledWith(
+      tx,
+      CAND,
+      'imported',
+      'deaths_foreign:1',
+    );
+  });
+
+  it('passes an empty death list for a snapshot without deaths (ROK-1931)', async () => {
+    const { deaths, svc } = setup(snap('character-vanilla'));
+    await svc.drainOnce();
+    expect(deaths.recordReportedDeaths).toHaveBeenCalledWith(tx, { id: 9 }, []);
   });
 });
 

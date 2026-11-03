@@ -152,7 +152,9 @@ export class ValheimDeathsRepository {
       async (locked) => {
         let n = 0;
         for (const death of here) {
-          if (await mergeOrInsertReportedDeath(locked, profile, death, windowSec))
+          if (
+            await mergeOrInsertReportedDeath(locked, profile, death, windowSec)
+          )
             n += 1;
         }
         return n;
