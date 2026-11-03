@@ -9,6 +9,10 @@ import type {
 } from '@raid-ledger/contract';
 import { TIER_DESCRIPTIONS } from '../archetype-copy';
 import { normalizeDimensions } from '../dimensions.helpers';
+import {
+  hasVectorSignal,
+  similarityFromDistance,
+} from './similar-players.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -120,7 +124,8 @@ export async function findSimilarPlayers(
     .where(eq(schema.playerTasteVectors.userId, userId))
     .limit(1);
   const anchorRow = anchor[0];
-  if (anchorRow === undefined) return [];
+  // ROK-1939: a zero-norm anchor has no cosine similarity to anyone.
+  if (anchorRow === undefined || !hasVectorSignal(anchorRow.vector)) return [];
 
   const anchorVector = `[${anchorRow.vector.join(',')}]`;
   // ROK-1083: archetype is now jsonb — extract intensityTier via
@@ -139,6 +144,7 @@ export async function findSimilarPlayers(
     FROM player_taste_vectors v
     JOIN users u ON u.id = v.user_id
     WHERE v.user_id <> ${userId}
+      AND vector_norm(v.vector) > 0
     ORDER BY distance ASC
     LIMIT ${clamped}
   `);
@@ -148,7 +154,7 @@ export async function findSimilarPlayers(
     username: r.username,
     avatar: r.avatar,
     intensityTier: r.intensity_tier ?? 'Newcomer',
-    similarity: Math.max(0, 1 - Number(r.distance)),
+    similarity: similarityFromDistance(r.distance),
   }));
 }
 
