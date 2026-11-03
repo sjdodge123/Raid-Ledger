@@ -124,18 +124,24 @@ afterAll(() => {
 });
 
 describe('POST /admin/test/valheim/deaths-fixture (ROK-1930 L5)', () => {
-  it('seeds 5 / 3 / 1 deaths the member reads sorted, with the linked characters', async () => {
+  it('seeds 5 / 4 (3 log + 1 reported) / 1 deaths the member reads sorted, with the linked characters', async () => {
     const f = await seed({ worker: 2 });
     const res = await readDeaths(f, f.users.member);
     expect(res.status).toBe(200);
     const body = ValheimDeathsResponseSchema.parse(res.body);
     expect(body.players.map((p) => [p.name, p.deaths, p.characterId])).toEqual([
       [f.characters.top.name, 5, f.characters.top.id],
-      [f.characters.second.name, 3, f.characters.second.id],
+      [f.characters.second.name, 4, f.characters.second.id],
       [f.unlinked.name, 1, null],
     ]);
     expect(body.since).not.toBeNull();
     expect(f.characters.top.deathPinLabels).toEqual(['Day 12', 'Day 31']);
+    // ROK-1931: one mod-reported death for `second`, counted in its bar.
+    expect(f.characters.second.deaths).toBe(4);
+    expect(f.reportedDeath).toEqual({
+      characterId: f.characters.second.id,
+      diedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
   });
 
   it("returns every character's Death pins on the world, and 404s the visitor", async () => {
@@ -160,7 +166,7 @@ describe('POST /admin/test/valheim/deaths-fixture (ROK-1930 L5)', () => {
     expect(again.serverId).toBe(first.serverId);
     expect(again.guildId).toBe(first.guildId);
     expect(again.users).toEqual(first.users);
-    expect(await deathRowCount(again.serverId)).toBe(9);
+    expect(await deathRowCount(again.serverId)).toBe(10);
     const other = await seed({ worker: 4 });
     expect(other.serverId).not.toBe(first.serverId);
   });

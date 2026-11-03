@@ -11,6 +11,7 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { ValheimDeathRecord } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -18,6 +19,10 @@ import {
   withDeathNameLock,
 } from '../screenshots/valheim-death-name-lock';
 import { mergeOrInsertLogDeath } from './valheim-deaths-merge.sql';
+import {
+  mergeOrInsertReportedDeath,
+  type ReportedDeathOwner,
+} from './valheim-deaths-reported.sql';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const {
@@ -34,6 +39,18 @@ export interface LogDeathInput {
   /** The parser's zone-less line timestamp, verbatim — part of the dedupe key. */
   loggedAt: string;
   occurredAt: Date;
+}
+
+/** The upserted profile a reported-death batch belongs to (ROK-1931). */
+export interface ReportedDeathProfile extends ReportedDeathOwner {
+  /** The character's current world on this server (D3). */
+  worldUid: string;
+}
+
+/** Outcome of one reported-death batch (D3: foreign entries are only counted). */
+export interface ReportedDeathsResult {
+  inserted: number;
+  foreign: number;
 }
 
 /** What the death sink needs to know about a Pelican server. */
@@ -110,6 +127,40 @@ export class ValheimDeathsRepository {
         return false;
       },
     );
+  }
+
+  /**
+   * ROK-1931 (D3/D5/D9): store the mod's reported deaths for this profile,
+   * on the caller's transaction (the importer's per-snapshot tx). Entries
+   * from another world are ignored and only counted. The rest run SQL R one
+   * at a time under ONE `(server, profile name)` death lock — each statement
+   * cannot violate a unique key, so nothing is caught or retried.
+   */
+  async recordReportedDeaths(
+    tx: Db,
+    profile: ReportedDeathProfile,
+    reported: readonly ValheimDeathRecord[],
+  ): Promise<ReportedDeathsResult> {
+    const here = reported.filter((d) => d.worldUid === profile.worldUid);
+    const foreign = reported.length - here.length;
+    if (here.length === 0) return { inserted: 0, foreign };
+    const windowSec = deathPostWindowSec();
+    const inserted = await withDeathNameLock(
+      tx,
+      profile.pelicanServerId,
+      profile.name,
+      async (locked) => {
+        let n = 0;
+        for (const death of here) {
+          if (
+            await mergeOrInsertReportedDeath(locked, profile, death, windowSec)
+          )
+            n += 1;
+        }
+        return n;
+      },
+    );
+    return { inserted, foreign };
   }
 
   /**
