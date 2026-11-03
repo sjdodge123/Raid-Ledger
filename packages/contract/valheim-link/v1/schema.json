@@ -348,6 +348,47 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_.-]{1,96}$"
           }
+        },
+        "deaths": {
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "worldUid": {
+                "type": "string",
+                "pattern": "^(0|-?[1-9]\\d{0,18})$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "z": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "at": {
+                "type": "string",
+                "maxLength": 24,
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "worldUid",
+              "x",
+              "z",
+              "at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "deathCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
         }
       },
       "required": [

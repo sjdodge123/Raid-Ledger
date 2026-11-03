@@ -46,6 +46,10 @@ export const VALHEIM_LINK_GRID_EDGE_MAX = 32;
 export const VALHEIM_LINK_SKILLS_MAX = 128;
 export const VALHEIM_LINK_TROPHIES_MAX = 1024;
 export const VALHEIM_LINK_KNOWN_MAX = 8192;
+/** `character.deaths[]` (ROK-1931): the mod keeps the newest 200 per character. */
+export const VALHEIM_LINK_DEATHS_MAX = 200;
+/** Largest `character.deathCount` (ROK-1931): Valheim's lifetime Deaths stat. */
+export const VALHEIM_LINK_DEATH_COUNT_MAX = 1_000_000;
 export const VALHEIM_LINK_PINS_MAX = 2000;
 export const VALHEIM_LINK_ITEM_EXPORT_MAX = 10_000;
 /** `containers` (ROK-1853): containers per message, items per container, items summed over the message, slots per container. */
