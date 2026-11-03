@@ -6,6 +6,11 @@ import type {
 } from '@raid-ledger/contract';
 import { defined } from '../../common/defined.helpers';
 import * as schema from '../../drizzle/schema';
+import {
+  hasVectorSignal,
+  similarityFromDistance,
+} from '../../taste-profile/queries/similar-players.helpers';
+import { multiplayerEligibilityClause } from './multiplayer-eligibility.sql';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -45,7 +50,9 @@ export async function findSimilarGames(
 ): Promise<SimilarGameDto[]> {
   const limit = input.limit ?? 10;
   const target = await resolveTarget(db, input);
-  if (!target) return [];
+  // ROK-1939: a zero-norm target has no cosine similarity to anything
+  // (pgvector returns NaN), so there is nothing meaningful to rank.
+  if (!target || !hasVectorSignal(target)) return [];
   const excludeId = input.gameId !== undefined ? input.gameId : null;
   const rows = await executeSimilarityQuery(
     db,
@@ -133,16 +140,11 @@ export async function executeSimilarityQuery(
   const targetLiteral = `[${target.join(',')}]`;
   const excludeClause =
     excludeGameId !== null ? sql`AND g.id <> ${excludeGameId}` : sql``;
-  // ROK-931: Community Lineup is group play, so solo-only titles are
-  // filtered out up-front. The OR-list is static — no injection surface.
+  // ROK-931 / ROK-1939: Community Lineup is group play, so solo-only titles
+  // are filtered out up-front — from the game's own multiplayer metadata,
+  // not from the (narrowed) pvp axis.
   const multiplayerClause = multiplayerOnly
-    ? sql`AND (
-        (gtv.dimensions->>'pvp')::float > 0
-        OR (gtv.dimensions->>'co_op')::float > 0
-        OR (gtv.dimensions->>'mmo')::float > 0
-        OR (gtv.dimensions->>'battle_royale')::float > 0
-        OR (gtv.dimensions->>'moba')::float > 0
-      )`
+    ? multiplayerEligibilityClause()
     : sql``;
   // No HNSW index on `vector` yet — the spec defers it until the corpus
   // exceeds ~500 games. A seqscan + in-memory sort over ~2K rows is still
@@ -156,6 +158,7 @@ export async function executeSimilarityQuery(
     WHERE g.banned = false
       AND g.hidden = false
       AND gtv.confidence >= ${minConfidence}
+      AND vector_norm(gtv.vector) > 0
       ${excludeClause}
       ${multiplayerClause}
     ORDER BY gtv.vector <=> ${targetLiteral}::vector ASC
@@ -168,6 +171,6 @@ function toSimilarGameDto(row: SimilarityRow): SimilarGameDto {
     gameId: row.game_id,
     name: row.name,
     coverUrl: row.cover_url,
-    similarity: Math.max(0, 1 - Number(row.distance)),
+    similarity: similarityFromDistance(row.distance),
   };
 }
