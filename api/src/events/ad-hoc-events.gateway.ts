@@ -1,6 +1,10 @@
 import { Inject, Logger } from '@nestjs/common';
 import { perfLog } from '../common/perf-logger';
 import { JwtService } from '@nestjs/jwt';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import type * as schema from '../drizzle/schema';
+import { authenticateSocket } from '../auth/socket-auth.helpers';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -22,7 +26,8 @@ import type { AdHocParticipantDto } from '@raid-ledger/contract';
  * - event:status — ad-hoc status change (live/grace_period/ended)
  * - event:endTimeExtended — end time was extended
  *
- * Auth: JWT from socket.handshake.auth.token (validated on connection).
+ * Auth: JWT from socket.handshake.auth.token, validated on connection with
+ * the same session checks as HTTP (`auth/socket-auth.helpers.ts`).
  * Note: Single-instance only for v1. Redis adapter is optional and documented.
  */
 // CORS is decided per handshake by SocketCorsIoAdapter (cors/socket-cors.ts).
@@ -32,35 +37,22 @@ export class AdHocEventsGateway
 {
   private readonly logger = new Logger(AdHocEventsGateway.name);
 
-  constructor(@Inject(JwtService) private readonly jwtService: JwtService) {}
+  constructor(
+    @Inject(JwtService) private readonly jwtService: JwtService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+  ) {}
 
   @WebSocketServer()
   server!: Server;
 
-  handleConnection(client: Socket): void {
-    const token = (client.handshake.auth as Record<string, unknown> | undefined)
-      ?.token;
-
-    if (!token || typeof token !== 'string') {
-      this.logger.debug(`Client ${client.id} rejected: no auth token provided`);
-      client.disconnect(true);
-      return;
-    }
-
-    try {
-      const payload = this.jwtService.verify<{ magicLink?: boolean }>(token);
-      // ROK-1366: mirrors JwtStrategy — a legacy JWT_SECRET-signed magic
-      // link is a one-time login, never a socket bearer.
-      if (payload.magicLink) {
-        this.logger.debug(`Client ${client.id} rejected: magic-link token`);
-        client.disconnect(true);
-        return;
-      }
-      this.logger.debug(`Client ${client.id} connected with valid token`);
-    } catch {
-      this.logger.debug(`Client ${client.id} rejected: invalid auth token`);
-      client.disconnect(true);
-    }
+  /** JWT + the HTTP session checks (token version, ban, deactivation). */
+  async handleConnection(client: Socket): Promise<void> {
+    await authenticateSocket(client, {
+      jwtService: this.jwtService,
+      db: this.db,
+      logger: this.logger,
+    });
   }
 
   handleDisconnect(client: Socket): void {
