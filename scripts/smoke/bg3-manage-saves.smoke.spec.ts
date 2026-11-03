@@ -22,6 +22,8 @@ import { hubSeedTag } from './hub-seed';
 const CAMPAIGN_NAME = 'Tactician run';
 const UI_TIMEOUT = 20_000;
 const OLD = 6;
+/** The overlay's accessible name: the pick step, or the confirm step's "Remove N playthrough(s)?". */
+const SHEET_NAME = /^(Manage my saves|Remove \d+ playthroughs?\?)$/;
 
 interface Seed {
     hubId: number;
@@ -77,7 +79,8 @@ async function openManageSaves(page: Page, hubId: number): Promise<Locator> {
     const open = page.getByTestId('bg3-campaign-tab').getByRole('button', { name: 'Manage my saves', exact: true });
     await expect(open, 'a member sees Manage my saves under Your saves').toBeVisible({ timeout: UI_TIMEOUT });
     await open.click();
-    const sheet = page.getByRole('dialog', { name: 'Manage my saves' });
+    // The confirm step renames the overlay ("Remove 6 playthroughs?"), so match both titles (Codex P2).
+    const sheet = page.getByRole('dialog', { name: SHEET_NAME });
     await expect(sheet.getByTestId('bg3-manage-saves-row'), 'all nine seeded playthroughs are listed').toHaveCount(9, { timeout: UI_TIMEOUT });
     return sheet;
 }
