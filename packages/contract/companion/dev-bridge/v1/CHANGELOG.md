@@ -7,6 +7,12 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-03 (ROK-2055, additive)
+
+- `error.error` gains `internal` (500): an unexpected companion failure while
+  serving the request. Code only, no `issues`. Additive — a new enum value no
+  existing producer emits; stays v1. New golden fixture `error--internal.json`.
+
 ## v1 — 2026-11-02 (ROK-2055)
 
 - Initial contract: the `/dev/v1/*` response bodies of the rl-companion dev

@@ -2825,7 +2825,8 @@
             "forbidden",
             "rate_limited",
             "not_found",
-            "probes_disabled"
+            "probes_disabled",
+            "internal"
           ]
         },
         "issues": {
