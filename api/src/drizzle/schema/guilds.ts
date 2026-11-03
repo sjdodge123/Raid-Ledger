@@ -14,6 +14,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type { GuildCrestPreset } from '@raid-ledger/contract';
 import { games } from './games';
+import { hubMedia } from './hub-media';
 import { pelicanServers } from './pelican-servers';
 import { users } from './users';
 
@@ -144,6 +145,15 @@ export const guilds = pgTable(
       onDelete: 'set null',
     }),
     crestRemovedAt: timestamp('crest_removed_at', { withTimezone: true }),
+    /**
+     * ROK-2074: the hub Gallery picture the crest was picked from (crest
+     * from-gallery); null for any other crest change. The picture going
+     * away (hard delete) nulls it.
+     */
+    crestMediaId: bigint('crest_media_id', { mode: 'number' }).references(
+      () => hubMedia.id,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

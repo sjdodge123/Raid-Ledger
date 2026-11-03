@@ -119,6 +119,13 @@ export const GuildSummarySchema = z
      * Optional so older fixtures parse.
      */
     crest: GuildCrestSchema.nullable().optional(),
+    /**
+     * ROK-2074 — the hub Gallery picture the crest was picked from, while
+     * that picture is still visible to every viewer (not removed, hidden or
+     * gated); null otherwise (an uploaded or preset crest, or the picture
+     * left the gallery). Sent on the hub page only; absent elsewhere.
+     */
+    crestMediaId: z.number().int().positive().nullable().optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
