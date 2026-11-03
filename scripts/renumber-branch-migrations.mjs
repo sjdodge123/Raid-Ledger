@@ -63,7 +63,7 @@ function readBase(git, ref) {
 }
 
 /** The last snapshot where HEAD forked from `ref` (null when there is no merge-base). */
-function readForkSnapshot(git, ref) {
+function mergeBaseSnapshot(git, ref) {
   let sha;
   try {
     sha = git('merge-base', 'HEAD', ref).trim();
@@ -71,6 +71,38 @@ function readForkSnapshot(git, ref) {
     return null;
   }
   return readBase(git, sha).lastSnapshot;
+}
+
+/** The snapshot in `ref`'s tree whose top-level id is `id` (null when none is). */
+function snapshotById(git, ref, id) {
+  let hits;
+  try {
+    hits = git('grep', '-l', '-F', `"id": "${id}"`, ref, '--', META_REL).split('\n').filter(Boolean);
+  } catch {
+    return null; // git grep exits 1 when nothing matches
+  }
+  for (const hit of hits) {
+    const snap = JSON.parse(git('show', `${ref}:${hit.slice(ref.length + 1)}`));
+    if (snap.id === id) return snap;
+  }
+  return null;
+}
+
+/**
+ * The snapshot the branch's first migration was generated on: the one whose id
+ * is that snapshot's original prevId. The merge-base is only a fallback — once
+ * the branch has merged `ref` it is `ref`'s tip, which would merge nothing.
+ */
+function findFork(git, base, prevId) {
+  const byId = snapshotById(git, base.ref, prevId);
+  if (byId) return { snapshot: byId, warning: null };
+  const viaMergeBase = mergeBaseSnapshot(git, base.ref);
+  const why = `no base snapshot has the first branch snapshot's prevId ${prevId}`;
+  if (!viaMergeBase) return { snapshot: null, warning: `${why}, and there is no merge-base` };
+  if (viaMergeBase.id === base.lastSnapshotId) {
+    return { snapshot: null, warning: `${why}, and the merge-base is the base's tip (branch already merged it?)` };
+  }
+  return { snapshot: viaMergeBase, warning: null };
 }
 
 /** The branch body with main's post-fork schema changes merged in, or null if none apply. */
@@ -108,7 +140,8 @@ export function planRenumber(baseEntries, fresh) {
 
 /** Branch snapshots in plan order, each with its target path and rewritten body. */
 function planSnapshots(git, root, base, plan) {
-  const fork = readForkSnapshot(git, base.ref);
+  let fork;
+  let forkWarning = null;
   let prevId = base.lastSnapshotId;
   const out = [];
   for (const { moved } of plan) {
@@ -116,13 +149,16 @@ function planSnapshots(git, root, base, plan) {
     if (!isBranchSnapshot(git, root, base, from)) continue;
     const body = readFileSync(path.join(root, from), 'utf8');
     if (!PREVID_RE.test(body)) throw new Error(`${from}: no "prevId" line to repoint`);
+    if (fork === undefined && base.lastSnapshot) {
+      ({ snapshot: fork, warning: forkWarning } = findFork(git, base, JSON.parse(body).prevId));
+    }
     const merged = mergedBody(base, fork, body, prevId);
     const next = merged?.text ?? (prevId === null ? body : body.replace(PREVID_RE, `"prevId": "${prevId}"`));
     const to = `${META_REL}/${moved.newPrefix}_snapshot.json`;
     out.push({ from, to, body: next, changed: next !== body, merged: merged !== null, conflicts: merged?.conflicts ?? [] });
     prevId = JSON.parse(body).id;
   }
-  return out;
+  return { snaps: out, forkWarning };
 }
 
 function sqlMoves(plan) {
@@ -151,7 +187,12 @@ function missingBaseFiles(root, base) {
   return [...base.blobs.keys()].filter((rel) => rel !== JOURNAL_REL && !existsSync(path.join(root, rel)));
 }
 
-function report(plan, snaps, ref, label) {
+function report(plan, snaps, ref, label, forkWarning) {
+  if (forkWarning) {
+    console.log(`  ⚠ snapshot bodies NOT merged with ${label ?? ref}'s schema changes: ${forkWarning}.`);
+    console.log('    Regenerate the last branch snapshot if the drift check fails: drizzle-kit generate,');
+    console.log('    copy the new snapshot body in (keep its id/prevId), delete the generated .sql.');
+  }
   for (const { moved } of plan) {
     if (moved.from !== moved.to) console.log(`  ${moved.from} → ${moved.to}`);
   }
@@ -185,7 +226,7 @@ export function renumber(root, ref, label = ref) {
     return 0;
   }
   const plan = planRenumber(base.entries, fresh);
-  const snaps = planSnapshots(git, root, base, plan);
+  const { snaps, forkWarning } = planSnapshots(git, root, base, plan);
   const entries = [...base.entries, ...plan.map((p) => p.entry)];
   const current = readFileSync(path.join(root, JOURNAL_REL), 'utf8');
   // drizzle-kit writes the journal with no trailing newline; keep whatever is there.
@@ -199,7 +240,7 @@ export function renumber(root, ref, label = ref) {
     return 0;
   }
   apply(root, ref, base, { journalText, sql, snaps });
-  report(plan, snaps, ref, label);
+  report(plan, snaps, ref, label, forkWarning);
   return 0;
 }
 

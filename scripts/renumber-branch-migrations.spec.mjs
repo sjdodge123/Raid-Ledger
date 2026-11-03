@@ -301,6 +301,30 @@ test('renumber merges main\'s post-fork schema (new column, new table) into ever
   assert.match(again.stdout, /^✓ nothing to renumber/m, again.stdout + again.stderr);
 });
 
+test('renumber finds the fork by prevId after the branch already merged main (merge-base = main\'s tip)', (t) => {
+  const { dir, t1ab } = buildSchemaFixture();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  git(dir, 'merge', '-q', '-s', 'ours', '-m', 'merge main', 'main');
+  const res = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.deepEqual(JSON.parse(read(dir, 'meta/0002_snapshot.json')).tables, { t1: t1ab, f: { columns: {} }, m: { columns: {} } });
+  assert.doesNotMatch(res.stdout, /⚠/);
+});
+
+test('renumber warns that snapshot bodies were not merged when no fork snapshot can be found', (t) => {
+  const { dir } = buildSchemaFixture();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const rel = path.join(dir, MIG, 'meta/0001_snapshot.json');
+  writeFileSync(rel, readFileSync(rel, 'utf8').replace('"prevId": "id-0"', '"prevId": "id-gone"'));
+  commitAll(dir, 'orphan prevId');
+  git(dir, 'merge', '-q', '-s', 'ours', '-m', 'merge main', 'main');
+  const res = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stdout, /⚠ snapshot bodies NOT merged with origin\/main's schema changes: .*prevId id-gone, and the merge-base is the base's tip/);
+  assert.match(res.stdout, /Regenerate the last branch snapshot/);
+  assert.deepEqual(Object.keys(JSON.parse(read(dir, 'meta/0002_snapshot.json')).tables), ['t1', 'f']);
+});
+
 test('mergeSnapshot: a key both sides changed keeps the branch value and is reported', async () => {
   const { mergeSnapshot } = await import('./snapshot-three-way-merge.mjs');
   const fork = { id: 'a', prevId: 'r', tables: { t: { columns: { c: { type: 'int' } } } } };
