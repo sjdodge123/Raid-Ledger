@@ -9,6 +9,7 @@
  * deletes no saves. Every test makes its own users + hub; no afterAll DB
  * work (the shared setup closes the pool).
  */
+import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { BG3_GAME_SLUG, BG3_SAVE_CONTRACT_ID } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -94,6 +95,7 @@ async function makeUser(tag: string): Promise<{ id: number; token: string }> {
 async function makeHubAndCampaign(
   hostUserId: number,
 ): Promise<{ hubId: number; campaignId: number }> {
+  seq += 1;
   const name = `BG3 Remove Saves Hub ${seq}`;
   const [g] = nonEmpty(
     await testApp.db
@@ -180,7 +182,7 @@ async function insertPicture(
     authorName: `u${userId}`,
     caption: 'Act 1',
     capturedAt: T0,
-    storageName: `rok2068-${userId}-${sha.slice(0, 8)}`,
+    storageName: randomUUID(),
     width: 1280,
     height: 720,
     bytes: 1000,
@@ -197,12 +199,15 @@ const advance = (userId: number, key: string, at = T0) =>
  * A: OLD (2 saves: SHA_SHARED, SHA_GONE; bound), OLD2 (1 save, no sha),
  * KEEP (1 save on SHA_SHARED; bound), default + claim, refs on both shas,
  * Gallery pictures of both shas, markers for OLD and KEEP. B: an OLD save on
- * SHA_GONE with its own binding, ref, picture and marker.
+ * SHA_GONE with its own binding, ref, marker and (in hub B) picture.
  */
 async function seedWorld() {
   const a = await makeUser('a');
   const b = await makeUser('b');
   const { hubId, campaignId } = await makeHubAndCampaign(a.id);
+  // A hub's provenance key is unique (twins collapse), so B's picture of
+  // SHA_GONE lives in another hub.
+  const { hubId: hubB } = await makeHubAndCampaign(b.id);
   await insertSave(a.id, OLD, 0, SHA_SHARED, campaignId);
   await insertSave(a.id, OLD, 1, SHA_GONE, campaignId);
   await insertSave(a.id, OLD2, 2, null);
@@ -228,7 +233,7 @@ async function seedWorld() {
     [b.id, SHA_GONE],
   ] as const) {
     await insertRef(userId, sha);
-    await insertPicture(hubId, userId, sha);
+    await insertPicture(userId === b.id ? hubB : hubId, userId, sha);
   }
   for (const [userId, key] of [
     [a.id, OLD],
@@ -236,7 +241,7 @@ async function seedWorld() {
     [b.id, OLD],
   ] as const)
     expect(await advance(userId, key)).toBe(true);
-  return { a, b, hubId, campaignId };
+  return { a, b, hubId, hubB, campaignId };
 }
 
 // ── reads ──────────────────────────────────────────────────────────────────
@@ -318,7 +323,7 @@ describe('POST plugins/bg3/me/saves/remove — auth and body', () => {
 
 describe('POST plugins/bg3/me/saves/remove — what goes and what stays', () => {
   it("removes only the caller's saves for those keys, their bindings, unused refs and pictures", async () => {
-    const { a, b, hubId } = await seedWorld();
+    const { a, b, hubId, hubB } = await seedWorld();
 
     const res = await post(a.token, { campaignKeys: [OLD, OLD2, OLD] });
 
@@ -345,9 +350,11 @@ describe('POST plugins/bg3/me/saves/remove — what goes and what stays', () => 
       [
         `${SHA_SHARED.slice(0, 4)}:live:${a.id}`,
         `${SHA_GONE.slice(0, 4)}:gone:null`,
-        `${SHA_GONE.slice(0, 4)}:live:${b.id}`,
       ].sort(),
     );
+    expect(await pictures(hubB)).toEqual([
+      `${SHA_GONE.slice(0, 4)}:live:${b.id}`,
+    ]);
     // B shares the OLD key and SHA_GONE: untouched.
     expect(await counts(b.id)).toEqual({
       saves: 1,
