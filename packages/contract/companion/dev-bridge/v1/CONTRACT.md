@@ -55,7 +55,9 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - `error.error` is one of `invalid_request` (400, carries `issues` — each
   `{ path, code, message }` as Zod reports it), `unauthorized` (401),
   `forbidden` (403), `rate_limited` (429, after 10 failed auths a minute),
-  `not_found` (404), `probes_disabled` (409).
+  `not_found` (404), `probes_disabled` (409), `internal` (500, an
+  unexpected companion failure while serving the request; code only, no
+  detail — a companion may instead close the connection with no body).
 - `sv-raw.path` and every other path are **relative to the configured WoW
   folder**, forward slashes, no `..`, no drive, no backslash. No endpoint
   accepts a filesystem path, URL, shell string or Lua.

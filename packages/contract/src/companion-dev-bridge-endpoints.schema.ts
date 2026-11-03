@@ -222,10 +222,13 @@ export const DevBridgeIssueSchema = z
     })
     .strict();
 
-/** Every error body. 401/403/429 carry the code only — no detail. Only `invalid_request` has `issues`. */
+/**
+ * Every error body. 401/403/429/500 carry the code only — no detail. Only `invalid_request` has `issues`.
+ * `internal` (500): an unexpected companion failure while serving the request.
+ */
 export const DevBridgeErrorSchema = z
     .object({
-        error: z.enum(['invalid_request', 'unauthorized', 'forbidden', 'rate_limited', 'not_found', 'probes_disabled']),
+        error: z.enum(['invalid_request', 'unauthorized', 'forbidden', 'rate_limited', 'not_found', 'probes_disabled', 'internal']),
         issues: z.array(DevBridgeIssueSchema).max(50).optional(),
     })
     .strict()

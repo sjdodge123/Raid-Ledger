@@ -109,6 +109,7 @@ const VALID = {
         { at: AT, level: 'warn', target: 'dev_bridge::auth', msg: 'rejected Authorization: Bearer <redacted> from 192.168.0.50' },
     ] },
     collectors: { collectors: [{ id: 'wow-ledgerlink', enabled: true, paused: false, lastScanAt: AT, lastUploadAt: null, pending: 1 }, { id: 'bg3-save', enabled: false, paused: false, lastScanAt: null, lastUploadAt: null, pending: 0, lastError: 'Save folder not found' }] },
+    'error--internal': { error: 'internal' },
     'error--invalid-request': { error: 'invalid_request', issues: [{ path: ['calls', 0, 'fn'], code: 'custom', message: 'Function not allowed (denied)' }] },
     'error--probes-disabled': { error: 'probes_disabled' },
     'error--unauthorized': { error: 'unauthorized' },
