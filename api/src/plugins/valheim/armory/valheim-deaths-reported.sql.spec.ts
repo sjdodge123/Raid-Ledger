@@ -70,6 +70,10 @@ describe('reportedDeathSql (SQL R)', () => {
     expect(set).toContain('reported_at = ');
     expect(set).toContain('steam_id = coalesce(d.steam_id, ');
     expect(set).not.toContain('source');
+    // A merged discord row takes the profile name; a log row keeps its own.
+    expect(set).toMatch(
+      /character_name = CASE WHEN d\.logged_at IS NULL THEN \$\d+::text ELSE d\.character_name END/,
+    );
     expect(text).toMatch(/\$\d+::text, 'mod',/);
   });
 

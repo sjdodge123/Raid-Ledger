@@ -251,6 +251,8 @@ describe('Valheim reported deaths (integration, ROK-1931)', () => {
     );
     expect(row).toMatchObject({
       source: 'discord',
+      // The OCR casing ('testviking') gives way to the profile name.
+      characterName: 'Testviking',
       steamId: STEAM,
       playerId: PLAYER_ID,
       worldUid: WORLD,
@@ -357,5 +359,9 @@ describe('Valheim reported deaths (integration, ROK-1931)', () => {
     // Every bucket is this player's — the merges attributed the discord row.
     const { groups } = await repo().countByPlayer(server);
     expect(groups.map((g) => g.steamId)).toEqual(groups.map(() => STEAM));
+    // One bucket: the merged discord row no longer splits on name casing.
+    expect(groups.map((g) => [g.characterName, g.deaths])).toEqual([
+      ['Testviking', 3],
+    ]);
   });
 });

@@ -60,6 +60,16 @@ function candidateSql(o: Bound, name: string, windowSec: number): SQL {
   ORDER BY abs(extract(epoch FROM d.occurred_at - ${o.at})), d.id LIMIT 1 FOR UPDATE`;
 }
 
+/**
+ * A merged discord row (no `logged_at`) takes the profile's name: its OCR
+ * text may differ in case, and `countByPlayer` buckets by exact name, so it
+ * would split the player's count. A log row keeps its name — it is part of
+ * `valheim_player_deaths_log_uq`, so a rewrite could collide.
+ */
+function nameOnMerge(name: string): SQL {
+  return sql`CASE WHEN d.logged_at IS NULL THEN ${name}::text ELSE d.character_name END`;
+}
+
 /** The bound, cast parameters every CTE shares. */
 interface Bound {
   s: SQL;
@@ -94,7 +104,8 @@ cand AS (${candidateSql(o, owner.name, windowSec)}),
 merged AS (
   UPDATE valheim_player_deaths d
   SET x = ${x}, z = ${z}, world_uid = ${w}, player_id = ${o.pid},
-      reported_at = ${o.at}, steam_id = coalesce(d.steam_id, ${o.steam})
+      reported_at = ${o.at}, steam_id = coalesce(d.steam_id, ${o.steam}),
+      character_name = ${nameOnMerge(owner.name)}
   FROM cand WHERE d.id = cand.id RETURNING d.id)
 INSERT INTO valheim_player_deaths
   (pelican_server_id, character_name, steam_id, player_id, world_uid, source,
