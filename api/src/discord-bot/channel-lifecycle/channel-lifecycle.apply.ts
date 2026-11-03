@@ -29,6 +29,7 @@ import type {
   HubLinkResult,
   ItemOutcome,
   PlannedGame,
+  TopicTarget,
 } from './channel-lifecycle.types';
 import type { LifecycleCandidateBinding } from './game-activity.types';
 
@@ -77,10 +78,10 @@ export async function linkHubs(
 
 /** The outcome field that asks `runOne` for a post-commit topic refresh. */
 export function topicField(
-  channelId: string,
+  target: TopicTarget,
   refresh: boolean,
-): Pick<ItemOutcome, 'topicChannelId'> {
-  return refresh ? { topicChannelId: channelId } : {};
+): Pick<ItemOutcome, 'topic'> {
+  return refresh ? { topic: target } : {};
 }
 
 /** The Games parent for a create; a full category overflows (D5 / §2.13). */
@@ -342,6 +343,9 @@ async function applyLinkHub(
     detail: game.reason,
     linkedHubs: linked.guildIds.length,
     linked,
-    ...topicField(binding.channelId, refreshTopic),
+    ...topicField(
+      { channelId: binding.channelId, bindingId: binding.id },
+      refreshTopic,
+    ),
   };
 }

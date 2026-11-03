@@ -139,7 +139,7 @@ function withLink(
     ...item,
     linkedHubs: linked.guildIds.length,
     linked,
-    ...topicField(created.channelId, refreshTopic),
+    ...topicField(created, refreshTopic),
   };
 }
 
