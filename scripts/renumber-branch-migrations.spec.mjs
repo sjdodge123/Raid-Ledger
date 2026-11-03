@@ -112,8 +112,12 @@ test('renumber: moves branch migrations after main, rewrites journal + snapshot 
   assert.equal(existsSync(path.join(dir, MIG, '0002_branch_feat.sql')), false);
   assert.equal(read(dir, '0002_main_x.sql'), 'CREATE TABLE "main_x" ();\n');
   assert.equal(JSON.parse(read(dir, 'meta/0002_snapshot.json')).id, 'id-main');
-  const moved = read(dir, 'meta/0003_snapshot.json');
-  assert.equal(moved, featSnap.replace('"prevId": "id-0001"', '"prevId": "id-main"'));
+  const moved = JSON.parse(read(dir, 'meta/0003_snapshot.json'));
+  const feat = JSON.parse(featSnap);
+  // id kept, prevId repointed, and main's post-fork change (t1 → main_x in this
+  // non-cumulative fixture) merged into the body alongside the branch's table.
+  assert.deepEqual(moved, { ...feat, prevId: 'id-main', tables: { feat: {}, main_x: {} } });
+  assert.match(res.stdout, /0003_snapshot\.json: merged in origin\/main's schema changes since the fork/);
   assert.equal(existsSync(path.join(dir, MIG, 'meta/0004_snapshot.json')), false);
 
   const entries = journal(dir);
@@ -251,4 +255,58 @@ test('findIndexCollisions: a merged base entry missing from the branch journal i
   assert.match(formatCollisionReport(findIndexCollisions(merged, dropped, [], merged), 'origin/main'), /keep ours/);
   // Stale: main has 0002_main_x, but the merge base predates it.
   assert.deepEqual(findIndexCollisions(merged, dropped, [], dropped), []);
+});
+
+/** Cumulative snapshots like drizzle-kit's: fork {t1:{a}}; main adds t1.b + table m; branch adds table f (+ f.y). */
+function buildSchemaFixture() {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rl-renumber-schema-'));
+  mkdirSync(path.join(dir, MIG, 'meta'), { recursive: true });
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'config', 'user.email', 'fixture@example.com');
+  git(dir, 'config', 'user.name', 'fixture');
+  const snap = (id, prevId, tables) => JSON.stringify({ id, prevId, version: '7', dialect: 'postgresql', tables, enums: {} }, null, 2);
+  const t1a = { columns: { a: { type: 'integer' } } };
+  const t1ab = { columns: { a: { type: 'integer' }, b: { type: 'text' } } };
+  const common = [entry(0, 'init', T0)];
+  writeMig(dir, { '0000_init.sql': 'x;\n', 'meta/0000_snapshot.json': snap('id-0', ROOT_ID, { t1: t1a }) }, common);
+  commitAll(dir, 'common');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  writeMig(dir, {
+    '0001_f.sql': 'f;\n', 'meta/0001_snapshot.json': snap('id-f', 'id-0', { t1: t1a, f: { columns: {} } }),
+    '0002_fy.sql': 'fy;\n', 'meta/0002_snapshot.json': snap('id-fy', 'id-f', { t1: t1a, f: { columns: { y: {} } } }),
+  }, [...common, entry(1, 'f', T0 + 1000), entry(2, 'fy', T0 + 2000)]);
+  commitAll(dir, 'feature');
+  git(dir, 'checkout', '-q', 'main');
+  writeMig(dir, { '0001_m.sql': 'm;\n', 'meta/0001_snapshot.json': snap('id-m', 'id-0', { t1: t1ab, m: { columns: {} } }) },
+    [...common, entry(1, 'm', T0 + 5000)]);
+  commitAll(dir, 'main');
+  git(dir, 'update-ref', 'refs/remotes/origin/main', 'main');
+  git(dir, 'checkout', '-q', 'feature');
+  return { dir, t1ab };
+}
+
+test('renumber merges main\'s post-fork schema (new column, new table) into every renumbered snapshot, keeping ids', (t) => {
+  const { dir, t1ab } = buildSchemaFixture();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const res = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  const s2 = JSON.parse(read(dir, 'meta/0002_snapshot.json'));
+  const s3 = JSON.parse(read(dir, 'meta/0003_snapshot.json'));
+  assert.deepEqual([s2.id, s2.prevId, s3.id, s3.prevId], ['id-f', 'id-m', 'id-fy', 'id-f']);
+  assert.deepEqual(s2.tables, { t1: t1ab, f: { columns: {} }, m: { columns: {} } });
+  assert.deepEqual(s3.tables, { t1: t1ab, f: { columns: { y: {} } }, m: { columns: {} } });
+  assert.doesNotMatch(res.stdout, /⚠/);
+  commitAll(dir, 'renumbered');
+  const again = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.match(again.stdout, /^✓ nothing to renumber/m, again.stdout + again.stderr);
+});
+
+test('mergeSnapshot: a key both sides changed keeps the branch value and is reported', async () => {
+  const { mergeSnapshot } = await import('./snapshot-three-way-merge.mjs');
+  const fork = { id: 'a', prevId: 'r', tables: { t: { columns: { c: { type: 'int' } } } } };
+  const main = { id: 'm', prevId: 'a', tables: { t: { columns: { c: { type: 'bigint' } } } } };
+  const branch = { id: 'b', prevId: 'a', tables: { t: { columns: { c: { type: 'text' } } } } };
+  const { snapshot, conflicts } = mergeSnapshot(fork, main, branch);
+  assert.deepEqual(conflicts, ['tables.t.columns.c.type']);
+  assert.deepEqual(snapshot, branch);
 });

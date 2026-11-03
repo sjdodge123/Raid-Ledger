@@ -11,7 +11,10 @@
  *     base's newest (and the previous entry), so Drizzle never skips it;
  *   - its meta/NNNN_snapshot.json (if the branch wrote one) is renamed and its
  *     prevId repointed: the first at the base's last snapshot id, each next at
- *     the branch snapshot before it. Only the "prevId" line changes.
+ *     the branch snapshot before it. Only the "prevId" line changes — unless
+ *     main changed the schema since the branch forked: then main's changes are
+ *     three-way merged into the body (snapshot-three-way-merge.mjs) so the
+ *     drift check does not see a snapshot that predates main's migrations.
  * The journal becomes base entries (verbatim) + the renumbered ones, and any
  * base migration file missing from the tree is written from the base, so a
  * later `git merge origin/main` merges the migrations folder cleanly.
@@ -30,6 +33,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUMP_MS } from './check-migration-merge-order.mjs';
 import { JOURNAL_REL, MIGRATIONS_REL } from './check-migration-index-collision.mjs';
+import { mergeSnapshot, sameJson } from './snapshot-three-way-merge.mjs';
 
 const META_REL = `${MIGRATIONS_REL}/meta`;
 const SNAPSHOT_RE = /^(\d{4})_snapshot\.json$/;
@@ -41,7 +45,7 @@ function gitIn(root) {
     execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1 << 28 });
 }
 
-/** Base journal, the base's migration blobs by path, and its last snapshot id. */
+/** Base journal, the base's migration blobs by path, and its last snapshot (+ id). */
 function readBase(git, ref) {
   const journal = JSON.parse(git('show', `${ref}:${JOURNAL_REL}`));
   const blobs = new Map();
@@ -54,8 +58,30 @@ function readBase(git, ref) {
     .filter(Boolean)
     .sort((a, b) => Number(a[1]) - Number(b[1]));
   const last = snaps.at(-1);
-  const lastSnapshotId = last ? JSON.parse(git('show', `${ref}:${META_REL}/${last[0]}`)).id : null;
-  return { entries: journal.entries, blobs, lastSnapshotId };
+  const lastSnapshot = last ? JSON.parse(git('show', `${ref}:${META_REL}/${last[0]}`)) : null;
+  return { entries: journal.entries, blobs, lastSnapshot, lastSnapshotId: lastSnapshot?.id ?? null };
+}
+
+/** The last snapshot where HEAD forked from `ref` (null when there is no merge-base). */
+function readForkSnapshot(git, ref) {
+  let sha;
+  try {
+    sha = git('merge-base', 'HEAD', ref).trim();
+  } catch {
+    return null;
+  }
+  return readBase(git, sha).lastSnapshot;
+}
+
+/** The branch body with main's post-fork schema changes merged in, or null if none apply. */
+function mergedBody(base, fork, body, prevId) {
+  if (!fork || !base.lastSnapshot) return null;
+  const parsed = JSON.parse(body);
+  const { snapshot, conflicts } = mergeSnapshot(fork, base.lastSnapshot, parsed);
+  if (sameJson(snapshot, parsed)) return null;
+  const eol = body.endsWith('\n') ? '\n' : '';
+  const out = prevId === null ? snapshot : { ...snapshot, prevId };
+  return { text: JSON.stringify(out, null, 2) + eol, conflicts };
 }
 
 /** A tree snapshot is the branch's when the base has no file there, or a different one. */
@@ -82,6 +108,7 @@ export function planRenumber(baseEntries, fresh) {
 
 /** Branch snapshots in plan order, each with its target path and rewritten body. */
 function planSnapshots(git, root, base, plan) {
+  const fork = readForkSnapshot(git, base.ref);
   let prevId = base.lastSnapshotId;
   const out = [];
   for (const { moved } of plan) {
@@ -89,8 +116,10 @@ function planSnapshots(git, root, base, plan) {
     if (!isBranchSnapshot(git, root, base, from)) continue;
     const body = readFileSync(path.join(root, from), 'utf8');
     if (!PREVID_RE.test(body)) throw new Error(`${from}: no "prevId" line to repoint`);
-    const next = prevId === null ? body : body.replace(PREVID_RE, `"prevId": "${prevId}"`);
-    out.push({ from, to: `${META_REL}/${moved.newPrefix}_snapshot.json`, body: next, changed: next !== body });
+    const merged = mergedBody(base, fork, body, prevId);
+    const next = merged?.text ?? (prevId === null ? body : body.replace(PREVID_RE, `"prevId": "${prevId}"`));
+    const to = `${META_REL}/${moved.newPrefix}_snapshot.json`;
+    out.push({ from, to, body: next, changed: next !== body, merged: merged !== null, conflicts: merged?.conflicts ?? [] });
     prevId = JSON.parse(body).id;
   }
   return out;
@@ -127,6 +156,13 @@ function report(plan, snaps, ref, label) {
     if (moved.from !== moved.to) console.log(`  ${moved.from} → ${moved.to}`);
   }
   for (const s of snaps) if (s.from !== s.to) console.log(`  ${s.from.split('/').pop()} → ${s.to.split('/').pop()} (prevId repointed)`);
+  for (const s of snaps) if (s.merged) console.log(`  ${s.to.split('/').pop()}: merged in ${label ?? ref}'s schema changes since the fork`);
+  for (const s of snaps) {
+    if (s.conflicts.length === 0) continue;
+    console.log(`  ⚠ ${s.to.split('/').pop()}: kept the branch's value where both sides changed: ${s.conflicts.join(', ')}`);
+    console.log('    Regenerate it if the drift check fails: drizzle-kit generate, copy the new snapshot body');
+    console.log('    in (keep its id/prevId), delete the generated .sql.');
+  }
   const named = label && label !== ref ? `${label} @ ${ref}` : ref;
   console.log(`✓ Renumbered ${plan.length} branch migration(s) after ${named}. SQL bodies untouched.`);
   console.log(`  Next: commit, then \`git merge ${ref}\` — this exact commit, not a re-fetched main.`);
@@ -140,7 +176,7 @@ function report(plan, snaps, ref, label) {
 
 export function renumber(root, ref, label = ref) {
   const git = gitIn(root);
-  const base = readBase(git, ref);
+  const base = { ...readBase(git, ref), ref };
   const journal = JSON.parse(readFileSync(path.join(root, JOURNAL_REL), 'utf8'));
   const baseTags = new Set(base.entries.map((e) => e.tag));
   const fresh = journal.entries.filter((e) => !baseTags.has(e.tag));
