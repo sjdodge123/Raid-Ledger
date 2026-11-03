@@ -170,7 +170,7 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     await expect(pins(map)).toHaveCount(second.deathPinLabels.length + 1);
     await expect(
       map.getByRole("button", {
-        name: /^Death · \d{1,2} [A-Z][a-z]{2} \d{2}:\d{2} \(Death\)$/,
+        name: /^Death · \d{1,2} [A-Z][a-z]{2}(?: \d{4})? \d{2}:\d{2} \(Death\)$/,
       }),
     ).toHaveCount(1);
   });

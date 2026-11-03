@@ -66,7 +66,7 @@ WITH existing AS (${existingLogSql(s, death)}),
 cand AS (
   SELECT d.id FROM valheim_player_deaths d
   WHERE d.pelican_server_id = ${s} AND d.source IN ('discord', 'mod')
-    AND d.logged_at IS NULL
+    AND (d.source = 'discord' OR d.logged_at IS NULL)
     AND ${sameCharacterSql(death)}
     AND d.occurred_at BETWEEN ${o} - make_interval(secs => ${windowSec}::int)
                           AND ${o} + make_interval(secs => ${windowSec}::int)

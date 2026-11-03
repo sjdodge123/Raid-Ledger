@@ -32,10 +32,12 @@ function setList(text: string): string {
 }
 
 describe('logDeathMergeSql (SQL B, ROK-1931 widening)', () => {
-  it('takes an unlogged discord OR mod death as the merge candidate', () => {
+  it('takes any discord death, or an unlogged mod death, as the merge candidate', () => {
+    // A discord death inferred from a screenshot carries logged_at (linkSql);
+    // excluding it double-counts the death when its log line arrives (Codex P1).
     const { text } = render();
     expect(text).toContain(
-      "d.source IN ('discord', 'mod') AND d.logged_at IS NULL",
+      "d.source IN ('discord', 'mod') AND (d.source = 'discord' OR d.logged_at IS NULL)",
     );
   });
 

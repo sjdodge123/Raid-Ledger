@@ -177,7 +177,7 @@ export async function expectEveryDeathPin(
   for (const n of synthetic) {
     expect(n).toMatch(
       new RegExp(
-        `^Death · \\d{1,2} [A-Z][a-z]{2} \\d{2}:\\d{2} · ${second.name} \\(Death\\)$`,
+        `^Death · \\d{1,2} [A-Z][a-z]{2}(?: \\d{4})? \\d{2}:\\d{2} · ${second.name} \\(Death\\)$`,
       ),
     );
   }
