@@ -23,15 +23,14 @@ function handshakeToken(client: Socket): string | null {
 
 function reject(client: Socket, logger: Logger, reason: string): false {
   logger.debug(`Client ${client.id} rejected: ${reason}`);
-  client.disconnect(true);
   return false;
 }
 
 /**
  * Socket handshake auth: the JWT signature, then the SAME session checks the
  * HTTP `JwtStrategy` runs (magic-link refusal, token version, ban / kick /
- * deactivation, impersonator standing). A failing client is disconnected.
- * Returns whether the client may stay connected.
+ * deactivation, impersonator standing). Returns whether the client may
+ * connect; the reason for a refusal is logged, never sent to the client.
  */
 export async function authenticateSocket(
   client: Socket,
@@ -48,4 +47,31 @@ export async function authenticateSocket(
   }
   deps.logger.debug(`Client ${client.id} connected with valid token`);
   return true;
+}
+
+/** The error a refused handshake gets (socket.io's `connect_error`). */
+export const SOCKET_UNAUTHORIZED = 'unauthorized';
+
+/** A socket.io namespace middleware. */
+export type SocketAuthMiddleware = (
+  socket: Socket,
+  next: (err?: Error) => void,
+) => void;
+
+/**
+ * Socket.IO middleware running {@link authenticateSocket} BEFORE the socket
+ * connects (register it in a gateway's `afterInit` with `server.use`). A
+ * refused handshake gets `next(err)`, so an unauthenticated client never
+ * joins the namespace and can never subscribe or emit — there is no window
+ * between connecting and an async check disconnecting it.
+ */
+export function socketAuthMiddleware(
+  deps: SocketAuthDeps,
+): SocketAuthMiddleware {
+  return (socket, next) => {
+    authenticateSocket(socket, deps).then(
+      (ok) => next(ok ? undefined : new Error(SOCKET_UNAUTHORIZED)),
+      () => next(new Error(SOCKET_UNAUTHORIZED)),
+    );
+  };
 }

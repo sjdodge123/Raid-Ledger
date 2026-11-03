@@ -7,6 +7,7 @@ import {
   ACTIVE_AUTH_ROW,
   describeSocketSessionChecks,
   mockAuthDb,
+  runSocketAuth,
 } from '../common/testing/socket-auth-fixtures';
 
 let gateway: LineupsGateway;
@@ -45,15 +46,21 @@ function makeClient(
 
 async function testAcceptsValidToken() {
   const client = makeClient('client-1');
-  await gateway.handleConnection(client);
+  await expect(runSocketAuth(gateway, client)).resolves.toBeUndefined();
   expect(mockJwtService.verify).toHaveBeenCalledWith('valid-jwt-token');
+}
+
+/** The handshake middleware called `next(err)`: the socket never connected. */
+async function expectRefused(client: Socket): Promise<void> {
+  const err = await runSocketAuth(gateway, client);
+  expect(err).toBeInstanceOf(Error);
+  expect(err?.message).toBe('unauthorized');
   expect(client.disconnect).not.toHaveBeenCalled();
 }
 
 async function testDisconnectsWithoutToken() {
   const client = makeClient('client-2', { handshake: { auth: {} } });
-  await gateway.handleConnection(client);
-  expect(client.disconnect).toHaveBeenCalledWith(true);
+  await expectRefused(client);
 }
 
 async function testDisconnectsWithInvalidToken() {
@@ -63,14 +70,12 @@ async function testDisconnectsWithInvalidToken() {
   const client = makeClient('client-3', {
     handshake: { auth: { token: 'bad-token' } },
   });
-  await gateway.handleConnection(client);
-  expect(client.disconnect).toHaveBeenCalledWith(true);
+  await expectRefused(client);
 }
 
 async function testDisconnectsWithMissingAuthObject() {
   const client = makeClient('client-4', { handshake: {} });
-  await gateway.handleConnection(client);
-  expect(client.disconnect).toHaveBeenCalledWith(true);
+  await expectRefused(client);
 }
 
 function testHandleDisconnect() {
@@ -220,11 +225,11 @@ beforeEach(() => setupEach());
 
 describe('LineupsGateway — connection', () => {
   it('accepts connection with valid auth token', () => testAcceptsValidToken());
-  it('disconnects client without auth token', () =>
+  it('refuses (next(err)) a client without auth token before it connects', () =>
     testDisconnectsWithoutToken());
-  it('disconnects client with invalid auth token', () =>
+  it('refuses (next(err)) a client with invalid auth token before it connects', () =>
     testDisconnectsWithInvalidToken());
-  it('disconnects client with missing auth object', () =>
+  it('refuses (next(err)) a client with missing auth object before it connects', () =>
     testDisconnectsWithMissingAuthObject());
   it('handles client disconnect', () => testHandleDisconnect());
   it('joins the correct room for lineup', () => testHandleSubscribe());
@@ -276,15 +281,14 @@ describe('LineupsGateway — emitScheduleChanged (ROK-1551)', () => {
 const MAGIC_SPEC_SECRET = 'gateway-magic-spec-secret';
 let savedJwtSecret: string | undefined;
 
-async function handshakeWith(token: string): Promise<Socket> {
+async function handshakeWith(token: string): Promise<Error | undefined> {
   const realJwt = new JwtService({ secret: MAGIC_SPEC_SECRET });
   const realGateway = new LineupsGateway(
     realJwt,
     mockAuthDb([ACTIVE_AUTH_ROW]),
   );
   const client = makeClient('client-magic', { handshake: { auth: { token } } });
-  await realGateway.handleConnection(client);
-  return client;
+  return runSocketAuth(realGateway, client);
 }
 
 describe('LineupsGateway — magic-link handshake (ROK-1366 AC5)', () => {
@@ -298,30 +302,30 @@ describe('LineupsGateway — magic-link handshake (ROK-1366 AC5)', () => {
 
   it('accepts a session token signed with JWT_SECRET (control)', async () => {
     const signer = new JwtService({ secret: MAGIC_SPEC_SECRET });
-    const client = await handshakeWith(
+    const err = await handshakeWith(
       signer.sign({ sub: 1, username: 'test', tv: 0 }),
     );
-    expect(client.disconnect).not.toHaveBeenCalled();
+    expect(err).toBeUndefined();
   });
 
-  it('disconnects a magic-link token signed with the purpose secret', async () => {
+  it('refuses a magic-link token signed with the purpose secret', async () => {
     const magic = signPurposeJwt(
       new JwtService(),
       'magic-link',
       { sub: 1, magicLink: true },
       '15m',
     );
-    const client = await handshakeWith(magic);
-    expect(client.disconnect).toHaveBeenCalledWith(true);
+    const err = await handshakeWith(magic);
+    expect(err?.message).toBe('unauthorized');
   });
 
-  it('disconnects a legacy magic-link token signed with JWT_SECRET', async () => {
+  it('refuses a legacy magic-link token signed with JWT_SECRET', async () => {
     // Links minted before the purpose-secret switch were signed with
     // JWT_SECRET; the secret alone cannot reject them (mirrors JwtStrategy).
     const signer = new JwtService({ secret: MAGIC_SPEC_SECRET });
     const legacy = signer.sign({ sub: 1, username: 'test', magicLink: true });
-    const client = await handshakeWith(legacy);
-    expect(client.disconnect).toHaveBeenCalledWith(true);
+    const err = await handshakeWith(legacy);
+    expect(err?.message).toBe('unauthorized');
   });
 });
 

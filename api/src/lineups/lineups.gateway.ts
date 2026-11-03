@@ -3,13 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import type * as schema from '../drizzle/schema';
-import { authenticateSocket } from '../auth/socket-auth.helpers';
+import { socketAuthMiddleware } from '../auth/socket-auth.helpers';
 import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
@@ -31,15 +31,14 @@ import { perfLog } from '../common/perf-logger';
  * Events:
  * - lineup:status — lineup advanced phase (building → voting → decided / archived)
  *
- * Auth: JWT from socket.handshake.auth.token, validated on connection with
- * the same session checks as HTTP (`auth/socket-auth.helpers.ts`).
+ * Auth: JWT from socket.handshake.auth.token, validated by a namespace
+ * middleware BEFORE the socket connects, with the same session checks as
+ * HTTP (`auth/socket-auth.helpers.ts`); a refused handshake never connects.
  * Note: Single-instance only for v1. Redis adapter is optional and documented.
  */
 // CORS is decided per handshake by SocketCorsIoAdapter (cors/socket-cors.ts).
 @WebSocketGateway({ namespace: '/lineups' })
-export class LineupsGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class LineupsGateway implements OnGatewayInit, OnGatewayDisconnect {
   private readonly logger = new Logger(LineupsGateway.name);
 
   constructor(
@@ -51,13 +50,18 @@ export class LineupsGateway
   @WebSocketServer()
   server!: Server;
 
-  /** JWT + the HTTP session checks (token version, ban, deactivation). */
-  async handleConnection(client: Socket): Promise<void> {
-    await authenticateSocket(client, {
-      jwtService: this.jwtService,
-      db: this.db,
-      logger: this.logger,
-    });
+  /**
+   * JWT + the HTTP session checks (token version, ban, deactivation) as a
+   * handshake middleware: a refused socket gets `next(err)` and never connects.
+   */
+  afterInit(server: Server): void {
+    server.use(
+      socketAuthMiddleware({
+        jwtService: this.jwtService,
+        db: this.db,
+        logger: this.logger,
+      }),
+    );
   }
 
   handleDisconnect(client: Socket): void {
