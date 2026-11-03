@@ -313,6 +313,8 @@ describe('POST plugins/bg3/me/saves/remove — auth and body', () => {
   it.each([
     ['an empty array', { campaignKeys: [] }],
     ['a non-hex key', { campaignKeys: ['zz'.repeat(32)] }],
+    ['a short key', { campaignKeys: ['ab'] }],
+    ['an uppercase-hex key', { campaignKeys: ['A1'.repeat(32)] }],
     ['an extra field', { campaignKeys: [OLD], all: true }],
     ['501 keys', { campaignKeys: Array.from({ length: 501 }, () => OLD) }],
   ])('400 on %s, nothing removed', async (_label, body) => {
@@ -438,7 +440,7 @@ describe('unbinding a key never deletes saves (D-8)', () => {
     const res = await testApp.request
       .delete(`/plugins/bg3/me/campaign-keys/${OLD}`)
       .set('Authorization', `Bearer ${a.token}`);
-    expect(res.status).toBeLessThan(300);
+    expect(res.status).toBe(204);
     expect(await counts(a.id)).toMatchObject({ saves: 4, keys: 1 });
   });
 });
