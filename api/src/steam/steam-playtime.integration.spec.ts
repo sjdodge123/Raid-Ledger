@@ -6,10 +6,14 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { at } from '../common/testing/narrow';
+import { eq } from 'drizzle-orm';
 import {
   updateExistingPlaytime,
   type PlaytimeUpdateEntry,
 } from './steam-playtime.helpers';
+
+const STEAM_A = '76561198000000001';
+const STEAM_B = '76561198000000002';
 
 function describeBatchPlaytimeUpdate() {
   let testApp: TestApp;
@@ -23,6 +27,10 @@ function describeBatchPlaytimeUpdate() {
   beforeEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
     userId = testApp.seed.adminUser.id;
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: STEAM_A })
+      .where(eq(schema.users.id, userId));
 
     // Create 5 games with steam_app_id
     const games = await testApp.db
@@ -56,7 +64,12 @@ function describeBatchPlaytimeUpdate() {
       playtime2weeks: 20 + i,
     }));
 
-    const updated = await updateExistingPlaytime(testApp.db, userId, toUpdate);
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      toUpdate,
+    );
     expect(updated).toBe(5);
 
     // Verify values persisted
@@ -82,12 +95,22 @@ function describeBatchPlaytimeUpdate() {
       { gameId: at(gameIds, 0), playtimeForever: 500, playtime2weeks: null },
     ];
 
-    const updated = await updateExistingPlaytime(testApp.db, userId, toUpdate);
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      toUpdate,
+    );
     expect(updated).toBe(1);
   });
 
   it('should handle empty array without error', async () => {
-    const updated = await updateExistingPlaytime(testApp.db, userId, []);
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      [],
+    );
     expect(updated).toBe(0);
   });
 
@@ -121,8 +144,62 @@ function describeBatchPlaytimeUpdate() {
       playtime2weeks: null,
     }));
 
-    const updated = await updateExistingPlaytime(testApp.db, userId, toUpdate);
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      toUpdate,
+    );
     expect(updated).toBe(allGameIds.length);
+  });
+
+  /** Each interest's playtime_forever, keyed by game id. */
+  async function playtimes(): Promise<Map<number, number | null>> {
+    const rows = await testApp.db
+      .select({
+        gameId: schema.gameInterests.gameId,
+        playtimeForever: schema.gameInterests.playtimeForever,
+      })
+      .from(schema.gameInterests)
+      .where(eq(schema.gameInterests.userId, userId));
+    return new Map(rows.map((r) => [r.gameId, r.playtimeForever]));
+  }
+
+  const rewrite = (): PlaytimeUpdateEntry[] =>
+    gameIds.map((gId) => ({
+      gameId: gId,
+      playtimeForever: 777,
+      playtime2weeks: 7,
+    }));
+
+  it('a sync for an account the user has since unlinked writes nothing back', async () => {
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: null })
+      .where(eq(schema.users.id, userId));
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      rewrite(),
+    );
+    expect(updated).toBe(0);
+    expect([...(await playtimes()).values()]).toEqual(gameIds.map(() => 100));
+  });
+
+  it('a sync for account A after the user swapped to B writes nothing back', async () => {
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: STEAM_B })
+      .where(eq(schema.users.id, userId));
+    const updated = await updateExistingPlaytime(
+      testApp.db,
+      userId,
+      STEAM_A,
+      rewrite(),
+    );
+    expect(updated).toBe(0);
+    expect([...(await playtimes()).values()]).toEqual(gameIds.map(() => 100));
   });
 }
 
