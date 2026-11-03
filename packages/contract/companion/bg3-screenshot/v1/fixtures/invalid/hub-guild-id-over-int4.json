@@ -1,0 +1,23 @@
+{
+  "envelopeVersion": 1,
+  "contract": "bg3-screenshot",
+  "contractVersion": 1,
+  "capturedAt": "2026-11-03T12:00:05Z",
+  "appVersion": "0.2.0",
+  "collectorVersion": "0.1.0",
+  "payload": {
+    "takenAt": "2026-11-03T12:00:00Z",
+    "width": 1920,
+    "height": 1080,
+    "image": {
+      "sha256": "5f1d3c0b9a8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4938271605f4e",
+      "byteLength": 412345,
+      "contentType": "image/webp",
+      "width": 1920,
+      "height": 1080
+    },
+    "target": {
+      "hubGuildId": 2147483648
+    }
+  }
+}
