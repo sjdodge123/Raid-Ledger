@@ -10,7 +10,7 @@ import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
 import { syncedAgo } from '../../../lib/synced-ago';
 import { Button } from '../../ui/button';
 import { HUB_MEDIA_KIND_LABEL } from './hub-gallery-labels';
-import type { HubGallerySinglePicture } from './hub-gallery-store';
+import { isSameOriginApiPath, type HubGallerySinglePicture } from './hub-gallery-store';
 
 export interface HubGalleryViewerProps {
     item: HubMediaItem;
@@ -103,7 +103,7 @@ export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubG
  * upload, a save shot): the same well, no count, Prev / Next or caption.
  */
 export function HubGallerySinglePictureView({ picture }: { picture: HubGallerySinglePicture }): JSX.Element {
-    const authed = useHubMediaImageUrl(picture.auth === true ? picture.url : null);
+    const authed = useHubMediaImageUrl(picture.auth === true && isSameOriginApiPath(picture.url) ? picture.url : null);
     const src = picture.auth === true ? authed : picture.url;
     const [failed, setFailed] = useState<string | null>(null);
     const region = useFocusRegionOnMount();

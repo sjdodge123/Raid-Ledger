@@ -70,11 +70,22 @@ export function useHubGalleryFilter(guildId: number): HubMediaFilter {
 }
 
 /**
+ * ROK-2074 (review) — an authed picture's url is concatenated onto the API
+ * base, so the bearer token only goes with a same-origin API path: a leading
+ * `/`, never `//` (protocol-relative) and no backslash (browsers read `\`
+ * as `/`). Anything else is never fetched with the token.
+ */
+export function isSameOriginApiPath(url: string): boolean {
+    return url.startsWith('/') && !url.startsWith('//') && !url.includes('\\');
+}
+
+/**
  * ROK-2074 — open one hub picture in the Gallery viewer: a Gallery item by
  * `mediaId` (Prev/Next walk All from there), or `{ url, alt }` alone. The
  * hub page mounts the dialog, so any widget — core or plugin — can call this.
  */
 export function openHubPicture(guildId: number, target: HubPictureTarget, returnFocus: HTMLElement | null): void {
+    if ('url' in target && target.auth === true && !isSameOriginApiPath(target.url)) return;
     const base = { guildId, mode: 'viewer', filter: 'all', index: 0, returnFocus } as const;
     useHubGalleryStore.getState().openGallery('mediaId' in target ? { ...base, mediaId: target.mediaId } : { ...base, single: target });
 }
