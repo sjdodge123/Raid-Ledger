@@ -65,6 +65,7 @@ describe('Taste Profile (ROK-948)', () => {
     igdbGenres: number[],
     igdbGameModes: number[],
     igdbThemes: number[] = [],
+    itadTags: string[] = [],
   ): Promise<number> {
     const [g] = nonEmpty(
       await testApp.db
@@ -75,6 +76,7 @@ describe('Taste Profile (ROK-948)', () => {
           genres: igdbGenres,
           gameModes: igdbGameModes,
           themes: igdbThemes,
+          itadTags,
         })
         .returning(),
       'g',
@@ -551,13 +553,17 @@ describe('Taste Profile (ROK-948)', () => {
       const rpg = await seedGame('RPG Anchor', [12], [1]);
       await seedInterest(anchor, rpg, 'steam_library', 8000);
 
-      // Seed 4 more users with different profiles
+      // Seed 4 more users with different profiles. ROK-1939 D9: IGDB
+      // Multiplayer (mode 2) no longer implies pvp, so the shooter games
+      // carry an explicit PvP tag to keep a real core-axis signal.
       for (let i = 1; i <= 4; i++) {
         const uid = await seedUser(`d:sim${i}`, `sim${i}`);
         const g = await seedGame(
           `G${i}`,
           i % 2 === 0 ? [12] : [5],
           i % 2 === 0 ? [1] : [2],
+          [],
+          i % 2 === 0 ? [] : ['PvP'],
         );
         await seedInterest(uid, g, 'steam_library', 3000 + i * 500);
       }
@@ -585,6 +591,49 @@ describe('Taste Profile (ROK-948)', () => {
           res.body.similar[i].similarity,
         );
       }
+    });
+
+    it('excludes zero-norm players instead of returning a null similarity (ROK-1939)', async () => {
+      const anchor = await seedUser('d:zn0', 'zn0');
+      await seedInterest(
+        anchor,
+        await seedGame('ZN RPG', [12], [1]),
+        'steam_library',
+        8000,
+      );
+      const peer = await seedUser('d:zn1', 'zn1');
+      await seedInterest(
+        peer,
+        await seedGame('ZN RPG 2', [12], [1]),
+        'steam_library',
+        4000,
+      );
+      // Untagged shooter + IGDB Multiplayer: no core-axis signal → all-zero vector.
+      const blank = await seedUser('d:zn2', 'zn2');
+      await seedInterest(
+        blank,
+        await seedGame('ZN Shooter', [5], [2]),
+        'steam_library',
+        4000,
+      );
+      await service.aggregateVectors();
+
+      const res = await testApp.request
+        .get(`/users/${anchor}/similar-players?limit=10`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      const similar: Array<{ userId: number; similarity: unknown }> =
+        res.body.similar;
+      const ids = similar.map((s) => s.userId);
+      expect(ids).toContain(peer);
+      expect(ids).not.toContain(blank);
+      for (const s of similar) expect(typeof s.similarity).toBe('number');
+
+      const blankRes = await testApp.request
+        .get(`/users/${blank}/similar-players`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(blankRes.status).toBe(200);
+      expect(blankRes.body.similar).toEqual([]);
     });
 
     it('returns empty array + 200 for a user with no vector', async () => {

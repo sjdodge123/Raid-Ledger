@@ -4,13 +4,9 @@
  * interests so the taste-profile pipelines derive varied intensity tiers
  * and vector titles across the demo population.
  */
-import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  loadPresenceUserIds,
-  retitleFromIntensity,
-} from '../taste-profile/archetype-retitle.helpers';
+import { retitleAllArchetypes } from '../taste-profile/archetype-retitle-all.helpers';
 import type {
   GeneratedGameActivityRollup,
   GeneratedPlayhistoryInterest,
@@ -102,41 +98,14 @@ export async function installPlayhistoryInterests(
 /**
  * Re-derive archetypes for every existing `player_taste_vectors` row.
  *
- * The production aggregator short-circuits on matching `signalHash`, so the
- * post-install sequence (aggregate → weekly intensity → re-aggregate) never
- * updates archetypes once the hash is stable. This helper exists purely
- * for demo installs — after `aggregateVectors` has populated vectors and
- * `weeklyIntensityRollup` has written fresh `intensity_metrics`, we
- * recompute archetypes bottom-up using the current metrics + dimensions.
- *
- * ROK-1105: all per-row updates are batched into a single round-trip via
- * `UPDATE ... FROM (VALUES ...)` instead of one UPDATE per user.
+ * Demo installs run aggregate → weekly intensity → re-aggregate, and the
+ * signal hash is stable by the second aggregate, so this re-titles the
+ * population against the fresh `intensity_metrics`. ROK-1939: a thin
+ * wrapper over the production `retitleAllArchetypes` (community-relative
+ * noun, one locked transaction, one batched UPDATE — ROK-1105).
  */
 export async function refreshArchetypesFromCurrentMetrics(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<number> {
-  const rows = await db
-    .select({
-      userId: schema.playerTasteVectors.userId,
-      dimensions: schema.playerTasteVectors.dimensions,
-      intensityMetrics: schema.playerTasteVectors.intensityMetrics,
-    })
-    .from(schema.playerTasteVectors);
-  if (rows.length === 0) return 0;
-  const presenceUserIds = await loadPresenceUserIds(db);
-  const valueTuples = rows.map((row) => {
-    const { archetype } = retitleFromIntensity(
-      row.intensityMetrics,
-      row.dimensions,
-      presenceUserIds.has(row.userId),
-    );
-    return sql`(${row.userId}::integer, ${JSON.stringify(archetype)}::jsonb)`;
-  });
-  await db.execute(sql`
-    UPDATE ${schema.playerTasteVectors} AS t
-    SET archetype = v.archetype
-    FROM (VALUES ${sql.join(valueTuples, sql`, `)}) AS v(user_id, archetype)
-    WHERE t.user_id = v.user_id
-  `);
-  return rows.length;
+  return retitleAllArchetypes(db);
 }

@@ -11,6 +11,7 @@ import {
   loadPresenceUserIds,
   retitleFromIntensity,
 } from '../archetype-retitle.helpers';
+import { retitleAllArchetypes } from '../archetype-retitle-all.helpers';
 import { computeSignalHash } from '../signal-hash.helpers';
 import {
   groupBy,
@@ -72,6 +73,9 @@ export async function runAggregateVectors(db: Db): Promise<void> {
 
     await upsertVector(db, userId, signals, signalHash, batch, axisIdf);
   }
+  // ROK-1939 D7: the noun is community-relative, so re-title EVERY profile
+  // (hash-unchanged ones included) once the loop has settled the community.
+  await retitleAllArchetypes(db);
 }
 
 async function upsertVector(
@@ -97,6 +101,10 @@ async function upsertVector(
   // ROK-1935: metrics + archetype come from the shared re-title helper and
   // are written in the same upsert. The jsonb column persists the composed
   // ArchetypeDto as-is (ROK-1083).
+  // ROK-1939: no community is passed, so this interim title uses the raw
+  // rule — the community is not settled until the loop ends. It is live
+  // only until `retitleAllArchetypes` (D7) overwrites every title at the
+  // end of the run; if that pass throws, the next daily run corrects it.
   const { archetype } = retitleFromIntensity(
     intensityMetrics,
     dimensions,
