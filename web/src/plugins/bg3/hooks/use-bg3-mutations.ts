@@ -7,7 +7,7 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 import type { Bg3CrossHubMove, Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotResponse } from '@raid-ledger/contract';
 import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
-import { hubMediaKeys } from '../../../lib/hub-media-query';
+import { isHubGalleryListQuery } from '../../../lib/hub-media-query';
 import { crossHubMoveOf } from '../upload/bg3-upload-errors';
 import {
     bindBg3CampaignKey,
@@ -133,7 +133,7 @@ export function useRemoveBg3Saves() {
         mutationFn: (campaignKeys: readonly string[]) => removeBg3Saves([...new Set(campaignKeys)]),
         onSettled: () => Promise.all([
             qc.invalidateQueries({ queryKey: bg3Keys.all }),
-            qc.invalidateQueries({ queryKey: hubMediaKeys.root }),
+            qc.invalidateQueries({ predicate: isHubGalleryListQuery }),
         ]),
     });
 }

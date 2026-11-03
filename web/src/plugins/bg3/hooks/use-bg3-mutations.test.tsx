@@ -133,6 +133,8 @@ describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)'
 });
 
 describe('ROK-2068 useRemoveBg3Saves', () => {
+    const PICTURE_KEY = ['hub-media', 'file', '/api/hubs/1/media/a/thumb'];
+
     it('POSTs the deduped keys, then marks every hub\'s BG3 queries and Gallery and the save lists stale', async () => {
         const bodies: unknown[] = [];
         server.use(bg3RemoveSavesHandler({ removed: { saves: 2, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 1 } }, (b) => bodies.push(b)));
@@ -141,6 +143,7 @@ describe('ROK-2068 useRemoveBg3Saves', () => {
         qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID), 'pages'], { pages: [] });
         qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'], { pages: [] });
         qc.setQueryData(bg3Keys.snapshot(BG3_HUB_ID + 1), buildBg3Snapshot());
+        qc.setQueryData(PICTURE_KEY, new Blob(['png']));
         const { result } = renderHook(() => useRemoveBg3Saves(), { wrapper });
         await act(async () => { await result.current.mutateAsync(['a'.repeat(64), 'a'.repeat(64)]); });
         expect(bodies).toEqual([{ campaignKeys: ['a'.repeat(64)] }]);
@@ -150,5 +153,7 @@ describe('ROK-2068 useRemoveBg3Saves', () => {
         // The removed saves may be filed in, and pictured on, any hub (review MINOR-4).
         expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID + 1))?.isInvalidated).toBe(true);
         expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(true);
+        // The picture bytes are immutable and cached forever: refetching them would flicker every picture (fix-1 MINOR-1).
+        expect(qc.getQueryState(PICTURE_KEY)?.isInvalidated, 'a cached picture file must not be invalidated').toBe(false);
     });
 });
