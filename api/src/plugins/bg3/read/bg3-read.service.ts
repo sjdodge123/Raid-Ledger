@@ -29,6 +29,7 @@ import {
   encodeHubMediaCursor,
   type HubMediaCursor,
 } from '../../../hub-media/hub-media.cursor';
+import { HubMediaSourceGateRegistry } from '../../../hub-media/hub-media.source-gates';
 import { Bg3CampaignsRepository } from '../campaigns/bg3-campaigns.repository';
 import { pickCanonical } from '../history/bg3-canonical.helpers';
 import { clusterSessions } from '../history/bg3-sessions.helpers';
@@ -39,7 +40,7 @@ import {
   toSession,
   toSnapshot,
 } from './bg3-read.mappers';
-import { Bg3ReadRepository } from './bg3-read.repository';
+import { Bg3ReadRepository, type Bg3SnapshotRow } from './bg3-read.repository';
 import {
   Bg3SavesReadRepository,
   isCanonicalSave,
@@ -61,6 +62,7 @@ export class Bg3ReadService {
     private readonly hubs: Bg3CampaignsRepository,
     private readonly access: GuildAccessService,
     private readonly blobs: CompanionBlobStore,
+    private readonly gates: HubMediaSourceGateRegistry,
   ) {}
 
   async campaigns(
@@ -95,11 +97,31 @@ export class Bg3ReadService {
     };
     for (const row of pickCanonical(rows, campaign.hostUserId)) {
       const party = PartySchema.safeParse(row.party);
-      if (party.success)
-        return toSnapshot(row, ctx, toPartySlots(party.data, claims));
+      if (party.success) {
+        const snap = toSnapshot(row, ctx, toPartySlots(party.data, claims));
+        const galleryMediaId = await this.galleryMediaId(row, ctx);
+        return { ...snap, galleryMediaId };
+      }
       this.logger.warn(`bg3 save ${row.id}: stored party fails re-parse`);
     }
     return { empty: true, campaignId: id };
+  }
+
+  /**
+   * ROK-2074: the visible Gallery picture of the snapshot's screenshot —
+   * null without a screenshot or while spoilers hide it (D-14).
+   */
+  private async galleryMediaId(
+    row: Bg3SnapshotRow,
+    ctx: { hubId: number; hidden: boolean },
+  ): Promise<number | null> {
+    if (ctx.hidden || row.thumbnailSha256 === null) return null;
+    const excludeSources = await this.gates.hiddenSources(ctx.hubId);
+    return this.repo.galleryMediaId(
+      ctx.hubId,
+      row.thumbnailSha256,
+      excludeSources,
+    );
   }
 
   async sessions(
