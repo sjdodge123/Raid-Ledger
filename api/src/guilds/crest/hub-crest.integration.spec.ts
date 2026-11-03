@@ -556,31 +556,31 @@ describe('rank 0 that does not admit a crest editor', () => {
   });
 });
 
-describe('ROK-2074 GuildSummary.crestMediaId', () => {
-  const pageCrestMediaId = async (): Promise<number | null | undefined> => {
-    const res = await testApp.request
-      .get(`/guilds/${hubId}`)
-      .set(auth('member'));
-    expect(res.status).toBe(200);
-    return GuildPageSchema.parse(res.body).guild.crestMediaId;
-  };
-  const storedMediaId = async (): Promise<number | null | undefined> => {
-    const [row] = await testApp.db
-      .select({ mediaId: schema.guilds.crestMediaId })
-      .from(schema.guilds)
-      .where(eq(schema.guilds.id, hubId));
-    return row?.mediaId;
-  };
-  const pick = async (): Promise<number> => {
-    const mediaId = await galleryItem(hubId);
-    const res = await testApp.request
-      .post(`${url()}/from-gallery`)
-      .set(auth('leader'))
-      .send({ mediaId });
-    expect(res.status).toBe(200);
-    return mediaId;
-  };
+const pageCrestMediaId = async (
+  who: Who = 'member',
+): Promise<number | null | undefined> => {
+  const res = await testApp.request.get(`/guilds/${hubId}`).set(auth(who));
+  expect(res.status).toBe(200);
+  return GuildPageSchema.parse(res.body).guild.crestMediaId;
+};
+const storedMediaId = async (): Promise<number | null | undefined> => {
+  const [row] = await testApp.db
+    .select({ mediaId: schema.guilds.crestMediaId })
+    .from(schema.guilds)
+    .where(eq(schema.guilds.id, hubId));
+  return row?.mediaId;
+};
+const pick = async (): Promise<number> => {
+  const mediaId = await galleryItem(hubId);
+  const res = await testApp.request
+    .post(`${url()}/from-gallery`)
+    .set(auth('leader'))
+    .send({ mediaId });
+  expect(res.status).toBe(200);
+  return mediaId;
+};
 
+describe('ROK-2074 GuildSummary.crestMediaId', () => {
   it('a gallery pick is remembered and sent on the hub page', async () => {
     const mediaId = await pick();
     expect(await storedMediaId()).toBe(mediaId);
@@ -613,5 +613,39 @@ describe('ROK-2074 GuildSummary.crestMediaId', () => {
       .where(eq(schema.hubMedia.id, mediaId));
     expect(await pageCrestMediaId()).toBeNull();
     expect(await storedMediaId()).toBe(mediaId);
+  });
+});
+
+describe('ROK-2074 crestMediaId — removal and non-member viewers', () => {
+  it('a removed (tombstoned) picture is not sent (the link stays)', async () => {
+    const mediaId = await pick();
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ removedAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    expect(await pageCrestMediaId()).toBeNull();
+    expect(await storedMediaId()).toBe(mediaId);
+  });
+
+  it('a signed-in non-member (who the Gallery 404s) gets null; staff get the id', async () => {
+    const mediaId = await pick();
+    const gallery = await testApp.request
+      .get(`/hubs/${hubId}/media`)
+      .set(auth('visitor'));
+    expect(gallery.status).toBe(404);
+    expect(await pageCrestMediaId('visitor')).toBeNull();
+    expect(await pageCrestMediaId('operator')).toBe(mediaId);
+  });
+
+  it("staff 'Remove upload' unlinks the picture", async () => {
+    await pick();
+    const res = await testApp.request
+      .delete(`${url()}/upload`)
+      .set(auth('operator'));
+    expect(res.status).toBe(200);
+    expect([await storedMediaId(), await pageCrestMediaId()]).toEqual([
+      null,
+      null,
+    ]);
   });
 });

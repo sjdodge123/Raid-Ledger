@@ -73,7 +73,7 @@ export class HubService {
     const [widgetPrefs, viewer, crestMediaId] = await Promise.all([
       readWidgetPrefs(this.db, guildId),
       this.withCrestRights(actor, guildId, page.viewer),
-      crestMediaIdFor(this.db, this.mediaGates(), page.guild),
+      this.crestMediaId(actor, page.guild),
     ]);
     return this.withViewerMute(actor, guildId, {
       ...page,
@@ -81,6 +81,22 @@ export class HubService {
       widgetPrefs,
       viewer,
     });
+  }
+
+  /**
+   * ROK-2074 (review MAJOR): the crest's Gallery picture only for a viewer
+   * the Gallery API admits — `canView`, the check `assertCanViewHubMedia`
+   * applies after the hidden-hub checks `HubVisibleGuard` already ran on
+   * this page. A community-hub visitor gets null, so the web opens the
+   * single-picture `crest.urlLg` view instead of a Gallery that 404s.
+   */
+  private async crestMediaId(
+    actor: GuildActor,
+    guild: GuildPage['guild'],
+  ): Promise<number | null> {
+    if (guild.crest?.source !== 'upload') return null;
+    if (!(await this.access.canView(actor, guild.id))) return null;
+    return crestMediaIdFor(this.db, this.mediaGates(), guild);
   }
 
   /**
