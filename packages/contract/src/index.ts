@@ -151,6 +151,9 @@ export * from './logs.schema.js';
 // Event Series (ROK-429)
 export * from './event-series.schema.js';
 
+// Series Signup (ROK-1728)
+export * from './series-signups.schema.js';
+
 // AI Features (ROK-542)
 export * from './ai.schema.js';
 
@@ -294,6 +297,7 @@ export * from './discord-join-post.schema.js';
 export * from './guild-content.schema.js';
 export * from './hub-posts.schema.js';
 export * from './hub-session-note.schema.js';
+export * from './hub-taggable.schema.js';
 export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';
 

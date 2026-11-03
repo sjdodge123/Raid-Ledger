@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { asc, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  GuildKind,
   GuildSummary,
   GuildViewerAccess,
   LadderRole,
@@ -100,6 +101,22 @@ export class GuildAccessService {
   /** Leader or Officer: admin/operator, or an explicit `guild_editors` grant. */
   async canEdit(actor: GuildActor, guildId: number): Promise<boolean> {
     return ladderCanEdit(await this.resolveLadder(actor, guildId));
+  }
+
+  /**
+   * ROK-2071 (Codex P2): `canEdit` for a caller that already read the hub's
+   * row, so it skips the per-hub kind lookup. Same ladder, same answer.
+   */
+  async canEditOfKind(
+    actor: GuildActor,
+    guildId: number,
+    kind: GuildKind,
+  ): Promise<boolean> {
+    if (isStaff(actor)) return true;
+    const role = await this.hubKinds
+      .require(kind)
+      .resolveLadder(actor, guildId);
+    return ladderCanEdit(role);
   }
 
   /**

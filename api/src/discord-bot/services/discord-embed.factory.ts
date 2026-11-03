@@ -8,7 +8,10 @@ import {
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
 import type { GameBadgeInputs } from '../embeds/embed-badges.helpers';
-import { buildSignupButtons } from './discord-embed-buttons.helpers';
+import {
+  buildSeriesJoinRow,
+  buildSignupButtons,
+} from './discord-embed-buttons.helpers';
 import { DiscordEmojiService } from './discord-emoji.service';
 import { buildRosterLine, buildViewButton } from './discord-embed.helpers';
 import { createInviteEmbed } from './discord-embed-invite.helpers';
@@ -90,6 +93,8 @@ export interface EmbedEventData {
     badges?: GameBadgeInputs;
   } | null;
   voiceChannelId?: string | null;
+  /** ROK-1728: set on a series night ⇒ the embed gets a Join Series row. */
+  recurrenceGroupId?: string | null;
 }
 
 export interface EmbedContext {
@@ -117,7 +122,21 @@ export interface BuildEventEmbedOptions {
 export interface EmbedResult {
   embed: EmbedBuilder;
   row?: ActionRowBuilder<ButtonBuilder>;
+  /** ROK-1728: the second row (Join Series) — series signup embeds only. */
+  seriesRow?: ActionRowBuilder<ButtonBuilder>;
   content?: string;
+}
+
+/**
+ * Every action row of an embed result, in order (`row`, then `seriesRow`).
+ * Send/edit paths MUST pass this rather than `[row]`, or an edit silently
+ * drops the Join Series row (ROK-1728 D8).
+ */
+export function embedComponents(
+  result: Pick<EmbedResult, 'row' | 'seriesRow'>,
+): ActionRowBuilder<ButtonBuilder>[] {
+  const rows = [result.row, result.seriesRow];
+  return rows.filter((r): r is ActionRowBuilder<ButtonBuilder> => !!r);
 }
 
 /** States that no longer invite anyone to act. */
@@ -159,7 +178,11 @@ export class DiscordEmbedFactory {
     // no row is attached — the row's `View Event` button is that same link.
     const embed = this.createChannelEventEmbed(event, context, options, !row);
     const content = buildPushContentForState(event, state, context.timezone);
-    return row ? { embed, row, content } : { embed, content };
+    if (!row) return { embed, content };
+    const seriesRow = seriesRowFor(event, options, row);
+    return seriesRow
+      ? { embed, row, seriesRow, content }
+      : { embed, row, content };
   }
 
   /**
@@ -283,6 +306,20 @@ function buildRowFor(
     return buildSignupButtons(eventId, clientUrl, hubLink);
   if (buttons === 'view') return buildViewButton(eventId, clientUrl, hubLink);
   return buttons;
+}
+
+/**
+ * ROK-1728: the Join Series row — only on a signup row (so never terminal,
+ * multi-group, `view` or `none`) of an event with a `recurrenceGroupId`.
+ */
+function seriesRowFor(
+  event: EmbedEventData,
+  options: BuildEventEmbedOptions | undefined,
+  row: ActionRowBuilder<ButtonBuilder> | undefined,
+): ActionRowBuilder<ButtonBuilder> | undefined {
+  const mode = options?.buttons ?? 'signup';
+  if (!row || mode !== 'signup' || !event.recurrenceGroupId) return undefined;
+  return buildSeriesJoinRow(event.id);
 }
 
 /** Context URL first, then the deployment-wide fallback. */

@@ -43,6 +43,7 @@ import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { RescheduleResponseListener } from './listeners/reschedule-response.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
+import { SeriesSignupInteractionListener } from './listeners/series-signup-interaction.listener';
 import { RunningLateInteractionListener } from './listeners/running-late-interaction.listener';
 import { PostEventFollowupInteractionListener } from './listeners/post-event-followup-interaction.listener';
 import { DeparturePromoteListener } from './listeners/departure-promote.listener';
@@ -193,6 +194,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     SignupInteractionListener,
     RescheduleResponseListener,
     RoachOutInteractionListener,
+    SeriesSignupInteractionListener,
     RunningLateInteractionListener,
     PostEventFollowupInteractionListener,
     DeparturePromoteListener,
