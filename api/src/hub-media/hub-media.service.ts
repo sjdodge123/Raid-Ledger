@@ -138,12 +138,22 @@ export class HubMediaService {
   /**
    * ROK-2068 — unlink the files of rows the caller already tombstoned inside
    * its own transaction (`tombstoneSourceRowsByKeys`), once it has committed.
+   * Never throws: the removal already succeeded and a tombstoned row is never
+   * served, so a failed unlink (EACCES, EIO) only leaves an orphan file —
+   * logged, and the next file is still tried.
    */
   async unlinkRemovedFiles(
     rows: readonly HubMediaRemovedFile[],
   ): Promise<void> {
-    for (const { guildId, storageName } of rows)
-      await unlinkMediaFiles(guildId, storageName);
+    for (const { guildId, storageName } of rows) {
+      try {
+        await unlinkMediaFiles(guildId, storageName);
+      } catch (err) {
+        this.logger.warn(
+          `hub ${guildId}: could not unlink removed media ${storageName}: ${String(err)}`,
+        );
+      }
+    }
   }
 
   private async tombstoneScrubbed(

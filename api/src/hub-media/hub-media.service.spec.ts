@@ -2,6 +2,7 @@
  * ROK-1965 — `HubMediaService.ingestUpload`: the provenance gate (D5) and
  * the row it hands the shared store tail. Repository + store tail mocked.
  */
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import type { HubMediaDownloader } from './hub-media-download';
@@ -221,5 +222,27 @@ describe('HubMediaService.unlinkRemovedFiles (ROK-2068)', () => {
       [9, 'e.webp'],
     ]);
     expect(markRemoved).not.toHaveBeenCalled();
+  });
+
+  it('a failed unlink after commit is logged, the rest still unlink, and it resolves (fix-1 MINOR-3)', async () => {
+    jest
+      .mocked(unlinkMediaFiles)
+      .mockRejectedValueOnce(new Error('EACCES: permission denied'))
+      .mockResolvedValueOnce(undefined);
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    await expect(
+      service.unlinkRemovedFiles([
+        { guildId: 7, storageName: 'd.webp' },
+        { guildId: 9, storageName: 'e.webp' },
+      ]),
+    ).resolves.toBeUndefined();
+    expect(jest.mocked(unlinkMediaFiles).mock.calls).toEqual([
+      [7, 'd.webp'],
+      [9, 'e.webp'],
+    ]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('d.webp'));
+    warn.mockRestore();
   });
 });
