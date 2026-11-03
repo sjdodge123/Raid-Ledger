@@ -25,7 +25,9 @@ import {
 } from "./valheim-link-map.schema.js";
 
 const Id = z.number().int().positive();
-const Iso = z.iso.datetime();
+/** The armory read shapes' ISO timestamp — shared with the server-pins layer. */
+export const ValheimReadIsoSchema = z.iso.datetime();
+const Iso = ValheimReadIsoSchema;
 
 /** How a character got its owner. */
 export const ValheimClaimSourceSchema = z.enum(["auto", "manual", "admin"]);

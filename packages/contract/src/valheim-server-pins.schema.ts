@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { ValheimInt64StringSchema } from './valheim-link-common.schema.js';
+import { ValheimReadIsoSchema } from './valheim-armory.schema.js';
 import {
     ValheimPinTypeSchema,
     ValheimWorldCoordSchema,
@@ -38,7 +39,7 @@ export const ValheimServerPinSchema = z
          * mod-reported death (its `label` is empty) — the web labels it
          * "Death · <date time>" in the viewer's local time (Q6 = A).
          */
-        diedAt: z.iso.datetime().optional(),
+        diedAt: ValheimReadIsoSchema.optional(),
     })
     .strict();
 export type ValheimServerPin = z.infer<typeof ValheimServerPinSchema>;
