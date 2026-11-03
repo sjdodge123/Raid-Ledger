@@ -334,6 +334,9 @@ describe('GET roster-insights (real DB)', () => {
         ],
       },
     ]);
+    // Only lead's linked snapshot carries a `lockouts` array (expired saves
+    // still count: the addon reported); the visitor case pins the key's absence.
+    expect(dto.lockoutReporters).toBe(1);
   });
 
   it('a member gets lastSeen from the latest-snapshot roster (ROK-1916)', async () => {
