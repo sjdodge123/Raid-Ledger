@@ -179,6 +179,30 @@
     "path": "calls.0",
     "code": "custom"
   },
+  "ledgerlink-snapshot--head-too-big": {
+    "path": "",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--guid-as-key": {
+    "path": "calls.4.values.0.Player-1234-0ABCDEF0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--type-without-presence": {
+    "path": "calls.2",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--presence-without-type": {
+    "path": "calls.1",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--name-bearing-called": {
+    "path": "calls.5",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot-page--guid-in-slice": {
+    "path": "snapshot.sections.0.lines.0",
+    "code": "custom"
+  },
   "ledgerlink-snapshot--duplicate-api": {
     "path": "apis.1",
     "code": "custom"

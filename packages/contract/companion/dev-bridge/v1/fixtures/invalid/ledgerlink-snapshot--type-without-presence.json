@@ -1,0 +1,135 @@
+{
+  "snapshotVersion": 1,
+  "addonVersion": "1.4.0",
+  "capturedAt": "2026-11-03T20:15:00Z",
+  "trigger": "logout",
+  "client": {
+    "version": "1.60.1",
+    "build": "99999",
+    "buildDate": "Nov 1 2026",
+    "interface": 11507,
+    "tocInterface": 11507,
+    "locale": "enUS",
+    "region": 90
+  },
+  "character": {
+    "class": "WARRIOR",
+    "level": 12,
+    "faction": "Alliance",
+    "inGuild": true
+  },
+  "ruleset": {
+    "isGameRuleActive": "function",
+    "enumGameRule": "table",
+    "rulesTruncated": false,
+    "rules": [
+      {
+        "name": "SyntheticRuleA",
+        "value": 1,
+        "active": true
+      },
+      {
+        "name": "SyntheticRuleB",
+        "value": 2,
+        "active": false
+      }
+    ],
+    "ledgerLink": {
+      "value": "normal",
+      "source": "detected"
+    }
+  },
+  "calls": [
+    {
+      "fn": "UnitGUID",
+      "args": [
+        "player"
+      ],
+      "status": "presence",
+      "type": "function"
+    },
+    {
+      "fn": "GetRealmName",
+      "status": "presence",
+      "type": "function"
+    },
+    {
+      "fn": "GetBuildInfo",
+      "status": "ok",
+      "values": [
+        "1.60.1",
+        "99999",
+        "Nov 1 2026",
+        11507
+      ],
+      "type": "function"
+    },
+    {
+      "fn": "C_SkillInfo.GetNumSkillLines",
+      "status": "missing"
+    },
+    {
+      "fn": "GetMoney",
+      "status": "ok",
+      "values": [
+        12345
+      ]
+    }
+  ],
+  "apis": [
+    {
+      "path": "C_GameRules.GetForeverExperiencePreset",
+      "type": "nil"
+    },
+    {
+      "path": "C_GameRules.IsGameRuleActive",
+      "type": "function"
+    },
+    {
+      "path": "C_GameRules.IsHardcoreActive",
+      "type": "nil"
+    },
+    {
+      "path": "C_SkillInfo",
+      "type": "nil"
+    },
+    {
+      "path": "C_SkillInfo.GetSkillLineInfo",
+      "type": "nil"
+    },
+    {
+      "path": "Enum.GameRule",
+      "type": "table"
+    },
+    {
+      "path": "GetProfessions",
+      "type": "function"
+    },
+    {
+      "path": "GetSkillLineInfo",
+      "type": "nil"
+    }
+  ],
+  "sections": [
+    {
+      "id": "S3",
+      "status": "ok",
+      "lines": [
+        "S3 talents: 3 tabs",
+        "tab 1: 5/21 points",
+        "quests in log: 4"
+      ]
+    },
+    {
+      "id": "S9",
+      "status": "ok",
+      "lines": [
+        "S9 professions",
+        "GetProfessions: function",
+        "GetSkillLineInfo: nil",
+        "C_SkillInfo: nil"
+      ]
+    }
+  ],
+  "truncated": false
+}

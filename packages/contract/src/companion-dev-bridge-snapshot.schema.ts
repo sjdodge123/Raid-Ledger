@@ -28,6 +28,16 @@ export const DEV_BRIDGE_SNAPSHOT_HEAD_MAX_BYTES = 4_096;
 /** A player GUID anywhere in a snapshot string (or table key) is a privacy bug (D3). */
 const PLAYER_GUID_RE = /Player-\d{1,5}-[0-9A-Fa-f]{8}/;
 
+/**
+ * D4: calls whose values carry a name, realm, guild or GUID. A snapshot reports them as
+ * `status: 'presence'` (the Lua `type`) only — never called. Mirrors LedgerLink `Probe.NAME_BEARING`.
+ */
+export const DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS = [
+    'UnitGUID', 'GetUnitName', 'UnitFullName', 'UnitName', 'GetRealmName',
+    'GetNormalizedRealmName', 'GetGuildInfo', 'GetGuildRosterInfo', 'GetGuildRosterLastOnline',
+] as const;
+const NAME_BEARING = new Set<string>(DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS);
+
 /** 1–3 dot-separated Lua identifiers, e.g. `C_GameRules.IsGameRuleActive`, `Enum.GameRule`. */
 const ApiPathSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$/).max(96);
 
@@ -148,12 +158,15 @@ function checkNoGuid(value: unknown, path: Path, ctx: z.RefinementCtx): void {
     }
 }
 
-/** `type` appears iff `status === 'presence'`, and a presence row is never called (no `values`). */
+/** `type` appears iff `status === 'presence'`, a presence row is never called (no `values`), and a D4 name-bearing fn is always presence. */
 function checkPresenceRows(snap: SnapshotShape, ctx: z.RefinementCtx): void {
     snap.calls.forEach((call, i) => {
         const presence = call.status === 'presence';
         if (presence !== (call.type !== undefined) || (presence && call.values !== undefined)) {
             ctx.addIssue({ code: 'custom', path: ['calls', i], message: 'type is required with status presence (and values forbidden), and allowed only there' });
+        }
+        if (NAME_BEARING.has(call.fn) && !presence) {
+            ctx.addIssue({ code: 'custom', path: ['calls', i], message: `${call.fn} is name-bearing (D4): report it as status presence only` });
         }
     });
 }

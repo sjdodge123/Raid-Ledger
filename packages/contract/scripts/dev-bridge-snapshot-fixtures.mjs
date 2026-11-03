@@ -125,14 +125,21 @@ const plusOneByte = (m) => {
     const call = m.calls.find((c) => c.fn === 'GetCVar');
     call.values[0] = `${call.values[0]}x`;
 };
+const GUID = 'Player-1234-0ABCDEF0';
 /** [name, base valid fixture, mutate, expected path, expected code] */
 export const SNAPSHOT_CASES = [
-    ['ledgerlink-snapshot--guid-in-line', 'ledgerlink-snapshot--forever', (m) => { m.sections[0].lines[0] = 'target Player-1234-0ABCDEF0'; }, 'sections.0.lines.0', 'custom'],
+    ['ledgerlink-snapshot--guid-in-line', 'ledgerlink-snapshot--forever', (m) => { m.sections[0].lines[0] = `target ${GUID}`; }, 'sections.0.lines.0', 'custom'],
     ['ledgerlink-snapshot--snapshot-version-2', 'ledgerlink-snapshot--forever', (m) => { m.snapshotVersion = 2; }, 'snapshotVersion', 'invalid_value'],
     ['ledgerlink-snapshot--unknown-key-name', 'ledgerlink-snapshot--forever', (m) => { m.character.name = 'Testchar'; }, 'character', 'unrecognized_keys'],
     ['ledgerlink-snapshot--item-too-big', 'ledgerlink-snapshot--forever', (m) => { m.sections[0].lines = Array.from({ length: 40 }, () => 'x'.repeat(256)); }, 'sections.0', 'custom'],
     ['ledgerlink-snapshot--over-size', 'ledgerlink-snapshot--max-size', plusOneByte, '', 'custom'],
     ['ledgerlink-snapshot--presence-with-values', 'ledgerlink-snapshot--forever', (m) => { m.calls[0].values = ['x']; }, 'calls.0', 'custom'],
+    ['ledgerlink-snapshot--head-too-big', 'ledgerlink-snapshot--forever', (m) => { m.ruleset.rules = headRules(spread(HEAD_MAX, 16, 256)); }, '', 'custom'],
+    ['ledgerlink-snapshot--guid-as-key', 'ledgerlink-snapshot--forever', (m) => { m.calls[4].values = [{ [GUID]: 1 }]; }, `calls.4.values.0.${GUID}`, 'custom'],
+    ['ledgerlink-snapshot--type-without-presence', 'ledgerlink-snapshot--forever', (m) => { m.calls[2].type = 'function'; }, 'calls.2', 'custom'],
+    ['ledgerlink-snapshot--presence-without-type', 'ledgerlink-snapshot--forever', (m) => { delete m.calls[1].type; }, 'calls.1', 'custom'],
+    ['ledgerlink-snapshot--name-bearing-called', 'ledgerlink-snapshot--forever', (m) => { m.calls.push({ fn: 'UnitName', args: ['player'], status: 'ok', values: ['Testchar'] }); }, 'calls.5', 'custom'],
+    ['ledgerlink-snapshot-page--guid-in-slice', 'ledgerlink-snapshot-page', (m) => { m.snapshot.sections[0].lines[0] = `target ${GUID}`; }, 'snapshot.sections.0.lines.0', 'custom'],
     ['ledgerlink-snapshot--duplicate-api', 'ledgerlink-snapshot--forever', (m) => { m.apis[1].path = m.apis[0].path; }, 'apis.1', 'custom'],
     ['ledgerlink-snapshot-page--character-key-short', 'ledgerlink-snapshot-page', (m) => { m.characterKey = 'a3f1'; }, 'characterKey', 'invalid_format'],
     ['ledgerlink-snapshot-history--missing-next', 'ledgerlink-snapshot-history', (m) => { delete m.next; }, 'next', 'invalid_type'],

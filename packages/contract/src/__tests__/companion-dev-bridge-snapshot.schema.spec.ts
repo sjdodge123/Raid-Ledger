@@ -13,6 +13,7 @@ import { DEV_BRIDGE_PAGE_MAX_BYTES, DEV_BRIDGE_RESULT_ITEM_MAX_BYTES, devBridgeJ
 import {
     DEV_BRIDGE_SNAPSHOT_HEAD_MAX_BYTES,
     DEV_BRIDGE_SNAPSHOT_MAX_BYTES,
+    DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS,
     DevBridgeSnapshotPageSchema,
     devBridgeSnapshotHeadBytes,
     LedgerLinkSnapshotSchema,
@@ -133,7 +134,7 @@ describe('ledgerlink-snapshot privacy (AC-3)', () => {
 
     it('a GUID nested in a call value table, as a value or as a key, is rejected at its path', () => {
         const snap = forever();
-        snap.calls.push({ fn: 'GetGuildRosterInfo', status: 'ok', values: [{ roster: ['ok', { who: 'Player-12345-ABCDEF01' }] }] });
+        snap.calls.push({ fn: 'GetCVar', status: 'ok', values: [{ roster: ['ok', { who: 'Player-12345-ABCDEF01' }] }] });
         snap.calls.push({ fn: 'GetMoney', status: 'ok', values: [{ 'Player-9-0000ffff': 1 }] });
         const n = snap.calls.length;
         expect(pathsOf(LedgerLinkSnapshotSchema.safeParse(snap))).toEqual([
@@ -168,6 +169,24 @@ describe('ledgerlink-snapshot row rules', () => {
         expect(pathsOf(LedgerLinkSnapshotSchema.safeParse(typed))).toEqual(['calls.2 custom']);
         expect(pathsOf(LedgerLinkSnapshotSchema.safeParse(untyped))).toEqual(['calls.0 custom']);
         expect(pathsOf(LedgerLinkSnapshotSchema.safeParse(called))).toEqual(['calls.1 custom']);
+    });
+
+    it.each(DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS)('D4: %s called (status ok + values) is rejected at the call; as presence it parses', (fn) => {
+        const called = forever();
+        called.calls.push({ fn, status: 'ok', values: ['Testchar'] });
+        expect(issuesOf(LedgerLinkSnapshotSchema.safeParse(called))).toEqual([
+            { path: `calls.${called.calls.length - 1}`, code: 'custom', message: `${fn} is name-bearing (D4): report it as status presence only` },
+        ]);
+        const presence = forever();
+        presence.calls.push({ fn, status: 'presence', type: 'nil' });
+        expect(pathsOf(LedgerLinkSnapshotSchema.safeParse(presence))).toEqual([]);
+    });
+
+    it('D4 matches the spec list exactly (LedgerLink Probe.NAME_BEARING)', () => {
+        expect([...DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS].sort()).toEqual([
+            'GetGuildInfo', 'GetGuildRosterInfo', 'GetGuildRosterLastOnline', 'GetNormalizedRealmName', 'GetRealmName',
+            'GetUnitName', 'UnitFullName', 'UnitGUID', 'UnitName',
+        ]);
     });
 
     it('a duplicate api path is rejected at the second occurrence', () => {
