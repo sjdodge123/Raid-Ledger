@@ -17,6 +17,8 @@ import { HubKindRegistry } from './hub-kind.registry';
 import { setActiveHubKindsSource } from '../discord-bot/channel-lifecycle/hub-link.resolver';
 import { HubEventTagger } from './hub-event-tagger';
 import { HubMineController } from './hub-mine.controller';
+import { HubTaggableController } from './hub-taggable.controller';
+import { HubTaggableService } from './hub-taggable.service';
 import { HubNotificationMuteController } from './hub-notification-mute.controller';
 import { HubController } from './hub.controller';
 import { HubService } from './hub.service';
@@ -50,10 +52,11 @@ import {
     HubWelcomeModule,
   ],
   // Order matters (ROK-1831): the literal `guilds/onboarding` and
-  // `guilds/mine` must register before `guilds/:id`.
+  // `guilds/mine` / `guilds/taggable` must register before `guilds/:id`.
   controllers: [
     HubOnboardingController,
     HubMineController,
+    HubTaggableController,
     HubController,
     HubNotificationMuteController,
     GuildDiscordController,
@@ -71,6 +74,7 @@ import {
     HubKindRegistry,
     HubOnboardingService,
     HubService,
+    HubTaggableService,
     HubRenameService,
     HubVisibleGuard,
     HubWidgetPrefsService,

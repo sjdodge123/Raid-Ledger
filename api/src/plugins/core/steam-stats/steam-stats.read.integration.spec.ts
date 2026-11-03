@@ -296,6 +296,24 @@ describe('GET /hubs/:guildId/steam-stats — members + feeds (I5, I6, I8, I9)', 
     expect(body.viewer).toEqual({ status: 'ok' });
   });
 
+  it('ROK-2069 — a Discord-avatar member (no custom upload) carries their avatar hash + Discord id', async () => {
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: '206900000000000101', avatar: 'a_rok2069hash' })
+      .where(eq(schema.users.id, a.id));
+    const body = available(await read(hub, b));
+    const mine = body.members.find((m) => m.userId === a.id);
+    expect({
+      avatar: mine?.avatar,
+      discordId: mine?.discordId,
+      customAvatarUrl: mine?.customAvatarUrl,
+    }).toEqual({
+      avatar: 'a_rok2069hash',
+      discordId: '206900000000000101',
+      customAvatarUrl: null,
+    });
+  });
+
   it('I6 — playtime comes from steam_library for the hub game; a manual row is ignored', async () => {
     await playtime(a.id, gameId, 'steam_library', 1234);
     await playtime(b.id, gameId, 'manual', 999);

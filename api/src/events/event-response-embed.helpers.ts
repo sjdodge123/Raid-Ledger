@@ -135,5 +135,7 @@ export async function buildEmbedEventData(
     // ROK-1460: the shared seam keeps `id` on the projection, so the six
     // interactive writers render the same title link as the sync processor.
     game: toEmbedGame(event.game),
+    // ROK-1728: a series night renders the Join Series row.
+    recurrenceGroupId: event.recurrenceGroupId ?? null,
   };
 }

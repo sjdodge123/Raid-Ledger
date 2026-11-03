@@ -70,9 +70,9 @@ test('editor: "Schedule for guild" opens Create Event pre-linked to the guild, a
 
         await expect(page).toHaveURL(new RegExp(`/events/new\\?gameId=\\d+&guildId=${guild.guildId}$`));
         await expect(page.getByRole('heading', { name: 'Create Event', level: 1 })).toBeVisible({ timeout: 15_000 });
-        const guildField = page.getByTestId('event-guild-field');
-        await expect(guildField, 'the guild\'s game is preselected, so the Guild field renders').toBeVisible({ timeout: 15_000 });
-        await expect(guildField.getByRole('combobox'), 'the Guild field is set to this guild').toHaveValue(String(guild.guildId));
+        const hubField = page.getByTestId('event-hub-field');
+        await expect(hubField, 'the guild\'s game is preselected, so the Core Hub field renders (ROK-2071)').toBeVisible({ timeout: 15_000 });
+        await expect(hubField.getByRole('combobox'), 'the Hub field is set to this guild').toHaveValue(String(guild.guildId));
 
         const title = world.uid('guild-event');
         await fillRequiredFields(page, title);

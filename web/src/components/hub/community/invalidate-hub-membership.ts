@@ -15,6 +15,9 @@ export async function invalidateHubMembership(qc: QueryClient, hubId: number): P
         qc.invalidateQueries({ queryKey: guildPageKey(hubId) }),
         qc.invalidateQueries({ queryKey: ['game-hubs'] }),
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
+        // ROK-2071 (Codex P2): leaving or joining a hub changes which hubs the
+        // event form's Hub picker offers (a stale one 403s on save).
+        qc.invalidateQueries({ queryKey: TAGGABLE_HUBS_PREFIX }),
     ]);
 }
 
@@ -36,15 +39,21 @@ export async function invalidateHubName(qc: QueryClient, hubId: number): Promise
 /** Every hub page AND `/guilds/mine` live under this prefix (see `guildPageKey`). */
 const HUB_PAGES_PREFIX = ['plugins', 'wow', 'guilds'] as const;
 
+/** The Core event-form Hub picker (`useTaggableHubsQuery`), every game + viewer. */
+export const TAGGABLE_HUBS_PREFIX = ['guilds', 'taggable'] as const;
+
 /**
  * ROK-1875 (Codex r5 P2) — a character change (delete, addon import) can add
  * or drop any hub: WoW guild membership derives from GUID-linked characters,
- * and the hub it touched is unknown here. Refetch every hub listing and page.
+ * and the hub it touched is unknown here. Refetch every hub listing and page,
+ * and the event form's Hub picker (ROK-2071 `['guilds', 'taggable', …]`) —
+ * a stale picker would offer a hub the viewer no longer edits (403 on save).
  */
 export async function invalidateAllHubMemberships(qc: QueryClient): Promise<void> {
     await Promise.all([
         qc.invalidateQueries({ queryKey: HUB_PAGES_PREFIX }),
         qc.invalidateQueries({ queryKey: ['game-hubs'] }),
         qc.invalidateQueries({ queryKey: ['hubs-directory'] }),
+        qc.invalidateQueries({ queryKey: TAGGABLE_HUBS_PREFIX }),
     ]);
 }

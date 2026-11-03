@@ -23,8 +23,8 @@ export type PluginSlotName =
     | 'character-create:import-form'
     | 'character-create:inline-import'
     | 'event-create:content-browser'
-    /** Guild picker for guild editors (ROK-1787); context `{ gameId, guildId, onGuildChange, dropUnlisted }`. */
-    | 'event-create:guild-field'
+    /** Core "Hub" picker on the event form (ROK-2071, was the WoW Guild field of ROK-1787); context `{ gameId, guildId, onGuildChange, dropUnlisted }`. */
+    | 'event-create:hub-field'
     | 'event-detail:content-sections'
     | 'event-detail:signup-warnings'
     | 'admin-settings:integration-cards'

@@ -88,6 +88,8 @@ export const SignupResponseSchema = z.object({
     runningLateAt: z.string().datetime().nullable().optional(),
     /** ROK-1379: Optional ETA-late minutes (column exists for fast-follow; unset in v1) */
     lateMinutes: z.number().int().positive().nullable().optional(),
+    /** ROK-1728: series membership that created/attached this signup (null = single night) */
+    seriesSignupId: z.number().int().positive().nullable().optional(),
 });
 
 export type SignupResponseDto = z.infer<typeof SignupResponseSchema>;

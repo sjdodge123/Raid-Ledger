@@ -167,14 +167,14 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     );
 }
 
-/** ROK-1787: plugin-owned Guild picker (WoW guild editors only). */
-function GuildFieldSlot({ gameId, guildId, setForm, dropUnlisted }: {
+/** ROK-2071: the Core "Hub" picker (any hub kind the viewer may tag; was the WoW Guild field of ROK-1787). */
+function HubFieldSlot({ gameId, guildId, setForm, dropUnlisted }: {
     gameId: number | null; guildId: number | null; setForm: React.Dispatch<React.SetStateAction<FormState>>;
     /** ROK-1817: create mode — the picker clears a guild the viewer cannot edit. */
     dropUnlisted: boolean;
 }) {
     const onGuildChange = useCallback((next: number | null) => setForm((prev) => ({ ...prev, guildId: next })), [setForm]);
-    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange, dropUnlisted }} />;
+    return <PluginSlot name="event-create:hub-field" context={{ gameId, guildId, onGuildChange, dropUnlisted }} />;
 }
 
 function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId }: {
@@ -212,10 +212,10 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
                 interestCount={interestCount} interestLoading={interestLoading}
                 slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
             />
-            {/* ROK-1893 P3: an inherited hub is shown (and clearable) in core — the plugin picker hides it from plain members. */}
+            {/* ROK-1893 P3: an inherited hub is shown (and clearable) here — the Hub picker hides it from plain members. */}
             {pollHubId !== null && form.guildId === pollHubId
                 ? <InheritedHubLine hubId={pollHubId} onRemove={() => setForm((prev) => ({ ...prev, guildId: null }))} />
-                : <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} dropUnlisted={!isEditMode} />}
+                : <HubFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} dropUnlisted={!isEditMode} />}
         </FormSection>
     );
 }

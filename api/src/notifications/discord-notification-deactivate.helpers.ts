@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { NotificationService } from './notification.service';
 import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
+import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-lifecycle.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
@@ -222,6 +223,13 @@ async function runCascade(
   },
   userId: number,
 ): Promise<void> {
+  // ROK-1728 AC5: end series memberships BEFORE the signup cascade.
+  await endSeriesMembershipsForUserBestEffort(
+    deps.db,
+    userId,
+    deps.logger,
+    'deactivated user',
+  );
   try {
     const count = await cancelAllUpcomingSignupsForUser(
       deps.db,
