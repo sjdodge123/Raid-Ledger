@@ -5,8 +5,8 @@
  * Seed: `POST /admin/test/valheim/deaths-fixture { worker }` (DEMO_MODE,
  * ROK-1930 L5) resets THIS worker's own server hub to two characters with a
  * map each on one world — `top` (5 deaths; Death pins "Day 12" + "Day 31", a
- * "Camp" pin and a shared cartography-table pin) and `second` (3 deaths; one
- * Death pin) — plus a name-only player (1 death, no character → not a link),
+ * "Camp" pin and a shared cartography-table pin) and `second` (3 log deaths + 1 mod-reported
+ * death off its one Death pin → 4, ROK-1931) — plus a name-only player (1 death, no character → not a link),
  * a hub member and a signed-in non-member visitor. The slot is the worker's
  * `parallelIndex`, so projects never share a server.
  *
@@ -29,9 +29,8 @@ import {
   closeFilters,
   mapApp,
   openFilters,
-  pinNames,
   pins,
-  playerPinName,
+  expectEveryDeathPin,
   responseTo,
   seedDeathsFixture as seed,
   serverPinsPath,
@@ -142,16 +141,7 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     await expect(page).not.toHaveURL(/[?&]vc=/);
     const map = mapApp(page);
     await expect(map).toBeVisible({ timeout: 15_000 });
-    const total = top.deathPinLabels.length + second.deathPinLabels.length;
-    await expect(pins(map)).toHaveCount(total);
-    expect(await pinNames(map)).toEqual(
-      [
-        ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
-        ...second.deathPinLabels.map((l) =>
-          playerPinName(l, second.name, "Death"),
-        ),
-      ].sort(),
-    );
+    await expectEveryDeathPin(map, f);
   });
 
   test('member: a mod-reported death draws as a synthetic "Death · <date time>" pin (ROK-1931)', async ({

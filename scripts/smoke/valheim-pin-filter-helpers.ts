@@ -140,3 +140,45 @@ export const playerPinName = (
   character: string,
   type: string,
 ): string => `${label} · ${character} (${type})`;
+
+/** ROK-1931: the synthetic reported-death pins the fixture's `reportedDeath` adds. */
+export const reportedPinCount = (f: Fixture): number =>
+  f.reportedDeath ? 1 : 0;
+
+/**
+ * Every player's Death pins on the world (a cross-player `types=Death` read):
+ * both characters' own Death pins, named "<label> · <character> (Death)",
+ * plus (ROK-1931) one synthetic pin per reported death, named
+ * "Death · <viewer-local date time> · <character> (Death)".
+ */
+export async function expectEveryDeathPin(
+  map: Locator,
+  f: Fixture,
+): Promise<void> {
+  const { top, second } = f.characters;
+  const reported = reportedPinCount(f);
+  await expect(pins(map)).toHaveCount(
+    top.deathPinLabels.length + second.deathPinLabels.length + reported,
+  );
+  const names = await pinNames(map);
+  const isSynthetic = (n: string) => n.startsWith("Death · ");
+  expect(names.filter((n) => !isSynthetic(n))).toEqual(
+    [
+      ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
+      ...second.deathPinLabels.map((l) =>
+        playerPinName(l, second.name, "Death"),
+      ),
+    ].sort(),
+  );
+  const synthetic = names.filter(isSynthetic);
+  expect(synthetic, "one synthetic pin per reported death").toHaveLength(
+    reported,
+  );
+  for (const n of synthetic) {
+    expect(n).toMatch(
+      new RegExp(
+        `^Death · \\d{1,2} [A-Z][a-z]{2} \\d{2}:\\d{2} · ${second.name} \\(Death\\)$`,
+      ),
+    );
+  }
+}
