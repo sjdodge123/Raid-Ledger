@@ -1,10 +1,10 @@
 /**
- * ROK-1940 (AC-2, AC-3): migration 0277 backfills "short late joiners count
+ * ROK-1940 (AC-2, AC-3): migration 0279 backfills "short late joiners count
  * as late" over voice-derived history only.
  *
  * Seeds OLD-shape rows — attendance_status set, attendance_source NULL (the
- * state before 0276/0277) — on a past 60-minute event, then re-executes
- * 0277's statements against the test DB (precedent:
+ * state before 0278/0279) — on a past 60-minute event, then re-executes
+ * 0279's statements against the test DB (precedent:
  * users/game-time-absence-span.integration.spec.ts runCapMigration).
  */
 import { readFileSync } from 'node:fs';
@@ -32,11 +32,11 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
-/** Run migration 0277's statements against the current test DB. */
+/** Run migration 0279's statements against the current test DB. */
 async function runBackfill(): Promise<void> {
   const file = join(
     __dirname,
-    '../../drizzle/migrations/0277_voice_attendance_late_backfill.sql',
+    '../../drizzle/migrations/0279_voice_attendance_late_backfill.sql',
   );
   const statements = readFileSync(file, 'utf8')
     .split('--> statement-breakpoint')
@@ -61,7 +61,7 @@ interface CaseSeed {
   matchBy: 'discord' | 'user';
   /** false = a voice row with no signup at all. */
   hasSignup?: boolean;
-  /** Pre-set provenance (a row already written after 0276); default NULL. */
+  /** Pre-set provenance (a row already written after 0278); default NULL. */
   source?: 'voice' | 'manual';
 }
 
@@ -290,7 +290,7 @@ async function snapshotAll(): Promise<unknown[]> {
   return [signups, voice];
 }
 
-describe('migration 0277 voice-derived late backfill (ROK-1940 AC-2)', () => {
+describe('migration 0279 voice-derived late backfill (ROK-1940 AC-2)', () => {
   it.each(Object.keys(CASES))('case %s ends as expected', async (key) => {
     const seeded = await seedAll();
     await runBackfill();
@@ -319,7 +319,7 @@ describe('migration 0277 voice-derived late backfill (ROK-1940 AC-2)', () => {
   });
 });
 
-describe('migration 0277 feeds the ROK-1938 leaderboard (ROK-1940 AC-3)', () => {
+describe('migration 0279 feeds the ROK-1938 leaderboard (ROK-1940 AC-3)', () => {
   it('counts a reclassified signup as attended AND late', async () => {
     const seeded = await seedAll();
     await runBackfill();
@@ -366,10 +366,10 @@ describe('backfill seed shape (ROK-1940)', () => {
 
 /**
  * D5 S3 only flips signups whose provenance is 'voice'. A row an organiser
- * marked AFTER 0276 already carries 'manual' (S1 skips it — it is not NULL);
+ * marked AFTER 0278 already carries 'manual' (S1 skips it — it is not NULL);
  * S2 still relabels its voice row, but the organiser's no_show must stand.
  */
-describe('migration 0277 never overrides a manual mark (ROK-1940 AC-2)', () => {
+describe('migration 0279 never overrides a manual mark (ROK-1940 AC-2)', () => {
   it('keeps a manual no_show with a late-short voice row as no_show', async () => {
     const eventId = await seedEvent();
     const userId = await seedUser('manualNoShow');
@@ -400,7 +400,7 @@ describe('migration 0277 never overrides a manual mark (ROK-1940 AC-2)', () => {
  * any classification other than 'no_show', so a reclassified short late
  * joiner now counts as having "played" the event's game.
  */
-describe('migration 0277 feeds Discord game roles (ROK-1940 AC-5)', () => {
+describe('migration 0279 feeds Discord game roles (ROK-1940 AC-5)', () => {
   async function desiredUserIds(): Promise<number[]> {
     const gameId = testApp.seed.game.id;
     const members = await findDesiredMembers(
