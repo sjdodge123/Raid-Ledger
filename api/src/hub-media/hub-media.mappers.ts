@@ -15,6 +15,8 @@ const SOURCE_LABEL: Record<HubMediaSource, string> = {
   upload: 'Uploaded',
   /** ROK-1959 D-8 — game-neutral: core never names the game. */
   'bg3-save': 'Game save',
+  /** ROK-1966 — game-neutral, like `bg3-save`. */
+  'bg3-screenshot': 'Companion screenshot',
 };
 
 /**
@@ -24,7 +26,9 @@ const SOURCE_LABEL: Record<HubMediaSource, string> = {
  */
 function sourceOf(row: HubMediaRow): HubMediaItem['source'] {
   const type: HubMediaSource =
-    row.source === 'upload' || row.source === 'bg3-save'
+    row.source === 'upload' ||
+    row.source === 'bg3-save' ||
+    row.source === 'bg3-screenshot'
       ? row.source
       : 'discord';
   return { type, label: SOURCE_LABEL[type] };
