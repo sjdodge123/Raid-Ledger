@@ -81,7 +81,7 @@ function MonthGroupItem({ group, ctx }: { group: Bg3MonthGroup; ctx: ListCtx }):
 function LoadError({ onRetry }: { onRetry: () => void }): JSX.Element {
     return (
         <div className="flex flex-col items-start gap-2" role="alert">
-            <p className="text-sm text-secondary">{BG3_MANAGE_SAVES_LOAD_ERROR}</p>
+            <p className="text-sm text-muted">{BG3_MANAGE_SAVES_LOAD_ERROR}</p>
             <Button variant="secondary" size="sm" onClick={onRetry}>Try again</Button>
         </div>
     );
