@@ -15,6 +15,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { queryUserReliability } from '../../events/analytics-queries.helpers';
+import { findDesiredMembers } from '../game-roles/game-role-desired.helpers';
 
 const MIN = 60_000;
 /** Whole-minute start so tsrange and timestamp compare without ms drift. */
@@ -60,6 +61,8 @@ interface CaseSeed {
   matchBy: 'discord' | 'user';
   /** false = a voice row with no signup at all. */
   hasSignup?: boolean;
+  /** Pre-set provenance (a row already written after 0276); default NULL. */
+  source?: 'voice' | 'manual';
 }
 
 interface CaseExpect {
@@ -186,6 +189,7 @@ async function seedSignup(
         discordUserId: seed.matchBy === 'discord' ? `bf-${key}` : null,
         attendanceStatus: seed.status,
         attendanceRecordedAt: seed.status ? END : null,
+        attendanceSource: seed.source ?? null,
       })
       .returning({ id: schema.eventSignups.id }),
     `signup ${key}`,
@@ -357,5 +361,69 @@ describe('backfill seed shape (ROK-1940)', () => {
       .from(schema.eventSignups)
       .where(inArray(schema.eventSignups.id, signupIds));
     expect(rows.map((r) => r.source)).toEqual(signupIds.map(() => null));
+  });
+});
+
+/**
+ * D5 S3 only flips signups whose provenance is 'voice'. A row an organiser
+ * marked AFTER 0276 already carries 'manual' (S1 skips it — it is not NULL);
+ * S2 still relabels its voice row, but the organiser's no_show must stand.
+ */
+describe('migration 0277 never overrides a manual mark (ROK-1940 AC-2)', () => {
+  it('keeps a manual no_show with a late-short voice row as no_show', async () => {
+    const eventId = await seedEvent();
+    const userId = await seedUser('manualNoShow');
+    const seed: CaseSeed = {
+      status: 'no_show',
+      voice: LATE_SHORT,
+      matchBy: 'discord',
+      source: 'manual',
+    };
+    const signupId = await seedSignup(eventId, userId, 'manualNoShow', seed);
+    const voiceId = await seedVoice(
+      eventId,
+      userId,
+      'manualNoShow',
+      LATE_SHORT,
+    );
+    await runBackfill();
+    expect(await readCase({ userId, signupId, voiceId })).toEqual({
+      voice: 'late',
+      status: 'no_show',
+      source: 'manual',
+    });
+  });
+});
+
+/**
+ * AC-5 (Q3 ruling): no game-roles code change — `voiceBranch` already keeps
+ * any classification other than 'no_show', so a reclassified short late
+ * joiner now counts as having "played" the event's game.
+ */
+describe('migration 0277 feeds Discord game roles (ROK-1940 AC-5)', () => {
+  async function desiredUserIds(): Promise<number[]> {
+    const gameId = testApp.seed.game.id;
+    const members = await findDesiredMembers(
+      testApp.db,
+      gameId,
+      30,
+      new Date(),
+    );
+    return [...members.keys()];
+  }
+
+  it('counts a short late joiner as played only after the backfill', async () => {
+    const seeded = await seedAll();
+    await testApp.db
+      .update(schema.events)
+      .set({ gameId: testApp.seed.game.id });
+    const lateUser = seededCase(seeded, 'i_lateShortCron').userId;
+    const onTimeShort = seededCase(seeded, 'iii_onTimeShort').userId;
+
+    expect(await desiredUserIds()).not.toContain(lateUser);
+    await runBackfill();
+    const after = await desiredUserIds();
+    expect(after).toContain(lateUser);
+    expect(after).not.toContain(onTimeShort);
   });
 });
