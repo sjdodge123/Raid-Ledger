@@ -143,7 +143,8 @@ describe('Bg3WhereWidget — the screenshot opens the Gallery viewer (ROK-2074)'
         serve(snap);
         await renderWhere();
         fireEvent.click(await screen.findByRole('button', { name: 'View the latest save screenshot' }));
-        const { returnFocus: _focus, ...request } = useHubGalleryStore.getState().request ?? { returnFocus: null };
+        const { returnFocus, ...request } = useHubGalleryStore.getState().request ?? { returnFocus: null };
+        expect(returnFocus).not.toBeNull();
         expect(request).toEqual({
             guildId: BG3_HUB_ID, mode: 'viewer', filter: 'all', index: 0,
             single: { url: snap.thumbnailUrl, alt: 'Latest save screenshot', auth: true },
