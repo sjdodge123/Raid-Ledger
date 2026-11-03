@@ -53,6 +53,15 @@ export const COMPANION_VERSION_MAX_CHARS = 48;
  */
 export const CompanionTimestampSchema = z.iso.datetime().max(COMPANION_TIMESTAMP_MAX_CHARS);
 
+/** Largest `guilds.id` (Postgres `serial` = int4). */
+export const COMPANION_HUB_GUILD_ID_MAX = 2_147_483_647;
+
+/**
+ * A hub's `guilds.id` (ROK-1966) — the same id as the `/hubs/:guildId` route
+ * and `bg3_campaigns.guild_id`, so the server checks membership on it directly.
+ */
+export const CompanionHubGuildIdSchema = z.number().int().positive().max(COMPANION_HUB_GUILD_ID_MAX);
+
 /** Lowercase hex SHA-256 of a separately uploaded blob. */
 export const CompanionSha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
 

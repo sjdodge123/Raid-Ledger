@@ -3,6 +3,14 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-03 (additive) — /config hubTargets + `image` blob slot (ROK-1966)
+
+- **Additive.** Each `/config` contract may carry an optional `hubTargets`
+  list (`{ hubGuildId, name, isDefault }`, ≤ 100) — the hubs the caller may
+  name in a `bg3-screenshot` payload. Older servers omit it.
+- `blobSlots` gains the value `"image"`, served only for the new
+  `bg3-screenshot` contract. The app MUST ignore a slot name it does not know.
+
 ## v1 — 2026-11-02 (additive) — /config plugin + game (ROK-2067)
 
 - **Additive.** Each `/config` contract gains two optional keys:

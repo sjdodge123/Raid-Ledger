@@ -2,6 +2,12 @@ import type { z } from 'zod';
 import { COMPANION_BG3_SAVE_MAX_BYTES } from './companion-common.schema.js';
 import { BG3_SAVE_CONTRACT_ID, BG3_SAVE_CONTRACT_VERSION, Bg3SaveMessageSchema } from './companion-bg3-save.schema.js';
 import {
+    BG3_SCREENSHOT_CONTRACT_ID,
+    BG3_SCREENSHOT_CONTRACT_VERSION,
+    Bg3ScreenshotMessageSchema,
+    COMPANION_BG3_SCREENSHOT_MAX_BYTES,
+} from './companion-bg3-screenshot.schema.js';
+import {
     COMPANION_WOW_LEDGERLINK_MAX_BYTES,
     WOW_LEDGERLINK_CONTRACT_ID,
     WOW_LEDGERLINK_CONTRACT_VERSION,
@@ -17,7 +23,7 @@ import {
 // ============================================================
 
 /** Blob slot names a contract may reference (each is a separately uploaded blob). */
-export type CompanionBlobSlot = 'thumbnail';
+export type CompanionBlobSlot = 'thumbnail' | 'image';
 
 /** Lifecycle of one contract version: `retired` versions are refused with the current one named. */
 export type CompanionContractStatus = 'current' | 'accepted' | 'retired';
@@ -50,9 +56,18 @@ const WOW_LEDGERLINK_V1: CompanionContractVersionSpec = {
     status: 'current',
 };
 
-/** The shipped registry: `bg3-save` v1 and `wow-ledgerlink` v1. */
+/** `bg3-screenshot` v1 (ROK-1966): one re-encoded WebP in the `image` slot. */
+const BG3_SCREENSHOT_V1: CompanionContractVersionSpec = {
+    schema: Bg3ScreenshotMessageSchema,
+    maxBytes: COMPANION_BG3_SCREENSHOT_MAX_BYTES,
+    blobSlots: Object.freeze<CompanionBlobSlot[]>(['image']),
+    status: 'current',
+};
+
+/** The shipped registry: `bg3-save` v1, `bg3-screenshot` v1 and `wow-ledgerlink` v1. */
 export const COMPANION_CONTRACTS: CompanionContractTable = Object.freeze({
     [BG3_SAVE_CONTRACT_ID]: Object.freeze({ [BG3_SAVE_CONTRACT_VERSION]: Object.freeze(BG3_SAVE_V1) }),
+    [BG3_SCREENSHOT_CONTRACT_ID]: Object.freeze({ [BG3_SCREENSHOT_CONTRACT_VERSION]: Object.freeze(BG3_SCREENSHOT_V1) }),
     [WOW_LEDGERLINK_CONTRACT_ID]: Object.freeze({ [WOW_LEDGERLINK_CONTRACT_VERSION]: Object.freeze(WOW_LEDGERLINK_V1) }),
 });
 

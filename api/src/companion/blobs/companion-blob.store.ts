@@ -12,7 +12,9 @@ import { CompanionSha256Schema } from '@raid-ledger/contract';
 import { companionBlobAbsolutePath, fsErrorCode } from './companion-blob.paths';
 import {
   CompanionBlobsRepository,
+  releaseHeldRefsIn,
   releaseUnusedRefsIn,
+  storedBlobsIn,
   type CompanionBlobDims,
   type CompanionRefRelease,
 } from './companion-blobs.repository';
@@ -39,23 +41,23 @@ export class CompanionBlobStore {
     sha256: string,
   ): Promise<CompanionBlobHandle | null> {
     if (!CompanionSha256Schema.safeParse(sha256).success) return null;
-    const dims = await this.repo.find(userId, sha256);
-    if (!dims) return null;
-    const handle = await open(
-      companionBlobAbsolutePath(userId, sha256),
-      'r',
-    ).catch((err: unknown) => {
-      if (fsErrorCode(err) === 'ENOENT') return null;
-      throw err;
-    });
-    if (!handle) return null;
-    const stream = handle.createReadStream({ autoClose: true });
-    return {
-      ...dims,
-      sha256,
-      contentType: COMPANION_BLOB_CONTENT_TYPE,
-      stream,
-    };
+    return openFile(userId, sha256, await this.repo.find(userId, sha256));
+  }
+
+  /**
+   * `open` inside the caller's transaction (ROK-1966 review): an in-tx
+   * ingest handler already holds a pooled connection, so its metadata
+   * lookup must ride that same `tx` — a read on the outer pool deadlocks at
+   * `DB_POOL_MAX=1` and starves under pool pressure.
+   */
+  async openIn(
+    tx: Parameters<typeof storedBlobsIn>[0],
+    userId: number,
+    sha256: string,
+  ): Promise<CompanionBlobHandle | null> {
+    if (!CompanionSha256Schema.safeParse(sha256).success) return null;
+    const [dims] = await storedBlobsIn(tx, userId, [sha256]);
+    return openFile(userId, sha256, dims ?? null);
   }
 
   /**
@@ -78,4 +80,39 @@ export class CompanionBlobStore {
   ): Promise<number> {
     return releaseUnusedRefsIn(tx, release);
   }
+
+  /**
+   * ROK-1966 review — inside an in-tx ingest handler, drop the refs the SAME
+   * ingest transaction just recorded for `contract` (the handler has copied
+   * the bytes elsewhere and no longer needs the original). Runs under the
+   * per-user blob lock ingest already holds. The blob, left with no ref, is
+   * reaped by the daily cleanup after 24 h, which frees the user's quota.
+   */
+  releaseHeldRefsIn(
+    tx: Parameters<typeof releaseHeldRefsIn>[0],
+    userId: number,
+    contract: string,
+    shas: readonly string[],
+  ): Promise<number> {
+    return releaseHeldRefsIn(tx, userId, contract, shas);
+  }
+}
+
+/** The file for a blob row found by `open`/`openIn`; null when either is gone. */
+async function openFile(
+  userId: number,
+  sha256: string,
+  dims: CompanionBlobDims | null,
+): Promise<CompanionBlobHandle | null> {
+  if (!dims) return null;
+  const handle = await open(
+    companionBlobAbsolutePath(userId, sha256),
+    'r',
+  ).catch((err: unknown) => {
+    if (fsErrorCode(err) === 'ENOENT') return null;
+    throw err;
+  });
+  if (!handle) return null;
+  const stream = handle.createReadStream({ autoClose: true });
+  return { ...dims, sha256, contentType: COMPANION_BLOB_CONTENT_TYPE, stream };
 }

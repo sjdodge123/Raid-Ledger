@@ -1,5 +1,6 @@
 // Regenerates packages/contract/companion/envelope/v1/schema.json,
-// companion/bg3-save/v1/schema.json, companion/wow-ledgerlink/v1/schema.json and
+// companion/bg3-save/v1/schema.json, companion/bg3-screenshot/v1/schema.json,
+// companion/wow-ledgerlink/v1/schema.json and
 // companion/device-link/v1/schema.json, companion/dev-bridge/v1/schema.json and
 // companion/dev-bridge/v1/allowlist.json from the Zod source of truth (ROK-1954,
 // ROK-1955, ROK-1964, ROK-2055).
@@ -13,12 +14,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     BG3_SAVE_CONTRACT_VERSION,
+    BG3_SCREENSHOT_CONTRACT_VERSION,
     COMPANION_DEVICE_LINK_CONTRACT_VERSION,
     COMPANION_ENVELOPE_VERSION,
     DEV_BRIDGE_CONTRACT_VERSION,
     serializeDevBridgeAllowlist,
     serializeDevBridgeJsonSchema,
     serializeBg3SaveJsonSchema,
+    serializeBg3ScreenshotJsonSchema,
     serializeCompanionDeviceLinkJsonSchema,
     serializeCompanionEnvelopeJsonSchema,
     serializeWowLedgerlinkJsonSchema,
@@ -29,6 +32,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'companion');
 const outputs = [
     [join(root, 'envelope', `v${COMPANION_ENVELOPE_VERSION}`, 'schema.json'), serializeCompanionEnvelopeJsonSchema()],
     [join(root, 'bg3-save', `v${BG3_SAVE_CONTRACT_VERSION}`, 'schema.json'), serializeBg3SaveJsonSchema()],
+    [join(root, 'bg3-screenshot', `v${BG3_SCREENSHOT_CONTRACT_VERSION}`, 'schema.json'), serializeBg3ScreenshotJsonSchema()],
     [join(root, 'wow-ledgerlink', `v${WOW_LEDGERLINK_CONTRACT_VERSION}`, 'schema.json'), serializeWowLedgerlinkJsonSchema()],
     [
         join(root, 'device-link', `v${COMPANION_DEVICE_LINK_CONTRACT_VERSION}`, 'schema.json'),

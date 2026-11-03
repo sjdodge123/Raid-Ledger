@@ -188,5 +188,15 @@ export const BG3_SETUP = {
       required: false,
       appliesTo: ['game_community'],
     },
+    {
+      id: 'companion-screenshots',
+      kind: 'companion_app',
+      title: 'Screenshots from the Companion',
+      instructions:
+        "1. In the Raid Ledger Companion, turn on \"BG3 screenshots\".\n2. Pick the Baldur's Gate 3 hub they go to. The first screenshot waits for you to confirm it; after that, new screenshots you take with Steam's screenshot key appear in that hub's Gallery under Screenshots. While the hub's spoiler setting hides location and screenshots, they stay hidden for everyone.",
+      required: false,
+      appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-screenshot' },
+    },
   ],
 } satisfies PluginSetup;
