@@ -46,15 +46,19 @@ function existingReportedSql(o: Bound): SQL {
     AND e.player_id = ${o.pid} AND e.reported_at = ${o.at}`;
 }
 
-/** SQL R's `cand`: the nearest unpositioned same-character death in the window. */
+/**
+ * SQL R's `cand`: the nearest unpositioned same-character death in the
+ * window. Same character = same name, AND the same SteamID or none — a
+ * SteamID alone would let another character on the account absorb it.
+ */
 function candidateSql(o: Bound, name: string, windowSec: number): SQL {
   const w = sql`make_interval(secs => ${windowSec}::int)`;
   return sql`
   SELECT d.id FROM valheim_player_deaths d
   WHERE d.pelican_server_id = ${o.s} AND d.source IN ('log', 'discord')
     AND d.reported_at IS NULL
-    AND (d.steam_id = ${o.steam}
-         OR (d.steam_id IS NULL AND lower(d.character_name) = lower(${name}::text)))
+    AND lower(d.character_name) = lower(${name}::text)
+    AND (d.steam_id = ${o.steam} OR d.steam_id IS NULL)
     AND d.occurred_at BETWEEN ${o.at} - ${w} AND ${o.at} + ${w}
     AND NOT EXISTS (SELECT 1 FROM existing)
   ORDER BY abs(extract(epoch FROM d.occurred_at - ${o.at})), d.id LIMIT 1 FOR UPDATE`;

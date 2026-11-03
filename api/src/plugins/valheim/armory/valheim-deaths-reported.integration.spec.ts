@@ -311,6 +311,29 @@ describe('Valheim reported deaths (integration, ROK-1931)', () => {
     expect(await rows()).toHaveLength(2);
   });
 
+  it("another character on the same SteamID dying within 120 s never absorbs this character's reported death (D6)", async () => {
+    const other = await repo().recordLogDeath(server, {
+      characterName: 'Othervik',
+      steamId: STEAM,
+      loggedAt: '2026-10-17T20:05:30',
+      occurredAt: new Date('2026-10-17T20:05:30Z'), // 18 s after DEATH_1
+    });
+    expect(other).toBe(true);
+    await push();
+    await drain();
+    expect(await reported(DEATH_1.at)).toMatchObject({
+      source: 'mod',
+      characterName: 'Testviking',
+      loggedAt: null,
+    });
+    const untouched = defined(
+      (await rows()).find((r) => r.characterName === 'Othervik'),
+      "Othervik's log row",
+    );
+    expect(untouched).toMatchObject({ x: null, z: null, reportedAt: null });
+    expect(await rows()).toHaveLength(3);
+  });
+
   it('a stale snapshot stores none of its deaths and keeps the newer deathCount (AC8)', async () => {
     const first = {
       worldUid: WORLD,

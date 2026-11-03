@@ -41,7 +41,7 @@ describe('reportedDeathSql (SQL R)', () => {
       "d.source IN ('log', 'discord') AND d.reported_at IS NULL",
     );
     expect(text).toMatch(
-      /d\.steam_id = \$\d+::text OR \(d\.steam_id IS NULL AND lower\(d\.character_name\) = lower\(\$\d+::text\)\)/,
+      /lower\(d\.character_name\) = lower\(\$\d+::text\) AND \(d\.steam_id = \$\d+::text OR d\.steam_id IS NULL\)/,
     );
     expect(text).toMatch(
       /BETWEEN \$\d+::timestamptz - make_interval\(secs => \$\d+::int\)/,
