@@ -18,6 +18,7 @@ const SHADOWED = [
   'sources',
   'cadence',
   'latestWins',
+  'alreadyHeld',
   'blobRefs',
   'handle',
 ] as const;

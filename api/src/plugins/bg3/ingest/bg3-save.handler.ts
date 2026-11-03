@@ -5,8 +5,8 @@
  *
  * Per-user lock order on that tx (ROK-1960 F5b + P2-3): device row share →
  * blob lock (only with a thumbnail) → markers lock ({@link
- * Bg3SaveHandler.lockLatestWins}, just before the marker upsert) → marker
- * row → campaign lock (`resolveCampaign`) → `bg3_saves` insert. "Delete my
+ * Bg3SaveHandler.lockLatestWins}, just before the marker upsert) → "already
+ * held" read (ROK-2070 M1) → marker row → campaign lock (`resolveCampaign`) → `bg3_saves` insert. "Delete my
  * BG3 data" keeps the same order, so the two serialise instead of a new
  * key's uncommitted marker slipping past the delete.
  */
@@ -22,6 +22,7 @@ import type { CompanionDeviceTx } from '../../../companion/devices/companion-dev
 import { lockBg3UserMarkers } from './bg3-marker-lock';
 import {
   Bg3SavesWriteRepository,
+  saveAlreadyHeld,
   type Bg3SaveInsert,
 } from './bg3-saves.write.repository';
 
@@ -111,6 +112,29 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
    */
   lockLatestWins(tx: CompanionDeviceTx, userId: number): Promise<void> {
     return lockBg3UserMarkers(tx, userId);
+  }
+
+  /**
+   * ROK-2070 M1: is this save already stored for the uploader (the same
+   * `(campaignKey, savedAt)`, or the same save under another key — see
+   * {@link saveAlreadyHeld})? `CompanionIngestService.commit` calls it after
+   * {@link lockLatestWins} and before the marker upsert; true acks `stale`.
+   *
+   * The per-user MARKERS lock is enough here, and the campaign lock is not
+   * taken early: the read covers only the uploader's own `bg3_saves`
+   * identity columns (key, source, name, savedAt). Every writer that adds or
+   * removes such a row — ingest, "Delete my BG3 data", remove saves — takes
+   * the markers lock first and holds it to commit, so the read is serialised
+   * with them; bind / unbind / default changes only re-file `campaign_id`,
+   * which the read ignores. Lock order is unchanged (blob → markers →
+   * campaign).
+   */
+  alreadyHeld(
+    tx: CompanionDeviceTx,
+    userId: number,
+    msg: Bg3SaveMessage,
+  ): Promise<boolean> {
+    return saveAlreadyHeld(tx, userId, msg.payload);
   }
 
   blobRefs(msg: Bg3SaveMessage): readonly CompanionWebpRef[] {

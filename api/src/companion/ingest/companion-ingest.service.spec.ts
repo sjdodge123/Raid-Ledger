@@ -84,6 +84,10 @@ interface SetupOver {
   advanced?: boolean;
   refs?: CompanionWebpRef[];
   lockLatestWins?: jest.Mock<Promise<void>, [CompanionDeviceTx, number]>;
+  alreadyHeld?: jest.Mock<
+    Promise<boolean>,
+    [CompanionDeviceTx, number, SaveMsg]
+  >;
   stored?: Array<{
     sha256: string;
     byteLength: number;
@@ -107,6 +111,7 @@ function setup(over: SetupOver = {}) {
     handle,
     ...(over.refs ? { blobRefs: () => over.refs ?? [] } : {}),
     ...(over.lockLatestWins ? { lockLatestWins: over.lockLatestWins } : {}),
+    ...(over.alreadyHeld ? { alreadyHeld: over.alreadyHeld } : {}),
   };
   const registry = new CompanionHandlerRegistry(
     { isActive: () => true },
@@ -306,5 +311,43 @@ describe('CompanionIngestService — handler marker lock (ROK-1960 P2-3)', () =>
     await service.ingest(DEVICE, 'test-save', body(), NOW);
     expect(repo.lockUserBlobs).not.toHaveBeenCalled();
     expect(order(lockLatestWins)).toBeLessThan(order(repo.advance));
+  });
+});
+
+describe('CompanionIngestService — handler "already held" check (ROK-2070 M1)', () => {
+  const heldMock = (held: boolean) =>
+    jest.fn<Promise<boolean>, [CompanionDeviceTx, number, SaveMsg]>(() =>
+      Promise.resolve(held),
+    );
+  const order = (f: jest.Mock): number =>
+    f.mock.invocationCallOrder[0] ?? Number.NaN;
+
+  it('a held message is stale: no marker advance, no refs, no handler', async () => {
+    const alreadyHeld = heldMock(true);
+    const lockLatestWins = jest.fn<Promise<void>, [CompanionDeviceTx, number]>(
+      () => Promise.resolve(),
+    );
+    const { service, repo, handle } = setup({
+      refs: [REF],
+      stored: [{ sha256: SHA, byteLength: 100, width: 64, height: 32 }],
+      lockLatestWins,
+      alreadyHeld,
+    });
+    const ack = await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(ack).toEqual({ status: 'stale' });
+    expect(alreadyHeld).toHaveBeenCalledWith(TX, 7, expect.anything());
+    expect(order(alreadyHeld)).toBeGreaterThan(order(lockLatestWins));
+    expect(repo.advance).not.toHaveBeenCalled();
+    expect(repo.recordBlobRefs).not.toHaveBeenCalled();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('a message not held runs the check before the marker advance, then is accepted', async () => {
+    const alreadyHeld = heldMock(false);
+    const { service, repo, handle } = setup({ alreadyHeld });
+    const ack = await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(ack).toEqual({ status: 'accepted' });
+    expect(order(alreadyHeld)).toBeLessThan(order(repo.advance));
+    expect(handle).toHaveBeenCalledTimes(1);
   });
 });

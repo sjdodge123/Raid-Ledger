@@ -4,7 +4,8 @@
  * message back), never on the outer db.
  */
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import type { Bg3SaveMessage } from '@raid-ledger/contract';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
@@ -19,28 +20,46 @@ export interface Bg3CampaignTarget {
 /** One `bg3_saves` insert. */
 export type Bg3SaveInsert = typeof schema.bg3Saves.$inferInsert;
 
+/** The identity of one incoming save, as {@link saveAlreadyHeld} reads it. */
+export type Bg3SaveIdentity = Pick<
+  Bg3SaveMessage['payload'],
+  'campaignKey' | 'campaignKeySource' | 'saveName' | 'savedAt'
+>;
+
 /**
- * ROK-2070 OQ3: does the uploader already hold this save under ANOTHER key
- * source? A save first sent with a folder key and re-sent with its GameID
- * key (or a bare-`.lsv` file-name key) misses the `(uploader, key, savedAt)`
- * unique index, so it is matched on `(uploader, savedAt, saveName)` across
- * key sources. A plain read on the ingest tx — never catch-and-retry, which
- * would poison it.
+ * ROK-2070 OQ3 + M1: does the uploader already hold this save? Either the
+ * exact `(campaignKey, savedAt)` the unique index guards (a replay, which an
+ * old pre-B1 marker no longer catches), or the same save under another key:
+ * same `saveName` and `savedAt` to the second (m1 — producers may differ in
+ * sub-second precision), with the same key or another key source (a folder
+ * key re-sent with its GameID key, or a bare-`.lsv` file-name key). A plain
+ * read on the ingest tx — never catch-and-retry, which would poison it.
  */
-async function heldUnderOtherKeySource(
+export async function saveAlreadyHeld(
   tx: CompanionDeviceTx,
-  row: Bg3SaveInsert,
+  userId: number,
+  p: Bg3SaveIdentity,
 ): Promise<boolean> {
   const s = schema.bg3Saves;
+  const at = new Date(p.savedAt);
+  const sameSecond = sql`date_trunc('second', ${s.savedAt}) = date_trunc('second', ${at.toISOString()}::timestamptz)`;
   const [held] = await tx
     .select({ id: s.id })
     .from(s)
     .where(
       and(
-        eq(s.uploaderUserId, row.uploaderUserId),
-        eq(s.savedAt, row.savedAt),
-        eq(s.saveName, row.saveName),
-        ne(s.campaignKeySource, row.campaignKeySource),
+        eq(s.uploaderUserId, userId),
+        or(
+          and(eq(s.campaignKey, p.campaignKey), eq(s.savedAt, at)),
+          and(
+            eq(s.saveName, p.saveName),
+            sameSecond,
+            or(
+              eq(s.campaignKey, p.campaignKey),
+              ne(s.campaignKeySource, p.campaignKeySource),
+            ),
+          ),
+        ),
       ),
     )
     .limit(1);
@@ -106,17 +125,14 @@ export class Bg3SavesWriteRepository {
 
   /**
    * D-4: insert one save; a replay of `(uploader, campaignKey, savedAt)` is
-   * a no-op. ROK-2070: so is the same save (same `savedAt` + `saveName`)
-   * already held under another `campaignKeySource`. The caller has taken
-   * the per-user campaign lock (`resolveCampaign`), so the pre-check and the
-   * insert cannot interleave with a concurrent upload by the same user.
-   * Returns whether a row was written.
+   * a no-op (a backstop: ingest has already acked an already-held save
+   * `stale` via {@link saveAlreadyHeld} before its marker moved, ROK-2070
+   * M1). Returns whether a row was written.
    */
   async insertSave(
     tx: CompanionDeviceTx,
     row: Bg3SaveInsert,
   ): Promise<boolean> {
-    if (await heldUnderOtherKeySource(tx, row)) return false;
     const s = schema.bg3Saves;
     const written = await tx
       .insert(s)
