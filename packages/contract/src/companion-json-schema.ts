@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { COMPANION_ENVELOPE_VERSION } from './companion-common.schema.js';
 import { CompanionEnvelopeSchema } from './companion-envelope.schema.js';
 import { BG3_SAVE_CONTRACT_VERSION, Bg3SaveMessageSchema } from './companion-bg3-save.schema.js';
+import { BG3_SCREENSHOT_CONTRACT_VERSION, Bg3ScreenshotMessageSchema } from './companion-bg3-screenshot.schema.js';
 import { WOW_LEDGERLINK_CONTRACT_VERSION, WowLedgerlinkMessageSchema } from './companion-wow-ledgerlink.schema.js';
 import {
     CompanionDeviceSelfSchema,
@@ -28,6 +29,10 @@ export const COMPANION_ENVELOPE_SCHEMA_ID =
 /** `$id` of the `bg3-save` message JSON Schema. */
 export const BG3_SAVE_SCHEMA_ID =
     `https://raid.gamernight.net/contracts/companion/bg3-save/v${BG3_SAVE_CONTRACT_VERSION}/schema.json`;
+
+/** `$id` of the `bg3-screenshot` message JSON Schema (ROK-1966). */
+export const BG3_SCREENSHOT_SCHEMA_ID =
+    `https://raid.gamernight.net/contracts/companion/bg3-screenshot/v${BG3_SCREENSHOT_CONTRACT_VERSION}/schema.json`;
 
 /** `$id` of the `wow-ledgerlink` message JSON Schema (ROK-1964). */
 export const WOW_LEDGERLINK_SCHEMA_ID =
@@ -74,6 +79,22 @@ export function buildWowLedgerlinkJsonSchema(): Record<string, unknown> {
         description:
             'GENERATED from WowLedgerlinkMessageSchema (packages/contract/src/companion-wow-ledgerlink.schema.ts) — do not edit by hand. payload.exportString is an unchanged LedgerLink v1 export string (packages/contract/ledgerlink/v1/); its inner format is checked by the server\'s LedgerLink decoder, not here. The server alone checks the clock; see CONTRACT.md.',
     };
+}
+
+/** The JSON Schema object for one `bg3-screenshot` v1 message (ROK-1966). */
+export function buildBg3ScreenshotJsonSchema(): Record<string, unknown> {
+    return {
+        ...toInputJsonSchema(Bg3ScreenshotMessageSchema),
+        $id: BG3_SCREENSHOT_SCHEMA_ID,
+        title: `RL Companion bg3-screenshot message v${BG3_SCREENSHOT_CONTRACT_VERSION}`,
+        description:
+            'GENERATED from Bg3ScreenshotMessageSchema (packages/contract/src/companion-bg3-screenshot.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: payload.image.width <= payload.width; payload.image.height <= payload.height; payload.takenAt <= capturedAt. Server-only rules (hub membership, clock, blob present) are in CONTRACT.md.',
+    };
+}
+
+/** Exact file contents of `companion/bg3-screenshot/v1/schema.json` (2-space indent, trailing newline). */
+export function serializeBg3ScreenshotJsonSchema(): string {
+    return `${JSON.stringify(buildBg3ScreenshotJsonSchema(), null, 2)}\n`;
 }
 
 /** Exact file contents of `companion/wow-ledgerlink/v1/schema.json` (2-space indent, trailing newline). */
