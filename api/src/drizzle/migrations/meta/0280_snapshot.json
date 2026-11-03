@@ -1,5 +1,5 @@
 {
-  "id": "79c678ac-90fe-42ac-9481-e705233f75a5",
+  "id": "bc042a6e-20a0-4d22-a285-c2bba65cf1f9",
   "prevId": "7e0dd502-b889-4c98-abc4-fb90f59847aa",
   "version": "7",
   "dialect": "postgresql",
@@ -11718,6 +11718,21 @@
           "columns": [
             {
               "expression": "crest_removed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guilds_crest_media_id": {
+          "name": "idx_guilds_crest_media_id",
+          "columns": [
+            {
+              "expression": "crest_media_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

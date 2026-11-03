@@ -189,6 +189,7 @@ export const guilds = pgTable(
     index('idx_guilds_reviewed_by').on(table.reviewedBy),
     index('idx_guilds_crest_set_by').on(table.crestSetBy),
     index('idx_guilds_crest_removed_by').on(table.crestRemovedBy),
+    index('idx_guilds_crest_media_id').on(table.crestMediaId),
     /** ROK-1870: the directory + the admin proposal queue. */
     index('idx_guilds_kind_status').on(table.kind, table.status),
     check(
