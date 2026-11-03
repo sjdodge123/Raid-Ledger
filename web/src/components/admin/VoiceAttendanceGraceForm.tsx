@@ -42,11 +42,13 @@ function useGraceForm() {
             toast.error(err instanceof Error ? err.message : 'Failed to save voice attendance grace.');
         }
     };
-    return { isLoading: voiceAttendance.isLoading, isPending: updateVoiceAttendance.isPending, value, error, onChange, handleSave };
+    // A failed GET with no cached value would otherwise show an empty input.
+    const loadFailed = voiceAttendance.isError && serverValue == null;
+    return { isLoading: voiceAttendance.isLoading, loadFailed, isPending: updateVoiceAttendance.isPending, value, error, onChange, handleSave };
 }
 
 export function VoiceAttendanceGraceForm() {
-    const { isLoading, isPending, value, error, onChange, handleSave } = useGraceForm();
+    const { isLoading, loadFailed, isPending, value, error, onChange, handleSave } = useGraceForm();
     return (
         <section className="bg-surface rounded-xl border border-edge p-6 space-y-4" data-testid="voice-attendance-section">
             <div>
@@ -55,8 +57,8 @@ export function VoiceAttendanceGraceForm() {
                     After an event ends, Raid Ledger marks each signed-up player from their time in the event&apos;s voice channel.
                 </p>
             </div>
-            {isLoading ? (
-                <p className="text-sm text-dim">Loading voice attendance settings…</p>
+            {isLoading || loadFailed ? (
+                <LoadState isLoading={isLoading} />
             ) : (
                 <form onSubmit={handleSave} className="space-y-3" noValidate>
                     <GraceField value={value} error={error} onChange={onChange} />
@@ -67,6 +69,12 @@ export function VoiceAttendanceGraceForm() {
             )}
         </section>
     );
+}
+
+/** Placeholder while the setting loads, or the load-failed message. */
+function LoadState({ isLoading }: { isLoading: boolean }) {
+    if (isLoading) return <p className="text-sm text-dim">Loading voice attendance settings…</p>;
+    return <p role="alert" className="text-sm text-danger">Couldn&apos;t load voice attendance settings. Reload the page to try again.</p>;
 }
 
 function GraceField({ value, error, onChange }: {

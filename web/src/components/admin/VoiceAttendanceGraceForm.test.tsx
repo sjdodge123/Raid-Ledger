@@ -10,7 +10,7 @@ import { toast } from '../../lib/toast';
 import { VoiceAttendanceGraceForm } from './VoiceAttendanceGraceForm';
 
 const mocks = vi.hoisted(() => ({
-    voiceAttendance: { isLoading: false, data: { graceMinutes: 5 } as { graceMinutes: number } | undefined },
+    voiceAttendance: { isLoading: false, isError: false, data: { graceMinutes: 5 } as { graceMinutes: number } | undefined },
     updateVoiceAttendance: { mutateAsync: vi.fn(), isPending: false },
 }));
 
@@ -34,6 +34,7 @@ async function enterAndSave(value: string) {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.voiceAttendance.isLoading = false;
+    mocks.voiceAttendance.isError = false;
     mocks.voiceAttendance.data = { graceMinutes: 5 };
     mocks.updateVoiceAttendance.isPending = false;
     mocks.updateVoiceAttendance.mutateAsync.mockResolvedValue({ graceMinutes: 5 });
@@ -48,6 +49,25 @@ describe('VoiceAttendanceGraceForm — render', () => {
         expect(field()).toHaveAttribute('min', '0');
         expect(field()).toHaveAttribute('max', '60');
         expect(field()).toHaveAccessibleDescription(/0–60, default 5\. Applies to events that end after you save\./);
+    });
+});
+
+describe('VoiceAttendanceGraceForm — load failure', () => {
+    it('shows a load error instead of an empty field when the GET fails', () => {
+        mocks.voiceAttendance.isError = true;
+        mocks.voiceAttendance.data = undefined;
+        render(<VoiceAttendanceGraceForm />);
+        expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load voice attendance settings.");
+        expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the form when a refetch fails but a value is cached', () => {
+        mocks.voiceAttendance.isError = true;
+        mocks.voiceAttendance.data = { graceMinutes: 9 };
+        render(<VoiceAttendanceGraceForm />);
+        expect(field()).toHaveValue(9);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 });
 
