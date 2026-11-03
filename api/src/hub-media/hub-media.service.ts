@@ -13,6 +13,7 @@ import {
   bytesUsed,
   findByKey,
   liveRowsBySourceAndUploader,
+  liveRowsBySourceUploaderAndKeys,
   markRemoved,
 } from './hub-media.repository';
 import {
@@ -131,6 +132,31 @@ export class HubMediaService {
     userId: number,
   ): Promise<number> {
     const rows = await liveRowsBySourceAndUploader(this.db, source, userId);
+    return this.tombstoneScrubbed(rows);
+  }
+
+  /**
+   * ROK-2068 — the member removed some of their `source` data: tombstone +
+   * scrub + unlink only their live rows whose provenance key is in
+   * `provenanceKeys`, on every hub. Returns how many rows were removed.
+   */
+  async removeSourceRowsByKeys(
+    source: HubMediaPluginSource,
+    userId: number,
+    provenanceKeys: readonly string[],
+  ): Promise<number> {
+    const rows = await liveRowsBySourceUploaderAndKeys(
+      this.db,
+      source,
+      userId,
+      provenanceKeys,
+    );
+    return this.tombstoneScrubbed(rows);
+  }
+
+  private async tombstoneScrubbed(
+    rows: readonly { id: number; guildId: number }[],
+  ): Promise<number> {
     let removed = 0;
     for (const { id, guildId } of rows) {
       // The tombstone keeps only its key (never re-added), not the member.

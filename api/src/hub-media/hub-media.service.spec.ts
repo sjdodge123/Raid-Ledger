@@ -10,6 +10,7 @@ import {
   bytesUsed,
   findByKey,
   liveRowsBySourceAndUploader,
+  liveRowsBySourceUploaderAndKeys,
   markRemoved,
 } from './hub-media.repository';
 import { encodeAndStore } from './hub-media-store.helpers';
@@ -24,6 +25,7 @@ jest.mock('./hub-media.repository', () => ({
   findByKey: jest.fn(),
   markRemoved: jest.fn(),
   liveRowsBySourceAndUploader: jest.fn(),
+  liveRowsBySourceUploaderAndKeys: jest.fn(),
 }));
 jest.mock('./hub-media.files', () => ({ unlinkMediaFiles: jest.fn() }));
 jest.mock('./hub-media-store.helpers', () => ({
@@ -202,6 +204,46 @@ describe('HubMediaService.removeSourceRowsOf (ROK-1959 D-9)', () => {
   it('removes nothing when the member has no rows from the source', async () => {
     jest.mocked(liveRowsBySourceAndUploader).mockResolvedValue([]);
     expect(await service.removeSourceRowsOf('bg3-save', 42)).toBe(0);
+    expect(markRemoved).not.toHaveBeenCalled();
+  });
+});
+
+describe('HubMediaService.removeSourceRowsByKeys (ROK-2068)', () => {
+  const service = new HubMediaService(db, downloader);
+  const keys = ['bg3-save:sha256:' + 'aa'.repeat(32)];
+
+  beforeEach(() => jest.resetAllMocks());
+
+  it("tombstones, scrubs and unlinks only the member's rows with those keys", async () => {
+    jest.mocked(liveRowsBySourceUploaderAndKeys).mockResolvedValue([
+      { id: 4, guildId: 7 },
+      { id: 5, guildId: 9 },
+    ]);
+    jest
+      .mocked(markRemoved)
+      .mockResolvedValueOnce('d.webp')
+      .mockResolvedValueOnce('e.webp');
+    expect(await service.removeSourceRowsByKeys('bg3-save', 42, keys)).toBe(2);
+    expect(liveRowsBySourceUploaderAndKeys).toHaveBeenCalledWith(
+      db,
+      'bg3-save',
+      42,
+      keys,
+    );
+    expect(liveRowsBySourceAndUploader).not.toHaveBeenCalled();
+    expect(jest.mocked(markRemoved).mock.calls.map((c) => c[1])).toEqual([
+      { guildId: 7, id: 4, scrub: true },
+      { guildId: 9, id: 5, scrub: true },
+    ]);
+    expect(jest.mocked(unlinkMediaFiles).mock.calls).toEqual([
+      [7, 'd.webp'],
+      [9, 'e.webp'],
+    ]);
+  });
+
+  it('removes nothing when no row matches the keys', async () => {
+    jest.mocked(liveRowsBySourceUploaderAndKeys).mockResolvedValue([]);
+    expect(await service.removeSourceRowsByKeys('bg3-save', 42, [])).toBe(0);
     expect(markRemoved).not.toHaveBeenCalled();
   });
 });

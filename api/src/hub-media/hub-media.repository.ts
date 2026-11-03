@@ -147,3 +147,24 @@ export async function liveRowsBySourceAndUploader(
       ),
     );
 }
+
+/** ROK-2068 — the member's live rows from one source with one of `keys`. */
+export async function liveRowsBySourceUploaderAndKeys(
+  db: Db,
+  source: string,
+  userId: number,
+  keys: readonly string[],
+): Promise<{ id: number; guildId: number }[]> {
+  if (keys.length === 0) return [];
+  return db
+    .select({ id: hubMedia.id, guildId: hubMedia.guildId })
+    .from(hubMedia)
+    .where(
+      and(
+        eq(hubMedia.source, source),
+        eq(hubMedia.uploadedBy, userId),
+        inArray(hubMedia.provenanceKey, [...keys]),
+        isNull(hubMedia.removedAt),
+      ),
+    );
+}
