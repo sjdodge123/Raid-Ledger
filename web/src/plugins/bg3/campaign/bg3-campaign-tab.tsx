@@ -17,6 +17,7 @@ import { Bg3EditorSection } from './bg3-editor-section';
 import { Bg3CampaignPicker } from './bg3-campaign-picker';
 import { Bg3StartCampaignDialog } from './bg3-start-campaign-dialog';
 import { Bg3AddSavesSheet } from './bg3-add-saves-sheet';
+import { Bg3ManageSavesSheet, BG3_MANAGE_SAVES_TITLE } from './bg3-manage-saves-sheet';
 import { Bg3ArchiveConfirm } from './bg3-archive-confirm';
 import { toastBg3CampaignError } from './bg3-campaign-toast';
 import { Bg3CampaignHistory } from './bg3-campaign-history';
@@ -40,9 +41,11 @@ function unassignedLine(n: number, capped: boolean): string {
     return n === 1 ? "1 of your saves isn't in a campaign." : `${n} of your saves aren't in a campaign.`;
 }
 
-interface YourSavesProps { hubId: number; data: Bg3HubCampaignsResponse; onAddSaves: () => void; onStart: () => void; onUpload: () => void }
+interface YourSavesProps {
+    hubId: number; data: Bg3HubCampaignsResponse; onAddSaves: () => void; onManage: () => void; onStart: () => void; onUpload: () => void;
+}
 
-function YourSaves({ hubId, data, onAddSaves, onStart, onUpload }: YourSavesProps): JSX.Element {
+function YourSaves({ hubId, data, onAddSaves, onManage, onStart, onUpload }: YourSavesProps): JSX.Element {
     const mine = useBg3MyUnassignedSaves();
     const setDefault = useSetBg3DefaultCampaign(hubId);
     const unassigned = (mine.data?.saves ?? []).filter((s) => s.campaignId === null).length;
@@ -53,6 +56,7 @@ function YourSaves({ hubId, data, onAddSaves, onStart, onUpload }: YourSavesProp
             <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={onAddSaves} disabled={!hasActive || unassigned === 0}>Add my saves</Button>
                 <Bg3UploadSaveButton onClick={onUpload} />
+                <Button variant="secondary" size="sm" onClick={onManage}>{BG3_MANAGE_SAVES_TITLE}</Button>
             </div>
             <label className="flex flex-col gap-1 text-sm text-secondary">
                 New saves go to:
@@ -64,17 +68,20 @@ function YourSaves({ hubId, data, onAddSaves, onStart, onUpload }: YourSavesProp
     );
 }
 
-type Dialog = 'start' | 'add-saves' | 'upload' | null;
+type Dialog = 'start' | 'add-saves' | 'manage-saves' | 'upload' | null;
 
-interface TabDialogsProps { dialog: Dialog; hubId: number; active: Bg3CampaignSummary | null; onClose: () => void }
+interface TabDialogsProps {
+    dialog: Dialog; hubId: number; campaigns: readonly Bg3CampaignSummary[]; active: Bg3CampaignSummary | null; onClose: () => void;
+}
 
-function TabDialogs({ dialog, hubId, active, onClose }: TabDialogsProps): JSX.Element {
+function TabDialogs({ dialog, hubId, campaigns, active, onClose }: TabDialogsProps): JSX.Element {
     return (
         <>
             {/* Mounted only while open (the `removing !== null && <Confirm/>` idiom): a closed
                 BottomSheet stays in the DOM off-screen, and one showed at a member's screen bottom. */}
             {dialog === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={onClose} />}
             {dialog === 'upload' && <Bg3UploadSaveSheet isOpen hubId={hubId} onClose={onClose} />}
+            {dialog === 'manage-saves' && <Bg3ManageSavesSheet isOpen hubId={hubId} campaigns={campaigns} onClose={onClose} />}
             {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={active.id}
                 campaignName={active.name} onClose={onClose} />}
         </>
@@ -99,11 +106,12 @@ export function Bg3CampaignTab({ page }: HubCtx): JSX.Element | null {
                 <Bg3CampaignList hubId={hubId} data={data} viewerId={user?.id ?? null}
                     onArchive={setArchiving} onStart={member ? () => setDialog('start') : null} />
             </Section>
-            {member && <YourSaves hubId={hubId} data={data} onAddSaves={() => setDialog('add-saves')} onStart={() => setDialog('start')}
+            {member && <YourSaves hubId={hubId} data={data} onAddSaves={() => setDialog('add-saves')}
+                onManage={() => setDialog('manage-saves')} onStart={() => setDialog('start')}
                 onUpload={() => setDialog('upload')} />}
             {active && <Section title="History"><Bg3CampaignHistory hubId={hubId} campaignId={active.id} /></Section>}
             {data.canEdit && <div className="rounded-lg border border-edge bg-surface p-4"><Bg3EditorSection hubId={hubId} data={data} /></div>}
-            <TabDialogs dialog={dialog} hubId={hubId} active={active} onClose={close} />
+            <TabDialogs dialog={dialog} hubId={hubId} campaigns={data.campaigns} active={active} onClose={close} />
             {archiving && <Bg3ArchiveConfirm hubId={hubId} campaign={archiving} onClose={() => setArchiving(null)} />}
         </div>
     );

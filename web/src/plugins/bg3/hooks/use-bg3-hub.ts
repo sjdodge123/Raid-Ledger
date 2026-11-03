@@ -8,6 +8,7 @@ import {
     BG3_SESSIONS_PAGE_LIMIT,
     BG3_SESSIONS_WIDGET_LIMIT,
     fetchBg3Campaigns,
+    fetchBg3MyAllSaves,
     fetchBg3MyUnassignedSaves,
     fetchBg3Sessions,
     fetchBg3Snapshot,
@@ -73,6 +74,17 @@ export function useBg3MyUnassignedSaves(enabled = true): UseQueryResult<Bg3MySav
     return useQuery({
         queryKey: bg3Keys.myUnassignedSaves,
         queryFn: fetchBg3MyUnassignedSaves,
+        enabled,
+        staleTime: STALE_MS,
+        retry,
+    });
+}
+
+/** ROK-2068 — every one of the caller's saves (Manage my saves sheet). */
+export function useBg3MyAllSaves(enabled = true): UseQueryResult<Bg3MySavesResponse> {
+    return useQuery({
+        queryKey: bg3Keys.myAllSaves,
+        queryFn: fetchBg3MyAllSaves,
         enabled,
         staleTime: STALE_MS,
         retry,
