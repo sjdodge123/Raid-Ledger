@@ -40,7 +40,9 @@ describe('ROK-2074 crestMediaIdFor', () => {
   });
 
   it('no gate registry fails closed to null', async () => {
-    expect(await crestMediaIdFor(db, null, { id: 4, crest: UPLOAD })).toBeNull();
+    expect(
+      await crestMediaIdFor(db, null, { id: 4, crest: UPLOAD }),
+    ).toBeNull();
     expect(findVisibleCrestMediaId).not.toHaveBeenCalled();
   });
 });
