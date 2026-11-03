@@ -11,10 +11,13 @@ const { valheimPlayerDeaths: d, valheimProfiles: p } = schema;
 /** A reported death on one world, with the profile it belongs to. */
 export interface ReportedDeathRow extends ReportedDeathPoint {
   profileId: number;
+  /** The profile's name — labels the pin when the character has no map row. */
+  characterName: string;
 }
 
 interface RawRow {
   profileId: number;
+  characterName: string;
   x: number | null;
   z: number | null;
   reportedAt: Date | null;
@@ -22,10 +25,10 @@ interface RawRow {
 
 /** Rows with a position + `at` (always so for reported rows) — narrowed, not cast. */
 function positioned(rows: RawRow[]): ReportedDeathRow[] {
-  return rows.flatMap(({ profileId, x, z, reportedAt }) =>
+  return rows.flatMap(({ profileId, characterName, x, z, reportedAt }) =>
     x === null || z === null || reportedAt === null
       ? []
-      : [{ profileId, x, z, reportedAt }],
+      : [{ profileId, characterName, x, z, reportedAt }],
   );
 }
 
@@ -61,7 +64,13 @@ export class ValheimReportedDeathsRepository {
 
   private async onWorld(worldUid: string, scope: SQL[]) {
     const rows = await this.db
-      .select({ profileId: p.id, x: d.x, z: d.z, reportedAt: d.reportedAt })
+      .select({
+        profileId: p.id,
+        characterName: p.name,
+        x: d.x,
+        z: d.z,
+        reportedAt: d.reportedAt,
+      })
       .from(d)
       .innerJoin(
         p,

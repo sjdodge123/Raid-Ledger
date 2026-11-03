@@ -93,8 +93,14 @@ describe('toServerPinsResponse (ROK-1943)', () => {
 
   describe('reported deaths (ROK-1931 D8)', () => {
     const AT = new Date('2026-11-02T21:14:00.000Z');
+    const NAMES: Record<number, string> = {
+      7: 'Ragnar',
+      8: 'Bjorn',
+      9: 'Sigrid',
+    };
     const died = (profileId: number, x: number) => ({
       profileId,
+      characterName: NAMES[profileId] ?? 'Nobody',
       x,
       z: -x,
       reportedAt: AT,
@@ -125,6 +131,26 @@ describe('toServerPinsResponse (ROK-1943)', () => {
         AT.toISOString(),
       ]);
       expect(ValheimServerPinsResponseSchema.parse(r)).toEqual(r);
+    });
+
+    it('still draw for a character with no map row on the world, after every map row', () => {
+      const rows = [row(7, 'Ragnar', [pin('Bed', 1)])];
+      const r = toServerPinsResponse('42', rows, undefined, [
+        died(9, 4),
+        died(7, 30),
+        died(9, 60),
+      ]);
+      expect(flat(r)).toEqual([
+        'Ragnar|7|Bed|1|L1|false',
+        'Ragnar|7|Death|30||false',
+        'Sigrid|9|Death|4||false',
+        'Sigrid|9|Death|60||false',
+      ]);
+      expect(r.truncated).toBe(false);
+      expect(ValheimServerPinsResponseSchema.parse(r)).toEqual(r);
+      expect(
+        flat(toServerPinsResponse('42', rows, ['Bed'], [died(9, 4)])),
+      ).toEqual(['Ragnar|7|Bed|1|L1|false']);
     });
 
     it('obey the types filter, fold into the first map row only, and count towards the cap', () => {
