@@ -27,7 +27,7 @@ export interface FormState {
     /** ROK-1386: lock the ephemeral channel to rostered members only. null = open. */
     privateVoice: boolean | null;
     selectedInstances: Record<string, unknown>[];
-    /** ROK-1787: guild the event shows on (WoW guild page); null = none. Set via the `event-create:guild-field` slot. */
+    /** ROK-1787/ROK-2071: hub the event shows on (any hub kind); null = none. Set via the Core `event-create:hub-field` slot. */
     guildId: number | null;
     titleIsAutoSuggested: boolean;
     descriptionIsAutoSuggested: boolean;
