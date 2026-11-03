@@ -31,7 +31,11 @@ export interface ModalFrameProps {
     initialFocusRef?: React.RefObject<HTMLElement | null>;
     /** Layer (default `Z_INDEX.MODAL`); a confirm over a stacked sheet goes above it (ROK-1738). */
     zIndex?: number | undefined;
+    /** ROK-2068 — a request is in flight: Escape and the backdrop do nothing and × is disabled. */
+    closeDisabled?: boolean | undefined;
 }
+
+const noop = (): void => {};
 
 /** Escape closes only the top overlay (ROK-1738, `useEscapeLayer`), never the dialog under it too. */
 function useModalEscape(isOpen: boolean, onClose: () => void) {
@@ -51,14 +55,15 @@ function ModalFooter({ children }: { children: ReactNode }) {
     );
 }
 
-function ModalHeader({ titleId, title, onClose }: { titleId: string; title: string; onClose: () => void }) {
+function ModalHeader({ titleId, title, onClose, disabled }: { titleId: string; title: string; onClose: () => void; disabled: boolean }) {
     return (
         <div className="shrink-0 flex items-center justify-between p-4 border-b border-edge">
             <h2 id={titleId} className="text-lg font-semibold text-foreground">{title}</h2>
             <button
                 type="button"
                 onClick={onClose}
-                className={`flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel ${FOCUS_RING}`}
+                disabled={disabled}
+                className={`flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel disabled:opacity-50 disabled:pointer-events-none ${FOCUS_RING}`}
                 aria-label="Close modal"
             >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,8 +83,10 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
  * ROK-342: focus trap + ARIA dialog semantics.
  */
 export function ModalFrame({
-    isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef, footer, zIndex = Z_INDEX.MODAL,
+    isOpen, onClose: onCloseProp, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef, footer, zIndex = Z_INDEX.MODAL,
+    closeDisabled = false,
 }: ModalFrameProps) {
+    const onClose = closeDisabled ? noop : onCloseProp;
     const titleId = useId();
     const trapRef = useFocusTrap<HTMLDivElement>(isOpen, initialFocusRef);
 
@@ -100,7 +107,7 @@ export function ModalFrame({
                 aria-labelledby={titleId}
                 style={{ animation: 'modal-spring 350ms var(--spring-bounce) forwards' }}
             >
-                <ModalHeader titleId={titleId} title={title} onClose={onClose} />
+                <ModalHeader titleId={titleId} title={title} onClose={onClose} disabled={closeDisabled} />
                 <div className={`${BODY_STRUCTURE} ${bodyClassName ?? DEFAULT_BODY_SKIN}`}>{children}</div>
                 {hasFooter && <ModalFooter>{footer}</ModalFooter>}
             </div>

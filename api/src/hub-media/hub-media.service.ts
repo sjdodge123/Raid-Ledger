@@ -14,6 +14,7 @@ import {
   findByKey,
   liveRowsBySourceAndUploader,
   markRemoved,
+  type HubMediaRemovedFile,
 } from './hub-media.repository';
 import {
   encodeAndStore,
@@ -131,6 +132,33 @@ export class HubMediaService {
     userId: number,
   ): Promise<number> {
     const rows = await liveRowsBySourceAndUploader(this.db, source, userId);
+    return this.tombstoneScrubbed(rows);
+  }
+
+  /**
+   * ROK-2068 — unlink the files of rows the caller already tombstoned inside
+   * its own transaction (`tombstoneSourceRowsByKeys`), once it has committed.
+   * Never throws: the removal already succeeded and a tombstoned row is never
+   * served, so a failed unlink (EACCES, EIO) only leaves an orphan file —
+   * logged, and the next file is still tried.
+   */
+  async unlinkRemovedFiles(
+    rows: readonly HubMediaRemovedFile[],
+  ): Promise<void> {
+    for (const { guildId, storageName } of rows) {
+      try {
+        await unlinkMediaFiles(guildId, storageName);
+      } catch (err) {
+        this.logger.warn(
+          `hub ${guildId}: could not unlink removed media ${storageName}: ${String(err)}`,
+        );
+      }
+    }
+  }
+
+  private async tombstoneScrubbed(
+    rows: readonly { id: number; guildId: number }[],
+  ): Promise<number> {
     let removed = 0;
     for (const { id, guildId } of rows) {
       // The tombstone keeps only its key (never re-added), not the member.
