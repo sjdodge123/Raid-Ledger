@@ -69,9 +69,23 @@ export function socketAuthMiddleware(
   deps: SocketAuthDeps,
 ): SocketAuthMiddleware {
   return (socket, next) => {
-    authenticateSocket(socket, deps).then(
-      (ok) => next(ok ? undefined : new Error(SOCKET_UNAUTHORIZED)),
-      () => next(new Error(SOCKET_UNAUTHORIZED)),
-    );
+    admitOrRefuse(socket, deps, next).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      deps.logger.error(`Socket handshake for ${socket.id} failed: ${message}`);
+    });
   };
+}
+
+/**
+ * Decide (any auth throw = refused), THEN call `next` exactly once: a throw from
+ * `next()` itself rejects this promise (logged by the caller) instead of
+ * re-entering the refusal branch or escaping as an unhandled rejection.
+ */
+async function admitOrRefuse(
+  socket: Socket,
+  deps: SocketAuthDeps,
+  next: (err?: Error) => void,
+): Promise<void> {
+  const ok = await authenticateSocket(socket, deps).catch(() => false);
+  next(ok ? undefined : new Error(SOCKET_UNAUTHORIZED));
 }
