@@ -7,11 +7,13 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 import type { Bg3CrossHubMove, Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotResponse } from '@raid-ledger/contract';
 import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
+import { isHubGalleryListQuery } from '../../../lib/hub-media-query';
 import { crossHubMoveOf } from '../upload/bg3-upload-errors';
 import {
     bindBg3CampaignKey,
     claimBg3Slot,
     createBg3Campaign,
+    removeBg3Saves,
     setBg3DefaultCampaign,
     unclaimBg3Slot,
     updateBg3Campaign,
@@ -116,6 +118,23 @@ export function useBindBg3Saves(hubId: number) {
             if (v.alsoDefault) await setBg3DefaultCampaign(v.campaignId);
         },
         onSettled: () => invalidateBg3Hub(qc, hubId),
+    });
+}
+
+/**
+ * ROK-2068 — remove the caller's saves of the picked playthroughs (keys). The
+ * saves may be filed in any hub and the server tombstones their pictures on
+ * every hub, so on settle EVERY hub's BG3 queries and Gallery refresh (review
+ * MINOR-4); removal is rare, so the extra refetches cost little.
+ */
+export function useRemoveBg3Saves() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (campaignKeys: readonly string[]) => removeBg3Saves([...new Set(campaignKeys)]),
+        onSettled: () => Promise.all([
+            qc.invalidateQueries({ queryKey: bg3Keys.all }),
+            qc.invalidateQueries({ predicate: isHubGalleryListQuery }),
+        ]),
     });
 }
 

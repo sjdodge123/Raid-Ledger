@@ -19,6 +19,7 @@ import {
   planSeedSaves,
   seedSaveMessage,
   variantShape,
+  planFolderKeySaves,
 } from './demo-test-bg3.helpers';
 
 const NOW = new Date('2026-10-28T12:00:00Z');
@@ -108,5 +109,29 @@ describe('BG3 seed helpers (ROK-1958)', () => {
       Bg3SeedHubSchema.safeParse({ tag: 'ok', variant: 'nope' }).success,
     ).toBe(false);
     expect(Bg3SeedHubSchema.safeParse({ tag: 'ok' }).success).toBe(true);
+  });
+
+  it('folder-keys: 6 old saves ~800 days back (2 bound) + 3 recent, one key each', () => {
+    const now = new Date('2026-11-02T12:00:00Z');
+    const plans = planFolderKeySaves('t1', now);
+    expect(plans).toHaveLength(9);
+    expect(new Set(plans.map((p) => p.campaignKey)).size).toBe(9);
+    expect(plans.map((p) => p.bound)).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    const days = plans.map((p) =>
+      Math.round((now.getTime() - p.savedAt.getTime()) / 86_400_000),
+    );
+    expect(days).toEqual([800, 800, 800, 800, 800, 800, 3, 2, 1]);
+    expect(variantShape('folder-keys')).toEqual(variantShape('default'));
+    expect(planFolderKeySaves('t1', now)).toEqual(plans);
   });
 });

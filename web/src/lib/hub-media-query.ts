@@ -22,6 +22,14 @@ export const hubMediaKeys = {
     strip: (guildId: number, filter: HubMediaFilter) => ['hub-media', guildId, 'strip', filter] as const,
 };
 
+/**
+ * ROK-2068 — matches every hub's Gallery list queries (`hubMediaKeys.all(id)` and below; a save removal spans
+ * hubs) but NOT the cached picture bytes (`['hub-media', 'file', path]`, immutable, cached forever).
+ */
+export function isHubGalleryListQuery({ queryKey }: { queryKey: readonly unknown[] }): boolean {
+    return queryKey[0] === 'hub-media' && typeof queryKey[1] === 'number';
+}
+
 export function kindForFilter(filter: HubMediaFilter): HubMediaKind | undefined {
     return filter === 'all' ? undefined : filter;
 }

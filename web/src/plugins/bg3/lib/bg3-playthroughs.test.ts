@@ -1,7 +1,10 @@
 /** ROK-1958 add-saves ruling (2026-10-29): saves group by campaign key = one playthrough. */
 import { describe, expect, it } from 'vitest';
 import { buildBg3MySave } from '../../../test/factories/bg3';
-import { addPlaythroughsLabel, addSavesMoveNote, groupByPlaythrough, saveCountLabel, uniquePlaythroughLabels } from './bg3-playthroughs';
+import {
+    addPlaythroughsLabel, addSavesMoveNote, bg3MonthLabel, groupByMonth, groupByPlaythrough, groupState, removePlaythroughsLabel,
+    removePlaythroughsTitle, saveCountLabel, setGroup, uniquePlaythroughLabels,
+} from './bg3-playthroughs';
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
@@ -71,5 +74,69 @@ describe('uniquePlaythroughLabels', () => {
         const labels = uniquePlaythroughLabels(groups, area);
         expect(labels).toEqual(['QuickSave · Grove', 'QuickSave · Camp (1)', 'QuickSave · Camp (2)']);
         expect(new Set(labels).size).toBe(3);
+    });
+});
+
+describe('ROK-2068 groupByMonth', () => {
+    // Mid-month noon UTC, so the local month is the same in every time zone.
+    const at = (key: string, savedAt: string) => buildBg3MySave({ id: savedAt.length + key.charCodeAt(0), campaignKey: key.repeat(64), savedAt });
+    const C = 'c';
+
+    it('groups playthroughs by their newest save\'s month, months and rows newest first', () => {
+        const playthroughs = groupByPlaythrough([
+            at('a', '2024-08-14T12:00:00.000Z'),
+            at('b', '2026-10-15T12:00:00.000Z'),
+            at('c', '2024-08-16T12:00:00.000Z'),
+            at('a', '2024-07-10T12:00:00.000Z'),
+        ]);
+        const months = groupByMonth(playthroughs);
+        expect(months.map((m) => m.key)).toEqual(['2026-10', '2024-08']);
+        expect(months[1]?.playthroughs.map((p) => p.campaignKey)).toEqual([C.repeat(64), A]);
+        expect(months[1]?.label).toBe(bg3MonthLabel('2024-08-14T12:00:00.000Z'));
+        expect(months[0]?.playthroughs).toHaveLength(1);
+    });
+
+    it('a playthrough spanning months sits under its newest save\'s month only', () => {
+        const months = groupByMonth(groupByPlaythrough([at('a', '2024-07-10T12:00:00.000Z'), at('a', '2024-09-10T12:00:00.000Z')]));
+        expect(months.map((m) => m.key)).toEqual(['2024-09']);
+    });
+
+    it('labels the month with its long name and year', () => {
+        expect(bg3MonthLabel('2024-08-14T12:00:00.000Z')).toMatch(/2024/);
+        expect(bg3MonthLabel('2024-08-14T12:00:00.000Z')).not.toBe(bg3MonthLabel('2024-09-14T12:00:00.000Z'));
+    });
+
+    it('returns no months for no playthroughs', () => {
+        expect(groupByMonth([])).toEqual([]);
+    });
+});
+
+describe('ROK-2068 remove labels', () => {
+    it('counts playthroughs and saves on the destructive button', () => {
+        expect(removePlaythroughsLabel(1, 1)).toBe('Remove 1 playthrough · 1 save');
+        expect(removePlaythroughsLabel(6, 14)).toBe('Remove 6 playthroughs · 14 saves');
+        expect(removePlaythroughsLabel(2, 40, true)).toBe('Remove 2 playthroughs · 40+ saves');
+    });
+
+    it('titles the confirm step', () => {
+        expect(removePlaythroughsTitle(1)).toBe('Remove 1 playthrough?');
+        expect(removePlaythroughsTitle(6)).toBe('Remove 6 playthroughs?');
+    });
+});
+
+describe('ROK-2068 month-group selection', () => {
+    const keys = ['k1', 'k2', 'k3'];
+
+    it('is clear with none picked, indeterminate with some, checked with all', () => {
+        expect(groupState(new Set(), keys)).toEqual({ checked: false, indeterminate: false });
+        expect(groupState(new Set(['k2', 'other']), keys)).toEqual({ checked: false, indeterminate: true });
+        expect(groupState(new Set(keys), keys)).toEqual({ checked: true, indeterminate: false });
+        expect(groupState(new Set(), [])).toEqual({ checked: false, indeterminate: false });
+    });
+
+    it('adds a whole group and removes only that group, keeping other picks', () => {
+        const on = setGroup(new Set(['other', 'k1']), keys, true);
+        expect([...on].sort()).toEqual(['k1', 'k2', 'k3', 'other']);
+        expect([...setGroup(on, keys, false)]).toEqual(['other']);
     });
 });
