@@ -5,6 +5,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { recipesFixtures } from './gen-valheim-link-fixtures.recipes.mjs';
 import { portalsFixtures } from './gen-valheim-link-fixtures.portals.mjs';
+import { deathsFixtures } from './gen-valheim-link-fixtures.deaths.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -249,8 +250,10 @@ const recipes = recipesFixtures(header);
 for (const [name, v] of Object.entries(recipes.valid)) write(dir, name, v);
 const portals = portalsFixtures(header, identity.worldUid);
 for (const [name, v] of Object.entries(portals.valid)) write(dir, name, v);
+const deaths = deathsFixtures(characterVanilla);
+for (const [name, v] of Object.entries(deaths.valid)) write(dir, name, v);
 const expected = {};
-for (const [name, [msg, want]] of Object.entries({ ...invalid, ...invalidContainers, ...recipes.invalid, ...portals.invalid })) {
+for (const [name, [msg, want]] of Object.entries({ ...invalid, ...invalidContainers, ...recipes.invalid, ...portals.invalid, ...deaths.invalid })) {
     write(invalidDir, name, msg);
     expected[name] = want;
 }

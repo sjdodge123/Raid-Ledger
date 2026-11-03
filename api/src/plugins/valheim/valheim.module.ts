@@ -55,6 +55,7 @@ import { HubMediaModule } from '../../hub-media/hub-media.module';
 import { ValheimServerPinsController } from './armory/read/valheim-server-pins.controller';
 import { ValheimServerPinsService } from './armory/read/valheim-server-pins.service';
 import { ValheimServerPinsRepository } from './armory/read/valheim-server-pins.repository';
+import { ValheimReportedDeathsRepository } from './armory/read/valheim-reported-deaths.repository';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { ValheimRecipesController } from './armory/read/valheim-recipes.controller';
 import { ValheimRecipesReadRepository } from './armory/read/valheim-recipes.read.repository';
@@ -149,6 +150,7 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
     // ROK-1943 Map tab cross-player pin layer.
     ValheimServerPinsService,
     ValheimServerPinsRepository,
+    ValheimReportedDeathsRepository,
     ValheimRecipesReadRepository,
     ValheimRecipesService,
     ValheimArmoryMapBytesService,

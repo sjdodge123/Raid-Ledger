@@ -53,6 +53,8 @@ describe('valheim_profiles schema', () => {
       'claim_source',
       'claimed_at',
       'claimed_by',
+      'death_count',
+      'death_count_at',
       'equipment',
       'game_version',
       'id',

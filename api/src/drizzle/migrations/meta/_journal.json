@@ -1926,6 +1926,13 @@
       "when": 1793416992862,
       "tag": "0275_tearful_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 276,
+      "version": "7",
+      "when": 1793688172379,
+      "tag": "0276_dry_viper",
+      "breakpoints": true
     }
   ]
 }
