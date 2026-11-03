@@ -6,7 +6,8 @@
  * source `bg3-screenshot`, kind `screenshot`); the `bg3-screenshot` media
  * gate hides it while the hub hides spoilers, like save pictures.
  */
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import Redis from 'ioredis';
 import type {
   Bg3ScreenshotMessage,
   CompanionConfigHubTarget,
@@ -19,7 +20,9 @@ import type {
 } from '../../../companion/ingest/companion-handler.registry';
 import { companionError } from '../../../companion/ingest/companion-ingest.errors';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
+import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { readBg3Blob } from '../read/bg3-thumbnail.encode';
+import { checkScreenshotRate } from './bg3-screenshot.limits';
 import { Bg3ScreenshotTargets } from './bg3-screenshot.targets';
 import {
   bg3ScreenshotProvenanceKey,
@@ -57,6 +60,7 @@ export class Bg3ScreenshotHandler implements CompanionInTxHandler<Bg3ScreenshotM
   constructor(
     private readonly blobs: CompanionBlobStore,
     private readonly targets: Bg3ScreenshotTargets,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   blobRefs(msg: Bg3ScreenshotMessage): readonly CompanionWebpRef[] {
@@ -82,10 +86,12 @@ export class Bg3ScreenshotHandler implements CompanionInTxHandler<Bg3ScreenshotM
     ctx: CompanionHandlerContext,
     msg: Bg3ScreenshotMessage,
   ): Promise<void> {
+    // Defence in depth: `alreadyHeld` checked the target on this same tx.
     await assertTarget(ctx.tx, ctx.userId, msg);
     const { image, target, takenAt } = msg.payload;
     const raw = await readBg3Blob(this.blobs, ctx.userId, image.sha256);
     if (!raw) throw companionError('invalid_blob', 'screenshot blob missing');
+    await checkScreenshotRate(this.redis, ctx.userId);
     const outcome = await storeBg3Screenshot(
       ctx.tx,
       {
@@ -100,9 +106,12 @@ export class Bg3ScreenshotHandler implements CompanionInTxHandler<Bg3ScreenshotM
         discord: null,
       },
       raw,
+      image.sha256,
     );
     if (outcome === 'not_image')
       throw companionError('invalid_blob', 'screenshot does not decode');
+    // No closer wire code exists (adding one is a contract change): here it
+    // means the HUB's Gallery is full, not the user's blobs (CONTRACT.md §3).
     if (outcome === 'cap')
       throw companionError('blob_quota_exceeded', 'the hub Gallery is full');
   }

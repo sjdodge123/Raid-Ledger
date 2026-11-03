@@ -4,7 +4,6 @@
  * second pooled connection while it holds one deadlocks `DB_POOL_MAX=1`);
  * the `/config` reads run on the pool.
  */
-import { randomUUID } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -127,29 +126,64 @@ export async function uploaderName(
   return row ? (row.displayName ?? row.username) : null;
 }
 
+/**
+ * Review m1 — the file name is content-addressed: the WebP sha256 shaped as
+ * the v4 uuid `storage_name` must be (version nibble 4, variant 8–b). A
+ * retry after a failed COMMIT rewrites the same two files instead of
+ * leaving an orphan pair (no sweep exists). Per-hub folder, and the hub
+ * holds one row per sha256 (provenance key), so no two rows share a name.
+ */
+export function screenshotStorageName(sha256: string): string {
+  const h = sha256.toLowerCase();
+  const variant = ((parseInt(h.charAt(16), 16) & 0x3) | 0x8).toString(16);
+  return [
+    h.slice(0, 8),
+    h.slice(8, 12),
+    `4${h.slice(13, 16)}`,
+    `${variant}${h.slice(17, 20)}`,
+    h.slice(20, 32),
+  ].join('-');
+}
+
 export type Bg3ScreenshotStoreOutcome =
   'stored' | 'duplicate' | 'cap' | 'not_image';
 
 /**
- * Encode + write the files, then insert the row on the ingest tx under the
- * per-hub cap lock (`pg_advisory_xact_lock`, held to commit — the same lock
- * `HubMediaService` takes). A losing insert unlinks its files.
+ * Encode, then — under the per-hub cap lock (`pg_advisory_xact_lock`, held
+ * to commit; the same lock `HubMediaService` takes) — re-check the hub does
+ * not hold it, check the cap, write the content-addressed files and insert
+ * the row on the ingest tx. The re-check runs before any write, so a
+ * duplicate never touches the winner's (same-named) files.
  */
 export async function storeBg3Screenshot(
   tx: DbOrTx,
   row: HubMediaStoreRow,
   raw: Buffer,
+  sha256: string,
 ): Promise<Bg3ScreenshotStoreOutcome> {
   const encoded = await encodeHubMedia(raw);
   if (!encoded) return 'not_image';
-  const storageName = randomUUID();
+  const storageName = screenshotStorageName(sha256);
   const insert = toRow(row, encoded, storageName);
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(${HUB_MEDIA_CAP_LOCK_CLASS}::int4, ${row.guildId}::int4)`,
   );
+  if (await screenshotHeld(tx, row.guildId, row.provenanceKey))
+    return 'duplicate';
   if ((await bytesUsedOn(tx, row.guildId)) + insert.bytes > hubMediaCapBytes())
     return 'cap';
   await writeMediaFiles(row.guildId, storageName, encoded.full, encoded.thumb);
+  return insertWritten(tx, insert);
+}
+
+/**
+ * Insert the row whose files are already written. A conflict means a writer
+ * outside the lock won: its row owns the same-named files, so they stay.
+ */
+async function insertWritten(
+  tx: DbOrTx,
+  insert: ReturnType<typeof toRow>,
+): Promise<Bg3ScreenshotStoreOutcome> {
   let written: { id: number } | undefined;
   try {
     [written] = await tx
@@ -158,12 +192,11 @@ export async function storeBg3Screenshot(
       .onConflictDoNothing({ target: [media.guildId, media.provenanceKey] })
       .returning({ id: media.id });
   } catch (err) {
-    await unlinkMediaFiles(row.guildId, storageName);
+    // Safe: the re-check (under the lock) proved no row owns this name.
+    await unlinkMediaFiles(insert.guildId, insert.storageName);
     throw err;
   }
-  if (written) return 'stored';
-  await unlinkMediaFiles(row.guildId, storageName);
-  return 'duplicate';
+  return written ? 'stored' : 'duplicate';
 }
 
 async function bytesUsedOn(db: DbOrTx, guildId: number): Promise<number> {

@@ -38,6 +38,7 @@ import {
   makeUser,
 } from '../../../companion/devices/testing/companion-link.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { screenshotStorageName } from './bg3-screenshot.repository';
 
 interface Who {
   id: number;
@@ -464,5 +465,47 @@ describe('Delete my BG3 data', () => {
     expect((await gallery(hub, mate)).items.map((i) => i.id)).toEqual([
       mateRow?.id,
     ]);
+  });
+});
+
+describe('per-user hourly allowance (review M1)', () => {
+  afterEach(() => {
+    delete process.env.HUB_MEDIA_COMPANION_PER_HOUR;
+  });
+
+  it('S-8 past the allowance → 429 rate_limited and no row; a replay still acks stale; another member is unaffected', async () => {
+    process.env.HUB_MEDIA_COMPANION_PER_HOUR = '2';
+    const hub = await insertHub('Tav Party');
+    const tav = await person('tav');
+    const mate = await person('mate');
+    await joinHub(hub, tav.id);
+    await joinHub(hub, mate.id);
+    const first = await makeShot(50);
+    expectAck(await upload(tav, first, hub), 'accepted');
+    expectAck(await upload(tav, await makeShot(51), hub), 'accepted');
+
+    const third = await upload(tav, await makeShot(52), hub);
+    const body = CompanionIngestErrorSchema.parse(third.body);
+    expect([third.status, body.code]).toEqual([429, 'rate_limited']);
+    expect(await mediaRows(hub)).toHaveLength(2);
+
+    // A replay acks stale before `handle`, so it never spends a slot.
+    expectAck(await post(tav, message(first, hub)), 'stale');
+    expectAck(await upload(mate, await makeShot(53), hub), 'accepted');
+    expect(await mediaRows(hub)).toHaveLength(3);
+  });
+
+  it('S-9 a stored screenshot is written under its content-addressed name', async () => {
+    const hub = await insertHub('Tav Party');
+    const tav = await person('tav');
+    await joinHub(hub, tav.id);
+    const shot = await makeShot(54);
+    expectAck(await upload(tav, shot, hub), 'accepted');
+    const name = screenshotStorageName(shot.ref.sha256);
+    const [row] = await mediaRows(hub);
+    expect(row?.storageName).toBe(name);
+    expect(mediaFiles()).toEqual(
+      [`${hub}`, `${hub}/${name}.thumb.webp`, `${hub}/${name}.webp`].sort(),
+    );
   });
 });

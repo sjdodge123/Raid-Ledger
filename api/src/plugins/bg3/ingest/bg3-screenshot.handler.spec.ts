@@ -13,6 +13,7 @@ import {
   type Bg3ScreenshotMessage,
 } from '@raid-ledger/contract';
 import { HttpException } from '@nestjs/common';
+import type Redis from 'ioredis';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { readBg3Blob } from '../read/bg3-thumbnail.encode';
@@ -21,8 +22,10 @@ import {
   bg3ScreenshotProvenanceKey,
   isLiveBg3HubMember,
   screenshotHeld,
+  screenshotStorageName,
   storeBg3Screenshot,
 } from './bg3-screenshot.repository';
+import { screenshotRateKey } from './bg3-screenshot.limits';
 import type { Bg3ScreenshotTargets } from './bg3-screenshot.targets';
 import { toHubTargets } from './bg3-screenshot.targets';
 
@@ -41,6 +44,8 @@ const member = jest.mocked(isLiveBg3HubMember);
 const held = jest.mocked(screenshotHeld);
 const store = jest.mocked(storeBg3Screenshot);
 const blob = jest.mocked(readBg3Blob);
+/** The fixed-window count the Redis INCR script answers. */
+const windowCount = jest.fn<Promise<number>, unknown[]>();
 
 const FIXTURES = join(
   __dirname,
@@ -54,6 +59,7 @@ function setup() {
   const handler = new Bg3ScreenshotHandler(
     {} as CompanionBlobStore,
     { forUser: jest.fn() } as unknown as Bg3ScreenshotTargets,
+    { eval: windowCount } as unknown as Redis,
   );
   const tx: unknown = { tx: true };
   const ctx = {
@@ -81,6 +87,12 @@ beforeEach(() => {
   held.mockResolvedValue(false);
   store.mockResolvedValue('stored');
   blob.mockResolvedValue(Buffer.from('webp'));
+  windowCount.mockResolvedValue(1);
+  process.env.HUB_MEDIA_COMPANION_PER_HOUR = '20';
+});
+
+afterEach(() => {
+  delete process.env.HUB_MEDIA_COMPANION_PER_HOUR;
 });
 
 describe('Bg3ScreenshotHandler — contract wiring', () => {
@@ -157,6 +169,7 @@ describe('Bg3ScreenshotHandler — handle stores a Gallery screenshot', () => {
         discord: null,
       },
       Buffer.from('webp'),
+      SHOT.payload.image.sha256,
     );
   });
 
@@ -176,6 +189,51 @@ describe('Bg3ScreenshotHandler — handle stores a Gallery screenshot', () => {
       code: 'invalid_blob',
     });
     expect(store).not.toHaveBeenCalled();
+  });
+});
+
+describe('Bg3ScreenshotHandler — per-user hourly allowance (review M1)', () => {
+  it('the 20th screenshot in the window is stored; the 21st refuses as retryable rate_limited (429) without storing', async () => {
+    const { handler, ctx } = setup();
+    windowCount.mockResolvedValueOnce(20).mockResolvedValueOnce(21);
+    await handler.handle(ctx, SHOT);
+    const err: unknown = await handler.handle(ctx, SHOT).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(HttpException);
+    expect(
+      err instanceof HttpException
+        ? [err.getStatus(), err.getResponse()]
+        : null,
+    ).toEqual([429, expect.objectContaining({ code: 'rate_limited' })]);
+    expect(store).toHaveBeenCalledTimes(1);
+    expect(windowCount).toHaveBeenLastCalledWith(
+      expect.any(String),
+      1,
+      screenshotRateKey(7),
+      3600,
+    );
+  });
+
+  it('a refused target never spends a slot', async () => {
+    member.mockResolvedValue(false);
+    const { handler, ctx } = setup();
+    await refusal(handler.handle(ctx, SHOT));
+    expect(windowCount).not.toHaveBeenCalled();
+  });
+});
+
+describe('screenshotStorageName — content-addressed file name (review m1)', () => {
+  const V4 =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('is a v4-uuid-shaped name, the same for the same sha256 and different for another', () => {
+    const a = screenshotStorageName('f'.repeat(64));
+    const b = screenshotStorageName(SHOT.payload.image.sha256);
+    expect([V4.test(a), V4.test(b)]).toEqual([true, true]);
+    expect(screenshotStorageName(SHOT.payload.image.sha256)).toBe(b);
+    expect(a).not.toBe(b);
   });
 });
 

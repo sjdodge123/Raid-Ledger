@@ -68,6 +68,21 @@ Server-only rules (not in the schema):
 - The referenced blob must already be stored.
 - When the hub hides screenshots (`hideLocationAndScreenshots`), the row is
   stored but not shown, the same rule as save thumbnails.
+- Each user may store at most 20 screenshots an hour across all hubs
+  (`HUB_MEDIA_COMPANION_PER_HOUR`; a fixed one-hour window). Past it the
+  message is refused with `rate_limited` (429), which is retryable; this answer
+  carries no `Retry-After`, so the app keeps the screenshot queued and retries
+  later (minutes, not seconds). A replay of a stored screenshot acks `stale`
+  and does not count.
+- When the hub's Gallery is full (the per-hub storage cap shared with Discord
+  pictures and member uploads), the message is refused with
+  `blob_quota_exceeded` (413). For this contract that code means "the hub's
+  Gallery is full", not only "your blob quota is spent"; nothing the app
+  deletes from its own blobs fixes it, so it should stop retrying that
+  screenshot and tell the user.
+- A screenshot the hub already holds — live, Removed by a leader, or withdrawn
+  through "Delete my BG3 data" — is never re-added; sending it again acks
+  `stale`.
 
 ## 4. Refinements (Zod only — not in `schema.json`)
 
