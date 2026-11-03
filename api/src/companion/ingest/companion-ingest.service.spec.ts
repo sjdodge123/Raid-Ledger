@@ -80,6 +80,8 @@ const REF: CompanionWebpRef = {
 };
 
 interface SetupOver {
+  /** Register the handler WITHOUT a `latestWins` marker. */
+  noMarker?: boolean;
   held?: boolean;
   advanced?: boolean;
   refs?: CompanionWebpRef[];
@@ -104,10 +106,14 @@ function setup(over: SetupOver = {}) {
     contract: 'test-save',
     versions: [1],
     sources: ['device', 'session'],
-    latestWins: (m) => ({
-      key: m.payload.key,
-      at: new Date(m.payload.savedAt),
-    }),
+    ...(over.noMarker
+      ? {}
+      : {
+          latestWins: (m: SaveMsg) => ({
+            key: m.payload.key,
+            at: new Date(m.payload.savedAt),
+          }),
+        }),
     handle,
     ...(over.refs ? { blobRefs: () => over.refs ?? [] } : {}),
     ...(over.lockLatestWins ? { lockLatestWins: over.lockLatestWins } : {}),
@@ -348,6 +354,35 @@ describe('CompanionIngestService — handler "already held" check (ROK-2070 M1)'
     const ack = await service.ingest(DEVICE, 'test-save', body(), NOW);
     expect(ack).toEqual({ status: 'accepted' });
     expect(order(alreadyHeld)).toBeLessThan(order(repo.advance));
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs without a latestWins marker: a held message is stale and stores nothing', async () => {
+    const alreadyHeld = heldMock(true);
+    const lockLatestWins = jest.fn<Promise<void>, [CompanionDeviceTx, number]>(
+      () => Promise.resolve(),
+    );
+    const { service, repo, handle } = setup({
+      noMarker: true,
+      lockLatestWins,
+      alreadyHeld,
+    });
+    const ack = await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(ack).toEqual({ status: 'stale' });
+    expect(alreadyHeld).toHaveBeenCalledWith(TX, 7, expect.anything());
+    expect(order(alreadyHeld)).toBeGreaterThan(order(lockLatestWins));
+    expect(repo.advance).not.toHaveBeenCalled();
+    expect(repo.recordBlobRefs).not.toHaveBeenCalled();
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('without a marker or a held message, it is accepted and never touches a marker', async () => {
+    const alreadyHeld = heldMock(false);
+    const { service, repo, handle } = setup({ noMarker: true, alreadyHeld });
+    const ack = await service.ingest(DEVICE, 'test-save', body(), NOW);
+    expect(ack).toEqual({ status: 'accepted' });
+    expect(alreadyHeld).toHaveBeenCalledTimes(1);
+    expect(repo.advance).not.toHaveBeenCalled();
     expect(handle).toHaveBeenCalledTimes(1);
   });
 });
