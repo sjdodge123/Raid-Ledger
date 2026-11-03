@@ -1,7 +1,8 @@
 /**
  * ROK-1941 SQL B: a console death merges into the nearest `discord` death
  * inferred from a death post — or (ROK-1931) a `mod` death the mod
- * reported — (same server, name case-insensitive, within the D7 window) or
+ * reported — (same server, name case-insensitive, never another known
+ * SteamID (ROK-1931 D6), within the D7 window) or
  * is inserted once per `(server, character, loggedAt)`.
  * Runs under `withDeathNameLock`; ONE statement that cannot violate
  * `valheim_player_deaths_log_uq` (the merge is skipped when the log row
@@ -39,6 +40,16 @@ function existingLogSql(s: SQL, death: LogDeathInput): SQL {
 }
 
 /**
+ * SQL B's "same character" (ROK-1931 D6): name case-insensitive, and never a
+ * row attributed to another SteamID — two players can share a name.
+ */
+function sameCharacterSql(death: LogDeathInput): SQL {
+  const steam = sql`${death.steamId}::text`;
+  return sql`lower(d.character_name) = lower(${death.characterName})
+    AND (d.steam_id IS NULL OR ${steam} IS NULL OR d.steam_id = ${steam})`;
+}
+
+/**
  * SQL B's single statement (spec "Correlation SQL" B). ROK-1931: the merge
  * also takes a reported (`mod`) death; the SET leaves its position,
  * `player_id`, `world_uid` and `reported_at` alone. Exported for the unit spec.
@@ -56,7 +67,7 @@ cand AS (
   SELECT d.id FROM valheim_player_deaths d
   WHERE d.pelican_server_id = ${s} AND d.source IN ('discord', 'mod')
     AND d.logged_at IS NULL
-    AND lower(d.character_name) = lower(${death.characterName})
+    AND ${sameCharacterSql(death)}
     AND d.occurred_at BETWEEN ${o} - make_interval(secs => ${windowSec}::int)
                           AND ${o} + make_interval(secs => ${windowSec}::int)
     AND NOT EXISTS (SELECT 1 FROM existing)

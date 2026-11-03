@@ -141,7 +141,7 @@ export function toProfileValues(
     trophies: msg.trophies,
     knownItems: items,
     knownRecipes: recipes,
-    // ROK-1931 (D7): stored, never the bar count; latest snapshot wins.
+    // ROK-1931 (D7): stored, never the bar count; an absent count keeps the stored one (upsert).
     deathCount: msg.deathCount ?? null,
     deathCountAt: msg.deathCount === undefined ? null : capturedAt,
     sourceSnapshotId: snap.id,

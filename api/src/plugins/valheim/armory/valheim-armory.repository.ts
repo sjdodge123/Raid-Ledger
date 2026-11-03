@@ -125,6 +125,7 @@ export class ValheimArmoryRepository {
         target: [profiles.pelicanServerId, profiles.steamId, profiles.playerId],
         set: {
           ...fromExcluded(PROFILE_SHEET_COLUMNS),
+          ...KEEP_DEATH_COUNT,
           importedAt: sql`now()`,
         },
         setWhere: notOlder(profiles.capturedAt),
@@ -240,9 +241,16 @@ const PROFILE_SHEET_COLUMNS = {
   trophies: profiles.trophies,
   knownItems: profiles.knownItems,
   knownRecipes: profiles.knownRecipes,
-  deathCount: profiles.deathCount,
-  deathCountAt: profiles.deathCountAt,
   sourceSnapshotId: profiles.sourceSnapshotId,
+};
+/**
+ * ROK-1931 (D7/Q3): the mod omits `deathCount` when the game has no stat —
+ * absent is not zero, so a newer snapshot without it keeps the stored
+ * count and its `death_count_at`.
+ */
+const KEEP_DEATH_COUNT = {
+  deathCount: sql`COALESCE(excluded.death_count, ${profiles.deathCount})`,
+  deathCountAt: sql`CASE WHEN excluded.death_count IS NULL THEN ${profiles.deathCountAt} ELSE excluded.death_count_at END`,
 };
 /** `profile_id` is COALESCEd separately (kept when the new map has none). */
 const MAP_COLUMNS = {
