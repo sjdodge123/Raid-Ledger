@@ -170,8 +170,9 @@ describe('filterPins (S15)', () => {
 });
 
 describe('synthetic Death pins (ROK-1931 Q6 = A)', () => {
-    // Built from local parts so the expected text holds in any test-runner timezone.
-    const diedAt = new Date(2026, 10, 2, 21, 14).toISOString();
+    // Built from local parts (this year) so the expected text holds in any
+    // test-runner timezone and year.
+    const diedAt = new Date(new Date().getFullYear(), 10, 2, 21, 14).toISOString();
     const synthetic = { ...own('Death', ''), diedAt };
 
     it('a character-map pin with diedAt reads "Death · 2 Nov 21:14" and drops diedAt', () => {
@@ -189,6 +190,15 @@ describe('synthetic Death pins (ROK-1931 Q6 = A)', () => {
         const layer = [{ ...serverPin('Death', '', 'Ragnhild'), diedAt }];
         expect(filterPins([], f({ players: 'all' }), layer).map((p) => p.label))
             .toEqual(['Death · 2 Nov 21:14 · Ragnhild']);
+    });
+
+    it('search matches the date label in both scopes, never the character suffix', () => {
+        const layer = [{ ...serverPin('Death', '', 'Ragnhild'), diedAt }];
+        const query = f({ query: '2 nov' });
+        expect(filterPins([synthetic], query, undefined).map((p) => p.label)).toEqual(['Death · 2 Nov 21:14']);
+        expect(filterPins([], { ...query, players: 'all' }, layer).map((p) => p.label))
+            .toEqual(['Death · 2 Nov 21:14 · Ragnhild']);
+        expect(filterPins([], f({ players: 'all', query: 'ragn' }), layer)).toEqual([]);
     });
 });
 

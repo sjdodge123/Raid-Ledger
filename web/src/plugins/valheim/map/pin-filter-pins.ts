@@ -1,7 +1,8 @@
 /**
  * ROK-1943 D6/D9/D14 — which pins the map draws under a `PinFilter`. Types AND
  * players AND label search AND crossed-out; predicates run on the pin's own
- * fields, so the players-scope character suffix is never searched (D14).
+ * fields, so the players-scope character suffix is never searched (D14). A
+ * synthetic Death pin is searched by its date label in both scopes.
  */
 import type { ValheimMapPin, ValheimReadMapPin, ValheimServerPin } from '@raid-ledger/contract';
 import type { PinFilter } from './pin-filter';
@@ -42,6 +43,11 @@ export function serverPinAsMapPin(pin: ValheimServerPin): ValheimMapPin {
     };
 }
 
+/** What a server pin is searched by: its own label, or a synthetic Death pin's date label. */
+function searchable(pin: ValheimServerPin): FilterablePin {
+    return pin.diedAt === undefined ? pin : { ...pin, label: deathPinLabel(pin.diedAt) };
+}
+
 /**
  * The pins the layer draws: this-character scope filters the map's own pins
  * (cartography copies included — the Layers switch still gates those); any
@@ -53,5 +59,5 @@ export function filterPins(
     server: readonly ValheimServerPin[] | undefined,
 ): readonly ValheimMapPin[] {
     if (filter.players === 'character') return own.map(readPinAsMapPin).filter((p) => matchesPinFilter(p, filter));
-    return (server ?? []).filter((p) => matchesPinFilter(p, filter)).map(serverPinAsMapPin);
+    return (server ?? []).filter((p) => matchesPinFilter(searchable(p), filter)).map(serverPinAsMapPin);
 }

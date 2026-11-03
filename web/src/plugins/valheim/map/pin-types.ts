@@ -134,11 +134,14 @@ export function pinStyleFor(type: string): PinStyle {
 
 /**
  * ROK-1931 Q6 = A — a synthetic Death pin (a mod-reported death: empty label +
- * `diedAt`) reads "Death · 2 Nov 21:14", in the viewer's local time. Same
- * date-fns `format` the map's snapshot footer uses (`map-legend.tsx`).
+ * `diedAt`) reads "Death · 2 Nov 21:14", in the viewer's local time, and
+ * "Death · 2 Nov 2025 21:14" when the death is from another year than `now`.
+ * Same date-fns `format` the map's snapshot footer uses (`map-legend.tsx`).
  */
-export function deathPinLabel(diedAt: string): string {
-    return `${pinStyleFor('Death').typeLabel} · ${format(new Date(diedAt), 'd MMM HH:mm')}`;
+export function deathPinLabel(diedAt: string, now: Date = new Date()): string {
+    const at = new Date(diedAt);
+    const pattern = at.getFullYear() === now.getFullYear() ? 'd MMM HH:mm' : 'd MMM yyyy HH:mm';
+    return `${pinStyleFor('Death').typeLabel} · ${format(at, pattern)}`;
 }
 
 /** The pin's visible / accessible text: its cleaned label, else the type name. */
