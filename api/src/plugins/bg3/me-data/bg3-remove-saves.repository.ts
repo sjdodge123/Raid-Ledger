@@ -1,8 +1,9 @@
 /**
  * ROK-2068 — "Remove uploaded saves" for chosen campaign keys. ONE
  * transaction, in `deleteAllFor`'s lock order (ROK-1960 F5b + P2-3), removes
- * the caller's `bg3-save` latest-wins markers for those keys (operator ruling
- * 2026-11-03: a re-sent copy of a removed save is accepted again), their key
+ * the caller's `bg3-save` latest-wins markers for those keys' saves (per-save
+ * and legacy bare-key; operator ruling 2026-11-03: a re-sent copy of a removed
+ * save is accepted again), their key
  * bindings and their saves, then releases thumbnail refs no remaining save of
  * theirs still uses, and tombstones + scrubs their Gallery pictures (every
  * hub) that no remaining save shows — in the SAME transaction, so a failure
@@ -27,6 +28,7 @@ import { lockBg3Gallery } from '../gallery/bg3-gallery-lock';
 import { galleryProvenanceKey } from '../gallery/bg3-gallery-sync.helpers';
 import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
 import { lockBg3UserMarkers } from '../ingest/bg3-marker-lock';
+import { bg3LatestMarkerKey } from '../ingest/bg3-save.handler';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -40,12 +42,26 @@ export interface Bg3RemovedSaves {
   galleryFiles: HubMediaRemovedFile[];
 }
 
-/** The caller's `bg3-save` markers for `keys` (latest_key IS the key). */
+/**
+ * The caller's `bg3-save` latest-wins markers for the saves under `keys`:
+ * one per save (`bg3LatestMarkerKey`, ROK-2070 B1), read from the rows about
+ * to go, plus the bare keys — pre-B1 markers that `legacyMarkerHolds` would
+ * otherwise still refuse a re-send on. Runs under the markers lock, so no
+ * ingest can add a row for these keys between this read and the delete.
+ */
 async function clearKeyMarkers(
   tx: Tx,
   userId: number,
   keys: string[],
 ): Promise<void> {
+  const named = await tx
+    .select({ key: s.campaignKey, name: s.saveName })
+    .from(s)
+    .where(and(eq(s.uploaderUserId, userId), inArray(s.campaignKey, keys)));
+  const markerKeys = [
+    ...keys,
+    ...named.map((r) => bg3LatestMarkerKey(r.key, r.name)),
+  ];
   const m = schema.companionIngestLatest;
   await tx
     .delete(m)
@@ -53,7 +69,7 @@ async function clearKeyMarkers(
       and(
         eq(m.userId, userId),
         eq(m.contract, BG3_SAVE_CONTRACT_ID),
-        inArray(m.latestKey, keys),
+        inArray(m.latestKey, markerKeys),
       ),
     );
 }

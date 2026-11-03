@@ -18,6 +18,7 @@ export interface Bg3SaveInspection {
     saveInfo: string;
     webp: Uint8Array | null;
     thumbnail: Bg3SaveThumbnail | null;
+    gameIdKey: string | null;
 }
 
 

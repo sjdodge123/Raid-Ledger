@@ -63,6 +63,14 @@ interface CompanionHandlerBase<M> {
    * uncommitted marker cannot slip past it (ROK-1960 P2-3).
    */
   lockLatestWins?(tx: CompanionDeviceTx, userId: number): Promise<void>;
+  /**
+   * Optional "already stored" check (ROK-2070 M1), in-tx handlers with a
+   * `latestWins` only. Runs on the ingest tx after `lockLatestWins` and
+   * BEFORE the marker upsert; true acks `stale` and writes nothing (no
+   * marker, no blob refs, no `handle`), so a skipped duplicate can neither
+   * advance a marker nor report `accepted` for a row that was not stored.
+   */
+  alreadyHeld?(tx: CompanionDeviceTx, userId: number, msg: M): Promise<boolean>;
 }
 
 /** Default mode: `handle` runs INSIDE the ingest transaction (step 11). */
@@ -137,7 +145,7 @@ function assertRegistrable(
   if (handler.sources?.length === 0) throw new Error(`${name}: empty sources`);
   if (
     handler.afterCommit === true &&
-    (handler.latestWins || handler.blobRefs)
+    (handler.latestWins || handler.blobRefs || handler.alreadyHeld)
   ) {
     throw new Error(
       `${name}: an after-commit handler has no latestWins/blobRefs`,

@@ -10,8 +10,15 @@
  * work (the shared setup closes the pool).
  */
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
-import { BG3_GAME_SLUG, BG3_SAVE_CONTRACT_ID } from '@raid-ledger/contract';
+import {
+  BG3_GAME_SLUG,
+  BG3_SAVE_CONTRACT_ID,
+  Bg3SaveMessageSchema,
+  type Bg3SaveMessage,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
@@ -19,10 +26,15 @@ import { waitFor } from '../../../common/testing/integration-helpers';
 import * as schema from '../../../drizzle/schema';
 import * as hubMediaRepo from '../../../hub-media/hub-media.repository';
 import { CompanionIngestLatestRepository } from '../../../companion/ingest/companion-ingest-latest.repository';
+import {
+  bearer,
+  expireLimiterWindows,
+} from '../../../companion/devices/testing/companion-link.helpers';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
 import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
+import { bg3LatestMarkerKey } from '../ingest/bg3-save.handler';
 import { Bg3RemoveSavesRepository } from './bg3-remove-saves.repository';
 
 const URL = '/plugins/bg3/me/saves/remove';
@@ -382,16 +394,92 @@ describe('POST plugins/bg3/me/saves/remove — what goes and what stays', () => 
   });
 });
 
+// ── latest-wins markers: real ingest (ROK-2070 B1: one marker per save) ────
+
+const MESSAGES = `/companion/v1/messages/${BG3_SAVE_CONTRACT_ID}`;
+const ACT2: Bg3SaveMessage = Bg3SaveMessageSchema.parse(
+  JSON.parse(
+    readFileSync(
+      join(
+        __dirname,
+        '../../../../../packages/contract/companion/bg3-save/v1/fixtures/act2-party-4p-summon.json',
+      ),
+      'utf8',
+    ),
+  ) as unknown,
+);
+
+/**
+ * The act2 fixture under `campaignKey`; another `savedAt` = another save.
+ * `capturedAt` must not precede `savedAt`, so it is pinned after both.
+ */
+function act2(campaignKey: string, savedAt = ACT2.payload.savedAt) {
+  const capturedAt = '2026-10-25T00:00:00Z';
+  return {
+    ...ACT2,
+    capturedAt,
+    payload: { ...ACT2.payload, campaignKey, savedAt },
+  };
+}
+
+async function ingestAck(token: string, msg: Bg3SaveMessage): Promise<unknown> {
+  const res = await testApp.request
+    .post(MESSAGES)
+    .set('Content-Type', 'application/json')
+    .set(bearer(token))
+    .serialize((bytes) => bytes)
+    .send(Buffer.from(JSON.stringify(msg)));
+  return [res.status, res.body];
+}
+
+const accepted = [202, { status: 'accepted' }];
+const stale = [202, { status: 'stale' }];
+
+async function markerKeys(userId: number): Promise<string[]> {
+  const m = schema.companionIngestLatest;
+  const rows = await testApp.db
+    .select({ key: m.latestKey })
+    .from(m)
+    .where(and(eq(m.userId, userId), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
+  return rows.map((r) => r.key).sort();
+}
+
 describe('POST plugins/bg3/me/saves/remove — latest-wins markers (Q3: cleared)', () => {
-  it('a re-sent removed save is accepted again; kept keys and other users stay stale', async () => {
-    const { a, b } = await seedWorld();
-    expect(await advance(a.id, OLD)).toBe(false);
+  beforeEach(() => expireLimiterWindows(testApp));
+
+  it('a re-sent removed save is accepted again (per-save marker); kept keys and other users stay stale', async () => {
+    const a = await makeUser('resend');
+    const b = await makeUser('resend-b');
+    const keepMsg = act2(KEEP, '2026-10-24T13:00:00Z');
+    expect(await ingestAck(a.token, act2(OLD))).toEqual(accepted);
+    expect(await ingestAck(a.token, keepMsg)).toEqual(accepted);
+    expect(await ingestAck(b.token, act2(OLD))).toEqual(accepted);
+    expect(await ingestAck(a.token, act2(OLD))).toEqual(stale);
+    const perSave = bg3LatestMarkerKey(OLD, ACT2.payload.saveName);
+    expect(await markerKeys(a.id)).toContain(perSave);
 
     expect((await post(a.token, { campaignKeys: [OLD] })).status).toBe(200);
 
-    expect(await advance(a.id, OLD)).toBe(true);
-    expect(await advance(a.id, KEEP)).toBe(false);
-    expect(await advance(b.id, OLD)).toBe(false);
+    expect(await markerKeys(a.id)).not.toContain(perSave);
+    expect(await ingestAck(a.token, act2(OLD))).toEqual(accepted);
+    expect(await savesByKey(a.id)).toEqual(
+      [OLD.slice(0, 4), KEEP.slice(0, 4)].sort(),
+    );
+    expect(await ingestAck(a.token, keepMsg)).toEqual(stale);
+    expect(await ingestAck(b.token, act2(OLD))).toEqual(stale);
+  });
+
+  it('a legacy bare-key marker is cleared too: the re-send after the remove is accepted', async () => {
+    const a = await makeUser('legacy');
+    expect(await ingestAck(a.token, act2(OLD))).toEqual(accepted);
+    // A pre-B1 marker on the bare campaign key, as old data still holds.
+    expect(await advance(a.id, OLD, new Date(ACT2.payload.savedAt))).toBe(true);
+
+    expect((await post(a.token, { campaignKeys: [OLD] })).status).toBe(200);
+
+    expect(await markerKeys(a.id)).toEqual([]);
+    expect(await ingestAck(a.token, act2(OLD))).toEqual(accepted);
+    expect(await savesByKey(a.id)).toEqual([OLD.slice(0, 4)]);
   });
 });
 
