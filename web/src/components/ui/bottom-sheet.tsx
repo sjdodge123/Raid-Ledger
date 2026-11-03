@@ -46,7 +46,11 @@ interface BottomSheetProps {
      * Its discard confirm goes one above that.
      */
     stacked?: boolean;
+    /** ROK-2068 — a request is in flight: Escape, the backdrop and swipe-down do nothing and × is disabled. */
+    closeDisabled?: boolean | undefined;
 }
+
+const noop = (): void => {};
 
 const DEFAULT_MAX_HEIGHT = '60vh';
 const EXPANDED_HEIGHT = '95vh';
@@ -138,13 +142,14 @@ function resolveDragGesture(
     }
 }
 
-function SheetHeader({ title, onClose }: { title: string; onClose: () => void }) {
+function SheetHeader({ title, onClose, disabled }: { title: string; onClose: () => void; disabled: boolean }) {
     return (
         <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-edge">
             <h3 className="text-lg font-semibold">{title}</h3>
             <button
                 onClick={onClose}
-                className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors"
+                disabled={disabled}
+                className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 aria-label="Close"
             >
                 <XMarkIcon className="w-5 h-5" />
@@ -197,8 +202,8 @@ function SheetDiscardConfirm({ guard, message, stacked }: { guard: DirtyCloseGua
     );
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false }: BottomSheetProps) {
-    const requestClose = closeGuard?.requestClose ?? onClose;
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false, closeDisabled = false }: BottomSheetProps) {
+    const requestClose = closeDisabled ? noop : (closeGuard?.requestClose ?? onClose);
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
@@ -216,7 +221,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
                 <div className="flex shrink-0 justify-center pt-3 pb-2 cursor-grab" onTouchStart={drag.handleDragStart} onTouchMove={drag.handleDragMove} onTouchEnd={drag.handleDragEnd}>
                     <div className="w-10 h-1 bg-muted rounded-full" />
                 </div>
-                {title && <SheetHeader title={title} onClose={requestClose} />}
+                {title && <SheetHeader title={title} onClose={requestClose} disabled={closeDisabled} />}
                 {/* Content-sized; shrinks and scrolls only once the sheet hits its cap. */}
                 <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
                 {footer ? <div className={OVERLAY_FOOTER_CLASS} data-testid="bottom-sheet-footer">{footer}</div> : null}

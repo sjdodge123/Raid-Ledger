@@ -133,19 +133,22 @@ describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)'
 });
 
 describe('ROK-2068 useRemoveBg3Saves', () => {
-    it('POSTs the deduped keys, then marks the BG3 hub queries, the save lists and this hub\'s Gallery stale', async () => {
+    it('POSTs the deduped keys, then marks every hub\'s BG3 queries and Gallery and the save lists stale', async () => {
         const bodies: unknown[] = [];
         server.use(bg3RemoveSavesHandler({ removed: { saves: 2, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 1 } }, (b) => bodies.push(b)));
         const { qc, wrapper } = setup();
         qc.setQueryData(bg3Keys.myAllSaves, { saves: [], nextCursor: null, defaultCampaignId: null });
         qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID), 'pages'], { pages: [] });
         qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'], { pages: [] });
-        const { result } = renderHook(() => useRemoveBg3Saves(BG3_HUB_ID), { wrapper });
+        qc.setQueryData(bg3Keys.snapshot(BG3_HUB_ID + 1), buildBg3Snapshot());
+        const { result } = renderHook(() => useRemoveBg3Saves(), { wrapper });
         await act(async () => { await result.current.mutateAsync(['a'.repeat(64), 'a'.repeat(64)]); });
         expect(bodies).toEqual([{ campaignKeys: ['a'.repeat(64)] }]);
         await waitFor(() => expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID), 'pages'])?.isInvalidated).toBe(true));
         expect(qc.getQueryState(bg3Keys.myAllSaves)?.isInvalidated).toBe(true);
         expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID))?.isInvalidated).toBe(true);
-        expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(false);
+        // The removed saves may be filed in, and pictured on, any hub (review MINOR-4).
+        expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID + 1))?.isInvalidated).toBe(true);
+        expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(true);
     });
 });

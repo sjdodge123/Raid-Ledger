@@ -17,11 +17,14 @@ export interface Bg3OverlayProps {
     readonly children: ReactNode;
     readonly closeGuard?: DirtyCloseGuard;
     readonly discardMessage?: string;
+    /** ROK-2068 — a request is in flight: no close path works and × is disabled. */
+    readonly closeDisabled?: boolean;
 }
 
-export function Bg3Overlay({ isOpen, title, onClose, footer, children, closeGuard, discardMessage }: Bg3OverlayProps): JSX.Element {
+export function Bg3Overlay({ isOpen, title, onClose, footer, children, closeGuard, discardMessage, closeDisabled = false }: Bg3OverlayProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const guard = {
+        closeDisabled,
         ...(closeGuard ? { closeGuard } : {}),
         ...(discardMessage !== undefined ? { discardMessage } : {}),
     };

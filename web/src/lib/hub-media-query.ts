@@ -18,6 +18,8 @@ export const HUB_GALLERY_STRIP_LIMIT = 8;
 export const HUB_GALLERY_STRIP_LIMIT_PHONE = 6;
 
 export const hubMediaKeys = {
+    /** Every hub's Gallery queries (ROK-2068: a save removal spans hubs). */
+    root: ['hub-media'] as const,
     all: (guildId: number) => ['hub-media', guildId] as const,
     strip: (guildId: number, filter: HubMediaFilter) => ['hub-media', guildId, 'strip', filter] as const,
 };

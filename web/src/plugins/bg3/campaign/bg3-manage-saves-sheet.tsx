@@ -5,7 +5,9 @@
  * (indeterminate when partly picked). The destructive footer button leads to a
  * confirm step in the same overlay; confirming POSTs the picked campaign keys
  * (`POST plugins/bg3/me/saves/remove`, at most `BG3_REMOVE_SAVES_MAX_KEYS`).
- * Unticking never deletes anything — only the confirmed Remove does.
+ * Unticking never deletes anything — only the confirmed Remove does. While
+ * that request is in flight no close path works (review P2-2), so its outcome
+ * (toast, cleared picks) is always shown.
  */
 import { useMemo, useState, type JSX } from 'react';
 import { BG3_REMOVE_SAVES_MAX_KEYS, type Bg3CampaignSummary } from '@raid-ledger/contract';
@@ -27,10 +29,10 @@ export const BG3_MANAGE_SAVES_TITLE = 'Manage my saves';
 export const BG3_MANAGE_SAVES_OVER_CAP_NOTE = `Pick ${BG3_REMOVE_SAVES_MAX_KEYS} or fewer playthroughs at a time.`;
 export const BG3_MANAGE_SAVES_CAPPED_NOTE = 'You have more saves than this list shows. Removing a playthrough still removes all of its saves.';
 export const BG3_MANAGE_SAVES_ERROR_TOAST = "Couldn't remove your saves.";
+export const BG3_MANAGE_SAVES_LOAD_ERROR = "Couldn't load your saves.";
 
 export interface Bg3ManageSavesSheetProps {
     readonly isOpen: boolean;
-    readonly hubId: number;
     /** This hub's campaigns — names a filed playthrough's campaign. */
     readonly campaigns: readonly Bg3CampaignSummary[];
     readonly onClose: () => void;
@@ -75,11 +77,24 @@ function MonthGroupItem({ group, ctx }: { group: Bg3MonthGroup; ctx: ListCtx }):
     );
 }
 
-interface BodyProps { readonly loading: boolean; readonly months: readonly Bg3MonthGroup[]; readonly overCap: boolean; readonly ctx: ListCtx }
+/** Review MINOR-5: a failed load must not read as "no saves" (it could prompt a re-upload). */
+function LoadError({ onRetry }: { onRetry: () => void }): JSX.Element {
+    return (
+        <div className="flex flex-col items-start gap-2" role="alert">
+            <p className="text-sm text-secondary">{BG3_MANAGE_SAVES_LOAD_ERROR}</p>
+            <Button variant="secondary" size="sm" onClick={onRetry}>Try again</Button>
+        </div>
+    );
+}
 
-function ManageBody({ loading, months, overCap, ctx }: BodyProps): JSX.Element {
+interface BodyProps {
+    readonly loading: boolean; readonly onRetry: (() => void) | null; readonly months: readonly Bg3MonthGroup[]; readonly overCap: boolean; readonly ctx: ListCtx;
+}
+
+function ManageBody({ loading, onRetry, months, overCap, ctx }: BodyProps): JSX.Element {
     let list: JSX.Element;
     if (loading) list = <p className="text-sm text-muted">Loading your saves…</p>;
+    else if (onRetry) list = <LoadError onRetry={onRetry} />;
     else if (months.length === 0) list = <p className="text-sm text-muted">You haven't uploaded any saves.</p>;
     else list = <ul className="flex flex-col gap-3" aria-label="Your playthroughs by month">{months.map((g) => <MonthGroupItem key={g.key} group={g} ctx={ctx} />)}</ul>;
     return (
@@ -113,13 +128,15 @@ function useManageSaves(isOpen: boolean) {
     }, [playthroughs]);
     const [selected, setSelected] = useState<Keys>(new Set());
     const picked = playthroughs.filter((p) => selected.has(p.campaignKey));
-    return { query, months, labels, selected, setSelected, picked, capped: (query.data?.nextCursor ?? null) !== null };
+    // A failed load with nothing to show offers a retry; a failed refetch keeps the list.
+    const onRetry = query.isError && !query.data ? () => void query.refetch() : null;
+    return { query, months, labels, selected, setSelected, picked, onRetry, capped: (query.data?.nextCursor ?? null) !== null };
 }
 
-export function Bg3ManageSavesSheet({ isOpen, hubId, campaigns, onClose }: Bg3ManageSavesSheetProps): JSX.Element {
+export function Bg3ManageSavesSheet({ isOpen, campaigns, onClose }: Bg3ManageSavesSheetProps): JSX.Element {
     const m = useManageSaves(isOpen);
     const [confirming, setConfirming] = useState(false);
-    const remove = useRemoveBg3Saves(hubId);
+    const remove = useRemoveBg3Saves();
     const saves = m.picked.reduce((n, p) => n + p.saves.length, 0);
     const overCap = m.picked.length > BG3_REMOVE_SAVES_MAX_KEYS;
     const close = (): void => { m.setSelected(new Set()); setConfirming(false); onClose(); };
@@ -139,9 +156,9 @@ export function Bg3ManageSavesSheet({ isOpen, hubId, campaigns, onClose }: Bg3Ma
             onCancel={guard.requestClose} onRemove={() => setConfirming(true)} />;
     return (
         <Bg3Overlay isOpen={isOpen} title={confirming ? removePlaythroughsTitle(m.picked.length) : BG3_MANAGE_SAVES_TITLE} onClose={close}
-            footer={footer} closeGuard={guard} discardMessage="Nothing will be removed.">
+            footer={footer} closeGuard={guard} discardMessage="Nothing will be removed." closeDisabled={remove.isPending}>
             {confirming ? <Bg3RemoveSavesConfirm saves={saves} capped={m.capped} />
-                : <ManageBody loading={m.query.isLoading} months={m.months} overCap={overCap} ctx={ctx} />}
+                : <ManageBody loading={m.query.isLoading} onRetry={m.onRetry} months={m.months} overCap={overCap} ctx={ctx} />}
         </Bg3Overlay>
     );
 }

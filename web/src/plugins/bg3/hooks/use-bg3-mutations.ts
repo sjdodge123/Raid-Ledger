@@ -123,16 +123,17 @@ export function useBindBg3Saves(hubId: number) {
 
 /**
  * ROK-2068 — remove the caller's saves of the picked playthroughs (keys). The
- * server also tombstones their Gallery pictures, so on settle this hub's
- * Gallery refreshes along with its BG3 queries and the caller's save lists.
+ * saves may be filed in any hub and the server tombstones their pictures on
+ * every hub, so on settle EVERY hub's BG3 queries and Gallery refresh (review
+ * MINOR-4); removal is rare, so the extra refetches cost little.
  */
-export function useRemoveBg3Saves(hubId: number) {
+export function useRemoveBg3Saves() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (campaignKeys: readonly string[]) => removeBg3Saves([...new Set(campaignKeys)]),
         onSettled: () => Promise.all([
-            invalidateBg3Hub(qc, hubId),
-            qc.invalidateQueries({ queryKey: hubMediaKeys.all(hubId) }),
+            qc.invalidateQueries({ queryKey: bg3Keys.all }),
+            qc.invalidateQueries({ queryKey: hubMediaKeys.root }),
         ]),
     });
 }

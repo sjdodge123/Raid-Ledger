@@ -1,16 +1,17 @@
 /** ROK-2068 — Manage my saves: month groups, tri-state month pick, confirm step, POST me/saves/remove. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import userEvent from '@testing-library/user-event';
 import type { Bg3MySave } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { bg3MySavesHandler, bg3RemoveSavesHandler } from '../../../test/mocks/bg3-handlers';
-import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignSummary, buildBg3MySave, buildBg3MySavesResponse } from '../../../test/factories/bg3';
+import { BG3_MY_SAVES_URL, BG3_REMOVE_SAVES_URL, bg3MySavesHandler, bg3RemoveSavesHandler } from '../../../test/mocks/bg3-handlers';
+import { BG3_CAMPAIGN_ID, buildBg3CampaignSummary, buildBg3MySave, buildBg3MySavesResponse } from '../../../test/factories/bg3';
 import { toast } from '../../../lib/toast';
 import { bg3MonthLabel } from '../lib/bg3-playthroughs';
 import { BG3_REMOVE_SAVES_RESEND_NOTE } from './bg3-remove-saves-confirm';
-import { Bg3ManageSavesSheet, BG3_MANAGE_SAVES_ERROR_TOAST, BG3_MANAGE_SAVES_OVER_CAP_NOTE } from './bg3-manage-saves-sheet';
+import { Bg3ManageSavesSheet, BG3_MANAGE_SAVES_ERROR_TOAST, BG3_MANAGE_SAVES_LOAD_ERROR, BG3_MANAGE_SAVES_OVER_CAP_NOTE } from './bg3-manage-saves-sheet';
 
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -35,7 +36,7 @@ function saves(): Bg3MySave[] {
 }
 
 function renderSheet(): ReturnType<typeof userEvent.setup> {
-    renderWithProviders(<Bg3ManageSavesSheet isOpen hubId={BG3_HUB_ID} campaigns={[buildBg3CampaignSummary()]} onClose={onClose} />);
+    renderWithProviders(<Bg3ManageSavesSheet isOpen campaigns={[buildBg3CampaignSummary()]} onClose={onClose} />);
     return userEvent.setup();
 }
 
@@ -61,6 +62,20 @@ describe('Manage my saves — the list', () => {
         expect(row('QuickSave_2')).toHaveAccessibleDescription(/^1 save · .* · In another hub's campaign$/);
         expect(row('QuickSave_3')).not.toHaveAccessibleDescription(/ In /);
     });
+
+    it('a failed load says so with a retry, never "no saves" (review MINOR-5)', async () => {
+        let fail = true;
+        server.use(http.get(BG3_MY_SAVES_URL, () => (fail
+            ? HttpResponse.json({ message: 'Internal server error' }, { status: 500 })
+            : HttpResponse.json(buildBg3MySavesResponse({ saves: saves() })))));
+        const user = renderSheet();
+        expect(await screen.findByText(BG3_MANAGE_SAVES_LOAD_ERROR, {}, { timeout: 8000 })).toBeInTheDocument();
+        expect(screen.queryByText("You haven't uploaded any saves.")).not.toBeInTheDocument();
+        fail = false;
+        await user.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await monthBox(AUG)).toBeInTheDocument();
+        expect(screen.queryByText(BG3_MANAGE_SAVES_LOAD_ERROR)).not.toBeInTheDocument();
+    }, 15_000);
 });
 
 describe('Manage my saves — month checkbox', () => {
@@ -138,6 +153,28 @@ describe('Manage my saves — remove', () => {
 });
 
 describe('Manage my saves — closing', () => {
+    it('while the remove is in flight no close path works, and the outcome still shows (review P2-2)', async () => {
+        let release = (): void => {};
+        const gate = new Promise<void>((r) => { release = r; });
+        server.use(http.post(BG3_REMOVE_SAVES_URL, async () => { await gate; return HttpResponse.json({ removed: REMOVED }); }));
+        const user = renderSheet();
+        await user.click(await monthBox(AUG));
+        await user.click(screen.getByRole('button', { name: 'Remove 2 playthroughs · 3 saves' }));
+        await user.click(screen.getByRole('button', { name: 'Remove saves' }));
+        const x = screen.getByRole('button', { name: /^Close( modal)?$/ });
+        await waitFor(() => expect(x).toBeDisabled());
+        await user.keyboard('{Escape}');
+        const backdrop = screen.getByRole('dialog').previousElementSibling;
+        if (!backdrop) throw new Error('the overlay has no backdrop');
+        fireEvent.click(backdrop);
+        expect(screen.queryByText('Nothing will be removed.')).not.toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        release();
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Removed 3 saves.'));
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: /^Close( modal)?$/ })).toBeEnabled();
+    });
+
     it('Cancel with picks asks to discard and removes nothing; without picks it just closes', async () => {
         const user = renderSheet();
         await user.click(await monthBox(OCT));
