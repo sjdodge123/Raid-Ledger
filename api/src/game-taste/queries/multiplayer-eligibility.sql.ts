@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { MULTIPLAYER_TAGS } from '../multiplayer-tags.constants';
 
 /**
  * Multiplayer eligibility for similarity results (ROK-931, ROK-1939).
@@ -21,12 +22,10 @@ export const IGDB_MULTIPLAYER_MODES: readonly number[] = [
   6, // Battle Royale
 ];
 
-/** Lowercased ITAD/Steam tags that mean multiplayer without naming an axis. */
-export const MULTIPLAYER_TAGS_LOWER: readonly string[] = [
-  'multiplayer',
-  'online multiplayer',
-  'local multiplayer',
-];
+/** Lowercased shared multiplayer tags, matched case-insensitively. */
+const MULTIPLAYER_TAGS_LOWER: readonly string[] = MULTIPLAYER_TAGS.map((t) =>
+  t.toLowerCase(),
+);
 
 const GROUP_PLAY_AXES = ['pvp', 'co_op', 'mmo', 'battle_royale', 'moba'];
 
@@ -50,15 +49,20 @@ function multiplayerTagPredicate(): SQL {
     sql`, `,
   );
   return sql`EXISTS (
-    SELECT 1 FROM jsonb_array_elements_text(COALESCE(g.itad_tags, '[]'::jsonb)) AS t(tag)
+    SELECT 1 FROM jsonb_array_elements_text(
+      CASE WHEN jsonb_typeof(g.itad_tags) = 'array'
+           THEN g.itad_tags ELSE '[]'::jsonb END
+    ) AS t(tag)
     WHERE lower(t.tag) IN (${tags})
   )`;
 }
 
 /**
  * `AND (...)` clause keeping a game when ANY multiplayer signal is present:
- * a group-play taste axis, an IGDB multiplayer mode, a generic multiplayer
- * tag, or an IGDB player count above one. Expects `g` = games and
+ * a group-play taste axis, an IGDB multiplayer mode, a shared multiplayer
+ * tag, an IGDB player count above one, or a Co-Optimus online capacity above
+ * one. A non-array `itad_tags` value counts as no tags rather than failing
+ * the whole query. Expects `g` = games and
  * `gtv` = game_taste_vectors in scope.
  */
 export function multiplayerEligibilityClause(): SQL {
@@ -67,5 +71,6 @@ export function multiplayerEligibilityClause(): SQL {
     OR ${igdbModePredicate()}
     OR ${multiplayerTagPredicate()}
     OR COALESCE((g.player_count->>'max')::numeric, 0) > 1
+    OR COALESCE(g.cooptimus_online_max, 0) > 1
   )`;
 }
