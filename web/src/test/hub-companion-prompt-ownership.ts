@@ -11,6 +11,8 @@ import { getHubCompanionPromptRegistrations } from '../components/hub/companion/
 export interface CompanionPromptRegistration {
     owner: string;
     requirementId: string;
+    /** `HubCompanionPrompt.alsoCovers` — further requirements the same card prompts. */
+    alsoCovers: readonly string[];
     games: readonly string[];
 }
 
@@ -19,7 +21,7 @@ type Manifests = Readonly<Record<string, PluginHubManifest>>;
 /** Every Companion prompt registered right now, with its owner. */
 export function collectCompanionPrompts(): CompanionPromptRegistration[] {
     return getHubCompanionPromptRegistrations().map(({ pluginSlug, prompt }) => ({
-        owner: pluginSlug, requirementId: prompt.requirementId, games: prompt.games,
+        owner: pluginSlug, requirementId: prompt.requirementId, alsoCovers: prompt.alsoCovers ?? [], games: prompt.games,
     }));
 }
 
@@ -29,16 +31,26 @@ function promptProblems(r: CompanionPromptRegistration, manifest: PluginHubManif
     const requirement = manifest.setup.requirements.find((q) => q.id === r.requirementId);
     if (requirement === undefined) return [`${key} names no requirement in HUB_PLUGIN_MANIFESTS.${r.owner}.setup`];
     const problems = requirement.rlCompanion === undefined ? [`${key} names a requirement without rlCompanion`] : [];
+    problems.push(...coverProblems(r, manifest, key));
     if (r.games.length === 0) problems.push(`${key} lists no games`);
     const allowed = manifest.gameSlugs ?? [];
     return [...problems, ...r.games.filter((g) => !allowed.includes(g))
         .map((g) => `${key} targets game "${g}", not in HUB_PLUGIN_MANIFESTS.${r.owner}.gameSlugs`)];
 }
 
+/** Each `alsoCovers` id is held to the same rules as `requirementId`: own manifest, rlCompanion. */
+function coverProblems(r: CompanionPromptRegistration, manifest: PluginHubManifest, key: string): string[] {
+    return r.alsoCovers.flatMap((id) => {
+        const covered = manifest.setup.requirements.find((q) => q.id === id);
+        if (covered === undefined) return [`${key} also covers "${id}", which names no requirement in HUB_PLUGIN_MANIFESTS.${r.owner}.setup`];
+        return covered.rlCompanion === undefined ? [`${key} also covers "${id}", a requirement without rlCompanion`] : [];
+    });
+}
+
 /** Every drift between registered prompts and the manifests' `rlCompanion` requirements. */
 export function companionPromptDrift(regs: readonly CompanionPromptRegistration[], manifests: Manifests): string[] {
     const byOwner = new Map(Object.entries(manifests));
-    const prompted = new Set(regs.map((r) => `${r.owner}:${r.requirementId}`));
+    const prompted = new Set(regs.flatMap((r) => [r.requirementId, ...r.alsoCovers].map((id) => `${r.owner}:${id}`)));
     const unprompted = [...byOwner].flatMap(([owner, m]) => m.setup.requirements
         .filter((q) => q.rlCompanion !== undefined && !prompted.has(`${owner}:${q.id}`))
         .map((q) => `HUB_PLUGIN_MANIFESTS.${owner}.setup requirement "${q.id}" carries rlCompanion but no companion prompt registers it`));

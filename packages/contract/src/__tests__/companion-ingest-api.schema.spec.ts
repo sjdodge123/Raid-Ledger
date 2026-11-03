@@ -110,3 +110,22 @@ describe('CompanionConfigSchema contract plugin + game (T-C-4, ROK-2067)', () =>
         expect(CompanionConfigSchema.safeParse(withContract({ game: { slug: 'x', name: 'X' } })).success).toBe(false);
     });
 });
+
+describe('CompanionConfigSchema contract hubTargets + image slot (ROK-1966)', () => {
+    const [contract] = authenticatedConfig.contracts;
+    const screenshot = { ...contract, id: 'bg3-screenshot', maxBytes: 4096, blobSlots: ['image'] };
+    const withTargets = (hubTargets: unknown) => ({ ...authenticatedConfig, contracts: [{ ...screenshot, hubTargets }] });
+    const hub = { hubGuildId: 42, name: 'Tavern Crew', isDefault: true };
+    it('accepts the image slot, hubTargets absent (older server), empty, and listed', () => {
+        expect(CompanionConfigSchema.safeParse({ ...authenticatedConfig, contracts: [screenshot] }).success).toBe(true);
+        expect(CompanionConfigSchema.safeParse(withTargets([])).success).toBe(true);
+        expect(CompanionConfigSchema.safeParse(withTargets([hub, { ...hub, hubGuildId: 7, isDefault: false }])).success).toBe(true);
+    });
+    it('rejects a bad hub id, an empty name, a missing isDefault and an unknown key', () => {
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, hubGuildId: 0 }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, hubGuildId: '42' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, name: '' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ hubGuildId: 42, name: 'x' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, slug: 'tavern' }])).success).toBe(false);
+    });
+});

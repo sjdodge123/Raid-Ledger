@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "envelopeVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "contract": {
+      "type": "string",
+      "const": "bg3-screenshot"
+    },
+    "contractVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "capturedAt": {
+      "type": "string",
+      "maxLength": 24,
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "appVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "collectorVersion": {
+      "type": "string",
+      "maxLength": 48,
+      "pattern": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,4}(-[0-9A-Za-z.-]{1,32})?$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "takenAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "width": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 16384
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "byteLength": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 1048576
+            },
+            "contentType": {
+              "type": "string",
+              "const": "image/webp"
+            },
+            "width": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 4096
+            },
+            "height": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 4096
+            }
+          },
+          "required": [
+            "sha256",
+            "byteLength",
+            "contentType",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "hubGuildId": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "required": [
+            "hubGuildId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "takenAt",
+        "width",
+        "height",
+        "image",
+        "target"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "envelopeVersion",
+    "contract",
+    "contractVersion",
+    "capturedAt",
+    "appVersion",
+    "collectorVersion",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raid.gamernight.net/contracts/companion/bg3-screenshot/v1/schema.json",
+  "title": "RL Companion bg3-screenshot message v1",
+  "description": "GENERATED from Bg3ScreenshotMessageSchema (packages/contract/src/companion-bg3-screenshot.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: payload.image.width <= payload.width; payload.image.height <= payload.height; payload.takenAt <= capturedAt. Server-only rules (hub membership, clock, blob present) are in CONTRACT.md."
+}

@@ -171,6 +171,10 @@ omit them; both `.strict()` inside):
 |---|---|---|
 | `plugin` | `{ id, name, state: 'active' \| 'inactive' \| 'not_installed' } \| null` | The contract's owner plugin (`name` = its manifest name, else `id`) and whether it is turned on, installed but off, or not installed. `null` = no handler registered. `enabled` keeps its meaning: a contract can be `enabled: false` with `state: 'active'` (its handler is not reachable from this caller). |
 | `game` | `{ slug, name, coverUrl: string \| null } \| null` | The owner plugin's game, for tile art. Of the plugin's game slugs with a `games` row, the one with the most hubs on this server wins; a tie (or no hubs) goes to the plugin's hub-manifest primary slug. `coverUrl` = the IGDB cover, else the ITAD boxart; when the picked game has neither it borrows the first cover among the plugin's other slugs (the name stays the picked game's). `coverUrl` may be protocol-relative (`//images.igdb.com/...`, as IGDB stores it); the app resolves it against `https:`. `null` = the plugin has no `games` row. |
+| `hubTargets` | `[{ hubGuildId, name, isDefault }]`, ≤ 100 | ROK-1966. Only on contracts whose payload names a hub (`bg3-screenshot`): the hubs the caller is a live member of that the contract may target, for the app's hub picker. `isDefault` marks at most one pre-selected hub. `[]` = nothing to pick; absent = older server or a contract without a target. |
+
+`blobSlots` values: `"thumbnail"` (`bg3-save`) and, since ROK-1966, `"image"`
+(`bg3-screenshot`).
 
 ## 5. Clock rule
 

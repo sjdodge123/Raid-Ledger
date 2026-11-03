@@ -256,6 +256,7 @@ export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
+export * from './companion-bg3-screenshot.schema.js';
 // Companion `wow-ledgerlink` v1 — wraps a LedgerLink v1 export string (ROK-1964).
 export * from './companion-wow-ledgerlink.schema.js';
 export * from './companion-registry.js';
