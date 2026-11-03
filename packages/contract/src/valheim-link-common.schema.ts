@@ -20,7 +20,7 @@ export const VALHEIM_LINK_SCHEMA_VERSION = 1;
 // array full, every string at max length, free text of control characters
 // that JSON escapes to 6 bytes), so the array caps always bind first.
 
-/** Request-body cap for a `character` message (UTF-8 JSON); worst case ≈ 1.87 MB. */
+/** Request-body cap for a `character` message (UTF-8 JSON); worst case ≈ 1.89 MB (with 200 deaths, ROK-1931). */
 export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 2_097_152;
 /** Request-body cap for a `map` message (inline bitmaps); worst case ≈ 7.03 MB. */
 export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
