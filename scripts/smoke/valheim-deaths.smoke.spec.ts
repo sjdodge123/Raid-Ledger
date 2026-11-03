@@ -154,6 +154,37 @@ test.describe("Valheim hub — Deaths card + death pins (ROK-1930)", () => {
     );
   });
 
+  test('member: a mod-reported death draws as a synthetic "Death · <date time>" pin (ROK-1931)', async ({
+    page,
+  }, testInfo) => {
+    const f = await seed(testInfo.parallelIndex);
+    const { second } = f.characters;
+    const reported = f.reportedDeath;
+    expect(reported, "deaths fixture seeds a reported death").toEqual({
+      characterId: second.id,
+      diedAt: expect.any(String),
+    });
+    await signInContextAs(page.context(), f.users.member.id);
+    const mapRead = responseTo(
+      page,
+      `/characters/${second.id}/maps/${second.mapId}`,
+    );
+    await page.goto(`/hubs/${f.guildId}?pins=death&vc=${second.id}#map`);
+    const res = await mapRead;
+    expect(res.status(), `character map read answered ${res.status()}`).toBe(
+      200,
+    );
+    const map = mapApp(page);
+    await expect(map).toBeVisible({ timeout: 15_000 });
+    // Its own Death pins plus the synthetic one; the label is viewer-local time.
+    await expect(pins(map)).toHaveCount(second.deathPinLabels.length + 1);
+    await expect(
+      map.getByRole("button", {
+        name: /^Death · \d{1,2} [A-Z][a-z]{2} \d{2}:\d{2} \(Death\)$/,
+      }),
+    ).toHaveCount(1);
+  });
+
   test("visitor: no Deaths card on the Overview, and the deaths read is a 404", async ({
     page,
   }, testInfo) => {

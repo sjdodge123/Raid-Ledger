@@ -33,6 +33,12 @@ export interface Fixture {
   unlinked: { name: string; deaths: number };
   /** ROK-1946: the world's scanned portals (raw tags, `""` = unnamed). */
   portals: { count: number; tags: string[] };
+  /**
+   * ROK-1931: one mod-reported death (`source: 'mod'`, with x/z on the world)
+   * for `characterId`, far from its own Death pins — the read adds it as a
+   * synthetic Death pin labelled "Death · <date time>" on the web.
+   */
+  reportedDeath?: { characterId: number; diedAt: string };
 }
 
 /** Install-or-activate through the admin plugin API (valheim-map-tab pattern). */
