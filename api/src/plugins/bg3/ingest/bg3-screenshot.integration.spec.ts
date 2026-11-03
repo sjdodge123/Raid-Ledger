@@ -451,24 +451,26 @@ describe('Delete my BG3 data', () => {
     await joinHub(hub, mate.id);
     expectAck(await upload(tav, await makeShot(45), hub), 'accepted');
     expectAck(await upload(mate, await makeShot(46), hub), 'accepted');
-    const byUploader = async () =>
-      Object.fromEntries(
-        (await mediaRows(hub)).map((r) => [r.uploadedBy, r.removedAt]),
-      );
-    const mateRow = (await mediaRows(hub)).find(
-      (r) => r.uploadedBy === mate.id,
-    );
+    // Keyed by row id taken BEFORE the delete: the tombstone scrubs
+    // `uploaded_by` (ROK-1959 — withdrawn data keeps only its key).
+    const before = await mediaRows(hub);
+    const tavRow = before.find((r) => r.uploadedBy === tav.id);
+    const mateRow = before.find((r) => r.uploadedBy === mate.id);
 
     const res = await testApp.request
       .delete('/plugins/bg3/me/data')
       .set(bearer(tav.token));
     expect(res.status).toBe(200);
 
-    const removed = await byUploader();
-    expect([removed[tav.id] instanceof Date, removed[mate.id]]).toEqual([
-      true,
-      null,
-    ]);
+    const after = new Map((await mediaRows(hub)).map((r) => [r.id, r]));
+    const tavAfter = after.get(tavRow?.id ?? -1);
+    const mateAfter = after.get(mateRow?.id ?? -1);
+    expect([
+      tavAfter?.removedAt instanceof Date,
+      tavAfter?.uploadedBy,
+      mateAfter?.removedAt,
+      mateAfter?.uploadedBy,
+    ]).toEqual([true, null, null, mate.id]);
     expect((await gallery(hub, mate)).items.map((i) => i.id)).toEqual([
       mateRow?.id,
     ]);
