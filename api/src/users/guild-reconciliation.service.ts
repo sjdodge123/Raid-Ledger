@@ -183,7 +183,8 @@ export class GuildReconciliationService {
    * seen in the guild at least once (ROK-1749 `guild_member_seen_at IS NOT
    * NULL`). Excludes `local:%` (email-only) and `unlinked:%` (unlinked) ids —
    * neither is guild-trackable — and never-seen OAuth guests. The hub seed's
-   * synthetic users are dropped too: their snowflakes are in no real guild.
+   * synthetic users are dropped too under DEMO_MODE: their snowflakes are in
+   * no real guild.
    */
   private async loadActiveDbUsers(): Promise<ActiveUser[]> {
     const rows = await this.db
@@ -200,7 +201,11 @@ export class GuildReconciliationService {
       );
     // SQL isNotNull(discordId) above guarantees non-null; Drizzle still infers
     // `string | null` from the nullable column, so assert the narrowed type.
-    return rows.filter((r) => !isSeedSyntheticUser(r)) as ActiveUser[];
+    // Seed users exist only under DEMO_MODE, so production keeps every row.
+    const demo = process.env.DEMO_MODE === 'true';
+    return rows.filter(
+      (r) => !(demo && isSeedSyntheticUser(r)),
+    ) as ActiveUser[];
   }
 
   /**
