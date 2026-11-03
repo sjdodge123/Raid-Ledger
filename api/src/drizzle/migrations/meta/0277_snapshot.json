@@ -1,5 +1,5 @@
 {
-  "id": "c3af846d-1d23-412d-8838-ab81630ee5de",
+  "id": "98951add-3c07-49d1-9484-bd9b2fc89a3a",
   "prevId": "e6434845-0dc8-4f81-a721-28cd68064de8",
   "version": "7",
   "dialect": "postgresql",
@@ -1278,12 +1278,6 @@
         "attendance_status": {
           "name": "attendance_status",
           "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attendance_source": {
-          "name": "attendance_source",
-          "type": "varchar(10)",
           "primaryKey": false,
           "notNull": false
         },
@@ -13376,7 +13370,7 @@
       "checkConstraints": {
         "hub_media_source_check": {
           "name": "hub_media_source_check",
-          "value": "\"hub_media\".\"source\" IN ('discord', 'upload', 'bg3-save')"
+          "value": "\"hub_media\".\"source\" IN ('discord', 'upload', 'bg3-save', 'bg3-screenshot')"
         },
         "hub_media_kind_check": {
           "name": "hub_media_kind_check",
