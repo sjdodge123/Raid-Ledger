@@ -125,24 +125,36 @@ isSummon`. Key order is not significant to the schema.
   is a plain, unsalted SHA-256, so a low-entropy folder name can be recovered
   by hashing candidate names.
 - `campaignKey` MUST be the lowercase hex SHA-256 of the save-folder name
-  (`campaignKeySource: "save-folder"`) or, once ROK-1967 reads `meta.lsf`, of
-  the save's GameID (`campaignKeySource: "game-id"`). The collector MUST hash
-  the UTF-8 bytes of the folder's own name (no path) and MUST send all 64 hex
-  characters. **The raw folder name is never sent**: its format is unverified
-  and may embed the character name.
+  (`campaignKeySource: "save-folder"`) or, since ROK-2070 reads `meta.lsf`
+  inside the `.lsv`, of the save's GameID (`campaignKeySource: "game-id"`).
+  For a folder key the collector MUST hash the UTF-8 bytes of the folder's
+  own name (no path). Every key MUST be sent as all 64 hex characters.
+  **The raw folder name is never sent**: its format is unverified and may
+  embed the character name.
+- **GameID hash input (ROK-2070).** The hashed bytes are the UTF-8 bytes of
+  the GameID's text exactly as `meta.lsf` stores it, before hashing: for a
+  string attribute, the stored string with its trailing NUL stripped (no
+  trimming, no case change); for a UUID attribute, LSLib's display form,
+  lowercase and hyphenated. A GameID outside 1..=128 bytes of printable
+  ASCII counts as unreadable. **The raw GameID is never sent** (§4).
+- **Fallback.** An unreadable `meta.lsf` (absent, oversize, wrong magic or
+  version, a corrupt or unsupported section, no GameID attribute) falls back
+  to the folder key with `campaignKeySource: "save-folder"`; **the upload
+  never fails** because of `meta.lsf`.
 - A browser upload of a bare `.lsv` (no folder, ROK-1960) hashes the file's
   stem (its name without `.lsv`) and sends `campaignKeySource: "file-name"`.
   BG3 names the `.lsv` after its folder, so the key usually equals the folder
   key, but the source records that the folder was not seen. The same never-
   send-the-raw-name rule applies.
 - The schema accepts exactly 64 lowercase hex characters (`^[0-9a-f]{64}$`,
-  a full SHA-256; a later GameID key is hashed the same way). The invalid fixture `campaign-key-raw-folder` proves a
-  raw name is rejected.
+  a full SHA-256) for all three sources. The invalid fixture
+  `campaign-key-raw-folder` proves a raw name is rejected.
 - **The folder name fragments campaigns across saves** (Codex review). A
   `save-folder` key is NOT a reliable campaign identity: one playthrough can
   span several save folders, so the server MUST NOT assume one key = one
-  campaign. Campaign grouping is by `meta.lsf` GameID later (ROK-1967,
-  `campaignKeySource: "game-id"`) or by the user's manual assignment.
+  campaign. Campaign grouping is by the `meta.lsf` GameID (ROK-2070,
+  `campaignKeySource: "game-id"`) when it is readable, or by the user's
+  manual assignment. A `file-name` key is as fragmentary as a folder key.
   `campaignKeySource` exists so that switch never silently splits or merges
   campaigns.
 
@@ -155,7 +167,8 @@ paths, the raw save-folder name, the OS username or a hardware id. The sample
 `SaveInfo.json` holds no names or account ids. Two sent fields still carry
 user-linked data: `saveName` is **user-authored free text** that may contain
 personal text (shown in the local preview before upload), and `campaignKey` is
-**pseudonymous, not anonymous** (an unsalted hash of the folder name, §3.3). Upload is opt-in per game, with
+**pseudonymous, not anonymous** (an unsalted hash of the folder name, file
+stem or GameID, §3.3). Upload is opt-in per game, with
 a local preview before the first upload and on every contract bump (spike §5).
 
 ## 5. Strict keys and refinements
