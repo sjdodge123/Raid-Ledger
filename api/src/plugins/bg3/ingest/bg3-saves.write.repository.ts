@@ -4,7 +4,7 @@
  * message back), never on the outer db.
  */
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
 import { liveCommunityRole } from '../../../guilds/community/community-hub.reads';
@@ -18,6 +18,34 @@ export interface Bg3CampaignTarget {
 
 /** One `bg3_saves` insert. */
 export type Bg3SaveInsert = typeof schema.bg3Saves.$inferInsert;
+
+/**
+ * ROK-2070 OQ3: does the uploader already hold this save under ANOTHER key
+ * source? A save first sent with a folder key and re-sent with its GameID
+ * key (or a bare-`.lsv` file-name key) misses the `(uploader, key, savedAt)`
+ * unique index, so it is matched on `(uploader, savedAt, saveName)` across
+ * key sources. A plain read on the ingest tx — never catch-and-retry, which
+ * would poison it.
+ */
+async function heldUnderOtherKeySource(
+  tx: CompanionDeviceTx,
+  row: Bg3SaveInsert,
+): Promise<boolean> {
+  const s = schema.bg3Saves;
+  const [held] = await tx
+    .select({ id: s.id })
+    .from(s)
+    .where(
+      and(
+        eq(s.uploaderUserId, row.uploaderUserId),
+        eq(s.savedAt, row.savedAt),
+        eq(s.saveName, row.saveName),
+        ne(s.campaignKeySource, row.campaignKeySource),
+      ),
+    )
+    .limit(1);
+  return held !== undefined;
+}
 
 @Injectable()
 export class Bg3SavesWriteRepository {
@@ -78,12 +106,17 @@ export class Bg3SavesWriteRepository {
 
   /**
    * D-4: insert one save; a replay of `(uploader, campaignKey, savedAt)` is
-   * a no-op. Returns whether a row was written.
+   * a no-op. ROK-2070: so is the same save (same `savedAt` + `saveName`)
+   * already held under another `campaignKeySource`. The caller has taken
+   * the per-user campaign lock (`resolveCampaign`), so the pre-check and the
+   * insert cannot interleave with a concurrent upload by the same user.
+   * Returns whether a row was written.
    */
   async insertSave(
     tx: CompanionDeviceTx,
     row: Bg3SaveInsert,
   ): Promise<boolean> {
+    if (await heldUnderOtherKeySource(tx, row)) return false;
     const s = schema.bg3Saves;
     const written = await tx
       .insert(s)

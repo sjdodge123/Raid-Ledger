@@ -572,3 +572,76 @@ describe('I-10 browser upload (ROK-1960): a session JWT, a bare .lsv', () => {
     ]);
   });
 });
+
+type KeySource = Bg3SaveMessage['payload']['campaignKeySource'];
+
+/** `save()` under an explicit key source (ROK-2070). */
+function keyed(
+  key: string,
+  source: KeySource,
+  savedAt?: string,
+): Bg3SaveMessage {
+  const msg = save(savedAt === undefined ? { key } : { key, savedAt });
+  return { ...msg, payload: { ...msg.payload, campaignKeySource: source } };
+}
+
+/** `[campaignKey, campaignKeySource, savedAt]` of every save, in order. */
+async function keyRows(): Promise<[string, string, string][]> {
+  return (await saveRows()).map((r) => [
+    r.campaignKey,
+    r.campaignKeySource,
+    r.savedAt.toISOString(),
+  ]);
+}
+
+describe('I-11 re-upload under another key source (ROK-2070 OQ3)', () => {
+  it('a folder-key save re-sent with its game-id key → accepted, still one row (the folder one)', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder')),
+      'accepted',
+    );
+    expectAck(await ingest(w.host.token, keyed(KEY_B, 'game-id')), 'accepted');
+    expect(await keyRows()).toEqual([
+      [KEY_A, 'save-folder', iso(ACT2.payload.savedAt)],
+    ]);
+    // A replay of the skipped game-id message is stale and writes nothing.
+    expectAck(await ingest(w.host.token, keyed(KEY_B, 'game-id')), 'stale');
+    expect(await saveRows()).toHaveLength(1);
+  });
+
+  it('a game-id save at a different savedAt → two rows', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder', at('10'))),
+      'accepted',
+    );
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_B, 'game-id', at('11'))),
+      'accepted',
+    );
+    expect(await keyRows()).toEqual([
+      [KEY_A, 'save-folder', iso(at('10'))],
+      [KEY_B, 'game-id', iso(at('11'))],
+    ]);
+  });
+
+  it('the same key source under another key is unchanged → two rows; another uploader is unaffected', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder')),
+      'accepted',
+    );
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_C, 'save-folder')),
+      'accepted',
+    );
+    expectAck(await ingest(w.mate.token, keyed(KEY_B, 'game-id')), 'accepted');
+    const rows = await saveRows();
+    expect(rows.map((r) => [r.uploaderUserId, r.campaignKey])).toEqual([
+      [w.host.id, KEY_A],
+      [w.host.id, KEY_C],
+      [w.mate.id, KEY_B],
+    ]);
+  });
+});
