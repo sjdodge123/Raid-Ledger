@@ -9,9 +9,11 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { seedDiscordId } from '../admin/demo-test-community-hubs.snowflakes';
 
 type Row = {
   id: number;
+  username?: string;
   discordId: string;
   avatar: string | null;
   guildMemberSeenAt: Date | null;
@@ -97,6 +99,32 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
     expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep', {
       seenBefore: expect.any(Date),
     });
+  });
+
+  it('spares hub-seed users on their synthetic snowflakes; a seed name on a real id is still swept', async () => {
+    const seen = { avatar: null, guildMemberSeenAt: OLD };
+    const h = setup(
+      ['111'],
+      [
+        {
+          id: 7,
+          username: 'community-leader',
+          discordId: seedDiscordId('community-leader'),
+          ...seen,
+        },
+        {
+          id: 8,
+          username: 'community-officer-t1',
+          discordId: seedDiscordId('community-officer-t1'),
+          ...seen,
+        },
+        { id: 5, username: 'community-member-1', discordId: '999', ...seen },
+      ],
+    );
+    await h.run();
+    expect(h.deactivateUser.mock.calls.map(([id]: [number]) => id)).toEqual([
+      5,
+    ]);
   });
 
   it('logs how many never-seen users were skipped', async () => {
