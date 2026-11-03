@@ -59,6 +59,7 @@ export const VECTOR_TITLE_DESCRIPTIONS: Record<VectorTitle, string> = {
   Acrobat: 'Leaps and lands platformer challenges',
   Racer: 'Lives for speed and the perfect racing line',
   Athlete: 'Competes on the virtual field in sports titles',
+  Gunslinger: 'Lives behind the sights in first-person shooters',
 } as const;
 
 /**
@@ -96,4 +97,5 @@ export const VECTOR_TITLE_AXES: Record<
   Acrobat: ['platformer'],
   Racer: ['racing'],
   Athlete: ['sports'],
+  Gunslinger: ['fps'],
 } as const;
