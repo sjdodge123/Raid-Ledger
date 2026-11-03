@@ -18,6 +18,8 @@ export interface VoiceAttendanceMocks {
   mockGetBindings: jest.Mock;
   mockGetGuildId: jest.Mock;
   mockGetDefaultVoice: jest.Mock;
+  /** SettingsService.get — resolves '5' (the grace setting) by default. */
+  mockSettingsGet: jest.Mock;
 }
 
 /** Set up the shared test module and return all mocks. */
@@ -26,6 +28,7 @@ export async function setupVoiceAttendanceTestModule(): Promise<VoiceAttendanceM
   const mockGetBindings = jest.fn().mockResolvedValue([]);
   const mockGetGuildId = jest.fn().mockReturnValue('guild-1');
   const mockGetDefaultVoice = jest.fn().mockResolvedValue(null);
+  const mockSettingsGet = jest.fn().mockResolvedValue('5');
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -34,7 +37,7 @@ export async function setupVoiceAttendanceTestModule(): Promise<VoiceAttendanceM
       {
         provide: SettingsService,
         useValue: {
-          get: jest.fn().mockResolvedValue('5'),
+          get: mockSettingsGet,
           getDiscordBotDefaultVoiceChannel: mockGetDefaultVoice,
         },
       },
@@ -67,6 +70,7 @@ export async function setupVoiceAttendanceTestModule(): Promise<VoiceAttendanceM
     mockGetBindings,
     mockGetGuildId,
     mockGetDefaultVoice,
+    mockSettingsGet,
   };
 }
 

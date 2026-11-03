@@ -75,7 +75,11 @@ async function updateByDiscordId(
   if (ids.length === 0) return;
   await db
     .update(schema.eventSignups)
-    .set({ attendanceStatus: status, attendanceRecordedAt: now })
+    .set({
+      attendanceStatus: status,
+      attendanceSource: 'voice',
+      attendanceRecordedAt: now,
+    })
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),
@@ -99,7 +103,11 @@ async function updateByUserId(
   if (ids.length === 0) return;
   await db
     .update(schema.eventSignups)
-    .set({ attendanceStatus: status, attendanceRecordedAt: now })
+    .set({
+      attendanceStatus: status,
+      attendanceSource: 'voice',
+      attendanceRecordedAt: now,
+    })
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),

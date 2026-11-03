@@ -7,6 +7,7 @@ import {
   type WeeklySnapshotInput,
 } from '../intensity-rollup.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
+import { loadCommunityAxisStats } from '../archetype-retitle-all.helpers';
 import {
   loadPresenceUserIds,
   writeIntensityWithTitle,
@@ -115,6 +116,15 @@ async function communityDistributions(
 }
 
 /**
+ * Presence ids + the D6 community the re-title uses. ROK-1939 D8: the
+ * weekly write uses the same community-relative noun rule as the daily
+ * aggregate's re-title, or it would flip nouns back to the raw rule.
+ */
+function loadTitleInputs(db: Db) {
+  return Promise.all([loadPresenceUserIds(db), loadCommunityAxisStats(db)]);
+}
+
+/**
  * Weekly intensity rollup. ROK-1935: every active user with a taste-vector
  * row is re-titled on every run — users with a snapshot get fresh metrics,
  * the rest keep their stored metrics — so after a run no stored archetype
@@ -136,7 +146,7 @@ export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
     allTimeHoursDistribution: [...dists.allTime.values()],
     maxUniqueGames: dists.maxUniqueGames,
   };
-  const presenceUserIds = await loadPresenceUserIds(db);
+  const [presenceUserIds, titleCommunity] = await loadTitleInputs(db);
 
   for (const { id: userId } of users) {
     const snap = await buildWeeklySnapshot(db, userId, weekStart, dists);
@@ -150,6 +160,7 @@ export async function runWeeklyIntensityRollup(db: Db): Promise<void> {
         userId,
         metrics,
         presenceUserIds.has(userId),
+        titleCommunity,
       );
     });
   }

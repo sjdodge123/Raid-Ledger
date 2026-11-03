@@ -156,6 +156,30 @@ async function testRecordAttendanceValid() {
   });
 }
 
+async function testRecordWritesManualSource() {
+  const updated = { ...mockSignup, attendanceStatus: 'excused' };
+  const chain = updateChainWith([updated]);
+  mockDb.select
+    .mockReturnValueOnce(selectChainWith([pastEvent]))
+    .mockReturnValueOnce(selectChainWith([mockSignup]))
+    .mockReturnValueOnce(selectChainWith([mockUser]));
+  mockDb.update.mockReturnValueOnce(chain);
+
+  await service.recordAttendance(
+    1,
+    { signupId: 100, attendanceStatus: 'excused' },
+    10,
+    false,
+  );
+
+  expect(chain.set).toHaveBeenCalledWith(
+    expect.objectContaining({
+      attendanceStatus: 'excused',
+      attendanceSource: 'manual',
+    }),
+  );
+}
+
 async function testRecordEventNotFound() {
   mockDb.select.mockReturnValueOnce(selectChainWith([]));
   await expect(
@@ -296,6 +320,8 @@ beforeEach(() => setupEach());
 describe('AttendanceService — recordAttendance', () => {
   it('should record attendance for valid past event', () =>
     testRecordAttendanceValid());
+  it("should stamp attendance_source 'manual' (ROK-1940)", () =>
+    testRecordWritesManualSource());
   it('should throw NotFoundException when event missing', () =>
     testRecordEventNotFound());
   it('should throw BadRequestException when event not ended', () =>

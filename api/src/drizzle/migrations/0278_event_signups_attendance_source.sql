@@ -1,0 +1,1 @@
+ALTER TABLE "event_signups" ADD COLUMN "attendance_source" varchar(10);
