@@ -152,7 +152,7 @@ describe('W6 — the Gallery alias', () => {
 describe('W7 — every Companion prompt names its own rlCompanion requirement, and back', () => {
     const prompts = collectCompanionPrompts();
     const prompt = (over: Partial<CompanionPromptRegistration>): CompanionPromptRegistration =>
-        ({ owner: 'bg3', requirementId: 'upload-saves', games: ['baldurs-gate-3'], ...over });
+        ({ owner: 'bg3', requirementId: 'upload-saves', alsoCovers: ['companion-screenshots'], games: ['baldurs-gate-3'], ...over });
 
     it('sees the BG3 and Blizzard prompts, and finds no drift', () => {
         expect(prompts.map((p) => `${p.owner}:${p.requirementId}`))
@@ -180,6 +180,17 @@ describe('W7 — every Companion prompt names its own rlCompanion requirement, a
             .toEqual(['companion prompt bg3:upload-saves lists no games']);
         expect(companionPromptDrift([...prompts, prompt({ owner: 'ghost' })], HUB_PLUGIN_MANIFESTS))
             .toEqual(['companion prompt ghost:upload-saves has no HUB_PLUGIN_MANIFESTS.ghost']);
+    });
+
+    it('holds an alsoCovers id to the same rules, and an uncovered rlCompanion requirement is reported (ROK-1966)', () => {
+        const rest = prompts.filter((p) => p.owner !== 'bg3');
+        expect(companionPromptDrift([...rest, prompt({ alsoCovers: [] })], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'HUB_PLUGIN_MANIFESTS.bg3.setup requirement "companion-screenshots" carries rlCompanion but no companion prompt registers it',
+        ]);
+        expect(companionPromptDrift([...rest, prompt({ alsoCovers: ['companion-screenshots', 'gone', 'bind-campaign'] })], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'companion prompt bg3:upload-saves also covers "gone", which names no requirement in HUB_PLUGIN_MANIFESTS.bg3.setup',
+            'companion prompt bg3:upload-saves also covers "bind-campaign", a requirement without rlCompanion',
+        ]);
     });
 
     it('names an rlCompanion requirement no prompt registers', () => {

@@ -215,6 +215,8 @@ async function obliterateAllQueues(): Promise<void> {
  * `weekly-digest:` (ROK-1435) covers the ISO-week claim
  * (`weekly-digest:2026-W39`): the DB row goes with the truncate, but a Redis
  * copy left behind makes the next test's first post read as a duplicate.
+ * `hub-media-companion:` (ROK-1966) is the per-user screenshot window: user
+ * ids repeat after a truncate, so a spent window would refuse a new user.
  */
 export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'lineup-',
@@ -228,6 +230,7 @@ export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'cooptimus:',
   'igdb:search:itad:',
   'weekly-digest:',
+  'hub-media-companion:',
 ];
 
 /**

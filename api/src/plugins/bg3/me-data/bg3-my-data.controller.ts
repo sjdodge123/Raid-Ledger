@@ -48,6 +48,7 @@ export class Bg3MyDataController {
   ): Promise<{ deleted: Bg3MyDataDeleted }> {
     const deleted = await this.repo.deleteAllFor(req.user.id);
     await this.hubMedia.removeSourceRowsOf('bg3-save', req.user.id);
+    await this.hubMedia.removeSourceRowsOf('bg3-screenshot', req.user.id);
     return { deleted };
   }
 

@@ -45,6 +45,26 @@ describe('Bg3GalleryRegistrations (ROK-1959 D-5 / D-12)', () => {
     [true, true],
     [false, false],
   ])(
+    'ROK-1966: the bg3-screenshot gate follows the same spoiler toggle (hide=%s → %s)',
+    async (hide, hidden) => {
+      jest
+        .spyOn(ingestSources, 'registerHubIngestSource')
+        .mockImplementation(() => undefined);
+      const { regs, gates } = setup(hide);
+      regs.onModuleInit();
+      const call = gates.register.mock.calls.find(
+        (c) => c[1] === 'bg3-screenshot',
+      );
+      if (!call) throw new Error('no bg3-screenshot media gate registered');
+      expect(call[0]).toBe(BG3_PLUGIN_ID);
+      await expect(call[2](9)).resolves.toBe(hidden);
+    },
+  );
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
     'the gate follows the hub spoiler toggle (hide=%s → %s)',
     async (hide, hidden) => {
       jest
