@@ -94,6 +94,12 @@ export const eventSignups = pgTable(
     preferredRoles: text('preferred_roles').array(),
     /** Post-event attendance status recorded by organizer (ROK-421) */
     attendanceStatus: varchar('attendance_status', { length: 20 }),
+    /**
+     * Who set `attendance_status` (ROK-1940): `'voice'` = the voice-session
+     * auto-populate, `'manual'` = an organiser via recordAttendance. Null on
+     * rows with no status (and on legacy rows until the backfill runs).
+     */
+    attendanceSource: varchar('attendance_source', { length: 10 }),
     /** Timestamp when attendance was last recorded (ROK-421) */
     attendanceRecordedAt: timestamp('attendance_recorded_at'),
     /** Timestamp when signup was cancelled/roached out (ROK-421 AC#8/#9) */
