@@ -105,12 +105,15 @@ function findFork(git, base, prevId) {
   return { snapshot: viaMergeBase, warning: null };
 }
 
-/** The branch body with main's post-fork schema changes merged in, or null if none apply. */
+/**
+ * The branch body with main's post-fork schema changes merged in (`text` null when none apply), plus the keys both
+ * sides changed — reported even when every main-side change conflicted and the body is unchanged.
+ */
 function mergedBody(base, fork, body, prevId) {
   if (!fork || !base.lastSnapshot) return null;
   const parsed = JSON.parse(body);
   const { snapshot, conflicts } = mergeSnapshot(fork, base.lastSnapshot, parsed);
-  if (sameJson(snapshot, parsed)) return null;
+  if (sameJson(snapshot, parsed)) return { text: null, conflicts };
   const eol = body.endsWith('\n') ? '\n' : '';
   const out = prevId === null ? snapshot : { ...snapshot, prevId };
   return { text: JSON.stringify(out, null, 2) + eol, conflicts };
@@ -155,7 +158,7 @@ function planSnapshots(git, root, base, plan) {
     const merged = mergedBody(base, fork, body, prevId);
     const next = merged?.text ?? (prevId === null ? body : body.replace(PREVID_RE, `"prevId": "${prevId}"`));
     const to = `${META_REL}/${moved.newPrefix}_snapshot.json`;
-    out.push({ from, to, body: next, changed: next !== body, merged: merged !== null, conflicts: merged?.conflicts ?? [] });
+    out.push({ from, to, body: next, changed: next !== body, merged: merged?.text != null, conflicts: merged?.conflicts ?? [] });
     prevId = JSON.parse(body).id;
   }
   return { snaps: out, forkWarning };

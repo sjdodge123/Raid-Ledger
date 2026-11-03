@@ -334,3 +334,33 @@ test('mergeSnapshot: a key both sides changed keeps the branch value and is repo
   assert.deepEqual(conflicts, ['tables.t.columns.c.type']);
   assert.deepEqual(snapshot, branch);
 });
+
+test('renumber reports a conflict even when every main-side change conflicted (body unchanged)', (t) => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'rl-renumber-conflict-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(path.join(dir, MIG, 'meta'), { recursive: true });
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'config', 'user.email', 'fixture@example.com');
+  git(dir, 'config', 'user.name', 'fixture');
+  const snap = (id, prevId, type) =>
+    JSON.stringify({ id, prevId, version: '7', dialect: 'postgresql', tables: { t1: { columns: { a: { type } } } }, enums: {} }, null, 2);
+  const common = [entry(0, 'init', T0)];
+  writeMig(dir, { '0000_init.sql': 'x;\n', 'meta/0000_snapshot.json': snap('id-0', ROOT_ID, 'integer') }, common);
+  commitAll(dir, 'common');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  writeMig(dir, { '0001_f.sql': 'f;\n', 'meta/0001_snapshot.json': snap('id-f', 'id-0', 'text') },
+    [...common, entry(1, 'f', T0 + 1000)]);
+  commitAll(dir, 'feature');
+  git(dir, 'checkout', '-q', 'main');
+  writeMig(dir, { '0001_m.sql': 'm;\n', 'meta/0001_snapshot.json': snap('id-m', 'id-0', 'bigint') },
+    [...common, entry(1, 'm', T0 + 5000)]);
+  commitAll(dir, 'main');
+  git(dir, 'update-ref', 'refs/remotes/origin/main', 'main');
+  git(dir, 'checkout', '-q', 'feature');
+  const res = run(dir, 'bash', [TOOL, '--no-fetch']);
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stdout, /⚠ 0002_snapshot\.json: kept the branch's value where both sides changed: tables\.t1\.columns\.a\.type/);
+  assert.doesNotMatch(res.stdout, /merged in/);
+  const s2 = JSON.parse(read(dir, 'meta/0002_snapshot.json'));
+  assert.deepEqual([s2.id, s2.prevId, s2.tables.t1.columns.a.type], ['id-f', 'id-m', 'text']);
+});
