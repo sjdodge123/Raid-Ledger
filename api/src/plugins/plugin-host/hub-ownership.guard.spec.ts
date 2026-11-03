@@ -343,11 +343,13 @@ describe('ROK-1965 D17 — ingest sources are scanned (each must go red)', () =>
 });
 
 describe('ROK-1957 D-16 — companion handlers are scanned (each must go red)', () => {
-  it('fails when the bg3-save handler registration is gone', () => {
+  it('fails when the bg3 handler registrations are gone', () => {
+    // bg3.module.ts registers both the save and the screenshot handler.
     const noBg3 = SOURCES.filter((s) => s.file !== 'plugins/bg3/bg3.module.ts');
     const keys = scanHubRegistrations(noBg3, CTX).keys;
-    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+    expect([...ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)].sort()).toEqual([
       'bg3/ingest-source/bg3-save is declared but nothing registers it',
+      'bg3/ingest-source/bg3-screenshot is declared but nothing registers it',
     ]);
   });
 

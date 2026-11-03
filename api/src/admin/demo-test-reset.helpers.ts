@@ -158,6 +158,11 @@ function countsFromArray([
  * lineup-confirmation-pills.smoke.spec.ts hero assertions failed
  * because the freshly-created smoke lineup id=3 had 16 inherited
  * `lineup_aborted` rows from April–May.)
+ *
+ * `notifications` is included for the same reason: its `payload.eventId`
+ * (and lineup ids) are not FKs, and `events` restarts at id 1, so a kept row
+ * pointed at a reused id — a smoke filtering DMs by `payload.eventId` read a
+ * previous run's "On the bench" for the new event 84 (TECH-DEBT 2026-10-28).
  */
 async function wipeChildren(db: Db): Promise<void> {
   await db.execute(sql`
@@ -184,6 +189,7 @@ async function wipeChildren(db: Db): Promise<void> {
       event_plans,
       wow_classic_quest_progress,
       notification_dedup,
+      notifications,
       activity_log
     RESTART IDENTITY CASCADE
   `);

@@ -11,6 +11,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   COMPANION_CONTRACTS,
   type CompanionContractTable,
+  type CompanionConfigHubTarget,
   type CompanionContractVersionSpec,
   type CompanionWebpRef,
 } from '@raid-ledger/contract';
@@ -71,6 +72,8 @@ interface CompanionHandlerBase<M> {
    * advance a marker nor report `accepted` for a row that was not stored.
    */
   alreadyHeld?(tx: CompanionDeviceTx, userId: number, msg: M): Promise<boolean>;
+  /** ROK-1966 Q3: the `/config` hub picker for this contract (the caller's hubs). */
+  hubTargets?(userId: number): Promise<CompanionConfigHubTarget[]>;
 }
 
 /** Default mode: `handle` runs INSIDE the ingest transaction (step 11). */

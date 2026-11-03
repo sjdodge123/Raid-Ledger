@@ -17,6 +17,7 @@ import {
   CompanionVersionStringSchema,
   type CompanionConfig,
   type CompanionConfigContract,
+  type CompanionConfigHubTarget,
   type CompanionConfigGame,
   type CompanionConfigLimits,
   type CompanionConfigRate,
@@ -49,6 +50,8 @@ const LIMITS: CompanionConfigLimits = Object.freeze({
 interface ContractEntry {
   body: CompanionConfigContract;
   ownerId: string | undefined;
+  /** ROK-1966: the resolved handler's `/config` hub picker, if it has one. */
+  hubTargets: ((userId: number) => Promise<CompanionConfigHubTarget[]>) | null;
 }
 
 interface VersionEntry {
@@ -106,7 +109,7 @@ export class CompanionConfigService {
     return CompanionConfigSchema.parse({
       ...base,
       rate: rateFor(auth.via),
-      contracts: await this.contracts(auth.via),
+      contracts: await this.contracts(auth),
     });
   }
 
@@ -120,15 +123,33 @@ export class CompanionConfigService {
   }
 
   private async contracts(
-    via: CompanionIngestVia,
+    auth: CompanionIngestAuth,
   ): Promise<CompanionConfigContract[]> {
     const games = new Map<string, Promise<CompanionConfigGame | null>>();
     const all = Object.entries(this.table).map(async ([id, versions]) => {
-      const entry = this.contract(id, versionEntries(versions), via);
-      if (!entry || !this.owners) return entry ? [entry.body] : [];
-      return [{ ...entry.body, ...(await this.ownerFields(entry, games)) }];
+      const entry = this.contract(id, versionEntries(versions), auth.via);
+      if (!entry) return [];
+      const targets = await this.hubTargetsOf(entry, auth.userId);
+      const body = { ...entry.body, ...targets };
+      if (!this.owners) return [body];
+      return [{ ...body, ...(await this.ownerFields(entry, games)) }];
     });
     return (await Promise.all(all)).flat();
+  }
+
+  /** ROK-1966: `hubTargets` when the handler offers them; a failed read omits it. */
+  private async hubTargetsOf(
+    { body, hubTargets }: ContractEntry,
+    userId: number,
+  ): Promise<Pick<CompanionConfigContract, 'hubTargets'>> {
+    if (!hubTargets) return {};
+    try {
+      return { hubTargets: await hubTargets(userId) };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`/config hubTargets for ${body.id} failed: ${reason}`);
+      return {};
+    }
   }
 
   /** `plugin` + `game` for one contract; one game lookup per owner per call. */
@@ -171,9 +192,10 @@ export class CompanionConfigService {
     const listing = this.registry
       .list()
       .find((l) => l.contract === id && l.versions.includes(current.version));
+    const handler = this.registry.resolve(id, current.version, via);
     const body: CompanionConfigContract = {
       id,
-      enabled: this.registry.resolve(id, current.version, via) !== null,
+      enabled: handler !== null,
       versions: entries.map((e) => ({
         version: e.version,
         status: e.spec.status,
@@ -184,6 +206,7 @@ export class CompanionConfigService {
         minIntervalSec: COMPANION_DEFAULT_MIN_INTERVAL_SEC,
       },
     };
-    return { body, ownerId: listing?.ownerPluginId };
+    const hubTargets = handler?.hubTargets?.bind(handler) ?? null;
+    return { body, ownerId: listing?.ownerPluginId, hubTargets };
   }
 }

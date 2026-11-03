@@ -17,9 +17,10 @@ export type HubMediaKind = z.infer<typeof HubMediaKindSchema>;
 
 /**
  * Where a picture came from: a Discord post, a member upload (ROK-1965), or
- * a Baldur's Gate 3 save thumbnail the `bg3` plugin copied in (ROK-1959).
+ * a Baldur's Gate 3 save thumbnail the `bg3` plugin copied in (ROK-1959),
+ * or a BG3 screenshot a member's Companion sent (ROK-1966).
  */
-export const HUB_MEDIA_SOURCES = ['discord', 'upload', 'bg3-save'] as const;
+export const HUB_MEDIA_SOURCES = ['discord', 'upload', 'bg3-save', 'bg3-screenshot'] as const;
 export const HubMediaSourceSchema = z.enum(HUB_MEDIA_SOURCES);
 export type HubMediaSource = z.infer<typeof HubMediaSourceSchema>;
 
