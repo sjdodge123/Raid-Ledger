@@ -9,6 +9,11 @@ previous version during the transition.
 
 ## v1 — 2026-11-03 (ROK-2072, additive)
 
+- `ledgerlink-snapshot` refinement: a D4 name-bearing call
+  (`DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`) must be `status: "presence"`; the
+  snapshot `digest` serialisation is documented as companion-internal. Six more
+  invalid fixtures pin the head cap, GUID-as-key, both presence/type rules,
+  the GUID guard on a page slice and D4.
 - New `$defs`: `ledgerlink-snapshot` (the dev snapshot LedgerLink stores per
   character under `/rl dev on`; input mode), `ledgerlink-snapshot-page`
   (`GET /dev/v1/ledgerlink/snapshot`) and `ledgerlink-snapshot-history`

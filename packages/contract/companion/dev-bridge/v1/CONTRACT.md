@@ -210,8 +210,12 @@ leaves no `dev` key at all. At most 10 characters are held.
 
 **Privacy (D3/D4).** The snapshot itself carries no name, realm, guild or
 GUID: `character` is `{ class, level, faction, inGuild }` only, and
-name-bearing calls (`UnitGUID`, `UnitName`, `GetRealmName`, `GetGuildInfo`, …)
-appear in `calls` as `status: "presence"` with the Lua `type` and no `values`.
+name-bearing calls (`UnitGUID`, `GetUnitName`, `UnitFullName`, `UnitName`,
+`GetRealmName`, `GetNormalizedRealmName`, `GetGuildInfo`, `GetGuildRosterInfo`,
+`GetGuildRosterLastOnline` — `DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`, mirroring
+LedgerLink `Probe.NAME_BEARING`) appear in `calls` **only** as
+`status: "presence"` with the Lua `type` and no `values`; any other status for
+one of them is rejected at that call.
 **No string or table key anywhere may match a player GUID**
 (`Player-<1–5 digits>-<8 hex>`); the addon scrubs GUIDs out of section text
 before storing. The companion derives `characterKey = sha256_hex(guid)` from
@@ -250,6 +254,12 @@ keeps three rows). `ledgerlink-snapshot-history` lists rows newest first with
 the patch-day signals (`clientVersion`, `clientBuild`, `interface`,
 `missingApis` = count of `apis[].type === "nil"`, `activeRules`); its cursor
 names the last returned `snapshotId`.
+
+**The digest is opaque.** How the companion serialises the snapshot before
+hashing (key order, number formatting, whitespace) is internal to the
+companion and **not part of this contract**: clients may compare two `digest`
+values for equality, but must never recompute one, and a companion release
+may change the serialisation (old and new rows then simply differ once).
 
 **Params + errors.** `flavor` as every endpoint; `character` (a
 `characterKey`) is optional when the flavor has one cached character, else
