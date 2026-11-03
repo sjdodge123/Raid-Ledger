@@ -17,6 +17,10 @@ import type {
   ValheimMapRow,
   ValheimProfileRow,
 } from '../../../../drizzle/schema';
+import {
+  withReportedDeathPins,
+  type ReportedDeathPoint,
+} from './valheim-reported-death-pins';
 
 /** A profile joined with its server name and owner, as the list reads it. */
 export interface ArmoryProfileReadRow {
@@ -37,7 +41,10 @@ export interface ArmoryProfileReadRow {
 
 /** The list row plus the character sheet columns. */
 export type ArmoryDetailReadRow = ArmoryProfileReadRow &
-  Pick<ValheimProfileRow, 'equipment' | 'inventory' | 'skills' | 'trophies'>;
+  Pick<
+    ValheimProfileRow,
+    'equipment' | 'inventory' | 'skills' | 'trophies' | 'deathCount'
+  >;
 
 /** A map ref as read: id, world and capture time. */
 export interface ArmoryMapRefRow {
@@ -118,6 +125,7 @@ export function toDetail(
     skills: row.skills,
     trophies: row.trophies,
     maps: maps.map(toMapRef),
+    deathCount: row.deathCount,
   };
 }
 
@@ -128,8 +136,14 @@ function toBaseMap(row: ArmoryMapReadRow): ValheimMapBaseMap | null {
   return { sha256, width, height, ready: row.baseMapReady };
 }
 
-/** Map metadata; blob bytes and fog bitmaps are V7's (Q7). */
-export function toMapMeta(row: ArmoryMapReadRow): ValheimMapMeta {
+/**
+ * Map metadata; blob bytes and fog bitmaps are V7's (Q7). ROK-1931: the
+ * character's reported deaths on this world join the pins (D8).
+ */
+export function toMapMeta(
+  row: ArmoryMapReadRow,
+  reported: readonly ReportedDeathPoint[] = [],
+): ValheimMapMeta {
   return {
     id: row.id,
     worldUid: row.worldUid,
@@ -137,7 +151,7 @@ export function toMapMeta(row: ArmoryMapReadRow): ValheimMapMeta {
       textureSize: row.textureSize,
       pixelSizeMetres: row.pixelSizeMetres,
     },
-    pins: row.pins,
+    pins: withReportedDeathPins(row.pins, reported),
     hasSharedExplored: row.hasSharedExplored,
     baseMap: toBaseMap(row),
     capturedAt: row.capturedAt.toISOString(),

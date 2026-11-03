@@ -1,6 +1,7 @@
 /** ROK-1943 S10 — the cross-player pin layer mapper. */
 import {
   VALHEIM_SERVER_PINS_CAP,
+  ValheimServerPinsResponseSchema,
   type ValheimMapPin,
 } from '@raid-ledger/contract';
 import { UNKNOWN_CHARACTER_NAME } from './valheim-deaths-pins.mappers';
@@ -88,5 +89,65 @@ describe('toServerPinsResponse (ROK-1943)', () => {
       true,
     ]);
     expect(over.pins.filter((p) => p.characterName === 'Bjorn')).toEqual([]);
+  });
+
+  describe('reported deaths (ROK-1931 D8)', () => {
+    const AT = new Date('2026-11-02T21:14:00.000Z');
+    const died = (profileId: number, x: number) => ({
+      profileId,
+      x,
+      z: -x,
+      reportedAt: AT,
+    });
+
+    it("join their character's map row as Death pins, deduped only on that character's own pin", () => {
+      const rows = [
+        row(7, 'Ragnar', [pin('Death', 2)]),
+        row(8, 'Bjorn', [pin('Death', 50)]),
+      ];
+      // 7@3 is 1.4 m from Ragnar's own pin → dropped; 8@3 is Bjorn's, whose
+      // own pin is far away → kept although Ragnar has one close by.
+      const r = toServerPinsResponse('42', rows, undefined, [
+        died(7, 3),
+        died(7, 30),
+        died(8, 3),
+      ]);
+      expect(flat(r)).toEqual([
+        'Ragnar|7|Death|2|L2|false',
+        'Ragnar|7|Death|30||false',
+        'Bjorn|8|Death|50|L50|false',
+        'Bjorn|8|Death|3||false',
+      ]);
+      expect(r.pins.map((p) => p.diedAt ?? null)).toEqual([
+        null,
+        AT.toISOString(),
+        null,
+        AT.toISOString(),
+      ]);
+      expect(ValheimServerPinsResponseSchema.parse(r)).toEqual(r);
+    });
+
+    it('obey the types filter, fold into the first map row only, and count towards the cap', () => {
+      const dup = [row(7, 'Ragnar', []), row(7, 'Ragnar', [])];
+      expect(
+        flat(toServerPinsResponse('42', dup, ['Bed'], [died(7, 9)])),
+      ).toEqual([]);
+      expect(
+        flat(toServerPinsResponse('42', dup, undefined, [died(7, 9)])),
+      ).toEqual(['Ragnar|7|Death|9||false']);
+      const many = Array.from({ length: VALHEIM_SERVER_PINS_CAP }, (_, i) =>
+        pin('Bed', i),
+      );
+      const over = toServerPinsResponse(
+        '42',
+        [row(7, 'Ragnar', many)],
+        undefined,
+        [died(7, -900)],
+      );
+      expect([over.pins.length, over.truncated]).toEqual([
+        VALHEIM_SERVER_PINS_CAP,
+        true,
+      ]);
+    });
   });
 });
