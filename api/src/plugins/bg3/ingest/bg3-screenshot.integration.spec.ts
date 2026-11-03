@@ -320,6 +320,13 @@ describe('ingest → hub Gallery', () => {
 
     const [row, ...rest] = await mediaRows(hub);
     expect(rest).toEqual([]);
+    // Review P2: the Gallery keeps its own copy, so the raw blob's ref is
+    // released in the ingest tx and the blob no longer pins tav's quota.
+    const refs = await testApp.db
+      .select({ contract: schema.companionBlobRefs.contract })
+      .from(schema.companionBlobRefs)
+      .where(eq(schema.companionBlobRefs.userId, tav.id));
+    expect(refs).toEqual([]);
     expect({
       source: row?.source,
       kind: row?.kind,

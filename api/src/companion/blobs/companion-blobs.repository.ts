@@ -134,6 +134,31 @@ export async function releaseUnusedRefsIn(
   return result.count;
 }
 
+/**
+ * ROK-1966 review — drop `contract`'s refs to `shas` that the CALLER's
+ * ingest transaction recorded (step 11d) and holds the user's blob lock for
+ * (step 11b). No `referencedAt` cut-off: under that lock no other ingest can
+ * have refreshed them, and the transaction clock would equal it anyway.
+ */
+export async function releaseHeldRefsIn(
+  tx: Pick<Db, 'delete'>,
+  userId: number,
+  contract: string,
+  shas: readonly string[],
+): Promise<number> {
+  if (shas.length === 0) return 0;
+  const result = await tx
+    .delete(refs)
+    .where(
+      and(
+        eq(refs.userId, userId),
+        eq(refs.contract, contract),
+        inArray(refs.sha256, [...shas]),
+      ),
+    );
+  return result.count;
+}
+
 /** Blob reads/writes for the upload route, the store and the cleanup job. */
 @Injectable()
 export class CompanionBlobsRepository {

@@ -16,7 +16,7 @@ import { HttpException } from '@nestjs/common';
 import type Redis from 'ioredis';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
 import type { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
-import { readBg3Blob } from '../read/bg3-thumbnail.encode';
+import { readBg3BlobIn } from '../read/bg3-thumbnail.encode';
 import { Bg3ScreenshotHandler } from './bg3-screenshot.handler';
 import {
   bg3ScreenshotProvenanceKey,
@@ -37,13 +37,13 @@ jest.mock('./bg3-screenshot.repository', () => ({
   uploaderName: jest.fn().mockResolvedValue('Tav'),
 }));
 jest.mock('../read/bg3-thumbnail.encode', () => ({
-  readBg3Blob: jest.fn(),
+  readBg3BlobIn: jest.fn(),
 }));
 
 const member = jest.mocked(isLiveBg3HubMember);
 const held = jest.mocked(screenshotHeld);
 const store = jest.mocked(storeBg3Screenshot);
-const blob = jest.mocked(readBg3Blob);
+const blob = jest.mocked(readBg3BlobIn);
 /** The fixed-window count the Redis INCR script answers. */
 const windowCount = jest.fn<Promise<number>, unknown[]>();
 
@@ -56,8 +56,12 @@ const SHOT: Bg3ScreenshotMessage = Bg3ScreenshotMessageSchema.parse(
 );
 
 function setup() {
+  const blobs = {
+    openIn: jest.fn(),
+    releaseHeldRefsIn: jest.fn().mockResolvedValue(1),
+  };
   const handler = new Bg3ScreenshotHandler(
-    {} as CompanionBlobStore,
+    blobs as unknown as CompanionBlobStore,
     { forUser: jest.fn() } as unknown as Bg3ScreenshotTargets,
     { eval: windowCount } as unknown as Redis,
   );
@@ -69,7 +73,7 @@ function setup() {
     deviceId: 3,
     receivedAt: new Date('2026-11-03T12:01:00Z'),
   } as CompanionHandlerContext;
-  return { handler, ctx };
+  return { handler, ctx, blobs };
 }
 
 async function refusal(p: Promise<unknown>): Promise<unknown> {
@@ -172,14 +176,43 @@ describe('Bg3ScreenshotHandler — handle stores a Gallery screenshot', () => {
       SHOT.payload.image.sha256,
     );
   });
+});
+
+describe('Bg3ScreenshotHandler — blob read + ref release (review P1/P2)', () => {
+  it('reads the blob on the ingest tx, never a second pooled connection (review P1)', async () => {
+    const { handler, ctx, blobs } = setup();
+    await handler.handle(ctx, SHOT);
+    expect(blob).toHaveBeenCalledWith(
+      blobs,
+      ctx.tx,
+      7,
+      SHOT.payload.image.sha256,
+    );
+  });
+
+  it.each(['stored', 'duplicate'] as const)(
+    'a %s outcome releases its bg3-screenshot blob ref on the ingest tx (review P2)',
+    async (outcome) => {
+      store.mockResolvedValue(outcome);
+      const { handler, ctx, blobs } = setup();
+      await handler.handle(ctx, SHOT);
+      expect(blobs.releaseHeldRefsIn).toHaveBeenCalledWith(
+        ctx.tx,
+        7,
+        BG3_SCREENSHOT_CONTRACT_ID,
+        [SHOT.payload.image.sha256],
+      );
+    },
+  );
 
   it.each([
     ['not_image', 'invalid_blob'],
     ['cap', 'blob_quota_exceeded'],
   ] as const)('a %s store outcome refuses as %s', async (outcome, code) => {
     store.mockResolvedValue(outcome);
-    const { handler, ctx } = setup();
+    const { handler, ctx, blobs } = setup();
     expect(await refusal(handler.handle(ctx, SHOT))).toMatchObject({ code });
+    expect(blobs.releaseHeldRefsIn).not.toHaveBeenCalled();
   });
 
   it('a missing blob refuses as invalid_blob without storing', async () => {

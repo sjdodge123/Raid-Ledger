@@ -20,8 +20,9 @@ import type {
 } from '../../../companion/ingest/companion-handler.registry';
 import { companionError } from '../../../companion/ingest/companion-ingest.errors';
 import type { CompanionDeviceTx } from '../../../companion/devices/companion-device-lock';
+import type { HubMediaStoreRow } from '../../../hub-media/hub-media-store.helpers';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
-import { readBg3Blob } from '../read/bg3-thumbnail.encode';
+import { readBg3BlobIn } from '../read/bg3-thumbnail.encode';
 import { checkScreenshotRate } from './bg3-screenshot.limits';
 import { Bg3ScreenshotTargets } from './bg3-screenshot.targets';
 import {
@@ -30,6 +31,7 @@ import {
   screenshotHeld,
   storeBg3Screenshot,
   uploaderName,
+  type Bg3ScreenshotStoreOutcome,
 } from './bg3-screenshot.repository';
 
 const TARGET_PATH = 'payload.target.hubGuildId';
@@ -47,6 +49,36 @@ async function assertTarget(
     "target hub is not a Baldur's Gate 3 hub you are a member of",
     { issues: [{ path: TARGET_PATH, code: 'not_a_member' }] },
   );
+}
+
+/** The Gallery row for an accepted screenshot (source `bg3-screenshot`). */
+function galleryRow(
+  userId: number,
+  authorName: HubMediaStoreRow['authorName'],
+  msg: Bg3ScreenshotMessage,
+): HubMediaStoreRow {
+  const { image, target, takenAt } = msg.payload;
+  return {
+    guildId: target.hubGuildId,
+    source: 'bg3-screenshot',
+    kind: 'screenshot',
+    provenanceKey: bg3ScreenshotProvenanceKey(image.sha256),
+    uploadedBy: userId,
+    authorName,
+    caption: null,
+    capturedAt: new Date(takenAt),
+    discord: null,
+  };
+}
+
+/** A refused store outcome → its wire error; `stored`/`duplicate` pass. */
+function assertStored(outcome: Bg3ScreenshotStoreOutcome): void {
+  if (outcome === 'not_image')
+    throw companionError('invalid_blob', 'screenshot does not decode');
+  // No closer wire code exists (adding one is a contract change): here it
+  // means the HUB's Gallery is full, not the user's blobs (CONTRACT.md §3).
+  if (outcome === 'cap')
+    throw companionError('blob_quota_exceeded', 'the hub Gallery is full');
 }
 
 @Injectable()
@@ -88,32 +120,26 @@ export class Bg3ScreenshotHandler implements CompanionInTxHandler<Bg3ScreenshotM
   ): Promise<void> {
     // Defence in depth: `alreadyHeld` checked the target on this same tx.
     await assertTarget(ctx.tx, ctx.userId, msg);
-    const { image, target, takenAt } = msg.payload;
-    const raw = await readBg3Blob(this.blobs, ctx.userId, image.sha256);
-    if (!raw) throw companionError('invalid_blob', 'screenshot blob missing');
-    await checkScreenshotRate(this.redis, ctx.userId);
-    const outcome = await storeBg3Screenshot(
+    const { image } = msg.payload;
+    // Review P1: on the ingest tx — never a second pooled connection.
+    const raw = await readBg3BlobIn(
+      this.blobs,
       ctx.tx,
-      {
-        guildId: target.hubGuildId,
-        source: 'bg3-screenshot',
-        kind: 'screenshot',
-        provenanceKey: bg3ScreenshotProvenanceKey(image.sha256),
-        uploadedBy: ctx.userId,
-        authorName: await uploaderName(ctx.tx, ctx.userId),
-        caption: null,
-        capturedAt: new Date(takenAt),
-        discord: null,
-      },
-      raw,
+      ctx.userId,
       image.sha256,
     );
-    if (outcome === 'not_image')
-      throw companionError('invalid_blob', 'screenshot does not decode');
-    // No closer wire code exists (adding one is a contract change): here it
-    // means the HUB's Gallery is full, not the user's blobs (CONTRACT.md §3).
-    if (outcome === 'cap')
-      throw companionError('blob_quota_exceeded', 'the hub Gallery is full');
+    if (!raw) throw companionError('invalid_blob', 'screenshot blob missing');
+    await checkScreenshotRate(this.redis, ctx.userId);
+    const authorName = await uploaderName(ctx.tx, ctx.userId);
+    const row = galleryRow(ctx.userId, authorName, msg);
+    const outcome = await storeBg3Screenshot(ctx.tx, row, raw, image.sha256);
+    assertStored(outcome);
+    // The Gallery holds its own re-encoded copy: release the raw blob's ref
+    // on this tx, so the daily cleanup reaps the blob and frees the user's
+    // 64 MiB blob quota for later screenshots and save thumbnails (review P2).
+    await this.blobs.releaseHeldRefsIn(ctx.tx, ctx.userId, this.contract, [
+      image.sha256,
+    ]);
   }
 
   /** `/config` hub picker (Q3): the caller's BG3 hubs, default pre-selected. */
