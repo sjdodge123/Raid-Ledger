@@ -93,6 +93,8 @@ export interface ItemOutcome {
   linkedHubs?: number;
   /** Hubs linked in this item's tx — announced by `runOne` after it commits. */
   linked?: HubLinkResult;
+  /** An auto-managed channel whose topic `runOne` refreshes after the link tx commits. */
+  topicChannelId?: string;
   /** A create's new channel + binding: hubs are linked after the create tx commits. */
   created?: { channelId: string; bindingId: string };
   /** A permission error: stop the tick (D14). */

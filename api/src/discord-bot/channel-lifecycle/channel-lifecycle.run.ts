@@ -2,7 +2,13 @@ import { Logger } from '@nestjs/common';
 import type { Guild } from 'discord.js';
 import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
-import { applyAction, linkHubs } from './channel-lifecycle.apply';
+import {
+  applyAction,
+  linkHubs,
+  topicField,
+  type LinkedHubs,
+} from './channel-lifecycle.apply';
+import { refreshTopicAfterCommit } from './channel-lifecycle.topic-refresh';
 import { staleLinkDetail } from './channel-lifecycle.decide';
 import { lockLifecycleBinding } from './channel-lifecycle.store.queries';
 import {
@@ -110,7 +116,7 @@ async function linkCreated(
   ctx: ApplyContext,
   game: PlannedGame,
   created: CreatedChannel,
-): Promise<HubLinkResult | null> {
+): Promise<LinkedHubs | null> {
   const current = await lockLifecycleBinding(ctx.db, created.bindingId);
   const planned = { channelId: created.channelId, gameId: game.row.gameId };
   const stale = staleLinkDetail(planned, current);
@@ -136,11 +142,17 @@ async function linkAfterCreate(
   item: ItemOutcome,
 ): Promise<ItemOutcome> {
   try {
-    const linked = await ctx.db.transaction((tx) =>
+    const res = await ctx.db.transaction((tx) =>
       linkCreated({ ...ctx, db: tx }, game, created),
     );
-    if (linked === null) return item;
-    return { ...item, linkedHubs: linked.guildIds.length, linked };
+    if (res === null) return item;
+    const { linked, refreshTopic } = res;
+    return {
+      ...item,
+      linkedHubs: linked.guildIds.length,
+      linked,
+      ...topicField(created.channelId, refreshTopic),
+    };
   } catch (err) {
     if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
     Sentry.captureException(err, {
@@ -240,7 +252,7 @@ async function runOne(
     created === undefined
       ? item
       : await linkAfterCreate(ctx, game, created, rest);
-  return announceCommitted(ctx, final);
+  return announceCommitted(ctx, await refreshTopicAfterCommit(ctx, game, final));
 }
 
 /**

@@ -8,7 +8,6 @@ import {
   ensureCategory,
   revertArchive,
   revertUnarchive,
-  setTopic,
   unarchiveChannel,
   type EnsuredCategory,
 } from './channel-lifecycle.discord-ops';
@@ -32,7 +31,6 @@ import type {
   PlannedGame,
 } from './channel-lifecycle.types';
 import type { LifecycleCandidateBinding } from './game-activity.types';
-import { resolveGameHubLink } from './hub-link.resolver';
 
 /**
  * ROK-1431 — the per-action executors of a live reconcile (spec §2.5 steps
@@ -50,38 +48,39 @@ export function lifecycleTopic(
   return `${game.row.gameName} on Raid Ledger — events, polls and hub posts. ${hubUrl ?? gameUrl}`;
 }
 
-/** D10/OQ-7: after a hub link, point the topic at the hub. */
-async function refreshTopic(
-  ctx: ApplyContext,
-  game: PlannedGame,
-  channelId: string,
-): Promise<void> {
-  const link = await resolveGameHubLink(ctx.db, {
-    gameId: game.row.gameId,
-    clientUrl: ctx.clientUrl,
-  });
-  await setTopic(ctx.guild, channelId, lifecycleTopic(ctx, game, link?.url));
+/** A hub link's result + whether the channel's topic should now point at the hub. */
+export interface LinkedHubs {
+  linked: HubLinkResult;
+  refreshTopic: boolean;
 }
 
 /**
- * Link the game's hubs to `channelId`. Only an auto-managed channel's topic is
- * refreshed (Codex r3 P1): a manual binding's topic is the admin's.
+ * Link the game's hubs to `channelId` (DB only, on `ctx.db` — the caller's
+ * tx). Only an auto-managed channel's topic is refreshed (Codex r3 P1): a
+ * manual binding's topic is the admin's. The refresh is Discord I/O, so the
+ * caller fires it AFTER the tx commits (`refreshTopicAfterCommit`): a Discord
+ * error must never roll back the link (tech-debt 2026-10-22).
  */
 export async function linkHubs(
   ctx: ApplyContext,
   game: PlannedGame,
   channel: { id: string; autoManaged: boolean },
-): Promise<HubLinkResult> {
-  const { gameId } = game.row;
+): Promise<LinkedHubs> {
   const linked = await ctx.hubLinker.linkHubsForGame(
-    gameId,
+    game.row.gameId,
     channel.id,
     ctx.db,
   );
-  if (linked.guildIds.length > 0 && channel.autoManaged) {
-    await refreshTopic(ctx, game, channel.id);
-  }
-  return linked;
+  const refreshTopic = linked.guildIds.length > 0 && channel.autoManaged;
+  return { linked, refreshTopic };
+}
+
+/** The outcome field that asks `runOne` for a post-commit topic refresh. */
+export function topicField(
+  channelId: string,
+  refresh: boolean,
+): Pick<ItemOutcome, 'topicChannelId'> {
+  return refresh ? { topicChannelId: channelId } : {};
 }
 
 /** The Games parent for a create; a full category overflows (D5 / §2.13). */
@@ -334,10 +333,15 @@ async function applyLinkHub(
   const planned = { channelId: binding.channelId, gameId: game.row.gameId };
   const stale = staleLinkDetail(planned, current);
   if (stale !== null) return { outcome: 'deferred', detail: stale };
-  const linked = await linkHubs(ctx, game, {
+  const { linked, refreshTopic } = await linkHubs(ctx, game, {
     id: binding.channelId,
     autoManaged: current?.autoManaged === true,
   });
-  const linkedHubs = linked.guildIds.length;
-  return { outcome: 'done', detail: game.reason, linkedHubs, linked };
+  return {
+    outcome: 'done',
+    detail: game.reason,
+    linkedHubs: linked.guildIds.length,
+    linked,
+    ...topicField(binding.channelId, refreshTopic),
+  };
 }
