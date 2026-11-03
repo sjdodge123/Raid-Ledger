@@ -580,7 +580,9 @@ describe('ROK-2074 snapshot galleryMediaId — removed, gated, spoilers', () => 
         Promise.resolve(gateSaves && g === hub),
       );
   });
-  beforeEach(() => {
+  // The gate lives on the worker-cached TestApp's registry: reset after every
+  // case so a gated last case can't hide bg3-save in a later spec file.
+  afterEach(() => {
     gateSaves = false;
   });
   it('is null once the matching picture is removed (tombstoned)', async () => {

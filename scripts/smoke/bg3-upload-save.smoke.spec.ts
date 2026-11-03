@@ -190,18 +190,19 @@ async function closeWithDone(page: Page): Promise<void> {
     await expect(sheet, 'Done closes the sheet').toHaveCount(0);
 }
 
-/** ROK-2074 — the `galleryMediaId` of the newest snapshot the page itself fetched (undefined until one lands). */
-function watchSnapshotGalleryId(page: Page, hubId: number): () => number | null | undefined {
-    let latest: number | null | undefined;
-    page.on('response', (r) => {
-        if (r.request().method() !== 'GET' || !r.ok()) return;
-        if (!new URL(r.url()).pathname.endsWith(`/plugins/bg3/hubs/${hubId}/snapshot`)) return;
-        void r.json().then(
-            (b: { galleryMediaId?: number | null }) => { latest = b.galleryMediaId ?? null; },
-            () => undefined,
-        );
-    });
-    return () => latest;
+/**
+ * ROK-2074 — open the hub page and return the `galleryMediaId` of the snapshot
+ * THAT navigation fetched (armed before the goto, so an earlier page's
+ * snapshot response can never answer for it).
+ */
+async function gotoHubReadingGalleryId(page: Page, hubId: number): Promise<number | null> {
+    const snapshot = page.waitForResponse(
+        (r) => r.request().method() === 'GET' && r.ok() && new URL(r.url()).pathname.endsWith(`/plugins/bg3/hubs/${hubId}/snapshot`),
+        { timeout: UI_TIMEOUT },
+    );
+    await page.goto(`/hubs/${hubId}`);
+    const body = (await (await snapshot).json()) as { galleryMediaId?: number | null };
+    return body.galleryMediaId ?? null;
 }
 
 async function waitForThumbnail(jwt: string, hubId: number): Promise<void> {
@@ -294,7 +295,6 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         const seed = await seedHub(testInfo);
         const file = uploadFile(testInfo);
         const jwt = await signInOnboardedMember(page, seed.memberId);
-        const galleryId = watchSnapshotGalleryId(page, seed.hubId);
         await page.goto(`/hubs/${seed.hubId}#campaign`);
         const openSheet = page.getByTestId('bg3-campaign-tab').getByRole('button', { name: 'Upload a save' });
         await expect(openSheet, 'a member sees Upload a save under Your saves').toBeVisible({ timeout: UI_TIMEOUT });
@@ -307,11 +307,9 @@ test.describe('BG3 upload a save (ROK-1960)', () => {
         await waitForThumbnail(jwt, seed.hubId);
         await closeWithDone(page);
 
-        await page.goto(`/hubs/${seed.hubId}`);
+        const mediaId = await gotoHubReadingGalleryId(page, seed.hubId);
         const shot = page.getByRole('button', { name: 'View the latest save screenshot', exact: true });
         await expect(shot, 'Where we are shows the save screenshot as a button').toBeVisible({ timeout: UI_TIMEOUT });
-        await expect.poll(galleryId, { message: 'the page fetched the snapshot', timeout: UI_TIMEOUT }).not.toBeUndefined();
-        const mediaId = galleryId();
         const inGallery = typeof mediaId === 'number';
         await shot.click();
         const dialog = page.getByRole('dialog', { name: inGallery ? 'Gallery' : 'Picture' });
