@@ -85,18 +85,21 @@ export class CompanionIngestService {
   ): Promise<AckStatus> {
     await this.assertDeviceHeld(tx, auth);
     const refs = await this.checkBlobRefs(tx, auth.userId, msg);
+    const { handler } = msg;
+    // The handler's marker lock (if any) first: blob → markers lock → marker.
+    if (marker || handler.alreadyHeld) {
+      await handler.lockLatestWins?.(tx, auth.userId);
+    }
+    // ROK-2070 M1: an already-stored message is stale BEFORE the marker moves
+    // — with or without a latest-wins marker.
+    if (await handler.alreadyHeld?.(tx, auth.userId, msg.message)) {
+      return 'stale';
+    }
     if (marker) {
-      // The handler's marker lock (if any) first: blob → markers lock → marker.
-      await msg.handler.lockLatestWins?.(tx, auth.userId);
-      // ROK-2070 M1: an already-stored message is stale BEFORE the marker moves.
-      if (await msg.handler.alreadyHeld?.(tx, auth.userId, msg.message)) {
-        return 'stale';
-      }
       const row = { userId: auth.userId, contract: msg.contract, ...marker };
       if (!(await this.repo.advance(tx, row))) return 'stale';
     }
     await this.repo.recordBlobRefs(tx, auth.userId, msg.contract, refs);
-    const { handler } = msg;
     if (handler.afterCommit !== true) {
       const { userId, via, deviceId } = auth;
       const ctx = { tx, userId, via, deviceId, receivedAt };

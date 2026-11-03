@@ -64,9 +64,9 @@ interface CompanionHandlerBase<M> {
    */
   lockLatestWins?(tx: CompanionDeviceTx, userId: number): Promise<void>;
   /**
-   * Optional "already stored" check (ROK-2070 M1), in-tx handlers with a
-   * `latestWins` only. Runs on the ingest tx after `lockLatestWins` and
-   * BEFORE the marker upsert; true acks `stale` and writes nothing (no
+   * Optional "already stored" check (ROK-2070 M1), in-tx handlers only —
+   * with or without a `latestWins` marker. Runs on the ingest tx after
+   * `lockLatestWins` and BEFORE any marker upsert; true acks `stale` and writes nothing (no
    * marker, no blob refs, no `handle`), so a skipped duplicate can neither
    * advance a marker nor report `accepted` for a row that was not stored.
    */
@@ -148,7 +148,7 @@ function assertRegistrable(
     (handler.latestWins || handler.blobRefs || handler.alreadyHeld)
   ) {
     throw new Error(
-      `${name}: an after-commit handler has no latestWins/blobRefs`,
+      `${name}: an after-commit handler has no latestWins/blobRefs/alreadyHeld`,
     );
   }
   const interval = handler.cadence?.minIntervalSec;

@@ -11,8 +11,12 @@ import * as ops from './channel-lifecycle.discord-ops';
 import * as queries from './channel-lifecycle.store.queries';
 import type { LockedBindingState } from './channel-lifecycle.store.queries';
 import { executePlan } from './channel-lifecycle.run';
+import { LifecyclePermissionError } from './channel-lifecycle.errors';
 import type { ApplyContext, PlannedGame } from './channel-lifecycle.types';
-import type { GameLifecycleActivityRow } from './game-activity.types';
+import type {
+  GameLifecycleActivityRow,
+  LifecycleCandidateBinding,
+} from './game-activity.types';
 import type { ChannelBindingsService } from '../services/channel-bindings.service';
 import type { LifecycleDb } from './channel-lifecycle.store';
 
@@ -22,6 +26,7 @@ jest.mock('@sentry/nestjs', () => ({
 }));
 jest.mock('./channel-lifecycle.discord-ops');
 jest.mock('./channel-lifecycle.store.queries');
+jest.mock('./hub-link.resolver');
 
 interface FakeTx {
   log: string[];
@@ -63,6 +68,19 @@ const LOCKED: LockedBindingState = {
   gameId: 7,
   bindingPurpose: 'game-announcements',
   recurrenceGroupId: null,
+};
+
+/** An existing auto-managed binding a `link_hub` action links. */
+const LINK_BINDING: LifecycleCandidateBinding = {
+  id: 'b-old',
+  guildId: 'g1',
+  channelId: 'new-ch',
+  lifecycleState: 'active',
+  autoManaged: true,
+  pinned: false,
+  archivedAt: null,
+  restoreParentId: null,
+  archivedOverwrites: null,
 };
 
 const CREATE: PlannedGame = { row: ROW, action: 'create', reason: 'activity' };
@@ -206,14 +224,188 @@ describe('Codex P2: LINKED is announced only after the link tx commits', () => {
   });
 
   it('a rolled-back link announces nothing', async () => {
-    jest.mocked(ops.setTopic).mockRejectedValueOnce(new Error('topic boom'));
-    const { pool } = fakePool();
+    const { pool, committed } = fakePool();
     const { ctx, link } = makeCtx(pool, new Error('unused'));
-    link.mockResolvedValue(LINKED);
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.reject(new Error('link boom'));
+    });
     const announce = jest.fn();
     ctx.hubLinker.announceLinked = announce;
     await executePlan(ctx, PLAN);
     expect(link).toHaveBeenCalledTimes(1);
+    expect(committed).toEqual(['bind new-ch']);
     expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe('tech-debt 2026-10-22: the topic refresh runs after the link commits', () => {
+  const LINKED = { channelId: 'new-ch', guildIds: [11] };
+  const PLAN = { run: [CREATE], deferred: [], skipped: 0, verify: [] };
+
+  it('a Discord topic failure keeps the committed hub link', async () => {
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.resolve(LINKED);
+    });
+    const seenAtTopic: string[][] = [];
+    jest.mocked(ops.setTopic).mockImplementation(() => {
+      seenAtTopic.push([...committed]);
+      return Promise.reject(new Error('topic boom'));
+    });
+    const announce = jest.fn();
+    ctx.hubLinker.announceLinked = announce;
+    const res = await executePlan(ctx, PLAN);
+    expect(committed).toEqual(['bind new-ch', 'link 11']);
+    expect(seenAtTopic).toEqual([['bind new-ch', 'link 11']]);
+    expect(announce.mock.calls).toEqual([[LINKED]]);
+    expect(res.items.map((i) => [i.action, i.outcome])).toEqual([
+      ['create', 'done'],
+    ]);
+  });
+});
+
+describe('tech-debt 2026-11-03: topic refresh — permission stop + the link_hub path', () => {
+  const LINKED = { channelId: 'new-ch', guildIds: [11] };
+
+  /** A hub link that commits `link 11` and resolves with one guild. */
+  function committingLink(link: jest.Mock): void {
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.resolve(LINKED);
+    });
+  }
+
+  it('a permission error on the refresh keeps the link and stops the tick', async () => {
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    committingLink(link);
+    jest
+      .mocked(ops.setTopic)
+      .mockRejectedValue(new LifecyclePermissionError('topic', 50013));
+    const LATER: PlannedGame = { ...CREATE, row: { ...ROW, gameId: 8 } };
+    const res = await executePlan(ctx, {
+      run: [CREATE, LATER],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    expect(committed).toEqual(['bind new-ch', 'link 11']);
+    expect(res.stoppedReason).toBe('permissions');
+    expect(res.items.map((i) => [i.gameId, i.outcome])).toEqual([
+      [7, 'done'],
+      [8, 'deferred'],
+    ]);
+    expect(res.items[1]?.detail).toBe('stopped: missing permissions');
+    expect(ops.createTextChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it('a link_hub action keeps the committed link when the refresh fails', async () => {
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    committingLink(link);
+    jest.mocked(ops.setTopic).mockRejectedValue(new Error('topic boom'));
+    const announce = jest.fn();
+    ctx.hubLinker.announceLinked = announce;
+    const LINK_HUB: PlannedGame = {
+      row: { ...ROW, binding: LINK_BINDING },
+      action: 'link_hub',
+      reason: 'hub has no channel',
+    };
+    const res = await executePlan(ctx, {
+      run: [LINK_HUB],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    expect(link).toHaveBeenCalledWith(7, 'new-ch', expect.anything());
+    expect(ops.setTopic).toHaveBeenCalledTimes(1);
+    expect(committed).toEqual(['link 11']);
+    expect(announce.mock.calls).toEqual([[LINKED]]);
+    expect(res.stoppedReason).toBeNull();
+    expect(res.items.map((i) => [i.action, i.outcome])).toEqual([
+      ['link_hub', 'done'],
+    ]);
+  });
+});
+
+describe('Codex P2 2026-11-03: the topic refresh re-locks + re-validates the binding', () => {
+  const LINKED = { channelId: 'new-ch', guildIds: [11] };
+  const PLAN = { run: [CREATE], deferred: [], skipped: 0, verify: [] };
+
+  /** A create whose hub link commits; `afterLink` is the topic tx's re-read. */
+  async function runCreate(afterLink: LockedBindingState | null): Promise<{
+    committed: string[];
+    pool: LifecycleDb;
+  }> {
+    jest
+      .mocked(queries.lockLifecycleBinding)
+      .mockResolvedValueOnce(LOCKED)
+      .mockResolvedValueOnce(afterLink);
+    jest.mocked(ops.setTopic).mockResolvedValue(undefined);
+    const { pool, committed } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockImplementation((_g: number, _c: string, tx: FakeTx) => {
+      tx.log.push('link 11');
+      return Promise.resolve(LINKED);
+    });
+    await executePlan(ctx, PLAN);
+    return { committed, pool };
+  }
+
+  it('skips the topic edit when the binding was removed after the link committed', async () => {
+    const { committed } = await runCreate(null);
+    expect(jest.mocked(queries.lockLifecycleBinding).mock.calls).toHaveLength(
+      2,
+    );
+    expect(ops.setTopic).not.toHaveBeenCalled();
+    expect(committed).toEqual(['bind new-ch', 'link 11']);
+  });
+
+  it('skips the topic edit when the binding was reassigned to another game', async () => {
+    const { committed } = await runCreate({ ...LOCKED, gameId: 99 });
+    expect(ops.setTopic).not.toHaveBeenCalled();
+    expect(committed).toEqual(['bind new-ch', 'link 11']);
+  });
+
+  it('skips the topic edit when the binding is no longer auto-managed', async () => {
+    await runCreate({ ...LOCKED, autoManaged: false });
+    expect(ops.setTopic).not.toHaveBeenCalled();
+  });
+
+  it('edits the topic of an unchanged binding, re-locked in a tx of its own', async () => {
+    const { pool } = await runCreate(LOCKED);
+    const locks = jest.mocked(queries.lockLifecycleBinding).mock.calls;
+    expect(locks.map((c) => c[1])).toEqual(['b-new', 'b-new']);
+    expect(locks[1]?.[0]).not.toBe(pool);
+    expect(locks[1]?.[0]).not.toBe(locks[0]?.[0]);
+    expect(jest.mocked(ops.setTopic).mock.calls.map((c) => c[1])).toEqual([
+      'new-ch',
+    ]);
+  });
+});
+
+describe('Codex P2 2026-11-03: a link_hub topic refresh', () => {
+  it('re-locks the existing binding by its id', async () => {
+    jest.mocked(ops.setTopic).mockResolvedValue(undefined);
+    const { pool } = fakePool();
+    const { ctx, link } = makeCtx(pool, new Error('unused'));
+    link.mockResolvedValue({ channelId: 'new-ch', guildIds: [11] });
+    const LINK_HUB: PlannedGame = {
+      row: { ...ROW, binding: LINK_BINDING },
+      action: 'link_hub',
+      reason: 'hub has no channel',
+    };
+    await executePlan(ctx, {
+      run: [LINK_HUB],
+      deferred: [],
+      skipped: 0,
+      verify: [],
+    });
+    const locks = jest.mocked(queries.lockLifecycleBinding).mock.calls;
+    expect(locks.map((c) => c[1])).toEqual(['b-old', 'b-old']);
+    expect(ops.setTopic).toHaveBeenCalledTimes(1);
   });
 });

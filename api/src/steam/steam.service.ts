@@ -83,7 +83,7 @@ export class SteamService {
     this.fireAndForgetDiscovery(unmatched);
 
     // Phase 2: Partition into insert/update and persist (using current matches only)
-    return this.persistInterests(userId, ownedGames, dbMatches);
+    return this.persistInterests(userId, steamId, ownedGames, dbMatches);
   }
 
   /** Launch ITAD discovery in the background without blocking the caller. */
@@ -149,6 +149,7 @@ export class SteamService {
   /** Persist game interests and return sync result DTO. */
   private async persistInterests(
     userId: number,
+    steamId: string,
     ownedGames: SteamOwnedGame[],
     allMatches: { id: number; steamAppId: number | null }[],
   ): Promise<SteamSyncResultDto> {
@@ -161,6 +162,7 @@ export class SteamService {
     const updatedPlaytime = await updateExistingPlaytime(
       this.db,
       userId,
+      steamId,
       toUpdate,
     );
     return this.buildSyncResult(
