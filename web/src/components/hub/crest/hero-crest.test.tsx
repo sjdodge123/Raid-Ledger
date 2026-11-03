@@ -28,8 +28,10 @@ describe('HeroCrest — view vs change (ROK-2074)', () => {
         renderCrest(UPLOAD, { crestMediaId: 42 });
         const view = screen.getByRole('button', { name: 'View hub picture' });
         fireEvent.click(view);
-        expect(request()).toMatchObject({ guildId: 7, mode: 'viewer', mediaId: 42, returnFocus: view });
-        expect(request()?.single).toBeUndefined();
+        const { returnFocus, ...rest } = request() ?? { returnFocus: null };
+        // Compared by identity: a failing deep-equal on a DOM node would print its whole React fiber.
+        expect(returnFocus === view, 'focus returns to the crest').toBe(true);
+        expect(rest).toEqual({ guildId: 7, mode: 'viewer', filter: 'all', index: 0, mediaId: 42 });
     });
 
     it('an uploaded crest with no Gallery picture opens its large image as a single picture', () => {

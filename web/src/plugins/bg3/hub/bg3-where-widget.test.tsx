@@ -131,8 +131,10 @@ describe('Bg3WhereWidget — the screenshot opens the Gallery viewer (ROK-2074)'
         await renderWhere();
         const shot = await screen.findByRole('button', { name: 'View the latest save screenshot' });
         fireEvent.click(shot);
-        expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: BG3_HUB_ID, mode: 'viewer', mediaId: 812, returnFocus: shot });
-        expect(useHubGalleryStore.getState().request?.single).toBeUndefined();
+        const { returnFocus, ...request } = useHubGalleryStore.getState().request ?? { returnFocus: null };
+        // Compared by identity: a failing deep-equal on a DOM node would print its whole React fiber.
+        expect(returnFocus === shot, 'focus returns to the screenshot').toBe(true);
+        expect(request).toEqual({ guildId: BG3_HUB_ID, mode: 'viewer', filter: 'all', index: 0, mediaId: 812 });
     });
 
     it('opens the save picture alone (fetched with the token) when it has no Gallery twin', async () => {
@@ -141,9 +143,11 @@ describe('Bg3WhereWidget — the screenshot opens the Gallery viewer (ROK-2074)'
         serve(snap);
         await renderWhere();
         fireEvent.click(await screen.findByRole('button', { name: 'View the latest save screenshot' }));
-        const request = useHubGalleryStore.getState().request;
-        expect(request?.mediaId).toBeUndefined();
-        expect(request?.single).toEqual({ url: snap.thumbnailUrl, alt: 'Latest save screenshot', auth: true });
+        const { returnFocus: _focus, ...request } = useHubGalleryStore.getState().request ?? { returnFocus: null };
+        expect(request).toEqual({
+            guildId: BG3_HUB_ID, mode: 'viewer', filter: 'all', index: 0,
+            single: { url: snap.thumbnailUrl, alt: 'Latest save screenshot', auth: true },
+        });
     });
 });
 
