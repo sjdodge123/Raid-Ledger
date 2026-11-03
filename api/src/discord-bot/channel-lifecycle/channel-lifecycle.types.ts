@@ -86,6 +86,12 @@ export interface ApplyContext {
   now: Date;
 }
 
+/** A post-commit topic refresh: the channel + the binding re-locked before the edit. */
+export interface TopicTarget {
+  channelId: string;
+  bindingId: string;
+}
+
 /** The outcome of running one planned game. */
 export interface ItemOutcome {
   outcome: 'done' | 'failed' | 'deferred' | 'planned';
@@ -93,6 +99,8 @@ export interface ItemOutcome {
   linkedHubs?: number;
   /** Hubs linked in this item's tx — announced by `runOne` after it commits. */
   linked?: HubLinkResult;
+  /** An auto-managed channel whose topic `runOne` refreshes after the link tx commits. */
+  topic?: TopicTarget;
   /** A create's new channel + binding: hubs are linked after the create tx commits. */
   created?: { channelId: string; bindingId: string };
   /** A permission error: stop the tick (D14). */
