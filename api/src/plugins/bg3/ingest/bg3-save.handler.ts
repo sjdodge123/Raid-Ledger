@@ -10,6 +10,7 @@
  * BG3 data" keeps the same order, so the two serialise instead of a new
  * key's uncommitted marker slipping past the delete.
  */
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { Bg3SaveMessage, CompanionWebpRef } from '@raid-ledger/contract';
 import type {
@@ -23,6 +24,26 @@ import {
   Bg3SavesWriteRepository,
   type Bg3SaveInsert,
 } from './bg3-saves.write.repository';
+
+/**
+ * D-4 (ROK-2070 B1): the `bg3-save` latest-wins marker key — ONE save, not
+ * one campaign key. A GameID key is shared by every save of a playthrough,
+ * so a marker on the bare key would refuse any older save sent after a newer
+ * one; hashing in `saveName` restores the per-save scope a folder key had.
+ * 64 hex chars (under the 128-char marker cap). Markers written before this
+ * change (keyed by the bare campaign key) simply go unused; a replay of such
+ * an old save is still deduped by {@link Bg3SaveHandler.alreadyHeld} and the
+ * `(uploader, campaignKey, savedAt)` unique index. Exported so a delete path
+ * can compute the same key for the rows it removes.
+ */
+export function bg3LatestMarkerKey(
+  campaignKey: string,
+  saveName: string,
+): string {
+  return createHash('sha256')
+    .update(`${campaignKey}\n${saveName}`, 'utf8')
+    .digest('hex');
+}
 
 /** Highest level among the non-summons (summons only as a fallback). */
 export function partyMaxLevel(
@@ -73,9 +94,13 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
 
   constructor(private readonly repo: Bg3SavesWriteRepository) {}
 
-  /** D-4: one latest marker per campaign key. */
+  /** D-4: one latest marker per save ({@link bg3LatestMarkerKey}). */
   latestWins(msg: Bg3SaveMessage): { key: string; at: Date } {
-    return { key: msg.payload.campaignKey, at: new Date(msg.payload.savedAt) };
+    const { campaignKey, saveName, savedAt } = msg.payload;
+    return {
+      key: bg3LatestMarkerKey(campaignKey, saveName),
+      at: new Date(savedAt),
+    };
   }
 
   /**

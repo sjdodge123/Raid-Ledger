@@ -575,14 +575,16 @@ describe('I-10 browser upload (ROK-1960): a session JWT, a bare .lsv', () => {
 
 type KeySource = Bg3SaveMessage['payload']['campaignKeySource'];
 
-/** `save()` under an explicit key source (ROK-2070). */
+/** `save()` under an explicit key source (and save name) (ROK-2070). */
 function keyed(
   key: string,
   source: KeySource,
   savedAt?: string,
+  saveName = ACT2.payload.saveName,
 ): Bg3SaveMessage {
   const msg = save(savedAt === undefined ? { key } : { key, savedAt });
-  return { ...msg, payload: { ...msg.payload, campaignKeySource: source } };
+  const payload = { ...msg.payload, campaignKeySource: source, saveName };
+  return { ...msg, payload };
 }
 
 /** `[campaignKey, campaignKeySource, savedAt]` of every save, in order. */
@@ -643,5 +645,27 @@ describe('I-11 re-upload under another key source (ROK-2070 OQ3)', () => {
       [w.host.id, KEY_C],
       [w.mate.id, KEY_B],
     ]);
+  });
+});
+
+describe('I-11 game-id saves keep one latest-wins marker per save (ROK-2070 B1)', () => {
+  it('game-id saves arriving newest-first are all stored; an exact replay is stale', async () => {
+    const w = await world();
+    const older = keyed(KEY_B, 'game-id', at('10'), 'QuickSave_10');
+    const sends = [
+      keyed(KEY_B, 'game-id', at('11'), 'QuickSave_11'),
+      older,
+      keyed(KEY_B, 'game-id', at('09'), 'AutoSave_9'),
+    ];
+    for (const m of sends) {
+      expectAck(await ingest(w.host.token, m), 'accepted');
+    }
+    expect(await keyRows()).toEqual([
+      [KEY_B, 'game-id', iso(at('11'))],
+      [KEY_B, 'game-id', iso(at('10'))],
+      [KEY_B, 'game-id', iso(at('09'))],
+    ]);
+    expectAck(await ingest(w.host.token, older), 'stale');
+    expect(await saveRows()).toHaveLength(3);
   });
 });
