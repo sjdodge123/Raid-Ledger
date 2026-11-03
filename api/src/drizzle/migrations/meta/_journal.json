@@ -1940,6 +1940,20 @@
       "when": 1793693572833,
       "tag": "0277_hub_media_source_bg3_screenshot",
       "breakpoints": true
+    },
+    {
+      "idx": 278,
+      "version": "7",
+      "when": 1793693672833,
+      "tag": "0278_event_signups_attendance_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "7",
+      "when": 1793693772833,
+      "tag": "0279_voice_attendance_late_backfill",
+      "breakpoints": true
     }
   ]
 }
