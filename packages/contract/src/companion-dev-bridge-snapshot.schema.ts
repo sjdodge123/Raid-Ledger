@@ -1,14 +1,8 @@
 import { z } from 'zod';
 import { CompanionTimestampSchema } from './companion-common.schema.js';
 import {
-    DEV_BRIDGE_PAGE_MAX_BYTES,
-    DEV_BRIDGE_RESULT_ITEM_MAX_BYTES,
-    DevBridgeCallStatusSchema,
-    DevBridgeFlavorSchema,
-    DevBridgeNextSchema,
-    DevBridgeProbeValueSchema,
-    devBridgeJsonBytes,
-    devBridgeMaxBytes,
+    DEV_BRIDGE_PAGE_MAX_BYTES, DEV_BRIDGE_RESULT_ITEM_MAX_BYTES, DevBridgeCallStatusSchema, DevBridgeFlavorSchema,
+    DevBridgeNextSchema, DevBridgeProbeValueSchema, devBridgeJsonBytes, devBridgeMaxBytes,
 } from './companion-dev-bridge.schema.js';
 
 // ============================================================
@@ -35,15 +29,10 @@ export const DEV_BRIDGE_SNAPSHOT_HEAD_MAX_BYTES = 4_096;
 const PLAYER_GUID_RE = /Player-\d{1,5}-[0-9A-Fa-f]{8}/;
 
 /** 1–3 dot-separated Lua identifiers, e.g. `C_GameRules.IsGameRuleActive`, `Enum.GameRule`. */
-const ApiPathSchema = z
-    .string()
-    .regex(/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$/)
-    .max(96);
+const ApiPathSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$/).max(96);
 
 /** What Lua `type(x)` returns. */
-export const LedgerLinkSnapshotLuaTypeSchema = z.enum([
-    'nil', 'function', 'table', 'string', 'number', 'boolean', 'userdata', 'thread',
-]);
+export const LedgerLinkSnapshotLuaTypeSchema = z.enum(['nil', 'function', 'table', 'string', 'number', 'boolean', 'userdata', 'thread']);
 
 const SectionIdSchema = z.string().regex(/^S[0-9]{1,2}$/);
 const SnapshotText = (max: number) => z.string().max(max);
