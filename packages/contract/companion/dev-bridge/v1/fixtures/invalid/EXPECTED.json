@@ -154,5 +154,65 @@
   "error--unknown-code": {
     "path": "error",
     "code": "invalid_value"
+  },
+  "ledgerlink-snapshot--guid-in-line": {
+    "path": "sections.0.lines.0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--snapshot-version-2": {
+    "path": "snapshotVersion",
+    "code": "invalid_value"
+  },
+  "ledgerlink-snapshot--unknown-key-name": {
+    "path": "character",
+    "code": "unrecognized_keys"
+  },
+  "ledgerlink-snapshot--item-too-big": {
+    "path": "sections.0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--over-size": {
+    "path": "",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--presence-with-values": {
+    "path": "calls.0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--head-too-big": {
+    "path": "",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--guid-as-key": {
+    "path": "calls.4.values.0.Player-1234-0ABCDEF0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--type-without-presence": {
+    "path": "calls.2",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--presence-without-type": {
+    "path": "calls.1",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--name-bearing-called": {
+    "path": "calls.5",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot-page--guid-in-slice": {
+    "path": "snapshot.sections.0.lines.0",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot--duplicate-api": {
+    "path": "apis.1",
+    "code": "custom"
+  },
+  "ledgerlink-snapshot-page--character-key-short": {
+    "path": "characterKey",
+    "code": "invalid_format"
+  },
+  "ledgerlink-snapshot-history--missing-next": {
+    "path": "next",
+    "code": "invalid_type"
   }
 }

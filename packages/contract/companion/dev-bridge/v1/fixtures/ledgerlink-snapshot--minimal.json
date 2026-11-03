@@ -1,0 +1,73 @@
+{
+  "snapshotVersion": 1,
+  "addonVersion": "1.4.0",
+  "capturedAt": "2026-11-03T20:15:00Z",
+  "trigger": "logout",
+  "client": {
+    "version": "1.60.1",
+    "build": "99999",
+    "buildDate": "Nov 1 2026",
+    "interface": 11507,
+    "tocInterface": null,
+    "locale": "enUS",
+    "region": null
+  },
+  "character": {
+    "class": null,
+    "level": null,
+    "faction": null,
+    "inGuild": false
+  },
+  "ruleset": {
+    "isGameRuleActive": "nil",
+    "enumGameRule": "nil",
+    "rules": [],
+    "rulesTruncated": false,
+    "ledgerLink": {
+      "value": null,
+      "source": null
+    }
+  },
+  "calls": [
+    {
+      "fn": "GetMoney",
+      "status": "missing"
+    }
+  ],
+  "apis": [
+    {
+      "path": "C_GameRules.GetForeverExperiencePreset",
+      "type": "nil"
+    },
+    {
+      "path": "C_GameRules.IsGameRuleActive",
+      "type": "nil"
+    },
+    {
+      "path": "C_GameRules.IsHardcoreActive",
+      "type": "nil"
+    },
+    {
+      "path": "C_SkillInfo",
+      "type": "nil"
+    },
+    {
+      "path": "C_SkillInfo.GetSkillLineInfo",
+      "type": "nil"
+    },
+    {
+      "path": "Enum.GameRule",
+      "type": "nil"
+    },
+    {
+      "path": "GetProfessions",
+      "type": "nil"
+    },
+    {
+      "path": "GetSkillLineInfo",
+      "type": "nil"
+    }
+  ],
+  "sections": [],
+  "truncated": false
+}
