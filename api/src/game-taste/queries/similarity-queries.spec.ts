@@ -31,6 +31,10 @@ describe('findSimilarGames — zero-norm guard (ROK-1939)', () => {
 
   it('returns [] for a zero-norm target without running the similarity query', async () => {
     mockDb.limit.mockResolvedValueOnce([{ vector: [0, 0, 0, 0, 0, 0, 0] }]);
+    // What pgvector would return for a zero-norm anchor if the query ran.
+    mockDb.execute.mockResolvedValueOnce([
+      { game_id: 9, name: 'Peer', cover_url: null, distance: 'NaN' },
+    ]);
 
     const result = await findSimilarGames(mockDb as never, {
       gameId: 7,
