@@ -145,7 +145,7 @@ export const BG3_HUB_MANIFEST = {
     { id: BG3_GALLERY_SOURCE_ID, kind: 'ingest-source', label: 'Copies one save picture per play session into the hub Gallery' },
     { id: BG3_GALLERY_SYNC_JOB_NAME, kind: 'scheduled-job', label: 'Adds new save pictures to the Gallery every 15 minutes' },
     { id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures while the hub hides spoilers' },
-    { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'ingest-source', label: "Adds the Baldur's Gate 3 screenshots players send from the Companion to the hub Gallery" },
+    { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'ingest-source', label: 'Adds the BG3 screenshots players send from the Companion to the hub Gallery' },
     { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'media-gate', label: 'Hides Companion screenshots while the hub hides spoilers' },
   ],
   gameSlugs: [...BG3_GAME_SLUGS],
