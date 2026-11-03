@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -45,6 +46,9 @@ import { HubKindRegistry } from './hub-kind.registry';
  */
 @Injectable()
 export class HubService {
+  private readonly logger = new Logger(HubService.name);
+  private gatesWarned = false;
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -107,7 +111,12 @@ export class HubService {
   private mediaGates(): HubMediaSourceGateRegistry | null {
     try {
       return this.moduleRef.get(HubMediaSourceGateRegistry, { strict: false });
-    } catch {
+    } catch (err) {
+      if (this.gatesWarned) return null;
+      this.gatesWarned = true;
+      this.logger.warn(
+        `media gate registry unavailable; crest picture not linked: ${String(err)}`,
+      );
       return null;
     }
   }
