@@ -4,7 +4,7 @@ import { deathsMapHref, deathsShowAllHref } from '../hub/valheim-deaths.helpers'
 import { PIN_TYPE_GROUP_IDS } from './pin-type-groups';
 import {
     DEFAULT_PIN_FILTER, activeFilterCount, clearPinFilters, filterPins, parsePinFilter,
-    serverPinAsMapPin, toggleType, writePinFilter, writeSelection, type PinFilter,
+    readPinAsMapPin, serverPinAsMapPin, toggleType, writePinFilter, writeSelection, type PinFilter,
 } from './pin-filter';
 
 const qs = (s: string) => new URLSearchParams(s);
@@ -166,6 +166,29 @@ describe('filterPins (S15)', () => {
     it('serverPinAsMapPin carries checked and is never a cartography copy', () => {
         expect(serverPinAsMapPin(serverPin('Death', '', 'Ragnhild', true))).toEqual(
             { type: 'Death', label: 'Death · Ragnhild', x: 1, z: 2, checked: true, shared: false });
+    });
+});
+
+describe('synthetic Death pins (ROK-1931 Q6 = A)', () => {
+    // Built from local parts so the expected text holds in any test-runner timezone.
+    const diedAt = new Date(2026, 10, 2, 21, 14).toISOString();
+    const synthetic = { ...own('Death', ''), diedAt };
+
+    it('a character-map pin with diedAt reads "Death · 2 Nov 21:14" and drops diedAt', () => {
+        expect(readPinAsMapPin(synthetic)).toEqual(
+            { type: 'Death', label: 'Death · 2 Nov 21:14', x: 0, z: 0, checked: false, shared: false });
+        expect(readPinAsMapPin(own('Death', 'Grave'))).toEqual(own('Death', 'Grave'));
+    });
+
+    it('filterPins labels the synthetic pin on the character map', () => {
+        const out = filterPins([own('Death', 'Grave'), synthetic], f({ types: new Set(['death'] as const) }), undefined);
+        expect(out.map((p) => p.label)).toEqual(['Grave', 'Death · 2 Nov 21:14']);
+    });
+
+    it('the server-pins layer labels it "Death · <date time> · <character>"', () => {
+        const layer = [{ ...serverPin('Death', '', 'Ragnhild'), diedAt }];
+        expect(filterPins([], f({ players: 'all' }), layer).map((p) => p.label))
+            .toEqual(['Death · 2 Nov 21:14 · Ragnhild']);
     });
 });
 
