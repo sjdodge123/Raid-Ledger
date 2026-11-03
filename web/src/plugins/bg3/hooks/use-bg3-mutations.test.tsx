@@ -14,6 +14,7 @@ import {
     bg3CreateCampaignHandler,
     bg3DefaultCampaignHandler,
     bg3Error,
+    bg3RemoveSavesHandler,
     bg3SnapshotHandler,
 } from '../../../test/mocks/bg3-handlers';
 import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignSummary, buildBg3Claim, buildBg3Snapshot } from '../../../test/factories/bg3';
@@ -26,7 +27,9 @@ import {
     useBindBg3Saves,
     useClaimBg3Slot,
     useCreateBg3Campaign,
+    useRemoveBg3Saves,
 } from './use-bg3-mutations';
+import { hubMediaKeys } from '../../../lib/hub-media-query';
 
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -126,5 +129,23 @@ describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)'
             `key:a:{"campaignId":${BG3_CAMPAIGN_ID},"confirmCrossHub":true}`,
             `default:{"campaignId":${BG3_CAMPAIGN_ID}}`,
         ]);
+    });
+});
+
+describe('ROK-2068 useRemoveBg3Saves', () => {
+    it('POSTs the deduped keys, then marks the BG3 hub queries, the save lists and this hub\'s Gallery stale', async () => {
+        const bodies: unknown[] = [];
+        server.use(bg3RemoveSavesHandler({ removed: { saves: 2, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 1 } }, (b) => bodies.push(b)));
+        const { qc, wrapper } = setup();
+        qc.setQueryData(bg3Keys.myAllSaves, { saves: [], nextCursor: null, defaultCampaignId: null });
+        qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID), 'pages'], { pages: [] });
+        qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'], { pages: [] });
+        const { result } = renderHook(() => useRemoveBg3Saves(BG3_HUB_ID), { wrapper });
+        await act(async () => { await result.current.mutateAsync(['a'.repeat(64), 'a'.repeat(64)]); });
+        expect(bodies).toEqual([{ campaignKeys: ['a'.repeat(64)] }]);
+        await waitFor(() => expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID), 'pages'])?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(bg3Keys.myAllSaves)?.isInvalidated).toBe(true);
+        expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID))?.isInvalidated).toBe(true);
+        expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(false);
     });
 });

@@ -357,3 +357,14 @@ describe('ROK-1960 "Upload a save" in Your saves', () => {
         expect(screen.queryByRole('button', { name: 'Upload a save' })).not.toBeInTheDocument();
     });
 });
+
+describe('ROK-2068 — Manage my saves', () => {
+    it('a member opens Manage my saves from Your saves; the sheet mounts only once opened', async () => {
+        const user = userEvent.setup();
+        renderTab();
+        const open = await screen.findByRole('button', { name: 'Manage my saves' });
+        expect(screen.queryByTestId('bg3-manage-saves')).not.toBeInTheDocument();
+        await user.click(open);
+        expect(await screen.findByTestId('bg3-manage-saves')).toBeInTheDocument();
+    });
+});
