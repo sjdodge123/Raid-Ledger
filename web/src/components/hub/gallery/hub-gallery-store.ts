@@ -7,6 +7,7 @@
  * `closeGallery()`; the card's tiles open it in `viewer` mode on a picture id,
  * "See all (N)" in `grid` mode. `returnFocus` is the element to refocus on close.
  */
+import { useCallback } from 'react';
 import { create } from 'zustand';
 import type { HubMediaFilter } from '../../../lib/hub-media-query';
 
@@ -28,8 +29,24 @@ export interface HubGalleryOpenRequest {
      * for the dialog's removable chip). Dialog-local: never written to `filters`.
      */
     subject?: { id: string; label: string };
+    /**
+     * ROK-2074 — viewer mode on ONE picture that is not a Gallery item (a crest
+     * upload, a BG3 save shot with no Gallery twin): no list, chips, Prev/Next or
+     * per-media actions — just the picture, close and focus return.
+     */
+    single?: HubGallerySinglePicture;
     returnFocus: HTMLElement | null;
 }
+
+/** A lone picture for the viewer. `auth`: `url` is an API path fetched with the bearer token (else a plain `src`). */
+export interface HubGallerySinglePicture {
+    url: string;
+    alt: string;
+    auth?: boolean;
+}
+
+/** What `openHubPicture` opens: a Gallery item by id, or a lone picture. */
+export type HubPictureTarget = { mediaId: number } | HubGallerySinglePicture;
 
 interface HubGalleryState {
     filters: Record<number, HubMediaFilter>;
@@ -50,4 +67,24 @@ export const useHubGalleryStore = create<HubGalleryState>((set) => ({
 /** The hub's current chip filter (default All). */
 export function useHubGalleryFilter(guildId: number): HubMediaFilter {
     return useHubGalleryStore((s) => s.filters[guildId] ?? 'all');
+}
+
+/**
+ * ROK-2074 — open one hub picture in the Gallery viewer: a Gallery item by
+ * `mediaId` (Prev/Next walk All from there), or `{ url, alt }` alone. The
+ * hub page mounts the dialog, so any widget — core or plugin — can call this.
+ */
+export function openHubPicture(guildId: number, target: HubPictureTarget, returnFocus: HTMLElement | null): void {
+    const base = { guildId, mode: 'viewer', filter: 'all', index: 0, returnFocus } as const;
+    useHubGalleryStore.getState().openGallery('mediaId' in target ? { ...base, mediaId: target.mediaId } : { ...base, single: target });
+}
+
+/** Close the dialog, then refocus the element that opened it (after the overlay's own focus restore). */
+export function useCloseGalleryAndReturnFocus(request: HubGalleryOpenRequest): () => void {
+    const closeGallery = useHubGalleryStore((s) => s.closeGallery);
+    return useCallback(() => {
+        const el = request.returnFocus;
+        closeGallery();
+        setTimeout(() => { if (el?.isConnected) el.focus(); }, 0);
+    }, [request.returnFocus, closeGallery]);
 }

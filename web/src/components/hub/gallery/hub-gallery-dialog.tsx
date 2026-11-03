@@ -21,8 +21,8 @@ import { HubGalleryChips } from './hub-gallery-chips';
 import { HubGallerySubjectChip } from './hub-gallery-subject-chip';
 import { HubGalleryFooter } from './hub-gallery-footer';
 import { HubGalleryGrid } from './hub-gallery-grid';
-import { type HubGalleryOpenRequest, useHubGalleryStore } from './hub-gallery-store';
-import { HubGalleryViewer } from './hub-gallery-viewer';
+import { type HubGalleryOpenRequest, type HubGallerySinglePicture, useCloseGalleryAndReturnFocus, useHubGalleryStore } from './hub-gallery-store';
+import { HubGallerySinglePictureView, HubGalleryViewer } from './hub-gallery-viewer';
 import { HUB_GALLERY_PAGE_SIZE, type HubGalleryPages, useHubGalleryPages } from './use-hub-gallery-pages';
 
 export interface HubGalleryDialogProps {
@@ -106,16 +106,6 @@ function useClampFilter(pages: HubGalleryPages, filter: HubMediaFilter, changeFi
     useEffect(() => { if (clamped !== filter) changeFilter(clamped); }, [clamped, filter, changeFilter]);
 }
 
-function useCloseAndReturnFocus(request: HubGalleryOpenRequest): () => void {
-    const closeGallery = useHubGalleryStore((s) => s.closeGallery);
-    return useCallback(() => {
-        const el = request.returnFocus;
-        closeGallery();
-        // After the overlay unmounts (its own focus restore runs first).
-        setTimeout(() => { if (el?.isConnected) el.focus(); }, 0);
-    }, [request.returnFocus, closeGallery]);
-}
-
 type GallerySubject = NonNullable<HubGalleryOpenRequest['subject']>;
 
 /**
@@ -170,7 +160,22 @@ function GalleryBody({ mode, filter, onFilter, subject, onClearSubject, pages, i
     );
 }
 
+/** ROK-2074 — one picture that is not a Gallery item: the same shell and well, nothing to walk or moderate. */
+function SinglePictureDialog({ request, picture }: { request: HubGalleryOpenRequest; picture: HubGallerySinglePicture }): JSX.Element {
+    const desktop = useMediaQuery(DESKTOP_MQ);
+    const close = useCloseGalleryAndReturnFocus(request);
+    const body = <HubGallerySinglePictureView picture={picture} />;
+    if (desktop) return <Modal isOpen onClose={close} title="Picture" maxWidth="max-w-3xl">{body}</Modal>;
+    return <BottomSheet isOpen onClose={close} title="Picture" maxHeight="95vh">{body}</BottomSheet>;
+}
+
 export function HubGalleryDialog({ request, canEdit }: HubGalleryDialogProps): JSX.Element {
+    const single = request.single;
+    if (single !== undefined) return <SinglePictureDialog request={request} picture={single} />;
+    return <GalleryListDialog request={request} canEdit={canEdit} />;
+}
+
+function GalleryListDialog({ request, canEdit }: HubGalleryDialogProps): JSX.Element {
     const { guildId } = request;
     const desktop = useMediaQuery(DESKTOP_MQ);
     const [mode, setMode] = useState(request.mode);
@@ -179,7 +184,7 @@ export function HubGalleryDialog({ request, canEdit }: HubGalleryDialogProps): J
     const nav = useViewerNav(pages, index, setIndex);
     const scope = useRef<HTMLDivElement>(null);
     useArrowKeys(scope, mode === 'viewer' && item !== undefined && !seeking, nav.prev, nav.next);
-    const close = useCloseAndReturnFocus(request);
+    const close = useCloseGalleryAndReturnFocus(request);
     const body = (
         <GalleryBody mode={mode} filter={filter} onFilter={changeFilter} subject={subject} onClearSubject={clearSubject} pages={pages} index={index}
             nav={nav} scope={scope} seeking={seeking} onOpen={(i) => { setIndex(i); setMode('viewer'); }} />

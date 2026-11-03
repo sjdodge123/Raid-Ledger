@@ -1,6 +1,6 @@
 /**
- * ROK-1941 D14 — the hub's ONE Gallery dialog, mounted by the Overview (not the
- * Gallery card), so anything on the page can open it through
+ * ROK-1941 D14 — the hub's ONE Gallery dialog, mounted by the hub page (ROK-2074;
+ * was the Overview — never the Gallery card), so anything on the page can open it through
  * `hub-gallery-store` — a Deaths thumbnail included — even when an officer hid
  * the Gallery card. The dialog chunk loads only once a request names this hub.
  */
