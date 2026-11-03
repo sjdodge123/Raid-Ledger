@@ -1,5 +1,5 @@
 {
-  "id": "c3af846d-1d23-412d-8838-ab81630ee5de",
+  "id": "e6434845-0dc8-4f81-a721-28cd68064de8",
   "prevId": "3fdad568-3053-49b3-82b9-1292811192dd",
   "version": "7",
   "dialect": "postgresql",
@@ -1278,12 +1278,6 @@
         "attendance_status": {
           "name": "attendance_status",
           "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attendance_source": {
-          "name": "attendance_source",
-          "type": "varchar(10)",
           "primaryKey": false,
           "notNull": false
         },
@@ -17117,6 +17111,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "death_count": {
+          "name": "death_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "death_count_at": {
+          "name": "death_count_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "source_snapshot_id": {
           "name": "source_snapshot_id",
           "type": "bigint",
@@ -18908,6 +18914,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "player_id": {
+          "name": "player_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "world_uid": {
+          "name": "world_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "hub_media_id": {
           "name": "hub_media_id",
           "type": "bigint",
@@ -18947,6 +18971,40 @@
           ],
           "isUnique": true,
           "where": "\"valheim_player_deaths\".\"source\" = 'log'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "valheim_player_deaths_reported_uq": {
+          "name": "valheim_player_deaths_reported_uq",
+          "columns": [
+            {
+              "expression": "pelican_server_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "steam_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reported_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"valheim_player_deaths\".\"reported_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -19054,6 +19112,10 @@
         "valheim_player_deaths_log_ts_check": {
           "name": "valheim_player_deaths_log_ts_check",
           "value": "\"valheim_player_deaths\".\"source\" <> 'log' OR \"valheim_player_deaths\".\"logged_at\" IS NOT NULL"
+        },
+        "valheim_player_deaths_mod_shape_check": {
+          "name": "valheim_player_deaths_mod_shape_check",
+          "value": "\"valheim_player_deaths\".\"source\" <> 'mod' OR (\"valheim_player_deaths\".\"reported_at\" IS NOT NULL AND \"valheim_player_deaths\".\"x\" IS NOT NULL AND \"valheim_player_deaths\".\"z\" IS NOT NULL AND \"valheim_player_deaths\".\"player_id\" IS NOT NULL AND \"valheim_player_deaths\".\"world_uid\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
