@@ -73,6 +73,7 @@ const insertedSignup = {
   characterId: null,
   preferredRoles: null,
   attendanceStatus: null,
+  attendanceSource: null,
   attendanceRecordedAt: null,
   roachedOutAt: null,
   runningLateAt: null,

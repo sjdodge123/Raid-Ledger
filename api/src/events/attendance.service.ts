@@ -54,6 +54,7 @@ export class AttendanceService {
       .update(schema.eventSignups)
       .set({
         attendanceStatus: dto.attendanceStatus,
+        attendanceSource: 'manual',
         attendanceRecordedAt: new Date(),
       })
       .where(eq(schema.eventSignups.id, signup.id))

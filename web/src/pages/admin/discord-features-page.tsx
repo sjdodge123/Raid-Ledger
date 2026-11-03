@@ -8,6 +8,7 @@ import { LfgBoardSection } from './lfg-board-section';
 import { WeeklyDigestSection } from './weekly-digest-section';
 import { GameRolesSection } from './game-roles-section';
 import { JoinPostSection } from './join-post-section';
+import { VoiceAttendanceGraceForm } from '../../components/admin/VoiceAttendanceGraceForm';
 
 export function DiscordFeaturesPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -52,17 +53,27 @@ function DiscordFeaturesContent() {
             {isBotConnected ? (
                 <>
                     <QuickPlayToggle checked={adHocEventsStatus.data?.enabled ?? false} isPending={updateAdHocEvents.isPending} onToggle={handleToggle} />
-                    <EphemeralVoiceSection />
-                    <LfgBoardSection />
-                    <WeeklyDigestSection />
-                    <GameRolesSection />
-                    <JoinPostSection />
+                    <BotFeatureSections />
                 </>
             ) : (
                 <BotNotConnectedWarning />
             )}
             <GeneralLobbyInfo />
         </div>
+    );
+}
+
+/** The bot-backed feature cards, in page order (ROK-1940 adds Voice attendance). */
+function BotFeatureSections() {
+    return (
+        <>
+            <VoiceAttendanceGraceForm />
+            <EphemeralVoiceSection />
+            <LfgBoardSection />
+            <WeeklyDigestSection />
+            <GameRolesSection />
+            <JoinPostSection />
+        </>
     );
 }
 
