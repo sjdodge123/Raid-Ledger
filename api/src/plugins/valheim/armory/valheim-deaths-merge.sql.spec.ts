@@ -45,6 +45,14 @@ describe('logDeathMergeSql (SQL B, ROK-1931 widening)', () => {
     expect(set).not.toMatch(/reported_at|player_id|world_uid|\bx =|\bz =/);
   });
 
+  it('never takes a candidate attributed to another SteamID (D6)', () => {
+    const { text, params } = render();
+    expect(text).toMatch(
+      /d\.steam_id IS NULL OR \$\d+::text IS NULL\s+OR d\.steam_id = \$\d+::text/,
+    );
+    expect(params).toContain('76561198000000001');
+  });
+
   it('keeps the log dedupe key and the 120 s window', () => {
     const { text, params } = render();
     expect(text).toContain(
