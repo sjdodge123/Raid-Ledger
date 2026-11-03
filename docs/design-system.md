@@ -1839,6 +1839,11 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
   ("Previous picture" / "Next picture", `aria-disabled` at either end so focus stays put) over its edges, ←/→ keys (not while typing). Prev/Next walk the
   **filtered** set and page in more through `nextCursor` at the loaded end. Caption: kind badge, author,
   date + relative time, source ("From Discord"; a member upload says "Uploaded", ROK-1965), the optional decorator link.
+- **Single picture** (ROK-2074, `openHubPicture(guildId, { url, alt, auth? }, returnFocus)`): a picture that is not
+  a Gallery item — an uploaded hub crest, a BG3 save shot with no Gallery twin — opens alone in the same shell and
+  well, titled "Picture": no count, Prev / Next, chips, caption or footer; close + focus return as above. With
+  `{ mediaId }` it opens the normal viewer on that item instead. Callers: the hero crest ("View hub picture"; its
+  pencil badge is the separate "Change crest" target) and the BG3 "Where we are" screenshot.
 - **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar, always shown): grid → `Add picture`, then
   `Load more` (24 a page) while `nextCursor`; viewer → `Back to all`, editors `Hide` (`warning-soft`) / `Unhide`
   (`success-soft`), and `Remove` (`destructive-soft`) on an item whose server-computed `canRemove` is true (the hub
@@ -1862,9 +1867,9 @@ real grid + dialog over a seeded demo cache — two items are member uploads wit
 member" shows only the uploader's Remove, and a states row renders Add picture / "Add", "Uploading… 40%" via
 `HubGalleryAddPictureView` and the empty member card `HubGalleryEmpty`); live on a Valheim server hub's Overview (`/hubs/:id`).
 
-- **Mounted once by the Overview (ROK-1941 D14)** — `hub-gallery-dialog-mount.tsx` in `hub-overview.tsx`, not
-  inside the Gallery card, so any widget opens it through `useHubGalleryStore().openGallery(…)` even when the
-  card is hidden. A viewer request carries `mediaId`; a picture past the loaded pages is paged in (≤10 pages)
+- **Mounted once by the hub page (ROK-1941 D14; moved up from the Overview by ROK-2074)** — `hub-gallery-dialog-mount.tsx`
+  in `hub-page.tsx`, not inside the Gallery card, so any widget — and the hero crest, on every tab — opens it through
+  `useHubGalleryStore().openGallery(…)` or `openHubPicture(…)` even when the card is hidden. A viewer request carries `mediaId`; a picture past the loaded pages is paged in (≤10 pages)
   while the dialog shows "Loading pictures…" — never a different picture first — then falls back to `index`.
 
 **New pattern: thumbnail strip in a meter row (ROK-1941, operator Q1 = A)** — `ValheimDeathsPictures`

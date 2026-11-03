@@ -14,6 +14,7 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { bg3Keys } from '../hooks/bg3-keys';
 import { useBg3SnapshotVisible } from '../hooks/use-bg3-visible';
 import Bg3WhereWidget from './bg3-where-widget';
+import { useHubGalleryStore } from '../../../components/hub/gallery/hub-gallery-store';
 
 const auth = vi.hoisted(() => ({ user: { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member' } }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -119,6 +120,32 @@ async function probeAfterSnapshot(): Promise<string | null> {
     await waitFor(() => expect(queryClient.getQueryState(bg3Keys.snapshot(BG3_HUB_ID))?.status).toMatch(/success/));
     return screen.getByTestId('probe').textContent;
 }
+
+/** ROK-2074 — the save shot is a button into the Gallery viewer. */
+describe('Bg3WhereWidget — the screenshot opens the Gallery viewer (ROK-2074)', () => {
+    afterEach(() => { useHubGalleryStore.setState({ filters: {}, request: null }); });
+
+    it('opens the matching Gallery picture when the save has one', async () => {
+        stubObjectUrl();
+        serve(buildBg3Snapshot({ galleryMediaId: 812 }));
+        await renderWhere();
+        const shot = await screen.findByRole('button', { name: 'View the latest save screenshot' });
+        fireEvent.click(shot);
+        expect(useHubGalleryStore.getState().request).toMatchObject({ guildId: BG3_HUB_ID, mode: 'viewer', mediaId: 812, returnFocus: shot });
+        expect(useHubGalleryStore.getState().request?.single).toBeUndefined();
+    });
+
+    it('opens the save picture alone (fetched with the token) when it has no Gallery twin', async () => {
+        stubObjectUrl();
+        const snap = buildBg3Snapshot({ galleryMediaId: null });
+        serve(snap);
+        await renderWhere();
+        fireEvent.click(await screen.findByRole('button', { name: 'View the latest save screenshot' }));
+        const request = useHubGalleryStore.getState().request;
+        expect(request?.mediaId).toBeUndefined();
+        expect(request?.single).toEqual({ url: snap.thumbnailUrl, alt: 'Latest save screenshot', auth: true });
+    });
+});
 
 describe('Where we are / Session history probe (V-7)', () => {
     it('is visible with a non-empty snapshot', async () => {

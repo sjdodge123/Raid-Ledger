@@ -408,3 +408,42 @@ describe('HubGalleryDialog — scoped to a subject (ROK-2027)', () => {
         expect(document.activeElement).toBe(remove);
     });
 });
+
+/** ROK-2074 — a picture that is not a Gallery item (crest upload, BG3 save shot) opens alone. */
+describe('HubGalleryDialog — single picture', () => {
+    const single = { url: 'https://cdn.test/crest-lg.webp', alt: 'Iron Vanguard crest' };
+
+    it('shows just the picture: no count, Prev / Next, chips, caption or per-media actions', async () => {
+        open({ single });
+        expect(await screen.findByRole('img', { name: 'Iron Vanguard crest' })).toHaveAttribute('src', single.url);
+        expect(screen.getByRole('dialog', { name: 'Picture' })).toBeInTheDocument();
+        for (const name of ['Previous picture', 'Next picture', 'Back to all', 'Hide', 'Remove', 'All']) {
+            expect(screen.queryByRole('button', { name }), name).toBeNull();
+        }
+        expect(screen.queryByTestId('hub-gallery-caption')).toBeNull();
+        expect(screen.queryByTestId('hub-gallery-viewer')).toBeNull();
+    });
+
+    it('Escape closes and returns focus to what opened it', async () => {
+        const trigger = open({ single });
+        await screen.findByRole('img', { name: 'Iron Vanguard crest' });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() => expect(useHubGalleryStore.getState().request).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+    });
+
+    it('an API path is fetched with the token; a failed image says so instead of a broken icon', async () => {
+        Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:single'), revokeObjectURL: vi.fn() });
+        try {
+            open({ single: { url: '/hubs/5/media/9/file', alt: 'Save', auth: true } });
+            const img = await screen.findByRole('img', { name: 'Save' });
+            expect(img).toHaveAttribute('src', 'blob:single');
+            fireEvent.error(img);
+            expect(screen.getByText('Couldn’t load this picture.')).toBeInTheDocument();
+        } finally {
+            Reflect.deleteProperty(URL, 'createObjectURL');
+            Reflect.deleteProperty(URL, 'revokeObjectURL');
+        }
+    });
+});
+

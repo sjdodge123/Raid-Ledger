@@ -29,7 +29,7 @@ interface HeroCrestProps {
 }
 
 /** What clicking the crest opens; null for a preset or no crest (nothing to view). */
-export function heroCrestPicture(crest: GuildCrest | null | undefined, crestMediaId: number | null | undefined, name: string): HubPictureTarget | null {
+function heroCrestPicture(crest: GuildCrest | null | undefined, crestMediaId: number | null | undefined, name: string): HubPictureTarget | null {
     const upload = asCrestUpload(crest);
     if (upload === null) return null;
     if (crestMediaId != null) return { mediaId: crestMediaId };
