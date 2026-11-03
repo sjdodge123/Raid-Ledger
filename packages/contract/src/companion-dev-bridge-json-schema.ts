@@ -14,6 +14,11 @@ import {
     DevBridgeSvRawSchema,
 } from './companion-dev-bridge-endpoints.schema.js';
 import { DevBridgeProbeQueueFileSchema } from './companion-dev-bridge-queue.schema.js';
+import {
+    DevBridgeSnapshotHistorySchema,
+    DevBridgeSnapshotPageSchema,
+    LedgerLinkSnapshotSchema,
+} from './companion-dev-bridge-snapshot.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 JSON Schema (ROK-2055).
@@ -30,7 +35,8 @@ export const DEV_BRIDGE_SCHEMA_ID =
 /**
  * Every body on the bridge, keyed by its `$defs` name — also the fixture
  * filename prefix (`<key>.json` or `<key>--<case>.json`). Bodies the companion
- * RECEIVES (`probe-request` from agents, `probe-result` from the addon) are
+ * RECEIVES (`probe-request` from agents, `probe-result` and
+ * `ledgerlink-snapshot` from the addons) are
  * generated in input mode; everything the companion SENDS (including the
  * Queue.lua JSON, `probe-queue`) in output mode.
  */
@@ -48,12 +54,15 @@ export const DEV_BRIDGE_MESSAGES = {
     'probe-cancelled': DevBridgeProbeCancelledSchema,
     logs: DevBridgeLogsSchema,
     collectors: DevBridgeCollectorsSchema,
+    'ledgerlink-snapshot': LedgerLinkSnapshotSchema,
+    'ledgerlink-snapshot-page': DevBridgeSnapshotPageSchema,
+    'ledgerlink-snapshot-history': DevBridgeSnapshotHistorySchema,
     error: DevBridgeErrorSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type DevBridgeMessageName = keyof typeof DEV_BRIDGE_MESSAGES;
 
-const INPUT_MESSAGES: ReadonlySet<string> = new Set(['probe-request', 'probe-result']);
+const INPUT_MESSAGES: ReadonlySet<string> = new Set(['probe-request', 'probe-result', 'ledgerlink-snapshot']);
 
 /** One message's draft-2020-12 schema, without its own `$schema` key. */
 function toDef(schema: z.ZodType, io: 'input' | 'output'): Record<string, unknown> {
@@ -81,7 +90,7 @@ export function buildDevBridgeJsonSchema(): Record<string, unknown> {
         $id: DEV_BRIDGE_SCHEMA_ID,
         title: `RL Companion dev bridge v${DEV_BRIDGE_CONTRACT_VERSION}`,
         description:
-            'GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; "$i" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no "..", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request ≤4 KiB measured as its largest queue entry (output form + probeId, flavor padded to 34 chars), each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB; see CONTRACT.md.',
+            'GENERATED from packages/contract/src/companion-dev-bridge.schema.ts and companion-dev-bridge-endpoints.schema.ts / companion-dev-bridge-snapshot.schema.ts — do not edit by hand. One $defs entry per /dev/v1/* body plus the probe request/result. Refinements enforced by the Zod schema but not expressible here: probe fn paths must pass allowlist.json (deny wins); exactly one of fn/presence per call; "$i" only with forEach; call ids unique; forEach.countFrom names an earlier fn call; ≤40 keys per result table; relative paths have no "..", drive or backslash; log lines hold no unredacted token (any letter case). Byte caps, measured as UTF-8 of the JSON serialisation: every response body ≤16 KiB, a probe request ≤4 KiB measured as its largest queue entry (output form + probeId, flavor padded to 34 chars), each probe-result item (a call without iterations, or one iteration) ≤3 KiB, a whole probe result ≤64 KiB. ledgerlink-snapshot: no string or table key holds a player GUID (Player-<digits>-<8 hex>); apis[].path unique; a call carries type (and no values) iff status is presence; each calls/apis/sections item ≤3 KiB, the head (snapshot minus those three arrays) ≤4 KiB, the whole snapshot ≤48 KiB (a ledgerlink-snapshot-page slice applies only the GUID and presence rules); see CONTRACT.md.',
         $defs: buildDefs(),
         not: {},
     };

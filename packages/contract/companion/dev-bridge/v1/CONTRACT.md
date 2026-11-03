@@ -51,6 +51,8 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | DELETE | `/dev/v1/probes/:id` | `probe-cancelled` | no |
 | GET | `/dev/v1/logs?since=&level=&cursor=` | `logs` | yes |
 | GET | `/dev/v1/collectors` | `collectors` | no |
+| GET | `/dev/v1/ledgerlink/snapshot?flavor=&character=&at=&cursor=` | `ledgerlink-snapshot-page` | yes (`calls` → `apis` → `sections`) |
+| GET | `/dev/v1/ledgerlink/snapshot/history?flavor=&character=&cursor=` | `ledgerlink-snapshot-history` | yes |
 
 - `error.error` is one of `invalid_request` (400, carries `issues` — each
   `{ path, code, message }` as Zod reports it), `unauthorized` (401),
@@ -195,6 +197,75 @@ present), `flavor` resolved to the folder the file sits in (never `auto`),
 plus the companion-assigned `probeId`; the allowlist and the 4 KiB request cap
 (measured as above, so any accepted POST fits) apply. `fixtures/probe-queue.json` carries an arg holding `]]`, `]==]`, a
 quote, a backslash and a newline.
+
+## LedgerLink dev snapshot (`ledgerlink-snapshot`) — ROK-2072
+
+**Where it lives.** Only while the operator has typed `/rl dev on`, LedgerLink
+keeps `LedgerLinkDB.dev = { v = 1, enabledAt = <unix s>, snapshots = { [<guid>]
+= "<JSON>" } }` in the account-wide SavedVariables file and rewrites the
+current character's entry on every `PLAYER_LOGOUT` (`/reload`, logout, exit).
+Each value is ONE JSON string that validates against `$defs/ledgerlink-snapshot`
+(input mode — the companion receives it). `/rl dev off` (and the default)
+leaves no `dev` key at all. At most 10 characters are held.
+
+**Privacy (D3/D4).** The snapshot itself carries no name, realm, guild or
+GUID: `character` is `{ class, level, faction, inGuild }` only, and
+name-bearing calls (`UnitGUID`, `GetUnitName`, `UnitFullName`, `UnitName`,
+`GetRealmName`, `GetNormalizedRealmName`, `GetGuildInfo`, `GetGuildRosterInfo`,
+`GetGuildRosterLastOnline` — `DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`, mirroring
+LedgerLink `Probe.NAME_BEARING`) appear in `calls` **only** as
+`status: "presence"` with the Lua `type` and no `values`; any other status for
+one of them is rejected at that call.
+**No string or table key anywhere may match a player GUID**
+(`Player-<1–5 digits>-<8 hex>`); the addon scrubs GUIDs out of section text
+before storing. The companion derives `characterKey = sha256_hex(guid)` from
+the table key — the same value as `sv-parsed` `outbox[].guidHash` — so no
+response ever holds the GUID.
+
+**Content.** `client` (`GetBuildInfo`, the addon's TOC interface, locale, raw
+region), `ruleset` (the `Enum.GameRule` members discovered by `pairs()`, ≤ 64,
+each with `C_GameRules.IsGameRuleActive(value)`; LedgerLink's own ruleset
+answer), `calls` (`/rl probe` S1, structured), `apis` (S2 + the watched list,
+presence only, unique, sorted by path) and `sections` (the `/rl probe` text of
+S3 and S9; `skipped` when the 50 ms logout time guard ran out).
+
+**Caps** (UTF-8 bytes of the JSON serialisation, as everywhere here): each
+`calls` / `apis` / `sections` item ≤ 3 KiB; the head (the snapshot minus those
+three arrays) ≤ 4 KiB; the whole snapshot ≤ 48 KiB
+(`fixtures/ledgerlink-snapshot--max-size.json` sits exactly on it). A section
+holds ≤ 40 lines of ≤ 256 chars; the addon drops trailing lines (and sets
+`truncated`) to fit.
+
+**Paging (`ledgerlink-snapshot-page`).** Items are `calls[]` then `apis[]` then
+`sections[]`; every page carries the row fields, the full head and the next
+items that fit, and clients rebuild the snapshot by concatenating each array
+across pages. A page's `snapshot` is a slice: the arrays may be empty and only
+the GUID and presence rules apply to it. One page always fits: a 4 KiB head +
+one 3 KiB item + every row field at its maximum is 7,766 bytes
+(`fixtures/ledgerlink-snapshot-page--max-page.json`). The cursor encodes
+`(snapshotId, itemOffset)`; a cursor whose row was pruned → 400 at `cursor`.
+
+**History and dedupe.** The companion caches the latest snapshot plus 7 days
+of history per flavor + `characterKey`, on local disk only — never uploaded to
+Raid Ledger. `digest` is sha256 of the snapshot with `capturedAt` removed; a
+capture whose digest equals the newest row's bumps that row's `lastCapturedAt`
+and `seenCount` instead of adding a row (consecutive identical only, so A→B→A
+keeps three rows). `ledgerlink-snapshot-history` lists rows newest first with
+the patch-day signals (`clientVersion`, `clientBuild`, `interface`,
+`missingApis` = count of `apis[].type === "nil"`, `activeRules`); its cursor
+names the last returned `snapshotId`.
+
+**The digest is opaque.** How the companion serialises the snapshot before
+hashing (key order, number formatting, whitespace) is internal to the
+companion and **not part of this contract**: clients may compare two `digest`
+values for equality, but must never recompute one, and a companion release
+may change the serialisation (old and new rows then simply differ once).
+
+**Params + errors.** `flavor` as every endpoint; `character` (a
+`characterKey`) is optional when the flavor has one cached character, else
+400 at `character`; on `history` it is an optional filter. `at` = a
+`snapshotId` from `history` (default: latest; unknown → 404). Nothing cached
+(dev mode off, never saved, pruned) → 404 `not_found`. No new error code.
 
 ## Fixtures
 

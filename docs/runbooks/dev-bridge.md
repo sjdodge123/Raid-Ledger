@@ -32,9 +32,22 @@ script in game, or `/reload` for you.**
 | Probe status / answer | `/dev/v1/probes`, `/dev/v1/probes/<probeId>` |
 | Companion log (redacted) | `/dev/v1/logs?since=<iso>&level=warn` |
 | Collector status | `/dev/v1/collectors` |
+| What changed in the client, and when (dev snapshot history) | `/dev/v1/ledgerlink/snapshot/history?flavor=<flavor>` |
+| One dev snapshot: build, `Enum.GameRule`, API presence, S1/S3/S9 | `/dev/v1/ledgerlink/snapshot?flavor=<flavor>&character=<characterKey>&at=<snapshotId>` |
 
 Bodies are ≤16 KiB. When `next` is not `null`, fetch the next page with
 `?cursor=<next>` (keep the other query params).
+
+## In-game facts without a probe (dev snapshot)
+
+With `/rl dev on`, LedgerLink writes a diagnostic snapshot on every save and
+the companion keeps the latest plus 7 days (CONTRACT.md → "LedgerLink dev
+snapshot"). Check `/snapshot/history` first — a new row means the client's
+answer changed (`clientBuild`, `missingApis`, `activeRules`) — then read that
+row with `/snapshot?at=<snapshotId>` (page through `next`). A 404 means
+nothing is cached: the operator has not typed `/rl dev on` once, or has not
+saved since. Say so in your report; do not ask them to `/reload`. Prefer this
+over queuing a probe whenever the snapshot already holds the fact.
 
 ## Probes — execute tier (the operator approves each)
 

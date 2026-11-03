@@ -7,6 +7,23 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-03 (ROK-2072, additive)
+
+- `ledgerlink-snapshot` refinement: a D4 name-bearing call
+  (`DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`) must be `status: "presence"`; the
+  snapshot `digest` serialisation is documented as companion-internal. Six more
+  invalid fixtures pin the head cap, GUID-as-key, both presence/type rules,
+  the GUID guard on a page slice and D4.
+- New `$defs`: `ledgerlink-snapshot` (the dev snapshot LedgerLink stores per
+  character under `/rl dev on`; input mode), `ledgerlink-snapshot-page`
+  (`GET /dev/v1/ledgerlink/snapshot`) and `ledgerlink-snapshot-history`
+  (`GET /dev/v1/ledgerlink/snapshot/history`). New bodies no existing
+  producer emits; no existing `$defs` entry changes (only the root
+  `description` gains the snapshot refinements). Stays v1.
+- New golden fixtures `ledgerlink-snapshot--{minimal,forever,max-size}`,
+  `ledgerlink-snapshot-page{,--max-page}`, `ledgerlink-snapshot-history`,
+  `error--not-found`, and nine invalid cases in `fixtures/invalid/`.
+
 ## v1 — 2026-11-03 (ROK-2055, additive)
 
 - `error.error` gains `internal` (500): an unexpected companion failure while

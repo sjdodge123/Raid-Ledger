@@ -8,6 +8,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEV_BRIDGE_MESSAGES } from '../dist/index.js';
+import { SNAPSHOT_CASES, SNAPSHOT_SIZES, SNAPSHOT_VALID } from './dev-bridge-snapshot-fixtures.mjs';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'companion', 'dev-bridge', 'v1', 'fixtures');
 const INVALID = join(FIX, 'invalid');
@@ -113,6 +114,7 @@ const VALID = {
     'error--invalid-request': { error: 'invalid_request', issues: [{ path: ['calls', 0, 'fn'], code: 'custom', message: 'Function not allowed (denied)' }] },
     'error--probes-disabled': { error: 'probes_disabled' },
     'error--unauthorized': { error: 'unauthorized' },
+    ...SNAPSHOT_VALID,
 };
 
 const withFn = (fn) => (m) => { m.calls[0].fn = fn; };
@@ -157,6 +159,7 @@ const CASES = [
     ['logs--unredacted-bearer-lowercase', 'logs', (m) => { m.lines[1].msg = 'rejected authorization: bearer abc123'; }, 'lines.1.msg', 'custom'],
     ['logs--unredacted-bearer-uppercase', 'logs', (m) => { m.lines[1].msg = 'rejected AUTHORIZATION: BEARER abc123'; }, 'lines.1.msg', 'custom'],
     ['error--unknown-code', 'error--unauthorized', (m) => { m.error = 'teapot'; }, 'error', 'invalid_value'],
+    ...SNAPSHOT_CASES,
 ];
 
 const schemaFor = (name) => {
@@ -172,7 +175,7 @@ const sizes = { request: bytes(maxRequest), queueEntry: bytes(queued(maxRequest)
 if (sizes.queueEntry > REQ_MAX || sizes.queueEntry < REQ_MAX - 8 || sizes.head < ITEM_MAX - 8 || sizes.iteration < ITEM_MAX - 8 || sizes.page !== PAGE_WORST) {
     throw new Error(`max-size fixtures are not at their caps: ${JSON.stringify(sizes)}`);
 }
-console.log('worst-case sizes', sizes);
+console.log('worst-case sizes', sizes, 'snapshot', SNAPSHOT_SIZES, `snapshot page margin ${16_384 - SNAPSHOT_SIZES.page}B`);
 rmSync(FIX, { recursive: true, force: true });
 mkdirSync(INVALID, { recursive: true });
 for (const [name, value] of Object.entries(VALID)) {
