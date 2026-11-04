@@ -7,6 +7,29 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-03 (ROK-2077, additive)
+
+- New `$defs`: `bg3-saves` (`GET /dev/v1/bg3/saves`) and
+  `bg3-save-structure` (`GET /dev/v1/bg3/saves/<saveRef>/structure`), both
+  output mode — read-only, redacted views of the saves the `bg3-save`
+  collector sees. Redaction is structural: strict objects, an equipment
+  `slot` enum, a prefixed (or `null`) `statsId`, a dotted-record or
+  `E`-enum `type`, unique equipment slots per party row, a BG3-only
+  `next` cursor grammar, and a guard on every string and key against any
+  GUID shape (dashed, `_`/`.`-split by runs of any length, braced, undashed,
+  Larian handle in any case, ≥ 32 hex) and any run of ≥ 10 digits. New bodies no existing producer emits;
+  no existing `$defs` entry changes (the shared cursor is untouched; only the
+  root `description` gains the BG3 refinements). **Additive** — stays v1.
+- New golden fixtures `bg3-saves`, `bg3-save-structure{,--unsupported,--types-page}`
+  and 26 invalid cases in `fixtures/invalid/`, each raising exactly one
+  issue (extra key on a save row or in `decoded`; GUID in `statsId` / `type`,
+  `_`- and `__`-split, and as a Larian handle in either case; path or bare
+  name in `statsId`; display name or 8-hex GUID fragment in `classId`; a
+  17-digit id; free-text equipment `slot`; duplicate `saveRef` / party
+  `slot` / equipment `slot`; folder-name `next` on both bodies;
+  non-hex `saveRef`; ability out of range; unknown `fallbackReason`;
+  missing `next`; both bodies over 16 KiB).
+
 ## v1 — 2026-11-03 (ROK-2072, additive)
 
 - `ledgerlink-snapshot` refinement: a D4 name-bearing call

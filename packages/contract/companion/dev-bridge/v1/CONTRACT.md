@@ -53,6 +53,8 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | GET | `/dev/v1/collectors` | `collectors` | no |
 | GET | `/dev/v1/ledgerlink/snapshot?flavor=&character=&at=&cursor=` | `ledgerlink-snapshot-page` | yes (`calls` → `apis` → `sections`) |
 | GET | `/dev/v1/ledgerlink/snapshot/history?flavor=&character=&cursor=` | `ledgerlink-snapshot-history` | yes |
+| GET | `/dev/v1/bg3/saves?cursor=` | `bg3-saves` | yes |
+| GET | `/dev/v1/bg3/saves/<saveRef>/structure?cursor=` | `bg3-save-structure` | yes (`types` → `party`) |
 
 - `error.error` is one of `invalid_request` (400, carries `issues` — each
   `{ path, code, message }` as Zod reports it), `unauthorized` (401),
@@ -266,6 +268,121 @@ may change the serialisation (old and new rows then simply differ once).
 400 at `character`; on `history` it is an optional filter. `at` = a
 `snapshotId` from `history` (default: latest; unknown → 404). Nothing cached
 (dev mode off, never saved, pruned) → 404 `not_found`. No new error code.
+
+## BG3 save reads (`bg3-saves`, `bg3-save-structure`) — ROK-2077
+
+Read-only views of what the `bg3-save` collector sees on the PC, so an agent
+can check a NewAge decoder against real saves without the operator sending
+files. Free tier (same token as every endpoint); every body ≤ 16 KiB.
+
+**Redaction is enforced by the schema, not by convention.** Never a save or
+character name, profile id, GUID, file or folder path, position, dialogue
+line or image byte. Concretely:
+
+- Every object is strict — an extra key (`name`, `position`, `path`, …) is
+  `unrecognized_keys`.
+- Identifier fields, by how far the shape alone protects them:
+
+  | Field | Shape | Name-proof by shape? |
+  |---|---|---|
+  | equipment `slot` | closed enum of the 19 BG3 `ItemSlot` names (`Helmet`, `Breast`, `Cloak`, `MeleeMainHand`, `MeleeOffHand`, `RangedMainHand`, `RangedOffHand`, `Ring`, `Underwear`, `Boots`, `Gloves`, `Amulet`, `Ring2`, `Wings`, `Horns`, `Overhead`, `MusicalInstrument`, `VanityBody`, `VanityBoots`) | **yes** |
+  | `statsId` | `^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,57}$`, ≤ 64 (`ARM_Hat`, `WPN_Longsword_1`), or `null` | **mostly** — a bare name (`Astarion`) or a path does not fit; a name behind a fake 2–6 char prefix (`AB_Astarion`) would |
+  | `types[].type` | a component record `[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+){2,}` (`core.v0.Level`, `game.stats.v3.StatsComponent`) or a bare enum `E[A-Z][A-Za-z0-9]{1,80}` (`EAbility`, `EResistanceType`), ≤ 128 | **mostly** — a bare or capitalised name does not fit; a lower-case dotted string (`tav.is.great`) or an `E`-prefixed name (`EAstarion`) would |
+  | `classId`, `subclassId` | `^[A-Za-z0-9_.]+$`, ≤ 64 (`Wizard`, `EvocationSchool`) | **no** — a one-word name (`Tav`) fits. These rely on the companion emitting only values it read from game data. |
+
+  `classId`, `subclassId` and `type` also reject a string that is all hex
+  and ≥ 8 chars (`6f2b8c1e`, a GUID fragment), as `invalid_format`.
+- **Values that do not fit are dropped, never rewritten.** An equipped item
+  whose stats id does not match the `statsId` pattern (a modded item, e.g.
+  `Shadowheart_Robe`) is sent with `statsId: null`. A class the companion
+  cannot map to a Larian class id (a mod class known only by UUID) is left
+  out of `classLevels`; it is never sent as a UUID fragment.
+
+  None of them admits `/`, `\`, `:`, `-` or a space, so no path, dashed GUID
+  or multi-word name fits any of them.
+- No string value or object key anywhere in either body may hold:
+  - a **GUID** (`custom`, "A GUID is not allowed in a BG3 dev-bridge body"):
+    32 hex digits split 8-4-4-4-12 by `-`, `_`, `.` or nothing (braced or
+    not), a Larian handle (`h` + 8 hex + `g` + 4 hex …), or any run of ≥ 32
+    hex digits — also after every `-`, `_`, `.`, `{` and `}` is stripped, so
+    a GUID split by separator runs of any length (`__`) is caught; the Larian
+    handle check ignores case. A base64-encoded GUID and a truncated one
+    (< 32 hex) have no detectable shape — accepted residuals that rely on
+    the companion;
+  - a **run of ≥ 10 decimal digits** (`custom`, "A run of 10 or more digits
+    (a profile or platform id) is not allowed …") — SteamID64s, Larian
+    profile ids. `saveRef` is exempt: its 12-hex pattern keeps a SteamID64
+    out, but a 10–12 digit id would fit; `saveRef` relies on its HMAC
+    derivation for that. The rule also rejects a 10-digit `gameVersion`
+    segment (`4.1.1.1234567890`), which `bg3-save` allows; real builds are
+    7 digits (`4.1.1.6758295`), so this is deliberate, not a bug.
+- `saveRef` (`^[0-9a-f]{12}$`) is the first 12 lowercase hex chars of
+  `HMAC-SHA256(key = a random per-install secret, message = the save's path
+  relative to the save root)`. It is stable while the save keeps its path
+  and cannot be reversed offline without the secret (a plain hash of a
+  low-entropy save name could be). `campaignKeyPrefix` is the first 8 hex
+  chars of the row's `bg3-save` `campaignKey` (`^[0-9a-f]{8}$`), so a row
+  joins to the uploads it produced without exposing the full key.
+- `saves[].saveRef` is unique within a page, and so is `party[].slot`;
+  `equipment[].slot` is unique within one party row (`custom`, "Duplicate
+  saveRef … in saves" / "Duplicate slot … in party" / "Duplicate slot … in
+  equipment").
+- **Cursor.** Both bodies use their own `next` grammar,
+  `^p[1-9][0-9]{0,3}_(saves|types|party)_[0-9]{1,6}$` — page number,
+  section, row offset (e.g. `p2_types_9`) — not the shared 128-char cursor,
+  so no file or folder name fits. The cursor is an offset, never derived
+  from a file or folder name. It is valid only against the same save
+  contents: if the save was rewritten since the first page, the companion
+  returns 404 `not_found` and the client restarts from the first page.
+
+**`bg3-saves` rows** (one per `.lsv`, paged with `next`):
+`saveRef`, `campaignKeyPrefix`, `campaignKeySource` (the `bg3-save` enum:
+`save-folder` | `game-id` | `file-name`), `gameVersion` (the `bg3-save`
+pattern, or `null`), `savedAt` (ISO datetime or `null`), `partySize` and
+`nonSummonCount` (0–16 or `null`), `clientCount` (meta.lsf
+`ClientDatas/ClientData` count — the co-op hint; `null` when meta.lsf is
+unreadable), `lsfVersions` (`{ meta, globals }` — the LSF format version of
+`meta.lsf` and `Globals.lsf`, 1–255, `null` when absent or unreadable),
+`newAgeBytes` (size of the NewAge blob, `0` when there is none), and
+`fallbackReason`:
+
+| `fallbackReason` | Meaning |
+|---|---|
+| `null` | Full read; no fallback. |
+| `no-newage` | `Globals.lsf` has no `NewAge` blob. |
+| `newage-unreadable` | The blob is not a readable LSMF. |
+| `lsf-unreadable` | An LSF file failed to parse. |
+| `meta-missing` | The save has no `meta.lsf`. |
+
+`fallbackReason` and `decoder` are closed enums: a new value is
+**breaking** (a v1 validator rejects it) and needs a new `vN/`. Adding an
+equipment `slot` is the same — BG3 has 19 today, all listed.
+
+**`bg3-save-structure`** (unknown `saveRef` → 404 `not_found`):
+
+- `types[]` — the NewAge type table: `{ type, version, elementSize, count,
+  decoder }`, `decoder` = `ok` (the companion decodes this exact
+  `(type, version, elementSize)` triple), `unsupported` (a decoder exists but
+  the triple differs — layout drift) or `none` (no decoder). Counts only,
+  never element bytes.
+- `checks` — `partyEntitiesFound`, `partyMatchesSaveInfo`, `portraitsFound`,
+  `portraitsMapped`, `metaNamesMatchParty`, `ownerProfileMatchesLocal`: the
+  S0 verification answers as counts and booleans (no name is compared in
+  the body; only the outcome is reported).
+- `party[]` — `{ slot, decoded }` by 0-based party index. Every `decoded`
+  field is optional and absent when its decoder is `unsupported`/`none`:
+  `abilities` (`str dex con int wis cha`, each 1–30), `proficiencyBonus`
+  (1–10), `maxHp` (1–100,000), `classLevels[] { classId, subclassId|null,
+  level 1–20 }` (≤ 12), `equipment[] { slot, statsId }` (≤ 19).
+
+**Paging.** ~330 type rows do not fit 16 KiB, so the body is paged by
+**row**: every page repeats `saveRef` and `checks`; the companion fills pages
+with the remaining `types` rows first, then `party` rows, never splitting a
+row, and sets `next` until both are exhausted. Each party row is checked
+against `DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES` = 6 KiB (`custom`, "Party row
+is N bytes; the cap is 6144"); the field caps already keep the worst row
+well under it (the spec builds that row), so one always fits a page with
+the head.
 
 ## Fixtures
 
