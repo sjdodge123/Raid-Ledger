@@ -63,6 +63,8 @@ import {
   handleNominateButtonClick,
   parseSteamNominateButtonId,
   safeNominate,
+  isGameNominatable,
+  notNominatableCopy,
 } from './steam-link.listener.nomination-flow';
 
 /** Dedup TTL in milliseconds. */
@@ -260,6 +262,10 @@ export class SteamLinkListener implements OnModuleDestroy {
         message,
         `**${game.name}** is already nominated for the current lineup.`,
       );
+      return;
+    }
+    if (!(await isGameNominatable(this.db, game.id))) {
+      await this.sendDmSafe(message, notNominatableCopy(game.name));
       return;
     }
     if (await getAutoNominateSteamUrlsPref(this.db, userId)) {

@@ -27,6 +27,7 @@ import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
+import { checkUpdateClaim } from './characters-update-claim.helpers';
 import { defined } from '../common/defined.helpers';
 import { withDisplayOverrides } from './characters-display-equipment.helpers';
 
@@ -137,6 +138,7 @@ export class CharactersService {
       character,
       dto,
     );
+    await checkUpdateClaim(this.db, userId, character, prepared);
     const [updated] = await this.db
       .update(schema.characters)
       .set({ ...prepared, updatedAt: new Date() })
