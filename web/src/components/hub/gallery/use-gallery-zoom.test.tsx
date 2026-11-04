@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { JSX } from 'react';
-import { type GallerySwipe, useGalleryZoom } from './use-gallery-zoom';
+import { GALLERY_WHEEL_SETTLE_MS, type GallerySwipe, useGalleryZoom } from './use-gallery-zoom';
 
 /** jsdom lays nothing out: the stage reads 400×300, the picture 400×225 (fit). */
 function stubLayout(): () => void {
@@ -109,6 +109,19 @@ describe('useGalleryZoom (ROK-2075)', () => {
         fireEvent.pointerUp(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
         fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 150 });
         expect(announced(), 'settled: the readout takes the final zoom').toBe('2.00');
+    });
+
+    it('a ctrl-wheel run that stops just above fit snaps back to fit once it settles', () => {
+        vi.useFakeTimers();
+        try {
+            render(<Harness resetKey={1} />);
+            fireEvent.wheel(screen.getByTestId('stage'), { deltaY: -2, ctrlKey: true });
+            expect(zoomOf()).toBe('1.02');
+            act(() => { vi.advanceTimersByTime(GALLERY_WHEEL_SETTLE_MS); });
+            expect(zoomOf(), 'settled below the 1.05 snap: back to fit').toBe('1.00');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('a double-click toggles fit ↔ 2×', () => {

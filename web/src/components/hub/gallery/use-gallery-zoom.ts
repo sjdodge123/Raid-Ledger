@@ -90,17 +90,23 @@ function useMeasure(stage: HTMLElement | null, content: HTMLElement | null, disp
     }, [stage, content, dispatch]);
 }
 
+/** A ctrl-wheel run has no "end" event: settle (snap 1.00–1.05 to fit, announce the level) this long after the last one. */
+export const GALLERY_WHEEL_SETTLE_MS = 150;
+
 function useWheel(stage: HTMLElement | null, dispatch: (a: ZoomAction) => void): void {
     useEffect(() => {
         if (stage === null) return undefined;
+        let settle: ReturnType<typeof setTimeout> | undefined;
         const onWheel = (e: WheelEvent): void => {
             if (!e.ctrlKey && !e.metaKey) return;
             e.preventDefault();
             const px = wheelDeltaPx(e.deltaY, e.deltaMode, stage.clientHeight);
             dispatch({ type: 'zoomBy', factor: wheelZoomFactor(px), anchor: fromCentre(stage, e.clientX, e.clientY) });
+            clearTimeout(settle);
+            settle = setTimeout(() => dispatch({ type: 'settle' }), GALLERY_WHEEL_SETTLE_MS);
         };
         stage.addEventListener('wheel', onWheel, { passive: false });
-        return () => stage.removeEventListener('wheel', onWheel);
+        return () => { clearTimeout(settle); stage.removeEventListener('wheel', onWheel); };
     }, [stage, dispatch]);
 }
 
