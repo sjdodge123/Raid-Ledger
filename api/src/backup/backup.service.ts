@@ -39,6 +39,11 @@ import {
   archiveUploadsForDump,
   deleteUploadsArchiveOf,
 } from './backup-uploads.wiring';
+import {
+  reportBackgroundArchive,
+  UploadsArchiveTracker,
+} from './backup-uploads.tracker';
+import { listBackupFiles } from './backup-list.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
@@ -67,6 +72,7 @@ export class BackupService implements OnModuleInit {
   private readonly dailyDir: string;
   private readonly migrationDir: string;
   private readonly dbContainer: string;
+  private readonly uploadsArchives: UploadsArchiveTracker;
 
   constructor(
     private readonly configService: ConfigService,
@@ -85,6 +91,7 @@ export class BackupService implements OnModuleInit {
       this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
     this.dailyDir = path.join(this.backupBase, 'daily');
     this.migrationDir = path.join(this.backupBase, 'migrations');
+    this.uploadsArchives = new UploadsArchiveTracker(this.dailyDir);
   }
 
   onModuleInit(): void {
@@ -126,19 +133,29 @@ export class BackupService implements OnModuleInit {
   }
 
   /**
-   * Create a daily pg_dump backup plus its companion uploads archive. A failed
-   * archive never loses the dump (it is logged; the cron run reports it).
+   * Admin "Create backup": resolves once the dump is written and archives the
+   * uploads in the BACKGROUND (nginx gives /api/ 60 s). The list shows the
+   * archive as `archiving` until it settles; a failure is logged and sent to
+   * Sentry, never thrown — the dump is already safe.
    */
   async createDailyBackup(): Promise<string> {
-    const { dumpPath } = await this.createDailyBackupWithArchive();
-    return dumpPath;
+    const filename = await this.dumpDaily();
+    void this.archiveUploadsOf(filename).then(reportBackgroundArchive);
+    return path.join(this.dailyDir, filename);
   }
 
-  /** Dump FIRST, then archive (spec D3): every dumped row has its file on disk. */
+  /** Cron: dump FIRST, then archive (spec D3) — awaited, so rotation follows it. */
   private async createDailyBackupWithArchive(): Promise<{
     dumpPath: string;
     archive: UploadsArchiveResult;
   }> {
+    const filename = await this.dumpDaily();
+    const archive = await this.archiveUploadsOf(filename);
+    return { dumpPath: path.join(this.dailyDir, filename), archive };
+  }
+
+  /** Write `daily/raid_ledger_<ts>.dump`; returns its filename. */
+  private async dumpDaily(): Promise<string> {
     const filename = `raid_ledger_${formatBackupTimestamp(new Date())}.dump`;
     const dumpPath = path.join(this.dailyDir, filename);
     this.logger.log(`Starting daily backup: ${filename}`);
@@ -147,13 +164,19 @@ export class BackupService implements OnModuleInit {
     this.logger.log(
       `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
     );
-    const archive = await archiveUploadsForDump(
-      this.dailyDir,
-      filename,
-      this.logger,
-      UPLOADS_ARCHIVE_KEEP,
+    return filename;
+  }
+
+  /** The dump's companion archive, tracked; joins one already running. Never rejects. */
+  private archiveUploadsOf(filename: string): Promise<UploadsArchiveResult> {
+    return this.uploadsArchives.run(filename, () =>
+      archiveUploadsForDump(
+        this.dailyDir,
+        filename,
+        this.logger,
+        UPLOADS_ARCHIVE_KEEP,
+      ),
     );
-    return { dumpPath, archive };
   }
 
   /** Create a pre-migration snapshot. */
@@ -205,29 +228,12 @@ export class BackupService implements OnModuleInit {
 
   /** List all backup files from both directories. */
   listBackups(): BackupFileDto[] {
-    const backups: BackupFileDto[] = [];
-    for (const [dir, type] of [
-      [this.dailyDir, 'daily'],
-      [this.migrationDir, 'migration'],
-    ] as const) {
-      try {
-        for (const file of fs.readdirSync(dir)) {
-          if (!file.endsWith('.dump')) continue;
-          const stats = fs.statSync(path.join(dir, file));
-          backups.push({
-            filename: file,
-            type,
-            sizeBytes: stats.size,
-            createdAt: stats.birthtime.toISOString(),
-          });
-        }
-      } catch {
-        /* Directory may not exist yet */
-      }
-    }
-    return backups.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    return listBackupFiles(
+      [
+        [this.dailyDir, 'daily'],
+        [this.migrationDir, 'migration'],
+      ],
+      (dump) => this.uploadsArchives.stateOf(dump),
     );
   }
 
