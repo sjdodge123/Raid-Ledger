@@ -118,6 +118,12 @@
     }
     const headers = { 'content-type': 'application/json' };
     if (key && TESTER_KEY_RE.test(key)) headers['x-tester-token'] = key;
+    // ROK-1900 D10: a plan opened from the inbox rules with the operator's
+    // inbox key, which the inbox keeps in localStorage — header only, never
+    // a URL. The server ignores it unless it matches RL_APPROVAL_TOKEN_SHA256.
+    let inboxKey = null;
+    try { inboxKey = localStorage.getItem('rl-approval-key'); } catch { inboxKey = null; }
+    if (typeof inboxKey === 'string' && inboxKey.length > 0) headers['x-approval-token'] = inboxKey;
     return headers;
   };
 

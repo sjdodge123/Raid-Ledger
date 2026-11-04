@@ -9,6 +9,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
+import { rm } from 'node:fs/promises';
+import { PLAN_A, call, makeStateDir, seedPlanFile, startServer } from './auth-harness.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MODULES = ['test-plan-state.js', 'test-plan-render.js', 'test-plan-submit.js', 'test-plan-polling.js']
@@ -74,4 +76,71 @@ test('tester_token_required becomes a message that points the tester at their li
   assert.match((await NS.submitDraft(SLUG, { plan_id: PLAN })).error, expected);
   assert.match((await NS.postComment(SLUG, { plan_id: PLAN }, 1, 'x', null)).error, expected);
   assert.match((await NS.requestReset(SLUG, { plan_id: PLAN }, 1)).error, expected);
+});
+
+// ROK-1900 D10 / AC9 — the operator's inbox key is a tester credential on
+// every plan, sent ONLY as the X-Approval-Token header (the inbox key never
+// rides in a URL, so as ?k= → x-tester-token it is refused). Without a token
+// the write still 401s; a wrong inbox key is no credential.
+test('the inbox key passes a step on any plan via its header only; no token, a wrong key, or the key as ?k= 401s', async () => {
+  const INBOX = 'operator-inbox-key-d10';
+  const dir = await makeStateDir();
+  const srv = await startServer(dir, { approvalToken: INBOX });
+  try {
+    await seedPlanFile(dir, PLAN_A, { tester_token: 'plan-own-token' });
+    const path = `/api/test-plans/foo/${PLAN_A}/step/1/result`;
+    const body = { tester: 'op', verdict: 'pass' };
+    assert.equal((await call(srv.port, 'POST', path, { body })).status, 401, 'no token');
+    assert.equal((await call(srv.port, 'POST', path, { body, headers: { 'x-approval-token': 'wrong' } })).status,
+      401, 'wrong inbox key');
+    const viaInbox = await call(srv.port, 'POST', path, { body, headers: { 'x-approval-token': INBOX } });
+    assert.equal(viaInbox.status, 200, `inbox header: ${viaInbox.text}`);
+    const viaK = await call(srv.port, 'POST', path, { body, headers: { 'x-tester-token': INBOX } });
+    assert.equal(viaK.status, 401, `inbox key as ?k= tester token must be refused: ${viaK.text}`);
+  } finally {
+    await srv.kill();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('with RL_APPROVAL_TOKEN_SHA256 unset no inbox-looking header is a tester credential', async () => {
+  const dir = await makeStateDir();
+  const srv = await startServer(dir);
+  try {
+    await seedPlanFile(dir, PLAN_A, { tester_token: 'plan-own-token' });
+    const r = await call(srv.port, 'POST', `/api/test-plans/foo/${PLAN_A}/step/1/result`,
+      { body: { tester: 'op', verdict: 'pass' }, headers: { 'x-approval-token': 'anything' } });
+    assert.equal(r.status, 401);
+  } finally {
+    await srv.kill();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// Codex P2 — a tester page opened from the inbox has no ?k=, so its writes
+// carry the inbox key the inbox stored in localStorage, as X-Approval-Token.
+test('a tester page with the stored inbox key sends it as x-approval-token, and the server accepts it', async () => {
+  const INBOX = 'operator-inbox-key-stored-locally';
+  const { window, NS, calls } = await loadTester(`http://fleet.example/?slug=${SLUG}&plan=${PLAN}`);
+  window.localStorage.setItem('rl-approval-key', INBOX);
+  NS.bufferVerdict(SLUG, PLAN, 1, 'pass');
+  await NS.submitDraft(SLUG, { plan_id: PLAN });
+  await NS.postComment(SLUG, { plan_id: PLAN }, 1, 'from the inbox', null);
+  const [submit, comment] = writes(calls);
+  assert.equal(submit.headers['x-approval-token'], INBOX, 'submit carries the stored inbox key');
+  assert.equal(comment.headers['x-approval-token'], INBOX, 'comment carries the stored inbox key');
+  assert.equal(submit.headers['x-tester-token'], undefined, 'never as the ?k= tester token');
+
+  const dir = await makeStateDir();
+  const srv = await startServer(dir, { approvalToken: INBOX });
+  try {
+    await seedPlanFile(dir, PLAN_A, { tester_token: 'plan-own-token' });
+    const r = await call(srv.port, 'POST', `/api/test-plans/foo/${PLAN_A}/submit`, {
+      body: { tester: 'op', verdicts: [{ step_id: 1, verdict: 'pass' }] }, headers: submit.headers,
+    });
+    assert.equal(r.status, 200, `submit with the page's own headers: ${r.text}`);
+  } finally {
+    await srv.kill();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

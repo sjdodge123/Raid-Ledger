@@ -1,6 +1,7 @@
 // ROK-1847 — shared harness for the test-plan auth specs. Not a *.test.js
 // file, so `node --test rl-infra/dashboard/test/*.test.js` does not run it.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { request } from 'node:http';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -24,11 +25,19 @@ export const makeStateDir = async () => {
 };
 
 // `agentToken: null` boots the server with RL_AGENT_TOKEN unset.
-export const startServer = async (stateDir, { agentToken = AGENT_TOKEN } = {}) => {
+// ROK-1900: `approvalToken` (raw inbox key) sets RL_APPROVAL_TOKEN_SHA256 to
+// its hash; `env` overrides anything (e.g. a malformed hash).
+export const startServer = async (stateDir, { agentToken = AGENT_TOKEN, approvalToken = null, env: extra = {} } = {}) => {
   const env = { ...process.env, PORT: '0', STATE_DIR: stateDir, PUBLIC_DIR,
     RL_PUBLIC_DOMAIN: 'gamernight.net', NODE_ENV: 'test' };
   delete env.RL_AGENT_TOKEN;
+  delete env.RL_APPROVAL_TOKEN_SHA256;
+  delete env.RL_APPROVALS_ROOT;
   if (agentToken !== null) env.RL_AGENT_TOKEN = agentToken;
+  if (approvalToken !== null) {
+    env.RL_APPROVAL_TOKEN_SHA256 = createHash('sha256').update(approvalToken, 'utf8').digest('hex');
+  }
+  Object.assign(env, extra);
   const child = spawn(process.execPath, [SERVER_PATH], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   let err = '';
