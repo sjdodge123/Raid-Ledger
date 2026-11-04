@@ -3886,3 +3886,4 @@ same day (#1278, #1279, #1280).
 - **resolved** line 3698 (`steam-playtime.helpers.ts:48-60`, purge vs in-flight sync race) — fixed by 202513304 (#1928); residual gap stays at line 3865.
 - **resolved** line 3410 (`ad-hoc-events.gateway.ts:57` + `lineups.gateway.ts:61` signature-only handshake) — fixed by 202513304 (#1928).
 - **partial** line 2818 — the `tzOffset` half is fixed (`users-controller.helpers.ts:108-116` clamp); the `week` half and the unbounded cache are fixed in this batch.
+- **resolved** line 2858 (`api/src/notifications/notification-prefs.helpers.ts:20`, PATCH /notifications/preferences unvalidated) — fixed on chore/tech-debt-2026-11-04 (f7bedcb83).
