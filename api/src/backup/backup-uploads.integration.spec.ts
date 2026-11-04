@@ -58,18 +58,27 @@ function describeUploadsArchive() {
   let dailyDir = '';
   const created: string[] = [];
 
-  /** POST /admin/backups; returns the dump filename and records it for cleanup. */
+  /**
+   * POST /admin/backups, then wait for its background uploads archive to
+   * settle (504 fix: the POST answers after the dump). Returns the dump
+   * filename and records it for cleanup.
+   */
   async function createBackup(): Promise<string> {
     const res = await testApp.request
       .post('/admin/backups')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(201);
     const filename = String(res.body.backup.filename);
-    const service = testApp.app.get(BackupService);
-    dailyDir = path.dirname(service.getBackupFilePath('daily', filename));
     created.push(filename, filename.replace(/\.dump$/, '.uploads.tar'));
+    const service = testApp.app.get(BackupService);
+    await service.uploadsArchives.whenIdle();
+    dailyDir = path.dirname(service.getBackupFilePath('daily', filename));
     return filename;
   }
+
+  /** Never tear down while an archive still writes into the sandbox. */
+  const archivesIdle = (): Promise<void> =>
+    testApp.app.get(BackupService).uploadsArchives.whenIdle();
 
   const inDaily = (name: string): string => path.join(dailyDir, name);
   const archiveOf = (dump: string): string =>
@@ -85,12 +94,14 @@ function describeUploadsArchive() {
     process.env.BACKUP_UPLOADS_DIR = UPLOADS_DIR;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await archivesIdle();
     for (const name of created.splice(0))
       fs.rmSync(inDaily(name), { force: true });
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await archivesIdle();
     delete process.env.BACKUP_UPLOADS_DIR;
     fs.rmSync(SANDBOX, { recursive: true, force: true });
   });

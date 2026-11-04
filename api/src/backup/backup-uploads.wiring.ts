@@ -102,13 +102,15 @@ export function removeStalePartialArchives(
   dailyDir: string,
   logger: BackupLogger,
 ): void {
-  let names: string[];
+  let partials: string[];
   try {
-    names = fs.readdirSync(dailyDir);
+    partials = fs
+      .readdirSync(dailyDir)
+      .filter((n) => n.endsWith('.uploads.tar.partial'));
   } catch {
     return;
   }
-  for (const name of names.filter((n) => n.endsWith('.uploads.tar.partial'))) {
+  for (const name of partials) {
     try {
       fs.unlinkSync(path.join(dailyDir, name));
       logger.warn(`Removed interrupted uploads archive: daily/${name}`);

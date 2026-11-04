@@ -62,6 +62,12 @@ const TEST_BACKUP_DIR = SKIP_BACKUP_INTEGRATION
   : fs.mkdtempSync(path.join(os.tmpdir(), 'raid-ledger-backup-test-'));
 if (!SKIP_BACKUP_INTEGRATION) {
   process.env.BACKUP_DIR = TEST_BACKUP_DIR;
+  // The uploads archive runs in the background after POST and a Create or a
+  // Delete while it runs is a 409 (504 fix). This suite tests the DB dump, so
+  // point the uploads root at nothing: every archive is `skipped` at once and
+  // no tar is left running into the next request (the archive itself is
+  // backup-uploads.integration.spec.ts's job).
+  process.env.BACKUP_UPLOADS_DIR = path.join(TEST_BACKUP_DIR, 'no-uploads');
 }
 
 function describeBackupCRUD() {
