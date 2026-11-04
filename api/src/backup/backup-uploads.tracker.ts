@@ -35,6 +35,7 @@ const PUBLIC_FAILURE: Record<ArchiveFailure['reason'], string> = {
   'insufficient-space': 'Not enough free space on the backup disk',
   'measure-failed': 'Could not measure the uploads folder — see server logs',
   'tar-failed': 'Archive failed — see server logs',
+  timeout: 'Archive took too long and was stopped — see server logs',
 };
 
 /** Results whose throw `settle` already sent to Sentry (no second report). */
@@ -44,6 +45,8 @@ export class UploadsArchiveTracker {
   private readonly running = new Map<string, Promise<UploadsArchiveResult>>();
   private readonly failures = new Map<string, string>();
   private tail: Promise<unknown> = Promise.resolve();
+  /** A manual Create is dumping: its archive is not registered yet (MINOR 14). */
+  private creating = false;
 
   constructor(
     private readonly dailyDir: string,
@@ -63,16 +66,35 @@ export class UploadsArchiveTracker {
     this.failures.delete(dumpFilename);
     const job = this.tail
       .then(() => settle(archive, this.logger))
-      .then((result) => this.finish(dumpFilename, result));
-    this.tail = job;
+      .then(
+        (result) => this.finish(dumpFilename, result),
+        (err: unknown) => this.finish(dumpFilename, threwResult(err)),
+      );
+    // A rejected link must never wedge every later archive (MINOR 15).
+    this.tail = job.catch(() => undefined);
     this.running.set(dumpFilename, job);
     return job;
   }
 
-  /** Manual Create: 409 while any archive is queued or running. */
+  /** Manual Create: 409 while another Create dumps or any archive is queued or running. */
   assertIdle(): void {
-    if (this.running.size > 0)
+    if (this.creating || this.running.size > 0)
       throw new ConflictException(ARCHIVE_RUNNING_MESSAGE);
+  }
+
+  /**
+   * Manual Create: `assertIdle`, then hold the guard SYNCHRONOUSLY until
+   * `create` (dump + archive registration) settles, so a second POST during
+   * the dump is a 409 too — not a second dump of the same second (MINOR 14).
+   */
+  async exclusive<T>(create: () => Promise<T>): Promise<T> {
+    this.assertIdle();
+    this.creating = true;
+    try {
+      return await create();
+    } finally {
+      this.creating = false;
+    }
   }
 
   /** Delete: 409 while this dump's archive is queued or running. */
@@ -115,6 +137,13 @@ export class UploadsArchiveTracker {
   }
 }
 
+function threwResult(
+  err: unknown,
+): Extract<UploadsArchiveResult, { reason: 'tar-failed' }> {
+  const detail = err instanceof Error ? err.message : String(err);
+  return { status: 'failed', reason: 'tar-failed', detail };
+}
+
 /** `archiveUploadsForDump` never throws by contract; this keeps it so. */
 async function settle(
   archive: () => Promise<UploadsArchiveResult>,
@@ -124,14 +153,9 @@ async function settle(
     return await archive();
   } catch (err) {
     Sentry.captureException(err, { tags: { backup: 'uploads-archive' } });
-    const detail = err instanceof Error ? err.message : String(err);
-    logger?.error(`uploads archive threw: ${detail}`);
-    const result: UploadsArchiveResult = {
-      status: 'failed',
-      reason: 'tar-failed',
-      detail,
-    };
+    const result = threwResult(err);
     capturedResults.add(result);
+    logger?.error(`uploads archive threw: ${result.detail}`);
     return result;
   }
 }

@@ -127,7 +127,9 @@ export class BackupService implements OnModuleInit {
     await this.cronJobService.executeWithTracking(
       'BackupService_dailyBackup',
       async () => {
-        const { archive } = await this.createDailyBackupWithArchive();
+        // Dump FIRST, then archive (spec D3): queued behind a running one and
+        // awaited (a hung tar is killed at its deadline), so rotation follows.
+        const archive = await this.archiveUploadsOf(await this.dumpDaily());
         this.rotateDailyBackups();
         this.rotateMigrationSnapshots();
         this.rotateUploadsArchives();
@@ -142,23 +144,15 @@ export class BackupService implements OnModuleInit {
    * uploads in the BACKGROUND (nginx gives /api/ 60 s). The list shows the
    * archive as `archiving` until it settles; a failure is logged and sent to
    * Sentry, never thrown — the dump is already safe. Archives run one at a
-   * time: a Create while one is queued or running is a 409, before any dump.
+   * time: a Create while one is queued or running — or while another Create
+   * is still dumping — is a 409, before any dump.
    */
   async createDailyBackup(): Promise<string> {
-    this.uploadsArchives.assertIdle();
-    const filename = await this.dumpDaily();
-    void this.archiveUploadsOf(filename).then(reportBackgroundArchive);
-    return path.join(this.dailyDir, filename);
-  }
-
-  /** Cron: dump FIRST, then archive (spec D3) — queued behind a running one and awaited, so rotation follows it. */
-  private async createDailyBackupWithArchive(): Promise<{
-    dumpPath: string;
-    archive: UploadsArchiveResult;
-  }> {
-    const filename = await this.dumpDaily();
-    const archive = await this.archiveUploadsOf(filename);
-    return { dumpPath: path.join(this.dailyDir, filename), archive };
+    return this.uploadsArchives.exclusive(async () => {
+      const filename = await this.dumpDaily();
+      void this.archiveUploadsOf(filename).then(reportBackgroundArchive);
+      return path.join(this.dailyDir, filename);
+    });
   }
 
   /** Write `daily/raid_ledger_<ts>.dump`; returns its filename. */
