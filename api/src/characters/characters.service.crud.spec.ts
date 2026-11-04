@@ -593,10 +593,42 @@ describe('CharactersService — crud', () => {
   });
 
   describe('update', () => {
+    /** findOneOwned → game slug → realm claim lookup, in that order. */
+    function selectSequence(claimRows: unknown[]) {
+      const limit = jest
+        .fn()
+        .mockResolvedValueOnce([mockCharacter])
+        .mockResolvedValueOnce([{ slug: 'world-of-warcraft' }])
+        .mockResolvedValueOnce(claimRows);
+      mockDb.select.mockReturnValue({
+        from: () => ({ where: () => ({ limit }) }),
+      });
+      return limit;
+    }
+
     it('should update a character', async () => {
+      const limit = selectSequence([]);
       const dto = { name: 'UpdatedName' };
       const result = await service.update(1, 'char-uuid-1', dto);
       expect(result).toMatchObject({ id: expect.any(String) });
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(limit).toHaveBeenCalledTimes(3);
+    });
+
+    it('refuses a rename onto another player name+realm (backlog 2808)', async () => {
+      selectSequence([{ id: 'other-char', userId: 2 }]);
+      await expect(
+        service.update(1, 'char-uuid-1', { name: 'Jaina' }),
+      ).rejects.toThrow(
+        'Jaina on Area 52 is already claimed by another player',
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('skips the claim lookup when neither name nor realm changes', async () => {
+      const limit = selectSequence([{ id: 'other-char', userId: 2 }]);
+      await service.update(1, 'char-uuid-1', { spec: 'Elemental' });
+      expect(limit).toHaveBeenCalledTimes(2);
       expect(mockDb.update).toHaveBeenCalled();
     });
   });
