@@ -74,8 +74,8 @@ export const BG3_VALID = {
     'bg3-save-structure--types-page': typesPage,
 };
 
-const GUID = '6f2b8c1e-4d3a-4b7e-9a10-2c5d8e3f7a41';
-const GUID_UNDASHED = GUID.replaceAll('-', '');
+// Undashed only: the contract spec's anonymisation guard rejects any dashed GUID on disk.
+const GUID_UNDASHED = '6f2b8c1e4d3a4b7e9a102c5d8e3f7a41';
 const STATS = 'party.0.decoded.equipment.0.statsId';
 /** [name, base valid fixture, mutate, expected path, expected code] */
 export const BG3_CASES = [
@@ -87,8 +87,8 @@ export const BG3_CASES = [
     ['bg3-save-structure--extra-decoded-key', 'bg3-save-structure', (m) => { m.party[0].decoded.position = [12.5, 3, -40.25]; }, 'party.0.decoded', 'unrecognized_keys'],
     ['bg3-save-structure--guid-in-stats-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${GUID_UNDASHED}`; }, STATS, 'custom'],
     ['bg3-save-structure--guid-in-type', 'bg3-save-structure', (m) => { m.types[0].type = GUID_UNDASHED; }, 'types.0.type', 'custom'],
-    ['bg3-save-structure--dashed-guid-class-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = GUID; }, 'party.0.decoded.classLevels.0.classId', 'invalid_format'],
-    ['bg3-save-structure--path-in-stats-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'C:/Users/x/AppData/Local/Larian Studios'; }, STATS, 'invalid_format'],
+    ['bg3-save-structure--display-name-class-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = 'Tav the Brave'; }, 'party.0.decoded.classLevels.0.classId', 'invalid_format'],
+    ['bg3-save-structure--path-in-stats-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'Saves/Story/QuickSave_179.lsv'; }, STATS, 'invalid_format'],
     ['bg3-save-structure--ability-out-of-range', 'bg3-save-structure', (m) => { m.party[0].decoded.abilities.str = 31; }, 'party.0.decoded.abilities.str', 'too_big'],
     ['bg3-save-structure--save-ref-path', 'bg3-save-structure', (m) => { m.saveRef = 'Saves/Tav-1'; }, 'saveRef', 'invalid_format'],
     ['bg3-save-structure--over-size', 'bg3-save-structure', (m) => { m.types = Array.from({ length: 160 }, (_, i) => ({ ...m.types[2], count: i })); }, '', 'custom'],

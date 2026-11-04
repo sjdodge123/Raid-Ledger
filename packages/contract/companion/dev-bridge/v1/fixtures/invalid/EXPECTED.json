@@ -247,7 +247,7 @@
     "path": "types.0.type",
     "code": "custom"
   },
-  "bg3-save-structure--dashed-guid-class-id": {
+  "bg3-save-structure--display-name-class-id": {
     "path": "party.0.decoded.classLevels.0.classId",
     "code": "invalid_format"
   },
