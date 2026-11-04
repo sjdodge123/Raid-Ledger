@@ -900,6 +900,62 @@ else
     log "disk: ladder library not found at $DISK_PRESSURE_LIB — skipping disk-pressure check"
 fi
 
+# 3b'. 2026-10-26 — registry GC. rl-registry was never garbage-collected (424
+# rl-allinone tags, 134 GB, builds starved of disk). Deletes rl-allinone tags
+# that back no container/env, are older than RL_REGISTRY_RETENTION_HOURS (48)
+# and are not among the newest RL_REGISTRY_KEEP_N (5), then runs `registry
+# garbage-collect` in rl-registry, all while holding a `registry_gc` entry in
+# admission.json (no image build is admitted meanwhile — ROK-2018).
+# Interval-gated (RL_REGISTRY_GC_INTERVAL_HOURS, 6); forced when the disk
+# ladder just ran. RL_REGISTRY_GC_DRY_RUN defaults to 1 (report only).
+# Our rl-net address for the registry, never .env's host one.
+REGISTRY_GC_LIB="${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_registry_gc.sh"
+if [[ -r "$REGISTRY_GC_LIB" ]]; then
+    # Read by the sourced _registry_gc.sh, not by this file.
+    # shellcheck disable=SC2034
+    {
+        RL_REGISTRY_URL="${RL_SWEEPER_REGISTRY_URL:-http://rl-registry:5000}"
+        RL_ENVS_FILE="$ENVS"
+        RL_ADMISSION_FILE="${STATE_DIR}/admission.json"
+        RL_REGISTRY_GC_STATE_FILE="${STATE_DIR}/registry-gc.json"
+    }
+    # shellcheck disable=SC1090
+    source "$REGISTRY_GC_LIB"
+    _rgc_mode=""
+    [[ "$(jq -r '.pruned // false' <<<"${DISK_RESULT:-null}" 2>/dev/null)" == "true" ]] && _rgc_mode=force
+    # Non-zero = aborted: docker ps/images or the env registry was unreadable
+    # (protected_tags_unreadable), or a kept tag's digest was
+    # (protected_digest_unreadable), so the protected set was unknown and
+    # nothing was deleted; tags/list was unreadable (tags_unreadable); or a
+    # timed-out garbage-collect could not be confirmed dead
+    # (gc=timed_out_cleanup_failed — the registry_gc entry is kept until it
+    # expires, so builds stay blocked). Logged + audited.
+    # The lib's stderr (which digest was unreadable, a timeout, a failed
+    # cleanup) goes to the sweeper log, line by line.
+    _rgc_err=$(mktemp)
+    if ! REGISTRY_GC_RESULT=$(registry_gc::sweep "$_rgc_mode" 2>"$_rgc_err"); then
+        _rgc_failed=1
+    else
+        _rgc_failed=0
+    fi
+    while IFS= read -r _rgc_line; do log "registry: $_rgc_line"; done < "$_rgc_err"
+    rm -f "$_rgc_err"
+    if (( _rgc_failed )); then
+        log "registry: GC aborted — $(jq -r '.error // .gc // "unknown"' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
+    fi
+    [[ -n "$REGISTRY_GC_RESULT" ]] || REGISTRY_GC_RESULT='{}'
+    if [[ "$(jq -r '.skipped // empty' <<<"$REGISTRY_GC_RESULT" 2>/dev/null)" != "interval" ]]; then
+        audit registry_gc "$REGISTRY_GC_RESULT"
+        # The ledger the sweep locks must be the orchestrator's own file
+        # (ROK-2018 UNVERIFIED: /state = /srv/rl-infra/state) — confirm on the
+        # first dry-run log.
+        log "registry: admission ledger $RL_ADMISSION_FILE dry_run=$RL_REGISTRY_GC_DRY_RUN"
+        log "registry: $(jq -rc '"tags=" + ((.tags_seen // "?")|tostring) + " deleted=" + ((.deleted // [])|length|tostring) + " gc=" + (.gc // "?")' <<<"$REGISTRY_GC_RESULT" 2>/dev/null || echo unknown)"
+    fi
+else
+    log "registry: GC library not found at $REGISTRY_GC_LIB — skipping registry GC"
+fi
+
 # 3c. ROK-1331 M1 — task retention block moved to a self-contained function
 # below + invoked at the top (before docker ops) so it runs even when docker
 # is unavailable (test runners on the operator's Mac). See `prune_old_tasks`
