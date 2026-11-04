@@ -113,7 +113,8 @@ admission::prune_stale() {
         --argjson waitmax "$(admission::max_wait_seconds)" \
         '{
             heavy_running: [ (.heavy_running // [])[]
-                | select(($now - (.admitted_epoch // $now)) < $hold) ],
+                | select(($now - (.admitted_epoch // $now)) < $hold)
+                | select((.kind // "") != "registry_gc" or (.expires_epoch // 0) > $now) ],
             heavy_waiting: [ (.heavy_waiting // [])[]
                 | select(($now - (.since_epoch // $now)) < ($waitmax + 60)) ]
         }' 2>/dev/null || true
@@ -187,6 +188,12 @@ def medium_n: [ents[] | select(wt == "medium" and kd != "image_build")] | length
 def build_n: [ents[] | select(kd == "image_build")] | length;
 def reserved: [ents[] | (.reserve_mb // .mb // $floor)] | add // 0;
 def waits: (.heavy_waiting // []);
+def gc_live($now): [ents[] | select(kd == "registry_gc" and (.expires_epoch // 0) > $now)] | length;
+def gc_reason($now):
+    if build_n > 0 then "image_build_running"
+    elif any(waits[]; kd == "image_build") then "image_build_waiting"
+    elif gc_live($now) > 0 then "registry_gc_running"
+    else "" end;
 def since_of($k; $now): (first(waits[] | select(.key == $k) | .since_epoch) // $now);
 def ahead($k; $now): since_of($k; $now) as $s
     | [waits[] | select(.key != $k and (.since_epoch // $now) < $s)];
@@ -195,8 +202,10 @@ def ledger_reason($w; $kind; $reserve; $envmb; $k; $now):
     | ([$a[] | select(wt == "heavy" and kd != "image_build")] | length) as $ah
     | ([$a[] | select(kd == "image_build")] | length) as $ab
     | ([$a[] | (.reserve_mb // $floor)] | add // 0) as $ar
-    | (ents | length) as $n
-    | if ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
+    | ([ents[] | select(kd != "registry_gc")] | length) as $n
+    | if ($kind == "image_build" and gc_live($now) > 0)
+      then "registry_gc_running"
+      elif ($kind != "image_build" and $w == "heavy" and $maxheavy > 0 and heavy_n >= $maxheavy)
       then "heavy_cap \(heavy_n)/\($maxheavy)"
       elif ($kind == "image_build" and $maxbuilds > 0 and build_n >= $maxbuilds)
       then "image_build_cap \(build_n)/\($maxbuilds)"
@@ -440,6 +449,11 @@ admission::release() {
         }' 2>/dev/null || true
 }
 
+# ROK-2018 — the `registry_gc` admission kind (gc_try_acquire / gc_renew)
+# lives in _admission_gc.sh; it needs _ADMISSION_JQ_DEFS above.
+# shellcheck source=SCRIPTDIR/_admission_gc.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/_admission_gc.sh"
+
 # Append one line to the task log (when given) and mirror it to stderr so an
 # interactive caller sees the wait too.
 admission::_log() {
@@ -503,12 +517,15 @@ admission::acquire() {
             return 2
         fi
         avail="$(admission::mem_available_mb)"
-        if [[ -z "$avail" ]]; then
+        if [[ -z "$avail" && "$kind" != image_build ]]; then
             admission::_log "$log_path" \
                 "[admission] MemAvailable unreadable at $RL_MEMINFO_PATH — admitted ungated"
             admission::_register_running "$key" "$task_id" "$floor" "$weight" "$kind" "$$"
             return 0
         fi
+        # ROK-2018: an image build still goes through the ledger (registry GC
+        # exclusion, build cap) — only the memory floor is waived.
+        [[ -z "$avail" ]] && avail=1073741824
         if admission::_try_admit "$key" "$task_id" "$avail" "$floor" "$weight" "$kind" "$$"; then
             admission::_log "$log_path" \
                 "[admission] admitted: available=${avail}MB need=${floor}MB ($(admission::running_count) heavy running)"

@@ -54,6 +54,12 @@ FULL_TAG="registry.rl.lan:5000/rl-allinone:${TAG}"
 # OPEN whenever df or the ladder library is unavailable.
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_admission.sh"
+# ROK-2018 — a direct-CLI build takes its own image_build ledger entry so a
+# registry GC can't run during its push (no-op under task-start).
+if ! admission::hold_image_build "$TAG"; then
+    jq -nc --arg tag "$TAG" '{ok: false, error: "admission_timeout", tag: $tag}'
+    exit 75
+fi
 if [[ -z "${RL_ADMISSION_DISK_HELD:-}" ]]; then
     if ! admission::acquire_disk "${RL_TASK_ID:-build-${TAG}}" "" ""; then
         FREE_GB_NOW="$(disk_pressure::free_gb 2>/dev/null || echo 0)"

@@ -253,11 +253,16 @@ rm -f "$PARSE_DONE"
 # until the release below the wait, not for a settle window.
 TASK_TOOL=$(jq -r ".tool // \"\"" "$JSON_PATH" 2>/dev/null || echo "")
 ADM_KIND=$(admission::kind_for_tool "$TASK_TOOL")
-if [[ "$WEIGHT" == "heavy" || "$WEIGHT" == "medium" ]]; then
+# ROK-2018: EVERY image build is admitted, whatever its weight. The ledger is
+# what keeps a build push and the registry GC apart, via registry_gc_running.
+# A light build is gated as medium.
+ADM_WEIGHT="$WEIGHT"
+[[ "$ADM_KIND" == "image_build" && "$WEIGHT" == "light" ]] && ADM_WEIGHT=medium
+if [[ "$ADM_WEIGHT" == "heavy" || "$ADM_WEIGHT" == "medium" ]]; then
     state::mutate "$JSON_PATH" ".admission_state = \"waiting\"" 2>/dev/null || true
     admission::acquire "$TASK_ID" "$TASK_ID" "$LOG_PATH" \
-        "admission::json_status_terminal \"$JSON_PATH\"" "$(admission::need_mb_for "$WEIGHT")" \
-        "$WEIGHT" "$ADM_KIND"
+        "admission::json_status_terminal \"$JSON_PATH\"" "$(admission::need_mb_for "$ADM_WEIGHT")" \
+        "$ADM_WEIGHT" "$ADM_KIND"
     ADM_RC=$?
     if (( ADM_RC == 2 )); then
         # Cancelled (or otherwise finished) while parked on the gate. Do NOT
