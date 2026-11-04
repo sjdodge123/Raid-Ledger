@@ -1,14 +1,13 @@
 /**
  * ROK-1794 — the pure halves of the guild-snapshot guard. The DB-backed rules
- * (live-member importer, held wholesale removal, audit row) are proven in
+ * (exporter on the roster, flagged wholesale change, audit row) are proven in
  * `addon-import-guild-trust.integration.spec.ts`.
  */
 import {
   MASS_REMOVAL_MIN,
-  ROSTER_HELD_MESSAGE,
-  RosterHeldError,
   isMassRemoval,
   receivedSnapshotAt,
+  wholesaleFlag,
   windowVerdict,
 } from './addon-import-guild.guard';
 
@@ -66,14 +65,29 @@ describe('windowVerdict (AC4, review r2)', () => {
   });
 });
 
-describe('RosterHeldError (AC4 + AC7)', () => {
-  it('sends the plain INVALID_PAYLOAD body — no new wire fields', () => {
-    const err = new RosterHeldError(7, 39, 40, false);
-    expect(err.getStatus()).toBe(422);
-    expect(err.getResponse()).toEqual({
-      code: 'INVALID_PAYLOAD',
-      message: ROSTER_HELD_MESSAGE,
+describe('wholesaleFlag (ROK-2066 — applied, flagged to staff)', () => {
+  const none = { removed: 0, added: 0 };
+  it('a wholesale window yields a staff flag with the window totals — no throw', () => {
+    const v = windowVerdict(40, none, { removed: 39, added: 0 });
+    expect(wholesaleFlag(7, v, false)).toEqual({
+      guildId: 7,
+      removed: 39,
+      added: 0,
+      live: 40,
+      dropsEditor: false,
     });
-    expect(err).toMatchObject({ guildId: 7, removed: 39, live: 40 });
+  });
+
+  it('dropping a member with editor rights flags even a small change', () => {
+    const v = windowVerdict(40, none, { removed: 1, added: 0 });
+    expect(wholesaleFlag(7, v, true)).toMatchObject({
+      removed: 1,
+      dropsEditor: true,
+    });
+  });
+
+  it('a small change raises no flag', () => {
+    const v = windowVerdict(40, none, { removed: 1, added: 2 });
+    expect(wholesaleFlag(7, v, false)).toBeNull();
   });
 });

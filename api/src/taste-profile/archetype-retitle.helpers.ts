@@ -17,6 +17,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { deriveArchetype } from './archetype.helpers';
+import type { CommunityAxisStats } from './archetype-community.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -30,17 +31,20 @@ export interface IntensityWithTitle {
 /**
  * Pair intensity metrics with the archetype they imply. The single place
  * that turns metrics into a title — callers persist both fields in ONE
- * statement.
+ * statement. `community` (ROK-1939) switches the noun to the
+ * community-relative pick; omitted or too thin → the raw ROK-1083 rule.
  */
 export function retitleFromIntensity(
   intensityMetrics: IntensityMetricsDto,
   dimensions: TasteProfileDimensionsDto,
   hasPresenceData: boolean,
+  community?: CommunityAxisStats,
 ): IntensityWithTitle {
   const archetype = deriveArchetype({
     intensityMetrics,
     dimensions,
     hasPresenceData,
+    community,
   });
   return { intensityMetrics, archetype };
 }
@@ -74,6 +78,7 @@ export async function writeIntensityWithTitle(
   userId: number,
   metrics: IntensityMetricsDto | null,
   hasPresenceData: boolean,
+  community?: CommunityAxisStats,
 ): Promise<boolean> {
   const [row] = await tx
     .select({
@@ -88,6 +93,7 @@ export async function writeIntensityWithTitle(
     metrics ?? row.intensityMetrics,
     row.dimensions,
     hasPresenceData,
+    community,
   );
   await tx
     .update(schema.playerTasteVectors)

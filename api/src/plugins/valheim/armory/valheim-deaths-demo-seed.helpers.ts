@@ -29,6 +29,7 @@ import {
   type DeathsFixtureCharacterPlan,
 } from './valheim-deaths-demo-seed.data';
 import type { DeathsFixturePortals } from './valheim-portals-demo-seed.helpers';
+import type { DeathsFixtureReported } from './valheim-deaths-demo-seed.reported';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -55,12 +56,14 @@ export interface DeathsFixture {
   worldUid: string;
   /** `member`: a manual hub member. `visitor`: onboarded, not a member. */
   users: { member: DeathsFixtureUser; visitor: DeathsFixtureUser };
-  /** `top` (5 deaths, SteamID-attributed), `second` (3, NULL SteamID → by name). */
+  /** `top` (5 deaths, SteamID-attributed), `second` (3 log, NULL SteamID → by name, + 1 reported). */
   characters: { top: DeathsFixtureCharacter; second: DeathsFixtureCharacter };
   /** The name-only player's bar (no character → not a link). */
   unlinked: { name: string; deaths: number };
   /** ROK-1946: the world's scanned portals (one scan, 5 portals). */
   portals: DeathsFixturePortals;
+  /** ROK-1931: `second`'s one mod-reported death (counted in its `deaths`). */
+  reportedDeath: DeathsFixtureReported;
 }
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');

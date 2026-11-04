@@ -100,6 +100,14 @@ describe('user-FK wipe manifest drift guard (ROK-313 §9.6)', () => {
     expect(wipe).not.toContain('hub_session_note_items');
   });
 
+  // ROK-1728: a series membership is personal (user_id CASCADE). A ban+wipe
+  // keeps the users row, so the cascade never fires — wipe it by column.
+  it('wipes series_signups by user_id (ROK-1728)', () => {
+    expect(WIPE_BY_COLUMN.map((w) => tableName(w.table))).toContain(
+      'series_signups',
+    );
+  });
+
   it('sanity: the manifest is non-trivial and the users table is excluded', () => {
     expect(referencing.size).toBeGreaterThan(20);
     expect(classifiedSet.has('users')).toBe(false);

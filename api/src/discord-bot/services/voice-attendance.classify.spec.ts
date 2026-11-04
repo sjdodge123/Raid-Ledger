@@ -119,7 +119,7 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
     });
   });
 
-  describe('late with < 20% presence should NOT be late (falls into no_show path)', () => {
+  describe('late join with < 20% presence', () => {
     it('classifies no_show when joined late but presence < 20% and total < 120s', () => {
       const { start, end, durationSec, graceMs } = eventWindow(2);
 
@@ -139,9 +139,9 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
       expect(result).toBe('no_show');
     });
 
-    it('classifies no_show (not late) when joined late but presence is below 20%', () => {
-      // >= 120s duration but < 20% presence. The late check requires >= 0.2,
-      // so they fall through. With < 20% they hit the no_show fallback.
+    it('classifies late (ROK-1940) when joined late with >= 120s but presence below 20%', () => {
+      // >= 120s duration but < 20% presence. Before ROK-1940 this hit the
+      // no_show fallback; a late joiner now stays late (intentional change).
       const { start, end, durationSec, graceMs } = eventWindow(2);
 
       // 5% presence on 2h event = 360s (> 120s threshold), joined 10min late
@@ -157,8 +157,7 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
         graceMs,
       );
 
-      expect(result).not.toBe('late');
-      expect(result).toBe('no_show');
+      expect(result).toBe('late');
     });
   });
 
@@ -305,6 +304,64 @@ describe('classifyVoiceSession — adversarial boundary conditions', () => {
         ),
       ).not.toThrow();
     });
+  });
+});
+
+// ─── 1b. ROK-1940 AC-1 — late joiners below 20% presence ─────────────────────
+
+describe('classifyVoiceSession — ROK-1940 late-short boundaries (60-min event, grace 5)', () => {
+  const MIN = 60_000;
+  const { start, end, durationSec, graceMs } = eventWindow(1);
+
+  /** Classify a session that joins at start + joinOffsetMs and stays totalSec. */
+  function classifyAt(
+    joinOffsetMs: number,
+    totalSec: number,
+    opts: { lastLeaveAt?: Date; graceMs?: number } = {},
+  ) {
+    const firstJoinAt = new Date(start.getTime() + joinOffsetMs);
+    const lastLeaveAt =
+      opts.lastLeaveAt ?? new Date(firstJoinAt.getTime() + totalSec * 1000);
+    return classifyVoiceSession(
+      { totalDurationSec: totalSec, firstJoinAt, lastLeaveAt },
+      start,
+      end,
+      durationSec,
+      opts.graceMs ?? graceMs,
+    );
+  }
+
+  it('(a) late join +6 min, 119 s → no_show (the < 120 s guard wins)', () => {
+    expect(classifyAt(6 * MIN, 119)).toBe('no_show');
+  });
+
+  it('(b) late join +6 min, 120 s (3.3%) → late', () => {
+    expect(classifyAt(6 * MIN, 120)).toBe('late');
+  });
+
+  it('(c) late join +6 min, 716 s (19.9%) → late', () => {
+    expect(classifyAt(6 * MIN, 716)).toBe('late');
+  });
+
+  it('(d) late join +6 min, 720 s (20%) → late (unchanged >= 20% path)', () => {
+    expect(classifyAt(6 * MIN, 720)).toBe('late');
+  });
+
+  it('(e) on time (join = start + 5 min, inside grace), 120 s → no_show', () => {
+    expect(classifyAt(5 * MIN, 120)).toBe('no_show');
+  });
+
+  it('(f) on time (join = start + 5 min), 716 s (19.9%) → no_show', () => {
+    expect(classifyAt(5 * MIN, 716)).toBe('no_show');
+  });
+
+  it('(g) on time, 720 s (20%) → early_leaver when leaving early, partial otherwise', () => {
+    expect(classifyAt(5 * MIN, 720)).toBe('early_leaver');
+    expect(classifyAt(5 * MIN, 720, { lastLeaveAt: end })).toBe('partial');
+  });
+
+  it('(h) grace 0: join start + 1 s, 120 s → late', () => {
+    expect(classifyAt(1000, 120, { graceMs: 0 })).toBe('late');
   });
 });
 

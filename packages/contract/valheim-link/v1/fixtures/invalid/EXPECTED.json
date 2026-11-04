@@ -222,5 +222,25 @@
   "portals-omitted-negative": {
     "path": "omitted",
     "code": "too_small"
+  },
+  "character-deaths-duplicate-at": {
+    "path": "deaths.1",
+    "code": "custom"
+  },
+  "character-deaths-after-captured": {
+    "path": "deaths.0.at",
+    "code": "custom"
+  },
+  "character-deaths-coord-out-of-range": {
+    "path": "deaths.0.x",
+    "code": "too_big"
+  },
+  "character-deaths-unknown-key": {
+    "path": "deaths.0",
+    "code": "unrecognized_keys"
+  },
+  "character-death-count-negative": {
+    "path": "deathCount",
+    "code": "too_small"
   }
 }

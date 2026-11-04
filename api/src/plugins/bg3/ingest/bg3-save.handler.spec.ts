@@ -2,6 +2,7 @@
  * ROK-1957 §9.1 U-5 — the `bg3-save` handler: contract wiring, latest-wins
  * key, blob refs, and the D-6 campaign resolution on `handle`.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
@@ -10,7 +11,11 @@ import {
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
-import { Bg3SaveHandler, partyMaxLevel } from './bg3-save.handler';
+import {
+  Bg3SaveHandler,
+  bg3LatestMarkerKey,
+  partyMaxLevel,
+} from './bg3-save.handler';
 import { lockBg3UserMarkers } from './bg3-marker-lock';
 
 jest.mock('./bg3-marker-lock', () => ({
@@ -58,11 +63,15 @@ describe('Bg3SaveHandler — contract wiring (U-5)', () => {
     expect(handler.sources).toEqual(['device', 'session']);
   });
 
-  it('latest-wins on {campaignKey, savedAt}', () => {
-    expect(handler.latestWins(ACT2)).toEqual({
-      key: ACT2.payload.campaignKey,
-      at: new Date(ACT2.payload.savedAt),
-    });
+  it('latest-wins on {sha256(campaignKey + "\\n" + saveName), savedAt} — one marker per save (ROK-2070 B1)', () => {
+    const { campaignKey, saveName, savedAt } = ACT2.payload;
+    const key = createHash('sha256')
+      .update(`${campaignKey}\n${saveName}`)
+      .digest('hex');
+    expect(handler.latestWins(ACT2)).toEqual({ key, at: new Date(savedAt) });
+    expect(bg3LatestMarkerKey(campaignKey, saveName)).toBe(key);
+    const other = { ...ACT2, payload: { ...ACT2.payload, saveName: 'Other' } };
+    expect(handler.latestWins(other).key).not.toBe(key);
   });
 
   it('refs the thumbnail, and nothing when it is null', () => {

@@ -31,10 +31,16 @@ export interface Bg3ParseReply {
 export async function handleBg3ParseRequest(request: Bg3ParseRequest): Promise<Bg3ParseReply> {
     try {
         const reader = await loadBg3Wasm();
-        const { saveInfo, webp, thumbnail } = reader.inspectBg3Save(new Uint8Array(request.bytes));
+        const { saveInfo, webp, thumbnail, gameIdKey } = reader.inspectBg3Save(new Uint8Array(request.bytes));
         // A plain object (structured clone drops class getters) with an own-buffer WebP copy to transfer.
         const ownWebp = webp ? new Uint8Array(webp) : null;
-        const inspection: Bg3SaveInspection = { saveInfo, webp: ownWebp, thumbnail: thumbnail ? { ...thumbnail } : null };
+        const inspection: Bg3SaveInspection = {
+            saveInfo,
+            webp: ownWebp,
+            thumbnail: thumbnail ? { ...thumbnail } : null,
+            // ROK-2070: the hashed GameID; an absent field from the reader counts as none.
+            gameIdKey: typeof gameIdKey === 'string' ? gameIdKey : null,
+        };
         return { response: { id: request.id, ok: true, inspection }, transfer: ownWebp ? [ownWebp.buffer] : [] };
     } catch (error) {
         return { response: { id: request.id, ok: false, code: wasmErrorCode(error) }, transfer: [] };

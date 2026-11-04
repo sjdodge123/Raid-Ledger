@@ -70,6 +70,7 @@ import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
 import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
 import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
+import { seriesSignupEmbedTests } from "./tests/series-signup-embed.test.js";
 import { hubNotificationsDmTests } from "./tests/hub-notifications-dm.test.js";
 import { hubPollEmbedTests } from "./tests/hub-poll-embed.test.js";
 import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
@@ -237,6 +238,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...guildDiscordMirrorTests,
     ...channelLifecycleTests,
     ...embedHubLinkTests,
+    ...seriesSignupEmbedTests,
     ...hubNotificationsDmTests,
     ...hubPollEmbedTests,
     ...hubPostRelayTests,

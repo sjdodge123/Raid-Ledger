@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HubHideSchema,
@@ -13,6 +15,7 @@ import {
   type MyGuilds,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { HubMediaSourceGateRegistry } from '../hub-media/hub-media.source-gates';
 import { isHubMuted } from '../notifications/hub-notification-mute.helpers';
 import * as schema from '../drizzle/schema';
 import type {
@@ -24,6 +27,7 @@ import {
   isStaff,
   type GuildActor,
 } from './guild-access.service';
+import { crestMediaIdFor } from './crest/hub-crest-media';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
@@ -42,11 +46,15 @@ import { HubKindRegistry } from './hub-kind.registry';
  */
 @Injectable()
 export class HubService {
+  private readonly logger = new Logger(HubService.name);
+  private gatesWarned = false;
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly hubKinds: HubKindRegistry,
     private readonly access: GuildAccessService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** The hub page, built by the guild kind's adapter, plus the core extras. */
@@ -66,15 +74,51 @@ export class HubService {
     guildId: number,
     page: GuildPage,
   ): Promise<GuildPage> {
-    const [widgetPrefs, viewer] = await Promise.all([
+    const [widgetPrefs, viewer, crestMediaId] = await Promise.all([
       readWidgetPrefs(this.db, guildId),
       this.withCrestRights(actor, guildId, page.viewer),
+      this.crestMediaId(actor, page.guild),
     ]);
     return this.withViewerMute(actor, guildId, {
       ...page,
+      guild: { ...page.guild, crestMediaId },
       widgetPrefs,
       viewer,
     });
+  }
+
+  /**
+   * ROK-2074 (review MAJOR): the crest's Gallery picture only for a viewer
+   * the Gallery API admits — `canView`, the check `assertCanViewHubMedia`
+   * applies after the hidden-hub checks `HubVisibleGuard` already ran on
+   * this page. A community-hub visitor gets null, so the web opens the
+   * single-picture `crest.urlLg` view instead of a Gallery that 404s.
+   */
+  private async crestMediaId(
+    actor: GuildActor,
+    guild: GuildPage['guild'],
+  ): Promise<number | null> {
+    if (guild.crest?.source !== 'upload') return null;
+    if (!(await this.access.canView(actor, guild.id))) return null;
+    return crestMediaIdFor(this.db, this.mediaGates(), guild);
+  }
+
+  /**
+   * ROK-2074: the media source gates, resolved lazily — `HubMediaModule`
+   * imports `GuildsCoreModule`, so it cannot be a constructor dependency.
+   * Null (crest picture not linked) when the module is not loaded.
+   */
+  private mediaGates(): HubMediaSourceGateRegistry | null {
+    try {
+      return this.moduleRef.get(HubMediaSourceGateRegistry, { strict: false });
+    } catch (err) {
+      if (this.gatesWarned) return null;
+      this.gatesWarned = true;
+      this.logger.warn(
+        `media gate registry unavailable; crest picture not linked: ${String(err)}`,
+      );
+      return null;
+    }
   }
 
   /**

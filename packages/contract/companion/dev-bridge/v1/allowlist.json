@@ -1,0 +1,297 @@
+{
+  "allowlistVersion": 1,
+  "segmentPattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+  "maxSegments": 3,
+  "tokenizer": "Split the segment at every \"_\". Inside each piece start a new word before an uppercase letter that follows a lowercase letter or a digit, and before an uppercase letter that is followed by a lowercase letter and preceded by an uppercase letter. Drop empty words. Deny words, deny pairs and deny-exact names compare case-insensitively; allow prefixes and allow-exact names compare case-sensitively.",
+  "allowPrefixes": [
+    "Get",
+    "Is",
+    "Has",
+    "Can",
+    "Unit",
+    "Num"
+  ],
+  "allowExact": [
+    "InCombatLockdown",
+    "time",
+    "date"
+  ],
+  "denyWords": [
+    "send",
+    "set",
+    "delete",
+    "destroy",
+    "buy",
+    "sell",
+    "accept",
+    "decline",
+    "confirm",
+    "use",
+    "cast",
+    "pickup",
+    "place",
+    "drop",
+    "repair",
+    "learn",
+    "unlearn",
+    "abandon",
+    "leave",
+    "invite",
+    "uninvite",
+    "promote",
+    "demote",
+    "kick",
+    "run",
+    "load",
+    "reload",
+    "logout",
+    "quit",
+    "create",
+    "hook",
+    "register",
+    "secure",
+    "macro",
+    "chat",
+    "mail",
+    "auction",
+    "trade",
+    "getfenv",
+    "setfenv",
+    "rawset",
+    "loadstring",
+    "pcall",
+    "cancel",
+    "clear",
+    "remove",
+    "reset",
+    "toggle",
+    "equip",
+    "disband"
+  ],
+  "denyWordPairs": [
+    [
+      "guild",
+      "set"
+    ],
+    [
+      "guild",
+      "remove"
+    ],
+    [
+      "guild",
+      "disband"
+    ],
+    [
+      "guild",
+      "promote"
+    ]
+  ],
+  "denyExact": [
+    "GetQuestReward",
+    "GetInboxText"
+  ],
+  "redact": [
+    {
+      "fn": "GetGuildRosterInfo",
+      "returns": [
+        8
+      ],
+      "replacement": "<redacted>"
+    }
+  ],
+  "examples": {
+    "allowed": [
+      "GetProfessions",
+      "GetNumSkillLines",
+      "GetSkillLineInfo",
+      "GetCVar",
+      "IsInGuild",
+      "IsAddOnLoaded",
+      "C_AddOns.IsAddOnLoaded",
+      "UnitName",
+      "UnitGUID",
+      "GetNumAddOns",
+      "GetGuildRosterInfo",
+      "InCombatLockdown",
+      "UnitCastingInfo",
+      "C_Map.GetBestMapForUnit",
+      "GetSavedInstanceInfo"
+    ],
+    "denied": [
+      "SendChatMessage",
+      "SetCVar",
+      "loadstring",
+      "getfenv",
+      "RunScript",
+      "GuildUninvite",
+      "C_Container.UseContainerItem",
+      "GetQuestReward",
+      "CancelUnitBuff",
+      "DoEmote",
+      "GuildSetMOTD",
+      "C_ChatInfo.GetRegisteredAddonMessagePrefixes",
+      "GetTradeSkillLine",
+      "C_GuildInfo.RemoveFromGuild",
+      "UnitSetRole",
+      "A.B.C.GetMoney",
+      "1Get",
+      "Get-Money",
+      "Get..Money",
+      "UnitPopup_OnClick",
+      "UnitFrame_OnEvent",
+      "UnitPopup_ShowMenu",
+      "SomeAddon.time"
+    ],
+    "denyListed": [
+      "GetSendMailItem",
+      "UnitSetRole",
+      "GetQuestReward",
+      "GetInboxText",
+      "C_GuildInfo.GetGuildDisbandInfo",
+      "GetTradeSkillLine",
+      "C_ChatInfo.GetRegisteredAddonMessagePrefixes",
+      "GetMacroInfo",
+      "GetAuctionItemInfo",
+      "CanGuildInvite",
+      "IsAddOnLoadOnDemand",
+      "GetSendInfo",
+      "GetSetInfo",
+      "GetDeleteInfo",
+      "GetDestroyInfo",
+      "GetBuyInfo",
+      "GetSellInfo",
+      "GetAcceptInfo",
+      "GetDeclineInfo",
+      "GetConfirmInfo",
+      "GetUseInfo",
+      "GetCastInfo",
+      "GetPickupInfo",
+      "GetPlaceInfo",
+      "GetDropInfo",
+      "GetRepairInfo",
+      "GetLearnInfo",
+      "GetUnlearnInfo",
+      "GetAbandonInfo",
+      "GetLeaveInfo",
+      "GetInviteInfo",
+      "GetUninviteInfo",
+      "GetPromoteInfo",
+      "GetDemoteInfo",
+      "GetKickInfo",
+      "GetRunInfo",
+      "GetLoadInfo",
+      "GetReloadInfo",
+      "GetLogoutInfo",
+      "GetQuitInfo",
+      "GetCreateInfo",
+      "GetHookInfo",
+      "GetRegisterInfo",
+      "GetSecureInfo",
+      "GetMacroInfo",
+      "GetChatInfo",
+      "GetMailInfo",
+      "GetAuctionInfo",
+      "GetTradeInfo",
+      "GetGetfenvInfo",
+      "GetSetfenvInfo",
+      "GetRawsetInfo",
+      "GetLoadstringInfo",
+      "GetPcallInfo",
+      "GetCancelInfo",
+      "GetClearInfo",
+      "GetRemoveInfo",
+      "GetResetInfo",
+      "GetToggleInfo",
+      "GetEquipInfo",
+      "GetDisbandInfo"
+    ],
+    "tokenizer": [
+      {
+        "segment": "GetCVar",
+        "words": [
+          "Get",
+          "C",
+          "Var"
+        ]
+      },
+      {
+        "segment": "IsAddOnLoaded",
+        "words": [
+          "Is",
+          "Add",
+          "On",
+          "Loaded"
+        ]
+      },
+      {
+        "segment": "C_TradeSkillUI",
+        "words": [
+          "C",
+          "Trade",
+          "Skill",
+          "UI"
+        ]
+      },
+      {
+        "segment": "GUIDSetThing",
+        "words": [
+          "GUID",
+          "Set",
+          "Thing"
+        ]
+      },
+      {
+        "segment": "UnitIsAFK",
+        "words": [
+          "Unit",
+          "Is",
+          "AFK"
+        ]
+      },
+      {
+        "segment": "GetHTTPResponse2Code",
+        "words": [
+          "Get",
+          "HTTP",
+          "Response2",
+          "Code"
+        ]
+      },
+      {
+        "segment": "Get2Money",
+        "words": [
+          "Get2",
+          "Money"
+        ]
+      },
+      {
+        "segment": "Get2FA",
+        "words": [
+          "Get2",
+          "FA"
+        ]
+      },
+      {
+        "segment": "UnitPopup_OnClick",
+        "words": [
+          "Unit",
+          "Popup",
+          "On",
+          "Click"
+        ]
+      },
+      {
+        "segment": "__index",
+        "words": [
+          "index"
+        ]
+      },
+      {
+        "segment": "loadstring",
+        "words": [
+          "loadstring"
+        ]
+      }
+    ]
+  }
+}

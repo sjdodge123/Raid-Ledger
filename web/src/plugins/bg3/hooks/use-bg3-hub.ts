@@ -3,11 +3,13 @@
  * are and their probes. 403/404 never retry (the widgets hide, D-10).
  */
 import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { hubPictureLinkMeta } from '../../../lib/hub-media-query';
 import type { Bg3HubCampaignsResponse, Bg3MySavesResponse, Bg3SessionsResponse, Bg3SnapshotResponse } from '@raid-ledger/contract';
 import {
     BG3_SESSIONS_PAGE_LIMIT,
     BG3_SESSIONS_WIDGET_LIMIT,
     fetchBg3Campaigns,
+    fetchBg3MyAllSaves,
     fetchBg3MyUnassignedSaves,
     fetchBg3Sessions,
     fetchBg3Snapshot,
@@ -34,6 +36,8 @@ export function useBg3Snapshot(hubId: number, enabled = true): UseQueryResult<Bg
     return useQuery({
         queryKey: bg3Keys.snapshot(hubId),
         queryFn: () => fetchBg3Snapshot(hubId),
+        // ROK-2074: `galleryMediaId` links a Gallery picture — Gallery moderation refreshes it.
+        meta: hubPictureLinkMeta(hubId),
         enabled: enabled && hubId > 0,
         staleTime: STALE_MS,
         retry,
@@ -73,6 +77,17 @@ export function useBg3MyUnassignedSaves(enabled = true): UseQueryResult<Bg3MySav
     return useQuery({
         queryKey: bg3Keys.myUnassignedSaves,
         queryFn: fetchBg3MyUnassignedSaves,
+        enabled,
+        staleTime: STALE_MS,
+        retry,
+    });
+}
+
+/** ROK-2068 — every one of the caller's saves (Manage my saves sheet). */
+export function useBg3MyAllSaves(enabled = true): UseQueryResult<Bg3MySavesResponse> {
+    return useQuery({
+        queryKey: bg3Keys.myAllSaves,
+        queryFn: fetchBg3MyAllSaves,
         enabled,
         staleTime: STALE_MS,
         retry,

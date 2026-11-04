@@ -1,0 +1,53 @@
+{
+  "queueVersion": 1,
+  "probes": [
+    {
+      "probeId": "01JBX7Q2M3N4P5R6S7T8V9W0XY",
+      "title": "Can an addon read professions?",
+      "flavor": "_anniversary_",
+      "after": "PLAYER_LOGIN",
+      "calls": [
+        {
+          "id": "profs",
+          "fn": "GetProfessions"
+        },
+        {
+          "id": "n",
+          "fn": "GetNumSkillLines"
+        },
+        {
+          "id": "skill",
+          "fn": "GetSkillLineInfo",
+          "args": [
+            "$i"
+          ],
+          "forEach": {
+            "countFrom": "n",
+            "max": 60
+          }
+        },
+        {
+          "id": "ts",
+          "presence": "C_TradeSkillUI"
+        }
+      ]
+    },
+    {
+      "probeId": "01JBX7Q2M3N4P5R6S7T8V9W0XZ",
+      "title": "Does a quoted CVar arg survive the long bracket?",
+      "flavor": "_anniversary_",
+      "after": "PLAYER_ENTERING_WORLD",
+      "ttlHours": 24,
+      "calls": [
+        {
+          "id": "c",
+          "fn": "GetCVar",
+          "args": [
+            "a]]b]==]c\"d\ne\\f",
+            "it's"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -4,12 +4,13 @@
  * its edges, "3 of 24", and a caption line — kind badge, who, when, source,
  * the optional source link. The dialog owns the ←/→ keys and the footer.
  */
-import { useEffect, useRef, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import type { HubMediaItem } from '@raid-ledger/contract';
 import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
 import { syncedAgo } from '../../../lib/synced-ago';
 import { Button } from '../../ui/button';
 import { HUB_MEDIA_KIND_LABEL } from './hub-gallery-labels';
+import { isSameOriginApiPath, type HubGallerySinglePicture } from './hub-gallery-store';
 
 export interface HubGalleryViewerProps {
     item: HubMediaItem;
@@ -65,20 +66,26 @@ function NavButton({ side, onClick }: { side: 'prev' | 'next'; onClick: (() => v
     );
 }
 
-export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubGalleryViewerProps): JSX.Element {
-    const url = useHubMediaImageUrl(item.fullPath);
+/** Coming from the grid, the clicked tile is gone: keep focus inside the dialog. */
+function useFocusRegionOnMount(): RefObject<HTMLDivElement | null> {
     const region = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        // Coming from the grid, the clicked tile is gone: keep focus inside the dialog.
         const el = region.current;
         if (el !== null && !el.contains(document.activeElement)) el.focus();
     }, []);
+    return region;
+}
+
+const STAGE_CLASS = 'relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video';
+
+export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubGalleryViewerProps): JSX.Element {
+    const url = useHubMediaImageUrl(item.fullPath);
+    const region = useFocusRegionOnMount();
     return (
         <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer"
             data-media-id={item.id}>
             <p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>
-            <div data-testid="hub-gallery-stage"
-                className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video">
+            <div data-testid="hub-gallery-stage" className={STAGE_CLASS}>
                 {url === null
                     ? <span className="text-sm text-media-well-foreground">Loading picture…</span>
                     : <img src={url} alt={`${HUB_MEDIA_KIND_LABEL[item.kind]} picture${item.authorName === null ? '' : ` by ${item.authorName}`}`}
@@ -87,6 +94,26 @@ export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubG
                 <NavButton side="next" onClick={onNext} />
             </div>
             <Caption item={item} />
+        </div>
+    );
+}
+
+/**
+ * ROK-2074 — the viewer for one picture that is not a Gallery item (a crest
+ * upload, a save shot): the same well, no count, Prev / Next or caption.
+ */
+export function HubGallerySinglePictureView({ picture }: { picture: HubGallerySinglePicture }): JSX.Element {
+    const authed = useHubMediaImageUrl(picture.auth === true && isSameOriginApiPath(picture.url) ? picture.url : null);
+    const src = picture.auth === true ? authed : picture.url;
+    const [failed, setFailed] = useState<string | null>(null);
+    const region = useFocusRegionOnMount();
+    return (
+        <div ref={region} tabIndex={-1} className="outline-none" data-testid="hub-gallery-single">
+            <div data-testid="hub-gallery-stage" className={STAGE_CLASS}>
+                {src === null || failed === src
+                    ? <span className="text-sm text-media-well-foreground">{failed === null ? 'Loading picture…' : 'Couldn’t load this picture.'}</span>
+                    : <img src={src} alt={picture.alt} onError={() => setFailed(src)} className="max-h-full max-w-full object-contain" />}
+            </div>
         </div>
     );
 }

@@ -84,6 +84,8 @@ Sent on every vanilla save broadcast, on logout and on quit.
 | `trophies[]` (≤ 1024) | prefab ids | `m_trophies`. |
 | `knownItems[]` (≤ 8192) | prefab ids | Discovered materials/items (`m_knownMaterial`). |
 | `knownRecipes[]` (≤ 8192) | prefab ids | Craftable recipe item ids (`m_knownRecipes`). |
+| `deaths[]` (≤ 200, **optional**, ROK-1931) | `{ worldUid, x, z, at }` | Deaths the mod recorded on the player's machine, newest first (order not enforced). `worldUid` int64 string = the world it happened on — the profile is portable, so entries from single-player or other servers appear; the server **stores only entries whose `worldUid` equals `character.worldUid`** and ignores the rest. `x`/`z` world metres, \|v\| ≤ 32 768 (same bound as map pins). `at` = ISO UTC instant of the death (the player's clock), ≤ 24 chars, **unique** within the message (the server's dedupe key) and **≤ `capturedAt`**. Strict entry. Omitted = no history sent (older mod); the server never deletes stored deaths that fall off the 200 cap. |
+| `deathCount` (int 0–1 000 000, **optional**, ROK-1931) | integer | Valheim's lifetime `Deaths` stat for the character — every world and single-player. Stored for reference; **not** the per-server death count (that is the stored rows). |
 
 Item stack (`item`): `prefab`; `stack` 1–100 000; `quality` 1–10 (1-based
 upgrade level); `variant` 0–63; `durability` and `maxDurability` — durability
@@ -341,6 +343,7 @@ rules are enforced by the Zod schema but **cannot be expressed in
   `stations[].prefab`, `processes[].processor` to `processors[].prefab`;
   Σ recipe + piece resources + process inputs ≤ `VALHEIM_LINK_RECIPE_ENTRIES_MAX`.
 - `portals`: (`prefab`, `x`, `y`, `z`) unique across `portals[]`.
+- `character.deaths[]`: `at` unique, and no `at` later than `capturedAt`.
 
 **Server-enforced (not in Zod, not in `schema.json`).** The contract package
 stays synchronous and browser-safe, so it never inflates. The ingest endpoint
@@ -370,7 +373,7 @@ all pass Zod.
 
 | Constant | Value | Applies to | Typical |
 |---|---|---|---|
-| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.87 MB |
+| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.89 MB (≈ 1.87 MB plus ≈ 23 KB for 200 `deaths[]` entries, ROK-1931) |
 | `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.03 MB |
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
@@ -395,7 +398,7 @@ when one no longer fits its cap (ROK-1855) — add the new field to its builder.
 
 All values are synthetic: SteamID64s `765611980000000xx`, invented names
 (`Testviking`, `Fixtureheim`), no seeds, no real world names.
-Valid: `character-*` (2), `map-*` (2), `items-*` (2), `containers-*` (2),
+Valid: `character-*` (3: `character-vanilla`, `character-eaqs`, `character-deaths`), `map-*` (2), `items-*` (2), `containers-*` (2),
 `recipes-vanilla`, `recipes-processing`, `portals-vanilla` and `portals-modded`; invalid cases per kind live under `invalid/`.
 
 - `fixtures/<name>.json` — a message that **must parse**. Map bitmaps must

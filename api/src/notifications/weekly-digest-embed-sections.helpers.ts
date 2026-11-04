@@ -106,7 +106,7 @@ export function playingField(
   const value = fitOrClip(
     lines,
     section.total,
-    links?.playing ?? null,
+    null, // ROK-2063: "+N more" only — no "see all" to the unfiltered /games.
     DIGEST_FIELD_CAPS.playing,
   );
   return field(DIGEST_FIELD_NAMES.playing, value);

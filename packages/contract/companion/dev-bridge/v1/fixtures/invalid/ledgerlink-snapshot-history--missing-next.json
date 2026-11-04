@@ -1,0 +1,42 @@
+{
+  "entries": [
+    {
+      "snapshotId": "01JBX7Q2M3N4P5R6S7T8V9W0XY",
+      "flavor": "_anniversary_",
+      "characterKey": "a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1",
+      "digest": "5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c5d2c",
+      "capturedAt": "2026-11-03T20:15:00Z",
+      "lastCapturedAt": "2026-11-03T20:15:00Z",
+      "receivedAt": "2026-11-03T20:15:00Z",
+      "seenCount": 3,
+      "latest": true,
+      "addonVersion": "1.4.0",
+      "clientVersion": "1.60.1",
+      "clientBuild": "99999",
+      "interface": 11507,
+      "missingApis": 5,
+      "activeRules": [
+        "SyntheticRuleA"
+      ],
+      "truncated": false
+    },
+    {
+      "snapshotId": "01JBX7Q2M3N4P5R6S7T8V9W0XZ",
+      "flavor": "_anniversary_",
+      "characterKey": "a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1a3f1",
+      "digest": "0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e0b7e",
+      "capturedAt": "2026-11-01T18:30:00Z",
+      "lastCapturedAt": "2026-11-01T18:30:00Z",
+      "receivedAt": "2026-11-01T18:30:00Z",
+      "seenCount": 1,
+      "latest": false,
+      "addonVersion": "1.4.0",
+      "clientVersion": "1.15.7",
+      "clientBuild": "99999",
+      "interface": 11507,
+      "missingApis": 0,
+      "activeRules": [],
+      "truncated": false
+    }
+  ]
+}

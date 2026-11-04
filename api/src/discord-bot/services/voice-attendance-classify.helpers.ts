@@ -215,7 +215,16 @@ export function getEventDurationSec(
   );
 }
 
-/** Full classify pipeline for a single event. */
+/**
+ * Full classify pipeline for a single event.
+ *
+ * Forward-only (ROK-1940 D10): only rows whose `classification` is still NULL
+ * are classified. A row classified on an earlier pass is never rewritten, so a
+ * re-entry (API restart wipes the service's in-memory `classified` set while
+ * the event is still in the lookback) cannot re-grade history with a grace the
+ * admin saved after the fact — which would leave voice and the signup's
+ * already-populated attendance disagreeing.
+ */
 export async function classifyEventSessions(
   db: Db,
   eventId: number,
@@ -228,10 +237,11 @@ export async function classifyEventSessions(
   const sec = getEventDurationSec(event);
   if (sec <= 0) return;
   const { sessions } = await loadAndFilterSessions(db, eventId, logger);
-  if (sessions.length > 0) {
+  const pending = sessions.filter((s) => s.classification === null);
+  if (pending.length > 0) {
     await batchClassifySessions(
       db,
-      sessions,
+      pending,
       event.duration[0],
       event.duration[1],
       sec,
@@ -240,12 +250,18 @@ export async function classifyEventSessions(
   }
   await classifyNoShows(db, eventId, sessions, event);
   logger.log(
-    `Classified ${sessions.length} voice session(s) for event ${eventId}`,
+    `Classified ${pending.length} voice session(s) for event ${eventId}` +
+      ` (${sessions.length - pending.length} already classified, kept)`,
   );
 }
 
 /**
  * Check if an event should be classified.
+ * An event whose rows are all classified still returns true while it has
+ * signups (ROK-943: no_show rows / attendance may still be missing). That
+ * re-entry is non-destructive: classifyEventSessions only grades NULL rows,
+ * classifyNoShows is ON CONFLICT DO NOTHING, and autoPopulateAttendance only
+ * fills NULL attendance.
  * @param logger - Optional logger; logs the reason when returning false.
  */
 export async function shouldClassifyEvent(

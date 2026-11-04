@@ -256,6 +256,21 @@ describe('EventsController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('400s a create carrying schedulingMatchId before touching the db (ROK-2039)', async () => {
+      const body = {
+        title: 'From a poll',
+        startTime: '2026-02-10T18:00:00.000Z',
+        endTime: '2026-02-10T20:00:00.000Z',
+        schedulingMatchId: 7,
+      };
+
+      await expect(
+        controller.create({ user: mockUser } as AuthenticatedRequest, body),
+      ).rejects.toThrow('/scheduling-polls/7/lock-in');
+      expect(mockEventsService.create).not.toHaveBeenCalled();
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException when end before start', async () => {
       const body = {
         title: 'Event',

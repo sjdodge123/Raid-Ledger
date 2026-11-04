@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
+import { hubPictureLinkMeta } from '../../../lib/hub-media-query';
 import { createGuildEditor, deleteGuildEditor, fetchGuildEditors, fetchGuildPage, fetchGuildRaids } from './guild-api';
 
 const MAX_RETRIES = 2;
@@ -34,6 +35,8 @@ export function useGuildPage(guildId: number): UseQueryResult<GuildPage, Error> 
     return useQuery({
         queryKey: [...guildPageKey(guildId), viewer],
         queryFn: () => fetchGuildPage(guildId),
+        // ROK-2074: `guild.crestMediaId` links a Gallery picture — Gallery moderation refreshes it.
+        meta: hubPictureLinkMeta(guildId),
         enabled: guildId > 0,
         retry: retryUnlessClientError,
     });

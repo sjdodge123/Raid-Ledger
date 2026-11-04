@@ -13,6 +13,7 @@
  * delete (`calendar-read-purge.helpers.ts`), not a job.
  */
 import type { JobsOptions, Queue } from 'bullmq';
+import { CALENDAR_RETRY_BACKOFF_TYPE } from '../calendar-retry-backoff.helpers';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -57,7 +58,8 @@ export const READ_SYNCABLE_STATUSES = ['active'] as const;
 
 export const CALENDAR_READ_JOB_OPTIONS = {
   attempts: 4,
-  backoff: { type: 'exponential', delay: 60_000 },
+  // Exponential 60 s, raised to a provider's Retry-After (see helper).
+  backoff: { type: CALENDAR_RETRY_BACKOFF_TYPE, delay: 60_000 },
   removeOnComplete: true,
   // Bounded: failed jobs stay inspectable; `clearFinishedJob` keeps a
   // retained one from blocking the next add.

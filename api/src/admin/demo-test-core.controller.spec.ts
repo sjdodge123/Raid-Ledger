@@ -71,6 +71,20 @@ function mockDb(rowsByCall: unknown[][]) {
         onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
       })),
     })),
+    // ROK-1939: the archetype refresh reads the vector rows locked inside a
+    // transaction (select → from → innerJoin → orderBy → for). No rows →
+    // refreshed 0.
+    transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({
+              orderBy: () => ({ for: () => Promise.resolve([]) }),
+            }),
+          }),
+        }),
+      }),
+    ),
   };
   return db;
 }

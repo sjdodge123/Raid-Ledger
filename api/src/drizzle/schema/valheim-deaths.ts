@@ -16,7 +16,8 @@ import { serverFk, tsz } from './valheim-columns';
  * ROK-1930: one row per player death on a Valheim server. `source = 'log'`
  * rows come from the console's `0:0` ZDOID lines (deduped on server +
  * character name + the line's own zone-less timestamp, because replays
- * resend old lines); `'mod'` is reserved for ROK-1931 (with x/z).
+ * resend old lines); `'mod'` rows are deaths the mod reported (ROK-1931,
+ * with x/z and the character key, deduped on `reported_at`).
  * ROK-1941: `'discord'` rows are inferred from a death screenshot post with
  * no matching log/mod death; `hub_media_id` links a death to its picture.
  */
@@ -35,6 +36,12 @@ export const valheimPlayerDeaths = pgTable(
     occurredAt: tsz('occurred_at').notNull(),
     x: doublePrecision('x'),
     z: doublePrecision('z'),
+    /** ROK-1931 (D4): the contract's character key (int64 string) of a reported death. */
+    playerId: text('player_id'),
+    /** ROK-1931: the world the reported death happened on (the character's world here). */
+    worldUid: text('world_uid'),
+    /** ROK-1931: the mod's `at`, verbatim — never rewritten (the dedupe key). */
+    reportedAt: tsz('reported_at'),
     /** ROK-1941 (D8): the death post's first picture; one death ↔ one post. */
     hubMediaId: bigint('hub_media_id', { mode: 'number' }).references(
       () => hubMedia.id,
@@ -47,6 +54,10 @@ export const valheimPlayerDeaths = pgTable(
     uniqueIndex('valheim_player_deaths_log_uq')
       .on(t.pelicanServerId, t.characterName, t.loggedAt)
       .where(sql`${t.source} = 'log'`),
+    // ROK-1931 (D4): a reported death is stored once per character + `at`.
+    uniqueIndex('valheim_player_deaths_reported_uq')
+      .on(t.pelicanServerId, t.steamId, t.playerId, t.reportedAt)
+      .where(sql`${t.reportedAt} IS NOT NULL`),
     index('valheim_player_deaths_server_steam_idx').on(
       t.pelicanServerId,
       t.steamId,
@@ -68,6 +79,10 @@ export const valheimPlayerDeaths = pgTable(
     check(
       'valheim_player_deaths_log_ts_check',
       sql`${t.source} <> 'log' OR ${t.loggedAt} IS NOT NULL`,
+    ),
+    check(
+      'valheim_player_deaths_mod_shape_check',
+      sql`${t.source} <> 'mod' OR (${t.reportedAt} IS NOT NULL AND ${t.x} IS NOT NULL AND ${t.z} IS NOT NULL AND ${t.playerId} IS NOT NULL AND ${t.worldUid} IS NOT NULL)`,
     ),
   ],
 );

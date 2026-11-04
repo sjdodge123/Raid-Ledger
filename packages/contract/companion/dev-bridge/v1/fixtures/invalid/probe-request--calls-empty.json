@@ -1,0 +1,7 @@
+{
+  "title": "Can an addon read professions?",
+  "flavor": "auto",
+  "after": "PLAYER_LOGIN",
+  "ttlHours": 72,
+  "calls": []
+}

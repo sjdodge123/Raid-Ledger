@@ -50,6 +50,10 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.refreshTokens, column: schema.refreshTokens.userId },
   { table: schema.characters, column: schema.characters.userId },
   { table: schema.eventSignups, column: schema.eventSignups.userId },
+  // ROK-1728: series memberships are personal (user_id CASCADE). A ban+wipe
+  // keeps the users row, so they must be wiped explicitly. Other users'
+  // event_signups.series_signup_id never points here; that FK is SET NULL.
+  { table: schema.seriesSignups, column: schema.seriesSignups.userId },
   { table: schema.notifications, column: schema.notifications.userId },
   {
     table: schema.userNotificationPreferences,

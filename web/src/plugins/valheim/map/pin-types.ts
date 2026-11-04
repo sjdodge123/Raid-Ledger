@@ -8,6 +8,7 @@
  * Hildir quest chests `Hildir1`…`Hildir3` get their own icon + name.
  */
 import type { ComponentType, SVGProps } from 'react';
+import { format } from 'date-fns';
 import type { ValheimMapPin } from '@raid-ledger/contract';
 import {
     ArchiveBoxIcon,
@@ -129,6 +130,18 @@ const KNOWN: Readonly<Record<string, PinStyle>> = {
 /** Style for a pin type; anything unknown (modded, numeric) gets the generic pin. */
 export function pinStyleFor(type: string): PinStyle {
     return Object.hasOwn(KNOWN, type) ? (KNOWN[type] ?? GENERIC) : GENERIC;
+}
+
+/**
+ * ROK-1931 Q6 = A — a synthetic Death pin (a mod-reported death: empty label +
+ * `diedAt`) reads "Death · 2 Nov 21:14", in the viewer's local time, and
+ * "Death · 2 Nov 2025 21:14" when the death is from another year than `now`.
+ * Same date-fns `format` the map's snapshot footer uses (`map-legend.tsx`).
+ */
+export function deathPinLabel(diedAt: string, now: Date = new Date()): string {
+    const at = new Date(diedAt);
+    const pattern = at.getFullYear() === now.getFullYear() ? 'd MMM HH:mm' : 'd MMM yyyy HH:mm';
+    return `${pinStyleFor('Death').typeLabel} · ${format(at, pattern)}`;
 }
 
 /** The pin's visible / accessible text: its cleaned label, else the type name. */

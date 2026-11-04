@@ -214,7 +214,9 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     const coop = await seedGame('Coop Ally', { gameModes: [3] });
     const rpg = await seedGame('RPG One', { genres: [12] });
     const strategy = await seedGame('Strat One', { genres: [15] });
-    const pvp = await seedGame('PvP Arena', { gameModes: [2] });
+    // ROK-1939 D9: IGDB Multiplayer (mode 2) no longer implies pvp, so the
+    // pvp game carries an explicit PvP tag.
+    const pvp = await seedGame('PvP Arena', { tags: ['PvP'], gameModes: [2] });
     return { survival, coop, rpg, strategy, pvp };
   }
 

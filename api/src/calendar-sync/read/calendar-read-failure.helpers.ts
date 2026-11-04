@@ -11,7 +11,8 @@
  * - Anything else → `provider_error`, retry; after the final attempt only
  *   `last_error_code` and a backed-off `next_sync_at` are written: 1 h →
  *   2 h → 4 h → capped 6 h (stateless: the gap since the last success picks
- *   the step once a transient code is already recorded).
+ *   the step once a transient code is already recorded). A provider
+ *   Retry-After later than the step wins, clamped to the same 6 h cap.
  *
  * A transient read failure NEVER touches `status`: it is shared with the
  * ROK-1596 write fan-out and reconcile cron, which only pick `active` rows,
@@ -27,6 +28,7 @@ import type { CalendarSyncErrorCode } from '@raid-ledger/contract';
 import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { validRetryAfterMs } from '../calendar-retry-backoff.helpers';
 import {
   CalendarProviderError,
   ProviderAuthError,
@@ -104,7 +106,13 @@ function failureFields(
   if (decision.code === 'auth') return { status: 'needs_reconnect' };
   if (decision.retry && !opts.finalAttempt) return null;
   // No `status`: see the file header (writes keep running).
-  const backoff = readErrorBackoffMs(conn, opts.now);
+  // A provider Retry-After later than the D5 step wins (never sooner), but
+  // no later than the D5 cap: an absurd value must not park the read sync
+  // for a year or overflow `new Date` into an Invalid Date.
+  const backoff = Math.max(
+    readErrorBackoffMs(conn, opts.now),
+    validRetryAfterMs(decision.retryAfterMs, READ_ERROR_BACKOFF_CAP_MS),
+  );
   return { nextSyncAt: new Date(opts.now.getTime() + backoff) };
 }
 

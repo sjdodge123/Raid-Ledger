@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+    VALHEIM_LINK_DEATH_COUNT_MAX,
+    VALHEIM_LINK_DEATHS_MAX,
     VALHEIM_LINK_EQUIPMENT_MAX,
     VALHEIM_LINK_GRID_EDGE_MAX,
     VALHEIM_LINK_INVENTORY_ITEMS_MAX,
@@ -9,8 +11,10 @@ import {
     ValheimInt64StringSchema,
     ValheimPrefabIdSchema,
     ValheimSteamId64Schema,
+    ValheimTimestampSchema,
     valheimLinkHeaderShape,
 } from './valheim-link-common.schema.js';
+import { ValheimWorldCoordSchema } from './valheim-link-map.schema.js';
 
 // ============================================================
 // RL Valheim Link — `kind: "character"` summary (ROK-1829)
@@ -147,6 +151,21 @@ export const ValheimSkillSchema = z.object({
 }).strict();
 export type ValheimSkill = z.infer<typeof ValheimSkillSchema>;
 
+/**
+ * One death the mod recorded on the player's machine (ROK-1931). The
+ * character profile is portable, so each entry names its world; the server
+ * keeps only entries on the message's own `character.worldUid`.
+ */
+export const ValheimDeathRecordSchema = z.object({
+    /** World the death happened on (`ZNet.GetWorldUID()`). */
+    worldUid: ValheimInt64StringSchema,
+    x: ValheimWorldCoordSchema,
+    z: ValheimWorldCoordSchema,
+    /** When the player died, ISO UTC (the player's clock); unique per message, ≤ `capturedAt`. */
+    at: ValheimTimestampSchema,
+}).strict();
+export type ValheimDeathRecord = z.infer<typeof ValheimDeathRecordSchema>;
+
 const prefabList = (max: number) => z.array(ValheimPrefabIdSchema).max(max);
 
 function uniqueBy<T>(
@@ -163,6 +182,17 @@ function uniqueBy<T>(
     });
 }
 
+/** `deaths[].at` is unique (the dedupe key) and never after `capturedAt`. */
+function checkDeaths(deaths: readonly ValheimDeathRecord[], capturedAt: string, ctx: z.RefinementCtx): void {
+    uniqueBy(deaths, (d) => d.at, 'deaths', ctx);
+    const captured = Date.parse(capturedAt);
+    deaths.forEach((d, i) => {
+        if (Date.parse(d.at) > captured) {
+            ctx.addIssue({ code: 'custom', path: ['deaths', i, 'at'], message: 'death is after capturedAt' });
+        }
+    });
+}
+
 export const ValheimCharacterMessageSchema = z.object({
     ...valheimLinkHeaderShape,
     kind: z.literal('character'),
@@ -176,8 +206,13 @@ export const ValheimCharacterMessageSchema = z.object({
     knownItems: prefabList(VALHEIM_LINK_KNOWN_MAX),
     /** Recipe item prefab ids the player can craft (`m_knownRecipes`). */
     knownRecipes: prefabList(VALHEIM_LINK_KNOWN_MAX),
+    /** Recorded deaths, newest first (order not enforced); optional, additive (ROK-1931). */
+    deaths: z.array(ValheimDeathRecordSchema).max(VALHEIM_LINK_DEATHS_MAX).optional(),
+    /** Valheim's lifetime Deaths stat for the character (every world); optional, additive. */
+    deathCount: z.number().int().min(0).max(VALHEIM_LINK_DEATH_COUNT_MAX).optional(),
 }).strict().superRefine((msg, ctx) => {
     uniqueBy(msg.equipment, (e) => e.slot, 'equipment', ctx);
     uniqueBy(msg.skills, (s) => s.id, 'skills', ctx);
+    checkDeaths(msg.deaths ?? [], msg.capturedAt, ctx);
 });
 export type ValheimCharacterMessage = z.infer<typeof ValheimCharacterMessageSchema>;

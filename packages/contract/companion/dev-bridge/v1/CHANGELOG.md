@@ -1,0 +1,89 @@
+# Companion dev-bridge — changelog
+
+Additive changes (a new optional field a reader may ignore, relaxing a
+refinement, ADDING a deny word or `denyExact` name with an `allowlistVersion`
+bump) stay in `v1/`. Removing a deny entry or adding an allow prefix loosens
+the safety net and needs an explicit operator ruling. Anything else is
+breaking and gets a new `vN/` folder; rl-companion accepts the current and
+previous version during the transition.
+
+## v1 — 2026-11-03 (ROK-2077, additive)
+
+- New `$defs`: `bg3-saves` (`GET /dev/v1/bg3/saves`) and
+  `bg3-save-structure` (`GET /dev/v1/bg3/saves/<saveRef>/structure`), both
+  output mode — read-only, redacted views of the saves the `bg3-save`
+  collector sees. Redaction is structural: strict objects, an equipment
+  `slot` enum, a prefixed (or `null`) `statsId`, a dotted-record or
+  `E`-enum `type`, unique equipment slots per party row, a BG3-only
+  `next` cursor grammar, and a guard on every string and key against any
+  GUID shape (dashed, `_`/`.`-split by runs of any length, braced, undashed,
+  Larian handle in any case, ≥ 32 hex) and any run of ≥ 10 digits. New bodies no existing producer emits;
+  no existing `$defs` entry changes (the shared cursor is untouched; only the
+  root `description` gains the BG3 refinements). **Additive** — stays v1.
+- New golden fixtures `bg3-saves`, `bg3-save-structure{,--unsupported,--types-page}`
+  and 26 invalid cases in `fixtures/invalid/`, each raising exactly one
+  issue (extra key on a save row or in `decoded`; GUID in `statsId` / `type`,
+  `_`- and `__`-split, and as a Larian handle in either case; path or bare
+  name in `statsId`; display name or 8-hex GUID fragment in `classId`; a
+  17-digit id; free-text equipment `slot`; duplicate `saveRef` / party
+  `slot` / equipment `slot`; folder-name `next` on both bodies;
+  non-hex `saveRef`; ability out of range; unknown `fallbackReason`;
+  missing `next`; both bodies over 16 KiB).
+
+## v1 — 2026-11-03 (ROK-2072, additive)
+
+- `ledgerlink-snapshot` refinement: a D4 name-bearing call
+  (`DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`) must be `status: "presence"`; the
+  snapshot `digest` serialisation is documented as companion-internal. Six more
+  invalid fixtures pin the head cap, GUID-as-key, both presence/type rules,
+  the GUID guard on a page slice and D4.
+- New `$defs`: `ledgerlink-snapshot` (the dev snapshot LedgerLink stores per
+  character under `/rl dev on`; input mode), `ledgerlink-snapshot-page`
+  (`GET /dev/v1/ledgerlink/snapshot`) and `ledgerlink-snapshot-history`
+  (`GET /dev/v1/ledgerlink/snapshot/history`). New bodies no existing
+  producer emits; no existing `$defs` entry changes (only the root
+  `description` gains the snapshot refinements). Stays v1.
+- New golden fixtures `ledgerlink-snapshot--{minimal,forever,max-size}`,
+  `ledgerlink-snapshot-page{,--max-page}`, `ledgerlink-snapshot-history`,
+  `error--not-found`, and nine invalid cases in `fixtures/invalid/`.
+
+## v1 — 2026-11-03 (ROK-2055, additive)
+
+- `error.error` gains `internal` (500): an unexpected companion failure while
+  serving the request. Code only, no `issues`. Additive — a new enum value no
+  existing producer emits; stays v1. New golden fixture `error--internal.json`.
+
+## v1 — 2026-11-02 (ROK-2055)
+
+- Initial contract: the `/dev/v1/*` response bodies of the rl-companion dev
+  bridge (health, addons, LedgerLink SavedVariables raw + parsed, probes,
+  logs, collectors, errors), the probe grammar (`probe-request`) and the probe
+  result the LedgerLinkProbe addon stores (`probe-result`).
+- `allowlist.json`: the read-verb allowlist + deny list both rl-companion and
+  LedgerLinkProbe apply, with shared example vectors.
+- Generated `schema.json` (one `$defs` entry per body), golden fixtures and
+  `fixtures/invalid/EXPECTED.json`.
+- Review fixes before first release (ROK-2055 C1 review + Codex):
+  - allowlist: a read-prefixed last segment holding `_` is refused (FrameXML
+    handlers like `UnitPopup_OnClick`); `allowExact` matches the whole path;
+    new `examples.denyListed` (read-prefixed, deny-only) and
+    `examples.tokenizer` vectors.
+  - `probe-queue` (`$defs`): the Queue.lua JSON.
+  - byte caps enforced by the schemas: request ≤ 4 KiB, result item ≤ 3 KiB,
+    result ≤ 64 KiB, every response body ≤ 16 KiB; `probe-detail` pages by item.
+  - log redaction is case-insensitive.
+  - `APPLY:` probe-detail pages by result item and caps each item at 3 KiB
+    (the addon truncates) rather than adding a per-call page shape —
+    reversible: raising a cap is additive.
+  - `APPLY:` the request cap is 4 KiB of serialised output (≈30 full 128-char
+    args) rather than lower per-field limits — reversible the same way.
+  - `APPLY:` the 4 KiB request cap is measured on the request's largest
+    derived form (output form + `probeId`, `flavor` padded to 34 chars) on
+    POST, queue entry and echo alike, rather than giving the queue entry and
+    echo extra headroom — one number, and any accepted POST fits Queue.lua and
+    the probe-detail echo by construction. The echo carries the resolved
+    flavor (never `auto`). Worst-case probe-detail page: 14,132 B. Reversible:
+    raising the cap or switching to headroom is additive.
+  - `APPLY:` the Queue.lua JSON is an object `{ queueVersion, probes }`
+    (not a bare array) so the addon can detect a shape change; entries are
+    output form with `flavor` resolved.

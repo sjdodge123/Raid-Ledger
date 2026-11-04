@@ -1,8 +1,8 @@
 /**
  * Weekly Discord digest — section ② "last 7 days" recap aggregation (ROK-1435 slice L1).
  *
- * Guild-wide counts of events that finished in the last 7 days and the members
- * who attended them. The attendance predicate mirrors the `event_attendance`
+ * Guild-wide counts of events that finished in the last 7 days with 2+
+ * attendees, and the members who attended them (ROK-2063). The attendance predicate mirrors the `event_attendance`
  * CTE in `igdb/igdb-discover-community-playing.helpers.ts` (attended status,
  * linked user, not cancelled, event ended inside the window), and counts only
  * members still in the guild (not deactivated, banned or kicked).
@@ -20,6 +20,12 @@ import type * as schema from '../drizzle/schema';
 import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
 
 export const RECAP_WINDOW_DAYS = 7;
+
+/**
+ * An event counts toward the recap only when at least this many distinct
+ * active members attended it — play done together (ROK-2063).
+ */
+export const RECAP_MIN_ATTENDEES = 2;
 
 export interface WeeklyRecapOptions {
   /** Drop members whose `show_activity` preference is `false`. Default `true`. */
@@ -42,11 +48,11 @@ export type WeeklyRecapRow = {
 };
 
 export interface WeeklyRecap {
-  /** Distinct events with at least one counted attendee. */
+  /** Distinct events with 2+ attendees and at least one counted attendee. */
   eventsRun: number;
-  /** Distinct members counted as attended. */
+  /** Distinct members counted as attended, on qualifying events only. */
   playersAttended: number;
-  /** Total (member, event) attendance pairs. */
+  /** Total (member, event) attendance pairs on qualifying events. */
   attendances: number;
 }
 
@@ -118,15 +124,31 @@ export function SHOWS_ACTIVITY_SQL(userIdRef: string): SQL {
     )`;
 }
 
+/**
+ * Events with `RECAP_MIN_ATTENDEES`+ attended members (ROK-2063). Decided on
+ * `attended`, before the opt-out, so an opted-out attendee still makes the
+ * event a group event while staying out of the player count.
+ */
+const GROUP_EVENTS_CTE = sql`
+  group_events AS (
+    SELECT event_id FROM attended
+    GROUP BY event_id
+    HAVING COUNT(DISTINCT user_id) >= ${sql.raw(String(RECAP_MIN_ATTENDEES))}
+  )`;
+
+const IN_GROUP_EVENT_SQL = sql`a.event_id IN (SELECT event_id FROM group_events)`;
+
 const OPT_OUT_FILTERED_CTE = sql`
   filtered AS (
     SELECT a.* FROM attended a
-    WHERE ${SHOWS_ACTIVITY_SQL('a.user_id')}
+    WHERE ${IN_GROUP_EVENT_SQL}
+      AND ${SHOWS_ACTIVITY_SQL('a.user_id')}
   )`;
 
 const UNFILTERED_CTE = sql`
   filtered AS (
     SELECT a.* FROM attended a
+    WHERE ${IN_GROUP_EVENT_SQL}
   )`;
 
 /** Build the recap query; the opt-out predicate is included only when asked. */
@@ -136,6 +158,7 @@ export function buildWeeklyRecapQuery(options: WeeklyRecapOptions = {}): SQL {
   const attended = attendedCte(windowOffset(options.endOffsetDays));
   return sql`
     WITH ${attended},
+    ${GROUP_EVENTS_CTE},
     ${filtered}
     SELECT COUNT(DISTINCT event_id)::int AS events_run,
            COUNT(DISTINCT user_id)::int  AS players_attended,

@@ -1,0 +1,235 @@
+/// <reference types="node" />
+/**
+ * ROK-2077 — dev-bridge BG3 save reads: redaction is enforced by the schema.
+ * Fixture conformance (every fixture vs EXPECTED.json) and the schema.json
+ * drift guard live in `companion-dev-bridge-contract.spec.ts`; this spec pins
+ * each BG3 rule to its own issue path, code and message.
+ */
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { DEV_BRIDGE_PAGE_MAX_BYTES, devBridgeJsonBytes } from '../companion-dev-bridge.schema.js';
+import { DEV_BRIDGE_BG3_DIGITS_MESSAGE, DEV_BRIDGE_BG3_GUID_MESSAGE, bg3HoldsGuid } from '../companion-dev-bridge-bg3-redaction.js';
+import {
+    BG3_EQUIPMENT_SLOTS,
+    DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES,
+    DevBridgeBg3NextSchema,
+    DevBridgeBg3PartyRowSchema,
+    DevBridgeBg3SaveStructureSchema,
+    DevBridgeBg3SavesSchema,
+    type DevBridgeBg3PartyRow,
+    type DevBridgeBg3SaveStructure,
+} from '../companion-dev-bridge-bg3.schema.js';
+
+const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'companion', 'dev-bridge', 'v1', 'fixtures');
+const INVALID = join(FIX, 'invalid');
+const readJson = (dir: string, file: string): unknown => JSON.parse(readFileSync(join(dir, file), 'utf8'));
+const schemaFor = (name: string) => (name.startsWith('bg3-saves') ? DevBridgeBg3SavesSchema : DevBridgeBg3SaveStructureSchema);
+const bg3Names = (dir: string) => readdirSync(dir).filter((f) => f.startsWith('bg3-') && f.endsWith('.json')).map((f) => f.slice(0, -5));
+const structure = (): DevBridgeBg3SaveStructure => DevBridgeBg3SaveStructureSchema.parse(readJson(FIX, 'bg3-save-structure.json'));
+
+type Issue = { path: PropertyKey[]; code: string; message: string };
+const issuesOf = (res: { error?: { issues: Issue[] } }) =>
+    (res.error?.issues ?? []).map((i) => ({ path: i.path.map(String).join('.'), code: i.code, message: i.message }));
+
+const ExpectedSchema = z.record(z.string(), z.object({ path: z.string(), code: z.string() }));
+
+/** The message each rule must carry, so a failure for some OTHER reason does not count. */
+const MESSAGE: Record<string, RegExp> = {
+    custom: /GUID is not allowed|run of 10 or more digits|^Duplicate (saveRef|slot) |Response body is \d+ bytes; the cap is 16384/,
+    unrecognized_keys: /Unrecognized key/,
+    invalid_format: /Invalid string: must match pattern/,
+    too_big: /Too big/,
+    invalid_value: /Invalid option|expected one of/,
+    invalid_type: /Invalid input/,
+};
+
+describe('ROK-2077 bg3 fixtures', () => {
+    it('ships the BG3 valid and invalid fixtures', () => {
+        expect(bg3Names(FIX)).toEqual(expect.arrayContaining(['bg3-saves', 'bg3-save-structure', 'bg3-save-structure--unsupported', 'bg3-save-structure--types-page']));
+        expect(bg3Names(INVALID).length).toBeGreaterThanOrEqual(26);
+    });
+
+    it.each(bg3Names(FIX))('valid %s parses', (name) => {
+        expect(issuesOf(schemaFor(name).safeParse(readJson(FIX, `${name}.json`)))).toEqual([]);
+    });
+
+    it.each(bg3Names(INVALID))('invalid %s fails at its EXPECTED path + code with that rule\'s message', (name) => {
+        const want = ExpectedSchema.parse(readJson(INVALID, 'EXPECTED.json'))[name];
+        if (want === undefined) throw new Error(`${name} is missing from EXPECTED.json`);
+        const all = issuesOf(schemaFor(name).safeParse(readJson(INVALID, `${name}.json`)));
+        expect(all, 'exactly one reason, so a validator reporting the first issue agrees').toHaveLength(1);
+        const hits = all.filter((i) => i.path === want.path && i.code === want.code);
+        expect(hits.map((h) => `${h.path} ${h.code}`)).toEqual([`${want.path} ${want.code}`]);
+        expect(hits[0]?.message).toMatch(MESSAGE[want.code] ?? /^$/);
+    });
+});
+
+type Json = Record<string, unknown> | unknown[];
+const isJson = (v: unknown): v is Json => typeof v === 'object' && v !== null;
+
+/** Sets `body[path…] = value` on a parsed JSON clone; throws when the path is missing. */
+function setAt(body: unknown, path: (string | number)[], value: unknown): void {
+    const last = path[path.length - 1];
+    const parent = path.slice(0, -1).reduce<unknown>((o, k) => (isJson(o) ? Reflect.get(o, k) : undefined), body);
+    if (!isJson(parent) || last === undefined) throw new Error(`fixture has no ${path.join('.')}`);
+    Reflect.set(parent, last, value);
+}
+
+/** Issues a structure body raises after `path` is set to `value`. */
+function structureIssuesAt(path: (string | number)[], value: unknown) {
+    const body = readJson(FIX, 'bg3-save-structure.json');
+    setAt(body, path, value);
+    return issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(body));
+}
+
+const TYPE = ['types', 0, 'type'];
+const STATS = ['party', 0, 'decoded', 'equipment', 0, 'statsId'];
+const SLOT = ['party', 0, 'decoded', 'equipment', 0, 'slot'];
+const CLASS = ['party', 0, 'decoded', 'classLevels', 0, 'classId'];
+const SUBCLASS = ['party', 0, 'decoded', 'classLevels', 0, 'subclassId'];
+
+/** Every NewAge type name the spike's type table lists (SPIKE-bg3-character-page.md §2.3), brace groups expanded. */
+const SPIKE_TYPE_NAMES = [
+    'core.v0.Level', 'core.v0.EntityId', 'game.stats.v3.StatsComponent', 'game.stats.v0.ClassesComponent', 'game.stats.v0.HealthComponent',
+    'game.stats.v0.LevelComponent', 'game.experience.v0.ExperienceComponent', 'game.race.v0.RaceComponent',
+    'game.character_creation.v3.AppearanceComponent', 'game.character_creation.v1.AppearanceMaterialSetting',
+    'game.character_creation.v1.CharacterCreationStatsComponent', 'game.character_creation.v3.LevelUpComponent',
+    'game.character_creation.v0.OriginComponent', 'game.character_creation.v0.BackgroundComponent', 'game.character_creation.v0.GodComponent',
+    'game.character_creation.v0.IsCustomComponent', 'game.spell.v3.SpellBookComponent', 'game.spell.v1.AddedSpellsComponent',
+    'game.spell.v0.LearnedSpells', 'game.spell.v0.SpellBookPrepares', 'game.passives.v0.ToggledPassivesComponent',
+    'game.inventory.v0.OwnerComponent', 'game.inventory.v0.MemberComponent', 'game.inventory.v0.WieldingComponent',
+    'game.inventory.v0.StackMemberComponent', 'game.inventory.v1.ContainerComponent', 'game.character.v0.EquipmentVisualComponent',
+    'game.display_names.v2.Component', 'game.icon.v0.CustomIconsStorageComponent', 'game.icon.v0.CharacterCreationCustomIconComponent',
+    'game.avatar.v0.AvatarComponent', 'game.party.v0.MemberComponent', 'game.party.v0.WaypointsComponent', 'game.party.v0.UserSnapshotComponent',
+    'game.approval.v0.Ratings', 'EResistanceType', 'EProficiencyGroup', 'EAbility', 'game.damage.v0.EDamageType',
+];
+
+describe('ROK-2077 redaction by shape', () => {
+    it.each(SPIKE_TYPE_NAMES)('the spike type-table name %s parses as a types[].type', (t) => {
+        expect(structureIssuesAt(TYPE, t)).toEqual([]);
+    });
+
+    const IDENT_LEAKS = ['C:\\Users\\x', 'Saves/Story', 'Tav the Brave', '6f2b8c1e-4d3a-4b7e-9a10-2c5d8e3f7a41', 'S_Player:1', ''];
+    const hitsAt = (path: (string | number)[], leak: string) => structureIssuesAt(path, leak).some((i) => i.path === path.join('.'));
+
+    it.each(IDENT_LEAKS)('no identifier field accepts %j', (leak) => {
+        expect([TYPE, STATS, SLOT, CLASS, SUBCLASS].map((p) => hitsAt(p, leak))).toEqual([true, true, true, true, true]);
+    });
+
+    it.each(['Astarion', 'Tav', 'Lucky_hat'])('a one-word name %j fits neither type, statsId nor slot', (name) => {
+        expect([TYPE, STATS, SLOT].map((p) => hitsAt(p, name))).toEqual([true, true, true]);
+    });
+
+    it('keeps real Larian ids valid', () => {
+        for (const id of ['ARM_Hat', 'WPN_Longsword_1', 'FOR_UnfortunateGnome', 'UNI_ARM_Helmet_2']) expect(structureIssuesAt(STATS, id)).toEqual([]);
+        for (const t of ['core.v0.Level', 'game.character_creation.v3.AppearanceComponent']) expect(structureIssuesAt(TYPE, t)).toEqual([]);
+        expect(structureIssuesAt(SLOT, 'MusicalInstrument')).toEqual([]);
+    });
+
+    it('rejects a SteamID64 (or any 10+ digit run) in any string, with the digits message', () => {
+        const steam64 = ['7656119', '8012345678'].join('');
+        expect(structureIssuesAt(STATS, `ARM_${steam64}`)).toEqual([{ path: STATS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_DIGITS_MESSAGE }]);
+        expect(structureIssuesAt(CLASS, steam64).some((i) => i.path === CLASS.join('.'))).toBe(true);
+        expect(structureIssuesAt(STATS, 'WPN_Sword_123456789')).toEqual([]);
+        expect(structureIssuesAt(['saveRef'], '123456789012')).toEqual([]);
+    });
+
+    it('detects every GUID shape with one helper, and nothing a real id looks like', () => {
+        const g = ['6f2b8c1e', '4d3a', '4b7e', '9a10', '2c5d8e3f7a41'];
+        const shapes = [
+            g.join('-'), g.join('_'), g.join('.'), g.join(''), `{${g.join('-')}}`, `h${g.join('g')}`, g.join('').toUpperCase(), 'ab'.repeat(20),
+            g.join('__'), g.join('-_.'), `H${g.join('G').toUpperCase()}`,
+        ];
+        expect(shapes.filter((s) => !bg3HoldsGuid(s))).toEqual([]);
+        const ids = ['ARM_Hat', 'game.stats.v3.StatsComponent', '3f9a0c2b7d41', '4.1.1.6848561', 'EvocationSchool', 'p2_types_9'];
+        expect(ids.filter(bg3HoldsGuid)).toEqual([]);
+        expect(structureIssuesAt(CLASS, g.join('_'))).toEqual([{ path: CLASS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_GUID_MESSAGE }]);
+    });
+
+    it('rejects an all-hex GUID fragment of 8+ chars in classId, subclassId and type', () => {
+        for (const p of [CLASS, SUBCLASS, TYPE]) {
+            expect(structureIssuesAt(p, '6f2b8c1e').map((i) => `${i.path} ${i.code}`)).toEqual([`${p.join('.')} invalid_format`]);
+        }
+        expect(structureIssuesAt(TYPE, 'EDeadBeef').map((i) => i.code)).toEqual(['invalid_format']);
+        expect(structureIssuesAt(CLASS, 'Bard')).toEqual([]);
+    });
+
+    it('a statsId that does not fit is null, never rewritten', () => {
+        expect(structureIssuesAt(STATS, null)).toEqual([]);
+        expect(structureIssuesAt(STATS, 'Shadowheart_Robe').map((i) => i.code)).toEqual(['invalid_format']);
+    });
+
+    it('the BG3 cursor is a closed grammar: page, section, row offset — never a folder name', () => {
+        const ok = ['p2_types_9', 'p1_saves_0', 'p9999_party_999999'];
+        const bad = ['Tav_1234__QuickSave_12', 'QuickSave_12', 'p2', 'p0_types_1', 'p2_names_1', 'p2_types_1234567'];
+        expect(ok.filter((c) => !DevBridgeBg3NextSchema.safeParse(c).success)).toEqual([]);
+        expect(bad.filter((c) => DevBridgeBg3NextSchema.safeParse(c).success)).toEqual([]);
+        expect(DevBridgeBg3NextSchema.safeParse(null).success).toBe(true);
+    });
+
+    it('rejects an undashed GUID with the GUID message (it would otherwise pass the identifier pattern)', () => {
+        const s = structure();
+        const e = s.party[0]?.decoded.equipment?.[0];
+        if (e === undefined) throw new Error('fixture lost its equipment row');
+        e.statsId = 'ARM_6F2B8C1E4D3A4B7E9A102C5D8E3F7A41';
+        expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(s))).toEqual([
+            { path: 'party.0.decoded.equipment.0.statsId', code: 'custom', message: DEV_BRIDGE_BG3_GUID_MESSAGE },
+        ]);
+    });
+
+    it('rejects a name, profile id or position on a save row', () => {
+        for (const key of ['name', 'profileId', 'path', 'position']) {
+            const body = { ...DevBridgeBg3SavesSchema.parse(readJson(FIX, 'bg3-saves.json')) };
+            const rows = body.saves.map((r, i) => (i === 0 ? { ...r, [key]: 'x' } : r));
+            expect(issuesOf(DevBridgeBg3SavesSchema.safeParse({ ...body, saves: rows }))).toEqual([
+                { path: 'saves.0', code: 'unrecognized_keys', message: `Unrecognized key: "${key}"` },
+            ]);
+        }
+    });
+});
+
+/** A `structure` page whose `types` rows are filled with `x` ids so it serialises to exactly `limit` bytes. */
+function structureAt(limit: number): DevBridgeBg3SaveStructure {
+    const base = { ...structure(), types: [], party: [] };
+    const row = (type: string) => ({ type, version: 0, elementSize: 8, count: 1, decoder: 'ok' as const });
+    const empty = devBridgeJsonBytes({ ...base, types: Array.from({ length: 200 }, () => row('a.b.x')) });
+    let left = limit - empty;
+    const types = Array.from({ length: 200 }, () => {
+        const extra = Math.min(123, Math.max(0, left));
+        left -= extra;
+        return row(`a.b.${'x'.repeat(1 + extra)}`);
+    });
+    if (left !== 0) throw new Error(`cannot reach ${limit} bytes (${left} left)`);
+    return { ...base, types };
+}
+
+describe('ROK-2077 16 KiB page cap', () => {
+    it('a structure page of exactly 16 KiB parses; one byte more is rejected at the root', () => {
+        const atCap = structureAt(DEV_BRIDGE_PAGE_MAX_BYTES);
+        expect(devBridgeJsonBytes(atCap)).toBe(DEV_BRIDGE_PAGE_MAX_BYTES);
+        expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(atCap))).toEqual([]);
+        expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(structureAt(DEV_BRIDGE_PAGE_MAX_BYTES + 1)))).toEqual([
+            { path: '', code: 'custom', message: 'Response body is 16385 bytes; the cap is 16384' },
+        ]);
+    });
+
+    it('the worst-case party row stays under its documented bound and fits one page with a full head', () => {
+        const id = (n: number) => 'x'.repeat(n);
+        const worst: DevBridgeBg3PartyRow = DevBridgeBg3PartyRowSchema.parse({
+            slot: 15,
+            decoded: {
+                abilities: { str: 30, dex: 30, con: 30, int: 30, wis: 30, cha: 30 },
+                proficiencyBonus: 10,
+                maxHp: 100_000,
+                classLevels: Array.from({ length: 12 }, () => ({ classId: id(64), subclassId: id(64), level: 20 })),
+                equipment: BG3_EQUIPMENT_SLOTS.map((slot) => ({ slot, statsId: `ABCDEF_${id(57)}` })),
+            },
+        });
+        expect(devBridgeJsonBytes(worst)).toBeLessThanOrEqual(DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES);
+        const page = { ...structure(), types: [], party: [worst], next: 'p9999_party_999999' };
+        expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(page))).toEqual([]);
+    });
+});

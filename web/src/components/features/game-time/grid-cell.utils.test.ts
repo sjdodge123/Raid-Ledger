@@ -8,6 +8,7 @@ import {
     computeHeatmapBg,
     computeHeatmapLabel,
     computeCellStyle,
+    computeCellClasses,
 } from './grid-cell.utils';
 
 describe('computeHeatmapBg with the freshness model (ROK-1560)', () => {
@@ -89,5 +90,27 @@ describe('computeCellStyle (ROK-1588)', () => {
 
     it('is undefined when there is nothing to style', () => {
         expect(computeCellStyle([])).toBeUndefined();
+    });
+});
+
+describe('computeCellClasses — hover stacking (TD-1102)', () => {
+    const classes = (clickable: boolean, isInteractive: boolean): string =>
+        computeCellClasses(false, 'rounded-sm', 'bg-surface', isInteractive, clickable, false, true, isInteractive);
+
+    it('keeps a hovered interactive cell below the block layer (z-[8])', () => {
+        const cls = classes(false, true);
+        expect(cls).not.toMatch(/(?:^|\s)z-10(?:\s|$)/);
+        expect(cls).toMatch(/(?:^|\s)relative(?:\s|$)/);
+        expect(cls).toMatch(/(?:^|\s)z-\[7\](?:\s|$)/);
+    });
+
+    it('lifts a hovered click-to-toggle cell above its neighbours', () => {
+        expect(classes(true, false)).toMatch(/(?:^|\s)z-10 relative(?:\s|$)/);
+    });
+
+    it('does not lift an unhovered or non-interactive cell', () => {
+        const idle = computeCellClasses(false, 'rounded-sm', 'bg-surface', true, false, false, false, true);
+        expect(idle).not.toMatch(/z-/);
+        expect(classes(false, false)).not.toMatch(/z-/);
     });
 });

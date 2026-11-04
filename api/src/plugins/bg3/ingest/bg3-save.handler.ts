@@ -5,11 +5,12 @@
  *
  * Per-user lock order on that tx (ROK-1960 F5b + P2-3): device row share →
  * blob lock (only with a thumbnail) → markers lock ({@link
- * Bg3SaveHandler.lockLatestWins}, just before the marker upsert) → marker
- * row → campaign lock (`resolveCampaign`) → `bg3_saves` insert. "Delete my
+ * Bg3SaveHandler.lockLatestWins}, just before the marker upsert) → "already
+ * held" read (ROK-2070 M1) → marker row → campaign lock (`resolveCampaign`) → `bg3_saves` insert. "Delete my
  * BG3 data" keeps the same order, so the two serialise instead of a new
  * key's uncommitted marker slipping past the delete.
  */
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { Bg3SaveMessage, CompanionWebpRef } from '@raid-ledger/contract';
 import type {
@@ -21,8 +22,30 @@ import type { CompanionDeviceTx } from '../../../companion/devices/companion-dev
 import { lockBg3UserMarkers } from './bg3-marker-lock';
 import {
   Bg3SavesWriteRepository,
+  legacyMarkerHolds,
+  saveAlreadyHeld,
   type Bg3SaveInsert,
 } from './bg3-saves.write.repository';
+
+/**
+ * D-4 (ROK-2070 B1): the `bg3-save` latest-wins marker key — ONE save, not
+ * one campaign key. A GameID key is shared by every save of a playthrough,
+ * so a marker on the bare key would refuse any older save sent after a newer
+ * one; hashing in `saveName` restores the per-save scope a folder key had.
+ * 64 hex chars (under the 128-char marker cap). Markers written before this
+ * change (keyed by the bare campaign key) are never advanced again, but
+ * {@link Bg3SaveHandler.alreadyHeld} still honours them (Codex P2), so a
+ * replay of an old save is refused even after retention pruned its row. Exported so a delete path
+ * can compute the same key for the rows it removes.
+ */
+export function bg3LatestMarkerKey(
+  campaignKey: string,
+  saveName: string,
+): string {
+  return createHash('sha256')
+    .update(`${campaignKey}\n${saveName}`, 'utf8')
+    .digest('hex');
+}
 
 /** Highest level among the non-summons (summons only as a fallback). */
 export function partyMaxLevel(
@@ -73,9 +96,13 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
 
   constructor(private readonly repo: Bg3SavesWriteRepository) {}
 
-  /** D-4: one latest marker per campaign key. */
+  /** D-4: one latest marker per save ({@link bg3LatestMarkerKey}). */
   latestWins(msg: Bg3SaveMessage): { key: string; at: Date } {
-    return { key: msg.payload.campaignKey, at: new Date(msg.payload.savedAt) };
+    const { campaignKey, saveName, savedAt } = msg.payload;
+    return {
+      key: bg3LatestMarkerKey(campaignKey, saveName),
+      at: new Date(savedAt),
+    };
   }
 
   /**
@@ -86,6 +113,32 @@ export class Bg3SaveHandler implements CompanionInTxHandler<Bg3SaveMessage> {
    */
   lockLatestWins(tx: CompanionDeviceTx, userId: number): Promise<void> {
     return lockBg3UserMarkers(tx, userId);
+  }
+
+  /**
+   * ROK-2070 M1: is this save already stored for the uploader (the same
+   * `(campaignKey, savedAt)`, or the same save under another key — see
+   * {@link saveAlreadyHeld}) or held by a pre-B1 bare-key marker ({@link
+   * legacyMarkerHolds}, Codex P2)? `CompanionIngestService.commit` calls it after
+   * {@link lockLatestWins} and before the marker upsert; true acks `stale`.
+   *
+   * The per-user MARKERS lock is enough here, and the campaign lock is not
+   * taken early: the read covers only the uploader's own `bg3_saves`
+   * identity columns (key, source, name, savedAt). Every writer that adds or
+   * removes such a row — ingest, "Delete my BG3 data", remove saves — takes
+   * the markers lock first and holds it to commit, so the read is serialised
+   * with them; bind / unbind / default changes only re-file `campaign_id`,
+   * which the read ignores. Lock order is unchanged (blob → markers →
+   * campaign). The marker read is covered by the same lock: every marker
+   * writer or deleter for this contract holds it.
+   */
+  async alreadyHeld(
+    tx: CompanionDeviceTx,
+    userId: number,
+    msg: Bg3SaveMessage,
+  ): Promise<boolean> {
+    if (await legacyMarkerHolds(tx, userId, msg.payload)) return true;
+    return saveAlreadyHeld(tx, userId, msg.payload);
   }
 
   blobRefs(msg: Bg3SaveMessage): readonly CompanionWebpRef[] {

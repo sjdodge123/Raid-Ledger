@@ -84,7 +84,16 @@ export type Bg3HubCampaignsResponse = z.infer<typeof Bg3HubCampaignsResponseSche
 export const Bg3PartyClaimSchema = z.object({
     userId: id,
     displayName: z.string().min(1),
+    /** Legacy: the raw custom upload path only. Render through the trio below (ROK-2069). */
     avatarUrl: z.string().nullable(),
+    /**
+     * ROK-2069 — the same avatar inputs as `LineupParticipantSchema`: Discord
+     * avatar hash + `discordId` + custom upload path, resolved client-side by
+     * `toAvatarUser` / `resolveAvatar`. Optional so an older server's payload parses.
+     */
+    avatar: z.string().nullable().optional(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
 }).strict();
 export type Bg3PartyClaim = z.infer<typeof Bg3PartyClaimSchema>;
 
@@ -115,6 +124,13 @@ export const Bg3SnapshotSchema = z.object({
     party: z.array(Bg3PartySlotSchema),
     thumbnailUrl,
     spoilersHidden: z.boolean(),
+    /**
+     * ROK-2074 — the visible hub Gallery picture of this save's screenshot
+     * (`hub_media` provenance `bg3-save:sha256:<thumbnail sha>`); null when
+     * none (not imported, removed, hidden, or spoilers hidden). Optional so
+     * older fixtures parse.
+     */
+    galleryMediaId: id.nullable().optional(),
 }).strict();
 export type Bg3Snapshot = z.infer<typeof Bg3SnapshotSchema>;
 
@@ -231,3 +247,29 @@ export type Bg3HubSettingsBody = z.infer<typeof Bg3HubSettingsBodySchema>;
 
 export const Bg3ClaimBodySchema = z.object({ slotKey: Bg3SlotKeySchema }).strict();
 export type Bg3ClaimBody = z.infer<typeof Bg3ClaimBodySchema>;
+
+/**
+ * ROK-2068 — "Remove uploaded saves": delete the caller's saves (and their
+ * key bindings, unused thumbnail refs and hub Gallery pictures) for chosen
+ * campaign keys. One key per save folder today, so a batch of keys is one
+ * request. Removed keys' latest-wins markers are cleared too (operator
+ * ruling 2026-11-03), so re-sending a removed save is accepted again.
+ */
+export const BG3_REMOVE_SAVES_MAX_KEYS = 500;
+
+export const Bg3RemoveSavesBodySchema = z.object({
+    campaignKeys: z.array(Bg3CampaignKeySchema).min(1).max(BG3_REMOVE_SAVES_MAX_KEYS),
+}).strict();
+export type Bg3RemoveSavesBody = z.infer<typeof Bg3RemoveSavesBodySchema>;
+
+const removedCount = z.number().int().min(0);
+
+export const Bg3RemoveSavesResultSchema = z.object({
+    removed: z.object({
+        saves: removedCount,
+        campaignKeys: removedCount,
+        thumbnailRefs: removedCount,
+        galleryPictures: removedCount,
+    }).strict(),
+}).strict();
+export type Bg3RemoveSavesResult = z.infer<typeof Bg3RemoveSavesResultSchema>;

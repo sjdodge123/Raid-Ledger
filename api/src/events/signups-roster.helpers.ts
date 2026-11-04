@@ -4,6 +4,7 @@
  * Extracted from signups.service.ts for file size compliance (ROK-719).
  */
 import * as schema from '../drizzle/schema';
+import { GRACEFUL_DECLINE_HOURS } from './signup-cancel.helpers';
 import type {
   SignupResponseDto,
   ConfirmationStatus,
@@ -67,7 +68,7 @@ export function determineCancelStatus(eventDuration: [Date, Date] | null): {
   const hoursUntilEvent = eventStartTime
     ? (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
     : 0;
-  const isGracefulDecline = hoursUntilEvent >= 23;
+  const isGracefulDecline = hoursUntilEvent >= GRACEFUL_DECLINE_HOURS;
   const cancelStatus = isGracefulDecline ? 'declined' : 'roached_out';
   return { cancelStatus, isGracefulDecline, now };
 }
@@ -131,6 +132,7 @@ export function buildSignupResponseDto(
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     runningLate: signup.runningLateAt != null,
+    seriesSignupId: signup.seriesSignupId ?? null,
     runningLateAt: signup.runningLateAt?.toISOString() ?? null,
     lateMinutes: signup.lateMinutes ?? null,
     ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
@@ -166,6 +168,7 @@ export function buildAnonymousSignupResponseDto(
     attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
     attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     runningLate: signup.runningLateAt != null,
+    seriesSignupId: signup.seriesSignupId ?? null,
     runningLateAt: signup.runningLateAt?.toISOString() ?? null,
     lateMinutes: signup.lateMinutes ?? null,
     ...(assignedSlot ? { assignedSlot: assignedSlot as RosterRole } : {}),
@@ -195,6 +198,7 @@ export function buildRosterAssignmentResponseDto(
         ('tank' | 'healer' | 'dps')[] | null) ?? null,
     signupStatus: row.event_signups.status as SignupStatus,
     runningLate: row.event_signups.runningLateAt != null,
+    inSeries: row.event_signups.seriesSignupId != null,
     lateMinutes: row.event_signups.lateMinutes ?? null,
   };
 }

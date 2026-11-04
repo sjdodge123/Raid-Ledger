@@ -61,7 +61,7 @@ function messageOf(run: () => unknown): string {
 
 beforeEach(() => {
     inspectBg3SaveInWorker.mockReset();
-    inspectBg3SaveInWorker.mockResolvedValue({ saveInfo: RAW, webp: null, thumbnail: null });
+    inspectBg3SaveInWorker.mockResolvedValue({ saveInfo: RAW, webp: null, thumbnail: null, gameIdKey: null });
 });
 
 describe('readDroppedFiles → selectBg3SaveSource → campaign key (ROK-1960 AC2)', () => {

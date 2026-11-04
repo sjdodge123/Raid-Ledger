@@ -4,6 +4,7 @@ import { server } from '../../../test/mocks/server';
 import {
     BG3_MY_SAVES_URL,
     bg3CampaignsHandler,
+    bg3RemoveSavesHandler,
     bg3SessionsHandler,
     bg3SnapshotHandler,
     bg3UpdateCampaignHandler,
@@ -18,7 +19,7 @@ import {
     buildBg3Snapshot,
 } from '../../../test/factories/bg3';
 import {
-    BG3_MY_SAVES_MAX_PAGES, fetchBg3Campaigns, fetchBg3MyUnassignedSaves, fetchBg3Sessions, fetchBg3Snapshot, isBg3AccessDenied, updateBg3Campaign,
+    BG3_MY_SAVES_MAX_PAGES, fetchBg3Campaigns, fetchBg3MyAllSaves, fetchBg3MyUnassignedSaves, removeBg3Saves, fetchBg3Sessions, fetchBg3Snapshot, isBg3AccessDenied, updateBg3Campaign,
 } from './bg3-api';
 
 describe('bg3-api', () => {
@@ -80,6 +81,31 @@ describe('bg3-api', () => {
         expect(all.saves.at(-1)?.saveName).toBe('Oldest');
         expect(all).toMatchObject({ nextCursor: null, defaultCampaignId: 77 });
         expect(urls).toEqual(['?unassigned=true', '?unassigned=true&cursor=p2']);
+    });
+});
+
+describe('bg3-api — ROK-2068 Manage my saves', () => {
+    it('walks every page of ALL the caller\'s saves without the unassigned filter', async () => {
+        const urls: string[] = [];
+        const page1 = buildBg3MySavesResponse({ saves: [buildBg3MySave({ id: 1, campaignId: BG3_CAMPAIGN_ID })], nextCursor: 'p2' });
+        const page2 = buildBg3MySavesResponse({ saves: [buildBg3MySave({ id: 2 })], nextCursor: null });
+        server.use(http.get(BG3_MY_SAVES_URL, ({ request }) => {
+            const url = new URL(request.url);
+            urls.push(url.search);
+            return HttpResponse.json(url.searchParams.get('cursor') === 'p2' ? page2 : page1);
+        }));
+        const all = await fetchBg3MyAllSaves();
+        expect(all.saves.map((s) => s.id)).toEqual([1, 2]);
+        expect(urls).toEqual(['', '?cursor=p2']);
+    });
+
+    it('POSTs the campaign keys to me/saves/remove and parses the counts', async () => {
+        const bodies: unknown[] = [];
+        const removed = { saves: 3, campaignKeys: 2, thumbnailRefs: 1, galleryPictures: 1 };
+        server.use(bg3RemoveSavesHandler({ removed }, (b) => bodies.push(b)));
+        const keys = ['a'.repeat(64), 'b'.repeat(64)];
+        await expect(removeBg3Saves(keys)).resolves.toEqual({ removed });
+        expect(bodies).toEqual([{ campaignKeys: keys }]);
     });
 });
 

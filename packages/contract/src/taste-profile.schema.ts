@@ -91,6 +91,10 @@ export const IntensityTierSchema = z.enum(INTENSITY_TIERS);
  * titles take the raw axis score; multi-axis titles take the max of
  * their component axes (e.g. `Hero = max(rpg, fantasy)`,
  * `Architect = max(crafting, automation, sandbox)`).
+ *
+ * APPEND-ONLY: stored archetypes are jsonb, so removing or renaming a
+ * value would fail to parse old rows. `Gunslinger` (the `fps` axis) was
+ * appended by ROK-1939 — additive.
  */
 export const VECTOR_TITLES = [
   'Duelist',
@@ -114,6 +118,8 @@ export const VECTOR_TITLES = [
   'Acrobat',
   'Racer',
   'Athlete',
+  // Appended for ROK-1939 (fps noun) — append-only, like the axis pool.
+  'Gunslinger',
 ] as const;
 
 export type VectorTitle = (typeof VECTOR_TITLES)[number];

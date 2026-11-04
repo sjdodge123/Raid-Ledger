@@ -13,6 +13,7 @@ import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
 import { assertHubMemberOrStaff } from './valheim-hub-member.helpers';
 import { ValheimServerPinsRepository } from './valheim-server-pins.repository';
 import { toServerPinsResponse } from './valheim-server-pins.mappers';
+import { ValheimReportedDeathsRepository } from './valheim-reported-deaths.repository';
 
 @Injectable()
 export class ValheimServerPinsService {
@@ -20,6 +21,7 @@ export class ValheimServerPinsService {
     private readonly hubs: ValheimArmoryReadRepository,
     private readonly access: GuildAccessService,
     private readonly repo: ValheimServerPinsRepository,
+    private readonly reported: ValheimReportedDeathsRepository,
   ) {}
 
   /** `GET …/servers/:serverId/pins?worldUid=&players=&types=`. */
@@ -30,7 +32,10 @@ export class ValheimServerPinsService {
   ): Promise<ValheimServerPinsResponse> {
     await assertHubMemberOrStaff(this.hubs, this.access, serverId, user);
     const { worldUid, players, types } = query;
-    const rows = await this.repo.mapsOnWorld(serverId, worldUid, players);
-    return toServerPinsResponse(worldUid, rows, types);
+    const [rows, reported] = await Promise.all([
+      this.repo.mapsOnWorld(serverId, worldUid, players),
+      this.reported.forWorld(serverId, worldUid, players),
+    ]);
+    return toServerPinsResponse(worldUid, rows, types, reported);
   }
 }
