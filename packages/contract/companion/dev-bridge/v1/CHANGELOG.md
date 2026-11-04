@@ -12,16 +12,21 @@ previous version during the transition.
 - New `$defs`: `bg3-saves` (`GET /dev/v1/bg3/saves`) and
   `bg3-save-structure` (`GET /dev/v1/bg3/saves/<saveRef>/structure`), both
   output mode — read-only, redacted views of the saves the `bg3-save`
-  collector sees. Redaction is structural: strict objects,
-  `[A-Za-z0-9_.]` identifiers, and a GUID guard on every string and key.
-  New bodies no existing producer emits; no existing `$defs` entry changes
-  (only the root `description` gains the BG3 refinements). Stays v1.
+  collector sees. Redaction is structural: strict objects, an equipment
+  `slot` enum, prefixed `statsId` and dotted `type` patterns, a BG3-only
+  `next` cursor grammar, and a guard on every string and key against any
+  GUID shape (dashed, `_`/`.`-split, braced, undashed, Larian handle, ≥ 32
+  hex) and any run of ≥ 10 digits. New bodies no existing producer emits;
+  no existing `$defs` entry changes (the shared cursor is untouched; only the
+  root `description` gains the BG3 refinements). **Additive** — stays v1.
 - New golden fixtures `bg3-saves`, `bg3-save-structure{,--unsupported,--types-page}`
-  and thirteen invalid cases in `fixtures/invalid/` (extra key on a save row
-  or in `decoded`, GUID in
-  `statsId` / `type`, path in `statsId`, display name in `classId`,
-  non-hex `saveRef`, ability out of range, unknown `fallbackReason`,
-  missing `next`, both bodies over 16 KiB).
+  and 22 invalid cases in `fixtures/invalid/`, each raising exactly one
+  issue (extra key on a save row or in `decoded`; GUID in `statsId` / `type`,
+  `_`-split, and as a Larian handle; path or bare name in `statsId`;
+  display name in `classId`; a 17-digit id; free-text equipment `slot`;
+  duplicate `saveRef` / party `slot`; folder-name `next` on both bodies;
+  non-hex `saveRef`; ability out of range; unknown `fallbackReason`;
+  missing `next`; both bodies over 16 KiB).
 
 ## v1 — 2026-11-03 (ROK-2072, additive)
 
