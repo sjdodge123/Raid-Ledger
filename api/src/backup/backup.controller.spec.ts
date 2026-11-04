@@ -55,4 +55,31 @@ describe('BackupController', () => {
       );
     });
   });
+
+  describe('createBackup', () => {
+    it('answers with the new dump while its uploads archive is still archiving', async () => {
+      const dump = 'raid_ledger_2026-11-04_100000.dump';
+      const backupService = {
+        createDailyBackup: jest
+          .fn()
+          .mockResolvedValue(`/backups/daily/${dump}`),
+        listBackups: jest.fn().mockReturnValue([
+          {
+            filename: dump,
+            type: 'daily',
+            sizeBytes: 2048,
+            createdAt: '2026-11-04T10:00:00.000Z',
+            uploadsArchive: { state: 'archiving' },
+          },
+        ]),
+      } as unknown as BackupService;
+      const controller = new BackupController(backupService);
+
+      const res = await controller.createBackup();
+
+      expect(res.success).toBe(true);
+      expect(res.backup?.filename).toBe(dump);
+      expect(res.backup?.uploadsArchive).toEqual({ state: 'archiving' });
+    });
+  });
 });
