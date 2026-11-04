@@ -11,8 +11,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { DEV_BRIDGE_PAGE_MAX_BYTES, devBridgeJsonBytes } from '../companion-dev-bridge.schema.js';
+import { DEV_BRIDGE_BG3_DIGITS_MESSAGE, DEV_BRIDGE_BG3_GUID_MESSAGE, bg3HoldsGuid } from '../companion-dev-bridge-bg3-redaction.js';
 import {
+    BG3_EQUIPMENT_SLOTS,
     DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES,
+    DevBridgeBg3NextSchema,
     DevBridgeBg3PartyRowSchema,
     DevBridgeBg3SaveStructureSchema,
     DevBridgeBg3SavesSchema,
@@ -35,18 +38,18 @@ const ExpectedSchema = z.record(z.string(), z.object({ path: z.string(), code: z
 
 /** The message each rule must carry, so a failure for some OTHER reason does not count. */
 const MESSAGE: Record<string, RegExp> = {
-    custom: /GUID is not allowed|Response body is \d+ bytes; the cap is 16384/,
+    custom: /GUID is not allowed|run of 10 or more digits|^Duplicate (saveRef|slot) |Response body is \d+ bytes; the cap is 16384/,
     unrecognized_keys: /Unrecognized key/,
     invalid_format: /Invalid string: must match pattern/,
     too_big: /Too big/,
-    invalid_value: /Invalid option/,
+    invalid_value: /Invalid option|expected one of/,
     invalid_type: /Invalid input/,
 };
 
 describe('ROK-2077 bg3 fixtures', () => {
     it('ships the BG3 valid and invalid fixtures', () => {
         expect(bg3Names(FIX)).toEqual(expect.arrayContaining(['bg3-saves', 'bg3-save-structure', 'bg3-save-structure--unsupported', 'bg3-save-structure--types-page']));
-        expect(bg3Names(INVALID).length).toBeGreaterThanOrEqual(12);
+        expect(bg3Names(INVALID).length).toBeGreaterThanOrEqual(21);
     });
 
     it.each(bg3Names(FIX))('valid %s parses', (name) => {
@@ -56,31 +59,78 @@ describe('ROK-2077 bg3 fixtures', () => {
     it.each(bg3Names(INVALID))('invalid %s fails at its EXPECTED path + code with that rule\'s message', (name) => {
         const want = ExpectedSchema.parse(readJson(INVALID, 'EXPECTED.json'))[name];
         if (want === undefined) throw new Error(`${name} is missing from EXPECTED.json`);
-        const hits = issuesOf(schemaFor(name).safeParse(readJson(INVALID, `${name}.json`))).filter((i) => i.path === want.path && i.code === want.code);
+        const all = issuesOf(schemaFor(name).safeParse(readJson(INVALID, `${name}.json`)));
+        expect(all, 'exactly one reason, so a validator reporting the first issue agrees').toHaveLength(1);
+        const hits = all.filter((i) => i.path === want.path && i.code === want.code);
         expect(hits.map((h) => `${h.path} ${h.code}`)).toEqual([`${want.path} ${want.code}`]);
         expect(hits[0]?.message).toMatch(MESSAGE[want.code] ?? /^$/);
     });
 });
 
+type Json = Record<string, unknown> | unknown[];
+const isJson = (v: unknown): v is Json => typeof v === 'object' && v !== null;
+
+/** Sets `body[path…] = value` on a parsed JSON clone; throws when the path is missing. */
+function setAt(body: unknown, path: (string | number)[], value: unknown): void {
+    const last = path[path.length - 1];
+    const parent = path.slice(0, -1).reduce<unknown>((o, k) => (isJson(o) ? Reflect.get(o, k) : undefined), body);
+    if (!isJson(parent) || last === undefined) throw new Error(`fixture has no ${path.join('.')}`);
+    Reflect.set(parent, last, value);
+}
+
+/** Issues a structure body raises after `path` is set to `value`. */
+function structureIssuesAt(path: (string | number)[], value: unknown) {
+    const body = readJson(FIX, 'bg3-save-structure.json');
+    setAt(body, path, value);
+    return issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(body));
+}
+
+const TYPE = ['types', 0, 'type'];
+const STATS = ['party', 0, 'decoded', 'equipment', 0, 'statsId'];
+const SLOT = ['party', 0, 'decoded', 'equipment', 0, 'slot'];
+const CLASS = ['party', 0, 'decoded', 'classLevels', 0, 'classId'];
+const SUBCLASS = ['party', 0, 'decoded', 'classLevels', 0, 'subclassId'];
+
 describe('ROK-2077 redaction by shape', () => {
     const IDENT_LEAKS = ['C:\\Users\\x', 'Saves/Story', 'Tav the Brave', '6f2b8c1e-4d3a-4b7e-9a10-2c5d8e3f7a41', 'S_Player:1', ''];
+    const hitsAt = (path: (string | number)[], leak: string) => structureIssuesAt(path, leak).some((i) => i.path === path.join('.'));
 
     it.each(IDENT_LEAKS)('no identifier field accepts %j', (leak) => {
-        const at = (mutate: (s: DevBridgeBg3SaveStructure) => void, path: string) => {
-            const s = structure();
-            mutate(s);
-            return issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(s)).map((i) => i.path).filter((p) => p === path);
-        };
-        const eq = (s: DevBridgeBg3SaveStructure) => s.party[0]?.decoded.equipment?.[0];
-        const cl = (s: DevBridgeBg3SaveStructure) => s.party[0]?.decoded.classLevels?.[0];
-        const rejected = [
-            at((s) => { const t = s.types[0]; if (t) t.type = leak; }, 'types.0.type'),
-            at((s) => { const e = eq(s); if (e) e.statsId = leak; }, 'party.0.decoded.equipment.0.statsId'),
-            at((s) => { const e = eq(s); if (e) e.slot = leak; }, 'party.0.decoded.equipment.0.slot'),
-            at((s) => { const c = cl(s); if (c) c.classId = leak; }, 'party.0.decoded.classLevels.0.classId'),
-            at((s) => { const c = cl(s); if (c) c.subclassId = leak; }, 'party.0.decoded.classLevels.0.subclassId'),
-        ];
-        expect(rejected.map((r) => r.length > 0)).toEqual([true, true, true, true, true]);
+        expect([TYPE, STATS, SLOT, CLASS, SUBCLASS].map((p) => hitsAt(p, leak))).toEqual([true, true, true, true, true]);
+    });
+
+    it.each(['Astarion', 'Tav', 'Lucky_hat'])('a one-word name %j fits neither type, statsId nor slot', (name) => {
+        expect([TYPE, STATS, SLOT].map((p) => hitsAt(p, name))).toEqual([true, true, true]);
+    });
+
+    it('keeps real Larian ids valid', () => {
+        for (const id of ['ARM_Hat', 'WPN_Longsword_1', 'FOR_UnfortunateGnome', 'UNI_ARM_Helmet_2']) expect(structureIssuesAt(STATS, id)).toEqual([]);
+        for (const t of ['core.v0.Level', 'game.character_creation.v3.AppearanceComponent']) expect(structureIssuesAt(TYPE, t)).toEqual([]);
+        expect(structureIssuesAt(SLOT, 'MusicalInstrument')).toEqual([]);
+    });
+
+    it('rejects a SteamID64 (or any 10+ digit run) in any string, with the digits message', () => {
+        const steam64 = ['7656119', '8012345678'].join('');
+        expect(structureIssuesAt(CLASS, steam64)).toEqual([{ path: CLASS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_DIGITS_MESSAGE }]);
+        expect(structureIssuesAt(STATS, 'WPN_Sword_123456789')).toEqual([]);
+        expect(structureIssuesAt(['saveRef'], '123456789012')).toEqual([]);
+    });
+
+    it('detects every GUID shape with one helper, and nothing a real id looks like', () => {
+        const g = ['6f2b8c1e', '4d3a', '4b7e', '9a10', '2c5d8e3f7a41'];
+        const shapes = [g.join('-'), g.join('_'), g.join('.'), g.join(''), `{${g.join('-')}}`, `h${g.join('g')}`, g.join('').toUpperCase(), 'ab'.repeat(20)];
+        expect(shapes.filter((s) => !bg3HoldsGuid(s))).toEqual([]);
+        const ids = ['ARM_Hat', 'game.stats.v3.StatsComponent', '3f9a0c2b7d41', '4.1.1.6848561', 'EvocationSchool', 'p2_types_9'];
+        expect(ids.filter(bg3HoldsGuid)).toEqual([]);
+        expect(structureIssuesAt(CLASS, g.join('_'))).toEqual([{ path: CLASS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_GUID_MESSAGE }]);
+    });
+
+    it('the BG3 cursor is a closed grammar: page, section, row offset — never a folder name', () => {
+        const ok = ['p2_types_9', 'p1_saves_0', 'p9999_party_999999'];
+        const bad = ['Tav_1234__QuickSave_12', 'QuickSave_12', 'p2', 'p0_types_1', 'p2_names_1', 'p2_types_1234567'];
+        expect(ok.filter((c) => !DevBridgeBg3NextSchema.safeParse(c).success)).toEqual([]);
+        expect(bad.filter((c) => DevBridgeBg3NextSchema.safeParse(c).success)).toEqual([]);
+        expect(DevBridgeBg3NextSchema.safeParse(null).success).toBe(true);
     });
 
     it('rejects an undashed GUID with the GUID message (it would otherwise pass the identifier pattern)', () => {
@@ -89,7 +139,7 @@ describe('ROK-2077 redaction by shape', () => {
         if (e === undefined) throw new Error('fixture lost its equipment row');
         e.statsId = 'ARM_6F2B8C1E4D3A4B7E9A102C5D8E3F7A41';
         expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(s))).toEqual([
-            { path: 'party.0.decoded.equipment.0.statsId', code: 'custom', message: 'A GUID is not allowed in a BG3 dev-bridge body' },
+            { path: 'party.0.decoded.equipment.0.statsId', code: 'custom', message: DEV_BRIDGE_BG3_GUID_MESSAGE },
         ]);
     });
 
@@ -108,12 +158,12 @@ describe('ROK-2077 redaction by shape', () => {
 function structureAt(limit: number): DevBridgeBg3SaveStructure {
     const base = { ...structure(), types: [], party: [] };
     const row = (type: string) => ({ type, version: 0, elementSize: 8, count: 1, decoder: 'ok' as const });
-    const empty = devBridgeJsonBytes({ ...base, types: Array.from({ length: 200 }, () => row('x')) });
+    const empty = devBridgeJsonBytes({ ...base, types: Array.from({ length: 200 }, () => row('a.b.x')) });
     let left = limit - empty;
     const types = Array.from({ length: 200 }, () => {
-        const extra = Math.min(127, Math.max(0, left));
+        const extra = Math.min(123, Math.max(0, left));
         left -= extra;
-        return row('x'.repeat(1 + extra));
+        return row(`a.b.${'x'.repeat(1 + extra)}`);
     });
     if (left !== 0) throw new Error(`cannot reach ${limit} bytes (${left} left)`);
     return { ...base, types };
@@ -138,11 +188,11 @@ describe('ROK-2077 16 KiB page cap', () => {
                 proficiencyBonus: 10,
                 maxHp: 100_000,
                 classLevels: Array.from({ length: 12 }, () => ({ classId: id(64), subclassId: id(64), level: 20 })),
-                equipment: Array.from({ length: 19 }, () => ({ slot: id(32), statsId: id(64) })),
+                equipment: BG3_EQUIPMENT_SLOTS.map((slot) => ({ slot, statsId: `ABCDEF_${id(57)}` })),
             },
         });
         expect(devBridgeJsonBytes(worst)).toBeLessThanOrEqual(DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES);
-        const page = { ...structure(), types: [], party: [worst], next: id(128) };
+        const page = { ...structure(), types: [], party: [worst], next: 'p9999_party_999999' };
         expect(issuesOf(DevBridgeBg3SaveStructureSchema.safeParse(page))).toEqual([]);
     });
 });

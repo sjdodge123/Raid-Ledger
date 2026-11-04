@@ -74,22 +74,36 @@ export const BG3_VALID = {
     'bg3-save-structure--types-page': typesPage,
 };
 
-// Undashed only: the contract spec's anonymisation guard rejects any dashed GUID on disk.
+// Undashed only: the contract spec's anonymisation guard rejects any dashed GUID
+// and any SteamID64 (7656119 + 10 digits) on disk, so the long-digit case is a
+// synthetic 17-digit id and the real Steam64 shape is an in-memory spec case.
 const GUID_UNDASHED = '6f2b8c1e4d3a4b7e9a102c5d8e3f7a41';
+const GUID_UNDERSCORED = '6f2b8c1e_4d3a_4b7e_9a10_2c5d8e3f7a41';
+const LARIAN_HANDLE = 'h6f2b8c1eg4d3ag4b7eg9a10g2c5d8e3f7a41';
+const CLASS = 'party.0.decoded.classLevels.0.classId';
 const STATS = 'party.0.decoded.equipment.0.statsId';
 /** [name, base valid fixture, mutate, expected path, expected code] */
 export const BG3_CASES = [
     ['bg3-saves--extra-key-name', 'bg3-saves', (m) => { m.saves[0].name = 'Tav'; }, 'saves.0', 'unrecognized_keys'],
     ['bg3-saves--save-ref-file-name', 'bg3-saves', (m) => { m.saves[0].saveRef = 'QuickSave_179'; }, 'saves.0.saveRef', 'invalid_format'],
     ['bg3-saves--unknown-fallback-reason', 'bg3-saves', (m) => { m.saves[2].fallbackReason = 'corrupt'; }, 'saves.2.fallbackReason', 'invalid_value'],
-    ['bg3-saves--over-size', 'bg3-saves', (m) => { m.saves = Array.from({ length: 64 }, () => ({ ...m.saves[0] })); }, '', 'custom'],
+    ['bg3-saves--over-size', 'bg3-saves', (m) => { m.saves = Array.from({ length: 64 }, (_, i) => ({ ...m.saves[0], saveRef: `abcdef${100000 + i}` })); }, '', 'custom'],
     ['bg3-saves--missing-next', 'bg3-saves', (m) => { delete m.next; }, 'next', 'invalid_type'],
     ['bg3-save-structure--extra-decoded-key', 'bg3-save-structure', (m) => { m.party[0].decoded.position = [12.5, 3, -40.25]; }, 'party.0.decoded', 'unrecognized_keys'],
     ['bg3-save-structure--guid-in-stats-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${GUID_UNDASHED}`; }, STATS, 'custom'],
-    ['bg3-save-structure--guid-in-type', 'bg3-save-structure', (m) => { m.types[0].type = GUID_UNDASHED; }, 'types.0.type', 'custom'],
+    ['bg3-save-structure--guid-in-type', 'bg3-save-structure', (m) => { m.types[0].type = `game.g${GUID_UNDASHED}.v0`; }, 'types.0.type', 'custom'],
     ['bg3-save-structure--display-name-class-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = 'Tav the Brave'; }, 'party.0.decoded.classLevels.0.classId', 'invalid_format'],
     ['bg3-save-structure--path-in-stats-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'Saves/Story/QuickSave_179.lsv'; }, STATS, 'invalid_format'],
     ['bg3-save-structure--ability-out-of-range', 'bg3-save-structure', (m) => { m.party[0].decoded.abilities.str = 31; }, 'party.0.decoded.abilities.str', 'too_big'],
     ['bg3-save-structure--save-ref-path', 'bg3-save-structure', (m) => { m.saveRef = 'Saves/Tav-1'; }, 'saveRef', 'invalid_format'],
     ['bg3-save-structure--over-size', 'bg3-save-structure', (m) => { m.types = Array.from({ length: 160 }, (_, i) => ({ ...m.types[2], count: i })); }, '', 'custom'],
+    ['bg3-save-structure--guid-underscored', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${GUID_UNDERSCORED}`; }, STATS, 'custom'],
+    ['bg3-save-structure--guid-larian-handle', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${LARIAN_HANDLE}`; }, STATS, 'custom'],
+    ['bg3-save-structure--stats-id-display-name', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'Astarion'; }, STATS, 'invalid_format'],
+    ['bg3-save-structure--long-digit-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = '90000000012345678'; }, CLASS, 'custom'],
+    ['bg3-save-structure--equipment-slot-free-text', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].slot = 'Lucky_hat'; }, 'party.0.decoded.equipment.0.slot', 'invalid_value'],
+    ['bg3-save-structure--duplicate-slot', 'bg3-save-structure', (m) => { m.party[1].slot = 0; }, 'party.1.slot', 'custom'],
+    ['bg3-save-structure--next-folder-name', 'bg3-save-structure', (m) => { m.next = 'Tav_1234__QuickSave_12'; }, 'next', 'invalid_format'],
+    ['bg3-saves--duplicate-save-ref', 'bg3-saves', (m) => { m.saves[1].saveRef = m.saves[0].saveRef; }, 'saves.1.saveRef', 'custom'],
+    ['bg3-saves--next-folder-name', 'bg3-saves', (m) => { m.next = 'Tav-1234__QuickSave_12'; }, 'next', 'invalid_format'],
 ];

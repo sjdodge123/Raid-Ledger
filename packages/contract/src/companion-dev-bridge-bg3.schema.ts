@@ -1,34 +1,54 @@
 import { z } from 'zod';
 import { BG3_CLASSES_MAX, BG3_LEVEL_MAX, BG3_PARTY_MAX, Bg3SavePayloadSchema } from './companion-bg3-save.schema.js';
 import { CompanionTimestampSchema } from './companion-common.schema.js';
-import { DEV_BRIDGE_PAGE_MAX_BYTES, DevBridgeNextSchema, devBridgeMaxBytes } from './companion-dev-bridge.schema.js';
+import { checkBg3Redaction, checkUniqueBy } from './companion-dev-bridge-bg3-redaction.js';
+import { DEV_BRIDGE_PAGE_MAX_BYTES, devBridgeMaxBytes } from './companion-dev-bridge.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 — BG3 save reads (ROK-2077).
 // GET /dev/v1/bg3/saves                       → `bg3-saves`
 // GET /dev/v1/bg3/saves/<saveRef>/structure   → `bg3-save-structure`
 // What the `bg3-save` collector sees, REDACTED BY SHAPE: strict objects only,
-// identifiers limited to [A-Za-z0-9_.] (no path, GUID, space or display
-// name fits), and no string or key anywhere may hold a GUID. Never names,
-// profile ids, GUIDs, file paths, positions, dialogue or image bytes.
+// closed enums / prefixed or dotted id patterns where the game has them, and
+// no string or key anywhere may hold a GUID or a 10+ digit run
+// (companion-dev-bridge-bg3-redaction.ts). Never names, profile ids, GUIDs,
+// file paths, positions, dialogue or image bytes.
 // ============================================================
 
-/** `saveRef`: the first 12 hex chars of a hash of the save — opaque, never a folder or file name. */
+/** `saveRef`: first 12 hex chars of HMAC-SHA256(per-install secret, save-relative path) — opaque, never a name. */
 export const DEV_BRIDGE_BG3_SAVE_REF_RE = /^[0-9a-f]{12}$/;
 
 /**
- * Upper bound of one `party` row, serialised. Not a separate check: the field
+ * Upper bound of one `party` row, serialised — checked on every row. The field
  * caps below already keep the worst-case row under it (the spec builds that
  * row), so a row plus the page head always fits one 16 KiB page.
  */
 export const DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES = 6_144;
 
-/** A GUID (UUID shape, dashed or not) anywhere in a BG3 dev-bridge body is a privacy bug. */
-const GUID_RE = /[0-9A-Fa-f]{8}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{4}-?[0-9A-Fa-f]{12}/;
-
-/** A Larian engine/stats/NewAge identifier: `ARM_Hat`, `Wizard`, `game.stats.v3.StatsComponent`. */
+/** A Larian class/subclass id (`Wizard`, `EvocationSchool`). A one-word name fits; the companion only emits game data. */
 const bg3Ident = (max: number) => z.string().regex(/^[A-Za-z0-9_.]+$/).min(1).max(max);
-const Count = z.number().int().min(0);
+const Count = z.number().int().min(0).max(100_000_000);
+
+/**
+ * Cursor of both BG3 bodies: `p<page>_<section>_<row offset>`, e.g. `p2_types_9`.
+ * A closed grammar, so no file or folder name fits (the shared
+ * `DevBridgeCursorSchema` is a free 128-char token and is left unchanged).
+ */
+export const DevBridgeBg3CursorSchema = z.string().regex(/^p[1-9][0-9]{0,3}_(saves|types|party)_[0-9]{1,6}$/);
+export const DevBridgeBg3NextSchema = DevBridgeBg3CursorSchema.nullable();
+
+/** NewAge type name: lowercase namespace + ≥2 dotted segments (`core.v0.Level`, `game.stats.v3.StatsComponent`). */
+export const DevBridgeBg3TypeNameSchema = z.string().regex(/^[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+){2,}$/).max(128);
+
+/** Item stats id: an uppercase Larian prefix, `_`, the rest (`ARM_Hat`, `WPN_Longsword_1`, `FOR_UnfortunateGnome`). */
+export const DevBridgeBg3StatsIdSchema = z.string().regex(/^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,90}$/).max(64);
+
+/** BG3 `ItemSlot` names, slot table 0–18. Adding a slot is additive only once readers accept it (see CONTRACT.md). */
+export const BG3_EQUIPMENT_SLOTS = [
+    'Helmet', 'Breast', 'Cloak', 'MeleeMainHand', 'MeleeOffHand', 'RangedMainHand', 'RangedOffHand', 'Ring', 'Underwear', 'Boots',
+    'Gloves', 'Amulet', 'Ring2', 'Wings', 'Horns', 'Overhead', 'MusicalInstrument', 'VanityBody', 'VanityBoots',
+] as const;
+export const DevBridgeBg3EquipmentSlotSchema = z.enum(BG3_EQUIPMENT_SLOTS);
 
 export const DevBridgeBg3SaveRefSchema = z.string().regex(DEV_BRIDGE_BG3_SAVE_REF_RE);
 
@@ -36,7 +56,7 @@ export const DevBridgeBg3SaveRefSchema = z.string().regex(DEV_BRIDGE_BG3_SAVE_RE
  * Why the collector fell back to the `SaveInfo`-only payload (null = it did not):
  * `no-newage` (Globals.lsf has no NewAge blob), `newage-unreadable` (bad LSMF),
  * `lsf-unreadable` (an LSF file failed to parse), `meta-missing` (no meta.lsf).
- * New values are additive.
+ * A closed enum: a new value is breaking (new `vN/`).
  */
 export const DevBridgeBg3FallbackReasonSchema = z.enum(['no-newage', 'newage-unreadable', 'lsf-unreadable', 'meta-missing']);
 
@@ -62,46 +82,30 @@ export const DevBridgeBg3SaveRowSchema = z
     })
     .strict();
 
-type Path = (string | number)[];
-
-/** Adds a `custom` issue at every string value or object key holding a GUID. */
-function checkNoGuid(value: unknown, path: Path, ctx: z.RefinementCtx): void {
-    if (typeof value === 'string') {
-        if (GUID_RE.test(value)) ctx.addIssue({ code: 'custom', path, message: 'A GUID is not allowed in a BG3 dev-bridge body' });
-        return;
-    }
-    if (Array.isArray(value)) {
-        value.forEach((v, i) => checkNoGuid(v, [...path, i], ctx));
-        return;
-    }
-    if (value === null || typeof value !== 'object') return;
-    for (const [key, v] of Object.entries(value)) {
-        if (GUID_RE.test(key)) ctx.addIssue({ code: 'custom', path: [...path, key], message: 'A GUID is not allowed as a key' });
-        checkNoGuid(v, [...path, key], ctx);
-    }
-}
-
 const fitsPage = devBridgeMaxBytes(DEV_BRIDGE_PAGE_MAX_BYTES, 'Response body');
 
-/** Every BG3 body: no GUID anywhere, ≤ 16 KiB serialised. */
+/** Every BG3 body: no GUID or 10+ digit run in any string or key, ≤ 16 KiB serialised. */
 function bg3BodyChecks(value: unknown, ctx: z.RefinementCtx): void {
-    checkNoGuid(value, [], ctx);
+    checkBg3Redaction(value, [], ctx);
     fitsPage(value, ctx);
 }
 
 /** GET /dev/v1/bg3/saves?cursor= */
 export const DevBridgeBg3SavesSchema = z
-    .object({ saves: z.array(DevBridgeBg3SaveRowSchema).max(64), next: DevBridgeNextSchema })
+    .object({ saves: z.array(DevBridgeBg3SaveRowSchema).max(64), next: DevBridgeBg3NextSchema })
     .strict()
-    .superRefine(bg3BodyChecks);
+    .superRefine((body, ctx) => {
+        checkUniqueBy(body.saves, 'saves', 'saveRef', (r) => r.saveRef, ctx);
+        bg3BodyChecks(body, ctx);
+    });
 
-/** Whether the companion has a decoder for this `(type, version, elementSize)` triple. */
+/** Whether the companion has a decoder for this `(type, version, elementSize)` triple. Closed: a new value is breaking. */
 export const DevBridgeBg3DecoderStatusSchema = z.enum(['ok', 'unsupported', 'none']);
 
 /** One NewAge type-table record — counts only, never element bytes. */
 export const DevBridgeBg3TypeRowSchema = z
     .object({
-        type: bg3Ident(128),
+        type: DevBridgeBg3TypeNameSchema,
         version: z.number().int().min(0).max(65_535),
         elementSize: z.number().int().min(0).max(1_048_576),
         count: Count,
@@ -132,7 +136,7 @@ export const DevBridgeBg3ClassLevelSchema = z
     .strict();
 
 /** One equipped item: the equipment slot name and the item's stats id (e.g. `ARM_Hat`). */
-export const DevBridgeBg3EquipmentSchema = z.object({ slot: bg3Ident(32), statsId: bg3Ident(64) }).strict();
+export const DevBridgeBg3EquipmentSchema = z.object({ slot: DevBridgeBg3EquipmentSlotSchema, statsId: DevBridgeBg3StatsIdSchema }).strict();
 
 /** Decoded fields of one party member; each is absent when its decoder is `unsupported` or `none`. */
 export const DevBridgeBg3DecodedSchema = z
@@ -141,14 +145,15 @@ export const DevBridgeBg3DecodedSchema = z
         proficiencyBonus: z.number().int().min(1).max(10).optional(),
         maxHp: z.number().int().min(1).max(100_000).optional(),
         classLevels: z.array(DevBridgeBg3ClassLevelSchema).max(BG3_CLASSES_MAX).optional(),
-        equipment: z.array(DevBridgeBg3EquipmentSchema).max(19).optional(),
+        equipment: z.array(DevBridgeBg3EquipmentSchema).max(BG3_EQUIPMENT_SLOTS.length).optional(),
     })
     .strict();
 
 /** One party member by 0-based party index — never a name, GUID or profile id. */
 export const DevBridgeBg3PartyRowSchema = z
     .object({ slot: z.number().int().min(0).max(BG3_PARTY_MAX - 1), decoded: DevBridgeBg3DecodedSchema })
-    .strict();
+    .strict()
+    .superRefine(devBridgeMaxBytes(DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES, 'Party row'));
 
 /**
  * GET /dev/v1/bg3/saves/<saveRef>/structure?cursor= — paged by ROW: every page
@@ -162,10 +167,13 @@ export const DevBridgeBg3SaveStructureSchema = z
         types: z.array(DevBridgeBg3TypeRowSchema).max(512),
         checks: DevBridgeBg3StructureChecksSchema,
         party: z.array(DevBridgeBg3PartyRowSchema).max(BG3_PARTY_MAX),
-        next: DevBridgeNextSchema,
+        next: DevBridgeBg3NextSchema,
     })
     .strict()
-    .superRefine(bg3BodyChecks);
+    .superRefine((body, ctx) => {
+        checkUniqueBy(body.party, 'party', 'slot', (r) => r.slot, ctx);
+        bg3BodyChecks(body, ctx);
+    });
 
 export type DevBridgeBg3SaveRow = z.output<typeof DevBridgeBg3SaveRowSchema>;
 export type DevBridgeBg3Saves = z.output<typeof DevBridgeBg3SavesSchema>;

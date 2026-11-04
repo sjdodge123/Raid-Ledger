@@ -266,5 +266,41 @@
   "bg3-save-structure--over-size": {
     "path": "",
     "code": "custom"
+  },
+  "bg3-save-structure--guid-underscored": {
+    "path": "party.0.decoded.equipment.0.statsId",
+    "code": "custom"
+  },
+  "bg3-save-structure--guid-larian-handle": {
+    "path": "party.0.decoded.equipment.0.statsId",
+    "code": "custom"
+  },
+  "bg3-save-structure--stats-id-display-name": {
+    "path": "party.0.decoded.equipment.0.statsId",
+    "code": "invalid_format"
+  },
+  "bg3-save-structure--long-digit-id": {
+    "path": "party.0.decoded.classLevels.0.classId",
+    "code": "custom"
+  },
+  "bg3-save-structure--equipment-slot-free-text": {
+    "path": "party.0.decoded.equipment.0.slot",
+    "code": "invalid_value"
+  },
+  "bg3-save-structure--duplicate-slot": {
+    "path": "party.1.slot",
+    "code": "custom"
+  },
+  "bg3-save-structure--next-folder-name": {
+    "path": "next",
+    "code": "invalid_format"
+  },
+  "bg3-saves--duplicate-save-ref": {
+    "path": "saves.1.saveRef",
+    "code": "custom"
+  },
+  "bg3-saves--next-folder-name": {
+    "path": "next",
+    "code": "invalid_format"
   }
 }
