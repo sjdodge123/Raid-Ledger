@@ -503,8 +503,19 @@ const zoomed = (): string | null => stage().getAttribute('data-zoom');
 const control = (name: string): HTMLElement => within(screen.getByRole('group', { name: 'Zoom' })).getByRole('button', { name });
 const readout = (): string => screen.getByTestId('hub-gallery-zoom-readout').textContent ?? '';
 const viewer = (): HTMLElement => screen.getByTestId('hub-gallery-viewer');
+/**
+ * The runner's `URL.createObjectURL` is Node's, and it rejects jsdom's Blob ("must be an instance of Blob"):
+ * thrown inside `useHubMediaImageUrl`'s effect, it unmounts the whole tree once the picture bytes land, so a
+ * longer case loses the dialog mid-test. Stub it, as the single-picture case above does (browsers share one Blob).
+ */
+function stubObjectUrls(): void {
+    beforeEach(() => { Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:hub-media'), revokeObjectURL: vi.fn() }); });
+    afterEach(() => { Reflect.deleteProperty(URL, 'createObjectURL'); Reflect.deleteProperty(URL, 'revokeObjectURL'); });
+}
 
 describe('HubGalleryDialog — zoom controls (ROK-2075)', () => {
+    stubObjectUrls();
+
     it('−/+/Fit sit in a "Zoom" group, aria-disabled at fit, and work from the keyboard', async () => {
         const user = userEvent.setup();
         open();
@@ -547,6 +558,8 @@ describe('HubGalleryDialog — zoom controls (ROK-2075)', () => {
 });
 
 describe('HubGalleryDialog — zoom and navigation (ROK-2075)', () => {
+    stubObjectUrls();
+
     it('→ walks pictures at fit; while zoomed it pans and the picture stays', async () => {
         open();
         expect(await caption()).toMatch(who(1));
