@@ -37,6 +37,7 @@ import { decodeCopyId, parseCopyId } from '../rl-copy-id.helpers';
 import {
   assertWriteOk,
   GOOGLE_CALENDAR_API,
+  GOOGLE_QUOTA_REASONS,
   googleErrorReasons,
 } from './google-write.helpers';
 
@@ -94,20 +95,11 @@ export function buildCalendarListUrl(pageToken?: string): string {
   return `${GOOGLE_CALENDAR_API}/users/me/calendarList?${params.toString()}`;
 }
 
-/** Google 403 reasons that mean "slow down", not "you may not". */
-const QUOTA_REASONS: ReadonlySet<string> = new Set([
-  'quotaExceeded',
-  'dailyLimitExceeded',
-  'rateLimitExceeded',
-  'userRateLimitExceeded',
-  'RATE_LIMIT_EXCEEDED',
-]);
-
 /** The TransientError reason of a non-scope, non-quota 403 (see header). */
 export const GOOGLE_POLICY_403 = 'http_403';
 
 function isQuotaReply(res: GoogleHttpResponse): boolean {
-  return googleErrorReasons(res.json).some((r) => QUOTA_REASONS.has(r));
+  return googleErrorReasons(res.json).some((r) => GOOGLE_QUOTA_REASONS.has(r));
 }
 
 /** Throw the shared error class for a non-2xx read reply (see header). */

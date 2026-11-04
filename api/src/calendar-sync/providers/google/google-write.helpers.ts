@@ -186,9 +186,18 @@ async function call(
   return res;
 }
 
-const RATE_LIMIT_REASONS = new Set([
+/**
+ * Google 403 reasons that mean "slow down", not "you may not". Shared by the
+ * write mapper below and the read mapper, so a quota or daily-limit 403 on a
+ * write is a RateLimitError (retry later), never a ProviderAuthError that
+ * flips the connection to needs_reconnect.
+ */
+export const GOOGLE_QUOTA_REASONS: ReadonlySet<string> = new Set([
+  'quotaExceeded',
+  'dailyLimitExceeded',
   'rateLimitExceeded',
   'userRateLimitExceeded',
+  'RATE_LIMIT_EXCEEDED',
 ]);
 const SCOPE_REASONS = new Set([
   'insufficientPermissions',
@@ -201,7 +210,7 @@ export function assertWriteOk(res: GoogleHttpResponse): void {
   if (status >= 200 && status < 300) return;
   const reason = `http_${status}`;
   const reasons = googleErrorReasons(res.json);
-  const rateLimited = reasons.some((r) => RATE_LIMIT_REASONS.has(r));
+  const rateLimited = reasons.some((r) => GOOGLE_QUOTA_REASONS.has(r));
   if (status === 429 || (status === 403 && rateLimited)) {
     throw new RateLimitError(
       googleHttp.parseRetryAfterMs(res.retryAfter),

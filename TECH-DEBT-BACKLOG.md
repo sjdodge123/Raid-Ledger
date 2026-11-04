@@ -3929,6 +3929,15 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
 - **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
 
+### 2026-11-04 — chore/tech-debt-2026-11-04e (overnight tech-debt batch E, verified on 120955165)
+
+- **resolved** line 2590 (`api/src/calendar-sync/providers/google/google-write.helpers.ts`, `assertWriteOk` mapped a 403 quota/daily-limit to ProviderAuthError → needs_reconnect) — fixed on chore/tech-debt-2026-11-04e (f1b65b679): one shared `GOOGLE_QUOTA_REASONS` set for read + write.
+- **resolved** line 2878 (`lineup-notification-deadline-extended.helpers.ts:75`, private-lineup deadline embed) — already fixed on main.
+- **resolved** line 2880 (`lineups-voting.helpers.ts:67`, vote for a game that isn't nominated) — already fixed on main.
+- **resolved** line 3751 (roster-insights member-path integration test) — already covered on main (`demo-test-guild.integration.spec.ts:405`).
+- **resolved** line 2317 (`scheduling.controller.ts` private-poll side reads) — already gated on main (`scheduling-side-reads.helpers.ts:40,63`).
+- **resolved** line 2288 (`checkAutoBench` counted tentative assignments) — already fixed on main (`hasDisplaceableTentative`).
+- **partial** line 2346 (duplicate `checkAutoBench` copies) — only the live `signup-allocation` copy remains.
 ### 2026-11-04 — chore/tech-debt-2026-11-04f (overnight tech-debt batch F, verified on 120955165)
 
 - **resolved** line 2724 (`web/src/lib/sentry-options.ts`, feedback reported "sent" after a 429 drop) — fixed on chore/tech-debt-2026-11-04f (347cd8b1e + f86b97922): only a 2xx counts as delivered, and only for envelopes that carry an `event` item (category rate limits on replay/transaction/session no longer fake a failure).
@@ -3947,6 +3956,9 @@ same day (#1278, #1279, #1280).
 - **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
 - **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
 
+### 2026-11-04 — chore/tech-debt-2026-11-04e (surfaced during PR #1945 GitHub CI, integration shard 1/4)
+
+- **med (flake, pre-existing, NOT this branch)** `api/src/lineups/scheduling/scheduling-open-lockin.integration.spec.ts:304` — `ROK-2024 open lock-in (integration) › (b) … announces once` failed `expect(signupsAtAnnounce).toEqual([signups.length])` → received `[]` (run 41806712957, seed 798599624). Not reproduced in 50 isolated fleet runs + 10 with the seed (task b5046f29323c); a test-side race: `fireEventCreated` (`api/src/lineups/lineups-notify-hooks.helpers.ts:236-250`) fires `notifyEventCreated` un-awaited, and the spy (`:49-56`) is marked called before its own `await signupUserIds()` pushes to `signupsAtAnnounce`, while `announcementsAfterWindow` (`:167-177`) returns as soon as the spy is called. On a slow CI shard the test's own query (`:298`) wins. Suggested: `await spy.mock.results[0]?.value` (or a `waitFor` on `signupsAtAnnounce` length) before `:304`; same guard for test (c)'s "after the signups" check.
 ### 2026-11-04 — chore/tech-debt-2026-11-04g (overnight tech-debt batch G, verified on a3bf66ff3)
 
 - **partial** line 3707 (`api/src/backup/backup-uploads.helpers.ts`, `measureTree` blocked the event loop) — the event-loop half is fixed on chore/tech-debt-2026-11-04g (14c083d60, `fs.promises` walk). The 504 half (manual "Create backup" tars uploads inside the request; nginx `/api/` 60 s timeout) stays open and needs a ruling on the shape (job + poll vs respond after the dump).
