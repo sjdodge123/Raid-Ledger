@@ -119,6 +119,14 @@ export const REALM_CACHE_TTL = 60 * 60 * 1000;
 /** Instance cache TTL: 24 hours */
 export const INSTANCE_CACHE_TTL = 24 * 60 * 60 * 1000;
 
+/**
+ * Size caps for the in-memory instance caches. The detail cache is fed by
+ * the anonymous /blizzard/instance/:id route, so an id walk must not grow
+ * the heap without bound.
+ */
+export const INSTANCE_DETAIL_CACHE_MAX = 500;
+export const INSTANCE_LIST_CACHE_MAX = 50;
+
 /** Spec-to-role mapping for WoW specializations */
 export const SPEC_ROLE_MAP: Record<string, 'tank' | 'healer' | 'dps'> = {
   Blood: 'tank',

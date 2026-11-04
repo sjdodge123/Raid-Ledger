@@ -3884,3 +3884,16 @@ same day (#1278, #1279, #1280).
 
 - **med** `scripts/bundle-budget.config.mjs:103` (`hub-page`) — origin/main 761686aac already measures hub-page at 14.984 KB gz against its 15.0 KB budget (0% headroom). ROK-2075 tripped it by ~20 bytes of `__vite__mapDeps` preload path alone (a shared heroicons chunk), fixed on the branch by lazy-loading the zoom controls. The next hub story will fail the same gate. Pre-existing: measured on main's build. Suggested: recapture the hub-page baseline per the file's own rule (measured +15%) in a small chore PR, or move more hub-page code behind lazy boundaries.
 - **low** `web/src/components/hub/gallery/use-gallery-zoom.test.tsx` (ROK-2075 review round 2) — pinch-centre maths and `pointercancel` handling are untested. Suggested: add both cases to the hook test.
+
+### 2026-11-04 — resolved on main, no note yet (surfaced during the overnight tech-debt pick, verified on 761686aac)
+
+- **resolved** line 3564 (`scripts/smoke/test-world.ts:66`, reset-scheduled-events route) — fixed by d21c102aa (#1835).
+- **resolved** line 3526 (`channel-lifecycle.apply.ts:69-78`, topic refresh inside the hub-link transaction) — fixed by 202513304 (#1928 batch A).
+- **resolved** line 3691 (`companion-blob.service.ts:110-117`, reservations not bounded by quota) — fixed by 202513304 (#1928).
+- **resolved** line 3698 (`steam-playtime.helpers.ts:48-60`, purge vs in-flight sync race) — fixed by 202513304 (#1928); residual gap stays at line 3865.
+- **resolved** line 3410 (`ad-hoc-events.gateway.ts:57` + `lineups.gateway.ts:61` signature-only handshake) — fixed by 202513304 (#1928).
+- **partial** line 2818 — the `tzOffset` half is fixed (`users-controller.helpers.ts:108-116` clamp); the `week` half and the unbounded cache are fixed in this batch.
+- **resolved** line 2858 (`api/src/notifications/notification-prefs.helpers.ts:20`, PATCH /notifications/preferences unvalidated) — fixed on chore/tech-debt-2026-11-04 (f7bedcb83).
+- **resolved** line 2862 (`api/src/plugins/wow-common/blizzard.service.ts:255`, never-pruned instance detail cache) — fixed on chore/tech-debt-2026-11-04 (b4076a987).
+- **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
+- **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
