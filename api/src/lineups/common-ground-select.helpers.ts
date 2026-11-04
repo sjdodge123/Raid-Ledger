@@ -19,6 +19,9 @@ import type { CommonGroundRow } from './common-ground-query.helpers';
  * the filtered pool query never returned WITHOUT a second, divergent copy of
  * this projection. Both call sites therefore produce byte-identical
  * `CommonGroundRow`s and map through the same `mapCommonGroundRow`.
+ *
+ * The hidden/banned filter lives HERE, not in either caller's `where`, so
+ * neither the pool nor the cohort by-id read can surface a moderated game.
  */
 export function commonGroundSelect(
   where: ReturnType<typeof sql>,
@@ -57,7 +60,7 @@ export function commonGroundSelect(
       ) AS "wishlistUserIds"
     FROM games g
     LEFT JOIN game_interests gi ON gi.game_id = g.id
-    WHERE ${where}
+    WHERE g.hidden = false AND g.banned = false AND (${where})
     GROUP BY g.id
     ${tail}
   `;

@@ -3877,7 +3877,45 @@ same day (#1278, #1279, #1280).
 - **low** `web/src/plugins/core/slots/event-hub-field.tsx:42` (ROK-2071) — the Core "Hub" `<Select>` is controlled by `guildId` with `placeholder="None"`, but its options are only the viewer's taggable hubs (`hubs.map`). An event already tagged to a hub that is NOT in that list (hidden hub, viewer without edit rights, archived, or a non-matching game) matches no option, so the field reads "None" although a hub is tagged. `dropUnlisted` clears it silently in create mode only; edit mode keeps the real `guildId` while displaying "None". Location of the display bug is confident; the exact edit-mode reproduction is UNVERIFIED (not run in a browser). Suggested: when `guildId` is set and absent from `hubs`, render a disabled option with the hub's name (or "Tagged to a hub you can't edit") instead of the "None" placeholder.
 - **low** `api/src/guilds/hub-taggable.service.ts:55-62` (`filterEditable`, ROK-2071) — for a non-staff viewer it runs `access.canEditOfKind` once per hub via `Promise.all`, and each call runs the kind's `resolveLadder` (`api/src/guilds/guild-access.service.ts:108-120`), so `GET /guilds/taggable` issues N ladder queries per request (N = active hubs for the game). The form refetches it on game and character changes. Parallel, so latency is bounded; load grows with hub count. Suggested: add a batched `resolveLaddersOfKind(actor, guildIds)` per hub kind (group `live` rows by kind) and filter on the result; add an integration case that asserts the query count.
 - **med** `tools/test-bot/src/smoke/**` (Join post ROK-1740, ROK-1933 hub welcome, ROK-1941 hub media) — discord-smoke channel-access flake, root cause UNREPRODUCED (single occurrence). PR #1919, run 41527258629 (job 125558203273): `POST /admin/settings/discord-bot/join-post → 400 "Pick a text channel in the connected Discord server."`, `PUT /guilds/2/discord/channel → 400 "Raid Ledger can't read that channel"`, `PUT /guilds/3/media-channel → 400` (same message), all in the same job. The branch touched digest code only; the same job passed on #1919's next head and on #1920 ~90 minutes later. Pointer, not proven: transient bot channel visibility in the shared guild (bot channel cache or permission propagation after the smoke run creates the channels). Specific spec file:line UNVERIFIED. Recorded in memory `reference_known_smoke_flakes.md` (2026-11-02) only, not previously here. Suggested: loop the three tests with the companion bot (`cd tools/test-bot && SMOKE_CATEGORY=<cat> npm run smoke`, 50+ runs; `./scripts/spec-loop.sh` is for Jest specs and does not apply); if it recurs, RCA the bot's channel-cache and permission check behind these 400s, or make the tests poll until the bot can see the channel.
+### 2026-11-04 — feat/rok-2075-gallery-zoom (surfaced during the dialog-test root cause)
+- **low** — `web/src/hooks/use-hub-media-image.ts:31`: under Node 24 + jsdom, `URL.createObjectURL` is Node's and rejects jsdom's Blob (`The "obj" argument must be an instance of Blob. Received an instance of Blob`). The hook checks only `typeof URL.createObjectURL === 'function'`, so the effect throws and React unmounts the test tree. It is still in stderr for "stale picture links > a moderation write refreshes…" (ROK-2074) on main, so it is pre-existing, not a ROK-2075 regression (ROK-2075 stubs it in its own zoom cases). Suggested: a try/catch in the hook, or stub `createObjectURL` file-wide in `hub-gallery-dialog.test.tsx`.
 
+### 2026-11-04 — feat/rok-2075-gallery-zoom (surfaced during the fleet --static bundle gate, task 678317da1abe)
+
+- **med** `scripts/bundle-budget.config.mjs:103` (`hub-page`) — origin/main 761686aac already measures hub-page at 14.984 KB gz against its 15.0 KB budget (0% headroom). ROK-2075 tripped it by ~20 bytes of `__vite__mapDeps` preload path alone (a shared heroicons chunk), fixed on the branch by lazy-loading the zoom controls. The next hub story will fail the same gate. Pre-existing: measured on main's build. Suggested: recapture the hub-page baseline per the file's own rule (measured +15%) in a small chore PR, or move more hub-page code behind lazy boundaries.
+- **low** `web/src/components/hub/gallery/use-gallery-zoom.test.tsx` (ROK-2075 review round 2) — pinch-centre maths and `pointercancel` handling are untested. Suggested: add both cases to the hook test.
+
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04c (overnight batch C)
+
+- **resolved** line 2812 (`api/src/csp-report/csp-report.controller.ts`) — fixed: only `application/csp-report`/`reports+json` reach Sentry, captures capped at 30/min process-wide, logged body truncated to 2048 chars. Residual (not done): foreign document-origin filtering and Sentry fingerprinting.
+- **resolved (partial)** line 2854 (`api/src/discord-bot/services/presence-game-detector.service.ts:312`) — fixed in presence, `bind.resolvers.ts:68`, `bind.helpers.ts:258`, `event-create.command.ts:225`, `roster-view.command.ts:84`. Still open: `characters-import.helpers.ts:54,236` and `common-ground-query.helpers.ts:193` (files held by open PRs on 2026-11-04).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04c (surfaced during the overnight batch C review)
+
+- **low** `api/src/csp-report/csp-report.integration.spec.ts:155` — no integration case for a rejected content type through the real `@Headers` binding. Suggested: post `application/json` and assert no Sentry capture.
+- **nit** `api/src/csp-report/csp-report.controller.ts:36` — comment says "dropped unlogged" but the report is logged without its body. Suggested: fix the comment.
+- **nit** `api/src/csp-report/csp-report-guard.ts:52` — truncation slices UTF-16 code units and can split a surrogate pair; harmless in a log line. Suggested: `Array.from(s).slice(...)` if it ever matters.
+- **nit** `api/src/csp-report/csp-report-guard.ts` (Sentry budget) — a fixed one-minute window lets up to 2× the budget through across a window boundary. Suggested: sliding window if the cap ever needs to be strict.
+- **nit** `api/src/discord-bot/services/presence-game-detector.service.ts` follow-up (backlog 2854) — the `characters-import` and `common-ground` ILIKE sites still take unescaped user text (out of batch C's scope: open PRs owned those files). Suggested: wrap them in `escapeLikePattern()` next.
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04b (overnight batch B)
+
+- **resolved** line 2842 (`api/src/lineups/common-ground-query.helpers.ts`) — fixed (f867fe267).
+- **resolved** line 2808 (`api/src/characters/characters-identity.helpers.ts`) — fixed (e288b3a12).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04 (surfaced during the overnight batch A review, REVIEW-TD-2026-11-04.md)
+
+- **low** `api/src/common/swr-cache.ts` (`memorySwr` `maxEntries`, batch A) — eviction is first-in-first-out because a cache hit never moves the entry to newest, so anonymous requests for made-up `/blizzard/instance/:id` ids can push real entries out and force fresh Blizzard calls. Suggested: move the entry to newest on a hit when `maxEntries` is set.
+- **nit** `api/src/plugins/wow-common/blizzard.constants.ts` (detail cache cap 500) — the cap may be smaller than the real instance set. Suggested: size it from the instance list count.
+- **low** `api/src/notifications/notification-prefs.helpers.ts` (batch A strict schema) — junk preference values saved before the PATCH validation landed can still break follow-up SQL that reads them. Suggested: a read-side filter or a one-off cleanup.
+
+### 2026-11-04 — chore/tech-debt-2026-11-04b (surfaced during the overnight batch B review, REVIEW-TD2.md)
+
+- **low** `api/src/discord-bot/listeners/steam-link.listener.nomination-flow.ts:111-115` (`isGameNominatable`) — the unit specs mock the select chain and ignore `.where(...)`, so deleting `VISIBILITY_FILTER()` would leave every test green. Shared with the integration-tested `validateGameExists`, so risk is low. Suggested: assert `mockDb.where` got a condition, or one integration case against a banned row.
+- **low** `api/src/lineups/common-ground-select.helpers.ts:63` (`queryCommonGroundByGameIds`, cohort tiles) — now filtered by moderation, but nothing tests that a hidden game in cohort memory drops out of the cohort row. Suggested: a case next to `cohort-memory.integration.spec.ts`.
+- **low** `api/src/lineups/lineups-carryover.helpers.ts:77-90` (`insertCarriedEntry`) — carryover inserts entries without `VISIBILITY_FILTER`, so a hidden/banned game still carries into a new lineup even though nominate now refuses it. Pre-existing gap. Suggested: filter carried entries through the same visibility predicate.
+- **nit** `api/src/lineups/common-ground-select.helpers.ts:70-77` and `api/src/lineups/common-ground-cohort.helpers.ts:156-157` — comments say "bypassing every pool filter" / "should be unreachable", both now false because moderation applies. Suggested: update the comments.
+- **nit** `api/src/characters/characters-import.helpers.ts:54` — `ilike(name, name)` treats `%`/`_` in a typed character name as wildcards (pre-existing on create, now reachable on update too). Suggested: `sql\`lower(name) = lower(${name})\``, as `checkRegionClaim` does.
+- **nit** `api/src/characters/characters-import.helpers.ts:55` — realm match is case-sensitive (`eq(realm)`), so `stormrage` can coexist with another user's `Stormrage`. Consistent on create and update. Suggested: compare lower(realm).
 ### 2026-11-04 — resolved on main, no note yet (surfaced during the overnight tech-debt pick, verified on 761686aac)
 
 - **resolved** line 3564 (`scripts/smoke/test-world.ts:66`, reset-scheduled-events route) — fixed by d21c102aa (#1835).
@@ -3900,6 +3938,14 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2317 (`scheduling.controller.ts` private-poll side reads) — already gated on main (`scheduling-side-reads.helpers.ts:40,63`).
 - **resolved** line 2288 (`checkAutoBench` counted tentative assignments) — already fixed on main (`hasDisplaceableTentative`).
 - **partial** line 2346 (duplicate `checkAutoBench` copies) — only the live `signup-allocation` copy remains.
+### 2026-11-04 — chore/tech-debt-2026-11-04f (overnight tech-debt batch F, verified on 120955165)
+
+- **resolved** line 2724 (`web/src/lib/sentry-options.ts`, feedback reported "sent" after a 429 drop) — fixed on chore/tech-debt-2026-11-04f (347cd8b1e + f86b97922): only a 2xx counts as delivered, and only for envelopes that carry an `event` item (category rate limits on replay/transaction/session no longer fake a failure).
+- **resolved** line 3592 (`hub-page.tsx` `latchReleased`) — already compares `errorUpdatedAt` on main.
+- **resolved** line 1465 (`bottom-sheet.tsx` focus trap) — already uses `useTabTrap` on main.
+- **resolved** line 1936 (`EventDetailRoster.tsx`) — fixed on main by ROK-1694 (`:103-106`).
+- **resolved** line 1229 (search-param writes) — fixed on main by ROK-1525 (`useSearchParamWrite`).
+- **low** `web/src/lib/sentry-reporting-transport.ts:59` (`reportUndeliveredSends`, review r-td6-delta) — `@sentry/core` `transports/base.js:14-26` filters envelope items per category, so when only the `error` category is rate-limited the event item is dropped but an attached screenshot (`attachment` category) still goes out and gets a 2xx; feedback then reads as delivered. Pre-existing in round 1, narrow. Suggested: in `captureMessageVerified`, record the event ids of failed/filtered envelopes and compare with the id `Sentry.captureMessage` returns, or check the `x-sentry-rate-limits` state for `error` before trusting a 2xx.
 ### 2026-11-04 — resolved on chore/tech-debt-2026-11-04d (overnight batch D)
 
 - **resolved** line 2706 (`web/src/lib/api/preferences-api.ts`, debounced preference writes lost on unload) — fixed (9c37a5341).

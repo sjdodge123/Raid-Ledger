@@ -11,9 +11,10 @@ import {
   ButtonStyle,
   type ButtonInteraction,
 } from 'discord.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import { STEAM_NOMINATE_BUTTON_IDS } from '../discord-bot.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -92,6 +93,29 @@ export function buildNominationPrompt(game: {
   };
 }
 
+/** DM copy for a game that moderation (hidden/banned) keeps out of lineups. */
+export function notNominatableCopy(gameName: string): string {
+  return `**${gameName}** can't be nominated on this server.`;
+}
+
+/**
+ * True when the game may be nominated — i.e. it is neither hidden nor banned.
+ * Mirrors `validateGameExists` so the bot never offers a nomination the
+ * service will refuse. Kept apart from `findGameBySteamAppId` on purpose: a
+ * null there falls through to discovery and would create a duplicate row.
+ */
+export async function isGameNominatable(
+  db: Db,
+  gameId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(and(eq(schema.games.id, gameId), VISIBILITY_FILTER()))
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * Translate an error from LineupsService.nominate into the user-facing
  * DM copy prescribed by AC-6 and the button handler spec.
@@ -108,6 +132,9 @@ export function translateNominateError(err: unknown, gameName: string): string {
   if (/already nominated|uq_lineup_entry_game|duplicate/i.test(msg)) {
     return `**${gameName}** is already nominated for the current lineup.`;
   }
+  // `validateGameExists` refuses a hidden or banned game with the same 404 as
+  // a missing one. That refusal is permanent, so never tell the user to retry.
+  if (/Game not found/i.test(msg)) return notNominatableCopy(gameName);
   return `Could not nominate **${gameName}** right now. Please try again.`;
 }
 

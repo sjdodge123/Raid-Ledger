@@ -1844,6 +1844,18 @@ dialog (`web/src/components/hub/gallery/`). Approved mockup frames 1–6
   well, titled "Picture": no count, Prev / Next, chips, caption or footer; close + focus return as above. With
   `{ mediaId }` it opens the normal viewer on that item instead. Callers: the hero crest ("View hub picture"; its
   pencil badge is the separate "Change crest" target) and the BG3 "Where we are" screenshot.
+- **Zoom** (ROK-2075, `hub-gallery-stage.tsx` + `use-gallery-zoom.ts` / `gallery-zoom.math.ts`, both viewer and
+  single picture): pinch, Ctrl/⌘ + wheel (a trackpad pinch) and double-tap / double-click (fit ↔ 2×) zoom about the
+  fingers / pointer, 1× (fit) … 4×; one pointer drags the picture while zoomed, clamped to the well; a plain wheel and a
+  vertical finger still scroll the sheet (`touch-action: pan-y` at fit, `none` zoomed). Controls bottom-right inside the
+  well (`hub-gallery-zoom-controls.tsx`): a `role="group"` "Zoom" of three 44px `Button secondary iconOnly` —
+  "Zoom out" (`MinusIcon`), "Zoom in" (`PlusIcon`), "Fit picture" (`ArrowsPointingInIcon`), ×1.5 a step,
+  `aria-disabled` at 1× / 4× / fit (focus stays) — and an sr-only `aria-live` "Zoom 150%" / "Fit". Keys on the viewer:
+  `+` `=` `-` `_` `0`; ←/→/↑/↓ **pan while zoomed** and walk pictures **only at fit**; a horizontal touch swipe
+  (≥48px) walks pictures only at fit. Prev / Next stay clickable while zoomed. A new picture opens at fit; closing
+  drops the zoom. The well scales the `full` rendition (≤2048px) — there is no larger one to swap in.
+  **New pattern: zoom / pan inside the §4.29 viewer — the §4.25 `MapViewport` is plugin-owned (Valheim) and
+  texture-space, and the Core boundary guard forbids importing it.** DON'T import the map maths into Core.
 - **Footer** (bare buttons in the overlay's `OVERLAY_FOOTER_CLASS` bar, always shown): grid → `Add picture`, then
   `Load more` (24 a page) while `nextCursor`; viewer → `Back to all`, editors `Hide` (`warning-soft`) / `Unhide`
   (`success-soft`), and `Remove` (`destructive-soft`) on an item whose server-computed `canRemove` is true (the hub

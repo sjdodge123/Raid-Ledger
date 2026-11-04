@@ -25,6 +25,7 @@ import {
   stubUserLookup,
   stubBuildingLineup,
   stubGameNominated,
+  stubGameNominatable,
   stubAutoNominatePref,
   type MockContext,
 } from './steam-link.listener.spec-helpers';
@@ -72,6 +73,7 @@ function activeLineupTests() {
     stubUserLookup(ctx, { id: 7, discordId: 'discord-user-1' });
     stubBuildingLineup(ctx, { id: 123 });
     stubGameNominated(ctx, false);
+    stubGameNominatable(ctx, true);
     stubAutoNominatePref(ctx, false);
 
     const msg = createMessage(
@@ -139,6 +141,37 @@ function alreadyNominatedTests() {
     expect(hasComponents).toBe(false);
     expect(ctx.mockLineupsService.nominate).not.toHaveBeenCalled();
   });
+
+  // Backlog 2842: a hidden or banned game used to get the 4-button prompt (or
+  // be auto-nominated), and the service then refused it with a retry message.
+  it.each([false, true])(
+    'refuses a hidden/banned game up front, no buttons (auto-pref %s)',
+    async (autoPref) => {
+      stubGameLookup(ctx, { id: 42, name: 'Banned Game', steamAppId: 730 });
+      stubUserLookup(ctx, { id: 7, discordId: 'discord-user-1' });
+      stubBuildingLineup(ctx, { id: 123 });
+      stubGameNominated(ctx, false);
+      stubGameNominatable(ctx, false);
+      stubAutoNominatePref(ctx, autoPref);
+
+      const msg = createMessage(
+        ctx,
+        'https://store.steampowered.com/app/730/BG/',
+      );
+      await callHandleMessage(ctx.listener, msg);
+
+      expect(ctx.mockDmSend).toHaveBeenCalledTimes(1);
+      const call = ctx.mockDmSend.mock.calls[0]?.[0] as {
+        content?: string;
+        components?: unknown[];
+      };
+      expect(call?.content).toBe(
+        "**Banned Game** can't be nominated on this server.",
+      );
+      expect(call?.components ?? []).toHaveLength(0);
+      expect(ctx.mockLineupsService.nominate).not.toHaveBeenCalled();
+    },
+  );
 }
 
 /**
@@ -151,6 +184,7 @@ function nominationPromptTests() {
     stubUserLookup(ctx, { id: 7, discordId: 'discord-user-1' });
     stubBuildingLineup(ctx, { id: 123 });
     stubGameNominated(ctx, false);
+    stubGameNominatable(ctx, true);
     stubAutoNominatePref(ctx, false);
 
     const msg = createMessage(
@@ -237,6 +271,7 @@ function autoNominateTests() {
     stubUserLookup(ctx, { id: 7, discordId: 'discord-user-1' });
     stubBuildingLineup(ctx, { id: 123 });
     stubGameNominated(ctx, false);
+    stubGameNominatable(ctx, true);
     stubAutoNominatePref(ctx, true);
 
     const msg = createMessage(
@@ -273,6 +308,7 @@ function nominationCapTests() {
     stubUserLookup(ctx, { id: 7, discordId: 'discord-user-1' });
     stubBuildingLineup(ctx, { id: 123 });
     stubGameNominated(ctx, false);
+    stubGameNominatable(ctx, true);
     stubAutoNominatePref(ctx, true);
     ctx.mockLineupsService.nominate.mockRejectedValueOnce(
       new Error('Lineup has reached the 25-entry cap'),

@@ -7,9 +7,11 @@
  * "Nominations are not available." while the next Steam paste silently
  * auto-nominates off a choice whose only visible outcome was a failure.
  */
+import { NotFoundException } from '@nestjs/common';
 import { STEAM_NOMINATE_BUTTON_IDS } from '../discord-bot.constants';
 import {
   handleNominateButtonClick,
+  translateNominateError,
   type NominateButtonDeps,
 } from './steam-link.listener.nomination-flow';
 
@@ -109,5 +111,24 @@ describe('handleNominateButtonClick — auto-nominate guard order (ROK-1092)', (
 
     expect(deps.setAutoNominatePref).not.toHaveBeenCalled();
     expect(nominate).toHaveBeenCalled();
+  });
+});
+
+describe('translateNominateError — moderated game (backlog 2842)', () => {
+  it('says a hidden/banned game cannot be nominated, not "try again"', () => {
+    const copy = translateNominateError(
+      new NotFoundException('Game not found'),
+      'Banned Game',
+    );
+
+    expect(copy).toBe("**Banned Game** can't be nominated on this server.");
+  });
+
+  it('keeps the retry copy for an unknown failure', () => {
+    const copy = translateNominateError(new Error('boom'), 'Some Game');
+
+    expect(copy).toBe(
+      'Could not nominate **Some Game** right now. Please try again.',
+    );
   });
 });
