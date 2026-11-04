@@ -34,6 +34,8 @@ script in game, or `/reload` for you.**
 | Collector status | `/dev/v1/collectors` |
 | What changed in the client, and when (dev snapshot history) | `/dev/v1/ledgerlink/snapshot/history?flavor=<flavor>` |
 | One dev snapshot: build, `Enum.GameRule`, API presence, S1/S3/S9 | `/dev/v1/ledgerlink/snapshot?flavor=<flavor>&character=<characterKey>&at=<snapshotId>` |
+| BG3 saves the collector sees (redacted: `saveRef`, versions, party/co-op counts, fallback reason) | `/dev/v1/bg3/saves` |
+| One BG3 save's NewAge type table, decoder status, S0 checks and decoded party stats | `/dev/v1/bg3/saves/<saveRef>/structure` |
 
 Bodies are ≤16 KiB. When `next` is not `null`, fetch the next page with
 `?cursor=<next>` (keep the other query params).

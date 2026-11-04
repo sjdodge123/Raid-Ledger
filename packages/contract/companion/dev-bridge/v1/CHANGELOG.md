@@ -7,6 +7,22 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-03 (ROK-2077, additive)
+
+- New `$defs`: `bg3-saves` (`GET /dev/v1/bg3/saves`) and
+  `bg3-save-structure` (`GET /dev/v1/bg3/saves/<saveRef>/structure`), both
+  output mode — read-only, redacted views of the saves the `bg3-save`
+  collector sees. Redaction is structural: strict objects,
+  `[A-Za-z0-9_.]` identifiers, and a GUID guard on every string and key.
+  New bodies no existing producer emits; no existing `$defs` entry changes
+  (only the root `description` gains the BG3 refinements). Stays v1.
+- New golden fixtures `bg3-saves`, `bg3-save-structure{,--unsupported,--types-page}`
+  and thirteen invalid cases in `fixtures/invalid/` (extra key on a save row
+  or in `decoded`, GUID in
+  `statsId` / `type`, path in `statsId`, display name in `classId`,
+  non-hex `saveRef`, ability out of range, unknown `fallbackReason`,
+  missing `next`, both bodies over 16 KiB).
+
 ## v1 — 2026-11-03 (ROK-2072, additive)
 
 - `ledgerlink-snapshot` refinement: a D4 name-bearing call
