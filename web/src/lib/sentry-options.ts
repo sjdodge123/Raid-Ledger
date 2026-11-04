@@ -12,7 +12,7 @@ import {
     scrubReplayEventUrls,
     scrubTransactionEvent,
 } from './sentry-scrub-events';
-import { reportUndeliveredSends } from './sentry-reporting-transport';
+import { carriesEvent, reportUndeliveredSends } from './sentry-reporting-transport';
 
 /** `@sentry/react` does not re-export it; derive it from the hook it feeds. */
 type TransactionEvent = Parameters<NonNullable<Sentry.BrowserOptions['beforeSendTransaction']>>[0];
@@ -80,8 +80,8 @@ export function beforeBreadcrumbScrub(
 }
 
 /**
- * Wraps the fetch transport so an undelivered send (4xx/5xx, a rate-limit
- * drop with no status, a network error) is reported — see
+ * Wraps the fetch transport so an undelivered event envelope (4xx/5xx, a
+ * rate-limit drop with no status, a network error) is reported — see
  * sentry-reporting-transport.ts.
  */
 function makeReportingTransport(
@@ -90,7 +90,11 @@ function makeReportingTransport(
     return (options) => {
         const base = Sentry.makeFetchTransport(options);
         return {
-            send: reportUndeliveredSends((envelope) => base.send(envelope), onTransportFailure),
+            send: reportUndeliveredSends(
+                (envelope: Parameters<typeof base.send>[0]) => base.send(envelope),
+                onTransportFailure,
+                (envelope) => carriesEvent(envelope),
+            ),
             flush: (timeout) => base.flush(timeout),
         };
     };

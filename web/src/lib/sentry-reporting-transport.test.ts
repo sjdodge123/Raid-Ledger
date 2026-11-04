@@ -6,10 +6,17 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
+    carriesEvent,
     isDeliveredSend,
     reportUndeliveredSends,
+    type EnvelopeItemsView,
     type TransportSendResult,
 } from './sentry-reporting-transport';
+
+function envelopeOf(...types: string[]): EnvelopeItemsView {
+    return [{}, types.map((type) => [{ type }, {}] as const)];
+}
+const EVENT = envelopeOf('event');
 
 function sendReturning(...results: TransportSendResult[]) {
     const queue = [...results];
@@ -29,25 +36,42 @@ describe('isDeliveredSend', () => {
 describe('reportUndeliveredSends', () => {
     it('reports both the 429 and the status-less drop that follows it', async () => {
         const onFailure = vi.fn();
-        const send = reportUndeliveredSends(sendReturning({ statusCode: 429 }, {}), onFailure);
-        await send('first');
+        const send = reportUndeliveredSends(sendReturning({ statusCode: 429 }, {}), onFailure, carriesEvent);
+        await send(EVENT);
         expect(onFailure, 'the 429 answer is a failure').toHaveBeenCalledTimes(1);
-        await expect(send('second')).resolves.toEqual({});
+        await expect(send(EVENT)).resolves.toEqual({});
         expect(onFailure, 'the rate-limited drop with no status is a failure').toHaveBeenCalledTimes(2);
     });
 
     it('does not report a delivered (2xx) send', async () => {
         const onFailure = vi.fn();
-        const send = reportUndeliveredSends(sendReturning({ statusCode: 200 }), onFailure);
-        await expect(send('ok')).resolves.toEqual({ statusCode: 200 });
+        const send = reportUndeliveredSends(sendReturning({ statusCode: 200 }), onFailure, carriesEvent);
+        await expect(send(EVENT)).resolves.toEqual({ statusCode: 200 });
         expect(onFailure).not.toHaveBeenCalled();
     });
 
     it('reports a rejected send and still rethrows it to the SDK', async () => {
         const onFailure = vi.fn();
         const boom = new Error('network down');
-        const send = reportUndeliveredSends(() => Promise.reject(boom), onFailure);
-        await expect(send('x')).rejects.toBe(boom);
+        const send = reportUndeliveredSends(() => Promise.reject(boom), onFailure, carriesEvent);
+        await expect(send(EVENT)).rejects.toBe(boom);
         expect(onFailure).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a rate-limited replay/transaction/session drop (category limits)', async () => {
+        const onFailure = vi.fn();
+        const send = reportUndeliveredSends(sendReturning({}, {}, {}), onFailure, carriesEvent);
+        await send(envelopeOf('replay_event', 'replay_recording'));
+        await send(envelopeOf('transaction'));
+        await send(envelopeOf('session'));
+        expect(onFailure, 'only an event envelope can fail the feedback check').not.toHaveBeenCalled();
+    });
+});
+
+describe('carriesEvent', () => {
+    it('is true only when an item is an event', () => {
+        expect(carriesEvent(envelopeOf('event', 'attachment'))).toBe(true);
+        expect(carriesEvent(envelopeOf('transaction'))).toBe(false);
+        expect(carriesEvent(envelopeOf())).toBe(false);
     });
 });

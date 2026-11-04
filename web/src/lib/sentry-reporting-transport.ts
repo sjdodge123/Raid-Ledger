@@ -10,6 +10,11 @@
  *   without making a request, which used to read as success;
  * - a rejected send (network error), reported and then rethrown so the SDK
  *   still sees it.
+ *
+ * Only envelopes that carry an `event` item count. Rate limits are per
+ * category, so a replay, transaction or session envelope can be dropped
+ * locally (`{}`) while the feedback event itself got a 2xx; counting those
+ * would show delivered feedback as failed.
  */
 
 /** The part of a transport response this check reads. */
@@ -23,20 +28,35 @@ export function isDeliveredSend(result: TransportSendResult): boolean {
     return status !== undefined && status >= 200 && status < 300;
 }
 
-/** Wraps a transport `send` so every undelivered envelope calls `onFailure`. */
+/** The part of an envelope this check reads: each item's header `type`. */
+export type EnvelopeItemsView = readonly [
+    unknown,
+    ReadonlyArray<readonly [{ readonly type?: unknown }, ...unknown[]]>,
+];
+
+/** Whether an envelope carries an error/message event (not replay, span, session…). */
+export function carriesEvent(envelope: EnvelopeItemsView): boolean {
+    return envelope[1].some(([header]) => header.type === 'event');
+}
+
+/**
+ * Wraps a transport `send` so every undelivered envelope that `counts`
+ * calls `onFailure`.
+ */
 export function reportUndeliveredSends<E, R extends TransportSendResult>(
     send: (envelope: E) => PromiseLike<R>,
     onFailure: () => void,
+    counts: (envelope: E) => boolean,
 ): (envelope: E) => Promise<R> {
     return async (envelope) => {
         let result: R;
         try {
             result = await send(envelope);
         } catch (err) {
-            onFailure();
+            if (counts(envelope)) onFailure();
             throw err;
         }
-        if (!isDeliveredSend(result)) onFailure();
+        if (!isDeliveredSend(result) && counts(envelope)) onFailure();
         return result;
     };
 }
