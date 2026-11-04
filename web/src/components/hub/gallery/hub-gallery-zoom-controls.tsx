@@ -7,9 +7,11 @@
 import type { ComponentType, JSX, SVGProps } from 'react';
 import { ArrowsPointingInIcon, MinusIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
+import { isAtFit } from './gallery-zoom.math';
 
 export interface HubGalleryZoomControlsProps {
-    zoom: number;
+    /** The settled zoom (`announcedZoom`): the live region must not queue a message per pinch / wheel frame. */
+    readoutZoom: number;
     atFit: boolean;
     canZoomIn: boolean;
     canZoomOut: boolean;
@@ -19,8 +21,8 @@ export interface HubGalleryZoomControlsProps {
 }
 
 /** What the live region reads: "Fit" at fit, else the zoom as a whole percentage. */
-function zoomReadout(zoom: number, atFit: boolean): string {
-    return atFit ? 'Fit' : `Zoom ${Math.round(zoom * 100)}%`;
+function zoomReadout(zoom: number): string {
+    return isAtFit({ zoom }) ? 'Fit' : `Zoom ${Math.round(zoom * 100)}%`;
 }
 
 interface ZoomButtonProps {
@@ -41,14 +43,14 @@ function ZoomButton({ label, Icon, enabled, run }: ZoomButtonProps): JSX.Element
 }
 
 export function HubGalleryZoomControls(props: HubGalleryZoomControlsProps): JSX.Element {
-    const { zoom, atFit, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } = props;
+    const { readoutZoom, atFit, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } = props;
     // The wrapper takes the absolute position: Button's base classes carry `relative`.
     return (
         <div role="group" aria-label="Zoom" data-testid="hub-gallery-zoom-controls" className="absolute bottom-2 right-2 flex gap-1">
             <ZoomButton label="Zoom out" Icon={MinusIcon} enabled={canZoomOut} run={zoomOut} />
             <ZoomButton label="Zoom in" Icon={PlusIcon} enabled={canZoomIn} run={zoomIn} />
             <ZoomButton label="Fit picture" Icon={ArrowsPointingInIcon} enabled={!atFit} run={fit} />
-            <span className="sr-only" aria-live="polite" data-testid="hub-gallery-zoom-readout">{zoomReadout(zoom, atFit)}</span>
+            <span className="sr-only" aria-live="polite" data-testid="hub-gallery-zoom-readout">{zoomReadout(readoutZoom)}</span>
         </div>
     );
 }

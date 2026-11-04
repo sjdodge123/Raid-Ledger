@@ -46,7 +46,7 @@ export interface HubGalleryStageProps {
 
 export function HubGalleryStage({ resetKey, onSwipe, testId, className, mediaId, picture, placeholder, header, overlay, footer }: HubGalleryStageProps): JSX.Element {
     const region = useFocusRegionOnMount();
-    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, atFit, animating, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
+    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, announcedZoom, atFit, animating, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
         useGalleryZoom(onSwipe === undefined ? { resetKey } : { resetKey, onSwipe });
     const motion = animating ? ' motion-safe:transition-transform motion-safe:duration-150' : '';
     return (
@@ -58,7 +58,7 @@ export function HubGalleryStage({ resetKey, onSwipe, testId, className, mediaId,
                     : <img ref={bindContent} src={picture.src} alt={picture.alt} onError={picture.onError} style={contentStyle} draggable={false}
                         className={`max-h-full max-w-full select-none object-contain${motion}`} />}
                 {overlay}
-                <HubGalleryZoomControls zoom={zoom} atFit={atFit} canZoomIn={canZoomIn} canZoomOut={canZoomOut} zoomIn={zoomIn} zoomOut={zoomOut} fit={fit} />
+                <HubGalleryZoomControls readoutZoom={announcedZoom} atFit={atFit} canZoomIn={canZoomIn} canZoomOut={canZoomOut} zoomIn={zoomIn} zoomOut={zoomOut} fit={fit} />
             </div>
             {footer}
         </div>

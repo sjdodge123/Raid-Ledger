@@ -46,6 +46,8 @@ export interface GalleryZoomApi {
     /** On the content: `translate() scale()` about its centre. */
     contentStyle: CSSProperties;
     zoom: number;
+    /** The zoom for the live readout: discrete steps and settled gestures only, so a pinch is not read frame by frame. */
+    announcedZoom: number;
     atFit: boolean;
     /** The last change was a discrete step — add `motion-safe:transition-transform` for it. */
     animating: boolean;
@@ -220,7 +222,7 @@ export function useGalleryZoom({ resetKey, onSwipe }: GalleryZoomOptions): Galle
         bindStage, bindContent, handlers, onKeyDown, ...commands,
         stageStyle: { touchAction: atFit ? 'pan-y' : 'none', cursor: atFit ? 'auto' : 'grab' },
         contentStyle: { transform: `translate(${state.x}px, ${state.y}px) scale(${state.zoom})`, transformOrigin: 'center center' },
-        zoom: state.zoom, atFit, animating: state.animate,
+        zoom: state.zoom, announcedZoom: state.announced, atFit, animating: state.animate,
         canZoomIn: state.zoom < GALLERY_ZOOM_MAX - 1e-3, canZoomOut: !atFit,
     };
 }

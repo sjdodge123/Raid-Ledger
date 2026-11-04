@@ -42,6 +42,8 @@ export interface ZoomState {
     fit: Size;
     /** The last change was a discrete step (button, key, double-tap) — the caller may animate it. */
     animate: boolean;
+    /** The zoom a screen reader hears: set by discrete steps and when a gesture settles, never per pinch/wheel frame. */
+    announced: number;
 }
 
 export type ZoomAction =
@@ -58,7 +60,7 @@ export type ZoomAction =
 const EMPTY: Size = { width: 0, height: 0 };
 const FIT_EPSILON = 1e-3;
 
-export const INITIAL_ZOOM_STATE: ZoomState = { zoom: 1, x: 0, y: 0, view: EMPTY, fit: EMPTY, animate: false };
+export const INITIAL_ZOOM_STATE: ZoomState = { zoom: 1, x: 0, y: 0, view: EMPTY, fit: EMPTY, animate: false, announced: 1 };
 
 export function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
@@ -105,7 +107,7 @@ function fitState(state: ZoomState): ZoomState {
     return { ...state, zoom: 1, x: 0, y: 0 };
 }
 
-export function zoomReducer(state: ZoomState, action: ZoomAction): ZoomState {
+function step(state: ZoomState, action: ZoomAction): ZoomState {
     switch (action.type) {
         case 'measure':
             return clampZoomState({ ...state, view: action.view, fit: action.fit, animate: false });
@@ -124,6 +126,20 @@ export function zoomReducer(state: ZoomState, action: ZoomAction): ZoomState {
         case 'reset':
             return { ...fitState(state), animate: false };
     }
+}
+
+/** A continuous frame (pinch, ctrl-wheel, drag) keeps the old `announced`; a discrete step or a settle updates it. */
+function announces(action: ZoomAction): boolean {
+    return action.type === 'zoomBy' ? action.animate === true : action.type !== 'pinch' && action.type !== 'pan' && action.type !== 'measure';
+}
+
+const SAME_KEYS = ['zoom', 'x', 'y', 'view', 'fit', 'animate', 'announced'] as const;
+
+export function zoomReducer(state: ZoomState, action: ZoomAction): ZoomState {
+    const stepped = step(state, action);
+    const next = announces(action) && stepped.announced !== stepped.zoom ? { ...stepped, announced: stepped.zoom } : stepped;
+    // Unchanged (a drag at fit clamps to nothing): keep the old object so React skips the re-render.
+    return SAME_KEYS.every((k) => Object.is(next[k], state[k])) ? state : next;
 }
 
 /** Midpoint + distance of two points (already relative to the stage centre). */

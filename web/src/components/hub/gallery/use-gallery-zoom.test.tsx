@@ -23,7 +23,7 @@ interface HarnessProps {
 
 function Harness({ resetKey, onSwipe, onParentKey }: HarnessProps): JSX.Element {
     // Destructure: the React compiler treats an object whose member feeds a `ref` prop as a ref.
-    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, atFit, animating, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
+    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, announcedZoom, atFit, animating, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
         useGalleryZoom({ resetKey, ...(onSwipe === undefined ? {} : { onSwipe }) });
     return (
         <div data-testid="region" tabIndex={-1} onKeyDown={onParentKey}>
@@ -31,7 +31,7 @@ function Harness({ resetKey, onSwipe, onParentKey }: HarnessProps): JSX.Element 
                 <div data-testid="stage" ref={bindStage} style={stageStyle} {...handlers}>
                     <button type="button">Stage control</button>
                     <div data-testid="content" ref={bindContent} style={contentStyle} data-zoom={zoom.toFixed(2)} data-fit={String(atFit)}
-                        data-animating={String(animating)} />
+                        data-animating={String(animating)} data-announced={announcedZoom.toFixed(2)} />
                 </div>
                 <button type="button" onClick={zoomIn} disabled={!canZoomIn}>Zoom in</button>
                 <button type="button" onClick={zoomOut} disabled={!canZoomOut}>Zoom out</button>
@@ -94,6 +94,21 @@ describe('useGalleryZoom (ROK-2075)', () => {
         expect(zoomOf()).toBe('1.00');
         expect(fireEvent.wheel(stage, { deltaY: -20, ctrlKey: true })).toBe(false);
         expect(Number(zoomOf())).toBeGreaterThan(1);
+    });
+
+    it('a pinch is announced once, when it settles — never per frame', () => {
+        render(<Harness resetKey={1} />);
+        const stage = screen.getByTestId('stage');
+        const announced = (): string | null => screen.getByTestId('content').getAttribute('data-announced');
+        fireEvent.pointerDown(stage, { pointerId: 1, pointerType: 'touch', button: 0, clientX: 150, clientY: 150 });
+        fireEvent.pointerDown(stage, { pointerId: 2, pointerType: 'touch', button: 0, clientX: 250, clientY: 150 });
+        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 150 });
+        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
+        expect(zoomOf()).toBe('2.00');
+        expect(announced(), 'mid-pinch: the readout holds').toBe('1.00');
+        fireEvent.pointerUp(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
+        fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 150 });
+        expect(announced(), 'settled: the readout takes the final zoom').toBe('2.00');
     });
 
     it('a double-click toggles fit ↔ 2×', () => {
