@@ -14,6 +14,8 @@ import {
   type InstanceDetailCacheEntry,
   REALM_CACHE_TTL,
   INSTANCE_CACHE_TTL,
+  INSTANCE_DETAIL_CACHE_MAX,
+  INSTANCE_LIST_CACHE_MAX,
 } from './blizzard.constants';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import * as profileH from './blizzard-profile.helpers';
@@ -228,6 +230,7 @@ export class BlizzardService {
         cache: this.instanceListCache,
         key: `${region}:${gameVariant}`,
         ttlMs: INSTANCE_CACHE_TTL,
+        maxEntries: INSTANCE_LIST_CACHE_MAX,
         fetcher: async () => {
           const token = await this.auth.getAccessToken(region);
           return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
@@ -256,6 +259,7 @@ export class BlizzardService {
       cache: this.instanceDetailCache,
       key: `${region}:${gameVariant}:${instanceId}`,
       ttlMs: INSTANCE_CACHE_TTL,
+      maxEntries: INSTANCE_DETAIL_CACHE_MAX,
       fetcher: async () => {
         const token = await this.auth.getAccessToken(region);
         return instFetch.fetchInstanceDetailFromApi(
