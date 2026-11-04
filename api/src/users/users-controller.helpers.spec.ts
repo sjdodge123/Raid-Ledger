@@ -11,6 +11,7 @@ import {
   parsePlayHistory,
   parseTzOffset,
   resolveSources,
+  resolveWeekStart,
   buildPaginatedMeta,
 } from './users-controller.helpers';
 
@@ -207,5 +208,33 @@ describe('Regression: ROK-1427 — parseTzOffset clamping', () => {
     expect(() =>
       new Date(Date.now() - huge * 60 * 1000).toISOString(),
     ).not.toThrow();
+  });
+});
+
+describe('Regression: backlog 2818 — resolveWeekStart year bounds', () => {
+  it('accepts an ISO date inside 2000-2100', () => {
+    expect(resolveWeekStart('2026-03-09').toISOString()).toBe(
+      '2026-03-09T00:00:00.000Z',
+    );
+    expect(resolveWeekStart('2000-01-01').getUTCFullYear()).toBe(2000);
+    expect(resolveWeekStart('2100-12-31').getUTCFullYear()).toBe(2100);
+  });
+
+  it('rejects a year before 2000 with BadRequest', () => {
+    expect(() => resolveWeekStart('1500-01-01')).toThrow(BadRequestException);
+    expect(() => resolveWeekStart('1999-12-31T12:00:00Z')).toThrow(
+      'Invalid week parameter',
+    );
+  });
+
+  it('rejects a year after 2100 with BadRequest', () => {
+    expect(() => resolveWeekStart('9999-01-01')).toThrow(BadRequestException);
+    expect(() => resolveWeekStart('2101-01-01')).toThrow(
+      'Invalid week parameter',
+    );
+  });
+
+  it('still rejects an unparseable week', () => {
+    expect(() => resolveWeekStart('not-a-date')).toThrow(BadRequestException);
   });
 });

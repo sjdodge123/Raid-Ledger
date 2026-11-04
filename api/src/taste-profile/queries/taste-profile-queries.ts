@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import { TIER_DESCRIPTIONS } from '../archetype-copy';
 import { normalizeDimensions } from '../dimensions.helpers';
+import { ACTIVE_MEMBER_SQL_AND } from '../../users/users-active.helpers';
 import {
   hasVectorSignal,
   similarityFromDistance,
@@ -63,6 +64,19 @@ function emptyArchetype(): ArchetypeDto {
       titles: [],
     },
   };
+}
+
+/** True when the user exists and is deactivated (ROK-1260). */
+export async function isUserDeactivated(
+  db: Db,
+  userId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ deactivatedAt: schema.users.deactivatedAt })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return row?.deactivatedAt != null;
 }
 
 export async function getTasteProfile(
@@ -144,7 +158,7 @@ export async function findSimilarPlayers(
     FROM player_taste_vectors v
     JOIN users u ON u.id = v.user_id
     WHERE v.user_id <> ${userId}
-      AND vector_norm(v.vector) > 0
+      AND vector_norm(v.vector) > 0${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
     ORDER BY distance ASC
     LIMIT ${clamped}
   `);
@@ -175,7 +189,7 @@ async function topCoPlayPartners(
       u.username, u.avatar, p.session_count, p.total_minutes, p.last_played_at
     FROM player_co_play p
     JOIN users u ON u.id = CASE WHEN user_id_a = ${userId} THEN user_id_b ELSE user_id_a END
-    WHERE user_id_a = ${userId} OR user_id_b = ${userId}
+    WHERE (user_id_a = ${userId} OR user_id_b = ${userId})${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
     ORDER BY p.session_count DESC, p.total_minutes DESC
     LIMIT 10
   `);
