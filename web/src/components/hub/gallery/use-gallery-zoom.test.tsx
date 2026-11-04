@@ -23,14 +23,15 @@ interface HarnessProps {
 
 function Harness({ resetKey, onSwipe, onParentKey }: HarnessProps): JSX.Element {
     // Destructure: the React compiler treats an object whose member feeds a `ref` prop as a ref.
-    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, atFit, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
+    const { bindStage, bindContent, handlers, onKeyDown, stageStyle, contentStyle, zoom, atFit, animating, canZoomIn, canZoomOut, zoomIn, zoomOut, fit } =
         useGalleryZoom({ resetKey, ...(onSwipe === undefined ? {} : { onSwipe }) });
     return (
         <div data-testid="region" tabIndex={-1} onKeyDown={onParentKey}>
             <div data-testid="inner" tabIndex={-1} onKeyDown={onKeyDown}>
                 <div data-testid="stage" ref={bindStage} style={stageStyle} {...handlers}>
                     <button type="button">Stage control</button>
-                    <div data-testid="content" ref={bindContent} style={contentStyle} data-zoom={zoom.toFixed(2)} data-fit={String(atFit)} />
+                    <div data-testid="content" ref={bindContent} style={contentStyle} data-zoom={zoom.toFixed(2)} data-fit={String(atFit)}
+                        data-animating={String(animating)} />
                 </div>
                 <button type="button" onClick={zoomIn} disabled={!canZoomIn}>Zoom in</button>
                 <button type="button" onClick={zoomOut} disabled={!canZoomOut}>Zoom out</button>
@@ -144,9 +145,11 @@ describe('useGalleryZoom gestures + keys (ROK-2075)', () => {
         const { rerender } = render(<Harness resetKey={1} />);
         fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
         expect(zoomOf()).toBe('1.50');
+        expect(screen.getByTestId('content').getAttribute('data-animating')).toBe('true');
         rerender(<Harness resetKey={2} />);
         expect(zoomOf()).toBe('1.00');
         expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+        expect(screen.getByTestId('content').getAttribute('data-animating'), 'a reset must not animate the next picture').toBe('false');
     });
 
     it('keys: + zooms, an arrow pans while zoomed without reaching the parent, and passes through at fit', () => {

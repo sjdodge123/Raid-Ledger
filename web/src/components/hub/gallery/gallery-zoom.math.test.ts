@@ -65,6 +65,7 @@ describe('gallery zoom maths (ROK-2075)', () => {
 
     it('fit resets zoom and offset', () => {
         expect(zoomReducer({ ...MEASURED, zoom: 3, x: 90, y: -40 }, { type: 'fit' })).toMatchObject({ zoom: 1, x: 0, y: 0 });
+        expect(zoomReducer({ ...MEASURED, zoom: 3, x: 90, animate: true }, { type: 'reset' }), 'a new picture never animates').toMatchObject({ zoom: 1, x: 0, animate: false });
     });
 
     it('a re-measure keeps the zoom and re-clamps the offset to the new stage', () => {

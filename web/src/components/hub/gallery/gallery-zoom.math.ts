@@ -51,7 +51,9 @@ export type ZoomAction =
     | { type: 'pan'; dx: number; dy: number; animate?: boolean }
     | { type: 'pinch'; before: PinchGeometry; after: PinchGeometry }
     | { type: 'settle' }
-    | { type: 'fit' };
+    | { type: 'fit' }
+    /** A new picture: back to fit in the same paint, never animated (the next `<img>` must not zoom out). */
+    | { type: 'reset' };
 
 const EMPTY: Size = { width: 0, height: 0 };
 const FIT_EPSILON = 1e-3;
@@ -119,6 +121,8 @@ export function zoomReducer(state: ZoomState, action: ZoomAction): ZoomState {
             return state.zoom < GALLERY_ZOOM_SNAP && !isAtFit(state) ? { ...fitState(state), animate: true } : state;
         case 'fit':
             return { ...fitState(state), animate: true };
+        case 'reset':
+            return { ...fitState(state), animate: false };
     }
 }
 

@@ -197,7 +197,7 @@ function useResetOn(resetKey: unknown, dispatch: (a: ZoomAction) => void): void 
     const [seen, setSeen] = useState(resetKey);
     if (!Object.is(seen, resetKey)) {
         setSeen(resetKey);
-        dispatch({ type: 'fit' });
+        dispatch({ type: 'reset' });
     }
 }
 
