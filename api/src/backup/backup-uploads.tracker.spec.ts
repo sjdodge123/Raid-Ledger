@@ -7,7 +7,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { UploadsArchiveTracker } from './backup-uploads.tracker';
+import { ConflictException } from '@nestjs/common';
+
+import {
+  ARCHIVE_RUNNING_MESSAGE,
+  UploadsArchiveTracker,
+} from './backup-uploads.tracker';
 import { removeStalePartialArchives } from './backup-uploads.wiring';
 import type { UploadsArchiveResult } from './backup-uploads.helpers';
 
@@ -124,5 +129,79 @@ describe('removeStalePartialArchives (504 review MINOR 5)', () => {
     const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
     removeStalePartialArchives(dir, logger);
     expect(fs.readdirSync(dir).sort()).toEqual([DUMP, TAR].sort());
+  });
+});
+
+describe('UploadsArchiveTracker.exclusive — concurrent Create (504 review MINOR 14)', () => {
+  it('a second Create while the first still dumps is a 409; the guard clears once it settles', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    let finishDump: (name: string) => void = () => undefined;
+    const dump = jest.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finishDump = resolve;
+        }),
+    );
+    const first = tracker.exclusive(dump);
+    await expect(tracker.exclusive(dump)).rejects.toThrow(
+      new ConflictException(ARCHIVE_RUNNING_MESSAGE),
+    );
+    expect(dump).toHaveBeenCalledTimes(1);
+    finishDump(DUMP);
+    await expect(first).resolves.toBe(DUMP);
+    await expect(
+      tracker.exclusive(() => Promise.resolve('next')),
+    ).resolves.toBe('next');
+  });
+
+  it('a dump that fails releases the guard', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    await expect(
+      tracker.exclusive(() => Promise.reject(new Error('pg_dump failed'))),
+    ).rejects.toThrow('pg_dump failed');
+    expect(() => tracker.assertIdle()).not.toThrow();
+  });
+});
+
+describe('UploadsArchiveTracker — a rejected link never wedges the chain (504 review MINOR 15)', () => {
+  it('when the failure path itself throws, the dump lists failed and the next archive still runs', async () => {
+    const logger = {
+      error: jest.fn(() => {
+        throw new Error('logger down');
+      }),
+    };
+    const tracker = new UploadsArchiveTracker(dir, logger);
+    const first = tracker.run(DUMP, () => Promise.reject(new Error('boom')));
+    const OTHER = 'raid_ledger_2026-11-04_100005.dump';
+    const written: UploadsArchiveResult = {
+      status: 'written',
+      path: path.join(dir, 'other.uploads.tar'),
+    };
+    const second = tracker.run(OTHER, () => Promise.resolve(written));
+    await expect(first).resolves.toMatchObject({
+      status: 'failed',
+      reason: 'tar-failed',
+    });
+    await expect(second).resolves.toEqual(written);
+    expect(tracker.stateOf(DUMP)).toEqual({
+      state: 'failed',
+      error: 'Archive failed — see server logs',
+    });
+    expect(() => tracker.assertIdle()).not.toThrow();
+  });
+
+  it('lists a timed-out archive with its own fixed copy', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    await tracker.run(DUMP, () =>
+      Promise.resolve<UploadsArchiveResult>({
+        status: 'failed',
+        reason: 'timeout',
+        detail: 'tar still running after 180 min — killed',
+      }),
+    );
+    expect(tracker.stateOf(DUMP)).toEqual({
+      state: 'failed',
+      error: 'Archive took too long and was stopped — see server logs',
+    });
   });
 });

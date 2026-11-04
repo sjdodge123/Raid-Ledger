@@ -27,7 +27,9 @@ export interface TarDeadline {
 /** The tar outlived its deadline and was killed. */
 export class TarTimeoutError extends Error {
   constructor(timeoutMs: number) {
-    super(`tar killed after ${Math.round(timeoutMs / 60_000)} min (timeout)`);
+    super(
+      `tar still running after ${Math.round(timeoutMs / 60_000)} min — killed`,
+    );
     this.name = 'TarTimeoutError';
   }
 }

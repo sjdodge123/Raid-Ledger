@@ -24,6 +24,10 @@ import {
   archiveUploads,
   type UploadsArchiveResult,
 } from './backup-uploads.helpers';
+import {
+  UPLOADS_TAR_TIMEOUT_MS,
+  type TarRunOptions,
+} from './backup-uploads.deadline';
 
 jest.mock('node:fs');
 jest.mock('@sentry/nestjs', () => ({
@@ -386,6 +390,80 @@ describe('uploads archives run one at a time (504 review MAJOR 1)', () => {
       'rotate-daily',
       'rotate-uploads',
     ]);
+  });
+});
+
+describe('two Creates at the same moment (504 review MINOR 14)', () => {
+  it('the second is a 409 while the first still dumps; only one pg_dump runs', async () => {
+    const first = service.createDailyBackup();
+    const second = service.createDailyBackup();
+    await expect(second).rejects.toThrow(
+      new ConflictException(
+        'An uploads archive is still running — try again when it finishes',
+      ),
+    );
+    await expect(first).resolves.toMatch(/raid_ledger_.+\.dump$/);
+    expect(events.filter((e) => e === 'pg_dump')).toHaveLength(1);
+    await flushBackground();
+  });
+});
+
+describe('a hung uploads tar (504 review MAJOR 13)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** The REAL archiveUploads (default deadline) around a tar that never exits. */
+  function tarHangs(seen: TarRunOptions[]): void {
+    const real = jest.requireActual<{ archiveUploads: typeof archiveUploads }>(
+      './backup-uploads.helpers',
+    ).archiveUploads;
+    (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+    mockArchive.mockImplementation((input) =>
+      real({
+        ...input,
+        measure: () => 0,
+        statfs: () => ({ bavail: Number.MAX_SAFE_INTEGER, bsize: 1 }),
+        runTar: (_args, opts) => {
+          seen.push(opts);
+          events.push('tar');
+          return new Promise(() => undefined);
+        },
+      }),
+    );
+  }
+
+  it('is SIGKILLed at the deadline; the cron still rotates, then fails, and Create works again', async () => {
+    const seen: TarRunOptions[] = [];
+    tarHangs(seen);
+    jest.useFakeTimers();
+    const cron = service.handleDailyBackup();
+    const outcome = expect(cron).rejects.toThrow(
+      /uploads archive failed \(timeout: tar still running after 180 min — killed\)/,
+    );
+    await jest.advanceTimersByTimeAsync(UPLOADS_TAR_TIMEOUT_MS - 1);
+    expect(events).toEqual(['pg_dump', 'tar']);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('uploads archive still running after 30 min'),
+      'warning',
+    );
+    await jest.advanceTimersByTimeAsync(1);
+    await outcome;
+    expect(seen[0]?.killSignal).toBe('SIGKILL');
+    expect(seen[0]?.signal.aborted).toBe(true);
+    expect(events).toEqual([
+      'pg_dump',
+      'tar',
+      'rotate-daily',
+      'rotate-uploads',
+    ]);
+    expect(rotateMigrationDir).toHaveBeenCalledTimes(1);
+
+    jest.useRealTimers();
+    archiveReturns({ status: 'written', path: '/next.uploads.tar' });
+    await expect(service.createDailyBackup()).resolves.toMatch(/\.dump$/);
+    await flushBackground();
+    expect(events.slice(-2)).toEqual(['pg_dump', 'archive']);
   });
 });
 
