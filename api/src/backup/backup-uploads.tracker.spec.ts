@@ -8,6 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { UploadsArchiveTracker } from './backup-uploads.tracker';
+import { removeStalePartialArchives } from './backup-uploads.wiring';
 import type { UploadsArchiveResult } from './backup-uploads.helpers';
 
 const DUMP = 'raid_ledger_2026-11-04_100000.dump';
@@ -21,6 +22,16 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+/** The resolver of the `i`th archive started; throws if it never started. */
+function started(
+  finishers: Array<(r: UploadsArchiveResult) => void>,
+  i: number,
+): (r: UploadsArchiveResult) => void {
+  const finish = finishers[i];
+  if (!finish) throw new Error(`archive #${i + 1} never started`);
+  return finish;
+}
 
 describe('UploadsArchiveTracker', () => {
   it('a second run for the same dump joins the running archive instead of starting another', async () => {
@@ -43,6 +54,53 @@ describe('UploadsArchiveTracker', () => {
     });
   });
 
+  it('archives for DIFFERENT dumps run one at a time, each after the previous settles', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    const finishers: Array<(r: UploadsArchiveResult) => void> = [];
+    const archive = jest.fn(
+      () =>
+        new Promise<UploadsArchiveResult>((resolve) => {
+          finishers.push(resolve);
+        }),
+    );
+    const OTHER = 'raid_ledger_2026-11-04_100005.dump';
+    void tracker.run(DUMP, archive);
+    const second = tracker.run(OTHER, archive);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(archive).toHaveBeenCalledTimes(1);
+    expect(tracker.stateOf(OTHER)).toEqual({ state: 'archiving' });
+
+    started(finishers, 0)({ status: 'skipped', reason: 'missing-root' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(archive).toHaveBeenCalledTimes(2);
+    started(finishers, 1)({ status: 'skipped', reason: 'missing-root' });
+    await tracker.whenIdle();
+    await expect(second).resolves.toEqual({
+      status: 'skipped',
+      reason: 'missing-root',
+    });
+    expect(tracker.stateOf(OTHER)).toBeUndefined();
+  });
+
+  it('a failure lists a fixed message per reason — never the raw detail with server paths', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    await tracker.run(DUMP, () =>
+      Promise.resolve<UploadsArchiveResult>({
+        status: 'failed',
+        reason: 'measure-failed',
+        detail: "EACCES: permission denied, scandir '/data/uploads/hub-media'",
+      }),
+    );
+    expect(tracker.stateOf(DUMP)).toEqual({
+      state: 'failed',
+      error: 'Could not measure the uploads folder — see server logs',
+    });
+    tracker.forget(DUMP);
+    expect(tracker.stateOf(DUMP)).toBeUndefined();
+  });
+});
+
+describe('UploadsArchiveTracker — after a restart', () => {
   it('after a restart, an archive cut short (only .partial on disk) is not listed as archiving or ready', () => {
     fs.writeFileSync(path.join(dir, `${TAR}.partial`), 'half');
     expect(new UploadsArchiveTracker(dir).stateOf(DUMP)).toBeUndefined();
@@ -54,5 +112,15 @@ describe('UploadsArchiveTracker', () => {
       state: 'ready',
       sizeBytes: 4,
     });
+  });
+});
+
+describe('removeStalePartialArchives (504 review MINOR 5)', () => {
+  it('removes only *.uploads.tar.partial left by a restart', () => {
+    for (const name of [`${TAR}.partial`, TAR, DUMP])
+      fs.writeFileSync(path.join(dir, name), 'x');
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    removeStalePartialArchives(dir, logger);
+    expect(fs.readdirSync(dir).sort()).toEqual([DUMP, TAR].sort());
   });
 });

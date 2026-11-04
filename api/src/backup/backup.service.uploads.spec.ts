@@ -6,7 +6,7 @@
  */
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as Sentry from '@sentry/nestjs';
@@ -301,35 +301,26 @@ describe('createDailyBackup — uploads archive in the background (504 fix)', ()
     expect(archiveStateOf(dump)).toEqual({ state: 'ready', sizeBytes: 4096 });
   });
 
-  it('lists a failed archive as failed with its reason and reports it to Sentry', async () => {
-    archivePending();
-    const dump = path.basename(await service.createDailyBackup());
-    listing(dump);
-    settleArchive({ status: 'failed', reason: 'tar-failed', detail: 'exit 2' });
-    await flushBackground();
-    expect(archiveStateOf(dump)).toEqual({
-      state: 'failed',
-      error: 'uploads archive failed (tar-failed: exit 2)',
-    });
-    expect(Sentry.captureMessage).toHaveBeenCalledWith(
-      'uploads archive failed (tar-failed: exit 2)',
-      'error',
-    );
-  });
-
   it('an archive that throws never escapes the request: logged, captured, listed failed', async () => {
     archivePending();
     const dump = path.basename(await service.createDailyBackup());
     listing(dump);
-    failArchive(new Error('EIO reading uploads'));
+    failArchive(new Error("EIO reading '/data/uploads/hub-media'"));
     await flushBackground();
     expect(Sentry.captureException).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'EIO reading uploads' }),
+      expect.objectContaining({
+        message: "EIO reading '/data/uploads/hub-media'",
+      }),
       expect.anything(),
+    );
+    // Reported once: the captured exception, not a second captureMessage.
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("EIO reading '/data/uploads/hub-media'"),
     );
     expect(archiveStateOf(dump)).toEqual({
       state: 'failed',
-      error: 'uploads archive failed (tar-failed: EIO reading uploads)',
+      error: 'Archive failed — see server logs',
     });
   });
 });
@@ -346,5 +337,111 @@ describe('listBackups — uploads archive state', () => {
     const [entry] = service.listBackups();
     expect(entry?.type).toBe('migration');
     expect(entry && 'uploadsArchive' in entry).toBe(false);
+  });
+});
+
+describe('uploads archives run one at a time (504 review MAJOR 1)', () => {
+  it('a manual Create while an archive runs is a 409 before any dump', async () => {
+    archivePending();
+    await service.createDailyBackup();
+    await expect(service.createDailyBackup()).rejects.toThrow(
+      new ConflictException(
+        'An uploads archive is still running — try again when it finishes',
+      ),
+    );
+    expect(events).toEqual(['pg_dump']);
+    expect(mockArchive).toHaveBeenCalledTimes(1);
+  });
+
+  it('Create is allowed again once the running archive settles', async () => {
+    archivePending();
+    await service.createDailyBackup();
+    settleArchive({ status: 'written', path: '/x.uploads.tar' });
+    await flushBackground();
+    await service.createDailyBackup();
+    expect(events).toEqual(['pg_dump', 'pg_dump']);
+  });
+
+  it('the cron dumps, waits for a running archive, then archives and rotates', async () => {
+    archivePending();
+    await service.createDailyBackup();
+    await flushBackground();
+    const finishManual = settleArchive;
+
+    const cron = service.handleDailyBackup();
+    await flushBackground();
+    expect(events).toEqual(['pg_dump', 'pg_dump']);
+    expect(mockArchive).toHaveBeenCalledTimes(1);
+
+    finishManual({ status: 'written', path: '/manual.uploads.tar' });
+    await flushBackground();
+    expect(mockArchive).toHaveBeenCalledTimes(2);
+    expect(events).not.toContain('rotate-uploads');
+
+    settleArchive({ status: 'written', path: '/cron.uploads.tar' });
+    await cron;
+    expect(events).toEqual([
+      'pg_dump',
+      'pg_dump',
+      'rotate-daily',
+      'rotate-uploads',
+    ]);
+  });
+});
+
+describe('deleteBackup while its archive runs (504 review MAJOR 2)', () => {
+  it('is a 409 and deletes nothing; after the archive settles it deletes dump and archive', async () => {
+    archivePending();
+    const dump = path.basename(await service.createDailyBackup());
+    (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+
+    expect(() => service.deleteBackup('daily', dump)).toThrow(
+      new ConflictException(
+        'Uploads archive in progress — delete after it finishes',
+      ),
+    );
+    expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+
+    settleArchive({ status: 'written', path: '/x.uploads.tar' });
+    await flushBackground();
+    service.deleteBackup('daily', dump);
+    expect(mockFs.unlinkSync.mock.calls.map((c) => String(c[0]))).toEqual([
+      path.join(DAILY_DIR, dump),
+      path.join(DAILY_DIR, dump.replace(/\.dump$/, '.uploads.tar')),
+    ]);
+  });
+});
+
+describe('failed uploads archive — admin-facing copy (504 review MINOR 3)', () => {
+  it('lists a failed archive with a path-free message; the raw error goes only to the log and Sentry', async () => {
+    archivePending();
+    const dump = path.basename(await service.createDailyBackup());
+    listing(dump);
+    const raw = 'Command failed: tar -c -f /srv/backups/daily/x.partial';
+    settleArchive({ status: 'failed', reason: 'tar-failed', detail: raw });
+    await flushBackground();
+    expect(archiveStateOf(dump)).toEqual({
+      state: 'failed',
+      error: 'Archive failed — see server logs',
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      `uploads archive failed (tar-failed: ${raw})`,
+    );
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      `uploads archive failed (tar-failed: ${raw})`,
+      'error',
+    );
+  });
+
+  it('a no-room failure tells the admin the disk is full, not the byte counts', async () => {
+    archivePending();
+    const dump = path.basename(await service.createDailyBackup());
+    listing(dump);
+    settleArchive({ status: 'failed', reason: 'insufficient-space' });
+    await flushBackground();
+    expect(archiveStateOf(dump)).toEqual({
+      state: 'failed',
+      error: 'Not enough free space on the backup disk',
+    });
   });
 });
