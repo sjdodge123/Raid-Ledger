@@ -5,9 +5,17 @@
  * an arrow pans while zoomed and stops there, so the dialog's ←/→ walk pictures only at fit.
  * `resetKey` (the picture) returns to fit; closing unmounts it.
  */
-import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'react';
+import { lazy, Suspense, useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { type GallerySwipe, useGalleryZoom } from './use-gallery-zoom';
-import { HubGalleryZoomControls } from './hub-gallery-zoom-controls';
+
+/**
+ * The controls are their own chunk: their heroicons sit in a chunk shared with the Valheim map controls, and a
+ * static import put that chunk in the hub page's preload list for the dialog (`hub-page` over its bundle budget).
+ * The fetch starts when this module evaluates (the dialog chunk), so the controls are normally ready with the picture.
+ */
+const loadZoomControls = () => import('./hub-gallery-zoom-controls');
+void loadZoomControls();
+const HubGalleryZoomControls = lazy(() => loadZoomControls().then((m) => ({ default: m.HubGalleryZoomControls })));
 
 const STAGE_CLASS = 'relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video';
 
@@ -59,7 +67,9 @@ export function HubGalleryStage({ resetKey, onSwipe, testId, className, mediaId,
                     : <img ref={bindContent} src={picture.src} alt={picture.alt} onError={picture.onError} style={contentStyle} draggable={false}
                         className={`max-h-full max-w-full select-none object-contain [-webkit-touch-callout:none]${motion}`} />}
                 {overlay}
-                <HubGalleryZoomControls readoutZoom={announcedZoom} atFit={atFit} canZoomIn={canZoomIn} canZoomOut={canZoomOut} zoomIn={zoomIn} zoomOut={zoomOut} fit={fit} />
+                <Suspense fallback={null}>
+                    <HubGalleryZoomControls readoutZoom={announcedZoom} atFit={atFit} canZoomIn={canZoomIn} canZoomOut={canZoomOut} zoomIn={zoomIn} zoomOut={zoomOut} fit={fit} />
+                </Suspense>
             </div>
             {footer}
         </div>
