@@ -4,6 +4,7 @@
  * inline beside the actions — never a toast (§4.8).
  */
 import type { JSX } from 'react';
+import type { CalendarProvider } from '@raid-ledger/contract';
 import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { Button } from '../../ui/button';
@@ -15,6 +16,8 @@ import { useCalendarSheetsStacked } from './calendar-sheet-stack';
 export interface CalendarDisconnectConfirmProps {
     isOpen: boolean;
     accountLabel: string | null;
+    /** ROK-1597 §8 Q7: Outlook adds a line, since Microsoft keeps the app grant. */
+    provider: CalendarProvider;
     isPending: boolean;
     failed: boolean;
     onCancel: () => void;
@@ -36,11 +39,14 @@ function ConfirmActions(props: CalendarDisconnectConfirmProps): JSX.Element {
     );
 }
 
-function ConfirmBody({ accountLabel, failed }: CalendarDisconnectConfirmProps): JSX.Element {
+function ConfirmBody({ accountLabel, provider, failed }: CalendarDisconnectConfirmProps): JSX.Element {
     return (
         <div className="space-y-2" data-testid="calendar-disconnect-dialog">
             {accountLabel && <p className="text-sm font-medium text-foreground">{accountLabel}</p>}
             <p className="text-sm text-secondary">{C.confirmBody}</p>
+            {provider === 'microsoft' && (
+                <p className="text-xs text-muted" data-testid="calendar-disconnect-microsoft-hint">{C.microsoft.disconnectHint}</p>
+            )}
             {failed && <p role="alert" className="text-sm text-danger">{C.disconnectFailed}</p>}
         </div>
     );

@@ -1,0 +1,200 @@
+{
+  "saveRef": "3f9a0c2b7d41",
+  "types": [
+    {
+      "type": "core.v0.Level",
+      "version": 0,
+      "elementSize": 16,
+      "count": 1,
+      "decoder": "ok"
+    },
+    {
+      "type": "core.v0.EntityId",
+      "version": 0,
+      "elementSize": 8,
+      "count": 41220,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 2310,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v0.HealthComponent",
+      "version": 0,
+      "elementSize": 32,
+      "count": 2288,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v0.ClassesComponent",
+      "version": 0,
+      "elementSize": 16,
+      "count": 412,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.inventory.v0.WieldingComponent",
+      "version": 0,
+      "elementSize": 8,
+      "count": 1904,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.inventory.v0.MemberComponent",
+      "version": 0,
+      "elementSize": 16,
+      "count": 3116,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.icon.v0.CustomIconsStorageComponent",
+      "version": 0,
+      "elementSize": 24,
+      "count": 1,
+      "decoder": "unsupported"
+    },
+    {
+      "type": "game.approval.v0.Ratings",
+      "version": 0,
+      "elementSize": 40,
+      "count": 9,
+      "decoder": "none"
+    },
+    {
+      "type": "EAbility",
+      "version": 0,
+      "elementSize": 4,
+      "count": 7,
+      "decoder": "none"
+    }
+  ],
+  "checks": {
+    "partyEntitiesFound": 4,
+    "partyMatchesSaveInfo": true,
+    "portraitsFound": 8,
+    "portraitsMapped": 4,
+    "metaNamesMatchParty": true,
+    "ownerProfileMatchesLocal": true
+  },
+  "party": [
+    {
+      "slot": 0,
+      "decoded": {
+        "abilities": {
+          "str": 17,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 10
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Fighter",
+            "subclassId": "BattleMaster",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_6f2b8c1e_4d3a_4b7e_9a10_2c5d8e3f7a41"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 1,
+      "decoded": {
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 14,
+          "int": 17,
+          "wis": 12,
+          "cha": 10
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Wizard",
+            "subclassId": "EvocationSchool",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_Hat"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 2,
+      "decoded": {
+        "abilities": {
+          "str": 10,
+          "dex": 17,
+          "con": 14,
+          "int": 12,
+          "wis": 13,
+          "cha": 8
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Rogue",
+            "subclassId": null,
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_Hat"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 3,
+      "decoded": {
+        "classLevels": [
+          {
+            "classId": "Cleric",
+            "subclassId": "LifeDomain",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Cloak",
+            "statsId": null
+          }
+        ]
+      }
+    }
+  ],
+  "next": null
+}

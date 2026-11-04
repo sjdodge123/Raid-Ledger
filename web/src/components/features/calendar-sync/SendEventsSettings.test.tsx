@@ -12,7 +12,8 @@ import type { CalendarConnection } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import {
-    CALENDAR_CONNECTION_URL, GOOGLE_CONSENT_URL_FIXTURE, GOOGLE_OAUTH_START_URL, calendarConnectionFixture,
+    CALENDAR_CONNECTION_URL, GOOGLE_CONSENT_URL_FIXTURE, GOOGLE_OAUTH_START_URL, MICROSOFT_CONSENT_URL_FIXTURE,
+    MICROSOFT_OAUTH_START_URL, calendarConnectionFixture,
 } from '../../../test/mocks/calendar-sync-handlers';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { buildAppleConnection } from '../../../test/factories/calendar-sync';
@@ -182,5 +183,41 @@ describe('SendEventsSettings — Apple iCloud (ROK-1598 A9/Q3)', () => {
     it('desktop helper names Apple Calendar, not Google', () => {
         renderApple(true);
         expect(screen.getByTestId('send-events-helper')).toHaveTextContent('To Apple Calendar');
+    });
+});
+
+describe('SendEventsSettings — Outlook / Microsoft 365 (ROK-1597 §8 Q4)', () => {
+    function renderOutlook() {
+        setDesktop(true);
+        const connection: CalendarConnection = { ...calendarConnectionFixture, id: 41, provider: 'microsoft', write: { enabled: true, target: 'dedicated' } };
+        return render(
+            <QueryClientProvider client={createTestQueryClient()}>
+                <SendEventsSettings connection={connection} />
+            </QueryClientProvider>,
+        );
+    }
+
+    it('offers both the dedicated and the main calendar', () => {
+        renderOutlook();
+        expect(screen.getAllByRole('radio').map((r) => r.getAttribute('value'))).toEqual(['dedicated', 'primary']);
+    });
+
+    it('409 needs_consent starts the Microsoft consent with intent=primary, never Google', async () => {
+        capturePatches(409, 'needs_consent');
+        const intents: (string | null)[] = [];
+        let googleStarts = 0;
+        server.use(
+            http.get(MICROSOFT_OAUTH_START_URL, ({ request }) => {
+                intents.push(new URL(request.url).searchParams.get('intent'));
+                return HttpResponse.json({ url: MICROSOFT_CONSENT_URL_FIXTURE });
+            }),
+            http.get(GOOGLE_OAUTH_START_URL, () => { googleStarts += 1; return HttpResponse.json({ url: GOOGLE_CONSENT_URL_FIXTURE }); }),
+        );
+        const assign = spyAssign();
+        renderOutlook();
+        fireEvent.click(screen.getByRole('radio', { name: S.primary }));
+        await waitFor(() => expect(assign).toHaveBeenCalledWith(MICROSOFT_CONSENT_URL_FIXTURE));
+        expect(intents).toEqual(['primary']);
+        expect(googleStarts, 'Outlook primary consent must not start Google').toBe(0);
     });
 });

@@ -47,6 +47,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import type { GuildMemberAvatars } from '../discord-bot/discord-bot-client.guild.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
+import { isSeedSyntheticUser } from '../admin/demo-test-community-hubs.snowflakes';
 
 const JOB_NAME = 'GuildReconciliationService_reconcileGuildMembers';
 
@@ -181,12 +182,15 @@ export class GuildReconciliationService {
    * Active (not-yet-deactivated) users with a real Discord snowflake who were
    * seen in the guild at least once (ROK-1749 `guild_member_seen_at IS NOT
    * NULL`). Excludes `local:%` (email-only) and `unlinked:%` (unlinked) ids —
-   * neither is guild-trackable — and never-seen OAuth guests.
+   * neither is guild-trackable — and never-seen OAuth guests. The hub seed's
+   * synthetic users are dropped too under DEMO_MODE: their snowflakes are in
+   * no real guild.
    */
   private async loadActiveDbUsers(): Promise<ActiveUser[]> {
     const rows = await this.db
       .select({
         id: schema.users.id,
+        username: schema.users.username,
         discordId: schema.users.discordId,
         avatar: schema.users.avatar,
         guildMemberSeenAt: schema.users.guildMemberSeenAt,
@@ -197,7 +201,11 @@ export class GuildReconciliationService {
       );
     // SQL isNotNull(discordId) above guarantees non-null; Drizzle still infers
     // `string | null` from the nullable column, so assert the narrowed type.
-    return rows as ActiveUser[];
+    // Seed users exist only under DEMO_MODE, so production keeps every row.
+    const demo = process.env.DEMO_MODE === 'true';
+    return rows.filter(
+      (r) => !(demo && isSeedSyntheticUser(r)),
+    ) as ActiveUser[];
   }
 
   /**

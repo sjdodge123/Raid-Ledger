@@ -1,11 +1,15 @@
 import { Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import type * as schema from '../drizzle/schema';
+import { socketAuthMiddleware } from '../auth/socket-auth.helpers';
 import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
@@ -27,50 +31,37 @@ import { perfLog } from '../common/perf-logger';
  * Events:
  * - lineup:status — lineup advanced phase (building → voting → decided / archived)
  *
- * Auth: JWT from socket.handshake.auth.token (validated on connection).
+ * Auth: JWT from socket.handshake.auth.token, validated by a namespace
+ * middleware BEFORE the socket connects, with the same session checks as
+ * HTTP (`auth/socket-auth.helpers.ts`); a refused handshake never connects.
  * Note: Single-instance only for v1. Redis adapter is optional and documented.
  */
-@WebSocketGateway({
-  namespace: '/lineups',
-  cors: {
-    origin: process.env.CLIENT_URL || '*',
-    credentials: true,
-  },
-})
-export class LineupsGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+// CORS is decided per handshake by SocketCorsIoAdapter (cors/socket-cors.ts).
+@WebSocketGateway({ namespace: '/lineups' })
+export class LineupsGateway implements OnGatewayInit, OnGatewayDisconnect {
   private readonly logger = new Logger(LineupsGateway.name);
 
-  constructor(@Inject(JwtService) private readonly jwtService: JwtService) {}
+  constructor(
+    @Inject(JwtService) private readonly jwtService: JwtService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+  ) {}
 
   @WebSocketServer()
   server!: Server;
 
-  handleConnection(client: Socket): void {
-    const token = (client.handshake.auth as Record<string, unknown> | undefined)
-      ?.token;
-
-    if (!token || typeof token !== 'string') {
-      this.logger.debug(`Client ${client.id} rejected: no auth token provided`);
-      client.disconnect(true);
-      return;
-    }
-
-    try {
-      const payload = this.jwtService.verify<{ magicLink?: boolean }>(token);
-      // ROK-1366: mirrors JwtStrategy — a legacy JWT_SECRET-signed magic
-      // link is a one-time login, never a socket bearer.
-      if (payload.magicLink) {
-        this.logger.debug(`Client ${client.id} rejected: magic-link token`);
-        client.disconnect(true);
-        return;
-      }
-      this.logger.debug(`Client ${client.id} connected with valid token`);
-    } catch {
-      this.logger.debug(`Client ${client.id} rejected: invalid auth token`);
-      client.disconnect(true);
-    }
+  /**
+   * JWT + the HTTP session checks (token version, ban, deactivation) as a
+   * handshake middleware: a refused socket gets `next(err)` and never connects.
+   */
+  afterInit(server: Server): void {
+    server.use(
+      socketAuthMiddleware({
+        jwtService: this.jwtService,
+        db: this.db,
+        logger: this.logger,
+      }),
+    );
   }
 
   handleDisconnect(client: Socket): void {

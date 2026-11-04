@@ -51,6 +51,7 @@ import { CooptimusSettingsController } from './cooptimus-settings.controller';
 import { DemoDataSettingsController } from './demo-data-settings.controller';
 import { CooptimusModule } from '../cooptimus/cooptimus.module';
 import { CommunityInsightsSettingsController } from './settings-community-insights.controller';
+import { VoiceAttendanceSettingsController } from './settings-voice-attendance.controller';
 import { OnboardingController } from './onboarding.controller';
 import { SettingsModule } from '../settings/settings.module';
 // ROK-1160 D9: DemoTestBackupController uses BackupService.getBackupFilePath as
@@ -167,6 +168,7 @@ import { UsersModule } from '../users/users.module';
     CooptimusSettingsController,
     DemoDataSettingsController,
     CommunityInsightsSettingsController,
+    VoiceAttendanceSettingsController,
     OnboardingController,
     GamesDedupAuditController,
   ],

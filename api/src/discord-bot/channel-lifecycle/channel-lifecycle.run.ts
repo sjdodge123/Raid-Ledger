@@ -2,7 +2,13 @@ import { Logger } from '@nestjs/common';
 import type { Guild } from 'discord.js';
 import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
-import { applyAction, linkHubs } from './channel-lifecycle.apply';
+import {
+  applyAction,
+  linkHubs,
+  topicField,
+  type LinkedHubs,
+} from './channel-lifecycle.apply';
+import { refreshTopicAfterCommit } from './channel-lifecycle.topic-refresh';
 import { staleLinkDetail } from './channel-lifecycle.decide';
 import { lockLifecycleBinding } from './channel-lifecycle.store.queries';
 import {
@@ -21,7 +27,6 @@ import { insertSuppression } from './channel-lifecycle.store';
 import { unlinkAutoHubsForChannel } from './hub-channel-link.queries';
 import type {
   ApplyContext,
-  HubLinkResult,
   ItemOutcome,
   PlannedGame,
 } from './channel-lifecycle.types';
@@ -110,7 +115,7 @@ async function linkCreated(
   ctx: ApplyContext,
   game: PlannedGame,
   created: CreatedChannel,
-): Promise<HubLinkResult | null> {
+): Promise<LinkedHubs | null> {
   const current = await lockLifecycleBinding(ctx.db, created.bindingId);
   const planned = { channelId: created.channelId, gameId: game.row.gameId };
   const stale = staleLinkDetail(planned, current);
@@ -122,6 +127,20 @@ async function linkCreated(
     id: created.channelId,
     autoManaged: current?.autoManaged === true,
   });
+}
+
+/** The create's outcome + the hubs its post-commit link tx linked. */
+function withLink(
+  item: ItemOutcome,
+  created: CreatedChannel,
+  { linked, refreshTopic }: LinkedHubs,
+): ItemOutcome {
+  return {
+    ...item,
+    linkedHubs: linked.guildIds.length,
+    linked,
+    ...topicField(created, refreshTopic),
+  };
 }
 
 /**
@@ -136,11 +155,10 @@ async function linkAfterCreate(
   item: ItemOutcome,
 ): Promise<ItemOutcome> {
   try {
-    const linked = await ctx.db.transaction((tx) =>
+    const res = await ctx.db.transaction((tx) =>
       linkCreated({ ...ctx, db: tx }, game, created),
     );
-    if (linked === null) return item;
-    return { ...item, linkedHubs: linked.guildIds.length, linked };
+    return res === null ? item : withLink(item, created, res);
   } catch (err) {
     if (err instanceof LifecyclePermissionError) return { ...item, stop: true };
     Sentry.captureException(err, {
@@ -240,7 +258,10 @@ async function runOne(
     created === undefined
       ? item
       : await linkAfterCreate(ctx, game, created, rest);
-  return announceCommitted(ctx, final);
+  return announceCommitted(
+    ctx,
+    await refreshTopicAfterCommit(ctx, game, final),
+  );
 }
 
 /**

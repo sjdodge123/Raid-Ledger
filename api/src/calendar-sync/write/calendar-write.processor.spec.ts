@@ -4,6 +4,7 @@
  * job bodies and the check itself are mocked (the check is unit-tested in
  * `calendar-away-heal.helpers.spec.ts`).
  */
+import { WORKER_METADATA } from '@nestjs/bullmq/dist/bull.constants';
 import type { Job, Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
 import type { SettingsService } from '../../settings/settings.service';
@@ -11,6 +12,7 @@ import { deriveIfNeedsReconnect } from '../read/calendar-away-heal.helpers';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import type { CalendarWriteJobData } from './calendar-write.enqueue.helpers';
 import { CalendarWriteProcessor } from './calendar-write.processor';
+import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { reconcileCalendarCopy } from './calendar-write-reconcile.helpers';
 import { runCalendarWriteOff } from './calendar-write-off.helpers';
 
@@ -71,5 +73,19 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
     const data = { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 };
     await makeProcessor().process(job(data as CalendarWriteJobData));
     expect(check).not.toHaveBeenCalled();
+  });
+});
+
+/** The `@Processor` worker options `@nestjs/bullmq` stores. */
+type WorkerMeta = { settings?: { backoffStrategy?: unknown } } | undefined;
+
+describe('CalendarWriteProcessor worker registration', () => {
+  it('registers the Retry-After-aware backoff strategy on the worker', () => {
+    // Without it BullMQ throws "Unknown backoff strategy" on the first retry.
+    const opts = Reflect.getMetadata(
+      WORKER_METADATA,
+      CalendarWriteProcessor,
+    ) as WorkerMeta;
+    expect(opts?.settings?.backoffStrategy).toBe(calendarRetryBackoff);
   });
 });

@@ -20,6 +20,11 @@ import {
 } from './calendar-read-consent.helpers';
 
 describe('grantAllowsRead (ROK-1598 T25)', () => {
+  it('Microsoft reads with Calendars.ReadWrite (ROK-1597 T20)', () => {
+    expect(grantAllowsRead('microsoft', ['Calendars.ReadWrite'])).toBe(true);
+    expect(grantAllowsRead('microsoft', ['User.Read'])).toBe(false);
+  });
+
   it('Apple is read-capable with no scope step', () => {
     expect(grantAllowsRead('apple', [])).toBe(true);
   });

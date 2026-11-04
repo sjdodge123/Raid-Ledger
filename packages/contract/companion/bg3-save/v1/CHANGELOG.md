@@ -5,6 +5,28 @@ Newest first. Every entry states **additive** or **breaking** (see
 Display-table edits (`src/companion-bg3-display.ts`) are not wire and get no
 entry.
 
+## v1 — 2026-11-02 (additive) — `game-id` key: hash input and fallback
+
+- **Additive, wording only** (stays v1, ROK-2070). §3.3 now pins what a
+  `campaignKeySource: "game-id"` key hashes: the UTF-8 bytes of the GameID's
+  text as `meta.lsf` stores it (string: trailing NUL stripped; UUID: LSLib's
+  lowercase hyphenated form). An unreadable `meta.lsf` falls back to the
+  `save-folder` key and the upload never fails. The `"game-id"` enum value
+  already existed and no producer had emitted it; the Zod schema,
+  `schema.json` and fixtures are unchanged. Stale ROK-1967 references in
+  §3.3 now name ROK-2070.
+
+## v1 — 2026-10-30 (additive) — `campaignKeySource: "file-name"`
+
+- **Additive** (stays v1, ROK-1960; operator ruling). New enum value
+  `"file-name"` for `payload.campaignKeySource`: a browser upload of a bare
+  `.lsv` keys by the SHA-256 of its file stem. A dropped folder still sends
+  `"save-folder"`. Existing payloads are unchanged; a collector that never
+  sends the value is unaffected. Mirrored on the read side
+  (`Bg3MySaveSchema.campaignKeySource`).
+- New golden pair `file-name-bare-lsv` (synthetic `SaveInfo.json` + message
+  with `campaignKeySource: "file-name"`); no existing fixture changes.
+
 ## v1 — 2026-10-28 (additive) — `\p{Cs}` dropped from the `saveName` pattern
 
 - **Additive** (stays v1, ROK-2034). The published `saveName` pattern no longer

@@ -18,6 +18,8 @@ import { lockCompanionUserBlobs } from '../../../companion/blobs/companion-blob-
 import { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import { BG3_SAVE_CONTRACT_ID } from '../bg3.constants';
 import { lockBg3Gallery } from '../gallery/bg3-gallery-lock';
+import { lockBg3UserCampaigns } from '../campaigns/bg3-campaign-lock';
+import { lockBg3UserMarkers } from '../ingest/bg3-marker-lock';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -91,6 +93,15 @@ export class Bg3MyDataRepository {
    * lock is taken FIRST, before any row lock — the order ingest and
    * retention use — so the three cannot deadlock; the re-take inside
    * `releaseUnusedRefsIn` is re-entrant.
+   *
+   * ROK-1960 F5b + P2-3 — the one per-user order every BG3 writer keeps:
+   * blob lock → gallery lock → markers lock → `bg3-save` marker rows →
+   * campaign lock → key / default / save rows. Ingest takes the markers
+   * lock, writes its marker (11c), and only then takes the campaign lock in
+   * `resolveCampaign`, so clearing markers after that lock would wait on an
+   * ingest that is itself waiting on us. The markers lock (P2-3) makes an
+   * ingest of a NEW key — an uncommitted INSERT this DELETE cannot see —
+   * finish before the delete or start after it, never straddle it.
    */
   deleteAllFor(
     userId: number,
@@ -100,9 +111,15 @@ export class Bg3MyDataRepository {
       await lockCompanionUserBlobs(tx, userId);
       // ROK-1959 P1: a Gallery copy in flight finishes (or re-checks) first.
       await lockBg3Gallery(tx, userId);
+      // P2-3: an ingest mid-marker-write commits first (or starts after us).
+      await lockBg3UserMarkers(tx, userId);
+      // Marker rows BEFORE the campaign lock: ingest advances its marker
+      // and only then takes that lock in `resolveCampaign` (F5b).
+      await clearLatestMarkers(tx, userId);
+      // Same per-user lock as bind / setDefault / ingest filing, so a concurrent bind can't deadlock against this delete.
+      await lockBg3UserCampaigns(tx, userId);
       const owned = await deleteOwned(tx, userId);
       const saves = await deleteSaves(tx, userId);
-      await clearLatestMarkers(tx, userId);
       const thumbnailRefs = await this.blobs.releaseUnusedRefsIn(tx, {
         userId,
         contract: BG3_SAVE_CONTRACT_ID,

@@ -1,7 +1,7 @@
 /**
  * ROK-1958 D-8 / §3.2 — the BG3 "Where we are" card body (order 35, span 1).
  * Fed by the ONE snapshot query Party also reads (D-14). Screenshot (16:9
- * media well, collapses on a failed fetch or `onError`), "Act N · <area>", a
+ * media well, a button opening it in the Gallery viewer — ROK-2074; collapses on a failed fetch or `onError`), "Act N · <area>", a
  * neutral difficulty chip, "Saved <relative> by <uploader>" and the patch
  * footnote. No
  * Honour badge (Q7). Spoilers on → one line replaces image + area. With no
@@ -9,6 +9,8 @@
  */
 import { useState, type JSX } from 'react';
 import { bg3DifficultyDisplay, bg3LevelDisplay, type Bg3Snapshot } from '@raid-ledger/contract';
+import { openHubPicture, type HubPictureTarget } from '../../../components/hub/gallery/hub-gallery-store';
+import { Button } from '../../../components/ui/button';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
 import { syncedAgo } from '../../../lib/synced-ago';
@@ -38,26 +40,37 @@ function absoluteTime(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
 }
 
-function Screenshot({ path }: { path: string }): JSX.Element | null {
+const SHOT_ALT = 'Latest save screenshot';
+
+/** ROK-2074 — the save's Gallery picture when it has one, else the save shot alone. */
+function shotPicture(path: string, galleryMediaId: number | null | undefined): HubPictureTarget {
+    const single = { url: path, alt: SHOT_ALT, auth: true };
+    return galleryMediaId != null ? { mediaId: galleryMediaId, fallback: single } : single;
+}
+
+/** ROK-2074 — a button that opens the picture in the Gallery viewer. */
+function Screenshot({ path, guildId, galleryMediaId }: { path: string; guildId: number; galleryMediaId: number | null | undefined }): JSX.Element | null {
     const url = useHubMediaImageUrl(path);
     const [failedUrl, setFailedUrl] = useState<string | null>(null);
     if (url === null || failedUrl === url) return null;
     return (
-        <div className="relative mb-2.5 aspect-video overflow-hidden rounded-md bg-media-well" data-testid="bg3-where-shot">
-            <img src={url} alt="Latest save screenshot" loading="lazy" onError={() => setFailedUrl(url)}
+        <Button variant="bare" aria-label="View the latest save screenshot" data-testid="bg3-where-shot"
+            onClick={(e) => openHubPicture(guildId, shotPicture(path, galleryMediaId), e.currentTarget)}
+            className="mb-2.5 block aspect-video w-full overflow-hidden rounded-md bg-media-well focus-visible:ring-offset-panel">
+            <img src={url} alt={SHOT_ALT} loading="lazy" onError={() => setFailedUrl(url)}
                 className="absolute inset-0 h-full w-full object-cover" />
-        </div>
+        </Button>
     );
 }
 
-function WhereBody({ snap }: { snap: Bg3Snapshot }): JSX.Element {
+function WhereBody({ snap, guildId }: { snap: Bg3Snapshot; guildId: number }): JSX.Element {
     const name = snap.uploader?.displayName ?? null;
     return (
         <div className="flex flex-col" data-testid="bg3-where">
             {snap.spoilersHidden
                 ? <p className="mb-2.5 text-sm text-muted">{BG3_SPOILERS_LINE}</p>
                 : <>
-                    {snap.thumbnailUrl !== null && <Screenshot path={snap.thumbnailUrl} />}
+                    {snap.thumbnailUrl !== null && <Screenshot path={snap.thumbnailUrl} guildId={guildId} galleryMediaId={snap.galleryMediaId} />}
                     {snap.area !== null && <p className="text-base font-semibold text-foreground" data-testid="bg3-where-place">{bg3PlaceLabel(snap.area)}</p>}
                 </>}
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -84,7 +97,7 @@ function WhereLoading(): JSX.Element {
 export default function Bg3WhereWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const snapshot = useBg3Snapshot(page.guild.id);
     const snap = snapshot.data;
-    if (snap != null && !snap.empty) return <WhereBody snap={snap} />;
+    if (snap != null && !snap.empty) return <WhereBody snap={snap} guildId={page.guild.id} />;
     if (snapshot.isPending) return <WhereLoading />;
     if (snapshot.isError) return <Bg3WidgetError text="Couldn't load where the party is." onRetry={() => void snapshot.refetch()} />;
     return null;

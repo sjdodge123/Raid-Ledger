@@ -5,7 +5,8 @@
  * {@link DigestSectionsV2}. Each read runs in its own `settle`, so one failing
  * source empties only its own section (or spotlight kind) and never the
  * digest (AC14). Every source is an EXISTING read — no second definition:
- * - Been playing: `fetchCommunityPlayingRow` (v1, drops opted-out members).
+ * - Been playing: `fetchCoPlayGames` (ROK-2063) — only games 2+ active members
+ *   played together this week; `/games` keeps `fetchCommunityPlayingRow`.
  * - Last 7 days + the prior week: `fetchWeeklyRecap` (`endOffsetDays: 7`).
  * - Firsts & milestones: `fetchDigestMilestones` (L2).
  * - Coming up: `fetchWeeklyUpcoming` (L1).
@@ -14,12 +15,7 @@
  * - Best price: `fetchWishlistedBestPrice` (L7) — replaces v1's deals.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type Redis from 'ioredis';
-import type { GameDiscoverRowDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
-import { fetchCommunityPlayingRow } from '../igdb/igdb-discover-community-playing.helpers';
-import { buildCommunityPlayingCategory } from '../igdb/igdb-discover.helpers';
-import { IGDB_CONFIG } from '../igdb/igdb.constants';
 import {
   listActiveGroupsForChannel,
   type LfgGroupAggregate,
@@ -36,6 +32,11 @@ import {
   type DigestLfgLine,
   type DigestPlayingLine,
 } from './weekly-digest-data.helpers';
+import {
+  digestCoPlayWindow,
+  fetchCoPlayGames,
+  type CoPlayGame,
+} from './weekly-digest-coplay.queries';
 import type { DigestSectionsV2 } from './weekly-digest-embed.helpers';
 import {
   fetchDigestMilestones,
@@ -73,7 +74,7 @@ export type DigestSpotlightSources = Readonly<
 
 /** Every v2 read, injectable so the assembly is unit-testable. */
 export interface DigestSources {
-  communityPlaying: () => Promise<GameDiscoverRowDto>;
+  coPlayGames: () => Promise<CoPlayGame[]>;
   recap: () => Promise<WeeklyRecap>;
   priorRecap: () => Promise<WeeklyRecap>;
   milestones: () => Promise<DigestMilestones>;
@@ -111,15 +112,9 @@ function buildSpotlightSources(db: Db): DigestSpotlightSources {
 }
 
 /** Wire the production reads. Both recaps honour the opt-out (4a). */
-export function buildDigestSources(
-  db: Db,
-  redis: Redis,
-  cacheTtl: number = IGDB_CONFIG.DISCOVER_CACHE_TTL,
-): DigestSources {
-  const category = buildCommunityPlayingCategory();
+export function buildDigestSources(db: Db): DigestSources {
   return {
-    communityPlaying: () =>
-      fetchCommunityPlayingRow(db, redis, category, cacheTtl),
+    coPlayGames: () => fetchCoPlayGames(db, digestCoPlayWindow()),
     recap: () => fetchWeeklyRecap(db, { respectActivityOptOut: true }),
     priorRecap: () =>
       fetchWeeklyRecap(db, { respectActivityOptOut: true, endOffsetDays: 7 }),
@@ -180,7 +175,7 @@ async function gatherActivity(
 ): Promise<Activity> {
   const noPlaying = emptySection<DigestPlayingLine>();
   const [playing, recap, priorRecap, milestones] = await Promise.all([
-    settle('playing', s.communityPlaying, shapePlaying, noPlaying, onError),
+    settle('playing', s.coPlayGames, shapePlaying, noPlaying, onError),
     settle('recap', s.recap, shapeRecap, null, onError),
     settle('priorRecap', s.priorRecap, keep, null, onError),
     settle('milestones', s.milestones, keep, null, onError),

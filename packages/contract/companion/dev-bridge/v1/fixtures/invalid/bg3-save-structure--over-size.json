@@ -1,0 +1,1250 @@
+{
+  "saveRef": "3f9a0c2b7d41",
+  "types": [
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 0,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 1,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 2,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 3,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 4,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 5,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 6,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 7,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 8,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 9,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 10,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 11,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 12,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 13,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 14,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 15,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 16,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 17,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 18,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 19,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 20,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 21,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 22,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 23,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 24,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 25,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 26,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 27,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 28,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 29,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 30,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 31,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 32,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 33,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 34,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 35,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 36,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 37,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 38,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 39,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 40,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 41,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 42,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 43,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 44,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 45,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 46,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 47,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 48,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 49,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 50,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 51,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 52,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 53,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 54,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 55,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 56,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 57,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 58,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 59,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 60,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 61,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 62,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 63,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 64,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 65,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 66,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 67,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 68,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 69,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 70,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 71,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 72,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 73,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 74,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 75,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 76,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 77,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 78,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 79,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 80,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 81,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 82,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 83,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 84,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 85,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 86,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 87,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 88,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 89,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 90,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 91,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 92,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 93,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 94,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 95,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 96,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 97,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 98,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 99,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 100,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 101,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 102,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 103,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 104,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 105,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 106,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 107,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 108,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 109,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 110,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 111,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 112,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 113,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 114,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 115,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 116,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 117,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 118,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 119,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 120,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 121,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 122,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 123,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 124,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 125,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 126,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 127,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 128,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 129,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 130,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 131,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 132,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 133,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 134,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 135,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 136,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 137,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 138,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 139,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 140,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 141,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 142,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 143,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 144,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 145,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 146,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 147,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 148,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 149,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 150,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 151,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 152,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 153,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 154,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 155,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 156,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 157,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 158,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 159,
+      "decoder": "ok"
+    }
+  ],
+  "checks": {
+    "partyEntitiesFound": 4,
+    "partyMatchesSaveInfo": true,
+    "portraitsFound": 8,
+    "portraitsMapped": 4,
+    "metaNamesMatchParty": true,
+    "ownerProfileMatchesLocal": true
+  },
+  "party": [
+    {
+      "slot": 0,
+      "decoded": {
+        "abilities": {
+          "str": 17,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 10
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Fighter",
+            "subclassId": "BattleMaster",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_Hat"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 1,
+      "decoded": {
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 14,
+          "int": 17,
+          "wis": 12,
+          "cha": 10
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Wizard",
+            "subclassId": "EvocationSchool",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_Hat"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 2,
+      "decoded": {
+        "abilities": {
+          "str": 10,
+          "dex": 17,
+          "con": 14,
+          "int": 12,
+          "wis": 13,
+          "cha": 8
+        },
+        "proficiencyBonus": 3,
+        "maxHp": 52,
+        "classLevels": [
+          {
+            "classId": "Rogue",
+            "subclassId": null,
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Helmet",
+            "statsId": "ARM_Hat"
+          },
+          {
+            "slot": "MeleeMainHand",
+            "statsId": "WPN_Longsword"
+          }
+        ]
+      }
+    },
+    {
+      "slot": 3,
+      "decoded": {
+        "classLevels": [
+          {
+            "classId": "Cleric",
+            "subclassId": "LifeDomain",
+            "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Cloak",
+            "statsId": null
+          }
+        ]
+      }
+    }
+  ],
+  "next": null
+}

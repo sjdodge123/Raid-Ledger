@@ -27,6 +27,7 @@ import type {
   CalendarWriteProvider,
 } from '../providers/calendar-provider.registry';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
+import { deleteCalendarIfExclusive } from '../services/calendar-shared-calendar.helpers';
 import {
   buildCopyInput,
   type CopyEventRow,
@@ -125,6 +126,18 @@ async function bestEffort(what: string, op: () => Promise<void>) {
   }
 }
 
+/** A lost claim's calendar — unless another connection adopted it (Codex P1). */
+const dropLoser = (ctx: WriteCtx, id: string): Promise<void> =>
+  bestEffort('calendar', async () => {
+    await deleteCalendarIfExclusive(
+      ctx.db,
+      ctx.conn,
+      ctx.provider,
+      ctx.creds,
+      id,
+    );
+  });
+
 /**
  * D5: the target calendar id. A changed dedicated calendar id is claimed by
  * compare-and-swap (B1); on a lost race the calendar this run just created
@@ -144,16 +157,10 @@ async function resolveTarget(
     current,
     id,
   ).catch(async (err: unknown) => {
-    if (err instanceof DedicatedTargetGoneError)
-      await bestEffort('calendar', () =>
-        ctx.provider.deleteRaidLedgerCalendar(ctx.creds, id),
-      );
+    if (err instanceof DedicatedTargetGoneError) await dropLoser(ctx, id);
     throw err;
   });
-  if (winner !== id)
-    await bestEffort('calendar', () =>
-      ctx.provider.deleteRaidLedgerCalendar(ctx.creds, id),
-    );
+  if (winner !== id) await dropLoser(ctx, id);
   ctx.conn = { ...ctx.conn, dedicatedCalendarId: winner };
   return winner;
 }

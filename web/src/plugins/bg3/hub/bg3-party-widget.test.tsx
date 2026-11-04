@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { GuildPage } from '@raid-ledger/contract';
+import type { Bg3SnapshotResponse, GuildPage } from '@raid-ledger/contract';
 import type { User } from '../../../hooks/use-auth';
 import { server } from '../../../test/mocks/server';
+import { companionDevicesHandler } from '../../../test/mocks/companion-devices-handlers';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     BG3_CLAIMS_URL, BG3_SNAPSHOT_URL, bg3CampaignsHandler, bg3ClaimHandler, bg3SnapshotHandler, bg3UnclaimHandler,
@@ -18,7 +19,7 @@ import { toast } from '../../../lib/toast';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import Bg3PartyWidget from './bg3-party-widget';
 
-type AuthUser = Pick<User, 'id' | 'username' | 'displayName' | 'role'>;
+type AuthUser = Pick<User, 'id' | 'username' | 'displayName' | 'role'> & Partial<Pick<User, 'discordId' | 'avatar' | 'customAvatarUrl'>>;
 const auth = vi.hoisted((): { user: AuthUser | null } => ({
     user: { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member' },
 }));
@@ -96,6 +97,20 @@ describe('Bg3PartyWidget — tiles (V-3)', () => {
         expect(within(slot('Generic:Human:1')).getByRole('button', { name: 'Not me' })).toBeInTheDocument();
         expect(claimButtons()).toHaveLength(0);
         expect(bodies[0]).toEqual({ body: { slotKey: 'Generic:Human:1' }, campaignId: String(BG3_CAMPAIGN_ID) });
+        release();
+    });
+
+    it('ROK-2069: the optimistic claim paints the viewer\'s Discord avatar, not initials', async () => {
+        auth.user = { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member', discordId: '206900000000000033', avatar: 'c_hash', customAvatarUrl: null };
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        serve();
+        server.use(http.post(BG3_CLAIMS_URL, async () => { await gate; return new HttpResponse(null, { status: 204 }); }));
+        await renderParty();
+        await userEvent.click(must(within(slot('Generic:Human:1')).queryByRole('button', { name: "That's me" }), 'claim'));
+        await waitFor(() => expect(within(slot('Generic:Human:1')).getByText('You')).toBeInTheDocument());
+        expect(within(slot('Generic:Human:1')).getByRole('img').getAttribute('src'))
+            .toBe('https://cdn.discordapp.com/avatars/206900000000000033/c_hash.png');
         release();
     });
 
@@ -275,5 +290,47 @@ describe('Bg3PartyWidget — empty-state dialogs (D-4 / D-5)', () => {
         expect(screen.queryByText('Add my saves to Tactician run')).not.toBeInTheDocument();
         await user.click(await screen.findByRole('button', { name: 'Add my saves' }));
         expect(await screen.findByText('Add my saves to Tactician run')).toBeInTheDocument();
+    });
+});
+
+describe('ROK-1960 "Upload a save"', () => {
+    it('members get it in the no-campaign and no-saves states, and it opens the upload sheet', async () => {
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        const user = userEvent.setup();
+        const view = renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        await user.click(await screen.findByRole('button', { name: 'Upload a save' }));
+        expect(await screen.findByTestId('bg3-upload-save')).toBeInTheDocument();
+        view.unmount();
+        const noSaves: Bg3SnapshotResponse = { empty: true, campaignId: BG3_CAMPAIGN_ID };
+        server.use(bg3CampaignsHandler(buildBg3CampaignsResponse()), bg3SnapshotHandler(noSaves));
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(await screen.findByText('No saves in Tactician run yet.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Upload a save' })).toBeInTheDocument();
+    });
+
+    it('a non-member does not get it', async () => {
+        server.use(bg3CampaignsHandler(buildBg3NoCampaignsResponse()), bg3SnapshotHandler('no-campaign'));
+        renderWithProviders(<Bg3PartyWidget {...ctx('visitor')} />);
+        expect(await screen.findByText('No campaign on this hub yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload a save' })).not.toBeInTheDocument();
+    });
+});
+
+// ROK-2056 — the Companion install line (AC5 / AC6). Off by default; one test flips it on.
+const companionFlag = vi.hoisted(() => ({ available: false }));
+vi.mock('../../../lib/companion-install', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/companion-install')>()),
+    companionDownloadAvailable: () => companionFlag.available,
+}));
+
+describe('ROK-2056 Companion install line', () => {
+    it('a member who is not linked sees it in the no-saves state (mockup panel E)', async () => {
+        companionFlag.available = true;
+        const noSaves: Bg3SnapshotResponse = { empty: true, campaignId: BG3_CAMPAIGN_ID };
+        server.use(bg3CampaignsHandler(buildBg3CampaignsResponse()), bg3SnapshotHandler(noSaves), companionDevicesHandler([]));
+        renderWithProviders(<Bg3PartyWidget {...ctx()} />);
+        expect(await screen.findByTestId('companion-install-link'))
+            .toHaveTextContent('Saves can upload by themselves — install the Companion.');
+        companionFlag.available = false;
     });
 });

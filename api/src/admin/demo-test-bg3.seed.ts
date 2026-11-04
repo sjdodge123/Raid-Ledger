@@ -16,6 +16,7 @@ import { insertCommunityHub } from '../guilds/community/community-proposals.quer
 import { upsertJoin } from '../guilds/community/community-membership.queries';
 import {
   bg3SeedDiscordId,
+  planFolderKeySaves,
   planSeedSaves,
   seedSaveMessage,
 } from './demo-test-bg3.helpers';
@@ -201,4 +202,30 @@ export async function seedBg3Claim(
   await db
     .insert(schema.bg3PartyClaims)
     .values({ campaignId, slotKey, userId });
+}
+
+/**
+ * ROK-2068 `folder-keys` — the member's saves, one key each; the bound ones
+ * are filed in `campaignId`. Returns the keys, oldest save first.
+ */
+export async function seedBg3FolderKeySaves(
+  db: Db,
+  memberId: number,
+  tag: string,
+  campaignId: number,
+  now: Date,
+): Promise<string[]> {
+  const plans = planFolderKeySaves(tag, now);
+  const ctx = { userId: memberId, deviceId: null, receivedAt: now };
+  for (const p of plans.filter((x) => x.bound))
+    await bindBg3Key(db, memberId, p.campaignKey, campaignId);
+  const rows = plans.map((p, i) =>
+    toBg3SaveRow(
+      ctx,
+      seedSaveMessage(p, i, p.campaignKey),
+      p.bound ? campaignId : null,
+    ),
+  );
+  await db.insert(schema.bg3Saves).values(rows).onConflictDoNothing();
+  return plans.map((p) => p.campaignKey);
 }

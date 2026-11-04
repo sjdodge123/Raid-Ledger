@@ -193,8 +193,9 @@ export function classifyVoiceSession(
   // 5. full: presence >= 80%
   if (presenceRatio >= 0.8) return 'full';
 
-  // 6. Fallback: >= 120s but < 20% presence — not meaningful attendance
-  return 'no_show';
+  // 6. Fallback: >= 120s but < 20% presence. A late joiner still counts as
+  // late (ROK-1940); an on-time short stay is not meaningful attendance.
+  return joinedLate ? 'late' : 'no_show';
 }
 
 /**
@@ -265,10 +266,14 @@ export function createSession(
   });
 }
 
-/** Parse grace minutes from a settings string, defaulting to 5. */
+/**
+ * Parse grace minutes from a settings string: NaN/missing → 5, otherwise
+ * clamped to 0–60 (ROK-1940 — the value is now admin-writable).
+ */
 export function parseGraceMinutes(value: string | null): number {
   const parsed = value ? parseInt(value, 10) : NaN;
-  return isNaN(parsed) ? 5 : parsed;
+  if (isNaN(parsed)) return 5;
+  return Math.min(60, Math.max(0, parsed));
 }
 
 /** Mark a session as left. */

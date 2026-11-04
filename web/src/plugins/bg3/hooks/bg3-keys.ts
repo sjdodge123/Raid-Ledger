@@ -10,6 +10,8 @@ export const bg3Keys = {
     sessionPages: (hubId: number, campaignId: number) =>
         ['bg3', 'sessions', hubId, campaignId, 'pages'] as const,
     myUnassignedSaves: ['bg3', 'my-saves', 'unassigned'] as const,
+    /** ROK-2068 Manage my saves — covered by `invalidateBg3Hub`'s `my-saves` match. */
+    myAllSaves: ['bg3', 'my-saves', 'all'] as const,
 };
 
 /** Invalidate every BG3 query of `hubId` plus the caller's own saves. */

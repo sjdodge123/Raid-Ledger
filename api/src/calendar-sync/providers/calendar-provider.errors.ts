@@ -88,3 +88,18 @@ export class ProviderNotConfiguredError extends CalendarProviderError {
     super('Calendar provider is not configured', reason);
   }
 }
+
+/**
+ * The grant lacks a required scope (the user unticked it on the provider's
+ * consent screen: Google granular consent U4, Microsoft ROK-1597). The
+ * callback maps it to `?error=scopes`; the adapter has already attempted a
+ * revoke where the provider has one, and nothing is stored (Q-F). Not a `CalendarProviderError`: it carries no
+ * provider reason, only the missing scope names.
+ */
+export class MissingScopesError extends Error {
+  readonly code = 'scopes' as const;
+  constructor(readonly missing: string[]) {
+    super(`Calendar grant is missing required scopes: ${missing.join(' ')}`);
+    this.name = 'MissingScopesError';
+  }
+}

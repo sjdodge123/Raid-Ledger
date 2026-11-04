@@ -13,10 +13,13 @@
  *   autoPopulateAttendance — userId fallback for attendance updates
  *   shouldClassifyEvent — logger param, logs reason on false
  */
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import {
   shouldClassifyEvent,
   loadAndFilterSessions,
   autoPopulateAttendance,
+  classifyEventSessions,
 } from './voice-attendance-classify.helpers';
 import {
   createDrizzleMock,
@@ -193,5 +196,76 @@ describe('autoPopulateAttendance', () => {
     // one matching by discordUserId, one matching by userId.
     // Currently only 1 update call is made (discordUserId only).
     expect(mockDb.update.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── classifyEventSessions — forward-only (ROK-1940 D10) ──────────────────
+
+describe('classifyEventSessions — never rewrites a classified row', () => {
+  let mockDb: MockDb;
+  const logger = { log: jest.fn(), warn: jest.fn() };
+  const start = new Date('2026-11-01T20:00:00Z');
+  const end = new Date('2026-11-01T22:00:00Z');
+  const event = { id: 7, duration: [start, end] } as never;
+  const at = (min: number): Date => new Date(start.getTime() + min * 60_000);
+
+  /** A voice row 6 min late with 120 s of presence (the Codex P2 example). */
+  const row = (id: string, classification: string | null) => ({
+    id,
+    eventId: 7,
+    userId: null,
+    discordUserId: `d-${id}`,
+    discordUsername: id,
+    firstJoinAt: at(6),
+    lastLeaveAt: at(8),
+    totalDurationSec: 120,
+    segments: [],
+    classification,
+  });
+
+  /** Ids handed to the classification UPDATE's CASE (WHEN id = $n THEN $n+1). */
+  const classifiedIds = (): unknown[] => {
+    const call = mockDb.set.mock.calls[0] as
+      [{ classification: SQL }] | undefined;
+    if (!call) throw new Error('expected a classification UPDATE, got none');
+    const { params } = new PgDialect().sqlToQuery(call[0].classification);
+    return params.filter((_, i) => i % 2 === 0);
+  };
+
+  /** Queue: sessions select, signup ids, (update), no-show signups. */
+  const run = async (rows: ReturnType<typeof row>[]) => {
+    mockDb.where
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([]);
+    await classifyEventSessions(mockDb as never, 7, event, 10 * 60_000, logger);
+  };
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    logger.log.mockClear();
+  });
+
+  it('a completed event (every row classified) issues no classification UPDATE', async () => {
+    await run([row('A', 'late'), row('B', 'no_show')]);
+
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('Classified 0 voice session(s) for event 7'),
+    );
+  });
+
+  it('a mixed event classifies only the NULL row; the classified row is not in the UPDATE', async () => {
+    await run([row('A', 'late'), row('B', null)]);
+
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(classifiedIds()).toEqual(['B']);
+  });
+
+  it('a fresh event (all NULL) classifies every row', async () => {
+    await run([row('A', null), row('B', null)]);
+
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(classifiedIds()).toEqual(['A', 'B']);
   });
 });

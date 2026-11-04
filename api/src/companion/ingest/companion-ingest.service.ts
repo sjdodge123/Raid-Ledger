@@ -1,8 +1,8 @@
 /**
  * ROK-1956 §4.1 — the messages pipeline after the body is read: the pure
  * steps (3–10), then step 11 in one transaction (device revalidation →
- * stored-blob ref check → latest-wins compare-and-set → ref upsert →
- * handler). A stale message commits nothing
+ * stored-blob ref check → handler marker lock + "already held" check →
+ * latest-wins compare-and-set → ref upsert → handler). A stale message commits nothing
  * and never reaches the handler (Q3). An after-commit handler (ROK-1964) runs
  * once that transaction has committed, never inside it. Logs ids, contract, version and the
  * result only — never the body or payload values.
@@ -85,12 +85,21 @@ export class CompanionIngestService {
   ): Promise<AckStatus> {
     await this.assertDeviceHeld(tx, auth);
     const refs = await this.checkBlobRefs(tx, auth.userId, msg);
+    const { handler } = msg;
+    // The handler's marker lock (if any) first: blob → markers lock → marker.
+    if (marker || handler.alreadyHeld) {
+      await handler.lockLatestWins?.(tx, auth.userId);
+    }
+    // ROK-2070 M1: an already-stored message is stale BEFORE the marker moves
+    // — with or without a latest-wins marker.
+    if (await handler.alreadyHeld?.(tx, auth.userId, msg.message)) {
+      return 'stale';
+    }
     if (marker) {
       const row = { userId: auth.userId, contract: msg.contract, ...marker };
       if (!(await this.repo.advance(tx, row))) return 'stale';
     }
     await this.repo.recordBlobRefs(tx, auth.userId, msg.contract, refs);
-    const { handler } = msg;
     if (handler.afterCommit !== true) {
       const { userId, via, deviceId } = auth;
       const ctx = { tx, userId, via, deviceId, receivedAt };

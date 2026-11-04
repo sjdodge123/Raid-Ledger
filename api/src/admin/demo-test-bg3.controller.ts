@@ -1,7 +1,7 @@
 /**
  * DemoTestBg3Controller (ROK-1958) — `POST /admin/test/bg3/seed-hub`, body
  * `{ tag, variant? }` with `variant` one of `default` | `no-campaign` |
- * `no-saves` | `spoilers`. Seeds a BG3 `game_community` hub for the BG3
+ * `no-saves` | `spoilers` | `folder-keys`. Seeds a BG3 `game_community` hub for the BG3
  * hub-widgets smoke spec and fleet test plan, and returns its ids:
  *   - users `bg3-<role>-<tag>`: host (leader + campaign host + uploader),
  *     officer (editor), member (no claim — the "That's me" actor), claimer
@@ -52,6 +52,7 @@ import {
   seedBg3Campaign,
   seedBg3Claim,
   seedBg3Memberships,
+  seedBg3FolderKeySaves,
   seedBg3Saves,
 } from './demo-test-bg3.seed';
 
@@ -69,6 +70,8 @@ export interface Bg3SeedHubResult {
   saveCount: number;
   sessionCount: number;
   claimedSlotKey: string | null;
+  /** ROK-2068 `folder-keys`: the member's per-save keys, oldest first. */
+  folderKeys: string[];
 }
 
 @Controller('admin/test/bg3')
@@ -126,15 +129,8 @@ export class DemoTestBg3Controller {
     const campaignKey = bg3SeedCampaignKey(tag);
     const campaignId = await this.campaignFor(hubId, ids.host, shape);
     const assignTo = shape.assignSaves ? campaignId : null;
-    if (assignTo !== null)
-      await bindBg3Key(this.db, ids.host, campaignKey, assignTo);
-    const { saves, sessions } = await seedBg3Saves(
-      this.db,
-      ids.host,
-      campaignKey,
-      assignTo,
-      new Date(),
-    );
+    const host = await this.seedHostSaves(ids.host, campaignKey, assignTo);
+    const folderKeys = await this.folderKeysFor(variant, ids, tag, campaignId);
     const claimed = shape.claim && assignTo !== null;
     if (claimed)
       await seedBg3Claim(this.db, assignTo, BG3_SEED_CLAIMED_SLOT, ids.claimer);
@@ -142,10 +138,39 @@ export class DemoTestBg3Controller {
       campaignId,
       campaignName: campaignId === null ? null : BG3_SEED_CAMPAIGN_NAME,
       campaignKey,
-      saveCount: saves,
-      sessionCount: sessions,
+      saveCount: host.saves,
+      sessionCount: host.sessions,
       claimedSlotKey: claimed ? BG3_SEED_CLAIMED_SLOT : null,
+      folderKeys,
     };
+  }
+
+  /** The host's 36 saves on `campaignKey`, bound + filed when `assignTo` is set. */
+  private async seedHostSaves(
+    hostId: number,
+    campaignKey: string,
+    assignTo: number | null,
+  ): Promise<{ saves: number; sessions: number }> {
+    if (assignTo !== null)
+      await bindBg3Key(this.db, hostId, campaignKey, assignTo);
+    return seedBg3Saves(this.db, hostId, campaignKey, assignTo, new Date());
+  }
+
+  /** ROK-2068 `folder-keys`: the member's 6 old + 3 recent per-key saves. */
+  private async folderKeysFor(
+    variant: Bg3SeedVariant,
+    ids: Record<Bg3SeedRole, number>,
+    tag: string,
+    campaignId: number | null,
+  ): Promise<string[]> {
+    if (variant !== 'folder-keys' || campaignId === null) return [];
+    return seedBg3FolderKeySaves(
+      this.db,
+      ids.member,
+      tag,
+      campaignId,
+      new Date(),
+    );
   }
 
   private async campaignFor(

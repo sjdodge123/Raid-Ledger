@@ -16,7 +16,7 @@ import {
 import { PIN_TYPE_GROUP_IDS, isPinTypeGroupId, type PinTypeGroupId } from './pin-type-groups';
 
 export { DEATH_PINS, PINS_PARAM } from './pin-filter-params';
-export { filterPins, matchesPinFilter, serverPinAsMapPin } from './pin-filter-pins';
+export { filterPins, matchesPinFilter, readPinAsMapPin, serverPinAsMapPin } from './pin-filter-pins';
 
 /** Whose pins: the shown character's own map, every player, or chosen character ids. */
 export type PinPlayers = 'character' | 'all' | readonly number[];

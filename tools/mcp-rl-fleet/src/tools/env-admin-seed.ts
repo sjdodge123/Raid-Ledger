@@ -2,13 +2,14 @@
 // can obtain the env admin password the same way rl_validate_ci does — the
 // value never leaves the MCP server process.
 import { execFileP } from './runner-git.js';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 
 // ROK-1368: re-assert admin@local in the spun env to a KNOWN password and
 // return it, so Playwright's global-setup (scripts/playwright-global-setup.ts,
 // `ADMIN_PASSWORD || 'password'`) authenticates against the fleet env. env-spin
 // seeds the env admin from RL_ADMIN_PASSWORD (or a random rl-<hex>) and only
 // RETURNS the plaintext — it never persists it keyed by slug, so the harness
-// can't look it up later. We re-seed via the rl-docker-proxy (the loopback-2375
+// can't look it up later. We re-seed via the rl-docker-proxy (its unix socket, ROK-2049
 // `docker exec` path rl_env_inspect already uses), preferring RL_ADMIN_PASSWORD
 // so a tester's password stays stable, else a fresh rl-ci-<hex>. bootstrap-admin
 // is idempotent (RESET_PASSWORD=true). Returns null on ANY failure — the caller
@@ -24,7 +25,7 @@ export function buildSeedRemote(slug: string, requireFixed = false): string {
   return (
     `PW="$(grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2-)"; ` +
     fallback +
-    `DOCKER_HOST=tcp://127.0.0.1:2375 docker exec ` +
+    `DOCKER_HOST=${VM_DOCKER_HOST} docker exec ` +
     `-e ADMIN_PASSWORD="$PW" -e RESET_PASSWORD=true ${container} ` +
     `node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 && ` +
     `printf 'RL_SEEDED_PW=%s' "$PW"`

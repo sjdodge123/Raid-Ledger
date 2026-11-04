@@ -15,6 +15,7 @@ import {
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getHubGameWidgetRegistrations, type HubGameWidget } from './hub-game-widgets';
+import { collectCompanionPrompts, companionPromptDrift, type CompanionPromptRegistration } from '../test/hub-companion-prompt-ownership';
 
 /** Every plugin folder's `register.ts`, discovered — a new plugin is checked automatically (review M2). */
 const PLUGIN_REGISTERS = import.meta.glob('./*/register.ts', { eager: true });
@@ -139,5 +140,63 @@ describe('W6 — the Gallery alias', () => {
     it('maps the old Valheim Gallery id to the Core one and collapses duplicates', () => {
         const prefs = { order: ['plugin:valheim:gallery', 'events', 'plugin:core:gallery'], hidden: [], added: [], config: {} };
         expect(normaliseHubWidgetPrefs(prefs).order).toEqual(['plugin:core:gallery', 'events']);
+    });
+});
+
+/**
+ * ROK-2056 — Companion prompts. Two-way, like W2: a prompt must name an `rlCompanion`
+ * requirement of its OWN plugin (inside its gameSlugs), and an `rlCompanion` requirement
+ * nobody prompts is reported, not allowed — a Companion collector members are never told
+ * about is the gap this story closes. A deliberately silent one needs a guard change.
+ */
+describe('W7 — every Companion prompt names its own rlCompanion requirement, and back', () => {
+    const prompts = collectCompanionPrompts();
+    const prompt = (over: Partial<CompanionPromptRegistration>): CompanionPromptRegistration =>
+        ({ owner: 'bg3', requirementId: 'upload-saves', alsoCovers: ['companion-screenshots'], games: ['baldurs-gate-3'], ...over });
+
+    it('sees the BG3 and Blizzard prompts, and finds no drift', () => {
+        expect(prompts.map((p) => `${p.owner}:${p.requirementId}`))
+            .toEqual(expect.arrayContaining(['bg3:upload-saves', 'blizzard:ledgerlink-companion']));
+        expect(companionPromptDrift(prompts, HUB_PLUGIN_MANIFESTS)).toEqual([]);
+    });
+
+    it('names a prompt whose requirement is missing, lacks rlCompanion, or belongs to another plugin', () => {
+        const others = prompts.filter((p) => p.owner !== 'bg3');
+        expect(companionPromptDrift([...others, prompt({ requirementId: 'gone' })], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'companion prompt bg3:gone names no requirement in HUB_PLUGIN_MANIFESTS.bg3.setup',
+            'HUB_PLUGIN_MANIFESTS.bg3.setup requirement "upload-saves" carries rlCompanion but no companion prompt registers it',
+        ]);
+        expect(companionPromptDrift([...prompts, prompt({ requirementId: 'bind-campaign' })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['companion prompt bg3:bind-campaign names a requirement without rlCompanion']);
+        expect(companionPromptDrift([...prompts, prompt({ owner: 'valheim' })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['companion prompt valheim:upload-saves names no requirement in HUB_PLUGIN_MANIFESTS.valheim.setup']);
+    });
+
+    it('names a prompt outside its plugin gameSlugs, with no games, or with no manifest', () => {
+        const rest = prompts.filter((p) => p.owner !== 'bg3');
+        expect(companionPromptDrift([...rest, prompt({ games: ['valheim'] })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['companion prompt bg3:upload-saves targets game "valheim", not in HUB_PLUGIN_MANIFESTS.bg3.gameSlugs']);
+        expect(companionPromptDrift([...rest, prompt({ games: [] })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['companion prompt bg3:upload-saves lists no games']);
+        expect(companionPromptDrift([...prompts, prompt({ owner: 'ghost' })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['companion prompt ghost:upload-saves has no HUB_PLUGIN_MANIFESTS.ghost']);
+    });
+
+    it('holds an alsoCovers id to the same rules, and an uncovered rlCompanion requirement is reported (ROK-1966)', () => {
+        const rest = prompts.filter((p) => p.owner !== 'bg3');
+        expect(companionPromptDrift([...rest, prompt({ alsoCovers: [] })], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'HUB_PLUGIN_MANIFESTS.bg3.setup requirement "companion-screenshots" carries rlCompanion but no companion prompt registers it',
+        ]);
+        expect(companionPromptDrift([...rest, prompt({ alsoCovers: ['companion-screenshots', 'gone', 'bind-campaign'] })], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'companion prompt bg3:upload-saves also covers "gone", which names no requirement in HUB_PLUGIN_MANIFESTS.bg3.setup',
+            'companion prompt bg3:upload-saves also covers "bind-campaign", a requirement without rlCompanion',
+        ]);
+    });
+
+    it('names an rlCompanion requirement no prompt registers', () => {
+        const regs = prompts.filter((p) => p.owner !== 'blizzard');
+        expect(companionPromptDrift(regs, HUB_PLUGIN_MANIFESTS)).toEqual([
+            'HUB_PLUGIN_MANIFESTS.blizzard.setup requirement "ledgerlink-companion" carries rlCompanion but no companion prompt registers it',
+        ]);
     });
 });

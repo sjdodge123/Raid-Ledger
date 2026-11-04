@@ -25,7 +25,9 @@ import {
 } from "./valheim-link-map.schema.js";
 
 const Id = z.number().int().positive();
-const Iso = z.iso.datetime();
+/** The armory read shapes' ISO timestamp — shared with the server-pins layer. */
+export const ValheimReadIsoSchema = z.iso.datetime();
+const Iso = ValheimReadIsoSchema;
 
 /** How a character got its owner. */
 export const ValheimClaimSourceSchema = z.enum(["auto", "manual", "admin"]);
@@ -184,6 +186,19 @@ export const ValheimCharacterDetailSchema =
     hubId: Id.nullable().optional(),
     /** ROK-1882 (additive): skill gains over the last 3 play days; the API always sends it (`days: []` when none). */
     skillTrend: ValheimSkillTrendSchema.optional(),
+    /**
+     * ROK-2058 (additive): the game version of the catalogue `items` came from.
+     * Differs from `gameVersion` when the server has no catalogue for the
+     * character's version yet and the API fell back to the newest one; null
+     * when there is no catalogue at all.
+     */
+    catalogueGameVersion: z.string().nullable().optional(),
+    /**
+     * ROK-1931 (additive, Q2 = A): the game's lifetime per-character death
+     * stat across every world and single-player ("Deaths (all worlds)"); null
+     * when the mod never reported it. Not the per-server bar count.
+     */
+    deathCount: z.number().int().min(0).nullable().optional(),
   }).strict();
 export type ValheimCharacterDetail = z.infer<
   typeof ValheimCharacterDetailSchema
@@ -193,12 +208,22 @@ export type ValheimCharacterDetail = z.infer<
  * `GET /plugins/valheim/armory/characters/:id/maps/:mapId` — metadata only; fog
  * bitmaps and blob bytes are served by V7 (Q7). Pin labels are free text.
  */
+/**
+ * A map pin as the armory reads it: the wire pin, plus (ROK-1931, additive)
+ * `diedAt` on a synthetic `Death` pin built from a mod-reported death — the
+ * web labels it "Death · <date time>" in the viewer's local time (Q6 = A).
+ */
+export const ValheimReadMapPinSchema = ValheimMapPinSchema.extend({
+  diedAt: Iso.optional(),
+}).strict();
+export type ValheimReadMapPin = z.infer<typeof ValheimReadMapPinSchema>;
+
 export const ValheimMapMetaSchema = z
   .object({
     id: Id,
     worldUid: ValheimInt64StringSchema,
     grid: ValheimMapGridSchema,
-    pins: z.array(ValheimMapPinSchema),
+    pins: z.array(ValheimReadMapPinSchema),
     hasSharedExplored: z.boolean(),
     baseMap: ValheimMapBaseMapSchema.nullable(),
     capturedAt: Iso,

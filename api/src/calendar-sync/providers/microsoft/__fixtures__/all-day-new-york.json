@@ -1,0 +1,11 @@
+{
+  "id": "AAMkAD-all-day-new-york=",
+  "subject": "Holiday",
+  "showAs": "oof",
+  "isAllDay": true,
+  "isCancelled": false,
+  "responseStatus": { "response": "organizer", "time": "0001-01-01T00:00:00Z" },
+  "originalStartTimeZone": "America/New_York",
+  "start": { "dateTime": "2026-11-05T05:00:00.0000000", "timeZone": "UTC" },
+  "end": { "dateTime": "2026-11-06T05:00:00.0000000", "timeZone": "UTC" }
+}

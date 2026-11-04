@@ -2,6 +2,7 @@
  * ROK-1957 §9.1 U-5 — the `bg3-save` handler: contract wiring, latest-wins
  * key, blob refs, and the D-6 campaign resolution on `handle`.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
@@ -10,7 +11,16 @@ import {
   type Bg3SaveMessage,
 } from '@raid-ledger/contract';
 import type { CompanionHandlerContext } from '../../../companion/ingest/companion-handler.registry';
-import { Bg3SaveHandler, partyMaxLevel } from './bg3-save.handler';
+import {
+  Bg3SaveHandler,
+  bg3LatestMarkerKey,
+  partyMaxLevel,
+} from './bg3-save.handler';
+import { lockBg3UserMarkers } from './bg3-marker-lock';
+
+jest.mock('./bg3-marker-lock', () => ({
+  lockBg3UserMarkers: jest.fn().mockResolvedValue(undefined),
+}));
 
 const FIXTURES = join(
   __dirname,
@@ -53,11 +63,15 @@ describe('Bg3SaveHandler — contract wiring (U-5)', () => {
     expect(handler.sources).toEqual(['device', 'session']);
   });
 
-  it('latest-wins on {campaignKey, savedAt}', () => {
-    expect(handler.latestWins(ACT2)).toEqual({
-      key: ACT2.payload.campaignKey,
-      at: new Date(ACT2.payload.savedAt),
-    });
+  it('latest-wins on {sha256(campaignKey + "\\n" + saveName), savedAt} — one marker per save (ROK-2070 B1)', () => {
+    const { campaignKey, saveName, savedAt } = ACT2.payload;
+    const key = createHash('sha256')
+      .update(`${campaignKey}\n${saveName}`)
+      .digest('hex');
+    expect(handler.latestWins(ACT2)).toEqual({ key, at: new Date(savedAt) });
+    expect(bg3LatestMarkerKey(campaignKey, saveName)).toBe(key);
+    const other = { ...ACT2, payload: { ...ACT2.payload, saveName: 'Other' } };
+    expect(handler.latestWins(other).key).not.toBe(key);
   });
 
   it('refs the thumbnail, and nothing when it is null', () => {
@@ -66,6 +80,14 @@ describe('Bg3SaveHandler — contract wiring (U-5)', () => {
     expect(handler.blobRefs(ACT2)).toEqual([thumb]);
     const bare = { ...ACT2, payload: { ...ACT2.payload, thumbnail: null } };
     expect(handler.blobRefs(bare)).toEqual([]);
+  });
+});
+
+describe('Bg3SaveHandler.lockLatestWins — markers lock (ROK-1960 P2-3)', () => {
+  it("takes the user's markers lock on the ingest tx", async () => {
+    const { handler, ctx } = setup(null);
+    await handler.lockLatestWins(ctx.tx, 7);
+    expect(lockBg3UserMarkers).toHaveBeenCalledWith(ctx.tx, 7);
   });
 });
 
@@ -115,6 +137,16 @@ describe('Bg3SaveHandler.handle — campaign resolution (D-6)', () => {
       thumbnailWidth: null,
       thumbnailHeight: null,
     });
+  });
+
+  it('accepts and stores campaignKeySource "file-name" (bare .lsv upload, ROK-1960)', async () => {
+    const { repo, handler, ctx } = setup(null);
+    const bare = Bg3SaveMessageSchema.parse({
+      ...ACT2,
+      payload: { ...ACT2.payload, campaignKeySource: 'file-name' },
+    });
+    await handler.handle(ctx, bare);
+    expect(insertedRow(repo)).toMatchObject({ campaignKeySource: 'file-name' });
   });
 });
 

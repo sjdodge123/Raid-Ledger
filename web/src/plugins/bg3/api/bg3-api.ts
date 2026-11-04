@@ -8,6 +8,7 @@ import {
     Bg3HubCampaignsResponseSchema,
     Bg3HubSettingsSchema,
     Bg3MySavesResponseSchema,
+    Bg3RemoveSavesResultSchema,
     Bg3SessionsResponseSchema,
     Bg3SnapshotResponseSchema,
     type Bg3CampaignSummary,
@@ -15,6 +16,7 @@ import {
     type Bg3HubSettings,
     type Bg3HubSettingsBody,
     type Bg3MySavesResponse,
+    type Bg3RemoveSavesResult,
     type Bg3SessionsResponse,
     type Bg3SnapshotResponse,
 } from '@raid-ledger/contract';
@@ -80,27 +82,45 @@ export function fetchBg3Sessions(
 /** Safety stop for the page walk below: 50 saves a page (api `BG3_MY_SAVES_PAGE`) × 40 = 2000 saves. */
 export const BG3_MY_SAVES_MAX_PAGES = 40;
 
-function fetchBg3MyUnassignedPage(cursor: string | null): Promise<Bg3MySavesResponse> {
-    const q = new URLSearchParams({ unassigned: 'true' });
+function fetchBg3MySavesPage(unassigned: boolean, cursor: string | null): Promise<Bg3MySavesResponse> {
+    const q = new URLSearchParams(unassigned ? { unassigned: 'true' } : {});
     if (cursor !== null) q.set('cursor', cursor);
-    return fetchApi(`${BG3_API}/me/saves?${q.toString()}`, {}, Bg3MySavesResponseSchema);
+    const query = q.toString();
+    return fetchApi(`${BG3_API}/me/saves${query === '' ? '' : `?${query}`}`, {}, Bg3MySavesResponseSchema);
 }
 
 /**
- * Every one of the caller's saves that is in no campaign: walks `nextCursor`
- * (the api pages 50 at a time) so the Add my saves list and the count are
+ * Walks `nextCursor` (the api pages 50 at a time) so a list and its counts are
  * whole. `nextCursor` is non-null only if the safety stop cut the walk short.
  */
-export async function fetchBg3MyUnassignedSaves(): Promise<Bg3MySavesResponse> {
-    const first = await fetchBg3MyUnassignedPage(null);
+async function walkBg3MySaves(unassigned: boolean): Promise<Bg3MySavesResponse> {
+    const first = await fetchBg3MySavesPage(unassigned, null);
     const saves = [...first.saves];
     let cursor = first.nextCursor;
     for (let page = 1; cursor !== null && page < BG3_MY_SAVES_MAX_PAGES; page += 1) {
-        const next = await fetchBg3MyUnassignedPage(cursor);
+        const next = await fetchBg3MySavesPage(unassigned, cursor);
         saves.push(...next.saves);
         cursor = next.nextCursor;
     }
     return { saves, nextCursor: cursor, defaultCampaignId: first.defaultCampaignId };
+}
+
+/** Every one of the caller's saves that is in no campaign (Add my saves). */
+export function fetchBg3MyUnassignedSaves(): Promise<Bg3MySavesResponse> {
+    return walkBg3MySaves(true);
+}
+
+/** ROK-2068 — every one of the caller's saves, filed or not, on any hub (Manage my saves). */
+export function fetchBg3MyAllSaves(): Promise<Bg3MySavesResponse> {
+    return walkBg3MySaves(false);
+}
+
+/**
+ * ROK-2068 — delete the caller's saves of these campaign keys (and their
+ * Gallery pictures). Works whether or not `bg3` is active; unknown keys count 0.
+ */
+export function removeBg3Saves(campaignKeys: readonly string[]): Promise<Bg3RemoveSavesResult> {
+    return fetchApi(`${BG3_API}/me/saves/remove`, json('POST', { campaignKeys }), Bg3RemoveSavesResultSchema);
 }
 
 export function createBg3Campaign(hubId: number, name: string): Promise<Bg3CampaignSummary> {
@@ -116,8 +136,13 @@ export function setBg3DefaultCampaign(campaignId: number | null): Promise<void> 
     return fetchApi<void>(`${BG3_API}/me/default-campaign`, json('PUT', { campaignId }));
 }
 
-export function bindBg3CampaignKey(campaignKey: string, campaignId: number): Promise<void> {
-    return fetchApi<void>(`${BG3_API}/me/campaign-keys/${seg(campaignKey)}`, json('PUT', { campaignId }));
+/**
+ * ROK-1960 F4: without `confirmCrossHub` a bind that would move the caller's
+ * saves out of another hub rejects with 409 `cross_hub_move` and moves nothing.
+ */
+export function bindBg3CampaignKey(campaignKey: string, campaignId: number, confirmCrossHub = false): Promise<void> {
+    const body = confirmCrossHub ? { campaignId, confirmCrossHub: true } : { campaignId };
+    return fetchApi<void>(`${BG3_API}/me/campaign-keys/${seg(campaignKey)}`, json('PUT', body));
 }
 
 export function updateBg3HubSettings(hubId: number, body: Bg3HubSettingsBody): Promise<Bg3HubSettings> {

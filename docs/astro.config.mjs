@@ -8,4 +8,8 @@ import { defineConfig } from 'astro/config';
 export default defineConfig({
   site: 'https://sjdodge123.github.io',
   base: '/Raid-Ledger',
+  // TODO(ROK-2051): main (ROK-2064, #1917) added a Starlight sidebar entry for
+  // the WoW: Forever guide (src/content/docs/guides/wow-forever.md, linked from
+  // the app via WOW_FOREVER_GUIDE_URL). This site has no Starlight, so that page
+  // is not published here yet — port it to src/pages/guides/ before merging.
 });

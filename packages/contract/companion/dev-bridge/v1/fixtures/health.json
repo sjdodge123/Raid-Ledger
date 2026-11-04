@@ -1,0 +1,15 @@
+{
+  "app": "rl-companion",
+  "appVersion": "0.4.0",
+  "bridgeVersion": 1,
+  "devMode": true,
+  "probesEnabled": true,
+  "wowDir": "D:/Games/World of Warcraft",
+  "flavors": [
+    "_classic_era_",
+    "_anniversary_"
+  ],
+  "wowRunning": false,
+  "uptimeSec": 5400,
+  "now": "2026-11-01T18:30:00Z"
+}

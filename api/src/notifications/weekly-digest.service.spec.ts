@@ -91,7 +91,6 @@ function setup(settings: Record<string, string | null> = {}) {
   };
   const service = new WeeklyDigestService(
     {} as never,
-    {} as never,
     dedup as never,
     settingsService as never,
     client as never,

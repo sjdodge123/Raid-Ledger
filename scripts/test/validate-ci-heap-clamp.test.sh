@@ -68,6 +68,25 @@ assert_heap "not-a-number" "" "non-numeric limit"
 # A limit so small the 75% share rounds to zero.
 assert_heap 1024 "" "sub-megabyte limit"
 
+# The api lint heap: 7/8 of a capped cgroup (over the runner's injected 3/4),
+# else a caller-set heap, else GitHub CI's 8192.
+assert_lint_opts() {
+    local limit="$1" inherited="$2" expected="$3" label="$4" actual tmp
+    tmp="$(mktemp)"
+    printf '%s' "$limit" > "$tmp"
+    actual="$(RL_CGROUP_MEMORY_MAX_FILE="$tmp" NODE_OPTIONS="$inherited" _lint_node_opts)"
+    rm -f "$tmp"
+    if [ "$actual" = "$expected" ]; then
+        pass
+    else
+        fail "$label: _lint_node_opts -> '$actual', expected '$expected'"
+    fi
+}
+
+assert_lint_opts 6442450944 "--max-old-space-size=4608" "--max-old-space-size=5376" "6 GiB runner overrides the injected 4608"
+assert_lint_opts max "--max-old-space-size=6000 --trace-warnings" "--max-old-space-size=6000 --trace-warnings" "no cgroup limit keeps a caller-set heap"
+assert_lint_opts max "--trace-warnings" "--trace-warnings --max-old-space-size=8192" "no cgroup limit, no heap -> 8192"
+
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"
 if (( TEST_FAIL_COUNT > 0 )); then

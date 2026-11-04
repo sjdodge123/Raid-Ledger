@@ -2,8 +2,10 @@
  * ROK-1874 AC5–7 — locking a standalone poll onto a full roster benches the
  * overflow voter and DMs them "On the bench" instead of "Auto-signed up".
  *
- * Flow under test is the real one the create form drives: POST /events with
- * `schedulingMatchId` (which signs the creator up first), then
+ * Flow under test is the legacy two-step one, kept live for `/complete`: the
+ * poll's event is created by the direct fixture `createPollEventDirect` (which
+ * signs the creator up first; ROK-2039 made `POST /events` refuse
+ * `schedulingMatchId`, and the form now uses `/lock-in`), then
  * POST /scheduling-polls/:matchId/complete. The auto-signup + DM chain is
  * fire-and-forget after `/complete`, so every assertion first waits (via the
  * repo's `waitFor` poll helper) until EVERY selected voter's notification row
@@ -14,6 +16,7 @@
  * `slotConfig.player = 2`, `maxAttendees = 2`. The creator's own signup takes
  * one spot, so creator + 2 other yes-voters overflows by exactly one.
  */
+import { createPollEventDirect } from '../../common/testing/poll-event.fixture';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -89,25 +92,20 @@ async function addSlotWithYesVotes(
   }
 }
 
-/** POST /events from the poll on an N-spot generic roster; returns its id. */
+/** The poll's event (direct fixture) on an N-spot generic roster; returns its id. */
 async function createEventFromPoll(
   matchId: number,
   start: Date,
 ): Promise<number> {
-  const res = await testApp.request
-    .post('/events')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({
-      title: 'Locked In Over Cap',
-      startTime: start.toISOString(),
-      endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
-      gameId: testApp.seed.game.id,
-      slotConfig: { type: 'generic', player: ROSTER_CAP },
-      maxAttendees: ROSTER_CAP,
-      schedulingMatchId: matchId,
-    });
-  expect(res.status).toBe(201);
-  return res.body.id as number;
+  return createPollEventDirect(testApp, testApp.seed.adminUser.id, {
+    title: 'Locked In Over Cap',
+    startTime: start.toISOString(),
+    endTime: new Date(start.getTime() + TWO_HOURS_MS).toISOString(),
+    gameId: testApp.seed.game.id,
+    slotConfig: { type: 'generic', player: ROSTER_CAP },
+    maxAttendees: ROSTER_CAP,
+    schedulingMatchId: matchId,
+  });
 }
 
 /** POST the lock-in that triggers auto-signup + the voter DMs. */

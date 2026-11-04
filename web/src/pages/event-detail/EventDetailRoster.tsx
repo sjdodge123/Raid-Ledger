@@ -6,6 +6,7 @@ import { toAvatarUser } from '../../lib/avatar';
 import { guestProfileLink } from '../../lib/guest-profile-link';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
+import { SeriesBadge } from '../../components/events/SeriesBadge';
 import { PluginSlot } from '../../plugins';
 import { copyWithToast } from '../../lib/clipboard';
 import type { EventResponseDto, SignupCharacterDto } from '@raid-ledger/contract';
@@ -35,6 +36,8 @@ interface SignupItem {
     /** ROK-1379 follow-up: running-late marker (⏰ badge parity with the Discord embed) */
     runningLate?: boolean | undefined;
     lateMinutes?: number | null | undefined;
+    /** ROK-1728: set when a series membership created or adopted this signup */
+    seriesSignupId?: number | null | undefined;
 }
 
 interface EventDetailRosterProps {
@@ -66,6 +69,12 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
             <span role="img" aria-hidden="true">&#9200;</span> late{minutes ? ` +${minutes}m` : ''}
         </span>
     );
+}
+
+/** Labelled "Series" marker for a signup tagged by a series membership (ROK-1728 AC7). */
+function SeriesMarker({ signup }: { signup: Pick<SignupItem, 'seriesSignupId'> }) {
+    if (signup.seriesSignupId == null) return null;
+    return <SeriesBadge showLabel title="Signed up for the series" className="shrink-0" />;
 }
 
 /**
@@ -108,6 +117,7 @@ function SignupEntry({ signup, event, showBadge }: {
                 <RolePreferenceBadges roles={signup.preferredRoles} />
                 {showBadge && <span className={showBadge.className}>{showBadge.text}</span>}
                 <RunningLateBadge signup={signup} />
+                <SeriesMarker signup={signup} />
             </div>
             {signup.character && (
                 <CharacterCardCompact id={signup.character.id} name={signup.character.name} avatarUrl={signup.character.avatarUrl}
@@ -161,6 +171,7 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                             <SignupIdentity signup={s} event={event} />
                             <RolePreferenceBadges roles={s.preferredRoles} />
                             <RunningLateBadge signup={s} />
+                            <SeriesMarker signup={s} />
                             <PluginSlot name="event-detail:signup-warnings" context={{ characterLevel: s.character?.level, contentInstances: event.contentInstances ?? [], gameSlug: event.game?.slug }} />
                         </div>
                         {s.character && (
@@ -202,6 +213,7 @@ function SimpleSignupGroup({ signups, event, title, icon, itemClass, badge }: {
                         <SignupIdentity signup={s} event={event} />
                         {badge && <span className={badge.className}>{badge.text}</span>}
                         <RunningLateBadge signup={s} />
+                        <SeriesMarker signup={s} />
                     </div>
                 ))}
             </div>

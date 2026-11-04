@@ -13,6 +13,8 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { findVisibleIdByProvenance } from '../../../hub-media/hub-media.read.repository';
+import { galleryProvenanceKey } from '../gallery/bg3-gallery-sync.helpers';
 import type { Bg3RetentionRow } from '../history/bg3-retention.helpers';
 import { toBg3CampaignSummary } from './bg3-read.mappers';
 
@@ -54,7 +56,11 @@ export interface Bg3ClaimView {
   slotKey: string;
   userId: number;
   displayName: string;
+  /** Raw `users.custom_avatar_url` — kept on the wire as legacy `avatarUrl`. */
   avatarUrl: string | null;
+  /** ROK-2069: Discord avatar hash + id, resolved client-side by `toAvatarUser`. */
+  avatar: string | null;
+  discordId: string | null;
 }
 
 export const SAVE_LITE_COLS = {
@@ -204,6 +210,8 @@ export class Bg3ReadRepository {
         displayName: u.displayName,
         username: u.username,
         avatarUrl: u.customAvatarUrl,
+        avatar: u.avatar,
+        discordId: u.discordId,
       })
       .from(k)
       .innerJoin(u, eq(u.id, k.userId))
@@ -212,5 +220,19 @@ export class Bg3ReadRepository {
       ...rest,
       displayName: displayName ?? username,
     }));
+  }
+
+  /**
+   * ROK-2074 — the hub Gallery picture of a save screenshot (D-4 provenance
+   * key) every viewer can see: not removed, hidden or gated; else null.
+   */
+  galleryMediaId(
+    hubId: number,
+    thumbnailSha256: string,
+    excludeSources: readonly string[],
+  ): Promise<number | null> {
+    const scope = { guildId: hubId, includeHidden: false, excludeSources };
+    const key = galleryProvenanceKey(thumbnailSha256);
+    return findVisibleIdByProvenance(this.db, scope, key);
   }
 }

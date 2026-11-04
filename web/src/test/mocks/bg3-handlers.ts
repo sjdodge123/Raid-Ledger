@@ -6,9 +6,11 @@
  */
 import { http, HttpResponse } from 'msw';
 import type {
+    Bg3CrossHubMove,
     Bg3CampaignSummary,
     Bg3HubCampaignsResponse,
     Bg3MySavesResponse,
+    Bg3RemoveSavesResult,
     Bg3SessionsResponse,
     Bg3SnapshotResponse,
 } from '@raid-ledger/contract';
@@ -20,6 +22,7 @@ export const BG3_SNAPSHOT_URL = `${BG3_URL}/hubs/:hubId/snapshot`;
 export const BG3_SESSIONS_URL = `${BG3_URL}/hubs/:hubId/campaigns/:campaignId/sessions`;
 export const BG3_SETTINGS_URL = `${BG3_URL}/hubs/:hubId/settings`;
 export const BG3_MY_SAVES_URL = `${BG3_URL}/me/saves`;
+export const BG3_REMOVE_SAVES_URL = `${BG3_URL}/me/saves/remove`;
 export const BG3_CAMPAIGN_URL = `${BG3_URL}/campaigns/:campaignId`;
 export const BG3_DEFAULT_URL = `${BG3_URL}/me/default-campaign`;
 export const BG3_KEY_URL = `${BG3_URL}/me/campaign-keys/:campaignKey`;
@@ -86,6 +89,19 @@ export const bg3UpdateCampaignHandler = (summary: Bg3CampaignSummary = buildBg3C
     writeHandler('patch', BG3_CAMPAIGN_URL, () => HttpResponse.json(summary), spy);
 export const bg3DefaultCampaignHandler = (spy?: Bg3Spy) => writeHandler('put', BG3_DEFAULT_URL, noContent, spy);
 export const bg3BindKeyHandler = (spy?: Bg3Spy) => writeHandler('put', BG3_KEY_URL, noContent, spy);
+/** ROK-1960 F4: the server's cross-hub guard — 409 `move` unless the body says `confirmCrossHub: true`. */
+export function bg3BindKeyCrossHubHandler(move: Bg3CrossHubMove, spy?: Bg3Spy) {
+    return http.put(BG3_KEY_URL, async ({ request, params }) => {
+        const body: unknown = await request.json();
+        spy?.(body, params);
+        const confirmed = typeof body === 'object' && body !== null && 'confirmCrossHub' in body && body.confirmCrossHub === true;
+        return confirmed ? noContent() : HttpResponse.json(move, { status: 409 });
+    });
+}
+/** ROK-2068 — POST me/saves/remove → 200 `result`, or `status` with a plain error body. */
+export function bg3RemoveSavesHandler(result: Bg3RemoveSavesResult, spy?: Bg3Spy, status = 200) {
+    return writeHandler('post', BG3_REMOVE_SAVES_URL, () => (status === 200 ? HttpResponse.json(result) : bg3Error(status, 'Internal server error')), spy);
+}
 export const bg3HubSettingsHandler = (
     settings: Bg3HubCampaignsResponse['settings'] = { hideLocationAndScreenshots: true, activeCampaignId: null },
     spy?: Bg3Spy,

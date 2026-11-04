@@ -45,6 +45,14 @@ export function contentEvents(raids: GuildRaidsDto | undefined, limit: number = 
         .slice(0, limit);
 }
 
+/**
+ * ROK-1926: the next content event that has NOT started yet. `/raids` lists
+ * events until they end, so a running one is skipped ("next run" = upcoming).
+ */
+export function nextContentEvent(raids: GuildRaidsDto | undefined, now: number = Date.now()): GuildEventCardDto | undefined {
+    return contentEvents(raids, Number.POSITIVE_INFINITY).find((e) => Date.parse(e.startTime) > now);
+}
+
 /** Whether any upcoming guild event has planned content (the widget's `useVisible`). */
 export function hasContentEvents(raids: GuildRaidsDto | undefined): boolean {
     return raids?.upcoming.some(hasContent) ?? false;

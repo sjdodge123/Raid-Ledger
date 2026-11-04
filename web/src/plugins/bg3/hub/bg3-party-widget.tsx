@@ -27,6 +27,9 @@ function viewerClaim(user: User | null | undefined): Bg3PartyClaim {
         userId: user?.id ?? 0,
         displayName: user?.displayName ?? user?.username ?? 'You',
         avatarUrl: user?.resolvedAvatarUrl ?? user?.customAvatarUrl ?? null,
+        avatar: user?.avatar ?? null,
+        discordId: user?.discordId ?? null,
+        customAvatarUrl: user?.customAvatarUrl ?? null,
     };
 }
 
@@ -89,7 +92,8 @@ export default function Bg3PartyWidget({ page }: HubWidgetCtx): JSX.Element {
             {snap === null || snap.empty || kind !== null
                 ? <Bg3PartyEmpty kind={kind ?? 'no-active'} campaignName={campaign?.name ?? null} canEdit={campaigns.data.canEdit}
                     isMember={isBg3HubMember(page)}
-                    onStartCampaign={() => setDialog('start')} onAddSaves={() => setDialog('add-saves')} />
+                    onStartCampaign={() => setDialog('start')} onAddSaves={() => setDialog('add-saves')}
+                    onUploadSave={() => setDialog('upload')} />
                 : <PartyGrid hubId={hubId} snap={snap} campaign={campaign} canEdit={campaigns.data.canEdit}
                     isMember={isBg3HubMember(page)} />}
             <Bg3PartyDialogs open={dialog} onClose={() => setDialog(null)} hubId={hubId}

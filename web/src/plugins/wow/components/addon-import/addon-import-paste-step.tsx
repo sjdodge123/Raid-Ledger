@@ -16,6 +16,7 @@ import { Field } from '../../../../components/ui/field';
 import { Textarea } from '../../../../components/ui/textarea';
 import { Button } from '../../../../components/ui/button';
 import { AddonImportErrorBanner } from './addon-import-error-banner';
+import { CompanionInstallLink } from '../../../../components/common/companion-install-link';
 
 function sizeError(bytes: number): string | undefined {
     if (bytes <= ADDON_IMPORT_MAX_BYTES) return undefined;
@@ -82,6 +83,7 @@ export function AddonImportPasteStep(props: AddonImportPasteStepProps): JSX.Elem
                 />
             </Field>
             <PasteMeta value={props.value} />
+            <CompanionInstallLink lead="Make this automatic —" />
             {props.error != null && <AddonImportErrorBanner error={props.error} gameId={props.gameId} />}
         </div>
     );

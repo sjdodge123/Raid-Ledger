@@ -10,6 +10,7 @@ import * as schema from '../../drizzle/schema';
 import type { CalendarOAuthIntent } from '@raid-ledger/contract';
 import type { CalendarProviderKey } from '../providers/calendar-provider.interface';
 import { hasGoogleReadScopes } from '../providers/google/google-oauth.helpers';
+import { hasMicrosoftCalendarScope } from '../providers/microsoft/microsoft-oauth.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -17,12 +18,14 @@ type Db = PostgresJsDatabase<typeof schema>;
  * Whether a grant on `provider` allows reading. Google: the read scopes.
  * Apple (ROK-1598 D10): an app-specific password reads everything — there
  * is no scope step, so a stored Apple connection is always read-capable.
+ * Microsoft (ROK-1597): `Calendars.ReadWrite` covers reading.
  */
 export function grantAllowsRead(
   provider: CalendarProviderKey,
   grantedScopes: readonly string[],
 ): boolean {
   if (provider === 'apple') return true;
+  if (provider === 'microsoft') return hasMicrosoftCalendarScope(grantedScopes);
   return provider === 'google' && hasGoogleReadScopes(grantedScopes);
 }
 

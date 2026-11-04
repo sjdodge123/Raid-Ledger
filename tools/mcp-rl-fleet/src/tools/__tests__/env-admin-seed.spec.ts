@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildSeedRemote, seedFixedEnvAdminPassword } from '../env-admin-seed.js';
 
 // Verbatim remote from before the requireFixed split (slug rok-1).
-const LEGACY_REMOTE = "PW=\"$(grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2-)\"; [ -z \"$PW\" ] && PW=\"rl-ci-$(openssl rand -hex 8)\"; DOCKER_HOST=tcp://127.0.0.1:2375 docker exec -e ADMIN_PASSWORD=\"$PW\" -e RESET_PASSWORD=true rl-env-rok-1-allinone node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 && printf 'RL_SEEDED_PW=%s' \"$PW\"";
+const LEGACY_REMOTE = "PW=\"$(grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2-)\"; [ -z \"$PW\" ] && PW=\"rl-ci-$(openssl rand -hex 8)\"; DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock docker exec -e ADMIN_PASSWORD=\"$PW\" -e RESET_PASSWORD=true rl-env-rok-1-allinone node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 && printf 'RL_SEEDED_PW=%s' \"$PW\"";
 
 describe('buildSeedRemote', () => {
   it('default (rl_validate_ci) form is byte-identical to the pre-split string', () => {

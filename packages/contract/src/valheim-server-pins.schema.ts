@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { ValheimInt64StringSchema } from './valheim-link-common.schema.js';
+import { ValheimReadIsoSchema } from './valheim-armory.schema.js';
 import {
     ValheimPinTypeSchema,
     ValheimWorldCoordSchema,
@@ -33,6 +34,12 @@ export const ValheimServerPinSchema = z
         /** The character the pin belongs to; null when no profile matches (D13). */
         characterId: Id.nullable(),
         characterName: z.string().min(1).max(64),
+        /**
+         * ROK-1931 (additive): set only on a synthetic `Death` pin from a
+         * mod-reported death (its `label` is empty) — the web labels it
+         * "Death · <date time>" in the viewer's local time (Q6 = A).
+         */
+        diedAt: ValheimReadIsoSchema.optional(),
     })
     .strict();
 export type ValheimServerPin = z.infer<typeof ValheimServerPinSchema>;

@@ -9,6 +9,7 @@ import { GuildEventCardSchema } from "../guild-raids.schema.js";
 import { HubFactFreshnessSchema } from "../hub-facts.schema.js";
 import { WowRosterInsightsSchema } from "../wow-roster-insights.schema.js";
 import { EventQuestReadinessSchema } from "../wow-event-quest-readiness.schema.js";
+import { EventRaidReadinessSchema } from "../wow-event-raid-readiness.schema.js";
 import {
   FOREVER_ENCHANTABLE_SLOTS,
   foreverGearSlotName,
@@ -457,5 +458,62 @@ describe("WowRosterInsights raidProgress (ROK-1917)", () => {
         WowRosterInsightsSchema.safeParse({ ...insights, raidProgress: rp })
           .success,
       ).toBe(false);
+  });
+});
+
+describe("EventRaidReadiness (ROK-1926)", () => {
+  const signup = {
+    userId: 7,
+    characterId: "3f1c9a52-8b7e-4d21-9c3a-5e6f7a8b9c0d",
+    name: "Wren",
+    level: { state: "fail", value: 52, source: "addon" },
+    quests: { state: "fail", ready: 2, total: 3 },
+    saved: { state: "pass", instanceName: null, resetAt: null },
+    ilvl: { state: "unknown", value: null, source: null },
+    overall: "fail",
+  };
+  const readiness = {
+    event: {
+      id: 12,
+      title: "Molten Core Night",
+      startTime: "2026-11-05T02:00:00.000Z",
+    },
+    requirements: {
+      minLevel: 60,
+      ilvlFloor: 55,
+      raidNames: ["Molten Core"],
+      questCount: 0,
+    },
+    signups: [signup],
+    freshness: { source: "addon", asOf: "2026-11-01T20:00:00.000Z" },
+  };
+  it("parses a full payload and an event with no signups", () => {
+    expect(EventRaidReadinessSchema.safeParse(readiness).success).toBe(true);
+    expect(
+      EventRaidReadinessSchema.safeParse({
+        ...readiness,
+        signups: [],
+        freshness: null,
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects an unknown key, an na overall and a negative quest count", () => {
+    const bad = [
+      { ...readiness, signups: [{ ...signup, extra: 1 }] },
+      { ...readiness, signups: [{ ...signup, overall: "na" }] },
+      {
+        ...readiness,
+        signups: [
+          { ...signup, quests: { state: "pass", ready: -1, total: 3 } },
+        ],
+      },
+      {
+        ...readiness,
+        requirements: { ...readiness.requirements, questCount: -1 },
+      },
+      { ...readiness, event: { ...readiness.event, startTime: "tomorrow" } },
+    ];
+    for (const r of bad)
+      expect(EventRaidReadinessSchema.safeParse(r).success).toBe(false);
   });
 });

@@ -33,6 +33,7 @@ import {
   seedDeathsCast,
   type DeathsFixture,
 } from './valheim-deaths-demo-seed.helpers';
+import { seedReportedDeath } from './valheim-deaths-demo-seed.reported';
 import { ensureDeathsHub } from './valheim-deaths-demo-seed.server';
 import {
   demoDeathDownloader,
@@ -70,7 +71,8 @@ function parseWorker(body: unknown): number {
  * a non-death pin and a shared pin; `second`: 1 Death pin + a non-death pin),
  * `valheim_player_deaths` rows (5 SteamID-attributed for `top`, 3 NULL-SteamID
  * for `second` → resolved by name, 1 for a name-only player with no profile),
- * a hub member and a non-member visitor, plus (ROK-1946) one portals scan of
+ * a hub member and a non-member visitor, (ROK-1931) one mod-reported death
+ * for `second` off its own Death pin, plus (ROK-1946) one portals scan of
  * 5 portals on the world. Re-running a worker resets the
  * characters, maps, deaths and portals; the server, hub and users keep their ids.
  *
@@ -129,6 +131,11 @@ export class ValheimDeathsDemoSeedController {
       baseMapSha256,
       now,
     });
+    const reported = await seedReportedDeath(
+      this.db,
+      { serverId, now },
+      cast.characters,
+    );
     const portals = await seedDeathsPortals(this.db, serverId, now);
     const users = await ensureDeathsUsers(this.db, worker, guildId);
     return {
@@ -137,6 +144,7 @@ export class ValheimDeathsDemoSeedController {
       worldUid: DEATHS_FIXTURE_WORLD_UID,
       users,
       ...cast,
+      ...reported,
       portals,
     };
   }

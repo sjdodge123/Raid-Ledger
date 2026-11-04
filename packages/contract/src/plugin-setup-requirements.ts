@@ -148,6 +148,7 @@ export const BLIZZARD_SETUP = {
         '1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.',
       required: false,
       appliesTo: ['wow_guild'],
+      rlCompanion: { collector: 'wow-ledgerlink' },
     },
   ],
 } satisfies PluginSetup;
@@ -167,6 +168,7 @@ export const BG3_SETUP = {
         'Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.',
       required: true,
       appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-save' },
     },
     {
       id: 'bind-campaign',
@@ -185,6 +187,16 @@ export const BG3_SETUP = {
         "Nothing to install. About 4 hours after a play session ends, the picture of its last save appears in the hub Gallery under Saves. While the hub's spoiler setting hides location and screenshots, save pictures stay hidden for everyone.",
       required: false,
       appliesTo: ['game_community'],
+    },
+    {
+      id: 'companion-screenshots',
+      kind: 'companion_app',
+      title: 'Screenshots from the Companion',
+      instructions:
+        "1. In the Raid Ledger Companion, turn on \"BG3 screenshots\".\n2. Pick the Baldur's Gate 3 hub they go to. The first screenshot waits for you to confirm it; after that, new screenshots you take with Steam's screenshot key appear in that hub's Gallery under Screenshots. While the hub's spoiler setting hides location and screenshots, they stay hidden for everyone.",
+      required: false,
+      appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-screenshot' },
     },
   ],
 } satisfies PluginSetup;

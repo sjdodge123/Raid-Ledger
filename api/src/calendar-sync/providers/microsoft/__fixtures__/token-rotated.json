@@ -1,0 +1,7 @@
+{
+  "token_type": "Bearer",
+  "scope": "Calendars.ReadWrite User.Read",
+  "expires_in": 3599,
+  "access_token": "EwB-FAKE-MS-ACCESS-TOKEN-refreshed",
+  "refresh_token": "M.C-FAKE-MS-REFRESH-TOKEN-rotated"
+}

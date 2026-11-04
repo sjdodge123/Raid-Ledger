@@ -45,6 +45,7 @@ import {
 } from './companion-blob.reader';
 import { blobRefMismatch, refsAgree } from './companion-blob-refs.helpers';
 import { CompanionBlobReservations } from './companion-blob-reservations';
+import { CompanionBlobUserHolds } from './companion-blob-user-holds';
 import { CompanionBlobsRepository } from './companion-blobs.repository';
 
 /** A request the blob service reads (raw body stream, guards already ran). */
@@ -83,6 +84,8 @@ const storageFull = () =>
 @Injectable()
 export class CompanionBlobService {
   private readonly logger = new Logger(CompanionBlobService.name);
+  /** This user's live upload holds count against their quota. */
+  private readonly userHolds = new CompanionBlobUserHolds();
 
   constructor(
     private readonly repo: CompanionBlobsRepository,
@@ -107,10 +110,24 @@ export class CompanionBlobService {
     const max = COMPANION_WEBP_MAX_BYTES;
     assertBlobRequestHeaders(req, max, req[COMPANION_CONTENT_TYPE]);
     const declared = declaredLength(req);
-    await this.assertUserRoom(auth.userId, declared);
     // Worst case: the declared length (the stream is capped to it), or the
     // contract max for a chunked body. Held until the row commits.
     const cap = declared > 0 ? Math.min(declared, max) : max;
+    const releaseUserHold = await this.holdUserRoom(auth.userId, declared, cap);
+    try {
+      return await this.reserveAndReceive(auth, sha256, req, cap);
+    } finally {
+      releaseUserHold();
+    }
+  }
+
+  /** The global reservation around steps 6–14; released on every path. */
+  private async reserveAndReceive(
+    auth: CompanionIngestAuth,
+    sha256: string,
+    req: CompanionBlobUpload,
+    cap: number,
+  ): Promise<CompanionBlobAck> {
     const hold = await this.reservations.reserve(
       cap,
       companionBlobTotalMaxBytes(),
@@ -146,14 +163,20 @@ export class CompanionBlobService {
 
   /**
    * Step 5 fast-fail on the user's quota (the insert re-checks it under the
-   * user's lock). The global ceiling is the reservation in `upload`.
+   * user's lock), counting the user's live upload holds so their in-flight
+   * uploads stay within the quota too. Holds `cap` bytes until released.
+   * The global ceiling is the reservation in `reserveAndReceive`.
    */
-  private async assertUserRoom(
+  private async holdUserRoom(
     userId: number,
     declared: number,
-  ): Promise<void> {
+    cap: number,
+  ): Promise<() => void> {
     const used = await this.repo.usage(userId);
-    if (used + declared > companionBlobQuotaBytes()) throw quotaExceeded();
+    const quota = companionBlobQuotaBytes();
+    const release = this.userHolds.tryHold(userId, used + declared, cap, quota);
+    if (release === null) throw quotaExceeded();
+    return release;
   }
 
   /** Steps 6–14: stream (≤ the reserved bytes) to a temp file, verify, store; temp always removed. */

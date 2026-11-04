@@ -4,9 +4,11 @@
  * The request only marks the caller's row `disconnecting` (the overview hides
  * it at once) and queues a `disconnect` job. The job body
  * (`runCalendarDisconnect`) then, for a row still `disconnecting`:
- * 1. under fresh credentials, deletes our copies outside the dedicated
- *    calendar (the primary-target ones; a 404 is success),
- * 2. deletes the dedicated "Raid Ledger" calendar (its copies go with it),
+ * 1. under fresh credentials, deletes every one of our copies, the dedicated
+ *    calendar's included (a 404 is success),
+ * 2. deletes the dedicated "Raid Ledger" calendar only when no other
+ *    connection still uses it (ROK-1597 Codex P1: an adopted calendar can be
+ *    shared — `deleteCalendarIfExclusive`),
  * 3. deletes the row (event links cascade),
  * 4. revokes best-effort with the stored credentials.
  *
@@ -44,6 +46,7 @@ import {
   purgeConnectionBusyBlocks,
   purgeConnectionCalendarAbsences,
 } from '../read/calendar-read-purge.helpers';
+import { deleteCalendarIfExclusive } from './calendar-shared-calendar.helpers';
 import {
   CalendarCredentialsUnreadableError,
   decryptCalendarCredentials,
@@ -168,12 +171,11 @@ async function deleteRemote(
     .where(and(eq(links.connectionId, row.id), ne(links.state, 'suppressed')));
   for (const ref of refs) {
     if (!ref.providerEventId) continue; // E1 undo placeholder: no copy
-    if (ref.calendarId === row.dedicatedCalendarId) continue;
     await ignoreNotFound(provider.deleteEvent(creds, ref));
   }
   const dedicated = row.dedicatedCalendarId;
   if (dedicated) {
-    await ignoreNotFound(provider.deleteRaidLedgerCalendar(creds, dedicated));
+    await deleteCalendarIfExclusive(db, row, provider, creds, dedicated);
   }
 }
 

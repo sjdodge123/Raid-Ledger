@@ -20,7 +20,7 @@
 import { useState, type JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
-import { useStartOAuth } from '../../../hooks/use-calendar-sync';
+import { useStartOAuth, type OAuthCalendarProvider } from '../../../hooks/use-calendar-sync';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { ProviderTile } from './CalendarProviderRow';
@@ -37,8 +37,9 @@ const TONE: Record<CalendarConnection['status'], string> = {
     active: 'text-success', needs_reconnect: 'text-danger', error: 'text-warning', disconnecting: 'text-warning',
 };
 
-function GoogleFixButton(): JSX.Element {
-    const fix = useStartOAuth('connect');
+/** Re-runs the provider's own consent (Google, or Outlook — ROK-1597). */
+function OAuthFixButton({ provider }: { provider: OAuthCalendarProvider }): JSX.Element {
+    const fix = useStartOAuth('connect', undefined, provider);
     return (
         <Button variant="secondary" loading={fix.isPending} loadingLabel={R.granting} onClick={() => fix.mutate()}
             aria-label={R.fix} data-testid="calendar-connection-fix">
@@ -60,7 +61,9 @@ function AppleFixButton({ connection }: { connection: CalendarConnection }): JSX
 }
 
 function FixButton({ connection }: { connection: CalendarConnection }): JSX.Element {
-    return connection.provider === 'apple' ? <AppleFixButton connection={connection} /> : <GoogleFixButton />;
+    return connection.provider === 'apple'
+        ? <AppleFixButton connection={connection} />
+        : <OAuthFixButton provider={connection.provider} />;
 }
 
 /** "Grant read access" applies to a live Google grant without read; an Apple password always reads. */
@@ -100,7 +103,7 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
                 <CalendarManageMenu connection={connection} />
             </div>
             {readSwitch && readGranted(connection) && <CalendarConnectionRead connection={connection} />}
-            {showGrant && <GrantRead />}
+            {showGrant && connection.provider !== 'apple' && <GrantRead provider={connection.provider} />}
             {showPicker && <CalendarPicker connection={connection} />}
         </div>
     );

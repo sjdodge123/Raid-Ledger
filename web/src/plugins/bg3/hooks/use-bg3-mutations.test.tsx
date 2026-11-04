@@ -8,11 +8,13 @@ import { createTestQueryClient } from '../../../test/render-helpers';
 import { server } from '../../../test/mocks/server';
 import {
     BG3_DEFAULT_URL,
+    bg3BindKeyCrossHubHandler,
     bg3BindKeyHandler,
     bg3ClaimHandler,
     bg3CreateCampaignHandler,
     bg3DefaultCampaignHandler,
     bg3Error,
+    bg3RemoveSavesHandler,
     bg3SnapshotHandler,
 } from '../../../test/mocks/bg3-handlers';
 import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignSummary, buildBg3Claim, buildBg3Snapshot } from '../../../test/factories/bg3';
@@ -20,11 +22,14 @@ import { toast } from '../../../lib/toast';
 import { bg3Keys } from './bg3-keys';
 import {
     BG3_CLAIM_CONFLICT_TOAST,
+    Bg3BindCrossHubHold,
     BG3_CREATED_DEFAULT_FAILED_TOAST,
     useBindBg3Saves,
     useClaimBg3Slot,
     useCreateBg3Campaign,
+    useRemoveBg3Saves,
 } from './use-bg3-mutations';
+import { hubMediaKeys } from '../../../lib/hub-media-query';
 
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -97,5 +102,58 @@ describe('use-bg3-mutations', () => {
         expect(result.current.data?.id).toBe(12);
         expect(creates).toBe(1);
         expect(toast.error).toHaveBeenCalledWith(BG3_CREATED_DEFAULT_FAILED_TOAST);
+    });
+});
+
+describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)', () => {
+    it('a 409 cross_hub_move stops at that key with a hold (no default); confirmCrossHub re-binds only the keys it names', async () => {
+        const { wrapper } = setup();
+        const calls: string[] = [];
+        // The contract needs ≥1 location — an empty list would not parse as a hold (the server never sends one).
+        const move = {
+            code: 'cross_hub_move' as const, saveCount: 2,
+            locations: [{ campaignId: 99, campaignName: 'Honour run', hubId: BG3_HUB_ID + 1, hubName: 'Other Crew' }],
+        };
+        server.use(
+            bg3BindKeyCrossHubHandler(move, (b, p) => calls.push(`key:${String(p['campaignKey']).slice(0, 1)}:${JSON.stringify(b)}`)),
+            bg3DefaultCampaignHandler((b) => calls.push(`default:${JSON.stringify(b)}`)),
+        );
+        const { result } = renderHook(() => useBindBg3Saves(BG3_HUB_ID), { wrapper });
+        const vars = { campaignKeys: ['a'.repeat(64)], campaignId: BG3_CAMPAIGN_ID, alsoDefault: true };
+        const failure = await result.current.mutateAsync(vars).then(() => null, (e: unknown) => e);
+        expect(failure).toBeInstanceOf(Bg3BindCrossHubHold);
+        expect(failure instanceof Bg3BindCrossHubHold ? [failure.campaignKey, failure.move] : null).toEqual(['a'.repeat(64), move]);
+        await act(() => result.current.mutateAsync({ ...vars, confirmCrossHub: ['a'.repeat(64)] }));
+        expect(calls).toEqual([
+            `key:a:{"campaignId":${BG3_CAMPAIGN_ID}}`,
+            `key:a:{"campaignId":${BG3_CAMPAIGN_ID},"confirmCrossHub":true}`,
+            `default:{"campaignId":${BG3_CAMPAIGN_ID}}`,
+        ]);
+    });
+});
+
+describe('ROK-2068 useRemoveBg3Saves', () => {
+    const PICTURE_KEY = ['hub-media', 'file', '/api/hubs/1/media/a/thumb'];
+
+    it('POSTs the deduped keys, then marks every hub\'s BG3 queries and Gallery and the save lists stale', async () => {
+        const bodies: unknown[] = [];
+        server.use(bg3RemoveSavesHandler({ removed: { saves: 2, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 1 } }, (b) => bodies.push(b)));
+        const { qc, wrapper } = setup();
+        qc.setQueryData(bg3Keys.myAllSaves, { saves: [], nextCursor: null, defaultCampaignId: null });
+        qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID), 'pages'], { pages: [] });
+        qc.setQueryData([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'], { pages: [] });
+        qc.setQueryData(bg3Keys.snapshot(BG3_HUB_ID + 1), buildBg3Snapshot());
+        qc.setQueryData(PICTURE_KEY, new Blob(['png']));
+        const { result } = renderHook(() => useRemoveBg3Saves(), { wrapper });
+        await act(async () => { await result.current.mutateAsync(['a'.repeat(64), 'a'.repeat(64)]); });
+        expect(bodies).toEqual([{ campaignKeys: ['a'.repeat(64)] }]);
+        await waitFor(() => expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID), 'pages'])?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(bg3Keys.myAllSaves)?.isInvalidated).toBe(true);
+        expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID))?.isInvalidated).toBe(true);
+        // The removed saves may be filed in, and pictured on, any hub (review MINOR-4).
+        expect(qc.getQueryState(bg3Keys.snapshot(BG3_HUB_ID + 1))?.isInvalidated).toBe(true);
+        expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(true);
+        // The picture bytes are immutable and cached forever: refetching them would flicker every picture (fix-1 MINOR-1).
+        expect(qc.getQueryState(PICTURE_KEY)?.isInvalidated, 'a cached picture file must not be invalidated').toBe(false);
     });
 });

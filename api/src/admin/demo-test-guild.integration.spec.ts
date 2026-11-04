@@ -259,8 +259,9 @@ describe('POST /admin/test/wow/seed-guild — guild raids (ROK-1787)', () => {
       { role: 'healer', filled: 1, needed: 4 },
       { role: 'dps', filled: 0, needed: 14 },
     ]);
+    // ROK-1926: the member benches with a level-52 alt, not the linked main.
     expect(res.body.composition.benched).toEqual([
-      { characterId: out.users.member.characterId, name: 'Dainel' },
+      { characterId: out.raids.underLevelCharacterId, name: 'Daenvar' },
     ]);
     expect(res.body.recent).toEqual([
       expect.objectContaining({
@@ -400,6 +401,8 @@ describe('POST /admin/test/wow/seed-guild — withLockouts (ROK-1914)', () => {
       [SEED_LOCKOUT_SHARED.name, ['Aldren 10', 'Brisa 4']],
       [SEED_LOCKOUT_SOLO.name, ['Dainel 1']],
     ]);
+    // gm, officer and the solo member each reported saves (linked chars).
+    expect(res.body.lockoutReporters).toBe(3);
   });
 
   it('without the flag: no lockouts key and no snapshots', async () => {

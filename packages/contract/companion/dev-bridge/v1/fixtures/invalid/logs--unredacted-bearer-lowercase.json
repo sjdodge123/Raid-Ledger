@@ -1,0 +1,17 @@
+{
+  "next": "bG9nczI",
+  "lines": [
+    {
+      "at": "2026-11-01T18:30:00Z",
+      "level": "info",
+      "target": "dev_bridge",
+      "msg": "GET /dev/v1/health 200 412B from 192.168.0.229"
+    },
+    {
+      "at": "2026-11-01T18:30:00Z",
+      "level": "warn",
+      "target": "dev_bridge::auth",
+      "msg": "rejected authorization: bearer abc123"
+    }
+  ]
+}

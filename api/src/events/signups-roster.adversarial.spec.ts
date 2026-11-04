@@ -22,10 +22,12 @@ const baseSignup = {
   status: 'signed_up',
   preferredRoles: ['tank', 'healer'],
   attendanceStatus: null,
+  attendanceSource: null,
   attendanceRecordedAt: null,
   roachedOutAt: null,
   runningLateAt: null,
   lateMinutes: null,
+  seriesSignupId: null,
 };
 
 const baseUser = {

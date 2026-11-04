@@ -73,10 +73,12 @@ const insertedSignup = {
   characterId: null,
   preferredRoles: null,
   attendanceStatus: null,
+  attendanceSource: null,
   attendanceRecordedAt: null,
   roachedOutAt: null,
   runningLateAt: null,
   lateMinutes: null,
+  seriesSignupId: null,
 };
 
 describe('discordSignupTxBody — bench fallback (ROK-626)', () => {

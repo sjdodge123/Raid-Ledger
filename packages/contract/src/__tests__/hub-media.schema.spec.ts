@@ -147,7 +147,7 @@ describe('save pictures (ROK-1959 D-1 / D-7)', () => {
 
     it('adds kind "save" and source "bg3-save", keeping the existing values', () => {
         expect(HUB_MEDIA_KINDS).toEqual(['death', 'screenshot', 'image', 'upload', 'save']);
-        expect(HUB_MEDIA_SOURCES).toEqual(['discord', 'upload', 'bg3-save']);
+        expect(HUB_MEDIA_SOURCES).toEqual(['discord', 'upload', 'bg3-save', 'bg3-screenshot']);
     });
 
     it('accepts a save picture item', () => {

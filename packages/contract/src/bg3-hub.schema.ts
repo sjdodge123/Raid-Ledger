@@ -84,7 +84,16 @@ export type Bg3HubCampaignsResponse = z.infer<typeof Bg3HubCampaignsResponseSche
 export const Bg3PartyClaimSchema = z.object({
     userId: id,
     displayName: z.string().min(1),
+    /** Legacy: the raw custom upload path only. Render through the trio below (ROK-2069). */
     avatarUrl: z.string().nullable(),
+    /**
+     * ROK-2069 — the same avatar inputs as `LineupParticipantSchema`: Discord
+     * avatar hash + `discordId` + custom upload path, resolved client-side by
+     * `toAvatarUser` / `resolveAvatar`. Optional so an older server's payload parses.
+     */
+    avatar: z.string().nullable().optional(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
 }).strict();
 export type Bg3PartyClaim = z.infer<typeof Bg3PartyClaimSchema>;
 
@@ -115,6 +124,13 @@ export const Bg3SnapshotSchema = z.object({
     party: z.array(Bg3PartySlotSchema),
     thumbnailUrl,
     spoilersHidden: z.boolean(),
+    /**
+     * ROK-2074 — the visible hub Gallery picture of this save's screenshot
+     * (`hub_media` provenance `bg3-save:sha256:<thumbnail sha>`); null when
+     * none (not imported, removed, hidden, or spoilers hidden). Optional so
+     * older fixtures parse.
+     */
+    galleryMediaId: id.nullable().optional(),
 }).strict();
 export type Bg3Snapshot = z.infer<typeof Bg3SnapshotSchema>;
 
@@ -148,7 +164,7 @@ export const Bg3MySaveSchema = z.object({
     saveName: z.string().min(1),
     savedAt: iso,
     campaignKey: Bg3CampaignKeySchema,
-    campaignKeySource: z.enum(['save-folder', 'game-id']),
+    campaignKeySource: z.enum(['save-folder', 'game-id', 'file-name']),
     campaignId: id.nullable(),
     area: bg3Id,
     thumbnailUrl,
@@ -161,6 +177,34 @@ export const Bg3MySavesResponseSchema = z.object({
     defaultCampaignId: id.nullable(),
 }).strict();
 export type Bg3MySavesResponse = z.infer<typeof Bg3MySavesResponseSchema>;
+
+/**
+ * ROK-1960 F4 — one place the caller's saves with a campaign key sit (or its
+ * binding points). Campaign + hub are null when the caller can no longer read
+ * that hub (left it, or hidden).
+ */
+export const Bg3KeyLocationSchema = z.object({
+    campaignId: id.nullable(),
+    campaignName: z.string().nullable(),
+    hubId: id.nullable(),
+    hubName: z.string().nullable(),
+}).strict();
+export type Bg3KeyLocation = z.infer<typeof Bg3KeyLocationSchema>;
+
+export const BG3_CROSS_HUB_MOVE = 'cross_hub_move' as const;
+
+/**
+ * ROK-1960 F4 — the 409 body of `PUT me/campaign-keys/:key` sent without
+ * `confirmCrossHub` when the bind would move the caller's saves (or binding)
+ * out of another hub. Nothing moved. `locations` = the other hubs' places;
+ * `saveCount` = the caller's saves with the key the bind would move.
+ */
+export const Bg3CrossHubMoveSchema = z.object({
+    code: z.literal(BG3_CROSS_HUB_MOVE),
+    saveCount: z.number().int().min(0),
+    locations: z.array(Bg3KeyLocationSchema).min(1),
+});
+export type Bg3CrossHubMove = z.infer<typeof Bg3CrossHubMoveSchema>;
 
 // ---------- writes ----------
 
@@ -181,7 +225,11 @@ export const Bg3UpdateCampaignBodySchema = z.object({
 );
 export type Bg3UpdateCampaignBody = z.infer<typeof Bg3UpdateCampaignBodySchema>;
 
-export const Bg3BindKeyBodySchema = z.object({ campaignId: id }).strict();
+/** ROK-1960 F4: `confirmCrossHub: true` = the user agreed to move saves out of another hub (else 409 `cross_hub_move`). */
+export const Bg3BindKeyBodySchema = z.object({
+    campaignId: id,
+    confirmCrossHub: z.boolean().optional(),
+}).strict();
 export type Bg3BindKeyBody = z.infer<typeof Bg3BindKeyBodySchema>;
 
 /** `null` clears the uploader's default campaign (D-6). */
@@ -199,3 +247,29 @@ export type Bg3HubSettingsBody = z.infer<typeof Bg3HubSettingsBodySchema>;
 
 export const Bg3ClaimBodySchema = z.object({ slotKey: Bg3SlotKeySchema }).strict();
 export type Bg3ClaimBody = z.infer<typeof Bg3ClaimBodySchema>;
+
+/**
+ * ROK-2068 — "Remove uploaded saves": delete the caller's saves (and their
+ * key bindings, unused thumbnail refs and hub Gallery pictures) for chosen
+ * campaign keys. One key per save folder today, so a batch of keys is one
+ * request. Removed keys' latest-wins markers are cleared too (operator
+ * ruling 2026-11-03), so re-sending a removed save is accepted again.
+ */
+export const BG3_REMOVE_SAVES_MAX_KEYS = 500;
+
+export const Bg3RemoveSavesBodySchema = z.object({
+    campaignKeys: z.array(Bg3CampaignKeySchema).min(1).max(BG3_REMOVE_SAVES_MAX_KEYS),
+}).strict();
+export type Bg3RemoveSavesBody = z.infer<typeof Bg3RemoveSavesBodySchema>;
+
+const removedCount = z.number().int().min(0);
+
+export const Bg3RemoveSavesResultSchema = z.object({
+    removed: z.object({
+        saves: removedCount,
+        campaignKeys: removedCount,
+        thumbnailRefs: removedCount,
+        galleryPictures: removedCount,
+    }).strict(),
+}).strict();
+export type Bg3RemoveSavesResult = z.infer<typeof Bg3RemoveSavesResultSchema>;

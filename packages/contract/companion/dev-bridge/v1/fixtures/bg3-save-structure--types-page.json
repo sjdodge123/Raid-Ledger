@@ -1,0 +1,85 @@
+{
+  "saveRef": "3f9a0c2b7d41",
+  "types": [
+    {
+      "type": "core.v0.Level",
+      "version": 0,
+      "elementSize": 16,
+      "count": 1,
+      "decoder": "ok"
+    },
+    {
+      "type": "core.v0.EntityId",
+      "version": 0,
+      "elementSize": 8,
+      "count": 41220,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v3.StatsComponent",
+      "version": 3,
+      "elementSize": 36,
+      "count": 2310,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v0.HealthComponent",
+      "version": 0,
+      "elementSize": 32,
+      "count": 2288,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.stats.v0.ClassesComponent",
+      "version": 0,
+      "elementSize": 16,
+      "count": 412,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.inventory.v0.WieldingComponent",
+      "version": 0,
+      "elementSize": 8,
+      "count": 1904,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.inventory.v0.MemberComponent",
+      "version": 0,
+      "elementSize": 16,
+      "count": 3116,
+      "decoder": "ok"
+    },
+    {
+      "type": "game.icon.v0.CustomIconsStorageComponent",
+      "version": 0,
+      "elementSize": 24,
+      "count": 1,
+      "decoder": "unsupported"
+    },
+    {
+      "type": "game.approval.v0.Ratings",
+      "version": 0,
+      "elementSize": 40,
+      "count": 9,
+      "decoder": "none"
+    },
+    {
+      "type": "EAbility",
+      "version": 0,
+      "elementSize": 4,
+      "count": 7,
+      "decoder": "none"
+    }
+  ],
+  "checks": {
+    "partyEntitiesFound": 4,
+    "partyMatchesSaveInfo": true,
+    "portraitsFound": 8,
+    "portraitsMapped": 4,
+    "metaNamesMatchParty": true,
+    "ownerProfileMatchesLocal": true
+  },
+  "party": [],
+  "next": "p2_types_10"
+}

@@ -7,6 +7,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { GuildActor } from '../../../../guilds/guild-access.service';
 import { ValheimArmoryReadRepository } from './valheim-armory-read.repository';
+import { ValheimReportedDeathsRepository } from './valheim-reported-deaths.repository';
 import { ValheimArmoryReadService } from './valheim-armory-read.service';
 
 const ORIGINAL = process.env.VALHEIM_LINK_BLOB_DIR;
@@ -24,6 +25,7 @@ async function service(): Promise<ValheimArmoryReadService> {
           findServerHub: () => Promise.resolve(null),
         },
       },
+      { provide: ValheimReportedDeathsRepository, useValue: {} },
     ],
   }).compile();
   return mod.get(ValheimArmoryReadService);

@@ -57,3 +57,18 @@ export const VoiceAttendanceSummarySchema = z.object({
   sessions: z.array(EventVoiceSessionSchema),
 });
 export type VoiceAttendanceSummaryDto = z.infer<typeof VoiceAttendanceSummarySchema>;
+
+// ============================================================
+// Voice Attendance Settings (ROK-1940)
+// ============================================================
+
+/**
+ * Admin setting: minutes after an event's start before a first voice join
+ * counts as late. GET/PUT /admin/settings/voice-attendance. Default 5.
+ */
+export const VoiceAttendanceSettingsSchema = z.object({
+  graceMinutes: z.number().int().min(0).max(60),
+});
+export type VoiceAttendanceSettingsDto = z.infer<
+  typeof VoiceAttendanceSettingsSchema
+>;

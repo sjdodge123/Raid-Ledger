@@ -61,6 +61,7 @@ export function applyCalendarSyncUpdate(
 
 export const CALENDARS_OVERVIEW_URL = `${API_BASE}/users/me/calendars`;
 export const GOOGLE_OAUTH_START_URL = `${API_BASE}/users/me/calendars/oauth/google/start`;
+export const MICROSOFT_OAUTH_START_URL = `${API_BASE}/users/me/calendars/oauth/microsoft/start`;
 export const CALENDAR_CONNECTION_URL = `${API_BASE}/users/me/calendars/:id`;
 /** ROK-1599 subscribe link: POST creates or resets it, answering `{ url }`. */
 export const CALENDAR_FEED_URL = `${API_BASE}/users/me/calendars/feed`;
@@ -80,6 +81,7 @@ export const APPLE_CONNECT_URL = `${API_BASE}/users/me/calendars/apple`;
 export const APPLE_PASSWORD_FAIL = 'xxxx-xxxx-xxxx-fail';
 export const APPLE_PASSWORD_DOWN = 'xxxx-xxxx-xxxx-down';
 export const GOOGLE_CONSENT_URL_FIXTURE = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client';
+export const MICROSOFT_CONSENT_URL_FIXTURE = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=test-client';
 
 /** A healthy Google connection, as `GET /users/me/calendars` lists it. */
 export const calendarConnectionFixture: CalendarConnection = {
@@ -113,6 +115,10 @@ export const calendarsOverviewVariants = {
         providers: { google: { available: false }, microsoft: { available: false }, apple: { available: false } },
     }),
     withApple: calendarsOverviewFixture({ connections: [buildAppleConnection()] }),
+    /* ROK-1597: the admin configured the Microsoft client (§8 Q8 shows the Outlook row only then). */
+    microsoftAvailable: calendarsOverviewFixture({
+        providers: { google: { available: true }, microsoft: { available: true }, apple: { available: true } },
+    }),
     withFeed: calendarsOverviewFixture({ feed: { url: CALENDAR_FEED_URL_FIXTURE } }),
     disabled: calendarsOverviewFixture({
         enabled: false,
@@ -125,6 +131,7 @@ export function userCalendarHandlers(overview: CalendarsOverview = calendarsOver
     return [
         http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json(overview)),
         http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url: GOOGLE_CONSENT_URL_FIXTURE })),
+        http.get(MICROSOFT_OAUTH_START_URL, () => HttpResponse.json({ url: MICROSOFT_CONSENT_URL_FIXTURE })),
         http.delete(CALENDAR_CONNECTION_URL, () => new HttpResponse(null, { status: 202 })),
         http.post(CALENDAR_FEED_URL, () => HttpResponse.json({ url: CALENDAR_FEED_RESET_URL_FIXTURE })),
         // Default: no write connection → no copy (null); Undo → 204; .ics → one VEVENT.

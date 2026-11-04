@@ -338,3 +338,33 @@ describe('History section (D-9)', () => {
         expect(screen.queryByRole('heading', { name: 'History' })).not.toBeInTheDocument();
     });
 });
+
+describe('ROK-1960 "Upload a save" in Your saves', () => {
+    it('a member gets it even with no unassigned saves, and it opens the upload sheet', async () => {
+        server.use(bg3MySavesHandler(buildBg3MySavesResponse({ saves: [] })));
+        const user = userEvent.setup();
+        renderTab(true);
+        const upload = await screen.findByRole('button', { name: 'Upload a save' });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Add my saves' })).toBeDisabled());
+        expect(upload).toBeEnabled();
+        await user.click(upload);
+        expect(await screen.findByTestId('bg3-upload-save')).toBeInTheDocument();
+    });
+
+    it('non-member staff do not get it', async () => {
+        renderTab(false);
+        expect(await screen.findByRole('list', { name: 'Campaigns' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload a save' })).not.toBeInTheDocument();
+    });
+});
+
+describe('ROK-2068 — Manage my saves', () => {
+    it('a member opens Manage my saves from Your saves; the sheet mounts only once opened', async () => {
+        const user = userEvent.setup();
+        renderTab();
+        const open = await screen.findByRole('button', { name: 'Manage my saves' });
+        expect(screen.queryByTestId('bg3-manage-saves')).not.toBeInTheDocument();
+        await user.click(open);
+        expect(await screen.findByTestId('bg3-manage-saves')).toBeInTheDocument();
+    });
+});

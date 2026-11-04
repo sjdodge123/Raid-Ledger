@@ -4,13 +4,16 @@
  * query; a 409 rolls back, toasts and refetches (D-6).
  */
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotResponse } from '@raid-ledger/contract';
+import type { Bg3CrossHubMove, Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotResponse } from '@raid-ledger/contract';
 import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
+import { isHubGalleryListQuery } from '../../../lib/hub-media-query';
+import { crossHubMoveOf } from '../upload/bg3-upload-errors';
 import {
     bindBg3CampaignKey,
     claimBg3Slot,
     createBg3Campaign,
+    removeBg3Saves,
     setBg3DefaultCampaign,
     unclaimBg3Slot,
     updateBg3Campaign,
@@ -66,15 +69,72 @@ export function useSetBg3DefaultCampaign(hubId: number) {
     });
 }
 
-/** Add my saves (D-5): one key PUT per ticked playthrough (each binds every save with that key), then the optional default. */
+/**
+ * ROK-1960 (operator ruling 2026-10-31): the key bind answered 409
+ * `cross_hub_move` — that playthrough's earlier saves sit in another hub.
+ * The bind stopped at `campaignKey` (keys before it are bound; none after it
+ * ran, nor the default) so the sheet can ask, then re-run with it confirmed.
+ */
+export class Bg3BindCrossHubHold extends Error {
+    readonly campaignKey: string;
+    readonly move: Bg3CrossHubMove;
+    constructor(campaignKey: string, move: Bg3CrossHubMove) {
+        super('cross_hub_move');
+        Object.setPrototypeOf(this, Bg3BindCrossHubHold.prototype);
+        this.name = 'Bg3BindCrossHubHold';
+        this.campaignKey = campaignKey;
+        this.move = move;
+    }
+}
+
+/** Add my saves variables; `confirmCrossHub` = the keys the user agreed to move out of another hub. */
+export interface Bg3BindSavesVars {
+    readonly campaignKeys: readonly string[];
+    readonly campaignId: number;
+    readonly alsoDefault: boolean;
+    readonly confirmCrossHub?: readonly string[];
+}
+
+async function bindKey(key: string, campaignId: number, confirmed: boolean): Promise<void> {
+    try {
+        await bindBg3CampaignKey(key, campaignId, confirmed);
+    } catch (error) {
+        const move = crossHubMoveOf(error);
+        throw move === null ? error : new Bg3BindCrossHubHold(key, move);
+    }
+}
+
+/**
+ * Add my saves (D-5): one key PUT per ticked playthrough (each binds every save
+ * with that key), then the optional default. A 409 `cross_hub_move` rejects
+ * with `Bg3BindCrossHubHold`; re-binding an already-bound key is a no-op.
+ */
 export function useBindBg3Saves(hubId: number) {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async (v: { campaignKeys: readonly string[]; campaignId: number; alsoDefault: boolean }) => {
-            for (const key of new Set(v.campaignKeys)) await bindBg3CampaignKey(key, v.campaignId);
+        mutationFn: async (v: Bg3BindSavesVars) => {
+            const confirmed = new Set(v.confirmCrossHub ?? []);
+            for (const key of new Set(v.campaignKeys)) await bindKey(key, v.campaignId, confirmed.has(key));
             if (v.alsoDefault) await setBg3DefaultCampaign(v.campaignId);
         },
         onSettled: () => invalidateBg3Hub(qc, hubId),
+    });
+}
+
+/**
+ * ROK-2068 — remove the caller's saves of the picked playthroughs (keys). The
+ * saves may be filed in any hub and the server tombstones their pictures on
+ * every hub, so on settle EVERY hub's BG3 queries and Gallery refresh (review
+ * MINOR-4); removal is rare, so the extra refetches cost little.
+ */
+export function useRemoveBg3Saves() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (campaignKeys: readonly string[]) => removeBg3Saves([...new Set(campaignKeys)]),
+        onSettled: () => Promise.all([
+            qc.invalidateQueries({ queryKey: bg3Keys.all }),
+            qc.invalidateQueries({ predicate: isHubGalleryListQuery }),
+        ]),
     });
 }
 

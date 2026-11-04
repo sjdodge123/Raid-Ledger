@@ -224,6 +224,31 @@ describe('EventDetailRoster — running-late badge (ROK-1379 follow-up)', () => 
     });
 });
 
+describe('EventDetailRoster — series marker (ROK-1728 AC7)', () => {
+    const SERIES_TITLE = 'Signed up for the series';
+
+    it('renders the labelled Series badge for a confirmed signup tagged by a series membership', () => {
+        renderRoster(createRoster([createSignup({ seriesSignupId: 5 })]));
+        const badge = screen.getByTitle(SERIES_TITLE);
+        expect(badge).toHaveAttribute('data-testid', 'series-badge');
+        expect(badge).toHaveTextContent('Series');
+    });
+
+    it('renders the badge in the Tentative and Pending groups', () => {
+        renderRoster(createRoster([
+            createSignup({ status: 'tentative' as const, seriesSignupId: 5 }),
+            createSignup({ id: 2, confirmationStatus: 'pending' as const, seriesSignupId: 6 }),
+        ]));
+        expect(screen.getByText('Pending (1)')).toBeInTheDocument();
+        expect(screen.getAllByTitle(SERIES_TITLE)).toHaveLength(2);
+    });
+
+    it('renders no badge when seriesSignupId is null or absent', () => {
+        renderRoster(createRoster([createSignup({ seriesSignupId: null }), createSignup({ id: 2 })]));
+        expect(screen.queryByTestId('series-badge')).not.toBeInTheDocument();
+    });
+});
+
 /**
  * ROK-1694: an anonymous Discord signup (user_id NULL), shaped like the API sends it —
  * user.id 0 and user.avatar hardcoded null, with the real Discord avatar hash in the

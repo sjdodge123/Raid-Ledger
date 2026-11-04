@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { events } from './events';
 import { characters } from './characters';
+import { seriesSignups } from './series-signups';
 
 /**
  * Confirmation status for event signups.
@@ -93,6 +94,12 @@ export const eventSignups = pgTable(
     preferredRoles: text('preferred_roles').array(),
     /** Post-event attendance status recorded by organizer (ROK-421) */
     attendanceStatus: varchar('attendance_status', { length: 20 }),
+    /**
+     * Who set `attendance_status` (ROK-1940): `'voice'` = the voice-session
+     * auto-populate, `'manual'` = an organiser via recordAttendance. Null on
+     * rows with no status (and on legacy rows until the backfill runs).
+     */
+    attendanceSource: varchar('attendance_source', { length: 10 }),
     /** Timestamp when attendance was last recorded (ROK-421) */
     attendanceRecordedAt: timestamp('attendance_recorded_at'),
     /** Timestamp when signup was cancelled/roached out (ROK-421 AC#8/#9) */
@@ -109,6 +116,15 @@ export const eventSignups = pgTable(
      */
     lateMinutes: integer('late_minutes'),
     signedUpAt: timestamp('signed_up_at').defaultNow().notNull(),
+    /**
+     * Series membership that created/attached this signup (ROK-1728).
+     * Null = a single-night signup. Cleared on future rows when the
+     * membership ends; past rows keep it as history.
+     */
+    seriesSignupId: integer('series_signup_id').references(
+      () => seriesSignups.id,
+      { onDelete: 'set null' },
+    ),
   },
   (table) => [
     // Ensure each RL user can only sign up once per event (AC-4)
@@ -128,5 +144,7 @@ export const eventSignups = pgTable(
     index('idx_event_signups_event_id_status').on(table.eventId, table.status),
     // ROK-1157: FK backing index (parent delete / RI scan)
     index('idx_event_signups_character_id').on(table.characterId),
+    // ROK-1728: FK backing index
+    index('idx_event_signups_series_signup_id').on(table.seriesSignupId),
   ],
 );

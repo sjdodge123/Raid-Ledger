@@ -13,6 +13,7 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import { embedComponents } from '../services/discord-embed.factory';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -278,7 +279,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
         record.channelId,
         record.messageId,
         built.embed,
-        built.row,
+        embedComponents(built),
         built.content,
       );
       await this.persistState(record.id, bump.newState);

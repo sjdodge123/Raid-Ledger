@@ -4,7 +4,6 @@ import { CharacterDetailHeaderBadges } from './slots/character-detail-header-bad
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
 import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
 import { EventCreateContentBrowser } from './slots/event-create-content-browser';
-import { EventCreateGuildField } from './slots/event-create-guild-field';
 import { EventDetailContentSections } from './slots/event-detail-content-sections';
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
 import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-cards';
@@ -28,6 +27,8 @@ import { recentDingsWidget } from './hub-widgets/recent-dings.register';
 import { lastSeenWidget } from './hub-widgets/last-seen.register';
 import { gearReadinessWidget } from './hub-widgets/gear-readiness.register';
 import { raidProgressWidget } from './hub-widgets/raid-progress.register';
+import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
+import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -44,7 +45,6 @@ blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderAc
 blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
 blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
 blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
-blizzard.registerSlot('event-create:guild-field', EventCreateGuildField);
 blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
 blizzard.registerSlot('event-detail:content-sections', BossLootPanel, 5);
 blizzard.registerSlot('event-detail:content-sections', QuestPrepPanel, 10);
@@ -61,7 +61,20 @@ registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
+registerReadyCheckWidget(blizzard);
 blizzard.registerHubWidget(recentDingsWidget);
 blizzard.registerHubWidget(lastSeenWidget);
 blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
+
+// ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild
+// hubs (the same game scope as every Forever widget). Requirement
+// `ledgerlink-companion` in BLIZZARD_SETUP carries `rlCompanion: wow-ledgerlink`.
+blizzard.registerHubCompanionPrompt({
+    requirementId: 'ledgerlink-companion',
+    games: [WOW_FOREVER_GAME_SLUG],
+    kinds: ['wow_guild'],
+    heading: 'Upload your LedgerLink exports automatically',
+    body: 'This hub reads LedgerLink exports. Install the Raid Ledger Companion on the PC you play WoW on and your exports upload when you log out, or keep pasting them.',
+    shortBody: 'Install the Raid Ledger Companion on the PC you play WoW on, or keep pasting exports.',
+});

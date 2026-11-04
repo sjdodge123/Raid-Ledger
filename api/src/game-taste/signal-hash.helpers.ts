@@ -22,8 +22,11 @@ import { createHash } from 'crypto';
  * `taste-profile/signal-hash.helpers.ts`.
  *
  * 1 -> 2: ROK-1102 item 5 appended the `fps` axis to the pool.
+ * 2 -> 3: ROK-1939 D9 narrowed the pvp classifier (no IGDB Multiplayer
+ *         fallback, no Multiplayer co-occurrence rule, no Team-Based /
+ *         Class-Based tags).
  */
-export const SIGNAL_HASH_VERSION = 2;
+export const SIGNAL_HASH_VERSION = 3;
 
 export interface GameSignalSummary {
   gameId: number;

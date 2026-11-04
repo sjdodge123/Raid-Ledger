@@ -15,17 +15,23 @@ const BATCH_SIZE = 200;
 /**
  * Batch-update playtime for existing Steam game interests.
  * Uses a single UPDATE ... FROM VALUES per batch instead of N individual queries.
+ *
+ * `steamId` is the SteamID the sync fetched the library for. Every UPDATE
+ * re-checks that the user is STILL linked to it, so a sync still in flight
+ * when the user unlinks (purge) or swaps accounts writes nothing back
+ * (tech-debt 2026-10-27, ROK-1953 review).
  */
 export async function updateExistingPlaytime(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
+  steamId: string,
   toUpdate: PlaytimeUpdateEntry[],
 ): Promise<number> {
   if (toUpdate.length === 0) return 0;
   let updated = 0;
   for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
     const batch = toUpdate.slice(i, i + BATCH_SIZE);
-    updated += await updatePlaytimeBatch(db, userId, batch);
+    updated += await updatePlaytimeBatch(db, userId, steamId, batch);
   }
   return updated;
 }
@@ -34,6 +40,7 @@ export async function updateExistingPlaytime(
 async function updatePlaytimeBatch(
   db: PostgresJsDatabase<typeof schema>,
   userId: number,
+  steamId: string,
   batch: PlaytimeUpdateEntry[],
 ): Promise<number> {
   const now = new Date().toISOString();
@@ -55,6 +62,10 @@ async function updatePlaytimeBatch(
     WHERE gi.user_id = ${userId}
       AND gi.game_id = v.game_id
       AND gi.source = 'steam_library'
+      AND EXISTS (
+        SELECT 1 FROM ${schema.users} AS u
+        WHERE u.id = ${userId} AND u.steam_id = ${steamId}
+      )
     RETURNING gi.id
   `);
 
