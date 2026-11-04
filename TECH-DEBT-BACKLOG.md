@@ -3882,3 +3882,11 @@ same day (#1278, #1279, #1280).
 
 - **resolved** line 2812 (`api/src/csp-report/csp-report.controller.ts`) — fixed: only `application/csp-report`/`reports+json` reach Sentry, captures capped at 30/min process-wide, logged body truncated to 2048 chars. Residual (not done): foreign document-origin filtering and Sentry fingerprinting.
 - **resolved (partial)** line 2854 (`api/src/discord-bot/services/presence-game-detector.service.ts:312`) — fixed in presence, `bind.resolvers.ts:68`, `bind.helpers.ts:258`, `event-create.command.ts:225`, `roster-view.command.ts:84`. Still open: `characters-import.helpers.ts:54,236` and `common-ground-query.helpers.ts:193` (files held by open PRs on 2026-11-04).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04c (surfaced during the overnight batch C review)
+
+- **low** `api/src/csp-report/csp-report.integration.spec.ts:155` — no integration case for a rejected content type through the real `@Headers` binding. Suggested: post `application/json` and assert no Sentry capture.
+- **nit** `api/src/csp-report/csp-report.controller.ts:36` — comment says "dropped unlogged" but the report is logged without its body. Suggested: fix the comment.
+- **nit** `api/src/csp-report/csp-report-guard.ts:52` — truncation slices UTF-16 code units and can split a surrogate pair; harmless in a log line. Suggested: `Array.from(s).slice(...)` if it ever matters.
+- **nit** `api/src/csp-report/csp-report-guard.ts` (Sentry budget) — a fixed one-minute window lets up to 2× the budget through across a window boundary. Suggested: sliding window if the cap ever needs to be strict.
+- **nit** `api/src/discord-bot/services/presence-game-detector.service.ts` follow-up (backlog 2854) — the `characters-import` and `common-ground` ILIKE sites still take unescaped user text (out of batch C's scope: open PRs owned those files). Suggested: wrap them in `escapeLikePattern()` next.
