@@ -89,18 +89,28 @@ function describeCommonGroundVisibility() {
     'refuses to nominate a %s game with 404',
     async (label, flags) => {
       const lineupId = await createBuildingLineup();
+      const visibleId = await insertOwnedGame(`Visible ${label}`);
       const gameId = await insertOwnedGame(`Moderated ${label}`, flags);
+      const nominate = (id: number) =>
+        testApp.request
+          .post(`/lineups/${lineupId}/nominate`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ gameId: id });
 
-      const res = await testApp.request
-        .post(`/lineups/${lineupId}/nominate`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ gameId });
+      // Positive control: the same lineup, user and route accept a visible
+      // game, so the 404 below can only come from the moderation flag.
+      const ok = await nominate(visibleId);
+      expect(ok.status).toBe(201);
+
+      const res = await nominate(gameId);
 
       expect(res.status).toBe(404);
       const entries = await testApp.db
         .select({ gameId: schema.communityLineupEntries.gameId })
         .from(schema.communityLineupEntries);
-      expect(entries.map((e) => e.gameId)).not.toContain(gameId);
+      const entryIds = entries.map((e) => e.gameId);
+      expect(entryIds).toContain(visibleId);
+      expect(entryIds).not.toContain(gameId);
     },
   );
 }
