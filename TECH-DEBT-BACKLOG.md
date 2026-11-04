@@ -3890,3 +3890,12 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2862 (`api/src/plugins/wow-common/blizzard.service.ts:255`, never-pruned instance detail cache) — fixed on chore/tech-debt-2026-11-04 (b4076a987).
 - **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
 - **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04f (overnight tech-debt batch F, verified on 120955165)
+
+- **resolved** line 2724 (`web/src/lib/sentry-options.ts`, feedback reported "sent" after a 429 drop) — fixed on chore/tech-debt-2026-11-04f (347cd8b1e + f86b97922): only a 2xx counts as delivered, and only for envelopes that carry an `event` item (category rate limits on replay/transaction/session no longer fake a failure).
+- **resolved** line 3592 (`hub-page.tsx` `latchReleased`) — already compares `errorUpdatedAt` on main.
+- **resolved** line 1465 (`bottom-sheet.tsx` focus trap) — already uses `useTabTrap` on main.
+- **resolved** line 1936 (`EventDetailRoster.tsx`) — fixed on main by ROK-1694 (`:103-106`).
+- **resolved** line 1229 (search-param writes) — fixed on main by ROK-1525 (`useSearchParamWrite`).
+- **low** `web/src/lib/sentry-reporting-transport.ts:59` (`reportUndeliveredSends`, review r-td6-delta) — `@sentry/core` `transports/base.js:14-26` filters envelope items per category, so when only the `error` category is rate-limited the event item is dropped but an attached screenshot (`attachment` category) still goes out and gets a 2xx; feedback then reads as delivered. Pre-existing in round 1, narrow. Suggested: in `captureMessageVerified`, record the event ids of failed/filtered envelopes and compare with the id `Sentry.captureMessage` returns, or check the `x-sentry-rate-limits` state for `error` before trusting a 2xx.
