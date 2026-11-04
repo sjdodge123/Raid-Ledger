@@ -193,3 +193,40 @@ describe('PluginSlot — part 3', () => {
     });
 
 });
+
+describe('PluginSlot — context.pluginSlug scope (tech-debt 2619)', () => {
+    beforeEach(() => {
+        clearRegistry();
+        usePluginStore.setState({ activeSlugs: new Set(['ai']), initialized: true });
+        registerSlotComponent({
+            pluginSlug: 'ai',
+            slotName: 'admin-settings:plugin-content',
+            component: TestComponent,
+            priority: 0,
+        });
+    });
+
+    it('renders the fallback when only another active plugin fills a slug-scoped slot', () => {
+        render(
+            <PluginSlot
+                name="admin-settings:plugin-content"
+                context={{ pluginSlug: 'pelican' }}
+                fallback={<div data-testid="fallback">No config</div>}
+            />,
+        );
+        expect(screen.getByTestId('fallback')).toBeInTheDocument();
+        expect(screen.queryByTestId('test-component')).not.toBeInTheDocument();
+    });
+
+    it('renders the scoped plugin component when the slug matches', () => {
+        render(
+            <PluginSlot
+                name="admin-settings:plugin-content"
+                context={{ pluginSlug: 'ai' }}
+                fallback={<div data-testid="fallback">No config</div>}
+            />,
+        );
+        expect(screen.getByTestId('test-component')).toBeInTheDocument();
+        expect(screen.queryByTestId('fallback')).not.toBeInTheDocument();
+    });
+});

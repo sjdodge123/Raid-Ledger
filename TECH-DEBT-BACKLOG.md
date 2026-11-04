@@ -3890,3 +3890,13 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2862 (`api/src/plugins/wow-common/blizzard.service.ts:255`, never-pruned instance detail cache) — fixed on chore/tech-debt-2026-11-04 (b4076a987).
 - **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
 - **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
+
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04d (overnight batch D)
+
+- **resolved** line 2706 (`web/src/lib/api/preferences-api.ts`, debounced preference writes lost on unload) — fixed (9c37a5341).
+- **resolved** line 2619 + low 2620 (`web/src/plugins/plugin-slot.tsx:22`, fallback hidden by foreign-slug registrations) — fixed (72fafd6f7).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04d (surfaced during the overnight batch D review)
+
+- **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
+- **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
