@@ -11,7 +11,9 @@ export async function getMyPreferences(): Promise<Record<string, unknown>> {
 /**
  * Debounced preference batcher (ROK-666).
  * Coalesces rapid preference changes into a single PATCH request
- * after 800ms of inactivity.
+ * after 800ms of inactivity. A batch still pending when the page is hidden
+ * or unloaded is sent at once with `keepalive`, so a reload inside the
+ * debounce window does not drop the write (Bearer auth rules out sendBeacon).
  */
 const preferenceBatcher = (() => {
     let pending: Record<string, unknown> = {};
@@ -19,8 +21,10 @@ const preferenceBatcher = (() => {
     let flushPromise: Promise<void> | null = null;
     let resolveFlush: (() => void) | null = null;
     let rejectFlush: ((err: unknown) => void) | null = null;
+    let unloadBound = false;
 
-    function flush(): void {
+    function flush(keepalive: boolean): void {
+        if (timer) clearTimeout(timer);
         timer = null;
         const batch = pending;
         const resolve = resolveFlush;
@@ -33,14 +37,29 @@ const preferenceBatcher = (() => {
         fetchApi('/users/me/preferences', {
             method: 'PATCH',
             body: JSON.stringify({ preferences: batch }),
+            ...(keepalive ? { keepalive: true } : {}),
         }).then(
             () => resolve?.(),
             (err) => reject?.(err),
         );
     }
 
+    function flushIfPending(): void {
+        if (timer) flush(true);
+    }
+
+    function bindUnloadFlush(): void {
+        if (unloadBound || typeof window === 'undefined') return;
+        unloadBound = true;
+        window.addEventListener('pagehide', flushIfPending);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') flushIfPending();
+        });
+    }
+
     return {
         queue(key: string, value: unknown): Promise<void> {
+            bindUnloadFlush();
             pending[key] = value;
             if (timer) clearTimeout(timer);
 
@@ -51,7 +70,7 @@ const preferenceBatcher = (() => {
                 });
             }
 
-            timer = setTimeout(flush, 800);
+            timer = setTimeout(() => flush(false), 800);
             return flushPromise;
         },
     };
