@@ -38,7 +38,7 @@ export interface ArchiveUploadsInput {
   reserveBytes?: number;
   statfs?: StatfsFn;
   runTar?: RunTarFn;
-  measure?: (dir: string) => number;
+  measure?: (dir: string) => number | Promise<number>;
 }
 
 /**
@@ -126,13 +126,17 @@ export function isTarFatal(err: unknown, outPath: string): boolean {
   return !onlyBenignTarWarnings(errorStderr(err));
 }
 
-/** Bytes of regular files under `dir`; symlinks are not followed (0). */
-export function measureTree(dir: string): number {
+/**
+ * Bytes of regular files under `dir`; symlinks are not followed (0). Async
+ * (`fs.promises`) so walking a large uploads tree never blocks the event
+ * loop for the whole walk — the manual backup runs inside a request.
+ */
+export async function measureTree(dir: string): Promise<number> {
   let total = 0;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) total += measureTree(full);
-    else if (entry.isFile()) total += fs.lstatSync(full).size;
+    if (entry.isDirectory()) total += await measureTree(full);
+    else if (entry.isFile()) total += (await fs.promises.lstat(full)).size;
   }
   return total;
 }
@@ -173,9 +177,11 @@ async function runTarTolerant(
 type ArchiveFailure = Extract<UploadsArchiveResult, { status: 'failed' }>;
 
 /** Spec D8 pre-flight: tree bytes + reserve must fit the backup disk. */
-function preflightSpace(input: ArchiveUploadsInput): ArchiveFailure | null {
+async function preflightSpace(
+  input: ArchiveUploadsInput,
+): Promise<ArchiveFailure | null> {
   try {
-    const bytes = (input.measure ?? measureTree)(input.uploadsDir);
+    const bytes = await (input.measure ?? measureTree)(input.uploadsDir);
     const reserve = input.reserveBytes ?? UPLOADS_RESERVE_BYTES;
     const statfs = input.statfs ?? fs.statfsSync;
     if (hasRoomFor(bytes, input.dailyDir, reserve, statfs)) return null;
@@ -220,7 +226,7 @@ export async function archiveUploads(
     input.warn(`uploads dir missing; no uploads archive (${input.uploadsDir})`);
     return { status: 'skipped', reason: 'missing-root' };
   }
-  return preflightSpace(input) ?? writeArchive(input);
+  return (await preflightSpace(input)) ?? writeArchive(input);
 }
 
 /** One-line description of a failed archive for logs and the cron error, else null. */

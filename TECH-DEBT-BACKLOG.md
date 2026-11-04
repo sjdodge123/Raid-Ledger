@@ -3946,3 +3946,9 @@ same day (#1278, #1279, #1280).
 
 - **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
 - **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
+
+### 2026-11-04 — chore/tech-debt-2026-11-04g (overnight tech-debt batch G, verified on a3bf66ff3)
+
+- **partial** line 3707 (`api/src/backup/backup-uploads.helpers.ts`, `measureTree` blocked the event loop) — the event-loop half is fixed on chore/tech-debt-2026-11-04g (14c083d60, `fs.promises` walk). The 504 half (manual "Create backup" tars uploads inside the request; nginx `/api/` 60 s timeout) stays open and needs a ruling on the shape (job + poll vs respond after the dump).
+- **resolved** line 3808 (calendar Retry-After) — honoured on main via `calendar-retry-backoff.helpers.ts` (104470fc4, #1907).
+- **resolved** line 3751 (roster-insights member path) — asserted on main at `admin/demo-test-guild.integration.spec.ts:405` and `roster-insights.integration.spec.ts:339`.
