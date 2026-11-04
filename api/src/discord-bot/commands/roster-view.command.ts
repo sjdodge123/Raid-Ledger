@@ -14,7 +14,10 @@ import { and, ilike, gte, sql, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { buildWordMatchFilters } from '../../common/search.util';
+import {
+  buildWordMatchFilters,
+  escapeLikePattern,
+} from '../../common/search.util';
 import { SignupsService } from '../../events/signups.service';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import {
@@ -81,7 +84,7 @@ export class RosterViewCommand
     const events = await this.db
       .select({ id: schema.events.id })
       .from(schema.events)
-      .where(ilike(schema.events.title, input))
+      .where(ilike(schema.events.title, escapeLikePattern(input)))
       .limit(1);
     if (events.length === 0) {
       await interaction.editReply(`No event found matching "${input}".`);

@@ -3885,6 +3885,18 @@ same day (#1278, #1279, #1280).
 - **med** `scripts/bundle-budget.config.mjs:103` (`hub-page`) — origin/main 761686aac already measures hub-page at 14.984 KB gz against its 15.0 KB budget (0% headroom). ROK-2075 tripped it by ~20 bytes of `__vite__mapDeps` preload path alone (a shared heroicons chunk), fixed on the branch by lazy-loading the zoom controls. The next hub story will fail the same gate. Pre-existing: measured on main's build. Suggested: recapture the hub-page baseline per the file's own rule (measured +15%) in a small chore PR, or move more hub-page code behind lazy boundaries.
 - **low** `web/src/components/hub/gallery/use-gallery-zoom.test.tsx` (ROK-2075 review round 2) — pinch-centre maths and `pointercancel` handling are untested. Suggested: add both cases to the hook test.
 
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04c (overnight batch C)
+
+- **resolved** line 2812 (`api/src/csp-report/csp-report.controller.ts`) — fixed: only `application/csp-report`/`reports+json` reach Sentry, captures capped at 30/min process-wide, logged body truncated to 2048 chars. Residual (not done): foreign document-origin filtering and Sentry fingerprinting.
+- **resolved (partial)** line 2854 (`api/src/discord-bot/services/presence-game-detector.service.ts:312`) — fixed in presence, `bind.resolvers.ts:68`, `bind.helpers.ts:258`, `event-create.command.ts:225`, `roster-view.command.ts:84`. Still open: `characters-import.helpers.ts:54,236` and `common-ground-query.helpers.ts:193` (files held by open PRs on 2026-11-04).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04c (surfaced during the overnight batch C review)
+
+- **low** `api/src/csp-report/csp-report.integration.spec.ts:155` — no integration case for a rejected content type through the real `@Headers` binding. Suggested: post `application/json` and assert no Sentry capture.
+- **nit** `api/src/csp-report/csp-report.controller.ts:36` — comment says "dropped unlogged" but the report is logged without its body. Suggested: fix the comment.
+- **nit** `api/src/csp-report/csp-report-guard.ts:52` — truncation slices UTF-16 code units and can split a surrogate pair; harmless in a log line. Suggested: `Array.from(s).slice(...)` if it ever matters.
+- **nit** `api/src/csp-report/csp-report-guard.ts` (Sentry budget) — a fixed one-minute window lets up to 2× the budget through across a window boundary. Suggested: sliding window if the cap ever needs to be strict.
+- **nit** `api/src/discord-bot/services/presence-game-detector.service.ts` follow-up (backlog 2854) — the `characters-import` and `common-ground` ILIKE sites still take unescaped user text (out of batch C's scope: open PRs owned those files). Suggested: wrap them in `escapeLikePattern()` next.
 ### 2026-11-04 — resolved on chore/tech-debt-2026-11-04b (overnight batch B)
 
 - **resolved** line 2842 (`api/src/lineups/common-ground-query.helpers.ts`) — fixed (f867fe267).
