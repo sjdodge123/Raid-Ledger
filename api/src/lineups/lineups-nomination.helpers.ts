@@ -7,11 +7,12 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { NominateGameDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import {
-  findGameName,
   countLineupEntries,
   countDistinctNominators,
 } from './lineups-query.helpers';
@@ -47,12 +48,20 @@ export async function validateNominationCap(
   }
 }
 
-/** Validate that a game exists in the database. */
+/**
+ * Validate that a game exists and is nominatable. A hidden or banned game
+ * is refused with the same 404 as a missing one, so moderation state is not
+ * disclosed and the Common Ground filter cannot be bypassed by id.
+ */
 export async function validateGameExists(
   db: Db,
   gameId: number,
 ): Promise<void> {
-  const [game] = await findGameName(db, gameId);
+  const [game] = await db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(and(eq(schema.games.id, gameId), VISIBILITY_FILTER()))
+    .limit(1);
   if (!game) throw new NotFoundException('Game not found');
 }
 

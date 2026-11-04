@@ -3885,6 +3885,25 @@ same day (#1278, #1279, #1280).
 - **med** `scripts/bundle-budget.config.mjs:103` (`hub-page`) — origin/main 761686aac already measures hub-page at 14.984 KB gz against its 15.0 KB budget (0% headroom). ROK-2075 tripped it by ~20 bytes of `__vite__mapDeps` preload path alone (a shared heroicons chunk), fixed on the branch by lazy-loading the zoom controls. The next hub story will fail the same gate. Pre-existing: measured on main's build. Suggested: recapture the hub-page baseline per the file's own rule (measured +15%) in a small chore PR, or move more hub-page code behind lazy boundaries.
 - **low** `web/src/components/hub/gallery/use-gallery-zoom.test.tsx` (ROK-2075 review round 2) — pinch-centre maths and `pointercancel` handling are untested. Suggested: add both cases to the hook test.
 
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04b (overnight batch B)
+
+- **resolved** line 2842 (`api/src/lineups/common-ground-query.helpers.ts`) — fixed (f867fe267).
+- **resolved** line 2808 (`api/src/characters/characters-identity.helpers.ts`) — fixed (e288b3a12).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04 (surfaced during the overnight batch A review, REVIEW-TD-2026-11-04.md)
+
+- **low** `api/src/common/swr-cache.ts` (`memorySwr` `maxEntries`, batch A) — eviction is first-in-first-out because a cache hit never moves the entry to newest, so anonymous requests for made-up `/blizzard/instance/:id` ids can push real entries out and force fresh Blizzard calls. Suggested: move the entry to newest on a hit when `maxEntries` is set.
+- **nit** `api/src/plugins/wow-common/blizzard.constants.ts` (detail cache cap 500) — the cap may be smaller than the real instance set. Suggested: size it from the instance list count.
+- **low** `api/src/notifications/notification-prefs.helpers.ts` (batch A strict schema) — junk preference values saved before the PATCH validation landed can still break follow-up SQL that reads them. Suggested: a read-side filter or a one-off cleanup.
+
+### 2026-11-04 — chore/tech-debt-2026-11-04b (surfaced during the overnight batch B review, REVIEW-TD2.md)
+
+- **low** `api/src/discord-bot/listeners/steam-link.listener.nomination-flow.ts:111-115` (`isGameNominatable`) — the unit specs mock the select chain and ignore `.where(...)`, so deleting `VISIBILITY_FILTER()` would leave every test green. Shared with the integration-tested `validateGameExists`, so risk is low. Suggested: assert `mockDb.where` got a condition, or one integration case against a banned row.
+- **low** `api/src/lineups/common-ground-select.helpers.ts:63` (`queryCommonGroundByGameIds`, cohort tiles) — now filtered by moderation, but nothing tests that a hidden game in cohort memory drops out of the cohort row. Suggested: a case next to `cohort-memory.integration.spec.ts`.
+- **low** `api/src/lineups/lineups-carryover.helpers.ts:77-90` (`insertCarriedEntry`) — carryover inserts entries without `VISIBILITY_FILTER`, so a hidden/banned game still carries into a new lineup even though nominate now refuses it. Pre-existing gap. Suggested: filter carried entries through the same visibility predicate.
+- **nit** `api/src/lineups/common-ground-select.helpers.ts:70-77` and `api/src/lineups/common-ground-cohort.helpers.ts:156-157` — comments say "bypassing every pool filter" / "should be unreachable", both now false because moderation applies. Suggested: update the comments.
+- **nit** `api/src/characters/characters-import.helpers.ts:54` — `ilike(name, name)` treats `%`/`_` in a typed character name as wildcards (pre-existing on create, now reachable on update too). Suggested: `sql\`lower(name) = lower(${name})\``, as `checkRegionClaim` does.
+- **nit** `api/src/characters/characters-import.helpers.ts:55` — realm match is case-sensitive (`eq(realm)`), so `stormrage` can coexist with another user's `Stormrage`. Consistent on create and update. Suggested: compare lower(realm).
 ### 2026-11-04 — resolved on main, no note yet (surfaced during the overnight tech-debt pick, verified on 761686aac)
 
 - **resolved** line 3564 (`scripts/smoke/test-world.ts:66`, reset-scheduled-events route) — fixed by d21c102aa (#1835).
@@ -3897,3 +3916,13 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2862 (`api/src/plugins/wow-common/blizzard.service.ts:255`, never-pruned instance detail cache) — fixed on chore/tech-debt-2026-11-04 (b4076a987).
 - **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
 - **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
+
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04d (overnight batch D)
+
+- **resolved** line 2706 (`web/src/lib/api/preferences-api.ts`, debounced preference writes lost on unload) — fixed (9c37a5341).
+- **resolved** line 2619 + low 2620 (`web/src/plugins/plugin-slot.tsx:22`, fallback hidden by foreign-slug registrations) — fixed (72fafd6f7).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04d (surfaced during the overnight batch D review)
+
+- **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
+- **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
