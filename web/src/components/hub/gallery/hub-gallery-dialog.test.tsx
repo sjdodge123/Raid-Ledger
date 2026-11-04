@@ -615,3 +615,20 @@ describe('HubGalleryDialog — zoom and navigation (ROK-2075)', () => {
         expect(zoomed()).toBe('1.00');
     });
 });
+
+describe('HubGalleryDialog — zoomed arrows outside the region (ROK-2075 review)', () => {
+    stubObjectUrls();
+
+    it('while zoomed, → from the footer or the chips does not walk pictures either', async () => {
+        open();
+        expect(await caption()).toMatch(who(1));
+        fireEvent.click(control('Zoom in'));
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Back to all' }), { key: 'ArrowRight' });
+        expect(counter(), 'zoomed, focus on the footer: → never walks').toBe('1 of 30');
+        fireEvent.keyDown(screen.getByTestId('hub-gallery-chip-all'), { key: 'ArrowRight' });
+        expect(counter(), 'zoomed, focus on a chip: → never walks').toBe('1 of 30');
+        fireEvent.click(control('Fit picture'));
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Back to all' }), { key: 'ArrowRight' });
+        expect(await caption(), 'at fit: → from the footer walks').toMatch(who(2));
+    });
+});

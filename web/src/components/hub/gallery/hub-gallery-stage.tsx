@@ -9,7 +9,7 @@ import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'rea
 import { type GallerySwipe, useGalleryZoom } from './use-gallery-zoom';
 import { HubGalleryZoomControls } from './hub-gallery-zoom-controls';
 
-export const STAGE_CLASS = 'relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video';
+const STAGE_CLASS = 'relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video';
 
 /** Coming from the grid, the clicked tile is gone: keep focus inside the dialog. */
 function useFocusRegionOnMount(): RefObject<HTMLDivElement | null> {
@@ -52,11 +52,12 @@ export function HubGalleryStage({ resetKey, onSwipe, testId, className, mediaId,
     return (
         <div ref={region} tabIndex={-1} className={className} data-testid={testId} data-media-id={mediaId} onKeyDown={onKeyDown}>
             {header}
-            <div ref={bindStage} {...handlers} style={stageStyle} data-testid="hub-gallery-stage" data-zoom={zoom.toFixed(2)} className={STAGE_CLASS}>
+            <div ref={bindStage} {...handlers} style={stageStyle} data-testid="hub-gallery-stage" data-zoom={zoom.toFixed(2)}
+                data-zoomed={atFit ? undefined : ''} className={STAGE_CLASS}>
                 {picture === null
                     ? placeholder
                     : <img ref={bindContent} src={picture.src} alt={picture.alt} onError={picture.onError} style={contentStyle} draggable={false}
-                        className={`max-h-full max-w-full select-none object-contain${motion}`} />}
+                        className={`max-h-full max-w-full select-none object-contain [-webkit-touch-callout:none]${motion}`} />}
                 {overlay}
                 <HubGalleryZoomControls readoutZoom={announcedZoom} atFit={atFit} canZoomIn={canZoomIn} canZoomOut={canZoomOut} zoomIn={zoomIn} zoomOut={zoomOut} fit={fit} />
             </div>

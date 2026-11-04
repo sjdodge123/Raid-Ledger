@@ -53,6 +53,8 @@ function useArrowKeys(scope: RefObject<HTMLElement | null>, active: boolean, pre
         if (!active) return undefined;
         const onKey = (e: KeyboardEvent): void => {
             if (!inDialog(scope, e.target) || isTyping(e.target)) return;
+            // ROK-2075: while the picture is zoomed ←/→ never walk, whatever has focus (the region pans; elsewhere, nothing).
+            if (scope.current?.querySelector('[data-zoomed]') != null) return;
             if (e.key === 'ArrowLeft' && prev !== null) { e.preventDefault(); prev(); }
             if (e.key === 'ArrowRight' && next !== null) { e.preventDefault(); next(); }
         };
