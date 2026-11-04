@@ -34,6 +34,7 @@ jest.mock('./users-moderation-game-roles.helpers');
 jest.mock('../feedback/feedback-screenshot-user.helpers');
 jest.mock('../auth/auth-user-cache');
 jest.mock('../events/signup-cancel-batch.helpers');
+jest.mock('../events/series-signups-lifecycle.helpers');
 jest.mock('../guilds/community/community-membership.queries', () => ({
   refreshUserHubCounts: jest.fn(),
 }));

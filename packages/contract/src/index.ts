@@ -151,6 +151,9 @@ export * from './logs.schema.js';
 // Event Series (ROK-429)
 export * from './event-series.schema.js';
 
+// Series Signup (ROK-1728)
+export * from './series-signups.schema.js';
+
 // AI Features (ROK-542)
 export * from './ai.schema.js';
 
@@ -253,6 +256,7 @@ export * from './companion-ingest-api.schema.js';
 export * from './companion-bg3-save.schema.js';
 export * from './companion-bg3-save-raw.schema.js';
 export * from './companion-bg3-save-normalise.js';
+export * from './companion-bg3-screenshot.schema.js';
 // Companion `wow-ledgerlink` v1 — wraps a LedgerLink v1 export string (ROK-1964).
 export * from './companion-wow-ledgerlink.schema.js';
 export * from './companion-registry.js';
@@ -264,6 +268,9 @@ export * from './companion-dev-bridge.schema.js';
 export * from './companion-dev-bridge-allowlist.js';
 export * from './companion-dev-bridge-endpoints.schema.js';
 export * from './companion-dev-bridge-queue.schema.js';
+export * from './companion-dev-bridge-snapshot.schema.js';
+export * from './companion-dev-bridge-bg3.schema.js';
+export * from './companion-dev-bridge-bg3-redaction.js';
 export * from './companion-dev-bridge-json-schema.js';
 // BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).
 export * from './bg3-hub.schema.js';
@@ -294,6 +301,7 @@ export * from './discord-join-post.schema.js';
 export * from './guild-content.schema.js';
 export * from './hub-posts.schema.js';
 export * from './hub-session-note.schema.js';
+export * from './hub-taggable.schema.js';
 export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';
 

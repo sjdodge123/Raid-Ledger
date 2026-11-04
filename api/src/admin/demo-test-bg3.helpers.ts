@@ -20,6 +20,7 @@ export const BG3_SEED_VARIANTS = [
   'no-campaign',
   'no-saves',
   'spoilers',
+  'folder-keys',
 ] as const;
 export type Bg3SeedVariant = (typeof BG3_SEED_VARIANTS)[number];
 
@@ -225,4 +226,43 @@ export function variantShape(variant: Bg3SeedVariant): {
     claim: true,
     spoilers: variant === 'spoilers',
   };
+}
+
+/** ROK-2068 `folder-keys` — the member's old (~800 days) and recent saves. */
+export const BG3_FOLDER_KEYS_OLD = 6;
+export const BG3_FOLDER_KEYS_RECENT = 3;
+/** How many of the OLD saves are bound to the active campaign. */
+export const BG3_FOLDER_KEYS_BOUND = 2;
+const DAY_MS = 86_400_000;
+
+/** One `folder-keys` save: its own key, as one save folder = one key. */
+export interface Bg3FolderKeyPlan extends Bg3SeedSavePlan {
+  campaignKey: string;
+  bound: boolean;
+}
+
+/**
+ * Oldest first: 6 saves an hour apart starting 800 days before `now` (the
+ * first 2 bound to the campaign), then 3 saves 3, 2 and 1 days ago. Every
+ * save has its own campaign key, like a real per-folder upload.
+ */
+export function planFolderKeySaves(tag: string, now: Date): Bg3FolderKeyPlan[] {
+  const total = BG3_FOLDER_KEYS_OLD + BG3_FOLDER_KEYS_RECENT;
+  const oldStart = now.getTime() - 800 * DAY_MS;
+  return Array.from({ length: total }, (_, i) => {
+    const old = i < BG3_FOLDER_KEYS_OLD;
+    const at = old
+      ? oldStart + i * 3_600_000
+      : now.getTime() - (total - i) * DAY_MS;
+    return {
+      sessionIndex: i,
+      savedAt: new Date(at),
+      currentLevel: old ? 'WLD_Main_A' : 'SCL_Main_A',
+      level: old ? 2 : 6,
+      campaignKey: createHash('sha256')
+        .update(`bg3-seed:${tag}:folder:${i}`)
+        .digest('hex'),
+      bound: i < BG3_FOLDER_KEYS_BOUND,
+    };
+  });
 }

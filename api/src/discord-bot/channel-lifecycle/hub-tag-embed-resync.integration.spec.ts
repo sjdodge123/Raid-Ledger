@@ -41,8 +41,13 @@ let testApp: TestApp;
 let sendEmbed: jest.SpyInstance;
 let editEmbed: jest.SpyInstance;
 
-/** The Hub-labelled Link button urls on a serialized action row. */
-function hubUrls(row: unknown): string[] {
+/**
+ * The Hub-labelled Link button urls on the card's FIRST action row. ROK-1728:
+ * send/edit now carry `embedComponents()` (a row list) — accept either shape.
+ */
+function hubUrls(arg: unknown): string[] {
+  const rows: unknown[] = Array.isArray(arg) ? arg : [arg];
+  const row = rows[0];
   if (!(row instanceof ActionRowBuilder)) return [];
   const json: unknown = row.toJSON();
   if (typeof json !== 'object' || json === null) return [];

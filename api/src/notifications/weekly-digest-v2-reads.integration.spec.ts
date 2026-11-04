@@ -101,7 +101,10 @@ async function attend(eventId: number, userId: number): Promise<void> {
 describe('Weekly digest v2 — recap prior-week window (ROK-1771 C1, integration)', () => {
   it('counts an event that ended 8–14 days ago in the prior week only', async () => {
     const alice = await seedUser('alice');
-    await attend(await seedEvent(endedDaysAgo(10)), alice);
+    const amy = await seedUser('amy');
+    const old = await seedEvent(endedDaysAgo(10));
+    await attend(old, alice);
+    await attend(old, amy);
 
     const current = await fetchWeeklyRecap(testApp.db);
     const prior = await fetchWeeklyRecap(testApp.db, PRIOR);
@@ -111,13 +114,19 @@ describe('Weekly digest v2 — recap prior-week window (ROK-1771 C1, integration
       playersAttended: 0,
       attendances: 0,
     });
-    expect(prior).toEqual({ eventsRun: 1, playersAttended: 1, attendances: 1 });
+    // ROK-2063: amy makes it a 2+ event. Was {1,1,1}.
+    expect(prior).toEqual({ eventsRun: 1, playersAttended: 2, attendances: 2 });
   });
 
   it('keeps this week out of the prior week, and 15+ days out of both', async () => {
     const bob = await seedUser('bob');
-    await attend(await seedEvent(endedDaysAgo(1)), bob);
-    await attend(await seedEvent(endedDaysAgo(15)), bob);
+    const ben = await seedUser('ben');
+    // ROK-2063: two attendees each, so only the window decides.
+    for (const daysAgo of [1, 15]) {
+      const id = await seedEvent(endedDaysAgo(daysAgo));
+      await attend(id, bob);
+      await attend(id, ben);
+    }
 
     expect((await fetchWeeklyRecap(testApp.db)).eventsRun).toBe(1);
     expect((await fetchWeeklyRecap(testApp.db, PRIOR)).eventsRun).toBe(0);
@@ -126,11 +135,15 @@ describe('Weekly digest v2 — recap prior-week window (ROK-1771 C1, integration
   it('drops an opted-out attendee from BOTH weeks (AC10)', async () => {
     const visible = await seedUser('visible');
     const hidden = await seedUser('hidden', false);
+    const hiddenToo = await seedUser('hidden-too', false);
     for (const daysAgo of [2, 10]) {
       const shared = await seedEvent(endedDaysAgo(daysAgo));
       await attend(shared, visible);
       await attend(shared, hidden);
-      await attend(await seedEvent(endedDaysAgo(daysAgo)), hidden);
+      // ROK-2063: two opted-out attendees, so the opt-out (not 2+) drops it.
+      const hiddenOnly = await seedEvent(endedDaysAgo(daysAgo));
+      await attend(hiddenOnly, hidden);
+      await attend(hiddenOnly, hiddenToo);
     }
 
     const expected = { eventsRun: 1, playersAttended: 1, attendances: 1 };

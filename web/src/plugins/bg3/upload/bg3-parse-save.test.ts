@@ -31,7 +31,7 @@ function must<T>(value: T | null | undefined, label: string): T {
 function inspection(overrides: Partial<Bg3SaveInspection> = {}): Bg3SaveInspection {
     const ref = must(GOLDEN_PAYLOAD.thumbnail, 'golden thumbnail');
     const thumbnail = { sha256: ref.sha256, byteLength: ref.byteLength, width: ref.width, height: ref.height };
-    return { saveInfo: RAW, webp: new Uint8Array(ref.byteLength).fill(7), thumbnail, ...overrides };
+    return { saveInfo: RAW, webp: new Uint8Array(ref.byteLength).fill(7), thumbnail, gameIdKey: null, ...overrides };
 }
 
 function lsv(name = 'QuickSave_1.lsv', size?: number): File {
@@ -79,6 +79,18 @@ describe('parseBg3Save — golden', () => {
         const bare = await parseBg3Save({ file: lsv('Tav-1234__QuickSave_1.LSV'), folderName: null });
         expect(bare.payload.campaignKey).toBe(await sha256Hex('Tav-1234__QuickSave_1'));
         expect(bare.payload.campaignKeySource).toBe('file-name');
+    });
+
+    it('keys by the reader\'s GameID hash, as-is, ahead of the folder and the file stem (ROK-2070 OQ7)', async () => {
+        const gameIdKey = 'a'.repeat(64);
+        inspectBg3SaveInWorker.mockResolvedValue(inspection({ gameIdKey }));
+        const fromFolder = await parseBg3Save({ file: lsv(), folderName: 'Tav-1234__QuickSave_1' });
+        const bare = await parseBg3Save({ file: lsv(), folderName: null });
+        const keys = [fromFolder.payload, bare.payload].map((p) => [p.campaignKey, p.campaignKeySource]);
+        expect(keys).toEqual([
+            [gameIdKey, 'game-id'],
+            [gameIdKey, 'game-id'],
+        ]);
     });
 
     it('drops the thumbnail when the reader returns none', async () => {

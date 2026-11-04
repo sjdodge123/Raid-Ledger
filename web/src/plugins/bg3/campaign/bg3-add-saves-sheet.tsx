@@ -12,17 +12,16 @@
  * confirm inline. Move here re-binds with that key confirmed; Cancel sends nothing.
  */
 import { useState, type JSX } from 'react';
-import { bg3LevelDisplay, type Bg3MySave } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
-import { syncedAgo } from '../../../lib/synced-ago';
 import { useBg3MyUnassignedSaves } from '../hooks/use-bg3-hub';
 import { Bg3BindCrossHubHold, useBindBg3Saves, type Bg3BindSavesVars } from '../hooks/use-bg3-mutations';
 import { Bg3UploadMoveConfirm } from '../upload/bg3-upload-move-confirm';
 import { useBg3MoveCheck, type Bg3MoveCheck } from '../upload/use-bg3-move-check';
 import {
-    addPlaythroughsLabel, addSavesMoveNote, groupByPlaythrough, saveCountLabel, uniquePlaythroughLabels, type Bg3Playthrough,
+    addPlaythroughsLabel, addSavesMoveNote, bg3AreaLabel, bg3SaveLine, groupByPlaythrough, saveCountLabel, uniquePlaythroughLabels,
+    type Bg3Playthrough,
 } from '../lib/bg3-playthroughs';
 import { Bg3Overlay } from './bg3-overlay';
 import { toastBg3CampaignError } from './bg3-campaign-toast';
@@ -37,13 +36,6 @@ export interface Bg3AddSavesSheetProps {
     readonly campaignId: number;
     readonly campaignName: string;
     readonly onClose: () => void;
-}
-
-const areaLabel = (save: Bg3MySave): string => bg3LevelDisplay(save.area).label;
-
-function saveLine(save: Bg3MySave): string {
-    const { act, label } = bg3LevelDisplay(save.area);
-    return `${act === null ? label : `Act ${act} · ${label}`} · ${syncedAgo(save.savedAt)}`;
 }
 
 function toggle(set: ReadonlySet<string>, key: string): Set<string> {
@@ -61,12 +53,12 @@ interface PlaythroughListProps {
 
 function PlaythroughList({ playthroughs, selected, capped, onToggle }: PlaythroughListProps): JSX.Element {
     if (playthroughs.length === 0) return <p className="text-sm text-muted">All your saves are already in a campaign.</p>;
-    const labels = uniquePlaythroughLabels(playthroughs, areaLabel);
+    const labels = uniquePlaythroughLabels(playthroughs, bg3AreaLabel);
     return (
         <ul className="flex flex-col gap-3" aria-label="Your playthroughs that aren't in a campaign">
             {playthroughs.map((p, i) => (
                 <li key={p.campaignKey}>
-                    <Checkbox label={labels[i] ?? p.newest.saveName} description={`${saveCountLabel(p.saves.length, capped)} · ${saveLine(p.newest)}`}
+                    <Checkbox label={labels[i] ?? p.newest.saveName} description={`${saveCountLabel(p.saves.length, capped)} · ${bg3SaveLine(p.newest)}`}
                         checked={selected.has(p.campaignKey)} onChange={() => onToggle(p.campaignKey)} />
                 </li>
             ))}

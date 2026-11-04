@@ -164,6 +164,15 @@ payload are unchanged — this only widens what one paste may contain.
   Nothing is partially imported. The character binding (game, region,
   name, ruleset, GUID) runs against **every** section, not just the first;
   any section's binding reject rejects the whole paste.
+- **Guild roster replace (ROK-2066, operator 2026-11-02 — supersedes the
+  ROK-1794 "explicit grants only" rule):** the guild section no longer
+  refuses a roster because of who sent it. Any importer listed in the roster
+  (`who.guid` among `data.members`, else `NOT_IN_GUILD`) replaces a stored
+  roster when its `data.snapshotAt` is not older than the stored one; an
+  older snapshot is `stale` and writes nothing for the guild while the other
+  sections still apply. A large roster change applies too and is flagged to
+  Raid Ledger staff. Atomicity is unchanged: the sections commit together, so
+  a guild-section reject still rejects the char and raid sections.
 - **One authoritative section for the character row:** the class/level
   update, the ruleset change (`confirm.updateRuleset`) and the GUID pin
   follow ONE section — the `char` section when present (it is the

@@ -4,8 +4,14 @@
  * Each test seeds its OWN guild through the DEMO_MODE fixture
  * `POST /admin/test/wow/seed-guild` (unique per project, worker and run), so
  * the parallel projects never share a crest. The officer is an editor granted
- * by name (`viewer.canEdit`), which is what turns the hero crest into the
- * "Change crest" button; the plain member gets the read-only crest.
+ * by name (`viewer.canEdit`), which is what adds the pencil badge
+ * (`hub-crest-edit`, "Change crest" — the ONLY picker entry since ROK-2074);
+ * the plain member gets the read-only crest.
+ *
+ * ROK-2074: a crest with a picture is a "View hub picture" button for
+ * everyone. A crest picked from the Gallery opens that picture in the Gallery
+ * viewer; an uploaded crest opens the single-picture viewer titled "Picture";
+ * a preset is not a button. Escape closes either and focus returns to the crest.
  *
  * The picker is a `Modal` at ≥1024px and a `BottomSheet` below — both carry
  * the same test ids. Its radios are `sr-only` inputs inside `<label>`s, so the
@@ -20,6 +26,7 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, apiPut, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
+import { pollListed, uniquePng, uploadAs } from './hub-gallery-upload-fixtures';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -76,7 +83,9 @@ async function pick(scope: Locator, name: string): Promise<void> {
 }
 
 async function openPicker(page: Page): Promise<Locator> {
-    await page.getByTestId('guild-hero').getByTestId('hub-crest-edit').click();
+    const edit = page.getByTestId('guild-hero').getByTestId('hub-crest-edit');
+    await expect(edit, 'the pencil badge is the "Change crest" target').toHaveAccessibleName('Change crest');
+    await edit.click();
     const picker = page.getByTestId('crest-picker');
     await expect(picker).toBeVisible({ timeout: 15_000 });
     return picker;
@@ -107,6 +116,26 @@ async function openNavRow(page: Page, guildId: number): Promise<Locator> {
 
 function heroCrest(page: Page): Locator {
     return page.getByTestId('guild-hero').getByTestId('hub-crest');
+}
+
+/** ROK-2074 — the crest itself, a button only when the crest has a picture. */
+function viewCrest(page: Page): Locator {
+    return page.getByTestId('guild-hero').getByRole('button', { name: 'View hub picture', exact: true });
+}
+
+/** Escape closes the open picture dialog and focus goes back to the crest. */
+async function closeAndExpectFocusBack(page: Page, dialog: Locator): Promise<void> {
+    await page.keyboard.press('Escape');
+    await expect(dialog, 'Escape closes the picture').toHaveCount(0);
+    await expect(viewCrest(page), 'focus returns to the crest').toBeFocused();
+}
+
+/** Poll the hub page (`GET /guilds/:id`) until its `guild.crestMediaId` is `expected`. */
+async function waitForCrestMediaId(jwt: string, guildId: number, expected: number | null): Promise<void> {
+    await pollForCondition(async () => {
+        const page = (await apiGet(jwt, `/guilds/${guildId}`)) as { guild?: { crestMediaId?: number | null } } | null;
+        return page?.guild !== undefined && (page.guild.crestMediaId ?? null) === expected ? true : null;
+    }, { description: `hub page crestMediaId = ${String(expected)}` });
 }
 
 test('editor: picks an emblem + colours, the hero shows it; None falls back to initials', async ({ page }, testInfo) => {
@@ -145,6 +174,7 @@ test('member: sees the saved crest but no "Change crest" button', async ({ page 
         await expect(heroCrest(page), 'members see the saved crest').toHaveAttribute('data-crest', 'preset', { timeout: 15_000 });
         await expect(heroCrest(page).getByTestId('hub-crest-emblem')).toHaveAttribute('data-emblem', 'crown');
         await expect(page.getByTestId('hub-crest-edit'), 'only editors get the picker entry').toHaveCount(0);
+        await expect(page.getByTestId('hub-crest-view'), 'a preset crest has no picture to view').toHaveCount(0);
 
         const row = await openNavRow(page, guild.guildId);
         await expect(row, 'the nav lists the guild').toBeVisible({ timeout: 15_000 });
@@ -153,9 +183,9 @@ test('member: sees the saved crest but no "Change crest" button', async ({ page 
     });
 });
 
-test('editor: uploads a PNG, Save commits it, the hero shows the image crest', async ({ page }, testInfo) => {
+test('editor: uploads a PNG, Save commits it, the hero shows the image crest; it opens as a single picture', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild, token) => {
-        await signInOnboardedMember(page, guild.users.officer.userId);
+        const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
         await page.goto(`/hubs/${guild.guildId}`);
         await expect(heroCrest(page)).toHaveAttribute('data-crest', 'initials', { timeout: 15_000 });
 
@@ -166,5 +196,43 @@ test('editor: uploads a PNG, Save commits it, the hero shows the image crest', a
         await waitForCrest(token, guild.guildId, (s) => s.active === 'upload', 'crest upload saved');
         await expect(heroCrest(page), 'the hero shows the uploaded crest').toHaveAttribute('data-crest', 'upload', { timeout: 15_000 });
         await expect(heroCrest(page).getByTestId('hub-crest-img')).toHaveAttribute('src', /\/guild-crests\//);
+
+        // ROK-2074: an uploaded crest (not from the Gallery) opens the single-picture viewer.
+        await waitForCrestMediaId(jwt, guild.guildId, null);
+        await viewCrest(page).click();
+        const single = page.getByRole('dialog', { name: 'Picture' });
+        await expect(single, 'an uploaded crest opens the "Picture" viewer').toBeVisible({ timeout: 15_000 });
+        await expect(single.getByTestId('hub-gallery-single').getByRole('img'), 'the viewer shows the crest upload')
+            .toHaveAttribute('src', /\/guild-crests\//, { timeout: 15_000 });
+        await expect(single.getByTestId('hub-gallery-viewer'), 'not the Gallery list viewer').toHaveCount(0);
+        await closeAndExpectFocusBack(page, single);
+    });
+});
+
+test('editor: a crest picked from the Gallery opens that picture in the Gallery viewer', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild, token) => {
+        const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
+        const { id: mediaId } = await uploadAs(jwt, guild.guildId, uniquePng(96));
+        await pollListed(jwt, guild.guildId, mediaId, true);
+        await page.goto(`/hubs/${guild.guildId}`);
+        await expect(heroCrest(page)).toHaveAttribute('data-crest', 'initials', { timeout: 15_000 });
+
+        const picker = await openPicker(page);
+        await pick(picker, 'Gallery');
+        const option = picker.getByTestId(`crest-gallery-option-${mediaId}`);
+        await option.click();
+        await expect(option, 'the uploaded picture is the picked crest').toHaveAttribute('aria-checked', 'true');
+        await save(page, picker);
+        await waitForCrest(token, guild.guildId, (s) => s.active === 'upload', 'crest picked from the gallery');
+        await waitForCrestMediaId(jwt, guild.guildId, mediaId);
+
+        await page.goto(`/hubs/${guild.guildId}`);
+        await expect(heroCrest(page), 'the hero shows the gallery crest').toHaveAttribute('data-crest', 'upload', { timeout: 15_000 });
+        await viewCrest(page).click();
+        const gallery = page.getByRole('dialog', { name: 'Gallery' });
+        await expect(gallery, 'a gallery crest opens the Gallery').toBeVisible({ timeout: 15_000 });
+        await expect(gallery.getByTestId('hub-gallery-viewer'), 'the viewer opens on the crest\'s picture')
+            .toHaveAttribute('data-media-id', String(mediaId), { timeout: 15_000 });
+        await closeAndExpectFocusBack(page, gallery);
     });
 });

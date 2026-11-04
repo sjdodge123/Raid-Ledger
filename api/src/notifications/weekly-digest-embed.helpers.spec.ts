@@ -128,8 +128,7 @@ describe('buildWeeklyDigestEmbed — sections', () => {
     const fields = build(full()).toJSON().fields;
     expect(fieldNamed(fields, DIGEST_FIELD_NAMES.playing)).toBe(
       `**[Game 1](${ORIGIN}/games/1)** · 1 player\n` +
-        `**[Game 2](${ORIGIN}/games/2)** · 2 players\n` +
-        `[see all ↗](${ORIGIN}/games)`,
+        `**[Game 2](${ORIGIN}/games/2)** · 2 players`,
     );
     expect(fieldNamed(fields, DIGEST_FIELD_NAMES.recap)).toBe(
       `**4** events · **9** players\n[past events ↗](${ORIGIN}/events?tab=past)`,
@@ -227,11 +226,11 @@ describe('fitSectionLines — the 1024 boundary', () => {
     expect(value).toBe(`${first}\n+1 more · ${tail}`);
   });
 
-  it('counts items the data layer already cut (total > items)', () => {
+  it('counts items the data layer already cut (total > items), with no link (ROK-2063)', () => {
     const fields = build({ ...full(), playing: playing(5, 12) }).toJSON()
       .fields;
     expect(fieldNamed(fields, DIGEST_FIELD_NAMES.playing)).toMatch(
-      new RegExp(`\\n\\+7 more · \\[see all ↗\\]\\(${ORIGIN}/games\\)$`),
+      /\n\+7 more$/,
     );
   });
 

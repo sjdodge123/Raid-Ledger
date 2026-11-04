@@ -33,7 +33,7 @@ class FakeWorker implements Bg3ParseWorker {
 }
 
 let workers: FakeWorker[] = [];
-const INSPECTION = { saveInfo: '{}', webp: null, thumbnail: null };
+const INSPECTION = { saveInfo: '{}', webp: null, thumbnail: null, gameIdKey: null };
 
 function must<T>(value: T | undefined, label: string): T {
     if (value === undefined) throw new Error(`missing ${label}`);

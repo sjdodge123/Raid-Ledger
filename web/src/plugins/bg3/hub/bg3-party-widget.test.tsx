@@ -19,7 +19,7 @@ import { toast } from '../../../lib/toast';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import Bg3PartyWidget from './bg3-party-widget';
 
-type AuthUser = Pick<User, 'id' | 'username' | 'displayName' | 'role'>;
+type AuthUser = Pick<User, 'id' | 'username' | 'displayName' | 'role'> & Partial<Pick<User, 'discordId' | 'avatar' | 'customAvatarUrl'>>;
 const auth = vi.hoisted((): { user: AuthUser | null } => ({
     user: { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member' },
 }));
@@ -97,6 +97,20 @@ describe('Bg3PartyWidget — tiles (V-3)', () => {
         expect(within(slot('Generic:Human:1')).getByRole('button', { name: 'Not me' })).toBeInTheDocument();
         expect(claimButtons()).toHaveLength(0);
         expect(bodies[0]).toEqual({ body: { slotKey: 'Generic:Human:1' }, campaignId: String(BG3_CAMPAIGN_ID) });
+        release();
+    });
+
+    it('ROK-2069: the optimistic claim paints the viewer\'s Discord avatar, not initials', async () => {
+        auth.user = { id: 33, username: 'thistle', displayName: 'Thistle', role: 'member', discordId: '206900000000000033', avatar: 'c_hash', customAvatarUrl: null };
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        serve();
+        server.use(http.post(BG3_CLAIMS_URL, async () => { await gate; return new HttpResponse(null, { status: 204 }); }));
+        await renderParty();
+        await userEvent.click(must(within(slot('Generic:Human:1')).queryByRole('button', { name: "That's me" }), 'claim'));
+        await waitFor(() => expect(within(slot('Generic:Human:1')).getByText('You')).toBeInTheDocument());
+        expect(within(slot('Generic:Human:1')).getByRole('img').getAttribute('src'))
+            .toBe('https://cdn.discordapp.com/avatars/206900000000000033/c_hash.png');
         release();
     });
 

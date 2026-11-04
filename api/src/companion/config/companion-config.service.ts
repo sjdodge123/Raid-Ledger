@@ -17,6 +17,8 @@ import {
   CompanionVersionStringSchema,
   type CompanionConfig,
   type CompanionConfigContract,
+  type CompanionConfigHubTarget,
+  type CompanionConfigGame,
   type CompanionConfigLimits,
   type CompanionConfigRate,
   type CompanionContractTable,
@@ -32,6 +34,7 @@ import type {
   CompanionIngestAuth,
   CompanionIngestVia,
 } from '../ingest/companion-ingest-request';
+import { CompanionConfigOwners } from './companion-config-owners.service';
 
 /** No minimum unless the operator sets `COMPANION_MIN_APP_VERSION`. */
 export const DEFAULT_COMPANION_MIN_APP_VERSION = '0.0.0';
@@ -42,6 +45,14 @@ const LIMITS: CompanionConfigLimits = Object.freeze({
   imageEdgeMax: COMPANION_IMAGE_EDGE_MAX,
   capturedAtMaxFutureMs: COMPANION_CAPTURED_AT_MAX_FUTURE_MS,
 });
+
+/** A served contract plus its registry owner (undefined = no handler). */
+interface ContractEntry {
+  body: CompanionConfigContract;
+  ownerId: string | undefined;
+  /** ROK-1966: the resolved handler's `/config` hub picker, if it has one. */
+  hubTargets: ((userId: number) => Promise<CompanionConfigHubTarget[]>) | null;
+}
 
 interface VersionEntry {
   version: number;
@@ -81,12 +92,14 @@ export class CompanionConfigService {
     @Optional()
     @Inject(COMPANION_CONTRACT_TABLE)
     table?: CompanionContractTable,
+    /** ROK-2067 `plugin` + `game`; absent (bare unit specs) = keys omitted. */
+    @Optional() private readonly owners?: CompanionConfigOwners,
   ) {
     this.table = table ?? COMPANION_CONTRACTS;
   }
 
   /** The `/config` body for `auth` (null = anonymous), schema-parsed. */
-  build(auth: CompanionIngestAuth | null): CompanionConfig {
+  async build(auth: CompanionIngestAuth | null): Promise<CompanionConfig> {
     const base = {
       configVersion: 1 as const,
       minAppVersion: this.minAppVersion(),
@@ -96,7 +109,7 @@ export class CompanionConfigService {
     return CompanionConfigSchema.parse({
       ...base,
       rate: rateFor(auth.via),
-      contracts: this.contracts(auth.via),
+      contracts: await this.contracts(auth),
     });
   }
 
@@ -109,11 +122,63 @@ export class CompanionConfigService {
     return DEFAULT_COMPANION_MIN_APP_VERSION;
   }
 
-  private contracts(via: CompanionIngestVia): CompanionConfigContract[] {
-    return Object.entries(this.table).flatMap(([id, versions]) => {
-      const entry = this.contract(id, versionEntries(versions), via);
-      return entry ? [entry] : [];
+  private async contracts(
+    auth: CompanionIngestAuth,
+  ): Promise<CompanionConfigContract[]> {
+    const games = new Map<string, Promise<CompanionConfigGame | null>>();
+    const all = Object.entries(this.table).map(async ([id, versions]) => {
+      const entry = this.contract(id, versionEntries(versions), auth.via);
+      if (!entry) return [];
+      const targets = await this.hubTargetsOf(entry, auth.userId);
+      const body = { ...entry.body, ...targets };
+      if (!this.owners) return [body];
+      return [{ ...body, ...(await this.ownerFields(entry, games)) }];
     });
+    return (await Promise.all(all)).flat();
+  }
+
+  /** ROK-1966: `hubTargets` when the handler offers them; a failed read omits it. */
+  private async hubTargetsOf(
+    { body, hubTargets }: ContractEntry,
+    userId: number,
+  ): Promise<Pick<CompanionConfigContract, 'hubTargets'>> {
+    if (!hubTargets) return {};
+    try {
+      return { hubTargets: await hubTargets(userId) };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`/config hubTargets for ${body.id} failed: ${reason}`);
+      return {};
+    }
+  }
+
+  /** `plugin` + `game` for one contract; one game lookup per owner per call. */
+  private async ownerFields(
+    { ownerId }: ContractEntry,
+    games: Map<string, Promise<CompanionConfigGame | null>>,
+  ): Promise<Pick<CompanionConfigContract, 'plugin' | 'game'>> {
+    const owners = this.owners;
+    if (!owners) return {};
+    const key = ownerId ?? '';
+    const game = games.get(key) ?? this.safeGame(owners, ownerId);
+    games.set(key, game);
+    return { plugin: owners.plugin(ownerId), game: await game };
+  }
+
+  /** The owner's game; a failed lookup is `null` art, never a failed `/config`. */
+  private async safeGame(
+    owners: CompanionConfigOwners,
+    ownerId: string | undefined,
+  ): Promise<CompanionConfigGame | null> {
+    try {
+      return await owners.game(ownerId);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `/config game lookup for ${ownerId ?? 'no owner'} failed: ${reason}`,
+      );
+      return null;
+    }
   }
 
   /** One contract as served now; `enabled` = its current version resolves. */
@@ -121,15 +186,16 @@ export class CompanionConfigService {
     id: string,
     entries: VersionEntry[],
     via: CompanionIngestVia,
-  ): CompanionConfigContract | null {
+  ): ContractEntry | null {
     const current = currentEntry(entries);
     if (!current) return null;
     const listing = this.registry
       .list()
       .find((l) => l.contract === id && l.versions.includes(current.version));
-    return {
+    const handler = this.registry.resolve(id, current.version, via);
+    const body: CompanionConfigContract = {
       id,
-      enabled: this.registry.resolve(id, current.version, via) !== null,
+      enabled: handler !== null,
       versions: entries.map((e) => ({
         version: e.version,
         status: e.spec.status,
@@ -140,5 +206,7 @@ export class CompanionConfigService {
         minIntervalSec: COMPANION_DEFAULT_MIN_INTERVAL_SEC,
       },
     };
+    const hubTargets = handler?.hubTargets?.bind(handler) ?? null;
+    return { body, ownerId: listing?.ownerPluginId, hubTargets };
   }
 }

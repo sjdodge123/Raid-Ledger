@@ -204,7 +204,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <RosterSlotSection event={page.event} eventId={page.eventId} roster={page.roster} rosterAssignments={derived.rosterAssignments}
                 isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp} userSignup={derived.userSignup}
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} hubPrompt={hubPrompt} />
-            <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
+            <EventDetailFallbackSignup event={page.event} rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
             {!derived.rosterAssignments && hubPrompt}
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}

@@ -1,12 +1,13 @@
 /**
  * ROK-1943 D6/D9/D14 — which pins the map draws under a `PinFilter`. Types AND
  * players AND label search AND crossed-out; predicates run on the pin's own
- * fields, so the players-scope character suffix is never searched (D14).
+ * fields, so the players-scope character suffix is never searched (D14). A
+ * synthetic Death pin is searched by its date label in both scopes.
  */
-import type { ValheimMapPin, ValheimServerPin } from '@raid-ledger/contract';
+import type { ValheimMapPin, ValheimReadMapPin, ValheimServerPin } from '@raid-ledger/contract';
 import type { PinFilter } from './pin-filter';
 import { groupOf } from './pin-type-groups';
-import { pinDisplayLabel } from './pin-types';
+import { deathPinLabel, pinDisplayLabel } from './pin-types';
 
 /** The fields every pin source shares — enough to filter on. */
 export type FilterablePin = Pick<ValheimMapPin, 'type' | 'label' | 'checked'>;
@@ -23,16 +24,28 @@ export function matchesPinFilter(pin: FilterablePin, filter: PinFilter): boolean
     return pinDisplayLabel(pin.label, pin.type).toLowerCase().includes(filter.query.toLowerCase());
 }
 
+/** ROK-1931 Q6 = A: a synthetic Death pin (it carries `diedAt`) takes its label from that time. */
+export function readPinAsMapPin(pin: ValheimReadMapPin): ValheimMapPin {
+    const { diedAt, ...rest } = pin;
+    return diedAt === undefined ? rest : { ...rest, label: deathPinLabel(diedAt) };
+}
+
 /** D14 / Q3: a players-scope pin is labelled `"<display label> · <character>"`. */
 export function serverPinAsMapPin(pin: ValheimServerPin): ValheimMapPin {
+    const text = pin.diedAt === undefined ? pinDisplayLabel(pin.label, pin.type) : deathPinLabel(pin.diedAt);
     return {
         type: pin.type,
-        label: `${pinDisplayLabel(pin.label, pin.type)} · ${pin.characterName}`,
+        label: `${text} · ${pin.characterName}`,
         x: pin.x,
         z: pin.z,
         checked: pin.checked,
         shared: false,
     };
+}
+
+/** What a server pin is searched by: its own label, or a synthetic Death pin's date label. */
+function searchable(pin: ValheimServerPin): FilterablePin {
+    return pin.diedAt === undefined ? pin : { ...pin, label: deathPinLabel(pin.diedAt) };
 }
 
 /**
@@ -41,10 +54,10 @@ export function serverPinAsMapPin(pin: ValheimServerPin): ValheimMapPin {
  * players scope filters the server layer, which is empty until it loads.
  */
 export function filterPins(
-    own: readonly ValheimMapPin[],
+    own: readonly ValheimReadMapPin[],
     filter: PinFilter,
     server: readonly ValheimServerPin[] | undefined,
 ): readonly ValheimMapPin[] {
-    if (filter.players === 'character') return own.filter((p) => matchesPinFilter(p, filter));
-    return (server ?? []).filter((p) => matchesPinFilter(p, filter)).map(serverPinAsMapPin);
+    if (filter.players === 'character') return own.map(readPinAsMapPin).filter((p) => matchesPinFilter(p, filter));
+    return (server ?? []).filter((p) => matchesPinFilter(searchable(p), filter)).map(serverPinAsMapPin);
 }

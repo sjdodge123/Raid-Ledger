@@ -5,8 +5,11 @@
  *   the metrics, so no stored title disagrees with its stored intensity.
  * - A player with no presence data (no `game_activity_rollups` row with
  *   seconds > 0) is titled `Newcomer`, not `Casual`.
+ * - ROK-1939 D7/D8: the noun is community-relative, so the daily aggregate
+ *   re-titles EVERY profile (signal hash unchanged included) and the weekly
+ *   job uses the same rule.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   TASTE_PROFILE_AXIS_POOL,
   type ArchetypeDto,
@@ -15,9 +18,10 @@ import {
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { deriveTier } from './archetype.helpers';
-import { TIER_DESCRIPTIONS } from './archetype-copy';
+import { deriveArchetype, deriveTier } from './archetype.helpers';
+import { TIER_DESCRIPTIONS, VECTOR_TITLE_DESCRIPTIONS } from './archetype-copy';
 import { currentWeekStart } from './pipelines/weekly-intensity';
+import { retitleAllArchetypes } from './archetype-retitle-all.helpers';
 import { TasteProfileService } from './taste-profile.service';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -186,5 +190,91 @@ describe('Archetype re-titling (ROK-1935)', () => {
 
     const row = await loadVector(userId);
     expect(row.archetype?.intensityTier).toBe('Newcomer');
+  });
+
+  /**
+   * ROK-1939 fixture: six profiles that all share a pvp-heavy shape; only
+   * `x` also plays horror. The raw rule titles everyone by pvp (Duelist…);
+   * the community-relative rule singles `x` out as Nightcrawler. The rows
+   * carry a raw-rule title and NO signals, so the aggregate loop skips them
+   * (no hash change) — only the D7 pass can re-title `x`.
+   */
+  async function seedPvpCommunity(): Promise<number> {
+    const shared = { pvp: 100, shooter: 80 };
+    const ids: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const userId = await seedUser(i === 0 ? 'x-horror' : `pvp-${i}`);
+      const dimensions = {
+        ...zeroDimensions(),
+        ...shared,
+        ...(i === 0 ? { horror: 60 } : {}),
+      };
+      const intensityMetrics = {
+        intensity: 0,
+        focus: 0,
+        breadth: 0,
+        consistency: 0,
+      };
+      await testApp.db.insert(schema.playerTasteVectors).values({
+        userId,
+        vector: [0, 0, 0, 0, 0, 0, 0],
+        dimensions,
+        intensityMetrics,
+        archetype: deriveArchetype({
+          intensityMetrics,
+          dimensions,
+          hasPresenceData: false,
+        }),
+        signalHash: `stable-${userId}`,
+      });
+      ids.push(userId);
+    }
+    const [x] = nonEmpty(ids, 'x-horror user');
+    const before = await loadVector(x);
+    expect(before.archetype?.vectorTitles).not.toContain('Nightcrawler');
+    return x;
+  }
+
+  it('the daily aggregate re-titles a hash-unchanged profile against the community (ROK-1939 D7)', async () => {
+    const x = await seedPvpCommunity();
+
+    await service.aggregateVectors();
+
+    const row = await loadVector(x);
+    expect(row.signalHash).toBe(`stable-${x}`);
+    expect(row.archetype?.vectorTitles).toEqual(['Nightcrawler']);
+    expect(row.archetype?.descriptions.titles).toEqual([
+      VECTOR_TITLE_DESCRIPTIONS.Nightcrawler,
+    ]);
+  });
+
+  it('a re-title pass leaves an unchanged title untouched (ROK-1939 IS DISTINCT FROM)', async () => {
+    const x = await seedPvpCommunity();
+    const xminOf = async (): Promise<string> => {
+      const rows = await testApp.db.execute<{ xmin: string }>(
+        sql`SELECT xmin::text AS xmin FROM player_taste_vectors WHERE user_id = ${x}`,
+      );
+      return nonEmpty([...rows], 'xmin row')[0].xmin;
+    };
+
+    await retitleAllArchetypes(testApp.db);
+    const settled = await xminOf();
+    expect((await loadVector(x)).archetype?.vectorTitles).toEqual([
+      'Nightcrawler',
+    ]);
+
+    await retitleAllArchetypes(testApp.db);
+    // A rewritten row gets a new xmin; an unchanged title must not be rewritten.
+    expect(await xminOf()).toBe(settled);
+  });
+
+  it('the weekly job re-titles with the same community-relative rule (ROK-1939 D8)', async () => {
+    const x = await seedPvpCommunity();
+
+    await service.weeklyIntensityRollup();
+
+    const row = await loadVector(x);
+    expect(row.archetype?.intensityTier).toBe('Newcomer');
+    expect(row.archetype?.vectorTitles).toEqual(['Nightcrawler']);
   });
 });

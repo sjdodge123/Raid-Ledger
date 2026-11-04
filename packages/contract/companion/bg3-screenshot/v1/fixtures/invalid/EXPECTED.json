@@ -1,0 +1,58 @@
+{
+  "envelope-unknown-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "payload-unknown-key": {
+    "path": "payload",
+    "code": "unrecognized_keys"
+  },
+  "target-unknown-key": {
+    "path": "payload.target",
+    "code": "unrecognized_keys"
+  },
+  "target-missing": {
+    "path": "payload.target",
+    "code": "invalid_type"
+  },
+  "hub-guild-id-zero": {
+    "path": "payload.target.hubGuildId",
+    "code": "too_small"
+  },
+  "hub-guild-id-string": {
+    "path": "payload.target.hubGuildId",
+    "code": "invalid_type"
+  },
+  "hub-guild-id-over-int4": {
+    "path": "payload.target.hubGuildId",
+    "code": "too_big"
+  },
+  "image-png": {
+    "path": "payload.image.contentType",
+    "code": "invalid_value"
+  },
+  "image-too-large": {
+    "path": "payload.image.byteLength",
+    "code": "too_big"
+  },
+  "image-edge-over-4096": {
+    "path": "payload.image.width",
+    "code": "too_big"
+  },
+  "image-wider-than-source": {
+    "path": "payload.image.width",
+    "code": "custom"
+  },
+  "source-edge-too-big": {
+    "path": "payload.width",
+    "code": "too_big"
+  },
+  "taken-after-captured": {
+    "path": "payload.takenAt",
+    "code": "custom"
+  },
+  "contract-version-2": {
+    "path": "contractVersion",
+    "code": "invalid_value"
+  }
+}

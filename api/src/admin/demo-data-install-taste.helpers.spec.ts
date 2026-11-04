@@ -55,12 +55,15 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
   let mockDb: MockDb;
   let db: Db;
 
-  /** First `from` = the vector rows; the presence query ends at `where`. */
+  /**
+   * The locked vector read ends at `for('update')` (ROK-1939); the
+   * presence query ends at `where`.
+   */
   function mockRows(
     rows: typeof VECTOR_ROWS,
     presenceIds: number[] = rows.map((r) => r.userId),
   ): void {
-    mockDb.from.mockResolvedValueOnce(rows);
+    mockDb.for.mockResolvedValueOnce(rows.map((r) => ({ ...r, active: true })));
     mockDb.where.mockResolvedValueOnce(
       presenceIds.map((userId) => ({ userId })),
     );
@@ -82,6 +85,15 @@ describe('refreshArchetypesFromCurrentMetrics (ROK-1105 batched)', () => {
     mockRows(VECTOR_ROWS);
     await expect(refreshArchetypesFromCurrentMetrics(db)).resolves.toBe(3);
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks the vector rows inside one transaction before re-titling (ROK-1939 D7)', async () => {
+    mockRows(VECTOR_ROWS);
+    await refreshArchetypesFromCurrentMetrics(db);
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.for).toHaveBeenCalledWith('update', {
+      of: schema.playerTasteVectors,
+    });
   });
 
   it('parameterizes one (user_id, archetype) tuple per row with the derived archetype', async () => {

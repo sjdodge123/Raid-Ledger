@@ -23,6 +23,7 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import { embedComponents } from '../services/discord-embed.factory';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 import { SettingsService } from '../../settings/settings.service';
@@ -315,16 +316,14 @@ export class SignupInteractionListener {
     try {
       const currentState =
         record.embedState as import('../discord-bot.constants').EmbedState;
-      const { embed, row } = this.embedFactory.buildEventEmbed(
-        eventData,
-        context,
-        { state: currentState },
-      );
+      const built = this.embedFactory.buildEventEmbed(eventData, context, {
+        state: currentState,
+      });
       await this.clientService.editEmbed(
         record.channelId,
         record.messageId,
-        embed,
-        row,
+        built.embed,
+        embedComponents(built),
       );
     } catch (err) {
       this.logger.warn(

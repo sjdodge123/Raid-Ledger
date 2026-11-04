@@ -21,10 +21,13 @@ import {
 } from './weekly-digest-milestones.helpers';
 import {
   buildEventMilestonesQuery,
-  buildFirstGamesQuery,
   buildHourMilestonesQuery,
   buildNewMembersQuery,
 } from './weekly-digest-milestones-sql.helpers';
+import { buildFirstCoPlayGamesQuery } from './weekly-digest-first-coplay.queries';
+
+const NOW = new Date('2026-11-02T12:00:00.000Z');
+const WEEK = { start: new Date('2026-10-26T12:00:00.000Z'), end: NOW };
 
 const H = 3600;
 
@@ -171,7 +174,7 @@ describe('query privacy (AC10)', () => {
   it.each([
     ['B1', buildNewMembersQuery()],
     ['B3', buildEventMilestonesQuery(10)],
-    ['B2', buildFirstGamesQuery()],
+    ['B2', buildFirstCoPlayGamesQuery(WEEK, NOW)],
     ['B4', buildHourMilestonesQuery(100 * H)],
   ])('%s carries the show_activity opt-out predicate', (_label, query) => {
     expect(render(query)).toContain("sa_pref.key = 'show_activity'");
@@ -182,5 +185,47 @@ describe('query privacy (AC10)', () => {
     expect(text).toContain('u.guild_member_seen_at IS NOT NULL');
     expect(text).toContain('u.deactivated_at IS NULL');
     expect(text).toContain('u.kicked_at IS NULL');
+  });
+});
+
+describe('B2 first co-play query (ROK-2063)', () => {
+  const query = new PgDialect().sqlToQuery(
+    buildFirstCoPlayGamesQuery(WEEK, NOW),
+  );
+  const text = query.sql.replace(/\s+/g, ' ');
+
+  it('keeps a game only when its first co-play is inside [start, end)', () => {
+    expect(text).toContain('cp.co_played_at <');
+    expect(query.params).toEqual(
+      expect.arrayContaining([WEEK.start.toISOString(), NOW.toISOString()]),
+    );
+  });
+
+  it('takes candidates from the bounded week, never solo rollups', () => {
+    expect(text).toContain('gs.started_at >= $');
+    expect(text).not.toContain('game_activity_rollups');
+    // Sessions are not clipped to the week start: an overlap is credited to
+    // the week holding the instant it reaches 15 minutes.
+    expect(text).not.toContain('GREATEST(gs.started_at');
+    expect(text).toContain(
+      "GREATEST(a.s_from, b.s_from) + interval '15 minutes' <= LEAST(a.s_to, b.s_to)",
+    );
+    expect(text).toMatch(
+      /GREATEST\(a\.s_from, b\.s_from\) \+ interval '15 minutes' < \$/,
+    );
+  });
+
+  it('rules out earlier co-play with index-bounded NOT EXISTS lookups', () => {
+    expect(text).toContain(
+      'NOT EXISTS ( SELECT 1 FROM game_activity_sessions ha',
+    );
+    expect(text).toMatch(
+      /hb\.started_at BETWEEN ha\.started_at - interval '25 hours' AND /,
+    );
+    expect(text).toMatch(
+      /GREATEST\(ha\.started_at, hb\.started_at\) \+ interval '15 minutes' < \$/,
+    );
+    expect(text).toContain('NOT EXISTS ( SELECT 1 FROM events he');
+    expect(text).not.toContain('WITH cp_history');
   });
 });

@@ -74,6 +74,8 @@ export const RosterAssignmentResponseSchema = z.object({
     runningLate: z.boolean().optional(),
     /** ROK-1379 follow-up: optional ETA-late minutes (unset in v1) */
     lateMinutes: z.number().int().positive().nullable().optional(),
+    /** ROK-1728: signup is tagged by a series membership (`seriesSignupId != null`) */
+    inSeries: z.boolean().optional(),
 });
 export type RosterAssignmentResponse = z.infer<typeof RosterAssignmentResponseSchema>;
 

@@ -3,6 +3,27 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-03 (additive) — /config hubTargets + `image` blob slot (ROK-1966)
+
+- **Additive.** Each `/config` contract may carry an optional `hubTargets`
+  list (`{ hubGuildId, name, isDefault }`, ≤ 100) — the hubs the caller may
+  name in a `bg3-screenshot` payload. Older servers omit it.
+- `blobSlots` gains the value `"image"`, served only for the new
+  `bg3-screenshot` contract. The app MUST ignore a slot name it does not know.
+
+## v1 — 2026-11-02 (additive) — /config plugin + game (ROK-2067)
+
+- **Additive.** Each `/config` contract gains two optional keys:
+  `plugin` (`CompanionConfigPluginSchema`: `{id, name, state}` with
+  `state` ∈ `active` | `inactive` | `not_installed`, or `null` when no handler
+  is registered) and `game` (`CompanionConfigGameSchema`:
+  `{slug, name, coverUrl}`, or `null`). Older servers omit both; the app MUST
+  ignore unknown keys and treat an absent key as "unknown". CONTRACT §4.2.
+- `game.coverUrl` may be protocol-relative (`//images.igdb.com/...`); the
+  app resolves it against `https:`.
+- `enabled` is unchanged. The anonymous answer is unchanged (no `contracts`).
+- The message envelope and `schema.json` are unchanged.
+
 ## v1 — 2026-10-25 (additive) — ingest API (ROK-1956)
 
 - **Additive.** Five error codes appended (`unsupported_media`,

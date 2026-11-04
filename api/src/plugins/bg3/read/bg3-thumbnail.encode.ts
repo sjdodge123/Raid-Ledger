@@ -27,6 +27,20 @@ export async function readBg3Blob(
   return handle ? buffer(handle.stream) : null;
 }
 
+/**
+ * `readBg3Blob` inside an in-tx ingest handler: the metadata lookup rides
+ * the handler's `tx`, never a second pooled connection (ROK-1966 review).
+ */
+export async function readBg3BlobIn(
+  store: Pick<CompanionBlobStore, 'openIn'>,
+  tx: Parameters<CompanionBlobStore['openIn']>[0],
+  userId: number,
+  sha256: string,
+): Promise<Buffer | null> {
+  const handle = await store.openIn(tx, userId, sha256);
+  return handle ? buffer(handle.stream) : null;
+}
+
 /** Re-encoded webp of one rendition; null when the bytes do not decode. */
 export async function encodeBg3Thumbnail(
   raw: Buffer,

@@ -851,7 +851,7 @@ run_lint() {
   # Check-only by design (ROK-1404): `lint` must never mutate the tree, so the
   # lint → prettier:check order is irrelevant; use `lint:fix` for auto-fixes.
   if [ "$effective_scope" != "web" ]; then
-    npm run lint -w api || return $?
+    run_api_lint || return $?
     npm run prettier:check -w api || return $?
   fi
   if [ "$effective_scope" != "api" ]; then
@@ -1103,6 +1103,37 @@ _cgroup_heap_mb() {
     limit_bytes=$(cat "$cgroup_max" 2>/dev/null || true)
   fi
   resolve_heap_mb "$limit_bytes"
+}
+
+# NODE_OPTIONS for the type-aware api lint. It outgrew the runner's injected
+# 4608 MB ceiling (rl-infra/docker-compose.yml; heap OOM on a 6 GiB runner,
+# 2026-11-02), and GitHub CI already pins 8192 for the same growth. Lint runs
+# alone, so a capped cgroup gets 7/8 of its limit instead of jest's 3/4; with
+# no usable limit a caller-set heap wins, else GitHub's 8192.
+_lint_node_opts() {
+  local opts="${NODE_OPTIONS:-}" heap_mb
+  heap_mb="$(_cgroup_heap_mb)"
+  if [ -n "$heap_mb" ]; then
+    _repin_heap "$opts" $(( heap_mb * 7 / 6 ))
+  elif printf '%s' "$opts" | grep -Eq -- '--max[-_]old[-_]space[-_]size='; then
+    printf '%s' "$opts"
+  else
+    _repin_heap "$opts" 8192
+  fi
+}
+
+# `npm run lint -w api` as two eslint processes (fleet heap OOM, 2026-11-02).
+# api/tsconfig.json has no `include`, so projectService puts every api file in
+# ONE program, and the type checker's caches for every linted file pile up in
+# that one process. Splitting the file list caps each process's share: pass 1
+# is the npm script's own glob minus `*.spec.ts`, pass 2 is exactly the
+# `*.spec.ts` files of that glob, so the union is the original file set. The
+# step fails if either pass fails.
+run_api_lint() {
+  local opts
+  opts="$(_lint_node_opts)"
+  NODE_OPTIONS="$opts" npm run lint -w api -- --ignore-pattern '**/*.spec.ts' || return $?
+  (cd "$REPO_ROOT/api" && NODE_OPTIONS="$opts" npx eslint '{src,apps,libs,test}/**/*.spec.ts') || return $?
 }
 
 run_unit_tests() {
@@ -2694,7 +2725,7 @@ run_scoped_typecheck() {
 run_scoped_lint() {
   local ran=false
   if _scoped_has api; then
-    npm run lint -w api || return $?
+    run_api_lint || return $?
     npm run prettier:check -w api || return $?
     ran=true
   fi

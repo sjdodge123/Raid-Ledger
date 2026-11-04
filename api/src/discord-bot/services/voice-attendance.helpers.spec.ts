@@ -34,10 +34,16 @@ describe('parseGraceMinutes', () => {
     });
   });
 
-  describe('negative values', () => {
-    it('parses negative number string as-is (caller is responsible for validation)', () => {
-      // parseGraceMinutes does not clamp; it returns whatever parseInt gives.
-      expect(parseGraceMinutes('-1')).toBe(-1);
+  describe('clamping to 0–60 (ROK-1940)', () => {
+    it('clamps a negative value up to 0', () => {
+      // Intentional behaviour change: previously returned -1 unclamped.
+      expect(parseGraceMinutes('-1')).toBe(0);
+    });
+
+    it('keeps 60 and clamps a value above 60 down to 60', () => {
+      expect(parseGraceMinutes('60')).toBe(60);
+      expect(parseGraceMinutes('61')).toBe(60);
+      expect(parseGraceMinutes('999')).toBe(60);
     });
   });
 

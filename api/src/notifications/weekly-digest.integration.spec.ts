@@ -94,6 +94,15 @@ async function seedSignup(
   });
 }
 
+/** One `attended` signup per user on `eventId`. */
+async function seedAttendees(
+  testApp: TestApp,
+  eventId: number,
+  userIds: number[],
+): Promise<void> {
+  for (const userId of userIds) await seedSignup(testApp, eventId, userId);
+}
+
 async function seedShowActivity(
   testApp: TestApp,
   userId: number,
@@ -138,27 +147,41 @@ describe('Weekly digest 7-day recap (ROK-1435 L1, integration)', () => {
   it('counts distinct events, distinct players and attendance pairs', async () => {
     const alice = await seedUser(testApp, 'alice');
     const bob = await seedUser(testApp, 'bob');
+    const carol = await seedUser(testApp, 'carol');
     const raid = await seedEvent(testApp, creatorId, {
       duration: endedAgo(24),
     });
     const dungeon = await seedEvent(testApp, creatorId, {
       duration: endedAgo(6 * 24),
     });
-    await seedSignup(testApp, raid, alice);
-    await seedSignup(testApp, raid, bob);
-    await seedSignup(testApp, dungeon, bob);
+    const solo = await seedEvent(testApp, creatorId);
+    await seedAttendees(testApp, raid, [alice, bob]);
+    await seedAttendees(testApp, dungeon, [bob, carol]);
+    await seedSignup(testApp, solo, alice);
 
+    // ROK-2063: carol joins the dungeon so both events clear the 2+ rule
+    // (bob still counts once); alice's solo event is excluded. Was {2,2,3}.
     await expect(fetchWeeklyRecap(testApp.db)).resolves.toEqual({
       eventsRun: 2,
-      playersAttended: 2,
-      attendances: 3,
+      playersAttended: 3,
+      attendances: 4,
     });
+  });
+});
+
+describe('Weekly digest recap — exclusions (ROK-1435 L1, integration)', () => {
+  const ctx = useRecapApp();
+  let testApp: TestApp;
+  let creatorId: number;
+  beforeEach(() => {
+    ({ testApp, creatorId } = ctx);
   });
 
   it('excludes cancelled, stale, in-progress, non-attended and unlinked signups', async () => {
     const carol = await seedUser(testApp, 'carol');
+    const dave = await seedUser(testApp, 'dave');
     const counted = await seedEvent(testApp, creatorId);
-    await seedSignup(testApp, counted, carol);
+    await seedAttendees(testApp, counted, [carol, dave]);
 
     const cancelled = await seedEvent(testApp, creatorId, { cancelled: true });
     const stale = await seedEvent(testApp, creatorId, {
@@ -174,11 +197,17 @@ describe('Weekly digest 7-day recap (ROK-1435 L1, integration)', () => {
     await seedSignup(testApp, running, carol);
     await seedSignup(testApp, noShow, carol, 'no_show');
     await seedSignup(testApp, unlinked, null);
+    // ROK-2063: dave also attends each excluded event, so each one would
+    // clear the 2+ rule — only the exclusion under test keeps it out.
+    for (const e of [cancelled, stale, running, noShow, unlinked]) {
+      await seedSignup(testApp, e, dave);
+    }
 
+    // ROK-2063: carol + dave on the counted event (2+ rule). Was {1,1,1}.
     await expect(fetchWeeklyRecap(testApp.db)).resolves.toEqual({
       eventsRun: 1,
-      playersAttended: 1,
-      attendances: 1,
+      playersAttended: 2,
+      attendances: 2,
     });
   });
 });
@@ -193,6 +222,7 @@ describe('Weekly digest recap — guild membership (ROK-1435 L1, integration)', 
 
   it('drops attendees who were deactivated, banned or kicked', async () => {
     const stays = await seedUser(testApp, 'stays');
+    const staysToo = await seedUser(testApp, 'stays-too');
     const left = await seedUser(testApp, 'left');
     const banned = await seedUser(testApp, 'banned');
     const kicked = await seedUser(testApp, 'kicked');
@@ -211,15 +241,18 @@ describe('Weekly digest recap — guild membership (ROK-1435 L1, integration)', 
       .where(eq(schema.users.id, kicked));
     const shared = await seedEvent(testApp, creatorId);
     const goneOnly = await seedEvent(testApp, creatorId);
-    for (const u of [stays, left, banned, kicked]) {
+    for (const u of [stays, staysToo, left, banned, kicked]) {
       await seedSignup(testApp, shared, u);
     }
+    // Two departed attendees: only the membership filter keeps it out (2+ rule).
     await seedSignup(testApp, goneOnly, left);
+    await seedSignup(testApp, goneOnly, banned);
 
+    // ROK-2063: a second active member keeps `shared` a 2+ event. Was {1,1,1}.
     await expect(fetchWeeklyRecap(testApp.db)).resolves.toEqual({
       eventsRun: 1,
-      playersAttended: 1,
-      attendances: 1,
+      playersAttended: 2,
+      attendances: 2,
     });
   });
 });
@@ -236,15 +269,19 @@ describe('Weekly digest recap — privacy (ROK-1435 L1, integration)', () => {
     async function seedPrivacyFixture(): Promise<void> {
       const visible = await seedUser(testApp, 'visible');
       const hidden = await seedUser(testApp, 'hidden');
+      const hiddenToo = await seedUser(testApp, 'hidden-too');
       const optedIn = await seedUser(testApp, 'opted-in');
       await seedShowActivity(testApp, hidden, false);
+      await seedShowActivity(testApp, hiddenToo, false);
       await seedShowActivity(testApp, optedIn, true);
       const shared = await seedEvent(testApp, creatorId);
       const hiddenOnly = await seedEvent(testApp, creatorId);
       await seedSignup(testApp, shared, visible);
       await seedSignup(testApp, shared, hidden);
       await seedSignup(testApp, shared, optedIn);
+      // Two opted-out attendees: the 2+ rule passes, only the opt-out decides.
       await seedSignup(testApp, hiddenOnly, hidden);
+      await seedSignup(testApp, hiddenOnly, hiddenToo);
     }
 
     it('drops opted-out members (and events only they attended) by default', async () => {
@@ -273,10 +310,11 @@ describe('Weekly digest recap — privacy (ROK-1435 L1, integration)', () => {
       const recap = await fetchWeeklyRecap(testApp.db, {
         respectActivityOptOut: false,
       });
+      // ROK-2063: hidden-too joins hiddenOnly (2+ rule). Was {2,3,4}.
       expect(recap).toEqual({
         eventsRun: 2,
-        playersAttended: 3,
-        attendances: 4,
+        playersAttended: 4,
+        attendances: 5,
       });
     });
   });
@@ -316,10 +354,10 @@ describe('Weekly digest dispatch dedup (ROK-1435 L4, integration)', () => {
       .get(SettingsService)
       .set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, 'digest-default-chan');
     const creator = await seedUser(testApp, 'dispatch-creator');
-    const eventId = await seedEvent(testApp, creator, {
-      duration: endedAgo(24),
-    });
-    await seedSignup(testApp, eventId, creator);
+    const mate = await seedUser(testApp, 'dispatch-mate');
+    const eventId = await seedEvent(testApp, creator);
+    // ROK-2063: a second attendee keeps the recap non-empty (2+ rule).
+    await seedAttendees(testApp, eventId, [creator, mate]);
   });
 
   afterEach(async () => {
@@ -424,11 +462,9 @@ async function seedFutureEvent(
 
 describe('Weekly digest v2 assembly over the real reads (ROK-1771 L6b, integration)', () => {
   let testApp: TestApp;
-  let redis: Redis;
 
   beforeAll(async () => {
     testApp = await getTestApp();
-    redis = testApp.app.get<Redis>(REDIS_CLIENT);
   });
 
   afterEach(async () => {
@@ -447,7 +483,7 @@ describe('Weekly digest v2 assembly over the real reads (ROK-1771 L6b, integrati
     const week = formatSpotlightWeek(isoWeek(new Date(), 'UTC'));
 
     const s = await assembleDigestSections(
-      buildDigestSources(testApp.db, redis),
+      buildDigestSources(testApp.db),
       { history: [], week },
       onError,
     );

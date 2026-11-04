@@ -74,6 +74,8 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
       'ingest-source/bg3-save.gallery',
       'scheduled-job/Bg3GalleryCron_sync',
       'media-gate/bg3-save',
+      'ingest-source/bg3-screenshot',
+      'media-gate/bg3-screenshot',
     ]);
     expect(BG3_HUB_MANIFEST.widgets.map((w) => `${w.layoutKey}/${w.id}`)).toEqual([
       'plugin/where-we-are', 'plugin/party', 'plugin/session-history',
@@ -101,6 +103,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
       { id: 'upload-saves', kind: 'companion_app', required: true, appliesTo: ['game_community'], hasCheck: false },
       { id: 'bind-campaign', kind: 'other', required: true, appliesTo: ['game_community'], hasCheck: false },
       { id: 'gallery-saves', kind: 'other', required: false, appliesTo: ['game_community'], hasCheck: false },
+      { id: 'companion-screenshots', kind: 'companion_app', required: false, appliesTo: ['game_community'], hasCheck: false },
     ]);
   });
 });

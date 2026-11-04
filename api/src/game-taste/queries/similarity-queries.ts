@@ -1,4 +1,4 @@
-import { inArray, sql } from 'drizzle-orm';
+import { inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SimilarGameDto,
@@ -6,6 +6,11 @@ import type {
 } from '@raid-ledger/contract';
 import { defined } from '../../common/defined.helpers';
 import * as schema from '../../drizzle/schema';
+import {
+  hasVectorSignal,
+  similarityFromDistance,
+} from '../../taste-profile/queries/similar-players.helpers';
+import { multiplayerEligibilityClause } from './multiplayer-eligibility.sql';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -45,7 +50,9 @@ export async function findSimilarGames(
 ): Promise<SimilarGameDto[]> {
   const limit = input.limit ?? 10;
   const target = await resolveTarget(db, input);
-  if (!target) return [];
+  // ROK-1939: a zero-norm target has no cosine similarity to anything
+  // (pgvector returns NaN), so there is nothing meaningful to rank.
+  if (!target || !hasVectorSignal(target)) return [];
   const excludeId = input.gameId !== undefined ? input.gameId : null;
   const rows = await executeSimilarityQuery(
     db,
@@ -122,6 +129,18 @@ export function elementwiseMean(vectors: number[][]): number[] {
   });
 }
 
+/**
+ * ROK-1939: after D9 a game's 7-dim core vector can be all-zero (e.g. a pure
+ * FPS/Shooter/Multiplayer title). pgvector's cosine distance to it is NaN,
+ * and Postgres sorts NaN above every number. Zero-norm candidates are kept —
+ * the lineup pool still needs them via multiplayer metadata — but reported at
+ * distance 1 (similarity 0) and ordered after every positive-norm candidate.
+ */
+function distanceSql(targetLiteral: string): SQL {
+  return sql`CASE WHEN vector_norm(gtv.vector) = 0 THEN 1::float8
+    ELSE (gtv.vector <=> ${targetLiteral}::vector) END`;
+}
+
 export async function executeSimilarityQuery(
   db: Db,
   target: number[],
@@ -133,24 +152,18 @@ export async function executeSimilarityQuery(
   const targetLiteral = `[${target.join(',')}]`;
   const excludeClause =
     excludeGameId !== null ? sql`AND g.id <> ${excludeGameId}` : sql``;
-  // ROK-931: Community Lineup is group play, so solo-only titles are
-  // filtered out up-front. The OR-list is static — no injection surface.
+  // ROK-931 / ROK-1939: Community Lineup is group play, so solo-only titles
+  // are filtered out up-front — from the game's own multiplayer metadata,
+  // not from the (narrowed) pvp axis.
   const multiplayerClause = multiplayerOnly
-    ? sql`AND (
-        (gtv.dimensions->>'pvp')::float > 0
-        OR (gtv.dimensions->>'co_op')::float > 0
-        OR (gtv.dimensions->>'mmo')::float > 0
-        OR (gtv.dimensions->>'battle_royale')::float > 0
-        OR (gtv.dimensions->>'moba')::float > 0
-      )`
+    ? multiplayerEligibilityClause()
     : sql``;
   // No HNSW index on `vector` yet — the spec defers it until the corpus
   // exceeds ~500 games. A seqscan + in-memory sort over ~2K rows is still
-  // sub-ms; revisit if the corpus grows much past 5K or if the confidence
-  // + banned/hidden filters start dominating plan cost.
+  // sub-ms; revisit if the corpus grows much past 5K.
   return db.execute<SimilarityRow>(sql`
     SELECT g.id AS game_id, g.name, g.cover_url,
-           (gtv.vector <=> ${targetLiteral}::vector) AS distance
+           ${distanceSql(targetLiteral)} AS distance
     FROM game_taste_vectors gtv
     JOIN games g ON g.id = gtv.game_id
     WHERE g.banned = false
@@ -158,7 +171,7 @@ export async function executeSimilarityQuery(
       AND gtv.confidence >= ${minConfidence}
       ${excludeClause}
       ${multiplayerClause}
-    ORDER BY gtv.vector <=> ${targetLiteral}::vector ASC
+    ORDER BY (vector_norm(gtv.vector) = 0) ASC, distance ASC, g.id ASC
     LIMIT ${limit}
   `);
 }
@@ -168,6 +181,6 @@ function toSimilarGameDto(row: SimilarityRow): SimilarGameDto {
     gameId: row.game_id,
     name: row.name,
     coverUrl: row.cover_url,
-    similarity: Math.max(0, 1 - Number(row.distance)),
+    similarity: similarityFromDistance(row.distance),
   };
 }

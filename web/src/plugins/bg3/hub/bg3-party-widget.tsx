@@ -27,6 +27,9 @@ function viewerClaim(user: User | null | undefined): Bg3PartyClaim {
         userId: user?.id ?? 0,
         displayName: user?.displayName ?? user?.username ?? 'You',
         avatarUrl: user?.resolvedAvatarUrl ?? user?.customAvatarUrl ?? null,
+        avatar: user?.avatar ?? null,
+        discordId: user?.discordId ?? null,
+        customAvatarUrl: user?.customAvatarUrl ?? null,
     };
 }
 

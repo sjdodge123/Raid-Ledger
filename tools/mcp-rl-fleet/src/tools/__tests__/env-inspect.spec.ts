@@ -137,9 +137,9 @@ describe('rl_env_inspect — execute()', () => {
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
     // Mirrors infra-logs proxy routing: rl-agent is NOT in docker group, so
-    // route via rl-docker-proxy at loopback 2375 (whitelisted for docker exec).
+    // route via rl-docker-proxy on its unix socket (ROK-2049; whitelisted for docker exec).
     expect(remote).toBe(
-      'DOCKER_HOST=tcp://127.0.0.1:2375 docker exec rl-env-myenv-allinone cat /etc/nginx/http.d/default.conf 2>&1',
+      'DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock docker exec rl-env-myenv-allinone cat /etc/nginx/http.d/default.conf 2>&1',
     );
   });
 
@@ -153,7 +153,7 @@ describe('rl_env_inspect — execute()', () => {
     const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('rl-env-other-allinone');
     expect(remote).toContain('cat /etc/supervisor.d/raid-ledger.ini');
-    expect(remote.startsWith('DOCKER_HOST=tcp://127.0.0.1:2375 ')).toBe(true);
+    expect(remote.startsWith('DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock ')).toBe(true);
   });
 
   it('uses the standard SSH argv (BatchMode + ConnectTimeout)', async () => {

@@ -37,6 +37,9 @@ export function toPartySlots(
             userId: claim.userId,
             displayName: claim.displayName,
             avatarUrl: claim.avatarUrl,
+            avatar: claim.avatar,
+            discordId: claim.discordId,
+            customAvatarUrl: claim.avatarUrl,
           }
         : null,
     };
