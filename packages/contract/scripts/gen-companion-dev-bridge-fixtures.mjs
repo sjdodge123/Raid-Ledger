@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEV_BRIDGE_MESSAGES } from '../dist/index.js';
 import { SNAPSHOT_CASES, SNAPSHOT_SIZES, SNAPSHOT_VALID } from './dev-bridge-snapshot-fixtures.mjs';
+import { BG3_CASES, BG3_VALID } from './dev-bridge-bg3-fixtures.mjs';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'companion', 'dev-bridge', 'v1', 'fixtures');
 const INVALID = join(FIX, 'invalid');
@@ -115,6 +116,7 @@ const VALID = {
     'error--probes-disabled': { error: 'probes_disabled' },
     'error--unauthorized': { error: 'unauthorized' },
     ...SNAPSHOT_VALID,
+    ...BG3_VALID,
 };
 
 const withFn = (fn) => (m) => { m.calls[0].fn = fn; };
@@ -160,6 +162,7 @@ const CASES = [
     ['logs--unredacted-bearer-uppercase', 'logs', (m) => { m.lines[1].msg = 'rejected AUTHORIZATION: BEARER abc123'; }, 'lines.1.msg', 'custom'],
     ['error--unknown-code', 'error--unauthorized', (m) => { m.error = 'teapot'; }, 'error', 'invalid_value'],
     ...SNAPSHOT_CASES,
+    ...BG3_CASES,
 ];
 
 const schemaFor = (name) => {
