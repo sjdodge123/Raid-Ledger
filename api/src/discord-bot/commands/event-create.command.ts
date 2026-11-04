@@ -6,6 +6,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { ilike } from 'drizzle-orm';
+import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -222,7 +223,7 @@ export class EventCreateCommand
     const matches = await this.db
       .select()
       .from(schema.games)
-      .where(ilike(schema.games.name, gameName))
+      .where(ilike(schema.games.name, escapeLikePattern(gameName)))
       .limit(1);
     return matches[0] ?? null;
   }

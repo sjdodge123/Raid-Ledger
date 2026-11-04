@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { and, eq, ilike, sql } from 'drizzle-orm';
+import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActivityType, type GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -309,7 +310,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
       .from(schema.games)
       .where(
         and(
-          ilike(schema.games.name, activityName),
+          ilike(schema.games.name, escapeLikePattern(activityName)),
           eq(schema.games.hidden, false),
           eq(schema.games.banned, false),
         ),
