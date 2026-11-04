@@ -7,6 +7,7 @@ import type { INestApplication, LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, RequestHandler, Response, NextFunction } from 'express';
 import * as bodyParser from 'body-parser';
+import { CSP_REPORT_CONTENT_TYPES } from './csp-report/csp-report.constants';
 
 // Descending severity. A threshold like 'log' enables itself plus everything
 // to its left (more severe), e.g. error+warn+log. Order matches the original
@@ -84,14 +85,9 @@ export function buildLoggerSelfTest(logger: LoggerLike): () => void {
   };
 }
 
-// Browsers POST CSP violation reports with content-type `application/csp-report`
-// (legacy) or `application/reports+json` (Reporting API). Nest's default
-// `application/json` parser ignores both, so register a dedicated parser first
-// to make `@Body()` resolve. ROK-1158.
-export const CSP_REPORT_CONTENT_TYPES = [
-  'application/csp-report',
-  'application/reports+json',
-];
+// CSP report content types (ROK-1158) live beside the controller that gates
+// Sentry on them; re-exported here for the body parser and its callers.
+export { CSP_REPORT_CONTENT_TYPES };
 
 /**
  * Install the CSP-violation-report body parser BEFORE Nest's default json
