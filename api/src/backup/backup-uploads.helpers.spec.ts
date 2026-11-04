@@ -184,17 +184,29 @@ describe('hasRoomFor', () => {
 });
 
 describe('measureTree', () => {
-  it('sums nested regular files', () => {
+  it('sums nested regular files', async () => {
     const root = seedUploads();
-    expect(measureTree(root)).toBe('png-bytes'.length + 'webp'.length);
+    expect(await measureTree(root)).toBe('png-bytes'.length + 'webp'.length);
   });
 
-  it('counts a symlink as 0 bytes, not its target', () => {
+  it('counts a symlink as 0 bytes, not its target', async () => {
     const root = seedUploads();
     const big = path.join(tmp, 'big.bin');
     fs.writeFileSync(big, Buffer.alloc(4096));
     fs.symlinkSync(big, path.join(root, 'link.bin'));
-    expect(measureTree(root)).toBe('png-bytes'.length + 'webp'.length);
+    expect(await measureTree(root)).toBe('png-bytes'.length + 'webp'.length);
+  });
+
+  // TD 2026-10-25 (backup.service manual backup): the walk must yield to the
+  // event loop instead of blocking it with readdirSync/lstatSync throughout.
+  it('yields to the event loop while it walks the tree', async () => {
+    const root = seedUploads();
+    let yielded = false;
+    setImmediate(() => {
+      yielded = true;
+    });
+    await measureTree(root);
+    expect({ yieldedDuringWalk: yielded }).toEqual({ yieldedDuringWalk: true });
   });
 });
 
