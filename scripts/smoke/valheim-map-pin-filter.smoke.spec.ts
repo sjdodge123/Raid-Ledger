@@ -24,6 +24,8 @@ import {
   pinNames,
   pins,
   playerPinName,
+  expectEveryDeathPin,
+  reportedPinCount,
   responseTo,
   seedDeathsFixture,
   serverPinsPath,
@@ -121,17 +123,7 @@ test.describe("Valheim Map — pin filter (ROK-1943)", () => {
     expect(everyone.has("players"), "Everyone sends no players").toBe(false);
     await expect(panel.getByRole("radio", { name: "Everyone" })).toBeChecked();
     await expect(page).toHaveURL(/[?&]players=all(&|#|$)/);
-    await expect(pins(map)).toHaveCount(
-      top.deathPinLabels.length + second.deathPinLabels.length,
-    );
-    expect(await pinNames(map)).toEqual(
-      [
-        ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
-        ...second.deathPinLabels.map((l) =>
-          playerPinName(l, second.name, "Death"),
-        ),
-      ].sort(),
-    );
+    await expectEveryDeathPin(map, f);
 
     // All types: the read drops `types`; the second character's Home pin appears.
     const allTypes = await serverPinsQuery(page, f, () =>
@@ -145,9 +137,14 @@ test.describe("Valheim Map — pin filter (ROK-1943)", () => {
       exact: true,
     });
     await expect(copper).toHaveCount(1);
-    // Own, non-shared pins of both characters: top 2 Death + Camp, second Death + Copper.
+    // Own, non-shared pins of both characters: top 2 Death + Camp, second Death + Copper,
+    // plus (ROK-1931) the synthetic pin of second's reported death.
     await expect(pins(map)).toHaveCount(
-      top.deathPinLabels.length + 1 + second.deathPinLabels.length + 1,
+      top.deathPinLabels.length +
+        1 +
+        second.deathPinLabels.length +
+        1 +
+        reportedPinCount(f),
     );
 
     // Label search (case-insensitive, debounced into `q`) narrows to Copper.
@@ -210,17 +207,7 @@ test.describe("Valheim Map — pin filter (ROK-1943)", () => {
     );
     const map = mapApp(page);
     await expect(map).toBeVisible({ timeout: 15_000 });
-    await expect(pins(map)).toHaveCount(
-      top.deathPinLabels.length + second.deathPinLabels.length,
-    );
-    expect(await pinNames(map)).toEqual(
-      [
-        ...top.deathPinLabels.map((l) => playerPinName(l, top.name, "Death")),
-        ...second.deathPinLabels.map((l) =>
-          playerPinName(l, second.name, "Death"),
-        ),
-      ].sort(),
-    );
+    await expectEveryDeathPin(map, f);
 
     const panel = await openFilters(page, wide);
     await expect(panel.getByTestId("map-pin-type-death")).toHaveAttribute(

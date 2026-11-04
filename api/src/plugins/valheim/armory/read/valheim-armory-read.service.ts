@@ -37,6 +37,7 @@ import {
   ValheimArmoryReadRepository,
   type ArmoryListFilter,
 } from './valheim-armory-read.repository';
+import { ValheimReportedDeathsRepository } from './valheim-reported-deaths.repository';
 
 /** `GET /admin/plugins/valheim/armory/characters` — includes `steamId64`. */
 export interface ValheimAdminCharacterListResponse {
@@ -46,7 +47,10 @@ export interface ValheimAdminCharacterListResponse {
 
 @Injectable()
 export class ValheimArmoryReadService {
-  constructor(private readonly repo: ValheimArmoryReadRepository) {}
+  constructor(
+    private readonly repo: ValheimArmoryReadRepository,
+    private readonly reported: ValheimReportedDeathsRepository,
+  ) {}
 
   /**
    * Member list page, sorted by name; never includes a SteamID64. Non-staff
@@ -152,6 +156,6 @@ export class ValheimArmoryReadService {
     await this.assertCharacterVisible(id, actor);
     const row = await this.repo.findMap(id, mapId);
     if (!row) throw new NotFoundException('Map not found');
-    return toMapMeta(row);
+    return toMapMeta(row, await this.reported.forCharacter(id, row.worldUid));
   }
 }

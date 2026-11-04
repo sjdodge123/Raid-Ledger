@@ -6,6 +6,8 @@
  *   - Change B — multi-tag scoring saturates at SATURATION_COUNT
  *   - Change C — co-occurrence rules contribute partial weights
  *   - IGDB fallback stays binary when tags.length === 0
+ *   - ROK-1939 D9 — pvp narrowed (no Multiplayer rule, no IGDB mode 2,
+ *     no Team-Based / Class-Based tags)
  */
 import { axisMatchScore, SATURATION_COUNT } from './axis-match';
 
@@ -62,12 +64,6 @@ describe('axisMatchScore — no match returns 0', () => {
 });
 
 describe('axisMatchScore — enriched vocabulary (Change A)', () => {
-  it('Team-Based tag hits the pvp axis (new)', () => {
-    expect(
-      axisMatchScore('pvp', game({ tags: ['team-based'] })),
-    ).toBeGreaterThan(0);
-  });
-
   it('Hero Shooter hits the shooter axis (new)', () => {
     expect(
       axisMatchScore('shooter', game({ tags: ['hero shooter'] })),
@@ -94,15 +90,13 @@ describe('axisMatchScore — enriched vocabulary (Change A)', () => {
 });
 
 describe('axisMatchScore — co-occurrence rules (Change C)', () => {
-  it('Multiplayer WITHOUT a Co-op tag contributes to pvp', () => {
+  // ROK-1939 D9 (operator ruling): the Multiplayer → pvp 0.5 rule is gone.
+  it('Multiplayer WITHOUT a Co-op tag no longer contributes to pvp', () => {
     const score = axisMatchScore(
       'pvp',
       game({ tags: ['multiplayer', 'action'] }),
     );
-    // Weight 0.5 from the Multiplayer → pvp rule
-    expect(score).toBeGreaterThanOrEqual(0.5);
-    // Action isn't in pvp direct mapping, so score should be exactly 0.5
-    expect(score).toBeCloseTo(0.5, 5);
+    expect(score).toBe(0);
   });
 
   it('Multiplayer WITH a Co-op tag does NOT contribute to pvp', () => {
@@ -123,24 +117,23 @@ describe('axisMatchScore — co-occurrence rules (Change C)', () => {
     expect(score).toBeGreaterThanOrEqual(0.2);
   });
 
-  it('Call of Duty scenario: FPS + Shooter + Multiplayer scores shooter strong AND pvp partially', () => {
+  it('Call of Duty scenario: FPS + Shooter + Multiplayer scores shooter/fps strong and pvp 0 (ROK-1939 D9)', () => {
     const cod = game({
       tags: ['multiplayer', 'action', 'fps', 'shooter', 'singleplayer'],
     });
-    const shooterScore = axisMatchScore('shooter', cod);
-    const pvpScore = axisMatchScore('pvp', cod);
-    const socialScore = axisMatchScore('social', cod);
-    expect(shooterScore).toBeGreaterThan(0.5); // 2 direct tags → 2/3
-    expect(pvpScore).toBeGreaterThanOrEqual(0.5); // Multiplayer + no Co-op → 0.5
-    expect(socialScore).toBeGreaterThanOrEqual(0.3); // Multiplayer → 0.3
+    expect(axisMatchScore('shooter', cod)).toBeGreaterThan(0.5); // 2 direct → 2/3
+    expect(axisMatchScore('fps', cod)).toBeGreaterThan(0);
+    expect(axisMatchScore('pvp', cod)).toBe(0); // no PvP vocabulary
+    expect(axisMatchScore('social', cod)).toBeCloseTo(0.3, 5); // Multiplayer → 0.3
   });
 
   it('capped at 1.0 even when direct + conditional would exceed', () => {
-    // All three pvp direct tags + Multiplayer-excl bonus
+    // 3 direct social tags (1.0) + the Multiplayer → social bonus (0.3)
+    // would be 1.3 uncapped.
     const score = axisMatchScore(
-      'pvp',
+      'social',
       game({
-        tags: ['pvp', 'competitive', 'team-based', 'multiplayer', 'esports'],
+        tags: ['party', 'casual', 'local multiplayer', 'multiplayer'],
       }),
     );
     expect(score).toBe(1);
@@ -193,5 +186,26 @@ describe('axisMatchScore — fps axis (ROK-1102 #5)', () => {
     const tagless = game({ tags: [], genres: [5] });
     expect(axisMatchScore('shooter', tagless)).toBe(1);
     expect(axisMatchScore('fps', tagless)).toBe(0);
+  });
+});
+
+describe('axisMatchScore — narrowed pvp axis (ROK-1939 D9)', () => {
+  it('an untagged IGDB Multiplayer (mode 2) game scores pvp 0', () => {
+    expect(axisMatchScore('pvp', game({ gameModes: [2] }))).toBe(0);
+  });
+
+  it.each(['team-based', 'class-based'])(
+    'the dropped %s tag no longer hits pvp',
+    (tag) => {
+      expect(axisMatchScore('pvp', game({ tags: [tag] }))).toBe(0);
+    },
+  );
+
+  it('explicit competitive vocabulary still saturates pvp', () => {
+    const score = axisMatchScore(
+      'pvp',
+      game({ tags: ['pvp', 'competitive', 'esports'] }),
+    );
+    expect(score).toBe(1);
   });
 });

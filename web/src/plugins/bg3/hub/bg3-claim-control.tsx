@@ -13,6 +13,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { Bg3PartyClaim } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
+import { toAvatarUser } from '../../../lib/avatar';
 
 export interface Bg3ClaimControlProps {
     /** null for a slot that cannot be claimed (summons never render this). */
@@ -32,10 +33,20 @@ export interface Bg3ClaimControlProps {
 const FOOTER = 'mt-auto flex min-h-[44px] items-center gap-2 border-t border-edge-subtle pt-2';
 const WHO = 'min-w-0 flex-1 truncate text-sm text-foreground';
 
+/** ROK-2069: custom → Discord CDN → initials, like every other avatar. `avatarUrl` is the legacy custom path. */
+function claimAvatarUser(claim: Bg3PartyClaim) {
+    return toAvatarUser({
+        id: claim.userId,
+        avatar: claim.avatar ?? null,
+        discordId: claim.discordId,
+        customAvatarUrl: claim.customAvatarUrl ?? claim.avatarUrl,
+    });
+}
+
 function Claimant({ claim, label }: { claim: Bg3PartyClaim; label: string }): JSX.Element {
     return (
         <>
-            <AvatarWithFallback avatarUrl={claim.avatarUrl} username={claim.displayName} sizeClassName="h-6 w-6" />
+            <AvatarWithFallback user={claimAvatarUser(claim)} username={claim.displayName} sizeClassName="h-6 w-6" />
             <span className={WHO}>{label}</span>
         </>
     );

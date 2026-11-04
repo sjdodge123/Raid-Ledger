@@ -1,10 +1,13 @@
 /** ROK-1836 — character page header (§4.9): name, server + world, owner line, updated line. L4 fills `actions`. */
 import type { JSX, ReactNode } from 'react';
-import type { ValheimCharacterSummary } from '@raid-ledger/contract';
+import type { ValheimCharacterDetail, ValheimCharacterSummary } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
 import { buildDiscordAvatarUrl } from '../../../lib/avatar';
 import { ownerChip, updatedAgo } from '../lib/valheim-owner.helpers';
+
+/** ROK-1931 Q2 = A: the summary plus the detail read's lifetime death stat, when it has one. */
+type HeaderCharacter = ValheimCharacterSummary & Pick<ValheimCharacterDetail, 'deathCount'>;
 
 function OwnerLine({ character }: { character: ValheimCharacterSummary }) {
     const chip = ownerChip(character);
@@ -37,7 +40,7 @@ function OwnerLine({ character }: { character: ValheimCharacterSummary }) {
 function HeaderMeta({
     character,
 }: {
-    character: ValheimCharacterSummary;
+    character: HeaderCharacter;
 }): JSX.Element {
     return (
         <div className="flex flex-col gap-1">
@@ -53,6 +56,11 @@ function HeaderMeta({
                 {updatedAgo(character.capturedAt)} · game{' '}
                 {character.gameVersion}
             </div>
+            {typeof character.deathCount === 'number' && (
+                <div className="text-xs text-muted">
+                    Deaths (all worlds): {character.deathCount}
+                </div>
+            )}
         </div>
     );
 }
@@ -61,7 +69,7 @@ export function ValheimCharacterHeader({
     character,
     actions,
 }: {
-    character: ValheimCharacterSummary;
+    character: HeaderCharacter;
     actions?: ReactNode;
 }) {
     return (

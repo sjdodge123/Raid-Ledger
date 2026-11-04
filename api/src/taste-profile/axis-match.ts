@@ -11,7 +11,7 @@ import { AXIS_MAPPINGS } from './axis-mapping.constants';
  *     tags, so a game tagged "Co-op, Online Co-Op, Local Co-Op" scores
  *     higher on the co_op axis than a game tagged only "Co-op".
  *   - Co-occurrence rules (CO_OCCURRENCE_RULES) layer partial weights
- *     for soft signals like "Multiplayer + no Co-op tag → pvp".
+ *     for soft signals like "Multiplayer → a little social".
  *   - IGDB fallback (when the tags array is empty) stays binary 0/1 —
  *     the IGDB taxonomy is too coarse to graduate.
  *
@@ -25,8 +25,8 @@ export const SATURATION_COUNT = 3;
 /**
  * Co-occurrence rule — lets common-but-ambiguous tags contribute a
  * partial signal to an axis based on the surrounding tag context.
- * Example: "Multiplayer" alone usually implies PvP when no co-op tag
- * is present; with a co-op tag it implies co-op instead.
+ * Example: "Multiplayer" always adds a little to social (people play
+ * together), whatever else the game is tagged with.
  */
 export interface CoOccurrenceRule {
   axis: TasteProfilePoolAxis;
@@ -41,13 +41,8 @@ export interface CoOccurrenceRule {
 }
 
 export const CO_OCCURRENCE_RULES: CoOccurrenceRule[] = [
-  // Multiplayer without co-op variants → PvP (fixes the CoD case)
-  {
-    axis: 'pvp',
-    tag: 'Multiplayer',
-    weight: 0.5,
-    excludes: ['Co-op', 'Online Co-Op', 'Local Co-Op'],
-  },
+  // ROK-1939 D9 removed "Multiplayer without co-op → pvp 0.5": it made every
+  // online game (CoD, survival, sandbox) read as PvP.
   // Multiplayer → social (always a little — people play together)
   { axis: 'social', tag: 'Multiplayer', weight: 0.3 },
   // Bare "Action" tag → adventure lean

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SimilarGameDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { MULTIPLAYER_TAGS } from '../../game-taste/multiplayer-tags.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -30,19 +31,6 @@ export type WildcardSource = 'wildcard_popular' | 'wildcard_sale';
 export interface WildcardCandidate extends SimilarGameDto {
   source: WildcardSource;
 }
-
-/** ITAD tags that indicate multiplayer capability. */
-const MULTIPLAYER_TAGS = [
-  'Multiplayer',
-  'Co-op',
-  'Online Co-Op',
-  'Local Co-Op',
-  'PvP',
-  'MMO',
-  'Massively Multiplayer',
-  'Online PvP',
-  'Cross-Platform Multiplayer',
-];
 
 /** How many wildcards of each type to add to the LLM pool. */
 export const WILDCARD_POPULAR_SLOTS = 5;

@@ -45,6 +45,7 @@ function row(over: Partial<ArmoryDetailReadRow> = {}): ArmoryDetailReadRow {
     inventory: SHEET.inventory,
     skills: SHEET.skills,
     trophies: SHEET.trophies,
+    deathCount: null,
     ...over,
   };
 }
@@ -115,5 +116,41 @@ describe('valheim armory read mappers (ROK-1835 L4)', () => {
   it('map meta has a null base map when the map carries no reference', () => {
     const out = toMapMeta(mapRow({ baseMapSha256: null }));
     expect(out.baseMap).toBeNull();
+  });
+
+  it('detail carries the lifetime deathCount (ROK-1931 Q2 = A), null when never reported', () => {
+    const out = toDetail(row({ deathCount: 57 }), []);
+    expect(out.deathCount).toBe(57);
+    expect(ValheimCharacterDetailSchema.parse(out)).toEqual(out);
+    expect(toDetail(row(), []).deathCount).toBeNull();
+  });
+
+  it("map meta adds the character's reported deaths as Death pins, minus one near its own (ROK-1931 D8)", () => {
+    const own = {
+      type: 'Death',
+      label: 'here',
+      x: 10,
+      z: 10,
+      checked: true,
+      shared: false,
+    };
+    const out = toMapMeta(mapRow({ pins: [own] }), [
+      { x: 13, z: 14, reportedAt: AT }, // exactly 5 m from `own` → dropped
+      { x: -40, z: 2.5, reportedAt: AT },
+    ]);
+    expect(out.pins).toEqual([
+      own,
+      {
+        type: 'Death',
+        label: '',
+        x: -40,
+        z: 2.5,
+        checked: false,
+        shared: false,
+        diedAt: AT.toISOString(),
+      },
+    ]);
+    expect(ValheimMapMetaSchema.parse(out)).toEqual(out);
+    expect(JSON.stringify(out)).not.toContain(STEAM);
   });
 });

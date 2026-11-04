@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CompanionSha256Schema, CompanionVersionStringSchema } from './companion-common.schema.js';
+import { CompanionHubGuildIdSchema, CompanionSha256Schema, CompanionVersionStringSchema } from './companion-common.schema.js';
 import {
     COMPANION_CONTRACT_VERSION_MAX,
     CompanionContractIdSchema,
@@ -62,6 +62,34 @@ export const CompanionConfigRateSchema = z.object({
 }).strict();
 export type CompanionConfigRate = z.infer<typeof CompanionConfigRateSchema>;
 
+/** ROK-2067 D1/D2 — the contract's owner plugin and its state on this server. */
+export const CompanionConfigPluginSchema = z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    state: z.enum(['active', 'inactive', 'not_installed']),
+}).strict();
+export type CompanionConfigPlugin = z.infer<typeof CompanionConfigPluginSchema>;
+
+/** ROK-2067 D13 — the owner plugin's game, for the app's tile art. */
+export const CompanionConfigGameSchema = z.object({
+    slug: z.string().min(1),
+    name: z.string().min(1),
+    coverUrl: z.string().min(1).nullable(),
+}).strict();
+export type CompanionConfigGame = z.infer<typeof CompanionConfigGameSchema>;
+
+/** Most hub targets one `/config` contract entry lists. */
+export const COMPANION_CONFIG_HUB_TARGETS_MAX = 100;
+
+/** ROK-1966 Q3 — one hub the caller is a live member of, offered in the app's hub picker. */
+export const CompanionConfigHubTargetSchema = z.object({
+    hubGuildId: CompanionHubGuildIdSchema,
+    name: z.string().min(1),
+    /** The pre-selected pick: the hub of the caller's most recent save's campaign (at most one per list). */
+    isDefault: z.boolean(),
+}).strict();
+export type CompanionConfigHubTarget = z.infer<typeof CompanionConfigHubTargetSchema>;
+
 /** One registry contract as the server currently serves it. */
 export const CompanionConfigContractSchema = z.object({
     id: CompanionContractIdSchema,
@@ -73,8 +101,18 @@ export const CompanionConfigContractSchema = z.object({
     }).strict()),
     /** Decoded byte cap of the current version. */
     maxBytes: z.number().int().positive(),
-    blobSlots: z.array(z.enum(['thumbnail'])),
+    blobSlots: z.array(z.enum(['thumbnail', 'image'])),
     cadence: z.object({ minIntervalSec: z.number().int().positive() }).strict(),
+    /** Owner plugin; `null` = no handler registered. Absent from older servers. */
+    plugin: CompanionConfigPluginSchema.nullable().optional(),
+    /** Owner plugin's game; `null` = no `games` row. Absent from older servers. */
+    game: CompanionConfigGameSchema.nullable().optional(),
+    /**
+     * ROK-1966 — hubs the caller may name in `payload.target.hubGuildId` (only
+     * contracts whose payload has a target, e.g. `bg3-screenshot`). Absent from
+     * older servers and for contracts without a target; `[]` = none to pick.
+     */
+    hubTargets: z.array(CompanionConfigHubTargetSchema).max(COMPANION_CONFIG_HUB_TARGETS_MAX).optional(),
 }).strict();
 export type CompanionConfigContract = z.infer<typeof CompanionConfigContractSchema>;
 

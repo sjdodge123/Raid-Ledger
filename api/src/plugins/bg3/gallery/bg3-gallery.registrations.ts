@@ -23,6 +23,10 @@ export class Bg3GalleryRegistrations implements OnModuleInit {
     this.gates.register(BG3_PLUGIN_ID, 'bg3-save', (guildId) =>
       this.hidesSpoilers(guildId),
     );
+    // ROK-1966: Companion screenshots follow the same spoiler rule.
+    this.gates.register(BG3_PLUGIN_ID, 'bg3-screenshot', (guildId) =>
+      this.hidesSpoilers(guildId),
+    );
   }
 
   /** Exposed for specs: the hub's spoiler toggle. */

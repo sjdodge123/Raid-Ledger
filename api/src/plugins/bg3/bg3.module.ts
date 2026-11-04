@@ -22,9 +22,12 @@ import { Bg3ClaimsService } from './claims/bg3-claims.service';
 import { Bg3HistoryRetentionCron } from './history/bg3-retention.cron';
 import { Bg3RetentionRepository } from './history/bg3-retention.repository';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
+import { Bg3ScreenshotHandler } from './ingest/bg3-screenshot.handler';
+import { Bg3ScreenshotTargets } from './ingest/bg3-screenshot.targets';
 import { Bg3SavesWriteRepository } from './ingest/bg3-saves.write.repository';
 import { Bg3MyDataController } from './me-data/bg3-my-data.controller';
 import { Bg3MyDataRepository } from './me-data/bg3-my-data.repository';
+import { Bg3RemoveSavesRepository } from './me-data/bg3-remove-saves.repository';
 import { Bg3MySavesService } from './read/bg3-my-saves.service';
 import { Bg3ReadController } from './read/bg3-read.controller';
 import { Bg3ReadRepository } from './read/bg3-read.repository';
@@ -55,6 +58,8 @@ import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
   ],
   providers: [
     Bg3SaveHandler,
+    Bg3ScreenshotHandler,
+    Bg3ScreenshotTargets,
     Bg3SavesWriteRepository,
     Bg3CampaignsRepository,
     Bg3CampaignsService,
@@ -67,6 +72,7 @@ import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
     Bg3ReadService,
     Bg3MySavesService,
     Bg3MyDataRepository,
+    Bg3RemoveSavesRepository,
     Bg3GalleryFeed,
     Bg3GallerySyncService,
     Bg3GallerySyncCron,
@@ -79,10 +85,12 @@ export class Bg3Module implements OnModuleInit {
     private readonly pluginRegistry: PluginRegistryService,
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly saveHandler: Bg3SaveHandler,
+    private readonly screenshotHandler: Bg3ScreenshotHandler,
   ) {}
 
   onModuleInit(): void {
     this.pluginRegistry.registerManifest(BG3_MANIFEST);
     this.companionRegistry.register(BG3_PLUGIN_ID, this.saveHandler);
+    this.companionRegistry.register(BG3_PLUGIN_ID, this.screenshotHandler);
   }
 }

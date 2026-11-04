@@ -10,10 +10,12 @@ import {
   uniqueIndex,
   check,
   jsonb,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type { GuildCrestPreset } from '@raid-ledger/contract';
 import { games } from './games';
+import { hubMedia } from './hub-media';
 import { pelicanServers } from './pelican-servers';
 import { users } from './users';
 
@@ -144,6 +146,16 @@ export const guilds = pgTable(
       onDelete: 'set null',
     }),
     crestRemovedAt: timestamp('crest_removed_at', { withTimezone: true }),
+    /**
+     * ROK-2074: the hub Gallery picture the crest was picked from (crest
+     * from-gallery); null for any other crest change. The picture going
+     * away (hard delete) nulls it.
+     */
+    crestMediaId: bigint('crest_media_id', { mode: 'number' }).references(
+      // Annotated: hub_media.guild_id references guilds (a type cycle).
+      (): AnyPgColumn => hubMedia.id,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -177,6 +189,7 @@ export const guilds = pgTable(
     index('idx_guilds_reviewed_by').on(table.reviewedBy),
     index('idx_guilds_crest_set_by').on(table.crestSetBy),
     index('idx_guilds_crest_removed_by').on(table.crestRemovedBy),
+    index('idx_guilds_crest_media_id').on(table.crestMediaId),
     /** ROK-1870: the directory + the admin proposal queue. */
     index('idx_guilds_kind_status').on(table.kind, table.status),
     check(

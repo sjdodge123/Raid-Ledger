@@ -3,7 +3,13 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 const { hubMedia } = schema;
+/** A tombstoned row whose files are still on disk. */
+export interface HubMediaRemovedFile {
+  guildId: number;
+  storageName: string;
+}
 export type HubMediaInsert = typeof hubMedia.$inferInsert;
 
 /** The row for a key — live or tombstoned — so a duplicate skips the download. */
@@ -146,4 +152,39 @@ export async function liveRowsBySourceAndUploader(
         isNull(hubMedia.removedAt),
       ),
     );
+}
+
+/**
+ * ROK-2068 — tombstone + scrub the member's live rows from one source whose
+ * provenance key is in `keys`, on every hub, in ONE statement that cannot
+ * violate a constraint, so a caller runs it inside its own transaction.
+ * Returns each row's hub + storage name; unlink the files AFTER commit.
+ */
+export async function tombstoneSourceRowsByKeys(
+  db: Db | Tx,
+  source: string,
+  userId: number,
+  keys: readonly string[],
+): Promise<HubMediaRemovedFile[]> {
+  if (keys.length === 0) return [];
+  return db
+    .update(hubMedia)
+    .set({
+      removedAt: new Date(),
+      authorName: null,
+      caption: null,
+      uploadedBy: null,
+    })
+    .where(
+      and(
+        eq(hubMedia.source, source),
+        eq(hubMedia.uploadedBy, userId),
+        inArray(hubMedia.provenanceKey, [...keys]),
+        isNull(hubMedia.removedAt),
+      ),
+    )
+    .returning({
+      guildId: hubMedia.guildId,
+      storageName: hubMedia.storageName,
+    });
 }

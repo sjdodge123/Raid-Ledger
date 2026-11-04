@@ -149,11 +149,12 @@ describe('Raid Ledger Companion marker (ROK-2056)', () => {
     expect(messages({ ...companion, rlCompanion: { collector: 'bg3-save', extra: 1 } })).not.toEqual([]);
   });
 
-  it('marks exactly the BG3 save upload and the LedgerLink auto-upload', () => {
+  it('marks exactly the BG3 save upload, the BG3 screenshot collector and the LedgerLink auto-upload', () => {
     const marked = all.filter((r) => r.rlCompanion !== undefined).map((r) => [r.id, r.rlCompanion?.collector]);
     expect(marked).toEqual([
       ['ledgerlink-companion', 'wow-ledgerlink'],
       ['upload-saves', 'bg3-save'],
+      ['companion-screenshots', 'bg3-screenshot'],
     ]);
     const addon = must(all.find((r) => r.id === 'ledgerlink-addon'), 'ledgerlink-addon');
     expect(addon.rlCompanion).toBeUndefined();

@@ -5,7 +5,7 @@
  * gallery feed. Blobs live in a per-file tmpdir (`COMPANION_BLOB_DIR`);
  * every WebP is generated in-test with sharp.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
@@ -34,6 +34,7 @@ import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { HubMediaSourceGateRegistry } from '../../../hub-media/hub-media.source-gates';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { Bg3GalleryFeed } from '../bg3-gallery.feed';
 
@@ -515,5 +516,99 @@ describe('Bg3GalleryFeed (§5.7)', () => {
       await feed.canonicalThumbnails(hub),
       await feed.openRawThumbnail(hub, hostTwin.id),
     ]).toEqual([[], null]);
+  });
+});
+
+/** A `bg3-save` Gallery row of `h` for screenshot `sha` (D-4 provenance). */
+async function galleryRow(h: number, sha: string): Promise<number> {
+  const [row] = await testApp.db
+    .insert(schema.hubMedia)
+    .values({
+      guildId: h,
+      source: 'bg3-save',
+      kind: 'save',
+      provenanceKey: `bg3-save:sha256:${sha}`,
+      capturedAt: new Date('2026-10-24T12:00:00.000Z'),
+      storageName: randomUUID(),
+      width: 480,
+      height: 270,
+      bytes: 100,
+    })
+    .returning({ id: schema.hubMedia.id });
+  if (!row) throw new Error('expected a hub_media row');
+  return row.id;
+}
+const galleryIdOf = async (): Promise<number | null | undefined> => {
+  const res = await get(`${base(hub)}/snapshot?campaignId=${camp}`, guest);
+  const snap = Bg3SnapshotResponseSchema.parse(res.body);
+  if (snap.empty) throw new Error('expected a snapshot');
+  return snap.galleryMediaId;
+};
+
+describe('ROK-2074 snapshot galleryMediaId', () => {
+  it("matches this hub's visible Gallery picture of the save screenshot", async () => {
+    const { sha } = await pictured();
+    await galleryRow(otherHub, sha);
+    const mediaId = await galleryRow(hub, sha);
+    expect(await galleryIdOf()).toBe(mediaId);
+  });
+
+  it('is null when no Gallery picture matches (only another hub has it)', async () => {
+    const { sha } = await pictured();
+    await galleryRow(otherHub, sha);
+    expect(await galleryIdOf()).toBeNull();
+  });
+
+  it('is null once the matching picture is hidden', async () => {
+    const { sha } = await pictured();
+    const mediaId = await galleryRow(hub, sha);
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    expect(await galleryIdOf()).toBeNull();
+  });
+});
+
+describe('ROK-2074 snapshot galleryMediaId — removed, gated, spoilers', () => {
+  /** A `core` test gate that hides `bg3-save` on `hub` while set. */
+  let gateSaves = false;
+  beforeAll(() => {
+    testApp.app
+      .get(HubMediaSourceGateRegistry)
+      .register('core', 'bg3-save', (g) =>
+        Promise.resolve(gateSaves && g === hub),
+      );
+  });
+  // The gate lives on the worker-cached TestApp's registry: reset after every
+  // case so a gated last case can't hide bg3-save in a later spec file.
+  afterEach(() => {
+    gateSaves = false;
+  });
+  it('is null once the matching picture is removed (tombstoned)', async () => {
+    const { sha } = await pictured();
+    const mediaId = await galleryRow(hub, sha);
+    expect(await galleryIdOf()).toBe(mediaId);
+    await testApp.db
+      .update(schema.hubMedia)
+      .set({ removedAt: new Date() })
+      .where(eq(schema.hubMedia.id, mediaId));
+    expect(await galleryIdOf()).toBeNull();
+  });
+
+  it('is null while a source gate hides bg3-save pictures', async () => {
+    const { sha } = await pictured();
+    const mediaId = await galleryRow(hub, sha);
+    expect(await galleryIdOf()).toBe(mediaId);
+    gateSaves = true;
+    expect(await galleryIdOf()).toBeNull();
+  });
+
+  it('is null while spoilers hide location and screenshots (D-14)', async () => {
+    const { sha } = await pictured();
+    const mediaId = await galleryRow(hub, sha);
+    expect(await galleryIdOf()).toBe(mediaId);
+    await hideSpoilers();
+    expect(await galleryIdOf()).toBeNull();
   });
 });

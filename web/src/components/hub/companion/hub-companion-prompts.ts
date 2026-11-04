@@ -17,6 +17,13 @@ import { companionDownloadAvailable } from '../../../lib/companion-install';
 export interface HubCompanionPrompt {
     /** A requirement id in this plugin's manifest `setup` that carries `rlCompanion`. */
     readonly requirementId: string;
+    /**
+     * Other `rlCompanion` requirement ids of this plugin that the SAME card covers —
+     * one Companion install serves every collector, and core renders one card per hub
+     * (first match wins), so a second prompt would never show. The ownership guard
+     * holds each id to the same rules as `requirementId` (ROK-1966).
+     */
+    readonly alsoCovers?: readonly string[];
     /** Game slugs, matched against `page.guild.gameSlug`. */
     readonly games: readonly string[];
     /** Hub kinds it appears on. */

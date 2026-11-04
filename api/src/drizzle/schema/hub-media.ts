@@ -77,7 +77,7 @@ export const hubMedia = pgTable(
     index('hub_media_uploaded_by_idx').on(t.uploadedBy),
     check(
       'hub_media_source_check',
-      sql`${t.source} IN ('discord', 'upload', 'bg3-save')`,
+      sql`${t.source} IN ('discord', 'upload', 'bg3-save', 'bg3-screenshot')`,
     ),
     check(
       'hub_media_kind_check',

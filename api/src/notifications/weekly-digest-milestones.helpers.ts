@@ -4,7 +4,8 @@
  *
  *  - B1 new members: new to Raid Ledger this week AND seen in the guild.
  *  - B3 event milestones: a member's attended-event count crossed 10/25/50.
- *  - B2 first-time games: first activity ever (presence or attended event).
+ *  - B2 first-time games: the game's first-ever co-play (2+ members together,
+ *    ROK-2063) falls in this digest week.
  *  - B4 hour milestones: a game's community hours crossed 100/250/500/1000.
  *
  * Every list is already privacy-filtered (`show_activity = false` members are
@@ -15,9 +16,10 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
+import { digestCoPlayWindow } from './weekly-digest-coplay.queries';
+import { buildFirstCoPlayGamesQuery } from './weekly-digest-first-coplay.queries';
 import {
   buildEventMilestonesQuery,
-  buildFirstGamesQuery,
   buildHourMilestonesQuery,
   buildNewMembersQuery,
 } from './weekly-digest-milestones-sql.helpers';
@@ -209,17 +211,27 @@ function lowest(thresholds: readonly number[]): number {
   return thresholds[0] ?? 0;
 }
 
+/** Options for {@link fetchDigestMilestones}. */
+export interface DigestMilestonesOptions {
+  /** The digest's clock (B2's week ends here); defaults to the current time. */
+  now?: Date;
+}
+
 /** Run the four reads against the live database and shape the section. */
 export async function fetchDigestMilestones(
   db: PostgresJsDatabase<typeof schema>,
+  opts: DigestMilestonesOptions = {},
 ): Promise<DigestMilestones> {
+  const now = opts.now ?? new Date();
   const minSeconds = lowest(HOUR_MILESTONE_THRESHOLDS) * SECONDS_PER_HOUR;
   const [members, events, games, hours] = await Promise.all([
     db.execute<NewMemberRow>(buildNewMembersQuery()),
     db.execute<EventMilestoneRow>(
       buildEventMilestonesQuery(lowest(EVENT_MILESTONE_THRESHOLDS)),
     ),
-    db.execute<FirstGameRow>(buildFirstGamesQuery()),
+    db.execute<FirstGameRow>(
+      buildFirstCoPlayGamesQuery(digestCoPlayWindow(now), now),
+    ),
     db.execute<HourMilestoneRow>(buildHourMilestonesQuery(minSeconds)),
   ]);
   return {

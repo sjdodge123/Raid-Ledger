@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { findVisible } from '../../hub-media/hub-media.read.repository';
@@ -16,6 +16,7 @@ const CREST_COLUMNS = {
   crestUploadKey: guilds.crestUploadKey,
   crestPreset: guilds.crestPreset,
   crestRemovedAt: guilds.crestRemovedAt,
+  crestMediaId: guilds.crestMediaId,
 };
 
 /** The crest slice of one `guilds` row. */
@@ -25,6 +26,8 @@ export type CrestRow = {
   crestUploadKey: string | null;
   crestPreset: schema.GuildSelect['crestPreset'];
   crestRemovedAt: Date | null;
+  /** ROK-2074: the gallery picture the crest was picked from, else null. */
+  crestMediaId: number | null;
 };
 
 /** The crest columns one write may set. */
@@ -38,6 +41,7 @@ export type CrestPatch = Partial<
     | 'crestSetAt'
     | 'crestRemovedBy'
     | 'crestRemovedAt'
+    | 'crestMediaId'
   >
 >;
 
@@ -118,4 +122,26 @@ export async function findGalleryStorageName(
   const scope = { guildId, includeHidden: false, excludeSources };
   const row = await findVisible(db, scope, mediaId);
   return row?.storageName ?? null;
+}
+
+/**
+ * ROK-2074 — the gallery picture a SHOWING upload crest was picked from,
+ * while every viewer of this hub's gallery can still see it (same rule as
+ * `findGalleryStorageName`); null otherwise.
+ */
+export async function findVisibleCrestMediaId(
+  db: Db,
+  guildId: number,
+  excludeSources: readonly string[],
+): Promise<number | null> {
+  const [row] = await db
+    .select({ mediaId: guilds.crestMediaId })
+    .from(guilds)
+    .where(and(eq(guilds.id, guildId), eq(guilds.crestActive, 'upload')))
+    .limit(1);
+  const mediaId = row?.mediaId ?? null;
+  if (mediaId === null) return null;
+  const scope = { guildId, includeHidden: false, excludeSources };
+  const media = await findVisible(db, scope, mediaId);
+  return media ? media.id : null;
 }

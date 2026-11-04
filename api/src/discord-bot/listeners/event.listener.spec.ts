@@ -383,7 +383,7 @@ function eventUpdatedTests() {
       'channel-789',
       'msg-456',
       mockEmbed,
-      mockRow,
+      [mockRow], // ROK-1728: embedComponents() — row 1 (+ series row)
       undefined,
     );
   });
@@ -422,7 +422,7 @@ function adHocGuardTests() {
       'channel-789',
       'msg-456',
       mockEmbed,
-      mockRow,
+      [mockRow], // ROK-1728: embedComponents() — row 1 (+ series row)
       undefined,
     );
   });

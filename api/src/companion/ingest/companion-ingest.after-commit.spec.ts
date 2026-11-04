@@ -166,6 +166,7 @@ describe('CompanionHandlerRegistry — after-commit handlers', () => {
   it.each([
     ['latestWins', { latestWins: () => null }],
     ['blobRefs', { blobRefs: () => [] }],
+    ['alreadyHeld', { alreadyHeld: () => Promise.resolve(false) }],
   ])(
     'refuses an after-commit handler declaring %s (its tx state would commit without the handler)',
     (_name, extra) => {

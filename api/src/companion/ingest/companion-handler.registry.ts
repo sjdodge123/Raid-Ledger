@@ -11,6 +11,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   COMPANION_CONTRACTS,
   type CompanionContractTable,
+  type CompanionConfigHubTarget,
   type CompanionContractVersionSpec,
   type CompanionWebpRef,
 } from '@raid-ledger/contract';
@@ -63,6 +64,16 @@ interface CompanionHandlerBase<M> {
    * uncommitted marker cannot slip past it (ROK-1960 P2-3).
    */
   lockLatestWins?(tx: CompanionDeviceTx, userId: number): Promise<void>;
+  /**
+   * Optional "already stored" check (ROK-2070 M1), in-tx handlers only —
+   * with or without a `latestWins` marker. Runs on the ingest tx after
+   * `lockLatestWins` and BEFORE any marker upsert; true acks `stale` and writes nothing (no
+   * marker, no blob refs, no `handle`), so a skipped duplicate can neither
+   * advance a marker nor report `accepted` for a row that was not stored.
+   */
+  alreadyHeld?(tx: CompanionDeviceTx, userId: number, msg: M): Promise<boolean>;
+  /** ROK-1966 Q3: the `/config` hub picker for this contract (the caller's hubs). */
+  hubTargets?(userId: number): Promise<CompanionConfigHubTarget[]>;
 }
 
 /** Default mode: `handle` runs INSIDE the ingest transaction (step 11). */
@@ -137,10 +148,10 @@ function assertRegistrable(
   if (handler.sources?.length === 0) throw new Error(`${name}: empty sources`);
   if (
     handler.afterCommit === true &&
-    (handler.latestWins || handler.blobRefs)
+    (handler.latestWins || handler.blobRefs || handler.alreadyHeld)
   ) {
     throw new Error(
-      `${name}: an after-commit handler has no latestWins/blobRefs`,
+      `${name}: an after-commit handler has no latestWins/blobRefs/alreadyHeld`,
     );
   }
   const interval = handler.cadence?.minIntervalSec;

@@ -3,9 +3,6 @@ import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
   ChannelType,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   type Message,
   type EmbedBuilder,
   type ActionRowBuilder as ActionRowType,
@@ -23,6 +20,13 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import { type EmbedResult } from '../services/discord-embed.factory';
+import {
+  buildInviteButtonRow,
+  capActionRows,
+  unfurlRowEntries,
+  type UnfurlRowEntry,
+} from './event-link-rows.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
 import { PugsService } from '../../events/pugs.service';
@@ -126,30 +130,30 @@ export class EventLinkListener {
     clientUrl: string,
   ): Promise<UnfurlResult> {
     const embeds: EmbedBuilder[] = [];
-    const rows: ActionRowType<ButtonType>[] = [];
+    const rows: UnfurlRowEntry<UnfurlRow>[] = [];
     const eventIds: number[] = [];
     for (const id of parsed.eventIds) {
       const r = await this.unfurlEventLink(id, ctx);
       if (!r) continue;
       embeds.push(r.embed);
-      if (r.row) rows.push(r.row);
+      rows.push(...unfurlRowEntries(r));
       eventIds.push(id);
     }
     for (const code of parsed.inviteCodes) {
       const r = await this.unfurlInviteLink(code, ctx, clientUrl);
       if (!r) continue;
       embeds.push(r.embed);
-      rows.push(r.row);
+      rows.push({ row: r.row, series: false });
       if (!eventIds.includes(r.eventId)) eventIds.push(r.eventId);
     }
-    return { embeds, rows, eventIds };
+    return { embeds, rows: capActionRows(rows), eventIds };
   }
 
   /** Unfurl a single event link. */
   private async unfurlEventLink(
     eventId: number,
     ctx: EmbedContext,
-  ): Promise<{ embed: EmbedBuilder; row?: ActionRowType<ButtonType> } | null> {
+  ): Promise<EmbedResult | null> {
     try {
       const event = await this.eventsService.findOne(eventId);
       if (event.cancelledAt) return null;
@@ -249,9 +253,10 @@ interface ParsedLinks {
   inviteCodes: string[];
 }
 
+type UnfurlRow = ActionRowType<ButtonType>;
 interface UnfurlResult {
   embeds: EmbedBuilder[];
-  rows: ActionRowType<ButtonType>[];
+  rows: UnfurlRow[];
   eventIds: number[];
 }
 
@@ -322,21 +327,4 @@ interface InviteUnfurl {
   embed: EmbedBuilder;
   row: ActionRowType<ButtonType>;
   eventId: number;
-}
-
-function buildInviteButtonRow(
-  code: string,
-  clientUrl: string,
-  eventId: number,
-): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`pug_join:${code}`)
-      .setLabel('Join Event')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setLabel('View Event')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${clientUrl}/events/${eventId}`),
-  );
 }

@@ -218,15 +218,14 @@ async function testIsActiveAfterInstall() {
     },
   ];
 
-  let selectCallCount = 0;
+  // The existence lookup (`.where()`) finds no row; refreshActiveCache's bare
+  // `select({slug, active}).from(plugins)` then sees the inserted row (ROK-2067 D2).
   mockDb.select.mockImplementation(() => ({
-    from: jest.fn().mockImplementation(() => ({
-      where: jest.fn().mockImplementation(() => {
-        selectCallCount++;
-        if (selectCallCount === 1) return thenableResult([]);
-        return thenableResult([{ slug: 'test-plugin' }]);
-      }),
-    })),
+    from: jest.fn().mockImplementation(() => {
+      const all = thenableResult([{ slug: 'test-plugin', active: true }]);
+      all.where = jest.fn().mockImplementation(() => thenableResult([]));
+      return all;
+    }),
   }));
 
   await service.install('test-plugin');

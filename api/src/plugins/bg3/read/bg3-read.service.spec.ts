@@ -6,6 +6,7 @@ import {
 import { BG3_GAME_SLUG, type Bg3HubSettings } from '@raid-ledger/contract';
 import type { CompanionBlobStore } from '../../../companion/blobs/companion-blob.store';
 import type { GuildAccessService } from '../../../guilds/guild-access.service';
+import type { HubMediaSourceGateRegistry } from '../../../hub-media/hub-media.source-gates';
 import type { Bg3CampaignsRepository } from '../campaigns/bg3-campaigns.repository';
 import type { Bg3HubRow } from './bg3-hub-access.helpers';
 import type { Bg3ReadRepository, Bg3SnapshotRow } from './bg3-read.repository';
@@ -61,6 +62,7 @@ function setup(
     inHub?: boolean;
     archived?: boolean;
     rows?: Bg3SnapshotRow[];
+    galleryMediaId?: number | null;
   } = {},
 ) {
   const settings = {
@@ -91,6 +93,7 @@ function setup(
     ),
     sessionRows: jest.fn().mockResolvedValue(o.rows ?? []),
     snapshotRows: jest.fn().mockResolvedValue(o.rows ?? [snapRow(1, 7)]),
+    galleryMediaId: jest.fn().mockResolvedValue(o.galleryMediaId ?? null),
     claims: jest.fn().mockResolvedValue([
       {
         slotKey: 'Generic:Human:1',
@@ -120,14 +123,16 @@ function setup(
     canEdit: jest.fn().mockResolvedValue(o.canEdit ?? false),
   };
   const blobs = { open: jest.fn().mockResolvedValue(null) };
+  const gates = { hiddenSources: jest.fn().mockResolvedValue(['upload']) };
   const svc = new Bg3ReadService(
     repo as unknown as Bg3ReadRepository,
     saves as unknown as Bg3SavesReadRepository,
     hubs as unknown as Bg3CampaignsRepository,
     access as unknown as GuildAccessService,
     blobs as unknown as CompanionBlobStore,
+    gates as unknown as HubMediaSourceGateRegistry,
   );
-  return { svc, repo, saves, blobs };
+  return { svc, repo, saves, blobs, gates };
 }
 
 describe('Bg3ReadService', () => {
@@ -182,6 +187,31 @@ describe('Bg3ReadService', () => {
       thumbnailUrl: null,
       spoilersHidden: true,
     });
+  });
+
+  it('ROK-2074: carries the visible Gallery picture of the screenshot (gated read)', async () => {
+    const { svc, repo } = setup({ galleryMediaId: 42 });
+    const snap = await svc.snapshot(5, me, undefined);
+    expect(snap).toMatchObject({ galleryMediaId: 42 });
+    expect(repo.galleryMediaId).toHaveBeenCalledWith(5, 'a'.repeat(64), [
+      'upload',
+    ]);
+  });
+
+  it('ROK-2074: galleryMediaId is null when no Gallery picture matches', async () => {
+    const { svc } = setup({ galleryMediaId: null });
+    const snap = await svc.snapshot(5, me, undefined);
+    expect(snap).toMatchObject({ galleryMediaId: null });
+  });
+
+  it('ROK-2074: spoilers hidden → galleryMediaId null without a lookup', async () => {
+    const { svc, repo } = setup({
+      settings: { hideLocationAndScreenshots: true },
+      galleryMediaId: 42,
+    });
+    const snap = await svc.snapshot(5, me, undefined);
+    expect(snap).toMatchObject({ galleryMediaId: null });
+    expect(repo.galleryMediaId).not.toHaveBeenCalled();
   });
 
   it('skips a row whose stored party fails re-parse, else answers empty', async () => {

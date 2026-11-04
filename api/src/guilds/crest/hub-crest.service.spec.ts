@@ -54,6 +54,7 @@ beforeEach(() => {
     crestUploadKey: OLD,
     crestPreset: { ...PRESET },
     crestRemovedAt: null,
+    crestMediaId: 9,
   };
   redis.eval.mockResolvedValue(1);
   jest.mocked(findCrestRow).mockImplementation(() => Promise.resolve(row));
@@ -277,5 +278,35 @@ describe('HubCrestService.removeUpload', () => {
     await expect(svc.removeUpload(staff, 5)).rejects.toMatchObject({
       status: 404,
     });
+  });
+});
+
+describe('ROK-2074 crestMediaId — only a gallery pick links a picture', () => {
+  it('fromGallery stores the picked media id', async () => {
+    jest
+      .mocked(findGalleryStorageName)
+      .mockResolvedValue('0f8fad5b-d9cb-469f-a165-70867728950e');
+    jest.mocked(readFile).mockResolvedValue(Buffer.from('webp'));
+    await svc.fromGallery(editor, 5, { mediaId: 3 });
+    expect(row.crestMediaId).toBe(3);
+  });
+
+  it('a direct upload unlinks the picture', async () => {
+    await svc.upload(editor, 5, Buffer.from('png'));
+    expect(row.crestMediaId).toBeNull();
+  });
+
+  it.each([
+    ['a preset', { active: 'preset', preset: PRESET }],
+    ['re-showing the stored upload', { active: 'upload' }],
+    ['clearing the crest', { active: null }],
+  ])('%s unlinks the picture', async (_label, body) => {
+    await svc.set(editor, 5, body);
+    expect(row.crestMediaId).toBeNull();
+  });
+
+  it('a staff removal unlinks the picture', async () => {
+    await svc.removeUpload(staff, 5);
+    expect(row.crestMediaId).toBeNull();
   });
 });

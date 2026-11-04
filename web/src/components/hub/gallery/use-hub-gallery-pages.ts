@@ -11,7 +11,7 @@ import { HubMediaItemSchema, type HubMediaItem, type HubMediaKind } from '@raid-
 import { fetchApi } from '../../../lib/api/fetch-api';
 import { encodePathSegment } from '../../../lib/api/path-segment';
 import { fetchHubMedia, type HubMediaFetchQuery } from '../../../lib/hub-media-api';
-import { hubMediaKeys, type HubMediaFilter } from '../../../lib/hub-media-query';
+import { hubMediaKeys, isHubPictureLinkQuery, type HubMediaFilter } from '../../../lib/hub-media-query';
 import { toast } from '../../../lib/toast';
 
 export const HUB_GALLERY_PAGE_SIZE = 24;
@@ -71,7 +71,13 @@ function mediaPath(guildId: number, id: number): string {
 
 export function useHubGalleryModeration(guildId: number) {
     const qc = useQueryClient();
-    const refresh = (): Promise<void> => qc.invalidateQueries({ queryKey: hubMediaKeys.all(guildId) });
+    // ROK-2074: also the queries holding a link to a picture (crest, BG3 save shot) — a removed one must not open stale.
+    const refresh = async (): Promise<void> => {
+        await Promise.all([
+            qc.invalidateQueries({ queryKey: hubMediaKeys.all(guildId) }),
+            qc.invalidateQueries({ predicate: (q) => isHubPictureLinkQuery(q, guildId) }),
+        ]);
+    };
     const hide = useMutation({
         mutationFn: ({ id, hidden }: { id: number; hidden: boolean }) =>
             fetchApi(mediaPath(guildId, id), { method: 'PATCH', body: JSON.stringify({ hidden }) }, HubMediaItemSchema),

@@ -89,3 +89,43 @@ describe('CompanionConfigSchema (T-C-3)', () => {
         expect(CompanionConfigSchema.safeParse({ ...authenticatedConfig, contracts: [{ ...contract, blobSlots: ['portrait'] }] }).success).toBe(false);
     });
 });
+
+describe('CompanionConfigSchema contract plugin + game (T-C-4, ROK-2067)', () => {
+    const [contract] = authenticatedConfig.contracts;
+    const withContract = (extra: Record<string, unknown>) => ({ ...authenticatedConfig, contracts: [{ ...contract, ...extra }] });
+    const plugin = { id: 'bg3', name: "Baldur's Gate 3", state: 'active' };
+    const game = { slug: 'baldurs-gate-iii', name: "Baldur's Gate 3", coverUrl: 'https://images.igdb.com/x.jpg' };
+    it('accepts plugin + game absent (older server), null, and every plugin state', () => {
+        expect(CompanionConfigSchema.safeParse(authenticatedConfig).success).toBe(true);
+        expect(CompanionConfigSchema.safeParse(withContract({ plugin: null, game: null })).success).toBe(true);
+        for (const state of ['active', 'inactive', 'not_installed']) {
+            expect(CompanionConfigSchema.safeParse(withContract({ plugin: { ...plugin, state }, game })).success).toBe(true);
+        }
+        expect(CompanionConfigSchema.safeParse(withContract({ game: { ...game, coverUrl: null } })).success).toBe(true);
+    });
+    it('rejects an unknown state and an unknown key inside plugin or game', () => {
+        expect(CompanionConfigSchema.safeParse(withContract({ plugin: { ...plugin, state: 'disabled' } })).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withContract({ plugin: { ...plugin, version: '1.0.0' } })).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withContract({ game: { ...game, igdbId: 1 } })).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withContract({ game: { slug: 'x', name: 'X' } })).success).toBe(false);
+    });
+});
+
+describe('CompanionConfigSchema contract hubTargets + image slot (ROK-1966)', () => {
+    const [contract] = authenticatedConfig.contracts;
+    const screenshot = { ...contract, id: 'bg3-screenshot', maxBytes: 4096, blobSlots: ['image'] };
+    const withTargets = (hubTargets: unknown) => ({ ...authenticatedConfig, contracts: [{ ...screenshot, hubTargets }] });
+    const hub = { hubGuildId: 42, name: 'Tavern Crew', isDefault: true };
+    it('accepts the image slot, hubTargets absent (older server), empty, and listed', () => {
+        expect(CompanionConfigSchema.safeParse({ ...authenticatedConfig, contracts: [screenshot] }).success).toBe(true);
+        expect(CompanionConfigSchema.safeParse(withTargets([])).success).toBe(true);
+        expect(CompanionConfigSchema.safeParse(withTargets([hub, { ...hub, hubGuildId: 7, isDefault: false }])).success).toBe(true);
+    });
+    it('rejects a bad hub id, an empty name, a missing isDefault and an unknown key', () => {
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, hubGuildId: 0 }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, hubGuildId: '42' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, name: '' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ hubGuildId: 42, name: 'x' }])).success).toBe(false);
+        expect(CompanionConfigSchema.safeParse(withTargets([{ ...hub, slug: 'tavern' }])).success).toBe(false);
+    });
+});

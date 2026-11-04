@@ -25,6 +25,14 @@
  *   3. Cap at 2 — never emit 3+ titles.
  *   4. Tie-break: equal scores resolve by each title's primary-axis
  *      position in `TASTE_PROFILE_AXIS_POOL` (earlier index wins).
+ *
+ * Community-relative rule (ROK-1939) — replaces the rules above whenever
+ * `community` stats cover >= 5 profiles (`archetype-community.helpers.ts`):
+ * eligible titles = raw title score >= 30; title 1 = the eligible title
+ * with the highest community z-score (max over its axes, SD floored at
+ * 10); title 2 = the next eligible title within 0.5 z of title 1; ties →
+ * raw score → pool order. Fewer than 5 profiles, or no stats passed →
+ * the ROK-1083 raw rule above, unchanged.
  */
 import {
   TASTE_PROFILE_AXIS_POOL,
@@ -39,6 +47,11 @@ import {
   VECTOR_TITLE_AXES,
   VECTOR_TITLE_DESCRIPTIONS,
 } from './archetype-copy';
+import {
+  isCommunityUsable,
+  pickRelativeTitles,
+  type CommunityAxisStats,
+} from './archetype-community.helpers';
 
 /** Minimum axis score required to earn any vector title. */
 const TOP_AXIS_FLOOR = 30;
@@ -59,6 +72,12 @@ export interface ArchetypeDerivationInputs {
    * exact definition. `false` → tier `Newcomer`.
    */
   hasPresenceData: boolean;
+  /**
+   * Community axis stats (ROK-1939, `computeCommunityAxisStats`). Present
+   * with >= `MIN_COMMUNITY` profiles → community-relative noun; absent or
+   * thinner → the raw ROK-1083 rule.
+   */
+  community?: CommunityAxisStats | undefined;
 }
 
 interface VectorTitleScore {
@@ -159,8 +178,10 @@ export function deriveArchetype(
     inputs.intensityMetrics.intensity,
     inputs.hasPresenceData,
   );
-  const scores = computeVectorTitleScores(inputs.dimensions);
-  const vectorTitles = pickTopTitles(scores);
+  const { community, dimensions } = inputs;
+  const vectorTitles = isCommunityUsable(community)
+    ? pickRelativeTitles(dimensions, community)
+    : pickTopTitles(computeVectorTitleScores(dimensions));
   const descriptions = buildDescriptions(intensityTier, vectorTitles);
   return { intensityTier, vectorTitles, descriptions };
 }

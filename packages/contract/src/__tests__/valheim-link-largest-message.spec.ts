@@ -9,6 +9,8 @@ import {
     VALHEIM_LINK_CONTAINER_SLOTS_MAX,
     VALHEIM_LINK_CONTAINERS_MAX,
     VALHEIM_LINK_CONTAINERS_MAX_BYTES,
+    VALHEIM_LINK_DEATH_COUNT_MAX,
+    VALHEIM_LINK_DEATHS_MAX,
     VALHEIM_LINK_PIECES_MAX,
     VALHEIM_LINK_PORTAL_TAG_MAX_CHARS,
     VALHEIM_LINK_PORTALS_MAX,
@@ -122,6 +124,14 @@ function largestCharacter(): unknown {
         trophies: Array.from({ length: VALHEIM_LINK_TROPHIES_MAX }, (_, i) => prefab(i)),
         knownItems: Array.from({ length: VALHEIM_LINK_KNOWN_MAX }, (_, i) => prefab(i)),
         knownRecipes: Array.from({ length: VALHEIM_LINK_KNOWN_MAX }, (_, i) => prefab(i)),
+        // ROK-1931: `at` unique and <= capturedAt; millisecond ISO is the 24-char max.
+        deaths: Array.from({ length: VALHEIM_LINK_DEATHS_MAX }, (_, i) => ({
+            worldUid: VALHEIM_LINK_INT64_MIN,
+            x: -(VALHEIM_LINK_WORLD_COORD_MAX - 0.000000000004),
+            z: -(VALHEIM_LINK_WORLD_COORD_MAX - 0.000000000004),
+            at: new Date(Date.UTC(2025, 0, 1) - i * 1001).toISOString(),
+        })),
+        deathCount: VALHEIM_LINK_DEATH_COUNT_MAX,
     };
 }
 

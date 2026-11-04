@@ -116,7 +116,7 @@ export class HubCrestService {
     bytes: Buffer,
   ): Promise<GuildCrestEditorState> {
     await checkCrestUploadRate(this.redis, actor.id);
-    return this.storeEncoded(actor, guildId, bytes, false);
+    return this.storeEncoded(actor, guildId, bytes, null);
   }
 
   /**
@@ -141,7 +141,7 @@ export class HubCrestService {
     if (!name) throw new NotFoundException(PICTURE_NOT_FOUND);
     await checkCrestUploadRate(this.redis, actor.id);
     const bytes = await readGalleryFile(guildId, name);
-    return this.storeEncoded(actor, guildId, bytes, true);
+    return this.storeEncoded(actor, guildId, bytes, parsed.data.mediaId);
   }
 
   /** `DELETE /guilds/:id/crest/upload` — staff only (moderation). */
@@ -163,20 +163,23 @@ export class HubCrestService {
   /**
    * Encode → (row lock) write files + point the row at them → drop the old
    * files. A failed update removes the new files unless the row uses them.
+   * `galleryMediaId` (ROK-2074) is the picked gallery picture, null for a
+   * direct upload; only a gallery pick may exceed 1024 px.
    */
   private async storeEncoded(
     actor: GuildActor,
     guildId: number,
     bytes: Buffer,
-    allowLarge: boolean,
+    galleryMediaId: number | null,
   ): Promise<GuildCrestEditorState> {
+    const allowLarge = galleryMediaId !== null;
     const enc = await encodeGuildCrest(bytes, { allowLarge });
     if (!enc.ok) throw encodeError(enc.code);
     let wrote = false;
     const out = await updateCrestRow(this.db, guildId, async () => {
       await writeCrestFiles(guildId, enc.key, { sm: enc.sm, lg: enc.lg });
       wrote = true;
-      return uploadPatch(enc.key, actor.id, new Date());
+      return uploadPatch(enc.key, actor.id, new Date(), galleryMediaId);
     }).catch(async (err: unknown) => {
       if (wrote) await this.dropFiles(guildId, enc.key);
       throw err;

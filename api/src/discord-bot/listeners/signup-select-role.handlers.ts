@@ -53,10 +53,12 @@ export async function signupWithCharacter(
   });
 
   if (signupStatus === 'tentative') {
+    // signup() above already audited this row; one feed row per click.
     await deps.signupsService.updateStatus(
       eventId,
       { userId },
       { status: 'tentative' },
+      { audit: false },
     );
   }
   return signupResult.assignedSlot ?? undefined;
@@ -252,10 +254,12 @@ async function markTentative(
   eventId: number,
   userId: number,
 ): Promise<void> {
+  // Called right after signup() for the same row, which already audited it.
   await deps.signupsService.updateStatus(
     eventId,
     { userId },
     { status: 'tentative' },
+    { audit: false },
   );
 }
 

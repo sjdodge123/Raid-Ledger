@@ -2,19 +2,19 @@
  * Weekly Discord digest — section types and shaping (ROK-1435 slice L2;
  * v2 ROK-1771). The shared line types the embed renders, plus the pure
  * shapers for the v1 sections that v2 keeps: ① what the community has been
- * playing, ② the last-7-days recap and ④ live LFG groups. The v1 "on sale"
+ * playing together (ROK-2063 co-play), ② the last-7-days recap and ④ live LFG groups. The v1 "on sale"
  * deals are gone (replaced by Best price, ruling §11). Source wiring and the
  * concurrent assembly live in `weekly-digest-assembly.helpers.ts`.
  *
  * `shapeLfg` projects onto viewer-independent fields only, so no per-reader
  * fact (`hasOwnIntent`) can reach a channel embed (AC5/AC10).
  */
-import type { GameDetailDto, GameDiscoverRowDto } from '@raid-ledger/contract';
 import { playersStillNeeded } from '@raid-ledger/contract';
 import {
   deriveViability,
   type LfgGroupAggregate,
 } from '../lfg/lfg-query.helpers';
+import type { CoPlayGame } from './weekly-digest-coplay.queries';
 import {
   isEmptyWeeklyRecap,
   type WeeklyRecap,
@@ -50,21 +50,21 @@ export interface DigestSection<T> {
   total: number;
 }
 
-function toGameRef(game: GameDetailDto): DigestGameRef {
-  return { gameId: game.id, name: game.name, slug: game.slug };
-}
-
-/** ① Top games by distinct players, in the row's own rank order. */
+/**
+ * ① Top games played together (ROK-2063), in the co-play read's rank order.
+ * `total` counts the whole filtered set, so "+N more" never counts solo play.
+ */
 export function shapePlaying(
-  row: GameDiscoverRowDto,
+  games: readonly CoPlayGame[],
 ): DigestSection<DigestPlayingLine> {
-  const metadata = row.metadata ?? {};
-  const lines = row.games
+  const lines = games
+    .filter((game) => game.players > 0)
     .map((game) => ({
-      ...toGameRef(game),
-      playerCount: metadata[String(game.id)]?.playerCount ?? 0,
-    }))
-    .filter((line) => line.playerCount > 0);
+      gameId: game.gameId,
+      name: game.name,
+      slug: game.slug,
+      playerCount: game.players,
+    }));
   return { items: lines.slice(0, DIGEST_PLAYING_LIMIT), total: lines.length };
 }
 

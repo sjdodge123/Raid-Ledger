@@ -42,7 +42,7 @@ import {
   withEnv,
 } from '../../companion/devices/testing/companion-link.helpers';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { Bg3SaveHandler } from './ingest/bg3-save.handler';
+import { Bg3SaveHandler, bg3LatestMarkerKey } from './ingest/bg3-save.handler';
 
 const MESSAGES = `/companion/v1/messages/${BG3_SAVE_CONTRACT_ID}`;
 const BG3 = '/plugins/bg3';
@@ -570,5 +570,154 @@ describe('I-10 browser upload (ROK-1960): a session JWT, a bare .lsv', () => {
     expect(blobs.map((b) => [b.userId, b.sha256, b.deviceId])).toEqual([
       [w.host.id, ref.sha256, null],
     ]);
+  });
+});
+
+type KeySource = Bg3SaveMessage['payload']['campaignKeySource'];
+
+/** `save()` under an explicit key source (and save name) (ROK-2070). */
+function keyed(
+  key: string,
+  source: KeySource,
+  savedAt?: string,
+  saveName = ACT2.payload.saveName,
+): Bg3SaveMessage {
+  const msg = save(savedAt === undefined ? { key } : { key, savedAt });
+  const payload = { ...msg.payload, campaignKeySource: source, saveName };
+  return { ...msg, payload };
+}
+
+/** The user's `bg3-save` latest-wins marker keys. */
+async function markerKeys(userId: number): Promise<string[]> {
+  const m = schema.companionIngestLatest;
+  const rows = await testApp.db
+    .select({ key: m.latestKey })
+    .from(m)
+    .where(and(eq(m.userId, userId), eq(m.contract, BG3_SAVE_CONTRACT_ID)));
+  return rows.map((r) => r.key);
+}
+
+/** `[campaignKey, campaignKeySource, savedAt]` of every save, in order. */
+async function keyRows(): Promise<[string, string, string][]> {
+  return (await saveRows()).map((r) => [
+    r.campaignKey,
+    r.campaignKeySource,
+    r.savedAt.toISOString(),
+  ]);
+}
+
+describe('I-11 an already-held save is stale before its marker moves (ROK-2070 OQ3 + M1)', () => {
+  it('a folder-key save re-sent with its game-id key → stale, one row, and no game-id marker (M1)', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder')),
+      'accepted',
+    );
+    expectAck(await ingest(w.host.token, keyed(KEY_B, 'game-id')), 'stale');
+    expect(await keyRows()).toEqual([
+      [KEY_A, 'save-folder', iso(ACT2.payload.savedAt)],
+    ]);
+    expect(await markerKeys(w.host.id)).toEqual([
+      bg3LatestMarkerKey(KEY_A, ACT2.payload.saveName),
+    ]);
+    // Once the folder row is gone, the game-id copy is stored (not stuck).
+    await testApp.db.delete(schema.bg3Saves);
+    expectAck(await ingest(w.host.token, keyed(KEY_B, 'game-id')), 'accepted');
+    expect(await keyRows()).toEqual([
+      [KEY_B, 'game-id', iso(ACT2.payload.savedAt)],
+    ]);
+  });
+
+  it('the same save with a sub-second savedAt from another producer → stale, one row (m1)', async () => {
+    const w = await world();
+    const T = '2026-10-24T12:00:00Z';
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder', T)),
+      'accepted',
+    );
+    const ms = keyed(KEY_B, 'game-id', '2026-10-24T12:00:00.123Z');
+    expectAck(await ingest(w.host.token, ms), 'stale');
+    expect(await keyRows()).toEqual([[KEY_A, 'save-folder', iso(T)]]);
+  });
+
+  it('a file-name-key save re-sent with a save-folder key → stale, one row', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'file-name')),
+      'accepted',
+    );
+    expectAck(await ingest(w.host.token, keyed(KEY_C, 'save-folder')), 'stale');
+    expect(await keyRows()).toEqual([
+      [KEY_A, 'file-name', iso(ACT2.payload.savedAt)],
+    ]);
+  });
+
+  it('a replay whose only marker predates B1 (bare campaign key) → stale, one row', async () => {
+    const w = await world();
+    expectAck(await ingest(w.host.token, keyed(KEY_A, 'game-id')), 'accepted');
+    await testApp.db
+      .update(schema.companionIngestLatest)
+      .set({ latestKey: KEY_A });
+    expectAck(await ingest(w.host.token, keyed(KEY_A, 'game-id')), 'stale');
+    expect(await saveRows()).toHaveLength(1);
+  });
+});
+
+describe('I-11 a different save is stored under its own key (ROK-2070 OQ3)', () => {
+  it('a game-id save at a different savedAt → two rows', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder', at('10'))),
+      'accepted',
+    );
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_B, 'game-id', at('11'))),
+      'accepted',
+    );
+    expect(await keyRows()).toEqual([
+      [KEY_A, 'save-folder', iso(at('10'))],
+      [KEY_B, 'game-id', iso(at('11'))],
+    ]);
+  });
+
+  it('the same key source under another key is unchanged → two rows; another uploader is unaffected', async () => {
+    const w = await world();
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_A, 'save-folder')),
+      'accepted',
+    );
+    expectAck(
+      await ingest(w.host.token, keyed(KEY_C, 'save-folder')),
+      'accepted',
+    );
+    expectAck(await ingest(w.mate.token, keyed(KEY_B, 'game-id')), 'accepted');
+    const rows = await saveRows();
+    expect(rows.map((r) => [r.uploaderUserId, r.campaignKey])).toEqual([
+      [w.host.id, KEY_A],
+      [w.host.id, KEY_C],
+      [w.mate.id, KEY_B],
+    ]);
+  });
+});
+
+describe('I-11 game-id saves keep one latest-wins marker per save (ROK-2070 B1)', () => {
+  it('game-id saves arriving newest-first are all stored; an exact replay is stale', async () => {
+    const w = await world();
+    const older = keyed(KEY_B, 'game-id', at('10'), 'QuickSave_10');
+    const sends = [
+      keyed(KEY_B, 'game-id', at('11'), 'QuickSave_11'),
+      older,
+      keyed(KEY_B, 'game-id', at('09'), 'AutoSave_9'),
+    ];
+    for (const m of sends) {
+      expectAck(await ingest(w.host.token, m), 'accepted');
+    }
+    expect(await keyRows()).toEqual([
+      [KEY_B, 'game-id', iso(at('11'))],
+      [KEY_B, 'game-id', iso(at('10'))],
+      [KEY_B, 'game-id', iso(at('09'))],
+    ]);
+    expectAck(await ingest(w.host.token, older), 'stale');
+    expect(await saveRows()).toHaveLength(3);
   });
 });

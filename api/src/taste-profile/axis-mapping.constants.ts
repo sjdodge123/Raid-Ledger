@@ -28,19 +28,21 @@ export const AXIS_MAPPINGS: Record<TasteProfilePoolAxis, AxisMapping> = {
     genres: [],
     themes: [],
   },
+  // ROK-1939 D9: pvp is narrowed to explicitly competitive vocabulary.
+  // 'Team-Based' / 'Class-Based' were dropped (routinely on co-op and class-RPG
+  // games) and the IGDB Multiplayer mode (2) no longer implies pvp — a game
+  // reaches this axis only through one of the tags below.
   pvp: {
     tags: [
       'PvP',
       'Competitive',
-      'Team-Based',
       'eSports',
       'Arena Shooter',
       'Tactical Shooter',
       'PvP Arena',
       '1v1',
-      'Class-Based',
     ],
-    gameModes: [2],
+    gameModes: [],
     genres: [],
     themes: [],
   },

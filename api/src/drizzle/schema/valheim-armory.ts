@@ -68,6 +68,10 @@ export const valheimProfiles = pgTable(
     trophies: jsonb('trophies').$type<string[]>().notNull(),
     knownItems: jsonb('known_items').$type<string[]>().notNull(),
     knownRecipes: jsonb('known_recipes').$type<string[]>().notNull(),
+    /** ROK-1931 (D7): the game's lifetime `Deaths` stat (all worlds), when sent. */
+    deathCount: integer('death_count'),
+    /** ROK-1931: `captured_at` of the snapshot that carried `death_count`. */
+    deathCountAt: tsz('death_count_at'),
     sourceSnapshotId: snapshotCol(),
   },
   (t) => [

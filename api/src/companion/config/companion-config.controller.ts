@@ -19,7 +19,7 @@ export class CompanionConfigController {
   /** 200 with a `CompanionConfigSchema`-parsed body. */
   @Get()
   @Header('Cache-Control', 'no-store')
-  get(@Req() req: CompanionIngestRequest): CompanionConfig {
+  get(@Req() req: CompanionIngestRequest): Promise<CompanionConfig> {
     return this.config.build(req.companionIngest ?? null);
   }
 }

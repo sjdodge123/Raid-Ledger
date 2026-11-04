@@ -1,9 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
@@ -66,7 +64,6 @@ export class WeeklyDigestService {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
-    @Inject(REDIS_CLIENT) private redis: Redis,
     private readonly dedupService: NotificationDedupService,
     private readonly settingsService: SettingsService,
     private readonly discordBotClient: DiscordBotClientService,
@@ -165,7 +162,7 @@ export class WeeklyDigestService {
   ): Promise<BuiltDigest | null> {
     const context = await this.spotlightContext(now, timeZone);
     const sections = await assembleDigestSections(
-      buildDigestSources(this.db, this.redis),
+      buildDigestSources(this.db),
       context,
       (section, error) =>
         this.logger.warn(

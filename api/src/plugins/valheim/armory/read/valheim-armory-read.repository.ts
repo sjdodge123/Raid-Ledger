@@ -73,6 +73,7 @@ const sheetCols = {
   inventory: p.inventory,
   skills: p.skills,
   trophies: p.trophies,
+  deathCount: p.deathCount,
 };
 
 /** D8: readiness is computed at read time from the blob table. */

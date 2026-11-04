@@ -1,0 +1,53 @@
+{
+  "saves": [
+    {
+      "saveRef": "3f9a0c2b7d41",
+      "campaignKeyPrefix": "9c1e5a07",
+      "campaignKeySource": "save-folder",
+      "gameVersion": "4.1.1.6848561",
+      "savedAt": "2026-11-02T21:40:00Z",
+      "partySize": 4,
+      "nonSummonCount": 4,
+      "clientCount": 4,
+      "lsfVersions": {
+        "meta": 7,
+        "globals": 7
+      },
+      "newAgeBytes": 6701312,
+      "fallbackReason": null
+    },
+    {
+      "saveRef": "b07e44d1a9c3",
+      "campaignKeyPrefix": "9c1e5a07",
+      "campaignKeySource": "save-folder",
+      "gameVersion": "4.1.1.6848561",
+      "savedAt": "2026-11-01T19:05:00Z",
+      "partySize": 5,
+      "nonSummonCount": 4,
+      "clientCount": 1,
+      "lsfVersions": {
+        "meta": 7,
+        "globals": 7
+      },
+      "newAgeBytes": 6701312,
+      "fallbackReason": null
+    },
+    {
+      "saveRef": "e512f8a06b3d",
+      "campaignKeyPrefix": "41d7b2e9",
+      "campaignKeySource": "file-name",
+      "gameVersion": null,
+      "savedAt": "2026-11-02T21:40:00Z",
+      "partySize": 4,
+      "nonSummonCount": 4,
+      "clientCount": null,
+      "lsfVersions": {
+        "meta": null,
+        "globals": 7
+      },
+      "newAgeBytes": 0,
+      "fallbackReason": "corrupt"
+    }
+  ],
+  "next": null
+}

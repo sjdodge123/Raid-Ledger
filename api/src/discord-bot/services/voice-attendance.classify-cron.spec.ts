@@ -2,6 +2,7 @@ import { VoiceAttendanceService } from './voice-attendance.service';
 import type { MockDb } from '../../common/testing/drizzle-mock';
 import * as flushH from './voice-attendance-flush.helpers';
 import * as classifyH from './voice-attendance-classify.helpers';
+import * as schema from '../../drizzle/schema';
 import { setupVoiceAttendanceTestModule } from './voice-attendance.service.spec-helpers';
 
 jest.mock('./voice-attendance-flush.helpers', () => ({
@@ -39,11 +40,13 @@ function fakeEvent(
 describe('VoiceAttendanceService — classification cron', () => {
   let service: VoiceAttendanceService;
   let mockDb: MockDb;
+  let mockSettingsGet: jest.Mock;
 
   beforeEach(async () => {
     const mocks = await setupVoiceAttendanceTestModule();
     service = mocks.service;
     mockDb = mocks.mockDb;
+    mockSettingsGet = mocks.mockSettingsGet;
 
     mockFetchEndedEvents.mockReset().mockResolvedValue([]);
     mockShouldClassify.mockReset().mockResolvedValue(true);
@@ -143,5 +146,31 @@ describe('VoiceAttendanceService — classification cron', () => {
       expect.any(Date),
       7_200_000,
     );
+  });
+
+  // ROK-1940 AC-8: the next classification uses the saved grace setting.
+  describe('grace minutes come from the saved setting', () => {
+    const graceMsPassedToClassifier = (): unknown =>
+      mockClassifyEventSessions.mock.calls[0]?.[3];
+
+    it('classifies with the saved grace (12 min -> 720000 ms)', async () => {
+      mockSettingsGet.mockResolvedValue('12');
+      mockFetchEndedEvents.mockResolvedValue([fakeEvent(7, 1, 2)]);
+
+      await service.classifyCompletedEvents();
+
+      expect(mockSettingsGet).toHaveBeenCalledWith(
+        schema.SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
+      );
+      expect(graceMsPassedToClassifier()).toBe(12 * 60_000);
+    });
+
+    it('falls back to 5 min when the setting was never saved', async () => {
+      mockSettingsGet.mockResolvedValue(null);
+
+      await service.classifyEvent(8);
+
+      expect(graceMsPassedToClassifier()).toBe(5 * 60_000);
+    });
   });
 });
