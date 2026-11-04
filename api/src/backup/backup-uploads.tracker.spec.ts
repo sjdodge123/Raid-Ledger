@@ -81,7 +81,6 @@ describe('UploadsArchiveTracker', () => {
     });
     expect(tracker.stateOf(OTHER)).toBeUndefined();
   });
-
 });
 
 describe('UploadsArchiveTracker — failure copy', () => {
