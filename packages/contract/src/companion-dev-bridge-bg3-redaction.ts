@@ -14,15 +14,19 @@ const SEP = '[-_.]?';
  * - 32 hex digits split 8-4-4-4-12 by `-`, `_`, `.` or no separator (each gap
  *   independently) — this also catches the braced `{…}` form, the braces sit
  *   outside the match;
- * - a Larian handle, `h` + 8 hex + `g` + 4 hex (`h6f2b8c1eg4d3ag…`);
- * - any run of 32 or more hex digits.
- * A base64 GUID (22 alphanumerics) has no detectable shape — an accepted residual.
+ * - a Larian handle, `h` + 8 hex + `g` + 4 hex (`h6f2b8c1eg4d3ag…`), any case;
+ * - any run of 32 or more hex digits, also once every `-`, `_`, `.`, `{`, `}`
+ *   is stripped — so a GUID split by separator runs of any length (`__`) fits.
+ * A base64 GUID (22 alphanumerics) or a truncated one (< 32 hex) has no
+ * detectable shape — an accepted residual.
  */
 const GUID_SHAPES: readonly RegExp[] = [
     new RegExp(`${HEX}{8}${SEP}${HEX}{4}${SEP}${HEX}{4}${SEP}${HEX}{4}${SEP}${HEX}{12}`),
-    /h[0-9A-Fa-f]{8}g[0-9A-Fa-f]{4}/,
+    /h[0-9a-f]{8}g[0-9a-f]{4}/i,
     /[0-9A-Fa-f]{32,}/,
 ];
+const GUID_SEPARATORS_RE = /[-_.{}]/g;
+const HEX_32_RE = /[0-9a-f]{32}/i;
 
 /** A run of 10+ decimal digits: a SteamID64 (17 digits), a Larian profile id, an epoch-ms stamp. */
 const DIGIT_RUN_RE = /[0-9]{10,}/;
@@ -32,14 +36,15 @@ export const DEV_BRIDGE_BG3_DIGITS_MESSAGE = 'A run of 10 or more digits (a prof
 
 /** True when `s` holds any GUID shape above — the one GUID test every BG3 body uses. */
 export function bg3HoldsGuid(s: string): boolean {
-    return GUID_SHAPES.some((re) => re.test(s));
+    return GUID_SHAPES.some((re) => re.test(s)) || HEX_32_RE.test(s.replace(GUID_SEPARATORS_RE, ''));
 }
 
 type Path = (string | number)[];
 
 /**
- * `saveRef` is exempt from the digit rule only: it is already pinned to 12 hex
- * chars, and a hash prefix that happens to be 10+ decimal digits is not an id.
+ * `saveRef` is exempt from the digit rule only: it is pinned to 12 hex chars,
+ * so a SteamID64 cannot fit; a 10–12 digit id could, and `saveRef` relies on
+ * its HMAC derivation for that (a hash prefix is all-decimal ~1.6% of the time).
  */
 function digitsExempt(path: Path): boolean {
     return path[path.length - 1] === 'saveRef';

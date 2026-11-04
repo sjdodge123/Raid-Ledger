@@ -25,8 +25,14 @@ export const DEV_BRIDGE_BG3_SAVE_REF_RE = /^[0-9a-f]{12}$/;
  */
 export const DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES = 6_144;
 
-/** A Larian class/subclass id (`Wizard`, `EvocationSchool`). A one-word name fits; the companion only emits game data. */
-const bg3Ident = (max: number) => z.string().regex(/^[A-Za-z0-9_.]+$/).min(1).max(max);
+/** Rejects a string that is all hex and ≥ 8 chars — a GUID fragment (`6f2b8c1e`), not an id. */
+const NOT_LONG_HEX = '(?![0-9A-Fa-f]{8,}$)';
+
+/**
+ * A Larian class/subclass id (`Wizard`, `EvocationSchool`). A one-word name fits; the companion only emits game data.
+ * An unmapped class (a mod class known only by UUID) is omitted from `classLevels`, never sent as a UUID fragment.
+ */
+const bg3Ident = (max: number) => z.string().regex(new RegExp(`^${NOT_LONG_HEX}[A-Za-z0-9_.]+$`)).min(1).max(max);
 const Count = z.number().int().min(0).max(100_000_000);
 
 /**
@@ -37,13 +43,19 @@ const Count = z.number().int().min(0).max(100_000_000);
 export const DevBridgeBg3CursorSchema = z.string().regex(/^p[1-9][0-9]{0,3}_(saves|types|party)_[0-9]{1,6}$/);
 export const DevBridgeBg3NextSchema = DevBridgeBg3CursorSchema.nullable();
 
-/** NewAge type name: lowercase namespace + ≥2 dotted segments (`core.v0.Level`, `game.stats.v3.StatsComponent`). */
-export const DevBridgeBg3TypeNameSchema = z.string().regex(/^[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+){2,}$/).max(128);
+/**
+ * NewAge type-table name: a component record — lowercase namespace + ≥2 dotted segments
+ * (`core.v0.Level`, `game.stats.v3.StatsComponent`) — or a bare enum (`EAbility`, `EResistanceType`).
+ */
+export const DevBridgeBg3TypeNameSchema = z
+    .string()
+    .regex(new RegExp(`^${NOT_LONG_HEX}(?:[a-z][a-z0-9_]*(\\.[A-Za-z0-9_]+){2,}|E[A-Z][A-Za-z0-9]{1,80})$`))
+    .max(128);
 
 /** Item stats id: an uppercase Larian prefix, `_`, the rest (`ARM_Hat`, `WPN_Longsword_1`, `FOR_UnfortunateGnome`). */
-export const DevBridgeBg3StatsIdSchema = z.string().regex(/^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,90}$/).max(64);
+export const DevBridgeBg3StatsIdSchema = z.string().regex(/^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,57}$/).max(64);
 
-/** BG3 `ItemSlot` names, slot table 0–18. Adding a slot is additive only once readers accept it (see CONTRACT.md). */
+/** BG3 `ItemSlot` names, slot table 0–18. Adding a slot is breaking — a v1 validator rejects it (see CONTRACT.md). */
 export const BG3_EQUIPMENT_SLOTS = [
     'Helmet', 'Breast', 'Cloak', 'MeleeMainHand', 'MeleeOffHand', 'RangedMainHand', 'RangedOffHand', 'Ring', 'Underwear', 'Boots',
     'Gloves', 'Amulet', 'Ring2', 'Wings', 'Horns', 'Overhead', 'MusicalInstrument', 'VanityBody', 'VanityBoots',
@@ -135,8 +147,13 @@ export const DevBridgeBg3ClassLevelSchema = z
     .object({ classId: bg3Ident(64), subclassId: bg3Ident(64).nullable(), level: z.number().int().min(1).max(BG3_LEVEL_MAX) })
     .strict();
 
-/** One equipped item: the equipment slot name and the item's stats id (e.g. `ARM_Hat`). */
-export const DevBridgeBg3EquipmentSchema = z.object({ slot: DevBridgeBg3EquipmentSlotSchema, statsId: DevBridgeBg3StatsIdSchema }).strict();
+/**
+ * One equipped item: the equipment slot name and the item's stats id (e.g. `ARM_Hat`).
+ * `statsId` is null when the item's stats id does not fit the pattern (a modded item) — never rewritten to fit.
+ */
+export const DevBridgeBg3EquipmentSchema = z
+    .object({ slot: DevBridgeBg3EquipmentSlotSchema, statsId: DevBridgeBg3StatsIdSchema.nullable() })
+    .strict();
 
 /** Decoded fields of one party member; each is absent when its decoder is `unsupported` or `none`. */
 export const DevBridgeBg3DecodedSchema = z
@@ -147,7 +164,8 @@ export const DevBridgeBg3DecodedSchema = z
         classLevels: z.array(DevBridgeBg3ClassLevelSchema).max(BG3_CLASSES_MAX).optional(),
         equipment: z.array(DevBridgeBg3EquipmentSchema).max(BG3_EQUIPMENT_SLOTS.length).optional(),
     })
-    .strict();
+    .strict()
+    .superRefine((d, ctx) => checkUniqueBy(d.equipment ?? [], 'equipment', 'slot', (e) => e.slot, ctx));
 
 /** One party member by 0-based party index — never a name, GUID or profile id. */
 export const DevBridgeBg3PartyRowSchema = z

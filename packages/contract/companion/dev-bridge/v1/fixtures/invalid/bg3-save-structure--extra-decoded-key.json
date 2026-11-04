@@ -63,6 +63,13 @@
       "elementSize": 40,
       "count": 9,
       "decoder": "none"
+    },
+    {
+      "type": "EAbility",
+      "version": 0,
+      "elementSize": 4,
+      "count": 7,
+      "decoder": "none"
     }
   ],
   "checks": {
@@ -183,6 +190,12 @@
             "classId": "Cleric",
             "subclassId": "LifeDomain",
             "level": 6
+          }
+        ],
+        "equipment": [
+          {
+            "slot": "Cloak",
+            "statsId": null
           }
         ]
       }

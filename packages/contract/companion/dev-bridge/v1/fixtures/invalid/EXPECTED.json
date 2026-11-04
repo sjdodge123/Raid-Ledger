@@ -280,7 +280,7 @@
     "code": "invalid_format"
   },
   "bg3-save-structure--long-digit-id": {
-    "path": "party.0.decoded.classLevels.0.classId",
+    "path": "party.0.decoded.equipment.0.statsId",
     "code": "custom"
   },
   "bg3-save-structure--equipment-slot-free-text": {
@@ -298,6 +298,22 @@
   "bg3-saves--duplicate-save-ref": {
     "path": "saves.1.saveRef",
     "code": "custom"
+  },
+  "bg3-save-structure--guid-double-underscored": {
+    "path": "party.0.decoded.equipment.0.statsId",
+    "code": "custom"
+  },
+  "bg3-save-structure--guid-larian-handle-upper": {
+    "path": "party.0.decoded.equipment.0.statsId",
+    "code": "custom"
+  },
+  "bg3-save-structure--duplicate-equipment-slot": {
+    "path": "party.0.decoded.equipment.1.slot",
+    "code": "custom"
+  },
+  "bg3-save-structure--hex-fragment-class-id": {
+    "path": "party.0.decoded.classLevels.0.classId",
+    "code": "invalid_format"
   },
   "bg3-saves--next-folder-name": {
     "path": "next",

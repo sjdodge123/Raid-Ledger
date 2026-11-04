@@ -1236,6 +1236,12 @@
             "subclassId": "LifeDomain",
             "level": 6
           }
+        ],
+        "equipment": [
+          {
+            "slot": "Cloak",
+            "statsId": null
+          }
         ]
       }
     }

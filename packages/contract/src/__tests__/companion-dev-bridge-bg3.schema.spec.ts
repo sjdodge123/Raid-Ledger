@@ -49,7 +49,7 @@ const MESSAGE: Record<string, RegExp> = {
 describe('ROK-2077 bg3 fixtures', () => {
     it('ships the BG3 valid and invalid fixtures', () => {
         expect(bg3Names(FIX)).toEqual(expect.arrayContaining(['bg3-saves', 'bg3-save-structure', 'bg3-save-structure--unsupported', 'bg3-save-structure--types-page']));
-        expect(bg3Names(INVALID).length).toBeGreaterThanOrEqual(21);
+        expect(bg3Names(INVALID).length).toBeGreaterThanOrEqual(26);
     });
 
     it.each(bg3Names(FIX))('valid %s parses', (name) => {
@@ -91,7 +91,27 @@ const SLOT = ['party', 0, 'decoded', 'equipment', 0, 'slot'];
 const CLASS = ['party', 0, 'decoded', 'classLevels', 0, 'classId'];
 const SUBCLASS = ['party', 0, 'decoded', 'classLevels', 0, 'subclassId'];
 
+/** Every NewAge type name the spike's type table lists (SPIKE-bg3-character-page.md §2.3), brace groups expanded. */
+const SPIKE_TYPE_NAMES = [
+    'core.v0.Level', 'core.v0.EntityId', 'game.stats.v3.StatsComponent', 'game.stats.v0.ClassesComponent', 'game.stats.v0.HealthComponent',
+    'game.stats.v0.LevelComponent', 'game.experience.v0.ExperienceComponent', 'game.race.v0.RaceComponent',
+    'game.character_creation.v3.AppearanceComponent', 'game.character_creation.v1.AppearanceMaterialSetting',
+    'game.character_creation.v1.CharacterCreationStatsComponent', 'game.character_creation.v3.LevelUpComponent',
+    'game.character_creation.v0.OriginComponent', 'game.character_creation.v0.BackgroundComponent', 'game.character_creation.v0.GodComponent',
+    'game.character_creation.v0.IsCustomComponent', 'game.spell.v3.SpellBookComponent', 'game.spell.v1.AddedSpellsComponent',
+    'game.spell.v0.LearnedSpells', 'game.spell.v0.SpellBookPrepares', 'game.passives.v0.ToggledPassivesComponent',
+    'game.inventory.v0.OwnerComponent', 'game.inventory.v0.MemberComponent', 'game.inventory.v0.WieldingComponent',
+    'game.inventory.v0.StackMemberComponent', 'game.inventory.v1.ContainerComponent', 'game.character.v0.EquipmentVisualComponent',
+    'game.display_names.v2.Component', 'game.icon.v0.CustomIconsStorageComponent', 'game.icon.v0.CharacterCreationCustomIconComponent',
+    'game.avatar.v0.AvatarComponent', 'game.party.v0.MemberComponent', 'game.party.v0.WaypointsComponent', 'game.party.v0.UserSnapshotComponent',
+    'game.approval.v0.Ratings', 'EResistanceType', 'EProficiencyGroup', 'EAbility', 'game.damage.v0.EDamageType',
+];
+
 describe('ROK-2077 redaction by shape', () => {
+    it.each(SPIKE_TYPE_NAMES)('the spike type-table name %s parses as a types[].type', (t) => {
+        expect(structureIssuesAt(TYPE, t)).toEqual([]);
+    });
+
     const IDENT_LEAKS = ['C:\\Users\\x', 'Saves/Story', 'Tav the Brave', '6f2b8c1e-4d3a-4b7e-9a10-2c5d8e3f7a41', 'S_Player:1', ''];
     const hitsAt = (path: (string | number)[], leak: string) => structureIssuesAt(path, leak).some((i) => i.path === path.join('.'));
 
@@ -111,18 +131,35 @@ describe('ROK-2077 redaction by shape', () => {
 
     it('rejects a SteamID64 (or any 10+ digit run) in any string, with the digits message', () => {
         const steam64 = ['7656119', '8012345678'].join('');
-        expect(structureIssuesAt(CLASS, steam64)).toEqual([{ path: CLASS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_DIGITS_MESSAGE }]);
+        expect(structureIssuesAt(STATS, `ARM_${steam64}`)).toEqual([{ path: STATS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_DIGITS_MESSAGE }]);
+        expect(structureIssuesAt(CLASS, steam64).some((i) => i.path === CLASS.join('.'))).toBe(true);
         expect(structureIssuesAt(STATS, 'WPN_Sword_123456789')).toEqual([]);
         expect(structureIssuesAt(['saveRef'], '123456789012')).toEqual([]);
     });
 
     it('detects every GUID shape with one helper, and nothing a real id looks like', () => {
         const g = ['6f2b8c1e', '4d3a', '4b7e', '9a10', '2c5d8e3f7a41'];
-        const shapes = [g.join('-'), g.join('_'), g.join('.'), g.join(''), `{${g.join('-')}}`, `h${g.join('g')}`, g.join('').toUpperCase(), 'ab'.repeat(20)];
+        const shapes = [
+            g.join('-'), g.join('_'), g.join('.'), g.join(''), `{${g.join('-')}}`, `h${g.join('g')}`, g.join('').toUpperCase(), 'ab'.repeat(20),
+            g.join('__'), g.join('-_.'), `H${g.join('G').toUpperCase()}`,
+        ];
         expect(shapes.filter((s) => !bg3HoldsGuid(s))).toEqual([]);
         const ids = ['ARM_Hat', 'game.stats.v3.StatsComponent', '3f9a0c2b7d41', '4.1.1.6848561', 'EvocationSchool', 'p2_types_9'];
         expect(ids.filter(bg3HoldsGuid)).toEqual([]);
         expect(structureIssuesAt(CLASS, g.join('_'))).toEqual([{ path: CLASS.join('.'), code: 'custom', message: DEV_BRIDGE_BG3_GUID_MESSAGE }]);
+    });
+
+    it('rejects an all-hex GUID fragment of 8+ chars in classId, subclassId and type', () => {
+        for (const p of [CLASS, SUBCLASS, TYPE]) {
+            expect(structureIssuesAt(p, '6f2b8c1e').map((i) => `${i.path} ${i.code}`)).toEqual([`${p.join('.')} invalid_format`]);
+        }
+        expect(structureIssuesAt(TYPE, 'EDeadBeef').map((i) => i.code)).toEqual(['invalid_format']);
+        expect(structureIssuesAt(CLASS, 'Bard')).toEqual([]);
+    });
+
+    it('a statsId that does not fit is null, never rewritten', () => {
+        expect(structureIssuesAt(STATS, null)).toEqual([]);
+        expect(structureIssuesAt(STATS, 'Shadowheart_Robe').map((i) => i.code)).toEqual(['invalid_format']);
     });
 
     it('the BG3 cursor is a closed grammar: page, section, row offset — never a folder name', () => {

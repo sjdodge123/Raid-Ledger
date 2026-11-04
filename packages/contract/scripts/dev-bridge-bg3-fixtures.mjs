@@ -33,6 +33,7 @@ const types = [
     T('game.inventory.v0.MemberComponent', 0, 16, 3_116, 'ok'),
     T('game.icon.v0.CustomIconsStorageComponent', 0, 24, 1, 'unsupported'),
     T('game.approval.v0.Ratings', 0, 40, 9, 'none'),
+    T('EAbility', 0, 4, 7, 'none'),
 ];
 const checks = {
     partyEntitiesFound: 4, partyMatchesSaveInfo: true, portraitsFound: 8, portraitsMapped: 4,
@@ -54,7 +55,7 @@ const structure = {
         member(0, { str: 17, dex: 14, con: 15, int: 8, wis: 12, cha: 10 }, 'Fighter', 'BattleMaster'),
         member(1, { str: 8, dex: 14, con: 14, int: 17, wis: 12, cha: 10 }, 'Wizard', 'EvocationSchool'),
         member(2, { str: 10, dex: 17, con: 14, int: 12, wis: 13, cha: 8 }, 'Rogue', null),
-        { slot: 3, decoded: { classLevels: [{ classId: 'Cleric', subclassId: 'LifeDomain', level: 6 }] } },
+        { slot: 3, decoded: { classLevels: [{ classId: 'Cleric', subclassId: 'LifeDomain', level: 6 }], equipment: [{ slot: 'Cloak', statsId: null }] } },
     ],
     next: null,
 };
@@ -65,7 +66,7 @@ const unsupported = {
     party: [{ slot: 0, decoded: {} }, { slot: 1, decoded: {} }],
     next: null,
 };
-const typesPage = { saveRef: '3f9a0c2b7d41', types, checks, party: [], next: 'p2_types_9' };
+const typesPage = { saveRef: '3f9a0c2b7d41', types, checks, party: [], next: 'p2_types_10' };
 
 export const BG3_VALID = {
     'bg3-saves': saves,
@@ -79,6 +80,8 @@ export const BG3_VALID = {
 // synthetic 17-digit id and the real Steam64 shape is an in-memory spec case.
 const GUID_UNDASHED = '6f2b8c1e4d3a4b7e9a102c5d8e3f7a41';
 const GUID_UNDERSCORED = '6f2b8c1e_4d3a_4b7e_9a10_2c5d8e3f7a41';
+const GUID_DOUBLE_UNDERSCORED = '6f2b8c1e__4d3a__4b7e__9a10__2c5d8e3f7a41';
+const LARIAN_HANDLE_UPPER = 'H6F2B8C1EG4D3AG4B7EG9A10G2C5D8E3F7A41';
 const LARIAN_HANDLE = 'h6f2b8c1eg4d3ag4b7eg9a10g2c5d8e3f7a41';
 const CLASS = 'party.0.decoded.classLevels.0.classId';
 const STATS = 'party.0.decoded.equipment.0.statsId';
@@ -100,10 +103,14 @@ export const BG3_CASES = [
     ['bg3-save-structure--guid-underscored', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${GUID_UNDERSCORED}`; }, STATS, 'custom'],
     ['bg3-save-structure--guid-larian-handle', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${LARIAN_HANDLE}`; }, STATS, 'custom'],
     ['bg3-save-structure--stats-id-display-name', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'Astarion'; }, STATS, 'invalid_format'],
-    ['bg3-save-structure--long-digit-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = '90000000012345678'; }, CLASS, 'custom'],
+    ['bg3-save-structure--long-digit-id', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = 'ARM_90000000012345678'; }, STATS, 'custom'],
     ['bg3-save-structure--equipment-slot-free-text', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].slot = 'Lucky_hat'; }, 'party.0.decoded.equipment.0.slot', 'invalid_value'],
     ['bg3-save-structure--duplicate-slot', 'bg3-save-structure', (m) => { m.party[1].slot = 0; }, 'party.1.slot', 'custom'],
     ['bg3-save-structure--next-folder-name', 'bg3-save-structure', (m) => { m.next = 'Tav_1234__QuickSave_12'; }, 'next', 'invalid_format'],
     ['bg3-saves--duplicate-save-ref', 'bg3-saves', (m) => { m.saves[1].saveRef = m.saves[0].saveRef; }, 'saves.1.saveRef', 'custom'],
+    ['bg3-save-structure--guid-double-underscored', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${GUID_DOUBLE_UNDERSCORED}`; }, STATS, 'custom'],
+    ['bg3-save-structure--guid-larian-handle-upper', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[0].statsId = `ARM_${LARIAN_HANDLE_UPPER}`; }, STATS, 'custom'],
+    ['bg3-save-structure--duplicate-equipment-slot', 'bg3-save-structure', (m) => { m.party[0].decoded.equipment[1].slot = 'Helmet'; }, 'party.0.decoded.equipment.1.slot', 'custom'],
+    ['bg3-save-structure--hex-fragment-class-id', 'bg3-save-structure', (m) => { m.party[0].decoded.classLevels[0].classId = '6f2b8c1e'; }, CLASS, 'invalid_format'],
     ['bg3-saves--next-folder-name', 'bg3-saves', (m) => { m.next = 'Tav-1234__QuickSave_12'; }, 'next', 'invalid_format'],
 ];
