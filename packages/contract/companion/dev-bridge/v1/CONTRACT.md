@@ -286,9 +286,17 @@ line or image byte. Concretely:
   | Field | Shape | Name-proof by shape? |
   |---|---|---|
   | equipment `slot` | closed enum of the 19 BG3 `ItemSlot` names (`Helmet`, `Breast`, `Cloak`, `MeleeMainHand`, `MeleeOffHand`, `RangedMainHand`, `RangedOffHand`, `Ring`, `Underwear`, `Boots`, `Gloves`, `Amulet`, `Ring2`, `Wings`, `Horns`, `Overhead`, `MusicalInstrument`, `VanityBody`, `VanityBoots`) | **yes** |
-  | `statsId` | `^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,90}$`, ≤ 64 (`ARM_Hat`, `WPN_Longsword_1`) | **mostly** — a bare name (`Astarion`) or a path does not fit; a name behind a fake prefix (`X_Astarion`) would |
-  | `types[].type` | `^[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+){2,}$`, ≤ 128 (`core.v0.Level`, `game.stats.v3.StatsComponent`) | **mostly** — a bare or capitalised name does not fit |
+  | `statsId` | `^[A-Z][A-Z0-9]{1,5}_[A-Za-z0-9_]{1,57}$`, ≤ 64 (`ARM_Hat`, `WPN_Longsword_1`), or `null` | **mostly** — a bare name (`Astarion`) or a path does not fit; a name behind a fake 2–6 char prefix (`AB_Astarion`) would |
+  | `types[].type` | a component record `[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+){2,}` (`core.v0.Level`, `game.stats.v3.StatsComponent`) or a bare enum `E[A-Z][A-Za-z0-9]{1,80}` (`EAbility`, `EResistanceType`), ≤ 128 | **mostly** — a bare or capitalised name does not fit; a lower-case dotted string (`tav.is.great`) or an `E`-prefixed name (`EAstarion`) would |
   | `classId`, `subclassId` | `^[A-Za-z0-9_.]+$`, ≤ 64 (`Wizard`, `EvocationSchool`) | **no** — a one-word name (`Tav`) fits. These rely on the companion emitting only values it read from game data. |
+
+  `classId`, `subclassId` and `type` also reject a string that is all hex
+  and ≥ 8 chars (`6f2b8c1e`, a GUID fragment), as `invalid_format`.
+- **Values that do not fit are dropped, never rewritten.** An equipped item
+  whose stats id does not match the `statsId` pattern (a modded item, e.g.
+  `Shadowheart_Robe`) is sent with `statsId: null`. A class the companion
+  cannot map to a Larian class id (a mod class known only by UUID) is left
+  out of `classLevels`; it is never sent as a UUID fragment.
 
   None of them admits `/`, `\`, `:`, `-` or a space, so no path, dashed GUID
   or multi-word name fits any of them.
@@ -296,11 +304,18 @@ line or image byte. Concretely:
   - a **GUID** (`custom`, "A GUID is not allowed in a BG3 dev-bridge body"):
     32 hex digits split 8-4-4-4-12 by `-`, `_`, `.` or nothing (braced or
     not), a Larian handle (`h` + 8 hex + `g` + 4 hex …), or any run of ≥ 32
-    hex digits. A base64-encoded GUID has no detectable shape — an accepted
-    residual that relies on the companion;
+    hex digits — also after every `-`, `_`, `.`, `{` and `}` is stripped, so
+    a GUID split by separator runs of any length (`__`) is caught; the Larian
+    handle check ignores case. A base64-encoded GUID and a truncated one
+    (< 32 hex) have no detectable shape — accepted residuals that rely on
+    the companion;
   - a **run of ≥ 10 decimal digits** (`custom`, "A run of 10 or more digits
     (a profile or platform id) is not allowed …") — SteamID64s, Larian
-    profile ids. `saveRef` is exempt: its 12-hex pattern already bounds it.
+    profile ids. `saveRef` is exempt: its 12-hex pattern keeps a SteamID64
+    out, but a 10–12 digit id would fit; `saveRef` relies on its HMAC
+    derivation for that. The rule also rejects a 10-digit `gameVersion`
+    segment (`4.1.1.1234567890`), which `bg3-save` allows; real builds are
+    7 digits (`4.1.1.6758295`), so this is deliberate, not a bug.
 - `saveRef` (`^[0-9a-f]{12}$`) is the first 12 lowercase hex chars of
   `HMAC-SHA256(key = a random per-install secret, message = the save's path
   relative to the save root)`. It is stable while the save keeps its path
@@ -308,8 +323,10 @@ line or image byte. Concretely:
   low-entropy save name could be). `campaignKeyPrefix` is the first 8 hex
   chars of the row's `bg3-save` `campaignKey` (`^[0-9a-f]{8}$`), so a row
   joins to the uploads it produced without exposing the full key.
-- `saves[].saveRef` is unique within a page, and so is `party[].slot`
-  (`custom`, "Duplicate saveRef … in saves" / "Duplicate slot … in party").
+- `saves[].saveRef` is unique within a page, and so is `party[].slot`;
+  `equipment[].slot` is unique within one party row (`custom`, "Duplicate
+  saveRef … in saves" / "Duplicate slot … in party" / "Duplicate slot … in
+  equipment").
 - **Cursor.** Both bodies use their own `next` grammar,
   `^p[1-9][0-9]{0,3}_(saves|types|party)_[0-9]{1,6}$` — page number,
   section, row offset (e.g. `p2_types_9`) — not the shared 128-char cursor,
