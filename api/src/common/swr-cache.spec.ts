@@ -271,3 +271,47 @@ describe('memorySwr — failed blocking fetch (ROK-1636)', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * The anonymous /blizzard/instance/:id route feeds a memorySwr cache, so an
+ * id walk must not grow it without bound: `maxEntries` evicts the oldest.
+ */
+describe('memorySwr — maxEntries', () => {
+  const fetchKey = (
+    cache: Map<string, MemoryCacheEntry<string>>,
+    key: string,
+    maxEntries?: number,
+  ) =>
+    memorySwr({
+      cache,
+      key,
+      ttlMs: 10000,
+      fetcher: () => Promise.resolve(`value-${key}`),
+      ...(maxEntries !== undefined ? { maxEntries } : {}),
+    });
+
+  it('evicts the oldest entry once the cap is exceeded', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string>>();
+    for (const key of ['a', 'b', 'c']) await fetchKey(cache, key, 2);
+    expect([...cache.keys()]).toEqual(['b', 'c']);
+  });
+
+  it('treats a re-fetched key as the newest entry', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string>>();
+    await fetchKey(cache, 'a', 2);
+    await fetchKey(cache, 'b', 2);
+    const a = cache.get('a');
+    if (!a) throw new Error('entry a was not cached');
+    cache.set('a', { ...a, staleAt: 0, expiresAt: 0 });
+    await fetchKey(cache, 'a', 2);
+    await fetchKey(cache, 'c', 2);
+    expect([...cache.keys()]).toEqual(['a', 'c']);
+  });
+
+  it('keeps every entry when maxEntries is omitted', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string>>();
+    const keys = ['a', 'b', 'c', 'd', 'e'];
+    for (const key of keys) await fetchKey(cache, key);
+    expect([...cache.keys()]).toEqual(keys);
+  });
+});
