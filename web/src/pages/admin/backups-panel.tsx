@@ -172,7 +172,7 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
                     <Button size="sm" variant="warning-soft" onClick={() => onRestore(backup)}>Restore</Button>
-                    <Button size="sm" variant="destructive-soft" onClick={() => onDelete(backup)}>Delete</Button>
+                    <Button size="sm" variant="destructive-soft" disabled={backup.uploadsArchive?.state === 'archiving'} onClick={() => onDelete(backup)}>Delete</Button>
                 </div>
             </td>
         </tr>
