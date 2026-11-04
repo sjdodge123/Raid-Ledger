@@ -3882,3 +3882,9 @@ same day (#1278, #1279, #1280).
 
 - **resolved** line 2842 (`api/src/lineups/common-ground-query.helpers.ts`) — fixed (f867fe267).
 - **resolved** line 2808 (`api/src/characters/characters-identity.helpers.ts`) — fixed (e288b3a12).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04 (surfaced during the overnight batch A review, REVIEW-TD-2026-11-04.md)
+
+- **low** `api/src/common/swr-cache.ts` (`memorySwr` `maxEntries`, batch A) — eviction is first-in-first-out because a cache hit never moves the entry to newest, so anonymous requests for made-up `/blizzard/instance/:id` ids can push real entries out and force fresh Blizzard calls. Suggested: move the entry to newest on a hit when `maxEntries` is set.
+- **nit** `api/src/plugins/wow-common/blizzard.constants.ts` (detail cache cap 500) — the cap may be smaller than the real instance set. Suggested: size it from the instance list count.
+- **low** `api/src/notifications/notification-prefs.helpers.ts` (batch A strict schema) — junk preference values saved before the PATCH validation landed can still break follow-up SQL that reads them. Suggested: a read-side filter or a one-off cleanup.
