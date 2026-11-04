@@ -3890,3 +3890,13 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2862 (`api/src/plugins/wow-common/blizzard.service.ts:255`, never-pruned instance detail cache) — fixed on chore/tech-debt-2026-11-04 (b4076a987).
 - **resolved** line 2818 (`api/src/users/users-controller.helpers.ts` + `game-time.service.ts`, week year range + unbounded composite cache) — fixed on chore/tech-debt-2026-11-04 (0f5507205).
 - **resolved** line 2816 (`api/src/taste-profile/taste-profile.controller.ts` + `queries/taste-profile-queries.ts`, deactivated-user rule) — fixed on chore/tech-debt-2026-11-04 (904a8a543).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04e (overnight tech-debt batch E, verified on 120955165)
+
+- **resolved** line 2590 (`api/src/calendar-sync/providers/google/google-write.helpers.ts`, `assertWriteOk` mapped a 403 quota/daily-limit to ProviderAuthError → needs_reconnect) — fixed on chore/tech-debt-2026-11-04e (f1b65b679): one shared `GOOGLE_QUOTA_REASONS` set for read + write.
+- **resolved** line 2878 (`lineup-notification-deadline-extended.helpers.ts:75`, private-lineup deadline embed) — already fixed on main.
+- **resolved** line 2880 (`lineups-voting.helpers.ts:67`, vote for a game that isn't nominated) — already fixed on main.
+- **resolved** line 3751 (roster-insights member-path integration test) — already covered on main (`demo-test-guild.integration.spec.ts:405`).
+- **resolved** line 2317 (`scheduling.controller.ts` private-poll side reads) — already gated on main (`scheduling-side-reads.helpers.ts:40,63`).
+- **resolved** line 2288 (`checkAutoBench` counted tentative assignments) — already fixed on main (`hasDisplaceableTentative`).
+- **partial** line 2346 (duplicate `checkAutoBench` copies) — only the live `signup-allocation` copy remains.
