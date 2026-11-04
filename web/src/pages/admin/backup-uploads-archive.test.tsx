@@ -54,6 +54,11 @@ describe('createdBackupMessage', () => {
             .toBe('Backup created — archiving uploads in the background');
     });
 
+    it('still toasts when the response carries no backup entry (list scan missed it)', () => {
+        expect(createdBackupMessage({ message: `Backup created: ${BACKUP.filename}` }))
+            .toBe(`Backup created: ${BACKUP.filename}`);
+    });
+
     it('keeps the server message when there is no running archive', () => {
         expect(createdBackupMessage({ message: `Backup created: ${BACKUP.filename}`, backup: BACKUP }))
             .toBe(`Backup created: ${BACKUP.filename}`);

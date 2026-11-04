@@ -82,6 +82,9 @@ describe('UploadsArchiveTracker', () => {
     expect(tracker.stateOf(OTHER)).toBeUndefined();
   });
 
+});
+
+describe('UploadsArchiveTracker — failure copy', () => {
   it('a failure lists a fixed message per reason — never the raw detail with server paths', async () => {
     const tracker = new UploadsArchiveTracker(dir);
     await tracker.run(DUMP, () =>

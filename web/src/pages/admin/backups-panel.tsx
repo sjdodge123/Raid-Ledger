@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 import { formatSize, formatDate, TYPE_BADGE, createdBackupMessage } from './backup-panel-utils';
 import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 import { UploadsArchiveStatus } from './backup-uploads-archive';
+import { anyArchiving } from '../../hooks/backup-archive-poll';
 
 type FilterType = 'all' | 'daily' | 'migration';
 
@@ -66,7 +67,7 @@ export function BackupsPanel() {
 
     return (
         <div className="space-y-6">
-            <BackupHeader onCreateBackup={h.handleCreate} isCreating={h.createBackup.isPending} />
+            <BackupHeader onCreateBackup={h.handleCreate} isCreating={h.createBackup.isPending} archiveRunning={anyArchiving(allBackups)} />
             <FilterPills filter={filter} setFilter={setFilter} allBackups={allBackups} dailyCount={dailyCount} migrationCount={migrationCount} />
             <BackupStates isLoading={h.backups.isLoading} isError={h.backups.isError} isEmpty={allBackups.length === 0} hasData={!!h.backups.data} />
             {filtered.length > 0 && <BackupTable filtered={filtered} tz={tz} onRestore={h.setRestoreTarget} onDelete={h.setDeleteTarget} />}
@@ -84,17 +85,20 @@ function NoFilterMatch({ show }: { show: boolean }): JSX.Element | null {
     return <div className="py-12 text-center text-muted text-sm">No backups match the selected filter.</div>;
 }
 
-function BackupHeader({ onCreateBackup, isCreating }: { onCreateBackup: () => void; isCreating: boolean }): JSX.Element {
+function BackupHeader({ onCreateBackup, isCreating, archiveRunning }: { onCreateBackup: () => void; isCreating: boolean; archiveRunning: boolean }): JSX.Element {
     return (
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
             <div>
                 <h2 className="text-xl font-semibold text-foreground">Backups</h2>
                 <p className="text-sm text-muted mt-1">Manage database backups. Daily backups run automatically at 2 AM with 30-day retention.</p>
             </div>
-            <button onClick={onCreateBackup} disabled={isCreating}
-                className="px-4 py-2 text-sm font-medium bg-success/20 text-success border border-success/40 rounded-lg hover:bg-success/30 transition-colors disabled:opacity-50 whitespace-nowrap">
-                {isCreating ? 'Creating...' : 'Create Backup'}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+                <button onClick={onCreateBackup} disabled={isCreating || archiveRunning} aria-describedby={archiveRunning ? 'backup-create-hint' : undefined}
+                    className="px-4 py-2 text-sm font-medium bg-success/20 text-success border border-success/40 rounded-lg hover:bg-success/30 transition-colors disabled:opacity-50 whitespace-nowrap">
+                    {isCreating ? 'Creating...' : 'Create Backup'}
+                </button>
+                {archiveRunning && <p id="backup-create-hint" className="text-xs text-muted text-right">Available once the uploads archive finishes</p>}
+            </div>
         </div>
     );
 }

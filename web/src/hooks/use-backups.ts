@@ -3,7 +3,7 @@ import type { BackupFileDto, BackupListResponseDto } from '@raid-ledger/contract
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import { nativeFetch } from '../lib/api/native-fetch';
-import { backupsRefetchInterval } from './backup-archive-poll';
+import { backupErrorMessage, backupsRefetchInterval } from './backup-archive-poll';
 
 function backupHeaders(): Record<string, string> {
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() || ''}` };
@@ -11,7 +11,7 @@ function backupHeaders(): Record<string, string> {
 
 async function backupFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
     const response = await nativeFetch(`${API_BASE_URL}${path}`, { method, headers: backupHeaders() });
-    if (!response.ok) throw new Error(errorMsg);
+    if (!response.ok) throw new Error(await backupErrorMessage(response, errorMsg));
     return response.json();
 }
 
@@ -30,7 +30,7 @@ function useBackupMutations() {
     const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
 
     const createBackup = useMutation({
-        mutationFn: () => backupFetch<{ success: boolean; message: string; backup: BackupFileDto }>('/admin/backups', 'POST', 'Failed to create backup'),
+        mutationFn: () => backupFetch<{ success: boolean; message: string; backup?: BackupFileDto }>('/admin/backups', 'POST', 'Failed to create backup'),
         onSuccess: invalidate,
     });
 

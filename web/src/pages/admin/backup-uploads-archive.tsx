@@ -15,7 +15,7 @@ export function UploadsArchiveStatus({ archive }: { archive: UploadsArchive | un
 
 function ArchivingChip(): JSX.Element {
     return (
-        <span role="status" className="block mt-1 font-sans">
+        <span role="status" className="block mt-1">
             <StatusChip tone="neutral" title="The uploads archive is still being written">
                 <span aria-hidden="true" className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
                 Archiving uploads…
@@ -27,7 +27,7 @@ function ArchivingChip(): JSX.Element {
 function ReadyChip({ sizeBytes }: { sizeBytes: number | undefined }): JSX.Element {
     const label = sizeBytes === undefined ? 'Uploads archived' : `Uploads ${formatSize(sizeBytes)}`;
     return (
-        <span className="block mt-1 font-sans">
+        <span className="block mt-1">
             <StatusChip tone="success" title="Uploads archive ready">{label}</StatusChip>
         </span>
     );

@@ -24,7 +24,7 @@ export const TYPE_BADGE: Record<string, string> = {
 };
 
 /** Toast copy after a manual Create backup — never claims the uploads archive is done while it runs. */
-export function createdBackupMessage(data: { message: string; backup: BackupFileDto }): string {
-    if (data.backup.uploadsArchive?.state === 'archiving') return 'Backup created — archiving uploads in the background';
+export function createdBackupMessage(data: { message: string; backup?: BackupFileDto | undefined }): string {
+    if (data.backup?.uploadsArchive?.state === 'archiving') return 'Backup created — archiving uploads in the background';
     return data.message;
 }
