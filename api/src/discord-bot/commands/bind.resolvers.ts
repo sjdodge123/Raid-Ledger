@@ -1,5 +1,6 @@
 import { ChannelType, type ChatInputCommandInteraction } from 'discord.js';
 import { ilike, eq } from 'drizzle-orm';
+import { escapeLikePattern } from '../../common/search.util';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
@@ -65,7 +66,7 @@ export async function resolveGame(
   const [match] = await db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(ilike(schema.games.name, gameName))
+    .where(ilike(schema.games.name, escapeLikePattern(gameName)))
     .limit(1);
   if (!match) {
     await interaction.editReply(`Game "${gameName}" not found.`);
