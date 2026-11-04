@@ -3899,3 +3899,12 @@ same day (#1278, #1279, #1280).
 - **resolved** line 1936 (`EventDetailRoster.tsx`) — fixed on main by ROK-1694 (`:103-106`).
 - **resolved** line 1229 (search-param writes) — fixed on main by ROK-1525 (`useSearchParamWrite`).
 - **low** `web/src/lib/sentry-reporting-transport.ts:59` (`reportUndeliveredSends`, review r-td6-delta) — `@sentry/core` `transports/base.js:14-26` filters envelope items per category, so when only the `error` category is rate-limited the event item is dropped but an attached screenshot (`attachment` category) still goes out and gets a 2xx; feedback then reads as delivered. Pre-existing in round 1, narrow. Suggested: in `captureMessageVerified`, record the event ids of failed/filtered envelopes and compare with the id `Sentry.captureMessage` returns, or check the `x-sentry-rate-limits` state for `error` before trusting a 2xx.
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04d (overnight batch D)
+
+- **resolved** line 2706 (`web/src/lib/api/preferences-api.ts`, debounced preference writes lost on unload) — fixed (9c37a5341).
+- **resolved** line 2619 + low 2620 (`web/src/plugins/plugin-slot.tsx:22`, fallback hidden by foreign-slug registrations) — fixed (72fafd6f7).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04d (surfaced during the overnight batch D review)
+
+- **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
+- **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
