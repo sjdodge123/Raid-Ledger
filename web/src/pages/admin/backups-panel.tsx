@@ -6,8 +6,9 @@ import { useBackups } from '../../hooks/use-backups';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
-import { formatSize, formatDate, TYPE_BADGE } from './backup-panel-utils';
+import { formatSize, formatDate, TYPE_BADGE, createdBackupMessage } from './backup-panel-utils';
 import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
+import { UploadsArchiveStatus } from './backup-uploads-archive';
 
 type FilterType = 'all' | 'daily' | 'migration';
 
@@ -29,7 +30,7 @@ function useBackupState() {
 function useBackupActions(state: ReturnType<typeof useBackupState>) {
     const { createBackup, deleteBackup, restoreBackup, resetInstance, queryClient, deleteTarget, setDeleteTarget, restoreTarget, setRestoreTarget, setShowResetModal, setResetResult } = state;
     const handleCreate = (): void => {
-        createBackup.mutate(undefined, { onSuccess: (data) => toast.success(data.message), onError: (err) => toast.error(err.message) });
+        createBackup.mutate(undefined, { onSuccess: (data) => toast.success(createdBackupMessage(data)), onError: (err) => toast.error(err.message) });
     };
     const handleDelete = (): void => {
         if (!deleteTarget) return;
@@ -160,6 +161,7 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
             <td className="px-4 py-3 font-mono text-xs text-foreground truncate max-w-[200px]">
                 {backup.filename}
                 <span className="sm:hidden block text-muted font-sans mt-0.5">{formatDate(backup.createdAt, tz)}</span>
+                <UploadsArchiveStatus archive={backup.uploadsArchive} />
             </td>
             <td className="px-4 py-3 text-muted hidden sm:table-cell">{formatDate(backup.createdAt, tz)}</td>
             <td className="px-4 py-3 text-muted hidden md:table-cell">{formatSize(backup.sizeBytes)}</td>

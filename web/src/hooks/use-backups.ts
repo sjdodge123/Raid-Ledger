@@ -3,6 +3,7 @@ import type { BackupFileDto, BackupListResponseDto } from '@raid-ledger/contract
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import { nativeFetch } from '../lib/api/native-fetch';
+import { backupsRefetchInterval } from './backup-archive-poll';
 
 function backupHeaders(): Record<string, string> {
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() || ''}` };
@@ -20,6 +21,7 @@ function useBackupQuery() {
         queryFn: () => backupFetch('/admin/backups', 'GET', 'Failed to fetch backups'),
         enabled: !!getAuthToken(),
         staleTime: 15_000,
+        refetchInterval: (query) => backupsRefetchInterval(query.state.data),
     });
 }
 
