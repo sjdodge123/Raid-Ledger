@@ -96,34 +96,6 @@ describe('useGalleryZoom (ROK-2075)', () => {
         expect(Number(zoomOf())).toBeGreaterThan(1);
     });
 
-    it('a pinch is announced once, when it settles — never per frame', () => {
-        render(<Harness resetKey={1} />);
-        const stage = screen.getByTestId('stage');
-        const announced = (): string | null => screen.getByTestId('content').getAttribute('data-announced');
-        fireEvent.pointerDown(stage, { pointerId: 1, pointerType: 'touch', button: 0, clientX: 150, clientY: 150 });
-        fireEvent.pointerDown(stage, { pointerId: 2, pointerType: 'touch', button: 0, clientX: 250, clientY: 150 });
-        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 150 });
-        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
-        expect(zoomOf()).toBe('2.00');
-        expect(announced(), 'mid-pinch: the readout holds').toBe('1.00');
-        fireEvent.pointerUp(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
-        fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 150 });
-        expect(announced(), 'settled: the readout takes the final zoom').toBe('2.00');
-    });
-
-    it('a ctrl-wheel run that stops just above fit snaps back to fit once it settles', () => {
-        vi.useFakeTimers();
-        try {
-            render(<Harness resetKey={1} />);
-            fireEvent.wheel(screen.getByTestId('stage'), { deltaY: -2, ctrlKey: true });
-            expect(zoomOf()).toBe('1.02');
-            act(() => { vi.advanceTimersByTime(GALLERY_WHEEL_SETTLE_MS); });
-            expect(zoomOf(), 'settled below the 1.05 snap: back to fit').toBe('1.00');
-        } finally {
-            vi.useRealTimers();
-        }
-    });
-
     it('a double-click toggles fit ↔ 2×', () => {
         render(<Harness resetKey={1} />);
         const stage = screen.getByTestId('stage');
@@ -200,5 +172,39 @@ describe('useGalleryZoom gestures + keys (ROK-2075)', () => {
         render(<Harness resetKey={1} />);
         act(() => { fireEvent.keyDown(screen.getByTestId('inner'), { key: '+', ctrlKey: true }); });
         expect(zoomOf()).toBe('1.00');
+    });
+});
+
+describe('useGalleryZoom — settling (ROK-2075 review)', () => {
+    let restore: () => void;
+    beforeEach(() => { restore = stubLayout(); });
+    afterEach(() => restore());
+
+    it('a pinch is announced once, when it settles — never per frame', () => {
+        render(<Harness resetKey={1} />);
+        const stage = screen.getByTestId('stage');
+        const announced = (): string | null => screen.getByTestId('content').getAttribute('data-announced');
+        fireEvent.pointerDown(stage, { pointerId: 1, pointerType: 'touch', button: 0, clientX: 150, clientY: 150 });
+        fireEvent.pointerDown(stage, { pointerId: 2, pointerType: 'touch', button: 0, clientX: 250, clientY: 150 });
+        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 300, clientY: 150 });
+        fireEvent.pointerMove(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
+        expect(zoomOf()).toBe('2.00');
+        expect(announced(), 'mid-pinch: the readout holds').toBe('1.00');
+        fireEvent.pointerUp(stage, { pointerId: 2, pointerType: 'touch', clientX: 350, clientY: 150 });
+        fireEvent.pointerUp(stage, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 150 });
+        expect(announced(), 'settled: the readout takes the final zoom').toBe('2.00');
+    });
+
+    it('a ctrl-wheel run that stops just above fit snaps back to fit once it settles', () => {
+        vi.useFakeTimers();
+        try {
+            render(<Harness resetKey={1} />);
+            fireEvent.wheel(screen.getByTestId('stage'), { deltaY: -2, ctrlKey: true });
+            expect(zoomOf()).toBe('1.02');
+            act(() => { vi.advanceTimersByTime(GALLERY_WHEEL_SETTLE_MS); });
+            expect(zoomOf(), 'settled below the 1.05 snap: back to fit').toBe('1.00');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

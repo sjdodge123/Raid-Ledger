@@ -63,17 +63,6 @@ describe('gallery zoom maths (ROK-2075)', () => {
         expect(zoomReducer({ ...MEASURED, zoom: 1.6 }, { type: 'settle' }).zoom).toBe(1.6);
     });
 
-    it('announces discrete steps and settles, never a pinch or wheel frame', () => {
-        const wheeled = zoomReducer(MEASURED, { type: 'zoomBy', factor: 1.2 });
-        expect(wheeled).toMatchObject({ zoom: 1.2, announced: 1 });
-        expect(zoomReducer(wheeled, { type: 'settle' }).announced).toBe(1.2);
-        expect(zoomReducer(MEASURED, { type: 'zoomBy', factor: 1.5, animate: true }).announced).toBe(1.5);
-    });
-
-    it('returns the same state object when nothing changed (a drag at fit), so React skips the render', () => {
-        expect(zoomReducer(MEASURED, { type: 'pan', dx: 40, dy: 10 })).toBe(MEASURED);
-    });
-
     it('fit resets zoom and offset', () => {
         expect(zoomReducer({ ...MEASURED, zoom: 3, x: 90, y: -40 }, { type: 'fit' })).toMatchObject({ zoom: 1, x: 0, y: 0 });
         expect(zoomReducer({ ...MEASURED, zoom: 3, x: 90, animate: true }, { type: 'reset' }), 'a new picture never animates').toMatchObject({ zoom: 1, x: 0, animate: false });
@@ -116,5 +105,18 @@ describe('gallery zoom input rules (ROK-2075)', () => {
         expect(isDoubleTap(first, 1400, { x: 0, y: 0 })).toBe(false);
         expect(isDoubleTap(first, 1100, { x: 50, y: 0 })).toBe(false);
         expect(isDoubleTap(null, 1100, { x: 0, y: 0 })).toBe(false);
+    });
+});
+
+describe('zoomReducer — readout + render economy (ROK-2075 review)', () => {
+    it('announces discrete steps and settles, never a pinch or wheel frame', () => {
+        const wheeled = zoomReducer(MEASURED, { type: 'zoomBy', factor: 1.2 });
+        expect(wheeled).toMatchObject({ zoom: 1.2, announced: 1 });
+        expect(zoomReducer(wheeled, { type: 'settle' }).announced).toBe(1.2);
+        expect(zoomReducer(MEASURED, { type: 'zoomBy', factor: 1.5, animate: true }).announced).toBe(1.5);
+    });
+
+    it('returns the same state object when nothing changed (a drag at fit), so React skips the render', () => {
+        expect(zoomReducer(MEASURED, { type: 'pan', dx: 40, dy: 10 })).toBe(MEASURED);
     });
 });

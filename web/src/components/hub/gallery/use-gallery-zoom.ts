@@ -13,7 +13,7 @@
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
     GALLERY_KEY_PAN_PX, GALLERY_TAP_SLOP_PX, GALLERY_ZOOM_MAX, GALLERY_ZOOM_STEP, INITIAL_ZOOM_STATE, type Point, type ZoomAction,
-    type ZoomState, isAtFit, isDoubleTap, pinchGeometry, swipeDirection, wheelDeltaPx, wheelZoomFactor, zoomReducer,
+    isAtFit, isDoubleTap, pinchGeometry, swipeDirection, wheelDeltaPx, wheelZoomFactor, zoomReducer,
 } from './gallery-zoom.math';
 
 export type GallerySwipe = 'prev' | 'next';
@@ -144,10 +144,9 @@ function endGesture(g: Gesture, point: Point, atFit: boolean, dispatch: (a: Zoom
     g.multi = false;
 }
 
-function usePointerHandlers(state: ZoomState, dispatch: (a: ZoomAction) => void, onSwipe?: (d: GallerySwipe) => void): GalleryZoomHandlers {
+function usePointerHandlers(atFit: boolean, dispatch: (a: ZoomAction) => void, onSwipe?: (d: GallerySwipe) => void): GalleryZoomHandlers {
     const g = useRef<Gesture>({ pointers: new Map(), start: null, moved: false, multi: false, touch: false, lastTap: null });
-    const live = useRef({ atFit: isAtFit(state), onSwipe });
-    const atFit = isAtFit(state);
+    const live = useRef({ atFit, onSwipe });
     useEffect(() => { live.current = { atFit, onSwipe }; }, [atFit, onSwipe]);
     return useMemo(() => {
         const lift = (e: PointerEvent<HTMLElement>, cancelled: boolean): void => {
@@ -161,7 +160,8 @@ function usePointerHandlers(state: ZoomState, dispatch: (a: ZoomAction) => void,
                 const gesture = g.current;
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                 // Prev / Next / zoom controls sit over the stage: capturing their pointer would swallow the click.
-                if (e.target instanceof Element && e.target.closest('button, a') !== null) return;
+                const hit = e.target instanceof Element ? e.target.closest('button, a, [role="button"]') : null;
+                if (hit !== null && e.currentTarget.contains(hit)) return;
                 e.currentTarget.setPointerCapture?.(e.pointerId);
                 const point = fromCentre(e.currentTarget, e.clientX, e.clientY);
                 gesture.pointers.set(e.pointerId, point);
@@ -217,7 +217,7 @@ export function useGalleryZoom({ resetKey, onSwipe }: GalleryZoomOptions): Galle
     useMeasure(stage, content, dispatch);
     useWheel(stage, dispatch);
     const atFit = isAtFit(state);
-    const handlers = usePointerHandlers(state, dispatch, onSwipe);
+    const handlers = usePointerHandlers(atFit, dispatch, onSwipe);
     const onKeyDown = useKeyDown(atFit, dispatch);
     const commands = useMemo(() => ({
         zoomIn: () => dispatch({ type: 'zoomBy', factor: GALLERY_ZOOM_STEP, animate: true }),
