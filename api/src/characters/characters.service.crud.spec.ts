@@ -631,5 +631,23 @@ describe('CharactersService — crud', () => {
       expect(limit).toHaveBeenCalledTimes(2);
       expect(mockDb.update).toHaveBeenCalled();
     });
+
+    // The web form always re-sends name+realm. An old cross-user collision
+    // must not 409 an edit that keeps (or only re-cases) the stored name.
+    it.each(['Thrall', 'THRALL'])(
+      're-sending the stored name+realm (%s) does not 409 on an existing duplicate',
+      async (name) => {
+        const limit = selectSequence([{ id: 'other-char', userId: 2 }]);
+        await expect(
+          service.update(1, 'char-uuid-1', {
+            name,
+            realm: 'Area 52',
+            spec: 'Elemental',
+          }),
+        ).resolves.toMatchObject({ id: expect.any(String) });
+        expect(limit).toHaveBeenCalledTimes(2);
+        expect(mockDb.update).toHaveBeenCalled();
+      },
+    );
   });
 });

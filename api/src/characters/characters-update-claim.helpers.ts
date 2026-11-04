@@ -25,5 +25,21 @@ export async function checkUpdateClaim(
   if (dto.name === undefined && dto.realm === undefined) return;
   const name = dto.name ?? character.name;
   const realm = dto.realm === undefined ? character.realm : dto.realm;
+  // The web edit form always re-sends name+realm. Only a real change is
+  // checked, normalised as `checkDuplicateClaim` matches (case-insensitive
+  // name, exact realm), so an existing cross-user collision cannot 409 an
+  // unrelated edit.
+  if (isSameClaim(character, name, realm)) return;
   await checkDuplicateClaim(db, character.gameId, userId, name, realm);
+}
+
+function isSameClaim(
+  character: ClaimRef,
+  name: string,
+  realm: string | null,
+): boolean {
+  return (
+    name.toLowerCase() === character.name.toLowerCase() &&
+    realm === character.realm
+  );
 }
