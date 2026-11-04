@@ -29,6 +29,7 @@ function Harness({ resetKey, onSwipe, onParentKey }: HarnessProps): JSX.Element 
         <div data-testid="region" tabIndex={-1} onKeyDown={onParentKey}>
             <div data-testid="inner" tabIndex={-1} onKeyDown={onKeyDown}>
                 <div data-testid="stage" ref={bindStage} style={stageStyle} {...handlers}>
+                    <button type="button">Stage control</button>
                     <div data-testid="content" ref={bindContent} style={contentStyle} data-zoom={zoom.toFixed(2)} data-fit={String(atFit)} />
                 </div>
                 <button type="button" onClick={zoomIn} disabled={!canZoomIn}>Zoom in</button>
@@ -129,6 +130,14 @@ describe('useGalleryZoom gestures + keys (ROK-2075)', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
         drag(screen.getByTestId('stage'), [200, 100], [100, 105]);
         expect(onSwipe).not.toHaveBeenCalled();
+    });
+
+    it('a pointer on a control over the stage is not a gesture (the click is not captured)', () => {
+        render(<Harness resetKey={1} />);
+        const button = screen.getByRole('button', { name: 'Stage control' });
+        tap(button, 0, 0);
+        tap(button, 0, 0);
+        expect(zoomOf()).toBe('1.00');
     });
 
     it('a new resetKey (the next picture) returns to fit', () => {

@@ -152,6 +152,8 @@ function usePointerHandlers(state: ZoomState, dispatch: (a: ZoomAction) => void,
             onPointerDown: (e) => {
                 const gesture = g.current;
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
+                // Prev / Next / zoom controls sit over the stage: capturing their pointer would swallow the click.
+                if (e.target instanceof Element && e.target.closest('button, a') !== null) return;
                 e.currentTarget.setPointerCapture?.(e.pointerId);
                 const point = fromCentre(e.currentTarget, e.clientX, e.clientY);
                 gesture.pointers.set(e.pointerId, point);
