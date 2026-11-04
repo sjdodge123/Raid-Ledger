@@ -2,15 +2,17 @@
  * ROK-1942 — the Gallery dialog's viewer mode (approved mockup frames 3 / 4):
  * the full picture in a `bg-media-well` well (near-black in every scheme) with 44px Prev / Next buttons over
  * its edges, "3 of 24", and a caption line — kind badge, who, when, source,
- * the optional source link. The dialog owns the ←/→ keys and the footer.
+ * the optional source link. The dialog owns the ←/→ keys and the footer;
+ * ROK-2075: the well zooms (`hub-gallery-stage.tsx`) and ←/→ walk only at fit.
  */
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useState, type JSX } from 'react';
 import type { HubMediaItem } from '@raid-ledger/contract';
 import { useHubMediaImageUrl } from '../../../hooks/use-hub-media-image';
 import { syncedAgo } from '../../../lib/synced-ago';
 import { Button } from '../../ui/button';
 import { HUB_MEDIA_KIND_LABEL } from './hub-gallery-labels';
 import { isSameOriginApiPath, type HubGallerySinglePicture } from './hub-gallery-store';
+import { HubGalleryStage } from './hub-gallery-stage';
 
 export interface HubGalleryViewerProps {
     item: HubMediaItem;
@@ -66,54 +68,31 @@ function NavButton({ side, onClick }: { side: 'prev' | 'next'; onClick: (() => v
     );
 }
 
-/** Coming from the grid, the clicked tile is gone: keep focus inside the dialog. */
-function useFocusRegionOnMount(): RefObject<HTMLDivElement | null> {
-    const region = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const el = region.current;
-        if (el !== null && !el.contains(document.activeElement)) el.focus();
-    }, []);
-    return region;
-}
-
-const STAGE_CLASS = 'relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-media-well lg:aspect-video';
-
 export function HubGalleryViewer({ item, position, total, onPrev, onNext }: HubGalleryViewerProps): JSX.Element {
     const url = useHubMediaImageUrl(item.fullPath);
-    const region = useFocusRegionOnMount();
+    const alt = `${HUB_MEDIA_KIND_LABEL[item.kind]} picture${item.authorName === null ? '' : ` by ${item.authorName}`}`;
     return (
-        <div ref={region} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-testid="hub-gallery-viewer"
-            data-media-id={item.id}>
-            <p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>
-            <div data-testid="hub-gallery-stage" className={STAGE_CLASS}>
-                {url === null
-                    ? <span className="text-sm text-media-well-foreground">Loading picture…</span>
-                    : <img src={url} alt={`${HUB_MEDIA_KIND_LABEL[item.kind]} picture${item.authorName === null ? '' : ` by ${item.authorName}`}`}
-                        className="max-h-full max-w-full object-contain" />}
-                <NavButton side="prev" onClick={onPrev} />
-                <NavButton side="next" onClick={onNext} />
-            </div>
-            <Caption item={item} />
-        </div>
+        <HubGalleryStage resetKey={item.id} onSwipe={(d) => (d === 'next' ? onNext : onPrev)?.()}
+            testId="hub-gallery-viewer" className="flex flex-col gap-3 outline-none" mediaId={item.id}
+            picture={url === null ? null : { src: url, alt }}
+            placeholder={<span className="text-sm text-media-well-foreground">Loading picture…</span>}
+            header={<p className="text-sm text-muted" aria-live="polite">{position} of {total}</p>}
+            overlay={<><NavButton side="prev" onClick={onPrev} /><NavButton side="next" onClick={onNext} /></>}
+            footer={<Caption item={item} />} />
     );
 }
 
 /**
  * ROK-2074 — the viewer for one picture that is not a Gallery item (a crest
- * upload, a save shot): the same well, no count, Prev / Next or caption.
+ * upload, a save shot): the same well and zoom, no count, Prev / Next or caption.
  */
 export function HubGallerySinglePictureView({ picture }: { picture: HubGallerySinglePicture }): JSX.Element {
     const authed = useHubMediaImageUrl(picture.auth === true && isSameOriginApiPath(picture.url) ? picture.url : null);
     const src = picture.auth === true ? authed : picture.url;
     const [failed, setFailed] = useState<string | null>(null);
-    const region = useFocusRegionOnMount();
+    const shown = src === null || failed === src ? null : { src, alt: picture.alt, onError: () => setFailed(src) };
     return (
-        <div ref={region} tabIndex={-1} className="outline-none" data-testid="hub-gallery-single">
-            <div data-testid="hub-gallery-stage" className={STAGE_CLASS}>
-                {src === null || failed === src
-                    ? <span className="text-sm text-media-well-foreground">{failed === null ? 'Loading picture…' : 'Couldn’t load this picture.'}</span>
-                    : <img src={src} alt={picture.alt} onError={() => setFailed(src)} className="max-h-full max-w-full object-contain" />}
-            </div>
-        </div>
+        <HubGalleryStage resetKey={picture.url} testId="hub-gallery-single" className="outline-none" picture={shown}
+            placeholder={<span className="text-sm text-media-well-foreground">{failed === null ? 'Loading picture…' : 'Couldn’t load this picture.'}</span>} />
     );
 }
