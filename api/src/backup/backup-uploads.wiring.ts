@@ -92,3 +92,32 @@ export function deleteUploadsArchiveOf(
     );
   }
 }
+
+/**
+ * Boot: remove `*.uploads.tar.partial` left by an archive a restart cut short.
+ * Nothing archives before the module is up, so every partial is dead weight
+ * that rotation never matches and every later space pre-flight counts.
+ */
+export function removeStalePartialArchives(
+  dailyDir: string,
+  logger: BackupLogger,
+): void {
+  let partials: string[];
+  try {
+    partials = fs
+      .readdirSync(dailyDir)
+      .filter((n) => n.endsWith('.uploads.tar.partial'));
+  } catch {
+    return;
+  }
+  for (const name of partials) {
+    try {
+      fs.unlinkSync(path.join(dailyDir, name));
+      logger.warn(`Removed interrupted uploads archive: daily/${name}`);
+    } catch (err) {
+      logger.warn(
+        `Could not remove interrupted uploads archive ${name}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+}

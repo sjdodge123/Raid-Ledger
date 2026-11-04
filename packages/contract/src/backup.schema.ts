@@ -1,10 +1,29 @@
 import { z } from 'zod';
 
+/**
+ * The companion uploads archive of a daily dump (ROK-2023), additive. The
+ * admin "Create backup" responds once the dump is written and archives the
+ * uploads in the background, so the list reports `archiving` until it
+ * settles, then `ready` (with its size) or `failed` (with the logged reason).
+ * Absent = no archive for this dump (migration snapshot, no uploads dir, a
+ * dump older than the archive feature, or an archive cut short by a restart).
+ */
+export const BackupUploadsArchiveSchema = z.object({
+  state: z.enum(['archiving', 'ready', 'failed']),
+  sizeBytes: z.number().optional(),
+  error: z.string().optional(),
+});
+
+export type BackupUploadsArchiveDto = z.infer<
+  typeof BackupUploadsArchiveSchema
+>;
+
 export const BackupFileSchema = z.object({
   filename: z.string(),
   type: z.enum(['daily', 'migration']),
   sizeBytes: z.number(),
   createdAt: z.string(),
+  uploadsArchive: BackupUploadsArchiveSchema.optional(),
 });
 
 export type BackupFileDto = z.infer<typeof BackupFileSchema>;

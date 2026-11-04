@@ -1,3 +1,5 @@
+import type { BackupFileDto } from '@raid-ledger/contract';
+
 export function formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -20,3 +22,9 @@ export const TYPE_BADGE: Record<string, string> = {
     daily: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
     migration: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
+
+/** Toast copy after a manual Create backup — never claims the uploads archive is done while it runs. */
+export function createdBackupMessage(data: { message: string; backup?: BackupFileDto | undefined }): string {
+    if (data.backup?.uploadsArchive?.state === 'archiving') return 'Backup created — archiving uploads in the background';
+    return data.message;
+}

@@ -13,6 +13,11 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 
 import { cleanupPartialFile } from './backup.helpers';
+import {
+  runWithDeadline,
+  TarTimeoutError,
+  type TarRunOptions,
+} from './backup-uploads.deadline';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,14 +26,18 @@ export const UPLOADS_RESERVE_BYTES = 1024 * 1024 * 1024;
 
 type WarnFn = (message: string) => void;
 export type StatfsFn = (dir: string) => { bavail: number; bsize: number };
-export type RunTarFn = (args: string[]) => Promise<unknown>;
+export type RunTarFn = (
+  args: string[],
+  opts: TarRunOptions,
+) => Promise<unknown>;
 
 export type UploadsArchiveResult =
   | { status: 'written'; path: string }
   | { status: 'skipped'; reason: 'missing-root' }
   | { status: 'failed'; reason: 'insufficient-space' }
   | { status: 'failed'; reason: 'measure-failed'; detail: string }
-  | { status: 'failed'; reason: 'tar-failed'; detail: string };
+  | { status: 'failed'; reason: 'tar-failed'; detail: string }
+  | { status: 'failed'; reason: 'timeout'; detail: string };
 
 export interface ArchiveUploadsInput {
   uploadsDir: string;
@@ -39,6 +48,9 @@ export interface ArchiveUploadsInput {
   statfs?: StatfsFn;
   runTar?: RunTarFn;
   measure?: (dir: string) => number | Promise<number>;
+  /** Defaults: UPLOADS_TAR_TIMEOUT_MS / UPLOADS_TAR_SLOW_WARN_MS (deadline module). */
+  tarTimeoutMs?: number;
+  tarSlowWarnMs?: number;
 }
 
 /**
@@ -155,26 +167,40 @@ export function hasRoomFor(
 const errMessage = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
 
-const defaultRunTar: RunTarFn = (args) => execFileAsync('tar', args);
-
-/** Run tar into `partial`; true when the archive is usable (D5). */
-async function runTarTolerant(
-  runTar: RunTarFn,
-  partial: string,
-  uploadsDir: string,
-  warn: WarnFn,
-): Promise<true | string> {
-  try {
-    await runTar(tarCreateArgs(partial, uploadsDir));
-    return true;
-  } catch (err) {
-    if (isTarFatal(err, partial)) return errMessage(err);
-    warn(`uploads archive: tar exit 1 (files changed during read) — kept`);
-    return true;
-  }
-}
+const defaultRunTar: RunTarFn = (args, opts) =>
+  execFileAsync('tar', args, opts);
 
 type ArchiveFailure = Extract<UploadsArchiveResult, { status: 'failed' }>;
+
+/** Run tar into `partial` under its deadline; null when the archive is usable (D5). */
+async function runTarTolerant(
+  input: ArchiveUploadsInput,
+  partial: string,
+): Promise<ArchiveFailure | null> {
+  const runTar = input.runTar ?? defaultRunTar;
+  const args = tarCreateArgs(partial, input.uploadsDir);
+  try {
+    await runWithDeadline(
+      (opts) => runTar(args, opts),
+      path.basename(input.outPath),
+      { timeoutMs: input.tarTimeoutMs, slowWarnMs: input.tarSlowWarnMs },
+    );
+    return null;
+  } catch (err) {
+    if (err instanceof TarTimeoutError)
+      return { status: 'failed', reason: 'timeout', detail: err.message };
+    if (isTarFatal(err, partial))
+      return {
+        status: 'failed',
+        reason: 'tar-failed',
+        detail: errMessage(err),
+      };
+    input.warn(
+      `uploads archive: tar exit 1 (files changed during read) — kept`,
+    );
+    return null;
+  }
+}
 
 /** Spec D8 pre-flight: tree bytes + reserve must fit the backup disk. */
 async function preflightSpace(
@@ -199,12 +225,14 @@ async function preflightSpace(
 async function writeArchive(
   input: ArchiveUploadsInput,
 ): Promise<UploadsArchiveResult> {
-  const { uploadsDir, outPath, warn } = input;
+  const { outPath } = input;
   const partial = `${outPath}.partial`;
-  const runTar = input.runTar ?? defaultRunTar;
-  const ok = await runTarTolerant(runTar, partial, uploadsDir, warn);
+  const failure = await runTarTolerant(input, partial);
+  if (failure) {
+    cleanupPartialFile(partial);
+    return failure;
+  }
   try {
-    if (ok !== true) throw new Error(ok);
     fs.renameSync(partial, outPath);
     return { status: 'written', path: outPath };
   } catch (err) {
@@ -217,7 +245,7 @@ async function writeArchive(
  * Archive `uploadsDir` to `outPath` (spec D4/D7/D8). Never throws: the
  * caller decides how loud each outcome is. Missing root → skipped; an
  * unreadable tree or too little free space → failed before tar runs; a tar
- * failure → failed with the partial removed.
+ * failure or a tar past its deadline → failed with the partial removed.
  */
 export async function archiveUploads(
   input: ArchiveUploadsInput,
