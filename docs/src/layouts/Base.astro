@@ -7,7 +7,15 @@ import { SITE, withBase } from '../data/site';
 // scripts/og-card.html in the ROK-2051 lane.
 import ogCard from '../assets/screenshots/S12-og-card.png';
 
-const canonical = new URL(withBase(''), Astro.site).href;
+interface Props {
+  /** Page title; defaults to the landing page's. */
+  title?: string;
+  description?: string | undefined;
+  /** Absolute path of this page (Astro.url.pathname); defaults to the site root. */
+  path?: string;
+}
+const { title = SITE.title, description = SITE.description, path } = Astro.props;
+const canonical = new URL(path ?? withBase(''), Astro.site).href;
 const ogImage = new URL(ogCard.src, Astro.site).href;
 const ogAlt = 'Raid Ledger: grow a Discord gaming community that actually shows up';
 ---
@@ -16,16 +24,16 @@ const ogAlt = 'Raid Ledger: grow a Discord gaming community that actually shows 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{SITE.title}</title>
-    <meta name="description" content={SITE.description} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href={withBase('favicon.svg')} />
     <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Raid Ledger" />
-    <meta property="og:title" content={SITE.title} />
-    <meta property="og:description" content={SITE.description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
@@ -34,8 +42,8 @@ const ogAlt = 'Raid Ledger: grow a Discord gaming community that actually shows 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={ogImage} />
     <meta name="twitter:image:alt" content={ogAlt} />
-    <meta name="twitter:title" content={SITE.title} />
-    <meta name="twitter:description" content={SITE.description} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
     <!-- First paint: stored choice, else the OS colour scheme. Storage can throw. -->
     <script is:inline>
       (function () {

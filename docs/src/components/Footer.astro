@@ -1,8 +1,11 @@
 ---
-import { LINKS } from '../data/site';
+import { LINKS, withBase } from '../data/site';
+
+/** In-page anchors point at the landing page, so they also work from /guides/*. */
+const home = (hash: string): string => withBase('') + hash;
 
 const COLUMNS = [
-  { head: 'Product', links: [['#features', 'Features'], ['#games', 'Game plugins'], ['#self-host', 'Self-host'], ['#faq', 'FAQ']] },
+  { head: 'Product', links: [[home('#features'), 'Features'], [home('#games'), 'Game plugins'], [home('#self-host'), 'Self-host'], [home('#faq'), 'FAQ']] },
   { head: 'Resources', links: [[LINKS.wiki, 'Documentation'], [LINKS.ledgerLink, 'LedgerLink addon'], [LINKS.releases, 'Releases']] },
   { head: 'Project', links: [[LINKS.repo, 'GitHub'], [LINKS.issues, 'Report an issue'], [LINKS.license, 'MIT License']] },
 ];
@@ -11,7 +14,7 @@ const COLUMNS = [
   <div class="wrap">
     <div class="foot">
       <div>
-        <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">RL</span>Raid Ledger</a>
+        <a class="brand" href={home('#top')}><span class="brand-mark" aria-hidden="true">RL</span>Raid Ledger</a>
         <p>Run and grow your Discord gaming community. Free, open source, self-hosted.</p>
       </div>
       {COLUMNS.map((col) => (
