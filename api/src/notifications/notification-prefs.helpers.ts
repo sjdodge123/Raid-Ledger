@@ -2,11 +2,36 @@
  * Preference merging helpers for NotificationService.
  * Extracted from notification.service.ts to satisfy file size limits.
  */
-import type {
-  ChannelPrefs,
-  NotificationType,
+import { z } from 'zod';
+import {
+  CHANNELS,
+  NOTIFICATION_TYPES,
+  type ChannelPrefs,
+  type NotificationType,
 } from '../drizzle/schema/notification-preferences';
+import { parseOrBadRequest } from '../users/users-controller.helpers';
 import type { UpdatePreferencesInput } from './notification.types';
+
+/**
+ * Runtime shape of PATCH /notifications/preferences. Only known types and
+ * channels, and only boolean values, so nothing else reaches channel_prefs
+ * (its `::boolean` casts in the follow-up fan-out SQL would throw).
+ */
+export const UpdatePreferencesSchema = z
+  .object({
+    channelPrefs: z.partialRecord(
+      z.enum(NOTIFICATION_TYPES),
+      z.partialRecord(z.enum(CHANNELS), z.boolean()),
+    ),
+  })
+  .strict();
+
+/** Parse a raw preferences body; throws BadRequestException when invalid. */
+export function parseUpdatePreferencesBody(
+  body: unknown,
+): UpdatePreferencesInput {
+  return parseOrBadRequest(UpdatePreferencesSchema, body);
+}
 
 /** Deep-merge incoming partial preferences with current. */
 export function mergePreferences(
