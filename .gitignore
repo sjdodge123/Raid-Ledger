@@ -48,6 +48,9 @@ scripts/*
 !scripts/snapshot-three-way-merge.mjs
 !scripts/renumber-branch-migrations.spec.mjs
 !scripts/check-migration-index-collision.mjs
+# ROK-1900 interim-folder -> approvals inbox migration helper (dry-run export).
+!scripts/pending-approval-export.mjs
+!scripts/pending-approval-export.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs

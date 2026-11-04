@@ -17,6 +17,14 @@ import {
   agentDenial, agentTokenOk, checkTestUrl, mintTesterToken, sanitizePlanTestUrls, testerAllowed,
   withoutSecrets,
 } from './plan-auth.js';
+import { createApprovalAuth } from './approvals-auth.js';
+import { createClientIp, touchBucket } from './client-ip.js';
+import { createApprovalContent } from './approvals-content.js';
+import { createApprovalLimits } from './approvals-limits.js';
+import { createContentSigner } from './approvals-sign.js';
+import { createPlanStepSource } from './approvals-plan-steps.js';
+import { createApprovalRoutes } from './approvals-routes.js';
+import { createApprovalStore } from './approvals-store.js';
 
 const STATE_DIR = process.env.STATE_DIR || '/state';
 const PUBLIC_DIR = process.env.PUBLIC_DIR || '/app/public';
@@ -98,42 +106,49 @@ const rateBuckets = new Map();
 // on every access.
 const byteBuckets = new Map();
 
-// Trusted-proxy chain for X-Forwarded-For interpretation. Without this, all
-// requests behind Traefik / Cloudflare collapse into the single proxy peer's
-// IP and the per-IP quota becomes a global quota — one bad actor exhausts
-// 100 MB / 24h for every other tester. With RL_TRUSTED_PROXY_CIDRS set to
-// the proxy's IP(s), we walk X-Forwarded-For right-to-left, skipping
-// trusted hops, and key the limiter on the first untrusted hop (the real
-// client). Default is empty (no proxies trusted) so dev/local stays exactly
-// as before. Comma-separated list of literal IPs (CIDR is overkill for the
-// 1-2 known proxies we deploy behind).
-const RL_TRUSTED_PROXIES = new Set(
-  (process.env.RL_TRUSTED_PROXY_CIDRS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
+// Real client IP behind Cloudflare -> Traefik (client-ip.js): CF-Connecting-IP
+// / X-Forwarded-For are honoured ONLY from a trusted proxy peer
+// (RL_TRUSTED_PROXY_CIDRS literals/CIDRs, RL_TRUSTED_PROXY_HOSTS resolved by
+// DNS — compose sets `traefik`). Without either, the socket peer is the client.
+const clientIps = createClientIp();
+clientIps.start();
+const clientIp = (req) => clientIps.clientIp(req);
 
-// Returns the real client IP, considering X-Forwarded-For only when the
-// immediate socket peer is in the trusted-proxy allowlist. Otherwise the
-// socket peer is the client (forging XFF requires impersonating a trusted
-// proxy, which on the LAN you can't do without already controlling that
-// host).
-const clientIp = (req) => {
-  const peer = req.socket?.remoteAddress || 'unknown';
-  if (!RL_TRUSTED_PROXIES.has(peer)) return peer;
-  // Walk X-Forwarded-For right-to-left, skipping trusted-proxy entries,
-  // and return the first untrusted IP (the original client).
-  const xff = req.headers?.['x-forwarded-for'];
-  if (typeof xff !== 'string' || xff.length === 0) return peer;
-  const hops = xff.split(',').map((s) => s.trim()).filter(Boolean);
-  for (let i = hops.length - 1; i >= 0; i--) {
-    if (!RL_TRUSTED_PROXIES.has(hops[i])) return hops[i];
-  }
-  // Every hop was trusted — fall back to the socket peer rather than
-  // returning a "trusted" identity as the client.
-  return peer;
-};
+// ROK-1900 — "Pending approval" inbox. Its own RW mount (never under
+// test-plans, so plan-prune cannot reach it); fails closed without
+// RL_APPROVAL_TOKEN_SHA256 (approvals-auth.js).
+const approvalStore = createApprovalStore({ root: process.env.RL_APPROVALS_ROOT || join(STATE_DIR, 'approvals') });
+const approvalAuth = createApprovalAuth({
+  agentToken: RL_AGENT_TOKEN, inboxHashHex: process.env.RL_APPROVAL_TOKEN_SHA256,
+});
+// Per-boot HMAC secret for signed content URLs (never persisted or logged).
+const approvalSigner = createContentSigner();
+const approvalLimits = createApprovalLimits();
+const handleApprovals = createApprovalRoutes({
+  store: approvalStore,
+  auth: approvalAuth,
+  signer: approvalSigner,
+  limits: approvalLimits,
+  publicDomain: PUBLIC_DOMAIN,
+  ipOf: clientIp,
+  // Unverdicted design/operator plan steps (D9). Called per request, after
+  // the plan loader below is initialised.
+  planSteps: (...a) => planStepSource(...a),
+});
+const handleApprovalContent = createApprovalContent({
+  store: approvalStore, auth: approvalAuth, signer: approvalSigner, limits: approvalLimits, ipOf: clientIp,
+});
+const planStepSource = createPlanStepSource({
+  listSlugs: async () => {
+    try {
+      const ds = await readdir(TEST_PLANS_DIR, { withFileTypes: true });
+      return ds.filter((d) => d.isDirectory() && validSlug(d.name)).map((d) => d.name);
+    } catch (err) { if (err.code === 'ENOENT') return []; throw err; }
+  },
+  listPlans: (slug) => listPlans(slug),
+  publicDomain: PUBLIC_DOMAIN,
+  clean: (v) => stripWrapMaybe(v),
+});
 
 // Returns true if the IP's cumulative byte usage in the trailing
 // BYTE_LIMIT_WINDOW_MS is under BYTE_LIMIT_MAX after `nextBytes` is added.
@@ -160,14 +175,7 @@ const byteQuotaOk = (req, res, nextBytes) => {
     return false;
   }
   samples.push({ ts: now, bytes: nextBytes });
-  byteBuckets.set(ip, samples);
-  if (byteBuckets.size > RATE_LIMIT_MAP_CAP) {
-    for (const [k, v] of byteBuckets) {
-      const fresh = v.filter((s) => s.ts > cutoff);
-      if (fresh.length === 0) byteBuckets.delete(k);
-      else byteBuckets.set(k, fresh);
-    }
-  }
+  touchBucket(byteBuckets, ip, samples, RATE_LIMIT_MAP_CAP);
   return true;
 };
 
@@ -187,14 +195,7 @@ const rateLimitOk = (req, res) => {
     return false;
   }
   stamps.push(now);
-  rateBuckets.set(ip, stamps);
-  if (rateBuckets.size > RATE_LIMIT_MAP_CAP) {
-    for (const [k, v] of rateBuckets) {
-      const fresh = v.filter((t) => t > cutoff);
-      if (fresh.length === 0) rateBuckets.delete(k);
-      else rateBuckets.set(k, fresh);
-    }
-  }
+  touchBucket(rateBuckets, ip, stamps, RATE_LIMIT_MAP_CAP);
   return true;
 };
 
@@ -2013,6 +2014,26 @@ const handleTestPlanList = async (res) => {
   }
 };
 
+// ROK-1900 — CSP for the dashboard's own pages. Scripts are external files
+// only (no inline <script>, no handlers), so script-src stays 'self' with no
+// 'unsafe-inline'. Styles keep 'unsafe-inline' for the one style="" attribute
+// in index.html and JS-set styles. frame-src 'self' confines iframes to the
+// sandboxed /approvals-content/ mockups; base-uri/object-src/form-action shut
+// the classic injection pivots; frame-ancestors stops the approve buttons
+// being clickjacked.
+const PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
 const serveStatic = async (req, res) => {
   const path = sanitizePath(req.url);
   if (!path) {
@@ -2026,6 +2047,7 @@ const serveStatic = async (req, res) => {
     res.writeHead(200, {
       'content-type': ct,
       'cache-control': 'no-store',
+      ...(extname(path) === '.html' ? { 'content-security-policy': PAGE_CSP } : {}),
     });
     res.end(data);
   } catch {
@@ -2076,7 +2098,7 @@ const gateTester = async (slug, planId, req, res) => {
     else sendJson(res, 500, { ok: false, error: 'plan_unreadable' });
     return false;
   }
-  if (testerAllowed(req, plan, RL_AGENT_TOKEN)) return true;
+  if (testerAllowed(req, plan, RL_AGENT_TOKEN, approvalAuth.keyOk)) return true;
   sendJson(res, 401, {
     ok: false,
     error: 'tester_token_required',
@@ -2144,6 +2166,8 @@ const dispatch = async (req, res) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
     if (!rateLimitOk(req, res)) return;
   }
+  if (await handleApprovals(req, res, pathOnly)) return;
+  if (await handleApprovalContent(req, res, pathOnly)) return;
   if (pathOnly === '/api/state') {
     await handleApiState(res);
     return;
