@@ -51,6 +51,8 @@ describe('UploadsArchiveTracker', () => {
     const first = tracker.run(DUMP, archive);
     const second = tracker.run(DUMP, archive);
     expect(second).toBe(first);
+    // run() starts the archive from `tail.then(...)`: let that microtask run.
+    await new Promise((resolve) => setImmediate(resolve));
     expect(archive).toHaveBeenCalledTimes(1);
     finish({ status: 'written', path: path.join(dir, TAR) });
     await expect(first).resolves.toEqual({

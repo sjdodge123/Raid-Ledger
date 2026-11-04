@@ -34,7 +34,8 @@ describe('UploadsArchiveStatus', () => {
     it('failed: a warning line carrying the server error', () => {
         const error = 'uploads archive failed (tar-failed: exit 2)';
         const { container } = render(<UploadsArchiveStatus archive={{ state: 'failed', error }} />);
-        const line = screen.getByText('Uploads archive failed', { exact: false });
+        // Exact match on the line's own text: the nested error span also contains the phrase (any case).
+        const line = screen.getByText('Uploads archive failed', { exact: true });
         expect(line).toHaveClass('text-warning');
         expect(line).toHaveAttribute('title', error);
         expect(screen.getByText(error)).toHaveClass('text-muted');

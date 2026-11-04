@@ -344,7 +344,34 @@ describe('listBackups — uploads archive state', () => {
   });
 });
 
+/** Fake ONLY `Date` (the dump-name clock); the chain still needs real timers. */
+function freezeClock(at: string): void {
+  jest.useFakeTimers({
+    now: new Date(at),
+    doNotFake: [
+      'hrtime',
+      'nextTick',
+      'performance',
+      'queueMicrotask',
+      'requestAnimationFrame',
+      'cancelAnimationFrame',
+      'requestIdleCallback',
+      'cancelIdleCallback',
+      'setImmediate',
+      'clearImmediate',
+      'setInterval',
+      'clearInterval',
+      'setTimeout',
+      'clearTimeout',
+    ],
+  });
+}
+
 describe('uploads archives run one at a time (504 review MAJOR 1)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('a manual Create while an archive runs is a 409 before any dump', async () => {
     archivePending();
     await service.createDailyBackup();
@@ -367,11 +394,14 @@ describe('uploads archives run one at a time (504 review MAJOR 1)', () => {
   });
 
   it('the cron dumps, waits for a running archive, then archives and rotates', async () => {
+    // Two real dumps are seconds apart, so their names (and archives) differ.
+    freezeClock('2026-11-04T10:00:00Z');
     archivePending();
     await service.createDailyBackup();
     await flushBackground();
     const finishManual = settleArchive;
 
+    jest.setSystemTime(new Date('2026-11-04T10:00:05Z'));
     const cron = service.handleDailyBackup();
     await flushBackground();
     expect(events).toEqual(['pg_dump', 'pg_dump']);
