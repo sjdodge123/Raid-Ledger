@@ -1,6 +1,7 @@
 /** ROK-1942 — the Gallery dialog: viewer keys + buttons over the filtered set, focus return, chips, See-all paging, role-gated actions. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
 import { HUB_MEDIA_KINDS, type HubMediaItem, type HubMediaListResponse } from '@raid-ledger/contract';
@@ -492,5 +493,112 @@ describe('HubGalleryDialog — stale picture links', () => {
         await waitFor(() => expect(queryClient.getQueryState(['hub-page', 5])?.isInvalidated, 'hub 5 page').toBe(true));
         expect(queryClient.getQueryState(['plugin-snapshot', 5])?.isInvalidated, 'hub 5 plugin snapshot').toBe(true);
         expect(queryClient.getQueryState(['hub-page', 6])?.isInvalidated, 'hub 6 page untouched').toBe(false);
+    });
+});
+
+
+/** ROK-2075 — zoom in the viewer and the single picture (the gesture maths: `use-gallery-zoom.test.tsx`). */
+const stage = (): HTMLElement => screen.getByTestId('hub-gallery-stage');
+const zoomed = (): string | null => stage().getAttribute('data-zoom');
+const control = (name: string): HTMLElement => within(screen.getByRole('group', { name: 'Zoom' })).getByRole('button', { name });
+const readout = (): string => screen.getByTestId('hub-gallery-zoom-readout').textContent ?? '';
+const viewer = (): HTMLElement => screen.getByTestId('hub-gallery-viewer');
+
+describe('HubGalleryDialog — zoom controls (ROK-2075)', () => {
+    it('−/+/Fit sit in a "Zoom" group, aria-disabled at fit, and work from the keyboard', async () => {
+        const user = userEvent.setup();
+        open();
+        await caption();
+        expect(control('Zoom out')).toHaveAttribute('aria-disabled', 'true');
+        expect(control('Fit picture')).toHaveAttribute('aria-disabled', 'true');
+        expect(control('Zoom in')).not.toHaveAttribute('aria-disabled');
+        expect(readout()).toBe('Fit');
+        control('Zoom in').focus();
+        await user.keyboard('{Enter}');
+        expect(zoomed(), 'Enter on Zoom in').toBe('1.50');
+        expect(readout()).toBe('Zoom 150%');
+        expect(control('Zoom out')).not.toHaveAttribute('aria-disabled');
+        control('Fit picture').focus();
+        await user.keyboard(' ');
+        expect(zoomed(), 'Space on Fit').toBe('1.00');
+        expect(readout()).toBe('Fit');
+        expect(control('Fit picture')).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('Zoom in stops at 4×, where it turns aria-disabled; Zoom out steps back', async () => {
+        open();
+        await caption();
+        for (let i = 0; i < 5; i += 1) fireEvent.click(control('Zoom in'));
+        expect(zoomed()).toBe('4.00');
+        expect(control('Zoom in')).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(control('Zoom out'));
+        expect(zoomed()).toBe('2.67');
+    });
+
+    it('+ and 0 on the viewer zoom and fit', async () => {
+        open();
+        await caption();
+        fireEvent.keyDown(viewer(), { key: '+' });
+        expect(zoomed()).toBe('1.50');
+        fireEvent.keyDown(viewer(), { key: '0' });
+        expect(zoomed()).toBe('1.00');
+    });
+
+});
+
+describe('HubGalleryDialog — zoom and navigation (ROK-2075)', () => {
+    it('→ walks pictures at fit; while zoomed it pans and the picture stays', async () => {
+        open();
+        expect(await caption()).toMatch(who(1));
+        fireEvent.keyDown(viewer(), { key: '+' });
+        fireEvent.keyDown(viewer(), { key: 'ArrowRight' });
+        expect(counter(), 'zoomed: → pans, never walks').toBe('1 of 30');
+        expect(await caption()).toMatch(who(1));
+        expect(zoomed()).toBe('1.50');
+        fireEvent.keyDown(viewer(), { key: '0' });
+        fireEvent.keyDown(viewer(), { key: 'ArrowRight' });
+        expect(await caption(), 'at fit: → walks').toMatch(who(2));
+        expect(counter()).toBe('2 of 30');
+    });
+
+    it('Next still works while zoomed and opens the next picture at fit', async () => {
+        open();
+        await caption();
+        fireEvent.click(control('Zoom in'));
+        expect(zoomed()).toBe('1.50');
+        fireEvent.click(screen.getByRole('button', { name: 'Next picture' }));
+        expect(await caption()).toMatch(who(2));
+        expect(zoomed(), 'a new picture resets to fit').toBe('1.00');
+        expect(readout()).toBe('Fit');
+    });
+
+    it('a touch swipe left at fit opens the next picture', async () => {
+        open();
+        expect(await caption()).toMatch(who(1));
+        fireEvent.pointerDown(stage(), { pointerId: 7, pointerType: 'touch', button: 0, clientX: 200, clientY: 100 });
+        fireEvent.pointerMove(stage(), { pointerId: 7, pointerType: 'touch', clientX: 100, clientY: 105 });
+        fireEvent.pointerUp(stage(), { pointerId: 7, pointerType: 'touch', clientX: 100, clientY: 105 });
+        expect(await caption()).toMatch(who(2));
+    });
+
+    it('closing drops the zoom: reopening starts at fit', async () => {
+        const trigger = open();
+        await caption();
+        fireEvent.click(control('Zoom in'));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() => expect(useHubGalleryStore.getState().request).toBeNull());
+        act(() => useHubGalleryStore.setState({ request: { guildId: 5, mode: 'viewer', filter: 'all', index: 0, returnFocus: trigger } }));
+        await caption();
+        expect(zoomed()).toBe('1.00');
+    });
+
+    it('the single picture (ROK-2074) gets the same controls and keys', async () => {
+        open({ single: { url: 'https://cdn.test/crest-lg.webp', alt: 'Iron Vanguard crest' } });
+        await screen.findByRole('img', { name: 'Iron Vanguard crest' });
+        expect(control('Zoom in')).toBeInTheDocument();
+        fireEvent.keyDown(screen.getByTestId('hub-gallery-single'), { key: '+' });
+        expect(zoomed()).toBe('1.50');
+        fireEvent.click(control('Fit picture'));
+        expect(zoomed()).toBe('1.00');
     });
 });
