@@ -3900,3 +3900,12 @@ same day (#1278, #1279, #1280).
 - **resolved** line 2317 (`scheduling.controller.ts` private-poll side reads) — already gated on main (`scheduling-side-reads.helpers.ts:40,63`).
 - **resolved** line 2288 (`checkAutoBench` counted tentative assignments) — already fixed on main (`hasDisplaceableTentative`).
 - **partial** line 2346 (duplicate `checkAutoBench` copies) — only the live `signup-allocation` copy remains.
+### 2026-11-04 — resolved on chore/tech-debt-2026-11-04d (overnight batch D)
+
+- **resolved** line 2706 (`web/src/lib/api/preferences-api.ts`, debounced preference writes lost on unload) — fixed (9c37a5341).
+- **resolved** line 2619 + low 2620 (`web/src/plugins/plugin-slot.tsx:22`, fallback hidden by foreign-slug registrations) — fixed (72fafd6f7).
+
+### 2026-11-04 — chore/tech-debt-2026-11-04d (surfaced during the overnight batch D review)
+
+- **low** `web/src/lib/api/fetch-api.ts:88-90` (keepalive unload flush, batch D) — when the access token is already stale at `pagehide`, `fetchWithAuth` does a normal refresh first and only then sends the keepalive PATCH, so an unload in between still loses the write (the 401-retry path at :100 has the same gap). Suggested: skip the pre-flight refresh when `options.keepalive` is set and let a 401 drop the write, or document the residual in the JSDoc.
+- **nit** `web/src/pages/admin/plugin-integration-panel.tsx:36-38` — the `!isActive` fallback workaround and its comment are now dead: the slug-scoped `PluginSlot` shows the fallback itself. Suggested: delete the workaround.
