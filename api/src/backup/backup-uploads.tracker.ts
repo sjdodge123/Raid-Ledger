@@ -2,16 +2,18 @@
  * The admin "Create backup" archives uploads in the background (nginx gives
  * `/api/` 60 s; a large hub-media tree takes longer). This in-memory tracker
  * (the API is a single process) is how the backup list knows an archive is
- * still running, and how a second request for the same dump joins the first
- * archive instead of starting another tar.
+ * still running, and it runs archives ONE AT A TIME across all dumps: each
+ * job is chained after the previous one, so every disk-space pre-flight sees
+ * the previous tar's final size and two multi-GB tars never grow at once.
  *
  * A restart forgets everything, which is the point: an archive killed
  * mid-run leaves only `<name>.uploads.tar.partial`, never the final name, so
  * the dump then simply lists without an archive — never a permanent
- * "archiving".
+ * "archiving". (Boot removes those leftovers: `removeStalePartialArchives`.)
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ConflictException } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { BackupUploadsArchiveDto } from '@raid-ledger/contract';
 
@@ -21,13 +23,37 @@ import {
   type UploadsArchiveResult,
 } from './backup-uploads.helpers';
 
+export const ARCHIVE_RUNNING_MESSAGE =
+  'An uploads archive is still running — try again when it finishes';
+export const DELETE_WHILE_ARCHIVING_MESSAGE =
+  'Uploads archive in progress — delete after it finishes';
+
+type ArchiveFailure = Extract<UploadsArchiveResult, { status: 'failed' }>;
+
+/** UI copy per failure reason — never the raw tar/fs text (server paths, stderr). */
+const PUBLIC_FAILURE: Record<ArchiveFailure['reason'], string> = {
+  'insufficient-space': 'Not enough free space on the backup disk',
+  'measure-failed': 'Could not measure the uploads folder — see server logs',
+  'tar-failed': 'Archive failed — see server logs',
+};
+
+/** Results whose throw `settle` already sent to Sentry (no second report). */
+const capturedResults = new WeakSet<UploadsArchiveResult>();
+
 export class UploadsArchiveTracker {
   private readonly running = new Map<string, Promise<UploadsArchiveResult>>();
   private readonly failures = new Map<string, string>();
+  private tail: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly dailyDir: string) {}
+  constructor(
+    private readonly dailyDir: string,
+    private readonly logger?: { error(message: string): void },
+  ) {}
 
-  /** Run `archive` for a dump; a call while one runs joins it. Never rejects. */
+  /**
+   * Queue `archive` for a dump behind every archive already queued; a call
+   * for a dump already queued/running joins it. Never rejects.
+   */
   run(
     dumpFilename: string,
     archive: () => Promise<UploadsArchiveResult>,
@@ -35,14 +61,34 @@ export class UploadsArchiveTracker {
     const existing = this.running.get(dumpFilename);
     if (existing) return existing;
     this.failures.delete(dumpFilename);
-    const job = settle(archive).then((result) => {
-      this.running.delete(dumpFilename);
-      const failure = uploadsArchiveFailure(result);
-      if (failure) this.failures.set(dumpFilename, failure);
-      return result;
-    });
+    const job = this.tail
+      .then(() => settle(archive, this.logger))
+      .then((result) => this.finish(dumpFilename, result));
+    this.tail = job;
     this.running.set(dumpFilename, job);
     return job;
+  }
+
+  /** Manual Create: 409 while any archive is queued or running. */
+  assertIdle(): void {
+    if (this.running.size > 0)
+      throw new ConflictException(ARCHIVE_RUNNING_MESSAGE);
+  }
+
+  /** Delete: 409 while this dump's archive is queued or running. */
+  assertNotArchiving(dumpFilename: string): void {
+    if (this.running.has(dumpFilename))
+      throw new ConflictException(DELETE_WHILE_ARCHIVING_MESSAGE);
+  }
+
+  /** Drop a deleted dump's recorded failure. */
+  forget(dumpFilename: string): void {
+    this.failures.delete(dumpFilename);
+  }
+
+  /** Resolves once every archive queued so far has settled (test seam). */
+  async whenIdle(): Promise<void> {
+    await this.tail;
   }
 
   /** The list entry's `uploadsArchive`, or undefined when the dump has none. */
@@ -57,23 +103,42 @@ export class UploadsArchiveTracker {
       return undefined;
     }
   }
+
+  private finish(
+    dumpFilename: string,
+    result: UploadsArchiveResult,
+  ): UploadsArchiveResult {
+    this.running.delete(dumpFilename);
+    if (result.status === 'failed')
+      this.failures.set(dumpFilename, PUBLIC_FAILURE[result.reason]);
+    return result;
+  }
 }
 
 /** `archiveUploadsForDump` never throws by contract; this keeps it so. */
 async function settle(
   archive: () => Promise<UploadsArchiveResult>,
+  logger: { error(message: string): void } | undefined,
 ): Promise<UploadsArchiveResult> {
   try {
     return await archive();
   } catch (err) {
     Sentry.captureException(err, { tags: { backup: 'uploads-archive' } });
     const detail = err instanceof Error ? err.message : String(err);
-    return { status: 'failed', reason: 'tar-failed', detail };
+    logger?.error(`uploads archive threw: ${detail}`);
+    const result: UploadsArchiveResult = {
+      status: 'failed',
+      reason: 'tar-failed',
+      detail,
+    };
+    capturedResults.add(result);
+    return result;
   }
 }
 
-/** A background archive has no caller to fail: its failure goes to Sentry. */
+/** A background archive has no caller to fail: its failure goes to Sentry (once). */
 export function reportBackgroundArchive(result: UploadsArchiveResult): void {
   const failure = uploadsArchiveFailure(result);
-  if (failure) Sentry.captureMessage(failure, 'error');
+  if (failure && !capturedResults.has(result))
+    Sentry.captureMessage(failure, 'error');
 }

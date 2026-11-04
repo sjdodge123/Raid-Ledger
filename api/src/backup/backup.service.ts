@@ -24,7 +24,6 @@ import {
   dropSchemas,
   cleanupPartialFile,
   formatBackupTimestamp,
-  isSafeBackupFilename,
 } from './backup.helpers';
 import {
   rotateDailyDir,
@@ -38,12 +37,13 @@ import {
 import {
   archiveUploadsForDump,
   deleteUploadsArchiveOf,
+  removeStalePartialArchives,
 } from './backup-uploads.wiring';
 import {
   reportBackgroundArchive,
   UploadsArchiveTracker,
 } from './backup-uploads.tracker';
-import { listBackupFiles } from './backup-list.helpers';
+import { listBackupFiles, resolveBackupFile } from './backup-list.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
@@ -72,7 +72,8 @@ export class BackupService implements OnModuleInit {
   private readonly dailyDir: string;
   private readonly migrationDir: string;
   private readonly dbContainer: string;
-  private readonly uploadsArchives: UploadsArchiveTracker;
+  /** Public for the integration spec's `whenIdle()` seam. */
+  readonly uploadsArchives: UploadsArchiveTracker;
 
   constructor(
     private readonly configService: ConfigService,
@@ -91,11 +92,15 @@ export class BackupService implements OnModuleInit {
       this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
     this.dailyDir = path.join(this.backupBase, 'daily');
     this.migrationDir = path.join(this.backupBase, 'migrations');
-    this.uploadsArchives = new UploadsArchiveTracker(this.dailyDir);
+    this.uploadsArchives = new UploadsArchiveTracker(
+      this.dailyDir,
+      this.logger,
+    );
   }
 
   onModuleInit(): void {
     this.ensureDirectories();
+    removeStalePartialArchives(this.dailyDir, this.logger);
     this.rotateMigrationSnapshots();
   }
 
@@ -136,15 +141,17 @@ export class BackupService implements OnModuleInit {
    * Admin "Create backup": resolves once the dump is written and archives the
    * uploads in the BACKGROUND (nginx gives /api/ 60 s). The list shows the
    * archive as `archiving` until it settles; a failure is logged and sent to
-   * Sentry, never thrown — the dump is already safe.
+   * Sentry, never thrown — the dump is already safe. Archives run one at a
+   * time: a Create while one is queued or running is a 409, before any dump.
    */
   async createDailyBackup(): Promise<string> {
+    this.uploadsArchives.assertIdle();
     const filename = await this.dumpDaily();
     void this.archiveUploadsOf(filename).then(reportBackgroundArchive);
     return path.join(this.dailyDir, filename);
   }
 
-  /** Cron: dump FIRST, then archive (spec D3) — awaited, so rotation follows it. */
+  /** Cron: dump FIRST, then archive (spec D3) — queued behind a running one and awaited, so rotation follows it. */
   private async createDailyBackupWithArchive(): Promise<{
     dumpPath: string;
     archive: UploadsArchiveResult;
@@ -245,22 +252,17 @@ export class BackupService implements OnModuleInit {
    */
   getBackupFilePath(type: 'daily' | 'migration', filename: string): string {
     const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
-    const notFound = `Backup file not found: ${type}/${filename}`;
-    if (!isSafeBackupFilename(filename)) throw new NotFoundException(notFound);
-    const resolved = path.resolve(dir, filename);
-    if (path.dirname(resolved) !== path.resolve(dir))
-      throw new NotFoundException(notFound);
-    if (!fs.existsSync(resolved)) throw new NotFoundException(notFound);
-    return resolved;
+    return resolveBackupFile(dir, type, filename);
   }
 
   /** Delete a specific backup file (a daily dump takes its uploads archive with it). */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
-    const filepath = this.getBackupFilePath(type, filename);
-    fs.unlinkSync(filepath);
+    if (type === 'daily') this.uploadsArchives.assertNotArchiving(filename);
+    fs.unlinkSync(this.getBackupFilePath(type, filename));
     this.logger.log(`Deleted backup: ${type}/${filename}`);
-    if (type === 'daily' && filename.endsWith('.dump'))
-      deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
+    if (type !== 'daily' || !filename.endsWith('.dump')) return;
+    deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
+    this.uploadsArchives.forget(filename);
   }
 
   /** Restore the database from a backup file. */

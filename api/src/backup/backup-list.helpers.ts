@@ -1,10 +1,13 @@
 /** BackupService.listBackups' directory scan, kept out of the service file (300-line cap). */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { NotFoundException } from '@nestjs/common';
 import type {
   BackupFileDto,
   BackupUploadsArchiveDto,
 } from '@raid-ledger/contract';
+
+import { isSafeBackupFilename } from './backup.helpers';
 
 type BackupType = BackupFileDto['type'];
 
@@ -35,4 +38,24 @@ export function listBackupFiles(
   return backups.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+}
+
+/**
+ * Absolute path of `filename` inside `dir`, or NotFoundException. Traversal
+ * collapses to 404 — never 400 (ROK-1279). An in-flight
+ * `.uploads.tar.partial` is never served (504 review NIT 12).
+ */
+export function resolveBackupFile(
+  dir: string,
+  type: BackupType,
+  filename: string,
+): string {
+  const notFound = `Backup file not found: ${type}/${filename}`;
+  if (!isSafeBackupFilename(filename) || filename.endsWith('.partial'))
+    throw new NotFoundException(notFound);
+  const resolved = path.resolve(dir, filename);
+  if (path.dirname(resolved) !== path.resolve(dir))
+    throw new NotFoundException(notFound);
+  if (!fs.existsSync(resolved)) throw new NotFoundException(notFound);
+  return resolved;
 }
