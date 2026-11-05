@@ -5,7 +5,7 @@
  * `calendar-away-heal.helpers.spec.ts`).
  */
 import { WORKER_METADATA } from '@nestjs/bullmq/dist/bull.constants';
-import type { Job, Queue } from 'bullmq';
+import { DelayedError, type Job, type Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
 import type { SettingsService } from '../../settings/settings.service';
 import { deriveIfNeedsReconnect } from '../read/calendar-away-heal.helpers';
@@ -15,6 +15,7 @@ import { CalendarWriteProcessor } from './calendar-write.processor';
 import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { reconcileCalendarCopy } from './calendar-write-reconcile.helpers';
 import { runCalendarWriteOff } from './calendar-write-off.helpers';
+import { WRITE_DEBOUNCE_MS } from '../calendar-sync.constants';
 
 jest.mock('../read/calendar-away-heal.helpers', () => ({
   deriveIfNeedsReconnect: jest.fn().mockResolvedValue(undefined),
@@ -32,12 +33,21 @@ const writeOff = jest.mocked(runCalendarWriteOff);
 const DB = { db: true };
 const READ_QUEUE = { read: true };
 
-function makeProcessor() {
+/** Write-queue fake: `states` maps a job id to its BullMQ state. */
+function makeQueue(states: Record<string, string> = {}) {
+  return {
+    getJobState: jest.fn((id: string) =>
+      Promise.resolve(states[id] ?? 'unknown'),
+    ),
+  };
+}
+
+function makeProcessor(queue = makeQueue()) {
   return new CalendarWriteProcessor(
     DB as never,
     {} as CalendarProviderRegistry,
     {} as SettingsService,
-    {} as Queue,
+    queue as unknown as Queue,
     {} as QueueHealthService,
     READ_QUEUE as unknown as Queue,
   );
@@ -73,6 +83,68 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
     const data = { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 };
     await makeProcessor().process(job(data as CalendarWriteJobData));
     expect(check).not.toHaveBeenCalled();
+  });
+});
+
+const RECONCILE: CalendarWriteJobData = {
+  kind: 'reconcile',
+  connectionId: 8,
+  eventId: 2,
+  userId: 4,
+};
+const PLAIN_ID = 'cal-write-8-2-4';
+const RERUN_ID = `${PLAIN_ID}-rerun`;
+
+/** An active job as the worker hands it to `process` (id + moveToDelayed). */
+function activeJob(id: string) {
+  const moveToDelayed = jest.fn().mockResolvedValue(undefined);
+  const j = { ...job(RECONCILE), id, moveToDelayed };
+  return { job: j as unknown as Job<CalendarWriteJobData>, moveToDelayed };
+}
+
+describe('CalendarWriteProcessor → a key never runs twice at once', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    reconcile.mockResolvedValue({ result: 'created' });
+  });
+
+  it('a -rerun whose plain job is still active waits instead of creating a second copy', async () => {
+    const queue = makeQueue({ [PLAIN_ID]: 'active' });
+    const { job: rerun, moveToDelayed } = activeJob(RERUN_ID);
+    const before = Date.now();
+    await expect(
+      makeProcessor(queue).process(rerun, 'tok'),
+    ).rejects.toBeInstanceOf(DelayedError);
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(queue.getJobState).toHaveBeenCalledWith(PLAIN_ID);
+    const [until, token] = moveToDelayed.mock.calls[0] ?? [];
+    expect(token).toBe('tok');
+    expect(until).toBeGreaterThanOrEqual(before + WRITE_DEBOUNCE_MS);
+  });
+
+  it('a plain job (e.g. a retry) whose -rerun is active waits too', async () => {
+    const queue = makeQueue({ [RERUN_ID]: 'active' });
+    const { job: plain, moveToDelayed } = activeJob(PLAIN_ID);
+    const before = Date.now();
+    await expect(
+      makeProcessor(queue).process(plain, 'tok'),
+    ).rejects.toBeInstanceOf(DelayedError);
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(queue.getJobState).toHaveBeenCalledWith(RERUN_ID);
+    expect(moveToDelayed).toHaveBeenCalledTimes(1);
+    // The plain job waits twice as long, so a simultaneous start can't re-collide.
+    const [until] = moveToDelayed.mock.calls[0] ?? [];
+    expect(until).toBeGreaterThanOrEqual(before + 2 * WRITE_DEBOUNCE_MS);
+  });
+
+  it('runs normally when its sibling is pending or gone', async () => {
+    const queue = makeQueue({ [PLAIN_ID]: 'delayed' });
+    const { job: rerun, moveToDelayed } = activeJob(RERUN_ID);
+    await expect(makeProcessor(queue).process(rerun, 'tok')).resolves.toEqual({
+      result: 'created',
+    });
+    expect(moveToDelayed).not.toHaveBeenCalled();
+    expect(reconcile).toHaveBeenCalledTimes(1);
   });
 });
 
