@@ -1,6 +1,6 @@
 /**
- * Forms section, part 2 (ROK-1655 PR-1): `FilePicker`, `ColorInput` and
- * `Button brandColor`. Split from forms-section.tsx to keep that file small;
+ * Forms section, part 2 (ROK-1655 PR-1): `FilePicker`, `ColorInput`,
+ * `Button brandColor` and the shared `MemberCombobox` (ROK-2095). Split from forms-section.tsx to keep that file small;
  * every example mounts the real primitive.
  *
  * Check both families with the side-by-side toggle: the FilePicker trigger is
@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
 import { FilePicker } from '../../components/ui/file-picker';
 import { ColorInput } from '../../components/ui/color-input';
+import { MemberCombobox, type MemberOption } from '../../components/shared/member-combobox';
 import { StateFrame } from './design-system-bits';
 
 /**
@@ -54,6 +55,17 @@ function ColorInputDemo(): JSX.Element {
     );
 }
 
+function MemberComboboxDemo(): JSX.Element {
+    const [member, setMember] = useState<MemberOption | null>(null);
+    return (
+        <StateFrame label="MemberCombobox — avatar rows in a Field" note="Searches the site's members. The Field draws the label; editing the text after a pick clears it (ROK-2095).">
+            <Field label="Leader" hint="Type a username, then pick a row." className="w-full">
+                <MemberCombobox value={member} onChange={setMember} />
+            </Field>
+        </StateFrame>
+    );
+}
+
 function BrandButtonDemo(): JSX.Element {
     return (
         <StateFrame label="Button — brandColor (runtime fill)" note="Provider / brand data only. The inline fill replaces the variant; the label is white or dark — whichever has the higher contrast on the fill — on every scheme (ROK-1472).">
@@ -64,12 +76,13 @@ function BrandButtonDemo(): JSX.Element {
     );
 }
 
-/** FilePicker, ColorInput and Button brandColor, for the Forms section grid. */
+/** FilePicker, ColorInput, MemberCombobox and Button brandColor, for the Forms section grid. */
 export function PickerStates(): JSX.Element {
     return (
         <>
             <FilePickerDemo />
             <ColorInputDemo />
+            <MemberComboboxDemo />
             <BrandButtonDemo />
         </>
     );

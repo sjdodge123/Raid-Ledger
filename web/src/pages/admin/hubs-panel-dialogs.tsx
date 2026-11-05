@@ -10,7 +10,7 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { useApproveHubProposal, useRejectHubProposal, useTransferHubLeader, type AdminHubEntry } from './use-admin-hubs';
-import { UserPicker, type PickedOption } from './hubs-panel-pickers';
+import { MemberCombobox, type MemberOption } from '../../components/shared/member-combobox';
 
 /** Footer: the server error (if any), Cancel and the primary action. */
 export function DialogFooter({ error, onCancel, children }: { error: string | null; onCancel: () => void; children: JSX.Element }): JSX.Element {
@@ -80,7 +80,7 @@ export function RejectHubDialog({ proposal, onClose }: ProposalDialogProps): JSX
 
 /** Hand the hub to another member; the server refuses a non-member (404) or the current leader (409). */
 export function TransferLeaderDialog({ hub, onClose }: { hub: AdminHubEntry; onClose: () => void }): JSX.Element {
-    const [target, setTarget] = useState<PickedOption | null>(null);
+    const [target, setTarget] = useState<MemberOption | null>(null);
     const transfer = useTransferHubLeader();
     const submit = (): void => {
         if (target) transfer.mutate({ hubId: hub.id, userId: target.id }, { onSuccess: onClose });
@@ -92,7 +92,12 @@ export function TransferLeaderDialog({ hub, onClose }: { hub: AdminHubEntry; onC
     );
     return (
         <Modal isOpen onClose={onClose} title={`Transfer leadership of “${hub.name}”`} footer={footer}>
-            <UserPicker label="New leader" value={target} onChange={setTarget} />
+            {/* ROK-2095: the listbox portals into this dialog (overflow-hidden), so reserve its max-h-64 below the field. */}
+            <div className="min-h-[21rem]">
+                <Field label="New leader" required hint="Pick a current member of the hub.">
+                    <MemberCombobox value={target} onChange={setTarget} />
+                </Field>
+            </div>
         </Modal>
     );
 }
