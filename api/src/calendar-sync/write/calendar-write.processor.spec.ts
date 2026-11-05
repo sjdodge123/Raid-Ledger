@@ -125,12 +125,16 @@ describe('CalendarWriteProcessor → a key never runs twice at once', () => {
   it('a plain job (e.g. a retry) whose -rerun is active waits too', async () => {
     const queue = makeQueue({ [RERUN_ID]: 'active' });
     const { job: plain, moveToDelayed } = activeJob(PLAIN_ID);
+    const before = Date.now();
     await expect(
       makeProcessor(queue).process(plain, 'tok'),
     ).rejects.toBeInstanceOf(DelayedError);
     expect(reconcile).not.toHaveBeenCalled();
     expect(queue.getJobState).toHaveBeenCalledWith(RERUN_ID);
     expect(moveToDelayed).toHaveBeenCalledTimes(1);
+    // The plain job waits twice as long, so a simultaneous start can't re-collide.
+    const [until] = moveToDelayed.mock.calls[0] ?? [];
+    expect(until).toBeGreaterThanOrEqual(before + 2 * WRITE_DEBOUNCE_MS);
   });
 
   it('runs normally when its sibling is pending or gone', async () => {
