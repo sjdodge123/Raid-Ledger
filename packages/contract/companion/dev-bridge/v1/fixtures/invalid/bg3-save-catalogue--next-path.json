@@ -1,0 +1,46 @@
+{
+  "saveRef": "3f9a0c2b7d41",
+  "catalogueState": "ready",
+  "next": "Saves/Story/QuickSave_1",
+  "hitRate": {
+    "total": 4,
+    "resolvedName": 3,
+    "resolvedRarity": 3
+  },
+  "party": [
+    {
+      "slot": 0,
+      "items": [
+        {
+          "slot": "Helmet",
+          "statsId": "ARM_Hat",
+          "name": "Hat",
+          "rarity": "Common"
+        },
+        {
+          "slot": "MeleeMainHand",
+          "statsId": "WPN_Longsword",
+          "name": "Longsword",
+          "rarity": "Common"
+        }
+      ]
+    },
+    {
+      "slot": 1,
+      "items": [
+        {
+          "slot": "Cloak",
+          "statsId": null,
+          "name": null,
+          "rarity": null
+        },
+        {
+          "slot": "Amulet",
+          "statsId": "ARM_Amulet_Necromancy_Thay",
+          "name": "Necromancy of Thay",
+          "rarity": "Legendary"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "collectors": [
+    {
+      "id": "wow-ledgerlink",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-04T20:15:00Z",
+      "lastUploadAt": null,
+      "pending": 0
+    },
+    {
+      "id": "bg3-save",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-04T20:15:00Z",
+      "lastUploadAt": "2026-11-04T20:15:00Z",
+      "pending": 0
+    }
+  ],
+  "bg3Catalogue": {
+    "state": "absent",
+    "reason": "gog",
+    "buildMs": null,
+    "builtAt": null,
+    "counts": null,
+    "lastLookup": null
+  }
+}
