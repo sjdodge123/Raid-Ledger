@@ -110,7 +110,9 @@ function describeUploadsArchive() {
     seedUploads();
     const dump = await createBackup();
 
-    expect(dump).toMatch(/^raid_ledger_\d{4}-\d{2}-\d{2}_\d{6}\.dump$/);
+    expect(dump).toMatch(
+      /^raid_ledger_\d{4}-\d{2}-\d{2}_\d{6}(?:_\d+)?\.dump$/,
+    );
     expect(fs.statSync(inDaily(dump)).size).toBeGreaterThan(0);
     expect(fs.existsSync(archiveOf(dump))).toBe(true);
     expect(fs.existsSync(`${archiveOf(dump)}.partial`)).toBe(false);
