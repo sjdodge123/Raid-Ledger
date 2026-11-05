@@ -53,7 +53,9 @@ describe('CreateHubDialog (ROK-2095)', () => {
         for (const name of ['Game', 'Leader']) {
             const input = within(dialog).getByRole('combobox', { name: new RegExp(`^${name}`) });
             expect(input).not.toHaveAttribute('aria-label');
-            expect(input.labels?.[0]?.textContent).toMatch(new RegExp(`^${name}`));
+            expect(input).toBeInstanceOf(HTMLInputElement);
+            const labels = input instanceof HTMLInputElement ? input.labels : null;
+            expect(labels?.[0]?.textContent).toMatch(new RegExp(`^${name}`));
         }
         expect(within(dialog).getByText(/Members join from the hub page/)).toBeInTheDocument();
     });
