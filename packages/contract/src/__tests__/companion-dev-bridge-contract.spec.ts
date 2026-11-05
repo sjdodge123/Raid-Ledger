@@ -19,7 +19,16 @@ import {
     isDevBridgeReadVerb,
     serializeDevBridgeAllowlist,
 } from '../companion-dev-bridge-allowlist.js';
-import { DEV_BRIDGE_MESSAGES, serializeDevBridgeJsonSchema } from '../companion-dev-bridge-json-schema.js';
+import {
+    DEV_BRIDGE_SV_READABLE_ADDONS,
+    DevBridgeSvRawSchema,
+    DevBridgeSvReadableAddonSchema,
+} from '../companion-dev-bridge-endpoints.schema.js';
+import {
+    buildDevBridgeJsonSchema,
+    DEV_BRIDGE_MESSAGES,
+    serializeDevBridgeJsonSchema,
+} from '../companion-dev-bridge-json-schema.js';
 
 const V1 = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'companion', 'dev-bridge', 'v1');
 const FIX = join(V1, 'fixtures');
@@ -99,6 +108,40 @@ describe('dev-bridge v1 drift guards (AC-1)', () => {
 
     it('allowlist.json matches a fresh generation', () => {
         expect(read(V1, 'allowlist.json')).toBe(serializeDevBridgeAllowlist());
+    });
+});
+
+describe('dev-bridge v1 addon SavedVariables allowlist (GET /dev/v1/addons/<folder>/sv)', () => {
+    /** `!BugGrabber` → `sv-raw--addon-buggrabber`. */
+    const fixtureOf = (folder: string): string => `sv-raw--addon-${folder.replace(/^!/, '').toLowerCase()}`;
+
+    it('lists exactly Mailworthy and !BugGrabber — never LedgerLink, which has its own route', () => {
+        expect([...DEV_BRIDGE_SV_READABLE_ADDONS]).toEqual(['Mailworthy', '!BugGrabber']);
+        expect(DevBridgeSvReadableAddonSchema.options).toEqual([...DEV_BRIDGE_SV_READABLE_ADDONS]);
+    });
+
+    it.each(['LedgerLink', 'EnhanceQoL', 'mailworthy', 'BugGrabber', '../Mailworthy', ''])(
+        'refuses folder %j',
+        (folder) => {
+            expect(DevBridgeSvReadableAddonSchema.safeParse(folder).success).toBe(false);
+        },
+    );
+
+    it.each([...DEV_BRIDGE_SV_READABLE_ADDONS])('%s has an sv-raw fixture for its own <folder>.lua', (folder) => {
+        const name = fixtureOf(folder);
+        expect(namesIn(FIX)).toContain(name);
+        const body = DevBridgeSvRawSchema.parse(readJson(FIX, `${name}.json`));
+        expect({ name, path: body.path }).toEqual({
+            name,
+            path: expect.stringMatching(new RegExp(`^${body.flavor}/WTF/Account/ACCOUNTNAME/SavedVariables/${folder}\\.lua$`)),
+        });
+    });
+
+    it('schema.json names every readable folder in its description', () => {
+        const description = String(buildDevBridgeJsonSchema()['description']);
+        for (const folder of DEV_BRIDGE_SV_READABLE_ADDONS) {
+            expect({ folder, named: description.includes(folder) }).toEqual({ folder, named: true });
+        }
     });
 });
 

@@ -28,6 +28,7 @@ script in game, or `/reload` for you.**
 | Is the bridge up, which flavors exist, is WoW running | `/dev/v1/health` |
 | Installed addons (from `.toc` headers) | `/dev/v1/addons?flavor=<flavor>` |
 | LedgerLink SavedVariables, raw text | `/dev/v1/ledgerlink/sv?flavor=<flavor>&scope=account` |
+| Mailworthy / BugGrabber SavedVariables, raw text (only these two) | `/dev/v1/addons/Mailworthy/sv?flavor=<flavor>&scope=account` (or `/dev/v1/addons/!BugGrabber/sv?…`; `%21BugGrabber` also works) |
 | LedgerLink SavedVariables, parsed (GUIDs hashed) | `/dev/v1/ledgerlink/sv/parsed?flavor=<flavor>` |
 | Probe status / answer | `/dev/v1/probes`, `/dev/v1/probes/<probeId>` |
 | Companion log (redacted) | `/dev/v1/logs?since=<iso>&level=warn` |

@@ -45,6 +45,7 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | GET | `/dev/v1/addons?flavor=&cursor=` | `addons` | yes |
 | GET | `/dev/v1/ledgerlink/sv?flavor=&scope=account\|character&cursor=` | `sv-raw` | yes (text) |
 | GET | `/dev/v1/ledgerlink/sv/parsed?flavor=&cursor=` | `sv-parsed` | yes |
+| GET | `/dev/v1/addons/<folder>/sv?flavor=&scope=account\|character&cursor=` (`<folder>` in `DEV_BRIDGE_SV_READABLE_ADDONS`) | `sv-raw` | yes (text) |
 | POST | `/dev/v1/probes` (body `probe-request`) | 202 `probe-queued` · 400/409 `error` | no |
 | GET | `/dev/v1/probes?status=&cursor=` | `probe-list` | yes |
 | GET | `/dev/v1/probes/:id?cursor=` | `probe-detail` | yes (`result.calls`) |
@@ -94,6 +95,45 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Probe `status`: `queued` → `answered` | `expired` (past `ttlHours`) |
   `rejected` (the stored result failed `probe-result`; `error` says why) |
   `cancelled` (after DELETE).
+
+## Other addons' SavedVariables (`/dev/v1/addons/<folder>/sv`)
+
+`GET /dev/v1/addons/<folder>/sv` returns one page of `<folder>.lua` in the
+same `sv-raw` body as `ledgerlink/sv`, with the same paging, cursor and
+error rules. `<folder>` must be one of `DEV_BRIDGE_SV_READABLE_ADDONS`
+(`companion-dev-bridge-endpoints.schema.ts`, Zod enum
+`DevBridgeSvReadableAddonSchema`; matched exactly and case-sensitively after
+percent-decoding, so `!BugGrabber` and `%21BugGrabber` are the same folder):
+
+| Folder | Saved variable | Why it is readable |
+|---|---|---|
+| `Mailworthy` | `MailworthyDB` (`selftest` holds the self-test report) | the operator's own addon |
+| `!BugGrabber` | `BugGrabberDB` | holds only captured Lua errors |
+
+**Why an allowlist.** Other addons' saved data can hold whispers and chat
+history (EnhanceQoL's IM history, for one), so the bridge reads only addons
+the operator owns or that hold only error reports. LedgerLink is not in the
+list: it has its own route. Adding a folder is an **additive** change (stays
+v1); removing one is breaking. Like `sv-raw` everywhere, the text is returned
+as-is (operator's own LAN tool).
+
+**Selection — the same for `ledgerlink/sv` and `addons/<folder>/sv`.**
+`scope=account` reads `<flavor>/WTF/Account/<account>/SavedVariables/<file>.lua`;
+`scope=character` reads
+`<flavor>/WTF/Account/<account>/<realm>/<character>/SavedVariables/<file>.lua`.
+`scope` defaults to `account` when omitted. There is no account, realm or
+character parameter: of every file of that
+scope under every account folder of the flavor, the companion serves the one
+with the **newest mtime**. Symlinked files are not followed. `path` names the
+file served, relative to the WoW folder. The cursor pins that file's length
++ mtime; a file rewritten mid-paging is a 400 `invalid_request` at `cursor`,
+and the client restarts without one.
+
+**Errors.** A folder not in the list → 404 `not_found`, checked before any
+query parameter (never 403 or 400, so the response reveals nothing about
+folders outside the list). A listed folder
+with no SavedVariables file of that scope → 404 `not_found`. A bad `scope`
+or `flavor` → 400 `invalid_request`, as on every other route.
 
 ## Probe request (`probe-request`)
 
