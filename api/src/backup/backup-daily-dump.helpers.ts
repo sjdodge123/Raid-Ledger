@@ -6,7 +6,9 @@
  * the restore drill and `uploadsArchiveName` all key off it); a clash takes
  * `_2`, `_3`, … before `.dump`. That keeps the `raid_ledger_*.dump` and
  * `raid_ledger_*.uploads.tar` patterns, and `_` sorts after `.`, so the
- * rotation's equal-mtime name tie-break still ranks the later dump newer.
+ * rotation's equal-mtime name tie-break still ranks the later dump newer
+ * (lexically, so `_10` sorts before `_9`; mtime decides first, and ten
+ * same-second dumps do not happen in practice).
  * Kept out of backup.service.ts (300-line cap).
  */
 import * as fs from 'node:fs';

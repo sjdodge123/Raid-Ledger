@@ -294,9 +294,10 @@ run_reconcile() {
 
 # A JSON-safe detail string: backslashes escaped FIRST (raw node stderr can
 # carry Windows paths or regex text), quotes dropped, control whitespace
-# flattened to spaces.
+# flattened to spaces, every other control byte (e.g. ANSI ESC) dropped.
 json_detail() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g' | tr -d '"' | tr '\n\r\t' '   '
+  printf '%s' "$1" | sed 's/\\/\\\\/g' | tr -d '"' | tr '\n\r\t' '   ' \
+    | tr -d '\000-\010\013\014\016-\037\177'
 }
 
 json_finding() {

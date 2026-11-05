@@ -49,6 +49,6 @@ describe('DailyDumpNamer', () => {
 
   it('gives up probing at a bound instead of looping forever', () => {
     const name = new DailyDumpNamer().next(DIR, AT, () => true);
-    expect(name).toMatch(/^raid_ledger_.+_\d+\.dump$/);
+    expect(name).toMatch(/_50\.dump$/);
   });
 });
