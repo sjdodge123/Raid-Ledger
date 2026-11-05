@@ -10,6 +10,7 @@ import {
     DevBridgeProbeIdSchema,
     DevBridgeProbeResultSchema,
 } from './companion-dev-bridge.schema.js';
+import { DevBridgeBg3CatalogueReportSchema } from './companion-dev-bridge-bg3-catalogue-report.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 — `/dev/v1/*` response bodies (ROK-2055 §6).
@@ -17,13 +18,13 @@ import {
 // would not fit is paged with `?cursor=` and carries `next` (null = last page).
 // ============================================================
 
-/** A path relative to the configured WoW folder: forward slashes, no leading `/`, no `..`, no drive. */
+/** A relative path (to the configured WoW folder, or for BG3 to the install's `Data/` / inside a pak): forward slashes, no leading `/`, no `..`, no drive. */
 export const DevBridgeRelativePathSchema = z
     .string()
     .min(1)
     .max(512)
     .refine((p) => !p.startsWith('/') && !p.includes('\\') && !p.includes(':'), {
-        message: 'Must be relative to the WoW folder, with forward slashes',
+        message: 'Must be a relative path, with forward slashes',
     })
     .refine((p) => p.split('/').every((s) => s !== '' && s !== '.' && s !== '..'), {
         message: 'Must not contain empty, "." or ".." segments',
@@ -207,9 +208,9 @@ export const DevBridgeCollectorSchema = z
     })
     .strict();
 
-/** GET /dev/v1/collectors */
+/** GET /dev/v1/collectors — `bg3Catalogue` (optional, ROK-2081): the BG3 game-data catalogue state, body-level, not a row. */
 export const DevBridgeCollectorsSchema = z
-    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32) })
+    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32), bg3Catalogue: DevBridgeBg3CatalogueReportSchema.optional() })
     .strict()
     .superRefine(fitsPage);
 

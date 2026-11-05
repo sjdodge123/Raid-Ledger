@@ -1,0 +1,60 @@
+{
+  "found": true,
+  "store": null,
+  "next": null,
+  "paks": [
+    {
+      "rel": "Shared.pak",
+      "parts": 1,
+      "entriesMatched": [
+        {
+          "name": "Public/Shared/Stats/Generated/Data/Armor.txt",
+          "sizeOnDisk": 412330,
+          "size": 2901442,
+          "method": "lz4",
+          "part": 0
+        },
+        {
+          "name": "Public/Shared/Stats/Generated/Data/Weapon.txt",
+          "sizeOnDisk": 98114,
+          "size": 701220,
+          "method": "lz4",
+          "part": 0
+        }
+      ]
+    },
+    {
+      "rel": "Gustav.pak",
+      "parts": 3,
+      "entriesMatched": [
+        {
+          "name": "Public/Gustav/RootTemplates/_merged.lsf",
+          "sizeOnDisk": 61440112,
+          "size": 188220416,
+          "method": "zstd",
+          "part": 2
+        },
+        {
+          "name": "Public/Gustav/Origins/Origins.lsx",
+          "sizeOnDisk": 20480,
+          "size": 88120,
+          "method": "lz4",
+          "part": 0
+        }
+      ]
+    },
+    {
+      "rel": "Localization/English.pak",
+      "parts": 1,
+      "entriesMatched": [
+        {
+          "name": "Localization/English/english.loca",
+          "sizeOnDisk": 9910552,
+          "size": 31455870,
+          "method": "lz4",
+          "part": 0
+        }
+      ]
+    }
+  ]
+}

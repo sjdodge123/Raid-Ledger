@@ -55,6 +55,8 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | GET | `/dev/v1/ledgerlink/snapshot/history?flavor=&character=&cursor=` | `ledgerlink-snapshot-history` | yes |
 | GET | `/dev/v1/bg3/saves?cursor=` | `bg3-saves` | yes |
 | GET | `/dev/v1/bg3/saves/<saveRef>/structure?cursor=` | `bg3-save-structure` | yes (`types` → `party`) |
+| GET | `/dev/v1/bg3/install?cursor=` | `bg3-install` | yes (`paks`, by entry slice) |
+| GET | `/dev/v1/bg3/saves/<saveRef>/catalogue?cursor=` | `bg3-save-catalogue` | yes (`party`) |
 
 - `error.error` is one of `invalid_request` (400, carries `issues` — each
   `{ path, code, message }` as Zod reports it), `unauthorized` (401),
@@ -369,7 +371,13 @@ equipment `slot` is the same — BG3 has 19 today, all listed.
   `portraitsMapped`, `metaNamesMatchParty`, `ownerProfileMatchesLocal`: the
   S0 verification answers as counts and booleans (no name is compared in
   the body; only the outcome is reported).
-- `party[]` — `{ slot, decoded }` by 0-based party index. Every `decoded`
+- `party[]` — `{ slot, characterKeyPrefix?, decoded }` by 0-based party index.
+  `characterKeyPrefix` (optional, ROK-2079 OQ-4; `^[0-9a-f]{8}$`, like
+  `campaignKeyPrefix`) is the first 8 hex chars of the member's
+  `characterKey = SHA-256(campaignKey ‖ ':' ‖ entityGuid)`, with entityGuid
+  as lowercase hyphenated text — so a sweep can check that one entity keeps
+  its key across saves of a campaign. Absent when the companion cannot derive
+  it; the GUID itself is never on the bridge. Every `decoded`
   field is optional and absent when its decoder is `unsupported`/`none`:
   `abilities` (`str dex con int wis cha`, each 1–30), `proficiencyBonus`
   (1–10), `maxHp` (1–100,000), `classLevels[] { classId, subclassId|null,
@@ -383,6 +391,74 @@ against `DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES` = 6 KiB (`custom`, "Party row
 is N bytes; the cap is 6144"); the field caps already keep the worst row
 well under it (the spec builds that row), so one always fits a page with
 the head.
+
+## BG3 game-data catalogue (`bg3-install`, `bg3-save-catalogue`, `collectors.bg3Catalogue`) — ROK-2081
+
+Read-only views of the companion's BG3 catalogue — item / origin / quest
+names it resolves from the player's own install (ROK-2081 ruling 6). Game-data
+names (item names, rarities, origin names) **are** allowed on the LAN bridge
+(ruling 7); custom character names never are — every object is strict, so a
+`characterName` key is `unrecognized_keys`. Both new bodies carry the same
+body-wide GUID / ≥ 10-digit guard as the ROK-2077 bodies, ≤ 16 KiB per page,
+and their own cursor grammar `^p[1-9][0-9]{0,3}_(paks|party)_[0-9]{1,6}$`
+(`p<page>_<section>_<offset>`). For `bg3-install` (`paks`) the offset is a
+**flat** count of matched entries already returned, across every pak in pak
+order — one pak's `entriesMatched` can span pages, so the offset is never a
+pak index. For `bg3-save-catalogue` (`party`) it is the number of party rows
+already returned. Like the ROK-2077 cursors it is an offset, never a file or
+folder name.
+
+**`collectors.bg3Catalogue`** (optional, body-level — not a collector row):
+`{ state, reason, buildMs, builtAt, counts, lastLookup }`.
+
+| `state` | Meaning | `reason` |
+|---|---|---|
+| `absent` | No usable install was found | `no-steam` · `no-bg3-library` · `no-app-manifest` · `no-data-dir` · `unsupported-store` · `other` |
+| `indexing` | A build is running; the previous catalogue may still serve (ruling 9) | `null` |
+| `ready` | Built; `buildMs`, `builtAt`, `counts` are non-null | `null` |
+| `failed` | The last build failed (retried later) | `timeout` · `too-large` · `pak-error` · `parse-error` · `install-changed` · `cache-error` · `other` |
+
+`reason` is set iff `state` is `absent`/`failed` and must come from that
+state's list (`custom`). `other` is in both lists: the companion maps any
+error kind it adds later to `other`, so a new companion-side kind needs no new
+value here. `absent` has no catalogue, so `buildMs`, `builtAt`, `counts` and
+`lastLookup` are all `null` (`custom` otherwise). `failed` (like `indexing`)
+may keep them non-null: the previous catalogue is still served and they
+describe it. `counts` = `{ items, origins, quests, waypoints,
+skipped }`; `lastLookup` = `{ total, resolvedName, resolvedRarity, at }` of
+the latest lookup batch (each resolved count ≤ `total`). `state`, `reason`
+and the pak `method` / `store` enums are closed: a new named value is
+**breaking** (for `reason`, unknown kinds go to `other` instead).
+
+**`bg3-install`** (`GET /dev/v1/bg3/install`): `{ found, store, paks[],
+next }`. `store` ∈ `steam` · `gog` · `epic` · `mac-app-store` · `unknown`
+(a store, not a platform), and `store` is `null` iff `found` is `false`
+(`custom`). `found: false` ⇒ `paks` is empty. Each pak: `rel` — relative to the
+install's `Data/` folder, forward slashes, no `..`, no drive, ending `.pak`,
+≤ 256 (the install path itself never leaves the PC); `parts` 1–16; and
+`entriesMatched[]` (≤ 96 per page) of `{ name, sizeOnDisk, size, method,
+part }` — the entry's path inside the pak (relative, ≤ 256), its compressed
+and decompressed sizes, `method` ∈ `none` · `zlib` · `lz4` · `zstd` ·
+`unknown`, and the archive part (0–15) holding it — always `< parts` of
+its pak (`custom`). `paks[].rel` is unique
+within a page; a pak whose entries span pages repeats its head (`rel`,
+`parts`) with the next slice (clients merge by `rel`). Names and sizes only —
+never pak bytes.
+
+**`bg3-save-catalogue`** (`GET /dev/v1/bg3/saves/<saveRef>/catalogue`;
+unknown `saveRef` → 404 `not_found`): `{ saveRef, catalogueState, hitRate,
+party[], next }`. `party[]` = `{ slot, items[] }` by the same 0-based party
+index as `bg3-save-structure`; each item `{ slot, statsId, name, rarity }` —
+the equipment `slot` enum, the `bg3-save-structure` `statsId` pattern or
+`null`, `name` (display text ≤ 128) or `null`, `rarity` (a Larian id ≤ 64,
+e.g. `Legendary`) or `null`. A `null` name is a miss (a modded or unknown id)
+— misses are listed by `statsId`. `items[].slot` is unique within a row and
+`party[].slot` within a page. `hitRate` = `{ total, resolvedName,
+resolvedRarity }` over the whole save, repeated on every page.
+`catalogueState` `absent`/`failed` ⇒ every `name` and `rarity` is `null`
+(`custom`). Each row is checked against
+`DEV_BRIDGE_BG3_CATALOGUE_ROW_MAX_BYTES` = 12 KiB; a row of 19 items at
+every field cap fits it and one page with the head.
 
 ## Fixtures
 
