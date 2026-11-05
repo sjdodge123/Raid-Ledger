@@ -35,6 +35,7 @@ const PUBLIC_FAILURE: Record<ArchiveFailure['reason'], string> = {
   'insufficient-space': 'Not enough free space on the backup disk',
   'measure-failed': 'Could not measure the uploads folder — see server logs',
   'tar-failed': 'Archive failed — see server logs',
+  'rename-failed': 'Archive could not be saved — see server logs',
   timeout: 'Archive took too long and was stopped — see server logs',
 };
 
