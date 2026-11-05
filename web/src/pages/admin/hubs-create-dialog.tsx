@@ -7,17 +7,21 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { useAdminCreateHub } from './use-admin-hubs';
-import { GamePicker, UserPicker, type PickedOption } from './hubs-panel-pickers';
+import { MemberCombobox, type MemberOption } from '../../components/shared/member-combobox';
+import { GamePicker, type PickedOption } from './hubs-panel-pickers';
 import { DialogFooter } from './hubs-panel-dialogs';
 
-function isComplete(game: PickedOption | null, leader: PickedOption | null, name: string, blurb: string): boolean {
+/** ROK-2095: the one member picked here is the Leader; everyone else joins from the hub page (ROK-1870 R2). */
+const LEADER_HINT = 'Runs the hub. Members join from the hub page once it is live.';
+
+function isComplete(game: PickedOption | null, leader: MemberOption | null, name: string, blurb: string): boolean {
     return !!game && !!leader && name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0;
 }
 
 /** The create-hub form in a Modal. */
 export function CreateHubDialog({ onClose }: { onClose: () => void }): JSX.Element {
     const [game, setGame] = useState<PickedOption | null>(null);
-    const [leader, setLeader] = useState<PickedOption | null>(null);
+    const [leader, setLeader] = useState<MemberOption | null>(null);
     const [name, setName] = useState('');
     const [blurb, setBlurb] = useState('');
     const create = useAdminCreateHub();
@@ -33,14 +37,18 @@ export function CreateHubDialog({ onClose }: { onClose: () => void }): JSX.Eleme
     return (
         <Modal isOpen onClose={onClose} title="Create hub" footer={footer}>
             <div className="space-y-4">
-                <GamePicker label="Game" value={game} onChange={setGame} />
+                <Field label="Game" required>
+                    <GamePicker value={game} onChange={setGame} />
+                </Field>
                 <Field label="Hub name" required>
                     <Input value={name} maxLength={HUB_NAME_MAX} onChange={(e) => setName(e.target.value)} />
                 </Field>
                 <Field label="Blurb" required>
                     <Textarea value={blurb} maxLength={HUB_BLURB_MAX} showCount onChange={(e) => setBlurb(e.target.value)} />
                 </Field>
-                <UserPicker label="Leader" value={leader} onChange={setLeader} />
+                <Field label="Leader" required hint={LEADER_HINT}>
+                    <MemberCombobox value={leader} onChange={setLeader} />
+                </Field>
             </div>
         </Modal>
     );
