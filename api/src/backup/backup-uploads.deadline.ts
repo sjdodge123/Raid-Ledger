@@ -45,7 +45,8 @@ function warnSlow(slowWarnMs: number, label: string): void {
 /**
  * Run `run` under the deadline. On expiry the signal aborts (execFile then
  * SIGKILLs tar) and the returned promise rejects with `TarTimeoutError` even
- * if the runner ignores the signal. Both timers are cleared on settle.
+ * if the runner ignores the signal. Both timers are cleared on settle —
+ * including when `run` throws synchronously.
  */
 export function runWithDeadline(
   run: (opts: TarRunOptions) => Promise<unknown>,
@@ -64,7 +65,11 @@ export function runWithDeadline(
     expire(new TarTimeoutError(timeoutMs));
   }, timeoutMs);
   const slowTimer = setTimeout(() => warnSlow(slowWarnMs, label), slowWarnMs);
-  const child = run({ signal: controller.signal, killSignal: 'SIGKILL' });
+  // A runner that throws synchronously (spawn/arg setup) becomes a rejection,
+  // so the `finally` below still clears both timers (#1949 review NIT 20).
+  const child = new Promise<unknown>((resolve) => {
+    resolve(run({ signal: controller.signal, killSignal: 'SIGKILL' }));
+  });
   return Promise.race([child, expired])
     .catch((err: unknown) => {
       // execFile rejects with its own AbortError first; report it as the timeout.

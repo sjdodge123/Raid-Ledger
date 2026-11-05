@@ -37,6 +37,7 @@ export type UploadsArchiveResult =
   | { status: 'failed'; reason: 'insufficient-space' }
   | { status: 'failed'; reason: 'measure-failed'; detail: string }
   | { status: 'failed'; reason: 'tar-failed'; detail: string }
+  | { status: 'failed'; reason: 'rename-failed'; detail: string }
   | { status: 'failed'; reason: 'timeout'; detail: string };
 
 export interface ArchiveUploadsInput {
@@ -236,8 +237,13 @@ async function writeArchive(
     fs.renameSync(partial, outPath);
     return { status: 'written', path: outPath };
   } catch (err) {
+    // tar succeeded; moving the partial into place did not (backlog 2026-10-27).
     cleanupPartialFile(partial);
-    return { status: 'failed', reason: 'tar-failed', detail: errMessage(err) };
+    return {
+      status: 'failed',
+      reason: 'rename-failed',
+      detail: errMessage(err),
+    };
   }
 }
 

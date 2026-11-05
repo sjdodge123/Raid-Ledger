@@ -107,6 +107,21 @@ describe('UploadsArchiveTracker — failure copy', () => {
     tracker.forget(DUMP);
     expect(tracker.stateOf(DUMP)).toBeUndefined();
   });
+
+  it('a rename failure has its own copy, distinct from a tar failure', async () => {
+    const tracker = new UploadsArchiveTracker(dir);
+    await tracker.run(DUMP, () =>
+      Promise.resolve<UploadsArchiveResult>({
+        status: 'failed',
+        reason: 'rename-failed',
+        detail: "EISDIR: illegal operation on a directory, rename '/x'",
+      }),
+    );
+    expect(tracker.stateOf(DUMP)).toEqual({
+      state: 'failed',
+      error: 'Archive could not be saved — see server logs',
+    });
+  });
 });
 
 describe('UploadsArchiveTracker — after a restart', () => {

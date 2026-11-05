@@ -40,6 +40,26 @@ afterEach(() => {
 });
 
 describe('runWithDeadline', () => {
+  it('a runner that throws synchronously rejects and leaves no pending timers', async () => {
+    const boom = new Error('spawn EACCES');
+    // The async wrapper catches a sync throw too, so the timer assertion
+    // below is what fails when the timers leak — not an uncaught throw.
+    const settled = (async (): Promise<unknown> => {
+      try {
+        await runWithDeadline(() => {
+          throw boom;
+        }, 'raid_ledger_ts.uploads.tar');
+        return undefined;
+      } catch (err) {
+        return err;
+      }
+    })();
+    expect(await settled).toBe(boom);
+    expect(jest.getTimerCount()).toBe(0);
+    await jest.advanceTimersByTimeAsync(UPLOADS_TAR_TIMEOUT_MS);
+    expect(slowWarnings()).toEqual([]);
+  });
+
   it('defaults to a 3 h kill and a 30 min warning', () => {
     expect(UPLOADS_TAR_TIMEOUT_MS).toBe(3 * 60 * 60 * 1000);
     expect(UPLOADS_TAR_SLOW_WARN_MS).toBe(30 * 60 * 1000);

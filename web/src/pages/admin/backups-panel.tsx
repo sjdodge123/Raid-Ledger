@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 import { formatSize, formatDate, TYPE_BADGE, createdBackupMessage } from './backup-panel-utils';
 import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 import { UploadsArchiveStatus } from './backup-uploads-archive';
+import { BackupRowActions } from './backup-row-actions';
 import { anyArchiving } from '../../hooks/backup-archive-poll';
 
 type FilterType = 'all' | 'daily' | 'migration';
@@ -170,10 +171,7 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
             <td className="px-4 py-3 text-muted hidden sm:table-cell">{formatDate(backup.createdAt, tz)}</td>
             <td className="px-4 py-3 text-muted hidden md:table-cell">{formatSize(backup.sizeBytes)}</td>
             <td className="px-4 py-3 text-right">
-                <div className="flex items-center justify-end gap-2">
-                    <Button size="sm" variant="warning-soft" onClick={() => onRestore(backup)}>Restore</Button>
-                    <Button size="sm" variant="destructive-soft" disabled={backup.uploadsArchive?.state === 'archiving'} onClick={() => onDelete(backup)}>Delete</Button>
-                </div>
+                <BackupRowActions backup={backup} onRestore={onRestore} onDelete={onDelete} />
             </td>
         </tr>
     );
