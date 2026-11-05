@@ -270,6 +270,8 @@ export * from './companion-dev-bridge-endpoints.schema.js';
 export * from './companion-dev-bridge-queue.schema.js';
 export * from './companion-dev-bridge-snapshot.schema.js';
 export * from './companion-dev-bridge-bg3.schema.js';
+export * from './companion-dev-bridge-bg3-catalogue-report.schema.js';
+export * from './companion-dev-bridge-bg3-catalogue.schema.js';
 export * from './companion-dev-bridge-bg3-redaction.js';
 export * from './companion-dev-bridge-json-schema.js';
 // BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).

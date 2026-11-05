@@ -10,6 +10,7 @@ import {
     DevBridgeProbeIdSchema,
     DevBridgeProbeResultSchema,
 } from './companion-dev-bridge.schema.js';
+import { DevBridgeBg3CatalogueReportSchema } from './companion-dev-bridge-bg3-catalogue-report.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 — `/dev/v1/*` response bodies (ROK-2055 §6).
@@ -207,9 +208,9 @@ export const DevBridgeCollectorSchema = z
     })
     .strict();
 
-/** GET /dev/v1/collectors */
+/** GET /dev/v1/collectors — `bg3Catalogue` (optional, ROK-2081): the BG3 game-data catalogue state, body-level, not a row. */
 export const DevBridgeCollectorsSchema = z
-    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32) })
+    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32), bg3Catalogue: DevBridgeBg3CatalogueReportSchema.optional() })
     .strict()
     .superRefine(fitsPage);
 
