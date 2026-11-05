@@ -16,6 +16,7 @@ import { InviteeMultiSelect } from '../../components/lineups/InviteeMultiSelect'
 import { useAdminCreateHub } from './use-admin-hubs';
 import { GamePicker, type PickedOption } from './hubs-panel-pickers';
 import { DialogFooter } from './hubs-panel-dialogs';
+import { initialMembers, membersLimitError } from './hubs-create-form';
 
 const LEADER_HINT = 'Runs the hub. Anyone else can still join from the hub page once it is live.';
 const MEMBERS_COPY = {
@@ -30,16 +31,17 @@ function useCreateHubForm() {
     const [name, setName] = useState('');
     const [blurb, setBlurb] = useState('');
     const [members, setMembers] = useState<number[]>([]);
-    const complete = !!game && !!leader && name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0;
+    const memberUserIds = initialMembers(members, leader?.id ?? null);
+    const membersError = membersLimitError(memberUserIds.length);
+    const complete = !!game && !!leader && name.trim().length >= HUB_NAME_MIN && blurb.trim().length > 0 && membersError === null;
     const body = (): AdminCreateHubDto | null => {
         if (!game || !leader) return null;
-        const memberUserIds = members.filter((id) => id !== leader.id);
         return {
             gameId: game.id, leaderUserId: leader.id, name: name.trim(), blurb: blurb.trim(),
             ...(memberUserIds.length > 0 ? { memberUserIds } : {}),
         };
     };
-    return { game, setGame, leader, setLeader, name, setName, blurb, setBlurb, members, setMembers, complete, body };
+    return { game, setGame, leader, setLeader, name, setName, blurb, setBlurb, members, setMembers, membersError, complete, body };
 }
 
 type CreateHubForm = ReturnType<typeof useCreateHubForm>;
@@ -61,6 +63,7 @@ function CreateHubFields({ f }: { f: CreateHubForm }): JSX.Element {
             </Field>
             <InviteeMultiSelect value={f.members} onChange={f.setMembers} copy={MEMBERS_COPY}
                 {...(f.leader ? { excludeIds: [f.leader.id] } : {})} />
+            {f.membersError && <p role="alert" className="text-sm text-danger">{f.membersError}</p>}
         </div>
     );
 }
