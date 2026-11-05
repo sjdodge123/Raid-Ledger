@@ -7,6 +7,22 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-05 (addon SavedVariables reads, additive)
+
+- New route `GET /dev/v1/addons/<folder>/sv?flavor=&scope=&cursor=`,
+  body `sv-raw` (schema unchanged). `<folder>` must be in the new export
+  `DEV_BRIDGE_SV_READABLE_ADDONS = ['Mailworthy', '!BugGrabber']` (Zod enum
+  `DevBridgeSvReadableAddonSchema`); anything else, or a listed addon with no
+  file, is 404 `not_found`. Other addons' saved data can hold whispers and
+  chat history, so only addons the operator owns or that hold only error
+  reports are readable; adding a folder to the list is additive.
+- CONTRACT.md now spells out file selection for both raw routes: newest mtime
+  among every file of the scope, no account/realm/character parameter (what
+  `ledgerlink/sv` already did; previously undocumented).
+- New golden fixtures `sv-raw--addon-mailworthy`, `sv-raw--addon-buggrabber`.
+  `schema.json` changes only in the root `description` (names the route and
+  the folders); no `$defs` change. **Additive** — stays v1.
+
 ## v1 — 2026-11-05 (ROK-2079 OQ-4 + ROK-2081 ruling 6, additive)
 
 - `bg3-save-structure` party rows gain an optional `characterKeyPrefix`
