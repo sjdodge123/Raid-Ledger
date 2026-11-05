@@ -2,7 +2,8 @@
  * ROK-2095 — Create hub: the Game and Leader pickers carry VISIBLE labels (the
  * `Combobox` `label` prop is only an aria-label, so `getByLabelText` alone
  * passed while the operator saw two unlabelled boxes), and the leader is picked
- * from the shared member picker, not typed as free text.
+ * from the shared member picker, not typed as free text. ROK-2096: the admin
+ * may also pick the hub's first members.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -57,7 +58,7 @@ describe('CreateHubDialog (ROK-2095)', () => {
             const labels = input instanceof HTMLInputElement ? input.labels : null;
             expect(labels?.[0]?.textContent).toMatch(new RegExp(`^${name}`));
         }
-        expect(within(dialog).getByText(/Members join from the hub page/)).toBeInTheDocument();
+        expect(within(dialog).getByText(/join from the hub page once it is live/)).toBeInTheDocument();
     });
 
     it('picks the leader from member rows with avatars and posts leaderUserId', async () => {
@@ -86,5 +87,22 @@ describe('CreateHubDialog (ROK-2095)', () => {
         expect(create).toBeEnabled();
         await user.type(leader, 'x');
         expect(create).toBeDisabled();
+    });
+
+    it('ROK-2096: posts the picked members as memberUserIds and hides the leader from the list', async () => {
+        const user = userEvent.setup();
+        const dialog = open();
+        await fillGameNameBlurb(user, dialog);
+        await user.type(within(dialog).getByRole('combobox', { name: /^Leader/ }), 'hip');
+        await user.click(await screen.findByRole('option', { name: 'hiphoptobop' }));
+        expect(within(dialog).getByText('Members (optional)')).toBeInTheDocument();
+        await user.click(within(await within(dialog).findByTestId('invitee-option-10')).getByRole('checkbox'));
+        expect(within(dialog).queryByTestId('invitee-option-9')).not.toBeInTheDocument();
+        expect(within(dialog).getByText('1 member selected')).toBeInTheDocument();
+        await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+        await waitFor(() => expect(store.requests).toContainEqual({
+            method: 'POST', path: '/admin/hubs',
+            body: { gameId: 77, leaderUserId: 9, name: 'Gamergoons', blurb: 'Forever raiders', memberUserIds: [10] },
+        }));
     });
 });
