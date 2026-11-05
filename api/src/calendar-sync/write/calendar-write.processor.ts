@@ -8,6 +8,8 @@
  * ROK-1593 — a `failed` reconcile / write-off that left the
  * connection `needs_reconnect` queues a read `derive` for its user, so its
  * synced away days stop counting (Q12).
+ * A job never runs alongside its own `-rerun` (or vice versa): it defers
+ * itself first — `calendar-write-overlap.helpers.ts` explains why.
  */
 import { Inject, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
@@ -32,6 +34,7 @@ import {
   type ReconcileOutcome,
 } from './calendar-write-reconcile.helpers';
 import { isFinalAttempt } from './calendar-write-reconcile-persist.helpers';
+import { deferWhileSiblingActive } from './calendar-write-overlap.helpers';
 import {
   type CalendarDisconnectResult,
   runCalendarDisconnect,
@@ -75,7 +78,9 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
 
   async process(
     job: Job<CalendarWriteJobData>,
+    token?: string,
   ): Promise<ReconcileOutcome | WriteOffOutcome | CalendarDisconnectResult> {
+    await deferWhileSiblingActive(this.queue, job, token);
     const { data } = job;
     const deps = { db: this.db, registry: this.registry };
     if (data.kind === 'write-off') {
