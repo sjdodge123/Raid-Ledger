@@ -44,6 +44,7 @@ import {
   UploadsArchiveTracker,
 } from './backup-uploads.tracker';
 import { listBackupFiles, resolveBackupFile } from './backup-list.helpers';
+import { DailyDumpNamer, writeDailyDump } from './backup-daily-dump.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
@@ -72,6 +73,7 @@ export class BackupService implements OnModuleInit {
   private readonly dailyDir: string;
   private readonly migrationDir: string;
   private readonly dbContainer: string;
+  private readonly dumpNames = new DailyDumpNamer();
   /** Public for the integration spec's `whenIdle()` seam. */
   readonly uploadsArchives: UploadsArchiveTracker;
 
@@ -155,17 +157,15 @@ export class BackupService implements OnModuleInit {
     });
   }
 
-  /** Write `daily/raid_ledger_<ts>.dump`; returns its filename. */
-  private async dumpDaily(): Promise<string> {
-    const filename = `raid_ledger_${formatBackupTimestamp(new Date())}.dump`;
-    const dumpPath = path.join(this.dailyDir, filename);
-    this.logger.log(`Starting daily backup: ${filename}`);
-    await this.runPgDump(dumpPath);
-    const stats = fs.statSync(dumpPath);
-    this.logger.log(
-      `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
+  /** Write `daily/raid_ledger_<ts>[_n].dump` (unique name); returns its filename. */
+  private dumpDaily(): Promise<string> {
+    const filename = this.dumpNames.next(this.dailyDir, new Date());
+    return writeDailyDump(
+      this.dailyDir,
+      filename,
+      (p) => this.runPgDump(p),
+      this.logger,
     );
-    return filename;
   }
 
   /** The dump's companion archive, tracked; joins one already running. Never rejects. */

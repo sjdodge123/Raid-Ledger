@@ -325,6 +325,25 @@ describe('archiveUploads', () => {
     expect(fs.readdirSync(path.dirname(outPath))).toEqual([]);
   });
 
+  it('fails with rename-failed (not tar-failed) when the finished partial cannot be moved into place', async () => {
+    const outPath = outFor();
+    // A non-empty directory at the target path makes renameSync fail.
+    fs.mkdirSync(path.join(outPath, 'occupied'), { recursive: true });
+    const res = await archiveUploads({
+      uploadsDir: seedUploads(),
+      outPath,
+      dailyDir: path.dirname(outPath),
+      warn: noWarn,
+      statfs: roomy,
+      runTar: (args) => {
+        fs.writeFileSync(args[1] ?? '', 'complete');
+        return Promise.resolve();
+      },
+    });
+    expect(res).toMatchObject({ status: 'failed', reason: 'rename-failed' });
+    expect(fs.existsSync(`${outPath}.partial`)).toBe(false);
+  });
+
   it('keeps the archive and warns on a GNU exit-1 with output', async () => {
     const outPath = outFor();
     const warn = jest.fn();
