@@ -7,6 +7,30 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-05 (ROK-2079 OQ-4 + ROK-2081 ruling 6, additive)
+
+- `bg3-save-structure` party rows gain an optional `characterKeyPrefix`
+  (`^[0-9a-f]{8}$`): the first 8 hex chars of `characterKey =
+  SHA-256(campaignKey ‖ ':' ‖ entityGuid)`, so a sweep can compare one
+  entity across saves. Optional — every existing body stays valid.
+- `collectors` gains an optional body-level `bg3Catalogue` block
+  (`state`, `reason`, `buildMs`, `builtAt`, `counts`, `lastLookup`), not a
+  field on the strict collector rows. Optional — every existing body stays
+  valid.
+- New `$defs` (output mode, read-only routes): `bg3-install`
+  (`GET /dev/v1/bg3/install` — pak names relative to `Data/`, parts,
+  matched entries with sizes / method / part; never an absolute path) and
+  `bg3-save-catalogue` (`GET /dev/v1/bg3/saves/<saveRef>/catalogue` — per
+  equipped slot `{ slot, statsId, name, rarity }` plus the save's hit
+  rate). Game-data names are allowed on the LAN bridge (ROK-2081 ruling 7);
+  character names are not (strict objects). Both carry the BG3 GUID /
+  10-digit guard and their own `p<n>_(paks|party)_<offset>` cursor.
+- New golden fixtures `bg3-save-structure--character-keys`,
+  `collectors--bg3-catalogue{,-absent}`, `bg3-install{,--absent,--entries-page}`,
+  `bg3-save-catalogue{,--no-catalogue}`, and 19 invalid cases (each exactly
+  one issue). Existing `$defs` change only by the two optional properties;
+  the root `description` gains the new refinements. **Additive** — stays v1.
+
 ## v1 — 2026-11-03 (ROK-2077, additive)
 
 - New `$defs`: `bg3-saves` (`GET /dev/v1/bg3/saves`) and
