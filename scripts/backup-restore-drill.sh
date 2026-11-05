@@ -292,9 +292,16 @@ run_reconcile() {
   [ "$RECONCILE_EXIT" = "0" ] || tail -30 /tmp/rl-drill-reconcile.out >&2
 }
 
+# A JSON-safe detail string: backslashes escaped FIRST (raw node stderr can
+# carry Windows paths or regex text), quotes dropped, control whitespace
+# flattened to spaces.
+json_detail() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g' | tr -d '"' | tr '\n\r\t' '   '
+}
+
 json_finding() {
   printf '{"id":"%s","tier":"%s","status":"%s","detail":"%s"}' \
-    "$1" "$2" "$3" "$(printf '%s' "$4" | tr -d '"' | tr '\n' ' ')"
+    "$1" "$2" "$3" "$(json_detail "$4")"
 }
 
 # The API child gets a port nothing else is listening on. A hardcoded 3000
