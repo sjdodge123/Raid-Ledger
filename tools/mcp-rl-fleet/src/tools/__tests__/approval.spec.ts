@@ -114,6 +114,16 @@ describe('transport (spec D6: body over stdin, token in no argv)', () => {
     expect(get).toContain("--expand-header 'X-Agent-Token: {{RL_AGENT_TOKEN_VALUE}}'");
   });
 
+  it('reaches docker through the VM proxy unix socket, never the retired TCP port (ROK-2049)', () => {
+    for (const cmd of [
+      buildRemoteCommand('POST', '/api/approvals', true),
+      buildRemoteCommand('GET', '/api/approvals', false),
+    ]) {
+      expect(cmd).toContain('DOCKER_HOST=unix:///srv/rl-infra/run/docker-proxy/docker.sock docker run');
+      expect(cmd).not.toContain('tcp://');
+    }
+  });
+
   it('refuses a path outside the approvals routes', () => {
     expect(() => buildRemoteCommand('GET', "/api/approvals/x';rm -rf /", false)).toThrow(/bad path/);
   });
