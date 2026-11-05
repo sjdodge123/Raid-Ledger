@@ -71,10 +71,27 @@ export const DevBridgeAddonsSchema = z
     .strict()
     .superRefine(fitsPage);
 
-/** Which LedgerLink SavedVariables file: the account-wide one or a per-character one. */
+/** Which SavedVariables file: the account-wide one or a per-character one (the newest by mtime). */
 export const DevBridgeSvScopeSchema = z.enum(['account', 'character']);
 
-/** GET /dev/v1/ledgerlink/sv?flavor=&scope=&cursor= — one page of the raw `LedgerLink.lua`. */
+/**
+ * Addon folders whose SavedVariables `GET /dev/v1/addons/<folder>/sv` may
+ * read (body `sv-raw`). Other addons' saved data can hold whispers and chat
+ * history, so only addons the operator owns or that hold only error reports
+ * are listed. LedgerLink is not here: it has its own `ledgerlink/sv` route.
+ * Adding a folder is additive; any other folder is a 404 `not_found`.
+ */
+export const DEV_BRIDGE_SV_READABLE_ADDONS = ['Mailworthy', '!BugGrabber'] as const;
+
+/** The `<folder>` path segment of `GET /dev/v1/addons/<folder>/sv`. */
+export const DevBridgeSvReadableAddonSchema = z.enum(DEV_BRIDGE_SV_READABLE_ADDONS);
+
+export type DevBridgeSvReadableAddon = z.infer<typeof DevBridgeSvReadableAddonSchema>;
+
+/**
+ * One page of a raw SavedVariables file: `GET /dev/v1/ledgerlink/sv?flavor=&scope=&cursor=`
+ * (`LedgerLink.lua`) and `GET /dev/v1/addons/<folder>/sv?flavor=&scope=&cursor=` (`<folder>.lua`).
+ */
 export const DevBridgeSvRawSchema = z
     .object({
         flavor: DevBridgeFlavorSchema,
