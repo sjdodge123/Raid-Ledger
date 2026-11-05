@@ -61,7 +61,7 @@ function CreateHubFields({ f }: { f: CreateHubForm }): JSX.Element {
             <Field label="Leader" required hint={LEADER_HINT}>
                 <MemberCombobox value={f.leader} onChange={f.setLeader} />
             </Field>
-            <InviteeMultiSelect value={f.members} onChange={f.setMembers} copy={MEMBERS_COPY}
+            <InviteeMultiSelect value={f.members} onChange={f.setMembers} copy={MEMBERS_COPY} hideBadges
                 {...(f.leader ? { excludeIds: [f.leader.id] } : {})} />
             {f.membersError && <p role="alert" className="text-sm text-danger">{f.membersError}</p>}
         </div>

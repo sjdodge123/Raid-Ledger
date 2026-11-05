@@ -99,6 +99,8 @@ describe('CreateHubDialog (ROK-2095)', () => {
         await user.click(within(await within(dialog).findByTestId('invitee-option-10')).getByRole('checkbox'));
         expect(within(dialog).queryByTestId('invitee-option-9')).not.toBeInTheDocument();
         expect(within(dialog).getByText('1 member selected')).toBeInTheDocument();
+        // Operator ruling 2026-11-05: the lineup caveats (both seeded users lack Steam) are hidden on a hub.
+        expect(within(dialog).queryByText(/No Steam linked|No Discord/)).not.toBeInTheDocument();
         await user.click(within(dialog).getByRole('button', { name: 'Create' }));
         await waitFor(() => expect(store.requests).toContainEqual({
             method: 'POST', path: '/admin/hubs',

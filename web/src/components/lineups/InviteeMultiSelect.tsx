@@ -13,7 +13,8 @@
  *
  * ROK-2096: `copy` overrides the label + hint for a non-lineup caller (Create
  * hub's initial members), and `excludeIds` hides users chosen elsewhere (the
- * hub's leader).
+ * hub's leader). `hideBadges` drops the lineup-only No Discord / No Steam
+ * caveats, which say nothing about hub membership (operator ruling 2026-11-05).
  */
 import { useMemo, useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -38,6 +39,8 @@ export interface InviteeMultiSelectProps {
     copy?: { label: string; hint: string; noun: string };
     /** Users not offered (e.g. the member already picked as leader). */
     excludeIds?: readonly number[];
+    /** Hide the per-row No Discord / No Steam caveats (lineup-specific). */
+    hideBadges?: boolean;
 }
 
 /** Field label per mode. */
@@ -101,10 +104,12 @@ function MemberRow({
     member,
     checked,
     onToggle,
+    hideBadges,
 }: {
     member: GuildMember;
     checked: boolean;
     onToggle: () => void;
+    hideBadges: boolean;
 }): JSX.Element {
     return (
         <label
@@ -120,7 +125,7 @@ function MemberRow({
             <span className="text-sm text-foreground flex-1">
                 {member.username}
             </span>
-            <MemberBadges member={member} />
+            {!hideBadges && <MemberBadges member={member} />}
         </label>
     );
 }
@@ -132,6 +137,7 @@ export function InviteeMultiSelect({
     mode = 'private',
     copy,
     excludeIds,
+    hideBadges = false,
 }: InviteeMultiSelectProps): JSX.Element {
     const [search, setSearch] = useState('');
     const { data: members = [], isLoading } = useGuildMembers(search);
@@ -184,6 +190,7 @@ export function InviteeMultiSelect({
                         member={m}
                         checked={value.includes(m.id)}
                         onToggle={() => toggle(m.id)}
+                        hideBadges={hideBadges}
                     />
                 ))}
             </div>
