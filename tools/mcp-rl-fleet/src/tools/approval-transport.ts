@@ -19,6 +19,7 @@
 import { spawn } from 'node:child_process';
 
 import { buildSshArgs, shellQuote } from '../exec.js';
+import { VM_DOCKER_HOST } from '../docker-proxy.js';
 
 export const DASHBOARD_ORIGIN = 'http://rl-dashboard:8080';
 export const CURL_IMAGE = 'curlimages/curl:8.10.1';
@@ -52,7 +53,7 @@ export function buildRemoteCommand(method: ApprovalMethod, path: string, hasBody
   const bodyArgs = hasBody ? `-H 'content-type: application/json' --data-binary @- ` : '';
   return (
     `read -r ${TOKEN_ENV}; export ${TOKEN_ENV}; ` +
-    `DOCKER_HOST=tcp://127.0.0.1:2375 docker run --rm${hasBody ? ' -i' : ''} -e ${TOKEN_ENV} ` +
+    `DOCKER_HOST=${VM_DOCKER_HOST} docker run --rm${hasBody ? ' -i' : ''} -e ${TOKEN_ENV} ` +
     `--network rl-net ${CURL_IMAGE} ` +
     `curl -s -X ${method} --variable '%${TOKEN_ENV}' ` +
     `--expand-header 'X-Agent-Token: {{${TOKEN_ENV}}}' ${bodyArgs}` +
