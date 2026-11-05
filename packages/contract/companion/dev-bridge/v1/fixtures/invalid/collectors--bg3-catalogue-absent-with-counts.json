@@ -1,0 +1,34 @@
+{
+  "collectors": [
+    {
+      "id": "wow-ledgerlink",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-04T20:15:00Z",
+      "lastUploadAt": null,
+      "pending": 0
+    },
+    {
+      "id": "bg3-save",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-04T20:15:00Z",
+      "lastUploadAt": "2026-11-04T20:15:00Z",
+      "pending": 0
+    }
+  ],
+  "bg3Catalogue": {
+    "state": "absent",
+    "reason": "unsupported-store",
+    "buildMs": null,
+    "builtAt": null,
+    "counts": {
+      "items": 1,
+      "origins": 0,
+      "quests": 0,
+      "waypoints": 0,
+      "skipped": 0
+    },
+    "lastLookup": null
+  }
+}

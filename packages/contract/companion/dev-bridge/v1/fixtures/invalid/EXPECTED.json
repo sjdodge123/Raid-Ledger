@@ -343,6 +343,10 @@
     "path": "bg3Catalogue.reason",
     "code": "invalid_value"
   },
+  "collectors--bg3-catalogue-absent-with-counts": {
+    "path": "bg3Catalogue.counts",
+    "code": "custom"
+  },
   "collectors--bg3-catalogue-lookup-over-total": {
     "path": "bg3Catalogue.lastLookup.resolvedName",
     "code": "custom"
@@ -361,6 +365,14 @@
   },
   "bg3-install--paks-when-absent": {
     "path": "paks",
+    "code": "custom"
+  },
+  "bg3-install--found-no-store": {
+    "path": "store",
+    "code": "custom"
+  },
+  "bg3-install--part-not-below-parts": {
+    "path": "paks.0.entriesMatched.0.part",
     "code": "custom"
   },
   "bg3-install--unknown-method": {

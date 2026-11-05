@@ -18,13 +18,13 @@ import { DevBridgeBg3CatalogueReportSchema } from './companion-dev-bridge-bg3-ca
 // would not fit is paged with `?cursor=` and carries `next` (null = last page).
 // ============================================================
 
-/** A path relative to the configured WoW folder: forward slashes, no leading `/`, no `..`, no drive. */
+/** A relative path (to the configured WoW folder, or for BG3 to the install's `Data/` / inside a pak): forward slashes, no leading `/`, no `..`, no drive. */
 export const DevBridgeRelativePathSchema = z
     .string()
     .min(1)
     .max(512)
     .refine((p) => !p.startsWith('/') && !p.includes('\\') && !p.includes(':'), {
-        message: 'Must be relative to the WoW folder, with forward slashes',
+        message: 'Must be a relative path, with forward slashes',
     })
     .refine((p) => p.split('/').every((s) => s !== '' && s !== '.' && s !== '..'), {
         message: 'Must not contain empty, "." or ".." segments',

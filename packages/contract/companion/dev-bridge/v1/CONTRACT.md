@@ -400,34 +400,47 @@ names (item names, rarities, origin names) **are** allowed on the LAN bridge
 (ruling 7); custom character names never are — every object is strict, so a
 `characterName` key is `unrecognized_keys`. Both new bodies carry the same
 body-wide GUID / ≥ 10-digit guard as the ROK-2077 bodies, ≤ 16 KiB per page,
-and their own cursor grammar `^p[1-9][0-9]{0,3}_(paks|party)_[0-9]{1,6}$`.
+and their own cursor grammar `^p[1-9][0-9]{0,3}_(paks|party)_[0-9]{1,6}$`
+(`p<page>_<section>_<offset>`). For `bg3-install` (`paks`) the offset is a
+**flat** count of matched entries already returned, across every pak in pak
+order — one pak's `entriesMatched` can span pages, so the offset is never a
+pak index. For `bg3-save-catalogue` (`party`) it is the number of party rows
+already returned. Like the ROK-2077 cursors it is an offset, never a file or
+folder name.
 
 **`collectors.bg3Catalogue`** (optional, body-level — not a collector row):
 `{ state, reason, buildMs, builtAt, counts, lastLookup }`.
 
 | `state` | Meaning | `reason` |
 |---|---|---|
-| `absent` | No usable install was found | `no-steam` · `no-bg3-library` · `no-app-manifest` · `no-data-dir` · `unsupported-store` |
+| `absent` | No usable install was found | `no-steam` · `no-bg3-library` · `no-app-manifest` · `no-data-dir` · `unsupported-store` · `other` |
 | `indexing` | A build is running; the previous catalogue may still serve (ruling 9) | `null` |
 | `ready` | Built; `buildMs`, `builtAt`, `counts` are non-null | `null` |
-| `failed` | The last build failed (retried later) | `timeout` · `too-large` · `pak-error` · `parse-error` · `install-changed` · `cache-error` |
+| `failed` | The last build failed (retried later) | `timeout` · `too-large` · `pak-error` · `parse-error` · `install-changed` · `cache-error` · `other` |
 
 `reason` is set iff `state` is `absent`/`failed` and must come from that
-state's list (`custom`). `counts` = `{ items, origins, quests, waypoints,
+state's list (`custom`). `other` is in both lists: the companion maps any
+error kind it adds later to `other`, so a new companion-side kind needs no new
+value here. `absent` has no catalogue, so `buildMs`, `builtAt`, `counts` and
+`lastLookup` are all `null` (`custom` otherwise). `failed` (like `indexing`)
+may keep them non-null: the previous catalogue is still served and they
+describe it. `counts` = `{ items, origins, quests, waypoints,
 skipped }`; `lastLookup` = `{ total, resolvedName, resolvedRarity, at }` of
 the latest lookup batch (each resolved count ≤ `total`). `state`, `reason`
-and the pak `method` / `store` enums are closed: a new value is
-**breaking**.
+and the pak `method` / `store` enums are closed: a new named value is
+**breaking** (for `reason`, unknown kinds go to `other` instead).
 
 **`bg3-install`** (`GET /dev/v1/bg3/install`): `{ found, store, paks[],
-next }`. `store` ∈ `steam` · `gog` · `epic` · `mac` · `unknown`, or `null`.
-`found: false` ⇒ `paks` is empty. Each pak: `rel` — relative to the
+next }`. `store` ∈ `steam` · `gog` · `epic` · `mac-app-store` · `unknown`
+(a store, not a platform), and `store` is `null` iff `found` is `false`
+(`custom`). `found: false` ⇒ `paks` is empty. Each pak: `rel` — relative to the
 install's `Data/` folder, forward slashes, no `..`, no drive, ending `.pak`,
 ≤ 256 (the install path itself never leaves the PC); `parts` 1–16; and
 `entriesMatched[]` (≤ 96 per page) of `{ name, sizeOnDisk, size, method,
 part }` — the entry's path inside the pak (relative, ≤ 256), its compressed
 and decompressed sizes, `method` ∈ `none` · `zlib` · `lz4` · `zstd` ·
-`unknown`, and the archive part (0–15) holding it. `paks[].rel` is unique
+`unknown`, and the archive part (0–15) holding it — always `< parts` of
+its pak (`custom`). `paks[].rel` is unique
 within a page; a pak whose entries span pages repeats its head (`rel`,
 `parts`) with the next slice (clients merge by `rel`). Names and sizes only —
 never pak bytes.

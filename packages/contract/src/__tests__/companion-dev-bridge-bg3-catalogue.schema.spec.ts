@@ -39,7 +39,7 @@ const ExpectedSchema = z.record(z.string(), z.object({ path: z.string(), code: z
 
 /** The message each rule must carry, so a failure for some OTHER reason does not count. */
 const MESSAGE: Record<string, RegExp> = {
-    custom: /GUID is not allowed|^Duplicate (rel|slot) |exceeds total|must be (set|null) when state is|does not belong to state|is required when state is ready|must be null without a catalogue|paks must be empty when found is false|Must be relative|Must not contain empty/,
+    custom: /GUID is not allowed|^Duplicate (rel|slot) |exceeds total|must be (set|null) when state is|does not belong to state|is required when state is ready|must be null without a catalogue|paks must be empty when found is false|store must be (set|null) when found is|part must be less than parts|Must be a relative path|Must not contain empty/,
     unrecognized_keys: /Unrecognized key/,
     invalid_format: /Invalid string: must (match pattern|end with)/,
     invalid_value: /Invalid option|expected one of/,
@@ -48,7 +48,7 @@ const MESSAGE: Record<string, RegExp> = {
 describe('ROK-2081 bg3 catalogue fixtures', () => {
     it('ships the catalogue valid and invalid fixtures', () => {
         expect(names(FIX)).toEqual(expect.arrayContaining(['bg3-install', 'bg3-install--absent', 'bg3-save-catalogue', 'collectors--bg3-catalogue']));
-        expect(names(INVALID).length).toBeGreaterThanOrEqual(17);
+        expect(names(INVALID)).toHaveLength(20);
     });
 
     it.each(names(FIX))('valid %s parses', (name) => {
@@ -76,6 +76,19 @@ describe('ROK-2081 catalogue report states', () => {
         expect(issuesOf(DevBridgeBg3CatalogueReportSchema.safeParse({ ...base, state: 'failed', reason: 'timeout' }))).toEqual([]);
         const wrong = issuesOf(DevBridgeBg3CatalogueReportSchema.safeParse({ ...base, state: 'failed', reason: 'no-steam' }));
         expect(wrong.map((i) => `${i.path} ${i.message}`)).toEqual(['reason reason no-steam does not belong to state failed']);
+    });
+
+    it('other is the catch-all reason of both absent and failed', () => {
+        for (const state of ['absent', 'failed'] as const) {
+            expect(issuesOf(DevBridgeBg3CatalogueReportSchema.safeParse({ ...base, state, reason: 'other' }))).toEqual([]);
+        }
+    });
+
+    it('failed may keep the previous build facts; absent may not', () => {
+        const facts = { buildMs: 10, builtAt: '2026-11-04T20:01:12Z', counts: { items: 1, origins: 0, quests: 0, waypoints: 0, skipped: 0 } };
+        expect(issuesOf(DevBridgeBg3CatalogueReportSchema.safeParse({ ...base, ...facts, state: 'failed', reason: 'timeout' }))).toEqual([]);
+        const absent = issuesOf(DevBridgeBg3CatalogueReportSchema.safeParse({ ...base, ...facts, state: 'absent', reason: 'no-steam' }));
+        expect(absent.map((i) => i.path)).toEqual(['buildMs', 'builtAt', 'counts']);
     });
 
     it('the collectors body stays valid without the block (additive)', () => {

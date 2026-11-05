@@ -27,9 +27,20 @@ previous version during the transition.
   10-digit guard and their own `p<n>_(paks|party)_<offset>` cursor.
 - New golden fixtures `bg3-save-structure--character-keys`,
   `collectors--bg3-catalogue{,-absent}`, `bg3-install{,--absent,--entries-page}`,
-  `bg3-save-catalogue{,--no-catalogue}`, and 19 invalid cases (each exactly
+  `bg3-save-catalogue{,--no-catalogue}`, and 22 invalid cases (each exactly
   one issue). Existing `$defs` change only by the two optional properties;
   the root `description` gains the new refinements. **Additive** — stays v1.
+- Review fixes (same unreleased v1 change, still **additive** — no shipped
+  body changes meaning): `bg3Catalogue.reason` gains the catch-all `other`
+  in both the `absent` and `failed` lists, so a future companion error kind
+  is not a new value; `state: absent` ⇒ `buildMs`, `builtAt`, `counts`,
+  `lastLookup` all `null` (`failed` may keep the previous catalogue's);
+  `bg3-install.store` value `mac` is `mac-app-store` (a store, not a
+  platform) and `store` is `null` iff `found` is `false`; each matched
+  entry's `part` < its pak's `parts`; the `paks` cursor offset is a flat
+  count of matched entries across paks; the relative-path message no longer
+  names the WoW folder. New invalid cases `collectors--bg3-catalogue-absent-with-counts`,
+  `bg3-install--found-no-store`, `bg3-install--part-not-below-parts`.
 
 ## v1 — 2026-11-03 (ROK-2077, additive)
 

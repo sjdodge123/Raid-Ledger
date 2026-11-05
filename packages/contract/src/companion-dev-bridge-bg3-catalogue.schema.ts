@@ -24,7 +24,11 @@ import { DevBridgeRelativePathSchema } from './companion-dev-bridge-endpoints.sc
 // Both bodies get the BG3 body-wide GUID / 10+ digit guard.
 // ============================================================
 
-/** Cursor of both catalogue bodies: `p<page>_(paks|party)_<row offset>`, e.g. `p2_paks_3`. Never a file or folder name. */
+/**
+ * Cursor of both catalogue bodies: `p<page>_(paks|party)_<offset>`, e.g. `p2_paks_3`. Never a file or folder name.
+ * `paks` (bg3-install): `<offset>` = how many matched entries were already returned, counted flat across every
+ * pak in pak order (one pak's entries can span pages). `party` (bg3-save-catalogue): party rows already returned.
+ */
 export const DevBridgeBg3CatalogueCursorSchema = z.string().regex(/^p[1-9][0-9]{0,3}_(paks|party)_[0-9]{1,6}$/);
 const Next = DevBridgeBg3CatalogueCursorSchema.nullable();
 
@@ -49,15 +53,21 @@ export const DevBridgeBg3PakSchema = z
         parts: z.number().int().min(1).max(16),
         entriesMatched: z.array(DevBridgeBg3PakEntrySchema).max(96),
     })
-    .strict();
+    .strict()
+    .superRefine((pak, ctx) => {
+        pak.entriesMatched.forEach((e, i) => {
+            if (e.part >= pak.parts) ctx.addIssue({ code: 'custom', path: ['entriesMatched', i, 'part'], message: `part must be less than parts (${pak.parts})` });
+        });
+    });
 
-/** Which store the install came from; null when none was found. */
-export const DevBridgeBg3StoreSchema = z.enum(['steam', 'gog', 'epic', 'mac', 'unknown']);
+/** Which store the install came from (`mac-app-store` is a store, not a platform); null iff none was found. */
+export const DevBridgeBg3StoreSchema = z.enum(['steam', 'gog', 'epic', 'mac-app-store', 'unknown']);
 
 /**
  * GET /dev/v1/bg3/install?cursor= — paged by pak: every page repeats `found` +
  * `store`; a pak whose `entriesMatched` span pages repeats its head (`rel`,
- * `parts`) with the next slice (clients merge by `rel`). `found: false` ⇒ no paks.
+ * `parts`) with the next slice (clients merge by `rel`). `found: false` ⇒ no paks;
+ * `store` is null iff `found` is false.
  */
 export const DevBridgeBg3InstallSchema = z
     .object({
@@ -69,6 +79,7 @@ export const DevBridgeBg3InstallSchema = z
     .strict()
     .superRefine((body, ctx) => {
         if (!body.found && body.paks.length > 0) ctx.addIssue({ code: 'custom', path: ['paks'], message: 'paks must be empty when found is false' });
+        if (body.found !== (body.store !== null)) ctx.addIssue({ code: 'custom', path: ['store'], message: `store must be ${body.found ? 'set' : 'null'} when found is ${String(body.found)}` });
         checkUniqueBy(body.paks, 'paks', 'rel', (p) => p.rel, ctx);
         devBridgeBg3BodyChecks(body, ctx);
     });
