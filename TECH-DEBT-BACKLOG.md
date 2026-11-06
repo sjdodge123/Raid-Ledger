@@ -4033,6 +4033,14 @@ same day (#1278, #1279, #1280).
 - **resolved on main, noted by the batch M scout** (no code change): line 1853 steam nudge recipients (`lineup-steam-nudge.service.ts:53-54` adds `ACTIVE_MEMBER_SQL_AND`, ROK-1684); line 3508 `startGracePeriod` no-op (`ad-hoc-event-end.helpers.ts:69` returns early; already noted at 3648).
 
 
+### 2026-11-06 — chore/tech-debt-2026-11-06p (overnight batch P)
+
+- **(resolved)** line 2552 `web/src/plugins/wow/slots/boss-loot-panel.tsx` — the boss-row Wowhead link carries `aria-label="View on Wowhead"`; `boss-loot-panel.test.tsx` finds it by role + name.
+- **(resolved)** line 3857 `web/src/pages/cron-jobs/cron-utils.ts` — `describeCron` reads `0 M * * * *` as "Every hour at :MM" (zero-padded; seconds must be 0), so `forever-namespace-probe-launch` shows "Every hour at :30". New `cron-describe.test.ts`; `*/N` and daily wording unchanged.
+- **(resolved)** line 2614 `web/src/pages/admin/plugins-panel.tsx` — the card-action toast uses a past-tense map ("Plugin installed / activated / deactivated"); the helper moved to `plugins/plugin-action.ts` with `plugin-action.test.ts`. Uninstall already toasted "Plugin uninstalled" from its confirm flow.
+- **(resolved)** lines 3762 + 3763 `web/src/plugins/wow/hub-widgets/whos-saved.helpers.ts` — `liveLockouts` re-sorts by live member count desc, then name (the api comparator in `roster-insights.lockouts.ts`); new `whos-saved.helpers.test.ts` covers expiry filtering, group `resetAt` and ordering.
+- **(resolved)** line 3963 `web/src/pages/admin/plugin-integration-panel.tsx` — the dead `!isActive` fallback is deleted; the existing "inactive but another plugin fills the slot" test now exercises `PluginSlot`'s slug-scoped fallback.
+- **resolved on main, confirmed by batch P** (no code change): line 1936 anonymous confirmed signup (`web/src/pages/event-detail/EventDetailRoster.tsx:99-105` routes every anonymous signup, confirmed included, to `AnonymousUserLabel`); line 3513 `web/src/components/ui/markdown/markdown-load.ts:29` `BLOCK_START` uses `\[(?=[^[\]]*\]:)`; line 3745 `web/src/components/hub/gallery/hub-gallery-dialog.tsx:80-90` keys the seek guard on length AND data version (ROK-1965), so a cancelled page-in is asked again; lines 2619/2620 `web/src/plugins/plugin-slot.tsx:28-30` filters registrations by `context.pluginSlug`.
 ### 2026-11-06 — chore/tech-debt-2026-11-06l (overnight batch L)
 
 - **(resolved)** batch L: line 4007 — the LFG +1/Join listener and the composer catch `NotFoundException` and reply "That game is no longer available." (`LFG_GAME_GONE_REPLY` / `isGameGone` in `lfg-join-confirmation.helpers.ts`); line 4008 — `/lfg` game autocomplete (`autocompleteGameIds`) applies `VISIBILITY_FILTER`. `isGameGone` treats any 404 from `createIntent` as the game being gone (its only 404 today); comment at the helper.
