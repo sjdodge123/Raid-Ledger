@@ -64,8 +64,9 @@ export interface MemorySwrOptions<T> {
   /** Async function that fetches fresh data */
   fetcher: () => Promise<T>;
   /**
-   * Cap on the cache's size. When a write takes it past this, the oldest
-   * entries (Map insertion order; a rewrite counts as new) are evicted.
+   * Cap on the cache's size. When a write takes it past this, the least
+   * recently used entries are evicted (a rewrite or a fresh/stale hit
+   * counts as a use).
    * Omitted: unbounded, the original behaviour.
    */
   maxEntries?: number;
@@ -92,6 +93,10 @@ export async function memorySwr<T>(opts: MemorySwrOptions<T>): Promise<T> {
   const entry = cache.get(key);
   const now = Date.now();
 
+  if (entry && now < entry.expiresAt && maxEntries !== undefined) {
+    markRecentlyUsed(cache, key, entry);
+  }
+
   if (entry) {
     if (now < entry.staleAt) {
       // Fresh — return immediately, no refresh needed
@@ -110,6 +115,16 @@ export async function memorySwr<T>(opts: MemorySwrOptions<T>): Promise<T> {
   const data = await fetcher();
   store(data);
   return data;
+}
+
+/** A capped cache is LRU: re-insert a hit so it becomes the newest entry. */
+function markRecentlyUsed<T>(
+  cache: Map<string, MemoryCacheEntry<T>>,
+  key: string,
+  entry: MemoryCacheEntry<T>,
+): void {
+  cache.delete(key);
+  cache.set(key, entry);
 }
 
 /** Write an entry; with a cap, re-insert it as newest and evict the oldest. */
