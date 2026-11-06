@@ -171,7 +171,7 @@ function attendedEventsCte(b: CoPlayBounds): SQL {
     INNER JOIN users u ON u.id = s.user_id
     WHERE ${ATTENDED_SIGNUP_SQL}
       AND e.game_id IS NOT NULL
-      AND upper(e.duration) <= ${pgTimestamp(b.end)}
+      AND upper(e.duration) < ${pgTimestamp(b.end)}
       AND upper(e.duration) >= ${pgTimestamp(b.start)}${memberFilter(b)}
   )`;
 }
