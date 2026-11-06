@@ -48,18 +48,27 @@ interface ShapedScrubRule {
  * linear: no nested quantifiers over overlapping character classes.
  */
 const SHAPED_SCRUB_RULES: ShapedScrubRule[] = [
-  // `"password":"…"`, `"clientSecret": "…"`, `"apiKey":"…"`, `"cookie":"…"`
-  // — the key names the keyed patterns cover; the value honours `\"` escapes.
+  // `"password":"…"`, `"clientSecret": "…"`, `"apiKey":"…"`, `"x-api-key"`,
+  // `"idToken"`, `"jwt"`, `"cookie":"…"` — the key names the keyed patterns
+  // cover; the value honours `\"` escapes.
   {
     pattern:
-      /("(?:[A-Za-z0-9_]*(?:password|secret)|(?:access|refresh|api|auth|bearer)_?token|token|api_?key|database_url|authorization|(?:set-)?cookie)"\s*:\s*")[^"\\]*(?:\\.[^"\\]*)*"/gi,
+      /("(?:[A-Za-z0-9_]*(?:password|secret)|(?:access|refresh|api|auth|bearer|id)_?token|token|jwt|(?:x-)?api[_-]?key|database_url|authorization|(?:set-)?cookie)"\s*:\s*")[^"\\]*(?:\\.[^"\\]*)*"/gi,
     replacement: '$1[REDACTED]"',
+  },
+  // pino-http's array form `"set-cookie":["a=1; HttpOnly","b=2"]` — every
+  // string in the array collapses to one `"[REDACTED]"`.
+  {
+    pattern:
+      /("(?:set-)?cookie"\s*:\s*\[\s*)"[^"\\]*(?:\\.[^"\\]*)*"(?:\s*,\s*"[^"\\]*(?:\\.[^"\\]*)*")*/gi,
+    replacement: '$1"[REDACTED]"',
   },
   // A bare JWT (`eyJ<header>.<payload>.<signature>`), the whole match.
   {
     // The lookbehind (not `\b`) stops a retry at every `eyJ` inside a
     // `-`-joined run, which made `"-eyJa".repeat(40000)` quadratic.
-    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
+    pattern:
+      /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
     replacement: '[REDACTED]',
   },
   // `?key=` / `&key=` / `?api_key=` / `&apikey=` API keys. The value stops at
