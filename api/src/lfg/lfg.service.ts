@@ -39,6 +39,7 @@ import {
   listActiveGroups,
   listHeartedWithoutIntent,
   requireGame,
+  requireVisibleGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
@@ -127,7 +128,7 @@ export class LfgService {
     gameId: number,
     opts: LfgUrgencyRequest = WEEK_REQUEST,
   ): Promise<CreateIntentResult> {
-    const game = await this.requireGame(gameId);
+    const game = await requireVisibleGame(this.db, gameId);
     const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
     this.announcePost(gameId, outcome);
     if (outcome.refreshed) {
@@ -285,7 +286,7 @@ export class LfgService {
     gameId: number,
     dto: ConvertLfgIntentsDto,
   ): Promise<{ converted: number }> {
-    await this.requireGame(gameId);
+    await requireVisibleGame(this.db, gameId);
     const target = toConversionTarget(dto);
     const role = await resolveConvertRole(this.db, userId, gameId, target);
     if (role === null) {
@@ -344,7 +345,7 @@ export class LfgService {
     this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, payload);
   }
 
-  /** Load a game or 404 — shared with the group-page reads. */
+  /** Load a game or 404 for the group-page READ — writes use requireVisibleGame. */
   private requireGame(
     gameId: number,
   ): Promise<typeof schema.games.$inferSelect> {

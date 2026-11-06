@@ -123,7 +123,7 @@ function arrangeInsert(
   landed = intentRow(),
   session: object[] = [],
 ): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([landed]); // insertIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
   mockDb.limit.mockResolvedValueOnce(session); // readPlayingNow (D9)
@@ -144,7 +144,7 @@ function arrangeBump(
   activeCount: number,
   bumped: object[] = [nowRow()],
 ): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent (week)
   mockDb.returning.mockResolvedValueOnce(bumped); // bumpIntentUrgency
@@ -154,7 +154,7 @@ function arrangeBump(
 
 /** The re-post path: the partial unique index rejects the insert. */
 function arrangeConflict(mockDb: MockDb, activeCount: number): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
@@ -163,7 +163,7 @@ function arrangeConflict(mockDb: MockDb, activeCount: number): void {
 
 /** Game found, caller is a participant, target resolves to the route's game. */
 function arrangeConvert(mockDb: MockDb, converted: number): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // resolveConvertRole (live intent)
   mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
   mockDb.returning.mockResolvedValueOnce(
@@ -391,7 +391,7 @@ describe('LfgService lifecycle events', () => {
     });
 
     it('raises a 500-class error when the conflicting row cannot be re-read', async () => {
-      mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
       mockDb.returning.mockResolvedValueOnce([]); // insert lost the conflict
       mockDb.limit.mockResolvedValueOnce([]); // findActiveIntent misses
       mockDb.returning.mockResolvedValueOnce([]); // retry insert lost again
