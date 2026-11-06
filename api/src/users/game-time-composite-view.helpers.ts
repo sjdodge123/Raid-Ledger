@@ -52,6 +52,11 @@ function freshnessFields(confirmedAt: Date | null): {
   };
 }
 
+/** Template days are Monday-first; the composite week is Sunday-first. */
+function remapToSundayFirst(slots: TemplateSlot[]): TemplateSlot[] {
+  return slots.map((s) => ({ ...s, dayOfWeek: (s.dayOfWeek + 1) % 7 }));
+}
+
 /** Fetch all data sources for composite view in parallel (including template). */
 function fetchAllCompositeData(
   db: Db,
@@ -77,15 +82,13 @@ export async function buildCompositeViewResult(
   userId: number,
   weekStart: Date,
   tzOffset: number,
+  weekSent = true,
 ): Promise<CompositeViewResult> {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
   const [template, signedUpEvents, overrideRows, absenceRows, confirmedAt] =
     await fetchAllCompositeData(db, getTemplate, userId, weekStart, weekEnd);
-  const remapped = template.slots.map((s) => ({
-    ...s,
-    dayOfWeek: (s.dayOfWeek + 1) % 7,
-  }));
+  const remapped = remapToSundayFirst(template.slots);
   const signupsMap = await fetchSignupsPreview(db, [
     ...new Set(signedUpEvents.map((e) => e.eventId)),
   ]);
@@ -98,6 +101,7 @@ export async function buildCompositeViewResult(
     weekStart,
     weekEnd,
     tzOffset,
+    weekSent,
   );
   return { ...view, ...freshnessFields(confirmedAt) };
 }

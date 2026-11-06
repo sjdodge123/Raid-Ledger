@@ -27,6 +27,7 @@ import { buildEventBlocks } from './game-time-blocks.helpers';
 import { defined } from '../common/defined.helpers';
 import { expandWithinWindow } from '../calendar-sync/read/calendar-away-derive.helpers';
 import { mergeWithinWindow } from './game-time-absence-merge.helpers';
+import { calendarBusyWeekStart } from '../calendar-sync/read/calendar-busy-query.helpers';
 
 /** Select columns for signed-up event queries. */
 const SIGNED_UP_EVENT_COLUMNS = {
@@ -242,6 +243,22 @@ export function buildAbsenceDateSet(
   );
 }
 
+/**
+ * The window committed slots are keyed from. With no `week` sent the caller
+ * hands over the unshifted Sunday 00:00Z, so shift it to the viewer's local
+ * Sunday exactly like the calendar busy hours do (`calendarBusyWeekStart`).
+ */
+function committedWeekWindow(
+  weekStart: Date,
+  weekEnd: Date,
+  tzOffset: number,
+  weekSent: boolean,
+): [Date, Date] {
+  const start = calendarBusyWeekStart(weekStart, tzOffset, weekSent);
+  const shiftMs = start.getTime() - weekStart.getTime();
+  return [start, new Date(weekEnd.getTime() + shiftMs)];
+}
+
 /** Assemble the full composite view result from all fetched data. */
 export function assembleCompositeView(
   remapped: Array<{ dayOfWeek: number; hour: number }>,
@@ -252,12 +269,12 @@ export function assembleCompositeView(
   weekStart: Date,
   weekEnd: Date,
   tzOffset: number,
+  weekSent = true,
 ): CompositeViewResult {
   const templateSet = new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`));
   const committedSet = buildCommittedSet(
     signedUpEvents,
-    weekStart,
-    weekEnd,
+    ...committedWeekWindow(weekStart, weekEnd, tzOffset, weekSent),
     tzOffset,
   );
   const absenceDates = buildAbsenceDateSet(

@@ -312,6 +312,7 @@ export class GameTimeService {
       userId,
       weekStart,
       tzOffset,
+      weekSent,
     );
     // ROK-1593 D15: a separate field — never folded into slot status.
     const busyStart = calendarBusyWeekStart(weekStart, tzOffset, weekSent);
