@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { updatePreference } from '../lib/api-client';
 import { getAuthToken } from '../hooks/use-auth';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safe-storage';
 
 export type CalendarViewPref = 'schedule' | 'week' | 'month' | 'day';
 
@@ -21,14 +22,14 @@ function syncToServer(view: CalendarViewPref) {
 
 function initViewPref(): CalendarViewPref {
     // 1. Check new key
-    const stored = localStorage.getItem(LS_KEY);
+    const stored = safeGetItem(LS_KEY);
     if (stored && VALID.has(stored)) return stored as CalendarViewPref;
 
     // 2. Migrate from legacy key
-    const legacy = localStorage.getItem(LEGACY_KEY);
+    const legacy = safeGetItem(LEGACY_KEY);
     if (legacy && VALID.has(legacy)) {
-        localStorage.setItem(LS_KEY, legacy);
-        localStorage.removeItem(LEGACY_KEY);
+        safeSetItem(LS_KEY, legacy);
+        safeRemoveItem(LEGACY_KEY);
         return legacy as CalendarViewPref;
     }
 
@@ -48,7 +49,7 @@ export const useCalendarViewStore = create<CalendarViewState>((set) => {
         viewPref: initial,
 
         setViewPref(view: CalendarViewPref) {
-            localStorage.setItem(LS_KEY, view);
+            safeSetItem(LS_KEY, view);
             syncToServer(view);
             set({ viewPref: view });
         },

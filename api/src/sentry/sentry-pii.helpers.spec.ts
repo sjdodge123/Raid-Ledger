@@ -236,3 +236,37 @@ describe('caller-owned objects are never mutated (ROK-1779 Codex P2 round 3)', (
     expect(JSON.stringify(event.extra)).toContain('[truncated]');
   });
 });
+
+describe('scrubPiiString — e-mail regex stays linear', () => {
+  it('scrubs a 200k-char string with no @ in well under a second', () => {
+    const long = 'a'.repeat(200_000);
+    const start = performance.now();
+    expect(scrubPiiString(long)).toBe(long);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
+  it('scrubs 40k encoded plus-tags with no %40 (160k chars) in under 2 s', () => {
+    const long = 'a%2B'.repeat(40_000);
+    const start = performance.now();
+    expect(scrubPiiString(long)).toBe(long);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
+  it('still scrubs an e-mail embedded mid-text', () => {
+    expect(
+      scrubPiiString('ping alice.smith+tag@example.co.uk about the raid'),
+    ).toBe('ping [email] about the raid');
+  });
+
+  it('scrubs both halves of two glued addresses', () => {
+    expect(scrubPiiString('a@b.io.c@d.io a@b.io9c@d.io')).toBe(
+      '[email][email] [email][email]',
+    );
+  });
+
+  it('scrubs both halves of two glued percent-encoded addresses', () => {
+    expect(scrubPiiString('a%40b.io.c%40d.io a%40b.io9c%2540d.io')).toBe(
+      '[email][email] [email][email]',
+    );
+  });
+});
