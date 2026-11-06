@@ -128,6 +128,31 @@ function describeRenameClaim() {
     expect(res.status).toBe(200);
     expect(res.body.spec).toBe('Subtlety');
   });
+
+  it('treats % and _ in a name as literal characters, not wildcards', async () => {
+    const owner = await createMember(testApp, 'owner');
+    const other = await createMember(testApp, 'other');
+    await createCharacter(owner.token, 'Abc');
+    const mine = await createCharacter(other.token, 'OtherChar');
+
+    // `A_c` / `A%` would match `Abc` under ILIKE; an exact compare does not.
+    const created = await testApp.request
+      .post('/users/me/characters')
+      .set('Authorization', `Bearer ${other.token}`)
+      .send({
+        gameId: testApp.seed.game.id,
+        name: 'A_c',
+        realm: REALM,
+        class: 'Rogue',
+        role: 'dps',
+      });
+    const renamed = await patch(other.token, mine, { name: 'A%' });
+
+    expect({ created: created.status, renamed: renamed.status }).toEqual({
+      created: 201,
+      renamed: 200,
+    });
+  });
 }
 
 describe('Character rename claim check (integration)', describeRenameClaim);

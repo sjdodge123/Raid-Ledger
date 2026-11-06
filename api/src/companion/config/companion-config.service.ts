@@ -147,7 +147,10 @@ export class CompanionConfigService {
       return { hubTargets: await hubTargets(userId) };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`/config hubTargets for ${body.id} failed: ${reason}`);
+      this.logger.warn(
+        `/config hubTargets for ${body.id} failed: ${reason}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       return {};
     }
   }
@@ -176,6 +179,7 @@ export class CompanionConfigService {
       const reason = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `/config game lookup for ${ownerId ?? 'no owner'} failed: ${reason}`,
+        err instanceof Error ? err.stack : undefined,
       );
       return null;
     }
