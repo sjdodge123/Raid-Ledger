@@ -120,3 +120,54 @@ Canary/probe hooks available:
 4. **Story 2 now or wait?** It is cheap and removes a deploy from the critical path on launch week; recommend filing before 11-04.
 5. **Scope ambition:** if Blizzard ships only Game Data (no Profile) for Forever, is ruleset list + static race/class data worth anything to us, or do we hold until Profile exists?
 6. Do you want ROK-1562's description updated with these findings (this lane does not write to Linear)?
+
+---
+
+## Addendum 2026-11-06 — the Forever API is live; probe evidence (ROK-2102)
+
+Two runs of the admin namespace probe (ROK-1716, extended by ROK-2102) on fleet envs using the shared Blizzard client keys. Status codes are what Blizzard returned; nothing here is forum-sourced.
+
+### Run 1 — original probe (main `dffbd40ce`, 2026-11-06 21:36Z), 7 candidates × 4 regions × 3 endpoints
+
+| prefix | region | `dynamic` realm/index | `dynamic` connected-realm/index | `static` playable-race/index |
+|---|---|---|---|---|
+| `forever` | us / eu / kr / tw | 404 | 404 | **200** — a race named "High Order Skyborne" (the D4 Skyborne match) |
+| `classicforever` | us / eu / kr / tw | 403 | 403 | 403 |
+| `classicfe`, `classic2x`, `classicplus`, `wowforever` | all | 403 | 403 | 403 |
+| `classic` (control) | all | 200 | 200 | 200 |
+
+`found: { prefix: "forever" }` in all four regions. **The prefix is `forever`; `classicforever` was never a namespace.** There is no realm index for Forever — it is realmless.
+
+### Run 2 — extended probe (branch `feat/rok-2102-forever-api`, 2026-11-06 21:56Z), + `dynamic` ruleset/index, realmless profile `rok-androl` (a level-14 US character, logged out) and its sub-resources
+
+| prefix | region | ruleset/index | profile `/profile/wow/character/rok-androl` | `/equipment` | `/professions` | `/quests` | `/character-media` |
+|---|---|---|---|---|---|---|---|
+| `forever` | us | **200** (non-empty) | **200** | **200** | **200** | **200** | **200** |
+| `forever` | eu / kr / tw | 200 (non-empty) | 404 (the character is US) | not probed | not probed | not probed | not probed |
+| `classic` (control) | us | 404 | — | — | — | — | — |
+
+Sub-resources are only probed where the profile answered 200. The character path is `{name}-{surname}` lowercased, no realm, namespace `profile-forever-{region}`.
+
+### Response shapes (top-level keys only — the probe never stores names or ids)
+
+Probe run 2026-11-06 23:48Z on `rok-2102-ext` (same character path). `entries` = length of the first array value.
+
+| key | top-level keys | entries |
+|---|---|---|
+| `forever:us:ruleset` (also eu) | `_links`, `rulesets` | 4 |
+| `forever:kr:ruleset` (also tw) | `_links`, `rulesets` | 2 |
+| `forever:us:profile` | `_links`, `id`, `name`, `gender`, `faction`, `race`, `character_class`, `level`, `experience`, `achievement_points`, `achievements`, `titles`, `pvp_summary`, `encounters`, `media`, `last_login_timestamp`, `average_item_level`, `equipped_item_level`, `specializations`, `statistics`, `mythic_keystone_profile`, `equipment`, `appearance`, `collections`, `reputations`, `quests`, `achievements_statistics`, `professions`, `is_remix`, **`surname`**, **`ruleset`**, **`name_search`** | – |
+| `forever:us:profile-equipment` | `_links`, `character`, `equipped_items` | – |
+| `forever:us:profile-professions` | `_links`, `character`, `primaries`, `secondaries` | – |
+| `forever:us:profile-quests` | `_links`, `character`, `in_progress`, `completed` | – |
+| `forever:us:profile-media` | `_links`, `character`, `assets` | – |
+| `classic:us:realm` (control) | `_links`, `realms` | 50 |
+| `classic:us:connected-realm` (control) | `_links`, `connected_realms` | 23 |
+
+Read-outs: the profile has **no `realm` key**; the two-part name arrives as separate `name` + `surname` (plus `name_search`); the profile carries a **`ruleset`** object; `active_spec`/`active_title` are absent (as the forum said); equipment/professions/quests/media keep the retail top-level shape, so the retail mappers are a usable starting point. No guild was probed (the operator's guild does not exist yet).
+
+### What this changes in the 2026-10-04 plan
+
+- §"Biggest structural risk" is resolved the realmless way: character URL = `/profile/wow/character/{name}-{surname}?namespace=profile-forever-{region}`.
+- Prefix default becomes `forever` (ROK-2102 step 2); `classicforever` stays only as the stored sentinel on the games row.
+- The Forever client branch (ROK-2102 step 3), Armory import (ROK-1722), a Blizzard fact source (ROK-1920) and guild roster sync (ROK-1928) can proceed. Unverified still: non-ASCII name encoding, guild slug rules, a guild roster body (no guild probed yet).

@@ -115,9 +115,14 @@ describe('POST /admin/plugins/blizzard/forever-probe/run (ROK-1716)', () => {
       .set(auth(adminToken));
     expect(run.status).toBe(200);
     expect(run.body.status).toBe('ok');
-    expect(run.body.cells).toHaveLength(7 * 4 * 3);
+    expect(run.body.cells).toHaveLength(7 * 4 * 4);
     expect(run.body.matches).toEqual([
-      { prefix: 'classicforever', region: 'us', raceName: 'Skyborne' },
+      {
+        prefix: 'classicforever',
+        region: 'us',
+        raceName: 'Skyborne',
+        signal: 'skyborne',
+      },
     ]);
     expect(run.body.found).toMatchObject({ prefix: 'classicforever' });
 
@@ -145,7 +150,11 @@ describe('PUT /admin/plugins/blizzard/forever-probe/config (ROK-1716)', () => {
     const put = await testApp.request
       .put(`${ROUTE}/config`)
       .set(auth(adminToken))
-      .send({ extraCandidates: ['skyforever'], characterPath: null });
+      .send({
+        extraCandidates: ['skyforever'],
+        characterPath: null,
+        guildPath: null,
+      });
     expect(put.status).toBe(200);
     expect(put.body.extraCandidates).toEqual(['skyforever']);
     const run = await testApp.request
@@ -158,7 +167,11 @@ describe('PUT /admin/plugins/blizzard/forever-probe/config (ROK-1716)', () => {
     const res = await testApp.request
       .put(`${ROUTE}/config`)
       .set(auth(adminToken))
-      .send({ extraCandidates: ['NOT A PREFIX!'], characterPath: null });
+      .send({
+        extraCandidates: ['NOT A PREFIX!'],
+        characterPath: null,
+        guildPath: null,
+      });
     expect(res.status).toBe(400);
     const got = await testApp.request.get(ROUTE).set(auth(adminToken));
     expect(got.body.extraCandidates).toEqual([]);
@@ -173,7 +186,7 @@ describe('/admin/plugins/blizzard/forever-probe guards (ROK-1716)', () => {
     const put = await testApp.request
       .put(`${ROUTE}/config`)
       .set(auth(token))
-      .send({ extraCandidates: [], characterPath: null });
+      .send({ extraCandidates: [], characterPath: null, guildPath: null });
     expect([get.status, run.status, put.status]).toEqual([403, 403, 403]);
     expect(foundAlerts()).toHaveLength(0);
   });

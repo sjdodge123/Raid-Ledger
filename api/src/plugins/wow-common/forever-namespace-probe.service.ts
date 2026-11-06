@@ -27,6 +27,7 @@ import {
   WOW_FOREVER_PROBE_CHARACTER_KEY,
   WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY,
   WOW_FOREVER_PROBE_FOUND_KEY,
+  WOW_FOREVER_PROBE_GUILD_KEY,
   WOW_FOREVER_PROBE_LAST_RESULT_KEY,
 } from './forever.settings';
 
@@ -80,6 +81,7 @@ export class ForeverNamespaceProbeService {
       ),
       extraCandidates: await this.readExtras(),
       characterPath: await this.settings.get(WOW_FOREVER_PROBE_CHARACTER_KEY),
+      guildPath: await this.settings.get(WOW_FOREVER_PROBE_GUILD_KEY),
     };
   }
 
@@ -94,12 +96,13 @@ export class ForeverNamespaceProbeService {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message));
     }
-    const { extraCandidates, characterPath } = parsed.data;
+    const { extraCandidates, characterPath, guildPath } = parsed.data;
     await this.writeOrDelete(
       WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY,
       extraCandidates.length ? JSON.stringify(extraCandidates) : null,
     );
     await this.writeOrDelete(WOW_FOREVER_PROBE_CHARACTER_KEY, characterPath);
+    await this.writeOrDelete(WOW_FOREVER_PROBE_GUILD_KEY, guildPath);
     return this.getState();
   }
 
@@ -148,6 +151,7 @@ export class ForeverNamespaceProbeService {
       candidates,
       regions: FOREVER_PROBE_REGIONS,
       characterPath: await this.settings.get(WOW_FOREVER_PROBE_CHARACTER_KEY),
+      guildPath: await this.settings.get(WOW_FOREVER_PROBE_GUILD_KEY),
     });
   }
 

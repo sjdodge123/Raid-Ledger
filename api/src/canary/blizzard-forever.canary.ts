@@ -45,6 +45,7 @@ export async function probeForeverNamespace(
       candidates: [...DEFAULT_FOREVER_CANDIDATES],
       regions: ['us'],
       characterPath: null,
+      guildPath: null,
     });
     const found = run.matches[0]?.prefix;
     return {
