@@ -6,6 +6,7 @@
  * re-checked here because `NotDeactivatedGuard` only covers the HTTP routes, and
  * the public post is never touched — it repaints through the event consumer.
  */
+import { Logger, NotFoundException } from '@nestjs/common';
 import { ButtonStyle } from 'discord.js';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { LFG_INVITE_VIEW_LABEL } from '../embeds/lfg-view-group-button.helpers';
@@ -18,6 +19,7 @@ import {
   LfgJoinListener,
   parseJoinPress,
 } from './lfg-join.listener';
+import { LFG_GAME_GONE_REPLY } from './lfg-join-confirmation.helpers';
 
 type Row = Record<string, unknown>;
 
@@ -476,5 +478,42 @@ describe('LfgJoinListener DM branch — guards', () => {
 
     expect(service.createIntent).not.toHaveBeenCalled();
     expect(editReply).toHaveBeenCalledWith({ content: LFG_UNLINKED_REPLY });
+  });
+});
+
+describe('LfgJoinListener — a game moderated after the post was made', () => {
+  let errorSpy: jest.SpyInstance;
+  beforeEach(() => {
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('says the game is gone, without an error log, when createIntent 404s on the game', async () => {
+    const service = makeService();
+    service.createIntent.mockRejectedValue(
+      new NotFoundException('Game not found'),
+    );
+    const { listener } = build([LINKED, OPEN_ROW, [], []], service);
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(editReply).toHaveBeenCalledWith({ content: LFG_GAME_GONE_REPLY });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the generic reply and the error log for any other failure', async () => {
+    const service = makeService();
+    service.createIntent.mockRejectedValue(new Error('db down'));
+    const { listener } = build([LINKED, OPEN_ROW, [], []], service);
+    const { interaction, editReply } = makeButton(`${LFG_BUTTON_IDS.JOIN}:42`);
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(editReply).toHaveBeenCalledWith({
+      content: 'Something went wrong. Please try again.',
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 });
