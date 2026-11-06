@@ -4,12 +4,13 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { GuildPage, HubSessionNote, HubSessionNoteResponse, PutHubSessionNoteInput } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
     NOTE_UPDATED_AT, SESSION_NOTE_URL, buildSessionNote, buildSessionNoteResponse, sessionNoteGetHandler,
 } from '../../../test/mocks/hub-session-note-handlers';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget from './hub-session-note-widget';
+import { sessionNoteKey } from './hub-session-note-query';
 import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { ARMED_CLEAR_AFTER_COPY } from './session-note-form';
@@ -169,5 +170,47 @@ describe('SessionNoteDialog frame (T-W7) + card mount', () => {
         expect(screen.queryByTestId('session-note-form')).toBeNull();
         fireEvent.click(await screen.findByTestId('session-note-add'));
         expect(await screen.findByTestId('session-note-form')).toBeInTheDocument();
+    });
+});
+
+describe('SessionNoteDialog opens on a fresh note (ROK-1968 N6)', () => {
+    const STALE_AT = '2026-10-27T09:00:00.000001Z';
+    const FRESH = buildSessionNote({ items: [{ id: 1, text: 'Fresh row', done: false, doneAt: null }] });
+
+    /** A cache entry written just now (so within the 30s staleTime) holding an OLDER note than the server's. */
+    function staleCache() {
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(sessionNoteKey(5), editorResponse(buildSessionNote({ updatedAt: STALE_AT })));
+        return queryClient;
+    }
+    const cachedAt = (queryClient: ReturnType<typeof createTestQueryClient>): string | undefined =>
+        queryClient.getQueryData<HubSessionNoteResponse>(sessionNoteKey(5))?.note?.updatedAt;
+
+    it('refetches on open, rebases a clean draft, and saves with the fresh baseUpdatedAt', async () => {
+        server.use(sessionNoteGetHandler(editorResponse(FRESH)));
+        const bodies = capturePut();
+        renderWithProviders(<SessionNoteDialog guildId={5} onClose={vi.fn()} />, { queryClient: staleCache() });
+        await waitFor(() => expect(itemInput(0).value).toBe('Fresh row'));
+        type(0, 'Fresh row, edited');
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies).toHaveLength(1));
+        expect(bodies[0]?.baseUpdatedAt).toBe(NOTE_UPDATED_AT);
+    });
+
+    it('a draft already edited when the refetch lands keeps its text and the base it started from', async () => {
+        let release = (): void => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.get(SESSION_NOTE_URL, async () => { await gate; return HttpResponse.json(editorResponse(FRESH)); }));
+        const bodies = capturePut();
+        const queryClient = staleCache();
+        renderWithProviders(<SessionNoteDialog guildId={5} onClose={vi.fn()} />, { queryClient });
+        await screen.findAllByTestId('session-note-form');
+        type(0, 'My edit');
+        release();
+        await waitFor(() => expect(cachedAt(queryClient)).toBe(NOTE_UPDATED_AT));
+        expect(itemInput(0).value).toBe('My edit');
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies).toHaveLength(1));
+        expect(bodies[0]?.baseUpdatedAt).toBe(STALE_AT);
     });
 });
