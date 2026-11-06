@@ -118,7 +118,9 @@ describe('ForeverRulesetLookupService results and cache (ROK-2100)', () => {
     fetchRaw.mockResolvedValue(found({ type: 'SEASONAL' }));
     expect(await service.lookup('Ana Forever', 'us')).toBeNull();
   });
+});
 
+describe('ForeverRulesetLookupService budget and invalidation (ROK-2100)', () => {
   it('a fetch that never settles → null once the budget elapses, and the signal aborts', async () => {
     const { service, fetchRaw } = setup();
     fetchRaw.mockReturnValue(new Promise<ForeverRulesetFetchOutcome>(() => {}));

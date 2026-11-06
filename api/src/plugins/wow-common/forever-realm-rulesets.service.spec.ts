@@ -184,12 +184,16 @@ describe('ForeverRealmRulesetsService.resolveForPaste order (ROK-2100)', () => {
 
   it('4: everything misses → null (RULESET_REQUIRED downstream)', async () => {
     const { service } = await setup();
-    expect(await service.resolveForPaste(paste('CAMWOW US2 Realm 9'))).toBeNull();
+    expect(
+      await service.resolveForPaste(paste('CAMWOW US2 Realm 9')),
+    ).toBeNull();
   });
 
   it('the export carries a ruleset → null, no lookup', async () => {
     const { service, lookup } = await setup();
-    expect(await service.resolveForPaste(paste(RP_PVP_REALM, 'pvp'))).toBeNull();
+    expect(
+      await service.resolveForPaste(paste(RP_PVP_REALM, 'pvp')),
+    ).toBeNull();
     expect(lookup.lookup).not.toHaveBeenCalled();
   });
 });

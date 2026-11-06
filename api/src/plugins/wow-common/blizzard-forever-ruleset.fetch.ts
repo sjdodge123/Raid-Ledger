@@ -12,9 +12,7 @@ import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
  * abort or network — transient, not cacheable.
  */
 export type ForeverRulesetFetchOutcome =
-  | { kind: 'found'; ruleset: unknown }
-  | { kind: 'absent' }
-  | { kind: 'error' };
+  { kind: 'found'; ruleset: unknown } | { kind: 'absent' } | { kind: 'error' };
 
 type FetchLogger = {
   debug: (msg: string) => void;

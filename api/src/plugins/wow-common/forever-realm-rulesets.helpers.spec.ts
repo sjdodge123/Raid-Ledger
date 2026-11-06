@@ -147,7 +147,9 @@ describe('createFallbackRuleset Hardcore from Blizzard / realm name (ROK-2100 F1
   });
 
   it('a non-Hardcore Blizzard / realm-name inference is the fallback', () => {
-    expect(createFallbackRuleset(inferred('rppvp', 'realm-name'))).toBe('rppvp');
+    expect(createFallbackRuleset(inferred('rppvp', 'realm-name'))).toBe(
+      'rppvp',
+    );
     expect(createFallbackRuleset(inferred('pvp', 'blizzard'))).toBe('pvp');
   });
 });
@@ -156,7 +158,9 @@ describe('updateInferenceRuleset (ROK-2100 F8)', () => {
   it('only the realm map re-rulesets an existing character', () => {
     expect(updateInferenceRuleset(inferred('pvp', 'realm-map'))).toBe('pvp');
     expect(updateInferenceRuleset(inferred('pvp', 'blizzard'))).toBeUndefined();
-    expect(updateInferenceRuleset(inferred('pvp', 'realm-name'))).toBeUndefined();
+    expect(
+      updateInferenceRuleset(inferred('pvp', 'realm-name')),
+    ).toBeUndefined();
     expect(updateInferenceRuleset(null)).toBeUndefined();
   });
 });
