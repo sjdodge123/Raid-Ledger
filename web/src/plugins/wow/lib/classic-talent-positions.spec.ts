@@ -489,3 +489,13 @@ describe('CLASSIC_TALENT_POSITIONS', () => {
         }
     });
 });
+
+describe('buildWowheadTalentString — prototype-member class names', () => {
+    it.each(['constructor', 'toString', '__proto__'])('returns null for %s', (className) => {
+        expect(buildWowheadTalentString(className, [])).toBeNull();
+    });
+
+    it('still builds a string for a real class', () => {
+        expect(buildWowheadTalentString('Warrior', [])).toEqual(expect.any(String));
+    });
+});
