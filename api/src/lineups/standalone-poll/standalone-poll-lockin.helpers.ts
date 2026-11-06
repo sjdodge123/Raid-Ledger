@@ -17,7 +17,10 @@ import {
   findScheduleSlots,
   findScheduleVotes,
 } from '../scheduling/scheduling-query.helpers';
-import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
+import {
+  autoSignupSlotVoters,
+  type AutoSignupResult,
+} from '../scheduling/scheduling-auto-signup.helpers';
 import type { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import {
   splitYesVotersBySlot,
@@ -50,9 +53,7 @@ export interface LockIn {
 }
 
 /** What the awaited signup step hands the fire-and-forget tail. */
-type SignedUp = Awaited<ReturnType<typeof pickSlotVoters>> & {
-  benchedUserIds: number[];
-};
+type SignedUp = Awaited<ReturnType<typeof pickSlotVoters>> & AutoSignupResult;
 
 const errMsg = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
@@ -86,12 +87,8 @@ async function signUpStep(
     lockIn.matchId,
     lockIn.startTime,
   );
-  const benchedUserIds = await signUpWithPick(
-    deps,
-    lockIn,
-    voters.selectedVoters,
-  );
-  return { ...voters, benchedUserIds };
+  const outcome = await signUpWithPick(deps, lockIn, voters.selectedVoters);
+  return { ...voters, ...outcome };
 }
 
 /**
@@ -177,26 +174,27 @@ async function benchPickForVoters(
   return pick;
 }
 
-/** Sign the slot voters up, benching the re-checked pick; the benched ids. */
+/** Sign the slot voters up, benching the re-checked pick; benched + failed. */
 async function signUpWithPick(
   deps: LockInFanoutDeps,
   lockIn: LockIn,
   voters: { userId: number }[],
-): Promise<number[]> {
+): Promise<AutoSignupResult> {
   const benchUserIds = await benchPickForVoters(deps, lockIn, voters);
-  const { benchedUserIds } = await autoSignupSlotVoters({
+  return autoSignupSlotVoters({
     eventId: lockIn.eventId,
     creatorId: lockIn.creatorId ?? -1,
     voters,
     signupsService: deps.signupsService,
     ...(benchUserIds ? { benchUserIds } : {}),
   });
-  return benchedUserIds;
 }
 
 /**
  * Auto-heart + DMs for the winning slot's voters (ROK-1031), after signup.
- * Returns the users sent "Auto-signed up" / "On the bench" (ROK-2024).
+ * A voter whose signup failed is not on the event, so gets neither the
+ * "Auto-signed up" nor the "On the bench" DM. Returns the users sent one of
+ * those (ROK-2024).
  */
 async function notifySlotVoters(
   deps: LockInFanoutDeps,
@@ -204,6 +202,8 @@ async function notifySlotVoters(
   signed: SignedUp,
 ): Promise<ReadonlySet<number>> {
   const { matchId, eventId, startTime } = lockIn;
+  const failed = new Set(signed.failedUserIds);
+  const signedUp = signed.selectedVoters.filter((v) => !failed.has(v.userId));
   // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
   // name the DMs below announce.
   const gameName = await heartPollGameForVoters(
@@ -213,7 +213,7 @@ async function notifySlotVoters(
   );
   await notifyPollVoters(
     deps,
-    signed.selectedVoters,
+    signedUp,
     signed.otherVoters,
     signed.benchedUserIds,
     startTime,
@@ -221,5 +221,5 @@ async function notifySlotVoters(
     gameName ?? 'Game Night',
     await matchHubPayload(deps.db, matchId),
   );
-  return new Set(signed.selectedVoters.map((v) => v.userId));
+  return new Set(signedUp.map((v) => v.userId));
 }
