@@ -16,6 +16,11 @@ const PATTERNS: readonly RegExp[] = [
   // from an address and is redacted (tech-debt 3084).
   /(?<!\d)(?<!\d\.)(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?!\.?\d)/g,
   /\b(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}\b/gi,
+  // Bare hostname without a port (`play.example.com`): two or more dotted
+  // labels ending in a known TLD. Versions (`v1.2.3`), file names
+  // (`world.db`) and abbreviations (`e.g.`, `Co.`) have no TLD and survive
+  // (tech-debt 3084, operator ruling 2026-11-06).
+  /(?<![\w.-])(?:[a-z0-9-]+\.)+(?:com|net|org|io|gg|dev|app|xyz|me|co|us|uk|de|eu|info|cloud|host|tv|live|games|online|site|tech|ca|au|nl|fr|se|no|fi|ch|at|be|ru|pl|link|zone|world|space|fun|club)(?![\w-])/gi,
   /\b[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?/gi,
   /::[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*/gi,
   // Full 8-group form only; compressed forms are the two `::` patterns above.
