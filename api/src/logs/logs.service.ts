@@ -62,10 +62,15 @@ const SHAPED_SCRUB_RULES: ShapedScrubRule[] = [
     pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
     replacement: '[REDACTED]',
   },
-  // `?key=` / `&key=` (and `api_key=`) API keys, up to the next parameter.
-  { pattern: /([?&](?:api_?)?key=)[^&\s#]+/gi, replacement: '$1[REDACTED]' },
+  // `?key=` / `&key=` / `?api_key=` / `&apikey=` API keys. The value stops at
+  // the next parameter AND at a quote/`,`/`}`/`]`/`)`, so a URL inside a JSON
+  // string keeps its closing quote and the fields after it.
+  {
+    pattern: /([?&](?:api_?)?key=)[^\s"'&#,}\])]+/gi,
+    replacement: '$1[REDACTED]',
+  },
   // OAuth `?code=` / `&code=` — prose "code" with no `=` is left alone.
-  { pattern: /([?&]code=)[^&\s#]+/gi, replacement: '$1[REDACTED]' },
+  { pattern: /([?&]code=)[^\s"'&#,}\])]+/gi, replacement: '$1[REDACTED]' },
   // `Cookie:` / `Set-Cookie:` header values carrying a `name=value` pair.
   {
     pattern: /\b((?:Set-)?Cookie:)\s*[^\s=;]+=[^\r\n]*/gi,
