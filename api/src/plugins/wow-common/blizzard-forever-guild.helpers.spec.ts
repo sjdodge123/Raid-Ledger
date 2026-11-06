@@ -108,7 +108,7 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
   it('throws the 502 namespace refusal on 403', async () => {
     stubFetch(403, {});
     const err: unknown = await fetchForeverGuildRoster(
-      'x',
+      'raid-ledger',
       'us',
       'tok',
       logger,
@@ -120,7 +120,7 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
   it('throws a non-refusal 502 on 500', async () => {
     stubFetch(500, {});
     const err: unknown = await fetchForeverGuildRoster(
-      'x',
+      'raid-ledger',
       'us',
       'tok',
       logger,
