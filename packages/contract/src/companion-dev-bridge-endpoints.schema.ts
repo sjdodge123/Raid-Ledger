@@ -11,6 +11,7 @@ import {
     DevBridgeProbeResultSchema,
 } from './companion-dev-bridge.schema.js';
 import { DevBridgeBg3CatalogueReportSchema } from './companion-dev-bridge-bg3-catalogue-report.schema.js';
+import { DevBridgeCollectorIdSchema, DevBridgeCollectorStatusSchema } from './companion-dev-bridge-events.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 — `/dev/v1/*` response bodies (ROK-2055 §6).
@@ -215,13 +216,17 @@ export const DevBridgeLogsSchema = z
 /** One collector, the same data as the app's `get_collector_status`. */
 export const DevBridgeCollectorSchema = z
     .object({
-        id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+        id: DevBridgeCollectorIdSchema,
         enabled: z.boolean(),
         paused: z.boolean(),
         lastScanAt: CompanionTimestampSchema.nullable(),
         lastUploadAt: CompanionTimestampSchema.nullable(),
         pending: Count,
         lastError: z.string().max(512).optional(),
+        /** The tile's status line as an enum (2026-11-06, additive: optional so older companions still parse). */
+        status: DevBridgeCollectorStatusSchema.optional(),
+        /** Whether this device is linked for this collector's uploads (2026-11-06, additive). */
+        linked: z.boolean().optional(),
     })
     .strict();
 
