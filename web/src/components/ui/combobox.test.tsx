@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Combobox, type ComboboxProps } from './combobox';
+import { ComboboxPopup } from './combobox-popup';
 import { Field } from './field';
 import { Modal } from './modal';
 import { at } from '../../test/defined';
@@ -270,5 +271,20 @@ describe('Combobox — trailing, openOnFocus, testIds (ROK-1647)', () => {
         await userEvent.type(box(), '{ArrowDown}');
         expect(screen.getByRole('listbox').parentElement).toHaveAttribute('data-testid', 'pop');
         expect(screen.getByRole('option', { name: 'Diablo IV' }), 'the option testid must sit on the option row').toHaveAttribute('data-testid', 'opt');
+    });
+});
+
+describe('ComboboxPopup — height cap inside a dialog', () => {
+    const base = {
+        popupRef: { current: null }, listboxId: 'lb', items: ['a'], activeIndex: -1, optionId: (i: number) => `o${i}`,
+        isSelected: () => false, getKey: (o: string) => o, render: (o: string) => o,
+        onHover: () => undefined, onPick: () => undefined, testId: 'pop',
+    };
+
+    it('caps with min(16rem, Npx) when the hook reports a maxHeight, and sets no override without one', () => {
+        const { rerender } = render(<ComboboxPopup<string> {...base} pos={{ top: 0, left: 0, width: 100, maxHeight: 120 }} />);
+        expect(screen.getByTestId('pop').style.maxHeight).toBe('min(16rem, 120px)');
+        rerender(<ComboboxPopup<string> {...base} pos={{ top: 0, left: 0, width: 100 }} />);
+        expect(screen.getByTestId('pop').style.maxHeight, 'a <body> popup keeps only the max-h-64 class').toBe('');
     });
 });
