@@ -200,6 +200,23 @@ describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
         expect(imports[0]).toEqual({ name: 'Ana Forever', realm: null, region: 'us', gameVariant: 'wow_forever', isMain: false, ruleset: 'pvp' });
     });
 
+    it('sends the picked EU region in the preview query and the import body', async () => {
+        const previews = foreverPreviewLoad();
+        const imports = importLoad();
+        const user = userEvent.setup();
+        renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />);
+        await user.selectOptions(screen.getByRole('combobox', { name: 'Region' }), 'eu');
+        await user.type(firstName(), 'Ana');
+        await user.type(secondName(), 'Forever');
+        await user.click(searchButton());
+        await screen.findByTestId('preview-location');
+        expect(previews).toHaveLength(1);
+        expect(previews[0]?.get('region')).toBe('eu');
+        await user.click(screen.getByRole('button', { name: 'Save character' }));
+        await waitFor(() => expect(imports).toHaveLength(1));
+        expect(imports[0]).toEqual({ name: 'Ana Forever', realm: null, region: 'eu', gameVariant: 'wow_forever', isMain: false, ruleset: 'normal' });
+    });
+
     it('shows a one-word name as an inline error and sends no request', async () => {
         const previews = foreverPreviewLoad();
         const user = userEvent.setup();

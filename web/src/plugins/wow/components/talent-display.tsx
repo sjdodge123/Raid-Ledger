@@ -175,8 +175,8 @@ interface TalentDisplayProps {
 
 function noTalentHint(isArmoryImported: boolean, gameVariant: string | null | undefined): string {
     if (isArmoryImported) return 'Talent data may not be available for this character. Try refreshing.';
-    // A variant the Armory cannot import (WoW: Forever) gets the addon hint (AC5).
-    if (getWowVariantIntegrations(gameVariant)?.armoryImport === false) return FOREVER_ADDON_HINT_TALENTS;
+    // A variant whose data comes from the addon (WoW: Forever) gets the addon hint (AC5).
+    if (getWowVariantIntegrations(gameVariant)?.addonHints === true) return FOREVER_ADDON_HINT_TALENTS;
     return 'Talent data is only available for characters imported from the Blizzard Armory.';
 }
 
