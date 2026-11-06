@@ -1,8 +1,9 @@
 /**
  * ROK-1717: the WoW Forever controls inside the Blizzard API integration card.
  *
- * Blizzard has not published the Forever namespace, so the admin sets its
- * prefix here (no deploy) and turns Forever Armory import on once it works.
+ * The Forever namespace prefix is known (`forever`, confirmed by the ROK-2102
+ * probe), so the prefix field is an override only. A one-line status reads the
+ * latest probe result to say whether the configured prefix is confirmed live.
  * The prefix is a form field saved with its button; the Armory switch applies
  * immediately with the saved prefix (design-system: a Switch is for settings
  * that apply at once).
@@ -15,6 +16,7 @@ import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Switch } from '../../../components/ui/switch';
 import { useForeverConfig } from '../hooks/use-forever-config';
+import { useForeverProbe } from '../hooks/use-forever-probe';
 import { ForeverProbePanel } from './forever-probe-panel';
 
 type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
@@ -54,12 +56,26 @@ function PrefixForm({ saved, mutate, pending }: { saved: WowForeverConfigRespons
         <form onSubmit={onSubmit} noValidate className="space-y-3">
             <Field label="Namespace prefix" error={error}
                 hint="Blizzard namespace without the static-/dynamic-/profile- part and region">
-                <Input type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="classicforever" fieldSize="lg" />
+                <Input type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="forever" fieldSize="lg" />
             </Field>
             <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving..." aria-label="Save Forever settings">
                 Save
             </Button>
         </form>
+    );
+}
+
+/** One-line status: is the configured prefix a match in the latest probe run? (ROK-2102) */
+function NamespaceStatus({ prefix }: { prefix: string }): JSX.Element {
+    const { probe } = useForeverProbe();
+    const live = probe.data?.result?.matches.some((m) => m.prefix === prefix) ?? false;
+    if (live) {
+        return <p className="text-sm text-secondary">Forever namespace: <span className="text-foreground">live</span> — prefix <code>{prefix}</code></p>;
+    }
+    return (
+        <p className="text-sm text-secondary">
+            Forever namespace: <span className="text-foreground">not confirmed</span> — prefix <code>{prefix}</code>. Run the probe below.
+        </p>
     );
 }
 
@@ -106,6 +122,7 @@ export function ForeverSettingsSection(): JSX.Element | null {
     return (
         <section aria-labelledby="wow-forever-settings-heading" className="mt-6 pt-6 border-t border-edge space-y-4">
             <h3 id="wow-forever-settings-heading" className="text-base font-semibold text-foreground">WoW Forever</h3>
+            <NamespaceStatus prefix={config.data.namespacePrefix} />
             <PrefixForm key={config.data.namespacePrefix} saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
             <ArmoryToggle saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
             <ResolverToggle saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
