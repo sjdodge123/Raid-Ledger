@@ -12,6 +12,7 @@ import { TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { useForeverProbe } from '../hooks/use-forever-probe';
 import { ForeverProbeMatrix } from './forever-probe-matrix';
 import { ForeverProbeConfigForm } from './forever-probe-config-form';
+import { ForeverProbeShapes } from './forever-probe-shapes';
 
 const STATUS_CLS: Record<ForeverProbeResultDto['status'], string> = {
     ok: 'text-success', skipped: 'text-warning', error: 'text-danger',
@@ -54,6 +55,7 @@ export function ForeverProbePanel(): JSX.Element | null {
             </div>
             <FoundBanner result={result} />
             {result && <ForeverProbeMatrix result={result} />}
+            {result && <ForeverProbeShapes shapes={result.shapes} />}
             <ForeverProbeConfigForm key={`${probe.data.extraCandidates.join(',')}|${probe.data.characterPath ?? ''}|${probe.data.guildPath ?? ''}`}
                 saved={probe.data} mutate={saveConfig.mutateAsync} pending={saveConfig.isPending} />
         </section>
