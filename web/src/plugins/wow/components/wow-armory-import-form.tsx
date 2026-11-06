@@ -14,7 +14,8 @@ import { Input } from '../../../components/ui/input';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { RealmAutocomplete } from './realm-autocomplete';
 import { CharacterPreviewCard } from './character-preview-card';
-import { WowArmoryImportForeverFields, isForeverArmoryVariant, parseForeverArmoryTarget } from './wow-armory-import-forever-fields';
+import { WowArmoryImportForeverFields } from './wow-armory-import-forever-fields';
+import { isForeverArmoryVariant, parseForeverArmoryTarget } from '../lib/forever-armory-target';
 import { emptyForeverIdentity, formatForeverRuleset, type ForeverIdentity, type ForeverIdentityErrors } from '../lib/forever-identity';
 
 interface WowArmoryImportFormProps {
