@@ -3989,3 +3989,7 @@ same day (#1278, #1279, #1280).
 ### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
 
 - **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
+
+### 2026-11-06 — chore/tech-debt-2026-11-06k (surfaced during batch K review)
+
+- **low** `api/src/discord-bot/listeners/lfg-join.listener.ts:~168-200` and `api/src/discord-bot/lfg-composer/lfg-composer-flow.helpers.ts:~234` — since batch K, `createIntent` 404s ("Game not found") for an admin-hidden/banned game. A board post or composer card made before the game was moderated still offers Join; the join path is caught by `interaction.listener.ts:~122-136` (error-level "Error handling …" log + generic "Something went wrong"), and the composer leaves the card un-updated after `deferUpdate`. Only reachable for games moderated after their post. Suggested: catch `NotFoundException` around `createIntent` in both and reply ephemerally "That game is no longer available" (and edit the composer card), with a unit case each.
