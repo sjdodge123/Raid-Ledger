@@ -151,4 +151,41 @@ describe('CircuitBreaker (adversarial)', () => {
     jest.advanceTimersByTime(30_001); // now t=60_001ms — cooldown elapsed
     expect(() => breaker.checkState()).not.toThrow();
   });
+
+  describe('HALF_OPEN admits a single probe (3164)', () => {
+    /** A breaker tripped at t=0 and advanced past its cooldown. */
+    function trippedPastCooldown(): CircuitBreaker {
+      jest.useFakeTimers();
+      const breaker = new CircuitBreaker(3, 60_000);
+      breaker.recordFailure();
+      breaker.recordFailure();
+      breaker.recordFailure();
+      jest.advanceTimersByTime(61_000);
+      return breaker;
+    }
+
+    it('admits the first probe and rejects a second concurrent request', () => {
+      const breaker = trippedPastCooldown();
+      expect(() => breaker.checkState()).not.toThrow();
+      expect(() => breaker.checkState()).toThrow(ServiceUnavailableException);
+    });
+
+    it('re-arms a fresh probe after another cooldown when the probe never reports', () => {
+      const breaker = trippedPastCooldown();
+      breaker.checkState(); // probe admitted, never records a result
+      jest.advanceTimersByTime(59_999);
+      expect(() => breaker.checkState()).toThrow(ServiceUnavailableException);
+      jest.advanceTimersByTime(1);
+      expect(() => breaker.checkState()).not.toThrow();
+      expect(() => breaker.checkState()).toThrow(ServiceUnavailableException);
+    });
+
+    it('closes on probe success and admits every request again', () => {
+      const breaker = trippedPastCooldown();
+      breaker.checkState();
+      breaker.recordSuccess();
+      expect(() => breaker.checkState()).not.toThrow();
+      expect(() => breaker.checkState()).not.toThrow();
+    });
+  });
 });
