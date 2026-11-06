@@ -1,4 +1,5 @@
 import { useUpdateStatus } from '../../hooks/use-version';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 
 /** §4.12 inline count pill — indigo tint, remapped for the light family. */
 const PILL_CLS = 'px-2 py-0.5 text-xs rounded-full bg-indigo-500/10 text-indigo-400 font-medium';
@@ -44,7 +45,7 @@ export function BuildFixesNotice({ enabled }: { enabled: boolean }) {
     return (
         <p className="flex flex-wrap items-center gap-2 text-sm text-muted" data-testid="build-fixes-notice">
             <span className="text-secondary">{versionLabel(data.currentVersion)}</span>
-            <FixesClause count={data.fixesAvailable} href={data.fixesCompareUrl} />
+            <FixesClause count={data.fixesAvailable} href={safeHttpUrl(data.fixesCompareUrl) ?? null} />
         </p>
     );
 }

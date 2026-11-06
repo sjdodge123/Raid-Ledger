@@ -96,3 +96,42 @@ describe('game autocomplete relevance ranking (ROK-1531)', () => {
     expect(options[0]?.name).toBe('Peak & Valley Chronicles');
   });
 });
+
+// Batch L (2026-11-06) — `/lfg` refuses an admin-hidden or banned game, so its
+// id-valued autocomplete must not suggest one. The name-valued helper serves
+// `/bind` and `/playing` and is deliberately left unfiltered.
+describe('/lfg game autocomplete leaves out hidden and banned games', () => {
+  beforeAll(async () => {
+    await testApp.db.execute(
+      sql`DELETE FROM games WHERE name ILIKE '%Quarry%'`,
+    );
+    await testApp.db.insert(schema.games).values([
+      { name: 'Quarry Visible', slug: 'batch-l-quarry-visible' },
+      { name: 'Quarry Hidden', slug: 'batch-l-quarry-hidden', hidden: true },
+      { name: 'Quarry Banned', slug: 'batch-l-quarry-banned', banned: true },
+    ]);
+  });
+
+  it('suggests only the visible game to /lfg', async () => {
+    const names = (await autocompleteGameIds(testApp.db, 'quarry')).map(
+      (o) => o.name,
+    );
+
+    expect(names).toEqual(['Quarry Visible']);
+  });
+
+  it('still lists all three in the name-valued /bind helper', async () => {
+    const names = (await autocompleteGames(testApp.db, 'quarry')).map(
+      (o) => o.name,
+    );
+
+    expect(names).toHaveLength(3);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'Quarry Visible',
+        'Quarry Hidden',
+        'Quarry Banned',
+      ]),
+    );
+  });
+});

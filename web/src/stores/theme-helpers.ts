@@ -5,6 +5,7 @@
 
 import type { ThemeMode, ThemeDefinition } from './theme-registry';
 import { THEME_REGISTRY } from './theme-registry';
+import { safeGetItem, safeRemoveItem, safeSetItem } from '../lib/safe-storage';
 
 export type ThemeModePreference = 'light' | 'dark' | 'auto';
 
@@ -109,9 +110,9 @@ export function persistToLocalStorage(
     darkTheme: string,
     resolvedThemeId: string,
 ): void {
-    localStorage.setItem(LS_MODE_KEY, mode);
-    localStorage.setItem(LS_LIGHT_THEME_KEY, lightTheme);
-    localStorage.setItem(LS_DARK_THEME_KEY, darkTheme);
+    safeSetItem(LS_MODE_KEY, mode);
+    safeSetItem(LS_LIGHT_THEME_KEY, lightTheme);
+    safeSetItem(LS_DARK_THEME_KEY, darkTheme);
     const sub = SUB_THEME_CONFIG[resolvedThemeId];
     const schemeForFlashScript =
         sub?.scheme && sub.scheme !== sub.colorScheme
@@ -119,7 +120,7 @@ export function persistToLocalStorage(
             : mode === 'auto'
                 ? resolveSystemScheme()
                 : mode;
-    localStorage.setItem(LS_LEGACY_SCHEME_KEY, schemeForFlashScript);
+    safeSetItem(LS_LEGACY_SCHEME_KEY, schemeForFlashScript);
 }
 
 /** Initialize preferences from localStorage with legacy migration */
@@ -128,21 +129,21 @@ export function initFromLocalStorage(): {
     lightTheme: string;
     darkTheme: string;
 } {
-    const storedMode = localStorage.getItem(LS_MODE_KEY);
+    const storedMode = safeGetItem(LS_MODE_KEY);
     if (storedMode && ['light', 'dark', 'auto'].includes(storedMode)) {
         return {
             mode: storedMode as ThemeModePreference,
-            lightTheme: localStorage.getItem(LS_LIGHT_THEME_KEY) ?? 'default-light',
-            darkTheme: localStorage.getItem(LS_DARK_THEME_KEY) ?? 'default-dark',
+            lightTheme: safeGetItem(LS_LIGHT_THEME_KEY) ?? 'default-light',
+            darkTheme: safeGetItem(LS_DARK_THEME_KEY) ?? 'default-dark',
         };
     }
 
     if (storedMode === 'space') {
-        localStorage.setItem(LS_MODE_KEY, 'dark');
-        localStorage.setItem(LS_DARK_THEME_KEY, 'space');
+        safeSetItem(LS_MODE_KEY, 'dark');
+        safeSetItem(LS_DARK_THEME_KEY, 'space');
         return {
             mode: 'dark' as ThemeModePreference,
-            lightTheme: localStorage.getItem(LS_LIGHT_THEME_KEY) ?? 'default-light',
+            lightTheme: safeGetItem(LS_LIGHT_THEME_KEY) ?? 'default-light',
             darkTheme: 'space',
         };
     }
@@ -156,12 +157,12 @@ function migrateLegacyTheme(): {
     lightTheme: string;
     darkTheme: string;
 } {
-    const legacyTheme = localStorage.getItem(LS_LEGACY_THEME_KEY);
+    const legacyTheme = safeGetItem(LS_LEGACY_THEME_KEY);
     if (!legacyTheme) {
         return { mode: 'auto', lightTheme: 'default-light', darkTheme: 'default-dark' };
     }
 
-    localStorage.removeItem(LS_LEGACY_THEME_KEY);
+    safeRemoveItem(LS_LEGACY_THEME_KEY);
 
     if (legacyTheme === 'auto') {
         return { mode: 'auto', lightTheme: 'default-light', darkTheme: 'default-dark' };

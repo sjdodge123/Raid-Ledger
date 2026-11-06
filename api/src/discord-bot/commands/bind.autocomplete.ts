@@ -4,6 +4,7 @@ import {
   buildGameNameMatchFilter,
   gameRelevanceOrder,
 } from '../../igdb/game-search-relevance.helpers';
+import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schemaType from '../../drizzle/schema';
 import * as schema from '../../drizzle/schema';
@@ -32,6 +33,8 @@ export async function autocompleteGames(
  * the option value, which is what `/bind` and `/playing` want. `/lfg` hands its
  * pick straight to `LfgService.createIntent(userId, gameId)`, so it needs the
  * numeric id — and a stringified id can never collide with the `list` sentinel.
+ * Admin-hidden and banned games are left out: `/lfg` refuses them (`findGame`
+ * and `createIntent` both filter), so suggesting one only leads to a refusal.
  *
  * @param db - Drizzle handle.
  * @param value - Whatever the user has typed so far.
@@ -44,7 +47,7 @@ export async function autocompleteGameIds(
   const results = await db
     .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(buildGameNameMatchFilter(value))
+    .where(and(buildGameNameMatchFilter(value), VISIBILITY_FILTER()))
     .orderBy(...gameRelevanceOrder(value))
     .limit(25);
 

@@ -20,7 +20,7 @@
 import { useState, type JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
-import { useStartOAuth, type OAuthCalendarProvider } from '../../../hooks/use-calendar-sync';
+import { useStartOAuth } from '../../../hooks/use-calendar-sync';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { ProviderTile } from './CalendarProviderRow';
@@ -31,15 +31,16 @@ import { CalendarConnectionRead } from './CalendarConnectionRead';
 import { readGranted } from './use-read-rules';
 import { GrantRead } from './CalendarGrantRead';
 import { AppleConnectSheet } from './AppleConnectSheet';
-import { PROVIDER_DISPLAY, READ_COPY as R, readStatusLine } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, PROVIDER_DISPLAY, READ_COPY as R, readStatusLine } from './calendar-sync.copy';
 
 const TONE: Record<CalendarConnection['status'], string> = {
     active: 'text-success', needs_reconnect: 'text-danger', error: 'text-warning', disconnecting: 'text-warning',
 };
 
-/** Re-runs the provider's own consent (Google, or Outlook — ROK-1597). */
-function OAuthFixButton({ provider }: { provider: OAuthCalendarProvider }): JSX.Element {
-    const fix = useStartOAuth('connect', undefined, provider);
+type StartOAuth = ReturnType<typeof useStartOAuth>;
+
+/** Re-runs the provider's own consent (Google, or Outlook — ROK-1597); the card owns `fix` so its failure shows. */
+function OAuthFixButton({ fix }: { fix: StartOAuth }): JSX.Element {
     return (
         <Button variant="secondary" loading={fix.isPending} loadingLabel={R.granting} onClick={() => fix.mutate()}
             aria-label={R.fix} data-testid="calendar-connection-fix">
@@ -60,10 +61,34 @@ function AppleFixButton({ connection }: { connection: CalendarConnection }): JSX
     );
 }
 
-function FixButton({ connection }: { connection: CalendarConnection }): JSX.Element {
+function FixButton({ connection, fix }: { connection: CalendarConnection; fix: StartOAuth }): JSX.Element {
     return connection.provider === 'apple'
         ? <AppleFixButton connection={connection} />
-        : <OAuthFixButton provider={connection.provider} />;
+        : <OAuthFixButton fix={fix} />;
+}
+
+/** Title, optional account line and status; a refused Fix start shows under it, as on the provider row. */
+function ConnectionText({ connection, showAccount, desktop, fixFailed }: {
+    connection: CalendarConnection; showAccount: boolean; desktop: boolean; fixFailed: boolean;
+}): JSX.Element {
+    // The account line already names the email; keep it out of the "Connected · <email>" fallback.
+    const statusInput = showAccount ? { ...connection, accountLabel: null } : connection;
+    return (
+        <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground" data-testid="calendar-connection-name">
+                {PROVIDER_DISPLAY[connection.provider].name}
+            </p>
+            {showAccount && connection.accountLabel && (
+                <p className="truncate text-xs text-muted" data-testid="calendar-connection-account">{connection.accountLabel}</p>
+            )}
+            <p className={`truncate text-xs ${TONE[connection.status]}`} data-testid="calendar-connection-status">
+                {readStatusLine(statusInput, desktop)}
+            </p>
+            {fixFailed && connection.provider !== 'apple' && (
+                <p role="alert" className="text-xs text-danger">{C[connection.provider].startFailed}</p>
+            )}
+        </div>
+    );
 }
 
 /** "Grant read access" applies to a live Google grant without read; an Apple password always reads. */
@@ -82,24 +107,15 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
     const showGrant = anyReadable && !broken && offersGrant(connection);
-    const display = PROVIDER_DISPLAY[connection.provider];
-    // The account line already names the email; keep it out of the "Connected · <email>" fallback.
-    const statusInput = showAccount ? { ...connection, accountLabel: null } : connection;
+    // Hooks run unconditionally: an Apple card never fires this (its Fix opens the K3 sheet).
+    const fix = useStartOAuth('connect', undefined, connection.provider === 'apple' ? 'google' : connection.provider);
     return (
         <div className="space-y-3">
             <div className={CALENDAR_ROW} data-testid="calendar-connection-card" data-connection-id={connection.id}
                 data-provider={connection.provider}>
-                <ProviderTile label={display.tile} />
-                <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground" data-testid="calendar-connection-name">{display.name}</p>
-                    {showAccount && connection.accountLabel && (
-                        <p className="truncate text-xs text-muted" data-testid="calendar-connection-account">{connection.accountLabel}</p>
-                    )}
-                    <p className={`truncate text-xs ${TONE[connection.status]}`} data-testid="calendar-connection-status">
-                        {readStatusLine(statusInput, desktop)}
-                    </p>
-                </div>
-                {broken && <FixButton connection={connection} />}
+                <ProviderTile label={PROVIDER_DISPLAY[connection.provider].tile} />
+                <ConnectionText connection={connection} showAccount={showAccount} desktop={desktop} fixFailed={fix.isError} />
+                {broken && <FixButton connection={connection} fix={fix} />}
                 <CalendarManageMenu connection={connection} />
             </div>
             {readSwitch && readGranted(connection) && <CalendarConnectionRead connection={connection} />}
