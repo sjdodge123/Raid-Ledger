@@ -116,6 +116,22 @@ export function applyOptionalSyncFields(
 }
 
 /**
+ * Portrait/render URLs to write. A media miss (Blizzard serves 404 on
+ * `character-media` for a fresh or just-changed character, and
+ * `fetchCharacterMedia` turns any failure into null) keeps the stored URL
+ * instead of wiping it — all variants (FOREVER-MEDIA-STATIC §1a).
+ */
+function mediaFields(profile: EnrichedProfile['profile']): {
+  avatarUrl?: string;
+  renderUrl?: string;
+} {
+  return {
+    ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
+    ...(profile.renderUrl ? { renderUrl: profile.renderUrl } : {}),
+  };
+}
+
+/**
  * Build the set fields for a character sync update.
  *
  * The `professions` column is **only** included when the value is non-null.
@@ -134,8 +150,6 @@ export function buildSyncUpdateFields(
     spec: profile.spec,
     role: profile.role,
     itemLevel: profile.itemLevel,
-    avatarUrl: profile.avatarUrl,
-    renderUrl: profile.renderUrl,
     level: profile.level,
     race: profile.race,
     faction: profile.faction,
@@ -144,6 +158,7 @@ export function buildSyncUpdateFields(
     updatedAt: new Date(),
     ...(extra?.region ? { region: extra.region } : {}),
     ...(extra?.gameVariant ? { gameVariant: extra.gameVariant } : {}),
+    ...mediaFields(profile),
   };
   return applyOptionalSyncFields(base, { professions, equipment, talents });
 }
