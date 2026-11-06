@@ -3,6 +3,7 @@
  * interactions. Bots cannot press another bot's buttons, so this tier is where
  * the handlers are proven; the companion smoke only asserts the pinned card.
  */
+import { NotFoundException } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import {
   LFG_BLOCKED_REPLY,
@@ -10,6 +11,7 @@ import {
 } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller } from '../commands/lfg.command';
 import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
+import { LFG_GAME_GONE_REPLY } from '../listeners/lfg-join-confirmation.helpers';
 import {
   findComposerGame,
   searchComposerGames,
@@ -335,6 +337,26 @@ describe('goComposer (AC4 — the one write path)', () => {
       content: LFG_COMPOSER_COPY.STALE_REPLY,
       flags: MessageFlags.Ephemeral,
     });
+  });
+});
+
+describe('goComposer — a game moderated after the card was made', () => {
+  it('a game hidden or banned since the card was made says so and clears the card', async () => {
+    const d = deps();
+    d.createIntent.mockRejectedValue(new NotFoundException('Game not found'));
+    const i = fake('lfgc:go:week:7:c:deep');
+    await goComposer(d, i as never);
+    expect(i.deleteReply).not.toHaveBeenCalled();
+    expect(edited(i)).toEqual({ content: LFG_GAME_GONE_REPLY, components: [] });
+  });
+
+  it('any other createIntent failure still propagates', async () => {
+    const d = deps();
+    d.createIntent.mockRejectedValue(new Error('db down'));
+    const i = fake('lfgc:go:week:7:c:deep');
+    await expect(goComposer(d, i as never)).rejects.toThrow('db down');
+    expect(i.editReply).not.toHaveBeenCalled();
+    expect(i.deleteReply).not.toHaveBeenCalled();
   });
 });
 

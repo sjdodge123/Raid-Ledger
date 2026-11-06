@@ -18,6 +18,13 @@ describe('redactServerName (ruling Q3)', () => {
     ['Valheim nas:2456', 'Valheim'],
     ['CS (myserver:27015)', 'CS'],
     ['mc:25565 Survival', 'Survival'],
+    // Word-glued IPv4 (tech-debt 3084).
+    ['Valheim192.168.1.20', 'Valheim'],
+    ['srv_10.0.0.5:2456', 'srv_'],
+    ['Valheim 192.168.1.20x', 'Valheim x'],
+    ['Valheim...192.168.1.20', 'Valheim...'],
+    // A 4-part version is indistinguishable from an address: redacted.
+    ['Valheim Plus v0.9.9.1', 'Valheim Plus v'],
   ])('%s -> %s', (raw, expected) => {
     expect(redactServerName(raw, 1)).toBe(expected);
   });
@@ -33,6 +40,8 @@ describe('redactServerName (ruling Q3)', () => {
     'Raid 10:30',
     // Not a full 8-group IPv6 address, so not redacted.
     'Score a:b:c:d',
+    // A 5-group dotted number is not an address (tech-debt 3084).
+    'Mod 1.2.3.4.5',
   ])('keeps a clean name intact: %s', (raw) => {
     expect(redactServerName(raw, 1)).toBe(raw);
   });

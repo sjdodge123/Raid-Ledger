@@ -19,6 +19,9 @@ export function specToRole(spec: string): 'tank' | 'healer' | 'dps' | null {
 }
 
 /** Build API base params for character endpoints.
+ * `realmSlug` and `charName` are URL path segments: they are percent-encoded so
+ * a `/`, `..`, `?` or `#` in user input cannot steer the app-credentialed
+ * Blizzard request to another path (tech-debt 2904).
  * @param apiNamespacePrefix - From the game row (null for retail, e.g. 'classic1x')
  */
 export function buildCharacterParams(
@@ -27,12 +30,10 @@ export function buildCharacterParams(
   region: string,
   apiNamespacePrefix: string | null,
 ): { realmSlug: string; charName: string; namespace: string; baseUrl: string } {
-  const realmSlug = realm
-    .toLowerCase()
-    .replace(/'/g, '')
-    .replace(/\s+/g, '-')
-    .trim();
-  const charName = name.toLowerCase();
+  const realmSlug = encodeURIComponent(
+    realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim(),
+  );
+  const charName = encodeURIComponent(name.toLowerCase());
   const { profile: profilePrefix } = getNamespacePrefixes(apiNamespacePrefix);
   const namespace = `${profilePrefix}-${region}`;
   const baseUrl = `https://${region}.api.blizzard.com`;
