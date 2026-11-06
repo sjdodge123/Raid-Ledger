@@ -1,5 +1,11 @@
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
-import { fetchRawProfile, throwProfileError } from './blizzard-profile.helpers';
+import {
+  buildProfileResult,
+  fetchRawProfile,
+  throwProfileError,
+  type RawBlizzardProfile,
+} from './blizzard-profile.helpers';
+import { isNamespaceRefusal } from './blizzard-upstream-error';
 
 /**
  * ROK-1636: every upstream failure of the character profile call must reach
@@ -61,5 +67,66 @@ describe('fetchRawProfile — upstream 403 (ROK-1636)', () => {
       logger,
     );
     await expect(call).rejects.toBeInstanceOf(BadGatewayException);
+  });
+});
+
+/** Run throwProfileError for a realmless (Forever) character. */
+function callThrowRealmless(status: number): unknown {
+  try {
+    throwProfileError(status, 'body', 'Ana Forever', null, 'us', logger);
+  } catch (err) {
+    return err;
+  }
+  throw new Error('throwProfileError returned without throwing');
+}
+
+describe('throwProfileError — realmless Forever (ROK-2102)', () => {
+  beforeEach(() => {
+    logger.error.mockClear();
+    logger.warn.mockClear();
+  });
+
+  it('maps a 404 to an actionable NotFoundException, logged at warn', () => {
+    const err = callThrowRealmless(404);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect((err as Error).message).toBe(
+      "“Ana Forever” isn't visible on Battle.net yet (US). Forever characters appear after reaching level 10 and logging out once.",
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps a 403 as the 502 namespace refusal', () => {
+    const err = callThrowRealmless(403);
+    expect(err).toBeInstanceOf(BadGatewayException);
+    expect((err as BadGatewayException).getStatus()).toBe(502);
+    expect(isNamespaceRefusal(err)).toBe(true);
+  });
+});
+
+describe('buildProfileResult — body without realm (ROK-2102)', () => {
+  const realmless: RawBlizzardProfile = {
+    name: 'Ana Forever',
+    level: 24,
+    character_class: { name: 'Mage' },
+    race: { name: 'Human' },
+    faction: { type: 'ALLIANCE' },
+  };
+
+  it('maps a missing realm to null without throwing', () => {
+    const result = buildProfileResult(
+      realmless,
+      null,
+      null,
+      null,
+      'classicforever',
+      'us',
+      null,
+      'ana-forever',
+    );
+    expect(result.realm).toBeNull();
+    expect(result.name).toBe('Ana Forever');
+    expect(result.faction).toBe('alliance');
+    expect(result.profileUrl).toBeNull();
   });
 });

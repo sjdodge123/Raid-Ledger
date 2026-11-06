@@ -159,7 +159,12 @@ export class BlizzardService {
     region: string,
   ): Promise<guildH.ForeverGuildRoster | null> {
     const token = await this.auth.getAccessToken(region);
-    return guildH.fetchForeverGuildRoster(guildSlug, region, token, this.logger);
+    return guildH.fetchForeverGuildRoster(
+      guildSlug,
+      region,
+      token,
+      this.logger,
+    );
   }
 
   /** Fetch the realm list for a given region and namespace. */

@@ -11,6 +11,10 @@
  */
 import { fetchCharacterProfessions } from './blizzard-professions.helpers';
 import { at } from '../../common/testing/narrow';
+import {
+  getForeverNamespacePrefix,
+  setForeverNamespacePrefix,
+} from './forever-namespace.resolver';
 
 const RETAIL_PAYLOAD = {
   _links: {},
@@ -263,5 +267,63 @@ describe('fetchCharacterProfessions — Classic short-circuit', () => {
 
     expect(result).not.toBeNull();
     expect(result!.primary.length).toBeGreaterThan(0);
+  });
+});
+
+describe('fetchCharacterProfessions — realmless Forever (ROK-2102)', () => {
+  let previousPrefix: string;
+
+  beforeEach(() => {
+    previousPrefix = getForeverNamespacePrefix();
+    setForeverNamespacePrefix('forever');
+  });
+
+  afterEach(() => setForeverNamespacePrefix(previousPrefix));
+
+  it('is attempted for the Forever alias, on the realmless path', async () => {
+    mockFetchOnce(200, RETAIL_PAYLOAD);
+    const result = await fetchCharacterProfessions(
+      'Ana Forever',
+      null,
+      'us',
+      'classicforever',
+      'token-1',
+      fakeLogger,
+    );
+    const fetchMock = global.fetch as jest.Mock;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://us.api.blizzard.com/profile/wow/character/ana-forever/professions?namespace=profile-forever-us&locale=en_US',
+    );
+    expect(result?.primary[0]?.name).toBe('Tailoring');
+  });
+
+  it('still skips Classic without a request', async () => {
+    const fetchSpy = jest.fn();
+    global.fetch = fetchSpy;
+    const result = await fetchCharacterProfessions(
+      'Roknua',
+      'Dreamscythe',
+      'us',
+      'classicann',
+      'token-1',
+      fakeLogger,
+    );
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null on a Forever 404', async () => {
+    mockFetchOnce(404, {});
+    const result = await fetchCharacterProfessions(
+      'Ana Forever',
+      null,
+      'us',
+      'classicforever',
+      'token-1',
+      fakeLogger,
+    );
+    expect(result).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });
