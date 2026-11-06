@@ -62,7 +62,7 @@ export const SESSION_SPAN_SQL = sql.raw(
   `interval '${MAX_SESSION_SPAN_HOURS} hours'`,
 );
 
-/** A digest week. Session co-play is credited half-open (`start` ≤ t < `end`); event attendance still uses `≤ end`. */
+/** A digest week. Session co-play and event attendance are both credited half-open (`start` ≤ t < `end`). */
 export interface CoPlayWindow {
   start: Date;
   end: Date;
@@ -171,7 +171,7 @@ function attendedEventsCte(b: CoPlayBounds): SQL {
     INNER JOIN users u ON u.id = s.user_id
     WHERE ${ATTENDED_SIGNUP_SQL}
       AND e.game_id IS NOT NULL
-      AND upper(e.duration) <= ${pgTimestamp(b.end)}
+      AND upper(e.duration) < ${pgTimestamp(b.end)}
       AND upper(e.duration) >= ${pgTimestamp(b.start)}${memberFilter(b)}
   )`;
 }
