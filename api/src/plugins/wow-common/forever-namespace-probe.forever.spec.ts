@@ -133,6 +133,37 @@ describe('runProbe — live Forever shapes (ROK-2102)', () => {
     expect(run.shapes['forever:us:ruleset']).toMatchObject({ entryCount: 1 });
   });
 
+  it('never matches the `classic` control on a ruleset index (D3)', async () => {
+    const fetchFn: ProbeFetch = (url) =>
+      Promise.resolve(
+        url.includes('/ruleset/index')
+          ? reply(200, { rulesets: [{ id: 1, name: 'Era' }] })
+          : reply(404),
+      );
+    const run = await runProbe(input(fetchFn, null));
+    expect(run.matches).toEqual([
+      { prefix: 'forever', region: 'us', raceName: null, signal: 'ruleset' },
+    ]);
+    expect(run.shapes['classic:us:ruleset']).toMatchObject({ entryCount: 1 });
+  });
+
+  it('probes the guild roster with no character path set', async () => {
+    const calls: string[] = [];
+    const run = await runProbe({
+      ...input(foreverFetch(calls, 200), 'raid-ledger'),
+      characterPath: null,
+    });
+    expect(run.cells.some((c) => c.endpoint === 'profile')).toBe(false);
+    expect(
+      run.cells.filter(
+        (c) => c.prefix === 'forever' && c.endpoint === 'guild-roster',
+      ),
+    ).toHaveLength(1);
+    expect(calls.some((u) => u.includes('/guild/raid-ledger/roster?'))).toBe(
+      true,
+    );
+  });
+
   it('probes profile sub-resources only after a profile 200', async () => {
     const calls: string[] = [];
     const run = await runProbe(input(foreverFetch(calls, 404), null));

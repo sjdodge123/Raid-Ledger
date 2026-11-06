@@ -30,6 +30,9 @@ export const DEFAULT_FOREVER_CANDIDATES: readonly string[] = [
   'classic',
 ];
 
+/** The known-200 control; a ruleset index there is never a Forever match (D3). */
+export const FOREVER_PROBE_CONTROL_PREFIX = 'classic';
+
 /** Regions probed per candidate. */
 export const FOREVER_PROBE_REGIONS: readonly string[] = [
   'us',
@@ -259,7 +262,11 @@ function collect(run: ProbeRun, task: ProbeTask, out: ProbeOutcome): void {
   } else {
     const shape = summariseShape(out.body);
     run.shapes[key] = shape;
-    if (endpoint === 'ruleset' && shape.entryCount > 0) {
+    if (
+      endpoint === 'ruleset' &&
+      shape.entryCount > 0 &&
+      prefix !== FOREVER_PROBE_CONTROL_PREFIX
+    ) {
       run.matches.push({ prefix, region, raceName: null, signal: 'ruleset' });
     }
   }
