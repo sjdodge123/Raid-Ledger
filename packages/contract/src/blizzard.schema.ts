@@ -43,7 +43,7 @@ export type WowInstanceListResponseDto = z.infer<typeof WowInstanceListResponseS
  * ruleset. The ruleset is a mutable attribute (dead Hardcore characters can
  * move), NOT part of the identity; identity is region + full two-part name.
  */
-export const WowForeverRulesetSchema = z.enum(['normal', 'pvp', 'roleplaying', 'hardcore']);
+export const WowForeverRulesetSchema = z.enum(['normal', 'pvp', 'roleplaying', 'rppvp', 'hardcore']);
 export type WowForeverRuleset = z.infer<typeof WowForeverRulesetSchema>;
 
 /**
@@ -58,6 +58,7 @@ export const WOW_FOREVER_RULESET_LABELS: Record<WowForeverRuleset, string> = {
     normal: 'Normal',
     pvp: 'PvP',
     roleplaying: 'Roleplaying',
+    rppvp: 'RP-PvP',
     hardcore: 'Hardcore',
 };
 

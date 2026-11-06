@@ -145,6 +145,19 @@ describe('ForeverRealmRulesetsSection — save (ROK-1739)', () => {
         await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Realm rulesets saved'));
     });
 
+    it('offers RP-PvP in the ruleset select and PUTs rppvp when picked (ROK-2101)', async () => {
+        const user = userEvent.setup();
+        serve();
+        renderWithProviders(<ForeverRealmRulesetsSection />);
+        const ruleset = await screen.findByRole('combobox', { name: 'Ruleset, row 1' });
+        await user.selectOptions(ruleset, 'RP-PvP');
+        expect(ruleset).toHaveValue('rppvp');
+        await user.click(saveButton());
+        await waitFor(() => expect(puts).toEqual([{ entries: [
+            { region: 'us', realmName: 'Bloodmoon', ruleset: 'rppvp' },
+        ] }]));
+    });
+
     it('toasts the server message when the save is rejected', async () => {
         const user = userEvent.setup();
         serve();

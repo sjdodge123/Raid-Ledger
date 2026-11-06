@@ -22,7 +22,7 @@ const WEB_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SCANNED_ROOTS = ['components', 'pages'];
 
 /** The game's name/slug in any case, or a WoW: Forever-only ruleset as a string literal. */
-const BANNED = [/forever/i, /['"`](roleplaying|hardcore)['"`]/];
+const BANNED = [/forever/i, /['"`](roleplaying|rppvp|hardcore)['"`]/];
 
 /**
  * Files allowed to keep a match, each with its reason. Delete an entry the

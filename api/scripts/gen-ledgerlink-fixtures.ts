@@ -92,6 +92,10 @@ const VALID: Record<string, () => string> = {
     buildImportString(
       buildCharPayload({ who: buildWho({ ruleset: 'roleplaying' }) }),
     ),
+  'char-rppvp': () =>
+    buildImportString(
+      buildCharPayload({ who: buildWho({ ruleset: 'rppvp' }) }),
+    ),
   'char-null-ruleset-no-guild': charNoGuild,
   'char-forever-quests': () => buildImportString(buildForeverQuestsPayload()),
   'char-forever-quests-truncated': () =>

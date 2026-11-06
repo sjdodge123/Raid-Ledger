@@ -287,7 +287,7 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
         await expect(importButton, 'Import waits for a ruleset').toBeDisabled();
 
         await picker.getByText('PvP', { exact: true }).click();
-        await expect(picker.getByRole('radio', { name: 'PvP' }), 'the picked ruleset is checked').toBeChecked();
+        await expect(picker.getByRole('radio', { name: 'PvP', exact: true }), 'the picked ruleset is checked').toBeChecked();
         await expect(importButton, 'a picked ruleset enables Import').toBeEnabled();
 
         const id = await applyAndClaim(page, dialog);
@@ -386,7 +386,7 @@ test.describe('Addon import — realm-inferred ruleset (ROK-1739)', () => {
         await expect(dialog.getByTestId('addon-import-target'), 'the target line labels the ruleset as inferred')
             .toContainText(`PvP (inferred from ${INFER_PVP})`);
         const picker = dialog.getByTestId('addon-import-ruleset-picker');
-        await expect(picker.getByRole('radio', { name: 'PvP' }), 'the inferred ruleset is pre-selected').toBeChecked();
+        await expect(picker.getByRole('radio', { name: 'PvP', exact: true }), 'the inferred ruleset is pre-selected').toBeChecked();
         await expect(dialog.getByTestId('addon-import-ruleset-inference'))
             .toHaveText(`Pre-selected from realm ${INFER_PVP} — change it if that's wrong.`);
 

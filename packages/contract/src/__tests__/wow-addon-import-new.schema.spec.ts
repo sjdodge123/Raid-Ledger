@@ -30,6 +30,10 @@ describe('AddonImportNewRequestSchema', () => {
         expect(AddonImportNewRequestSchema.parse(base).ruleset).toBeUndefined();
     });
 
+    it('accepts rppvp as a selectable ruleset (ROK-2101)', () => {
+        expect(AddonImportNewRequestSchema.parse({ ...base, ruleset: 'rppvp' }).ruleset).toBe('rppvp');
+    });
+
     it('rejects hardcore (not selectable) and an unknown ruleset', () => {
         expect(AddonImportNewRequestSchema.safeParse({ ...base, ruleset: 'hardcore' }).success).toBe(false);
         expect(AddonImportNewRequestSchema.safeParse({ ...base, ruleset: 'seasonal' }).success).toBe(false);

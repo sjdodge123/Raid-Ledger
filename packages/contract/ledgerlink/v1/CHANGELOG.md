@@ -3,6 +3,16 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-06 — rppvp ruleset — **additive**
+
+- `who.ruleset` gains `rppvp` (RP-PvP realms, ROK-2101); stays v1. Every
+  other field is unchanged. `schema.json` regenerated (one enum value added);
+  new golden fixture `char-rppvp` (identical to `char-roleplaying` except
+  `who.ruleset`). Every existing fixture unchanged byte-for-byte.
+- A server without this change rejects the unknown enum value with 422
+  `INVALID_PAYLOAD`. The addon must not send `rppvp` until a server carrying
+  this change is deployed.
+
 ## v1 — 2026-11-02 — a newer guild snapshot from any roster member applies — **additive** (server acceptance rule)
 
 - **Wire format unchanged; stays v1** — no `schema.json` or fixture change

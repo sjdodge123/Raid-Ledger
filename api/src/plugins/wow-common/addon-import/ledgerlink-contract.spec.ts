@@ -65,6 +65,7 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
       'char-normal',
       'char-null-ruleset-no-guild',
       'char-roleplaying',
+      'char-rppvp',
       'guild-1-page',
       'guild-3-pages',
       'guild-8-pages-2000-members',

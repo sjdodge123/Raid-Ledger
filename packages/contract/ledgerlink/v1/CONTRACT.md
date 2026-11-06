@@ -67,7 +67,7 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 | `who.guid` | string | `^Player-\d{1,5}-[0-9A-F]{8}$` |
 | `who.fullName` | string ≤ 100 | |
 | `who.raw` | object | raw identity calls as returned: `getUnitName?` string, `unitName?` / `unitFullName?` `[string\|null, (string\|null)?]` (Lua drops a trailing nil), `realmName?` string |
-| `who.ruleset` | `"normal"` \| `"pvp"` \| `"roleplaying"` \| `"hardcore"` \| `null` | spelled **`roleplaying`** (not `rp`/`roleplay`); `null` when the addon can't tell |
+| `who.ruleset` | `"normal"` \| `"pvp"` \| `"roleplaying"` \| `"rppvp"` \| `"hardcore"` \| `null` | spelled **`roleplaying`** (not `rp`/`roleplay`); RP-PvP realms are **`rppvp`** (additive, ROK-2101); `null` when the addon can't tell |
 | `who.class` | string | client class token `^[A-Z]{2,16}$`, e.g. `PALADIN` |
 | `who.race` | string ≤ 32 | client race token, e.g. `NightElf` |
 | `who.gender` | `"male"` \| `"female"`, optional | `UnitSex`: 2 → `"male"`, 3 → `"female"`; omit on 1 (unknown). Additive, ROK-1742 |

@@ -13,7 +13,7 @@ const ROOT = __dirname;
 /** Forever-specific tokens; 'pvp'/'normal' are too generic to ban. */
 const BANNED: readonly RegExp[] = [
   /forever/i,
-  /['"`](roleplaying|hardcore)['"`]/,
+  /['"`](roleplaying|rppvp|hardcore)['"`]/,
 ];
 
 /** Relative path -> reason. Keep empty: core has no Forever exceptions. */
