@@ -384,3 +384,38 @@ describe('fetchCoPlayGames — events (ROK-2063, integration)', () => {
     ]);
   });
 });
+
+describe('fetchCoPlayGames — event window boundary (integration)', () => {
+  let testApp: TestApp;
+  let now: Date;
+  beforeAll(async () => {
+    testApp = await getTestApp();
+  });
+  beforeEach(() => {
+    now = new Date();
+  });
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  const read = () => fetchCoPlayGames(testApp.db, weekEnding(now), { now });
+
+  // Half-open [start, end): an event ending exactly on the boundary belongs to
+  // the NEXT week only — `<= end` counted it in two consecutive digests.
+  it('credits an event ending exactly at the window end to the next week only', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const edge = await seedGame(testApp, 'Boundary Raid');
+    await seedEvent(testApp, now, edge, 0, [a, b]);
+    expect((await read()).map((g) => g.gameId)).toEqual([]);
+    const next = { start: now, end: new Date(now.getTime() + 7 * DAY) };
+    const following = await fetchCoPlayGames(testApp.db, next, { now });
+    expect(following.map((g) => g.gameId)).toEqual([edge]);
+  });
+
+  it('counts an event ending one minute before the window end', async () => {
+    const [a, b] = [await seedUser(testApp), await seedUser(testApp)];
+    const game = await seedGame(testApp, 'Just Inside');
+    await seedEvent(testApp, now, game, MIN, [a, b]);
+    expect((await read()).map((g) => g.gameId)).toEqual([game]);
+  });
+});

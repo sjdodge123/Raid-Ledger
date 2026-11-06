@@ -39,6 +39,7 @@ import {
   listActiveGroups,
   listHeartedWithoutIntent,
   requireGame,
+  requireVisibleGame,
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
@@ -55,7 +56,7 @@ import {
   convertGroup,
   findActiveIntent,
   insertIntent,
-  isGroupParticipant,
+  resolveConvertRole,
   reviveIntent,
   toIntentDto,
   type LfgConversionTarget,
@@ -127,7 +128,7 @@ export class LfgService {
     gameId: number,
     opts: LfgUrgencyRequest = WEEK_REQUEST,
   ): Promise<CreateIntentResult> {
-    const game = await this.requireGame(gameId);
+    const game = await requireVisibleGame(this.db, gameId);
     const outcome = await this.postUnderGroupLock(userId, gameId, game, opts);
     this.announcePost(gameId, outcome);
     if (outcome.refreshed) {
@@ -285,20 +286,19 @@ export class LfgService {
     gameId: number,
     dto: ConvertLfgIntentsDto,
   ): Promise<{ converted: number }> {
-    await this.requireGame(gameId);
+    await requireVisibleGame(this.db, gameId);
     const target = toConversionTarget(dto);
-    const participant = await isGroupParticipant(
-      this.db,
-      userId,
-      gameId,
-      target,
-    );
-    if (!participant) {
+    const role = await resolveConvertRole(this.db, userId, gameId, target);
+    if (role === null) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
       );
     }
     await this.requireConversionTarget(gameId, target);
+    // A retry-only caller (their row already converted into this target, no
+    // live intent now) gets the idempotent answer and touches nobody: the
+    // live rows belong to a LATER group they are not part of.
+    if (role === 'retry') return { converted: 0 };
     const converted = await convertGroup(this.db, gameId, target);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
@@ -345,7 +345,7 @@ export class LfgService {
     this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, payload);
   }
 
-  /** Load a game or 404 — shared with the group-page reads. */
+  /** Load a game or 404 for the group-page READ — writes use requireVisibleGame. */
   private requireGame(
     gameId: number,
   ): Promise<typeof schema.games.$inferSelect> {

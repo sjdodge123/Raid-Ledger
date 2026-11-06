@@ -125,6 +125,32 @@ function describeBuildWordMatchFilters() {
     expect(sql).toContain('regexp_replace');
     expect(sql.toLowerCase()).toContain('ilike');
   });
+
+  // A word naming an Object.prototype member (`constructor`) used to resolve
+  // through the plain-object numeral tables to a function, which then threw in
+  // escapeLikePattern and 500'd game search. Underscores/case are normalised
+  // first, so `__proto__` -> `proto` and `toString` -> `tostring`.
+  const params = (word: string) => {
+    const [filter] = nonEmpty(
+      buildWordMatchFilters(schema.games.name, word),
+      'filter',
+    );
+    return new PgDialect().sqlToQuery(filter).params;
+  };
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'treats the prototype-member word %s as a plain word',
+    (word) => {
+      expect(() => params(word)).not.toThrow();
+      const plain = stripSearchPunctuation(word).toLowerCase();
+      expect(params(word)).toEqual([`%${plain}%`]);
+    },
+  );
+
+  it('still maps a numeral to its Roman/Arabic alternative', () => {
+    expect(params('2')).toEqual(['%2%', '%II%']);
+    expect(params('II')).toEqual(['%ii%', '%2%']);
+  });
 }
 describe('buildWordMatchFilters', () => describeBuildWordMatchFilters());
 

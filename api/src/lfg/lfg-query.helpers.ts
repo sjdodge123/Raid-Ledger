@@ -20,6 +20,7 @@ import {
   min,
   notInArray,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -395,15 +396,38 @@ export async function listHeartedWithoutIntent(
  * @param db - Drizzle handle.
  * @param gameId - Route parameter.
  */
-export async function requireGame(
+export function requireGame(
   db: LfgDb,
   gameId: number,
 ): Promise<typeof schema.games.$inferSelect> {
-  const [game] = await db
-    .select()
-    .from(schema.games)
-    .where(eq(schema.games.id, gameId))
-    .limit(1);
+  return loadGameOr404(db, eq(schema.games.id, gameId));
+}
+
+/**
+ * {@link requireGame} for the WRITE paths (post, invite, convert): an
+ * admin-hidden or banned game 404s exactly like a missing one, so a write can
+ * never raise a hand on, invite to, or convert a moderated game — and the
+ * response does not reveal that the hidden row exists.
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Route parameter.
+ */
+export function requireVisibleGame(
+  db: LfgDb,
+  gameId: number,
+): Promise<typeof schema.games.$inferSelect> {
+  return loadGameOr404(
+    db,
+    and(eq(schema.games.id, gameId), VISIBILITY_FILTER()),
+  );
+}
+
+/** The first game matching `where`, or a `NotFoundException` about the game. */
+async function loadGameOr404(
+  db: LfgDb,
+  where: SQL | undefined,
+): Promise<typeof schema.games.$inferSelect> {
+  const [game] = await db.select().from(schema.games).where(where).limit(1);
   if (!game) throw new NotFoundException('Game not found');
   return game;
 }

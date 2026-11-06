@@ -99,7 +99,7 @@ let service: LfgInviteService;
 
 /** Every recipient-scoped check passes; the inviter is in the group. */
 function allClear() {
-  mockedQuery.requireGame.mockResolvedValue(
+  mockedQuery.requireVisibleGame.mockResolvedValue(
     GAME as unknown as typeof schema.games.$inferSelect,
   );
   mockedQuery.getGroupSummary.mockResolvedValue({
