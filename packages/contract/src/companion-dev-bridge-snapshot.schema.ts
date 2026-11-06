@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WowForeverRulesetSchema } from './blizzard.schema.js';
 import { CompanionTimestampSchema } from './companion-common.schema.js';
 import {
     DEV_BRIDGE_PAGE_MAX_BYTES, DEV_BRIDGE_RESULT_ITEM_MAX_BYTES, DevBridgeCallStatusSchema, DevBridgeFlavorSchema,
@@ -78,7 +79,7 @@ export const LedgerLinkSnapshotRulesetSchema = z
         rulesTruncated: z.boolean(),
         ledgerLink: z
             .object({
-                value: z.enum(['normal', 'pvp', 'roleplaying', 'hardcore']).nullable(),
+                value: WowForeverRulesetSchema.nullable(),
                 source: z.enum(['set', 'detected']).nullable(),
             })
             .strict(),

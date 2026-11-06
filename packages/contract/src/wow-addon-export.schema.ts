@@ -71,7 +71,7 @@ export const AddonWhoSchema = z.object({
     guid: AddonGuidSchema,
     fullName: z.string().max(100),
     raw: AddonWhoRawSchema,
-    /** `normal|pvp|roleplaying|hardcore`; null when the addon can't tell. */
+    /** `normal|pvp|roleplaying|rppvp|hardcore`; null when the addon can't tell. */
     ruleset: WowForeverRulesetSchema.nullable(),
     class: AddonClassTokenSchema,
     race: z.string().max(32),

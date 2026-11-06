@@ -68,7 +68,7 @@ export const characters = pgTable(
     profileUrl: text('profile_url'),
     /** Blizzard API region (us, eu, kr, tw) — persisted for auto-sync */
     region: varchar('region', { length: 10 }),
-    /** ROK-1721: WoW: Forever ruleset (normal|pvp|roleplaying|hardcore); null for every other game */
+    /** ROK-1721: WoW: Forever ruleset (normal|pvp|roleplaying|rppvp|hardcore); null for every other game */
     ruleset: varchar('ruleset', { length: 20 }),
     /**
      * ROK-1724: in-game GUID (`Player-<realmId>-<hex8>`) pinned by the WoW

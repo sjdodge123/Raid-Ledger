@@ -7,6 +7,16 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-06 (snapshot ruleset gains rppvp, additive)
+
+- `ledgerlink-snapshot` `ruleset.ledgerLink.value` now reuses the shared
+  WoW: Forever ruleset enum (`WowForeverRulesetSchema`) instead of a copied
+  literal list, so it gains `rppvp` (RP-PvP realms, ROK-2101) alongside
+  `normal`, `pvp`, `roleplaying` and `hardcore`. Relaxing an enum is
+  **additive**: every existing body still parses. Without it a snapshot from
+  an RP-PvP realm would fail to parse once LedgerLink emits `rppvp`.
+  Fixtures unchanged.
+
 ## v1 — 2026-11-06 (collector status + structured events, additive)
 
 - `collectors` rows gain an **optional** `status`, the Companion tile's
