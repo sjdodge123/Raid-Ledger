@@ -26,6 +26,7 @@ import {
 } from '@raid-ledger/contract';
 import { getAuthToken } from './use-auth';
 import { fetchApi, fetchWithAuth } from '../lib/api/fetch-api';
+import { isHttpUrl } from '../lib/safe-http-url';
 import { GAME_TIME_ABSENCES_KEY, GAME_TIME_QUERY_KEY } from './use-game-time';
 
 export const CALENDARS_OVERVIEW_KEY = ['calendars', 'overview'] as const;
@@ -91,6 +92,8 @@ export function useStartOAuth(
         mutationFn: async () => {
             const query = oauthStartQuery(intent, returnTarget);
             const res = await fetchApi(`${BASE}/oauth/${provider}/start${query}`, {}, OAuthStartResponseSchema);
+            // `z.string().url()` accepts `javascript:` — refuse anything but http(s) as a failed start.
+            if (!isHttpUrl(res.url)) throw new Error('Calendar sign-in returned an unusable address');
             return res.url;
         },
         onSuccess: goToProvider,

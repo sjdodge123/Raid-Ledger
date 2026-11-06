@@ -21,7 +21,7 @@ import {
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 import { CalendarsPage } from './CalendarsPage';
-import { READ_COPY as R } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, READ_COPY as R } from './calendar-sync.copy';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 // `lib/toast` does `Object.assign(sonnerToast, { error: errorWithPersist })` at import time
@@ -168,6 +168,14 @@ describe('grant, Fix and kill switch', () => {
         expect(status).toHaveClass('text-danger');
         expect(screen.getByTestId('calendar-connection-fix')).toHaveTextContent(R.fix);
         expect(screen.getByRole('switch', { name: R.days.aria })).toBeDisabled();
+    });
+
+    it('needs_reconnect: a Fix whose start URL is refused (non-http) shows the start-failed alert', async () => {
+        renderWith({ status: 'needs_reconnect', errorCode: 'auth' });
+        server.use(http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url: 'javascript:alert(1)' })));
+        fireEvent.click(await screen.findByTestId('calendar-connection-fix'));
+        const card = screen.getByTestId('calendar-connection-card');
+        expect(await within(card).findByRole('alert')).toHaveTextContent(C.google.startFailed);
     });
 
     it('kill switch off: no read section at all', async () => {

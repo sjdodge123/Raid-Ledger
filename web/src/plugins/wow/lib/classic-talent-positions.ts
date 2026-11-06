@@ -9,6 +9,7 @@
  * Source: Wowhead TBC Classic talent calculator.
  */
 
+import { ownLookup } from '../../../lib/own-lookup';
 import type { TreePositionMap } from './talent-data/types';
 import { DRUID_POSITIONS, MAGE_POSITIONS, PRIEST_POSITIONS, WARLOCK_POSITIONS } from './talent-data/casters';
 import { HUNTER_POSITIONS, PALADIN_POSITIONS, ROGUE_POSITIONS, WARRIOR_POSITIONS } from './talent-data/melee';
@@ -126,7 +127,7 @@ export function buildWowheadTalentString(
     className: string,
     trees: ClassicTalentTree[],
 ): string | null {
-    const classPositions = CLASSIC_TALENT_POSITIONS[className];
+    const classPositions = ownLookup(CLASSIC_TALENT_POSITIONS, className);
     if (!classPositions) return null;
 
     const treeStrings: string[] = [];
