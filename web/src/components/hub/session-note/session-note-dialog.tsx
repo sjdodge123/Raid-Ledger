@@ -62,7 +62,8 @@ function useNoteEditor(guildId: number, initial: HubSessionNote | null) {
     const dirty = isDirty(draft, draftOf(base));
     // ROK-1968 N6: the dialog opens on the cached note while it refetches. When a newer note lands, a clean
     // editor rebases on it; a dirty one keeps its text AND the base it started from, so a real concurrent
-    // change still answers 409 and shows the "Load their version" banner instead of being overwritten.
+    // change still answers 409 and shows the "Load their version" banner instead of being overwritten. A draft
+    // edited and then reverted to clean also keeps that stale base, so its save may still 409 (acceptable).
     const freshAt = initial?.updatedAt ?? null;
     const [seenAt, setSeenAt] = useState(freshAt);
     if (freshAt !== seenAt) {
