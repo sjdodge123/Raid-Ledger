@@ -52,16 +52,41 @@ export function computeTotalRosterSlots(slotConfig: unknown): number {
   return 0;
 }
 
-/** Finds the next occurrence of a day-of-week/hour after the cursor. */
-function findNextOccurrence(jsDow: number, hour: number, after: Date): Date {
+/** A day-of-week/hour search never needs more than one week of steps. */
+const MAX_OCCURRENCE_STEPS = 8;
+
+/**
+ * Finds the next occurrence of a day-of-week/hour after the cursor, or null
+ * when none is found within a week (an out-of-range dow or hour).
+ */
+function findNextOccurrence(
+  jsDow: number,
+  hour: number,
+  after: Date,
+): Date | null {
   const cursor = new Date(after);
   cursor.setMinutes(0, 0, 0);
   cursor.setHours(hour);
-  while (cursor.getDay() !== jsDow || cursor <= after) {
+  for (let step = 0; step < MAX_OCCURRENCE_STEPS; step++) {
+    if (cursor.getDay() === jsDow && cursor > after) return cursor;
     cursor.setDate(cursor.getDate() + 1);
     cursor.setHours(hour, 0, 0, 0);
   }
-  return cursor;
+  return null;
+}
+
+/**
+ * Parses a `dow:hour` availability key (dow 0 = Monday). Returns null unless
+ * dow is an integer 0-6 and hour an integer 0-23.
+ */
+function parseAvailabilityKey(
+  key: string,
+): { dow: number; hour: number } | null {
+  // A missing part is NaN, exactly what Number(undefined) arithmetic gives.
+  const [dow = NaN, hour = NaN] = key.split(':').map(Number);
+  const dowOk = Number.isInteger(dow) && dow >= 0 && dow <= 6;
+  const hourOk = Number.isInteger(hour) && hour >= 0 && hour <= 23;
+  return dowOk && hourOk ? { dow, hour } : null;
 }
 
 /** Formats a date into a human-readable label. */
@@ -89,10 +114,11 @@ export function mapToConcreteDates(
   const suggestions: TimeSuggestion[] = [];
   const endDate = new Date(after.getTime() + daysAhead * 24 * 3600 * 1000);
   for (const [key, count] of ranked) {
-    // A missing part is NaN, exactly what Number(undefined) arithmetic gives.
-    const [dow = NaN, hour = NaN] = key.split(':').map(Number);
+    const parsed = parseAvailabilityKey(key);
+    if (!parsed) continue;
+    const { dow, hour } = parsed;
     const cursor = findNextOccurrence((dow + 1) % 7, hour, after);
-    while (cursor < endDate) {
+    while (cursor && cursor < endDate) {
       suggestions.push({
         date: cursor.toISOString(),
         label: formatLabel(cursor, timezone),
