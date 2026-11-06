@@ -53,7 +53,7 @@ describe('buildCandidateList', () => {
 });
 
 describe('buildProbeUrls', () => {
-  it('builds the realm, connected-realm and playable-race URLs', () => {
+  it('builds the realm, connected-realm, playable-race and ruleset URLs', () => {
     expect(buildProbeUrls('classicforever', 'eu')).toEqual([
       {
         endpoint: 'realm',
@@ -66,6 +66,10 @@ describe('buildProbeUrls', () => {
       {
         endpoint: 'playable-race',
         url: 'https://eu.api.blizzard.com/data/wow/playable-race/index?namespace=static-classicforever-eu&locale=en_US',
+      },
+      {
+        endpoint: 'ruleset',
+        url: 'https://eu.api.blizzard.com/data/wow/ruleset/index?namespace=dynamic-classicforever-eu&locale=en_US',
       },
     ]);
   });
@@ -184,21 +188,22 @@ describe('runProbe', () => {
     return Promise.resolve(reply(404));
   };
 
-  it('records one cell per candidate x region x endpoint (84)', async () => {
+  it('records one cell per candidate x region x endpoint (112)', async () => {
     const run = await runProbe({
       fetchFn: matrixFetch,
       token: 't',
       candidates: buildCandidateList([]),
       regions: FOREVER_PROBE_REGIONS,
       characterPath: null,
+      guildPath: null,
       timeoutMs: 5,
     });
     expect(FOREVER_PROBE_REGIONS).toEqual(['us', 'eu', 'kr', 'tw']);
-    expect(run.cells).toHaveLength(84);
+    expect(run.cells).toHaveLength(112);
     const keys = new Set(
       run.cells.map((c) => `${c.prefix}|${c.region}|${c.endpoint}`),
     );
-    expect(keys.size).toBe(84);
+    expect(keys.size).toBe(112);
     const find = (p: string, r: string, e: string) =>
       run.cells.find(
         (c) => c.prefix === p && c.region === r && c.endpoint === e,
@@ -217,6 +222,7 @@ describe('runProbe matches + concurrency', () => {
   function skyFetch(calls: string[]): ProbeFetch {
     return (url) => {
       calls.push(url);
+      if (url.includes('/ruleset/')) return Promise.resolve(reply(404));
       if (url.includes('static-classicforever-'))
         return Promise.resolve(reply(200, { races: [{ name: 'Skyborne' }] }));
       if (url.includes('static-classic-'))
@@ -236,9 +242,15 @@ describe('runProbe matches + concurrency', () => {
       candidates: ['classicforever', 'classic'],
       regions: ['us'],
       characterPath: 'Dreamscythe/Thrall',
+      guildPath: null,
     });
     expect(run.matches).toEqual([
-      { prefix: 'classicforever', region: 'us', raceName: 'Skyborne' },
+      {
+        prefix: 'classicforever',
+        region: 'us',
+        raceName: 'Skyborne',
+        signal: 'skyborne',
+      },
     ]);
     expect(calls).toContain(
       'https://us.api.blizzard.com/profile/wow/character/dreamscythe/thrall?namespace=profile-classicforever-us&locale=en_US',
@@ -269,6 +281,7 @@ describe('runProbe matches + concurrency', () => {
       candidates: ['classicforever'],
       regions: ['us'],
       characterPath: null,
+      guildPath: null,
     });
     expect(run.cells.some((c) => c.endpoint === 'profile')).toBe(false);
     expect(calls.some((u) => u.includes('/profile/'))).toBe(false);
@@ -292,8 +305,9 @@ describe('runProbe concurrency', () => {
       candidates: ['aa', 'bb', 'cc'],
       regions: ['us', 'eu'],
       characterPath: null,
+      guildPath: null,
     });
-    expect(run.cells).toHaveLength(18);
+    expect(run.cells).toHaveLength(24);
     expect(peak).toBe(4);
   });
 });

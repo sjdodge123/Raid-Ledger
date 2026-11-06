@@ -33,7 +33,9 @@ function probeRun(prefix: string | null): ProbeRun {
   );
   return {
     cells,
-    matches: [{ prefix, region: 'us', raceName: 'Skyborne' }],
+    matches: [
+      { prefix, region: 'us', raceName: 'Skyborne', signal: 'skyborne' },
+    ],
     shapes: {
       [`${prefix}:us:realm`]: {
         topLevelKeys: ['realms'],
@@ -198,6 +200,7 @@ describe('ForeverNamespaceProbeService config + state', () => {
       result: null,
       extraCandidates: [],
       characterPath: null,
+      guildPath: null,
     });
   });
 });
@@ -208,10 +211,12 @@ describe('ForeverNamespaceProbeService config', () => {
     const state = await service.updateConfig({
       extraCandidates: ['classicann'],
       characterPath: 'dreamscythe/thrall',
+      guildPath: 'raid-ledger',
     });
     expect(state).toMatchObject({
       extraCandidates: ['classicann'],
       characterPath: 'dreamscythe/thrall',
+      guildPath: 'raid-ledger',
     });
     await service.run();
     expect(runProbeMock).toHaveBeenCalledWith(
@@ -219,6 +224,7 @@ describe('ForeverNamespaceProbeService config', () => {
         candidates: expect.arrayContaining(['classicann', 'classic']),
         regions: ['us', 'eu', 'kr', 'tw'],
         characterPath: 'dreamscythe/thrall',
+        guildPath: 'raid-ledger',
         token: 'tok',
       }),
     );
@@ -229,8 +235,13 @@ describe('ForeverNamespaceProbeService config', () => {
     await service.updateConfig({
       extraCandidates: ['fe'],
       characterPath: 'a/b',
+      guildPath: 'c/d',
     });
-    await service.updateConfig({ extraCandidates: [], characterPath: null });
+    await service.updateConfig({
+      extraCandidates: [],
+      characterPath: null,
+      guildPath: null,
+    });
     expect(store.size).toBe(0);
   });
 
@@ -240,6 +251,7 @@ describe('ForeverNamespaceProbeService config', () => {
       service.updateConfig({
         extraCandidates: ['Bad Prefix'],
         characterPath: null,
+        guildPath: null,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -249,10 +261,41 @@ describe('ForeverNamespaceProbeService config', () => {
     async (characterPath) => {
       const { service } = setup();
       await expect(
-        service.updateConfig({ extraCandidates: [], characterPath }),
+        service.updateConfig({
+          extraCandidates: [],
+          characterPath,
+          guildPath: null,
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
     },
   );
+
+  it.each(['dreamscythe/..', 'a b', 'x/y/z', 'guild?x=1'])(
+    'rejects an unsafe guild path (%s)',
+    async (guildPath) => {
+      const { service } = setup();
+      await expect(
+        service.updateConfig({
+          extraCandidates: [],
+          characterPath: null,
+          guildPath,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+
+  it('accepts realmless Forever slugs for the character and guild (ROK-2102)', async () => {
+    const { service } = setup();
+    const state = await service.updateConfig({
+      extraCandidates: [],
+      characterPath: 'Thrall-Stormborn',
+      guildPath: 'raid-ledger',
+    });
+    expect(state).toMatchObject({
+      characterPath: 'Thrall-Stormborn',
+      guildPath: 'raid-ledger',
+    });
+  });
 });
 
 describe('ForeverNamespaceProbeService stored state', () => {
@@ -265,6 +308,32 @@ describe('ForeverNamespaceProbeService stored state', () => {
     expect(state.extraCandidates).toEqual([]);
   });
 
+  it('parses a pre-ROK-2102 stored result whose matches have no signal', async () => {
+    const { service, store } = setup();
+    const old = {
+      ranAt: '2026-11-04T00:00:00.000Z',
+      durationMs: 5,
+      status: 'ok',
+      candidates: ['classicforever'],
+      cells: [],
+      matches: [
+        { prefix: 'classicforever', region: 'us', raceName: 'Skyborne' },
+      ],
+      shapes: {},
+      found: null,
+    };
+    store.set(WOW_FOREVER_PROBE_LAST_RESULT_KEY, JSON.stringify(old));
+    const state = await service.getState();
+    expect(state.result?.matches).toEqual([
+      {
+        prefix: 'classicforever',
+        region: 'us',
+        raceName: 'Skyborne',
+        signal: 'skyborne',
+      },
+    ]);
+  });
+
   it('only ever writes its own plugin-owned keys (never ROK-1717 keys)', async () => {
     const { service, settings } = setup();
     runProbeMock.mockResolvedValue(probeRun('classicforever'));
@@ -272,6 +341,7 @@ describe('ForeverNamespaceProbeService stored state', () => {
     await service.updateConfig({
       extraCandidates: ['fe'],
       characterPath: null,
+      guildPath: 'raid-ledger',
     });
     const written = [
       ...settings.set.mock.calls,
