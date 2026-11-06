@@ -20,6 +20,12 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import type { AuthenticatedRequest } from '../auth/types';
 import { parseUpdatePreferencesBody } from './notification-prefs.helpers';
 
+/** Parse an integer query param; absent or non-numeric → `fallback`. */
+function parseIntOr(raw: string | undefined, fallback: number): number {
+  const n = raw ? parseInt(raw, 10) : fallback;
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /**
  * Controller for user notifications (ROK-197).
  * All endpoints are scoped to the authenticated user.
@@ -42,12 +48,10 @@ export class NotificationController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ): Promise<NotificationDto[]> {
-    // Validate and cap pagination params to prevent DOS
-    const parsedLimit = Math.min(
-      Math.max(limit ? parseInt(limit, 10) : 20, 1),
-      100,
-    ); // Cap at 100
-    const parsedOffset = Math.max(offset ? parseInt(offset, 10) : 0, 0); // No negative offsets
+    // Validate and cap pagination params to prevent DOS; a non-numeric
+    // value falls back to the default instead of reaching SQL as NaN.
+    const parsedLimit = Math.min(Math.max(parseIntOr(limit, 20), 1), 100);
+    const parsedOffset = Math.max(parseIntOr(offset, 0), 0); // No negative offsets
 
     return this.notificationService.getAll(
       req.user.id,
