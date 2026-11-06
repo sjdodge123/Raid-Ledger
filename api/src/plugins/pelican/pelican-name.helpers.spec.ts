@@ -25,6 +25,11 @@ describe('redactServerName (ruling Q3)', () => {
     ['Valheim...192.168.1.20', 'Valheim...'],
     // A 4-part version is indistinguishable from an address: redacted.
     ['Valheim Plus v0.9.9.1', 'Valheim Plus v'],
+    // A bare hostname with a known TLD is an address too (ruling 2026-11-06).
+    ['Valheim play.example.com', 'Valheim'],
+    ['Valheim (play.example.co.uk)', 'Valheim'],
+    ['Join Example.GG tonight', 'Join tonight'],
+    ['Palworld @ eu.play.example.net', 'Palworld'],
   ])('%s -> %s', (raw, expected) => {
     expect(redactServerName(raw, 1)).toBe(expected);
   });
@@ -42,6 +47,12 @@ describe('redactServerName (ruling Q3)', () => {
     'Score a:b:c:d',
     // A 5-group dotted number is not an address (tech-debt 3084).
     'Mod 1.2.3.4.5',
+    // Dotted tokens without a known TLD are not hostnames.
+    'Mod v1.2.3',
+    'World world.db',
+    'Hardcore vs. Easy',
+    'Dodge & Co.',
+    'e.g. survival',
   ])('keeps a clean name intact: %s', (raw) => {
     expect(redactServerName(raw, 1)).toBe(raw);
   });
