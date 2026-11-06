@@ -1,20 +1,23 @@
 /** ROK-1968 §8.4 T-W4–T-W7 — the "Before next session" editor dialog. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { JSX } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { GuildPage, HubSessionNote, HubSessionNoteResponse, PutHubSessionNoteInput } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
     NOTE_UPDATED_AT, SESSION_NOTE_URL, buildSessionNote, buildSessionNoteResponse, sessionNoteGetHandler,
 } from '../../../test/mocks/hub-session-note-handlers';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget from './hub-session-note-widget';
+import { sessionNoteKey } from './hub-session-note-query';
 import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { ARMED_CLEAR_AFTER_COPY } from './session-note-form';
 import { formatClearAfter } from './session-note.helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
+import { useSessionNote } from './use-hub-session-note';
 
 const media = vi.hoisted(() => ({ desktop: true }));
 vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: () => media.desktop }));
@@ -169,5 +172,56 @@ describe('SessionNoteDialog frame (T-W7) + card mount', () => {
         expect(screen.queryByTestId('session-note-form')).toBeNull();
         fireEvent.click(await screen.findByTestId('session-note-add'));
         expect(await screen.findByTestId('session-note-form')).toBeInTheDocument();
+    });
+});
+
+describe('SessionNoteDialog opens on a fresh note (ROK-1968 N6)', () => {
+    const STALE_AT = '2026-10-27T09:00:00.000001Z';
+    const FRESH = buildSessionNote({ items: [{ id: 1, text: 'Fresh row', done: false, doneAt: null }] });
+
+    /** A cache entry written just now (so within the 30s staleTime) holding an OLDER note than the server's. */
+    function staleCache() {
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(sessionNoteKey(5), editorResponse(buildSessionNote({ updatedAt: STALE_AT })));
+        return queryClient;
+    }
+    /**
+     * A second observer of the same query, rendered beside the dialog. TanStack batches one notification to every
+     * observer and React commits them together, so once this shows the fresh updatedAt the dialog has re-rendered
+     * with the fresh note too (a cache write alone notifies observers on a later tick, before any commit).
+     */
+    function NoteAtProbe(): JSX.Element {
+        const { data } = useSessionNote(5);
+        return <span data-testid="note-at-probe">{data?.note?.updatedAt ?? ''}</span>;
+    }
+
+    it('refetches on open, rebases a clean draft, and saves with the fresh baseUpdatedAt', async () => {
+        server.use(sessionNoteGetHandler(editorResponse(FRESH)));
+        const bodies = capturePut();
+        renderWithProviders(<SessionNoteDialog guildId={5} onClose={vi.fn()} />, { queryClient: staleCache() });
+        await waitFor(() => expect(itemInput(0).value).toBe('Fresh row'));
+        type(0, 'Fresh row, edited');
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies).toHaveLength(1));
+        expect(bodies[0]?.baseUpdatedAt).toBe(NOTE_UPDATED_AT);
+    });
+
+    it('a draft already edited when the refetch lands keeps its text and the base it started from', async () => {
+        let release = (): void => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.get(SESSION_NOTE_URL, async () => { await gate; return HttpResponse.json(editorResponse(FRESH)); }));
+        const bodies = capturePut();
+        const queryClient = staleCache();
+        renderWithProviders(<><SessionNoteDialog guildId={5} onClose={vi.fn()} /><NoteAtProbe /></>, { queryClient });
+        await screen.findAllByTestId('session-note-form');
+        type(0, 'My edit');
+        release();
+        // A committed render of the fresh note: without the dirty guard the dialog rebases in that same render,
+        // so the input would read 'Fresh row' here and the save would send the fresh NOTE_UPDATED_AT.
+        await waitFor(() => expect(screen.getByTestId('note-at-probe')).toHaveTextContent(NOTE_UPDATED_AT));
+        expect(itemInput(0).value).toBe('My edit');
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies).toHaveLength(1));
+        expect(bodies[0]?.baseUpdatedAt).toBe(STALE_AT);
     });
 });

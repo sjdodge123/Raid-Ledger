@@ -20,8 +20,12 @@ import { enqueueTick, isLatestTick, markTick, tickQueueKey } from './session-not
 
 export const ITEM_GONE_TOAST = 'That checklist item no longer exists';
 
-export function useSessionNote(guildId: number) {
-    return useQuery(sessionNoteQuery(guildId));
+/**
+ * `fresh` (the editor dialog only): refetch on every mount, so the dialog opened from a cache up to 30s old
+ * does not save on a stale `baseUpdatedAt` and 409 for nothing (ROK-1968 N6). The card keeps the cache.
+ */
+export function useSessionNote(guildId: number, { fresh = false }: { fresh?: boolean } = {}) {
+    return useQuery({ ...sessionNoteQuery(guildId), ...(fresh ? { refetchOnMount: 'always' as const } : {}) });
 }
 
 /** The note a 409 carried (`{ message, note }`), or undefined when the error is not a parseable conflict. */
