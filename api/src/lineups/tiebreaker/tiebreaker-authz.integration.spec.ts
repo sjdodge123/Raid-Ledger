@@ -18,6 +18,8 @@
  *      (late-vote race: the round advanced after the pre-check).
  *  10. Two concurrent round-completing votes advance the round exactly once
  *      (tech-debt 2026-10-10: `checkAndAdvanceRound` was not serialized).
+ *  11. An admin force-resolve racing the final vote advances once and
+ *      resolves once (`forceResolve` shares the round-advance lock).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -431,6 +433,55 @@ function describeTiebreakerAuthz() {
       .from(schema.communityLineupTiebreakers)
       .where(eq(schema.communityLineupTiebreakers.id, tb.tiebreakerId));
     expect(row?.status).toBe('active');
+  });
+
+  it('advances once when an admin force-resolve races the final vote', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 4,
+    });
+    const roundOne = (await findMatchups(testApp.db, tb.tiebreakerId))
+      .filter((m) => m.round === 1 && !m.isBye)
+      .sort((a, b) => a.position - b.position);
+    const [first, second] = [at(roundOne, 0), at(roundOne, 1)];
+    // Every voter has voted on `first`; all but the last on `second`.
+    await testApp.db.insert(BV).values([
+      ...tb.voterIds.map((userId) => ({
+        matchupId: first.id,
+        userId,
+        gameId: first.gameAId,
+      })),
+      ...tb.voterIds.slice(0, 3).map((userId) => ({
+        matchupId: second.id,
+        userId,
+        gameId: second.gameAId,
+      })),
+    ]);
+    const lastVoter = at(tb.voterIds, 3);
+    const vote = { matchupId: second.id, gameId: second.gameAId };
+    const [voteResult, forceResult] = await Promise.allSettled([
+      service.castBracketVote(tb.lineupId, vote, {
+        id: lastVoter,
+        role: 'member',
+      }),
+      service.forceResolve(tb.lineupId),
+    ]);
+    // The vote may lose the race (round already closed) — the force may not.
+    expect(forceResult.status).toBe('fulfilled');
+    expect(['fulfilled', 'rejected']).toContain(voteResult.status);
+
+    const roundTwo = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
+      (m) => m.round === 2,
+    );
+    expect(roundTwo).toHaveLength(1);
+    const T = schema.communityLineupTiebreakers;
+    const [row] = await testApp.db
+      .select({ status: T.status, winnerGameId: T.winnerGameId })
+      .from(T)
+      .where(eq(T.id, tb.tiebreakerId));
+    expect(row?.status).toBe('resolved');
+    expect(tb.gameIds).toContain(row?.winnerGameId);
   });
 }
 
