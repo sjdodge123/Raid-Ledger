@@ -289,7 +289,7 @@ async function loadConfig(settings: SettingsService): Promise<{
       baselineWeeks: parseNum(baseline, DEFAULT_BASELINE_WEEKS),
       recentWeeks: parseNum(recent, DEFAULT_RECENT_WEEKS),
     },
-    retentionDays: parseNum(retention, DEFAULT_RETENTION_DAYS),
+    retentionDays: parseRetentionDays(retention),
     timezone,
   };
 }
@@ -298,6 +298,15 @@ function parseNum(raw: string | null, fallback: number): number {
   if (raw === null || raw === '') return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Whole days of snapshots to keep. Below 1 day the prune would delete every
+ * snapshot (including today's), so it falls back to the default.
+ */
+function parseRetentionDays(raw: string | null): number {
+  const days = Math.trunc(parseNum(raw, DEFAULT_RETENTION_DAYS));
+  return days >= 1 ? days : DEFAULT_RETENTION_DAYS;
 }
 
 function todayUtcIso(): string {
