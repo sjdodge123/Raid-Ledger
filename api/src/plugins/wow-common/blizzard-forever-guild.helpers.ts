@@ -7,6 +7,7 @@
  * FLAG B4: guild-slug rules (spaces → `-`?) are unverified, so the slug is
  * taken as given — only lowercased and percent-encoded.
  */
+import { BadRequestException } from '@nestjs/common';
 import { blizzardUpstreamError } from './blizzard-upstream-error';
 import { getNamespacePrefixes } from './blizzard.constants';
 import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
@@ -70,12 +71,21 @@ export function mapForeverGuildRoster(body: unknown): ForeverGuildRoster {
  * @param guildSlug - Guild slug as given (lowercased and encoded here).
  * @param region - Blizzard region (`us`, `eu`, ...).
  */
+/** Accepted guild slug shape (FLAG B4: rules unverified; letters/digits/hyphens, 2–64). */
+const GUILD_SLUG_RE = /^[\p{L}\p{N}-]{2,64}$/u;
+
 export function buildForeverGuildRosterUrl(
   guildSlug: string,
   region: string,
 ): string {
+  const lowered = guildSlug.toLowerCase();
+  // Letters, digits and hyphens only: `.`/`..` survive encodeURIComponent and
+  // would let fetch normalise the path to another Blizzard route (review r1).
+  if (!GUILD_SLUG_RE.test(lowered)) {
+    throw new BadRequestException('Invalid guild slug');
+  }
   const { profile } = getNamespacePrefixes(FOREVER_NAMESPACE_ALIAS);
-  const slug = encodeURIComponent(guildSlug.toLowerCase());
+  const slug = encodeURIComponent(lowered);
   return `https://${region}.api.blizzard.com/data/wow/guild/${slug}/roster?namespace=${profile}-${region}&locale=en_US`;
 }
 
