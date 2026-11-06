@@ -133,3 +133,38 @@ describe('output-sanitizer (adversarial)', () => {
     });
   });
 });
+
+describe('output-sanitizer (nested + role mentions)', () => {
+  it('does not let a nested @every@everyoneone reassemble into @everyone', () => {
+    expect(sanitizeOutput('Ping @every@everyoneone now')).toBe('Ping now');
+  });
+
+  it('does not let a nested @he@herere reassemble into @here', () => {
+    expect(sanitizeOutput('Ping @he@herere now')).toBe('Ping now');
+  });
+
+  it('strips a doubly nested @every@every@everyoneoneone', () => {
+    expect(sanitizeOutput('x @every@every@everyoneoneone y')).toBe('x y');
+  });
+
+  it('strips Discord role mentions', () => {
+    expect(sanitizeOutput('Calling <@&123456> for raid')).toBe(
+      'Calling for raid',
+    );
+  });
+
+  it('leaves user mentions unchanged', () => {
+    expect(sanitizeOutput('Thanks <@123> and <@!456>')).toBe(
+      'Thanks <@123> and <@!456>',
+    );
+  });
+});
+
+describe('output-sanitizer (pathological nesting)', () => {
+  it('never emits @everyone however deep the nesting goes', () => {
+    let nested = '@everyone';
+    for (let i = 0; i < 15; i++) nested = `@every${nested}one`;
+    const result = sanitizeOutput(`go ${nested} now`);
+    expect(result).not.toContain('@everyone');
+  });
+});
