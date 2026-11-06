@@ -98,8 +98,8 @@ describe('importIdentityFields (ROK-1722)', () => {
     ).toBe('ana FOREVER');
   });
 
-  it('sets externalId only when the profile body carries an id', () => {
-    const withId = { ...profile, id: 900001 };
+  it('sets externalId only when the profile carries one', () => {
+    const withId = { ...profile, externalId: '900001' };
     expect(importIdentityFields(withId, dto()).externalId).toBe('900001');
     expect(importIdentityFields(profile, dto())).not.toHaveProperty(
       'externalId',
@@ -168,6 +168,36 @@ describe('mergeIntoOwnForeverRow (ROK-1722)', () => {
       ruleset: 'pvp',
       gameVariant: 'wow_forever',
     });
+  });
+
+  it('Main ticked: demotes the old main, then promotes the merged row', async () => {
+    const tx = createDrizzleMock();
+    tx.limit.mockResolvedValueOnce([row({ userId: 7, isMain: false })]);
+    tx.returning.mockResolvedValueOnce([row({ isMain: true })]);
+    const merged = await mergeIntoOwnForeverRow(tx as never, {
+      ...ctx(7),
+      dto: dto({ isMain: true }),
+    });
+    expect(tx.set).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ isMain: false }),
+    );
+    expect(tx.set).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ isMain: true, ruleset: 'pvp' }),
+    );
+    expect(merged?.isMain).toBe(true);
+  });
+
+  it('Main unticked: leaves main status alone', async () => {
+    const tx = createDrizzleMock();
+    tx.limit.mockResolvedValueOnce([row({ userId: 7, isMain: false })]);
+    tx.returning.mockResolvedValueOnce([row({ isMain: false })]);
+    await mergeIntoOwnForeverRow(tx as never, ctx(7));
+    expect(tx.set).toHaveBeenCalledTimes(1);
+    expect(tx.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ isMain: expect.anything() }),
+    );
   });
 
   it('returns undefined (caller inserts) when nobody holds the identity', async () => {

@@ -64,6 +64,10 @@ export interface BlizzardCharacterProfile {
   avatarUrl: string | null;
   renderUrl: string | null;
   profileUrl: string | null;
+  /** Blizzard character id (body `id`) as a string; null when absent (ROK-1722). */
+  externalId: string | null;
+  /** Body `ruleset` as sent, unmapped; null when absent (ROK-2100 maps it). */
+  rulesetRaw: unknown;
 }
 
 export interface WowRealm {

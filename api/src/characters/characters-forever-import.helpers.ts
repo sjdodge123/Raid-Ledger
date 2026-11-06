@@ -11,13 +11,15 @@ import { ConflictException } from '@nestjs/common';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
-  WowForeverRulesetSchema,
   type CharacterDto,
   type ImportWowCharacterDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { foreverLabel } from '../plugins/wow-common/wow-forever-identity.helpers';
-import { mapCharacterToDto } from './characters-mapping.helpers';
+import {
+  demoteExistingMain,
+  mapCharacterToDto,
+} from './characters-mapping.helpers';
 import {
   buildSyncUpdateFieldsFromSync,
   type EnrichedProfile,
@@ -51,23 +53,9 @@ export function foreverImportName(profileName: string, typed: string): string {
   return profileName.trim().includes(' ') ? profileName.trim() : typed.trim();
 }
 
-/** Ruleset: the profile body's own ruleset when valid, else the player's pick (FLAG C3). */
-export function resolveImportRuleset(
-  profile: Profile,
-  dto: ImportWowCharacterDto,
-): string | null {
-  const fromBody = WowForeverRulesetSchema.safeParse(
-    'ruleset' in profile ? profile.ruleset : undefined,
-  );
-  return fromBody.success ? fromBody.data : dto.ruleset;
-}
-
-/** Blizzard character id from the profile body, when it carries one. */
+/** Blizzard character id from the normalized profile, when it carries one. */
 export function profileExternalId(profile: Profile): string | null {
-  const id = 'id' in profile ? profile.id : undefined;
-  if (typeof id === 'number' || (typeof id === 'string' && id !== ''))
-    return String(id);
-  return null;
+  return profile.externalId ? profile.externalId : null;
 }
 
 /** Name/realm (+ Forever ruleset/externalId) for an imported row. */
@@ -77,7 +65,8 @@ export function importIdentityFields(
 ): ImportIdentityFields {
   if (!isForeverImport(dto))
     return { name: profile.name, realm: profile.realm };
-  const ruleset = resolveImportRuleset(profile, dto);
+  // The player's pick wins for now; ROK-2100 maps `profile.rulesetRaw`.
+  const ruleset = dto.ruleset;
   const externalId = profileExternalId(profile);
   return {
     name: foreverImportName(profile.name, dto.name),
@@ -118,6 +107,8 @@ export async function claimForeverIdentity(
 /**
  * Merge an import into the player's own Forever row: sync fields, ruleset
  * overwritten, game_variant + external_id set (the row becomes Armory-linked).
+ * Main ticked → this row is promoted and the player's old main demoted, as on
+ * the create path; unticked leaves the row's main status alone.
  */
 export async function mergeForeverRow(
   tx: Db,
@@ -128,6 +119,8 @@ export async function mergeForeverRow(
   logger: Logger,
 ): Promise<CharacterDto> {
   const { ruleset, externalId } = importIdentityFields(profile, dto);
+  const promote = dto.isMain === true;
+  if (promote) await demoteExistingMain(tx, existing.userId, existing.gameId);
   const fields = buildSyncUpdateFieldsFromSync(profile, sync, {
     region: dto.region,
     gameVariant: dto.gameVariant,
@@ -136,6 +129,7 @@ export async function mergeForeverRow(
     .update(schema.characters)
     .set({
       ...fields,
+      ...(promote ? { isMain: true } : {}),
       ...(ruleset !== undefined ? { ruleset } : {}),
       ...(externalId !== undefined ? { externalId } : {}),
     })
