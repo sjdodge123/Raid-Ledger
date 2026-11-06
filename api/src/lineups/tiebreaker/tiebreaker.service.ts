@@ -228,20 +228,17 @@ export class TiebreakerService {
 
   /**
    * Force-resolve an active tiebreaker (operator). A bracket advances under
-   * the round-advance lock; if a racing final vote already resolved it,
-   * this is a no-op (that vote owns the resolve + transition) — as it is
-   * when the vote resolves first after both advances committed.
+   * the round-advance lock. If a racing vote (or an earlier attempt that died
+   * after resolving) already resolved it, this resumes clear + transition
+   * with the stored winner; the conditional decided flip keeps matching to
+   * one run.
    */
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) throw new NotFoundException('No tiebreaker found');
 
     const outcome = await this.determineWinner(tb);
-    if (outcome.alreadyResolved) return;
-    const winnerId = outcome.winnerGameId;
-    if (!(await resolveTiebreaker(this.db, tb.id, winnerId))) return;
-    await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winnerId);
+    await this.resolveAndDecide(tb.id, lineupId, outcome.winnerGameId);
   }
 
   /**
@@ -256,10 +253,25 @@ export class TiebreakerService {
   ): Promise<void> {
     const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
     if (!winner) return;
-    if (!(await resolveTiebreaker(this.db, tb.id, winner))) return;
+    const final = await this.resolveAndDecide(tb.id, lineupId, winner);
+    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${final}`);
+  }
+
+  /**
+   * Resolve (first winner sticks), detach and flip to decided with the
+   * winner that stands. Safe to repeat: every step is idempotent and only
+   * the caller whose decided flip changed the row runs matching.
+   */
+  private async resolveAndDecide(
+    tiebreakerId: number,
+    lineupId: number,
+    winner: number,
+  ): Promise<number | null> {
+    const final = await resolveTiebreaker(this.db, tiebreakerId, winner);
+    if (final === null) return null;
     await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winner);
-    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
+    await this.transitionToDecided(lineupId, final);
+    return final;
   }
 
   /**
@@ -308,11 +320,11 @@ export class TiebreakerService {
   // -- private helpers --
 
   /** Flip to decided + rebuild match groups (ROK-1473: extracted). */
-  private transitionToDecided(
+  private async transitionToDecided(
     lineupId: number,
     decidedGameId?: number,
   ): Promise<void> {
-    return decideLineupFromTiebreaker(
+    await decideLineupFromTiebreaker(
       { db: this.db, logger: this.logger, events: this.eventEmitter },
       lineupId,
       decidedGameId,

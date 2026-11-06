@@ -154,19 +154,22 @@ export async function clearActiveTiebreaker(
  * duplicated at each caller — which also keeps that service off its 300-line
  * ESLint cap. The write is idempotent and never throws into the caller.
  *
- * Conditional on the row not already being `resolved`: when a force-resolve
- * and a bracket-completing vote race, the second UPDATE waits on the row
- * lock, re-evaluates the WHERE under READ COMMITTED and matches nothing, so
- * only one caller goes on to clear + transition (and re-run matching).
+ * Conditional on the row not already being `resolved`, so the first winner
+ * sticks: when a force-resolve and a bracket-completing vote race, the second
+ * UPDATE waits on the row lock, re-evaluates the WHERE under READ COMMITTED
+ * and matches nothing. That caller still goes on to clear + transition with
+ * the STORED winner — the once-only guard is the lineup's conditional
+ * `decided` flip (`decideLineupFromTiebreaker`), so a retry after a crash
+ * between this resolve and that flip still completes the transition.
  *
- * @returns `true` when this call resolved the tiebreaker, `false` when it was
- *   already resolved (or missing) — the caller must then do nothing further.
+ * @returns The winner that stands — this call's, or the one already stored —
+ *   or `null` when the tiebreaker row does not exist.
  */
 export async function resolveTiebreaker(
   db: Db,
   tiebreakerId: number,
   winnerId: number,
-): Promise<boolean> {
+): Promise<number | null> {
   const T = schema.communityLineupTiebreakers;
   const [row] = await db
     .update(T)
@@ -178,7 +181,20 @@ export async function resolveTiebreaker(
     })
     .where(and(eq(T.id, tiebreakerId), ne(T.status, 'resolved')))
     .returning({ lineupId: T.lineupId });
-  if (!row) return false;
+  if (!row) return findStoredWinner(db, tiebreakerId);
   await writeTiebreakerCohortMemory(db, row.lineupId, tiebreakerId, winnerId);
-  return true;
+  return winnerId;
+}
+
+/** Winner of an already-resolved tiebreaker, or `null` when none is stored. */
+async function findStoredWinner(
+  db: Db,
+  tiebreakerId: number,
+): Promise<number | null> {
+  const T = schema.communityLineupTiebreakers;
+  const [row] = await db
+    .select({ winnerGameId: T.winnerGameId })
+    .from(T)
+    .where(and(eq(T.id, tiebreakerId), eq(T.status, 'resolved')));
+  return row?.winnerGameId ?? null;
 }
