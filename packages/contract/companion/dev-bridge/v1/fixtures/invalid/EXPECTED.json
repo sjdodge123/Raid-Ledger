@@ -406,5 +406,45 @@
   "bg3-save-catalogue--next-path": {
     "path": "next",
     "code": "invalid_format"
+  },
+  "collectors--unknown-status": {
+    "path": "collectors.0.status",
+    "code": "invalid_value"
+  },
+  "collectors--linked-not-boolean": {
+    "path": "linked",
+    "code": "invalid_type"
+  },
+  "collectors--row-linked": {
+    "path": "collectors.0",
+    "code": "unrecognized_keys"
+  },
+  "events--unknown-error-code": {
+    "path": "events.2.errorCode",
+    "code": "invalid_value"
+  },
+  "events--free-text-message": {
+    "path": "events.0",
+    "code": "unrecognized_keys"
+  },
+  "events--error-code-sentence": {
+    "path": "events.5.errorCode",
+    "code": "invalid_value"
+  },
+  "events--unknown-kind": {
+    "path": "events.0.kind",
+    "code": "invalid_value"
+  },
+  "events--http-status-out-of-range": {
+    "path": "events.1.httpStatus",
+    "code": "too_big"
+  },
+  "events--missing-next": {
+    "path": "next",
+    "code": "invalid_type"
+  },
+  "events--over-size": {
+    "path": "",
+    "code": "custom"
   }
 }

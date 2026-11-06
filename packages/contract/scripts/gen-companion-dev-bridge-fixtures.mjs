@@ -11,6 +11,7 @@ import { DEV_BRIDGE_MESSAGES } from '../dist/index.js';
 import { SNAPSHOT_CASES, SNAPSHOT_SIZES, SNAPSHOT_VALID } from './dev-bridge-snapshot-fixtures.mjs';
 import { BG3_CASES, BG3_VALID } from './dev-bridge-bg3-fixtures.mjs';
 import { CATALOGUE_CASES, CATALOGUE_VALID, withCharacterKeys } from './dev-bridge-bg3-catalogue-fixtures.mjs';
+import { EVENTS_CASES, EVENTS_SIZES, EVENTS_VALID } from './dev-bridge-events-fixtures.mjs';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', 'companion', 'dev-bridge', 'v1', 'fixtures');
 const INVALID = join(FIX, 'invalid');
@@ -44,6 +45,13 @@ const result = {
     ],
 };
 const ID2 = '01JBX7Q2M3N4P5R6S7T8V9W0XZ';
+/** An sv-raw page whose byte/offset values agree: a last page's `bytes` is its text's file bytes; any other page's `next` is `offset:<bytes of the text served so far>` and `bytes` (the whole file) exceeds it. */
+const svPage = (body, fileBytes) => {
+    const served = Buffer.byteLength(body.text, 'utf8');
+    if (fileBytes === null) return { ...body, bytes: served, next: null };
+    if (fileBytes <= served) throw new Error(`sv-raw ${body.path}: file bytes ${fileBytes} must exceed the ${served} served`);
+    return { ...body, bytes: fileBytes, next: Buffer.from(`offset:${served}`).toString('base64url') };
+};
 const bytes = (v) => Buffer.byteLength(JSON.stringify(v), 'utf8');
 /** Largest n whose build(n) serialises to ≤ limit bytes (build grows strictly with n). */
 const largest = (build, limit) => { let n = 0; while (bytes(build(n + 1)) <= limit) n += 1; return n; };
@@ -97,10 +105,10 @@ const VALID = {
         { folder: 'LedgerLink', title: 'LedgerLink', version: '1.4.0', interface: '11507', savedVariables: ['LedgerLinkDB'], loadOnDemand: false },
         { folder: 'LedgerLinkProbe', title: null, version: null, interface: '11507, 20505', savedVariables: [], loadOnDemand: false },
     ] },
-    'sv-raw': { flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/LedgerLink.lua', bytes: 18342, mtime: AT, text: 'LedgerLinkDB = {\n\t["version"] = 1,\n', next: null },
+    'sv-raw': svPage({ flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/LedgerLink.lua', bytes: 18342, mtime: AT, text: 'LedgerLinkDB = {\n\t["version"] = 1,\n' }, 18342),
     // GET /dev/v1/addons/<folder>/sv — same `sv-raw` body, one per DEV_BRIDGE_SV_READABLE_ADDONS folder.
-    'sv-raw--addon-mailworthy': { flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/ACCOUNTNAME/SavedVariables/Mailworthy.lua', bytes: 2140, mtime: AT, text: 'MailworthyDB = {\n\t["selftest"] = {\n\t\t["ranAt"] = 1762021800,\n\t\t["passed"] = 11,\n\t\t["failed"] = 1,\n\t\t["results"] = {\n\t\t\t{ ["name"] = "inbox.scan", ["ok"] = true },\n\t\t\t{ ["name"] = "send.queue", ["ok"] = false, ["err"] = "queue empty after flush" },\n\t\t},\n\t},\n', next: 'b2Zmc2V0OjQwOTY' },
-    'sv-raw--addon-buggrabber': { flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/ACCOUNTNAME/SavedVariables/!BugGrabber.lua', bytes: 912, mtime: AT, text: 'BugGrabberDB = {\n\t["session"] = 42,\n\t["errors"] = {\n\t\t{\n\t\t\t["message"] = "Interface/AddOns/Mailworthy/Core.lua:88: attempt to index a nil value",\n\t\t\t["stack"] = "[Interface/AddOns/Mailworthy/Core.lua]:88: in function <Interface/AddOns/Mailworthy/Core.lua:80>",\n\t\t\t["locals"] = "self = <table> {}",\n\t\t\t["time"] = "2026/11/01 18:29:57",\n\t\t\t["session"] = 42,\n\t\t\t["counter"] = 1,\n\t\t},\n\t},\n}\n', next: null },
+    'sv-raw--addon-mailworthy': svPage({ flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/Mailworthy.lua', bytes: 2140, mtime: AT, text: 'MailworthyDB = {\n\t["selftest"] = {\n\t\t["ranAt"] = 1762021800,\n\t\t["passed"] = 11,\n\t\t["failed"] = 1,\n\t\t["results"] = {\n\t\t\t{ ["name"] = "inbox.scan", ["ok"] = true },\n\t\t\t{ ["name"] = "send.queue", ["ok"] = false, ["err"] = "queue empty after flush" },\n\t\t},\n\t},\n' }, null),
+    'sv-raw--addon-buggrabber': svPage({ flavor: '_anniversary_', scope: 'account', path: '_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/!BugGrabber.lua', bytes: 912, mtime: AT, text: 'BugGrabberDB = {\n\t["session"] = 42,\n\t["errors"] = {\n\t\t{\n\t\t\t["message"] = "Interface/AddOns/Mailworthy/Core.lua:88: attempt to index a nil value",\n\t\t\t["stack"] = "[Interface/AddOns/Mailworthy/Core.lua]:88: in function <Interface/AddOns/Mailworthy/Core.lua:80>",\n\t\t\t["locals"] = "self = <table> {}",\n\t\t\t["time"] = "2026/11/01 18:29:57",\n\t\t\t["session"] = 42,\n\t\t\t["counter"] = 1,\n\t\t},\n\t},\n}\n' }, null),
     'sv-parsed': { flavor: '_anniversary_', next: null, files: [
         { scope: 'account', account: 'TESTACCOUNT', mtime: AT, topKeys: ['version', 'outbox'], outbox: [{ guidHash: 'a3f1'.repeat(16), section: 'roster', source: 'guild', at: AT, exportedAt: null, pages: 2, bytes: 6100, decodes: true }], blockedCount: 0, region: 'EU' },
         { scope: 'character', account: 'TESTACCOUNT', realm: 'Testrealm', character: 'Testchar', mtime: AT, topKeys: ['settings'], outbox: [], blockedCount: 1, region: null },
@@ -114,7 +122,6 @@ const VALID = {
         { at: AT, level: 'info', target: 'dev_bridge', msg: 'GET /dev/v1/health 200 412B from 192.168.0.229' },
         { at: AT, level: 'warn', target: 'dev_bridge::auth', msg: 'rejected Authorization: Bearer <redacted> from 192.168.0.50' },
     ] },
-    collectors: { collectors: [{ id: 'wow-ledgerlink', enabled: true, paused: false, lastScanAt: AT, lastUploadAt: null, pending: 1 }, { id: 'bg3-save', enabled: false, paused: false, lastScanAt: null, lastUploadAt: null, pending: 0, lastError: 'Save folder not found' }] },
     'error--internal': { error: 'internal' },
     'error--invalid-request': { error: 'invalid_request', issues: [{ path: ['calls', 0, 'fn'], code: 'custom', message: 'Function not allowed (denied)' }] },
     'error--probes-disabled': { error: 'probes_disabled' },
@@ -123,6 +130,7 @@ const VALID = {
     ...BG3_VALID,
     'bg3-save-structure--character-keys': withCharacterKeys(BG3_VALID['bg3-save-structure']),
     ...CATALOGUE_VALID,
+    ...EVENTS_VALID,
 };
 
 const withFn = (fn) => (m) => { m.calls[0].fn = fn; };
@@ -170,6 +178,7 @@ const CASES = [
     ...SNAPSHOT_CASES,
     ...BG3_CASES,
     ...CATALOGUE_CASES,
+    ...EVENTS_CASES,
 ];
 
 const schemaFor = (name) => {
@@ -185,7 +194,7 @@ const sizes = { request: bytes(maxRequest), queueEntry: bytes(queued(maxRequest)
 if (sizes.queueEntry > REQ_MAX || sizes.queueEntry < REQ_MAX - 8 || sizes.head < ITEM_MAX - 8 || sizes.iteration < ITEM_MAX - 8 || sizes.page !== PAGE_WORST) {
     throw new Error(`max-size fixtures are not at their caps: ${JSON.stringify(sizes)}`);
 }
-console.log('worst-case sizes', sizes, 'snapshot', SNAPSHOT_SIZES, `snapshot page margin ${16_384 - SNAPSHOT_SIZES.page}B`);
+console.log('worst-case sizes', sizes, 'snapshot', SNAPSHOT_SIZES, 'events', EVENTS_SIZES, `snapshot page margin ${16_384 - SNAPSHOT_SIZES.page}B`);
 rmSync(FIX, { recursive: true, force: true });
 mkdirSync(INVALID, { recursive: true });
 for (const [name, value] of Object.entries(VALID)) {

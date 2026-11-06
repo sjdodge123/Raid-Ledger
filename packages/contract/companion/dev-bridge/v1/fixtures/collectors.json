@@ -6,7 +6,8 @@
       "paused": false,
       "lastScanAt": "2026-11-01T18:30:00Z",
       "lastUploadAt": null,
-      "pending": 1
+      "pending": 1,
+      "status": "waiting"
     },
     {
       "id": "bg3-save",
@@ -15,7 +16,18 @@
       "lastScanAt": null,
       "lastUploadAt": null,
       "pending": 0,
-      "lastError": "Save folder not found"
+      "lastError": "Save folder not found",
+      "status": "off"
+    },
+    {
+      "id": "bg3-screenshot",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-01T18:30:00Z",
+      "lastUploadAt": "2026-11-01T18:30:00Z",
+      "pending": 0,
+      "status": "up-to-date"
     }
-  ]
+  ],
+  "linked": true
 }

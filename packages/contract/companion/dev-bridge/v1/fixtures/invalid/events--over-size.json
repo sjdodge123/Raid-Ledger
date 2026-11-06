@@ -1,0 +1,621 @@
+{
+  "next": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+  "events": [
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    },
+    {
+      "ts": "2026-11-01T18:30:00.999Z",
+      "collectorId": "w---------------------------------------------------------------",
+      "kind": "upload-rejected",
+      "count": 1000000,
+      "httpStatus": 599,
+      "errorCode": "retired_contract_version"
+    }
+  ]
+}

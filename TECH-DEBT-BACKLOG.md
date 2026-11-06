@@ -3976,3 +3976,10 @@ same day (#1278, #1279, #1280).
 
 ### 2026-11-05 — rok-2095-hub-leader-member-picker (surfaced during the ROK-2095 fleet verify)
 - **med** `web/src/components/ui/use-anchored-popup.ts:25-33` (`placeTop`) + `web/src/components/ui/modal-frame.tsx:104`: a `Combobox` inside a short `Modal` has its listbox clipped by the dialog. The popup portals into the `[role="dialog"]` (`overflow-hidden`), but `placeTop` flips and clamps against `window.innerHeight`, not the portal container's rect. In Admin → Hubs → Transfer leader on `origin/main` only ~2 of 20 rows were visible (ROK-2095 verify, slot-2). Pre-existing: `main`'s `TransferLeaderDialog` used the same Combobox in the same Modal. ROK-2095 works around it locally (`hubs-panel-dialogs.tsx`, a `min-h-[21rem]` body). Suggested: have `useAnchoredPopup` flip/clamp (and cap `max-height`) within the portal container's bounding rect when it is a dialog, then drop the local `min-h`.
+
+### 2026-11-05 — overnight relay 1 (stretch tech-debt, verified on c5be30b96)
+
+- **med** (resolved) line 3451 (calendar-write rerun overlaps its own job → duplicate Google copy) — `deferWhileSiblingActive` (moveToDelayed + DelayedError) in PR #1955 (48df3c890).
+- **still open, re-verified** 2026-10-18 `api/src/discord-bot/listeners/steam-link.listener.ts:200-212` — an unlinked guild member's Steam link still runs ITAD lookup + game insert + IGDB re-enrich (`discoverGame` before `findLinkedRlUser`). Left for a day session: discord-bot/** needs a companion-bot smoke run.
+- **still open, re-verified** 2026-10-18 `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:92-115` (`buildBossKillsQuery`) — no reporter / active-member filter. Left for a day session: notifications/** needs a smoke run + an integration case.
+- **not reproduced again** line 3961 (`scheduling-open-lockin.integration.spec.ts:304`) — 50/50 green on the fleet (task 168e68dff85c); second 0/50. Per the flake rule no fix ships until it reproduces.

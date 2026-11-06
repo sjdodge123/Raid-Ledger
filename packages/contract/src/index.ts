@@ -267,6 +267,7 @@ export * from './companion-json-schema.js';
 export * from './companion-dev-bridge.schema.js';
 export * from './companion-dev-bridge-allowlist.js';
 export * from './companion-dev-bridge-endpoints.schema.js';
+export * from './companion-dev-bridge-events.schema.js';
 export * from './companion-dev-bridge-queue.schema.js';
 export * from './companion-dev-bridge-snapshot.schema.js';
 export * from './companion-dev-bridge-bg3.schema.js';
