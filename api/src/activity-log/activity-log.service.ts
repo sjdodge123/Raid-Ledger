@@ -28,18 +28,53 @@ interface ActivityRow {
  */
 const DISCORD_IDENTIFIER_KEY = /discord/i;
 
-/** Drop raw Discord identifiers from a stored metadata blob (ROK-1824). */
+/**
+ * Nesting levels below the top-level blob that are still walked. A deeper
+ * subtree is dropped whole, so a pathological blob cannot blow the stack.
+ */
+const MAX_STRIP_DEPTH = 10;
+
+/** Marker for a value removed because it sits past `MAX_STRIP_DEPTH`. */
+const DROPPED: unique symbol = Symbol('dropped');
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stripValue(value: unknown, depth: number): unknown {
+  if (!Array.isArray(value) && !isRecord(value)) return value;
+  if (depth > MAX_STRIP_DEPTH) return DROPPED;
+  if (Array.isArray(value)) {
+    return value
+      .map((item: unknown) => stripValue(item, depth + 1))
+      .filter((item: unknown) => item !== DROPPED);
+  }
+  return stripRecord(value, depth);
+}
+
+function stripRecord(
+  record: Record<string, unknown>,
+  depth: number,
+): Record<string, unknown> {
+  const kept: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (DISCORD_IDENTIFIER_KEY.test(key)) continue;
+    const stripped = stripValue(child, depth + 1);
+    if (stripped !== DROPPED) kept[key] = stripped;
+  }
+  return kept;
+}
+
+/**
+ * Drop raw Discord identifiers from a stored metadata blob (ROK-1824), at
+ * every depth: nested objects and objects inside arrays are walked too.
+ * Non-object (or array) input yields null.
+ */
 export function stripDiscordIdentifiers(
   metadata: unknown,
 ): Record<string, unknown> | null {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-    return null;
-  }
-  return Object.fromEntries(
-    Object.entries(metadata).filter(
-      ([key]) => !DISCORD_IDENTIFIER_KEY.test(key),
-    ),
-  );
+  if (!isRecord(metadata)) return null;
+  return stripRecord(metadata, 0);
 }
 
 function mapRow(r: ActivityRow): ActivityEntryDto {

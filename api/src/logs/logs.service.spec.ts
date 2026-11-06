@@ -8,6 +8,132 @@ jest.mock('node:fs');
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 
+/** Backlog 2938 fixtures: [label, input, expected]. */
+const SCRUB_SHAPE_CASES: [string, string, string][] = [
+  [
+    'a JSON-quoted password',
+    '{"level":30,"password":"hunter2","user":"bob"}',
+    '{"level":30,"password":"[REDACTED]","user":"bob"}',
+  ],
+  ['a JSON-quoted token', '{"token": "abc.def"}', '{"token": "[REDACTED]"}'],
+  [
+    'a JSON-quoted secret with an escaped quote',
+    '{"clientSecret":"s3c\\"ret","ok":true}',
+    '{"clientSecret":"[REDACTED]","ok":true}',
+  ],
+  ['a JSON-quoted apiKey', '{"apiKey":"AIzaSy123"}', '{"apiKey":"[REDACTED]"}'],
+  [
+    'a JSON-quoted cookie header',
+    '{"cookie":"rl_session=abc123"}',
+    '{"cookie":"[REDACTED]"}',
+  ],
+  [
+    'a bare JWT',
+    'issued eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig-_Abc for user 1',
+    'issued [REDACTED] for user 1',
+  ],
+  [
+    'a ?key= query parameter',
+    'GET /v1/maps?key=AIzaSyABC&lang=en HTTP/1.1',
+    'GET /v1/maps?key=[REDACTED]&lang=en HTTP/1.1',
+  ],
+  [
+    'a &key= query parameter',
+    'GET /v1/maps?q=x&key=AIzaSyABC HTTP/1.1',
+    'GET /v1/maps?q=x&key=[REDACTED] HTTP/1.1',
+  ],
+  [
+    'a Cookie header',
+    'Cookie: rl_session=abc123; theme=dark',
+    'Cookie: [REDACTED]',
+  ],
+  [
+    'a Set-Cookie header',
+    'Set-Cookie: refresh=xyz; HttpOnly; Path=/',
+    'Set-Cookie: [REDACTED]',
+  ],
+  [
+    'an OAuth ?code= parameter',
+    'GET /auth/discord/callback?code=AbC123&state=s1 HTTP/1.1',
+    'GET /auth/discord/callback?code=[REDACTED]&state=s1 HTTP/1.1',
+  ],
+  [
+    'an OAuth &code= parameter',
+    'GET /auth/steam/callback?state=s1&code=AbC123',
+    'GET /auth/steam/callback?state=s1&code=[REDACTED]',
+  ],
+  [
+    'an OAuth ?code= inside a JSON string',
+    '{"url":"/callback?code=abc","status":500}',
+    '{"url":"/callback?code=[REDACTED]","status":500}',
+  ],
+  [
+    'a ?key= inside a JSON string',
+    '{"url":"/v1/maps?key=AIzaSyABC","status":500}',
+    '{"url":"/v1/maps?key=[REDACTED]","status":500}',
+  ],
+  [
+    'a JSON-quoted x-api-key header',
+    '{"x-api-key":"k-123","host":"a"}',
+    '{"x-api-key":"[REDACTED]","host":"a"}',
+  ],
+  ['a JSON-quoted idToken', '{"idToken":"abc"}', '{"idToken":"[REDACTED]"}'],
+  ['a JSON-quoted id_token', '{"id_token":"abc"}', '{"id_token":"[REDACTED]"}'],
+  ['a JSON-quoted jwt', '{"jwt":"abc","ok":1}', '{"jwt":"[REDACTED]","ok":1}'],
+  [
+    'a pino-http set-cookie array',
+    '{"set-cookie":["a=1; HttpOnly", "b=\\"2\\""],"x":1}',
+    '{"set-cookie":["[REDACTED]"],"x":1}',
+  ],
+];
+
+/** Repeat `unit` until the line is at least 200k chars. */
+function line200k(unit: string): string {
+  return unit.repeat(Math.ceil(200_000 / unit.length));
+}
+
+/**
+ * Adversarial ~200k-char lines: every scrub rule's literal prefix repeated
+ * with no terminator, plus the run shapes that were quadratic before.
+ * `Cookie:` took 2.6 s and `-eyJa` 3.6 s before their fixes.
+ */
+const SCRUB_TIMING_CASES: [string, string][] = [
+  ['-eyJa repeated', '-eyJa'.repeat(40000)],
+  ['eyJ- repeated', 'eyJ-'.repeat(50000)],
+  ['eyJa. repeated', 'eyJa.'.repeat(40000)],
+  ['Cookie: repeated', 'Cookie:'.repeat(28571)],
+  ...[
+    'Set-Cookie:',
+    'Cookie: ',
+    '"password":"',
+    '"password":',
+    '"token": "',
+    '"set-cookie":["',
+    '"cookie":[',
+    'eyJ',
+    '?key=',
+    '&api_key=',
+    '?code=',
+    '&code=',
+    'DATABASE_URL=',
+    'JWT_SECRET=',
+    'password=',
+    'access_token=',
+    'token=',
+    'secret=',
+    'Authorization:',
+    'Authorization: Bearer ',
+  ].map((prefix): [string, string] => [`${prefix} repeated`, line200k(prefix)]),
+];
+
+/** Look-alikes the shaped scrub rules must leave alone: [label, input]. */
+const SCRUB_SHAPE_NEGATIVES: [string, string][] = [
+  ['prose mentioning code', 'the code is ready for review'],
+  ['an eyJ fragment without dots', 'token prefix eyJustAWord seen'],
+  ['look-alike query keys', 'GET /search?keyboard=us&monkey=1&barcode=9'],
+  ['prose mentioning a cookie', 'missing cookie: please sign in again'],
+];
+
 function describeLogsService() {
   let service: LogsService;
   const testLogDir = '/tmp/test-logs';
@@ -107,6 +233,33 @@ function describeLogsService() {
     });
   }
   describe('scrubContent', () => describeScrubContent());
+
+  /** Backlog 2938: secret shapes the key=value patterns used to miss. */
+  function describeScrubContentShapes() {
+    it.each(SCRUB_SHAPE_CASES)(
+      'should redact %s',
+      (_label, input, expected) => {
+        expect(service.scrubContent(input)).toBe(expected);
+      },
+    );
+
+    it.each(SCRUB_SHAPE_NEGATIVES)(
+      'should leave %s unchanged',
+      (_label, input) => {
+        expect(service.scrubContent(input)).toBe(input);
+      },
+    );
+
+    it.each(SCRUB_TIMING_CASES)(
+      'should scrub a 200k-char %s line in linear time',
+      (_label, input) => {
+        const startedAt = Date.now();
+        service.scrubContent(input);
+        expect(Date.now() - startedAt).toBeLessThan(1000);
+      },
+    );
+  }
+  describe('scrubContent shapes', () => describeScrubContentShapes());
 
   function describeListLogFiles() {
     it('should list .log files sorted newest first', () => {

@@ -38,6 +38,16 @@ interface CrossOwnerRow {
 }
 
 /**
+ * Refuse a game id that is not a safe integer: the ids below are stitched
+ * into `sql.raw`, so the runtime check is what keeps that text injection-free.
+ */
+function assertSafeGameId(label: string, value: number): void {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${label} must be a safe integer, got ${String(value)}`);
+  }
+}
+
+/**
  * A game merge pre-deletes each losing-game character that collides with a
  * winning-game one. On the per-user key both rows share an owner, but the
  * ruleset-identity key spans players — so the delete can drop a character that belongs
@@ -49,6 +59,8 @@ export async function reportCrossOwnerCharacterDeletes(
   loserGameId: number,
   winnerGameId: number,
 ): Promise<number> {
+  assertSafeGameId('loserGameId', loserGameId);
+  assertSafeGameId('winnerGameId', winnerGameId);
   const result = await tx.execute(
     sql.raw(
       `SELECT DISTINCT ON (l.id) l.id AS loser_character_id,

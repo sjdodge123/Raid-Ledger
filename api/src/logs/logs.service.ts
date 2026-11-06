@@ -16,22 +16,10 @@ import { selectWithinCap, type ExportFile } from './export-budget.helpers';
 import { writeTarArchive } from './log-export.writer';
 import { dropOverlappingGenerations } from './log-overlap.helpers';
 import { createBoundedScrubbedStream } from './log-download.stream';
+import { scrubLogContent } from './logs-scrub.patterns';
 
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
-
-/** Patterns to scrub from exported log content. */
-const SCRUB_PATTERNS: RegExp[] = [
-  /DATABASE_URL=\S+/gi,
-  /JWT_SECRET=\S+/gi,
-  /password=\S+/gi,
-  /\b(?:access_token|refresh_token|api_token|auth_token|bearer_token)=\S+/gi,
-  // ROK-1630: a bare `token=` query parameter (`?token=`, `&token=`). The
-  // lookbehind keeps `next_token=` / `session_token=` out, as before.
-  /(?<![A-Za-z0-9_])token=\S+/gi,
-  /secret=\S+/gi,
-  /Authorization:\s*\S+(\s+\S+)?/gi,
-];
 
 @Injectable()
 export class LogsService {
@@ -163,20 +151,6 @@ export class LogsService {
    * Scrub sensitive values from log content.
    */
   scrubContent(content: string): string {
-    let result = content;
-    for (const pattern of SCRUB_PATTERNS) {
-      result = result.replace(pattern, (match) => {
-        const eqIndex = match.indexOf('=');
-        const colonIndex = match.indexOf(':');
-        if (eqIndex !== -1) {
-          return match.substring(0, eqIndex + 1) + '[REDACTED]';
-        }
-        if (colonIndex !== -1) {
-          return match.substring(0, colonIndex + 1) + ' [REDACTED]';
-        }
-        return '[REDACTED]';
-      });
-    }
-    return result;
+    return scrubLogContent(content);
   }
 }
