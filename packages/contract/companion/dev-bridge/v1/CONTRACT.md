@@ -140,16 +140,20 @@ folders outside the list). A listed folder
 with no SavedVariables file of that scope → 404 `not_found`. A bad `scope`
 or `flavor` → 400 `invalid_request`, as on every other route.
 
-## Collector status (`collectors[].status`, `collectors[].linked`) — 2026-11-06
+## Collector status (`collectors[].status`, `linked`) — 2026-11-06
 
 Each `collectors` row may carry `status`, the Companion window's collector
-tile status line as a closed enum, and `linked`, whether this device holds a
-device token that this collector's uploads would use. Both are **optional**
-(additive): rows from a companion built before 2026-11-06 omit them and
-still parse (fixture `collectors--without-status`). A device-level state
-that blocks every collector replaces the collector's own line, in the order
-`paused` > `rate-limited` > `link-device` (what the window shows once for the
-device).
+tile status line as a closed enum. The body may carry `linked`, whether this
+device holds a device token. Linking is **device-level** (one token, one
+server URL per device), so `linked` is one top-level field, never per row: an
+unlinked device puts every enabled row on `link-device`
+(fixture `collectors--unlinked`; a row-level `linked` is invalid,
+`invalid/collectors--row-linked`). Both are **optional** (additive): a body
+from a companion built before 2026-11-06 omits them and still parses
+(fixture `collectors--without-status`). A device-level state that blocks
+every collector replaces the collector's own line, in the order `paused` >
+`rate-limited` > `link-device` > `error` (the device token cannot be read) —
+what the window shows once for the device.
 
 | Value | Meaning (tile copy it stands for) |
 |---|---|
@@ -162,10 +166,22 @@ device).
 | `needs-confirm` | Items are held until the user checks the preview and confirms the first upload ("N waiting — check the preview before the first upload"). |
 | `waiting` | Items are queued but not sent this pass ("N export(s) waiting"). |
 | `up-to-date` | Nothing new to send ("Up to date"). |
-| `uploaded` | The last pass's uploads were accepted ("Uploaded"). |
-| `rejected` | The server refused an upload's content (4xx with a `code`, e.g. a full hub Gallery); it is not resent. |
-| `retrying` | A transient failure (network, 5xx); the next scan tries again ("Will retry: …"). |
+| `uploaded` | The last pass ended "Uploaded N of M export(s)" with **N ≥ 1** — at least one upload was accepted. |
+| `rejected` | The batch was stopped by a content refusal that is not resent — today only the hub's Gallery being full (`blob_quota_exceeded`). Other refusals do not stop the batch; they show as `upload-rejected` events. |
+| `retrying` | The batch was stopped by a deferral (the server does not take the upload yet, or an unexpected answer): "Will retry: …". |
 | `error` | Anything else that stops the collector (e.g. the device token cannot be read, the server URL is unusable). |
+
+**How a finished pass maps.** rl-companion's upload pass ends with
+"Uploaded N of M export(s)" even when N is 0 (every item gave up after its
+retries, or was a content refusal that does not stop the batch). So:
+
+- N ≥ 1 → `uploaded`.
+- N = 0 → what the tile's state implies: `waiting` while exports are still
+  unsent (given-up items are retried on the next scan, so `pending` > 0),
+  `up-to-date` when nothing is left (every item was settled by a refusal).
+- A batch cut short maps by what stopped it: a pause → `paused`, the
+  collector switched off → `off`, 401 → `link-device`, 429 →
+  `rate-limited`, a full Gallery → `rejected`, a deferral → `retrying`.
 
 The enum carries no free text; the tile's wording, paths and reasons stay
 in the app. A new value is **breaking** for readers that switch on it, so it
@@ -175,8 +191,7 @@ needs a new `vN/` (or an operator ruling that the value is additive).
 
 Structured companion activity, the allowlisted replacement for the removed
 Activity-log mirror. **No free text anywhere**: every field is a timestamp,
-a collector id, an enum, an integer, or an error-code token matching
-`^[a-z0-9_-]{1,32}$` — never a message, path, file, account, character or
+a collector id, an enum or an integer — never a message, path, file, account, character or
 save name (four review rounds found path leaks in free-text scrubbing; the
 log mirror was removed for that reason). Rows are strict objects: an
 unknown key such as `message` is invalid (fixture
@@ -185,11 +200,11 @@ unknown key such as `message` is invalid (fixture
 | Field | Type | Notes |
 |---|---|---|
 | `ts` | timestamp (UTC, ≤24 chars) | When it happened. |
-| `collectorId` | `^[a-z0-9][a-z0-9-]{0,63}$` | Same grammar as `collectors[].id`. |
+| `collectorId` | `^[a-z0-9][a-z0-9-]{0,63}$` | Same grammar as `collectors[].id`: a code-defined built-in collector id (`wow-ledgerlink`, `bg3-save`, `bg3-screenshot`, …), never user data. |
 | `kind` | enum below | What happened. |
 | `count` | int 0–1,000,000, optional | Files scanned, exports uploaded or held. |
 | `httpStatus` | int 100–599, optional | The server's status, for an upload outcome. |
-| `errorCode` | `^[a-z0-9_-]{1,32}$`, optional | The server's rejection `code`, or the companion's own token. |
+| `errorCode` | enum below, optional | Why an upload was refused or deferred. |
 
 | Value | Meaning |
 |---|---|
@@ -203,9 +218,37 @@ unknown key such as `message` is invalid (fixture
 | `collector-off` | The user switched the collector off. |
 | `error` | Anything else that stopped the pass (`errorCode` says which). |
 
+**`errorCode`** (`DEV_BRIDGE_EVENT_ERROR_CODES`) — the codes rl-companion's
+upload paths can act on (`apps/companion/src-tauri/src/upload.rs`):
+
+| Value | Source |
+|---|---|
+| `invalid_envelope` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `invalid_payload` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `payload_too_large` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `captured_at_in_future` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `blob_quota_exceeded` | The hub's Gallery is full (413); stops the batch. |
+| `invalid_blob` | Server refused a blob PUT. |
+| `hash_mismatch` | Server refused a blob PUT. |
+| `unsupported_media` | Server refused a blob PUT. |
+| `blob_ref_mismatch` | Server refused a blob PUT. |
+| `blob_refused` | The companion's own: a blob PUT refused (4xx) with no `code`. |
+| `unknown_contract` | Deferred: the server does not take this contract yet. |
+| `unknown_contract_version` | Deferred: the server does not take this contract version yet. |
+| `retired_contract_version` | Deferred: the app is out of date. |
+| `other` | Anything else. |
+
+Mapping rule: the companion sends the server's `code` only when it is in the
+list; every other code (one the app does not know, an uppercase API code such
+as `USER_DEACTIVATED`) is sent as `other`, as is a kind-`error` event. A
+refused message with no `code` omits `errorCode` (`httpStatus` still says
+what happened). A 401 and a 429 carry no code: `link-required` and
+`upload-held` with `httpStatus` say it. A new code is breaking for pinned
+readers, like a new `status`.
+
 Events come oldest first. `since` (a timestamp) returns events with `ts`
-after it; paging is by the 16 KiB body cap (≤500 rows; with every field at
-its widest, 73 rows fit — fixture `events--max-page`). How many events the
+after it; paging is by the 16 KiB body cap alone — no row count limit (with
+every field at its widest, 76 rows fit — fixture `events--max-page`). How many events the
 companion retains is its choice; a cursor whose event was dropped is a 400
 `invalid_request` at `cursor`. A new `kind` value is breaking for the same
 reason as a new `status`.
