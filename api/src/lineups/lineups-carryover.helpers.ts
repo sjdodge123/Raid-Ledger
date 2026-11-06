@@ -5,6 +5,7 @@
 import { and, desc, eq, ne, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { ratchetNominationCap } from './lineups-nomination-cap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -42,6 +43,9 @@ async function findPreviousLineup(db: Db, excludeId: number) {
  * threshold-met matches are `scheduling` (never selected here), and their
  * below-threshold matches are `suggested` + `thresholdMet=false` (still
  * carried over as before).
+ *
+ * A hidden or banned game never carries (the same `VISIBILITY_FILTER` that
+ * refuses its nomination): a moderated game simply drops out, no notice.
  */
 async function findSuggestedMatches(db: Db, lineupId: number) {
   return db
@@ -50,11 +54,16 @@ async function findSuggestedMatches(db: Db, lineupId: number) {
       voteCount: schema.communityLineupMatches.voteCount,
     })
     .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.games,
+      eq(schema.games.id, schema.communityLineupMatches.gameId),
+    )
     .where(
       and(
         eq(schema.communityLineupMatches.lineupId, lineupId),
         eq(schema.communityLineupMatches.status, 'suggested'),
         eq(schema.communityLineupMatches.thresholdMet, false),
+        VISIBILITY_FILTER(),
       ),
     );
 }
