@@ -33,7 +33,9 @@ import {
 
 /** The default prefix or the stored alias: both persist as an absent key. */
 function isDefaultPrefix(prefix: string): boolean {
-  return prefix === FOREVER_DEFAULT_PREFIX || prefix === FOREVER_NAMESPACE_ALIAS;
+  return (
+    prefix === FOREVER_DEFAULT_PREFIX || prefix === FOREVER_NAMESPACE_ALIAS
+  );
 }
 
 /**
