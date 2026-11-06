@@ -42,7 +42,11 @@ import {
   type LfgGroupHorizon,
 } from './lfg-group-horizon.helpers';
 import { groupReadPressWouldSpawnNow } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
-import { getGroupSummary, requireGame, type LfgDb } from './lfg-query.helpers';
+import {
+  getGroupSummary,
+  requireVisibleGame,
+  type LfgDb,
+} from './lfg-query.helpers';
 import { reasonsForUser } from './lfg-suggestions.helpers';
 import {
   LFG_INVITE_GROUP_CAP,
@@ -217,7 +221,7 @@ export class LfgInviteService {
     if (inviterUserId === recipientUserId) {
       throw new BadRequestException('You cannot invite yourself');
     }
-    const game = await requireGame(this.db, gameId);
+    const game = await requireVisibleGame(this.db, gameId);
     if (!(await holdsLiveIntent(this.db, inviterUserId, gameId, now))) {
       throw new ForbiddenException('Only members of this group can invite');
     }

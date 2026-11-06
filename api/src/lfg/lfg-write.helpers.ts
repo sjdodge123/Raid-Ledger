@@ -7,7 +7,17 @@
  * poisons the whole transaction, savepoints included (memory
  * `reference_postgres_savepoint_does_not_contain_violations`).
  */
-import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type {
   LfgIntentDto,
   LfgIntentStatus,
@@ -337,27 +347,51 @@ export async function convertHolderIntent(
 }
 
 /**
- * True when the caller may convert this game's group RIGHT NOW.
+ * The caller's standing to convert this game's group RIGHT NOW.
  *
- * Two ways to qualify:
- *   1. They hold a live active intent on the game — an actual member.
- *   2. Their row already converted into *this exact target*, which is a
- *      retry of their own call and must stay idempotent rather than 403.
+ *   - `'member'` — they hold a live active intent on the game, so they may
+ *     convert the current live group.
+ *   - `'retry'`  — their only qualifying row already converted into *this
+ *     exact target*: a retry of their own call. It must stay idempotent rather
+ *     than 403, but it grants NO authority over whoever is live now — otherwise
+ *     a former participant could flip a later group into their stale target.
+ *   - `null`     — neither; a bystander.
  *
  * A `converted` row pointing at some OTHER poll/event is a past group and
- * grants nothing: without (2)'s target correlation, an old participant could
- * convert a later group they were never part of (Codex P1-b).
+ * grants nothing (Codex P1-b).
  *
  * @param db - Drizzle handle.
  * @param userId - Caller.
  * @param gameId - Game to check.
  * @param target - The conversion target from the request.
  */
-export async function isGroupParticipant(
+export async function resolveConvertRole(
   db: LfgDb,
   userId: number,
   gameId: number,
   target: LfgConversionTarget,
+): Promise<LfgConvertRole> {
+  const live = and(
+    eq(schema.lfgIntents.status, 'active'),
+    gt(schema.lfgIntents.expiresAt, new Date()),
+  );
+  if (await hasIntentRow(db, userId, gameId, live)) return 'member';
+  const retried = and(
+    eq(schema.lfgIntents.status, 'converted'),
+    convertedToTarget(target),
+  );
+  return (await hasIntentRow(db, userId, gameId, retried)) ? 'retry' : null;
+}
+
+/** What {@link resolveConvertRole} found. */
+export type LfgConvertRole = 'member' | 'retry' | null;
+
+/** True when the caller has at least one row on the game matching `filter`. */
+async function hasIntentRow(
+  db: LfgDb,
+  userId: number,
+  gameId: number,
+  filter: SQL | undefined,
 ): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.lfgIntents.id })
@@ -366,16 +400,7 @@ export async function isGroupParticipant(
       and(
         eq(schema.lfgIntents.userId, userId),
         eq(schema.lfgIntents.gameId, gameId),
-        or(
-          and(
-            eq(schema.lfgIntents.status, 'active'),
-            gt(schema.lfgIntents.expiresAt, new Date()),
-          ),
-          and(
-            eq(schema.lfgIntents.status, 'converted'),
-            convertedToTarget(target),
-          ),
-        ),
+        filter,
       ),
     )
     .limit(1);

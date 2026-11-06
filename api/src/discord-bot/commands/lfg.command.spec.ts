@@ -94,22 +94,60 @@ function fakeDb(batches: Row[][]): {
  * tell `name ilike $1` from `id = $1`, and to see the bound pattern itself.
  */
 function sqlText(predicate: unknown): string {
-  const chunks = (
-    predicate as { queryChunks: Array<string | { value?: unknown }> }
-  ).queryChunks;
+  const chunks = (predicate as { queryChunks: Array<string | SqlChunk> })
+    .queryChunks;
   return chunks
     .map((chunk) => {
       // `ilike` binds a raw string chunk; `eq` binds a Param with `.value`;
       // operators are StringChunks whose `.value` is a string array.
       if (typeof chunk === 'string') return `<${chunk}>`;
+      // `and(...)` nests SQL; columns render as `[name]`.
+      if (chunk.queryChunks !== undefined) return sqlText(chunk);
+      if (chunk.columnType !== undefined) return `[${String(chunk.name)}]`;
       const value = chunk.value;
       if (Array.isArray(value)) return value.join('');
-      if (typeof value === 'string' || typeof value === 'number') {
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
         return `<${String(value)}>`;
       }
       return '';
     })
     .join('');
+}
+
+interface SqlChunk {
+  value?: unknown;
+  queryChunks?: unknown;
+  columnType?: unknown;
+  name?: unknown;
+}
+
+/**
+ * A fake whose game row is moderated (`flag` = true): every lookup after the
+ * caller's returns it UNLESS the predicate excludes that flag, as Postgres
+ * would for `VISIBILITY_FILTER()`.
+ */
+function moderatedGameDb(flag: 'hidden' | 'banned', game: Row): never {
+  let calls = 0;
+  const db = {
+    select: () => ({
+      from: () => ({
+        where: (predicate: unknown) => {
+          const first = calls++ === 0;
+          const excluded = sqlText(predicate).includes(`[${flag}] = <false>`);
+          const rows = first ? LINKED : excluded ? [] : [game];
+          return {
+            limit: () => Promise.resolve(rows),
+            then: (fn: (r: Row[]) => unknown) => Promise.resolve(rows).then(fn),
+          };
+        },
+      }),
+    }),
+  };
+  return db as never;
 }
 
 function summary(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
@@ -331,11 +369,38 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     expect(sqlText(wheres[1])).toContain('<Valheim>');
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
-    // `games.id` fallback ran. That fallback would render as ` = <Valheim>`; the
-    // board read is the only conjunction in this flow, so it renders as `()`.
+    // `games.id` fallback ran: the third predicate is exactly the board's
+    // open-thread read (`lfg-board.db-helpers.ts`; sqlText leaves the
+    // inArray list empty), not an id lookup.
     expect(wheres).toHaveLength(3);
-    expect(sqlText(wheres[2])).toBe('()');
+    expect(sqlText(wheres[2])).toBe(
+      '([game_id] in  and [state] = <open> and [thread_id] is not null)',
+    );
   });
+
+  // A moderated game typed by name must read as unknown, not reach
+  // createIntent's 404 (which the handler reports as "Something went wrong").
+  it.each(['hidden', 'banned'] as const)(
+    'treats a %s game typed by name as unknown and never writes',
+    async (flag) => {
+      const lfgService = makeLfgService();
+      const db = moderatedGameDb(flag, { id: 99, name: 'Valheim' });
+      const command = new LfgCommand(
+        db,
+        lfgService as never,
+        settings as never,
+      );
+      const { interaction, editReply } = makeInteraction('Valheim');
+
+      await command.handleInteraction(interaction);
+
+      expect(lfgService.createIntent).not.toHaveBeenCalled();
+      const payload = editReply.mock.calls[0][0] as {
+        embeds: Array<{ toJSON: () => { description?: string } }>;
+      };
+      expect(payload.embeds[0]?.toJSON().description).toContain("I don't know");
+    },
+  );
 
   it('escapes LIKE metacharacters — `/lfg game:%` cannot select an arbitrary game', async () => {
     const lfgService = makeLfgService();
@@ -365,10 +430,13 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     });
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
-    // `games.id` fallback ran. That fallback would render as ` = <1942>`; the
-    // board read is the only conjunction in this flow, so it renders as `()`.
+    // `games.id` fallback ran: the third predicate is exactly the board's
+    // open-thread read (`lfg-board.db-helpers.ts`; sqlText leaves the
+    // inArray list empty), not an id lookup.
     expect(wheres).toHaveLength(3);
-    expect(sqlText(wheres[2])).toBe('()');
+    expect(sqlText(wheres[2])).toBe(
+      '([game_id] in  and [state] = <open> and [thread_id] is not null)',
+    );
   });
 
   it('refuses an id that cannot be an int4 without a second lookup', async () => {
