@@ -231,7 +231,7 @@ export class CharactersService {
     const { profile, talents, equipment, professions } = await fetchFullProfile(
       adapter,
       character.name,
-      character.realm ?? '',
+      character.realm,
       region,
       nsPrefix,
     );

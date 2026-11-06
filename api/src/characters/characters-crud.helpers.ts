@@ -9,7 +9,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, isNotNull, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
@@ -77,7 +77,8 @@ export function prepareRefresh(
   dto: RefreshCharacterDto,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
 ): { region: string; gameVariant: string; adapter: CharacterSyncAdapter } {
-  if (!character.realm)
+  // ROK-1722: a realmless Forever row (ruleset set) refreshes by region + name.
+  if (!character.realm && !character.ruleset)
     throw new NotFoundException(
       'Character has no realm — cannot refresh from external source',
     );
@@ -143,9 +144,14 @@ export async function syncAllCharacters(
     .where(
       and(
         isNotNull(schema.characters.region),
+        // ROK-1722: Armory-linked rows only (game_variant set). A manual
+        // Forever row keeps game_variant NULL and stays out; an imported one
+        // (realm NULL, ruleset set) syncs by region + name.
         isNotNull(schema.characters.gameVariant),
-        // ROK-1721: realm-less characters have no Armory path yet
-        isNotNull(schema.characters.realm),
+        or(
+          isNotNull(schema.characters.realm),
+          isNotNull(schema.characters.ruleset),
+        ),
       ),
     );
   let synced = 0;
@@ -207,7 +213,7 @@ async function performCharacterSync(
   const { profile, talents, equipment, professions } = await fetchFullProfile(
     adapter,
     char.name,
-    char.realm!,
+    char.realm,
     char.region!,
     nsPrefix,
   );
