@@ -43,7 +43,10 @@ export async function fetchFullProfile(
   apiNamespacePrefix: string | null,
 ): Promise<EnrichedProfile> {
   const nsArg = apiNamespacePrefix ?? undefined;
-  const profile = await adapter.fetchProfile(name, realm, region, nsArg);
+  const fetched = await adapter.fetchProfile(name, realm, region, nsArg);
+  // ROK-2102: a realmless (Forever) body has no realm; this path always asks
+  // by realm, so the requested realm stands in until it threads null.
+  const profile = { ...fetched, realm: fetched.realm ?? realm };
 
   let talents: unknown = null;
   if (profile.class) {
