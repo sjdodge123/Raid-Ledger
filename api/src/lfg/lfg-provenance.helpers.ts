@@ -34,7 +34,7 @@ import type { LfgConversionTarget } from './lfg-write.helpers';
  * SQL predicate: an intent whose conversion provenance points at `target`.
  *
  * Moved verbatim out of `lfg-write.helpers.ts`, where it was private and only
- * `isGroupParticipant` could reach it. The `pollId !== undefined` tie-break is
+ * `resolveConvertRole` could reach it. The `pollId !== undefined` tie-break is
  * part of the contract, not an accident: a caller passing both fields gets the
  * poll branch, exactly as before the move.
  *

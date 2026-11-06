@@ -19,11 +19,12 @@ import {
   type ChatInputCommandInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { eq, ilike, type SQL } from 'drizzle-orm';
+import { and, eq, ilike, type SQL } from 'drizzle-orm';
 import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import * as schema from '../../drizzle/schema';
 import { listGroupMembers } from '../../lfg/lfg-query.helpers';
 import { LfgService } from '../../lfg/lfg.service';
@@ -323,12 +324,16 @@ export class LfgCommand
     return isPick ? this.findGame(eq(schema.games.id, id)) : null;
   }
 
-  /** The first game satisfying `where`, or null. */
+  /**
+   * The first VISIBLE game satisfying `where`, or null. A hidden or banned game
+   * falls through to the unknown-game reply rather than reaching
+   * `createIntent`'s 404 (which would surface as "Something went wrong").
+   */
   private async findGame(where: SQL): Promise<number | null> {
     const [match] = await this.db
       .select({ id: schema.games.id })
       .from(schema.games)
-      .where(where)
+      .where(and(where, VISIBILITY_FILTER()))
       .limit(1);
     return match?.id ?? null;
   }

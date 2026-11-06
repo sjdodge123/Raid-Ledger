@@ -32,6 +32,8 @@ import {
   LfgGroupSummarySchema,
   LfgHeartedGameSchema,
 } from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -154,13 +156,12 @@ describe('LFG reads honour the shared visibility filter (Codex P1)', () => {
     // or banned game reaching this list puts it straight back on the Library —
     // the exact leak `VISIBILITY_FILTER` exists to prevent everywhere else
     // (`igdb-discover-deals.helpers.ts:133`, and siblings).
+    // The intents are posted while every game is visible, then two games are
+    // moderated: since batch K `POST /lfg` refuses a hidden or banned game, so
+    // "a live intent on a moderated game" only arises this way.
     const visible = await createGame(testApp, 'Visible LFG Game');
-    const hidden = await createGame(testApp, 'Hidden LFG Game', {
-      hidden: true,
-    });
-    const banned = await createGame(testApp, 'Banned LFG Game', {
-      banned: true,
-    });
+    const hidden = await createGame(testApp, 'Hidden LFG Game');
+    const banned = await createGame(testApp, 'Banned LFG Game');
     for (const game of [visible, hidden, banned]) {
       const posted = await testApp.request
         .post('/lfg')
@@ -168,6 +169,14 @@ describe('LFG reads honour the shared visibility filter (Codex P1)', () => {
         .send({ gameId: game.id });
       expect(posted.status).toBe(201);
     }
+    await testApp.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(eq(schema.games.id, hidden.id));
+    await testApp.db
+      .update(schema.games)
+      .set({ banned: true })
+      .where(eq(schema.games.id, banned.id));
 
     const res = await testApp.request
       .get('/lfg')
