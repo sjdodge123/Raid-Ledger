@@ -137,3 +137,60 @@ describe('carryover from an explicit source lineup (TDB:975)', () => {
     expect(await carriedEntries(lineupId)).toEqual([]);
   });
 });
+
+/** A game with the given moderation flags, nominated + below threshold in A. */
+async function seedSuggestedGame(
+  sourceId: number,
+  slug: string,
+  flags: { hidden?: boolean; banned?: boolean },
+): Promise<number> {
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: `Carryover ${slug}`, slug, ...flags })
+      .returning({ id: schema.games.id }),
+    slug,
+  );
+  await testApp.db.insert(schema.communityLineupEntries).values({
+    lineupId: sourceId,
+    gameId: game.id,
+    nominatedBy: testApp.seed.adminUser.id,
+  });
+  await testApp.db.insert(schema.communityLineupMatches).values({
+    lineupId: sourceId,
+    gameId: game.id,
+    status: 'suggested',
+    thresholdMet: false,
+  });
+  return game.id;
+}
+
+describe('carryover skips moderated games', () => {
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  it('carries the visible game but not the hidden or banned one', async () => {
+    const now = Date.now();
+    const sourceId = await insertLineup(
+      'co-mod-A',
+      'archived',
+      new Date(now - HOUR_MS),
+    );
+    const visibleId = await seedSuggestedGame(sourceId, 'co-visible', {});
+    await seedSuggestedGame(sourceId, 'co-hidden', { hidden: true });
+    await seedSuggestedGame(sourceId, 'co-banned', { banned: true });
+    const lineupId = await insertLineup('co-mod-B', 'building', new Date());
+
+    await carryOverFromLastDecided(testApp.db, lineupId);
+
+    expect(await carriedEntries(lineupId)).toEqual([
+      { gameId: visibleId, carriedOverFrom: sourceId },
+    ]);
+  });
+});
