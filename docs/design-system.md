@@ -838,7 +838,8 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 - **A popup portalled into a dialog is placed within the dialog, not the viewport** — `useAnchoredPopup` flips/clamps
   against the portal container's rect (any non-`<body>` container) and returns a `maxHeight` (the roomier side of
   the anchor) that the popup applies, so a long listbox in a short Modal scrolls instead of being clipped by the
-  dialog's `overflow-hidden`. Never pad a dialog body (`min-h-*`) to make room for a listbox.
+  dialog's `overflow-hidden`. The popup clamps to its dialog; a dialog whose main job is picking from a long list
+  (Transfer leader) gives its body enough height (`min-h-*`) to show ~6 rows, others (Create hub) do not.
 - **Passwords and secrets are `PasswordInput`** (ROK-1655, forms plan ruling 2): inside a `Field`, with
   `label` naming the toggle ("Show Password" / "Hide Password"). Several fields revealed together → one
   "Show passwords" `Checkbox` driving each field's controlled `revealed`. Never `Input type="password"`

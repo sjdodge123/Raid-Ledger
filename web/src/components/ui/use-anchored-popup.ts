@@ -27,6 +27,8 @@ export type PopupAlign = 'start' | 'end';
 const GAP_PX = 4;
 /** Clearance kept from the viewport edge when flipping or clamping. */
 const EDGE_PX = 8;
+/** One option row (44px touch target): a capped popup never gets less, even with no room. */
+const MIN_POPUP_PX = 44;
 
 /**
  * The popup's viewport `top` inside `bounds`: below the anchor when it fits, else
@@ -47,11 +49,11 @@ export function placeTop(anchor: PlacementBounds, height: number, viewportHeight
     return placeWithin(anchor, height, { top: 0, bottom: viewportHeight });
 }
 
-/** The tallest the popup may be inside `bounds`: the roomier side of the anchor (whole px, ≥ 0). */
+/** The tallest the popup may be inside `bounds`: the roomier side of the anchor (whole px, floored at one 44px row). */
 export function maxHeightWithin(anchor: PlacementBounds, bounds: PlacementBounds): number {
     const below = bounds.bottom - EDGE_PX - (anchor.bottom + GAP_PX);
     const above = anchor.top - GAP_PX - (bounds.top + EDGE_PX);
-    return Math.max(0, Math.floor(Math.max(below, above)));
+    return Math.max(MIN_POPUP_PX, Math.floor(Math.max(below, above)));
 }
 
 function samePos(a: PopupPosition | null, b: PopupPosition): boolean {
