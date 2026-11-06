@@ -19,6 +19,7 @@ import {
   getForeverNamespacePrefix,
   setForeverNamespacePrefix,
 } from '../plugins/wow-common/forever-namespace.resolver';
+import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../plugins/wow-common/forever.settings';
 import { CharactersService } from './characters.service';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
@@ -303,5 +304,61 @@ describe('Forever Armory refresh + auto-sync (ROK-1722)', () => {
       .from(schema.characters)
       .where(eq(schema.characters.id, id));
     expect(row?.level).toBe(24);
+  });
+});
+
+describe('Forever Armory kill switch off (ROK-1722)', () => {
+  const OFF = 'Armory import for WoW: Forever is turned off';
+  const settings = () => testApp.app.get(SettingsService);
+  const switchOff = () =>
+    settings().set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'false');
+
+  afterEach(async () => {
+    await settings().delete(WOW_FOREVER_ARMORY_IMPORT_KEY);
+  });
+
+  it('403s preview and import, and stores nothing', async () => {
+    const { token } = await memberToken('foreverswitchoff');
+    await switchOff();
+    const preview = await testApp.request
+      .get('/blizzard/character-preview')
+      .query({ name: 'Ana Forever', region: 'us', gameVariant: 'wow_forever' })
+      .set('Authorization', `Bearer ${token}`);
+    expect(preview.status).toBe(403);
+    expect(preview.body.message).toBe(OFF);
+    const res = await importAs(token);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe(OFF);
+    expect(await foreverRows()).toHaveLength(0);
+  });
+
+  it('403s a refresh and leaves Forever rows out of the nightly sync', async () => {
+    const { token } = await memberToken('foreverswitchsync');
+    const imported = await importAs(token);
+    expect(imported.status).toBe(201);
+    const id = imported.body.id as string;
+    await testApp.db
+      .update(schema.characters)
+      .set({ level: 1, lastSyncedAt: new Date('2026-01-01T00:00:00Z') })
+      .where(eq(schema.characters.id, id));
+    await switchOff();
+    const refresh = await testApp.request
+      .post(`/users/me/characters/${id}/refresh`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ region: 'us', gameVariant: 'wow_forever' });
+    expect(refresh.status).toBe(403);
+    expect(refresh.body.message).toBe(OFF);
+    const fetchProfile = jest.spyOn(
+      testApp.app.get(BlizzardService),
+      'fetchCharacterProfile',
+    );
+    const result = await testApp.app.get(CharactersService).syncAllCharacters();
+    expect(result).toEqual({ synced: 0, failed: 0 });
+    expect(fetchProfile).not.toHaveBeenCalled();
+    const [row] = await testApp.db
+      .select({ level: schema.characters.level })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, id));
+    expect(row?.level).toBe(1);
   });
 });
