@@ -7,19 +7,30 @@ import { test, expect } from './base';
 import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
-// ROK-1636: Armory import gating in the Add Character modal.
+// ROK-1636 / ROK-1722: Armory import gating in the Add Character modal.
 //
-// Blizzard has no WoW: Forever profile API yet, so picking that game disables
-// the "Import from Armory" tab (aria-disabled + a described-by note) and keeps
-// the Manual form. A supported variant (retail World of Warcraft) is the control. Both
-// games come from `api/scripts/seed-games.ts`, which CI seeds.
+// ROK-1722 turned WoW: Forever Armory import ON by default: the tab is enabled
+// and renders the realmless Forever identity block. The admin kill switch
+// (`GET /blizzard/capabilities` -> `armoryImport.wow_forever: false`) still
+// disables the tab with a described-by note and keeps the Manual form; that
+// variant mocks the capability on the page only, so it never flips the shared
+// env's admin setting under parallel specs. A supported variant (retail World of
+// Warcraft) is the control. Both games come from `api/scripts/seed-games.ts`.
 // ---------------------------------------------------------------------------
 
 const WOW_FOREVER = 'World of Warcraft: Forever';
 // Retail, not Classic Era: IGDB enrichment renames the seeded 'World of Warcraft Classic Era'
 // back to 'World of Warcraft Classic' on envs with IGDB keys (ROK-1643); retail's name is stable.
 const WOW_SUPPORTED = 'World of Warcraft';
-const ARMORY_UNAVAILABLE_NOTE = "Armory import isn't available for WoW Forever yet — add the character manually.";
+const ARMORY_UNAVAILABLE_NOTE = 'Armory import for WoW Forever is turned off on this server — add the character manually.';
+
+/** Answer the capability read with the Forever kill switch OFF (page-local; the env setting is untouched). */
+async function forceForeverArmoryKillSwitch(page: Page) {
+    await page.route((url) => url.pathname.endsWith('/blizzard/capabilities'), async (route) => {
+        const response = await route.fetch();
+        await route.fulfill({ response, status: 200, json: { armoryImport: { wow_forever: false } } });
+    });
+}
 
 /** Open the Add Character modal and pick `gameName` in its Game search. Returns the dialog. */
 async function openAddCharacterForGame(page: Page, gameName: string) {
@@ -35,10 +46,29 @@ async function openAddCharacterForGame(page: Page, gameName: string) {
     return dialog;
 }
 
-async function expectForeverArmoryDisabled(page: Page) {
+async function expectForeverArmoryEnabledByDefault(page: Page) {
     const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
     const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
-    await expect(armoryTab, 'Armory tab should be disabled for WoW Forever').toHaveAttribute('aria-disabled', 'true');
+    await expect(armoryTab).toBeVisible();
+    await expect(armoryTab, 'Armory tab is on by default for WoW Forever (ROK-1722)').not.toHaveAttribute('aria-disabled', 'true', {
+        timeout: 15_000,
+    });
+    await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toHaveCount(0);
+    await armoryTab.click();
+    await expect(dialog.getByTestId('forever-identity-fields')).toBeVisible();
+    await expect(dialog.getByRole('radiogroup', { name: 'Ruleset' })).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'First name', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Second name', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Region', exact: true })).toBeVisible();
+    await expect(dialog.getByPlaceholder('e.g. Arthas'), 'Forever Armory has no realm input').toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Search Armory' })).toBeVisible();
+}
+
+async function expectForeverArmoryKillSwitch(page: Page) {
+    await forceForeverArmoryKillSwitch(page);
+    const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
+    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    await expect(armoryTab, 'the kill switch disables the Forever Armory tab').toHaveAttribute('aria-disabled', 'true');
     await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeVisible();
     await expect(armoryTab, 'the note should describe the disabled tab').toHaveAccessibleDescription(ARMORY_UNAVAILABLE_NOTE);
     // Manual stays the active tab: its form is rendered. Forever is realmless (ROK-1721), so the
@@ -95,9 +125,14 @@ test.describe('Profile gaming — Characters (desktop)', () => {
             await expect(page.getByText(/\d+ characters?/).first()).toBeVisible();
         }
     });
-    test('WoW Forever disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+    test('WoW Forever enables Armory import by default with the identity fields (ROK-1722)', async ({ page }) => {
         test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
-        await expectForeverArmoryDisabled(page);
+        await expectForeverArmoryEnabledByDefault(page);
+    });
+
+    test('the Forever kill switch disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
+        await expectForeverArmoryKillSwitch(page);
     });
 
     test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
@@ -128,9 +163,14 @@ test.describe('Profile gaming — Characters (mobile)', () => {
         }
     });
 
-    test('WoW Forever disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+    test('WoW Forever enables Armory import by default with the identity fields (ROK-1722)', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Mobile-only test');
-        await expectForeverArmoryDisabled(page);
+        await expectForeverArmoryEnabledByDefault(page);
+    });
+
+    test('the Forever kill switch disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
+        await expectForeverArmoryKillSwitch(page);
     });
 
     test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
