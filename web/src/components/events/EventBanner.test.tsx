@@ -189,3 +189,20 @@ describe('EventBanner', () => {
     eventbannerGroup4();
     eventbannerGroup5();
 });
+
+describe('voice channel link scheme allow-list', () => {
+    it('renders the voice channel name without a link for a javascript: url', () => {
+        const { container } = renderWithRouter(
+            <EventBanner {...mockProps} voiceChannelName="Raid Voice" voiceChannelUrl="javascript:alert(1)" />,
+        );
+        expect(screen.getByText('Raid Voice')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: 'Raid Voice' })).not.toBeInTheDocument();
+        expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+    });
+
+    it('links the voice channel name for an https url', () => {
+        const url = 'https://discord.com/channels/1/2';
+        renderWithRouter(<EventBanner {...mockProps} voiceChannelName="Raid Voice" voiceChannelUrl={url} />);
+        expect(screen.getByRole('link', { name: 'Raid Voice' })).toHaveAttribute('href', url);
+    });
+});

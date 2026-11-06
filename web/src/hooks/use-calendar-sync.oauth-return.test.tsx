@@ -56,3 +56,24 @@ describe('Google OAuth start return target', () => {
         expect(await startAndCapture(() => result.current.mutate())).toBe('?intent=primary&return=onboarding');
     });
 });
+
+describe('OAuth start URL scheme allow-list', () => {
+    function serveStartUrl(url: string): void {
+        server.use(http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url })));
+    }
+
+    it('refuses a javascript: consent url — no navigation, the mutation errors', async () => {
+        serveStartUrl('javascript:alert(1)');
+        const { result } = renderHook(() => useStartGoogleConnect(), { wrapper });
+        result.current.mutate();
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(assign).not.toHaveBeenCalled();
+    });
+
+    it('still navigates to a plain http consent url', async () => {
+        serveStartUrl('http://accounts.example.test/consent');
+        const { result } = renderHook(() => useStartGoogleConnect(), { wrapper });
+        result.current.mutate();
+        await waitFor(() => expect(assign).toHaveBeenCalledWith('http://accounts.example.test/consent'));
+    });
+});
