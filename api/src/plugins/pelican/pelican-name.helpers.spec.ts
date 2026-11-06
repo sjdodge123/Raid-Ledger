@@ -18,6 +18,10 @@ describe('redactServerName (ruling Q3)', () => {
     ['Valheim nas:2456', 'Valheim'],
     ['CS (myserver:27015)', 'CS'],
     ['mc:25565 Survival', 'Survival'],
+    // Word-glued IPv4 (tech-debt 3084).
+    ['Valheim192.168.1.20', 'Valheim'],
+    ['srv_10.0.0.5:2456', 'srv_'],
+    ['Valheim 192.168.1.20x', 'Valheim x'],
   ])('%s -> %s', (raw, expected) => {
     expect(redactServerName(raw, 1)).toBe(expected);
   });

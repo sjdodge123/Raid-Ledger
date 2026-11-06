@@ -9,7 +9,10 @@ const PATTERNS: readonly RegExp[] = [
   /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi,
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
   /\[[0-9a-f:.]+\](?::\d{1,5})?/gi,
-  /\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b/g,
+  // IPv4 (+port). Digit/dot lookarounds instead of `\b`, so an address glued
+  // to a word (`Valheim192.168.1.20`, `srv_10.0.0.5:2456`) is still caught
+  // while a 5-group version string (`1.2.3.4.5`) is not (tech-debt 3084).
+  /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?(?!\.?\d)/g,
   /\b(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}\b/gi,
   /\b[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?/gi,
   /::[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*/gi,
