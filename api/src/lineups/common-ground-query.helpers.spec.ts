@@ -1,7 +1,9 @@
 /**
  * Unit tests for Common Ground scoring helpers (ROK-934).
  */
+import { PgDialect } from 'drizzle-orm/pg-core';
 import {
+  buildWhereConditions,
   computeScore,
   deriveGameIntensity,
   mapCommonGroundRow,
@@ -164,5 +166,25 @@ describe('deriveGameIntensity', () => {
     expect(
       deriveGameIntensity({ ...baseRow, playerCount: { min: 1, max: 64 } }),
     ).toBe('high');
+  });
+});
+
+describe('buildWhereConditions — search', () => {
+  /** Render the conditions to their bound parameter list. */
+  function boundParams(search: string): unknown[] {
+    const conditions = buildWhereConditions(
+      { minOwners: 1, limit: 10, search },
+      [],
+    );
+    const dialect = new PgDialect();
+    return conditions.flatMap((c) => dialect.sqlToQuery(c).params);
+  }
+
+  it('escapes LIKE wildcards so %, _ and \\ match literally', () => {
+    expect(boundParams('50%_a\\b')).toEqual(['%50\\%\\_a\\\\b%']);
+  });
+
+  it('wraps a plain search term in % for a substring match', () => {
+    expect(boundParams('zephyr')).toEqual(['%zephyr%']);
   });
 });
