@@ -3,7 +3,7 @@
  * Extracted from characters.service.ts for file size compliance (ROK-719).
  */
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { eq, and, ne, ilike, inArray, isNull } from 'drizzle-orm';
+import { eq, and, ne, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type {
@@ -51,7 +51,7 @@ export async function checkDuplicateClaim(
       and(
         eq(schema.characters.gameId, gameId),
         ne(schema.characters.userId, userId),
-        ilike(schema.characters.name, name),
+        sql`lower(${schema.characters.name}) = lower(${name})`,
         eq(schema.characters.realm, realm),
       ),
     )
@@ -233,7 +233,7 @@ export async function findExistingByProfile(
       and(
         eq(schema.characters.userId, userId),
         eq(schema.characters.gameId, gameId),
-        ilike(schema.characters.name, name),
+        sql`lower(${schema.characters.name}) = lower(${name})`,
         eq(schema.characters.realm, realm),
       ),
     )
