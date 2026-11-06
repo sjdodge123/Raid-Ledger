@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { WOW_FOREVER_NAMESPACE_PREFIX_KEY } from '../forever.settings';
+import { setForeverNamespacePrefix } from '../forever-namespace.resolver';
+import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { WowFactsService } from './wow-facts.service';
 import {
   MAX_ROSTER_ROWS,
@@ -26,7 +27,11 @@ function fakeSource(
   };
 }
 
+afterEach(() => setForeverNamespacePrefix(null));
+
+/** `prefix` is the EFFECTIVE Forever prefix (ROK-1920 seam). */
 function build(prefix: string | null) {
+  setForeverNamespacePrefix(prefix);
   const roster = fakeSource('roster', {
     level: { value: 58, source: 'roster', asOf: ago(3 * HOUR) },
   });
@@ -60,7 +65,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
       source: 'blizzard',
       asOf: ago(20 * HOUR),
     });
-    expect(settings.get).toHaveBeenCalledWith(WOW_FOREVER_NAMESPACE_PREFIX_KEY);
+    expect(settings.get).toHaveBeenCalledWith(WOW_FOREVER_ARMORY_IMPORT_KEY);
   });
 
   it('a stale blizzard value loses to a newer addon value', async () => {
