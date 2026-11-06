@@ -3999,3 +3999,12 @@ same day (#1278, #1279, #1280).
 ### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
 
 - **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
+
+### 2026-11-06 — chore/tech-debt-2026-11-06o (overnight batch O)
+
+- **resolved** line 3921 (`characters-import.helpers.ts:54` `ilike(name, name)`) and the `characters-import` part of lines 2856 / 3903 — `checkDuplicateClaim` and `findExistingByProfile` (`:236`) now compare `lower(name) = lower($1)` as `checkRegionClaim` does, so `%`/`_` are literal (integration case in `characters-rename-claim.integration.spec.ts`: `A_c` / `A%` do not collide with `Abc`). The other ILIKE sites in line 2856 (presence, bind, event-create, `/roster`, Common Ground) are untouched.
+- **resolved** line 3911 (`swr-cache.ts` `memorySwr` `maxEntries` FIFO) — a fresh/stale hit on a capped cache re-inserts the key, so eviction is least-recently-used (`swr-cache.spec.ts`).
+- **resolved** line 3880 (`companion-config.service.ts` `safeGame`) — the warning now carries the stack as logger.warn's second arg; the `hubTargets` catch got the same fix (`companion-config.service.spec.ts`).
+- **resolved on main** line 2346 (dead signup helper island) — `signup-core.helpers.ts`, `signup-slot.helpers.ts` and `signup-confirm.helpers.ts` are gone from `api/src/events/`; `signup-allocation.helpers.ts` remains and is live (imported by `signup-chain-exec`, `signup-tentative`, `signup-tentative-reslot`).
+- **resolved on main** line 3808 (second `checkAutoBench` in `signup-slot.helpers.ts`) — the file is gone; the only `checkAutoBench` is `signups-signup.helpers.ts:45`.
+- **resolved on main** line 3889 (`hub-page` bundle budget 0% headroom) — baseline recaptured to 15.0 KB, budget 17.3 KB (`scripts/bundle-budget.config.mjs:103`, operator ruling 2026-11-04).
