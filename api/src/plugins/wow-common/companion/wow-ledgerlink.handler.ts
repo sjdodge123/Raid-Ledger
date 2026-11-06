@@ -27,6 +27,7 @@ import type {
 import type { CompanionIngestVia } from '../../../companion/ingest/companion-ingest-request';
 import { AddonImportCreateService } from '../addon-import/addon-import-create.service';
 import { AddonImportError } from '../addon-import/addon-import.errors';
+import { LedgerlinkRulesetNoticeService } from './ledgerlink-ruleset-notice.service';
 import {
   companionErrorForImport,
   companionErrorForImportCode,
@@ -50,7 +51,10 @@ export class WowLedgerlinkHandler implements CompanionAfterCommitHandler<WowLedg
   readonly afterCommit = true;
   private readonly logger = new Logger(WowLedgerlinkHandler.name);
 
-  constructor(private readonly imports: AddonImportCreateService) {}
+  constructor(
+    private readonly imports: AddonImportCreateService,
+    private readonly notice: LedgerlinkRulesetNoticeService,
+  ) {}
 
   async handle(
     ctx: CompanionAfterCommitContext,
@@ -72,9 +76,23 @@ export class WowLedgerlinkHandler implements CompanionAfterCommitHandler<WowLedg
     } catch (err: unknown) {
       if (err instanceof AddonImportError) {
         this.logger.log(`wow-ledgerlink ${who} rejected code=${err.code}`);
+        await this.noticeRulesetRequired(ctx.userId, err);
       }
       throw companionErrorForImport(err);
     }
     this.logger.log(`wow-ledgerlink ${who} ${describeImportOutcome(res)}`);
+  }
+
+  /**
+   * ROK-2100 B.2: a create the server could not ruleset tells the member
+   * in-app (deduped, never throws). The paste route never does — the member
+   * is looking at the picker there.
+   */
+  private async noticeRulesetRequired(
+    userId: number,
+    err: AddonImportError,
+  ): Promise<void> {
+    if (err.code !== 'RULESET_REQUIRED' || !err.detail) return;
+    await this.notice.notifyRulesetRequired(userId, err.detail);
   }
 }

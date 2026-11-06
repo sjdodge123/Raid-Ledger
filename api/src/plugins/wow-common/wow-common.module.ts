@@ -65,6 +65,8 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
+import { NotificationModule } from '../../notifications/notification.module';
 
 @Module({
   imports: [
@@ -72,6 +74,8 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     CharactersModule,
     GuildsCoreModule,
     CompanionIngestModule,
+    // ROK-2100 B.2: the companion's RULESET_REQUIRED in-app notice.
+    NotificationModule,
   ],
   controllers: [
     BlizzardController,
@@ -136,6 +140,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     RecentDingsService,
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     WowLedgerlinkHandler,
+    LedgerlinkRulesetNoticeService,
   ],
   exports: [
     BlizzardService,

@@ -40,8 +40,19 @@ export function addonImportStatus(code: AddonImportErrorCode): number {
   return HttpStatus.UNPROCESSABLE_ENTITY;
 }
 
+/**
+ * ROK-2100 §4 B.2 — who a `RULESET_REQUIRED` create was for, so the companion
+ * handler can tell the member. Server-side only: never in the HTTP body.
+ */
+export interface AddonImportRulesetDetail {
+  characterName: string;
+  realmName: string | null;
+  guid: string;
+}
+
 export interface AddonImportErrorExtra {
   addCharacter?: AddonImportAddCharacterPrefill;
+  detail?: AddonImportRulesetDetail;
 }
 
 /**
@@ -50,6 +61,8 @@ export interface AddonImportErrorExtra {
  */
 export class AddonImportError extends HttpException {
   readonly code: AddonImportErrorCode;
+  /** Set on `RULESET_REQUIRED` from a create; not part of the wire body. */
+  readonly detail: AddonImportRulesetDetail | undefined;
 
   constructor(
     code: AddonImportErrorCode,
@@ -63,6 +76,7 @@ export class AddonImportError extends HttpException {
     };
     super(body, addonImportStatus(code));
     this.code = code;
+    this.detail = extra.detail;
     this.name = 'AddonImportError';
   }
 
