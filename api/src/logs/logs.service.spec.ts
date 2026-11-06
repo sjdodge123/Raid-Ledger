@@ -87,6 +87,45 @@ const SCRUB_SHAPE_CASES: [string, string, string][] = [
   ],
 ];
 
+/** Repeat `unit` until the line is at least 200k chars. */
+function line200k(unit: string): string {
+  return unit.repeat(Math.ceil(200_000 / unit.length));
+}
+
+/**
+ * Adversarial ~200k-char lines: every scrub rule's literal prefix repeated
+ * with no terminator, plus the run shapes that were quadratic before.
+ * `Cookie:` took 2.6 s and `-eyJa` 3.6 s before their fixes.
+ */
+const SCRUB_TIMING_CASES: [string, string][] = [
+  ['-eyJa repeated', '-eyJa'.repeat(40000)],
+  ['eyJ- repeated', 'eyJ-'.repeat(50000)],
+  ['eyJa. repeated', 'eyJa.'.repeat(40000)],
+  ['Cookie: repeated', 'Cookie:'.repeat(28571)],
+  ...[
+    'Set-Cookie:',
+    'Cookie: ',
+    '"password":"',
+    '"password":',
+    '"token": "',
+    '"set-cookie":["',
+    '"cookie":[',
+    'eyJ',
+    '?key=',
+    '&api_key=',
+    '?code=',
+    '&code=',
+    'DATABASE_URL=',
+    'JWT_SECRET=',
+    'password=',
+    'access_token=',
+    'token=',
+    'secret=',
+    'Authorization:',
+    'Authorization: Bearer ',
+  ].map((prefix): [string, string] => [`${prefix} repeated`, line200k(prefix)]),
+];
+
 /** Look-alikes the shaped scrub rules must leave alone: [label, input]. */
 const SCRUB_SHAPE_NEGATIVES: [string, string][] = [
   ['prose mentioning code', 'the code is ready for review'],
@@ -211,15 +250,14 @@ function describeLogsService() {
       },
     );
 
-    it.each([
-      ['-eyJa repeated', '-eyJa'.repeat(40000)],
-      ['eyJ- repeated', 'eyJ-'.repeat(50000)],
-      ['eyJa. repeated', 'eyJa.'.repeat(40000)],
-    ])('should scrub a 200k-char %s line in linear time', (_label, input) => {
-      const startedAt = Date.now();
-      service.scrubContent(input);
-      expect(Date.now() - startedAt).toBeLessThan(1000);
-    });
+    it.each(SCRUB_TIMING_CASES)(
+      'should scrub a 200k-char %s line in linear time',
+      (_label, input) => {
+        const startedAt = Date.now();
+        service.scrubContent(input);
+        expect(Date.now() - startedAt).toBeLessThan(1000);
+      },
+    );
   }
   describe('scrubContent shapes', () => describeScrubContentShapes());
 
