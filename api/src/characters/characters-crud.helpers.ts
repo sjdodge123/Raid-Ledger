@@ -20,6 +20,7 @@ import {
 } from './characters-sync.helpers';
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
+import { assertForeverArmoryImport } from '../plugins/wow-common/forever-armory-switch';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -71,11 +72,16 @@ export function enforceCooldown(lastSyncedAt: string | null): void {
   }
 }
 
-/** Prepare refresh parameters and validate. */
+/**
+ * Prepare refresh parameters and validate.
+ * @param foreverEnabled the Forever Armory kill switch (ROK-1722); a Forever
+ *   refresh 403s while it is off.
+ */
 export function prepareRefresh(
   character: CharacterDto,
   dto: RefreshCharacterDto,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
+  foreverEnabled: boolean,
 ): { region: string; gameVariant: string; adapter: CharacterSyncAdapter } {
   // ROK-1722: a realmless Forever row (ruleset set) refreshes by region + name.
   if (!character.realm && !character.ruleset)
@@ -84,9 +90,12 @@ export function prepareRefresh(
     );
   enforceCooldown(character.lastSyncedAt);
   const region = character.region ?? dto.region;
-  const gameVariant =
-    (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
-    dto.gameVariant;
+  // A realmless row is Forever by construction (only Forever drops the realm),
+  // so the request's 'retail' default must never be stamped onto it.
+  const gameVariant = character.realm
+    ? (character.gameVariant ?? dto.gameVariant)
+    : 'wow_forever';
+  assertForeverArmoryImport(gameVariant, foreverEnabled);
   const adapter = findAdapter(gameVariant);
   if (!adapter)
     throw new NotFoundException(
@@ -132,13 +141,37 @@ export async function findOneOwned(
   return mapCharacterToDto(character);
 }
 
-/** Sync all externally-linked characters. */
+/**
+ * Sync all externally-linked characters.
+ * @param includeForever the Forever Armory kill switch (ROK-1722): when off,
+ *   Forever rows are left out entirely (counted neither synced nor failed).
+ */
 export async function syncAllCharacters(
   db: Db,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
+  includeForever: boolean,
 ): Promise<{ synced: number; failed: number }> {
-  const externalCharacters = await db
+  const linked = await findSyncableCharacters(db);
+  const externalCharacters = includeForever
+    ? linked
+    : linked.filter((c) => c.gameVariant !== 'wow_forever');
+  let synced = 0;
+  let failed = 0;
+  for (const char of externalCharacters) {
+    const result = await syncSingleCharacter(db, char, findAdapter, logger);
+    if (result === 'synced') synced++;
+    else if (result === 'failed') failed++;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return { synced, failed };
+}
+
+/** Armory-linked rows the nightly sync may refresh. */
+async function findSyncableCharacters(
+  db: Db,
+): Promise<(typeof schema.characters.$inferSelect)[]> {
+  return db
     .select()
     .from(schema.characters)
     .where(
@@ -154,15 +187,6 @@ export async function syncAllCharacters(
         ),
       ),
     );
-  let synced = 0;
-  let failed = 0;
-  for (const char of externalCharacters) {
-    const result = await syncSingleCharacter(db, char, findAdapter, logger);
-    if (result === 'synced') synced++;
-    else if (result === 'failed') failed++;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return { synced, failed };
 }
 
 /** Sync a single external character. */
@@ -202,8 +226,9 @@ async function performCharacterSync(
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
 ): Promise<'synced' | 'skipped'> {
-  const adapter = findAdapter(char.gameVariant as string);
-  if (!adapter) {
+  const adapter = findAdapter(char.gameVariant ?? undefined);
+  const region = char.region;
+  if (!adapter || !region) {
     logger.debug(
       `No adapter for character ${char.id} (gameId: ${char.gameId}), skipping`,
     );
@@ -214,7 +239,7 @@ async function performCharacterSync(
     adapter,
     char.name,
     char.realm,
-    char.region!,
+    region,
     nsPrefix,
   );
   await db

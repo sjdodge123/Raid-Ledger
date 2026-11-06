@@ -3,7 +3,7 @@
  * The SQL filter itself is asserted against a real DB in
  * characters-forever-import.integration.spec.ts.
  */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { RefreshCharacterSchema } from '@raid-ledger/contract';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type * as schema from '../drizzle/schema';
@@ -65,6 +65,7 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
       mapCharacterToDto(row()),
       refreshDto,
       findAdapter,
+      true,
     );
     expect(out).toEqual({ region: 'us', gameVariant: 'wow_forever', adapter });
     expect(findAdapter).toHaveBeenCalledWith('wow_forever');
@@ -72,14 +73,32 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
 
   it('a manual row (variant null) takes the request variant', () => {
     const manual = mapCharacterToDto(row({ gameVariant: null }));
-    expect(prepareRefresh(manual, refreshDto, findAdapter).gameVariant).toBe(
-      'wow_forever',
+    expect(
+      prepareRefresh(manual, refreshDto, findAdapter, true).gameVariant,
+    ).toBe('wow_forever');
+  });
+
+  it('a realmless manual row refreshed with the retail default stays wow_forever', () => {
+    const manual = mapCharacterToDto(row({ gameVariant: null }));
+    const retailDefault = RefreshCharacterSchema.parse({ region: 'us' });
+    expect(retailDefault.gameVariant).toBe('retail');
+    const out = prepareRefresh(manual, retailDefault, findAdapter, true);
+    expect(out.gameVariant).toBe('wow_forever');
+    expect(findAdapter).toHaveBeenCalledWith('wow_forever');
+  });
+
+  it('403s a Forever refresh while the Armory kill switch is off', () => {
+    expect(() =>
+      prepareRefresh(mapCharacterToDto(row()), refreshDto, findAdapter, false),
+    ).toThrow(
+      new ForbiddenException('Armory import for WoW: Forever is turned off'),
     );
+    expect(findAdapter).not.toHaveBeenCalled();
   });
 
   it('still 404s a row with neither realm nor ruleset', () => {
     const bare = mapCharacterToDto(row({ ruleset: null }));
-    expect(() => prepareRefresh(bare, refreshDto, findAdapter)).toThrow(
+    expect(() => prepareRefresh(bare, refreshDto, findAdapter, true)).toThrow(
       new NotFoundException(
         'Character has no realm — cannot refresh from external source',
       ),
@@ -114,7 +133,9 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
       });
     const adapter = {
       fetchProfile,
-      fetchSpecialization: jest.fn().mockResolvedValue(null),
+      fetchSpecialization: jest
+        .fn()
+        .mockResolvedValue({ spec: null, role: null, talents: null }),
       fetchEquipment: jest.fn().mockResolvedValue(null),
       fetchProfessions: jest.fn().mockResolvedValue(null),
     };
@@ -123,6 +144,7 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
       db as never,
       () => adapter as never,
       logger,
+      true,
     );
     await jest.runAllTimersAsync();
     await expect(pending).resolves.toEqual({ synced: 1, failed: 0 });
@@ -133,5 +155,20 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
     ]);
     expect(db.set).toHaveBeenCalledWith(expect.objectContaining({ level: 25 }));
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncAllCharacters — Forever kill switch off (ROK-1722)', () => {
+  it('leaves Forever rows out: no Blizzard call, counted neither way', async () => {
+    const db = createDrizzleMock();
+    db.where.mockReturnValueOnce(Promise.resolve([row()]));
+    const fetchProfile = jest.fn();
+    const findAdapter = jest.fn(() => ({ fetchProfile }) as never);
+    const logger = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+    await expect(
+      syncAllCharacters(db as never, findAdapter, logger, false),
+    ).resolves.toEqual({ synced: 0, failed: 0 });
+    expect(findAdapter).not.toHaveBeenCalled();
+    expect(fetchProfile).not.toHaveBeenCalled();
   });
 });

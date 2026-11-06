@@ -28,7 +28,8 @@ export function resolvePreviewTarget(
     const parsed = WowForeverNameSchema.safeParse(name);
     if (!parsed.success)
       throw new BadRequestException('Enter a first and second name');
-    return { name: parsed.data, realm: realm?.trim() || null };
+    // Forever is realmless: a supplied realm is ignored, matching import.
+    return { name: parsed.data, realm: null };
   }
   const trimmedRealm = realm?.trim();
   if (!trimmedRealm) throw new BadRequestException('Realm is required');

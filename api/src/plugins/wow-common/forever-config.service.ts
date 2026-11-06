@@ -29,6 +29,7 @@ import {
   isWowheadResolverEnabled,
   setWowheadResolverEnabled,
 } from './wowhead-item/wowhead-resolver.settings';
+import { isForeverArmoryImportEnabled } from './forever-armory-switch';
 
 /**
  * Admin-controlled WoW: Forever runtime config (ROK-1717): the Blizzard
@@ -126,8 +127,8 @@ export class ForeverConfigService implements OnModuleInit {
   }
 
   /** ROK-1722: on by default — absent (or legacy 'true') = on, 'false' = off. */
-  private async isArmoryImportEnabled(): Promise<boolean> {
-    return (await this.settings.get(WOW_FOREVER_ARMORY_IMPORT_KEY)) !== 'false';
+  async isArmoryImportEnabled(): Promise<boolean> {
+    return isForeverArmoryImportEnabled(this.settings);
   }
 
   private async writeOrDelete(

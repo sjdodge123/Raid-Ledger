@@ -30,6 +30,11 @@ import * as identityH from './characters-identity.helpers';
 import { checkUpdateClaim } from './characters-update-claim.helpers';
 import { defined } from '../common/defined.helpers';
 import { withDisplayOverrides } from './characters-display-equipment.helpers';
+import { SettingsService } from '../settings/settings.service';
+import {
+  assertForeverVariantAllowed,
+  isForeverArmoryImportEnabled,
+} from '../plugins/wow-common/forever-armory-switch';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -44,6 +49,7 @@ export class CharactersService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
     private readonly enrichmentsService: EnrichmentsService,
+    private readonly settings: SettingsService,
   ) {}
 
   private findCharacterSyncAdapter(
@@ -187,6 +193,7 @@ export class CharactersService {
     userId: number,
     dto: ImportWowCharacterDto,
   ): Promise<CharacterDto> {
+    await assertForeverVariantAllowed(this.settings, dto.gameVariant);
     const adapter = this.findCharacterSyncAdapter(dto.gameVariant);
     if (!adapter)
       throw new NotFoundException(
@@ -226,6 +233,7 @@ export class CharactersService {
       character,
       dto,
       (v) => this.findCharacterSyncAdapter(v),
+      await isForeverArmoryImportEnabled(this.settings),
     );
     const nsPrefix = await crudH.resolveNsPrefix(this.db, character.gameId);
     const { profile, talents, equipment, professions } = await fetchFullProfile(
@@ -310,6 +318,7 @@ export class CharactersService {
       this.db,
       (v) => this.findCharacterSyncAdapter(v),
       this.logger,
+      await isForeverArmoryImportEnabled(this.settings),
     );
   }
 }

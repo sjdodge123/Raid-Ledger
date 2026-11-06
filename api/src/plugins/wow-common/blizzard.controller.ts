@@ -20,6 +20,8 @@ import {
 } from '../plugin-host/plugin-active.guard';
 import { variantToNamespacePrefix } from './blizzard.constants';
 import { resolvePreviewTarget } from './blizzard-preview.helpers';
+import { ForeverConfigService } from './forever-config.service';
+import { assertForeverArmoryImport } from './forever-armory-switch';
 
 /**
  * Controller for Blizzard API endpoints (ROK-234 UX refinements).
@@ -33,7 +35,10 @@ import { resolvePreviewTarget } from './blizzard-preview.helpers';
 export class BlizzardController {
   private readonly logger = new Logger(BlizzardController.name);
 
-  constructor(private readonly blizzardService: BlizzardService) {}
+  constructor(
+    private readonly blizzardService: BlizzardService,
+    private readonly foreverConfig: ForeverConfigService,
+  ) {}
 
   /**
    * GET /blizzard/realms?region=us&gameVariant=retail
@@ -82,6 +87,11 @@ export class BlizzardController {
       );
     }
     const variant = this.parseGameVariant(gameVariant);
+    if (variant === 'wow_forever')
+      assertForeverArmoryImport(
+        variant,
+        await this.foreverConfig.isArmoryImportEnabled(),
+      );
     const target = resolvePreviewTarget(variant, name, realm);
     return this.blizzardService.fetchCharacterProfile(
       target.name,

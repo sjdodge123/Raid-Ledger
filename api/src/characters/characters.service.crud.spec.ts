@@ -9,6 +9,7 @@ import { at } from '../common/testing/narrow';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Helper: build a mock tx.select that handles two sequential calls:
@@ -171,6 +172,10 @@ describe('CharactersService — crud', () => {
         CharactersService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
         {
           provide: EnrichmentsService,
           useValue: {

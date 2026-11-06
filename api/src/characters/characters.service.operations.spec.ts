@@ -5,6 +5,7 @@ import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
+import { SettingsService } from '../settings/settings.service';
 
 /** Single `.from().where().limit()` select returning `rows`. */
 function selectOnce(rows: unknown[]) {
@@ -171,6 +172,10 @@ describe('CharactersService — operations', () => {
         CharactersService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
         {
           provide: EnrichmentsService,
           useValue: {
@@ -372,6 +377,32 @@ describe('CharactersService — operations', () => {
         );
         expect(mockDb.transaction).not.toHaveBeenCalled();
       });
+    });
+
+    it('403s a Forever import while the Armory kill switch is off (ROK-1722)', async () => {
+      const settings = { get: jest.fn().mockResolvedValue('false') };
+      const off = new CharactersService(
+        mockDb as never,
+        mockPluginRegistry as never,
+        {} as never,
+        settings as never,
+      );
+      await expect(
+        off.importExternal(1, {
+          name: 'Thrall Forever',
+          realm: null,
+          region: 'us',
+          gameVariant: 'wow_forever',
+          isMain: false,
+          ruleset: 'normal',
+        }),
+      ).rejects.toThrow(
+        new ForbiddenException('Armory import for WoW: Forever is turned off'),
+      );
+      expect(
+        mockPluginRegistry.getAdaptersForExtensionPoint,
+      ).not.toHaveBeenCalled();
+      expect(mockDb.transaction).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when no adapter found', async () => {
