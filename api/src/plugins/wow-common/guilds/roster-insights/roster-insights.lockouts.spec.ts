@@ -176,6 +176,27 @@ describe('computeLockouts — repeated saves (ROK-1914)', () => {
       ['Bo', 3],
     ]);
   });
+
+  it("keeps a repeated save's soonest reset on the member, not the first seen", () => {
+    const out = computeLockouts(
+      [
+        row('Ana', [
+          lock({ resetAt: NOW_S + 900 }),
+          lock({ resetAt: NOW_S + 60 }),
+        ]),
+      ],
+      NOW_MS,
+    );
+    expect(out[0]?.resetAt).toBe(iso(NOW_S + 60));
+    expect(out[0]?.members.map((m) => m.resetAt)).toEqual([iso(NOW_S + 60)]);
+  });
+
+  it('takes the largest boss total any member reports, in either order', () => {
+    const ana = row('Ana', [lock({ total: 8 })]);
+    const bo = row('Bo', [lock({ total: 10 })]);
+    expect(computeLockouts([ana, bo], NOW_MS)[0]?.total).toBe(10);
+    expect(computeLockouts([bo, ana], NOW_MS)[0]?.total).toBe(10);
+  });
 });
 
 describe('countLockoutReporters (ROK-1914)', () => {
