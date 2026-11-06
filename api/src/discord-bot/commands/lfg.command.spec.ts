@@ -369,10 +369,12 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     expect(sqlText(wheres[1])).toContain('<Valheim>');
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
-    // `games.id` fallback ran. That fallback would render as `[id] = <Valheim>`;
-    // the third predicate is the board read instead.
+    // `games.id` fallback ran: the third predicate is exactly the board read
+    // (`findOpenForumThreadId`), not an id lookup.
     expect(wheres).toHaveLength(3);
-    expect(sqlText(wheres[2])).not.toContain('[id] = <Valheim>');
+    expect(sqlText(wheres[2])).toBe(
+      '([game_id] = <99> and [state] = <open> and [post_kind] = <forum> and [thread_id] is not null)',
+    );
   });
 
   // A moderated game typed by name must read as unknown, not reach
@@ -427,10 +429,12 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     });
     // ROK-1471 D8 appends ONE `lfg_group_messages` read for the post link, so
     // the predicate count is 3. The assertion's point is unchanged: no
-    // `games.id` fallback ran. That fallback would render as `[id] = <1942>`;
-    // the third predicate is the board read instead.
+    // `games.id` fallback ran: the third predicate is exactly the board read
+    // (`findOpenForumThreadId`), not an id lookup.
     expect(wheres).toHaveLength(3);
-    expect(sqlText(wheres[2])).not.toContain('[id] = <1942>');
+    expect(sqlText(wheres[2])).toBe(
+      '([game_id] = <7> and [state] = <open> and [post_kind] = <forum> and [thread_id] is not null)',
+    );
   });
 
   it('refuses an id that cannot be an int4 without a second lookup', async () => {
