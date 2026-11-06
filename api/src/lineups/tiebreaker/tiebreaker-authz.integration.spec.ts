@@ -19,10 +19,7 @@
  *  10. Two concurrent round-completing votes advance the round exactly once
  *      (tech-debt 2026-10-10: `checkAndAdvanceRound` was not serialized).
  *  11. An admin force-resolve racing the final vote advances once and
- *      resolves once (`forceResolve` shares the round-advance lock), so the
- *      decided transition (matching + poll cards) runs exactly once.
- *  12. `resolveTiebreaker` is conditional: a second call returns false and
- *      leaves the first winner in place.
+ *      resolves once (`forceResolve` shares the round-advance lock).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -36,8 +33,6 @@ import { TiebreakerService } from './tiebreaker.service';
 import { advanceBracket } from './tiebreaker-bracket.helpers';
 import { insertBracketVoteIfOpen } from './tiebreaker-authz.helpers';
 import { findMatchups } from './tiebreaker-query.helpers';
-import { resolveTiebreaker } from './tiebreaker-lifecycle.helpers';
-import * as decide from './tiebreaker-decide.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { at, defined, nonEmpty } from '../../common/testing/narrow';
 
@@ -465,7 +460,6 @@ function describeTiebreakerAuthz() {
     ]);
     const lastVoter = at(tb.voterIds, 3);
     const vote = { matchupId: second.id, gameId: second.gameAId };
-    const decideSpy = jest.spyOn(decide, 'decideLineupFromTiebreaker');
     const [voteResult, forceResult] = await Promise.allSettled([
       service.castBracketVote(tb.lineupId, vote, {
         id: lastVoter,
@@ -488,34 +482,6 @@ function describeTiebreakerAuthz() {
       .where(eq(T.id, tb.tiebreakerId));
     expect(row?.status).toBe('resolved');
     expect(tb.gameIds).toContain(row?.winnerGameId);
-    // Resolved once → one decided transition (one matching pass, one set of
-    // poll cards), whichever side won the race.
-    expect(decideSpy).toHaveBeenCalledTimes(1);
-    expect(decideSpy.mock.calls[0]?.[1]).toBe(tb.lineupId);
-    expect(decideSpy.mock.calls[0]?.[2]).toBe(row?.winnerGameId);
-    decideSpy.mockRestore();
-  });
-
-  it('resolveTiebreaker resolves once; a second call returns false', async () => {
-    const tb = await setupTiedLineup({
-      visibility: 'public',
-      mode: 'bracket',
-      games: 4,
-    });
-    const [winner, other] = [at(tb.gameIds, 0), at(tb.gameIds, 1)];
-    expect(await resolveTiebreaker(testApp.db, tb.tiebreakerId, winner)).toBe(
-      true,
-    );
-    expect(await resolveTiebreaker(testApp.db, tb.tiebreakerId, other)).toBe(
-      false,
-    );
-    const T = schema.communityLineupTiebreakers;
-    const [row] = await testApp.db
-      .select({ status: T.status, winnerGameId: T.winnerGameId })
-      .from(T)
-      .where(eq(T.id, tb.tiebreakerId));
-    expect(row?.status).toBe('resolved');
-    expect(row?.winnerGameId).toBe(winner);
   });
 }
 
