@@ -13,9 +13,12 @@ import {
   buildWho,
 } from './addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from './addon-import/testing/pin-export-clock';
+import { HARDCORE_CREATE_MESSAGE } from './addon-import/addon-import-create.helpers';
+import { AddonImportError } from './addon-import/addon-import.errors';
 import {
   buildRealmRulesetIndex,
   createFallbackRuleset,
+  updateInferenceRuleset,
   inferForPaste,
   inferRuleset,
   sortRealmRulesets,
@@ -106,6 +109,55 @@ describe('createFallbackRuleset (ROK-1739 D6)', () => {
     expect(createFallbackRuleset(at('hardcore'))).toBeUndefined();
     expect(createFallbackRuleset(at('pvp'))).toBe('pvp');
     expect(createFallbackRuleset(null)).toBeUndefined();
+  });
+});
+
+/** The AddonImportError response a call throws; anything else = null. */
+function responseOf(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (err) {
+    if (err instanceof AddonImportError) return err.getResponse();
+  }
+  return null;
+}
+
+const inferred = (
+  ruleset: AddonImportRulesetInferenceDto['ruleset'],
+  source: AddonImportRulesetInferenceDto['source'],
+): AddonImportRulesetInferenceDto => ({ ruleset, realmName: 'X', source });
+
+describe('createFallbackRuleset Hardcore from Blizzard / realm name (ROK-2100 F10)', () => {
+  it.each(['blizzard', 'realm-name'] as const)(
+    'a %s Hardcore with no pick → INVALID_PAYLOAD with the Hardcore message',
+    (source) => {
+      expect(
+        responseOf(() => createFallbackRuleset(inferred('hardcore', source))),
+      ).toMatchObject({
+        code: 'INVALID_PAYLOAD',
+        message: HARDCORE_CREATE_MESSAGE,
+      });
+    },
+  );
+
+  it('a member pick overrides an inferred Hardcore (no throw, no fallback)', () => {
+    expect(
+      createFallbackRuleset(inferred('hardcore', 'blizzard'), 'pvp'),
+    ).toBeUndefined();
+  });
+
+  it('a non-Hardcore Blizzard / realm-name inference is the fallback', () => {
+    expect(createFallbackRuleset(inferred('rppvp', 'realm-name'))).toBe('rppvp');
+    expect(createFallbackRuleset(inferred('pvp', 'blizzard'))).toBe('pvp');
+  });
+});
+
+describe('updateInferenceRuleset (ROK-2100 F8)', () => {
+  it('only the realm map re-rulesets an existing character', () => {
+    expect(updateInferenceRuleset(inferred('pvp', 'realm-map'))).toBe('pvp');
+    expect(updateInferenceRuleset(inferred('pvp', 'blizzard'))).toBeUndefined();
+    expect(updateInferenceRuleset(inferred('pvp', 'realm-name'))).toBeUndefined();
+    expect(updateInferenceRuleset(null)).toBeUndefined();
   });
 });
 

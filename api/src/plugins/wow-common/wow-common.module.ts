@@ -15,6 +15,7 @@ import { ForeverNamespaceProbeController } from './forever-namespace-probe.contr
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
+import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
@@ -94,6 +95,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     ForeverConfigService,
     ForeverNamespaceProbeService,
     ForeverRealmRulesetsService,
+    ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,
