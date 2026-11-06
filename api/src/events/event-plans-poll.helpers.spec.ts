@@ -33,6 +33,9 @@ describe('mapToConcreteDates', () => {
     expect(result.map((s) => s.availableCount)).toEqual([3]);
   });
 
+  // On the pre-fix code the next two cases never return: findNextOccurrence
+  // loops synchronously forever, so a regression shows as a hung worker, not a
+  // red assertion. The 7:20 case above is the assertion-level guard.
   it('returns without the key for a negative or fractional dow', () => {
     const result = mapToConcreteDates(
       [

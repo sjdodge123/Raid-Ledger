@@ -52,7 +52,7 @@ export function computeTotalRosterSlots(slotConfig: unknown): number {
   return 0;
 }
 
-/** A day-of-week/hour search never needs more than one week of steps. */
+/** A day-of-week/hour search checks today plus the next 7 days at most. */
 const MAX_OCCURRENCE_STEPS = 8;
 
 /**
