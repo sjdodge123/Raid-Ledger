@@ -104,7 +104,19 @@ export type WowForeverConfigResponseDto = z.infer<typeof WowForeverConfigRespons
 // ROK-1716: WoW: Forever namespace discovery probe
 // ============================================================
 
-export const ForeverProbeEndpointSchema = z.enum(['realm', 'connected-realm', 'playable-race', 'profile']);
+export const ForeverProbeEndpointSchema = z.enum([
+    'realm',
+    'connected-realm',
+    'playable-race',
+    'profile',
+    // ROK-2102: the live (realmless) Forever API shapes.
+    'ruleset',
+    'profile-equipment',
+    'profile-professions',
+    'profile-quests',
+    'profile-media',
+    'guild-roster',
+]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
 /** One probed (prefix, region, endpoint) → HTTP status; null status = network error / timeout. */
@@ -117,7 +129,17 @@ export const ForeverProbeCellSchema = z.object({
 });
 export type ForeverProbeCellDto = z.infer<typeof ForeverProbeCellSchema>;
 
-export const ForeverProbeMatchSchema = z.object({ prefix: z.string(), region: z.string(), raceName: z.string() });
+/**
+ * A namespace hit. `signal` says why: a Skyborne playable race, or a non-empty
+ * `ruleset` index (ROK-2102; `raceName` null). Results stored before ROK-2102
+ * have no `signal` and parse as `skyborne`.
+ */
+export const ForeverProbeMatchSchema = z.object({
+    prefix: z.string(),
+    region: z.string(),
+    raceName: z.string().nullable(),
+    signal: z.enum(['skyborne', 'ruleset']).default('skyborne'),
+});
 export type ForeverProbeMatchDto = z.infer<typeof ForeverProbeMatchSchema>;
 
 export const ForeverProbeFoundSchema = z.object({ prefix: z.string(), at: z.string() });
@@ -141,13 +163,21 @@ export const ForeverProbeStateSchema = z.object({
     result: ForeverProbeResultSchema.nullable(),
     extraCandidates: z.array(z.string()),
     characterPath: z.string().nullable(),
+    guildPath: z.string().nullable(),
 });
 export type ForeverProbeStateDto = z.infer<typeof ForeverProbeStateSchema>;
 
-/** Admin PUT body: extra candidate prefixes + optional raw `<realmOrRuleset>/<name>` profile path. */
+/**
+ * A probe path: Classic `<realmOrRuleset>/<name>` OR a realmless Forever slug
+ * `<name-surname>` (ROK-2102). A dot-only name (`.`/`..`) would resolve to
+ * another Blizzard path, so it is rejected.
+ */
+export const FOREVER_PROBE_PATH_RE = /^(?:[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}|[a-z0-9-]{1,64})$/i;
+
+/** Admin PUT body: extra candidate prefixes + optional character / guild probe paths. */
 export const ForeverProbeConfigSchema = z.object({
     extraCandidates: z.array(WowForeverNamespacePrefixSchema).max(20),
-    // A dot-only name (`.`/`..`) would resolve to another Blizzard path, so it is rejected.
-    characterPath: z.string().trim().regex(/^[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}$/i).nullable(),
+    characterPath: z.string().trim().regex(FOREVER_PROBE_PATH_RE).nullable(),
+    guildPath: z.string().trim().regex(FOREVER_PROBE_PATH_RE).nullable(),
 });
 export type ForeverProbeConfigDto = z.infer<typeof ForeverProbeConfigSchema>;
