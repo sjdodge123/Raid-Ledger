@@ -1,9 +1,10 @@
 /**
  * Form for importing a WoW character from Blizzard Armory (ROK-234).
  * Flow: select realm -> enter name -> search -> preview card -> confirm import.
+ * WoW: Forever (ROK-1722) is realmless: region + ruleset + two-part name instead.
  */
-import type { WowGameVariant } from '@raid-ledger/contract';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import type { WowGameVariant, WowForeverSelectableRuleset } from '@raid-ledger/contract';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import type { WowRegion, BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
 import { useImportWowCharacter } from '../hooks/use-wow-mutations';
 import { previewWowCharacter } from '../api-client';
@@ -13,6 +14,8 @@ import { Input } from '../../../components/ui/input';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { RealmAutocomplete } from './realm-autocomplete';
 import { CharacterPreviewCard } from './character-preview-card';
+import { WowArmoryImportForeverFields, isForeverArmoryVariant, parseForeverArmoryTarget } from './wow-armory-import-forever-fields';
+import { emptyForeverIdentity, formatForeverRuleset, type ForeverIdentity, type ForeverIdentityErrors } from '../lib/forever-identity';
 
 interface WowArmoryImportFormProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
@@ -57,7 +60,16 @@ function useSkipWarningValidator(formStateRef: React.RefObject<FormState>, onReg
     return { showSkipWarning, setShowSkipWarning, warningShownRef };
 }
 
+/** What a search (and the import after it) sends; `realm` is null for WoW: Forever. */
+interface SearchTarget { name: string; realm: string | null; region: WowRegion; ruleset: WowForeverSelectableRuleset | null }
+
+function initialForever(defaultRegion?: WowRegion): ForeverIdentity {
+    return { ...emptyForeverIdentity(), ...(defaultRegion ? { region: defaultRegion } : {}) };
+}
+
 function useImportFormState(isMain: boolean, defaultRealm?: string, defaultRegion?: WowRegion) {
+    const [forever, setForever] = useState<ForeverIdentity>(() => initialForever(defaultRegion));
+    const [foreverErrors, setForeverErrors] = useState<ForeverIdentityErrors | null>(null);
     const [name, setName] = useState('');
     const [realm, setRealm] = useState(defaultRealm ?? '');
     const [region, setRegion] = useState<WowRegion>(defaultRegion ?? 'us');
@@ -72,17 +84,31 @@ function useImportFormState(isMain: boolean, defaultRealm?: string, defaultRegio
         setPrevIsMain(isMain);
         setSetAsMain(isMain);
     }
-    return { name, setName, realm, setRealm, region, setRegion, setAsMain, setSetAsMain, error, setError, formState, setFormState, previewData, setPreviewData, formStateRef };
+    return { forever, setForever, foreverErrors, setForeverErrors, name, setName, realm, setRealm, region, setRegion, setAsMain, setSetAsMain, error, setError, formState, setFormState, previewData, setPreviewData, formStateRef };
+}
+
+/** Validates the inputs; on failure sets the field error(s) and returns null. Forever skips the realm. */
+function resolveSearchTarget(state: ReturnType<typeof useImportFormState>, gameVariant: string | undefined): SearchTarget | null {
+    if (isForeverArmoryVariant(gameVariant)) {
+        const parsed = parseForeverArmoryTarget(state.forever);
+        state.setForeverErrors(parsed.ok ? null : parsed.errors);
+        return parsed.ok ? parsed.target : null;
+    }
+    const name = state.name.trim();
+    const realm = state.realm.trim();
+    if (!name) { state.setError(NAME_REQUIRED); return null; }
+    if (!realm) { state.setError(REALM_REQUIRED); return null; }
+    return { name, realm, region: state.region, ruleset: null };
 }
 
 function useSearchHandler(state: ReturnType<typeof useImportFormState>, gameVariant: string | undefined) {
     return useCallback(async () => {
         state.setError('');
-        if (!state.name.trim()) { state.setError(NAME_REQUIRED); return; }
-        if (!state.realm.trim()) { state.setError(REALM_REQUIRED); return; }
+        const target = resolveSearchTarget(state, gameVariant);
+        if (!target) return;
         state.setPreviewData(null); state.setFormState('searching');
         try {
-            const data = await previewWowCharacter(state.name.trim(), state.realm.trim(), state.region, gameVariant);
+            const data = await previewWowCharacter(target.name, target.realm, target.region, gameVariant);
             state.setPreviewData(data); state.setFormState('preview');
         } catch (err) { state.setError(err instanceof Error ? err.message : 'Character not found'); state.setFormState('idle'); }
     }, [state, gameVariant]);
@@ -91,12 +117,21 @@ function useSearchHandler(state: ReturnType<typeof useImportFormState>, gameVari
 function useImportHandler(state: ReturnType<typeof useImportFormState>, gameVariant: string | undefined, onSuccess: WowArmoryImportFormProps['onSuccess']) {
     const importMutation = useImportWowCharacter();
     return useCallback(() => {
-        state.setError(''); state.setFormState('importing');
+        state.setError('');
+        const target = resolveSearchTarget(state, gameVariant);
+        if (!target) return;
+        state.setFormState('importing');
+        // Forever sends the typed two-part name; the server keeps the profile's name when it is two-part.
+        const realmless = target.realm === null;
         importMutation.mutate({
-            name: state.previewData?.name ?? state.name.trim(), realm: state.previewData?.realm ?? state.realm.trim(),
-            region: state.region, gameVariant: gameVariant as WowGameVariant | undefined, isMain: state.setAsMain,
+            name: realmless ? target.name : (state.previewData?.name ?? target.name),
+            realm: realmless ? null : (state.previewData?.realm ?? target.realm),
+            region: target.region, gameVariant: gameVariant as WowGameVariant | undefined, isMain: state.setAsMain, ruleset: target.ruleset,
         }, {
-            onSuccess: (data) => { state.setFormState('done'); state.setName(''); state.setRealm(''); state.setPreviewData(null); onSuccess?.(data); },
+            onSuccess: (data) => {
+                state.setFormState('done'); state.setName(''); state.setRealm(''); state.setPreviewData(null);
+                state.setForever((f) => ({ ...f, first: '', second: '' })); onSuccess?.(data);
+            },
             onError: (err) => { state.setError(err.message); state.setFormState('preview'); },
         });
     }, [state, importMutation, gameVariant, onSuccess]);
@@ -133,14 +168,14 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, de
 
     return (
         <div className="space-y-4">
-            {showSearch && <SearchFields region={state.region} realm={state.realm} name={state.name} formState={state.formState} error={state.error} gameVariant={gameVariant}
-                onRegionChange={(v) => { state.setRegion(v); handlers.handleFieldChange(); }} onRealmChange={(v) => { state.setRealm(v); handlers.handleFieldChange(); }}
-                onNameChange={(v) => { state.setName(v); handlers.handleFieldChange(); }} onSearch={() => void handlers.handleSearch()} />}
+            {showSearch && <SearchFields formState={state.formState} error={state.error} onSearch={() => void handlers.handleSearch()}
+                fields={<SearchInputs state={state} gameVariant={gameVariant} onFieldChange={handlers.handleFieldChange} onSearch={() => void handlers.handleSearch()} />} />}
             {showPreview && (
                 <>
                     {showSkipWarning && <div className="bg-warning/10 border border-warning/30 rounded-lg p-2.5 text-center"><p className="text-xs text-warning">You have unsaved progress. Use the buttons on the card, or click <strong>Next</strong> again to skip.</p></div>}
                     <CharacterPreviewCard preview={state.previewData!} setAsMain={state.setAsMain} onSetAsMainChange={state.setSetAsMain} onImport={handlers.handleImport}
-                        onBack={handlers.handleBack} isImporting={state.formState === 'importing'} error={state.error} highlightActions={showSkipWarning} />
+                        onBack={handlers.handleBack} isImporting={state.formState === 'importing'} error={state.error} highlightActions={showSkipWarning}
+                        realmFallback={isForeverArmoryVariant(gameVariant) ? formatForeverRuleset(state.forever.ruleset, state.forever.region) : null} />
                 </>
             )}
         </div>
@@ -178,12 +213,24 @@ function splitSearchError(error: string) {
     return { nameErr, realmErr, bannerErr: nameErr || realmErr ? '' : error };
 }
 
-/** Search form fields: region, realm, character name */
-function SearchFields({ region, realm, name, formState, error, gameVariant, onRegionChange, onRealmChange, onNameChange, onSearch }: {
-    region: WowRegion; realm: string; name: string; formState: FormState; error: string; gameVariant?: string | undefined;
+/** The inputs for this variant: Forever's identity block, or region + realm + name. */
+function SearchInputs({ state, gameVariant, onFieldChange, onSearch }: {
+    state: ReturnType<typeof useImportFormState>; gameVariant: string | undefined; onFieldChange: () => void; onSearch: () => void;
+}) {
+    if (isForeverArmoryVariant(gameVariant)) {
+        return <WowArmoryImportForeverFields value={state.forever} errors={state.foreverErrors} onChange={(v) => { state.setForever(v); onFieldChange(); }} />;
+    }
+    return <RealmNameFields region={state.region} realm={state.realm} name={state.name} error={state.error} gameVariant={gameVariant}
+        onRegionChange={(v) => { state.setRegion(v); onFieldChange(); }} onRealmChange={(v) => { state.setRealm(v); onFieldChange(); }}
+        onNameChange={(v) => { state.setName(v); onFieldChange(); }} onSearch={onSearch} />;
+}
+
+/** Region, realm and character name — every variant except WoW: Forever. */
+function RealmNameFields({ region, realm, name, error, gameVariant, onRegionChange, onRealmChange, onNameChange, onSearch }: {
+    region: WowRegion; realm: string; name: string; error: string; gameVariant?: string | undefined;
     onRegionChange: (v: WowRegion) => void; onRealmChange: (v: string) => void; onNameChange: (v: string) => void; onSearch: () => void;
 }) {
-    const { nameErr, realmErr, bannerErr } = splitSearchError(error);
+    const { nameErr, realmErr } = splitSearchError(error);
     return (
         <>
             <div className="space-y-3">
@@ -193,6 +240,18 @@ function SearchFields({ region, realm, name, formState, error, gameVariant, onRe
                 </Field>
             </div>
             <CharacterNameInput name={name} error={nameErr} onNameChange={onNameChange} onSearch={onSearch} />
+        </>
+    );
+}
+
+/** Search form: the variant's inputs, the API error banner and Search Armory. */
+function SearchFields({ fields, formState, error, onSearch }: {
+    fields: ReactNode; formState: FormState; error: string; onSearch: () => void;
+}) {
+    const { bannerErr } = splitSearchError(error);
+    return (
+        <>
+            {fields}
             {bannerErr && <SearchErrorBanner error={bannerErr} />}
             <Button fullWidth loading={formState === 'searching'} loadingLabel="Searching Armory…" onClick={onSearch}>Search Armory</Button>
         </>

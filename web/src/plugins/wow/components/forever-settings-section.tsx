@@ -73,7 +73,7 @@ function ArmoryToggle({ saved, mutate, pending }: { saved: WowForeverConfigRespo
         <div className="flex items-center justify-between gap-4">
             <div>
                 <p className="text-sm font-medium text-foreground">Armory import for WoW Forever</p>
-                <p id={hintId} className="text-sm text-secondary">Offer “Import from Armory” for Forever characters.</p>
+                <p id={hintId} className="text-sm text-secondary">On by default. Turn off to hide “Import from Armory” for Forever characters.</p>
             </div>
             <Switch checked={saved.armoryImportEnabled} onChange={onChange} label="Armory import for WoW Forever"
                 aria-describedby={hintId} disabled={pending} />
