@@ -164,7 +164,7 @@ function arrangeConflict(mockDb: MockDb, activeCount: number): void {
 /** Game found, caller is a participant, target resolves to the route's game. */
 function arrangeConvert(mockDb: MockDb, converted: number): void {
   mockDb.limit.mockResolvedValueOnce([game]); // requireGame
-  mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // isGroupParticipant
+  mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // resolveConvertRole (live intent)
   mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
   mockDb.returning.mockResolvedValueOnce(
     Array.from({ length: converted }, (_, i) => ({ id: 100 + i })),
