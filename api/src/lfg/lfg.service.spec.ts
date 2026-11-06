@@ -22,6 +22,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SettingsService } from '../settings/settings.service';
 import {
+  ForbiddenException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -631,6 +632,35 @@ describe('LfgService lifecycle events', () => {
       const result = await service.convert(3, GAME_ID, { eventId: EVENT_ID });
 
       expect(result).toEqual({ converted: 0 });
+      expect(emittedNames()).toEqual([]);
+    });
+
+    // A retry-only caller (row already converted into this target, no live
+    // intent) gets the idempotent answer WITHOUT converting the live rows of a
+    // later group they are not part of.
+    it('answers a retry-only caller with zero and never runs convertGroup', async () => {
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
+      mockDb.limit.mockResolvedValueOnce([]); // resolveConvertRole: no live intent
+      mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // ...but a converted row
+      mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
+
+      const result = await service.convert(3, GAME_ID, { eventId: EVENT_ID });
+
+      expect(result).toEqual({ converted: 0 });
+      // convertGroup is the only UPDATE on this path.
+      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(emittedNames()).toEqual([]);
+    });
+
+    it('403s a caller with neither a live nor a converted row in the group', async () => {
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
+      mockDb.limit.mockResolvedValueOnce([]); // no live intent
+      mockDb.limit.mockResolvedValueOnce([]); // no converted row either
+
+      await expect(
+        service.convert(3, GAME_ID, { eventId: EVENT_ID }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockDb.update).not.toHaveBeenCalled();
       expect(emittedNames()).toEqual([]);
     });
   });
