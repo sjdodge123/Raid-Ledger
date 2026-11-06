@@ -12,7 +12,7 @@
  * Anything the grammar below does not match stays a `text` token verbatim.
  */
 import type { ThreadMessageMentionDto } from '@raid-ledger/contract';
-import { safeHttpUrl } from '../../lib/safe-http-url';
+import { isHttpUrl } from '../../lib/safe-http-url';
 
 /** The mention flavours Discord encodes in `<@id>` / `<@&id>` / `<#id>`. */
 export type MentionKind = ThreadMessageMentionDto['kind'];
@@ -38,18 +38,8 @@ export type Token =
           display: string;
       };
 
-/**
- * Protocol ALLOW-list — the single rule that decides whether an anchor may be
- * built. Deliberately not a `javascript:` deny-list: a deny-list has to
- * enumerate every hostile scheme (`data:`, `vbscript:`, `blob:`, unicode
- * lookalikes) and is wrong the moment one is missed.
- *
- * @param raw candidate url straight out of user content
- * @returns true only for an absolute `http:` or `https:` url
- */
-export function isHttpUrl(raw: string): boolean {
-    return safeHttpUrl(raw) !== undefined;
-}
+/** Re-exported from the shared allow-list so existing discord importers keep working. */
+export { isHttpUrl };
 
 const FENCE = /```(?:([A-Za-z0-9+._-]*)\n)?([\s\S]*?)```/g;
 const QUOTE_LINE = /^\s*>\s?(.*)$/;

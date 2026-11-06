@@ -13,6 +13,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { LfgPlayingNowDto } from '@raid-ledger/contract';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 import { LFG_COPY, playingNowCount } from './lfg-copy';
 
 export interface LfgPlayingNowCardProps {
@@ -31,12 +32,13 @@ function SessionLinks({
 }: {
     playingNow: LfgPlayingNowDto;
 }): JSX.Element {
+    const voiceUrl = safeHttpUrl(playingNow.voiceInviteUrl);
     return (
         <div className="flex flex-wrap items-center gap-2">
-            {playingNow.voiceInviteUrl != null ? (
+            {voiceUrl != null ? (
                 <a
                     data-testid="lfg-playing-now-voice"
-                    href={playingNow.voiceInviteUrl}
+                    href={voiceUrl}
                     target="_blank"
                     rel="noreferrer"
                     className={LINK_BTN}
