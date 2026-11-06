@@ -57,7 +57,9 @@ const SHAPED_SCRUB_RULES: ShapedScrubRule[] = [
   },
   // A bare JWT (`eyJ<header>.<payload>.<signature>`), the whole match.
   {
-    pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
+    // The lookbehind (not `\b`) stops a retry at every `eyJ` inside a
+    // `-`-joined run, which made `"-eyJa".repeat(40000)` quadratic.
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
     replacement: '[REDACTED]',
   },
   // `?key=` / `&key=` (and `api_key=`) API keys, up to the next parameter.
