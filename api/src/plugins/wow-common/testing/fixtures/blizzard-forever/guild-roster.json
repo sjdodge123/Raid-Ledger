@@ -1,0 +1,28 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/data/wow/guild/lantern-watch/roster?namespace=profile-forever-us"
+    }
+  },
+  "guild": { "name": "Lantern Watch", "id": 900101 },
+  "members": [
+    {
+      "character": {
+        "name": "Ana Forever",
+        "id": 900001,
+        "level": 24,
+        "playable_class": { "id": 8 }
+      },
+      "rank": 0
+    },
+    {
+      "character": {
+        "name": "Bo Tester",
+        "id": 900002,
+        "level": 12,
+        "playable_class": { "id": 1 }
+      },
+      "rank": 4
+    }
+  ]
+}

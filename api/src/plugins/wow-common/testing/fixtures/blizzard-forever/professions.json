@@ -1,0 +1,22 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/professions?namespace=profile-forever-us"
+    }
+  },
+  "character": { "name": "Ana Forever", "id": 900001 },
+  "primaries": [
+    {
+      "profession": { "name": "Tailoring", "id": 197 },
+      "skill_points": 120,
+      "max_skill_points": 150
+    }
+  ],
+  "secondaries": [
+    {
+      "profession": { "name": "Cooking", "id": 185 },
+      "skill_points": 75,
+      "max_skill_points": 150
+    }
+  ]
+}
