@@ -15,6 +15,20 @@ import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { CronJobService } from './cron-job.service';
 
+const DEFAULT_EXECUTION_LIMIT = 50;
+const MAX_EXECUTION_LIMIT = 100;
+
+/**
+ * Parse the executions `limit` query param: an integer clamped to 1..100,
+ * falling back to 50 when absent or non-numeric (a NaN used to reach SQL
+ * as `LIMIT NaN` and 500).
+ */
+function parseExecutionLimit(raw: string | undefined): number {
+  const n = raw ? parseInt(raw, 10) : DEFAULT_EXECUTION_LIMIT;
+  if (!Number.isFinite(n)) return DEFAULT_EXECUTION_LIMIT;
+  return Math.max(1, Math.min(n, MAX_EXECUTION_LIMIT));
+}
+
 /**
  * Admin-only controller for cron job management (ROK-310).
  * All endpoints require JWT auth + admin role.
@@ -41,8 +55,10 @@ export class CronJobController {
     @Param('id', ParseIntPipe) id: number,
     @Query('limit') limit?: string,
   ) {
-    const parsedLimit = limit ? Math.min(parseInt(limit, 10), 100) : 50;
-    return this.cronJobService.getExecutionHistory(id, parsedLimit);
+    return this.cronJobService.getExecutionHistory(
+      id,
+      parseExecutionLimit(limit),
+    );
   }
 
   /**

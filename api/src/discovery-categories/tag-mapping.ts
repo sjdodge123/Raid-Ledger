@@ -185,7 +185,12 @@ function canonicalize(tag: string): string {
  */
 function itadMatchersFor(tag: string): string[] {
   const key = canonicalize(tag);
-  if (ITAD_SYNONYMS[key]) return ITAD_SYNONYMS[key];
+  // Own-key guard: a tag like "constructor" must not resolve to an
+  // inherited Object.prototype member (backlog 3052).
+  const synonyms = Object.hasOwn(ITAD_SYNONYMS, key)
+    ? ITAD_SYNONYMS[key]
+    : undefined;
+  if (synonyms) return synonyms;
   // Default: use the original tag lowercased+trimmed so the substring match
   // covers variants ("Horror", "Psychological Horror", "Survival Horror").
   return [tag.toLowerCase().trim()];
@@ -203,7 +208,10 @@ export function resolveTagFilter(tags: string[] | undefined): TagFilterSet {
   const themes = new Set<number>();
   for (const tag of tags) {
     for (const matcher of itadMatchersFor(tag)) itad.add(matcher);
-    const fallback = IGDB_FALLBACK[canonicalize(tag)];
+    const key = canonicalize(tag);
+    const fallback = Object.hasOwn(IGDB_FALLBACK, key)
+      ? IGDB_FALLBACK[key]
+      : undefined;
     if (fallback) {
       for (const id of fallback.genreIds) genres.add(id);
       for (const id of fallback.themeIds) themes.add(id);

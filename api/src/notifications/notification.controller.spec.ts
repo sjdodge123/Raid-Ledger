@@ -136,6 +136,22 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
 
       expect(mockNotificationService.getAll).toHaveBeenCalledWith(1, 20, 0);
     });
+
+    it('falls back to the default limit when limit is not a number (no LIMIT NaN)', async () => {
+      const req = { user: { id: 1 } } as AuthenticatedRequest;
+
+      await controller.getNotifications(req, 'abc', '5');
+
+      expect(mockNotificationService.getAll).toHaveBeenCalledWith(1, 20, 5);
+    });
+
+    it('falls back to offset 0 when offset is not a number (no OFFSET NaN)', async () => {
+      const req = { user: { id: 1 } } as AuthenticatedRequest;
+
+      await controller.getNotifications(req, '10', 'abc');
+
+      expect(mockNotificationService.getAll).toHaveBeenCalledWith(1, 10, 0);
+    });
   });
 
   describe('GET /notifications/unread/count', () => {

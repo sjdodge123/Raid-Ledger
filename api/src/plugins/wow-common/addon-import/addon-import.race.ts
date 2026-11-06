@@ -30,7 +30,10 @@ const DISPLAY_NAMES = new Set(Object.values(RACE_DISPLAY_NAMES));
  * stored as-is and logged at debug.
  */
 export function raceDisplayName(token: string): string {
-  const mapped = RACE_DISPLAY_NAMES[token];
+  // Own-key guard: "constructor" etc. must not hit Object.prototype.
+  const mapped = Object.hasOwn(RACE_DISPLAY_NAMES, token)
+    ? RACE_DISPLAY_NAMES[token]
+    : undefined;
   if (mapped !== undefined) return mapped;
   if (!DISPLAY_NAMES.has(token)) {
     logger.debug(`Unmapped addon race token "${token}" stored as-is`);
