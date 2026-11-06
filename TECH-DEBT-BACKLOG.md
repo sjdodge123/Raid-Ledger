@@ -4025,3 +4025,11 @@ same day (#1278, #1279, #1280).
 - **(resolved)** line 3848 `api/src/notifications/weekly-digest-coplay.queries.ts` — the event path is half-open (`upper(e.duration) < end`), so an event ending on the week boundary counts in one digest only. Spec: `weekly-digest-coplay.integration.spec.ts` › event window boundary (mutant-checked).
 - **resolved on main, noted by the batch M scout** (no code change): line 1853 steam nudge recipients (`lineup-steam-nudge.service.ts:53-54` adds `ACTIVE_MEMBER_SQL_AND`, ROK-1684); line 3508 `startGracePeriod` no-op (`ad-hoc-event-end.helpers.ts:69` returns early; already noted at 3648).
 
+
+### 2026-11-06 — chore/tech-debt-2026-11-06r (overnight batch R)
+
+- **(resolved)** line 3052 `api/src/discovery-categories/tag-mapping.ts:188,207` + `api/src/plugins/wow-common/addon-import/addon-import.race.ts:33` — table lookups are guarded with `Object.hasOwn`, so a 'constructor' tag no longer throws in `resolveTagFilter` and `raceDisplayName('constructor')` returns the string, not a function.
+- **(resolved, remaining part)** line 2916 `api/src/notifications/notification.controller.ts:46-50` + `api/src/cron-jobs/cron-job.controller.ts:44` — a non-numeric limit/offset falls back to the default (no more `LIMIT NaN` 500); the cron execution limit is clamped to 1–100.
+- **(resolved)** line 2996 `api/src/community-insights/pipelines/refresh-snapshot.ts:289,298` — retention below 1 day or non-numeric falls back to the 90-day default and fractions are truncated, so a 0/negative setting no longer prunes every snapshot. (The window setting half of that entry is unchanged.)
+- **resolved on main, noted by the batch R scout** (no code change): line 2894 (`availability.helpers.ts` `assertValidWindow` checks the merged range); line 2916 taste-profile + markRead parts (`parseSimilarLimit`, `ParseUUIDPipe`); line 3459 (`community-directory.cursor.ts:14` `.max(INT4_MAX)`); line 3850 (`weekly-digest-coplay.queries.ts` `cp_attended` uses `< end`); line 1010 (`igdb-search.helpers.ts:88` orders by `gameRelevanceOrder` before the limit, ROK-1602).
+- **open, not taken overnight:** line 2956 reminder DM crashes on a non-IANA timezone after the dedup claim (notifications DM path → needs a Discord smoke run); line 3042 Steam names over varchar(255) (truncation could break `renameSteamOnlyRow` matching → needs a ruling).
