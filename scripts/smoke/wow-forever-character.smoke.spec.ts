@@ -101,7 +101,7 @@ async function openForeverAdd(page: Page): Promise<Form> {
 
 async function pickRuleset(form: Form, label: string): Promise<void> {
     await form.ruleset.getByText(label, { exact: true }).click();
-    await expect(form.ruleset.getByRole('radio', { name: label })).toBeChecked();
+    await expect(form.ruleset.getByRole('radio', { name: label, exact: true })).toBeChecked();
 }
 
 async function submit(form: Form, label: 'Add Character' | 'Save Changes'): Promise<void> {
