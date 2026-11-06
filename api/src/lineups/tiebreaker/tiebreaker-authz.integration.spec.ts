@@ -16,6 +16,8 @@
  *   8. A veto against a BRACKET-mode tiebreaker → 400, no veto row.
  *   9. The conditional insert writes nothing once the matchup is resolved
  *      (late-vote race: the round advanced after the pre-check).
+ *  10. Two concurrent round-completing votes advance the round exactly once
+ *      (tech-debt 2026-10-10: `checkAndAdvanceRound` was not serialized).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -36,6 +38,7 @@ interface TiedSetup {
   lineupId: number;
   tiebreakerId: number;
   gameIds: number[];
+  voterIds: number[];
 }
 
 interface SetupOpts {
@@ -131,10 +134,12 @@ function describeTiebreakerAuthz() {
       'lineup',
     );
     const gameIds: number[] = [];
+    const voterIds: number[] = [];
     for (let i = 0; i < opts.games; i++) {
       const voter = await createMember();
       const gameId = await createGame();
       gameIds.push(gameId);
+      voterIds.push(voter.id);
       await testApp.db.insert(schema.communityLineupEntries).values({
         lineupId: lineup.id,
         gameId,
@@ -154,7 +159,7 @@ function describeTiebreakerAuthz() {
       { mode: opts.mode, roundDurationHours: 24 },
       { id: testApp.seed.adminUser.id, role: 'admin' },
     );
-    return { lineupId: lineup.id, tiebreakerId: detail.id, gameIds };
+    return { lineupId: lineup.id, tiebreakerId: detail.id, gameIds, voterIds };
   }
 
   async function firstOpenMatchup(tiebreakerId: number) {
@@ -381,6 +386,51 @@ function describeTiebreakerAuthz() {
     });
     expect(inserted).toBe(false);
     expect(await bracketVotesFor(roundOne.id)).toEqual([]);
+  });
+
+  it('advances the round exactly once when two final votes race', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 4,
+    });
+    const roundOne = (await findMatchups(testApp.db, tb.tiebreakerId))
+      .filter((m) => m.round === 1 && !m.isBye)
+      .sort((a, b) => a.position - b.position);
+    const [first, second] = [at(roundOne, 0), at(roundOne, 1)];
+    expect(tb.voterIds).toHaveLength(4);
+    // Every lineup voter has voted on `first`; two are left on `second`.
+    await testApp.db.insert(BV).values([
+      ...tb.voterIds.map((userId) => ({
+        matchupId: first.id,
+        userId,
+        gameId: first.gameAId,
+      })),
+      ...tb.voterIds.slice(0, 2).map((userId) => ({
+        matchupId: second.id,
+        userId,
+        gameId: second.gameAId,
+      })),
+    ]);
+    const vote = { matchupId: second.id, gameId: second.gameAId };
+    await Promise.all(
+      tb.voterIds
+        .slice(2)
+        .map((id) =>
+          service.castBracketVote(tb.lineupId, vote, { id, role: 'member' }),
+        ),
+    );
+
+    const roundTwo = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
+      (m) => m.round === 2,
+    );
+    expect(roundTwo).toHaveLength(1);
+    expect(at(roundTwo, 0).winnerGameId).toBeNull();
+    const [row] = await testApp.db
+      .select({ status: schema.communityLineupTiebreakers.status })
+      .from(schema.communityLineupTiebreakers)
+      .where(eq(schema.communityLineupTiebreakers.id, tb.tiebreakerId));
+    expect(row?.status).toBe('active');
   });
 }
 
