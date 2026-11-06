@@ -63,17 +63,21 @@ export function computeLockouts(
 /**
  * Add one character's save to its group. The addon does not enforce one
  * entry per instance save, so a repeat for a character already in the group
- * keeps the higher kill count instead of listing the character twice.
+ * keeps the higher kill count and the soonest reset instead of listing the
+ * character twice. The group's boss total is the largest any member reports,
+ * so it does not depend on which member is seen first.
  */
 function addMember(
   g: Group,
   row: { characterId: string; name: string },
-  l: { killed: number; resetAt: number },
+  l: { killed: number; resetAt: number; total: number },
 ): void {
   g.resetAt = Math.min(g.resetAt, l.resetAt);
+  g.total = Math.max(g.total, l.total);
   const seen = g.members.find((m) => m.characterId === row.characterId);
   if (seen) {
     seen.killed = Math.max(seen.killed, l.killed);
+    seen.resetAt = Math.min(seen.resetAt, l.resetAt);
     return;
   }
   g.members.push({
