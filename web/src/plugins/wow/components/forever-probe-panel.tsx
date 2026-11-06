@@ -54,7 +54,7 @@ export function ForeverProbePanel(): JSX.Element | null {
             </div>
             <FoundBanner result={result} />
             {result && <ForeverProbeMatrix result={result} />}
-            <ForeverProbeConfigForm key={`${probe.data.extraCandidates.join(',')}|${probe.data.characterPath ?? ''}`}
+            <ForeverProbeConfigForm key={`${probe.data.extraCandidates.join(',')}|${probe.data.characterPath ?? ''}|${probe.data.guildPath ?? ''}`}
                 saved={probe.data} mutate={saveConfig.mutateAsync} pending={saveConfig.isPending} />
         </section>
     );

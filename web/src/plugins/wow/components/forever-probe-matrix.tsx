@@ -1,15 +1,26 @@
 /**
  * ROK-1716: the Forever probe's candidate x region matrix. Each cell holds one
  * status chip per probed endpoint (realm, connected-realm, playable-race,
- * profile). Collapsed by default; the table scrolls inside its own container
+ * profile, and ROK-2102's ruleset / profile-family / guild-roster), labelled
+ * short in the legend. Matches are listed above the matrix: a ruleset-index
+ * signal reads "ruleset index", a Skyborne one its race name. Collapsed by default; the table scrolls inside its own container
  * so a phone never gets page overflow. Table styling follows the admin logs /
  * backups panels; chips follow the token-tint badge idiom.
  */
 import type { JSX } from 'react';
-import type { ForeverProbeCellDto, ForeverProbeEndpoint, ForeverProbeResultDto } from '@raid-ledger/contract';
+import type { ForeverProbeCellDto, ForeverProbeEndpoint, ForeverProbeMatchDto, ForeverProbeResultDto } from '@raid-ledger/contract';
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 
-const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = ['realm', 'connected-realm', 'playable-race', 'profile'];
+const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = [
+    'realm', 'connected-realm', 'playable-race', 'ruleset', 'profile',
+    'profile-equipment', 'profile-professions', 'profile-quests', 'profile-media', 'guild-roster',
+];
+/** Legend label per endpoint — the ROK-2102 additions get short names so the legend stays one line. */
+const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
+    realm: 'realm', 'connected-realm': 'connected-realm', 'playable-race': 'playable-race', ruleset: 'ruleset',
+    profile: 'profile', 'profile-equipment': 'equip', 'profile-professions': 'prof', 'profile-quests': 'quests',
+    'profile-media': 'media', 'guild-roster': 'guild',
+};
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';
 const TONE_CLS = {
@@ -64,26 +75,52 @@ function MatrixRow({ prefix, regions, cells }: { prefix: string; regions: string
     );
 }
 
-/** The collapsed candidate x region status matrix for the latest probe run. */
+/** What made a cell a match: the ruleset index, or the Skyborne race's name. */
+function matchSignalLabel(match: ForeverProbeMatchDto): string {
+    if (match.signal === 'ruleset') return 'ruleset index';
+    return match.raceName ?? 'Skyborne race';
+}
+
+function MatchList({ matches }: { matches: readonly ForeverProbeMatchDto[] }): JSX.Element | null {
+    if (matches.length === 0) return null;
+    return (
+        <ul aria-label="Probe matches" className="text-xs text-secondary space-y-0.5">
+            {matches.map((m) => (
+                <li key={`${m.prefix}:${m.region}:${m.signal}`} className="font-mono">{`${m.prefix}/${m.region}: ${matchSignalLabel(m)}`}</li>
+            ))}
+        </ul>
+    );
+}
+
+function MatrixTable({ result, regions }: { result: ForeverProbeResultDto; regions: string[] }): JSX.Element {
+    return (
+        <div className="max-w-full overflow-x-auto border border-edge rounded-xl">
+            <table className="min-w-max w-full text-sm">
+                <thead>
+                    <tr className="border-b border-edge bg-surface/50">
+                        <th scope="col" className={TH}>Candidate</th>
+                        {regions.map((r) => <th key={r} scope="col" className={TH}>{r}</th>)}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-edge">
+                    {result.candidates.map((p) => <MatrixRow key={p} prefix={p} regions={regions} cells={result.cells} />)}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+/** The match list plus the collapsed candidate x region status matrix for the latest probe run. */
 export function ForeverProbeMatrix({ result }: { result: ForeverProbeResultDto }): JSX.Element {
     const regions = regionsOf(result.cells);
-    const probed = ENDPOINT_ORDER.filter((e) => result.cells.some((c) => c.endpoint === e));
+    const probed = ENDPOINT_ORDER.filter((e) => result.cells.some((c) => c.endpoint === e)).map((e) => ENDPOINT_LABEL[e]);
     return (
-        <ScrollCollapsible title={`Probe matrix (${result.cells.length} checks)`} className="text-sm">
-            <p className="mb-2 text-xs text-muted">Each cell: {probed.join(' · ')} status, in that order.</p>
-            <div className="max-w-full overflow-x-auto border border-edge rounded-xl">
-                <table className="min-w-max w-full text-sm">
-                    <thead>
-                        <tr className="border-b border-edge bg-surface/50">
-                            <th scope="col" className={TH}>Candidate</th>
-                            {regions.map((r) => <th key={r} scope="col" className={TH}>{r}</th>)}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-edge">
-                        {result.candidates.map((p) => <MatrixRow key={p} prefix={p} regions={regions} cells={result.cells} />)}
-                    </tbody>
-                </table>
-            </div>
-        </ScrollCollapsible>
+        <>
+            <MatchList matches={result.matches} />
+            <ScrollCollapsible title={`Probe matrix (${result.cells.length} checks)`} className="text-sm">
+                <p className="mb-2 text-xs text-muted">Each cell: {probed.join(' · ')} status, in that order.</p>
+                <MatrixTable result={result} regions={regions} />
+            </ScrollCollapsible>
+        </>
     );
 }

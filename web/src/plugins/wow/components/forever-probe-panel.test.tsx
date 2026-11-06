@@ -30,7 +30,7 @@ let runs = 0;
 let puts: unknown[] = [];
 
 beforeEach(() => {
-    state = { result: null, extraCandidates: [], characterPath: null };
+    state = { result: null, extraCandidates: [], characterPath: null, guildPath: null };
     runs = 0;
     puts = [];
     server.use(
@@ -97,6 +97,58 @@ describe('ForeverProbePanel (ROK-1716)', () => {
         await user.type(await screen.findByRole('textbox', { name: /extra candidates/i }), 'forever2, wowfe');
         await user.type(screen.getByRole('textbox', { name: /character path/i }), 'nightslayer/thrall');
         await user.click(screen.getByRole('button', { name: /save probe settings/i }));
-        await waitFor(() => expect(puts).toEqual([{ extraCandidates: ['forever2', 'wowfe'], characterPath: 'nightslayer/thrall' }]));
+        await waitFor(() => expect(puts).toEqual([{ extraCandidates: ['forever2', 'wowfe'], characterPath: 'nightslayer/thrall', guildPath: null }]));
+    });
+
+});
+
+describe('ForeverProbePanel — Forever API paths + ruleset signal (ROK-2102)', () => {
+    it('accepts a realmless Forever character slug and sends it (ROK-2102)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverProbePanel />);
+        await user.type(await screen.findByRole('textbox', { name: /character path/i }), 'thrall-stormborn');
+        await user.click(screen.getByRole('button', { name: /save probe settings/i }));
+        await waitFor(() => expect(puts).toEqual([{ extraCandidates: [], characterPath: 'thrall-stormborn', guildPath: null }]));
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('sends the guild path alongside the character path (ROK-2102)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverProbePanel />);
+        await user.type(await screen.findByRole('textbox', { name: /guild path/i }), 'the-vanguard');
+        await user.click(screen.getByRole('button', { name: /save probe settings/i }));
+        await waitFor(() => expect(puts).toEqual([{ extraCandidates: [], characterPath: null, guildPath: 'the-vanguard' }]));
+    });
+
+    it('blocks an invalid guild path with an inline error and sends nothing (ROK-2102)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverProbePanel />);
+        const input = await screen.findByRole('textbox', { name: /guild path/i });
+        await user.type(input, 'a/b/c');
+        await user.click(screen.getByRole('button', { name: /save probe settings/i }));
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(puts).toEqual([]);
+    });
+
+    it('renders a ruleset-signal match as "ruleset index" and a Skyborne match by race name (ROK-2102)', async () => {
+        state = {
+            ...state,
+            result: makeResult({
+                cells: [
+                    { prefix: 'classicforever', region: 'us', endpoint: 'ruleset', status: 200 },
+                    { prefix: 'classicforever', region: 'us', endpoint: 'profile-equipment', status: 200 },
+                    { prefix: 'classicforever', region: 'us', endpoint: 'guild-roster', status: 404 },
+                ],
+                matches: [
+                    { prefix: 'classicforever', region: 'us', raceName: null, signal: 'ruleset' },
+                    { prefix: 'classic', region: 'eu', raceName: 'Skyborne', signal: 'skyborne' },
+                ],
+            }),
+        };
+        renderWithProviders(<ForeverProbePanel />);
+        expect(await screen.findByText(/classicforever\/us: ruleset index/i)).toBeInTheDocument();
+        expect(screen.getByText(/classic\/eu: skyborne/i)).toBeInTheDocument();
+        expect(screen.getByText(/each cell: ruleset · equip · guild status/i)).toBeInTheDocument();
     });
 });
