@@ -245,9 +245,9 @@ export function buildAbsenceDateSet(
 
 /**
  * The window signed-up events are fetched, keyed and blocked from. With no
- * `week` sent the caller hands over the unshifted Sunday 00:00Z, so shift it
- * to the viewer's local Sunday exactly like the calendar busy hours do
- * (`calendarBusyWeekStart`). Slot dates, overrides and absences keep the
+ * `week` sent the caller hands over the server's Sunday, so start at the
+ * viewer's local Sunday and run 7 days exactly like the calendar busy hours
+ * do (`calendarBusyWeekStart`). Slot dates, overrides and absences keep the
  * unshifted `weekStart`.
  */
 export function eventWeekWindow(
@@ -256,9 +256,9 @@ export function eventWeekWindow(
   tzOffset: number,
   weekSent: boolean,
 ): [Date, Date] {
+  if (weekSent) return [weekStart, weekEnd];
   const start = calendarBusyWeekStart(weekStart, tzOffset, weekSent);
-  const shiftMs = start.getTime() - weekStart.getTime();
-  return [start, new Date(weekEnd.getTime() + shiftMs)];
+  return [start, new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)];
 }
 
 /** Assemble the full composite view result from all fetched data. */

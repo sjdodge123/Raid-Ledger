@@ -183,4 +183,14 @@ describe('eventWeekWindow', () => {
       weekEnd,
     ]);
   });
+  it('New York server (no week): starts at Sunday 00:00Z + offset, runs 7 days', () => {
+    // NY local midnight Sun 1 Nov (EDT) and Sun 8 Nov (EST), as
+    // `resolveWeekStart` + `setDate(+7)` produce them on that server.
+    const nyStart = new Date('2026-11-01T04:00:00.000Z');
+    const nyEnd = new Date('2026-11-08T05:00:00.000Z');
+    expect(eventWeekWindow(nyStart, nyEnd, 300, false)).toEqual([
+      new Date('2026-11-01T05:00:00.000Z'),
+      new Date('2026-11-08T05:00:00.000Z'),
+    ]);
+  });
 });
