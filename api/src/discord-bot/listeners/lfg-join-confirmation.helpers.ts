@@ -31,7 +31,12 @@ import { lfgViewGroupComponents } from '../embeds/lfg-view-group-button.helpers'
  */
 export const LFG_GAME_GONE_REPLY = 'That game is no longer available.';
 
-/** True when `createIntent` refused because the game is gone (moderated). */
+/**
+ * True when `createIntent` refused because the game is gone (moderated or
+ * deleted). Its only 404 today is the game lookup (`requireVisibleGame`); if it
+ * ever throws another `NotFoundException`, narrow this check first or that
+ * error will be reworded as "game gone".
+ */
 export function isGameGone(error: unknown): boolean {
   return error instanceof NotFoundException;
 }
