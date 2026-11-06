@@ -20,6 +20,13 @@ describe('raceDisplayName (ROK-1742)', () => {
     expect(raceDisplayName('Pandaren')).toBe('Pandaren');
   });
 
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'passes the Object.prototype member name "%s" through as an unknown token',
+    (token) => {
+      expect(raceDisplayName(token)).toBe(token);
+    },
+  );
+
   it.each(['Night Elf', 'Undead', 'Blood Elf', 'Human'])(
     'is idempotent on the display name "%s"',
     (display) => {

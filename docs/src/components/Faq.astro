@@ -1,0 +1,20 @@
+---
+// FAQ (ruling Q13: the hosted-version answer stays "Not today").
+const FAQ = [
+  ['Do my members need to install anything?', 'No. They use Discord as they do today and sign in to the web app with their Discord account when they want the calendar, hubs or their profile. The game add-ons (the LedgerLink addon, the ValheimLink mod, the Companion app) are optional.'],
+  ['Is it only for raiding guilds?', 'No. Raids are where it started, but events, polls, lineups and hubs work for any game: survival servers, co-op campaigns, competitive teams or a group that meets every Friday.'],
+  ['Is there a hosted version?', 'Not today. You run it yourself, so your member list, schedules and history stay on hardware you control. It is built to be easy to run on a NAS or a home server.'],
+  ['What does it cost?', 'Nothing. Raid Ledger is MIT-licensed open source. You pay only for the machine you run it on and, if you want one, a domain name.'],
+  ['Can one install run several games and groups?', 'Yes. One Discord server can have many hubs: a guild, a game server and a campaign side by side, each with its own members, events and channels.'],
+  ['What happens to our data if we stop?', 'It is your database. Nightly backups sit in your own volume, and you can keep, move or delete them whenever you like.'],
+  ['Can I try it before inviting my server?', 'Yes. Install the demo data from the admin panel to explore a fully populated community, then clear it when you are ready to go live.'],
+] as const;
+---
+<section class="section section-flush" id="faq">
+  <div class="wrap">
+    <div class="section-head center reveal"><span class="eyebrow">FAQ</span><h2>Questions server owners ask</h2></div>
+    <div class="faq">
+      {FAQ.map(([q, a]) => <details><summary>{q}</summary><p>{a}</p></details>)}
+    </div>
+  </div>
+</section>
