@@ -58,4 +58,11 @@ describe('BossLootPanel — bossless instances (ROK-1719)', () => {
         expect(await screen.findByText('Edwin VanCleef')).toBeInTheDocument();
         expect(screen.getByText('Boss & Loot')).toBeInTheDocument();
     });
+
+    it('names the boss-row Wowhead link for assistive tech (TDB 2552)', async () => {
+        serveBosses({ [DEADMINES.id]: [boss(DEADMINES.id)] });
+        renderPanel([DEADMINES]);
+        await screen.findByText('Edwin VanCleef');
+        expect(screen.getByRole('link', { name: 'View on Wowhead' })).toHaveAttribute('target', '_blank');
+    });
 });

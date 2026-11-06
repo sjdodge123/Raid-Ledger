@@ -1,6 +1,5 @@
 import { useParams } from 'react-router-dom';
 import { PluginSlot } from '../../plugins';
-import { usePluginStore } from '../../stores/plugin-store';
 
 function NoConfigFallback() {
     return (
@@ -23,7 +22,6 @@ export function PluginIntegrationPanel() {
         pluginSlug: string;
         integrationKey: string;
     }>();
-    const isActive = usePluginStore((s) => (pluginSlug ? s.activeSlugs.has(pluginSlug) : false));
 
     if (!pluginSlug || !integrationKey) {
         return (
@@ -32,10 +30,6 @@ export function PluginIntegrationPanel() {
             </div>
         );
     }
-
-    // Other active plugins also fill this slot and render null for a foreign
-    // slug, so PluginSlot's own fallback never fires for an inactive plugin.
-    if (!isActive) return <NoConfigFallback />;
 
     return (
         <div className="space-y-6">
