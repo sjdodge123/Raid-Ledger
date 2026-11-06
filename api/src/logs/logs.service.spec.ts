@@ -108,6 +108,80 @@ function describeLogsService() {
   }
   describe('scrubContent', () => describeScrubContent());
 
+  /** Backlog 2938: secret shapes the key=value patterns used to miss. */
+  function describeScrubContentShapes() {
+    it.each([
+      [
+        'a JSON-quoted password',
+        '{"level":30,"password":"hunter2","user":"bob"}',
+        '{"level":30,"password":"[REDACTED]","user":"bob"}',
+      ],
+      ['a JSON-quoted token', '{"token": "abc.def"}', '{"token": "[REDACTED]"}'],
+      [
+        'a JSON-quoted secret with an escaped quote',
+        '{"clientSecret":"s3c\\"ret","ok":true}',
+        '{"clientSecret":"[REDACTED]","ok":true}',
+      ],
+      [
+        'a JSON-quoted apiKey',
+        '{"apiKey":"AIzaSy123"}',
+        '{"apiKey":"[REDACTED]"}',
+      ],
+      [
+        'a JSON-quoted cookie header',
+        '{"cookie":"rl_session=abc123"}',
+        '{"cookie":"[REDACTED]"}',
+      ],
+      [
+        'a bare JWT',
+        'issued eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig-_Abc for user 1',
+        'issued [REDACTED] for user 1',
+      ],
+      [
+        'a ?key= query parameter',
+        'GET /v1/maps?key=AIzaSyABC&lang=en HTTP/1.1',
+        'GET /v1/maps?key=[REDACTED]&lang=en HTTP/1.1',
+      ],
+      [
+        'a &key= query parameter',
+        'GET /v1/maps?q=x&key=AIzaSyABC HTTP/1.1',
+        'GET /v1/maps?q=x&key=[REDACTED] HTTP/1.1',
+      ],
+      [
+        'a Cookie header',
+        'Cookie: rl_session=abc123; theme=dark',
+        'Cookie: [REDACTED]',
+      ],
+      [
+        'a Set-Cookie header',
+        'Set-Cookie: refresh=xyz; HttpOnly; Path=/',
+        'Set-Cookie: [REDACTED]',
+      ],
+      [
+        'an OAuth ?code= parameter',
+        'GET /auth/discord/callback?code=AbC123&state=s1 HTTP/1.1',
+        'GET /auth/discord/callback?code=[REDACTED]&state=s1 HTTP/1.1',
+      ],
+      [
+        'an OAuth &code= parameter',
+        'GET /auth/steam/callback?state=s1&code=AbC123',
+        'GET /auth/steam/callback?state=s1&code=[REDACTED]',
+      ],
+    ])('should redact %s', (_label, input, expected) => {
+      expect(service.scrubContent(input)).toBe(expected);
+    });
+
+    it.each([
+      ['prose mentioning code', 'the code is ready for review'],
+      ['an eyJ fragment without dots', 'token prefix eyJustAWord seen'],
+      ['look-alike query keys', 'GET /search?keyboard=us&monkey=1&barcode=9'],
+      ['prose mentioning a cookie', 'missing cookie: please sign in again'],
+    ])('should leave %s unchanged', (_label, input) => {
+      expect(service.scrubContent(input)).toBe(input);
+    });
+  }
+  describe('scrubContent shapes', () => describeScrubContentShapes());
+
   function describeListLogFiles() {
     it('should list .log files sorted newest first', () => {
       const older = new Date('2026-01-01T00:00:00Z');
