@@ -3984,6 +3984,14 @@ same day (#1278, #1279, #1280).
 - **still open, re-verified** 2026-10-18 `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:92-115` (`buildBossKillsQuery`) — no reporter / active-member filter. Left for a day session: notifications/** needs a smoke run + an integration case.
 - **not reproduced again** line 3961 (`scheduling-open-lockin.integration.spec.ts:304`) — 50/50 green on the fleet (task 168e68dff85c); second 0/50. Per the flake rule no fix ships until it reproduces.
 
+### 2026-11-06 — chore/tech-debt-2026-11-06i (overnight tech-debt batch I, verified on c143353e9)
+
+- **med** (resolved) line 2623 (game-time composite view, no `week` sent: committed events keyed from the unshifted Sunday) — committed slots, event blocks and the event fetch now share one shifted window (`eventWeekWindow`), and `calendarBusyWeekStart` snaps to Sunday 00:00Z before applying the viewer offset, so a non-UTC server no longer double-shifts (prod/CI run UTC). Remaining, existing behaviour: with no `week`, the server's week can differ from the viewer's for a few hours around Sunday (a UTC-5 viewer at Sun 02:00Z gets the next week).
+- **low** (resolved) line 2890 (availability PATCH with one bound skipped the start<end / 24h checks) — `buildUpdateData` validates the merged range with the create schema's messages.
+- **low** (resolved, taste-profile part only) line 2912 (`?limit=abc` → NaN → SQL LIMIT 500) — `parseSimilarLimit` falls back to 10. The notifications/contract parts of that entry stay open.
+- **med** (resolved) line 2527 (Forever reward ids rendered as `Item #…`) — `mergeItemMetaFallback` batch-reads `wow_item_meta` for ids the JSON lookup and boss loot don't cover.
+- **resolved on main, noted by the batch I scout** (no code change): lines 2808, 2816, 2818, 2862, 2590, 3592, 1465, 2706, 2724 already carry fix notes at 3903–3951; 2824 partly fixed, the rest needs a UNIQUE index (migration).
+- **(resolved)** batch H, PR #1961 (f6b7204d7): line 3983 steam-link unlinked-author ITAD lookup and line 3984 / 2860 boss-kills reporter filter.
 ### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
 
 - **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
