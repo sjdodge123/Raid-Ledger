@@ -4014,3 +4014,7 @@ same day (#1278, #1279, #1280).
 - **(resolved)** line 3848 `api/src/notifications/weekly-digest-coplay.queries.ts` — the event path is half-open (`upper(e.duration) < end`), so an event ending on the week boundary counts in one digest only. Spec: `weekly-digest-coplay.integration.spec.ts` › event window boundary (mutant-checked).
 - **resolved on main, noted by the batch M scout** (no code change): line 1853 steam nudge recipients (`lineup-steam-nudge.service.ts:53-54` adds `ACTIVE_MEMBER_SQL_AND`, ROK-1684); line 3508 `startGracePeriod` no-op (`ad-hoc-event-end.helpers.ts:69` returns early; already noted at 3648).
 
+
+### 2026-11-06 — chore/tech-debt-2026-11-06l (overnight batch L)
+
+- **(resolved)** batch L: line 4007 — the LFG +1/Join listener and the composer catch `NotFoundException` and reply "That game is no longer available." (`LFG_GAME_GONE_REPLY` / `isGameGone` in `lfg-join-confirmation.helpers.ts`); line 4008 — `/lfg` game autocomplete (`autocompleteGameIds`) applies `VISIBILITY_FILTER`. `isGameGone` treats any 404 from `createIntent` as the game being gone (its only 404 today); comment at the helper.
