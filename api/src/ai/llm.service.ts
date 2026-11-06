@@ -40,6 +40,7 @@ export class LlmService {
     this.circuitBreaker = new CircuitBreaker(
       AI_DEFAULTS.circuitBreakerThreshold,
       AI_DEFAULTS.circuitBreakerCooldownMs,
+      AI_DEFAULTS.maxTimeoutMs,
     );
     this.concurrencyLimiter = new ConcurrencyLimiter(AI_DEFAULTS.maxConcurrent);
     this.rateLimiter = new LlmRateLimiter();

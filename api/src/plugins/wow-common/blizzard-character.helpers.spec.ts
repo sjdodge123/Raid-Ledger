@@ -35,4 +35,17 @@ describe('buildCharacterParams', () => {
     const result = buildCharacterParams('Char', 'Faerlina', 'us', 'classicann');
     expect(result.namespace).toBe('profile-classicann-us');
   });
+
+  it('percent-encodes path-steering characters in name and realm (2904)', () => {
+    const result = buildCharacterParams('a/../b?x#y', 'Area/52', 'us', null);
+    expect(result.charName).toBe('a%2F..%2Fb%3Fx%23y');
+    expect(result.realmSlug).toBe('area%2F52');
+    expect(result.realmSlug).not.toContain('/');
+  });
+
+  it('leaves a plain ASCII name and realm unchanged', () => {
+    const result = buildCharacterParams('Thrall', 'Area 52', 'us', null);
+    expect(result.charName).toBe('thrall');
+    expect(result.realmSlug).toBe('area-52');
+  });
 });
