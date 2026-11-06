@@ -13,6 +13,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
+import { escapeLikePattern } from '../common/search.util';
 import {
   OWNER_WEIGHT,
   SALE_BONUS,
@@ -134,8 +135,11 @@ export async function queryCoopDataAvailable(db: Db): Promise<boolean> {
   return rows[0]?.available === true;
 }
 
-/** Build WHERE conditions from filters. */
-function buildWhereConditions(
+/**
+ * Build WHERE conditions from filters. Exported for unit tests of the bound
+ * parameters (the search term is LIKE-escaped).
+ */
+export function buildWhereConditions(
   filters: CommonGroundFilters,
   excludeGameIds: number[],
 ): ReturnType<typeof sql>[] {
@@ -190,7 +194,9 @@ function buildWhereConditions(
   }
 
   if (filters.search) {
-    conditions.push(sql`g.name ILIKE ${'%' + filters.search + '%'}`);
+    conditions.push(
+      sql`g.name ILIKE ${'%' + escapeLikePattern(filters.search) + '%'}`,
+    );
   }
 
   return conditions;

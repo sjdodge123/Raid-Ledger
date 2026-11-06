@@ -308,6 +308,23 @@ describe('memorySwr — maxEntries', () => {
     expect([...cache.keys()]).toEqual(['a', 'c']);
   });
 
+  it('treats a fresh cache hit as recently used (LRU, not FIFO)', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string>>();
+    await fetchKey(cache, 'a', 2);
+    await fetchKey(cache, 'b', 2);
+    await fetchKey(cache, 'a', 2); // fresh hit — no fetch, but now newest
+    await fetchKey(cache, 'c', 2);
+    expect([...cache.keys()]).toEqual(['a', 'c']);
+  });
+
+  it('leaves recency alone on a hit when maxEntries is omitted', async () => {
+    const cache = new Map<string, MemoryCacheEntry<string>>();
+    await fetchKey(cache, 'a');
+    await fetchKey(cache, 'b');
+    await fetchKey(cache, 'a');
+    expect([...cache.keys()]).toEqual(['a', 'b']);
+  });
+
   it('keeps every entry when maxEntries is omitted', async () => {
     const cache = new Map<string, MemoryCacheEntry<string>>();
     const keys = ['a', 'b', 'c', 'd', 'e'];
