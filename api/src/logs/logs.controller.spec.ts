@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   PayloadTooLargeException,
+  Logger,
 } from '@nestjs/common';
 import { LogsController } from './logs.controller';
 import { LogsService } from './logs.service';
@@ -408,6 +409,35 @@ function describeLogsController() {
       expect(() =>
         controller.downloadFile('../etc/passwd', res, undefined),
       ).toThrow('Invalid filename');
+    });
+
+    it('validates the filename before logging, so a CR/LF name is never logged raw', () => {
+      const forged = 'a\nFAKE LOG LINE';
+      mockLogsService.getValidatedPath.mockImplementation(() => {
+        throw new BadRequestException('Invalid filename');
+      });
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+      const res = createMockResponse();
+      expect(() => controller.downloadFile(forged, res, undefined)).toThrow(
+        'Invalid filename',
+      );
+      const logged = log.mock.calls.map((call) => String(call[0]));
+      expect(logged.filter((line) => line.includes(forged))).toEqual([]);
+      log.mockRestore();
+    });
+
+    it('logs a validated filename JSON-encoded', () => {
+      mockLogsService.getValidatedPath.mockReturnValue('/data/logs/api.log');
+      mockLogsService.createScrubbedStream.mockReturnValue(createMockStream());
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+      controller.downloadFile('api.log', createMockResponse(), undefined);
+
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining('Log file download: "api.log"'),
+      );
+      log.mockRestore();
     });
 
     it('handles missing user info gracefully in audit log', () => {

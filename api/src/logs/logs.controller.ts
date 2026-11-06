@@ -82,11 +82,13 @@ export class LogsController {
     @Res() res: Response,
     @Request() req?: AuthenticatedRequest,
   ) {
+    // Validate first so an invalid name throws before any log line, then
+    // JSON-encode it so CR/LF cannot forge log entries.
+    const filepath = this.logsService.getValidatedPath(filename);
     this.logger.log(
-      `Log file download: ${filename} by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
+      `Log file download: ${JSON.stringify(filename)} by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
     );
 
-    const filepath = this.logsService.getValidatedPath(filename);
     const stream = this.logsService.createScrubbedStream(filepath);
 
     // A `.gz` generation is streamed decompressed, so drop the suffix.
