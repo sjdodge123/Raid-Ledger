@@ -8,6 +8,16 @@ import type {
   ForeverProbeEndpoint,
   ForeverProbeMatchDto,
 } from '@raid-ledger/contract';
+import {
+  buildFollowUpUrls,
+  buildProfileDetailUrls,
+  buildRulesetUrl,
+  dedupeTargets,
+  isKeysOnlyEndpoint,
+  profileAnswered,
+  summariseKeys,
+  type ProbeTarget,
+} from './forever-namespace-probe.forever';
 
 /** Candidate prefixes. `classic` is a known-200 control, never a bare match (D3). */
 export const DEFAULT_FOREVER_CANDIDATES: readonly string[] = [
@@ -80,6 +90,8 @@ export interface RunProbeInput {
   candidates: readonly string[];
   regions: readonly string[];
   characterPath: string | null;
+  /** Realmless `<slug>` or Classic `<realm>/<slug>` guild roster (ROK-2102). */
+  guildPath: string | null;
   timeoutMs?: number;
 }
 
@@ -100,7 +112,7 @@ export function buildCandidateList(extras: readonly string[]): string[] {
   return out;
 }
 
-/** The three Game Data URLs probed for one (prefix, region) (D2). */
+/** The four Game Data URLs probed for one (prefix, region) (D2, ROK-2102). */
 export function buildProbeUrls(prefix: string, region: string): ProbeUrl[] {
   const base = `https://${region}.api.blizzard.com/data/wow`;
   const q = (kind: string): string =>
@@ -115,16 +127,8 @@ export function buildProbeUrls(prefix: string, region: string): ProbeUrl[] {
       endpoint: 'playable-race',
       url: `${base}/playable-race/index${q('static')}`,
     },
+    buildRulesetUrl(prefix, region),
   ];
-}
-
-/** The optional profile URL for a raw `<realmOrRuleset>/<name>` path (D5). */
-function buildProfileUrl(path: string, prefix: string, region: string): string {
-  const safe = path
-    .split('/')
-    .map((s) => encodeURIComponent(s.trim().toLowerCase()))
-    .join('/');
-  return `https://${region}.api.blizzard.com/profile/wow/character/${safe}?namespace=profile-${prefix}-${region}&locale=en_US`;
 }
 
 /** GET one URL; never throws. Body is parsed only for a 200. */
@@ -240,46 +244,67 @@ function toCell(task: ProbeTask, out: ProbeOutcome): ForeverProbeCellDto {
   return cell;
 }
 
-/** Fold one outcome into the run: cell, shape (D6) and Skyborne match (D4). */
+/** Fold one outcome into the run: cell, shape (D6) and match (D4, ROK-2102). */
 function collect(run: ProbeRun, task: ProbeTask, out: ProbeOutcome): void {
   run.cells.push(toCell(task, out));
   if (out.status !== 200) return;
-  if (task.endpoint === 'playable-race') {
+  const { prefix, region, endpoint } = task;
+  const key = `${prefix}:${region}:${endpoint}`;
+  if (endpoint === 'playable-race') {
     const raceName = hasSkyborne(out.body);
-    if (raceName) {
-      run.matches.push({ prefix: task.prefix, region: task.region, raceName });
+    if (raceName)
+      run.matches.push({ prefix, region, raceName, signal: 'skyborne' });
+  } else if (isKeysOnlyEndpoint(endpoint)) {
+    run.shapes[key] = summariseKeys(out.body);
+  } else {
+    const shape = summariseShape(out.body);
+    run.shapes[key] = shape;
+    if (endpoint === 'ruleset' && shape.entryCount > 0) {
+      run.matches.push({ prefix, region, raceName: null, signal: 'ruleset' });
     }
-  } else if (task.endpoint !== 'profile') {
-    const key = `${task.prefix}:${task.region}:${task.endpoint}`;
-    run.shapes[key] = summariseShape(out.body);
   }
 }
 
-/** Probe every (candidate, region, endpoint), then profiles for matches (D5). */
+/** Tag each URL with its target so it becomes a task. */
+function toTasks(target: ProbeTarget, urls: ProbeUrl[]): ProbeTask[] {
+  return urls.map((u) => ({ ...u, ...target }));
+}
+
+/**
+ * Probe every (candidate, region, endpoint); then, per deduped match, the
+ * profile + guild roster; then profile sub-resources where the profile is 200.
+ */
 export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
-  const { fetchFn, token, characterPath, timeoutMs } = input;
-  const exec = async (t: ProbeTask): Promise<[ProbeTask, ProbeOutcome]> => [
-    t,
-    await probeOne(fetchFn, token, t.url, timeoutMs),
-  ];
-  const tasks: ProbeTask[] = input.candidates.flatMap((prefix) =>
-    input.regions.flatMap((region) =>
-      buildProbeUrls(prefix, region).map((u) => ({ ...u, prefix, region })),
+  const { fetchFn, token, characterPath, guildPath, timeoutMs } = input;
+  const run: ProbeRun = { cells: [], matches: [], shapes: {} };
+  const phase = async (tasks: ProbeTask[]): Promise<void> => {
+    const exec = async (t: ProbeTask): Promise<[ProbeTask, ProbeOutcome]> => [
+      t,
+      await probeOne(fetchFn, token, t.url, timeoutMs),
+    ];
+    for (const [t, out] of await mapPool(tasks, PROBE_CONCURRENCY, exec)) {
+      collect(run, t, out);
+    }
+  };
+  await phase(
+    input.candidates.flatMap((prefix) =>
+      input.regions.flatMap((region) =>
+        toTasks({ prefix, region }, buildProbeUrls(prefix, region)),
+      ),
     ),
   );
-  const run: ProbeRun = { cells: [], matches: [], shapes: {} };
-  for (const [t, out] of await mapPool(tasks, PROBE_CONCURRENCY, exec)) {
-    collect(run, t, out);
-  }
+  const targets = dedupeTargets(run.matches);
+  await phase(
+    targets.flatMap((t) =>
+      toTasks(t, buildFollowUpUrls(t, characterPath, guildPath)),
+    ),
+  );
   if (!characterPath) return run;
-  const profiles: ProbeTask[] = run.matches.map(({ prefix, region }) => ({
-    prefix,
-    region,
-    endpoint: 'profile',
-    url: buildProfileUrl(characterPath, prefix, region),
-  }));
-  for (const [t, out] of await mapPool(profiles, PROBE_CONCURRENCY, exec)) {
-    collect(run, t, out);
-  }
+  const answered = targets.filter((t) => profileAnswered(run.cells, t));
+  await phase(
+    answered.flatMap((t) =>
+      toTasks(t, buildProfileDetailUrls(characterPath, t.prefix, t.region)),
+    ),
+  );
   return run;
 }

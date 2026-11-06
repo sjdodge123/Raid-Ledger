@@ -38,12 +38,17 @@ export const WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY =
 export const WOW_FOREVER_PROBE_CHARACTER_KEY =
   'wow_forever_probe_character' as SettingKey;
 
-/** The probe's four setting keys, for the plugin manifest. */
+/** Realmless `<slug>` or `<realm>/<slug>` guild for the roster check (ROK-2102). */
+export const WOW_FOREVER_PROBE_GUILD_KEY =
+  'wow_forever_probe_guild' as SettingKey;
+
+/** The probe's five setting keys, for the plugin manifest. */
 export const WOW_FOREVER_PROBE_SETTING_KEYS: string[] = [
   WOW_FOREVER_PROBE_LAST_RESULT_KEY,
   WOW_FOREVER_PROBE_FOUND_KEY,
   WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY,
   WOW_FOREVER_PROBE_CHARACTER_KEY,
+  WOW_FOREVER_PROBE_GUILD_KEY,
 ];
 
 /**
