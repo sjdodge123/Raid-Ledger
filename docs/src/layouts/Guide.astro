@@ -1,0 +1,31 @@
+---
+// Long-form guide pages (src/pages/guides/*.md). Markdown pages pass their
+// frontmatter here; the body arrives through <slot />. Callouts (:::note) are
+// turned into <aside class="callout"> by src/plugins/remark-callouts.mjs.
+import Base from './Base.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/guide.css';
+
+interface Props {
+  frontmatter: { title: string; description?: string };
+}
+const { frontmatter } = Astro.props;
+const path = Astro.url.pathname;
+---
+<Base title={`${frontmatter.title} · Raid Ledger`} description={frontmatter.description} path={path}>
+  <Nav />
+  <main id="top" class="guide-main">
+    <div class="wrap guide-wrap">
+      <header class="guide-head">
+        <p class="eyebrow">Guide</p>
+        <h1>{frontmatter.title}</h1>
+        {frontmatter.description && <p class="lede">{frontmatter.description}</p>}
+      </header>
+      <article class="prose">
+        <slot />
+      </article>
+    </div>
+  </main>
+  <Footer />
+</Base>

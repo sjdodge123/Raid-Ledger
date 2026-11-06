@@ -1,4 +1,7 @@
 import type { Logger } from '@nestjs/common';
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { SETTING_KEYS } from '../../drizzle/schema';
 import { buildSnapshotFixture } from '../__fixtures__/snapshot-fixture';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 import { buildChurnSection } from './churn-section';
@@ -72,5 +75,47 @@ describe('runRefreshSnapshot — drift-history read failure', () => {
       'community-insights key-insights drift-history failed [job job-42]',
       expect.stringContaining('history read timed out'),
     );
+  });
+});
+
+const dialect = new PgDialect();
+
+/** Run a refresh with the retention setting stored as `raw`; return the prune's bound params. */
+async function pruneParamsFor(raw: string): Promise<unknown[]> {
+  const db = createDrizzleMock();
+  const { deps } = makeDeps();
+  jest
+    .mocked(deps.settings.get)
+    .mockImplementation((key: string) =>
+      Promise.resolve(
+        key === SETTING_KEYS.COMMUNITY_INSIGHTS_SNAPSHOT_RETENTION_DAYS
+          ? raw
+          : null,
+      ),
+    );
+  await runRefreshSnapshot(db as never, deps);
+  expect(db.delete).toHaveBeenCalledTimes(1);
+  // pruneOlderThan is the last statement the refresh issues.
+  const condition: unknown = db.where.mock.calls.at(-1)?.[0];
+  if (!(condition instanceof SQL)) throw new Error('prune issued no where');
+  return dialect.sqlToQuery(condition).params;
+}
+
+describe('runRefreshSnapshot — snapshot retention setting', () => {
+  beforeEach(() => stubSections());
+
+  it.each(['0', '-5', 'abc'])(
+    'a retention of %s falls back to the 90-day default instead of pruning every snapshot',
+    async (raw) => {
+      await expect(pruneParamsFor(raw)).resolves.toEqual([90]);
+    },
+  );
+
+  it('truncates a fractional retention (7.9 → 7 days)', async () => {
+    await expect(pruneParamsFor('7.9')).resolves.toEqual([7]);
+  });
+
+  it('keeps a valid retention as-is', async () => {
+    await expect(pruneParamsFor('30')).resolves.toEqual([30]);
   });
 });

@@ -1,0 +1,38 @@
+/* Raid Ledger marketing site — long-form guide pages (layouts/Guide.astro). Tokens only (site.css). */
+.guide-main { background: var(--hero-grad) no-repeat; background-size: 100% 40rem; }
+.guide-wrap { max-width: 800px; padding-top: 48px; padding-bottom: 80px; }
+@media (min-width: 1024px) { .guide-wrap { padding-top: 72px; padding-bottom: 112px; } }
+.guide-head { display: grid; gap: 14px; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--edge-subtle); }
+.guide-head h1 { font-size: clamp(32px, 5vw, 48px); font-weight: 800; letter-spacing: -0.03em; text-wrap: balance; }
+.guide-head .lede { font-size: 17px; }
+
+.prose { font-size: 16px; line-height: 1.7; color: var(--secondary); overflow-wrap: anywhere; }
+.prose > * + * { margin-top: 1em; }
+.prose h2 { font-size: clamp(22px, 3vw, 28px); font-weight: 800; margin-top: 2.2em; padding-top: .4em; }
+.prose h3 { font-size: 19px; font-weight: 700; margin-top: 1.8em; }
+.prose p, .prose li { margin: 0; }
+.prose li + li { margin-top: .5em; }
+.prose li > p + p, .prose li > * + * { margin-top: .75em; }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose strong { color: var(--fg); font-weight: 600; }
+.prose a { text-decoration: underline; text-underline-offset: 3px; }
+.prose code { font: 500 .88em/1.4 "JetBrains Mono", monospace; background: var(--panel); border: 1px solid var(--edge-subtle); border-radius: 6px; padding: .1em .4em; color: var(--fg); }
+.prose pre { background: var(--surface); border: 1px solid var(--edge); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+.prose pre code { background: none; border: 0; padding: 0; }
+/* Tables scroll sideways on a phone instead of widening the page. */
+.prose table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 14px; border: 1px solid var(--edge); border-radius: 10px; }
+.prose th, .prose td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--edge-subtle); min-width: 9rem; }
+.prose th { color: var(--fg); background: var(--panel); font-weight: 600; }
+.prose tr:last-child td { border-bottom: 0; }
+.prose hr { border: 0; border-top: 1px solid var(--edge-subtle); margin: 2em 0; }
+
+/* ---------- callouts (remark-callouts.mjs) ---------- */
+.callout { border: 1px solid var(--edge); border-left: 4px solid var(--indigo); background: var(--indigo-soft); border-radius: 10px; padding: 14px 16px; }
+.callout > * + * { margin-top: .5em; }
+.callout .callout-title { font: 700 12px/1 Inter, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--indigo); }
+.callout-tip { border-left-color: var(--accent); background: var(--accent-soft); }
+.callout-tip .callout-title { color: var(--accent-text); }
+.callout-caution { border-left-color: var(--warning); }
+.callout-caution .callout-title { color: var(--warning); }
+.callout-danger { border-left-color: var(--danger); }
+.callout-danger .callout-title { color: var(--danger); }

@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
+import { executePluginMutation, type PluginAction } from './plugins/plugin-action';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 import { PluginCard } from './plugins/PluginCard';
@@ -13,23 +14,12 @@ import { UninstallConfirmModal } from '../admin-settings/UninstallConfirmModal';
  * ROK-281 v2: Card-based layout showing full plugin details at a glance.
  * No collapsible sections — all info visible: author, capabilities, game slugs, integrations.
  */
-async function executePluginMutation(mutations: Record<string, { mutateAsync: (s: string) => Promise<void> }>, action: string, slug: string): Promise<void> {
-    const mutation = mutations[action];
-    if (!mutation) return;
-    try {
-        await mutation.mutateAsync(slug);
-        toast.success(`Plugin ${action}d`);
-    } catch (err) {
-        toast.error(err instanceof Error ? err.message : `Failed to ${action} plugin`);
-    }
-}
-
 export function PluginsPanel(): JSX.Element {
     const { plugins, install, uninstall, activate, deactivate } = usePluginAdmin();
     const [confirmPlugin, setConfirmPlugin] = useState<PluginInfoDto | null>(null);
     const isPending = install.isPending || uninstall.isPending || activate.isPending || deactivate.isPending;
 
-    const handleAction = (action: 'install' | 'activate' | 'deactivate', slug: string): void => {
+    const handleAction = (action: PluginAction, slug: string): void => {
         void executePluginMutation({ install, activate, deactivate }, action, slug);
     };
 
@@ -59,7 +49,7 @@ export function PluginsPanel(): JSX.Element {
 
 function PluginsPanelLayout({ plugins, isPending, handleAction, handleUninstallRequest, confirmPlugin, setConfirmPlugin, handleUninstallConfirm, uninstallPending }: {
     plugins: ReturnType<typeof usePluginAdmin>['plugins']; isPending: boolean;
-    handleAction: (action: 'install' | 'activate' | 'deactivate', slug: string) => void;
+    handleAction: (action: PluginAction, slug: string) => void;
     handleUninstallRequest: (slug: string) => void; confirmPlugin: PluginInfoDto | null;
     setConfirmPlugin: (p: PluginInfoDto | null) => void; handleUninstallConfirm: () => void; uninstallPending: boolean;
 }): JSX.Element {
