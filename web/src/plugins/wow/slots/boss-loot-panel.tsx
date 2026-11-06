@@ -188,7 +188,8 @@ function BossRowHeader({ boss, isExpanded, onToggle, wowheadVariant }: {
                 {boss.sodModified && <span className="boss-row__sod-badge">SoD</span>}
             </div>
             <a className="boss-row__wowhead-link" href={getWowheadNpcSearchUrl(boss.name, wowheadVariant)}
-                target="_blank" rel="noopener noreferrer" title="View on Wowhead">&#x2197;</a>
+                target="_blank" rel="noopener noreferrer" title="View on Wowhead"
+                aria-label="View on Wowhead">&#x2197;</a>
         </div>
     );
 }
