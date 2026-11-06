@@ -11,6 +11,7 @@ import {
   fetchOverrides,
   fetchAbsences,
   assembleCompositeView,
+  eventWeekWindow,
 } from './game-time-composite.helpers';
 import {
   gameTimeAgeDays,
@@ -57,18 +58,36 @@ function remapToSundayFirst(slots: TemplateSlot[]): TemplateSlot[] {
   return slots.map((s) => ({ ...s, dayOfWeek: (s.dayOfWeek + 1) % 7 }));
 }
 
+/** The rendered week plus the shifted window events are read from. */
+interface CompositeRange {
+  weekStart: Date;
+  weekEnd: Date;
+  eventWindow: [Date, Date];
+}
+
+/** One shifted window for the event fetch, committed slots and blocks. */
+function compositeRange(
+  weekStart: Date,
+  tzOffset: number,
+  weekSent: boolean,
+): CompositeRange {
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const eventWindow = eventWeekWindow(weekStart, weekEnd, tzOffset, weekSent);
+  return { weekStart, weekEnd, eventWindow };
+}
+
 /** Fetch all data sources for composite view in parallel (including template). */
 function fetchAllCompositeData(
   db: Db,
   getTemplate: TemplateReader,
   userId: number,
-  weekStart: Date,
-  weekEnd: Date,
+  { weekStart, weekEnd, eventWindow }: CompositeRange,
 ) {
   const [startDate, endDate] = weekDateRange(weekStart, weekEnd);
   return Promise.all([
     getTemplate(userId),
-    fetchWeekSignedUpEvents(db, userId, weekStart, weekEnd),
+    fetchWeekSignedUpEvents(db, userId, ...eventWindow),
     fetchOverrides(db, userId, startDate, endDate),
     fetchAbsences(db, userId, startDate, endDate),
     fetchGameTimeConfirmedAt(db, userId),
@@ -84,10 +103,9 @@ export async function buildCompositeViewResult(
   tzOffset: number,
   weekSent = true,
 ): Promise<CompositeViewResult> {
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
+  const range = compositeRange(weekStart, tzOffset, weekSent);
   const [template, signedUpEvents, overrideRows, absenceRows, confirmedAt] =
-    await fetchAllCompositeData(db, getTemplate, userId, weekStart, weekEnd);
+    await fetchAllCompositeData(db, getTemplate, userId, range);
   const remapped = remapToSundayFirst(template.slots);
   const signupsMap = await fetchSignupsPreview(db, [
     ...new Set(signedUpEvents.map((e) => e.eventId)),
@@ -99,9 +117,9 @@ export async function buildCompositeViewResult(
     absenceRows,
     signupsMap,
     weekStart,
-    weekEnd,
+    range.weekEnd,
     tzOffset,
-    weekSent,
+    range.eventWindow,
   );
   return { ...view, ...freshnessFields(confirmedAt) };
 }

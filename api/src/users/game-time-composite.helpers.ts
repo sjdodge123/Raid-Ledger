@@ -244,11 +244,13 @@ export function buildAbsenceDateSet(
 }
 
 /**
- * The window committed slots are keyed from. With no `week` sent the caller
- * hands over the unshifted Sunday 00:00Z, so shift it to the viewer's local
- * Sunday exactly like the calendar busy hours do (`calendarBusyWeekStart`).
+ * The window signed-up events are fetched, keyed and blocked from. With no
+ * `week` sent the caller hands over the unshifted Sunday 00:00Z, so shift it
+ * to the viewer's local Sunday exactly like the calendar busy hours do
+ * (`calendarBusyWeekStart`). Slot dates, overrides and absences keep the
+ * unshifted `weekStart`.
  */
-function committedWeekWindow(
+export function eventWeekWindow(
   weekStart: Date,
   weekEnd: Date,
   tzOffset: number,
@@ -269,12 +271,12 @@ export function assembleCompositeView(
   weekStart: Date,
   weekEnd: Date,
   tzOffset: number,
-  weekSent = true,
+  eventWindow: [Date, Date] = [weekStart, weekEnd],
 ): CompositeViewResult {
   const templateSet = new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`));
   const committedSet = buildCommittedSet(
     signedUpEvents,
-    ...committedWeekWindow(weekStart, weekEnd, tzOffset, weekSent),
+    ...eventWindow,
     tzOffset,
   );
   const absenceDates = buildAbsenceDateSet(
@@ -294,8 +296,7 @@ export function assembleCompositeView(
   );
   const events = buildEventBlocks(
     signedUpEvents,
-    weekStart,
-    weekEnd,
+    ...eventWindow,
     tzOffset,
     signupsMap,
   );
