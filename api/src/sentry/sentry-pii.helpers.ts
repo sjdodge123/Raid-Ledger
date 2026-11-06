@@ -24,11 +24,14 @@ const PII_KEY =
 // a glued second address (`a@b.io.c@d.io`) unscrubbed.
 const EMAIL = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,253}\.[A-Z]{2,}/gi;
 // Percent-encoded (`alice%40x.io`, double-encoded `%2540`, `+` as `%2B`) in
-// URLs and query strings. The local part starts at a token boundary or right
-// after a whole `%XX` escape, so `%3Dalice%40x.io` keeps its `%3D` and a
-// form-encoded space (`find+alice`) is not swallowed.
+// URLs and query strings. The local part never starts inside a `%XX` escape,
+// so `%3Dalice%40x.io` keeps its `%3D`; a form-encoded space (`find+alice`)
+// is not swallowed. Runs are bounded like EMAIL's (64-char segments, 32
+// `%2B` tags, 3 levels of `%25`, 253-char domain): unbounded, `a%2B` x 40k
+// took ~6 s. No start-boundary lookbehind, so a glued second address
+// (`a%40b.io.c%40d.io`) is scrubbed too.
 const ENCODED_EMAIL =
-  /(?<=^|[^A-Z0-9._%-]|%[0-9A-F]{2})[A-Z0-9._-]+(?:%(?:25)*2B[A-Z0-9._-]+)*%(?:25)*40[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  /(?<!%[0-9A-F]?)[A-Z0-9._-]{1,64}(?:%(?:25){0,3}2B[A-Z0-9._-]{1,64}){0,32}%(?:25){0,3}40[A-Z0-9.-]{1,253}\.[A-Z]{2,}/gi;
 const IPV6 =
   /(?<![\w:.])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::(?:ffff:)?[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6}(?:\.\d{1,3}){0,3})(?![\w:])/gi;
 // Real octets only, and not a product-token version (`Chrome/141.0.0.0`,

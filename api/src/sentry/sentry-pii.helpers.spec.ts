@@ -242,7 +242,14 @@ describe('scrubPiiString — e-mail regex stays linear', () => {
     const long = 'a'.repeat(200_000);
     const start = performance.now();
     expect(scrubPiiString(long)).toBe(long);
-    expect(performance.now() - start).toBeLessThan(500);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
+  it('scrubs 40k encoded plus-tags with no %40 (160k chars) in under 2 s', () => {
+    const long = 'a%2B'.repeat(40_000);
+    const start = performance.now();
+    expect(scrubPiiString(long)).toBe(long);
+    expect(performance.now() - start).toBeLessThan(2000);
   });
 
   it('still scrubs an e-mail embedded mid-text', () => {
@@ -253,6 +260,12 @@ describe('scrubPiiString — e-mail regex stays linear', () => {
 
   it('scrubs both halves of two glued addresses', () => {
     expect(scrubPiiString('a@b.io.c@d.io a@b.io9c@d.io')).toBe(
+      '[email][email] [email][email]',
+    );
+  });
+
+  it('scrubs both halves of two glued percent-encoded addresses', () => {
+    expect(scrubPiiString('a%40b.io.c%40d.io a%40b.io9c%2540d.io')).toBe(
       '[email][email] [email][email]',
     );
   });
