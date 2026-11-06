@@ -187,5 +187,17 @@ describe('CircuitBreaker (adversarial)', () => {
       expect(() => breaker.checkState()).not.toThrow();
       expect(() => breaker.checkState()).not.toThrow();
     });
+
+    it('holds the probe slot for probeTimeoutMs when it is longer than the cooldown', () => {
+      jest.useFakeTimers();
+      const breaker = new CircuitBreaker(1, 60_000, 120_000);
+      breaker.recordFailure();
+      jest.advanceTimersByTime(60_000);
+      breaker.checkState(); // slow probe still running
+      jest.advanceTimersByTime(60_000);
+      expect(() => breaker.checkState()).toThrow(ServiceUnavailableException);
+      jest.advanceTimersByTime(60_000);
+      expect(() => breaker.checkState()).not.toThrow();
+    });
   });
 });
