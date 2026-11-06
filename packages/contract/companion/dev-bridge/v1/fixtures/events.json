@@ -38,7 +38,7 @@
       "ts": "2026-11-01T18:30:10Z",
       "collectorId": "bg3-save",
       "kind": "error",
-      "errorCode": "folder_not_found"
+      "errorCode": "other"
     },
     {
       "ts": "2026-11-01T18:30:12Z",

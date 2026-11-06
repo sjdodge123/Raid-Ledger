@@ -225,14 +225,19 @@ export const DevBridgeCollectorSchema = z
         lastError: z.string().max(512).optional(),
         /** The tile's status line as an enum (2026-11-06, additive: optional so older companions still parse). */
         status: DevBridgeCollectorStatusSchema.optional(),
-        /** Whether this device is linked for this collector's uploads (2026-11-06, additive). */
-        linked: z.boolean().optional(),
     })
     .strict();
 
-/** GET /dev/v1/collectors — `bg3Catalogue` (optional, ROK-2081): the BG3 game-data catalogue state, body-level, not a row. */
+/**
+ * GET /dev/v1/collectors — `bg3Catalogue` (optional, ROK-2081): the BG3 game-data catalogue state, body-level, not a row.
+ * `linked` (optional, 2026-11-06, additive): whether this device holds a device token — one token per device, so body-level.
+ */
 export const DevBridgeCollectorsSchema = z
-    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32), bg3Catalogue: DevBridgeBg3CatalogueReportSchema.optional() })
+    .object({
+        collectors: z.array(DevBridgeCollectorSchema).max(32),
+        bg3Catalogue: DevBridgeBg3CatalogueReportSchema.optional(),
+        linked: z.boolean().optional(),
+    })
     .strict()
     .superRefine(fitsPage);
 

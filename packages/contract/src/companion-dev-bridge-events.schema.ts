@@ -4,14 +4,14 @@ import { DEV_BRIDGE_PAGE_MAX_BYTES, devBridgeMaxBytes, DevBridgeNextSchema } fro
 
 // ============================================================
 // Companion dev bridge v1 — collector status + structured activity events
-// (2026-11-06, additive). GET /dev/v1/collectors rows gain `status` / `linked`;
+// (2026-11-06, additive). GET /dev/v1/collectors rows gain `status`, the body a device-level `linked`;
 // GET /dev/v1/events is the allowlisted replacement for the removed
 // Activity-log mirror. NO free text anywhere: every field is an enum, a
 // number, a timestamp or a tight lowercase token — never a message, a path
 // or a name (free-text scrubbing leaked paths in four review rounds).
 // ============================================================
 
-/** A collector id (`wow-ledgerlink`, `bg3-save`, …). */
+/** A collector id (`wow-ledgerlink`, `bg3-save`, …): a code-defined built-in id, never user data. */
 export const DevBridgeCollectorIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 
 /**
@@ -52,7 +52,31 @@ export const DEV_BRIDGE_EVENT_KINDS = [
 export const DevBridgeEventKindSchema = z.enum(DEV_BRIDGE_EVENT_KINDS);
 
 /** A machine error code (the server's rejection `code`, or the companion's own) — a token, never a message. */
-export const DevBridgeEventErrorCodeSchema = z.string().regex(/^[a-z0-9_-]{1,32}$/);
+/**
+ * The codes an upload outcome can carry, from rl-companion's upload paths
+ * (apps/companion/src-tauri/src/upload.rs): the server's terminal content
+ * codes (TERMINAL_CODES), the Gallery-full code, the blob refusals, the
+ * companion's own `blob_refused`, and the "contract not served" codes.
+ * Any other server code — and anything else — is sent as `other`.
+ * Mapping rule: CONTRACT.md § Activity events.
+ */
+export const DEV_BRIDGE_EVENT_ERROR_CODES = [
+    'invalid_envelope',
+    'invalid_payload',
+    'payload_too_large',
+    'captured_at_in_future',
+    'blob_quota_exceeded',
+    'invalid_blob',
+    'hash_mismatch',
+    'unsupported_media',
+    'blob_ref_mismatch',
+    'blob_refused',
+    'unknown_contract',
+    'unknown_contract_version',
+    'retired_contract_version',
+    'other',
+] as const;
+export const DevBridgeEventErrorCodeSchema = z.enum(DEV_BRIDGE_EVENT_ERROR_CODES);
 
 /** One structured companion activity event. Strict: an unknown key (e.g. a `message`) is rejected. */
 export const DevBridgeEventSchema = z
@@ -68,13 +92,14 @@ export const DevBridgeEventSchema = z
     })
     .strict();
 
-/** GET /dev/v1/events?since=&cursor= — oldest first; paged by the 16 KiB body cap. */
+/** GET /dev/v1/events?since=&cursor= — oldest first; paged by the 16 KiB body cap (the only row bound). */
 export const DevBridgeEventsSchema = z
-    .object({ events: z.array(DevBridgeEventSchema).max(500), next: DevBridgeNextSchema })
+    .object({ events: z.array(DevBridgeEventSchema), next: DevBridgeNextSchema })
     .strict()
     .superRefine(devBridgeMaxBytes(DEV_BRIDGE_PAGE_MAX_BYTES, 'Response body'));
 
 export type DevBridgeCollectorStatus = z.output<typeof DevBridgeCollectorStatusSchema>;
 export type DevBridgeEventKind = z.output<typeof DevBridgeEventKindSchema>;
+export type DevBridgeEventErrorCode = z.output<typeof DevBridgeEventErrorCodeSchema>;
 export type DevBridgeEvent = z.output<typeof DevBridgeEventSchema>;
 export type DevBridgeEvents = z.output<typeof DevBridgeEventsSchema>;

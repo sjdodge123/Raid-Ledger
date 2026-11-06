@@ -412,8 +412,16 @@
     "code": "invalid_value"
   },
   "collectors--linked-not-boolean": {
-    "path": "collectors.2.linked",
+    "path": "linked",
     "code": "invalid_type"
+  },
+  "collectors--row-linked": {
+    "path": "collectors.0",
+    "code": "unrecognized_keys"
+  },
+  "events--unknown-error-code": {
+    "path": "events.2.errorCode",
+    "code": "invalid_value"
   },
   "events--free-text-message": {
     "path": "events.0",
@@ -421,7 +429,7 @@
   },
   "events--error-code-sentence": {
     "path": "events.5.errorCode",
-    "code": "invalid_format"
+    "code": "invalid_value"
   },
   "events--unknown-kind": {
     "path": "events.0.kind",

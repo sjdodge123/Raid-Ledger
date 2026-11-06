@@ -1,7 +1,7 @@
 /// <reference types="node" />
 /**
  * Dev-bridge v1 (2026-11-06, additive): `collectors` rows gain optional
- * `status` / `linked`; GET /dev/v1/events carries structured, free-text-free
+ * `status`, the body an optional device-level `linked`; GET /dev/v1/events carries structured, free-text-free
  * activity events. Fixture conformance lives in companion-dev-bridge-contract.spec.ts.
  */
 import { readFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import type { z } from 'zod';
 import { DevBridgeCollectorsSchema } from '../companion-dev-bridge-endpoints.schema.js';
 import {
     DEV_BRIDGE_COLLECTOR_STATUSES,
+    DEV_BRIDGE_EVENT_ERROR_CODES,
     DEV_BRIDGE_EVENT_KINDS,
     DevBridgeEventSchema,
     DevBridgeEventsSchema,
@@ -29,19 +30,24 @@ const EVENT = { ts: AT, collectorId: 'bg3-save', kind: 'upload-rejected', httpSt
 const issuesOf = (res: z.ZodSafeParseResult<unknown>): string[] =>
     res.success ? [] : res.error.issues.map((i) => `${i.path.join('.')} ${i.code}`);
 
-describe('collectors rows — status / linked (additive)', () => {
-    it('a row without status / linked (older companions) still parses', () => {
+describe('collectors — row status + body-level linked (additive)', () => {
+    it('the old shape (no status, no linked) from older companions still parses', () => {
         expect(issuesOf(DevBridgeCollectorsSchema.safeParse({ collectors: [LEGACY_ROW] }))).toEqual([]);
     });
 
-    it.each([...DEV_BRIDGE_COLLECTOR_STATUSES])('a row with status %s and linked parses', (status) => {
-        const res = DevBridgeCollectorsSchema.safeParse({ collectors: [{ ...LEGACY_ROW, status, linked: true }] });
+    it.each([...DEV_BRIDGE_COLLECTOR_STATUSES])('a row with status %s parses under a top-level linked', (status) => {
+        const res = DevBridgeCollectorsSchema.safeParse({ collectors: [{ ...LEGACY_ROW, status }], linked: true });
         expect(issuesOf(res)).toEqual([]);
     });
 
-    it('refuses a status outside the enum and a non-boolean linked', () => {
-        const res = DevBridgeCollectorsSchema.safeParse({ collectors: [{ ...LEGACY_ROW, status: 'Up to date', linked: 'yes' }] });
-        expect(issuesOf(res)).toEqual(['collectors.0.status invalid_value', 'collectors.0.linked invalid_type']);
+    it('refuses a status outside the enum and a non-boolean top-level linked', () => {
+        const res = DevBridgeCollectorsSchema.safeParse({ collectors: [{ ...LEGACY_ROW, status: 'Up to date' }], linked: 'yes' });
+        expect(issuesOf(res)).toEqual(['collectors.0.status invalid_value', 'linked invalid_type']);
+    });
+
+    it('refuses linked on a row (linking is device-level: one token per device)', () => {
+        const res = DevBridgeCollectorsSchema.safeParse({ collectors: [{ ...LEGACY_ROW, linked: true }] });
+        expect(issuesOf(res)).toEqual(['collectors.0 unrecognized_keys']);
     });
 });
 
@@ -56,9 +62,16 @@ describe('events page', () => {
         expect(issuesOf(res)).toEqual([' unrecognized_keys']);
     });
 
-    it.each(['Save folder not found', 'D:/Games', 'GALLERY_FULL', 'x'.repeat(33), ''])('refuses errorCode %j (a token, never a message)', (errorCode) => {
-        expect(issuesOf(DevBridgeEventSchema.safeParse({ ...EVENT, errorCode }))).toEqual(['errorCode invalid_format']);
+    it.each([...DEV_BRIDGE_EVENT_ERROR_CODES])('accepts errorCode %s', (errorCode) => {
+        expect(issuesOf(DevBridgeEventSchema.safeParse({ ...EVENT, errorCode }))).toEqual([]);
     });
+
+    it.each(['folder_not_found', 'sdodge', 'Save folder not found', 'D:/Games', 'GALLERY_FULL', 'USER_DEACTIVATED', ''])(
+        'refuses errorCode %j (outside the enum — the companion sends `other`)',
+        (errorCode) => {
+            expect(issuesOf(DevBridgeEventSchema.safeParse({ ...EVENT, errorCode }))).toEqual(['errorCode invalid_value']);
+        },
+    );
 
     it('bounds httpStatus to 100–599 integers', () => {
         expect(issuesOf(DevBridgeEventSchema.safeParse({ ...EVENT, httpStatus: 99 }))).toEqual(['httpStatus too_small']);
@@ -66,9 +79,9 @@ describe('events page', () => {
         expect(issuesOf(DevBridgeEventSchema.safeParse({ ...EVENT, httpStatus: 429.5 }))).toEqual(['httpStatus invalid_type']);
     });
 
-    it('caps a page at 500 rows and at the 16 KiB body cap', () => {
+    it('bounds a page by the 16 KiB body cap alone', () => {
         const rows = Array.from({ length: 501 }, () => ({ ts: AT, collectorId: 'a', kind: 'scan' }));
-        expect(issuesOf(DevBridgeEventsSchema.safeParse({ events: rows, next: null }))).toContain('events too_big');
+        expect(issuesOf(DevBridgeEventsSchema.safeParse({ events: rows, next: null }))).toEqual([' custom']);
         const big = Array.from({ length: 200 }, () => EVENT);
         expect(issuesOf(DevBridgeEventsSchema.safeParse({ events: big, next: null }))).toEqual([' custom']);
     });
@@ -79,7 +92,7 @@ describe('events page', () => {
 });
 
 describe('CONTRACT.md documents every enum value', () => {
-    it.each([...DEV_BRIDGE_COLLECTOR_STATUSES, ...DEV_BRIDGE_EVENT_KINDS])('names `%s` in a table row', (value) => {
+    it.each([...DEV_BRIDGE_COLLECTOR_STATUSES, ...DEV_BRIDGE_EVENT_KINDS, ...DEV_BRIDGE_EVENT_ERROR_CODES])('names `%s` in a table row', (value) => {
         expect({ value, documented: CONTRACT.includes(`| \`${value}\` |`) }).toEqual({ value, documented: true });
     });
 });

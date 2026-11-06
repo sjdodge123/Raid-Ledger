@@ -1,0 +1,49 @@
+{
+  "next": "ZXZlbnRzMg",
+  "events": [
+    {
+      "ts": "2026-11-01T18:30:00Z",
+      "collectorId": "wow-ledgerlink",
+      "kind": "scan",
+      "count": 3
+    },
+    {
+      "ts": "2026-11-01T18:30:02Z",
+      "collectorId": "wow-ledgerlink",
+      "kind": "upload-ok",
+      "count": 1,
+      "httpStatus": 202
+    },
+    {
+      "ts": "2026-11-01T18:30:04Z",
+      "collectorId": "bg3-save",
+      "kind": "upload-rejected",
+      "httpStatus": 422,
+      "errorCode": "folder_not_found"
+    },
+    {
+      "ts": "2026-11-01T18:30:06Z",
+      "collectorId": "bg3-screenshot",
+      "kind": "upload-held",
+      "count": 2,
+      "httpStatus": 429
+    },
+    {
+      "ts": "2026-11-01T18:30:08Z",
+      "collectorId": "wow-ledgerlink",
+      "kind": "link-required",
+      "httpStatus": 401
+    },
+    {
+      "ts": "2026-11-01T18:30:10Z",
+      "collectorId": "bg3-save",
+      "kind": "error",
+      "errorCode": "other"
+    },
+    {
+      "ts": "2026-11-01T18:30:12Z",
+      "collectorId": "bg3-save",
+      "kind": "collector-off"
+    }
+  ]
+}
