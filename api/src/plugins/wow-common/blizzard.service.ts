@@ -22,6 +22,7 @@ import * as profileH from './blizzard-profile.helpers';
 import * as equipH from './blizzard-equipment.helpers';
 import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
+import * as guildH from './blizzard-forever-guild.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
 import { foreverSeedOnlyList } from './forever-instance-data';
@@ -148,6 +149,17 @@ export class BlizzardService {
       token,
       this.logger,
     );
+  }
+
+  /** Fetch a WoW: Forever guild roster (ROK-2102); null on 404.
+   * @param guildSlug - Guild slug as given (rules unverified, FLAG B4)
+   */
+  async fetchForeverGuildRoster(
+    guildSlug: string,
+    region: string,
+  ): Promise<guildH.ForeverGuildRoster | null> {
+    const token = await this.auth.getAccessToken(region);
+    return guildH.fetchForeverGuildRoster(guildSlug, region, token, this.logger);
   }
 
   /** Fetch the realm list for a given region and namespace. */
