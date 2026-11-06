@@ -19,6 +19,7 @@ import {
   PluginActiveGuard,
 } from '../plugin-host/plugin-active.guard';
 import { variantToNamespacePrefix } from './blizzard.constants';
+import { resolvePreviewTarget } from './blizzard-preview.helpers';
 
 /**
  * Controller for Blizzard API endpoints (ROK-234 UX refinements).
@@ -74,24 +75,19 @@ export class BlizzardController {
     if (!name?.trim()) {
       throw new BadRequestException('Character name is required');
     }
-    if (!realm?.trim()) {
-      throw new BadRequestException('Realm is required');
-    }
-
     const parsedRegion = WowRegionSchema.safeParse(region ?? 'us');
     if (!parsedRegion.success) {
       throw new BadRequestException(
         'Invalid region. Must be one of: us, eu, kr, tw',
       );
     }
-
     const variant = this.parseGameVariant(gameVariant);
-    const namespacePrefix = variantToNamespacePrefix(variant);
+    const target = resolvePreviewTarget(variant, name, realm);
     return this.blizzardService.fetchCharacterProfile(
-      name.trim(),
-      realm.trim(),
+      target.name,
+      target.realm,
       parsedRegion.data,
-      namespacePrefix,
+      variantToNamespacePrefix(variant),
     );
   }
 
