@@ -105,6 +105,10 @@ describe('AddonExportSchema — field rules', () => {
         expect(ok({ ...charExport, who: { ...who, ruleset: 'roleplaying' } })).toBe(true);
     });
 
+    it('accepts the rppvp ruleset (RP-PvP realms, ROK-2101)', () => {
+        expect(ok({ ...charExport, who: { ...who, ruleset: 'rppvp' } })).toBe(true);
+    });
+
     it.each(['rp', 'roleplay', 'RP', 'Roleplaying'])('rejects the ruleset %s', (ruleset) => {
         expect(ok({ ...charExport, who: { ...who, ruleset } })).toBe(false);
     });

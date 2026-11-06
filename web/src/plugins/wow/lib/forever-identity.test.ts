@@ -8,6 +8,7 @@ describe('forever-identity helpers (ROK-1721)', () => {
     it('formats the ruleset label with the region for the detail page and invite card', () => {
         expect(formatForeverRuleset('pvp', 'us')).toBe('PvP (US)');
         expect(formatForeverRuleset('roleplaying', null)).toBe('Roleplaying');
+        expect(formatForeverRuleset('rppvp', 'us')).toBe('RP-PvP (US)');
         expect(formatForeverRuleset(null, 'us')).toBeNull();
     });
 

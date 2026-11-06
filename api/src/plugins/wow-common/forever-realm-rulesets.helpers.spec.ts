@@ -29,6 +29,7 @@ const index = buildRealmRulesetIndex([
   { region: 'us', realmName: 'Skyfall', ruleset: 'normal' },
   { region: 'us', realmName: 'Bloodmoon', ruleset: 'pvp' },
   { region: 'us', realmName: 'Tale Spinner', ruleset: 'roleplaying' },
+  { region: 'us', realmName: 'Realm 9 RP PvP', ruleset: 'rppvp' },
   { region: 'us', realmName: 'Last Stand', ruleset: 'hardcore' },
 ]);
 
@@ -47,6 +48,7 @@ describe('inferRuleset (ROK-1739)', () => {
     ['Skyfall', 'normal'],
     ['Bloodmoon', 'pvp'],
     ['Tale Spinner', 'roleplaying'],
+    ['Realm 9 RP PvP', 'rppvp'],
     ['Last Stand', 'hardcore'],
   ] as const)('U1–U4: realm %s maps to %s', (realm, ruleset) => {
     expect(inferRuleset(whoOn(realm), 'us', index)).toEqual({
