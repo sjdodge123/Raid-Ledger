@@ -3983,3 +3983,7 @@ same day (#1278, #1279, #1280).
 - **still open, re-verified** 2026-10-18 `api/src/discord-bot/listeners/steam-link.listener.ts:200-212` — an unlinked guild member's Steam link still runs ITAD lookup + game insert + IGDB re-enrich (`discoverGame` before `findLinkedRlUser`). Left for a day session: discord-bot/** needs a companion-bot smoke run.
 - **still open, re-verified** 2026-10-18 `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:92-115` (`buildBossKillsQuery`) — no reporter / active-member filter. Left for a day session: notifications/** needs a smoke run + an integration case.
 - **not reproduced again** line 3961 (`scheduling-open-lockin.integration.spec.ts:304`) — 50/50 green on the fleet (task 168e68dff85c); second 0/50. Per the flake rule no fix ships until it reproduces.
+
+### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
+
+- **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
