@@ -51,7 +51,9 @@ describe('Forever URL builders (ROK-2102)', () => {
       ],
     );
   });
+});
 
+describe('Forever guild + summary helpers (ROK-2102)', () => {
   it.each([
     ['raid-ledger', `${API}/data/wow/guild/raid-ledger/roster${NS}`],
     [
@@ -136,6 +138,17 @@ describe('runProbe — live Forever shapes (ROK-2102)', () => {
     const run = await runProbe(input(foreverFetch(calls, 404), null));
     expect(calls.some((u) => u.includes('/equipment'))).toBe(false);
     expect(run.cells.filter((c) => c.endpoint === 'profile')).toHaveLength(1);
+  });
+});
+
+describe('runProbe — Forever follow-ups (ROK-2102)', () => {
+  const input = (fetchFn: ProbeFetch, guildPath: string | null) => ({
+    fetchFn,
+    token: 't',
+    candidates: ['forever', 'classic'],
+    regions: ['us'],
+    characterPath: 'Thrall-Stormborn',
+    guildPath,
   });
 
   it('records profile-family + guild roster cells with keys-only shapes', async () => {

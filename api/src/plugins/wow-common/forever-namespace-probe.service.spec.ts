@@ -255,7 +255,9 @@ describe('ForeverNamespaceProbeService config', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+});
 
+describe('ForeverNamespaceProbeService config validation', () => {
   it.each(['dreamscythe/..', 'dreamscythe/.'])(
     'rejects a dot-only character name (%s) that would change the Blizzard path',
     async (characterPath) => {
@@ -269,7 +271,9 @@ describe('ForeverNamespaceProbeService config', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     },
   );
+});
 
+describe('ForeverNamespaceProbeService config paths (ROK-2102)', () => {
   it.each(['dreamscythe/..', 'a b', 'x/y/z', 'guild?x=1'])(
     'rejects an unsafe guild path (%s)',
     async (guildPath) => {

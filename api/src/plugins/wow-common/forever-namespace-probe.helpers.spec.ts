@@ -272,6 +272,17 @@ describe('runProbe matches + concurrency', () => {
       entryCount: 1,
     });
   });
+});
+
+describe('runProbe without a character path', () => {
+  function skyFetch(calls: string[]): ProbeFetch {
+    return (url) => {
+      calls.push(url);
+      if (url.includes('static-classicforever-'))
+        return Promise.resolve(reply(200, { races: [{ name: 'Skyborne' }] }));
+      return Promise.resolve(reply(404));
+    };
+  }
 
   it('skips the profile check without a character path', async () => {
     const calls: string[] = [];

@@ -270,22 +270,31 @@ function toTasks(target: ProbeTarget, urls: ProbeUrl[]): ProbeTask[] {
   return urls.map((u) => ({ ...u, ...target }));
 }
 
+/** A runner that probes a batch of tasks and folds each outcome into `run`. */
+function makePhase(
+  input: RunProbeInput,
+  run: ProbeRun,
+): (tasks: ProbeTask[]) => Promise<void> {
+  const { fetchFn, token, timeoutMs } = input;
+  const exec = async (t: ProbeTask): Promise<[ProbeTask, ProbeOutcome]> => [
+    t,
+    await probeOne(fetchFn, token, t.url, timeoutMs),
+  ];
+  return async (tasks) => {
+    for (const [t, out] of await mapPool(tasks, PROBE_CONCURRENCY, exec)) {
+      collect(run, t, out);
+    }
+  };
+}
+
 /**
  * Probe every (candidate, region, endpoint); then, per deduped match, the
  * profile + guild roster; then profile sub-resources where the profile is 200.
  */
 export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
-  const { fetchFn, token, characterPath, guildPath, timeoutMs } = input;
+  const { characterPath, guildPath } = input;
   const run: ProbeRun = { cells: [], matches: [], shapes: {} };
-  const phase = async (tasks: ProbeTask[]): Promise<void> => {
-    const exec = async (t: ProbeTask): Promise<[ProbeTask, ProbeOutcome]> => [
-      t,
-      await probeOne(fetchFn, token, t.url, timeoutMs),
-    ];
-    for (const [t, out] of await mapPool(tasks, PROBE_CONCURRENCY, exec)) {
-      collect(run, t, out);
-    }
-  };
+  const phase = makePhase(input, run);
   await phase(
     input.candidates.flatMap((prefix) =>
       input.regions.flatMap((region) =>
