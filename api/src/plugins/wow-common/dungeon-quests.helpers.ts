@@ -11,6 +11,7 @@ import type { EnrichedQuestReward } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { wowClassicBossLoot } from '../../drizzle/schema';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { mergeItemMetaFallback } from './dungeon-quests.item-meta';
 
 const logger = new Logger('DungeonQuestsHelpers');
 
@@ -200,7 +201,10 @@ function mergeLootRows(
   }
 }
 
-/** Build item details map from Wowhead JSON + boss loot table fallback. */
+/**
+ * Build item details map from Wowhead JSON, then the boss loot table, then
+ * the `wow_item_meta` cache for ids still unresolved (Forever rewards).
+ */
 export async function buildItemDetailsMap(
   db: PostgresJsDatabase<typeof schema>,
   allItemIds: Set<number>,
@@ -227,6 +231,7 @@ export async function buildItemDetailsMap(
       .where(inArray(wowClassicBossLoot.itemId, lootLookupIds));
     mergeLootRows(lootRows, itemDetailsMap);
   }
+  await mergeItemMetaFallback(db, allItemIds, itemDetailsMap);
   return itemDetailsMap;
 }
 

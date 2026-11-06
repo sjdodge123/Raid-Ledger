@@ -191,6 +191,54 @@ describe('Dungeon Quests — quest chain (integration)', () => {
   });
 });
 
+/** Forever-style reward ids absent from quest-reward-items.json + boss loot. */
+const META_REWARD_ID = 991001;
+const UNKNOWN_REWARD_ID = 991002;
+
+async function testRewardFromItemMetaCache() {
+  const instanceId = 401;
+  await insertQuest(testApp, {
+    questId: 5101,
+    dungeonInstanceId: instanceId,
+    name: 'Forever Reward Quest',
+    expansion: 'classic',
+    questLevel: 30,
+    rewardsJson: [META_REWARD_ID, UNKNOWN_REWARD_ID],
+  });
+  await testApp.db.insert(schema.wowItemMeta).values({
+    itemId: META_REWARD_ID,
+    status: 'resolved',
+    env: 16,
+    name: 'Blade of the Forever Depths',
+    quality: 3,
+    icon: 'inv_sword_04',
+    fetchedAt: new Date(),
+  });
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/instances/${instanceId}/quests/enriched?variant=classic_era`,
+  );
+  expect(res.status).toBe(200);
+  type Reward = { itemId: number; itemName: string; quality: string };
+  const quest = (res.body as Array<{ rewards: Reward[] | null }>)[0];
+  expect(quest?.rewards).toEqual([
+    {
+      itemId: META_REWARD_ID,
+      itemName: 'Blade of the Forever Depths',
+      quality: 'Rare',
+      slot: null,
+      itemLevel: null,
+      iconUrl:
+        'https://wow.zamimg.com/images/wow/icons/medium/inv_sword_04.jpg',
+      itemSubclass: null,
+    },
+    expect.objectContaining({
+      itemId: UNKNOWN_REWARD_ID,
+      itemName: `Item #${UNKNOWN_REWARD_ID}`,
+      quality: 'Common',
+    }),
+  ]);
+}
+
 describe('Dungeon Quests — enriched quests (integration)', () => {
   beforeAll(() => setupTestApp());
   afterEach(() => cleanupTestApp());
@@ -230,6 +278,9 @@ describe('Dungeon Quests — enriched quests (integration)', () => {
       const prereqQuest = questList.find((q) => q.questId === 5001);
       expect(prereqQuest!.prerequisiteChain).toBeNull();
     });
+
+    it('resolves a reward id with no lookup entry from the wow_item_meta cache', () =>
+      testRewardFromItemMetaCache());
 
     it('should return 400 for invalid variant', async () => {
       const res = await testApp.request.get(

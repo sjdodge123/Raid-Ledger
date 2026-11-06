@@ -141,3 +141,30 @@ describe('composite busy hours key to the viewer local week (ROK-1595)', () => {
     ]);
   });
 });
+
+/**
+ * With no `week`, `resolveWeekStart` returns the SERVER's local Sunday 00:00.
+ * The dates below are built explicitly (no machine-TZ dependency) as a
+ * non-UTC server would produce them; the viewer offset must apply to Sunday
+ * 00:00Z, not to the already-localised boundary.
+ */
+describe('calendarBusyWeekStart on a non-UTC server (no week sent)', () => {
+  it('New York server (local midnight = 04:00Z) + tz 300 → Sunday 05:00Z', () => {
+    const nySunday = new Date('2026-10-11T04:00:00.000Z');
+    expect(calendarBusyWeekStart(nySunday, 300, false).toISOString()).toBe(
+      '2026-10-11T05:00:00.000Z',
+    );
+  });
+
+  it('UTC+2 server (local midnight = Sat 22:00Z) + tz 300 → Sunday 05:00Z', () => {
+    const berlinSunday = new Date('2026-10-10T22:00:00.000Z');
+    expect(calendarBusyWeekStart(berlinSunday, 300, false).toISOString()).toBe(
+      '2026-10-11T05:00:00.000Z',
+    );
+  });
+
+  it('week sent: a non-midnight-UTC week is left untouched', () => {
+    const sent = new Date('2026-10-11T04:00:00.000Z');
+    expect(calendarBusyWeekStart(sent, 300, true)).toBe(sent);
+  });
+});

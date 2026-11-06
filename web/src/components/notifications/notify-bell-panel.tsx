@@ -87,6 +87,7 @@ export type PopoverAlign = PopupAlign;
  * ≥1024px: a portalled `role="dialog"` popover anchored under the bell. `end`
  * pins its right edge to the bell's right edge (the hook measures the panel),
  * so a bell at the right of its row keeps the panel inside the viewport.
+ * Portalled into a dialog it takes the hook's `maxHeight` and scrolls instead of clipping.
  */
 export function NotifyPopover({ open, onClose, anchorRef, bellRef, container, panel, align }: {
     open: boolean; onClose: () => void;
@@ -101,8 +102,11 @@ export function NotifyPopover({ open, onClose, anchorRef, bellRef, container, pa
     if (!open) return null;
     return createPortal(
         <div ref={popupRef} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-testid={`${panel.testIdPrefix}-popover`}
-            className="fixed z-50 w-80 bg-panel border border-edge rounded-lg shadow-lg p-3 focus:outline-none"
-            style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}>
+            className="fixed z-50 w-80 overflow-y-auto bg-panel border border-edge rounded-lg shadow-lg p-3 focus:outline-none"
+            style={{
+                top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden',
+                ...(pos?.maxHeight !== undefined ? { maxHeight: pos.maxHeight } : {}),
+            }}>
             <h2 id={titleId} className="text-sm font-semibold text-foreground mb-3">Notifications for {panel.subjectName}</h2>
             <NotifyPanelBody {...panel} />
         </div>,

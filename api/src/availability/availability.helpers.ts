@@ -1,6 +1,7 @@
 /**
  * Pure helper functions for availability service.
  */
+import { BadRequestException } from '@nestjs/common';
 import type {
   AvailabilityDto,
   AvailabilityConflict,
@@ -54,7 +55,28 @@ export function mapConflicts(
     }));
 }
 
-/** Build update data from existing availability and DTO. */
+/** Longest window the create schema allows (`CreateAvailabilityInputSchema`). */
+const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Enforce the create path's rules on a merged update range: end after start
+ * and at most 24 hours. A PATCH carrying one bound skips the schema refine.
+ * @throws BadRequestException when the merged range is inverted or too long.
+ */
+function assertValidWindow(startTime: string, endTime: string): void {
+  const spanMs = new Date(endTime).getTime() - new Date(startTime).getTime();
+  if (!(spanMs > 0)) {
+    throw new BadRequestException('End time must be after start time');
+  }
+  if (spanMs > MAX_WINDOW_MS) {
+    throw new BadRequestException('Availability window cannot exceed 24 hours');
+  }
+}
+
+/**
+ * Build update data from existing availability and DTO.
+ * @throws BadRequestException when a sent bound leaves an invalid window.
+ */
 export function buildUpdateData(
   existing: AvailabilityDto,
   dto: {
@@ -72,6 +94,7 @@ export function buildUpdateData(
   const newStartTime = dto.startTime ?? existing.timeRange.start;
   const newEndTime = dto.endTime ?? existing.timeRange.end;
   if (dto.startTime || dto.endTime) {
+    assertValidWindow(newStartTime, newEndTime);
     updateData.timeRange = [new Date(newStartTime), new Date(newEndTime)];
   }
   if (dto.status) updateData.status = dto.status;

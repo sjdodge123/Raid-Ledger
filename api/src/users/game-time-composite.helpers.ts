@@ -27,6 +27,7 @@ import { buildEventBlocks } from './game-time-blocks.helpers';
 import { defined } from '../common/defined.helpers';
 import { expandWithinWindow } from '../calendar-sync/read/calendar-away-derive.helpers';
 import { mergeWithinWindow } from './game-time-absence-merge.helpers';
+import { calendarBusyWeekStart } from '../calendar-sync/read/calendar-busy-query.helpers';
 
 /** Select columns for signed-up event queries. */
 const SIGNED_UP_EVENT_COLUMNS = {
@@ -242,6 +243,24 @@ export function buildAbsenceDateSet(
   );
 }
 
+/**
+ * The window signed-up events are fetched, keyed and blocked from. With no
+ * `week` sent the caller hands over the server's Sunday, so start at the
+ * viewer's local Sunday and run 7 days exactly like the calendar busy hours
+ * do (`calendarBusyWeekStart`). Slot dates, overrides and absences keep the
+ * unshifted `weekStart`.
+ */
+export function eventWeekWindow(
+  weekStart: Date,
+  weekEnd: Date,
+  tzOffset: number,
+  weekSent: boolean,
+): [Date, Date] {
+  if (weekSent) return [weekStart, weekEnd];
+  const start = calendarBusyWeekStart(weekStart, tzOffset, weekSent);
+  return [start, new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)];
+}
+
 /** Assemble the full composite view result from all fetched data. */
 export function assembleCompositeView(
   remapped: Array<{ dayOfWeek: number; hour: number }>,
@@ -252,12 +271,12 @@ export function assembleCompositeView(
   weekStart: Date,
   weekEnd: Date,
   tzOffset: number,
+  eventWindow: [Date, Date] = [weekStart, weekEnd],
 ): CompositeViewResult {
   const templateSet = new Set(remapped.map((s) => `${s.dayOfWeek}:${s.hour}`));
   const committedSet = buildCommittedSet(
     signedUpEvents,
-    weekStart,
-    weekEnd,
+    ...eventWindow,
     tzOffset,
   );
   const absenceDates = buildAbsenceDateSet(
@@ -277,8 +296,7 @@ export function assembleCompositeView(
   );
   const events = buildEventBlocks(
     signedUpEvents,
-    weekStart,
-    weekEnd,
+    ...eventWindow,
     tzOffset,
     signupsMap,
   );

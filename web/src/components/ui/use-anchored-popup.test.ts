@@ -5,12 +5,21 @@
  */
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { placeTop, useAnchoredPopup } from './use-anchored-popup';
+import { maxHeightWithin, placeTop, placeWithin, useAnchoredPopup } from './use-anchored-popup';
 
 const realInnerHeight = window.innerHeight;
+/** Nodes a test appended to `<body>`; removed in `afterEach` even when an assertion fails. */
+const mounted: HTMLElement[] = [];
+
+function mount(el: HTMLElement): HTMLElement {
+    document.body.appendChild(el);
+    mounted.push(el);
+    return el;
+}
 
 afterEach(() => {
     Object.defineProperty(window, 'innerHeight', { value: realInnerHeight, configurable: true });
+    mounted.splice(0).forEach((el) => el.remove());
 });
 
 function withRect(rect: Partial<DOMRect>): HTMLElement {
@@ -38,6 +47,41 @@ describe('placeTop', () => {
     });
 });
 
+// Bug (TECH-DEBT 2026-11-05): a Combobox inside a short Modal portals into the
+// `overflow-hidden` dialog, so placement must use the dialog's rect, not the viewport's.
+describe('placeWithin (container bounds)', () => {
+    const dialog = { top: 100, bottom: 400 };
+
+    it('flips up when there is no room below inside the container, though the viewport has room', () => {
+        expect(placeTop({ top: 300, bottom: 336 }, 120, 800)).toBe(340);
+        expect(placeWithin({ top: 300, bottom: 336 }, 120, dialog)).toBe(176);
+    });
+
+    it('opens below when the popup fits inside the container', () => {
+        expect(placeWithin({ top: 150, bottom: 186 }, 120, dialog)).toBe(190);
+    });
+
+    it('matches placeTop when the bounds are the viewport', () => {
+        expect(placeWithin({ top: 50, bottom: 86 }, 160, { top: 0, bottom: 200 })).toBe(32);
+    });
+});
+
+describe('maxHeightWithin', () => {
+    it('caps the popup to the roomier side of the anchor inside the container', () => {
+        // below: 400 - 8 - (186 + 4) = 202; above: 150 - 4 - (100 + 8) = 38
+        expect(maxHeightWithin({ top: 150, bottom: 186 }, { top: 100, bottom: 400 })).toBe(202);
+        // below: 392 - 340 = 52; above: 296 - 108 = 188
+        expect(maxHeightWithin({ top: 300, bottom: 336 }, { top: 100, bottom: 400 })).toBe(188);
+    });
+
+    it('floors at one 44px row, never 0 or negative, when the container has no room', () => {
+        // below: 140 - 8 - 140 = -8; above: 100 - 4 - 108 = -12
+        expect(maxHeightWithin({ top: 100, bottom: 136 }, { top: 100, bottom: 140 })).toBe(44);
+        // below: 200 - 8 - 160 = 32; above: 120 - 4 - 108 = 8 → still one full row
+        expect(maxHeightWithin({ top: 120, bottom: 156 }, { top: 100, bottom: 200 })).toBe(44);
+    });
+});
+
 describe('useAnchoredPopup', () => {
     function positionFor(anchor: Partial<DOMRect>, popupHeight: number, viewportHeight: number) {
         Object.defineProperty(window, 'innerHeight', { value: viewportHeight, configurable: true });
@@ -55,5 +99,24 @@ describe('useAnchoredPopup', () => {
     it('keeps a menu with room below under its trigger', () => {
         const pos = positionFor({ top: 200, bottom: 236, left: 900, right: 936, width: 36 }, 168, 768);
         expect(pos).toEqual({ top: 240, left: 760, width: 36 });
+    });
+
+    it('places and caps a popup portalled into a dialog against the dialog rect, not the viewport', () => {
+        Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+        const dialog = withRect({ top: 100, bottom: 400, left: 0, right: 600, width: 600, height: 300 });
+        const popup = withRect({ width: 200, height: 120 });
+        dialog.appendChild(popup);
+        mount(dialog);
+        const anchorRef = { current: withRect({ top: 300, bottom: 336, left: 10, right: 210, width: 200 }) };
+        const { result } = renderHook(() => useAnchoredPopup(anchorRef, { current: popup }, true, () => undefined));
+        expect(result.current).toEqual({ top: 176, left: 10, width: 200, maxHeight: 188 });
+    });
+
+    it('leaves a <body>-portalled popup uncapped (viewport placement unchanged)', () => {
+        Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+        const popup = mount(withRect({ width: 200, height: 120 }));
+        const anchorRef = { current: withRect({ top: 300, bottom: 336, left: 10, right: 210, width: 200 }) };
+        const { result } = renderHook(() => useAnchoredPopup(anchorRef, { current: popup }, true, () => undefined));
+        expect(result.current).toStrictEqual({ top: 340, left: 10, width: 200 });
     });
 });
