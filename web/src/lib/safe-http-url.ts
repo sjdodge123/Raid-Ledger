@@ -16,3 +16,17 @@ export function safeHttpUrl(raw: string | null | undefined): string | undefined 
         return undefined;
     }
 }
+
+/**
+ * Protocol ALLOW-list as a boolean — the single rule that decides whether an
+ * anchor may be built or the browser may be sent somewhere. Deliberately not a
+ * `javascript:` deny-list: a deny-list has to enumerate every hostile scheme
+ * (`data:`, `vbscript:`, `blob:`, unicode lookalikes) and is wrong the moment
+ * one is missed.
+ *
+ * @param raw candidate url from API data or user content
+ * @returns true only for an absolute `http:` or `https:` url
+ */
+export function isHttpUrl(raw: string | null | undefined): boolean {
+    return safeHttpUrl(raw) !== undefined;
+}

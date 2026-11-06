@@ -9,6 +9,7 @@ import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { SeriesBadge } from './SeriesBadge';
 import { HUB_PAGE_PREFIX } from '../routing/hub-paths';
 import { hubCopy } from '../hub/hub-copy';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -109,7 +110,8 @@ function BannerBadges({ game, hub }: { game: EventBannerProps['game']; hub: Even
     );
 }
 
-function VoiceChannel({ name, url }: { name: string; url?: string | null | undefined }) {
+function VoiceChannel({ name, url: rawUrl }: { name: string; url?: string | null | undefined }) {
+    const url = safeHttpUrl(rawUrl);
     return (
         <>
             <span className="event-banner__separator">•</span>

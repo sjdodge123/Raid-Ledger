@@ -1,3 +1,5 @@
+import { ownLookup } from '../../../lib/own-lookup';
+
 /**
  * WoW class icon URLs from Blizzard CDN.
  * Used in web UI to show class icons next to character names.
@@ -26,5 +28,5 @@ export const WOW_CLASS_ICONS: Record<string, string> = {
 /** Get class icon URL for a WoW class name, or null if not recognized. */
 export function getClassIconUrl(className: string | null | undefined): string | null {
   if (!className) return null;
-  return WOW_CLASS_ICONS[className] ?? null;
+  return ownLookup(WOW_CLASS_ICONS, className) ?? null;
 }

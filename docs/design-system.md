@@ -443,6 +443,8 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `use-now.ts` → `useNow(intervalMs = 60_000)` (ROK-1853) | `web/src/hooks/` | Relative-time labels that must keep ageing while a view stays mounted ("scanned 7 min ago"). `useNowTick` only ticks toward a future instant; use this for past timestamps. |
 | `useEscapeLayer` (existing) — a nested overlay (the Valheim item popover inside the chest Modal, `plugins/valheim/character/item-detail.tsx`) registers its own layer instead of a document keydown listener, so one Escape closes the topmost overlay only (ROK-1853). A `fixed` popover opened inside a `Modal` portals to `<body>`, not into the dialog — the frame's `overflow-hidden` plus its forwards-filled `modal-spring` transform clip a `fixed` child — and takes `Z_INDEX.MODAL_STACKED` plus a `useTabTrap` of its own (Codex r4). | — | Any overlay opened inside another overlay. |
 
+**Server- or user-supplied URLs** go through `web/src/lib/safe-http-url.ts` before they become an `href` or a navigation: `safeHttpUrl(raw)` returns the url only when it is absolute `http:`/`https:` (else `undefined` → render no link, or the surface's own fallback), `isHttpUrl(raw)` is the boolean form. An allow-list, never a `javascript:` deny-list.
+
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
 
