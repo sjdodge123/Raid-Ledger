@@ -78,6 +78,11 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
     expect(createDtoFromExport(who, 'us', 7, 'pvp').ruleset).toBe('pvp');
   });
 
+  it('who.ruleset rppvp (RP-PvP realm) → DTO rppvp (ROK-2101)', () => {
+    const who = buildWho({ ruleset: 'rppvp' });
+    expect(createDtoFromExport(who, 'us', 7).ruleset).toBe('rppvp');
+  });
+
   it('who.ruleset normal + pick pvp → DTO normal (export wins, pick ignored)', () => {
     const who = buildWho({ ruleset: 'normal' });
     expect(createDtoFromExport(who, 'us', 7, 'pvp').ruleset).toBe('normal');

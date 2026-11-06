@@ -110,7 +110,7 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
         await pasteAndCheck(user);
         expect(screen.getByTestId('addon-import-target')).toHaveTextContent('· ruleset not in export ·');
         const picker = within(screen.getByRole('radiogroup', { name: 'Ruleset' }));
-        expect(picker.getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Normal', 'PvP', 'Roleplaying']);
+        expect(picker.getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Normal', 'PvP', 'Roleplaying', 'RP-PvP']);
         expect(picker.queryByRole('radio', { checked: true })).toBeNull();
         expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Import' }), 'the disabled Import says why').toHaveAccessibleDescription(/Pick one to import\./);
