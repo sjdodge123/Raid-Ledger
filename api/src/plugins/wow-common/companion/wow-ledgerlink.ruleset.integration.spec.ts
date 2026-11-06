@@ -126,6 +126,21 @@ const post = (token: string, body: unknown) =>
     .set(bearer(token))
     .send(body as object);
 
+const NOTICE_MESSAGE =
+  "Your companion uploaded Ana Forever on CAMWOW US2 Realm 9 but Raid Ledger couldn't tell which ruleset that realm plays (Normal, PvP, RP or RP-PvP). Import it once from Characters → Import from LedgerLink and choose the ruleset — after that, the companion keeps it up to date.";
+
+/** Every notification row (ROK-2100 B.2 — the RULESET_REQUIRED notice). */
+async function notices() {
+  return testApp.db
+    .select({
+      type: schema.notifications.type,
+      title: schema.notifications.title,
+      message: schema.notifications.message,
+      payload: schema.notifications.payload,
+    })
+    .from(schema.notifications);
+}
+
 async function rulesets(): Promise<(string | null)[]> {
   const rows = await testApp.db
     .select({ ruleset: schema.characters.ruleset })
@@ -187,5 +202,54 @@ describe('ROK-2100 — null-ruleset companion upload resolves on create', () => 
     } finally {
       await settings.delete(WOW_FOREVER_ARMORY_IMPORT_KEY);
     }
+  });
+});
+
+describe('ROK-2100 B.2 — the companion RULESET_REQUIRED notice', () => {
+  it('RULESET_REQUIRED tells the member once in-app; a repeat within 7 days adds none (B.2)', async () => {
+    const token = await deviceToken('rs-notice');
+    blizzard({ kind: 'absent' });
+    const first = await post(token, upload(nullRulesetAt(UNTAGGED_REALM)));
+    expect(first.status).toBe(400);
+    expect(await notices()).toEqual([
+      {
+        type: 'system',
+        title: 'Pick a ruleset for Ana Forever',
+        message: NOTICE_MESSAGE,
+        payload: {
+          kind: 'ledgerlink_ruleset_required',
+          guid: buildWho().guid,
+          characterName: 'Ana Forever',
+          realmName: UNTAGGED_REALM,
+          link: '/profile/gaming/characters',
+        },
+      },
+    ]);
+    const again = upload(
+      nullRulesetAt(UNTAGGED_REALM),
+      FIXTURE_EXPORTED_AT + 600,
+    );
+    const second = await post(token, again);
+    expect(second.status).toBe(400);
+    expect(second.body.issues).toEqual([
+      { path: WOW_LEDGERLINK_EXPORT_PATH, code: 'RULESET_REQUIRED' },
+    ]);
+    expect(await notices()).toHaveLength(1);
+  });
+
+  it('a different character on the same account gets its own notice (B.2)', async () => {
+    const token = await deviceToken('rs-notice-two');
+    blizzard({ kind: 'absent' });
+    expect(
+      (await post(token, upload(nullRulesetAt(UNTAGGED_REALM)))).status,
+    ).toBe(400);
+    const other = upload({
+      ...nullRulesetAt(UNTAGGED_REALM),
+      guid: 'Player-4395-0000CAFE',
+    });
+    expect((await post(token, other)).status).toBe(400);
+    const guids = (await notices()).map((n) => JSON.stringify(n.payload));
+    expect(guids).toHaveLength(2);
+    expect(guids.some((g) => g.includes('Player-4395-0000CAFE'))).toBe(true);
   });
 });

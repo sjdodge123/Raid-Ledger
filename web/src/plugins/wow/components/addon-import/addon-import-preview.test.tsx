@@ -90,6 +90,14 @@ describe('AddonImportPreview — realm-inferred RULESET_CHANGED (ROK-1739 §6.2)
         expect(screen.getByTestId('addon-import-inference-source')).toHaveTextContent("Inferred from Blizzard's realm data.");
     });
 
+    it("ROK-2100: a realm-name inference says it came from the realm's name", () => {
+        const result = charResult({ warnings: [warning], rulesetInference: { ruleset: 'pvp', realmName: 'CAMWOW US2 Realm 9 PvP', source: 'realm-name' } });
+        renderWithProviders(<Harness result={result} onImport={vi.fn()} />);
+        expect(screen.getByTestId('addon-import-inference-source')).toHaveTextContent(
+            "Inferred from the realm's name — check it before importing.",
+        );
+    });
+
     it('keeps the export copy and shows no source line without an inference', () => {
         renderWithProviders(<Harness result={charResult({ warnings: [warning] })} onImport={vi.fn()} />);
         expect(screen.getByTestId('addon-import-warning')).toHaveTextContent('The export says this character is on a PvP realm, not Normal.');

@@ -429,3 +429,41 @@ describe('create route — update target (ROK-1739 D4)', () => {
     expect(await storedRuleset(id)).toBe('normal');
   });
 });
+
+describe('create route — realm-name inference (ROK-2100 §6)', () => {
+  const RP_PVP_REALM = 'CAMWOW US2 Realm 9 RP PvP';
+
+  it('an unmapped realm whose name says RP PvP → preview carries source realm-name', async () => {
+    const config = jest
+      .spyOn(testApp.app.get(SettingsService), 'getBlizzardConfig')
+      .mockResolvedValue(null);
+    try {
+      const token = await memberToken('newnamed');
+      const prev = await createRoute(token, exportFrom(RP_PVP_REALM));
+      expect(prev.status).toBe(200);
+      expect(prev.body.target).toMatchObject({
+        action: 'create',
+        ruleset: null,
+      });
+      expect(prev.body.rulesetInference).toEqual({
+        ruleset: 'rppvp',
+        realmName: RP_PVP_REALM,
+        source: 'realm-name',
+      });
+    } finally {
+      config.mockRestore();
+    }
+  });
+
+  it('a paste refused with RULESET_REQUIRED never writes a notice (B.2: the picker is on screen)', async () => {
+    const token = await memberToken('newnonotice');
+    const res = await createRoute(token, exportFrom('Nowhere Keep'), {
+      dryRun: false,
+    });
+    expect(res.body.code).toBe('RULESET_REQUIRED');
+    const rows = await testApp.db
+      .select({ id: schema.notifications.id })
+      .from(schema.notifications);
+    expect(rows).toEqual([]);
+  });
+});
