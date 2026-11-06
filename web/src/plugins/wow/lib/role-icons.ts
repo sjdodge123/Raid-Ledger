@@ -1,3 +1,5 @@
+import { ownLookup } from '../../../lib/own-lookup';
+
 /**
  * WoW Dungeon Finder role icon URLs.
  * PNGs served from /icons/roles/ (web/public/icons/roles/).
@@ -13,5 +15,5 @@ export const WOW_ROLE_ICONS: Record<string, string> = {
 /** Get role icon URL, or null if not a recognized role. */
 export function getRoleIconUrl(role: string | null | undefined): string | null {
   if (!role) return null;
-  return WOW_ROLE_ICONS[role] ?? null;
+  return ownLookup(WOW_ROLE_ICONS, role) ?? null;
 }

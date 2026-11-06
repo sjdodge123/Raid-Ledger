@@ -26,6 +26,7 @@ import { privateTagTitle } from '../hub-copy';
 import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
 import { httpStatusOf } from '../../../lib/api/api-error';
+import { safeHttpUrl } from '../../../lib/safe-http-url';
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
@@ -64,16 +65,17 @@ function MessageList({ messages, channel }: { messages: GuildDiscordMessageDto[]
     );
 }
 
-function MirrorFooter({ url }: { url: string }): JSX.Element {
+function MirrorFooter({ url: rawUrl }: { url: string }): JSX.Element {
+    const url = safeHttpUrl(rawUrl);
     return (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge pt-1">
             <p className="inline-flex items-center gap-1.5 text-xs text-muted">
                 <LockClosedIcon className="h-3.5 w-3.5" aria-hidden="true" /> Read-only · reply in Discord
             </p>
-            <a href={url} target="_blank" rel="noopener noreferrer" data-testid="guild-discord-open"
+            {url && <a href={url} target="_blank" rel="noopener noreferrer" data-testid="guild-discord-open"
                 className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-sm text-sm font-medium text-success hover:underline ${FOCUS_RING}`}>
                 Open in Discord <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
-            </a>
+            </a>}
         </div>
     );
 }

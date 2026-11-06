@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUpdateStatus } from '../../hooks/use-version';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 
 const RELEASES_FALLBACK_URL = 'https://github.com/sjdodge123/Raid-Ledger/releases';
 const DISMISS_KEY_PREFIX = 'raid_ledger_update_banner_dismissed_v';
@@ -37,7 +38,7 @@ function writeDismissed(latestVersion: string): void {
 }
 
 function BannerContent({ data }: { data: { latestVersion: string; currentVersion: string; latestReleaseUrl: string | null | undefined } }) {
-    const href = data.latestReleaseUrl ?? RELEASES_FALLBACK_URL;
+    const href = safeHttpUrl(data.latestReleaseUrl) ?? RELEASES_FALLBACK_URL;
     return (
         <div className="flex items-start gap-3">
             {WarningIcon}

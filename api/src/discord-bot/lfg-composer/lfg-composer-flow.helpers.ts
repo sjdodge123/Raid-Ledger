@@ -21,7 +21,7 @@ import type {
   StringSelectMenuInteraction,
 } from 'discord.js';
 import type { MagicLinkService } from '../../auth/magic-link.service';
-import type { LfgService } from '../../lfg/lfg.service';
+import type { CreateIntentResult, LfgService } from '../../lfg/lfg.service';
 import type { SettingsService } from '../../settings/settings.service';
 import {
   LFG_BLOCKED_REPLY,
@@ -30,7 +30,11 @@ import {
   parseUrgencyChoice,
 } from '../commands/lfg.command.helpers';
 import { resolveLfgCaller, type LfgCaller } from '../commands/lfg.command';
-import { buildLfgJoinConfirmation } from '../listeners/lfg-join-confirmation.helpers';
+import {
+  buildLfgJoinConfirmation,
+  isGameGone,
+  LFG_GAME_GONE_REPLY,
+} from '../listeners/lfg-join-confirmation.helpers';
 import { LFG_COMPOSER_COPY, LFG_COMPOSER_IDS } from './lfg-composer.constants';
 import { buildComposerModal } from './lfg-composer-card.helpers';
 import { resolveComposerGamesUrl } from './lfg-composer-link.helpers';
@@ -209,6 +213,26 @@ async function replyStale(interaction: ButtonInteraction): Promise<void> {
 }
 
 /**
+ * `createIntent`, or null once the presser has been told the game is gone — a
+ * card made before an admin hid or banned the game can still be pressed. Any
+ * other failure still propagates.
+ */
+async function createOrGone(
+  deps: ComposerFlowDeps,
+  interaction: ButtonInteraction,
+  args: Parameters<LfgService['createIntent']>,
+): Promise<CreateIntentResult | null> {
+  try {
+    return await deps.lfgService.createIntent(...args);
+  } catch (error) {
+    if (!isGameGone(error)) throw error;
+    const content = LFG_GAME_GONE_REPLY;
+    await interaction.editReply({ content, components: [] });
+    return null;
+  }
+}
+
+/**
  * The one irreversible press. Re-checks AC5 (a card can outlive a ban), then
  * writes through `createIntent`. A new group card posts to the board, so the
  * ephemeral closes (prototype step 5). A repeat press posts nothing new, so it
@@ -231,10 +255,12 @@ export async function goComposer(
     return;
   }
   const timezone = await deps.settingsService.getDiscordBotTimezone();
-  const result = await deps.lfgService.createIntent(caller.id, state.gameId, {
-    ...parseUrgencyChoice(value),
-    timezone,
-  });
+  const result = await createOrGone(deps, interaction, [
+    caller.id,
+    state.gameId,
+    { ...parseUrgencyChoice(value), timezone },
+  ]);
+  if (!result) return;
   if (result.created) {
     await interaction.deleteReply();
     return;

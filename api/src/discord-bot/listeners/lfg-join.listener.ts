@@ -55,6 +55,8 @@ import { DISCORD_BOT_EVENTS, LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   buildLfgJoinConfirmation,
+  isGameGone,
+  LFG_GAME_GONE_REPLY,
   type LfgJoinConfirmation,
 } from './lfg-join-confirmation.helpers';
 import {
@@ -196,12 +198,32 @@ export class LfgJoinListener {
       readGroupHorizon(this.db, gameId),
       this.settingsService.getDiscordBotTimezone(),
     ]);
-    return this.confirmation(
-      await this.lfgService.createIntent(caller.id, gameId, {
-        ...horizonJoinRequest(horizon),
-        timezone,
-      }),
-    );
+    return this.write(caller.id, gameId, {
+      ...horizonJoinRequest(horizon),
+      timezone,
+    });
+  }
+
+  /**
+   * The write itself. A post made before an admin hid or banned the game can
+   * still be pressed; that refusal is an expected answer, not an error.
+   */
+  private async write(
+    userId: number,
+    gameId: number,
+    request: Parameters<LfgService['createIntent']>[2],
+  ): Promise<LfgJoinReply> {
+    let result: CreateIntentResult;
+    try {
+      result = await this.lfgService.createIntent(userId, gameId, request);
+    } catch (error) {
+      if (!isGameGone(error)) throw error;
+      this.logger.warn(
+        `LFG join refused: game ${gameId} is no longer available`,
+      );
+      return LFG_GAME_GONE_REPLY;
+    }
+    return this.confirmation(result);
   }
 
   /**
