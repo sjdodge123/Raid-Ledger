@@ -3999,3 +3999,12 @@ same day (#1278, #1279, #1280).
 ### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
 
 - **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
+
+### 2026-11-06 — chore/tech-debt-2026-11-06m (overnight tech-debt batch M, verified on fd7ec47db)
+
+- **(resolved)** line 3336 `api/src/common/search.util.ts` — the numeral tables are `Map`s, so the search word `constructor` no longer resolves to `Object` and 500s every word-match search. Spec: `search.util.spec.ts` (only `constructor` reproduces; the others normalise to `tostring`/`proto`).
+- **(resolved)** line 3919 `api/src/lineups/lineups-carryover.helpers.ts` — `findSuggestedMatches` joins `games` with `VISIBILITY_FILTER()`, so a hidden or banned game no longer carries into a new lineup (it is dropped silently). Spec: `demo-test-lineup-carryover.integration.spec.ts` › carryover skips moderated games (mutant-checked).
+- **(resolved)** line 3503 — `autoSignupSlotVoters` returns `failedUserIds`; the standalone-poll lock-in drops them before `notifyPollVoters`, so a voter whose signup failed no longer gets "Auto-signed up" (they get the generic EVENT CREATED "Sign up!" DM instead). Spec: `standalone-poll-lockin.helpers.spec.ts`.
+- **(resolved)** line 3848 `api/src/notifications/weekly-digest-coplay.queries.ts` — the event path is half-open (`upper(e.duration) < end`), so an event ending on the week boundary counts in one digest only. Spec: `weekly-digest-coplay.integration.spec.ts` › event window boundary (mutant-checked).
+- **resolved on main, noted by the batch M scout** (no code change): line 1853 steam nudge recipients (`lineup-steam-nudge.service.ts:53-54` adds `ACTIVE_MEMBER_SQL_AND`, ROK-1684); line 3508 `startGracePeriod` no-op (`ad-hoc-event-end.helpers.ts:69` returns early; already noted at 3648).
+
