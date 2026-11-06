@@ -417,14 +417,23 @@ function describeLogsController() {
         throw new BadRequestException('Invalid filename');
       });
       const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
       const res = createMockResponse();
       expect(() => controller.downloadFile(forged, res, undefined)).toThrow(
         'Invalid filename',
       );
-      const logged = log.mock.calls.map((call) => String(call[0]));
+      const logged = [...log.mock.calls, ...warn.mock.calls].map((call) =>
+        String(call[0]),
+      );
       expect(logged.filter((line) => line.includes(forged))).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Log file download rejected: ${JSON.stringify(forged)}`,
+        ),
+      );
       log.mockRestore();
+      warn.mockRestore();
     });
 
     it('logs a validated filename JSON-encoded', () => {

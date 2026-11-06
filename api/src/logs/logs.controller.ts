@@ -82,12 +82,19 @@ export class LogsController {
     @Res() res: Response,
     @Request() req?: AuthenticatedRequest,
   ) {
-    // Validate first so an invalid name throws before any log line, then
-    // JSON-encode it so CR/LF cannot forge log entries.
-    const filepath = this.logsService.getValidatedPath(filename);
-    this.logger.log(
-      `Log file download: ${JSON.stringify(filename)} by ${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`,
-    );
+    // The name is always JSON-encoded so CR/LF cannot forge log entries; a
+    // rejected name still leaves an audit line (tech-debt 3160).
+    const who = `${req?.user?.username ?? 'unknown'} (ID: ${req?.user?.id ?? 'unknown'})`;
+    let filepath: string;
+    try {
+      filepath = this.logsService.getValidatedPath(filename);
+    } catch (err) {
+      this.logger.warn(
+        `Log file download rejected: ${JSON.stringify(filename)} by ${who}`,
+      );
+      throw err;
+    }
+    this.logger.log(`Log file download: ${JSON.stringify(filename)} by ${who}`);
 
     const stream = this.logsService.createScrubbedStream(filepath);
 
