@@ -8,9 +8,18 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { maxHeightWithin, placeTop, placeWithin, useAnchoredPopup } from './use-anchored-popup';
 
 const realInnerHeight = window.innerHeight;
+/** Nodes a test appended to `<body>`; removed in `afterEach` even when an assertion fails. */
+const mounted: HTMLElement[] = [];
+
+function mount(el: HTMLElement): HTMLElement {
+    document.body.appendChild(el);
+    mounted.push(el);
+    return el;
+}
 
 afterEach(() => {
     Object.defineProperty(window, 'innerHeight', { value: realInnerHeight, configurable: true });
+    mounted.splice(0).forEach((el) => el.remove());
 });
 
 function withRect(rect: Partial<DOMRect>): HTMLElement {
@@ -65,8 +74,11 @@ describe('maxHeightWithin', () => {
         expect(maxHeightWithin({ top: 300, bottom: 336 }, { top: 100, bottom: 400 })).toBe(188);
     });
 
-    it('never goes negative', () => {
-        expect(maxHeightWithin({ top: 100, bottom: 136 }, { top: 100, bottom: 140 })).toBe(0);
+    it('floors at one 44px row, never 0 or negative, when the container has no room', () => {
+        // below: 140 - 8 - 140 = -8; above: 100 - 4 - 108 = -12
+        expect(maxHeightWithin({ top: 100, bottom: 136 }, { top: 100, bottom: 140 })).toBe(44);
+        // below: 200 - 8 - 160 = 32; above: 120 - 4 - 108 = 8 → still one full row
+        expect(maxHeightWithin({ top: 120, bottom: 156 }, { top: 100, bottom: 200 })).toBe(44);
     });
 });
 
@@ -94,20 +106,17 @@ describe('useAnchoredPopup', () => {
         const dialog = withRect({ top: 100, bottom: 400, left: 0, right: 600, width: 600, height: 300 });
         const popup = withRect({ width: 200, height: 120 });
         dialog.appendChild(popup);
-        document.body.appendChild(dialog);
+        mount(dialog);
         const anchorRef = { current: withRect({ top: 300, bottom: 336, left: 10, right: 210, width: 200 }) };
         const { result } = renderHook(() => useAnchoredPopup(anchorRef, { current: popup }, true, () => undefined));
         expect(result.current).toEqual({ top: 176, left: 10, width: 200, maxHeight: 188 });
-        dialog.remove();
     });
 
     it('leaves a <body>-portalled popup uncapped (viewport placement unchanged)', () => {
         Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-        const popup = withRect({ width: 200, height: 120 });
-        document.body.appendChild(popup);
+        const popup = mount(withRect({ width: 200, height: 120 }));
         const anchorRef = { current: withRect({ top: 300, bottom: 336, left: 10, right: 210, width: 200 }) };
         const { result } = renderHook(() => useAnchoredPopup(anchorRef, { current: popup }, true, () => undefined));
         expect(result.current).toStrictEqual({ top: 340, left: 10, width: 200 });
-        popup.remove();
     });
 });
