@@ -126,3 +126,5 @@ Newest first. Every entry states **additive** or **breaking** (see
 - 2026-10-05 v1 — fixture fix, additive: guild fixtures now include the exporter; wire format unchanged.
 
 - 2026-10-22 v1 — **Additive (stays v1).** Wire format unchanged. Metadata only: `$id` moved off a private instance to the public repo path (ROK-1897).
+
+- 2026-11-06 v1 — **Additive (stays v1).** `who.ruleset` gains `rppvp` (RP-PvP realms, ROK-2101); wire format otherwise unchanged; fixture char-rppvp added.
