@@ -69,7 +69,7 @@ describe('autoSignupSlotVoters', () => {
       signupsService: mockSignupsService,
     });
 
-    expect(result).toEqual({ benchedUserIds: [11, 12] });
+    expect(result).toEqual({ benchedUserIds: [11, 12], failedUserIds: [] });
   });
 
   it('returns no benched voters when every signup took a roster spot', async () => {
@@ -80,10 +80,10 @@ describe('autoSignupSlotVoters', () => {
       signupsService: mockSignupsService,
     });
 
-    expect(result).toEqual({ benchedUserIds: [] });
+    expect(result).toEqual({ benchedUserIds: [], failedUserIds: [] });
   });
 
-  it('does not count a failed signup as benched (ROK-1874)', async () => {
+  it('reports a failed signup as failed, never as benched (ROK-1874)', async () => {
     mockSignupsService.signup
       .mockRejectedValueOnce(new Error('Event is full'))
       .mockResolvedValueOnce({ assignedSlot: 'bench' });
@@ -95,7 +95,7 @@ describe('autoSignupSlotVoters', () => {
       signupsService: mockSignupsService,
     });
 
-    expect(result).toEqual({ benchedUserIds: [11] });
+    expect(result).toEqual({ benchedUserIds: [11], failedUserIds: [10] });
   });
 
   it('signs up each voter who voted for the slot', async () => {
@@ -252,7 +252,7 @@ describe('autoSignupSlotVoters', () => {
         benchUserIds: new Set([10, 12]),
       });
 
-      expect(result).toEqual({ benchedUserIds: [11, 10] });
+      expect(result).toEqual({ benchedUserIds: [11, 10], failedUserIds: [] });
     });
 
     it('never signs up the creator or a picked id that is not a voter', async () => {
