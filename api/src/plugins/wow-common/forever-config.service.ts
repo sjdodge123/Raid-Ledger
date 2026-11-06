@@ -15,6 +15,7 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import { SettingsService } from '../../settings/settings.service';
 import { BlizzardService } from './blizzard.service';
 import {
+  FOREVER_DEFAULT_PREFIX,
   FOREVER_NAMESPACE_ALIAS,
   getForeverNamespacePrefix,
   setForeverNamespacePrefix,
@@ -29,6 +30,11 @@ import {
   isWowheadResolverEnabled,
   setWowheadResolverEnabled,
 } from './wowhead-item/wowhead-resolver.settings';
+
+/** The default prefix or the stored alias: both persist as an absent key. */
+function isDefaultPrefix(prefix: string): boolean {
+  return prefix === FOREVER_DEFAULT_PREFIX || prefix === FOREVER_NAMESPACE_ALIAS;
+}
 
 /**
  * Admin-controlled WoW: Forever runtime config (ROK-1717): the Blizzard
@@ -62,10 +68,10 @@ export class ForeverConfigService implements OnModuleInit {
   /** Current config as the admin form shows it. */
   async getConfig(): Promise<WowForeverConfigResponseDto> {
     const stored = await this.settings.get(WOW_FOREVER_NAMESPACE_PREFIX_KEY);
-    const namespacePrefix = stored || FOREVER_NAMESPACE_ALIAS;
+    const namespacePrefix = stored || FOREVER_DEFAULT_PREFIX;
     return {
       namespacePrefix,
-      namespacePrefixIsDefault: namespacePrefix === FOREVER_NAMESPACE_ALIAS,
+      namespacePrefixIsDefault: namespacePrefix === FOREVER_DEFAULT_PREFIX,
       armoryImportEnabled: await this.isArmoryImportEnabled(),
       wowheadResolverEnabled: await isWowheadResolverEnabled(this.settings),
     };
@@ -73,7 +79,8 @@ export class ForeverConfigService implements OnModuleInit {
 
   /**
    * Validate + persist the config, then announce it. The default prefix and a
-   * disabled flag are stored as an absent key.
+   * disabled flag are stored as an absent key; saving the `classicforever`
+   * alias also reads as "reset to the `forever` default" (ROK-2102).
    * @throws BadRequestException when the body fails the contract schema.
    */
   async updateConfig(
@@ -87,7 +94,7 @@ export class ForeverConfigService implements OnModuleInit {
       parsed.data;
     await this.writeOrDelete(
       WOW_FOREVER_NAMESPACE_PREFIX_KEY,
-      namespacePrefix === FOREVER_NAMESPACE_ALIAS ? null : namespacePrefix,
+      isDefaultPrefix(namespacePrefix) ? null : namespacePrefix,
     );
     await this.writeOrDelete(
       WOW_FOREVER_ARMORY_IMPORT_KEY,
