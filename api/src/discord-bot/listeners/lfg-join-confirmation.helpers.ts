@@ -19,9 +19,22 @@
  *     own timezone. A server-formatted clock string is wrong for most readers;
  *     the invite DM card already does this and this matches it.
  */
+import { NotFoundException } from '@nestjs/common';
 import type { ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { LfgIntentResponseDto } from '@raid-ledger/contract';
 import { lfgViewGroupComponents } from '../embeds/lfg-view-group-button.helpers';
+
+/**
+ * A press on a board post or composer card made BEFORE an admin hid or banned
+ * the game: `createIntent` refuses it with `NotFoundException('Game not found')`.
+ * One string for both press surfaces (the `+1`/Join buttons and the composer).
+ */
+export const LFG_GAME_GONE_REPLY = 'That game is no longer available.';
+
+/** True when `createIntent` refused because the game is gone (moderated). */
+export function isGameGone(error: unknown): boolean {
+  return error instanceof NotFoundException;
+}
 
 /** The ephemeral reply body: copy plus the `View the group` row. */
 export interface LfgJoinConfirmation {
