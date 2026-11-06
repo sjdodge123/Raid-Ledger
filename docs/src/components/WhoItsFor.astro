@@ -1,0 +1,13 @@
+---
+const audiences = [
+  ['Raid guilds', 'Rosters, roles, lockouts, attendance'],
+  ['Survival servers', "Server hours, maps, deaths, who's on"],
+  ['Co-op campaigns', 'Session notes, saves, party progress'],
+  ['Game-night crews', '"What are we playing?" put to a vote'],
+] as const;
+---
+<section class="audiences" aria-label="Who it's for">
+  <div class="wrap">
+    {audiences.map(([who, what]) => <div class="aud"><b>{who}</b><span>{what}</span></div>)}
+  </div>
+</section>

@@ -1,0 +1,126 @@
+/* Raid Ledger marketing site — section styles (audiences → footer). */
+/* ---------- audiences strip ---------- */
+.audiences { border-block: 1px solid var(--edge-subtle); background: var(--surface); }
+.audiences .wrap { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 16px; }
+@media (min-width: 900px) { .audiences .wrap { grid-template-columns: repeat(4, 1fr); } }
+.aud { padding: 22px 0; display: grid; gap: 4px; }
+.aud b { color: var(--fg); font-size: 15px; }
+.aud span { font-size: 13px; color: var(--muted); }
+
+/* ---------- how it works ---------- */
+.steps { display: grid; gap: 16px; counter-reset: s; }
+@media (min-width: 900px) { .steps { grid-template-columns: repeat(3, 1fr); gap: 20px; } }
+.step { position: relative; background: var(--surface); border: 1px solid var(--edge); border-radius: 14px; padding: 24px; box-shadow: var(--shadow); }
+.step::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--indigo-soft); color: var(--indigo); font-weight: 700; margin-bottom: 16px; }
+.step h3 { font-size: 19px; margin-bottom: 8px; }
+.step p { color: var(--muted); font-size: 15px; }
+
+/* ---------- growth chapters ---------- */
+.chapter { display: grid; gap: 40px; align-items: center; padding: 56px 0; border-top: 1px solid var(--edge-subtle); }
+.chapter > * { min-width: 0; }
+.chapter.first { border-top: 0; padding-top: 8px; }
+@media (min-width: 1024px) { .chapter { grid-template-columns: 1fr 1.1fr; gap: 64px; padding: 80px 0; } .chapter.flip > .ch-copy { order: 2; } }
+.ch-num { display: inline-flex; align-items: center; gap: 10px; font: 600 13px/1 Inter, sans-serif; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; letter-spacing: .1em; }
+.ch-num b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--edge-strong); color: var(--fg); letter-spacing: 0; }
+.ch-copy h3 { font-size: clamp(26px, 3.2vw, 36px); font-weight: 800; margin-bottom: 14px; }
+.ch-copy > p { color: var(--muted); font-size: 17px; margin-bottom: 24px; }
+.feats { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.feats li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.feats .ic { width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); display: grid; place-items: center; }
+.feats .ic svg { width: 16px; height: 16px; }
+.feats b { color: var(--fg); font-weight: 600; display: block; font-size: 15px; }
+.feats span { font-size: 14px; color: var(--muted); }
+.ch-media { display: grid; gap: 16px; }
+@media (min-width: 640px) { .ch-media.duo { grid-template-columns: 1fr 200px; align-items: end; } .shot.phone { max-width: 200px; } }
+
+/* ---------- plugins ---------- */
+.plugins { display: grid; gap: 16px; }
+@media (min-width: 700px) { .plugins { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1100px) { .plugins { grid-template-columns: repeat(3, 1fr); } }
+.plug { position: relative; display: grid; gap: 12px; align-content: start; background: var(--backdrop); border: 1px solid var(--edge); border-radius: 14px; padding: 22px; transition: border-color .2s, transform .25s; overflow: hidden; }
+.plug:hover { border-color: var(--edge-strong); transform: translateY(-2px); }
+.plug::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--c); }
+.plug-top { display: flex; align-items: center; gap: 12px; }
+.plug-ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font: 700 17px/1 Cinzel, serif; color: #fff; background: var(--c); flex: none; }
+.plug h3 { font-size: 18px; }
+.plug .via { font-size: 12px; color: var(--muted); }
+.plug p { font-size: 14px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 999px; background: var(--panel); color: var(--secondary); border: 1px solid var(--edge-subtle); }
+.plug.soon { border-style: dashed; background: transparent; }
+.plug.soon .plug-ic { background: var(--panel); color: var(--muted); }
+.plug.soon::after { display: none; }
+
+/* ---------- a week (example community, not testimonials) ---------- */
+.timeline { display: grid; position: relative; max-width: 760px; margin: 0 auto; }
+.tl { display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 14px 0; position: relative; }
+.tl::before { content: ""; position: absolute; left: 63px; top: 0; bottom: 0; width: 2px; background: var(--edge-subtle); }
+.tl time { font: 600 13px/1.6 "JetBrains Mono", monospace; color: var(--muted); text-align: right; padding-right: 4px; }
+.tl div { position: relative; padding-left: 22px; }
+.tl div::before { content: ""; position: absolute; left: -6px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--backdrop); border: 2px solid var(--accent); }
+.tl b { color: var(--fg); }
+.tl p { font-size: 15px; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 48px; }
+@media (min-width: 900px) { .stats { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
+.stat { padding: 20px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--edge); text-align: center; box-shadow: var(--shadow); }
+.stat b { display: block; font-size: clamp(26px, 3vw, 34px); color: var(--fg); font-weight: 800; letter-spacing: -.02em; }
+.stat span { font-size: 13px; color: var(--muted); }
+
+/* ---------- self host ---------- */
+.host { display: grid; gap: 40px; align-items: center; }
+.host > * { min-width: 0; }
+@media (min-width: 1024px) { .host { grid-template-columns: 1fr 1fr; gap: 64px; } }
+.term { border-radius: 14px; background: #0b1120; border: 1px solid #1e293b; overflow: hidden; box-shadow: 0 30px 60px -30px rgb(0 0 0 / .6); }
+.term-bar { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 14px; height: 52px; border-bottom: 1px solid #1e293b; color: #94a3b8; font: 500 12px/1 "JetBrains Mono", monospace; }
+.copy { min-height: 44px; min-width: 64px; padding: 0 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font: 600 13px/1 Inter, sans-serif; cursor: pointer; }
+.copy:hover { border-color: #475569; }
+.term pre { margin: 0; padding: 20px; overflow-x: auto; color: #e2e8f0; font: 400 13px/1.7 "JetBrains Mono", monospace; }
+.term .c { color: #8291a7; } .term .k { color: #34d399; } .term .s { color: #a5b4fc; }
+.checks { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 10px; }
+@media (min-width: 560px) { .checks { grid-template-columns: 1fr 1fr; } }
+.checks li { display: flex; gap: 10px; align-items: start; font-size: 15px; }
+.checks svg { width: 20px; height: 20px; color: var(--accent-text); flex: none; margin-top: 2px; }
+.runs-on { margin-top: 20px; font-size: 14px; color: var(--muted); }
+
+/* ---------- faq ---------- */
+.faq { max-width: 820px; margin: 0 auto; display: grid; gap: 10px; }
+.faq details { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; box-shadow: var(--shadow); }
+.faq summary { list-style: none; cursor: pointer; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; color: var(--fg); font-weight: 600; font-size: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font-size: 22px; font-weight: 400; color: var(--muted); transition: transform .2s; flex: none; }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { padding: 0 20px 18px; color: var(--muted); font-size: 15px; }
+
+/* ---------- final cta + footer ---------- */
+.final { text-align: center; border-radius: 24px; padding: 56px 20px; background: var(--hero-grad), var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+.final h2 { font-size: clamp(28px, 4.4vw, 46px); font-weight: 800; margin-bottom: 14px; }
+.final .hero-ctas { justify-content: center; }
+footer { border-top: 1px solid var(--edge-subtle); padding: 48px 0 104px; margin-top: 72px; font-size: 14px; }
+.foot { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; }
+.foot > :first-child { grid-column: 1 / -1; }
+@media (min-width: 900px) { .foot { grid-template-columns: 1.4fr repeat(3, 1fr); } .foot > :first-child { grid-column: auto; } }
+.foot h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.foot ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.foot li a { color: var(--secondary); display: inline-flex; align-items: center; min-height: 44px; }
+.foot p { color: var(--muted); max-width: 22rem; margin-top: 12px; }
+.fine { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--edge-subtle); color: var(--dim); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+/* ---------- section variants (were inline styles in the mockup) ---------- */
+.section-flush { padding-top: 0; }
+@media (min-width: 1024px) { .section-flush { padding-top: 0; } }
+.section-band { background: var(--surface); border-block: 1px solid var(--edge-subtle); }
+.vps h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; margin: 14px 0; }
+.vps { padding: 28px 20px; margin-bottom: 56px; border-radius: 18px; background: var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow); }
+@media (min-width: 1024px) { .vps { padding: 40px 48px; margin-bottom: 72px; } }
+.host-title { font-size: clamp(22px, 3vw, 30px); font-weight: 800; margin: 14px 0; color: var(--fg); }
+.final .lede { margin: 0 auto; }
+/* plugin accent colours (one per game, same in both themes) */
+.plug { --c: #059669; }
+.plug[data-c="wow"] { --c: #c2410c; }
+.plug[data-c="valheim"] { --c: #0369a1; }
+.plug[data-c="bg3"] { --c: #7c3aed; }
+.plug[data-c="servers"] { --c: #0f766e; }
+
+/* screenshots inside a plugin card (S9, S10) and under the example week (S11) */
+.plug .shot { margin-top: 4px; }
+.week-shot { max-width: 960px; margin: 40px auto 0; }

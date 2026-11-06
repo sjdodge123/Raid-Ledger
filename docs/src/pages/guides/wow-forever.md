@@ -1,4 +1,5 @@
 ---
+layout: ../../layouts/Guide.astro
 title: "WoW: Forever setup"
 description: "How guild officers and members get their WoW: Forever guild and characters into Raid Ledger with the LedgerLink addon and the Raid Ledger Companion."
 ---

@@ -1,0 +1,15 @@
+---
+// "From first join to fiftieth raid": the four growth chapters.
+import { CHAPTERS } from '../data/chapters';
+import GrowthChapter from './GrowthChapter.astro';
+---
+<section class="section section-flush" id="features">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow">Everything a growing community needs</span>
+      <h2>From first join to fiftieth raid</h2>
+      <p class="lede">Grouped by the job it does for you.</p>
+    </div>
+    {CHAPTERS.map((chapter, index) => <GrowthChapter chapter={chapter} index={index} />)}
+  </div>
+</section>
