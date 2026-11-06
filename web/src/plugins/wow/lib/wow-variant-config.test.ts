@@ -22,11 +22,11 @@ describe('WOW_VARIANT_INTEGRATIONS (ROK-1726)', () => {
         expect(foreverRows).toEqual(['wow_forever']);
     });
 
-    it('marks only wow_forever as not importable from the Armory', () => {
+    it('marks every variant, wow_forever included, as importable from the Armory by default (ROK-1722)', () => {
         const unsupported = Object.entries(WOW_VARIANT_INTEGRATIONS)
             .filter(([, row]) => !row.armoryImport)
             .map(([key]) => key);
-        expect(unsupported).toEqual(['wow_forever']);
+        expect(unsupported).toEqual([]);
     });
 
     it('adds a forever expansion domain alongside the verbatim classic ones', () => {

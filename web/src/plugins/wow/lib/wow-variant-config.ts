@@ -45,7 +45,7 @@ export const WOW_VARIANT_INTEGRATIONS: Readonly<Record<WowVariant, WowVariantInt
         armoryImport: true,
         namespaceAliases: ['classicann'],
     },
-    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: false, namespaceAliases: ['classicforever'] },
+    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: true, namespaceAliases: ['classicforever'] },
 };
 
 /** The retail Wowhead domain — the fallback for any unrecognised variant or expansion. */
