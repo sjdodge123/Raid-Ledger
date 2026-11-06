@@ -55,7 +55,7 @@ import {
   convertGroup,
   findActiveIntent,
   insertIntent,
-  isGroupParticipant,
+  resolveConvertRole,
   reviveIntent,
   toIntentDto,
   type LfgConversionTarget,
@@ -287,18 +287,17 @@ export class LfgService {
   ): Promise<{ converted: number }> {
     await this.requireGame(gameId);
     const target = toConversionTarget(dto);
-    const participant = await isGroupParticipant(
-      this.db,
-      userId,
-      gameId,
-      target,
-    );
-    if (!participant) {
+    const role = await resolveConvertRole(this.db, userId, gameId, target);
+    if (role === null) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
       );
     }
     await this.requireConversionTarget(gameId, target);
+    // A retry-only caller (their row already converted into this target, no
+    // live intent now) gets the idempotent answer and touches nobody: the
+    // live rows belong to a LATER group they are not part of.
+    if (role === 'retry') return { converted: 0 };
     const converted = await convertGroup(this.db, gameId, target);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
