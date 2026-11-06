@@ -2,7 +2,7 @@
  * WoW: Forever manual characters (ROK-1721) against a real database:
  * create, cross-user 409 on region + full name (pre-check AND the DB index
  * on its own), rename 409, Hardcore 400, ruleset edit, region lock,
- * and the nightly auto-sync skipping realm-less characters.
+ * and the nightly auto-sync skipping manual (non-Armory) realm-less characters.
  */
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
@@ -298,9 +298,11 @@ describe('WoW: Forever manual characters (integration)', () => {
     expect(row?.region).toBe('us');
   });
 
-  it('nightly auto-sync never calls Blizzard for a realm-less character', async () => {
+  it('nightly auto-sync never calls Blizzard for a manual realm-less character', async () => {
     const { userId } = await memberToken(testApp, 'foreversync');
-    // Worst case: a row that also carries game_variant (the old selection key).
+    // ROK-1722: only Armory-linked rows (game_variant set) sync; a manual
+    // row keeps game_variant NULL. The imported case is covered in
+    // characters-forever-import.integration.spec.ts.
     await testApp.db.insert(schema.characters).values({
       userId,
       gameId,
@@ -308,7 +310,7 @@ describe('WoW: Forever manual characters (integration)', () => {
       realm: null,
       region: 'us',
       ruleset: 'pvp',
-      gameVariant: 'wow_forever',
+      gameVariant: null,
       isMain: true,
     });
     const blizzard = testApp.app.get(BlizzardService);
