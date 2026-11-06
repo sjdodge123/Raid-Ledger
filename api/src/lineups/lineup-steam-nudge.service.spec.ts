@@ -2,6 +2,7 @@
  * TDD tests for LineupSteamNudgeService (ROK-993).
  * Validates Discord DM nudge dispatch, dedup, and SQL-level filtering.
  */
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -94,6 +95,19 @@ describe('LineupSteamNudgeService', () => {
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({ payload: { lineupId: 42 } }),
       );
+    });
+
+    it('resolves and logs a warning when the recipient query rejects', async () => {
+      mockDb.execute.mockRejectedValueOnce(new Error('db down'));
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(service.nudgeUnlinkedMembers(42)).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 });
