@@ -31,6 +31,10 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Every response body, serialised, is **≤ 16 KiB** (`DEV_BRIDGE_PAGE_MAX_BYTES`).
   A list or text that would not fit is paged: the client passes `?cursor=` and
   the body carries `next` (an opaque cursor, or `null` on the last page).
+  **A cursor is valid only on the route that issued it** — and, for
+  `/dev/v1/addons/<folder>/sv`, only for that same `<folder>`. The companion
+  answers a cursor from another route or folder with 400 `invalid_request`
+  at `cursor`; the client restarts without one.
 - **Every byte cap is UTF-8 bytes of the JSON serialisation**
   (`devBridgeJsonBytes`), never characters — escaping (`"`, `\n`, `\u0001`) and
   multi-byte text count. The schemas enforce each cap (a root-level `custom`
@@ -52,6 +56,7 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | DELETE | `/dev/v1/probes/:id` | `probe-cancelled` | no |
 | GET | `/dev/v1/logs?since=&level=&cursor=` | `logs` | yes |
 | GET | `/dev/v1/collectors` | `collectors` | no |
+| GET | `/dev/v1/events?since=&cursor=` | `events` | yes |
 | GET | `/dev/v1/ledgerlink/snapshot?flavor=&character=&at=&cursor=` | `ledgerlink-snapshot-page` | yes (`calls` → `apis` → `sections`) |
 | GET | `/dev/v1/ledgerlink/snapshot/history?flavor=&character=&cursor=` | `ledgerlink-snapshot-history` | yes |
 | GET | `/dev/v1/bg3/saves?cursor=` | `bg3-saves` | yes |
@@ -134,6 +139,76 @@ query parameter (never 403 or 400, so the response reveals nothing about
 folders outside the list). A listed folder
 with no SavedVariables file of that scope → 404 `not_found`. A bad `scope`
 or `flavor` → 400 `invalid_request`, as on every other route.
+
+## Collector status (`collectors[].status`, `collectors[].linked`) — 2026-11-06
+
+Each `collectors` row may carry `status`, the Companion window's collector
+tile status line as a closed enum, and `linked`, whether this device holds a
+device token that this collector's uploads would use. Both are **optional**
+(additive): rows from a companion built before 2026-11-06 omit them and
+still parse (fixture `collectors--without-status`). A device-level state
+that blocks every collector replaces the collector's own line, in the order
+`paused` > `rate-limited` > `link-device` (what the window shows once for the
+device).
+
+| Value | Meaning (tile copy it stands for) |
+|---|---|
+| `off` | The collector is switched off ("Off", "<Game> uploads are off", "Uploads switched off — uploaded N of M"). |
+| `paused` | The device is paused ("Paused — uploads resume when you unpause"; also a batch cut short by a pause). |
+| `rate-limited` | The server answered 429; uploads are held and retried automatically ("Rate limited — retrying …"). |
+| `link-device` | The device is not linked, or its token was refused and it must re-link ("Link this device to upload", "Re-link this device"). |
+| `not-scanned` | Switched on, no scan has finished yet ("Waiting for the first scan…"). |
+| `no-files` | The scan found nothing to read in the folder (the collector's no-files hint). |
+| `needs-confirm` | Items are held until the user checks the preview and confirms the first upload ("N waiting — check the preview before the first upload"). |
+| `waiting` | Items are queued but not sent this pass ("N export(s) waiting"). |
+| `up-to-date` | Nothing new to send ("Up to date"). |
+| `uploaded` | The last pass's uploads were accepted ("Uploaded"). |
+| `rejected` | The server refused an upload's content (4xx with a `code`, e.g. a full hub Gallery); it is not resent. |
+| `retrying` | A transient failure (network, 5xx); the next scan tries again ("Will retry: …"). |
+| `error` | Anything else that stops the collector (e.g. the device token cannot be read, the server URL is unusable). |
+
+The enum carries no free text; the tile's wording, paths and reasons stay
+in the app. A new value is **breaking** for readers that switch on it, so it
+needs a new `vN/` (or an operator ruling that the value is additive).
+
+## Activity events (`GET /dev/v1/events`, `events`) — 2026-11-06
+
+Structured companion activity, the allowlisted replacement for the removed
+Activity-log mirror. **No free text anywhere**: every field is a timestamp,
+a collector id, an enum, an integer, or an error-code token matching
+`^[a-z0-9_-]{1,32}$` — never a message, path, file, account, character or
+save name (four review rounds found path leaks in free-text scrubbing; the
+log mirror was removed for that reason). Rows are strict objects: an
+unknown key such as `message` is invalid (fixture
+`invalid/events--free-text-message`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `ts` | timestamp (UTC, ≤24 chars) | When it happened. |
+| `collectorId` | `^[a-z0-9][a-z0-9-]{0,63}$` | Same grammar as `collectors[].id`. |
+| `kind` | enum below | What happened. |
+| `count` | int 0–1,000,000, optional | Files scanned, exports uploaded or held. |
+| `httpStatus` | int 100–599, optional | The server's status, for an upload outcome. |
+| `errorCode` | `^[a-z0-9_-]{1,32}$`, optional | The server's rejection `code`, or the companion's own token. |
+
+| Value | Meaning |
+|---|---|
+| `scan` | A scan pass finished (`count` = files read). |
+| `upload-ok` | An upload was accepted (`count` = exports, `httpStatus` 2xx). |
+| `upload-rejected` | The server refused the content; not resent (`httpStatus` 4xx, `errorCode` = its `code`). |
+| `upload-held` | Uploads are held after a 429 (`httpStatus` 429, `count` = exports held). |
+| `upload-retry` | A transient failure; retried on a later scan (`httpStatus` when the server answered). |
+| `link-required` | The device token is missing or was refused (`httpStatus` 401 when refused). |
+| `collector-on` | The user switched the collector on. |
+| `collector-off` | The user switched the collector off. |
+| `error` | Anything else that stopped the pass (`errorCode` says which). |
+
+Events come oldest first. `since` (a timestamp) returns events with `ts`
+after it; paging is by the 16 KiB body cap (≤500 rows; with every field at
+its widest, 73 rows fit — fixture `events--max-page`). How many events the
+companion retains is its choice; a cursor whose event was dropped is a 400
+`invalid_request` at `cursor`. A new `kind` value is breaking for the same
+reason as a new `status`.
 
 ## Probe request (`probe-request`)
 
