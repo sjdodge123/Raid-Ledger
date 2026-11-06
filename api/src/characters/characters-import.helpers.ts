@@ -3,15 +3,13 @@
  * Extracted from characters.service.ts for file size compliance (ROK-719).
  */
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { eq, and, ne, inArray, isNull, sql } from 'drizzle-orm';
+import { eq, and, ne, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type {
   CharacterDto,
   ImportWowCharacterDto,
 } from '@raid-ledger/contract';
-import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
-import { variantToNamespacePrefix } from '../plugins/wow-common/blizzard.constants';
 import {
   fetchFullProfile,
   buildSyncUpdateFieldsFromSync,
@@ -19,11 +17,10 @@ import {
   type OptionalSyncFields,
 } from './characters-sync.helpers';
 import {
-  claimForeverIdentity,
-  foreverImportName,
   importIdentityFields,
   isForeverImport,
-  mergeForeverRow,
+  mergeIntoOwnForeverRow,
+  type ForeverImportCtx,
 } from './characters-forever-import.helpers';
 import { rethrowForeverViolation } from '../plugins/wow-common/wow-forever-identity.helpers';
 import {
@@ -36,6 +33,8 @@ import {
   checkIdentityClaim,
   type IdentityClaimOpts,
 } from './characters-identity.helpers';
+
+export { resolveGameByVariant } from './characters-import-game.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };
@@ -85,27 +84,6 @@ export async function validateUserExists(
     throw new NotFoundException(
       `User ${userId} not found — cannot import character`,
     );
-}
-
-/** Resolve game by slug candidates + namespace prefix from adapter. */
-export async function resolveGameByVariant(
-  db: Db,
-  adapter: CharacterSyncAdapter,
-  gameVariant: string,
-): Promise<typeof schema.games.$inferSelect> {
-  const slugCandidates = adapter.resolveGameSlugs(gameVariant);
-  const nsPrefix = variantToNamespacePrefix(gameVariant);
-  const nsFilter =
-    nsPrefix === null
-      ? isNull(schema.games.apiNamespacePrefix)
-      : eq(schema.games.apiNamespacePrefix, nsPrefix);
-  const [game] = await db
-    .select()
-    .from(schema.games)
-    .where(and(inArray(schema.games.slug, slugCandidates), nsFilter))
-    .limit(1);
-  if (!game) throw new NotFoundException('Game not found in the games catalog');
-  return game;
 }
 
 /** Build import insert values from profile and sync fields. */
@@ -197,6 +175,21 @@ async function resolveMainAndBuildValues(
   return { values, shouldBeMain };
 }
 
+/**
+ * Claim check before an import insert. Forever (ROK-1722) merges into the
+ * caller's own identity row; other variants check the realm claim.
+ * @returns the merged character, or undefined when the caller should insert.
+ */
+async function claimOrMergeImport(
+  tx: Db,
+  ctx: ForeverImportCtx,
+): Promise<CharacterDto | undefined> {
+  const { gameId, userId, profile } = ctx;
+  if (isForeverImport(ctx.dto)) return mergeIntoOwnForeverRow(tx, ctx);
+  await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
+  return undefined;
+}
+
 /** Execute the import transaction body. */
 export async function executeImportTx(
   tx: Db,
@@ -207,13 +200,9 @@ export async function executeImportTx(
   sync: OptionalSyncFields,
   logger: Logger,
 ): Promise<CharacterDto> {
-  if (isForeverImport(dto)) {
-    const name = foreverImportName(profile.name, dto.name);
-    const args = { userId, gameId, name, region: dto.region };
-    const own = await claimForeverIdentity(tx, args);
-    if (own) return mergeForeverRow(tx, own, profile, dto, sync, logger);
-  } else
-    await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
+  const ctx = { userId, gameId, profile, dto, sync, logger };
+  const merged = await claimOrMergeImport(tx, ctx);
+  if (merged) return merged;
   const { values, shouldBeMain } = await resolveMainAndBuildValues(
     tx,
     userId,

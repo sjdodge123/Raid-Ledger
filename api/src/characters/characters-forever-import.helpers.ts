@@ -75,7 +75,8 @@ export function importIdentityFields(
   profile: Profile,
   dto: ImportWowCharacterDto,
 ): ImportIdentityFields {
-  if (!isForeverImport(dto)) return { name: profile.name, realm: profile.realm };
+  if (!isForeverImport(dto))
+    return { name: profile.name, realm: profile.realm };
   const ruleset = resolveImportRuleset(profile, dto);
   const externalId = profileExternalId(profile);
   return {
@@ -144,4 +145,31 @@ export async function mergeForeverRow(
     `User ${existing.userId} merged Forever import into character ${existing.id} (${existing.name})`,
   );
   return mapCharacterToDto(defined(merged, 'merged Forever character row'));
+}
+
+/** Everything the Forever import transaction step needs. */
+export interface ForeverImportCtx {
+  userId: number;
+  gameId: number;
+  profile: Profile;
+  dto: ImportWowCharacterDto;
+  sync: OptionalSyncFields;
+  logger: Logger;
+}
+
+/**
+ * Forever import step inside the import transaction: 409 when another player
+ * owns the identity, merge when the caller owns it.
+ * @returns the merged character, or undefined when the caller should insert.
+ */
+export async function mergeIntoOwnForeverRow(
+  tx: Db,
+  ctx: ForeverImportCtx,
+): Promise<CharacterDto | undefined> {
+  const { userId, gameId, profile, dto, sync, logger } = ctx;
+  const name = foreverImportName(profile.name, dto.name);
+  const args = { userId, gameId, name, region: dto.region };
+  const own = await claimForeverIdentity(tx, args);
+  if (!own) return undefined;
+  return mergeForeverRow(tx, own, profile, dto, sync, logger);
 }
