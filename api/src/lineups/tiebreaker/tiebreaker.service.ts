@@ -11,7 +11,6 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   StartTiebreakerDto,
@@ -29,10 +28,9 @@ import { pickDismissWinner } from './tiebreaker-dismiss.helpers';
 import {
   findPendingOrActiveTiebreaker,
   findMatchups,
-  countDistinctMatchupVoters,
 } from './tiebreaker-query.helpers';
-import { advanceBracket, getCurrentRound } from './tiebreaker-bracket.helpers';
-import { countDistinctVoters } from '../lineups-query.helpers';
+import { advanceBracket } from './tiebreaker-bracket.helpers';
+import { advanceRoundIfComplete } from './tiebreaker-advance.helpers';
 import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
   submitVeto,
@@ -241,48 +239,21 @@ export class TiebreakerService {
   }
 
   /**
-   * Check if all community members have voted on every non-bye matchup
-   * in the current round. If so, advance the bracket.
-   * If the bracket completes, resolve the tiebreaker and transition lineup.
+   * Advance the bracket once every lineup voter has voted on every open
+   * matchup of the current round (serialized — see tiebreaker-advance).
+   * If the bracket completes, resolve the tiebreaker and transition the
+   * lineup — after the advance transaction has committed.
    */
   private async checkAndAdvanceRound(
     tb: typeof schema.communityLineupTiebreakers.$inferSelect,
     lineupId: number,
   ): Promise<void> {
-    const round = await getCurrentRound(this.db, tb.id);
-    const matchups = await findMatchups(this.db, tb.id);
-    const active = matchups.filter(
-      (m) => m.round === round && !m.isBye && !m.winnerGameId,
-    );
-    if (active.length === 0) return;
-
-    // Use lineup voter count — only people who voted in the lineup need to vote
-    const [tb2] = await this.db
-      .select()
-      .from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.id, tb.id))
-      .limit(1);
-    const lineupVoters = await countDistinctVoters(
-      this.db,
-      tb2?.lineupId ?? lineupId,
-    );
-    const requiredVotes = lineupVoters[0]?.total ?? 1;
-
-    for (const m of active) {
-      const voterCount = await countDistinctMatchupVoters(this.db, m.id);
-      if (voterCount < requiredVotes) return; // still waiting for votes
-    }
-
-    // All members voted on all matchups — advance
-    const winner = await advanceBracket(this.db, tb.id);
-    if (winner) {
-      await resolveTiebreaker(this.db, tb.id, winner);
-      await clearActiveTiebreaker(this.db, lineupId);
-      await this.transitionToDecided(lineupId, winner);
-      this.logger.log(
-        `Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`,
-      );
-    }
+    const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
+    if (!winner) return;
+    await resolveTiebreaker(this.db, tb.id, winner);
+    await clearActiveTiebreaker(this.db, lineupId);
+    await this.transitionToDecided(lineupId, winner);
+    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
   }
 
   /**
