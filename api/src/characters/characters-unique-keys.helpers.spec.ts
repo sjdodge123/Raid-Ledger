@@ -5,24 +5,30 @@
  */
 import { reportCrossOwnerCharacterDeletes } from './characters-unique-keys.helpers';
 
-function recordingTx() {
-  return { execute: jest.fn(() => Promise.resolve([])) };
+function recordingTx(): { execute: jest.Mock<Promise<unknown[]>, []> } {
+  return { execute: jest.fn((): Promise<unknown[]> => Promise.resolve([])) };
 }
 
+/** [label, loserGameId, winnerGameId] — each pair holds one bad id. */
+const BAD_IDS: ReadonlyArray<[string, number, number]> = [
+  ['NaN loser id', Number.NaN, 2],
+  ['fractional loser id', 1.5, 2],
+  ['NaN winner id', 1, Number.NaN],
+  ['fractional winner id', 1, 2.5],
+  ['unsafe winner id', 1, Number.MAX_SAFE_INTEGER + 1],
+];
+
 describe('reportCrossOwnerCharacterDeletes — game id guard', () => {
-  it.each([
-    ['NaN loser id', Number.NaN, 2],
-    ['fractional loser id', 1.5, 2],
-    ['NaN winner id', 1, Number.NaN],
-    ['fractional winner id', 1, 2.5],
-    ['unsafe winner id', 1, Number.MAX_SAFE_INTEGER + 1],
-  ])('rejects a %s without executing SQL', async (_label, loser, winner) => {
-    const tx = recordingTx();
-    await expect(
-      reportCrossOwnerCharacterDeletes(tx, loser, winner),
-    ).rejects.toThrow(/safe integer/);
-    expect(tx.execute).not.toHaveBeenCalled();
-  });
+  it.each(BAD_IDS)(
+    'rejects a %s without executing SQL',
+    async (_label, loser, winner) => {
+      const tx = recordingTx();
+      await expect(
+        reportCrossOwnerCharacterDeletes(tx, loser, winner),
+      ).rejects.toThrow(/safe integer/);
+      expect(tx.execute).not.toHaveBeenCalled();
+    },
+  );
 
   it('executes the report for safe integer ids', async () => {
     const tx = recordingTx();
