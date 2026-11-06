@@ -246,9 +246,24 @@ export function toBusyRanges(
 }
 
 /**
+ * The Sunday 00:00Z nearest `d`. With no `week` sent, `resolveWeekStart` uses
+ * the SERVER's local Sunday midnight, which is within ±14h of its Sunday 00:00Z
+ * in any zone (and IS it on a UTC server) — Sundays are 7 days apart, so the
+ * nearest one is always the right one.
+ */
+function nearestUtcSunday(d: Date): Date {
+  const day = new Date(d);
+  day.setUTCHours(0, 0, 0, 0);
+  const floor = day.getTime() - day.getUTCDay() * DAY_MS;
+  const late = d.getTime() - floor > 3.5 * DAY_MS;
+  return new Date(late ? floor + 7 * DAY_MS : floor);
+}
+
+/**
  * The instant busy hours key from (ROK-1595). `blockHourKeys` needs the
  * viewer's LOCAL Sunday 00:00. A client-sent `week` already is one; with no
- * `week` the server resolves Sunday 00:00Z, so shift it by `tzOffset`.
+ * `week` the server's Sunday is normalised to Sunday 00:00Z (a non-UTC server
+ * hands over its local midnight), then shifted by `tzOffset`.
  * Fixed offset: a DST change inside the week is not re-applied (as composite events).
  */
 export function calendarBusyWeekStart(
@@ -257,7 +272,8 @@ export function calendarBusyWeekStart(
   weekSent: boolean,
 ): Date {
   if (weekSent) return weekStart;
-  return new Date(weekStart.getTime() + tzOffset * MINUTE_MS);
+  const sunday = nearestUtcSunday(weekStart);
+  return new Date(sunday.getTime() + tzOffset * MINUTE_MS);
 }
 
 /** Key blocks to the local week starting `weekStart`, collapsed into runs. */

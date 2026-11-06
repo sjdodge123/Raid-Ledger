@@ -63,6 +63,8 @@ import {
   handleNominateButtonClick,
   parseSteamNominateButtonId,
   safeNominate,
+  isGameNominatable,
+  notNominatableCopy,
 } from './steam-link.listener.nomination-flow';
 
 /** Dedup TTL in milliseconds. */
@@ -190,25 +192,29 @@ export class SteamLinkListener implements OnModuleDestroy {
     }
   }
 
-  /** Handle a single Steam app ID from a message. */
+  /**
+   * Handle a single Steam app ID from a message.
+   *
+   * An author with no linked RL account is never sent anything, so the
+   * linked-user check runs BEFORE the ITAD lookup, `games` insert and IGDB
+   * re-enrich: an unlinked guild member's link must not cost any of them.
+   */
   private async processSingleAppId(
     appId: number,
     message: Message,
   ): Promise<void> {
-    let game = await findGameBySteamAppId(this.db, appId);
-    if (!game) {
-      game = await this.discoverGame(appId);
-      if (!game) return;
-    }
+    const existing = await findGameBySteamAppId(this.db, appId);
+    const user = await findLinkedRlUser(this.db, message.author.id);
+    if (!user) return;
+
+    const game = existing ?? (await this.discoverGame(appId));
+    if (!game) return;
 
     if (!game.igdbId && this.igdbService) {
       this.igdbService.enqueueReenrich(game.id).catch((err: unknown) => {
         this.logger.warn(`Failed to enqueue re-enrichment: ${String(err)}`);
       });
     }
-
-    const user = await findLinkedRlUser(this.db, message.author.id);
-    if (!user) return;
 
     const buildingLineup = await findActiveBuildingLineup(this.db);
     if (buildingLineup) {
@@ -260,6 +266,10 @@ export class SteamLinkListener implements OnModuleDestroy {
         message,
         `**${game.name}** is already nominated for the current lineup.`,
       );
+      return;
+    }
+    if (!(await isGameNominatable(this.db, game.id))) {
+      await this.sendDmSafe(message, notNominatableCopy(game.name));
       return;
     }
     if (await getAutoNominateSteamUrlsPref(this.db, userId)) {

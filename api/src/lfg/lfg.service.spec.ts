@@ -22,6 +22,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SettingsService } from '../settings/settings.service';
 import {
+  ForbiddenException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -123,7 +124,7 @@ function arrangeInsert(
   landed = intentRow(),
   session: object[] = [],
 ): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([landed]); // insertIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
   mockDb.limit.mockResolvedValueOnce(session); // readPlayingNow (D9)
@@ -144,7 +145,7 @@ function arrangeBump(
   activeCount: number,
   bumped: object[] = [nowRow()],
 ): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent (week)
   mockDb.returning.mockResolvedValueOnce(bumped); // bumpIntentUrgency
@@ -154,7 +155,7 @@ function arrangeBump(
 
 /** The re-post path: the partial unique index rejects the insert. */
 function arrangeConflict(mockDb: MockDb, activeCount: number): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.returning.mockResolvedValueOnce([]); // insertIntent lost the conflict
   mockDb.limit.mockResolvedValueOnce([intentRow()]); // findActiveIntent
   mockDb.groupBy.mockResolvedValueOnce([aggregate(activeCount)]);
@@ -163,8 +164,8 @@ function arrangeConflict(mockDb: MockDb, activeCount: number): void {
 
 /** Game found, caller is a participant, target resolves to the route's game. */
 function arrangeConvert(mockDb: MockDb, converted: number): void {
-  mockDb.limit.mockResolvedValueOnce([game]); // requireGame
-  mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // isGroupParticipant
+  mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
+  mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // resolveConvertRole (live intent)
   mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
   mockDb.returning.mockResolvedValueOnce(
     Array.from({ length: converted }, (_, i) => ({ id: 100 + i })),
@@ -391,7 +392,7 @@ describe('LfgService lifecycle events', () => {
     });
 
     it('raises a 500-class error when the conflicting row cannot be re-read', async () => {
-      mockDb.limit.mockResolvedValueOnce([game]); // requireGame
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
       mockDb.returning.mockResolvedValueOnce([]); // insert lost the conflict
       mockDb.limit.mockResolvedValueOnce([]); // findActiveIntent misses
       mockDb.returning.mockResolvedValueOnce([]); // retry insert lost again
@@ -631,6 +632,35 @@ describe('LfgService lifecycle events', () => {
       const result = await service.convert(3, GAME_ID, { eventId: EVENT_ID });
 
       expect(result).toEqual({ converted: 0 });
+      expect(emittedNames()).toEqual([]);
+    });
+
+    // A retry-only caller (row already converted into this target, no live
+    // intent) gets the idempotent answer WITHOUT converting the live rows of a
+    // later group they are not part of.
+    it('answers a retry-only caller with zero and never runs convertGroup', async () => {
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
+      mockDb.limit.mockResolvedValueOnce([]); // resolveConvertRole: no live intent
+      mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // ...but a converted row
+      mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
+
+      const result = await service.convert(3, GAME_ID, { eventId: EVENT_ID });
+
+      expect(result).toEqual({ converted: 0 });
+      // convertGroup is the only UPDATE on this path.
+      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(emittedNames()).toEqual([]);
+    });
+
+    it('403s a caller with neither a live nor a converted row in the group', async () => {
+      mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
+      mockDb.limit.mockResolvedValueOnce([]); // no live intent
+      mockDb.limit.mockResolvedValueOnce([]); // no converted row either
+
+      await expect(
+        service.convert(3, GAME_ID, { eventId: EVENT_ID }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockDb.update).not.toHaveBeenCalled();
       expect(emittedNames()).toEqual([]);
     });
   });

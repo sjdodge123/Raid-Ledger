@@ -304,6 +304,16 @@ describe('status mapping', () => {
     expect(await caught(run())).toBeInstanceOf(RateLimitError);
   });
 
+  it.each(['quotaExceeded', 'dailyLimitExceeded', 'RATE_LIMIT_EXCEEDED'])(
+    'maps a 403 %s to RateLimitError, not a reconnect (TDB:2590)',
+    async (why) => {
+      reply(403, { error: { code: 403, errors: [{ reason: why }] } });
+      const err = await caught(run());
+      expect(err).toBeInstanceOf(RateLimitError);
+      expect((err as RateLimitError).reason).toBe('http_403');
+    },
+  );
+
   it('maps a network failure and a timeout to TransientError', async () => {
     req.mockRejectedValueOnce(new TypeError('fetch failed'));
     const net = await caught(run());

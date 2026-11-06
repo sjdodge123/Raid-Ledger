@@ -206,3 +206,22 @@ describe('runLockInFanout failure semantics and announce (ROK-1031 / ROK-2024)',
     ]);
   });
 });
+
+describe('runLockInFanout skips the signup DMs for a failed signup', () => {
+  it('DMs only the voter whose signup landed and leaves the failed one out of the skip-set', async () => {
+    const { deps, signup } = buildDeps();
+    signup.mockImplementation((_eventId: number, userId: number) =>
+      userId === 11
+        ? Promise.reject(new Error('Event is full'))
+        : Promise.resolve({ assignedSlot: 'player' }),
+    );
+
+    await runLockInFanout(deps, lockIn());
+    await flush();
+
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+    const selected = notifyMock.mock.calls[0]?.[1] ?? [];
+    expect(selected.map((v) => v.userId)).toEqual([12]);
+    expect(announcedSkipSet()).toEqual(new Set([12]));
+  });
+});

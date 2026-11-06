@@ -195,6 +195,11 @@ export function stubGameNominated(ctx: MockContext, nominated: boolean) {
   ctx.mockDb.limit.mockResolvedValueOnce(nominated ? [{ id: 1 }] : []);
 }
 
+/** Visibility check (hidden/banned) that runs after the already-nominated one. */
+export function stubGameNominatable(ctx: MockContext, nominatable: boolean) {
+  ctx.mockDb.limit.mockResolvedValueOnce(nominatable ? [{ id: 42 }] : []);
+}
+
 export function stubAutoNominatePref(ctx: MockContext, enabled: boolean) {
   ctx.mockDb.limit.mockResolvedValueOnce(
     enabled ? [{ key: 'autoNominateSteamUrls', value: true }] : [],

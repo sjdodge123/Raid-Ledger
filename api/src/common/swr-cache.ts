@@ -63,6 +63,13 @@ export interface MemorySwrOptions<T> {
   staleRatio?: number;
   /** Async function that fetches fresh data */
   fetcher: () => Promise<T>;
+  /**
+   * Cap on the cache's size. When a write takes it past this, the least
+   * recently used entries are evicted (a rewrite or a fresh/stale hit
+   * counts as a use).
+   * Omitted: unbounded, the original behaviour.
+   */
+  maxEntries?: number;
 }
 
 /**
@@ -74,10 +81,21 @@ export interface MemorySwrOptions<T> {
  * - If the entry is expired or missing, calls fetcher synchronously (blocking).
  */
 export async function memorySwr<T>(opts: MemorySwrOptions<T>): Promise<T> {
-  const { cache, key, ttlMs, staleRatio = 0.2, fetcher } = opts;
+  const { cache, key, ttlMs, staleRatio = 0.2, fetcher, maxEntries } = opts;
+  const store = (data: T) =>
+    storeMemoryEntry(
+      cache,
+      key,
+      makeMemoryEntry(data, ttlMs, staleRatio),
+      maxEntries,
+    );
 
   const entry = cache.get(key);
   const now = Date.now();
+
+  if (entry && now < entry.expiresAt && maxEntries !== undefined) {
+    markRecentlyUsed(cache, key, entry);
+  }
 
   if (entry) {
     if (now < entry.staleAt) {
@@ -87,9 +105,7 @@ export async function memorySwr<T>(opts: MemorySwrOptions<T>): Promise<T> {
 
     if (now < entry.expiresAt) {
       // Stale but not expired — return immediately, trigger background refresh
-      triggerBackgroundRefresh(key, fetcher, (freshData: T) => {
-        cache.set(key, makeMemoryEntry(freshData, ttlMs, staleRatio));
-      });
+      triggerBackgroundRefresh(key, fetcher, store);
       return entry.data;
     }
     // Expired — fall through to blocking fetch
@@ -97,8 +113,37 @@ export async function memorySwr<T>(opts: MemorySwrOptions<T>): Promise<T> {
 
   // No cache or expired — blocking fetch
   const data = await fetcher();
-  cache.set(key, makeMemoryEntry(data, ttlMs, staleRatio));
+  store(data);
   return data;
+}
+
+/** A capped cache is LRU: re-insert a hit so it becomes the newest entry. */
+function markRecentlyUsed<T>(
+  cache: Map<string, MemoryCacheEntry<T>>,
+  key: string,
+  entry: MemoryCacheEntry<T>,
+): void {
+  cache.delete(key);
+  cache.set(key, entry);
+}
+
+/** Write an entry; with a cap, re-insert it as newest and evict the oldest. */
+function storeMemoryEntry<T>(
+  cache: Map<string, MemoryCacheEntry<T>>,
+  key: string,
+  entry: MemoryCacheEntry<T>,
+  maxEntries: number | undefined,
+): void {
+  if (maxEntries === undefined) {
+    cache.set(key, entry);
+    return;
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  for (const oldest of cache.keys()) {
+    if (cache.size <= maxEntries) break;
+    cache.delete(oldest);
+  }
 }
 
 function makeMemoryEntry<T>(

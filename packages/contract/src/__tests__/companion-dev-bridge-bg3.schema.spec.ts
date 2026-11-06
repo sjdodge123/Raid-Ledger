@@ -27,7 +27,8 @@ const FIX = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'companion
 const INVALID = join(FIX, 'invalid');
 const readJson = (dir: string, file: string): unknown => JSON.parse(readFileSync(join(dir, file), 'utf8'));
 const schemaFor = (name: string) => (name.startsWith('bg3-saves') ? DevBridgeBg3SavesSchema : DevBridgeBg3SaveStructureSchema);
-const bg3Names = (dir: string) => readdirSync(dir).filter((f) => f.startsWith('bg3-') && f.endsWith('.json')).map((f) => f.slice(0, -5));
+/** The ROK-2077 bodies only; the ROK-2081 catalogue bodies are pinned by companion-dev-bridge-bg3-catalogue.schema.spec.ts. */
+const bg3Names = (dir: string) => readdirSync(dir).filter((f) => /^bg3-save(s|-structure)(--.*)?\.json$/.test(f)).map((f) => f.slice(0, -5));
 const structure = (): DevBridgeBg3SaveStructure => DevBridgeBg3SaveStructureSchema.parse(readJson(FIX, 'bg3-save-structure.json'));
 
 type Issue = { path: PropertyKey[]; code: string; message: string };

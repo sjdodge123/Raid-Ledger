@@ -161,3 +161,18 @@ describe('GamePricingSummary — DB-cache null fields (ROK-854)', () => {
         expect(screen.queryByText(/\(/)).not.toBeInTheDocument();
     });
 });
+
+describe('GamePricingSummary — ITAD link scheme allow-list', () => {
+    it('renders no IsThereAnyDeal link for a javascript: url', () => {
+        const { container } = render(<GamePricingSummary pricing={buildPricing({ itadUrl: 'javascript:alert(1)' })} />);
+        expect(screen.getByText('$29.99')).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /isthereanydeal/i })).not.toBeInTheDocument();
+        expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+    });
+
+    it('renders the IsThereAnyDeal link for an https url', () => {
+        render(<GamePricingSummary pricing={buildPricing()} />);
+        expect(screen.getByRole('link', { name: /isthereanydeal/i }))
+            .toHaveAttribute('href', 'https://isthereanydeal.com/game/test/');
+    });
+});

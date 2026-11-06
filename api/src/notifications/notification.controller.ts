@@ -15,10 +15,10 @@ import {
   NotificationService,
   type NotificationDto,
   type NotificationPreferencesDto,
-  type UpdatePreferencesInput,
 } from './notification.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { AuthenticatedRequest } from '../auth/types';
+import { parseUpdatePreferencesBody } from './notification-prefs.helpers';
 
 /**
  * Controller for user notifications (ROK-197).
@@ -117,9 +117,12 @@ export class NotificationController {
   @UseGuards(AuthGuard('jwt'))
   async updatePreferences(
     @Request() req: AuthenticatedRequest,
-    @Body() body: UpdatePreferencesInput,
+    @Body() body: unknown,
   ): Promise<NotificationPreferencesDto> {
-    return this.notificationService.updatePreferences(req.user.id, body);
+    return this.notificationService.updatePreferences(
+      req.user.id,
+      parseUpdatePreferencesBody(body),
+    );
   }
 
   /**

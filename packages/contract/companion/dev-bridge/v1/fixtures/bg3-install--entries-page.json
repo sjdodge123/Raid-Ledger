@@ -1,0 +1,27 @@
+{
+  "found": true,
+  "store": "steam",
+  "next": "p2_paks_2",
+  "paks": [
+    {
+      "rel": "Gustav.pak",
+      "parts": 3,
+      "entriesMatched": [
+        {
+          "name": "Public/Gustav/RootTemplates/_merged.lsf",
+          "sizeOnDisk": 61440112,
+          "size": 188220416,
+          "method": "zstd",
+          "part": 2
+        },
+        {
+          "name": "Public/Gustav/Origins/Origins.lsx",
+          "sizeOnDisk": 20480,
+          "size": 88120,
+          "method": "lz4",
+          "part": 0
+        }
+      ]
+    }
+  ]
+}

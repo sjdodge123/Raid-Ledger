@@ -5,7 +5,8 @@
  * started from, verbatim. A 409 never overwrites: the draft stays, a §4.7
  * `warning` banner offers "Load their version", which replaces the draft (after
  * a confirm when it has edits) and rebases on the server's note. "Clear note"
- * asks "Clear the note for everyone?" first. Default export for `React.lazy`.
+ * asks "Clear the note for everyone?" first. Opening refetches the note, and a
+ * clean draft rebases on the fresh one (N6). Default export for `React.lazy`.
  */
 import { useState, type JSX, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -58,7 +59,18 @@ function useNoteEditor(guildId: number, initial: HubSessionNote | null) {
         save.reset();
         void client.invalidateQueries({ queryKey: sessionNoteKey(guildId) });
     };
-    return { base, draft, setDraft, save, clear, loadTheirs, dirty: isDirty(draft, draftOf(base)) };
+    const dirty = isDirty(draft, draftOf(base));
+    // ROK-1968 N6: the dialog opens on the cached note while it refetches. When a newer note lands, a clean
+    // editor rebases on it; a dirty one keeps its text AND the base it started from, so a real concurrent
+    // change still answers 409 and shows the "Load their version" banner instead of being overwritten. A draft
+    // edited and then reverted to clean also keeps that stale base, so its save may still 409 (acceptable).
+    const freshAt = initial?.updatedAt ?? null;
+    const [seenAt, setSeenAt] = useState(freshAt);
+    if (freshAt !== seenAt) {
+        setSeenAt(freshAt);
+        if (!dirty) { setBase(initial); setDraft(draftOf(initial)); }
+    }
+    return { base, draft, setDraft, save, clear, loadTheirs, dirty };
 }
 
 type Editor = ReturnType<typeof useNoteEditor>;
@@ -120,7 +132,7 @@ export interface SessionNoteDialogProps { guildId: number; onClose: () => void }
 
 /** Mounted only while open (the dialog store), so every open starts from a fresh draft. */
 export default function SessionNoteDialog({ guildId, onClose }: SessionNoteDialogProps): JSX.Element | null {
-    const { data } = useSessionNote(guildId);
+    const { data } = useSessionNote(guildId, { fresh: true });
     if (data === undefined) return null;
     return <SessionNoteEditor guildId={guildId} data={data} onClose={onClose} />;
 }

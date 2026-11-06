@@ -158,6 +158,9 @@ Write `planning-artifacts/session-notes.md` — this file is read by the next `/
 - ROK-XXX: <title> — PR #N merged — <commit SHA> — <1-line summary>
 - ROK-YYY: <title> — PR #N merged — <commit SHA> — <1-line summary>
 
+## Pending operator approvals
+- Run `rl_approval_list` and list each open item: id, story, title, `item_url` (never operator note text).
+
 ## Open PRs (carry forward)
 - ROK-ZZZ: PR #N — <status: approved/changes-requested/pending review>
   - Worktree: ../Raid-Ledger--rok-<num>

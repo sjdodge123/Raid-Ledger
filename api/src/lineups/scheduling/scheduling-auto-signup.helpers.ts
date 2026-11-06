@@ -31,20 +31,29 @@ export interface AutoSignupParams {
 
 type SignupFn = Pick<SignupsService, 'signup'>;
 
+/** Who landed on the bench and whose signup threw, in signup order. */
+export interface AutoSignupResult {
+  benchedUserIds: number[];
+  /** Voters whose signup failed — NOT signed up, so never DM'd as such. */
+  failedUserIds: number[];
+}
+
 /**
  * Auto-sign up poll voters for a newly created event.
  * Skips the event creator (already signed up) and deduplicates voters
  * who may appear multiple times across slots.
  * Individual signup failures are caught and swallowed so that one
  * failure does not prevent other voters from being signed up — a failed
- * signup is not counted as benched.
+ * signup is not counted as benched; it is reported in `failedUserIds` so a
+ * caller never tells that voter they were signed up.
  * @param params - Auto-signup parameters
  * @returns the voters whose signup landed on the bench (ROK-1874), read from
- *   each signup's `assignedSlot`, in signup order
+ *   each signup's `assignedSlot`, and the voters whose signup threw, both in
+ *   signup order
  */
 export async function autoSignupSlotVoters(
   params: AutoSignupParams,
-): Promise<{ benchedUserIds: number[] }> {
+): Promise<AutoSignupResult> {
   const { eventId, creatorId, voters, signupsService } = params;
   const picked = params.benchUserIds ?? new Set<number>();
   const uniqueUserIds = [...new Set(voters.map((v) => v.userId))].filter(
@@ -55,18 +64,18 @@ export async function autoSignupSlotVoters(
     ...uniqueUserIds.filter((uid) => picked.has(uid)),
   ];
 
-  const benchedUserIds: number[] = [];
+  const result: AutoSignupResult = { benchedUserIds: [], failedUserIds: [] };
   for (const userId of signupOrder) {
     const toBench = picked.has(userId);
-    if (await signUpOne(signupsService, eventId, userId, toBench)) {
-      benchedUserIds.push(userId);
-    }
+    const outcome = await signUpOne(signupsService, eventId, userId, toBench);
+    if (outcome === 'bench') result.benchedUserIds.push(userId);
+    if (outcome === 'failed') result.failedUserIds.push(userId);
   }
-  return { benchedUserIds };
+  return result;
 }
 
 /**
- * Sign one voter up; true when the signup landed on the bench. A failure is
+ * Sign one voter up: where the signup landed, or `failed`. A failure is
  * swallowed (one voter must not block the rest) and is not counted as benched.
  */
 async function signUpOne(
@@ -74,13 +83,13 @@ async function signUpOne(
   eventId: number,
   userId: number,
   toBench: boolean,
-): Promise<boolean> {
+): Promise<'bench' | 'roster' | 'failed'> {
   try {
     const result = toBench
       ? await signupsService.signup(eventId, userId, { slotRole: 'bench' })
       : await signupsService.signup(eventId, userId);
-    return result.assignedSlot === 'bench';
+    return result.assignedSlot === 'bench' ? 'bench' : 'roster';
   } catch {
-    return false;
+    return 'failed';
   }
 }

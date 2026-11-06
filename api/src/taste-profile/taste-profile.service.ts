@@ -11,6 +11,7 @@ import {
   findSimilarPlayers,
   getTasteProfile,
   getTasteVectorsForUsers,
+  isUserDeactivated,
   type SimilarPlayerRow,
   type TasteProfileResult,
   type TasteVectorRow,
@@ -68,6 +69,11 @@ export class TasteProfileService {
 
   getTasteProfile(userId: number): Promise<TasteProfileResult | null> {
     return getTasteProfile(this.db, userId);
+  }
+
+  /** ROK-1260: deactivated targets are hidden from non-admin viewers. */
+  isUserDeactivated(userId: number): Promise<boolean> {
+    return isUserDeactivated(this.db, userId);
   }
 
   findSimilarPlayers(

@@ -1,0 +1,9 @@
+{
+  "flavor": "_anniversary_",
+  "scope": "account",
+  "path": "_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/Mailworthy.lua",
+  "bytes": 257,
+  "mtime": "2026-11-01T18:30:00Z",
+  "text": "MailworthyDB = {\n\t[\"selftest\"] = {\n\t\t[\"ranAt\"] = 1762021800,\n\t\t[\"passed\"] = 11,\n\t\t[\"failed\"] = 1,\n\t\t[\"results\"] = {\n\t\t\t{ [\"name\"] = \"inbox.scan\", [\"ok\"] = true },\n\t\t\t{ [\"name\"] = \"send.queue\", [\"ok\"] = false, [\"err\"] = \"queue empty after flush\" },\n\t\t},\n\t},\n",
+  "next": null
+}

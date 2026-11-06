@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { GuildKindSchema, HubStatusSchema } from './guilds.schema.js';
+import { z } from "zod";
+import { GuildKindSchema, HubStatusSchema } from "./guilds.schema.js";
 
 /**
  * ROK-1870 — game community hubs: a third hub kind for games with no Pelican
@@ -38,7 +38,8 @@ const INVISIBLE_CHARS =
  * Removed only for the invisible test (never from the stored value); any other
  * VS16 (after a letter, leading, doubled) stays and is refused.
  */
-const EMOJI_VS16 = /(?<=\p{Extended_Pictographic})\uFE0F|(?<=[#*0-9])\uFE0F(?=\u20E3)/gu;
+const EMOJI_VS16 =
+  /(?<=\p{Extended_Pictographic})\uFE0F|(?<=[#*0-9])\uFE0F(?=\u20E3)/gu;
 
 /**
  * A visible letter or mark: an ignorable mark (CGJ, a variation selector, a
@@ -58,7 +59,7 @@ const EMOJI_LEFT = String.raw`\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1
 const JOINER_BETWEEN_LETTERS = new RegExp(
   String.raw`(?<=${VISIBLE_LETTER}|${EMOJI_LEFT})[\u200C\u200D]` +
     String.raw`(?=${VISIBLE_LETTER}|\p{Extended_Pictographic})`,
-  'gu',
+  "gu",
 );
 
 /**
@@ -66,7 +67,9 @@ const JOINER_BETWEEN_LETTERS = new RegExp(
  * in-word joiner.
  */
 function hasInvisibleChars(name: string): boolean {
-  const stripped = name.replace(JOINER_BETWEEN_LETTERS, '').replace(EMOJI_VS16, '');
+  const stripped = name
+    .replace(JOINER_BETWEEN_LETTERS, "")
+    .replace(EMOJI_VS16, "");
   return INVISIBLE_CHARS.test(stripped);
 }
 
@@ -80,17 +83,27 @@ function hasInvisibleChars(name: string): boolean {
 export const HubNameSchema = z
   .string()
   .trim()
-  .normalize('NFC')
+  .normalize("NFC")
   .min(HUB_NAME_MIN)
   .max(HUB_NAME_MAX)
-  .refine((v) => !CONTROL_CHARS.test(v), { message: 'Hub name cannot contain control characters' })
-  .refine((v) => !hasInvisibleChars(v), { message: 'Hub name cannot contain invisible characters' })
-  .refine((v) => HAS_LETTER_OR_DIGIT.test(v), { message: 'Hub name needs at least one letter or digit' });
+  .refine((v) => !CONTROL_CHARS.test(v), {
+    message: "Hub name cannot contain control characters",
+  })
+  .refine((v) => !hasInvisibleChars(v), {
+    message: "Hub name cannot contain invisible characters",
+  })
+  .refine((v) => HAS_LETTER_OR_DIGIT.test(v), {
+    message: "Hub name needs at least one letter or digit",
+  });
 
 const BlurbSchema = z.string().trim().min(1).max(HUB_BLURB_MAX);
 
 const UserRefSchema = z
-  .object({ userId: id, username: z.string(), avatarUrl: z.string().nullable() })
+  .object({
+    userId: id,
+    username: z.string(),
+    avatarUrl: z.string().nullable(),
+  })
   .strict();
 export type HubUserRef = z.infer<typeof UserRefSchema>;
 
@@ -115,7 +128,9 @@ export const HubProposalSchema = z
   .strict();
 export type HubProposal = z.infer<typeof HubProposalSchema>;
 
-export const HubProposalListSchema = z.object({ items: z.array(HubProposalSchema) }).strict();
+export const HubProposalListSchema = z
+  .object({ items: z.array(HubProposalSchema) })
+  .strict();
 export type HubProposalList = z.infer<typeof HubProposalListSchema>;
 
 /** The admin may tidy the name/blurb while approving. */
@@ -129,22 +144,38 @@ export const RejectHubProposalSchema = z
   .strict();
 export type RejectHubProposalDto = z.infer<typeof RejectHubProposalSchema>;
 
+/** ROK-2096: the most initial members an admin may seed on a direct create. */
+export const HUB_CREATE_MEMBERS_MAX = 200;
+
 export const AdminCreateHubSchema = z
-  .object({ gameId: id, name: HubNameSchema, blurb: BlurbSchema, leaderUserId: id })
+  .object({
+    gameId: id,
+    name: HubNameSchema,
+    blurb: BlurbSchema,
+    leaderUserId: id,
+    /** ROK-2096 (additive): the hub's first members besides the leader; duplicates and the leader are ignored. */
+    memberUserIds: z.array(id).max(HUB_CREATE_MEMBERS_MAX).optional(),
+  })
   .strict();
 export type AdminCreateHubDto = z.infer<typeof AdminCreateHubSchema>;
 
 /** `PATCH /hubs/:id` — leader/officer edits the blurb (renames go through `PATCH /guilds/:id/name`, ROK-1950). */
-export const HubBlurbUpdateSchema = z.object({ blurb: BlurbSchema.nullable() }).strict();
+export const HubBlurbUpdateSchema = z
+  .object({ blurb: BlurbSchema.nullable() })
+  .strict();
 export type HubBlurbUpdateDto = z.infer<typeof HubBlurbUpdateSchema>;
 
 export const HubLeaderTransferSchema = z.object({ userId: id }).strict();
 export type HubLeaderTransferDto = z.infer<typeof HubLeaderTransferSchema>;
 
-export const HubStatusUpdateSchema = z.object({ status: z.enum(['active', 'archived']) }).strict();
+export const HubStatusUpdateSchema = z
+  .object({ status: z.enum(["active", "archived"]) })
+  .strict();
 export type HubStatusUpdateDto = z.infer<typeof HubStatusUpdateSchema>;
 
-export const HubMemberRoleUpdateSchema = z.object({ role: z.enum(['officer', 'member']) }).strict();
+export const HubMemberRoleUpdateSchema = z
+  .object({ role: z.enum(["officer", "member"]) })
+  .strict();
 export type HubMemberRoleUpdateDto = z.infer<typeof HubMemberRoleUpdateSchema>;
 
 export const HubBanSchema = z
@@ -174,8 +205,8 @@ export const HubDirectoryQuerySchema = z
   .object({
     gameId: z.coerce.number().int().positive().optional(),
     q: z.string().trim().max(64).optional(),
-    membership: z.enum(['all', 'joined', 'not-joined']).default('all'),
-    sort: z.enum(['members', 'name', 'newest']).default('members'),
+    membership: z.enum(["all", "joined", "not-joined"]).default("all"),
+    sort: z.enum(["members", "name", "newest"]).default("members"),
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(50).default(24),
     /** ROK-1875: one hub kind only; absent = every kind live on this instance. */
@@ -184,7 +215,13 @@ export const HubDirectoryQuerySchema = z
   .strict();
 export type HubDirectoryQuery = z.infer<typeof HubDirectoryQuerySchema>;
 
-export const HubViewerStateSchema = z.enum(['member', 'leader', 'officer', 'not-member', 'banned']);
+export const HubViewerStateSchema = z.enum([
+  "member",
+  "leader",
+  "officer",
+  "not-member",
+  "banned",
+]);
 export type HubViewerState = z.infer<typeof HubViewerStateSchema>;
 
 export const HubDirectoryEntrySchema = z
@@ -220,7 +257,11 @@ export const HubDirectoryPageSchema = z
   .strict();
 export type HubDirectoryPage = z.infer<typeof HubDirectoryPageSchema>;
 
-export const ProposeBlockedReasonSchema = z.enum(['not-in-discord', 'limit-reached', 'pending-for-game']);
+export const ProposeBlockedReasonSchema = z.enum([
+  "not-in-discord",
+  "limit-reached",
+  "pending-for-game",
+]);
 
 /** `GET /hubs/by-game/:gameId` — the game page card. */
 export const GameHubsSchema = z
@@ -243,7 +284,7 @@ export const AdminHubEntrySchema = z
     gameName: z.string(),
     name: z.string(),
     blurb: z.string().nullable(),
-    status: z.enum(['active', 'archived']),
+    status: z.enum(["active", "archived"]),
     memberCount: z.number().int().nonnegative(),
     leader: z.object({ userId: id, username: z.string() }).strict().nullable(),
     createdAt: isoDate,
@@ -251,10 +292,14 @@ export const AdminHubEntrySchema = z
   .strict();
 export type AdminHubEntry = z.infer<typeof AdminHubEntrySchema>;
 
-export const AdminHubListSchema = z.object({ items: z.array(AdminHubEntrySchema) }).strict();
+export const AdminHubListSchema = z
+  .object({ items: z.array(AdminHubEntrySchema) })
+  .strict();
 export type AdminHubList = z.infer<typeof AdminHubListSchema>;
 
 export const CommunityHubJoinResponseSchema = z
   .object({ joined: z.boolean(), memberCount: z.number().int().nonnegative() })
   .strict();
-export type CommunityHubJoinResponse = z.infer<typeof CommunityHubJoinResponseSchema>;
+export type CommunityHubJoinResponse = z.infer<
+  typeof CommunityHubJoinResponseSchema
+>;

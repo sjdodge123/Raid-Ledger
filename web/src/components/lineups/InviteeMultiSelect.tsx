@@ -10,6 +10,11 @@
  * access gate (required, ≥1). On a PUBLIC lineup it is a seed list —
  * optional, and adding people never stops anyone else from joining.
  * Defaults to 'private' so pre-existing callers are unchanged.
+ *
+ * ROK-2096: `copy` overrides the label + hint for a non-lineup caller (Create
+ * hub's initial members), and `excludeIds` hides users chosen elsewhere (the
+ * hub's leader). `hideBadges` drops the lineup-only No Discord / No Steam
+ * caveats, which say nothing about hub membership (operator ruling 2026-11-05).
  */
 import { useMemo, useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -17,160 +22,183 @@ import { getPlayers } from '../../lib/api-client';
 import { SearchInput } from '../ui/search-input';
 
 interface GuildMember {
-  id: number;
-  username: string;
-  discordLinked: boolean;
-  steamLinked: boolean;
+    id: number;
+    username: string;
+    discordLinked: boolean;
+    steamLinked: boolean;
 }
 
 export type InviteeMultiSelectMode = 'private' | 'public';
 
 export interface InviteeMultiSelectProps {
-  value: number[];
-  onChange: (next: number[]) => void;
-  /** Copy variant — see file docstring. Defaults to 'private'. */
-  mode?: InviteeMultiSelectMode;
+    value: number[];
+    onChange: (next: number[]) => void;
+    /** Copy variant — see file docstring. Defaults to 'private'. */
+    mode?: InviteeMultiSelectMode;
+    /** Label + empty-state hint for a caller outside lineups; wins over `mode`. */
+    copy?: { label: string; hint: string; noun: string };
+    /** Users not offered (e.g. the member already picked as leader). */
+    excludeIds?: readonly number[];
+    /** Hide the per-row No Discord / No Steam caveats (lineup-specific). */
+    hideBadges?: boolean;
 }
 
 /** Field label per mode. */
 function modeLabel(mode: InviteeMultiSelectMode): string {
-  return mode === 'public' ? 'Invite members (optional)' : 'Invitees';
+    return mode === 'public' ? 'Invite members (optional)' : 'Invitees';
 }
 
 /** Empty-state hint per mode. */
 function modeHint(mode: InviteeMultiSelectMode): string {
-  return mode === 'public'
-    ? 'Optional — pull in members you know are playing. Anyone else can still see and join.'
-    : 'Pick at least one guild member. Private lineups require ≥1 invitee.';
+    return mode === 'public'
+        ? 'Optional — pull in members you know are playing. Anyone else can still see and join.'
+        : 'Pick at least one guild member. Private lineups require ≥1 invitee.';
 }
 
 function useGuildMembers(search: string) {
-  return useQuery({
-    queryKey: ['players', 'invitee-picker', search],
-    queryFn: () =>
-      getPlayers({
-        ...(search ? { search } : {}),
-        page: 1,
-        pageSize: 200,
-      }),
-    select: (data): GuildMember[] =>
-      (data.data ?? []).map((u) => ({
-        id: u.id,
-        username: u.username,
-        discordLinked: !!u.discordId,
-        steamLinked: u.steamLinked,
-      })),
-  });
+    return useQuery({
+        queryKey: ['players', 'invitee-picker', search],
+        queryFn: () =>
+            getPlayers({
+                ...(search ? { search } : {}),
+                page: 1,
+                pageSize: 200,
+            }),
+        select: (data): GuildMember[] =>
+            (data.data ?? []).map((u) => ({
+                id: u.id,
+                username: u.username,
+                discordLinked: !!u.discordId,
+                steamLinked: u.steamLinked,
+            })),
+    });
 }
 
 /** Shared visual treatment for the per-member caveat badges. */
 function MemberBadge({ children }: { children: string }): JSX.Element {
-  return (
-    <span className="text-[10px] uppercase tracking-wide text-muted">
-      {children}
-    </span>
-  );
+    return (
+        <span className="text-[10px] uppercase tracking-wide text-muted">
+            {children}
+        </span>
+    );
 }
 
 /** Caveat badges: missing Discord link (no DMs) and missing Steam link (ROK-1530 TD-2). */
 function MemberBadges({ member }: { member: GuildMember }): JSX.Element | null {
-  if (member.discordLinked && member.steamLinked) return null;
-  return (
-    <span className="flex items-center gap-2">
-      {!member.discordLinked && (
-        <MemberBadge>No Discord — DMs won&apos;t reach them</MemberBadge>
-      )}
-      {!member.steamLinked && (
-        <MemberBadge>No Steam linked — limited data</MemberBadge>
-      )}
-    </span>
-  );
+    if (member.discordLinked && member.steamLinked) return null;
+    return (
+        <span className="flex items-center gap-2">
+            {!member.discordLinked && (
+                <MemberBadge>
+                    No Discord — DMs won&apos;t reach them
+                </MemberBadge>
+            )}
+            {!member.steamLinked && (
+                <MemberBadge>No Steam linked — limited data</MemberBadge>
+            )}
+        </span>
+    );
 }
 
 function MemberRow({
-  member,
-  checked,
-  onToggle,
+    member,
+    checked,
+    onToggle,
+    hideBadges,
 }: {
-  member: GuildMember;
-  checked: boolean;
-  onToggle: () => void;
+    member: GuildMember;
+    checked: boolean;
+    onToggle: () => void;
+    hideBadges: boolean;
 }): JSX.Element {
-  return (
-    <label
-      data-testid={`invitee-option-${member.id}`}
-      className="flex items-center gap-2 px-3 py-2 hover:bg-panel rounded cursor-pointer"
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onToggle}
-        className="rounded border-edge"
-      />
-      <span className="text-sm text-foreground flex-1">{member.username}</span>
-      <MemberBadges member={member} />
-    </label>
-  );
+    return (
+        <label
+            data-testid={`invitee-option-${member.id}`}
+            className="flex items-center gap-2 px-3 py-2 hover:bg-panel rounded cursor-pointer"
+        >
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={onToggle}
+                className="rounded border-edge"
+            />
+            <span className="text-sm text-foreground flex-1">
+                {member.username}
+            </span>
+            {!hideBadges && <MemberBadges member={member} />}
+        </label>
+    );
 }
 
 /** Guild-member multi-select with search + checkboxes. */
 export function InviteeMultiSelect({
-  value,
-  onChange,
-  mode = 'private',
+    value,
+    onChange,
+    mode = 'private',
+    copy,
+    excludeIds,
+    hideBadges = false,
 }: InviteeMultiSelectProps): JSX.Element {
-  const [search, setSearch] = useState('');
-  const { data: members = [], isLoading } = useGuildMembers(search);
+    const [search, setSearch] = useState('');
+    const { data: members = [], isLoading } = useGuildMembers(search);
 
-  const filtered = useMemo(() => {
-    if (!search) return members;
-    const q = search.toLowerCase();
-    return members.filter((m) => m.username.toLowerCase().includes(q));
-  }, [members, search]);
+    const filtered = useMemo(() => {
+        const offered = excludeIds?.length
+            ? members.filter((m) => !excludeIds.includes(m.id))
+            : members;
+        if (!search) return offered;
+        const q = search.toLowerCase();
+        return offered.filter((m) => m.username.toLowerCase().includes(q));
+    }, [members, search, excludeIds]);
 
-  function toggle(id: number): void {
-    onChange(
-      value.includes(id) ? value.filter((v) => v !== id) : [...value, id],
+    function toggle(id: number): void {
+        onChange(
+            value.includes(id) ? value.filter((v) => v !== id) : [...value, id],
+        );
+    }
+
+    return (
+        <div data-testid="invitee-multi-select" className="space-y-2">
+            <label
+                htmlFor="invitee-search"
+                className="block text-sm font-medium text-foreground"
+            >
+                {copy?.label ?? modeLabel(mode)}
+            </label>
+            <SearchInput
+                id="invitee-search"
+                data-testid="invitee-search"
+                value={search}
+                onChange={setSearch}
+                placeholder="Search members..."
+                label="Search members"
+            />
+            <div className="max-h-48 overflow-y-auto border border-edge rounded-lg">
+                {isLoading && (
+                    <div className="px-3 py-2 text-sm text-muted">
+                        Loading...
+                    </div>
+                )}
+                {!isLoading && filtered.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted">
+                        No members found
+                    </div>
+                )}
+                {filtered.map((m) => (
+                    <MemberRow
+                        key={m.id}
+                        member={m}
+                        checked={value.includes(m.id)}
+                        onToggle={() => toggle(m.id)}
+                        hideBadges={hideBadges}
+                    />
+                ))}
+            </div>
+            <p className="text-xs text-muted">
+                {value.length > 0
+                    ? `${value.length} ${copy?.noun ?? 'invitee'}${value.length !== 1 ? 's' : ''} selected`
+                    : (copy?.hint ?? modeHint(mode))}
+            </p>
+        </div>
     );
-  }
-
-  return (
-    <div data-testid="invitee-multi-select" className="space-y-2">
-      <label
-        htmlFor="invitee-search"
-        className="block text-sm font-medium text-foreground"
-      >
-        {modeLabel(mode)}
-      </label>
-      <SearchInput
-        id="invitee-search"
-        data-testid="invitee-search"
-        value={search}
-        onChange={setSearch}
-        placeholder="Search members..."
-        label="Search members"
-      />
-      <div className="max-h-48 overflow-y-auto border border-edge rounded-lg">
-        {isLoading && (
-          <div className="px-3 py-2 text-sm text-muted">Loading...</div>
-        )}
-        {!isLoading && filtered.length === 0 && (
-          <div className="px-3 py-2 text-sm text-muted">No members found</div>
-        )}
-        {filtered.map((m) => (
-          <MemberRow
-            key={m.id}
-            member={m}
-            checked={value.includes(m.id)}
-            onToggle={() => toggle(m.id)}
-          />
-        ))}
-      </div>
-      <p className="text-xs text-muted">
-        {value.length > 0
-          ? `${value.length} invitee${value.length !== 1 ? 's' : ''} selected`
-          : modeHint(mode)}
-      </p>
-    </div>
-  );
 }

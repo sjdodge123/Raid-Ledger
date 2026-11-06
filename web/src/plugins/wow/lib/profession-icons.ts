@@ -1,3 +1,5 @@
+import { ownLookup } from '../../../lib/own-lookup';
+
 /**
  * WoW profession icon URLs from Blizzard CDN.
  *
@@ -47,7 +49,7 @@ const WOW_PROFESSION_ICONS: Record<string, string> = {
  */
 export function getProfessionIconUrl(slug: string | null | undefined): string | null {
   if (!slug) return null;
-  return WOW_PROFESSION_ICONS[slug] ?? null;
+  return ownLookup(WOW_PROFESSION_ICONS, slug) ?? null;
 }
 
 /**

@@ -35,6 +35,7 @@ import * as envDeploy from './tools/env-deploy.js';
 import * as forceRelease from './tools/force-release.js';
 import * as forceResync from './tools/force-resync.js';
 import * as testPlan from './tools/test-plan.js';
+import * as approval from './tools/approval.js';
 import * as task from './tools/task.js';
 import * as taskInspect from './tools/task-inspect.js';
 import * as taskLogs from './tools/task-logs.js';
@@ -371,6 +372,64 @@ const testPlanClearSchema: Shape = {
 };
 registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, async (p) =>
   jsonResult(await testPlan.executeClear(p as Parameters<typeof testPlan.executeClear>[0])),
+);
+
+// ----- Approvals inbox (ROK-1900) -----
+// Agents submit + read; only the operator rules (inbox token, dashboard-side).
+const approvalIdSchema = z.string().regex(approval.APPROVAL_ID_RE, {
+  message: 'approval_id must match YYYY-MM-DD-HHmm-XXXX (returned by rl_approval_submit)',
+});
+const absPath = z.string().min(1).max(1024).regex(/^\//, 'must be an absolute path');
+const approvalSubmitSchema: Shape = {
+  story: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{2,39}$/, 'story: ROK-1234 or a spike slug'),
+  title: z.string().min(1).max(120),
+  kind: z.enum(['mockup', 'prototype', 'ruling', 'spike']),
+  summary: z.string().max(600).optional(),
+  questions: z.array(z.object({
+    text: z.string().min(1).max(1000),
+    recommendation: z.string().min(1).max(1000),
+    options: z.array(z.object({
+      key: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,19}$/),
+      label: z.string().min(1).max(120),
+    })).max(6).optional(),
+  })).min(1).max(20),
+  mockup_path: absPath.optional(),
+  screenshot_paths: z.array(absPath).max(8).optional(),
+  spec_path: absPath.optional(),
+  links: z.array(z.object({ label: z.string().min(1).max(80), url: z.string().url().max(500) })).max(5).optional(),
+  supersedes: approvalIdSchema.optional(),
+  asked_by: z.string().regex(/^[A-Za-z0-9 _.-]{1,60}$/).optional(),
+};
+registerTool(approval.SUBMIT_TOOL, approval.SUBMIT_DESC, approvalSubmitSchema, async (p) =>
+  jsonResult(await approval.executeSubmit(p as approval.SubmitParams)),
+);
+const approvalListSchema: Shape = { status: z.enum(['pending', 'decided', 'all']).optional() };
+registerTool(approval.LIST_TOOL, approval.LIST_DESC, approvalListSchema, async (p) =>
+  jsonResult(await approval.executeList(p as Parameters<typeof approval.executeList>[0])),
+);
+const approvalStatusSchema: Shape = {
+  approval_id: approvalIdSchema,
+  include_notes: z.boolean().optional().describe(
+    'Default false (safe: no operator note text). true = sanitised notes; disposable sub-agent lanes only, never an orchestrating/Lead session.',
+  ),
+};
+registerTool(approval.STATUS_TOOL, approval.STATUS_DESC, approvalStatusSchema, async (p) =>
+  jsonResult(await approval.executeStatus(p as Parameters<typeof approval.executeStatus>[0])),
+);
+const approvalWaitSchema: Shape = {
+  approval_id: approvalIdSchema,
+  timeout_seconds: z.number().int().min(5).max(120).optional(),
+};
+registerTool(approval.WAIT_TOOL, approval.WAIT_DESC, approvalWaitSchema, async (p) =>
+  jsonResult(await approval.executeWait(p as Parameters<typeof approval.executeWait>[0])),
+);
+const approvalWithdrawSchema: Shape = {
+  approval_id: approvalIdSchema,
+  reason: z.string().max(500).optional(),
+  superseded_by: approvalIdSchema.optional(),
+};
+registerTool(approval.WITHDRAW_TOOL, approval.WITHDRAW_DESC, approvalWithdrawSchema, async (p) =>
+  jsonResult(await approval.executeWithdraw(p as Parameters<typeof approval.executeWithdraw>[0])),
 );
 
 // ----- Task tools (ROK-1331 M2) -----

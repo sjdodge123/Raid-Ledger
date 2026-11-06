@@ -1,11 +1,13 @@
 import type { JSX } from 'react';
 import type { ItadGamePricingDto } from '@raid-ledger/contract';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 
 /** Compact pricing summary shown inline in the game banner (ROK-419). */
 export function GamePricingSummary({ pricing }: {
     pricing: ItadGamePricingDto;
 }): JSX.Element | null {
-    const { currentBest, historyLow, currency, itadUrl } = pricing;
+    const { currentBest, historyLow, currency } = pricing;
+    const itadUrl = safeHttpUrl(pricing.itadUrl);
     if (!currentBest) return null;
 
     return (

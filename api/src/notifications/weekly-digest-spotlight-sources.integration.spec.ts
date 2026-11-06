@@ -175,7 +175,14 @@ describe('A1 rising game (ROK-1771 L3, integration)', () => {
 async function seedPull(
   t: TestApp,
   gameId: number,
-  p: { encounterId: number; name: string; endAgo: number; success?: boolean },
+  p: {
+    encounterId: number;
+    name: string;
+    endAgo: number;
+    /** Importing user; `null` = the reporter row was deleted (FK set null). */
+    reportedBy: number | null;
+    success?: boolean;
+  },
 ) {
   seq += 1;
   const endAt = ago(p.endAgo);
@@ -192,7 +199,40 @@ async function seedPull(
     success: p.success ?? true,
     roster: [{ guid: 'Player-1-0001', name: 'Secretcharname' }],
     guildKey: 'the guild',
+    reportedByUserId: p.reportedBy,
     payloadSha256: String(seq).padStart(64, '0'),
+  });
+}
+
+/**
+ * This week's kills that must NOT count: one per reporter the digest ignores
+ * (deactivated, banned, kicked, never-seen guest, opted-out, deleted reporter
+ * = NULL), plus an active member's kill on a hidden game.
+ */
+async function seedExcludedKills(t: TestApp, wow: number, memberId: number) {
+  const excluded = [
+    ...(await seedGone(t)),
+    await seedUser(t, 'opted-out', true),
+    null,
+  ];
+  for (const [i, reportedBy] of excluded.entries()) {
+    await seedPull(t, wow, {
+      encounterId: 700 + i,
+      name: `Forged boss ${i}`,
+      endAgo: DAY,
+      reportedBy,
+    });
+  }
+  const hiddenGame = await seedGame(t, 'Hidden WoW');
+  await t.db
+    .update(schema.games)
+    .set({ hidden: true })
+    .where(eq(schema.games.id, hiddenGame));
+  await seedPull(t, hiddenGame, {
+    encounterId: 699,
+    name: 'Hidden-game boss',
+    endAgo: DAY,
+    reportedBy: memberId,
   });
 }
 
@@ -205,28 +245,37 @@ describe('A3 boss kills (ROK-1771 L3, integration)', () => {
       encounterId: 663,
       name: 'Lucifron',
       endAgo: 20 * DAY,
+      reportedBy: ctx.creatorId,
     });
     await expect(fetchBossKillsCandidate(ctx.t.db)).resolves.toBeNull();
   });
 
   it('counts this week’s kills, flags first-ever ones, never roster names', async () => {
-    const { t } = ctx;
+    const { t, creatorId: reportedBy } = ctx;
     const wow = await seedGame(t, 'WoW Classic');
     await seedPull(t, wow, {
       encounterId: 663,
       name: 'Lucifron',
       endAgo: 20 * DAY,
+      reportedBy,
     });
     await seedPull(t, wow, {
       encounterId: 663,
       name: 'Lucifron',
       endAgo: 2 * DAY,
+      reportedBy,
     });
-    await seedPull(t, wow, { encounterId: 664, name: 'Magmadar', endAgo: DAY });
+    await seedPull(t, wow, {
+      encounterId: 664,
+      name: 'Magmadar',
+      endAgo: DAY,
+      reportedBy,
+    });
     await seedPull(t, wow, {
       encounterId: 665,
       name: 'Gehennas',
       endAgo: DAY,
+      reportedBy,
       success: false,
     });
     const c = await fetchBossKillsCandidate(t.db);
@@ -237,6 +286,28 @@ describe('A3 boss kills (ROK-1771 L3, integration)', () => {
       firstEverKills: ['Magmadar'],
     });
     expect(JSON.stringify(c)).not.toContain('Secretcharname');
+  });
+});
+
+describe('A3 boss kills reporter scoping (tech-debt, integration)', () => {
+  const ctx = useApp();
+
+  it('counts only kills an active, visible guild member reported, on a visible game', async () => {
+    const { t, creatorId } = ctx;
+    const wow = await seedGame(t, 'WoW Classic');
+    await seedPull(t, wow, {
+      encounterId: 664,
+      name: 'Magmadar',
+      endAgo: DAY,
+      reportedBy: creatorId,
+    });
+    await seedExcludedKills(t, wow, creatorId);
+    await expect(fetchBossKillsCandidate(t.db)).resolves.toEqual({
+      kind: 'boss_kills',
+      instanceName: null,
+      killCount: 1,
+      firstEverKills: ['Magmadar'],
+    });
   });
 });
 

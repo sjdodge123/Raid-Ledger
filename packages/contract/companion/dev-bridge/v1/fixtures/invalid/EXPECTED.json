@@ -318,5 +318,133 @@
   "bg3-saves--next-folder-name": {
     "path": "next",
     "code": "invalid_format"
+  },
+  "bg3-save-structure--character-key-prefix-upper": {
+    "path": "party.0.characterKeyPrefix",
+    "code": "invalid_format"
+  },
+  "bg3-save-structure--character-key-prefix-long": {
+    "path": "party.0.characterKeyPrefix",
+    "code": "invalid_format"
+  },
+  "collectors--bg3-catalogue-extra-key": {
+    "path": "bg3Catalogue",
+    "code": "unrecognized_keys"
+  },
+  "collectors--bg3-catalogue-ready-no-counts": {
+    "path": "bg3Catalogue.counts",
+    "code": "custom"
+  },
+  "collectors--bg3-catalogue-reason-wrong-state": {
+    "path": "bg3Catalogue.reason",
+    "code": "custom"
+  },
+  "collectors--bg3-catalogue-unknown-reason": {
+    "path": "bg3Catalogue.reason",
+    "code": "invalid_value"
+  },
+  "collectors--bg3-catalogue-absent-with-counts": {
+    "path": "bg3Catalogue.counts",
+    "code": "custom"
+  },
+  "collectors--bg3-catalogue-lookup-over-total": {
+    "path": "bg3Catalogue.lastLookup.resolvedName",
+    "code": "custom"
+  },
+  "bg3-install--drive-rel": {
+    "path": "paks.0.rel",
+    "code": "custom"
+  },
+  "bg3-install--parent-rel": {
+    "path": "paks.0.rel",
+    "code": "custom"
+  },
+  "bg3-install--rel-not-pak": {
+    "path": "paks.0.rel",
+    "code": "invalid_format"
+  },
+  "bg3-install--paks-when-absent": {
+    "path": "paks",
+    "code": "custom"
+  },
+  "bg3-install--found-no-store": {
+    "path": "store",
+    "code": "custom"
+  },
+  "bg3-install--part-not-below-parts": {
+    "path": "paks.0.entriesMatched.0.part",
+    "code": "custom"
+  },
+  "bg3-install--unknown-method": {
+    "path": "paks.0.entriesMatched.0.method",
+    "code": "invalid_value"
+  },
+  "bg3-install--duplicate-rel": {
+    "path": "paks.1.rel",
+    "code": "custom"
+  },
+  "bg3-save-catalogue--character-name": {
+    "path": "party.0",
+    "code": "unrecognized_keys"
+  },
+  "bg3-save-catalogue--name-without-catalogue": {
+    "path": "party.0.items.0.name",
+    "code": "custom"
+  },
+  "bg3-save-catalogue--hit-rate-over-total": {
+    "path": "hitRate.resolvedRarity",
+    "code": "custom"
+  },
+  "bg3-save-catalogue--guid-in-name": {
+    "path": "party.0.items.0.name",
+    "code": "custom"
+  },
+  "bg3-save-catalogue--duplicate-item-slot": {
+    "path": "party.0.items.1.slot",
+    "code": "custom"
+  },
+  "bg3-save-catalogue--next-path": {
+    "path": "next",
+    "code": "invalid_format"
+  },
+  "collectors--unknown-status": {
+    "path": "collectors.0.status",
+    "code": "invalid_value"
+  },
+  "collectors--linked-not-boolean": {
+    "path": "linked",
+    "code": "invalid_type"
+  },
+  "collectors--row-linked": {
+    "path": "collectors.0",
+    "code": "unrecognized_keys"
+  },
+  "events--unknown-error-code": {
+    "path": "events.2.errorCode",
+    "code": "invalid_value"
+  },
+  "events--free-text-message": {
+    "path": "events.0",
+    "code": "unrecognized_keys"
+  },
+  "events--error-code-sentence": {
+    "path": "events.5.errorCode",
+    "code": "invalid_value"
+  },
+  "events--unknown-kind": {
+    "path": "events.0.kind",
+    "code": "invalid_value"
+  },
+  "events--http-status-out-of-range": {
+    "path": "events.1.httpStatus",
+    "code": "too_big"
+  },
+  "events--missing-next": {
+    "path": "next",
+    "code": "invalid_type"
+  },
+  "events--over-size": {
+    "path": "",
+    "code": "custom"
   }
 }

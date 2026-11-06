@@ -10,6 +10,7 @@ import { CspReportController } from './csp-report.controller';
 jest.mock('@sentry/nestjs', () => ({ captureMessage: jest.fn() }));
 
 const captureMessage = Sentry.captureMessage as jest.Mock;
+const CSP_CT = 'application/csp-report';
 
 const legacy = (blockedUri: string): unknown => ({
   'csp-report': {
@@ -75,7 +76,7 @@ describe('CspReportController.handle (ROK-1501)', () => {
   it.each(BEACON_REPORTS)(
     '%s is logged but not sent to Sentry',
     (_label, report) => {
-      controller.handle(report);
+      controller.handle(report, CSP_CT);
 
       expect(captureMessage).not.toHaveBeenCalled();
       expect(logSpy).toHaveBeenCalledWith({
@@ -89,7 +90,7 @@ describe('CspReportController.handle (ROK-1501)', () => {
   it.each(CAPTURED_REPORTS)(
     '%s is captured and logged as before',
     (_label, report) => {
-      controller.handle(report);
+      controller.handle(report, CSP_CT);
 
       expect(captureMessage).toHaveBeenCalledTimes(1);
       expect(captureMessage).toHaveBeenCalledWith('CSP violation', {
@@ -107,10 +108,58 @@ describe('CspReportController.handle (ROK-1501)', () => {
     });
     const report = legacy('eval');
 
-    expect(() => controller.handle(report)).not.toThrow();
+    expect(() => controller.handle(report, CSP_CT)).not.toThrow();
     expect(warnSpy).toHaveBeenCalledWith(
       'Sentry.captureMessage failed for CSP report: sentry down',
     );
     expect(logSpy).toHaveBeenCalledWith({ event: 'csp_violation', report });
+  });
+});
+
+describe('CspReportController.handle abuse guards (backlog csp-report.controller.ts:21)', () => {
+  it.each([
+    ['application/json', 'application/json'],
+    ['text/plain', 'text/plain'],
+    ['no content type', undefined],
+  ])('%s is neither sent to Sentry nor logged with its body', (_l, ct) => {
+    controller.handle(legacy('eval'), ct);
+
+    expect(captureMessage).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith({
+      event: 'csp_violation',
+      ignored: 'content_type',
+      contentType: ct ?? '',
+    });
+  });
+
+  it('accepts a CSP content type with parameters and any case', () => {
+    controller.handle(
+      legacy('eval'),
+      'Application/Reports+JSON; charset=utf-8',
+    );
+
+    expect(captureMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops sending to Sentry after 30 reports in a minute but keeps logging', () => {
+    const report = legacy('eval');
+    for (let i = 0; i < 31; i += 1) controller.handle(report, CSP_CT);
+
+    expect(captureMessage).toHaveBeenCalledTimes(30);
+    expect(logSpy).toHaveBeenLastCalledWith({
+      event: 'csp_violation',
+      report,
+      ignored: 'sentry_budget',
+    });
+  });
+
+  it('logs only the first 2048 characters of an oversized report', () => {
+    const report = legacy(`https://x.test/${'a'.repeat(5000)}`);
+    controller.handle(report, CSP_CT);
+
+    expect(logSpy).toHaveBeenCalledWith({
+      event: 'csp_violation',
+      reportTruncated: JSON.stringify(report).slice(0, 2048),
+    });
   });
 });

@@ -24,7 +24,6 @@ import {
   dropSchemas,
   cleanupPartialFile,
   formatBackupTimestamp,
-  isSafeBackupFilename,
 } from './backup.helpers';
 import {
   rotateDailyDir,
@@ -38,7 +37,14 @@ import {
 import {
   archiveUploadsForDump,
   deleteUploadsArchiveOf,
+  removeStalePartialArchives,
 } from './backup-uploads.wiring';
+import {
+  reportBackgroundArchive,
+  UploadsArchiveTracker,
+} from './backup-uploads.tracker';
+import { listBackupFiles, resolveBackupFile } from './backup-list.helpers';
+import { DailyDumpNamer, writeDailyDump } from './backup-daily-dump.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
@@ -67,6 +73,9 @@ export class BackupService implements OnModuleInit {
   private readonly dailyDir: string;
   private readonly migrationDir: string;
   private readonly dbContainer: string;
+  private readonly dumpNames = new DailyDumpNamer();
+  /** Public for the integration spec's `whenIdle()` seam. */
+  readonly uploadsArchives: UploadsArchiveTracker;
 
   constructor(
     private readonly configService: ConfigService,
@@ -85,10 +94,15 @@ export class BackupService implements OnModuleInit {
       this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
     this.dailyDir = path.join(this.backupBase, 'daily');
     this.migrationDir = path.join(this.backupBase, 'migrations');
+    this.uploadsArchives = new UploadsArchiveTracker(
+      this.dailyDir,
+      this.logger,
+    );
   }
 
   onModuleInit(): void {
     this.ensureDirectories();
+    removeStalePartialArchives(this.dailyDir, this.logger);
     this.rotateMigrationSnapshots();
   }
 
@@ -115,7 +129,9 @@ export class BackupService implements OnModuleInit {
     await this.cronJobService.executeWithTracking(
       'BackupService_dailyBackup',
       async () => {
-        const { archive } = await this.createDailyBackupWithArchive();
+        // Dump FIRST, then archive (spec D3): queued behind a running one and
+        // awaited (a hung tar is killed at its deadline), so rotation follows.
+        const archive = await this.archiveUploadsOf(await this.dumpDaily());
         this.rotateDailyBackups();
         this.rotateMigrationSnapshots();
         this.rotateUploadsArchives();
@@ -126,34 +142,42 @@ export class BackupService implements OnModuleInit {
   }
 
   /**
-   * Create a daily pg_dump backup plus its companion uploads archive. A failed
-   * archive never loses the dump (it is logged; the cron run reports it).
+   * Admin "Create backup": resolves once the dump is written and archives the
+   * uploads in the BACKGROUND (nginx gives /api/ 60 s). The list shows the
+   * archive as `archiving` until it settles; a failure is logged and sent to
+   * Sentry, never thrown — the dump is already safe. Archives run one at a
+   * time: a Create while one is queued or running — or while another Create
+   * is still dumping — is a 409, before any dump.
    */
   async createDailyBackup(): Promise<string> {
-    const { dumpPath } = await this.createDailyBackupWithArchive();
-    return dumpPath;
+    return this.uploadsArchives.exclusive(async () => {
+      const filename = await this.dumpDaily();
+      void this.archiveUploadsOf(filename).then(reportBackgroundArchive);
+      return path.join(this.dailyDir, filename);
+    });
   }
 
-  /** Dump FIRST, then archive (spec D3): every dumped row has its file on disk. */
-  private async createDailyBackupWithArchive(): Promise<{
-    dumpPath: string;
-    archive: UploadsArchiveResult;
-  }> {
-    const filename = `raid_ledger_${formatBackupTimestamp(new Date())}.dump`;
-    const dumpPath = path.join(this.dailyDir, filename);
-    this.logger.log(`Starting daily backup: ${filename}`);
-    await this.runPgDump(dumpPath);
-    const stats = fs.statSync(dumpPath);
-    this.logger.log(
-      `Daily backup complete: ${filename} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`,
-    );
-    const archive = await archiveUploadsForDump(
+  /** Write `daily/raid_ledger_<ts>[_n].dump` (unique name); returns its filename. */
+  private dumpDaily(): Promise<string> {
+    const filename = this.dumpNames.next(this.dailyDir, new Date());
+    return writeDailyDump(
       this.dailyDir,
       filename,
+      (p) => this.runPgDump(p),
       this.logger,
-      UPLOADS_ARCHIVE_KEEP,
     );
-    return { dumpPath, archive };
+  }
+
+  /** The dump's companion archive, tracked; joins one already running. Never rejects. */
+  private archiveUploadsOf(filename: string): Promise<UploadsArchiveResult> {
+    return this.uploadsArchives.run(filename, () =>
+      archiveUploadsForDump(
+        this.dailyDir,
+        filename,
+        this.logger,
+        UPLOADS_ARCHIVE_KEEP,
+      ),
+    );
   }
 
   /** Create a pre-migration snapshot. */
@@ -205,29 +229,12 @@ export class BackupService implements OnModuleInit {
 
   /** List all backup files from both directories. */
   listBackups(): BackupFileDto[] {
-    const backups: BackupFileDto[] = [];
-    for (const [dir, type] of [
-      [this.dailyDir, 'daily'],
-      [this.migrationDir, 'migration'],
-    ] as const) {
-      try {
-        for (const file of fs.readdirSync(dir)) {
-          if (!file.endsWith('.dump')) continue;
-          const stats = fs.statSync(path.join(dir, file));
-          backups.push({
-            filename: file,
-            type,
-            sizeBytes: stats.size,
-            createdAt: stats.birthtime.toISOString(),
-          });
-        }
-      } catch {
-        /* Directory may not exist yet */
-      }
-    }
-    return backups.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    return listBackupFiles(
+      [
+        [this.dailyDir, 'daily'],
+        [this.migrationDir, 'migration'],
+      ],
+      (dump) => this.uploadsArchives.stateOf(dump),
     );
   }
 
@@ -239,22 +246,17 @@ export class BackupService implements OnModuleInit {
    */
   getBackupFilePath(type: 'daily' | 'migration', filename: string): string {
     const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
-    const notFound = `Backup file not found: ${type}/${filename}`;
-    if (!isSafeBackupFilename(filename)) throw new NotFoundException(notFound);
-    const resolved = path.resolve(dir, filename);
-    if (path.dirname(resolved) !== path.resolve(dir))
-      throw new NotFoundException(notFound);
-    if (!fs.existsSync(resolved)) throw new NotFoundException(notFound);
-    return resolved;
+    return resolveBackupFile(dir, type, filename);
   }
 
   /** Delete a specific backup file (a daily dump takes its uploads archive with it). */
   deleteBackup(type: 'daily' | 'migration', filename: string): void {
-    const filepath = this.getBackupFilePath(type, filename);
-    fs.unlinkSync(filepath);
+    if (type === 'daily') this.uploadsArchives.assertNotArchiving(filename);
+    fs.unlinkSync(this.getBackupFilePath(type, filename));
     this.logger.log(`Deleted backup: ${type}/${filename}`);
-    if (type === 'daily' && filename.endsWith('.dump'))
-      deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
+    if (type !== 'daily' || !filename.endsWith('.dump')) return;
+    deleteUploadsArchiveOf(this.dailyDir, filename, this.logger);
+    this.uploadsArchives.forget(filename);
   }
 
   /** Restore the database from a backup file. */

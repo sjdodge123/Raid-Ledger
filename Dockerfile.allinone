@@ -49,6 +49,31 @@ COPY packages/contract/package*.json ./packages/contract/
 RUN npm ci
 
 # ====================
+# Stage 1b: Production-only node_modules for the API (ROK-1699)
+# ====================
+# The deps stage above installs every workspace's dev dependencies (nest CLI,
+# typescript, jest, vite, playwright, ...) because the builder needs them.
+# The runtime only needs what the api workspace declares as `dependencies`,
+# so install that subset into a separate tree and ship it instead -- a full
+# dev tree was ~1 GB of the image. Everything the image runs before or as
+# NestJS is plain `node dist/...` (migrations, bootstrap-admin, seeds,
+# reencrypt-settings, resolve-public-url): nothing needs ts-node, tsx or
+# drizzle-kit at runtime. @raid-ledger/contract is linked as an api
+# dependency; its built dist is overlaid in the runtime stage below.
+FROM node:22-alpine AS prod-deps
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY api/package*.json ./api/
+COPY web/package*.json ./web/
+COPY packages/contract/package*.json ./packages/contract/
+
+RUN npm ci --omit=dev --workspace=@raid-ledger/api --include-workspace-root=false && \
+  npm cache clean --force && \
+  du -sh node_modules
+
+# ====================
 # Stage 2: Build
 # ====================
 FROM deps AS builder
@@ -169,7 +194,9 @@ COPY --from=builder /app/api/dist ./dist
 COPY --from=builder /app/api/package.json ./package.json
 COPY --from=builder /app/api/assets ./assets
 COPY --from=builder /app/api/src/drizzle/migrations ./drizzle/migrations
-COPY --from=builder /app/node_modules ./node_modules
+# Production-only tree from the prod-deps stage (ROK-1699), not the builder's
+# full dev tree.
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/packages/contract/dist ./node_modules/@raid-ledger/contract/dist
 COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-ledger/contract/package.json
 

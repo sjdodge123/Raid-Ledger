@@ -495,6 +495,32 @@ describe('conversion', () => {
     expect(second.body).toEqual({ converted: 0 });
   });
 
+  it('a former participant re-posting their old target never flips a later live group', async () => {
+    const [a, b, c] = await members('alpha', 'bravo', 'charlie');
+    const game = await createGame(testApp, 'Stale Retry Game');
+    await postIntent(a.token, game.id);
+    const staleEvent = await createFutureEvent(testApp, adminToken, {
+      gameId: game.id,
+    });
+    const first = await convert(a.token, game.id, { eventId: staleEvent });
+    expect(first.body).toEqual({ converted: 1 });
+
+    // A fresh group forms for the same game; A is not part of it.
+    await postIntent(b.token, game.id);
+    await postIntent(c.token, game.id);
+
+    const replay = await convert(a.token, game.id, { eventId: staleEvent });
+    expect(replay.status).toBeLessThan(400);
+    expect(replay.body).toEqual({ converted: 0 });
+    for (const member of [b, c]) {
+      const row = await readIntent(testApp, member.userId, game.id);
+      expect({
+        status: row?.status,
+        event: row?.converted_to_event_id,
+      }).toEqual({ status: 'active', event: null });
+    }
+  });
+
   it('400s when neither or both of pollId/eventId are supplied', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Bad Body Game');

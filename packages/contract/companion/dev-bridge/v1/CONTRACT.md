@@ -31,6 +31,10 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Every response body, serialised, is **≤ 16 KiB** (`DEV_BRIDGE_PAGE_MAX_BYTES`).
   A list or text that would not fit is paged: the client passes `?cursor=` and
   the body carries `next` (an opaque cursor, or `null` on the last page).
+  **A cursor is valid only on the route that issued it** — and, for
+  `/dev/v1/addons/<folder>/sv`, only for that same `<folder>`. The companion
+  answers a cursor from another route or folder with 400 `invalid_request`
+  at `cursor`; the client restarts without one.
 - **Every byte cap is UTF-8 bytes of the JSON serialisation**
   (`devBridgeJsonBytes`), never characters — escaping (`"`, `\n`, `\u0001`) and
   multi-byte text count. The schemas enforce each cap (a root-level `custom`
@@ -45,16 +49,20 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 | GET | `/dev/v1/addons?flavor=&cursor=` | `addons` | yes |
 | GET | `/dev/v1/ledgerlink/sv?flavor=&scope=account\|character&cursor=` | `sv-raw` | yes (text) |
 | GET | `/dev/v1/ledgerlink/sv/parsed?flavor=&cursor=` | `sv-parsed` | yes |
+| GET | `/dev/v1/addons/<folder>/sv?flavor=&scope=account\|character&cursor=` (`<folder>` in `DEV_BRIDGE_SV_READABLE_ADDONS`) | `sv-raw` | yes (text) |
 | POST | `/dev/v1/probes` (body `probe-request`) | 202 `probe-queued` · 400/409 `error` | no |
 | GET | `/dev/v1/probes?status=&cursor=` | `probe-list` | yes |
 | GET | `/dev/v1/probes/:id?cursor=` | `probe-detail` | yes (`result.calls`) |
 | DELETE | `/dev/v1/probes/:id` | `probe-cancelled` | no |
 | GET | `/dev/v1/logs?since=&level=&cursor=` | `logs` | yes |
 | GET | `/dev/v1/collectors` | `collectors` | no |
+| GET | `/dev/v1/events?since=&cursor=` | `events` | yes |
 | GET | `/dev/v1/ledgerlink/snapshot?flavor=&character=&at=&cursor=` | `ledgerlink-snapshot-page` | yes (`calls` → `apis` → `sections`) |
 | GET | `/dev/v1/ledgerlink/snapshot/history?flavor=&character=&cursor=` | `ledgerlink-snapshot-history` | yes |
 | GET | `/dev/v1/bg3/saves?cursor=` | `bg3-saves` | yes |
 | GET | `/dev/v1/bg3/saves/<saveRef>/structure?cursor=` | `bg3-save-structure` | yes (`types` → `party`) |
+| GET | `/dev/v1/bg3/install?cursor=` | `bg3-install` | yes (`paks`, by entry slice) |
+| GET | `/dev/v1/bg3/saves/<saveRef>/catalogue?cursor=` | `bg3-save-catalogue` | yes (`party`) |
 
 - `error.error` is one of `invalid_request` (400, carries `issues` — each
   `{ path, code, message }` as Zod reports it), `unauthorized` (401),
@@ -92,6 +100,158 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Probe `status`: `queued` → `answered` | `expired` (past `ttlHours`) |
   `rejected` (the stored result failed `probe-result`; `error` says why) |
   `cancelled` (after DELETE).
+
+## Other addons' SavedVariables (`/dev/v1/addons/<folder>/sv`)
+
+`GET /dev/v1/addons/<folder>/sv` returns one page of `<folder>.lua` in the
+same `sv-raw` body as `ledgerlink/sv`, with the same paging, cursor and
+error rules. `<folder>` must be one of `DEV_BRIDGE_SV_READABLE_ADDONS`
+(`companion-dev-bridge-endpoints.schema.ts`, Zod enum
+`DevBridgeSvReadableAddonSchema`; matched exactly and case-sensitively after
+percent-decoding, so `!BugGrabber` and `%21BugGrabber` are the same folder):
+
+| Folder | Saved variable | Why it is readable |
+|---|---|---|
+| `Mailworthy` | `MailworthyDB` (`selftest` holds the self-test report) | the operator's own addon |
+| `!BugGrabber` | `BugGrabberDB` | holds only captured Lua errors |
+
+**Why an allowlist.** Other addons' saved data can hold whispers and chat
+history (EnhanceQoL's IM history, for one), so the bridge reads only addons
+the operator owns or that hold only error reports. LedgerLink is not in the
+list: it has its own route. Adding a folder is an **additive** change (stays
+v1); removing one is breaking. Like `sv-raw` everywhere, the text is returned
+as-is (operator's own LAN tool).
+
+**Selection — the same for `ledgerlink/sv` and `addons/<folder>/sv`.**
+`scope=account` reads `<flavor>/WTF/Account/<account>/SavedVariables/<file>.lua`;
+`scope=character` reads
+`<flavor>/WTF/Account/<account>/<realm>/<character>/SavedVariables/<file>.lua`.
+`scope` defaults to `account` when omitted. There is no account, realm or
+character parameter: of every file of that
+scope under every account folder of the flavor, the companion serves the one
+with the **newest mtime**. Symlinked files are not followed. `path` names the
+file served, relative to the WoW folder. The cursor pins that file's length
++ mtime; a file rewritten mid-paging is a 400 `invalid_request` at `cursor`,
+and the client restarts without one.
+
+**Errors.** A folder not in the list → 404 `not_found`, checked before any
+query parameter (never 403 or 400, so the response reveals nothing about
+folders outside the list). A listed folder
+with no SavedVariables file of that scope → 404 `not_found`. A bad `scope`
+or `flavor` → 400 `invalid_request`, as on every other route.
+
+## Collector status (`collectors[].status`, `linked`) — 2026-11-06
+
+Each `collectors` row may carry `status`, the Companion window's collector
+tile status line as a closed enum. The body may carry `linked`, whether this
+device holds a device token. Linking is **device-level** (one token, one
+server URL per device), so `linked` is one top-level field, never per row: an
+unlinked device puts every enabled row on `link-device`
+(fixture `collectors--unlinked`; a row-level `linked` is invalid,
+`invalid/collectors--row-linked`). Both are **optional** (additive): a body
+from a companion built before 2026-11-06 omits them and still parses
+(fixture `collectors--without-status`). A device-level state that blocks
+every collector replaces the collector's own line, in the order `paused` >
+`rate-limited` > `link-device` > `error` (the device token cannot be read) —
+what the window shows once for the device.
+
+| Value | Meaning (tile copy it stands for) |
+|---|---|
+| `off` | The collector is switched off ("Off", "<Game> uploads are off", "Uploads switched off — uploaded N of M"). |
+| `paused` | The device is paused ("Paused — uploads resume when you unpause"; also a batch cut short by a pause). |
+| `rate-limited` | The server answered 429; uploads are held and retried automatically ("Rate limited — retrying …"). |
+| `link-device` | The device is not linked, or its token was refused and it must re-link ("Link this device to upload", "Re-link this device"). |
+| `not-scanned` | Switched on, no scan has finished yet ("Waiting for the first scan…"). |
+| `no-files` | The scan found nothing to read in the folder (the collector's no-files hint). |
+| `needs-confirm` | Items are held until the user checks the preview and confirms the first upload ("N waiting — check the preview before the first upload"). |
+| `waiting` | Items are queued but not sent this pass ("N export(s) waiting"). |
+| `up-to-date` | Nothing new to send ("Up to date"). |
+| `uploaded` | The last pass ended "Uploaded N of M export(s)" with **N ≥ 1** — at least one upload was accepted. |
+| `rejected` | The batch was stopped by a content refusal that is not resent — today only the hub's Gallery being full (`blob_quota_exceeded`). Other refusals do not stop the batch; they show as `upload-rejected` events. |
+| `retrying` | The batch was stopped by a deferral (the server does not take the upload yet, or an unexpected answer): "Will retry: …". |
+| `error` | Anything else that stops the collector (e.g. the device token cannot be read, the server URL is unusable). |
+
+**How a finished pass maps.** rl-companion's upload pass ends with
+"Uploaded N of M export(s)" even when N is 0 (every item gave up after its
+retries, or was a content refusal that does not stop the batch). So:
+
+- N ≥ 1 → `uploaded`.
+- N = 0 → what the tile's state implies: `waiting` while exports are still
+  unsent (given-up items are retried on the next scan, so `pending` > 0),
+  `up-to-date` when nothing is left (every item was settled by a refusal).
+- A batch cut short maps by what stopped it: a pause → `paused`, the
+  collector switched off → `off`, 401 → `link-device`, 429 →
+  `rate-limited`, a full Gallery → `rejected`, a deferral → `retrying`.
+
+The enum carries no free text; the tile's wording, paths and reasons stay
+in the app. A new value is **breaking** for readers that switch on it, so it
+needs a new `vN/` (or an operator ruling that the value is additive).
+
+## Activity events (`GET /dev/v1/events`, `events`) — 2026-11-06
+
+Structured companion activity, the allowlisted replacement for the removed
+Activity-log mirror. **No free text anywhere**: every field is a timestamp,
+a collector id, an enum or an integer — never a message, path, file, account, character or
+save name (four review rounds found path leaks in free-text scrubbing; the
+log mirror was removed for that reason). Rows are strict objects: an
+unknown key such as `message` is invalid (fixture
+`invalid/events--free-text-message`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `ts` | timestamp (UTC, ≤24 chars) | When it happened. |
+| `collectorId` | `^[a-z0-9][a-z0-9-]{0,63}$` | Same grammar as `collectors[].id`: a code-defined built-in collector id (`wow-ledgerlink`, `bg3-save`, `bg3-screenshot`, …), never user data. |
+| `kind` | enum below | What happened. |
+| `count` | int 0–1,000,000, optional | Files scanned, exports uploaded or held. |
+| `httpStatus` | int 100–599, optional | The server's status, for an upload outcome. |
+| `errorCode` | enum below, optional | Why an upload was refused or deferred. |
+
+| Value | Meaning |
+|---|---|
+| `scan` | A scan pass finished (`count` = files read). |
+| `upload-ok` | An upload was accepted (`count` = exports, `httpStatus` 2xx). |
+| `upload-rejected` | The server refused the content; not resent (`httpStatus` 4xx, `errorCode` = its `code`). |
+| `upload-held` | Uploads are held after a 429 (`httpStatus` 429, `count` = exports held). |
+| `upload-retry` | A transient failure; retried on a later scan (`httpStatus` when the server answered). |
+| `link-required` | The device token is missing or was refused (`httpStatus` 401 when refused). |
+| `collector-on` | The user switched the collector on. |
+| `collector-off` | The user switched the collector off. |
+| `error` | Anything else that stopped the pass (`errorCode` says which). |
+
+**`errorCode`** (`DEV_BRIDGE_EVENT_ERROR_CODES`) — the codes rl-companion's
+upload paths can act on (`apps/companion/src-tauri/src/upload.rs`):
+
+| Value | Source |
+|---|---|
+| `invalid_envelope` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `invalid_payload` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `payload_too_large` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `captured_at_in_future` | Server content rejection, terminal (`TERMINAL_CODES`). |
+| `blob_quota_exceeded` | The hub's Gallery is full (413); stops the batch. |
+| `invalid_blob` | Server refused a blob PUT. |
+| `hash_mismatch` | Server refused a blob PUT. |
+| `unsupported_media` | Server refused a blob PUT. |
+| `blob_ref_mismatch` | Server refused a blob PUT. |
+| `blob_refused` | The companion's own: a blob PUT refused (4xx) with no `code`. |
+| `unknown_contract` | Deferred: the server does not take this contract yet. |
+| `unknown_contract_version` | Deferred: the server does not take this contract version yet. |
+| `retired_contract_version` | Deferred: the app is out of date. |
+| `other` | Anything else. |
+
+Mapping rule: the companion sends the server's `code` only when it is in the
+list; every other code (one the app does not know, an uppercase API code such
+as `USER_DEACTIVATED`) is sent as `other`, as is a kind-`error` event. A
+refused message with no `code` omits `errorCode` (`httpStatus` still says
+what happened). A 401 and a 429 carry no code: `link-required` and
+`upload-held` with `httpStatus` say it. A new code is breaking for pinned
+readers, like a new `status`.
+
+Events come oldest first. `since` (a timestamp) returns events with `ts`
+after it; paging is by the 16 KiB body cap alone — no row count limit (with
+every field at its widest, 76 rows fit — fixture `events--max-page`). How many events the
+companion retains is its choice; a cursor whose event was dropped is a 400
+`invalid_request` at `cursor`. A new `kind` value is breaking for the same
+reason as a new `status`.
 
 ## Probe request (`probe-request`)
 
@@ -369,7 +529,13 @@ equipment `slot` is the same — BG3 has 19 today, all listed.
   `portraitsMapped`, `metaNamesMatchParty`, `ownerProfileMatchesLocal`: the
   S0 verification answers as counts and booleans (no name is compared in
   the body; only the outcome is reported).
-- `party[]` — `{ slot, decoded }` by 0-based party index. Every `decoded`
+- `party[]` — `{ slot, characterKeyPrefix?, decoded }` by 0-based party index.
+  `characterKeyPrefix` (optional, ROK-2079 OQ-4; `^[0-9a-f]{8}$`, like
+  `campaignKeyPrefix`) is the first 8 hex chars of the member's
+  `characterKey = SHA-256(campaignKey ‖ ':' ‖ entityGuid)`, with entityGuid
+  as lowercase hyphenated text — so a sweep can check that one entity keeps
+  its key across saves of a campaign. Absent when the companion cannot derive
+  it; the GUID itself is never on the bridge. Every `decoded`
   field is optional and absent when its decoder is `unsupported`/`none`:
   `abilities` (`str dex con int wis cha`, each 1–30), `proficiencyBonus`
   (1–10), `maxHp` (1–100,000), `classLevels[] { classId, subclassId|null,
@@ -383,6 +549,74 @@ against `DEV_BRIDGE_BG3_PARTY_ROW_MAX_BYTES` = 6 KiB (`custom`, "Party row
 is N bytes; the cap is 6144"); the field caps already keep the worst row
 well under it (the spec builds that row), so one always fits a page with
 the head.
+
+## BG3 game-data catalogue (`bg3-install`, `bg3-save-catalogue`, `collectors.bg3Catalogue`) — ROK-2081
+
+Read-only views of the companion's BG3 catalogue — item / origin / quest
+names it resolves from the player's own install (ROK-2081 ruling 6). Game-data
+names (item names, rarities, origin names) **are** allowed on the LAN bridge
+(ruling 7); custom character names never are — every object is strict, so a
+`characterName` key is `unrecognized_keys`. Both new bodies carry the same
+body-wide GUID / ≥ 10-digit guard as the ROK-2077 bodies, ≤ 16 KiB per page,
+and their own cursor grammar `^p[1-9][0-9]{0,3}_(paks|party)_[0-9]{1,6}$`
+(`p<page>_<section>_<offset>`). For `bg3-install` (`paks`) the offset is a
+**flat** count of matched entries already returned, across every pak in pak
+order — one pak's `entriesMatched` can span pages, so the offset is never a
+pak index. For `bg3-save-catalogue` (`party`) it is the number of party rows
+already returned. Like the ROK-2077 cursors it is an offset, never a file or
+folder name.
+
+**`collectors.bg3Catalogue`** (optional, body-level — not a collector row):
+`{ state, reason, buildMs, builtAt, counts, lastLookup }`.
+
+| `state` | Meaning | `reason` |
+|---|---|---|
+| `absent` | No usable install was found | `no-steam` · `no-bg3-library` · `no-app-manifest` · `no-data-dir` · `unsupported-store` · `other` |
+| `indexing` | A build is running; the previous catalogue may still serve (ruling 9) | `null` |
+| `ready` | Built; `buildMs`, `builtAt`, `counts` are non-null | `null` |
+| `failed` | The last build failed (retried later) | `timeout` · `too-large` · `pak-error` · `parse-error` · `install-changed` · `cache-error` · `other` |
+
+`reason` is set iff `state` is `absent`/`failed` and must come from that
+state's list (`custom`). `other` is in both lists: the companion maps any
+error kind it adds later to `other`, so a new companion-side kind needs no new
+value here. `absent` has no catalogue, so `buildMs`, `builtAt`, `counts` and
+`lastLookup` are all `null` (`custom` otherwise). `failed` (like `indexing`)
+may keep them non-null: the previous catalogue is still served and they
+describe it. `counts` = `{ items, origins, quests, waypoints,
+skipped }`; `lastLookup` = `{ total, resolvedName, resolvedRarity, at }` of
+the latest lookup batch (each resolved count ≤ `total`). `state`, `reason`
+and the pak `method` / `store` enums are closed: a new named value is
+**breaking** (for `reason`, unknown kinds go to `other` instead).
+
+**`bg3-install`** (`GET /dev/v1/bg3/install`): `{ found, store, paks[],
+next }`. `store` ∈ `steam` · `gog` · `epic` · `mac-app-store` · `unknown`
+(a store, not a platform), and `store` is `null` iff `found` is `false`
+(`custom`). `found: false` ⇒ `paks` is empty. Each pak: `rel` — relative to the
+install's `Data/` folder, forward slashes, no `..`, no drive, ending `.pak`,
+≤ 256 (the install path itself never leaves the PC); `parts` 1–16; and
+`entriesMatched[]` (≤ 96 per page) of `{ name, sizeOnDisk, size, method,
+part }` — the entry's path inside the pak (relative, ≤ 256), its compressed
+and decompressed sizes, `method` ∈ `none` · `zlib` · `lz4` · `zstd` ·
+`unknown`, and the archive part (0–15) holding it — always `< parts` of
+its pak (`custom`). `paks[].rel` is unique
+within a page; a pak whose entries span pages repeats its head (`rel`,
+`parts`) with the next slice (clients merge by `rel`). Names and sizes only —
+never pak bytes.
+
+**`bg3-save-catalogue`** (`GET /dev/v1/bg3/saves/<saveRef>/catalogue`;
+unknown `saveRef` → 404 `not_found`): `{ saveRef, catalogueState, hitRate,
+party[], next }`. `party[]` = `{ slot, items[] }` by the same 0-based party
+index as `bg3-save-structure`; each item `{ slot, statsId, name, rarity }` —
+the equipment `slot` enum, the `bg3-save-structure` `statsId` pattern or
+`null`, `name` (display text ≤ 128) or `null`, `rarity` (a Larian id ≤ 64,
+e.g. `Legendary`) or `null`. A `null` name is a miss (a modded or unknown id)
+— misses are listed by `statsId`. `items[].slot` is unique within a row and
+`party[].slot` within a page. `hitRate` = `{ total, resolvedName,
+resolvedRarity }` over the whole save, repeated on every page.
+`catalogueState` `absent`/`failed` ⇒ every `name` and `rarity` is `null`
+(`custom`). Each row is checked against
+`DEV_BRIDGE_BG3_CATALOGUE_ROW_MAX_BYTES` = 12 KiB; a row of 19 items at
+every field cap fits it and one page with the head.
 
 ## Fixtures
 

@@ -10,6 +10,8 @@ import {
     DevBridgeProbeIdSchema,
     DevBridgeProbeResultSchema,
 } from './companion-dev-bridge.schema.js';
+import { DevBridgeBg3CatalogueReportSchema } from './companion-dev-bridge-bg3-catalogue-report.schema.js';
+import { DevBridgeCollectorIdSchema, DevBridgeCollectorStatusSchema } from './companion-dev-bridge-events.schema.js';
 
 // ============================================================
 // Companion dev bridge v1 — `/dev/v1/*` response bodies (ROK-2055 §6).
@@ -17,13 +19,13 @@ import {
 // would not fit is paged with `?cursor=` and carries `next` (null = last page).
 // ============================================================
 
-/** A path relative to the configured WoW folder: forward slashes, no leading `/`, no `..`, no drive. */
+/** A relative path (to the configured WoW folder, or for BG3 to the install's `Data/` / inside a pak): forward slashes, no leading `/`, no `..`, no drive. */
 export const DevBridgeRelativePathSchema = z
     .string()
     .min(1)
     .max(512)
     .refine((p) => !p.startsWith('/') && !p.includes('\\') && !p.includes(':'), {
-        message: 'Must be relative to the WoW folder, with forward slashes',
+        message: 'Must be a relative path, with forward slashes',
     })
     .refine((p) => p.split('/').every((s) => s !== '' && s !== '.' && s !== '..'), {
         message: 'Must not contain empty, "." or ".." segments',
@@ -70,10 +72,27 @@ export const DevBridgeAddonsSchema = z
     .strict()
     .superRefine(fitsPage);
 
-/** Which LedgerLink SavedVariables file: the account-wide one or a per-character one. */
+/** Which SavedVariables file: the account-wide one or a per-character one (the newest by mtime). */
 export const DevBridgeSvScopeSchema = z.enum(['account', 'character']);
 
-/** GET /dev/v1/ledgerlink/sv?flavor=&scope=&cursor= — one page of the raw `LedgerLink.lua`. */
+/**
+ * Addon folders whose SavedVariables `GET /dev/v1/addons/<folder>/sv` may
+ * read (body `sv-raw`). Other addons' saved data can hold whispers and chat
+ * history, so only addons the operator owns or that hold only error reports
+ * are listed. LedgerLink is not here: it has its own `ledgerlink/sv` route.
+ * Adding a folder is additive; any other folder is a 404 `not_found`.
+ */
+export const DEV_BRIDGE_SV_READABLE_ADDONS = ['Mailworthy', '!BugGrabber'] as const;
+
+/** The `<folder>` path segment of `GET /dev/v1/addons/<folder>/sv`. */
+export const DevBridgeSvReadableAddonSchema = z.enum(DEV_BRIDGE_SV_READABLE_ADDONS);
+
+export type DevBridgeSvReadableAddon = z.infer<typeof DevBridgeSvReadableAddonSchema>;
+
+/**
+ * One page of a raw SavedVariables file: `GET /dev/v1/ledgerlink/sv?flavor=&scope=&cursor=`
+ * (`LedgerLink.lua`) and `GET /dev/v1/addons/<folder>/sv?flavor=&scope=&cursor=` (`<folder>.lua`).
+ */
 export const DevBridgeSvRawSchema = z
     .object({
         flavor: DevBridgeFlavorSchema,
@@ -197,19 +216,28 @@ export const DevBridgeLogsSchema = z
 /** One collector, the same data as the app's `get_collector_status`. */
 export const DevBridgeCollectorSchema = z
     .object({
-        id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+        id: DevBridgeCollectorIdSchema,
         enabled: z.boolean(),
         paused: z.boolean(),
         lastScanAt: CompanionTimestampSchema.nullable(),
         lastUploadAt: CompanionTimestampSchema.nullable(),
         pending: Count,
         lastError: z.string().max(512).optional(),
+        /** The tile's status line as an enum (2026-11-06, additive: optional so older companions still parse). */
+        status: DevBridgeCollectorStatusSchema.optional(),
     })
     .strict();
 
-/** GET /dev/v1/collectors */
+/**
+ * GET /dev/v1/collectors — `bg3Catalogue` (optional, ROK-2081): the BG3 game-data catalogue state, body-level, not a row.
+ * `linked` (optional, 2026-11-06, additive): whether this device holds a device token — one token per device, so body-level.
+ */
 export const DevBridgeCollectorsSchema = z
-    .object({ collectors: z.array(DevBridgeCollectorSchema).max(32) })
+    .object({
+        collectors: z.array(DevBridgeCollectorSchema).max(32),
+        bg3Catalogue: DevBridgeBg3CatalogueReportSchema.optional(),
+        linked: z.boolean().optional(),
+    })
     .strict()
     .superRefine(fitsPage);
 

@@ -327,6 +327,12 @@ services:
       # When set in .env, dashboard renders external (share-with-tester) URLs
       # per env in addition to the internal http://{slug}.rl.lan link.
       RL_PUBLIC_DOMAIN: ${RL_PUBLIC_DOMAIN:-}
+      # ROK-1900: per-IP limits key on the real client. Browsers arrive via
+      # Cloudflare -> Traefik, so trust Traefik (its compose service name,
+      # re-resolved every minute — its rl-net IP is dynamic) and read
+      # CF-Connecting-IP from it. Never trust the whole rl-net subnet: env
+      # containers share it. Extra literal IPs/CIDRs: RL_TRUSTED_PROXY_CIDRS.
+      RL_TRUSTED_PROXY_HOSTS: ${RL_TRUSTED_PROXY_HOSTS:-traefik}
     volumes:
       - ./state:/state:ro
       # ROK-1331 M1: explicit task state mount. The ./state:/state:ro mount
@@ -346,6 +352,10 @@ services:
       # Single-file RW override keeps the rest of /state RO. Safe with
       # logrotate copytruncate (inode preserved across rotation).
       - ./state/perf.log:/state/perf.log:rw
+      # ROK-1900: "Pending approval" inbox items. Own RW mount, outside
+      # test-plans, so plan-prune / env-destroy never reach it. deploy.sh
+      # requires it uid 1000 mode 0700 — agents (rl-fleet) must not reach it.
+      - ./state/approvals:/state/approvals:rw
       # Bind-mount public/ + server.js so operator edits to either land
       # immediately without rebuilding the image. The Dockerfile still
       # COPY's both as a fallback for fresh-deploy scenarios where the
@@ -356,6 +366,16 @@ services:
       # together — a server.js-only mount loads new code against the image's
       # (missing or stale) plan-auth.js and crash-loops on ERR_MODULE_NOT_FOUND.
       - ./dashboard/plan-auth.js:/app/plan-auth.js:ro
+      # ROK-1900: the approvals modules server.js imports mount with it too.
+      - ./dashboard/approvals-auth.js:/app/approvals-auth.js:ro
+      - ./dashboard/approvals-content.js:/app/approvals-content.js:ro
+      - ./dashboard/approvals-limits.js:/app/approvals-limits.js:ro
+      - ./dashboard/approvals-sign.js:/app/approvals-sign.js:ro
+      - ./dashboard/approvals-plan-steps.js:/app/approvals-plan-steps.js:ro
+      - ./dashboard/approvals-routes.js:/app/approvals-routes.js:ro
+      - ./dashboard/approvals-store.js:/app/approvals-store.js:ro
+      - ./dashboard/approvals-validate.js:/app/approvals-validate.js:ro
+      - ./dashboard/client-ip.js:/app/client-ip.js:ro
     labels:
       rl.role: infra
 

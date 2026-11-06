@@ -105,15 +105,18 @@ function normalizedIlike(column: Column, word: string): SQL {
  */
 export { ROMAN_ARABIC_PAIRS };
 
-const ARABIC_TO_ROMAN: Record<string, string> = Object.fromEntries(
+// Maps, not plain objects: a search word like `constructor` must not resolve
+// to an inherited Object member (it reached `escapeLikePattern` and 500'd).
+const ARABIC_TO_ROMAN = new Map<string, string>(
   ROMAN_ARABIC_PAIRS.map(([roman, arabic]) => [arabic, roman]),
 );
-const ROMAN_TO_ARABIC: Record<string, string> = Object.fromEntries(
+const ROMAN_TO_ARABIC = new Map<string, string>(
   ROMAN_ARABIC_PAIRS.map(([roman, arabic]) => [roman.toLowerCase(), arabic]),
 );
 
 /** Return the Roman/Arabic alternative for a word, or null if none. */
 function romanArabicAlt(word: string): string | null {
-  if (ARABIC_TO_ROMAN[word]) return ARABIC_TO_ROMAN[word];
-  return ROMAN_TO_ARABIC[word.toLowerCase()] ?? null;
+  return (
+    ARABIC_TO_ROMAN.get(word) ?? ROMAN_TO_ARABIC.get(word.toLowerCase()) ?? null
+  );
 }

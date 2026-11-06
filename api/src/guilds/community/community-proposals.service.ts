@@ -33,6 +33,11 @@ import * as q from './community-proposals.queries';
 import { findProposalUser, staffUserIds } from './community-proposals.users';
 import { isInDiscordGuild } from './discord-guild-member.helpers';
 import {
+  assertMembersActive,
+  initialMemberIds,
+  seedMembers,
+} from './community-create-members.helpers';
+import {
   approvedNotice,
   rejectedNotice,
   submittedNotice,
@@ -215,7 +220,7 @@ export class CommunityProposalsService {
     ]);
   }
 
-  /** `POST /admin/hubs` — an active hub led by `leaderUserId`. */
+  /** `POST /admin/hubs` — an active hub led by `leaderUserId`, with any seeded `memberUserIds` (ROK-2096). */
   async createDirect(
     adminId: number,
     dto: AdminCreateHubDto,
@@ -226,6 +231,8 @@ export class CommunityProposalsService {
     if (leader.deactivatedAt !== null) {
       throw new ConflictException(PROPOSAL_ERRORS.leaderInactive);
     }
+    const memberIds = initialMemberIds(leader.id, dto.memberUserIds);
+    await assertMembersActive(this.db, memberIds);
     await this.assertNameFree(this.db, dto.gameId, dto.name, null);
     const run = () =>
       this.db.transaction(async (tx) => {
@@ -238,6 +245,7 @@ export class CommunityProposalsService {
           reviewedBy: adminId,
         });
         await upsertJoin(tx, hub.id, leader.id, 'leader');
+        await seedMembers(tx, hub.id, memberIds);
         return { ...hub, memberCount: await refreshMemberCount(tx, hub.id) };
       });
     const hub = await conflictOnUnique(run, PROPOSAL_ERRORS.nameTaken);

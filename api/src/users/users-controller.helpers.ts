@@ -115,11 +115,19 @@ export function parseTzOffset(tzOffsetStr?: string): number {
   return Math.max(-840, Math.min(840, parsed));
 }
 
+const WEEK_MIN_YEAR = 2000;
+const WEEK_MAX_YEAR = 2100;
+
 /** Resolve week start date from query param or current week. */
 export function resolveWeekStart(week?: string): Date {
   if (week) {
     const d = new Date(week);
     if (isNaN(d.getTime()))
+      throw new BadRequestException('Invalid week parameter');
+    // Bound the year (same 2000-2100 range as absences): each distinct week is
+    // a game-time cache key, and extreme years reach Date-range edge cases.
+    const year = d.getUTCFullYear();
+    if (year < WEEK_MIN_YEAR || year > WEEK_MAX_YEAR)
       throw new BadRequestException('Invalid week parameter');
     return d;
   }

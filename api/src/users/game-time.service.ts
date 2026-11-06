@@ -18,6 +18,7 @@ import {
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { assertAbsenceWritable } from './game-time-absence-limit.helpers';
 import { defined } from '../common/defined.helpers';
+import { setBoundedCache, type CacheEntry } from './game-time-cache.helpers';
 import {
   calendarBusyWeekStart,
   fetchCalendarBusyHours,
@@ -56,11 +57,6 @@ type CompositeViewWithCalendar = CompositeViewResult & {
 /** TTL for in-memory game-time cache (ms). */
 const CACHE_TTL_MS = 2 * 60 * 1000;
 
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
-
 /**
  * Service for managing recurring weekly game time templates (ROK-189).
  */
@@ -88,7 +84,13 @@ export class GameTimeService {
   }
 
   private setCache<T>(key: string, data: T): void {
-    this.cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    const now = Date.now();
+    setBoundedCache(
+      this.cache,
+      key,
+      { data, expiresAt: now + CACHE_TTL_MS },
+      now,
+    );
   }
 
   /** Invalidate all cache entries for a user. */
@@ -310,6 +312,7 @@ export class GameTimeService {
       userId,
       weekStart,
       tzOffset,
+      weekSent,
     );
     // ROK-1593 D15: a separate field — never folded into slot status.
     const busyStart = calendarBusyWeekStart(weekStart, tzOffset, weekSent);

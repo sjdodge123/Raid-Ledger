@@ -432,6 +432,22 @@ function describeCommonGroundCoop() {
       expect(ids).toContain(matchBigEnough);
       expect(ids).not.toContain(matchTooSmall);
     });
+
+    it('treats LIKE wildcards in search as literal characters', async () => {
+      await createBuildingLineup();
+      const literal = await insertOwnedGame('Quill_Mark 100% Run');
+      // `_` and `%` would match these as wildcards on the unescaped pattern.
+      const wildcardOnly = await insertOwnedGame('QuillXMark 1000 Run');
+
+      const { status, ids } = await fetchGameIds({
+        minOwners: 1,
+        search: 'Quill_Mark 100%',
+      });
+
+      expect(status).toBe(200);
+      expect(ids).toContain(literal);
+      expect(ids).not.toContain(wildcardOnly);
+    });
   }
   describe(
     'minOnlineCoop — composes with existing filters',

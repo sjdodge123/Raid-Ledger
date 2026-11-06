@@ -1,6 +1,7 @@
 /**
  * The Combobox popup (ROK-1646): portalled to `portalContainer` (the
  * surrounding dialog, else `<body>`) above Modal and BottomSheet (`Z_INDEX.MODAL + 1`), `bg-surface border-edge rounded-lg`, the
+ * height capped to the dialog's room by `useAnchoredPopup` (so the list scrolls, never clips),
  * active row on `bg-overlay`, rows 44px below `lg`. A press inside it is
  * `preventDefault`ed so focus — and `aria-activedescendant` — stay on the input.
  * The visible status row is `aria-hidden`: the announcement comes from the ONE
@@ -47,10 +48,12 @@ function optionClass(active: boolean, selected: boolean): string {
     ].filter(Boolean).join(' ');
 }
 
+/** Inside a dialog the hook caps the height to the dialog's room; `max-h-64` stays the ceiling. */
 function popupStyle(pos: PopupPosition | null): CSSProperties {
     return {
         zIndex: Z_INDEX.MODAL + 1,
         top: pos?.top ?? 0, left: pos?.left ?? 0, width: pos?.width,
+        ...(pos?.maxHeight !== undefined ? { maxHeight: `min(16rem, ${pos.maxHeight}px)` } : {}),
         visibility: pos ? undefined : 'hidden',
     };
 }

@@ -252,7 +252,33 @@ describe('ROK-2067 plugin + game (owners wired)', () => {
       await expect(owned.build(DEVICE)).resolves.toMatchObject({
         contracts: [{ plugin: { id: OWNER, state: 'active' }, game: null }],
       });
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('db down'),
+        expect.stringContaining('Error: db down'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe('hubTargets', () => {
+  it('a failed hubTargets read omits the field and warns with the stack', async () => {
+    registry.register(
+      OWNER,
+      handler({ hubTargets: () => Promise.reject(new Error('hub down')) }),
+    );
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const contract = (await service.build(DEVICE)).contracts?.[0];
+      expect(contract).toBeDefined();
+      expect(contract).not.toHaveProperty('hubTargets');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('hub down'),
+        expect.stringContaining('Error: hub down'),
+      );
     } finally {
       warn.mockRestore();
     }

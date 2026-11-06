@@ -11,6 +11,8 @@ source "$(dirname "$0")/_bot_identity.sh"
 # ROK-1508 — sweep the test guild's leaked ⏰ voice channels on teardown.
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_discord_sweep.sh"
+# 2026-10-26 — registry_gc::delete_env_tag (drop this env's rl-allinone tag).
+source "$(dirname "$0")/_registry_gc.sh"
 
 SLUG=""
 FORCE=0
@@ -181,6 +183,14 @@ bot_identity::deregister_commands "${DESTROYED_SLOT:-}" "$SLUG" || true
 # env on the same slot must never have its claim cleared by an unrelated
 # destroy, so the release is holder-matched.
 bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
+
+# 2026-10-26 — delete this env's own rl-allinone:<tag> from rl-registry while
+# its env-registry row (which records the image) still exists. Skips `latest`
+# and a tag another env still uses; blobs are freed by the gc-sweeper's
+# registry_gc::sweep. Best-effort: an unreachable registry never fails a destroy.
+# Its log line (deleted / would delete under RL_REGISTRY_GC_DRY_RUN) goes to
+# stderr; stdout stays the JSON result.
+registry_gc::delete_env_tag "$SLUG" || true
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 
