@@ -4025,3 +4025,11 @@ same day (#1278, #1279, #1280).
 - **(resolved)** line 3848 `api/src/notifications/weekly-digest-coplay.queries.ts` — the event path is half-open (`upper(e.duration) < end`), so an event ending on the week boundary counts in one digest only. Spec: `weekly-digest-coplay.integration.spec.ts` › event window boundary (mutant-checked).
 - **resolved on main, noted by the batch M scout** (no code change): line 1853 steam nudge recipients (`lineup-steam-nudge.service.ts:53-54` adds `ACTIVE_MEMBER_SQL_AND`, ROK-1684); line 3508 `startGracePeriod` no-op (`ad-hoc-event-end.helpers.ts:69` returns early; already noted at 3648).
 
+
+### 2026-11-06 — chore/tech-debt-2026-11-06s (overnight batch S)
+
+- **(resolved)** line 3098 `api/src/ai/guardrails/output-sanitizer.ts` — the mention strip repeats until the text stops changing (≤10 passes; if still changing, every `@` is dropped), so nested `@every@everyoneone` can no longer rebuild `@everyone`/`@here`; Discord role mentions `<@&id>` are stripped too. User mentions `<@id>` unchanged.
+- **(resolved)** line 2938 `api/src/logs/logs.service.ts` — the export scrubber now also redacts JSON-quoted secrets (incl. camelCase keys, `authorization`/`cookie`), bare JWTs, `?key=`/`&key=`/`api_key=`, `Cookie:`/`Set-Cookie:` values and OAuth `?code=`/`&code=`; look-alikes (`?keyboard=`, `&barcode=`, prose "code"/"cookie:") stay unchanged. Linear on 200k-char input.
+- **(resolved)** lines 3760 + 3761 `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.lockouts.ts` — a repeated save keeps the member's earliest `resetAt` (matching the group min), and the group `total` is the largest any member reports, independent of row order.
+- **open, not taken overnight:** line 2958 `avatar.service.ts:66` — `sharp` default pixel limit + corrupt-body 500 (the pixel cap is a value the operator should pick; the INCR/EXPIRE half is a race).
+- **resolved on main, noted by the batch S scout** (no code change): line 394 (`game-time-absence.helpers.ts` `fetchAbsencesEndingOnOrAfter` has the `isMissingTableError` guard); line 3597 (`resume-refresh.ts` `settleWithin` with `REFETCH_BATCH_TIMEOUT_MS`); line 2328 (entry says fixed by ROK-1726).
