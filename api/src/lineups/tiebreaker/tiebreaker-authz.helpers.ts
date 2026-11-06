@@ -82,9 +82,8 @@ export interface BracketVoteInput {
  * Insert a bracket vote ONLY while the matchup is still open (no winner, not
  * a bye). `FOR UPDATE` locks the matchup row against a concurrent
  * `setMatchupWinner` UPDATE, so a vote cannot land after the winner is set.
- * It does NOT serialize the advance's earlier vote COUNT (no transaction
- * there), so a vote committed between that count and the UPDATE is saved but
- * not counted — see TECH-DEBT-BACKLOG (checkAndAdvanceRound serialization).
+ * The round advance reads the same rows `FOR UPDATE` before it counts
+ * (`tiebreaker-advance.helpers.ts`), so a vote is either counted or refused.
  * Returns false when nothing was written: matchup closed, or a duplicate vote.
  */
 export async function insertBracketVoteIfOpen(
