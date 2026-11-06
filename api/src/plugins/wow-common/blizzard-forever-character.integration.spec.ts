@@ -96,7 +96,7 @@ afterEach(async () => {
   testApp.app.get(SettingsService).invalidateCache(true);
 });
 
-describe('realmless Forever character (ROK-2102)', () => {
+describe('realmless Forever character profile (ROK-2102)', () => {
   it('maps the profile with realm null from the realmless path', async () => {
     const profile = await blizzard.fetchCharacterProfile(
       'Ana Forever',
@@ -121,6 +121,20 @@ describe('realmless Forever character (ROK-2102)', () => {
     expect(apiUrls()).toEqual([`${CHAR}${NS}`, `${CHAR}/character-media${NS}`]);
   });
 
+  it('turns a profile 404 into a 404 with the level-10 copy', async () => {
+    profileStatus = 404;
+    const err: unknown = await blizzard
+      .fetchCharacterProfile('Ana Forever', null, 'us', 'classicforever')
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect((err as NotFoundException).getStatus()).toBe(404);
+    expect((err as Error).message).toContain(
+      "isn't visible on Battle.net yet (US)",
+    );
+  });
+});
+
+describe('realmless Forever equipment, professions, roster (ROK-2102)', () => {
   it('maps the equipment summary', async () => {
     const equipment = await blizzard.fetchCharacterEquipment(
       'Ana Forever',
@@ -146,18 +160,6 @@ describe('realmless Forever character (ROK-2102)', () => {
     expect(professions?.primary.map((p) => p.name)).toEqual(['Tailoring']);
     expect(professions?.secondary.map((p) => p.name)).toEqual(['Cooking']);
     expect(apiUrls()).toEqual([`${CHAR}/professions${NS}`]);
-  });
-
-  it('turns a profile 404 into a 404 with the level-10 copy', async () => {
-    profileStatus = 404;
-    const err: unknown = await blizzard
-      .fetchCharacterProfile('Ana Forever', null, 'us', 'classicforever')
-      .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(NotFoundException);
-    expect((err as NotFoundException).getStatus()).toBe(404);
-    expect((err as Error).message).toContain(
-      "isn't visible on Battle.net yet (US)",
-    );
   });
 
   it('maps a guild roster under the Forever profile namespace', async () => {
