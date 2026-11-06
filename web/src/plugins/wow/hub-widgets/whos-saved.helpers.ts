@@ -22,14 +22,22 @@ function soonestReset(members: readonly LockoutMember[]): string {
     return soonest;
 }
 
-/** The lockouts still in force at `nowMs`; each group's `resetAt` is its soonest live member reset. */
+/** Most live members first, then name — the server's order (`roster-insights.lockouts.ts`). */
+function byMembersThenName(a: RosterLockout, b: RosterLockout): number {
+    return b.members.length - a.members.length || a.name.localeCompare(b.name);
+}
+
+/**
+ * The lockouts still in force at `nowMs`; each group's `resetAt` is its soonest live member reset.
+ * Re-sorted after expiry, since dropping members can change the server's member-count order.
+ */
 export function liveLockouts(lockouts: readonly RosterLockout[], nowMs: number): RosterLockout[] {
     const live: RosterLockout[] = [];
     for (const group of lockouts) {
         const members = group.members.filter((m) => isLive(m.resetAt, nowMs));
         if (members.length > 0) live.push({ ...group, members, resetAt: soonestReset(members) });
     }
-    return live;
+    return live.sort(byMembersThenName);
 }
 
 /** Every member reset instant, for the shared `useNowTick` clock. */

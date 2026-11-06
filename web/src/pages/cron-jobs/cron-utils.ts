@@ -66,6 +66,13 @@ function describeSpecificTime(min: string, hour: string): string | null {
     return `Daily at ${displayHour}:${m.toString().padStart(2, '0')} ${period}`;
 }
 
+/** `0 M * * * *` → "Every hour at :MM"; null for any other seconds/minute shape. */
+function describeHourlyAt(sec: string, min: string): string | null {
+    if (sec !== '0' || !/^\d{1,2}$/.test(min)) return null;
+    const m = parseInt(min, 10);
+    return m < 60 ? `Every hour at :${m.toString().padStart(2, '0')}` : null;
+}
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 type CronFields = [sec: string, min: string, hour: string, day: string, month: string, weekday: string];
@@ -77,10 +84,10 @@ const isSixFields = (parts: string[]): parts is CronFields => parts.length === 6
 export function describeCron(expression: string): string {
     const parts = expression.trim().split(/\s+/);
     if (!isSixFields(parts)) return expression;
-    const [, min, hour, day, month, weekday] = parts;
+    const [sec, min, hour, day, month, weekday] = parts;
     const isDaily = day === '*' && month === '*' && weekday === '*';
 
-    if (isDaily && hour === '*') { const r = describeMinuteInterval(min); if (r) return r; }
+    if (isDaily && hour === '*') { const r = describeMinuteInterval(min) ?? describeHourlyAt(sec, min); if (r) return r; }
     if (isDaily && min === '0') {
         const r = describeHourInterval(hour) ?? describeSpecificHours(hour); if (r) return r;
         if (hour === '0') return 'Daily at midnight';
