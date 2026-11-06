@@ -18,7 +18,11 @@ export const PII_REDACTED = '[redacted]';
 
 const PII_KEY =
   /(?:^|[._])(?:user_?name|display_?name|e-?mail|ip_?address|community_?name)$/i;
-const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+// Bounded runs (RFC 5321: 64-char local part, 253-char domain) keep the scan
+// linear: unbounded `+` restarted at every offset of a long `@`-less run
+// (200k chars ≈ 19 s). Not a start-boundary lookbehind — that would leave
+// a glued second address (`a@b.io.c@d.io`) unscrubbed.
+const EMAIL = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,253}\.[A-Z]{2,}/gi;
 // Percent-encoded (`alice%40x.io`, double-encoded `%2540`, `+` as `%2B`) in
 // URLs and query strings. The local part starts at a token boundary or right
 // after a whole `%XX` escape, so `%3Dalice%40x.io` keeps its `%3D` and a
