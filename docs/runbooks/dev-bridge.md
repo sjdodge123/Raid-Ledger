@@ -32,7 +32,8 @@ script in game, or `/reload` for you.**
 | LedgerLink SavedVariables, parsed (GUIDs hashed) | `/dev/v1/ledgerlink/sv/parsed?flavor=<flavor>` |
 | Probe status / answer | `/dev/v1/probes`, `/dev/v1/probes/<probeId>` |
 | Companion log (redacted) | `/dev/v1/logs?since=<iso>&level=warn` |
-| Collector status | `/dev/v1/collectors` |
+| Collector status (per row: optional `status` = the tile's status line, `linked`) | `/dev/v1/collectors` |
+| Companion activity, structured only (scan / upload outcomes, HTTP status, error code; never free text) | `/dev/v1/events?since=<iso>` |
 | What changed in the client, and when (dev snapshot history) | `/dev/v1/ledgerlink/snapshot/history?flavor=<flavor>` |
 | One dev snapshot: build, `Enum.GameRule`, API presence, S1/S3/S9 | `/dev/v1/ledgerlink/snapshot?flavor=<flavor>&character=<characterKey>&at=<snapshotId>` |
 | BG3 saves the collector sees (redacted: `saveRef`, versions, party/co-op counts, fallback reason) | `/dev/v1/bg3/saves` |
