@@ -20,8 +20,11 @@ import { createBoundedScrubbedStream } from './log-download.stream';
 /** Maximum total archive size in bytes (~100 MB). */
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 
-/** Patterns to scrub from exported log content. */
-const SCRUB_PATTERNS: RegExp[] = [
+/**
+ * Key=value / `Key: value` patterns. A match keeps everything up to its
+ * first `=` (or `:`) and redacts the rest — see {@link redactKeyedMatch}.
+ */
+const KEYED_SCRUB_PATTERNS: RegExp[] = [
   /DATABASE_URL=\S+/gi,
   /JWT_SECRET=\S+/gi,
   /password=\S+/gi,
@@ -32,6 +35,54 @@ const SCRUB_PATTERNS: RegExp[] = [
   /secret=\S+/gi,
   /Authorization:\s*\S+(\s+\S+)?/gi,
 ];
+
+/** A scrub pattern plus the literal replacement it is rewritten to. */
+interface ShapedScrubRule {
+  readonly pattern: RegExp;
+  readonly replacement: string;
+}
+
+/**
+ * Secret shapes the keyed patterns miss (backlog 2938). They run first, so a
+ * greedy `\S+` above cannot swallow a JSON closing quote. Every pattern is
+ * linear: no nested quantifiers over overlapping character classes.
+ */
+const SHAPED_SCRUB_RULES: ShapedScrubRule[] = [
+  // `"password":"…"`, `"clientSecret": "…"`, `"apiKey":"…"`, `"cookie":"…"`
+  // — the key names the keyed patterns cover; the value honours `\"` escapes.
+  {
+    pattern:
+      /("(?:[A-Za-z0-9_]*(?:password|secret)|(?:access|refresh|api|auth|bearer)_?token|token|api_?key|database_url|authorization|(?:set-)?cookie)"\s*:\s*")[^"\\]*(?:\\.[^"\\]*)*"/gi,
+    replacement: '$1[REDACTED]"',
+  },
+  // A bare JWT (`eyJ<header>.<payload>.<signature>`), the whole match.
+  {
+    pattern: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g,
+    replacement: '[REDACTED]',
+  },
+  // `?key=` / `&key=` (and `api_key=`) API keys, up to the next parameter.
+  { pattern: /([?&](?:api_?)?key=)[^&\s#]+/gi, replacement: '$1[REDACTED]' },
+  // OAuth `?code=` / `&code=` — prose "code" with no `=` is left alone.
+  { pattern: /([?&]code=)[^&\s#]+/gi, replacement: '$1[REDACTED]' },
+  // `Cookie:` / `Set-Cookie:` header values carrying a `name=value` pair.
+  {
+    pattern: /\b((?:Set-)?Cookie:)\s*[^\s=;]+=[^\r\n]*/gi,
+    replacement: '$1 [REDACTED]',
+  },
+];
+
+/**
+ * Redact a keyed match: keep the key and its `=` (or `:`), redact the value.
+ */
+function redactKeyedMatch(match: string): string {
+  const eqIndex = match.indexOf('=');
+  if (eqIndex !== -1) return match.substring(0, eqIndex + 1) + '[REDACTED]';
+  const colonIndex = match.indexOf(':');
+  if (colonIndex !== -1) {
+    return match.substring(0, colonIndex + 1) + ' [REDACTED]';
+  }
+  return '[REDACTED]';
+}
 
 @Injectable()
 export class LogsService {
@@ -164,18 +215,11 @@ export class LogsService {
    */
   scrubContent(content: string): string {
     let result = content;
-    for (const pattern of SCRUB_PATTERNS) {
-      result = result.replace(pattern, (match) => {
-        const eqIndex = match.indexOf('=');
-        const colonIndex = match.indexOf(':');
-        if (eqIndex !== -1) {
-          return match.substring(0, eqIndex + 1) + '[REDACTED]';
-        }
-        if (colonIndex !== -1) {
-          return match.substring(0, colonIndex + 1) + ' [REDACTED]';
-        }
-        return '[REDACTED]';
-      });
+    for (const rule of SHAPED_SCRUB_RULES) {
+      result = result.replace(rule.pattern, rule.replacement);
+    }
+    for (const pattern of KEYED_SCRUB_PATTERNS) {
+      result = result.replace(pattern, redactKeyedMatch);
     }
     return result;
   }
