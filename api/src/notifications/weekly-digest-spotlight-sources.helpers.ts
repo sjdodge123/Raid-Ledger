@@ -88,6 +88,12 @@ export function buildRisingGameQuery(): SQL {
  * A3 — one row per distinct `(encounter_id, difficulty_id)` killed in the
  * window, oldest first. `first_ever`: some guild_key that killed it this
  * week had no successful pull of it before the window. Never reads `roster`.
+ *
+ * A kill counts only when its reporter is an active, guild-seen member who
+ * shows activity, on a visible game — the same row-level rule as A1/A5, so a
+ * forged import from a guest or ex-member never reaches the channel. Pulls
+ * whose reporter was deleted (`reported_by_user_id` NULL) drop out. The
+ * `first_ever` history check reads every row: it can only suppress a flag.
  */
 export function buildBossKillsQuery(): SQL {
   return sql`
@@ -95,9 +101,13 @@ export function buildBossKillsQuery(): SQL {
       SELECT p.encounter_id, p.difficulty_id, p.guild_key,
              p.encounter_name, p.end_at
       FROM addon_encounter_pulls p
+      INNER JOIN users u ON u.id = p.reported_by_user_id
+      INNER JOIN games g ON g.id = p.game_id
       WHERE p.success = true
         AND p.end_at >= NOW() - INTERVAL '7 days'
-        AND p.end_at < NOW()
+        AND p.end_at < NOW()${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
+        AND ${SHOWS_ACTIVITY_SQL('p.reported_by_user_id')}
+        AND ${VISIBLE_GAME}
     )
     SELECT MIN(k.encounter_name) AS encounter_name,
       bool_or(NOT EXISTS (

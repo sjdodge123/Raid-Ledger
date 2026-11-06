@@ -572,3 +572,89 @@ describe('SteamLinkListener — ITAD discovery fail-fast', () => {
     }
   });
 });
+
+/** Feed `subject` one guild-text message carrying a CS2 Steam store link. */
+function postCs2Link(subject: SteamLinkListener): Promise<void> {
+  messageIdCounter++;
+  const send = jest.fn().mockResolvedValue({ id: 'dm-x' });
+  const msg = {
+    id: `unlinked-${messageIdCounter}`,
+    content: 'https://store.steampowered.com/app/730/CS2/',
+    author: {
+      bot: false,
+      id: 'discord-user-1',
+      createDM: jest.fn().mockResolvedValue({ send }),
+    },
+    guild: { id: 'guild-123' },
+    channel: { type: ChannelType.GuildText, id: 'chan-1' },
+  };
+  return (
+    subject as unknown as { handleMessage: (m: unknown) => Promise<void> }
+  ).handleMessage(msg);
+}
+
+/**
+ * Tech-debt (2026-10-18 backlog): an unlinked guild member's Steam link must
+ * not cost an ITAD lookup, a `games` insert or an IGDB re-enrich — the
+ * listener sends them nothing, so that work was pure side effect.
+ */
+describe('SteamLinkListener — unlinked author does no discovery work', () => {
+  let db: SteamLinkDbMock;
+  let itad: { lookupBySteamAppId: jest.Mock };
+  let igdb: { enqueueReenrich: jest.Mock };
+  let subject: SteamLinkListener;
+
+  beforeEach(() => {
+    db = buildSteamLinkDbMock();
+    itad = { lookupBySteamAppId: jest.fn().mockResolvedValue(null) };
+    igdb = { enqueueReenrich: jest.fn().mockResolvedValue(undefined) };
+    subject = new SteamLinkListener(
+      db as never,
+      { getClient: jest.fn() } as never,
+      itad as never,
+      igdb as never,
+      { get: jest.fn().mockResolvedValue('false') } as never,
+    );
+  });
+
+  afterEach(() => subject.onModuleDestroy());
+
+  const post = (): Promise<void> => postCs2Link(subject);
+
+  /** Queue the game lookup, then the linked-user lookup. */
+  function stubLookups(game: unknown, user: unknown): void {
+    db.limit.mockResolvedValueOnce(game ? [game] : []);
+    db.limit.mockResolvedValueOnce(user ? [user] : []);
+  }
+
+  it('skips the ITAD lookup and game insert for an unknown game', async () => {
+    stubLookups(null, null);
+    await post();
+    expect(itad.lookupBySteamAppId).not.toHaveBeenCalled();
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('skips the IGDB re-enrich for a known, unenriched game', async () => {
+    stubLookups({ id: 42, name: 'CS2', igdbId: null }, null);
+    await post();
+    expect(igdb.enqueueReenrich).not.toHaveBeenCalled();
+  });
+
+  it('still runs the ITAD lookup for a linked author', async () => {
+    stubLookups(null, { id: 7, discordId: 'discord-user-1' });
+    await post();
+    expect(itad.lookupBySteamAppId).toHaveBeenCalledWith(
+      730,
+      ITAD_INTERACTIVE_FETCH,
+    );
+  });
+
+  it('still re-enriches a known, unenriched game for a linked author', async () => {
+    stubLookups(
+      { id: 42, name: 'CS2', igdbId: null },
+      { id: 7, discordId: 'discord-user-1' },
+    );
+    await post();
+    expect(igdb.enqueueReenrich).toHaveBeenCalledWith(42);
+  });
+});

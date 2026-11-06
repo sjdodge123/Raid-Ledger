@@ -3992,3 +3992,6 @@ same day (#1278, #1279, #1280).
 - **med** (resolved) line 2527 (Forever reward ids rendered as `Item #…`) — `mergeItemMetaFallback` batch-reads `wow_item_meta` for ids the JSON lookup and boss loot don't cover.
 - **resolved on main, noted by the batch I scout** (no code change): lines 2808, 2816, 2818, 2862, 2590, 3592, 1465, 2706, 2724 already carry fix notes at 3903–3951; 2824 partly fixed, the rest needs a UNIQUE index (migration).
 - **(resolved)** batch H, PR #1961 (f6b7204d7): line 3983 steam-link unlinked-author ITAD lookup and line 3984 / 2860 boss-kills reporter filter.
+### 2026-11-06 — chore/tech-debt-2026-11-06h (surfaced during the batch H review)
+
+- **low** `api/src/notifications/weekly-digest-spotlight-sources.helpers.ts:104` (`buildBossKillsQuery`) — pulls are deduped across reporters on (game, region, encounter, start_at, guild_key) and only the first import is stored, so with the new active-member reporter filter a kill first imported by a guest, or by a raid leader who later leaves / is banned / opts out of activity, drops out of the digest for the whole guild. Fails safe (under-reporting, no leak). Suggested: count a pull when any active member's character is in its roster, not only when the reporter is.
