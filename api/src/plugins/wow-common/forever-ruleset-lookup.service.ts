@@ -14,6 +14,8 @@ export const RULESET_LOOKUP_BUDGET_MS = 1500;
 export const RULESET_HIT_TTL_MS = 24 * 60 * 60 * 1000;
 /** F6: a miss (404/403/unmapped) is remembered an hour — a fresh level 10 resolves the same evening. */
 export const RULESET_MISS_TTL_MS = 60 * 60 * 1000;
+/** A 5xx / timeout / network error is remembered a minute, so an outage costs one budget per key per minute. */
+export const RULESET_ERROR_TTL_MS = 60 * 1000;
 /** Cache cap; the oldest entry is dropped first. */
 export const RULESET_CACHE_MAX = 2000;
 
@@ -25,8 +27,10 @@ interface CacheEntry {
 /**
  * ROK-2100 step 2 — a WoW: Forever character's ruleset from the realmless
  * Battle.net profile. Gated on a configured Blizzard integration AND the
- * Forever Armory switch; bounded by {@link RULESET_LOOKUP_BUDGET_MS}; cached
- * per `${region}:${lower(name)}`. `lookup` never throws.
+ * Forever Armory switch (checked before the cache, so turning either off
+ * stops cached Blizzard data at once); bounded by
+ * {@link RULESET_LOOKUP_BUDGET_MS}; cached per `${region}:${lower(name)}` (hits 24h, misses 1h, errors 60s).
+ * `lookup` never throws.
  */
 @Injectable()
 export class ForeverRulesetLookupService {
@@ -49,17 +53,24 @@ export class ForeverRulesetLookupService {
     name: string,
     region: WowRegion,
   ): Promise<WowForeverRuleset | null> {
+    if (!(await this.enabled())) return null;
     const key = `${region}:${name.toLowerCase()}`;
     const cached = this.cache.get(key);
     if (cached && cached.until > Date.now()) return cached.ruleset;
-    if (!(await this.enabled())) return null;
     const outcome = await this.fetchWithinBudget(name, region);
-    if (outcome.kind === 'error') return null;
+    if (outcome.kind === 'error') {
+      this.remember(key, null, RULESET_ERROR_TTL_MS);
+      return null;
+    }
     const ruleset =
       outcome.kind === 'found'
         ? rulesetFromBlizzard(outcome.ruleset, (m) => this.logger.warn(m))
         : null;
-    this.remember(key, ruleset);
+    this.remember(
+      key,
+      ruleset,
+      ruleset === null ? RULESET_MISS_TTL_MS : RULESET_HIT_TTL_MS,
+    );
     return ruleset;
   }
 
@@ -92,8 +103,11 @@ export class ForeverRulesetLookupService {
     }
   }
 
-  private remember(key: string, ruleset: WowForeverRuleset | null): void {
-    const ttl = ruleset === null ? RULESET_MISS_TTL_MS : RULESET_HIT_TTL_MS;
+  private remember(
+    key: string,
+    ruleset: WowForeverRuleset | null,
+    ttl: number,
+  ): void {
     this.cache.delete(key);
     this.cache.set(key, { ruleset, until: Date.now() + ttl });
     if (this.cache.size <= RULESET_CACHE_MAX) return;
