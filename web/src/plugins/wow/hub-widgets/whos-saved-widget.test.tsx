@@ -90,7 +90,9 @@ describe('WhosSavedWidget', () => {
         expect(row(/Onyxia/)).toHaveTextContent('1 saved');
         expect(row(/Onyxia/)).toHaveTextContent(/^Onyxia1 savedResets in 30m$/);
         const list = screen.getByRole('list', { name: 'Saved instances' });
-        expect(within(list).getAllByRole('button').map((b) => b.textContent?.split(/\d/)[0])).toEqual(['Molten Core', 'Blackwing Lair', 'Onyxia']);
+        // The fixture lists Molten Core before Blackwing Lair (2 saved each); the card applies the
+        // server's order (`roster-insights.lockouts.ts`: member count desc, then name), so BWL leads.
+        expect(within(list).getAllByRole('button').map((b) => b.textContent?.split(/\d/)[0])).toEqual(['Blackwing Lair', 'Molten Core', 'Onyxia']);
     });
 
     it('left-aligns each instance header and stretches its label so name and count span the row', async () => {
