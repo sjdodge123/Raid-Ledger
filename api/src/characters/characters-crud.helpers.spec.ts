@@ -159,6 +159,61 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
 });
 
 describe('syncAllCharacters — Forever kill switch off (ROK-1722)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('still syncs a retail row next to the skipped Forever row', async () => {
+    jest.useFakeTimers();
+    const db = createDrizzleMock();
+    const retail = row({
+      id: 'char-retail',
+      name: 'Thrall',
+      realm: 'Area 52',
+      ruleset: null,
+      gameVariant: 'retail',
+    });
+    db.where.mockReturnValueOnce(Promise.resolve([row(), retail]));
+    db.limit.mockResolvedValueOnce([{ apiNamespacePrefix: null }]);
+    const fetchProfile = jest
+      .fn<Promise<unknown>, [string, string | null, string, string?]>()
+      .mockResolvedValue({
+        name: 'Thrall',
+        realm: 'Area 52',
+        class: 'Shaman',
+        spec: null,
+        role: null,
+        level: 80,
+        race: 'Orc',
+        faction: 'horde',
+        itemLevel: 600,
+        avatarUrl: null,
+        renderUrl: null,
+        profileUrl: null,
+      });
+    const adapter = {
+      fetchProfile,
+      fetchSpecialization: jest
+        .fn()
+        .mockResolvedValue({ spec: null, role: null, talents: null }),
+      fetchEquipment: jest.fn().mockResolvedValue(null),
+      fetchProfessions: jest.fn().mockResolvedValue(null),
+    };
+    const logger = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+    const pending = syncAllCharacters(
+      db as never,
+      () => adapter as never,
+      logger,
+      false,
+    );
+    await jest.runAllTimersAsync();
+    await expect(pending).resolves.toEqual({ synced: 1, failed: 0 });
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+    expect(fetchProfile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'Thrall',
+      'Area 52',
+      'us',
+    ]);
+  });
+
   it('leaves Forever rows out: no Blizzard call, counted neither way', async () => {
     const db = createDrizzleMock();
     db.where.mockReturnValueOnce(Promise.resolve([row()]));
