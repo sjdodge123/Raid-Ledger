@@ -72,8 +72,8 @@ export class ForeverConfigService implements OnModuleInit {
   }
 
   /**
-   * Validate + persist the config, then announce it. The default prefix and a
-   * disabled flag are stored as an absent key.
+   * Validate + persist the config, then announce it. The default prefix and an
+   * enabled flag are stored as an absent key; a disabled flag as 'false'.
    * @throws BadRequestException when the body fails the contract schema.
    */
   async updateConfig(
@@ -91,7 +91,7 @@ export class ForeverConfigService implements OnModuleInit {
     );
     await this.writeOrDelete(
       WOW_FOREVER_ARMORY_IMPORT_KEY,
-      armoryImportEnabled ? 'true' : null,
+      armoryImportEnabled ? null : 'false',
     );
     if (wowheadResolverEnabled !== undefined) {
       await setWowheadResolverEnabled(this.settings, wowheadResolverEnabled);
@@ -125,8 +125,9 @@ export class ForeverConfigService implements OnModuleInit {
     };
   }
 
+  /** ROK-1722: on by default — absent (or legacy 'true') = on, 'false' = off. */
   private async isArmoryImportEnabled(): Promise<boolean> {
-    return (await this.settings.get(WOW_FOREVER_ARMORY_IMPORT_KEY)) === 'true';
+    return (await this.settings.get(WOW_FOREVER_ARMORY_IMPORT_KEY)) !== 'false';
   }
 
   private async writeOrDelete(
