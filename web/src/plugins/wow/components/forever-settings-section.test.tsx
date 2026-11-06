@@ -178,11 +178,29 @@ describe('ForeverSettingsSection — namespace status (ROK-2102)', () => {
     const FOREVER_CONFIG = { ...DEFAULT_CONFIG, namespacePrefix: 'forever' };
     const probeState = (matchPrefix: string | null) => ({
         result: {
-            ranAt: '2026-11-06T21:36:00.000Z', durationMs: 1200, status: 'ok', candidates: ['forever', 'classicforever'],
-            cells: [], shapes: {}, found: matchPrefix ? { prefix: matchPrefix, at: '2026-11-06T21:36:00.000Z' } : null,
-            matches: matchPrefix ? [{ prefix: matchPrefix, region: 'us', raceName: 'High Order Skyborne', signal: 'skyborne' }] : [],
+            ranAt: '2026-11-06T21:36:00.000Z',
+            durationMs: 1200,
+            status: 'ok',
+            candidates: ['forever', 'classicforever'],
+            cells: [],
+            shapes: {},
+            found: matchPrefix
+                ? { prefix: matchPrefix, at: '2026-11-06T21:36:00.000Z' }
+                : null,
+            matches: matchPrefix
+                ? [
+                      {
+                          prefix: matchPrefix,
+                          region: 'us',
+                          raceName: 'High Order Skyborne',
+                          signal: 'skyborne',
+                      },
+                  ]
+                : [],
         },
-        extraCandidates: [], characterPath: null, guildPath: null,
+        extraCandidates: [],
+        characterPath: null,
+        guildPath: null,
     });
 
     it('shows forever as the prefix placeholder', async () => {
@@ -193,22 +211,73 @@ describe('ForeverSettingsSection — namespace status (ROK-2102)', () => {
     it('says live when the latest probe matched the configured prefix', async () => {
         server.use(
             http.get(URL, () => HttpResponse.json(FOREVER_CONFIG)),
-            http.get(`${URL}-probe`, () => HttpResponse.json(probeState('forever'))),
+            http.get(`${URL}-probe`, () =>
+                HttpResponse.json(probeState('forever')),
+            ),
         );
         renderWithProviders(<ForeverSettingsSection />);
-        const line = await screen.findByText((_, el) => el?.tagName === 'P' && /^Forever namespace: live — prefix forever$/.test(el.textContent ?? ''));
+        const line = await screen.findByText(
+            (_, el) =>
+                el?.tagName === 'P' &&
+                /^Forever namespace: live — prefix forever$/.test(
+                    el.textContent ?? '',
+                ),
+        );
         expect(line).toBeInTheDocument();
-        expect(screen.queryByText((_, el) => el?.tagName === 'P' && /^Forever namespace: not confirmed/.test(el.textContent ?? ''))).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(
+                (_, el) =>
+                    el?.tagName === 'P' &&
+                    /^Forever namespace: not confirmed/.test(
+                        el.textContent ?? '',
+                    ),
+            ),
+        ).not.toBeInTheDocument();
+    });
+
+    it('says not confirmed when the probe matched a different prefix than the configured one', async () => {
+        server.use(
+            http.get(URL, () =>
+                HttpResponse.json({
+                    ...DEFAULT_CONFIG,
+                    namespacePrefix: 'xyz',
+                }),
+            ),
+            http.get(`${URL}-probe`, () =>
+                HttpResponse.json(probeState('forever')),
+            ),
+        );
+        renderWithProviders(<ForeverSettingsSection />);
+        const line = await screen.findByText(
+            (_, el) =>
+                el?.tagName === 'P' &&
+                el.textContent ===
+                    'Forever namespace: not confirmed — prefix xyz. Run the probe below.',
+        );
+        expect(line).toBeInTheDocument();
+        expect(
+            screen.queryByText(
+                (_, el) =>
+                    el?.tagName === 'P' &&
+                    /^Forever namespace: live/.test(el.textContent ?? ''),
+            ),
+        ).not.toBeInTheDocument();
     });
 
     it('says not confirmed when no probe match has the configured prefix', async () => {
         server.use(
             http.get(URL, () => HttpResponse.json(FOREVER_CONFIG)),
-            http.get(`${URL}-probe`, () => HttpResponse.json(probeState('classic2x'))),
+            http.get(`${URL}-probe`, () =>
+                HttpResponse.json(probeState('classic2x')),
+            ),
         );
         renderWithProviders(<ForeverSettingsSection />);
-        const line = await screen.findByText((_, el) => el?.tagName === 'P'
-            && el.textContent === 'Forever namespace: not confirmed — prefix forever. Run the probe below.');
+        const line = await screen.findByText(
+            (_, el) =>
+                el?.tagName === 'P' &&
+                el.textContent ===
+                    'Forever namespace: not confirmed — prefix forever. Run the probe below.',
+        );
         expect(line).toBeInTheDocument();
     });
 });
