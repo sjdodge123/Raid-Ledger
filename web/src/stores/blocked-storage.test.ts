@@ -16,19 +16,40 @@ function denied(): never {
     throw new DOMException('The operation is insecure.', 'SecurityError');
 }
 
+/**
+ * Chrome with site data blocked throws on reading the `localStorage` property
+ * itself. Redefine the property (not `Storage.prototype` — on Node ≥24 the
+ * test setup swaps in a plain-object polyfill a prototype spy never reaches).
+ */
+const hosts: object[] = [...new Set<object>([globalThis, window])];
+const saved = new Map<object, PropertyDescriptor | undefined>();
+
 describe('stores survive blocked localStorage', () => {
     beforeEach(() => {
         vi.resetModules();
-        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(denied);
-        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(denied);
-        vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(denied);
+        for (const host of hosts) {
+            saved.set(host, Object.getOwnPropertyDescriptor(host, 'localStorage'));
+            Object.defineProperty(host, 'localStorage', { configurable: true, get: denied });
+        }
     });
 
     afterEach(() => {
+        for (const host of hosts) {
+            const original = saved.get(host);
+            if (original) Object.defineProperty(host, 'localStorage', original);
+            else Reflect.deleteProperty(host, 'localStorage');
+        }
+        saved.clear();
         vi.restoreAllMocks();
     });
 
+    it('the block is in force: reading localStorage itself throws', () => {
+        expect(() => window.localStorage).toThrow(DOMException);
+        expect(() => globalThis.localStorage).toThrow(DOMException);
+    });
+
     it('calendar view store initialises with a default view and its setter does not throw', async () => {
+        await expect(import('./calendar-view-store')).resolves.toHaveProperty('useCalendarViewStore');
         const { useCalendarViewStore } = await import('./calendar-view-store');
         expect(['schedule', 'week']).toContain(useCalendarViewStore.getState().viewPref);
 
@@ -37,6 +58,7 @@ describe('stores survive blocked localStorage', () => {
     });
 
     it('timezone store initialises to auto and its setter does not throw', async () => {
+        await expect(import('./timezone-store')).resolves.toHaveProperty('useTimezoneStore');
         const { useTimezoneStore } = await import('./timezone-store');
         expect(useTimezoneStore.getState().timezoneId).toBe('auto');
 
@@ -46,6 +68,7 @@ describe('stores survive blocked localStorage', () => {
 
     it('theme helpers fall back to default themes and persisting does not throw', async () => {
         const { initFromLocalStorage, persistToLocalStorage } = await import('./theme-helpers');
+        expect(() => initFromLocalStorage()).not.toThrow();
         expect(initFromLocalStorage()).toEqual({
             mode: 'auto',
             lightTheme: 'default-light',
