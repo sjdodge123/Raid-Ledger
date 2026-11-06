@@ -229,7 +229,8 @@ export class TiebreakerService {
   /**
    * Force-resolve an active tiebreaker (operator). A bracket advances under
    * the round-advance lock; if a racing final vote already resolved it,
-   * this is a no-op (that vote owns the resolve + transition).
+   * this is a no-op (that vote owns the resolve + transition) — as it is
+   * when the vote resolves first after both advances committed.
    */
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
@@ -238,7 +239,7 @@ export class TiebreakerService {
     const outcome = await this.determineWinner(tb);
     if (outcome.alreadyResolved) return;
     const winnerId = outcome.winnerGameId;
-    await resolveTiebreaker(this.db, tb.id, winnerId);
+    if (!(await resolveTiebreaker(this.db, tb.id, winnerId))) return;
     await clearActiveTiebreaker(this.db, lineupId);
     await this.transitionToDecided(lineupId, winnerId);
   }
@@ -255,7 +256,7 @@ export class TiebreakerService {
   ): Promise<void> {
     const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
     if (!winner) return;
-    await resolveTiebreaker(this.db, tb.id, winner);
+    if (!(await resolveTiebreaker(this.db, tb.id, winner))) return;
     await clearActiveTiebreaker(this.db, lineupId);
     await this.transitionToDecided(lineupId, winner);
     this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);

@@ -11,7 +11,7 @@
  * and made `insertTiebreaker` write `active` instead of `pending`.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { StartTiebreakerDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -153,22 +153,32 @@ export async function clearActiveTiebreaker(
  * completion), so the veto cohort-memory write hangs here rather than being
  * duplicated at each caller — which also keeps that service off its 300-line
  * ESLint cap. The write is idempotent and never throws into the caller.
+ *
+ * Conditional on the row not already being `resolved`: when a force-resolve
+ * and a bracket-completing vote race, the second UPDATE waits on the row
+ * lock, re-evaluates the WHERE under READ COMMITTED and matches nothing, so
+ * only one caller goes on to clear + transition (and re-run matching).
+ *
+ * @returns `true` when this call resolved the tiebreaker, `false` when it was
+ *   already resolved (or missing) — the caller must then do nothing further.
  */
 export async function resolveTiebreaker(
   db: Db,
   tiebreakerId: number,
   winnerId: number,
-): Promise<void> {
+): Promise<boolean> {
+  const T = schema.communityLineupTiebreakers;
   const [row] = await db
-    .update(schema.communityLineupTiebreakers)
+    .update(T)
     .set({
       status: 'resolved',
       winnerGameId: winnerId,
       resolvedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
-    .returning({ lineupId: schema.communityLineupTiebreakers.lineupId });
-  if (!row) return;
+    .where(and(eq(T.id, tiebreakerId), ne(T.status, 'resolved')))
+    .returning({ lineupId: T.lineupId });
+  if (!row) return false;
   await writeTiebreakerCohortMemory(db, row.lineupId, tiebreakerId, winnerId);
+  return true;
 }
