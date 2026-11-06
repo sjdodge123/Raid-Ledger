@@ -25,12 +25,12 @@ import { LineupsGateway } from '../lineups.gateway';
 import { dispatchTiebreakerOpen } from './tiebreaker-dispatch.helpers';
 import { detectTies } from './tiebreaker-detect.helpers';
 import { pickDismissWinner } from './tiebreaker-dismiss.helpers';
-import { findPendingOrActiveTiebreaker } from './tiebreaker-query.helpers';
 import {
-  advanceRoundIfComplete,
-  forceAdvanceBracket,
-  type ForcedBracketOutcome,
-} from './tiebreaker-advance.helpers';
+  findPendingOrActiveTiebreaker,
+  findMatchups,
+} from './tiebreaker-query.helpers';
+import { advanceBracket } from './tiebreaker-bracket.helpers';
+import { advanceRoundIfComplete } from './tiebreaker-advance.helpers';
 import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
   submitVeto,
@@ -54,6 +54,7 @@ import {
 } from './tie-pick.helpers';
 import type { TieHoldState } from './tie-hold.helpers';
 import { findLineupById } from '../lineups-query.helpers';
+import { defined } from '../../common/defined.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 import {
@@ -226,18 +227,12 @@ export class TiebreakerService {
     return buildTiebreakerDetail(this.db, tb, userId);
   }
 
-  /**
-   * Force-resolve an active tiebreaker (operator). A bracket advances under
-   * the round-advance lock; if a racing final vote already resolved it,
-   * this is a no-op (that vote owns the resolve + transition).
-   */
+  /** Force-resolve an active tiebreaker (operator). */
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) throw new NotFoundException('No tiebreaker found');
 
-    const outcome = await this.determineWinner(tb);
-    if (outcome.alreadyResolved) return;
-    const winnerId = outcome.winnerGameId;
+    const winnerId = await this.determineWinner(tb);
     await resolveTiebreaker(this.db, tb.id, winnerId);
     await clearActiveTiebreaker(this.db, lineupId);
     await this.transitionToDecided(lineupId, winnerId);
@@ -320,12 +315,21 @@ export class TiebreakerService {
 
   private async determineWinner(
     tb: typeof schema.communityLineupTiebreakers.$inferSelect,
-  ): Promise<ForcedBracketOutcome> {
-    if (tb.mode === 'bracket') return forceAdvanceBracket(this.db, tb.id);
+  ): Promise<number> {
+    const tiedGameIds = tb.tiedGameIds;
+
+    if (tb.mode === 'bracket') {
+      const winner = await advanceBracket(this.db, tb.id);
+      if (winner) return winner;
+      // If bracket isn't done, pick highest-seeded remaining
+      const matchups = await findMatchups(this.db, tb.id);
+      const final = matchups.find((m) => m.winnerGameId);
+      return final?.winnerGameId ?? defined(tiedGameIds[0], 'top tied game');
+    }
+
     // Veto mode: reveal and find survivor
     await revealVetoes(this.db, tb.id);
     const vetoes = await findVetoes(this.db, tb.id);
-    const winnerGameId = findSurvivor(tb.tiedGameIds, vetoes);
-    return { winnerGameId, alreadyResolved: false };
+    return findSurvivor(tiedGameIds, vetoes);
   }
 }
