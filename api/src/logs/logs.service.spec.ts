@@ -62,6 +62,29 @@ const SCRUB_SHAPE_CASES: [string, string, string][] = [
     'GET /auth/steam/callback?state=s1&code=AbC123',
     'GET /auth/steam/callback?state=s1&code=[REDACTED]',
   ],
+  [
+    'an OAuth ?code= inside a JSON string',
+    '{"url":"/callback?code=abc","status":500}',
+    '{"url":"/callback?code=[REDACTED]","status":500}',
+  ],
+  [
+    'a ?key= inside a JSON string',
+    '{"url":"/v1/maps?key=AIzaSyABC","status":500}',
+    '{"url":"/v1/maps?key=[REDACTED]","status":500}',
+  ],
+  [
+    'a JSON-quoted x-api-key header',
+    '{"x-api-key":"k-123","host":"a"}',
+    '{"x-api-key":"[REDACTED]","host":"a"}',
+  ],
+  ['a JSON-quoted idToken', '{"idToken":"abc"}', '{"idToken":"[REDACTED]"}'],
+  ['a JSON-quoted id_token', '{"id_token":"abc"}', '{"id_token":"[REDACTED]"}'],
+  ['a JSON-quoted jwt', '{"jwt":"abc","ok":1}', '{"jwt":"[REDACTED]","ok":1}'],
+  [
+    'a pino-http set-cookie array',
+    '{"set-cookie":["a=1; HttpOnly", "b=\\"2\\""],"x":1}',
+    '{"set-cookie":["[REDACTED]"],"x":1}',
+  ],
 ];
 
 /** Look-alikes the shaped scrub rules must leave alone: [label, input]. */
@@ -187,6 +210,16 @@ function describeLogsService() {
         expect(service.scrubContent(input)).toBe(input);
       },
     );
+
+    it.each([
+      ['-eyJa repeated', '-eyJa'.repeat(40000)],
+      ['eyJ- repeated', 'eyJ-'.repeat(50000)],
+      ['eyJa. repeated', 'eyJa.'.repeat(40000)],
+    ])('should scrub a 200k-char %s line in linear time', (_label, input) => {
+      const startedAt = Date.now();
+      service.scrubContent(input);
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    });
   }
   describe('scrubContent shapes', () => describeScrubContentShapes());
 
