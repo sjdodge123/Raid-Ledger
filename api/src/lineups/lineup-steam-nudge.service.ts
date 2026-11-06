@@ -30,14 +30,20 @@ export class LineupSteamNudgeService {
     private readonly dedupService: NotificationDedupService,
   ) {}
 
-  /** Send nudge DMs to all community members with Discord but no Steam. */
+  /**
+   * Send nudge DMs to all community members with Discord but no Steam.
+   * Never rejects: callers fire it with `void`, so a failure is logged here.
+   */
   async nudgeUnlinkedMembers(lineupId: number): Promise<void> {
-    const recipients = await this.findNudgeRecipients();
-    if (!recipients.length) return;
-
-    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-      const batch = recipients.slice(i, i + BATCH_SIZE);
-      await Promise.allSettled(batch.map((r) => this.sendNudge(r, lineupId)));
+    try {
+      const recipients = await this.findNudgeRecipients();
+      for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+        const batch = recipients.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(batch.map((r) => this.sendNudge(r, lineupId)));
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Steam nudge for lineup ${lineupId} failed: ${reason}`);
     }
   }
 
