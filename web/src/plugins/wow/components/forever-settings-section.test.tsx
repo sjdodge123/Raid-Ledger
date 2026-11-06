@@ -19,7 +19,7 @@ beforeEach(() => {
     puts = [];
     server.use(
         http.get(URL, () => HttpResponse.json(DEFAULT_CONFIG)),
-        http.get(`${URL}-probe`, () => HttpResponse.json({ result: null, extraCandidates: [], characterPath: null })),
+        http.get(`${URL}-probe`, () => HttpResponse.json({ result: null, extraCandidates: [], characterPath: null, guildPath: null })),
         http.put(URL, async ({ request }) => {
             const body = (await request.json()) as Record<string, unknown>;
             puts.push(body);
