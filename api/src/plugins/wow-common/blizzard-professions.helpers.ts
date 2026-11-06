@@ -113,9 +113,7 @@ async function requestProfessions(
     return null;
   }
   if (!res.ok) {
-    logger.warn(
-      `Professions fetch failed for ${characterPath}: ${res.status}`,
-    );
+    logger.warn(`Professions fetch failed for ${characterPath}: ${res.status}`);
     return null;
   }
   const parsed = parseProfessionsResponse(await res.json());
@@ -128,6 +126,14 @@ async function requestProfessions(
   return parsed;
 }
 
+/** Classic flavours skip /professions; retail and the Forever alias are asked. */
+function skipsProfessions(apiNamespacePrefix: string | null): boolean {
+  return (
+    apiNamespacePrefix !== null &&
+    apiNamespacePrefix !== FOREVER_NAMESPACE_ALIAS
+  );
+}
+
 /** Fetch a WoW character's professions from the Blizzard API. */
 export async function fetchCharacterProfessions(
   name: string,
@@ -137,7 +143,7 @@ export async function fetchCharacterProfessions(
   token: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
-  if (apiNamespacePrefix !== null && apiNamespacePrefix !== FOREVER_NAMESPACE_ALIAS) {
+  if (skipsProfessions(apiNamespacePrefix)) {
     logger.debug?.(
       `Skipping professions fetch for ${name}-${realm ?? '(realmless)'} — Classic Profile API does not expose /professions`,
     );

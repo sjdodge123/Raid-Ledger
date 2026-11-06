@@ -27,6 +27,21 @@ export interface EnrichedProfile {
 }
 
 /**
+ * ROK-2102: a realmless (Forever) body has no realm; this path always asks by
+ * realm, so the requested realm stands in until the import path threads null.
+ */
+async function fetchRealmProfile(
+  adapter: CharacterSyncAdapter,
+  name: string,
+  realm: string,
+  region: string,
+  nsArg: string | undefined,
+): Promise<EnrichedProfile['profile']> {
+  const fetched = await adapter.fetchProfile(name, realm, region, nsArg);
+  return { ...fetched, realm: fetched.realm ?? realm };
+}
+
+/**
  * Fetch profile, specialization, equipment, and professions from an adapter.
  * Shared across importExternal, refreshExternal, and syncAllCharacters.
  *
@@ -43,10 +58,7 @@ export async function fetchFullProfile(
   apiNamespacePrefix: string | null,
 ): Promise<EnrichedProfile> {
   const nsArg = apiNamespacePrefix ?? undefined;
-  const fetched = await adapter.fetchProfile(name, realm, region, nsArg);
-  // ROK-2102: a realmless (Forever) body has no realm; this path always asks
-  // by realm, so the requested realm stands in until it threads null.
-  const profile = { ...fetched, realm: fetched.realm ?? realm };
+  const profile = await fetchRealmProfile(adapter, name, realm, region, nsArg);
 
   let talents: unknown = null;
   if (profile.class) {

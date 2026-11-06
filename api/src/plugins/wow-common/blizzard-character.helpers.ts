@@ -71,7 +71,13 @@ export function buildCharacterParams(
       throw new BadRequestException('Realm is required');
     }
     const charName = buildRealmlessCharName(name);
-    return { characterPath: charName, realmSlug: null, charName, namespace, baseUrl };
+    return {
+      characterPath: charName,
+      realmSlug: null,
+      charName,
+      namespace,
+      baseUrl,
+    };
   }
   const realmSlug = buildRealmSlug(realm);
   const charName = encodeURIComponent(name.toLowerCase());

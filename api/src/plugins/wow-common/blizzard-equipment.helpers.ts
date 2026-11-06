@@ -111,9 +111,7 @@ async function fetchRawEquipment(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    logger.warn(
-      `Equipment fetch failed for ${characterPath}: ${res.status}`,
-    );
+    logger.warn(`Equipment fetch failed for ${characterPath}: ${res.status}`);
     return null;
   }
   return {
