@@ -1,8 +1,8 @@
 {
   "flavor": "_anniversary_",
   "scope": "account",
-  "path": "_anniversary_/WTF/Account/ACCOUNTNAME/SavedVariables/!BugGrabber.lua",
-  "bytes": 912,
+  "path": "_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/!BugGrabber.lua",
+  "bytes": 387,
   "mtime": "2026-11-01T18:30:00Z",
   "text": "BugGrabberDB = {\n\t[\"session\"] = 42,\n\t[\"errors\"] = {\n\t\t{\n\t\t\t[\"message\"] = \"Interface/AddOns/Mailworthy/Core.lua:88: attempt to index a nil value\",\n\t\t\t[\"stack\"] = \"[Interface/AddOns/Mailworthy/Core.lua]:88: in function <Interface/AddOns/Mailworthy/Core.lua:80>\",\n\t\t\t[\"locals\"] = \"self = <table> {}\",\n\t\t\t[\"time\"] = \"2026/11/01 18:29:57\",\n\t\t\t[\"session\"] = 42,\n\t\t\t[\"counter\"] = 1,\n\t\t},\n\t},\n}\n",
   "next": null

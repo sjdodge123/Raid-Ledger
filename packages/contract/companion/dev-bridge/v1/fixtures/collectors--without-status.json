@@ -1,0 +1,21 @@
+{
+  "collectors": [
+    {
+      "id": "wow-ledgerlink",
+      "enabled": true,
+      "paused": false,
+      "lastScanAt": "2026-11-01T18:30:00Z",
+      "lastUploadAt": null,
+      "pending": 1
+    },
+    {
+      "id": "bg3-save",
+      "enabled": false,
+      "paused": false,
+      "lastScanAt": null,
+      "lastUploadAt": null,
+      "pending": 0,
+      "lastError": "Save folder not found"
+    }
+  ]
+}

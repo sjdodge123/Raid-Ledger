@@ -133,7 +133,7 @@ describe('dev-bridge v1 addon SavedVariables allowlist (GET /dev/v1/addons/<fold
         const body = DevBridgeSvRawSchema.parse(readJson(FIX, `${name}.json`));
         expect({ name, path: body.path }).toEqual({
             name,
-            path: expect.stringMatching(new RegExp(`^${body.flavor}/WTF/Account/ACCOUNTNAME/SavedVariables/${folder}\\.lua$`)),
+            path: expect.stringMatching(new RegExp(`^${body.flavor}/WTF/Account/TESTACCOUNT/SavedVariables/${folder}\\.lua$`)),
         });
     });
 
