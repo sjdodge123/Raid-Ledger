@@ -288,4 +288,44 @@ describe('ForeverProbePanel — Forever API paths + ruleset signal (ROK-2102)', 
             screen.getByText(/each cell: ruleset · equip · guild status/i),
         ).toBeInTheDocument();
     });
+    it('lists every response shape key with its top-level keys and entry count, never the sample (ROK-2102)', async () => {
+        state = {
+            ...state,
+            result: makeResult({
+                shapes: {
+                    'classicforever:us:ruleset': {
+                        topLevelKeys: ['_links', 'rulesets'],
+                        entryCount: 3,
+                        sample: [{ name: 'SecretSampleValue' }],
+                    },
+                    'classic:eu:guild-roster': {
+                        topLevelKeys: ['guild', 'members'],
+                        entryCount: 0,
+                        sample: [],
+                    },
+                },
+            }),
+        };
+        renderWithProviders(<ForeverProbePanel />);
+        expect(
+            await screen.findByText(/response shapes \(top-level keys only\)/i),
+        ).toBeInTheDocument();
+        const list = screen.getByRole('list', {
+            name: /response shapes/i,
+            hidden: true,
+        });
+        const items = within(list).getAllByRole('listitem', { hidden: true });
+        expect(items.map((li) => li.textContent)).toEqual([
+            'classic:eu:guild-roster: guild, members (entries: 0)',
+            'classicforever:us:ruleset: _links, rulesets (entries: 3)',
+        ]);
+        expect(screen.queryByText(/SecretSampleValue/)).not.toBeInTheDocument();
+    });
+
+    it('renders no response shapes block when shapes is empty (ROK-2102)', async () => {
+        state = { ...state, result: makeResult({ shapes: {} }) };
+        renderWithProviders(<ForeverProbePanel />);
+        await screen.findByText(/last run/i);
+        expect(screen.queryByText(/response shapes/i)).not.toBeInTheDocument();
+    });
 });
