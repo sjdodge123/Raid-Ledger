@@ -15,8 +15,17 @@ import { variantToNamespacePrefix } from '../plugins/wow-common/blizzard.constan
 import {
   fetchFullProfile,
   buildSyncUpdateFieldsFromSync,
+  type EnrichedProfile,
   type OptionalSyncFields,
 } from './characters-sync.helpers';
+import {
+  claimForeverIdentity,
+  foreverImportName,
+  importIdentityFields,
+  isForeverImport,
+  mergeForeverRow,
+} from './characters-forever-import.helpers';
+import { rethrowForeverViolation } from '../plugins/wow-common/wow-forever-identity.helpers';
 import {
   mapCharacterToDto,
   resolveMainStatus,
@@ -30,7 +39,7 @@ import {
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };
-type CharProfile = { name: string; realm: string; [k: string]: unknown };
+type CharProfile = EnrichedProfile['profile'];
 
 /** Check if a character name+realm is already claimed by another user. */
 export async function checkDuplicateClaim(
@@ -108,15 +117,14 @@ export function buildImportInsertValues(
   sync: OptionalSyncFields,
   shouldBeMain: boolean,
 ) {
-  const syncFields = buildSyncUpdateFieldsFromSync(profile as never, sync, {
+  const syncFields = buildSyncUpdateFieldsFromSync(profile, sync, {
     region: dto.region,
     gameVariant: dto.gameVariant,
   });
   return {
     userId,
     gameId,
-    name: profile.name,
-    realm: profile.realm,
+    ...importIdentityFields(profile, dto),
     ...syncFields,
     isMain: shouldBeMain,
   };
@@ -199,7 +207,13 @@ export async function executeImportTx(
   sync: OptionalSyncFields,
   logger: Logger,
 ): Promise<CharacterDto> {
-  await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
+  if (isForeverImport(dto)) {
+    const name = foreverImportName(profile.name, dto.name);
+    const args = { userId, gameId, name, region: dto.region };
+    const own = await claimForeverIdentity(tx, args);
+    if (own) return mergeForeverRow(tx, own, profile, dto, sync, logger);
+  } else
+    await checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
   const { values, shouldBeMain } = await resolveMainAndBuildValues(
     tx,
     userId,
@@ -224,7 +238,7 @@ export async function findExistingByProfile(
   userId: number,
   gameId: number,
   name: string,
-  realm: string,
+  realm: string | null,
 ) {
   const [existing] = await db
     .select()
@@ -234,7 +248,9 @@ export async function findExistingByProfile(
         eq(schema.characters.userId, userId),
         eq(schema.characters.gameId, gameId),
         sql`lower(${schema.characters.name}) = lower(${name})`,
-        eq(schema.characters.realm, realm),
+        realm === null
+          ? isNull(schema.characters.realm)
+          : eq(schema.characters.realm, realm),
       ),
     )
     .limit(1);
@@ -273,7 +289,7 @@ export async function mergeIntoExisting(
   logger: Logger,
 ): Promise<CharacterDto> {
   const existing = await requireExistingForMerge(db, userId, gameId, profile);
-  const fields = buildSyncUpdateFieldsFromSync(profile as never, sync, {
+  const fields = buildSyncUpdateFieldsFromSync(profile, sync, {
     region: dto.region,
     gameVariant: dto.gameVariant,
   });
@@ -307,6 +323,8 @@ export async function insertOrMergeImport(
   } catch (error: unknown) {
     if (isUniqueViolation(error, 'unique_user_game_character'))
       return mergeIntoExisting(db, userId, gameId, profile, dto, sync, logger);
+    if (isForeverImport(dto))
+      rethrowForeverViolation(error, profile.name, dto.region);
     throw error;
   }
 }

@@ -9,7 +9,8 @@ import type { ExternalCharacterProfessions } from '../plugins/plugin-host/extens
 export interface EnrichedProfile {
   profile: {
     name: string;
-    realm: string;
+    /** Null for a realmless WoW: Forever character (ROK-1722). */
+    realm: string | null;
     class: string;
     spec: string | null;
     role: 'tank' | 'healer' | 'dps' | null;
@@ -27,13 +28,13 @@ export interface EnrichedProfile {
 }
 
 /**
- * ROK-2102: a realmless (Forever) body has no realm; this path always asks by
- * realm, so the requested realm stands in until the import path threads null.
+ * ROK-2102/1722: a body without a realm keeps the requested realm; a realmless
+ * (Forever) request asks with null and keeps null.
  */
 async function fetchRealmProfile(
   adapter: CharacterSyncAdapter,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   nsArg: string | undefined,
 ): Promise<EnrichedProfile['profile']> {
@@ -53,7 +54,7 @@ async function fetchRealmProfile(
 export async function fetchFullProfile(
   adapter: CharacterSyncAdapter,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
 ): Promise<EnrichedProfile> {

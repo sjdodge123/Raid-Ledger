@@ -316,11 +316,12 @@ describe('CharactersService — operations', () => {
     // never silently fall back to retail data.
     describe('wow_forever variant (ROK-1563)', () => {
       it('accepts wow_forever as a gameVariant on the import DTO (AC1)', () => {
+        // ROK-1722: a Forever body is realmless with a ruleset.
         const parsed = ImportWowCharacterSchema.parse({
-          name: 'Thrall',
-          realm: 'area-52',
+          name: 'Thrall Forever',
           region: 'us',
           gameVariant: 'wow_forever',
+          ruleset: 'pvp',
         });
         expect(parsed.gameVariant).toBe('wow_forever');
       });
@@ -354,17 +355,18 @@ describe('CharactersService — operations', () => {
 
         await expect(
           service.importExternal(1, {
-            name: 'Thrall',
-            realm: 'area-52',
+            name: 'Thrall Forever',
+            realm: null,
             region: 'us',
             gameVariant: 'wow_forever',
             isMain: false,
+            ruleset: 'normal',
           }),
         ).rejects.toThrow(NotFoundException);
         // No retail fallback: the Forever namespace prefix was the one used.
         expect(mockAdapter.fetchProfile).toHaveBeenCalledWith(
-          'Thrall',
-          'area-52',
+          'Thrall Forever',
+          null,
           'us',
           'classicforever',
         );
@@ -384,6 +386,7 @@ describe('CharactersService — operations', () => {
           region: 'us',
           gameVariant: 'retail',
           isMain: false,
+          ruleset: null,
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -487,6 +490,7 @@ describe('CharactersService — operations', () => {
         region: 'us',
         gameVariant: 'retail',
         isMain: false,
+        ruleset: null,
       });
 
       expect(result.itemLevel).toBe(500);
