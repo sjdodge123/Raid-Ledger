@@ -9,8 +9,10 @@
  * banned game with the SAME "Game not found" a missing id gets — a moderated
  * game must be indistinguishable from one that does not exist.
  *
- * Every case pairs the refusal with a positive control on the same route, so
- * the 404 proves the visibility check rather than an unmounted route.
+ * Every case asserts the 'Game not found' body, which distinguishes this 404
+ * from an unmounted route's. The `POST /lfg` cases also pair the refusal with a
+ * positive control on the same route; the invite and convert cases instead
+ * prove the group formed (a 201 `POST /lfg`) before the game was moderated.
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
