@@ -69,7 +69,7 @@ export class BlizzardService {
    */
   async fetchCharacterProfile(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterProfile> {
@@ -97,7 +97,7 @@ export class BlizzardService {
   /** Fetch character equipment from the Blizzard API. */
   async fetchCharacterEquipment(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterEquipment | null> {
@@ -115,7 +115,7 @@ export class BlizzardService {
   /** Fetch character professions from the Blizzard API. */
   async fetchCharacterProfessions(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<ExternalCharacterProfessions | null> {
@@ -133,7 +133,7 @@ export class BlizzardService {
   /** Fetch character specializations from the Blizzard API. */
   async fetchCharacterSpecializations(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     characterClass: string,
     apiNamespacePrefix: string | null = null,

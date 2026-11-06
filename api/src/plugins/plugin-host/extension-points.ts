@@ -61,26 +61,26 @@ export interface CharacterSyncAdapter {
   resolveGameSlugs(gameVariant?: string): string[];
   fetchProfile(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string,
   ): Promise<ExternalCharacterProfile>;
   fetchSpecialization(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     characterClass: string,
     gameVariant?: string,
   ): Promise<ExternalInferredSpecialization>;
   fetchEquipment(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string,
   ): Promise<ExternalCharacterEquipment>;
   fetchProfessions?(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string | null,
   ): Promise<ExternalCharacterProfessions | null>;

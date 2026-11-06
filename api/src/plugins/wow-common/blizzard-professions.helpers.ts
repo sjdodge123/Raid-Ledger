@@ -10,7 +10,9 @@
  *   `null`:
  *     • Classic-stack namespace (Blizzard Profile API does not expose
  *       /professions for any classic flavor; verified 2026-04-28 against
- *       profile-classicann-us / -classic1x-us / -classic-us).
+ *       profile-classicann-us / -classic1x-us / -classic-us). WoW: Forever
+ *       is the exception: its realmless profile serves /professions (probe
+ *       2026-11-06, ROK-2102), so the Forever alias is attempted.
  *     • 404 from the endpoint.
  *     • Non-OK status (5xx, timeout, network throw).
  *     • 200 OK but the parsed response has zero primary AND zero
@@ -25,6 +27,7 @@ import type {
   ExternalProfessionTier,
 } from '../plugin-host/extension-types';
 import { buildCharacterParams } from './blizzard-character.helpers';
+import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
 
 type Logger = {
   warn: (msg: string) => void;
@@ -97,8 +100,7 @@ function hasNoEntries(p: ExternalCharacterProfessions): boolean {
 async function requestProfessions(
   url: string,
   token: string,
-  charName: string,
-  realmSlug: string,
+  characterPath: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
   const res = await fetch(url, {
@@ -106,20 +108,20 @@ async function requestProfessions(
   });
   if (res.status === 404) {
     logger.debug?.(
-      `Professions 404 for ${charName}-${realmSlug} — leaving prior value alone`,
+      `Professions 404 for ${characterPath} — leaving prior value alone`,
     );
     return null;
   }
   if (!res.ok) {
     logger.warn(
-      `Professions fetch failed for ${charName}-${realmSlug}: ${res.status}`,
+      `Professions fetch failed for ${characterPath}: ${res.status}`,
     );
     return null;
   }
   const parsed = parseProfessionsResponse(await res.json());
   if (hasNoEntries(parsed)) {
     logger.debug?.(
-      `Professions empty for ${charName}-${realmSlug} — leaving prior value alone`,
+      `Professions empty for ${characterPath} — leaving prior value alone`,
     );
     return null;
   }
@@ -129,27 +131,27 @@ async function requestProfessions(
 /** Fetch a WoW character's professions from the Blizzard API. */
 export async function fetchCharacterProfessions(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ): Promise<ExternalCharacterProfessions | null> {
-  if (apiNamespacePrefix !== null) {
+  if (apiNamespacePrefix !== null && apiNamespacePrefix !== FOREVER_NAMESPACE_ALIAS) {
     logger.debug?.(
-      `Skipping professions fetch for ${name}-${realm} — Classic Profile API does not expose /professions`,
+      `Skipping professions fetch for ${name}-${realm ?? '(realmless)'} — Classic Profile API does not expose /professions`,
     );
     return null;
   }
-  const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+  const { characterPath, namespace, baseUrl } = buildCharacterParams(
     name,
     realm,
     region,
     apiNamespacePrefix,
   );
-  const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/professions?namespace=${namespace}&locale=en_US`;
+  const url = `${baseUrl}/profile/wow/character/${characterPath}/professions?namespace=${namespace}&locale=en_US`;
   try {
-    return await requestProfessions(url, token, charName, realmSlug, logger);
+    return await requestProfessions(url, token, characterPath, logger);
   } catch (err) {
     logger.warn(`Failed to fetch character professions: ${err}`);
     return null;

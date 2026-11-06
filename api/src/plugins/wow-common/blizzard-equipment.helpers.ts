@@ -94,25 +94,25 @@ function logEquipmentSample(
 /** Fetch raw equipment data from the Blizzard API. */
 async function fetchRawEquipment(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ) {
-  const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+  const { characterPath, charName, namespace, baseUrl } = buildCharacterParams(
     name,
     realm,
     region,
     apiNamespacePrefix,
   );
-  const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/equipment?namespace=${namespace}&locale=en_US`;
+  const url = `${baseUrl}/profile/wow/character/${characterPath}/equipment?namespace=${namespace}&locale=en_US`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
     logger.warn(
-      `Equipment fetch failed for ${charName}-${realmSlug}: ${res.status}`,
+      `Equipment fetch failed for ${characterPath}: ${res.status}`,
     );
     return null;
   }
@@ -126,7 +126,7 @@ async function fetchRawEquipment(
 /** Fetch a WoW character's equipped items from the Blizzard API. */
 export async function fetchCharacterEquipment(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
   token: string,

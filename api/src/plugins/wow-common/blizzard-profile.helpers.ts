@@ -24,22 +24,33 @@ export interface RawBlizzardProfile {
   active_spec?: { name: string };
   race: { name: string };
   faction: { type: string };
-  realm: { name: string };
+  /** Absent on a realmless WoW: Forever body (ROK-2102). */
+  realm?: { name: string };
 }
 
-/** Throw an HttpException for a failed profile fetch (404 → 404, else 502). */
+/** Throw an HttpException for a failed profile fetch (404 → 404, else 502).
+ * A realmless (Forever) 404 is expected for a character below level 10 or
+ * not yet logged out, so it is logged at warn with actionable copy (ROK-2102).
+ */
 export function throwProfileError(
   status: number,
   text: string,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   logger: Logger,
 ): never {
+  const regionLabel = region.toUpperCase();
+  if (status === 404 && realm === null) {
+    logger.warn(`Blizzard profile API 404 for realmless Forever character`);
+    throw new NotFoundException(
+      `“${name}” isn't visible on Battle.net yet (${regionLabel}). Forever characters appear after reaching level 10 and logging out once.`,
+    );
+  }
   logger.error(`Blizzard profile API error: ${status} ${text}`);
   if (status === 404)
     throw new NotFoundException(
-      `Character "${name}" not found on ${realm} (${region.toUpperCase()}). Check the spelling and realm.`,
+      `Character "${name}" not found on ${realm} (${regionLabel}). Check the spelling and realm.`,
     );
   throw blizzardUpstreamError(
     status,
@@ -52,10 +63,10 @@ export function throwProfileError(
 function buildProfileUrl(
   apiNamespacePrefix: string | null,
   region: string,
-  realmSlug: string,
+  realmSlug: string | null,
   charName: string,
 ): string | null {
-  return apiNamespacePrefix === null
+  return apiNamespacePrefix === null && realmSlug !== null
     ? `https://worldofwarcraft.blizzard.com/en-${region}/character/${realmSlug}/${charName}`
     : null;
 }
@@ -65,7 +76,7 @@ function extractCoreFields(profile: RawBlizzardProfile) {
   const specName = profile.active_spec?.name ?? null;
   return {
     name: profile.name,
-    realm: profile.realm.name,
+    realm: profile.realm?.name ?? null,
     class: profile.character_class.name,
     spec: specName,
     role: specName ? specToRole(specName) : null,
@@ -83,7 +94,7 @@ export function buildProfileResult(
   itemLevel: number | null,
   apiNamespacePrefix: string | null,
   region: string,
-  realmSlug: string,
+  realmSlug: string | null,
   charName: string,
 ): BlizzardCharacterProfile {
   return {
@@ -106,7 +117,7 @@ export async function fetchRawProfile(
   namespace: string,
   token: string,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   logger: Logger,
 ) {
@@ -153,14 +164,14 @@ export async function fetchEquipItemLevel(
 /** Fetch raw profile data, media, and item level for a character. */
 export async function fetchProfileData(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
   token: string,
   logger: Logger,
 ) {
   const params = buildCharacterParams(name, realm, region, apiNamespacePrefix);
-  const profileUrl = `${params.baseUrl}/profile/wow/character/${params.realmSlug}/${params.charName}`;
+  const profileUrl = `${params.baseUrl}/profile/wow/character/${params.characterPath}`;
   const profile = await fetchRawProfile(
     profileUrl,
     params.namespace,
