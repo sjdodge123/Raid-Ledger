@@ -20,7 +20,10 @@ import {
   getForeverNamespacePrefix,
   setForeverNamespacePrefix,
 } from './forever-namespace.resolver';
-import { WOW_FOREVER_NAMESPACE_PREFIX_KEY } from './forever.settings';
+import {
+  WOW_FOREVER_ARMORY_IMPORT_KEY,
+  WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+} from './forever.settings';
 
 const ADMIN_ROUTE = '/admin/plugins/blizzard/forever';
 
@@ -72,28 +75,43 @@ afterEach(async () => {
 });
 
 describe('GET /blizzard/capabilities (ROK-1717)', () => {
-  it('reports Forever Armory import off by default', async () => {
+  it('reports Forever Armory import on by default (ROK-1722)', async () => {
     const res = await testApp.request.get('/blizzard/capabilities');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ armoryImport: { wow_forever: false } });
+    expect(res.body).toEqual({ armoryImport: { wow_forever: true } });
   });
 
-  it('reports it on after an admin enables it', async () => {
+  it('reports it off after an admin flips the kill switch, and on again after re-enabling', async () => {
     const saved = await put(adminToken, {
       namespacePrefix: 'foo',
-      armoryImportEnabled: true,
+      armoryImportEnabled: false,
     });
     expect(saved.status).toBe(200);
     expect(saved.body).toEqual({
       namespacePrefix: 'foo',
       namespacePrefixIsDefault: false,
-      armoryImportEnabled: true,
+      armoryImportEnabled: false,
       wowheadResolverEnabled: true,
     });
+    const flagRows = () =>
+      testApp.db
+        .select({ key: schema.appSettings.key })
+        .from(schema.appSettings)
+        .where(eq(schema.appSettings.key, WOW_FOREVER_ARMORY_IMPORT_KEY));
+    // The kill switch is the only stored state; on-by-default stores nothing.
+    expect(await flagRows()).toHaveLength(1);
 
-    const res = await testApp.request.get('/blizzard/capabilities');
-    expect(res.body).toEqual({ armoryImport: { wow_forever: true } });
+    const off = await testApp.request.get('/blizzard/capabilities');
+    expect(off.body).toEqual({ armoryImport: { wow_forever: false } });
     expect(getForeverNamespacePrefix()).toBe('foo');
+
+    await put(adminToken, {
+      namespacePrefix: 'foo',
+      armoryImportEnabled: true,
+    });
+    const on = await testApp.request.get('/blizzard/capabilities');
+    expect(on.body).toEqual({ armoryImport: { wow_forever: true } });
+    expect(await flagRows()).toHaveLength(0);
   });
 });
 
@@ -123,7 +141,7 @@ describe('/admin/plugins/blizzard/forever guards (ROK-1717)', () => {
     expect(cfg.body).toEqual({
       namespacePrefix: 'classicforever',
       namespacePrefixIsDefault: true,
-      armoryImportEnabled: false,
+      armoryImportEnabled: true,
       wowheadResolverEnabled: true,
     });
   });
