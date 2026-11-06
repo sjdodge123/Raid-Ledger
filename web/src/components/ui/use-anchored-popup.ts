@@ -9,10 +9,17 @@
  * A `fixed` popup cannot be scrolled into view, so it flips above the anchor when
  * its rendered height does not fit below, and is clamped into the viewport when
  * it fits neither side (ROK-2030: the hub Manage menu's last item was unreachable).
+ * Portalled into a non-`<body>` container (a Modal's `overflow-hidden` dialog), it
+ * flips/clamps within that container's rect instead and reports a `maxHeight`
+ * (the roomier side of the anchor), so a long listbox scrolls instead of being clipped.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
-export interface PopupPosition { top: number; left: number; width: number }
+/** `maxHeight` is set only when the popup lives in a clipping container (not `<body>`). */
+export interface PopupPosition { top: number; left: number; width: number; maxHeight?: number }
+
+/** The vertical extent a popup must stay inside (viewport px). */
+export interface PlacementBounds { top: number; bottom: number }
 
 /** Which popup edge lines up with the anchor's matching edge. */
 export type PopupAlign = 'start' | 'end';
@@ -22,19 +29,33 @@ const GAP_PX = 4;
 const EDGE_PX = 8;
 
 /**
- * The popup's viewport `top`: below the anchor when it fits, else above it,
- * else clamped so as much of it as possible is on screen (top edge first).
+ * The popup's viewport `top` inside `bounds`: below the anchor when it fits, else
+ * above it, else clamped so as much of it as possible is inside (top edge first).
  */
-export function placeTop(anchor: { top: number; bottom: number }, height: number, viewportHeight: number): number {
+export function placeWithin(anchor: PlacementBounds, height: number, bounds: PlacementBounds): number {
+    const min = bounds.top + EDGE_PX;
+    const max = bounds.bottom - EDGE_PX;
     const below = anchor.bottom + GAP_PX;
-    if (below + height <= viewportHeight - EDGE_PX) return below;
+    if (below + height <= max) return below;
     const above = anchor.top - GAP_PX - height;
-    if (above >= EDGE_PX) return above;
-    return Math.max(EDGE_PX, Math.min(below, viewportHeight - EDGE_PX - height));
+    if (above >= min) return above;
+    return Math.max(min, Math.min(below, max - height));
+}
+
+/** `placeWithin` against the viewport (`0..viewportHeight`). */
+export function placeTop(anchor: PlacementBounds, height: number, viewportHeight: number): number {
+    return placeWithin(anchor, height, { top: 0, bottom: viewportHeight });
+}
+
+/** The tallest the popup may be inside `bounds`: the roomier side of the anchor (whole px, ≥ 0). */
+export function maxHeightWithin(anchor: PlacementBounds, bounds: PlacementBounds): number {
+    const below = bounds.bottom - EDGE_PX - (anchor.bottom + GAP_PX);
+    const above = anchor.top - GAP_PX - (bounds.top + EDGE_PX);
+    return Math.max(0, Math.floor(Math.max(below, above)));
 }
 
 function samePos(a: PopupPosition | null, b: PopupPosition): boolean {
-    return !!a && a.top === b.top && a.left === b.left && a.width === b.width;
+    return !!a && a.top === b.top && a.left === b.left && a.width === b.width && a.maxHeight === b.maxHeight;
 }
 
 /** Viewport offset of the popup's containing block (non-zero inside a transformed dialog). */
@@ -50,6 +71,26 @@ function alignedLeft(anchor: DOMRect, popup: HTMLElement | null, align: PopupAli
     return anchor.right - (popup?.getBoundingClientRect().width ?? 0);
 }
 
+/** The portal container's visible rect when it is not `<body>` (it clips the popup), else `null`. */
+function clippingBounds(popup: HTMLElement | null): PlacementBounds | null {
+    const host = popup?.parentElement;
+    if (!host || host === document.body || host === document.documentElement) return null;
+    const r = host.getBoundingClientRect();
+    return { top: Math.max(0, r.top), bottom: Math.min(window.innerHeight, r.bottom) };
+}
+
+/** Measure one placement: viewport rules for `<body>`, container rules (+ `maxHeight`) otherwise. */
+function measurePlacement(anchor: DOMRect, popup: HTMLElement | null, align: PopupAlign): PopupPosition {
+    const o = containingOrigin(popup);
+    const bounds = clippingBounds(popup);
+    const height = popup?.getBoundingClientRect().height ?? 0;
+    const left = alignedLeft(anchor, popup, align) - o.x;
+    if (!bounds) return { top: placeTop(anchor, height, window.innerHeight) - o.y, left, width: anchor.width };
+    const maxHeight = maxHeightWithin(anchor, bounds);
+    const top = placeWithin(anchor, Math.min(height, maxHeight), bounds) - o.y;
+    return { top, left, width: anchor.width, maxHeight };
+}
+
 function usePopupPosition(
     anchorRef: RefObject<HTMLElement | null>, popupRef: RefObject<HTMLElement | null>, open: boolean, align: PopupAlign,
 ): PopupPosition | null {
@@ -59,10 +100,7 @@ function usePopupPosition(
         const measure = (): void => {
             const r = anchorRef.current?.getBoundingClientRect();
             if (!r) return;
-            const popup = popupRef.current;
-            const o = containingOrigin(popup);
-            const top = placeTop(r, popup?.getBoundingClientRect().height ?? 0, window.innerHeight);
-            const next = { top: top - o.y, left: alignedLeft(r, popup, align) - o.x, width: r.width };
+            const next = measurePlacement(r, popupRef.current, align);
             setPos((prev) => (samePos(prev, next) ? prev : next));
         };
         measure();
@@ -98,7 +136,8 @@ function useOutsidePress(refs: RefObject<HTMLElement | null>[], open: boolean, o
 
 /**
  * Position the popup under `anchorRef` (above it when it does not fit below, see
- * `placeTop`); call `onOutside` on a press outside both.
+ * `placeWithin`; inside a non-`<body>` portal container also cap it with
+ * `maxHeight`, which the caller applies); call `onOutside` on a press outside both.
  * `align: 'end'` lines the popup's right edge up with the anchor's (measured, not
  * a CSS transform, which `containingOrigin` would read back and cancel).
  */

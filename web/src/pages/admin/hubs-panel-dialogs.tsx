@@ -92,12 +92,9 @@ export function TransferLeaderDialog({ hub, onClose }: { hub: AdminHubEntry; onC
     );
     return (
         <Modal isOpen onClose={onClose} title={`Transfer leadership of “${hub.name}”`} footer={footer}>
-            {/* ROK-2095: the listbox portals into this dialog (overflow-hidden), so reserve its max-h-64 below the field. */}
-            <div className="min-h-[21rem]">
-                <Field label="New leader" required hint="Pick a current member of the hub.">
-                    <MemberCombobox value={target} onChange={setTarget} />
-                </Field>
-            </div>
+            <Field label="New leader" required hint="Pick a current member of the hub.">
+                <MemberCombobox value={target} onChange={setTarget} />
+            </Field>
         </Modal>
     );
 }
