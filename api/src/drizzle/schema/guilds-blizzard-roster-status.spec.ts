@@ -4,17 +4,24 @@
  * `varchar(12)` and failed the empty-roster path with a Postgres length error.
  */
 import { getTableColumns } from 'drizzle-orm';
+import { PgVarchar } from 'drizzle-orm/pg-core';
 import { BLIZZARD_ROSTER_STATUSES } from '@raid-ledger/contract';
 import { guilds } from './guilds';
 
 describe('guilds.blizzard_roster_status column width', () => {
   const column = getTableColumns(guilds).blizzardRosterStatus;
 
+  /** The varchar width; fails loudly if the column stops being a varchar. */
+  function width(): number {
+    if (!(column instanceof PgVarchar)) throw new Error('not a varchar');
+    return column.length ?? 0;
+  }
+
   it.each([...BLIZZARD_ROSTER_STATUSES])(
     'fits the %s status',
     (status: string) => {
-      expect(column.length).toBe(16);
-      expect(status.length).toBeLessThanOrEqual(column.length ?? 0);
+      expect(width()).toBe(16);
+      expect(status.length).toBeLessThanOrEqual(width());
     },
   );
 
