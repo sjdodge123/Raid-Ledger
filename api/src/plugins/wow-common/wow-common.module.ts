@@ -55,11 +55,7 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
-import { RosterFactSource } from './facts/roster.fact-source';
-import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
-import { CharacterRowFactSource } from './facts/character-row.fact-source';
-import { BlizzardForeverFactSource } from './facts/blizzard-forever.fact-source';
-import { WowFactsService } from './facts/wow-facts.service';
+import { WowFactsModule } from './facts/wow-facts.module';
 import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
 import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
 import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
@@ -77,6 +73,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     CompanionIngestModule,
     // ROK-2100 B.2: the companion's RULESET_REQUIRED in-app notice.
     NotificationModule,
+    // ROK-1910/1920: roster fact sources + WowFactsService.
+    WowFactsModule,
   ],
   controllers: [
     BlizzardController,
@@ -129,12 +127,6 @@ import { NotificationModule } from '../../notifications/notification.module';
     GuildRaidsService,
     GuildAddonsService,
     WowHubKindAdapter,
-    // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
-    RosterFactSource,
-    AddonSnapshotFactSource,
-    CharacterRowFactSource,
-    BlizzardForeverFactSource,
-    WowFactsService,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,
     RosterInsightsService,
@@ -151,7 +143,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
-    WowFactsService,
+    WowFactsModule,
     GuildsCoreModule,
   ],
 })
