@@ -6,6 +6,7 @@ import type {
     ProfessionTierDto,
 } from '@raid-ledger/contract';
 import { getProfessionIconUrl } from '../lib/profession-icons';
+import { effectiveProfessionSkill, hasOnlyRedundantTier } from '../lib/profession-skill';
 import { EditProfessionsModal } from './EditProfessionsModal';
 import { Pill } from '../../../components/hub/hub-bits';
 import { sourceLabel } from '../hub-widgets/professions.helpers';
@@ -145,6 +146,8 @@ function ProfessionGroup({
 
 function ProfessionRow({ entry }: { entry: ProfessionEntryDto }) {
     const iconUrl = getProfessionIconUrl(entry.slug);
+    const { skillLevel, maxSkillLevel } = effectiveProfessionSkill(entry);
+    const showTiers = entry.tiers.length > 0 && !hasOnlyRedundantTier(entry);
     return (
         <div>
             <div className="flex items-center gap-2 text-foreground">
@@ -153,10 +156,10 @@ function ProfessionRow({ entry }: { entry: ProfessionEntryDto }) {
                 )}
                 <span className="font-medium">{entry.name}</span>
                 <span className="text-sm text-muted">
-                    {entry.skillLevel}/{entry.maxSkillLevel}
+                    {skillLevel}/{maxSkillLevel}
                 </span>
             </div>
-            {entry.tiers.length > 0 && <ProfessionTierList tiers={entry.tiers} />}
+            {showTiers && <ProfessionTierList tiers={entry.tiers} />}
         </div>
     );
 }

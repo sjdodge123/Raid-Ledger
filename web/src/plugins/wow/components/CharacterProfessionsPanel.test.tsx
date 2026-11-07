@@ -201,3 +201,31 @@ describe('CharacterProfessionsPanel — Armory-synced hides manual Edit (ROK-210
         expect(screen.queryByText(NOTE)).toBeNull();
     });
 });
+
+/** A stored Armory row from before the tier fallback: header 0/0, skill only in the tier. */
+const TIER_ONLY_MINING: CharacterProfessionsDto = {
+    primary: [
+        { id: 186, name: 'Mining', slug: 'mining', skillLevel: 0, maxSkillLevel: 0, tiers: [{ id: 186, name: 'Mining', skillLevel: 95, maxSkillLevel: 150 }] },
+    ],
+    secondary: [],
+    syncedAt: '2026-11-07T00:00:00.000Z',
+};
+
+describe('CharacterProfessionsPanel — tier-only Armory rows (Forever 0/0 fix)', () => {
+    it('reads the header from the tier when the stored header is 0/0', () => {
+        render(<CharacterProfessionsPanel professions={TIER_ONLY_MINING} isOwner={false} characterId="c1" gameId={1} source="blizzard" />);
+        expect(screen.getByText('95/150')).toBeInTheDocument();
+        expect(screen.queryByText('0/0')).not.toBeInTheDocument();
+    });
+
+    it('hides the tier list when the single tier repeats the profession name', () => {
+        render(<CharacterProfessionsPanel professions={TIER_ONLY_MINING} isOwner={false} characterId="c1" gameId={1} source="blizzard" />);
+        expect(screen.getAllByText('Mining')).toHaveLength(1);
+        expect(screen.getAllByText('95/150')).toHaveLength(1);
+    });
+
+    it('still lists a single tier whose name differs from the profession', () => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" gameId={1} />);
+        expect(screen.getByText('Dragon Isles Tailoring')).toBeInTheDocument();
+    });
+});
