@@ -3,7 +3,7 @@
  * ROK-1748: with the viewer's chain state each step is marked done / needed.
  */
 import type { EnrichedDungeonQuestDto, QuestPrereqState, QuestPrereqStep } from '@raid-ledger/contract';
-import { formatAddonSourceLine } from '../lib/addon-source-line';
+import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
 interface ChainStep { questId: number; name: string }
 
@@ -21,8 +21,18 @@ function StepMark({ step }: { step: QuestPrereqStep }) {
     );
 }
 
-function hasAddonSource(state: QuestPrereqState): boolean {
-    return state.completedSource === 'addon' || state.steps.some((s) => s.source === 'addon');
+/**
+ * The snapshot the chain state came from: the completion's source, else the first
+ * dated step's. Null for manual-only state (no source line). ROK-2109 adds the Armory.
+ */
+function datedSourceOf(state: QuestPrereqState): DatedSource | null {
+    const completed = asDatedSource(state.completedSource);
+    if (completed) return completed;
+    for (const step of state.steps) {
+        const source = asDatedSource(step.source);
+        if (source) return source;
+    }
+    return null;
 }
 
 /**
@@ -47,12 +57,13 @@ export function QuestPrereqChain({ quest, state, asOf }: {
             })}
         </div>
     );
-    if (!state || !hasAddonSource(state)) return chain;
+    const source = state ? datedSourceOf(state) : null;
+    if (!source) return chain;
     return (
         <>
             {chain}
             <p className="mt-1 text-xs text-muted" data-testid="quest-prereq-source">
-                {asOf ? formatAddonSourceLine(asOf) : 'via addon'}
+                {formatSourceLine(source, asOf ?? '')}
             </p>
         </>
     );

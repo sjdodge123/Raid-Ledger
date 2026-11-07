@@ -16,11 +16,8 @@ import {
   type EventSignupChar,
   type ForeverEventProgress,
 } from './event-forever-progress.helpers';
-import {
-  loadForeverCharSnapshot,
-  loadForeverCharSnapshots,
-  type CharSnapshot,
-} from './forever-char-snapshot.query';
+import type { EffectiveQuests } from './forever-quest-source.helpers';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -136,21 +133,15 @@ async function loadSignupChars(
   return rows.flatMap(toSignupChar);
 }
 
-/** One user's snapshot via the single loader; everyone's via the batch. */
-async function loadSnapshots(
+/** Effective quest data (addon snapshot / Armory list) of the signups. */
+function loadSnapshots(
   db: Db,
   signups: EventSignupChar[],
-  single: boolean,
-): Promise<Map<string, CharSnapshot>> {
-  if (!single) {
-    return loadForeverCharSnapshots(
-      db,
-      signups.map((x) => x.characterId),
-    );
-  }
-  const [one] = signups;
-  const snap = one ? await loadForeverCharSnapshot(db, one.characterId) : null;
-  return new Map(one && snap ? [[one.characterId, snap]] : []);
+): Promise<Map<string, EffectiveQuests>> {
+  return loadForeverQuestSources(
+    db,
+    signups.map((x) => x.characterId),
+  );
 }
 
 /** Shared body: every active member, or only `userId` when given. */
@@ -165,7 +156,7 @@ async function loadProgress(
     loadKnownQuests(db),
     loadSignupChars(db, eventId, userId),
   ]);
-  const snapshots = await loadSnapshots(db, signups, userId !== undefined);
+  const snapshots = await loadSnapshots(db, signups);
   const instanceIds = contentInstanceIds(event.contentInstances);
   return {
     ...selectEventQuests(known, instanceIds),

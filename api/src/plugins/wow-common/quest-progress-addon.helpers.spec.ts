@@ -7,6 +7,7 @@ import {
   QuestProgressDtoSchema,
 } from '@raid-ledger/contract';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { groupCoverage } from './event-forever-progress.helpers';
 import {
   buildPrereqState,
   countNeeded,
@@ -93,6 +94,65 @@ describe('deriveAddonProgress (D6)', () => {
     };
     const rows = deriveAddonProgress(both, new Set([10]), 1, CHAR);
     expect(rows).toEqual([addon(10, { completed: true })]);
+  });
+
+  it('carries a blizzard source from an Armory list; a manual row still wins (ROK-2109)', () => {
+    const armory = { ...snapshot, source: 'blizzard' as const };
+    const rows = deriveAddonProgress(armory, new Set([10, 20]), 1, CHAR);
+    expect(rows.map((r) => r.source)).toEqual(['blizzard', 'addon']);
+    const merged = mergeProgress(
+      [manual(10, { completed: false, pickedUp: true })],
+      rows,
+    );
+    expect(merged.find((r) => r.questId === 10)).toMatchObject({
+      source: 'manual',
+      completed: false,
+    });
+    expect(merged.find((r) => r.questId === 20)?.source).toBe('addon');
+  });
+});
+
+describe('deriveAddonProgress — Armory win keeps the addon log (ROK-2109 D4)', () => {
+  const snapshot = {
+    capturedAt: CAPTURED,
+    quests: { completed: [10], inProgress: [{ questId: 20 }] },
+  };
+
+  it('keeps an older addon pickup as addon with the log date when the Armory wins (ROK-2109 D4)', () => {
+    const LOG_AT = '2026-10-01T00:00:00.000Z';
+    const ARMORY_AT = '2026-11-06T00:00:00.000Z';
+    const armory = {
+      ...snapshot,
+      capturedAt: ARMORY_AT,
+      source: 'blizzard' as const,
+      inProgressAsOf: LOG_AT,
+    };
+    const rows = deriveAddonProgress(armory, new Set([10, 20]), 1, CHAR);
+    expect(rows).toEqual([
+      expect.objectContaining({
+        questId: 10,
+        completed: true,
+        source: 'blizzard',
+        asOf: ARMORY_AT,
+      }),
+      expect.objectContaining({
+        questId: 20,
+        pickedUp: true,
+        source: 'addon',
+        asOf: LOG_AT,
+      }),
+    ]);
+    const coverage = groupCoverage(
+      rows.map((r) => ({ ...r, username: 'Aldric' })),
+    );
+    expect(coverage).toEqual([
+      {
+        questId: 20,
+        coveredBy: [
+          { userId: 1, username: 'Aldric', source: 'addon', asOf: LOG_AT },
+        ],
+      },
+    ]);
   });
 });
 

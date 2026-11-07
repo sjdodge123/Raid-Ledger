@@ -16,7 +16,7 @@ import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 import {
   fetchFullProfile,
-  buildSyncUpdateFields,
+  buildSyncUpdateFieldsFromSync,
 } from './characters-sync.helpers';
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
@@ -249,7 +249,7 @@ async function performCharacterSync(
     return 'skipped';
   }
   const nsPrefix = await resolveNsPrefix(db, char.gameId);
-  const { profile, talents, equipment, professions } = await fetchFullProfile(
+  const fetched = await fetchFullProfile(
     adapter,
     char.name,
     char.realm,
@@ -258,7 +258,7 @@ async function performCharacterSync(
   );
   await db
     .update(schema.characters)
-    .set(buildSyncUpdateFields(profile, equipment, talents, professions))
+    .set(buildSyncUpdateFieldsFromSync(fetched.profile, fetched))
     .where(eq(schema.characters.id, char.id));
   return 'synced';
 }

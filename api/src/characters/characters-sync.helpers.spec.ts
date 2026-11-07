@@ -7,6 +7,7 @@
 import {
   applyOptionalSyncFields,
   buildSyncUpdateFields,
+  buildSyncUpdateFieldsFromSync,
   type EnrichedProfile,
 } from './characters-sync.helpers';
 
@@ -35,7 +36,12 @@ describe('applyOptionalSyncFields (ROK-2107)', () => {
   it('puts a Blizzard professions payload in armoryProfessions, never professions', () => {
     const record = applyOptionalSyncFields(
       { name: 'x' },
-      { professions: PAYLOAD, equipment: null, talents: null },
+      {
+        professions: PAYLOAD,
+        armoryQuests: null,
+        equipment: null,
+        talents: null,
+      },
     );
     expect(record).toHaveProperty('armoryProfessions', PAYLOAD);
     expect(record).not.toHaveProperty('professions');
@@ -44,10 +50,36 @@ describe('applyOptionalSyncFields (ROK-2107)', () => {
   it('emits neither key when the adapter returned null (leave prior value)', () => {
     const record = applyOptionalSyncFields(
       {},
-      { professions: null, equipment: null, talents: null },
+      { professions: null, armoryQuests: null, equipment: null, talents: null },
     );
     expect(record).not.toHaveProperty('armoryProfessions');
     expect(record).not.toHaveProperty('professions');
+  });
+});
+
+const QUESTS = {
+  fetchedAt: '2026-11-07T00:00:00.000Z',
+  completed: [7001, 7002],
+};
+
+describe('applyOptionalSyncFields — armoryQuests (ROK-2109 AC4)', () => {
+  it('omits armoryQuests when the adapter returned null (leave prior value)', () => {
+    const record = applyOptionalSyncFields(
+      {},
+      { professions: null, armoryQuests: null, equipment: null, talents: null },
+    );
+    expect(record).not.toHaveProperty('armoryQuests');
+  });
+
+  it('writes the quest payload to armoryQuests for every sync caller', () => {
+    const fields = buildSyncUpdateFieldsFromSync(PROFILE, {
+      professions: null,
+      armoryQuests: QUESTS,
+      equipment: null,
+      talents: null,
+    });
+    expect(fields).toHaveProperty('armoryQuests', QUESTS);
+    expect(fields).not.toHaveProperty('armoryProfessions');
   });
 });
 

@@ -108,6 +108,18 @@ describe('CharacterQuestsSection — summary + quest log', () => {
         expect(screen.getByText('2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total')).toBeInTheDocument();
     });
 
+    it('shows "via Armory" and the completed-list date for an Armory-only character (ROK-2109)', async () => {
+        body = { quests: makeQuests({
+            source: 'blizzard', syncedAt: '2026-11-07T09:00:00.000Z', inProgressSyncedAt: null, inProgress: [],
+            counts: { completedKnown: 2, knownTotal: 377, completedTotal: 120, inProgress: 0 },
+        }) };
+        await renderLoaded();
+        expect(screen.getByText('2 completed · 377 known · via Armory · 7 Nov 2026 · 120 quests total')).toBeInTheDocument();
+        expect(screen.queryByText(/via addon/)).not.toBeInTheDocument();
+        expect(screen.getByText('No quests in progress')).toBeInTheDocument();
+        expect(screen.getByText('The Deadmines · 1/6')).toBeInTheDocument();
+    });
+
     it('lists in-progress quests with Forever Wowhead links and instance tag', async () => {
         await renderLoaded();
         expect(screen.getByRole('heading', { name: 'In progress (2)' })).toBeInTheDocument();

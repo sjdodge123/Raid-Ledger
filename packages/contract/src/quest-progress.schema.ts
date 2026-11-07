@@ -5,8 +5,12 @@ import { z } from 'zod';
  * Per-event, per-player quest pickup/completion status.
  */
 
-/** ROK-1748: where a progress value came from (LedgerLink snapshot or a manual tick). */
-export const QuestProgressSourceSchema = z.enum(['addon', 'manual']);
+/**
+ * ROK-1748: where a progress value came from — LedgerLink snapshot (`addon`),
+ * a manual tick, or the Blizzard Armory `quests/completed` sync (`blizzard`,
+ * ROK-2109).
+ */
+export const QuestProgressSourceSchema = z.enum(['addon', 'manual', 'blizzard']);
 export type QuestProgressSource = z.infer<typeof QuestProgressSourceSchema>;
 
 /** Single quest progress entry (`id: 0` = synthetic addon row, ROK-1748 D9) */

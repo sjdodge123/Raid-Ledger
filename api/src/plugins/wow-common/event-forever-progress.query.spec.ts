@@ -1,6 +1,7 @@
 /**
  * ROK-1748 fix round 1: unit coverage for the Forever progress loader —
- * D8 inactive statuses and the PUT path's single-character snapshot read.
+ * D8 inactive statuses and the PUT path's single-character snapshot read
+ * (ROK-2109: both paths go through `loadForeverQuestSources`).
  */
 import {
   createDrizzleMock,
@@ -12,15 +13,11 @@ import {
   loadForeverEventProgress,
   loadForeverMemberProgress,
 } from './event-forever-progress.query';
-import {
-  loadForeverCharSnapshot,
-  loadForeverCharSnapshots,
-} from './forever-char-snapshot.query';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
-jest.mock('./forever-char-snapshot.query');
-const single = jest.mocked(loadForeverCharSnapshot);
-const batch = jest.mocked(loadForeverCharSnapshots);
+jest.mock('./forever-quest-source.query');
+const sources = jest.mocked(loadForeverQuestSources);
 
 let db: MockDb;
 
@@ -40,8 +37,7 @@ function queueRows(): void {
 beforeEach(() => {
   clearKnownQuestMemo();
   db = createDrizzleMock();
-  single.mockReset().mockResolvedValue(null);
-  batch.mockReset().mockResolvedValue(new Map());
+  sources.mockReset().mockResolvedValue(new Map());
 });
 
 describe('INACTIVE_SIGNUP_STATUSES (D8)', () => {
@@ -55,20 +51,20 @@ describe('INACTIVE_SIGNUP_STATUSES (D8)', () => {
 });
 
 describe('loadForeverMemberProgress', () => {
-  it('reads only the writer’s snapshot via the single-character loader', async () => {
+  it('reads only the writer’s character quest data', async () => {
     queueRows();
     await loadForeverMemberProgress(db as never, 10, 1);
-    expect(single).toHaveBeenCalledWith(db, 'char-1');
-    expect(batch).not.toHaveBeenCalled();
+    expect(sources).toHaveBeenCalledTimes(1);
+    expect(sources).toHaveBeenCalledWith(db, ['char-1']);
   });
 });
 
 describe('loadForeverEventProgress', () => {
-  it('reads every member’s snapshot via the batch loader', async () => {
+  it('reads every member’s quest data in one batched load', async () => {
     queueRows();
     await loadForeverEventProgress(db as never, 10);
-    expect(batch).toHaveBeenCalledWith(db, ['char-1']);
-    expect(single).not.toHaveBeenCalled();
+    expect(sources).toHaveBeenCalledTimes(1);
+    expect(sources).toHaveBeenCalledWith(db, ['char-1']);
   });
 
   it('memoises the known-quest read across calls', async () => {
