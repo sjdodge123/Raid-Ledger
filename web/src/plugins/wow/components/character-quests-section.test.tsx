@@ -116,7 +116,8 @@ describe('CharacterQuestsSection — summary + quest log', () => {
         await renderLoaded();
         expect(screen.getByText('2 completed · 377 known · via Armory · 7 Nov 2026 · 120 quests total')).toBeInTheDocument();
         expect(screen.queryByText(/via addon/)).not.toBeInTheDocument();
-        expect(screen.getByText('The Deadmines')).toBeInTheDocument();
+        expect(screen.getByText('No quests in progress')).toBeInTheDocument();
+        expect(screen.getByText('The Deadmines · 1/6')).toBeInTheDocument();
     });
 
     it('lists in-progress quests with Forever Wowhead links and instance tag', async () => {
