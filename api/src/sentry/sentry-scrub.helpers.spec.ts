@@ -1,4 +1,5 @@
 import { REDACTED, scrubSecrets, scrubString } from './sentry-scrub.helpers';
+import { scrubLogContent } from '../logs/logs-scrub.patterns';
 
 const SECRET = 'S3CR3T-VALUE';
 
@@ -71,6 +72,30 @@ describe('scrubSecrets', () => {
       ['code', REDACTED],
       ['scope', 'openid'],
     ]);
+  });
+
+  it("redacts a ['key', value] query pair and a { key } request param (ROK-2117)", () => {
+    const event = {
+      request: {
+        query_string: [
+          ['key', SECRET],
+          ['appid', '440'],
+        ],
+        data: { key: SECRET, title: 'Hades' },
+      },
+    };
+    scrubSecrets(event);
+    expect(event.request.query_string).toEqual([
+      ['key', REDACTED],
+      ['appid', '440'],
+    ]);
+    expect(event.request.data).toEqual({ key: REDACTED, title: 'Hades' });
+  });
+
+  it('keeps a `key` field outside the request (ROK-2117)', () => {
+    const event = { extra: { key: 'forever-raid-progress' } };
+    scrubSecrets(event);
+    expect(event.extra.key).toBe('forever-raid-progress');
   });
 
   it('keeps triage codes outside the request (Discord / Postgres `code`)', () => {
@@ -300,5 +325,91 @@ describe('ROK-1955 companion device secrets', () => {
       extra: { deviceCode: 'abc', user_code: 'BCDFGHJK' },
     });
     expect(event.extra).toEqual({ deviceCode: REDACTED, user_code: REDACTED });
+  });
+});
+
+describe('ROK-2117 `?key=` API keys (ITAD, Steam, Gemini)', () => {
+  it('redacts the ITAD breadcrumb http.query, keeps appid', () => {
+    const event = scrubSecrets({
+      breadcrumbs: [
+        {
+          category: 'http',
+          data: {
+            url: 'https://api.isthereanydeal.com/games/lookup/v1',
+            'http.query': `?key=${SECRET}&appid=440`,
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(event)).not.toContain(SECRET);
+    expect(event.breadcrumbs[0]?.data['http.query']).toBe(
+      `?key=${REDACTED}&appid=440`,
+    );
+  });
+
+  it('redacts a Steam URL key, keeps steamid', () => {
+    expect(
+      scrubString(`https://api.steampowered.com/x?key=${SECRET}&steamid=1`),
+    ).toBe(`https://api.steampowered.com/x?key=${REDACTED}&steamid=1`);
+  });
+
+  it('redacts a Gemini generateContent key', () => {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/m';
+    expect(scrubString(`POST ${url}:generateContent?key=${SECRET}`)).toBe(
+      `POST ${url}:generateContent?key=${REDACTED}`,
+    );
+  });
+
+  it.each(['api_key', 'apikey', 'api-key', 'API_KEY', 'key'])(
+    'redacts the %s query param',
+    (name) => {
+      expect(scrubString(`/x?a=1&${name}=${SECRET}&b=2`)).toBe(
+        `/x?a=1&${name}=${REDACTED}&b=2`,
+      );
+    },
+  );
+
+  it('redacts ?key= in a span description and its data', () => {
+    const url = `https://api.steampowered.com/x?key=${SECRET}`;
+    const event = scrubSecrets({
+      spans: [{ description: `GET ${url}`, data: { 'url.full': url } }],
+    });
+    expect(JSON.stringify(event)).not.toContain(SECRET);
+  });
+
+  it.each(['?monkey=1', '?turkey=2&sort=key', '?sort=key', '/keys?keyword=x'])(
+    'leaves %s alone',
+    (query) => {
+      expect(scrubString(query)).toBe(query);
+    },
+  );
+
+  it.each(['key', 'apiKey', 'api_key', 'x-api-key'])(
+    'redacts the JSON "%s" value',
+    (name) => {
+      expect(scrubString(`said {"${name}":"${SECRET}","ok":1}`)).toBe(
+        `said {"${name}":"${REDACTED}","ok":1}`,
+      );
+    },
+  );
+});
+
+/** Inputs both scrubbers must redact — the admin-log scrubber already did. */
+const KEY_PARITY_INPUTS: ReadonlyArray<string> = [
+  `GET https://api.isthereanydeal.com/games/lookup/v1?key=${SECRET}&appid=440`,
+  `GET https://api.steampowered.com/x?key=${SECRET}&steamid=1`,
+  `POST https://generativelanguage.googleapis.com/v1beta/models/m:generateContent?key=${SECRET}`,
+  `GET /x?a=1&api_key=${SECRET}`,
+  `GET /x?apikey=${SECRET}&b=2`,
+];
+
+describe('ROK-2117 parity with the admin-log scrubber (logs-scrub.patterns)', () => {
+  it.each(KEY_PARITY_INPUTS)('both scrubbers redact %s', (input) => {
+    const fromLogs = scrubLogContent(input);
+    const fromSentry = scrubString(input);
+    expect(fromLogs).not.toContain(SECRET);
+    expect(fromSentry).not.toContain(SECRET);
+    // Same shape: only the value differs ([REDACTED] vs [redacted]).
+    expect(fromSentry.toLowerCase()).toBe(fromLogs.toLowerCase());
   });
 });

@@ -92,11 +92,16 @@ async function testOAuthToken(
   }
 }
 
-/** Test ITAD API key by doing a lookup for TF2 (appid 440). */
+/**
+ * Test ITAD API key by doing a lookup for TF2 (appid 440). The key goes in
+ * the `ITAD-API-Key` header, never the URL, so it stays out of Sentry fetch
+ * breadcrumbs (ROK-2117).
+ */
 export async function testItadApiKey(apiKey: string): Promise<TestResult> {
   try {
     const response = await fetch(
-      `https://api.isthereanydeal.com/games/lookup/v1?key=${encodeURIComponent(apiKey)}&appid=440`,
+      'https://api.isthereanydeal.com/games/lookup/v1?appid=440',
+      { headers: { 'ITAD-API-Key': apiKey } },
     );
 
     if (!response.ok) {

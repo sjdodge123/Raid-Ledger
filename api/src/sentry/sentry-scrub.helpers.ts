@@ -14,17 +14,23 @@
  *   request URL). Elsewhere `code` is a Discord / Postgres error code that
  *   triage needs.
  * - Every string (URLs, query strings, messages, exception values) loses its
- *   secret query params and JSON-ish `"…token": "…"` values.
+ *   secret query params (incl. `?key=` API keys, ROK-2117) and JSON-ish
+ *   `"…token": "…"` / `"apiKey": "…"` values.
  */
 export const REDACTED = '[redacted]';
 
 const SECRET_KEY =
   /token|secret|credential|authorization|code_verifier|password|cookie|api[-_]?key|device_?code|user_?code/i;
-const REQUEST_ONLY_KEYS = new Set(['code', 'state']);
+// ROK-2117: `key` is an API key in a request (query pairs, `{ key }` params),
+// but too generic to redact everywhere (hub widget ids, sort keys).
+const REQUEST_ONLY_KEYS = new Set(['code', 'state', 'key']);
+// ROK-2117: ITAD, Steam and Gemini send their API key as `?key=` (also
+// `api_key` / `apikey` / `api-key`). The `([?&#]|^)` anchor keeps `monkey=`
+// and `turkey=` out. Parity with `logs-scrub.patterns.ts` is pinned in the spec.
 const QUERY_SECRET =
-  /([?&#]|^)((?:code|state|[a-z_]*token|code_verifier|client_secret|password)=)[^&#\s"']*/gi;
+  /([?&#]|^)((?:code|state|[a-z_]*token|code_verifier|client_secret|password|(?:api[-_]?)?key)=)[^&#\s"']*/gi;
 const JSON_SECRET =
-  /("(?:[a-z_]*token|code_verifier|client_secret|password|secret|device_?code|user_?code)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
+  /("(?:[a-z_]*token|code_verifier|client_secret|password|secret|device_?code|user_?code|(?:x-)?(?:api[-_]?)?key)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
 // ROK-1750: a private poll's share token rides the PATH, not the query.
 // ROK-1599: so does the ICS subscribe-link token (`/cal/u/<token>.ics`).
 const PATH_SECRET =

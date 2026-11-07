@@ -92,7 +92,8 @@ describe('itadPost', () => {
 
     const [url, options] = mockFetch.mock.calls[0];
     expect(url).toContain('/lookup/shop/61/id/v1');
-    expect(url).toContain('key=test-key');
+    expect(url).not.toContain('key=');
+    expect(options.headers['ITAD-API-Key']).toBe('test-key');
     expect(options.method).toBe('POST');
     expect(options.headers['Content-Type']).toBe('application/json');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
@@ -593,5 +594,52 @@ describe('ITAD final attempt', () => {
 
     expect(offsets).toEqual(attemptOffsets);
     expect(pending).toEqual({ settled: true, value: null });
+  });
+});
+
+// ROK-2117: a `?key=` URL lands verbatim in Sentry's fetch breadcrumbs, so the
+// ITAD API key travels only in the `ITAD-API-Key` header ITAD documents.
+describe('ITAD API key transport (ROK-2117)', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('itadFetch sends the key as ITAD-API-Key and keeps it out of the URL', async () => {
+    mockFetch.mockResolvedValueOnce(res(200, { found: true }));
+
+    await runFast(() =>
+      itadFetch('/games/lookup/v1', { key: 'secret-key', appid: '440' }),
+    );
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).not.toContain('key=');
+    expect(url).not.toContain('secret-key');
+    expect(url).toContain('appid=440');
+    expect(options.headers['ITAD-API-Key']).toBe('secret-key');
+    expect(options.headers['User-Agent']).toContain('RaidLedger');
+  });
+
+  it('itadPost sends the key as ITAD-API-Key and keeps the other params', async () => {
+    mockFetch.mockResolvedValueOnce(res(200, {}));
+
+    await runFast(() =>
+      itadPost('/lookup/shop/61/id/v1', { key: 'secret-key', shops: '61' }, []),
+    );
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).not.toContain('key=');
+    expect(url).not.toContain('secret-key');
+    expect(url).toContain('shops=61');
+    expect(options.headers['ITAD-API-Key']).toBe('secret-key');
+  });
+
+  it('omits the header and a dangling query when no key is given', async () => {
+    mockFetch.mockResolvedValueOnce(res(200, {}));
+
+    await runFast(() => itadFetch('/games/info/v2', {}));
+
+    const [url, options] = mockFetch.mock.calls[0];
+    expect(url).toMatch(/\/games\/info\/v2$/);
+    expect(options.headers).not.toHaveProperty('ITAD-API-Key');
   });
 });
