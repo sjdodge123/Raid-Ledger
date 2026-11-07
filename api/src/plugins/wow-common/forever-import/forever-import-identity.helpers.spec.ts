@@ -7,14 +7,17 @@ import {
   ImportWowCharacterSchema,
   type ImportWowCharacterInput,
 } from '@raid-ledger/contract';
-import { createDrizzleMock } from '../common/testing/drizzle-mock';
-import type * as schema from '../drizzle/schema';
-import type { EnrichedProfile } from './characters-sync.helpers';
+import { createDrizzleMock } from '../../../common/testing/drizzle-mock';
+import type * as schema from '../../../drizzle/schema';
+import type { EnrichedProfile } from '../../../characters/characters-sync.helpers';
 import {
   importIdentityFields,
   mergeIntoOwnForeverRow,
-} from './characters-forever-import.helpers';
-import { buildImportInsertValues } from './characters-import.helpers';
+} from './forever-import-identity.helpers';
+import { buildImportInsertValues } from '../../../characters/characters-import.helpers';
+import { WowForeverIdentityProvider } from '../wow-forever-identity.provider';
+
+const identity = new WowForeverIdentityProvider({ get: jest.fn() });
 
 type Row = typeof schema.characters.$inferSelect;
 
@@ -122,7 +125,15 @@ describe('importIdentityFields (ROK-1722)', () => {
 
 describe('buildImportInsertValues — Forever (ROK-1722)', () => {
   it('inserts realm null, the ruleset and game_variant wow_forever', () => {
-    const values = buildImportInsertValues(7, 3, profile, dto(), noSync, true);
+    const values = buildImportInsertValues(
+      7,
+      3,
+      profile,
+      dto(),
+      noSync,
+      true,
+      identity,
+    );
     expect(values).toMatchObject({
       userId: 7,
       gameId: 3,

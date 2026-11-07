@@ -253,7 +253,6 @@ describe('CharactersService catch paths hand the error to the provider', () => {
       db as never,
       makeRegistry(provider) as never,
       {} as never,
-      { get: jest.fn().mockResolvedValue(null) } as never,
     );
   }
 

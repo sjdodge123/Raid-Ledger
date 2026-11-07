@@ -14,18 +14,22 @@ import {
   type CharacterDto,
   type ImportWowCharacterDto,
 } from '@raid-ledger/contract';
-import * as schema from '../drizzle/schema';
-import { foreverLabel } from '../plugins/wow-common/wow-forever-identity.helpers';
+import * as schema from '../../../drizzle/schema';
+import { foreverLabel } from '../wow-forever-identity.helpers';
+import type {
+  ExternalImportCtx,
+  ExternalImportFields,
+} from '../../plugin-host/character-external-import.types';
 import {
   demoteExistingMain,
   mapCharacterToDto,
-} from './characters-mapping.helpers';
+} from '../../../characters/characters-mapping.helpers';
 import {
   buildSyncUpdateFieldsFromSync,
   type EnrichedProfile,
   type OptionalSyncFields,
-} from './characters-sync.helpers';
-import { defined } from '../common/defined.helpers';
+} from '../../../characters/characters-sync.helpers';
+import { defined } from '../../../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };
@@ -33,12 +37,7 @@ type Profile = EnrichedProfile['profile'];
 type CharacterRow = typeof schema.characters.$inferSelect;
 
 /** Identity columns of an imported row. Forever adds ruleset + externalId. */
-export interface ImportIdentityFields {
-  name: string;
-  realm: string | null;
-  ruleset?: string;
-  externalId?: string;
-}
+export type ImportIdentityFields = ExternalImportFields;
 
 /** True when the import targets a realmless WoW: Forever character. */
 export function isForeverImport(dto: ImportWowCharacterDto): boolean {
@@ -142,14 +141,7 @@ export async function mergeForeverRow(
 }
 
 /** Everything the Forever import transaction step needs. */
-export interface ForeverImportCtx {
-  userId: number;
-  gameId: number;
-  profile: Profile;
-  dto: ImportWowCharacterDto;
-  sync: OptionalSyncFields;
-  logger: Logger;
-}
+export type ForeverImportCtx = ExternalImportCtx;
 
 /**
  * Forever import step inside the import transaction: 409 when another player
