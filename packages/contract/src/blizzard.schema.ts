@@ -185,9 +185,11 @@ export type ForeverProbeStateDto = z.infer<typeof ForeverProbeStateSchema>;
 /**
  * A probe path: Classic `<realmOrRuleset>/<name>` OR a realmless Forever slug
  * `<name-surname>` (ROK-2102). A dot-only name (`.`/`..`) would resolve to
- * another Blizzard path, so it is rejected.
+ * another Blizzard path, so it is rejected. Letters are Unicode (`\p{L}`, `u`
+ * flag — ROK-2104) so an accented realmless name like `Zoë-Ashbringer` is
+ * expressible; the probe percent-encodes each segment before calling Blizzard.
  */
-export const FOREVER_PROBE_PATH_RE = /^(?:[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}|[a-z0-9-]{1,64})$/i;
+export const FOREVER_PROBE_PATH_RE = /^(?:[\p{L}\p{N}-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}|[\p{L}\p{N}-]{1,64})$/iu;
 
 /** Admin PUT body: extra candidate prefixes + optional character / guild probe paths. */
 export const ForeverProbeConfigSchema = z.object({

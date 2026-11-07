@@ -34,6 +34,12 @@ describe('Forever URL builders (ROK-2102)', () => {
     );
   });
 
+  it('percent-encodes an accented realmless slug (ROK-2104)', () => {
+    expect(buildProfileUrl('Zoë-Ashbringer', 'forever', 'us')).toBe(
+      `${API}/profile/wow/character/zo%C3%AB-ashbringer${NS}`,
+    );
+  });
+
   it('keeps the two-segment Classic profile URL unchanged', () => {
     expect(buildProfileUrl('Dreamscythe/Thrall', 'forever', 'us')).toBe(
       `${API}/profile/wow/character/dreamscythe/thrall${NS}`,
