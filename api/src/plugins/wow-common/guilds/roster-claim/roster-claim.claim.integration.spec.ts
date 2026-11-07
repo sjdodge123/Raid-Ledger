@@ -12,6 +12,11 @@ import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { findLinkedMemberRows } from '../guild-membership.helpers';
+import {
+  claimWithin,
+  readMember,
+  ROSTER_ROW_CHANGED,
+} from './roster-claim.tx';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const SNAPSHOT = new Date('2026-11-01T00:00:00Z');
@@ -349,5 +354,32 @@ describe('roster claim refusals (ROK-2128)', () => {
       .post(`/plugins/wow/roster-claim/members/${memberId('Gone Away')}/claim`)
       .send(BODY);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('roster claim: locked re-check of the read (ROK-2128 review 1)', () => {
+  it('409s when the row is renamed between the read and the locks; nothing is inserted', async () => {
+    const picker = await makeUser('l2stale');
+    const id = await insertMember(guildId, {
+      characterName: 'Stale Read',
+      guid: 'G-L2-STALE',
+    });
+    const stale = await readMember(testApp.db, id);
+    // A LedgerLink apply / Blizzard sync renames the row before the claim locks.
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ characterName: 'Fresh Name' })
+      .where(eq(schema.guildMembers.id, id));
+    const run = testApp.db.transaction((tx) =>
+      claimWithin(tx, stale, {
+        userId: picker.id,
+        memberId: id,
+        ruleset: 'normal',
+        isMain: false,
+      }),
+    );
+    await expect(run).rejects.toThrow(ROSTER_ROW_CHANGED);
+    expect(await charactersNamed('Stale Read')).toEqual([]);
+    expect(await charactersNamed('Fresh Name')).toEqual([]);
   });
 });

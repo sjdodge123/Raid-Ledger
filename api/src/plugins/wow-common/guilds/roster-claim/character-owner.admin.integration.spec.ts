@@ -229,6 +229,28 @@ async function expectReassignTrail(
     toUserId: toId,
     name: 'Ashen Vale',
   });
+  // Review 1 MAJOR: a fresh GUID claim for the NEW owner, so a ROK-1794
+  // member grant made for the old owner's link is not inherited.
+  const guidClaims = await testApp.db
+    .select()
+    .from(schema.activityLog)
+    .where(
+      and(
+        eq(schema.activityLog.entityType, 'addon_guid'),
+        eq(schema.activityLog.action, 'addon_guid_claimed'),
+        eq(schema.activityLog.entityId, toId),
+      ),
+    );
+  expect(guidClaims.map((r) => [r.actorId, r.metadata])).toEqual([
+    [
+      admin.id,
+      expect.objectContaining({
+        characterId,
+        guid: 'G-L3-ASHEN',
+        via: 'admin_reassign',
+      }),
+    ],
+  ]);
   expect(await systemMessages(fromId)).toContain(
     'An admin moved Ashen Vale to l3to.',
   );
@@ -306,6 +328,29 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
       404,
     );
     expect((await reassign(admin.token, id, { userId: 'x' })).status).toBe(400);
+  });
+
+  it('404s a character of a non-WoW game and leaves it with its owner', async () => {
+    const owner = await makeUser('l3otherfrom');
+    const to = await makeUser('l3otherto');
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Not WoW L3', slug: 'rok-2128-not-wow' })
+        .returning({ id: schema.games.id }),
+      'non-wow game',
+    );
+    const [ch] = nonEmpty(
+      await testApp.db
+        .insert(schema.characters)
+        .values({ userId: owner.id, gameId: game.id, name: 'Viking' })
+        .returning({ id: schema.characters.id }),
+      'non-wow character',
+    );
+    const res = await reassign(admin.token, ch.id, { userId: to.id });
+    expect(res.status).toBe(404);
+    const [row] = nonEmpty(await characterById(ch.id), 'unmoved');
+    expect(row.userId).toBe(owner.id);
   });
 });
 
