@@ -116,17 +116,18 @@ describe('summariseAccountSummary (AC3)', () => {
   });
 });
 
+const TOKEN_BODY = {
+  access_token: 'AT-secret-value-123',
+  token_type: 'bearer',
+  expires_in: 86399,
+  scope: 'wow.profile',
+  refresh_token: 'RT-secret-value-456',
+  id_token: 'IDT-secret-value-789',
+  sub: '900777',
+};
+
 describe('summariseTokenResponse (AC4)', () => {
-  const body = {
-    access_token: 'AT-secret-value-123',
-    token_type: 'bearer',
-    expires_in: 86399,
-    scope: 'wow.profile',
-    refresh_token: 'RT-secret-value-456',
-    id_token: 'IDT-secret-value-789',
-    sub: '900777',
-  };
-  const result = summariseTokenResponse(body, META);
+  const result = summariseTokenResponse(TOKEN_BODY, META);
 
   it('records key names, expiry, scope and issued-token booleans', () => {
     expect(result).toEqual({
