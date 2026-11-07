@@ -9,6 +9,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
+import { MANUAL_PROFESSIONS_WIN } from '../../../characters/characters-professions.helpers';
 import { WowFactsService } from './wow-facts.service';
 
 const SNAP = new Date('2026-11-04T20:00:00.000Z');
@@ -243,5 +244,104 @@ describe('WowFactsService.resolveFacts — CharacterRow Armory row (real DB)', (
       asOf: new Date(NOW.getTime() - 3600 * 1000),
     });
     expect(got.facts.get('armory')?.class?.source).toBe('blizzard');
+  });
+});
+
+/** ROK-2107 — a realmless Forever Armory row with a hand entry and/or an Armory value. */
+const PROF_SYNCED = new Date(NOW.getTime() - 2 * 3600 * 1000);
+const profs = (name: string, skillLevel: number) => ({
+  primary: [
+    {
+      id: 164,
+      name,
+      slug: name.toLowerCase(),
+      skillLevel,
+      maxSkillLevel: 300,
+      tiers: [],
+    },
+  ],
+  secondary: [],
+  syncedAt: PROF_SYNCED.toISOString(),
+});
+const MANUAL_PROFS = profs('Blacksmithing', 150);
+const ARMORY_PROFS = profs('Mining', 275);
+
+async function seedProfChar(tag: string, manual: unknown): Promise<string> {
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `facts-prof-${tag}`,
+        username: `prof-${tag}`,
+        role: 'member',
+      })
+      .returning(),
+    `${tag} user`,
+  );
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId: user.id,
+        gameId: testApp.seed.game.id,
+        name: `Prof${tag}`,
+        level: 60,
+        externalId: `prof-${tag}`,
+        lastSyncedAt: PROF_SYNCED,
+        gameVariant: 'wow_forever',
+        ruleset: 'normal',
+        professions: manual,
+        armoryProfessions: ARMORY_PROFS,
+      })
+      .returning(),
+    `${tag} character`,
+  );
+  return char.id;
+}
+
+describe('WowFactsService.resolveFacts — professions provenance (ROK-2107, real DB)', () => {
+  const ids: Record<'both' | 'armoryOnly', string> = {
+    both: '',
+    armoryOnly: '',
+  };
+  const resolve = async (key: 'both' | 'armoryOnly') =>
+    (
+      await facts.resolveFacts(
+        [{ key, memberId: null, characterId: ids[key] }],
+        NOW,
+      )
+    ).facts.get(key)?.professions;
+  const expectedBoth = MANUAL_PROFESSIONS_WIN
+    ? { value: MANUAL_PROFS, source: 'manual', asOf: null }
+    : { value: ARMORY_PROFS, source: 'blizzard', asOf: PROF_SYNCED };
+  const armoryFact = {
+    value: ARMORY_PROFS,
+    source: 'blizzard',
+    asOf: PROF_SYNCED,
+  };
+
+  beforeAll(async () => {
+    ids.both = await seedProfChar('both', MANUAL_PROFS);
+    ids.armoryOnly = await seedProfChar('armory', null);
+  });
+
+  afterEach(() =>
+    testApp.app.get(SettingsService).set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'true'),
+  );
+
+  it('seam live: both values set resolve per MANUAL_PROFESSIONS_WIN', async () => {
+    expect(await resolve('both')).toEqual(expectedBoth);
+  });
+
+  it('seam live: an Armory-only row resolves to the blizzard value', async () => {
+    expect(await resolve('armoryOnly')).toEqual(armoryFact);
+  });
+
+  it('Armory switch off: the row source still serves both cases (F4)', async () => {
+    await testApp.app
+      .get(SettingsService)
+      .set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'false');
+    expect(await resolve('both')).toEqual(expectedBoth);
+    expect(await resolve('armoryOnly')).toEqual(armoryFact);
   });
 });

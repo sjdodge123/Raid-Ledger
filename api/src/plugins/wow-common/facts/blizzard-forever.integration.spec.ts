@@ -53,6 +53,9 @@ const PROFESSIONS = {
   syncedAt: SYNCED.toISOString(),
 };
 
+/** ROK-2107: what the Armory sync wrote (sync-only column). */
+const ARMORY_PROFESSIONS = { ...PROFESSIONS, primary: [], secondary: [] };
+
 let testApp: TestApp;
 let facts: WowFactsService;
 let settings: SettingsService;
@@ -113,6 +116,7 @@ async function seedAll(): Promise<void> {
     itemLevel: 64,
     equipment: EQUIPMENT,
     professions: PROFESSIONS,
+    armoryProfessions: ARMORY_PROFESSIONS,
     addonGuid: 'Player-7-0000BF01',
   });
   ids.manual = await seedChar('manual', {
@@ -175,6 +179,12 @@ describe('BlizzardForeverFactSource.load (real DB)', () => {
     expect([...got.keys()]).toEqual(['armory']);
     expect(got.get('armory')?.level).toEqual({
       value: 60,
+      source: 'blizzard',
+      asOf: SYNCED,
+    });
+    // ROK-2107 (supersedes ROK-1920 F11): professions from armory_professions.
+    expect(got.get('armory')?.professions).toEqual({
+      value: ARMORY_PROFESSIONS,
       source: 'blizzard',
       asOf: SYNCED,
     });
