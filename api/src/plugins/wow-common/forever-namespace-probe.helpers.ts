@@ -13,11 +13,10 @@ import {
   buildProfileDetailUrls,
   buildRulesetUrl,
   dedupeTargets,
-  isKeysOnlyEndpoint,
   profileAnswered,
-  summariseKeys,
   type ProbeTarget,
 } from './forever-namespace-probe.forever';
+import * as staticProbe from './forever-namespace-probe.static';
 
 /** Candidate prefixes. `classic` is a known-200 control, never a bare match (D3). */
 export const DEFAULT_FOREVER_CANDIDATES: readonly string[] = [
@@ -257,8 +256,8 @@ function collect(run: ProbeRun, task: ProbeTask, out: ProbeOutcome): void {
     const raceName = hasSkyborne(out.body);
     if (raceName)
       run.matches.push({ prefix, region, raceName, signal: 'skyborne' });
-  } else if (isKeysOnlyEndpoint(endpoint)) {
-    run.shapes[key] = summariseKeys(out.body);
+  } else if (staticProbe.hasCustomShape(endpoint)) {
+    run.shapes[key] = staticProbe.summariseCustomShape(endpoint, out.body);
   } else {
     const shape = summariseShape(out.body);
     run.shapes[key] = shape;
@@ -296,7 +295,8 @@ function makePhase(
 
 /**
  * Probe every (candidate, region, endpoint); then, per deduped match, the
- * profile + guild roster; then profile sub-resources where the profile is 200.
+ * profile + guild roster; then the static journal / class indexes (ROK-2103);
+ * then profile sub-resources where the profile is 200.
  */
 export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
   const { characterPath, guildPath } = input;
@@ -314,6 +314,9 @@ export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
     targets.flatMap((t) =>
       toTasks(t, buildFollowUpUrls(t, characterPath, guildPath)),
     ),
+  );
+  await phase(
+    targets.flatMap((t) => toTasks(t, staticProbe.buildStaticUrls(t))),
   );
   if (!characterPath) return run;
   const answered = targets.filter((t) => profileAnswered(run.cells, t));
