@@ -166,7 +166,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const identitySource = editingCharacter ?? prefill;
     const mutations = useCharacterModalMutations();
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
-    const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
+    const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'roster'>('manual');
     const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
@@ -230,7 +230,7 @@ function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiv
                     error={s.errors.game} />
             )}
             {!s.isEditing && currentSlug && (
-                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars }} />
+                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, gameId: s.effectiveGameId, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars }} />
             )}
             {s.activeTab === 'manual' && (
                 <>

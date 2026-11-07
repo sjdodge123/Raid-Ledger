@@ -112,7 +112,7 @@ function useCharacterStepState(preselectedGame: GameRegistryDto) {
     const createMutation = useCreateCharacter();
     const deleteMutation = useDeleteCharacter();
     const { data: myCharsData } = useMyCharacters(preselectedGame.id);
-    const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
+    const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'roster'>('manual');
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
     const [errors, setErrors] = useState<StepErrors>({});
     const existingChars = myCharsData?.data ?? [];
@@ -155,7 +155,7 @@ function CharacterStepForm({ s, identity, preselectedGame, onRegisterValidator, 
 }) {
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
-            {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
+            {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, gameId: preselectedGame.id, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
                     {identity ? <identity.Fields value={identityValueOf(identity, s.form)} onChange={(v) => s.updateField('identity', v)} errors={s.errors.identity} /> : (
