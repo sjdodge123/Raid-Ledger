@@ -31,11 +31,26 @@ export interface CharacterParams {
   baseUrl: string;
 }
 
+/**
+ * A path segment that is empty or dots only survives percent-encoding
+ * (`encodeURIComponent('..') === '..'`) and fetch normalises it to another
+ * Blizzard path with the app's token (tech-debt 4082; 2904 covered slashes).
+ */
+function assertNotDotSegment(segment: string, label: string): void {
+  if (segment.length === 0 || /^\.+$/.test(segment)) {
+    throw new BadRequestException(`${label} is not a valid path segment`);
+  }
+}
+
 /** Slugify + percent-encode a realm name into a URL path segment. */
 function buildRealmSlug(realm: string): string {
-  return encodeURIComponent(
-    realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim(),
-  );
+  const slug = realm
+    .toLowerCase()
+    .replace(/'/g, '')
+    .replace(/\s+/g, '-')
+    .trim();
+  assertNotDotSegment(slug, 'Realm');
+  return encodeURIComponent(slug);
 }
 
 /** Realmless Forever slug; a malformed stored name maps to a 400. */
@@ -80,6 +95,7 @@ export function buildCharacterParams(
     };
   }
   const realmSlug = buildRealmSlug(realm);
+  assertNotDotSegment(name.toLowerCase(), 'Character name');
   const charName = encodeURIComponent(name.toLowerCase());
   const characterPath = `${realmSlug}/${charName}`;
   return { characterPath, realmSlug, charName, namespace, baseUrl };
