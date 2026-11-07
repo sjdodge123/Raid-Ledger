@@ -6,6 +6,8 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
 import { SettingsService } from '../settings/settings.service';
+import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
+import { WowForeverIdentityProvider } from '../plugins/wow-common/wow-forever-identity.provider';
 
 /** Single `.from().where().limit()` select returning `rows`. */
 function selectOnce(rows: unknown[]) {
@@ -381,11 +383,19 @@ describe('CharactersService — operations', () => {
 
     it('403s a Forever import while the Armory kill switch is off (ROK-1722)', async () => {
       const settings = { get: jest.fn().mockResolvedValue('false') };
+      const identity = new WowForeverIdentityProvider(settings);
+      const registry = {
+        getAdaptersForExtensionPoint: jest.fn((point: string) =>
+          point === EXTENSION_POINTS.CHARACTER_IDENTITY
+            ? new Map([['world-of-warcraft-forever', identity]])
+            : new Map(),
+        ),
+        isActive: jest.fn().mockReturnValue(true),
+      };
       const off = new CharactersService(
         mockDb as never,
-        mockPluginRegistry as never,
+        registry as never,
         {} as never,
-        settings as never,
       );
       await expect(
         off.importExternal(1, {
@@ -399,9 +409,9 @@ describe('CharactersService — operations', () => {
       ).rejects.toThrow(
         new ForbiddenException('Armory import for WoW: Forever is turned off'),
       );
-      expect(
-        mockPluginRegistry.getAdaptersForExtensionPoint,
-      ).not.toHaveBeenCalled();
+      expect(registry.getAdaptersForExtensionPoint).not.toHaveBeenCalledWith(
+        EXTENSION_POINTS.CHARACTER_SYNC,
+      );
       expect(mockDb.transaction).not.toHaveBeenCalled();
     });
 

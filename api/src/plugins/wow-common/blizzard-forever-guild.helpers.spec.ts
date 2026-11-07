@@ -85,10 +85,21 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
     expect(roster).toEqual(MAPPED_ROSTER);
   });
 
-  it('percent-encodes the slug so it cannot change the path', async () => {
+  it.each(['a/../b', '..', '.', 'a b', 'x', 'guild?x=1'])(
+    'rejects slug %p with a 400 before any request',
+    async (slug) => {
+      stubFetch(200, { members: [] });
+      await expect(
+        fetchForeverGuildRoster(slug, 'eu', 'tok', logger),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('lowercases and percent-encodes an accepted slug', async () => {
     stubFetch(200, { members: [] });
-    await fetchForeverGuildRoster('a/../b', 'eu', 'tok', logger);
-    expect(requestedUrl()).toContain('/data/wow/guild/a%2F..%2Fb/roster?');
+    await fetchForeverGuildRoster('Zoë-Guild', 'eu', 'tok', logger);
+    expect(requestedUrl()).toContain('/data/wow/guild/zo%C3%AB-guild/roster?');
   });
 
   it('returns null on 404 and warns', async () => {
@@ -101,7 +112,7 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
   it('throws the 502 namespace refusal on 403', async () => {
     stubFetch(403, {});
     const err: unknown = await fetchForeverGuildRoster(
-      'x',
+      'raid-ledger',
       'us',
       'tok',
       logger,
@@ -113,7 +124,7 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
   it('throws a non-refusal 502 on 500', async () => {
     stubFetch(500, {});
     const err: unknown = await fetchForeverGuildRoster(
-      'x',
+      'raid-ledger',
       'us',
       'tok',
       logger,

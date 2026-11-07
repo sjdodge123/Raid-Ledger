@@ -64,11 +64,16 @@ describe('wow_forever variant (ROK-1563)', () => {
     expect(variantToNamespacePrefix('wow_forever')).not.toBeNull();
   });
 
-  it('builds static-/dynamic-/profile- prefixes for the Forever namespace', () => {
+  it('resolves the stored alias to the forever namespaces by default (ROK-2102)', () => {
     expect(getNamespacePrefixes(WOW_FOREVER_NAMESPACE_PREFIX)).toEqual({
-      static: 'static-classicforever',
-      dynamic: 'dynamic-classicforever',
-      profile: 'profile-classicforever',
+      static: 'static-forever',
+      dynamic: 'dynamic-forever',
+      profile: 'profile-forever',
+    });
+    expect(getNamespacePrefixes('classicforever')).toEqual({
+      static: 'static-forever',
+      dynamic: 'dynamic-forever',
+      profile: 'profile-forever',
     });
   });
 

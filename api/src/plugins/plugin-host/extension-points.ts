@@ -31,6 +31,7 @@ import type {
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
 import type { GamePresenceEvent } from '../pelican/presence/presence-events';
+import type { CharacterExternalImportHooks } from './character-external-import.types';
 
 /** The character fields a display-equipment resolver may read (ROK-1727). */
 export interface DisplayEquipmentRow {
@@ -187,7 +188,7 @@ export interface AuthProvider {
 export type IdentityDb = PostgresJsDatabase<typeof schema>;
 
 /** Plugin-owned identity rules for MANUAL characters of a game (ROK-1733). */
-export interface CharacterIdentityProvider {
+export interface CharacterIdentityProvider extends CharacterExternalImportHooks {
   readonly gameSlugs: string[];
   /** Owning plugin id — core skips the provider while that plugin is inactive. */
   readonly pluginSlug: string;

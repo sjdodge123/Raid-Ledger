@@ -25,10 +25,10 @@ const hangingFetch: ProbeFetch = (_url, init) =>
   });
 
 describe('buildCandidateList', () => {
-  it('starts from the seven defaults with classic as the control', () => {
+  it('starts from the seven defaults: forever first, classic as the control (ROK-2102)', () => {
     expect(DEFAULT_FOREVER_CANDIDATES).toEqual([
-      'classicforever',
       'forever',
+      'classicforever',
       'classicfe',
       'classic2x',
       'classicplus',
