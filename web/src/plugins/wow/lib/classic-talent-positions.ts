@@ -37,7 +37,7 @@ export const CLASSIC_TALENT_POSITIONS: Record<string, ClassPositionMap> = {
  * Normalize a Blizzard API talent name to a URL slug for matching.
  * "Nature's Grasp" -> "natures-grasp"
  */
-function nameToSlug(name: string): string {
+export function nameToSlug(name: string): string {
     return name
         .toLowerCase()
         .replace(/[':]/g, '')
