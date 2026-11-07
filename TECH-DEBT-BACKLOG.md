@@ -4107,3 +4107,6 @@ Existing entries are left in place; this records their status. Line numbers are 
 - L2867 `api/src/ai/providers/google.helpers.ts:51` Gemini key sent as `?key=` and not redacted — **filed** as ROK-2117 (same root cause as the ITAD `?key=` leak).
 - L3588 rl-infra gc-sweeper `builder_prune` rung — **filed** as ROK-2111.
 - L3617 `rl-infra/docker-compose.yml:156` registry never garbage-collected — **filed** as ROK-2111 (registry retention is in its ruled scope).
+
+### 2026-11-07 — main CI run 42402464751 on fa36c5b06 (surfaced during the evening Lead's prod-pull check)
+- **low** `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.integration.spec.ts:541` — "roster-insights on a 2000-member roster › computes under the timing guard (p95 logged)": `expect(p95).toBeLessThan(1500)` received `1666.08` (integration-test-shard 2/4). Pre-existing flake: fa36c5b06 is web-only, the same spec passed on the four prior main runs; an absolute wall-clock guard on a shared CI runner. It blocked that commit's docker-build (no `:main` image for fa36c5b06). Suggested: assert on query count / plan shape, or make the guard relative to a warm-up baseline, instead of a fixed 1500 ms p95.
