@@ -5,12 +5,14 @@ import { BossDataRefreshService } from './boss-data-refresh.service';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { at } from '../../common/testing/narrow';
+import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
 let mockBossDataRefresh: { refresh: jest.Mock };
 let mockProbe: { run: jest.Mock; runIfInLaunchWindow: jest.Mock };
 let mockItemMeta: { retryDue: jest.Mock };
+let mockRosterJob: { run: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -21,6 +23,7 @@ async function setupEach() {
   };
   mockProbe = { run: jest.fn(), runIfInLaunchWindow: jest.fn() };
   mockItemMeta = { retryDue: jest.fn().mockResolvedValue(0) };
+  mockRosterJob = { run: jest.fn().mockResolvedValue(null) };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -29,6 +32,7 @@ async function setupEach() {
       { provide: BossDataRefreshService, useValue: mockBossDataRefresh },
       { provide: ForeverNamespaceProbeService, useValue: mockProbe },
       { provide: WowItemMetaService, useValue: mockItemMeta },
+      { provide: BlizzardRosterSyncJob, useValue: mockRosterJob },
     ],
   }).compile();
 
@@ -61,7 +65,7 @@ describe('WowCronRegistrar — getCronJobs', () => {
 
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
-    expect(jobs).toHaveLength(5);
+    expect(jobs).toHaveLength(6);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
@@ -84,6 +88,14 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(job?.cronExpression).toBe('0 15 5 * * *');
     await job?.handler();
     expect(mockItemMeta.retryDue).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers the 6-hourly Forever guild roster sync (ROK-1928 C1)', async () => {
+    const job = registrar.getCronJobs()[5];
+    expect(job?.name).toBe('forever-guild-roster-sync');
+    expect(job?.cronExpression).toBe('0 20 */6 * * *');
+    await expect(job?.handler()).resolves.toBeUndefined();
+    expect(mockRosterJob.run).toHaveBeenCalledTimes(1);
   });
 });
 

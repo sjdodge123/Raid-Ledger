@@ -21,6 +21,8 @@ export interface ForeverGuildMember {
   /** Null when the body carries no numeric `playable_class.id`. */
   classId: number | null;
   rank: number;
+  /** Blizzard `character.id`; null when the body carries no numeric id (ROK-1928). */
+  blizzardId: number | null;
 }
 
 /** A Forever guild roster. */
@@ -39,7 +41,7 @@ function numberOrNull(value: unknown): number | null {
 /** Map one raw roster entry (`{ character: {...}, rank }`), or null. */
 function mapMember(entry: unknown): ForeverGuildMember | null {
   if (!isRecord(entry) || !isRecord(entry.character)) return null;
-  const { name, level, playable_class: playableClass } = entry.character;
+  const { name, level, id, playable_class: playableClass } = entry.character;
   const numericLevel = numberOrNull(level);
   const rank = numberOrNull(entry.rank);
   if (typeof name !== 'string' || numericLevel === null || rank === null) {
@@ -48,7 +50,13 @@ function mapMember(entry: unknown): ForeverGuildMember | null {
   const classId = isRecord(playableClass)
     ? numberOrNull(playableClass.id)
     : null;
-  return { name, level: numericLevel, classId, rank };
+  return {
+    name,
+    level: numericLevel,
+    classId,
+    rank,
+    blizzardId: numberOrNull(id),
+  };
 }
 
 /**

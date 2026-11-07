@@ -3,13 +3,15 @@ import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
+import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 
 /**
  * Registers cron jobs for WoW character auto-sync, boss data refresh and the
- * Forever namespace probe (ROK-1716). Only active when the plugin is enabled.
+ * Forever namespace probe (ROK-1716) and the Forever guild roster sync
+ * (ROK-1928). Only active when the plugin is enabled.
  * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
  * ruleset set, game_variant set); manual Forever rows are skipped (ROK-1722).
  */
@@ -23,6 +25,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly bossDataRefresh: BossDataRefreshService,
     private readonly foreverProbe: ForeverNamespaceProbeService,
     private readonly itemMeta: WowItemMetaService,
+    private readonly rosterSync: BlizzardRosterSyncJob,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -38,6 +41,25 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 0 4 * * 0',
         handler: () => this.handleBossDataRefresh(),
       },
+      ...this.foreverProbeJobs(),
+      {
+        name: 'wowhead-item-retry',
+        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
+        cronExpression: '0 15 5 * * *',
+        handler: () => this.itemMeta.retryDue().then(() => undefined),
+      },
+      {
+        name: 'forever-guild-roster-sync',
+        // Every 6h at :20 — Forever guild rosters from Blizzard (ROK-1928 C)
+        cronExpression: '0 20 */6 * * *',
+        handler: () => this.rosterSync.run().then(() => undefined),
+      },
+    ];
+  }
+
+  /** The daily + launch-window Forever namespace probe jobs (ROK-1716 D7). */
+  private foreverProbeJobs(): CronJobDefinition[] {
+    return [
       {
         name: 'forever-namespace-probe',
         // Daily at 5:00 AM (ROK-1716 D7)
@@ -50,12 +72,6 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 30 * * * *',
         handler: async () =>
           throwOnProbeError(await this.foreverProbe.runIfInLaunchWindow()),
-      },
-      {
-        name: 'wowhead-item-retry',
-        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
-        cronExpression: '0 15 5 * * *',
-        handler: () => this.itemMeta.retryDue().then(() => undefined),
       },
     ];
   }

@@ -1,0 +1,3 @@
+ALTER TABLE "guilds" ADD COLUMN "blizzard_roster_synced_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "guilds" ADD COLUMN "blizzard_roster_status" varchar(16);--> statement-breakpoint
+ALTER TABLE "guilds" ADD CONSTRAINT "guilds_blizzard_roster_status_check" CHECK ("guilds"."blizzard_roster_status" IS NULL OR "guilds"."blizzard_roster_status" IN ('ok', 'not_found', 'error', 'skipped_empty'));

@@ -14,13 +14,18 @@ interface FreshnessFooterProps {
     testId?: string;
     /** Optional tooltip on the line (e.g. the absolute export time). */
     title?: string;
+    /**
+     * ROK-1928 D2 — who fed a `roster` fact: "Blizzard" once the hub's last
+     * Blizzard roster sync landed. Ignored for every other source.
+     */
+    rosterVia?: 'Blizzard' | 'LedgerLink';
 }
 
 /** Freshness line for one widget. */
-export function FreshnessFooter({ freshness, testId = 'forever-freshness', title }: FreshnessFooterProps): JSX.Element {
+export function FreshnessFooter({ freshness, testId = 'forever-freshness', title, rosterVia }: FreshnessFooterProps): JSX.Element {
     const asOf = freshness?.asOf ?? null;
     const stale = isStale(asOf);
-    const via = `via ${sourceLabel(freshness?.source ?? 'roster')}`;
+    const via = `via ${sourceLabel(freshness?.source ?? 'roster', rosterVia)}`;
     const when = asOf === null ? '' : ` · as of ${syncedAgo(asOf)}`;
     return (
         <p data-testid={testId} data-stale={stale ? 'true' : 'false'} title={title}

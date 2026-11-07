@@ -7,6 +7,7 @@ import type {
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
 import { titleCaseClass } from './addon-import.binding-name';
+import { adoptGuidlessMembers } from './addon-import-guild.adopt';
 import {
   insertDings,
   levelUps,
@@ -296,6 +297,7 @@ async function upsertMembersLoggingDings(
   seenAt: Date,
 ): Promise<number> {
   const members = dedupeMembers(payload.data.members);
+  await adoptGuidlessMembers(ctx, guildId, members); // ROK-1928 §B3
   const guids = members.map((m) => m.guid);
   const prior = await loadPriorLevels(ctx, guildId, guids);
   const inserted = await upsertMembers(ctx, guildId, payload, seenAt);

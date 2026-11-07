@@ -5,12 +5,15 @@
  */
 import type { JSX, ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { WowRosterInsightsDto } from '@raid-ledger/contract';
+import type { GuildSummary, WowRosterInsightsDto } from '@raid-ledger/contract';
 import { Switch } from '../../../components/ui/switch';
 import { QuietEmpty } from '../../../components/hub/card-bits';
 import { FreshnessFooter } from './freshness-footer';
+import { useRosterVia } from '../hooks/use-guild-blizzard-roster';
 
 interface RosterWidgetShellProps {
+    /** The hub — names the roster source ("via Blizzard" after a Blizzard sync, ROK-1928). */
+    guild: Pick<GuildSummary, 'id' | 'kind'>;
     query: UseQueryResult<WowRosterInsightsDto, Error>;
     mainsOnly: boolean;
     onMainsOnly: (next: boolean) => void;
@@ -28,15 +31,16 @@ export function MainsToggle({ checked, onChange }: { checked: boolean; onChange:
 }
 
 /** Switch + body + freshness footer around one roster-insights query. */
-export function RosterWidgetShell({ query, mainsOnly, onMainsOnly, children }: RosterWidgetShellProps): JSX.Element {
+export function RosterWidgetShell({ guild, query, mainsOnly, onMainsOnly, children }: RosterWidgetShellProps): JSX.Element {
     const { data, isError } = query;
+    const rosterVia = useRosterVia(guild);
     return (
         <div aria-busy={query.isFetching}>
             <MainsToggle checked={mainsOnly} onChange={onMainsOnly} />
             {data !== undefined ? children(data) : (
                 <QuietEmpty>{isError ? 'Roster stats are unavailable right now.' : 'Loading roster…'}</QuietEmpty>
             )}
-            {data !== undefined && <FreshnessFooter freshness={data.freshness.roster} />}
+            {data !== undefined && <FreshnessFooter freshness={data.freshness.roster} rosterVia={rosterVia} />}
         </div>
     );
 }

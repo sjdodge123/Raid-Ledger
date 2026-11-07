@@ -24,6 +24,7 @@ import { WowEventsLead } from './schedule-for-guild';
 import { useWowAddonsVisible } from './wow-resources.helpers';
 import { WOW_MEMBER_SORTS } from './wow-member-filters.helpers';
 import { useWowMemberFilters } from './use-wow-member-filters';
+import { BlizzardRosterSection } from '../guild/blizzard-roster-section';
 
 /**
  * `register.ts` is a boot-time side-effect import, so the addon panel (form,
@@ -62,5 +63,7 @@ export const wowHubModule: HubModule = {
     eventsLead: WowEventsLead,
     eventsJumpTab: 'raids',
     editorDelegation: WowEditorDelegation,
+    /** ROK-1928 A4: the Forever guild's Blizzard roster slug + sync status (renders nothing elsewhere). */
+    settingsSections: BlizzardRosterSection,
     modSources: [{ id: 'wow-addons', label: 'World of Warcraft addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
 };

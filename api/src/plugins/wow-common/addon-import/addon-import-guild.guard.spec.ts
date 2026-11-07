@@ -1,3 +1,4 @@
+import { isAdoptableGuid } from './addon-import-guild.adopt';
 /**
  * ROK-1794 — the pure halves of the guild-snapshot guard. The DB-backed rules
  * (exporter on the roster, flagged wholesale change, audit row) are proven in
@@ -7,6 +8,8 @@ import {
   MASS_REMOVAL_MIN,
   isMassRemoval,
   receivedSnapshotAt,
+  rosterMovement,
+  type LiveRosterRow,
   wholesaleFlag,
   windowVerdict,
 } from './addon-import-guild.guard';
@@ -89,5 +92,95 @@ describe('wholesaleFlag (ROK-2066 — applied, flagged to staff)', () => {
   it('a small change raises no flag', () => {
     const v = windowVerdict(40, none, { removed: 1, added: 2 });
     expect(wholesaleFlag(7, v, false)).toBeNull();
+  });
+});
+
+describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
+  const row = (
+    id: number,
+    guid: string | null,
+    name = `M${id}`,
+  ): LiveRosterRow => ({
+    id,
+    guid,
+    name,
+    grantId: null,
+  });
+  const live = [row(1, 'g1'), row(2, 'g2'), row(3, null)];
+
+  it('by GUID: GUID-less rows are not counted; unknown GUIDs are added', () => {
+    const m = rosterMovement(live, {
+      by: 'guid',
+      guids: new Set(['g1', 'g9']),
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 2]);
+    expect(m.gone.map((r) => r.id)).toEqual([2]);
+    expect(m.added).toBe(1);
+  });
+
+  it('by GUID with names: a GUID-less row a new member adopts is kept, not added', () => {
+    const rows = [row(1, 'g1'), row(3, null, 'Blizz'), row(4, null, 'Gone')];
+    const m = rosterMovement(rows, {
+      by: 'guid',
+      guids: new Set(['g1', 'g8', 'g9']),
+      names: new Map([
+        ['g1', 'm1'],
+        ['g8', 'blizz'],
+        ['g9', 'fresh'],
+      ]),
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 3, 4]);
+    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.added).toBe(1);
+  });
+
+  it('by GUID with names: a GUID a NOT-live row stores adopts nothing, like pickAdoptions (r2 NIT)', () => {
+    const rows = [row(1, 'g1'), row(3, null, 'Blizz')];
+    const presence = {
+      by: 'guid' as const,
+      guids: new Set(['g1', 'g7']),
+      names: new Map([
+        ['g1', 'm1'],
+        ['g7', 'blizz'],
+      ]),
+    };
+    const m = rosterMovement(rows, presence, new Set(['g1', 'g7']));
+    expect(m.gone.map((r) => r.id)).toEqual([3]);
+    expect(m.added).toBe(1);
+    const adoptable = (g: string) => isAdoptableGuid(new Set(['g1', 'g7']), g);
+    expect(adoptable('g7')).toBe(false);
+  });
+
+  it('by GUID with names: one incoming name keeps at most one GUID-less row', () => {
+    const rows = [row(3, null, 'Twin'), row(4, null, 'twin')];
+    const m = rosterMovement(rows, {
+      by: 'guid',
+      guids: new Set(['g8']),
+      names: new Map([['g8', 'twin']]),
+    });
+    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.added).toBe(0);
+  });
+
+  it('by GUID with names and no GUID-less rows: same as without names', () => {
+    const rows = [row(1, 'g1'), row(2, 'g2')];
+    const guids = new Set(['g1', 'g9']);
+    const withNames = rosterMovement(rows, {
+      by: 'guid',
+      guids,
+      names: new Map([['g9', 'm2']]),
+    });
+    expect(withNames).toEqual(rosterMovement(rows, { by: 'guid', guids }));
+  });
+
+  it('by id: every live row counts, GUID-less ones included', () => {
+    const m = rosterMovement(live, {
+      by: 'id',
+      ids: new Set([1, 3, 7]),
+      members: 4,
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(m.gone.map((r) => r.id)).toEqual([2]);
+    expect(m.added).toBe(2);
   });
 });
