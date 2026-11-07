@@ -108,7 +108,7 @@ export function buildRetailSpecResult(
 /** Fetch character specializations from the Blizzard API. */
 export async function fetchCharacterSpecializations(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   characterClass: string,
   apiNamespacePrefix: string | null,
@@ -116,13 +116,13 @@ export async function fetchCharacterSpecializations(
   logger: Logger,
 ): Promise<InferredSpecialization> {
   try {
-    const { realmSlug, charName, namespace, baseUrl } = buildCharacterParams(
+    const { characterPath, namespace, baseUrl } = buildCharacterParams(
       name,
       realm,
       region,
       apiNamespacePrefix,
     );
-    const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/specializations?namespace=${namespace}&locale=en_US`;
+    const url = `${baseUrl}/profile/wow/character/${characterPath}/specializations?namespace=${namespace}&locale=en_US`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });

@@ -52,7 +52,8 @@ export interface BlizzardCharacterEquipment {
 /** Character profile data returned from the Blizzard API */
 export interface BlizzardCharacterProfile {
   name: string;
-  realm: string;
+  /** Null for a realmless WoW: Forever character (ROK-2102). */
+  realm: string | null;
   class: string;
   spec: string | null;
   role: 'tank' | 'healer' | 'dps' | null;

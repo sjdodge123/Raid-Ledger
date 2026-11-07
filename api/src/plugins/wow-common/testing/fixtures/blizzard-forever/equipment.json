@@ -1,0 +1,27 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/equipment?namespace=profile-forever-us"
+    }
+  },
+  "character": { "name": "Ana Forever", "id": 900001 },
+  "equipped_item_level": 22,
+  "equipped_items": [
+    {
+      "item": { "id": 910001 },
+      "slot": { "type": "HEAD", "name": "Head" },
+      "quantity": 1,
+      "quality": { "type": "UNCOMMON", "name": "Uncommon" },
+      "name": "Invented Lantern Hood",
+      "level": { "value": 23, "display_string": "Item Level 23" }
+    },
+    {
+      "item": { "id": 910002 },
+      "slot": { "type": "MAIN_HAND", "name": "Main Hand" },
+      "quantity": 1,
+      "quality": { "type": "RARE", "name": "Rare" },
+      "name": "Invented Ember Staff",
+      "level": { "value": 25, "display_string": "Item Level 25" }
+    }
+  ]
+}

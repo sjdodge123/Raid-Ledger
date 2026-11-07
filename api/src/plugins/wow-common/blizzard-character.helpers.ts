@@ -2,7 +2,7 @@
  * Blizzard character API helper functions.
  * Extracted from BlizzardService for file size compliance (ROK-711).
  */
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import {
   type BlizzardEquipmentItem,
   type BlizzardCharacterEquipment,
@@ -10,6 +10,8 @@ import {
   SPEC_ROLE_MAP,
   CLASSIC_TALENT_TREE_ROLES,
 } from './blizzard.constants';
+import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
+import { buildForeverCharacterSlug } from './forever-character-slug';
 
 const logger = new Logger('BlizzardCharacterHelpers');
 
@@ -18,26 +20,69 @@ export function specToRole(spec: string): 'tank' | 'healer' | 'dps' | null {
   return SPEC_ROLE_MAP[spec] ?? null;
 }
 
+/** Path + namespace params for a Blizzard character endpoint. */
+export interface CharacterParams {
+  /** `${realmSlug}/${charName}`, or the realmless Forever slug. */
+  characterPath: string;
+  /** Null for a realmless Forever character (ROK-2102). */
+  realmSlug: string | null;
+  charName: string;
+  namespace: string;
+  baseUrl: string;
+}
+
+/** Slugify + percent-encode a realm name into a URL path segment. */
+function buildRealmSlug(realm: string): string {
+  return encodeURIComponent(
+    realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim(),
+  );
+}
+
+/** Realmless Forever slug; a malformed stored name maps to a 400. */
+function buildRealmlessCharName(name: string): string {
+  try {
+    return buildForeverCharacterSlug(name);
+  } catch (err) {
+    if (err instanceof Error) throw new BadRequestException(err.message);
+    throw err;
+  }
+}
+
 /** Build API base params for character endpoints.
  * `realmSlug` and `charName` are URL path segments: they are percent-encoded so
  * a `/`, `..`, `?` or `#` in user input cannot steer the app-credentialed
  * Blizzard request to another path (tech-debt 2904).
+ * A null realm is allowed ONLY for the Forever alias (realmless route,
+ * ROK-2102); any other realm-null call is a 400 so retail/Classic can never
+ * silently go realmless.
  * @param apiNamespacePrefix - From the game row (null for retail, e.g. 'classic1x')
  */
 export function buildCharacterParams(
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
-): { realmSlug: string; charName: string; namespace: string; baseUrl: string } {
-  const realmSlug = encodeURIComponent(
-    realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim(),
-  );
-  const charName = encodeURIComponent(name.toLowerCase());
+): CharacterParams {
   const { profile: profilePrefix } = getNamespacePrefixes(apiNamespacePrefix);
   const namespace = `${profilePrefix}-${region}`;
   const baseUrl = `https://${region}.api.blizzard.com`;
-  return { realmSlug, charName, namespace, baseUrl };
+  if (realm === null) {
+    if (apiNamespacePrefix !== FOREVER_NAMESPACE_ALIAS) {
+      throw new BadRequestException('Realm is required');
+    }
+    const charName = buildRealmlessCharName(name);
+    return {
+      characterPath: charName,
+      realmSlug: null,
+      charName,
+      namespace,
+      baseUrl,
+    };
+  }
+  const realmSlug = buildRealmSlug(realm);
+  const charName = encodeURIComponent(name.toLowerCase());
+  const characterPath = `${realmSlug}/${charName}`;
+  return { characterPath, realmSlug, charName, namespace, baseUrl };
 }
 
 /** Fetch character media (avatar + render URL). Non-fatal on failure. */
