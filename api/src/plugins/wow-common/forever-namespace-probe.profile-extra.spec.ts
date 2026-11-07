@@ -196,7 +196,9 @@ describe('runProbe — ROK-2108 follow-ups', () => {
     expect(calls.some((u) => u.includes('/specializations'))).toBe(false);
     expect(run.cells.map((c) => c.endpoint)).toContain('guild-summary');
   });
+});
 
+describe('runProbe — ROK-2108 extras that fail', () => {
   it('records a 403 / 404 on the new endpoints without a shape and keeps the other extras', async () => {
     const failing = new Map<string, number>([
       [`${CHAR}/achievements${PNS}`, 403],
