@@ -116,6 +116,10 @@ export const ForeverProbeEndpointSchema = z.enum([
     'profile-quests',
     'profile-media',
     'guild-roster',
+    // ROK-2103: static-namespace journal + class indexes per matched target.
+    'journal-expansion',
+    'journal-instance',
+    'playable-class',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
