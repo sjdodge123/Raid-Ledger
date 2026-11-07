@@ -166,6 +166,57 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
     });
   });
 
+  /** ROK-2109: write the Armory column the Forever sync owns. */
+  async function setArmory(id: string, fetchedAt: Date, completed: number[]) {
+    await testApp.db
+      .update(schema.characters)
+      .set({ armoryQuests: { fetchedAt: fetchedAt.toISOString(), completed } })
+      .where(eq(schema.characters.id, id));
+  }
+
+  const HOUR = 3600_000;
+  const ADDON_ONE = { ...QUESTS, completed: [5001] };
+
+  it('AC9: a newer Armory list wins the completed list; the addon log stays', async () => {
+    const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
+    await seedSnapshot(id, 2, { ...BASE_DATA, quests: ADDON_ONE });
+    const later = new Date(CAPTURED_AT.getTime() + HOUR);
+    await setArmory(id, later, [5001, 5002]);
+    const body = CharacterQuestsResponseSchema.parse(
+      (await get(id)).body,
+    ).quests;
+    expect(body?.source).toBe('blizzard');
+    expect(body?.syncedAt).toBe(later.toISOString());
+    expect(body?.inProgressSyncedAt).toBe(CAPTURED_AT.toISOString());
+    expect(body?.counts.completedKnown).toBe(2);
+    expect(body?.inProgress.map((q) => q.questId)).toEqual([92472, 5002]);
+  });
+
+  it('AC9: a newer addon snapshot wins; the older Armory id is not counted', async () => {
+    const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
+    await seedSnapshot(id, 2, { ...BASE_DATA, quests: ADDON_ONE });
+    await setArmory(id, new Date(CAPTURED_AT.getTime() - HOUR), [5001, 5002]);
+    const body = CharacterQuestsResponseSchema.parse(
+      (await get(id)).body,
+    ).quests;
+    expect(body?.source).toBe('addon');
+    expect(body?.syncedAt).toBe(CAPTURED_AT.toISOString());
+    expect(body?.counts.completedKnown).toBe(1);
+    expect(body?.inProgress.map((q) => q.questId)).toEqual([92472, 5002]);
+  });
+
+  it('shows the section for an Armory-only Forever character (ROK-2109)', async () => {
+    const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
+    await setArmory(id, CAPTURED_AT, [5001, 5002]);
+    const body = CharacterQuestsResponseSchema.parse(
+      (await get(id)).body,
+    ).quests;
+    expect(body?.source).toBe('blizzard');
+    expect(body?.inProgressSyncedAt).toBeNull();
+    expect(body?.inProgress).toEqual([]);
+    expect(body?.counts.completedKnown).toBe(2);
+  });
+
   it('never returns the raw completed id array', async () => {
     const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
     await seedSnapshot(id, 2, { ...BASE_DATA, quests: QUESTS });

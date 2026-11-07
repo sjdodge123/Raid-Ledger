@@ -27,7 +27,17 @@ export interface AddonQuestsSlice {
 export type AddonQuestSnapshot = {
   quests: AddonQuestsSlice;
   capturedAt: string;
+  /** Source of the completed list (ROK-2109 D6); defaults to `addon`. */
+  source?: AutoProgressSource | undefined;
+  /**
+   * Capture time of the in-progress log, which is always the addon's (D4).
+   * Defaults to `capturedAt` (an addon-won snapshot carries one date).
+   */
+  inProgressAsOf?: string | undefined;
 };
+
+/** Sources a derived (non-manual) progress row can carry (ROK-2109). */
+export type AutoProgressSource = 'addon' | 'blizzard';
 
 /** Synthetic progress row derived from a snapshot (D6). */
 export interface AddonProgressRow {
@@ -36,7 +46,7 @@ export interface AddonProgressRow {
   characterId: string;
   pickedUp: boolean;
   completed: boolean;
-  source: 'addon';
+  source: AutoProgressSource;
   asOf: string;
 }
 
@@ -74,8 +84,11 @@ export interface QuestDoneState {
 export type QuestDoneFn = (questId: number) => QuestDoneState;
 
 /**
- * Derive addon progress rows from a snapshot (D6). Only quests in
- * `knownQuestIds` are emitted; completed implies not picked up.
+ * Derive addon progress rows from a snapshot (D6). Completed rows carry the
+ * completed list's source (ROK-2109: `blizzard` when the Armory won);
+ * picked-up rows come from the log, so they stay `addon` with the log's date
+ * (D4). Only quests in `knownQuestIds` are emitted; completed implies not
+ * picked up.
  */
 export function deriveAddonProgress(
   snapshot: AddonQuestSnapshot,
@@ -88,17 +101,21 @@ export function deriveAddonProgress(
     ...completed,
     ...snapshot.quests.inProgress.map((q) => q.questId),
   ];
+  const logAsOf = snapshot.inProgressAsOf ?? snapshot.capturedAt;
   return [...new Set(ids)]
     .filter((questId) => knownQuestIds.has(questId))
-    .map((questId) => ({
-      userId,
-      questId,
-      characterId,
-      pickedUp: !completed.has(questId),
-      completed: completed.has(questId),
-      source: 'addon' as const,
-      asOf: snapshot.capturedAt,
-    }));
+    .map((questId) => {
+      const done = completed.has(questId);
+      return {
+        userId,
+        questId,
+        characterId,
+        pickedUp: !done,
+        completed: done,
+        source: done ? (snapshot.source ?? 'addon') : 'addon',
+        asOf: done ? snapshot.capturedAt : logAsOf,
+      };
+    });
 }
 
 /** Precedence key: one (user, quest) pair. */

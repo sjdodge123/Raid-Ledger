@@ -23,6 +23,7 @@ import {
 } from '../plugins/wow-common/forever-namespace.resolver';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../plugins/wow-common/forever.settings';
 import { CharactersService } from './characters.service';
+import { ArmoryQuestsSchema } from '../plugins/wow-common/blizzard-quests.helpers';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const FIXTURES = join(
@@ -42,6 +43,7 @@ const ROUTES: Record<string, string> = {
   [`${CHAR}/equipment${NS}`]: 'equipment.json',
   [`${CHAR}/professions${NS}`]: 'professions.json',
   [`${CHAR}/specializations${NS}`]: 'specializations.json',
+  [`${CHAR}/quests/completed${NS}`]: 'quests-completed.json',
 };
 
 const json = (body: unknown, status = 200): Response =>
@@ -529,5 +531,37 @@ describe('Forever talents newest-wins against the real snapshot query (ROK-2110 
       ]),
     );
     expect(nodes).not.toContainEqual(expect.objectContaining({ nodeId: 9001 }));
+  });
+});
+
+describe('Forever Armory quests (ROK-2109)', () => {
+  it('a refresh writes quests/completed ids to armory_quests and leaves the addon snapshots alone (AC4)', async () => {
+    const { token } = await memberToken('foreverquests');
+    const id = await importAndAge(token);
+    await testApp.db
+      .update(schema.characters)
+      .set({ armoryQuests: null })
+      .where(eq(schema.characters.id, id));
+    const res = await testApp.request
+      .post(`/users/me/characters/${id}/refresh`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ region: 'us', gameVariant: 'wow_forever' });
+    expect(res.status).toBe(201);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ armoryQuests: schema.characters.armoryQuests })
+        .from(schema.characters)
+        .where(eq(schema.characters.id, id)),
+      'refreshed row',
+    );
+    const stored = ArmoryQuestsSchema.parse(row.armoryQuests);
+    expect(stored.completed).toEqual([7001, 7002, 7003, 7004, 7005]);
+    expect(stored).not.toHaveProperty('completedTruncated');
+    expect(JSON.stringify(row.armoryQuests)).not.toContain('Invented Quest');
+    const snapshots = await testApp.db
+      .select({ id: schema.characterAddonSnapshots.id })
+      .from(schema.characterAddonSnapshots)
+      .where(eq(schema.characterAddonSnapshots.characterId, id));
+    expect(snapshots).toEqual([]);
   });
 });

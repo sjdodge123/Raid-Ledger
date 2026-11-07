@@ -69,6 +69,18 @@ export interface ExternalCharacterProfessions {
   syncedAt: string;
 }
 
+/**
+ * Completed quest ids from the Blizzard `quests/completed` endpoint (ROK-2109).
+ * Ascending, deduped, capped at the addon limit keeping the LOWEST ids;
+ * `completedTruncated` is set only when the cap cut the list. Quest names are
+ * never stored.
+ */
+export interface ExternalCharacterQuests {
+  fetchedAt: string;
+  completed: number[];
+  completedTruncated?: true;
+}
+
 /** Character profile data returned from an external game API */
 export interface ExternalCharacterProfile {
   name: string;
