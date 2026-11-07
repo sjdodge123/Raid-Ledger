@@ -19,17 +19,19 @@ jest.mock('./blizzard-roster-sync.tx', () => ({
   applyForeverRoster: jest.fn(),
 }));
 jest.mock('../../../guilds/guild-core.queries', () => ({
-  findHubGuild: jest.fn(async () => ({
-    guild: {
-      id: 7,
-      gameId: 1,
-      region: 'us',
-      nameKey: 'night shift',
-      kind: 'wow_guild',
-      guildSlug: 'night-shift',
-    },
-    gameSlug: 'world-of-warcraft-forever',
-  })),
+  findHubGuild: jest.fn(() =>
+    Promise.resolve({
+      guild: {
+        id: 7,
+        gameId: 1,
+        region: 'us',
+        nameKey: 'night shift',
+        kind: 'wow_guild',
+        guildSlug: 'night-shift',
+      },
+      gameSlug: 'world-of-warcraft-forever',
+    }),
+  ),
 }));
 jest.mock('../forever-armory-switch', () => ({
   isForeverArmoryImportEnabled: jest.fn().mockResolvedValue(true),
