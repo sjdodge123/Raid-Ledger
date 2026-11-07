@@ -4083,3 +4083,7 @@ same day (#1278, #1279, #1280).
 ### 2026-11-06 — feat/rok-2102-forever-api (surfaced during the ROK-2102 final `--static` gate, task 6fc0f8515031)
 
 - med `rl-infra/` (validate-ci container-startup step; `scripts/validate-ci.sh` container check) — with two `--static` gates on the host at once the second one's `Container startup` FAILs: `docker: Error response from daemon: failed to set up container networking: ... Bind for :::8090 failed: port is already allocated` → `API health check failed after 120s`. Build/TypeScript/Lint had passed; the same tree passed its earlier gate. Pre-existing: the step binds a fixed host port (8090) regardless of slot, so concurrent gates on different slots collide (hit 2026-11-06 ~23:40Z while slots 1, 2 and 4 gated in parallel). `Suggested:` derive the container-startup host port from the slot (e.g. `8090 + slot`) or use `-p 127.0.0.1::80` with the mapped port read back from `docker port`; also serialise the step through the admission ledger as `medium`.
+
+### 2026-11-06 — feat/rok-2106-bindings-grouped (surfaced during the ROK-2106 local admin vitest run)
+
+- low `web/src/components/admin/nas-only-route.test.tsx` ("cloud: the Demo Data panel never renders — the URL lands on General") — failed once in `npx vitest run src/components/admin src/pages/admin` (79 files, laptop), passed in isolation twice and on the next full rerun; file untouched by the branch. Looks load/timing-sensitive. Suggested: replace any implicit-timing read with `findBy*`/`waitFor` on the General-tab landmark and loop it with `--repeat 50`.
