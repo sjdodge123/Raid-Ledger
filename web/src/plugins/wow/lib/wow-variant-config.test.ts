@@ -7,6 +7,7 @@ import {
     getWowVariantIntegrations,
     resolveWowVariant,
     getWowVariantLabel,
+    professionsPillSource,
     slugToContentVariant,
 } from './wow-variant-config';
 
@@ -34,6 +35,14 @@ describe('WOW_VARIANT_INTEGRATIONS (ROK-1726)', () => {
             .filter(([, row]) => row.addonHints)
             .map(([key]) => key);
         expect(addonRows).toEqual(['wow_forever']);
+    });
+
+    it('lets the Blizzard sync fill professions for retail and wow_forever only (ROK-2107)', () => {
+        const rows = Object.entries(WOW_VARIANT_INTEGRATIONS)
+            .filter(([, row]) => row.armoryProfessions)
+            .map(([key]) => key)
+            .sort();
+        expect(rows).toEqual(['retail', 'wow_forever']);
     });
 
     it('adds a forever expansion domain alongside the verbatim classic ones', () => {
@@ -86,6 +95,22 @@ describe('resolveWowVariant (D6)', () => {
         [{ gameVariant: null, ruleset: null, gameSlug: null }, null],
     ])('%j → %j', (character, expected) => {
         expect(resolveWowVariant(character)).toBe(expected);
+    });
+});
+
+describe('professionsPillSource (ROK-2107)', () => {
+    it.each<[string | null, 'blizzard' | 'manual' | null | undefined, 'blizzard' | 'manual' | null]>([
+        ['retail', 'manual', 'manual'],
+        ['wow_forever', 'blizzard', 'blizzard'],
+        ['classicforever', 'manual', 'manual'],
+        ['classic_era', 'manual', null],
+        ['classic_anniversary', 'manual', null],
+        ['classic_era', 'blizzard', 'blizzard'],
+        [null, 'manual', null],
+        ['retail', null, null],
+        ['retail', undefined, null],
+    ])('%s + %s → %s', (variant, source, expected) => {
+        expect(professionsPillSource(variant, source)).toBe(expected);
     });
 });
 

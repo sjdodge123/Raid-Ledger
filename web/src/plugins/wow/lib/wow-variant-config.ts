@@ -31,6 +31,12 @@ export interface WowVariantIntegrations {
      * property, independent of `armoryImport` (ROK-1722).
      */
     addonHints: boolean;
+    /**
+     * Whether the Blizzard sync can fill this variant's professions (ROK-2107).
+     * Classic variants never get Armory professions, so their panel shows no
+     * Armory / Manual source pill unless the row really is Blizzard-sourced.
+     */
+    armoryProfessions: boolean;
     /** apiNamespacePrefix forms accepted wherever a variant is. */
     namespaceAliases: readonly string[];
 }
@@ -40,19 +46,20 @@ const CLASSIC_WOWHEAD: WowheadDomain = { urlBase: 'www.wowhead.com/classic', too
 const FOREVER_WOWHEAD: WowheadDomain = { urlBase: 'www.wowhead.com/forever', tooltipDomain: 'forever' };
 
 export const WOW_VARIANT_INTEGRATIONS: Readonly<Record<WowVariant, WowVariantIntegrations>> = {
-    retail: { label: null, wowhead: RETAIL_WOWHEAD, talentCalc: 'retailTraits', armoryImport: true, addonHints: false, namespaceAliases: [] },
-    classic_era: { label: 'Era', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, namespaceAliases: ['classic1x'] },
+    retail: { label: null, wowhead: RETAIL_WOWHEAD, talentCalc: 'retailTraits', armoryImport: true, addonHints: false, armoryProfessions: true, namespaceAliases: [] },
+    classic_era: { label: 'Era', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, armoryProfessions: false, namespaceAliases: ['classic1x'] },
     // The 'classic' namespace prefix equals this key, so it needs no alias.
-    classic: { label: 'Cata', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, namespaceAliases: [] },
+    classic: { label: 'Cata', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, armoryProfessions: false, namespaceAliases: [] },
     classic_anniversary: {
         label: 'TBC',
         wowhead: { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' },
         talentCalc: 'classic3tree',
         armoryImport: true,
         addonHints: false,
+        armoryProfessions: false,
         namespaceAliases: ['classicann'],
     },
-    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: true, addonHints: true, namespaceAliases: ['classicforever'] },
+    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: true, addonHints: true, armoryProfessions: true, namespaceAliases: ['classicforever'] },
 };
 
 /** The retail Wowhead domain — the fallback for any unrecognised variant or expansion. */
@@ -109,6 +116,19 @@ export function resolveWowVariant(character: WowVariantSource): WowVariant | nul
     if (character.ruleset != null) return 'wow_forever';
     const isForeverGame = !!character.gameSlug && slugToContentVariant(character.gameSlug) === 'wow_forever';
     return isForeverGame ? 'wow_forever' : null;
+}
+
+/**
+ * ROK-2107: the professions source pill to show — only for variants the
+ * Blizzard sync fills (retail, Forever), or a row that really is
+ * Blizzard-sourced; otherwise null (no pill).
+ */
+export function professionsPillSource(
+    variant: string | null | undefined,
+    source: 'blizzard' | 'manual' | null | undefined,
+): 'blizzard' | 'manual' | null {
+    if (source == null) return null;
+    return source === 'blizzard' || getWowVariantIntegrations(variant)?.armoryProfessions ? source : null;
 }
 
 /** Short card badge for a variant; null for retail and unknown variants. */

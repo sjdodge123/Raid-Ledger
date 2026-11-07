@@ -210,6 +210,18 @@ describe('CharacterDetailSections — professions source (ROK-2107 AC8)', () => 
         expect(lastSource(), `panel source for ${gameVariant}`).toBe(source);
     });
 
+    it.each([
+        ['classic_era', 'manual'], ['classic', 'manual'], ['classic_anniversary', 'manual'],
+    ])('%s character with professionsSource %s → the panel gets null (no pill on Classic)', (gameVariant, source) => {
+        renderSections({ gameVariant, character: { professionsSource: source } });
+        expect(lastSource(), `panel source for ${gameVariant}`).toBeNull();
+    });
+
+    it('a Classic character whose row really is Blizzard-sourced still gets the Armory source', () => {
+        renderSections({ gameVariant: 'classic_era', character: { professionsSource: 'blizzard' } });
+        expect(lastSource()).toBe('blizzard');
+    });
+
     it('a character without professionsSource → the panel gets null (no pill)', () => {
         renderSections({ gameVariant: 'retail' });
         expect(lastSource()).toBeNull();

@@ -14,7 +14,7 @@
  */
 import { lazy, Suspense, useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
-import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
+import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations, professionsPillSource } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { ItemDetailModal } from '../components/item-detail-modal';
@@ -116,7 +116,7 @@ export function CharacterDetailSections({
             <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId}
-                source={character?.professionsSource ?? null} />
+                source={professionsPillSource(variant, character?.professionsSource)} />
         </>
     );
 }
