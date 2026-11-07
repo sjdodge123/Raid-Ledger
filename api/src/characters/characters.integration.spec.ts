@@ -825,7 +825,9 @@ function describeProfessionSync() {
         .limit(1),
       'reloaded',
     );
-    expect(reloaded.professions).toEqual(fixture);
+    expect(reloaded.armoryProfessions).toEqual(fixture);
+    // ROK-2107: the sync never writes the user-entered column.
+    expect(reloaded.professions).toBeNull();
   });
 
   it('overwrites prior professions on re-sync — no concat (AC #10)', async () => {
@@ -849,9 +851,9 @@ function describeProfessionSync() {
       'reloaded',
     );
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(reloaded.professions).toEqual(second);
+    expect(reloaded.armoryProfessions).toEqual(second);
     // Defensive: not a concat / not duplicated
-    const professions = reloaded.professions as ProfessionFixture | null;
+    const professions = reloaded.armoryProfessions as ProfessionFixture | null;
     expect(professions?.primary).toHaveLength(1);
     expect(professions?.primary[0]?.name).toBe('Enchanting');
   });
@@ -861,7 +863,7 @@ function describeProfessionSync() {
 
     // Pre-populate professions on the row.
     const char = await insertSyncableCharacter(testApp, userId, gameId, {
-      professions: prior,
+      armoryProfessions: prior,
     });
 
     // Service returns null (signals 5xx / network failure).
@@ -877,7 +879,7 @@ function describeProfessionSync() {
         .limit(1),
       'reloaded',
     );
-    expect(reloaded.professions).toEqual(prior);
+    expect(reloaded.armoryProfessions).toEqual(prior);
   });
 
   it('persists empty arrays when adapter returns non-null empty (defensive contract test)', async () => {
@@ -899,7 +901,7 @@ function describeProfessionSync() {
         .limit(1),
       'reloaded',
     );
-    expect(reloaded.professions).toEqual(empty);
+    expect(reloaded.armoryProfessions).toEqual(empty);
   });
 }
 

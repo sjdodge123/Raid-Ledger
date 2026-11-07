@@ -59,3 +59,34 @@ describe('mapCharacterToDto addonLinked (ROK-1756)', () => {
     );
   });
 });
+
+describe('mapCharacterToDto professions provenance (ROK-2107)', () => {
+  const manual = {
+    primary: [],
+    secondary: [],
+    syncedAt: '2026-11-06T00:00:00.000Z',
+  };
+  const armory = { ...manual, syncedAt: '2026-11-05T00:00:00.000Z' };
+
+  it('serves the manual value (source manual) over the Armory one', () => {
+    const dto = mapCharacterToDto(
+      makeRow({ professions: manual, armoryProfessions: armory }),
+    );
+    expect(dto.professions).toEqual(manual);
+    expect(dto.professionsSource).toBe('manual');
+    expect(dto.hasManualProfessions).toBe(true);
+  });
+
+  it('serves the Armory value (source blizzard) when there is no manual entry', () => {
+    const dto = mapCharacterToDto(makeRow({ armoryProfessions: armory }));
+    expect(dto.professions).toEqual(armory);
+    expect(dto.professionsSource).toBe('blizzard');
+    expect(dto.hasManualProfessions).toBe(false);
+  });
+
+  it('reports no source when neither column has data', () => {
+    const dto = mapCharacterToDto(makeRow());
+    expect(dto.professions).toBeNull();
+    expect(dto.professionsSource).toBeNull();
+  });
+});
