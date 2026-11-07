@@ -20,6 +20,8 @@ import {
   type HubGuildRow,
 } from '../../../guilds/guild-core.queries';
 import { SettingsService } from '../../../settings/settings.service';
+import type { AddonImportTx } from '../addon-import/addon-import-apply.types';
+import { lockGuildName } from '../addon-import/addon-import.locks';
 import {
   FOREVER_ARMORY_OFF_MESSAGE,
   isForeverArmoryImportEnabled,
@@ -85,12 +87,29 @@ export class GuildBlizzardRosterService {
     return hub;
   }
 
+  /**
+   * Under the roster sync's guild lock (Codex P2-2), so a slug change waits
+   * for a running sync to commit, and a sync that runs after re-reads the
+   * new slug and bails.
+   */
   private async write(
     current: schema.GuildSelect,
     guildSlug: string | null,
   ): Promise<schema.GuildSelect> {
+    const { gameId, region, nameKey } = current;
+    return this.db.transaction(async (tx) => {
+      await lockGuildName(tx, gameId, region, nameKey);
+      return this.writeSlug(tx, current, guildSlug);
+    });
+  }
+
+  private async writeSlug(
+    tx: AddonImportTx,
+    current: schema.GuildSelect,
+    guildSlug: string | null,
+  ): Promise<schema.GuildSelect> {
     const changed = current.guildSlug !== guildSlug;
-    const [row] = await this.db
+    const [row] = await tx
       .update(schema.guilds)
       .set({
         guildSlug,

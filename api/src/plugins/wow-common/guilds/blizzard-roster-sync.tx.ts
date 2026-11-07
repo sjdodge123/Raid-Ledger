@@ -44,6 +44,11 @@ export interface SyncGuild {
 export interface RosterApplyResult {
   /** True when a newer snapshot already landed (nothing written). */
   stale: boolean;
+  /**
+   * True when the guild's slug changed or was cleared after the fetch
+   * (Codex P2-2) — the roster belongs to the old slug, nothing written.
+   */
+  superseded: boolean;
   updated: number;
   inserted: number;
   flag: RosterFlag | null;
@@ -167,25 +172,46 @@ async function logDings(
   await insertDings({ tx }, guildId, levelUpsById(existing, next), now);
 }
 
+/** Codex P2-2 — the stored slug, read under the guild lock. */
+async function slugStillCurrent(
+  tx: AddonImportTx,
+  guildId: number,
+  slug: string,
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ guildSlug: guilds.guildSlug })
+    .from(guilds)
+    .where(eq(guilds.id, guildId));
+  return row?.guildSlug === slug;
+}
+
+const NOTHING_WRITTEN = { updated: 0, inserted: 0, flag: null, warnings: [] };
+
 /**
  * Steps 4–10. The caller has already ruled out 404 / error / empty.
  * @param tx - The sync transaction.
  * @param guild - The Forever guild being synced.
+ * @param slug - The Blizzard slug the roster was fetched for; a different
+ *   stored slug (changed/cleared mid-fetch) aborts with `superseded`.
  * @param members - Mapped, non-empty API roster.
  * @param now - Sync instant T (guild + member stamps share it).
  */
 export async function applyForeverRoster(
   tx: AddonImportTx,
   guild: SyncGuild,
+  slug: string,
   members: readonly ForeverGuildMember[],
   now: Date,
 ): Promise<RosterApplyResult> {
   await lockGuildName(tx, guild.gameId, guild.region, guild.nameKey);
+  if (!(await slugStillCurrent(tx, guild.id, slug))) {
+    return { stale: false, superseded: true, ...NOTHING_WRITTEN };
+  }
   const existing = await loadExisting(tx, guild.id);
   const match = matchRosterMembers(existing, members);
   const { delta, flag } = await measure(tx, guild.id, match, members.length);
   if (!(await stampGuild(tx, guild.id, members.length, now))) {
-    return { stale: true, updated: 0, inserted: 0, flag: null, warnings: [] };
+    return { stale: true, superseded: false, ...NOTHING_WRITTEN };
   }
   await writeMembers(tx, guild.id, existing, match, now);
   await logDings(tx, guild.id, existing, match, now);
@@ -193,5 +219,12 @@ export async function applyForeverRoster(
   const counts = { members: members.length, newMembers: inserted, delta };
   await auditRosterChange(tx, guild.id, BLIZZARD_ACTOR, counts);
   const updated = match.matched.length;
-  return { stale: false, updated, inserted, flag, warnings: match.warnings };
+  return {
+    stale: false,
+    superseded: false,
+    updated,
+    inserted,
+    flag,
+    warnings: match.warnings,
+  };
 }

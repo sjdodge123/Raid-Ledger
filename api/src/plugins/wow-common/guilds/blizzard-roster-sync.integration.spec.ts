@@ -402,4 +402,25 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     expect(stored.lastSnapshotAt).toEqual(future);
     expect(await auditCount()).toBe(audits);
   });
+
+  it('(12) slug cleared between fetch and apply → skipped, nothing written (Codex P2-2)', async () => {
+    const { guild } = await seedGuild(addonRoster(5));
+    const live = await liveNames(guild.id);
+    const audits = await auditCount();
+    fetchSpy.mockImplementation(async () => {
+      await testApp.db
+        .update(schema.guilds)
+        .set({ guildSlug: null })
+        .where(eq(schema.guilds.id, guild.id));
+      return { members: fourPlusOne() };
+    });
+    expect(await sync(guild.id)).toEqual({ status: 'skipped' });
+    expect(await liveNames(guild.id)).toEqual(live);
+    expect(await allRows()).toHaveLength(5);
+    const stored = await guildRow(guild.id);
+    expect(stored.blizzardRosterStatus).toBeNull();
+    expect(stored.blizzardRosterSyncedAt).toBeNull();
+    expect(stored.lastSnapshotAt).toEqual(guild.lastSnapshotAt);
+    expect(await auditCount()).toBe(audits);
+  });
 });

@@ -12,6 +12,7 @@ import { BlizzardService } from '../blizzard.service';
 import type { ForeverGuildRoster } from '../blizzard-forever-guild.helpers';
 import { isForeverArmoryImportEnabled } from '../forever-armory-switch';
 import { isEmptyRoster } from './blizzard-roster-sync.helpers';
+import { RosterInsightsCache } from './roster-insights/roster-insights.cache';
 import {
   applyForeverRoster,
   type RosterApplyResult,
@@ -44,6 +45,7 @@ export class BlizzardRosterSyncService {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly blizzard: BlizzardService,
     private readonly settings: SettingsService,
+    private readonly insightsCache: RosterInsightsCache,
   ) {}
 
   /**
@@ -93,10 +95,14 @@ export class BlizzardRosterSyncService {
       return early ?? { status: 'not_found' };
     const now = new Date();
     const res = await this.db.transaction((tx) =>
-      applyForeverRoster(tx, guild, roster.members, now),
+      applyForeverRoster(tx, guild, slug, roster.members, now),
     );
+    // Slug changed/cleared mid-fetch → the roster is the old slug's (P2-2).
+    if (res.superseded) return { status: 'skipped' };
     // A newer snapshot already stored → nothing written, no status (MINOR 15).
     if (res.stale) return { status: 'stale' };
+    // After the commit, never inside the tx (Codex P2-3).
+    this.insightsCache.invalidateGuild(guild.id);
     await this.flagIfNeeded(res);
     return { status: 'ok', updated: res.updated, inserted: res.inserted };
   }
