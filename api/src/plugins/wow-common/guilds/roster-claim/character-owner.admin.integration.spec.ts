@@ -210,6 +210,31 @@ async function systemMessages(userId: number): Promise<string[]> {
   return rows.map((r) => r.message);
 }
 
+/** D7 audit row + FLAG 7 notices of a Change owner. */
+async function expectReassignTrail(
+  characterId: string,
+  fromId: number,
+  toId: number,
+): Promise<void> {
+  const [audit] = nonEmpty(
+    await claimAudits('admin_reassigned', toId),
+    'reassign audit',
+  );
+  expect(audit.actorId).toBe(admin.id);
+  expect(audit.metadata).toMatchObject({
+    characterId: characterId,
+    guildId,
+    memberId: members.get('Ashen Vale'),
+    fromUserId: fromId,
+    toUserId: toId,
+    name: 'Ashen Vale',
+  });
+  expect(await systemMessages(fromId)).toContain(
+    'An admin moved Ashen Vale to l3to.',
+  );
+  expect(await systemMessages(toId)).toContain('An admin gave you Ashen Vale.');
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   const registry = testApp.app.get(PluginRegistryService);
@@ -250,25 +275,7 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     expect(promoted.isMain).toBe(true);
     expect(await signupCharacter(future)).toBeNull();
     expect(await signupCharacter(past)).toBe(ashen);
-    const [audit] = nonEmpty(
-      await claimAudits('admin_reassigned', to.id),
-      'reassign audit',
-    );
-    expect(audit.actorId).toBe(admin.id);
-    expect(audit.metadata).toMatchObject({
-      characterId: ashen,
-      guildId,
-      memberId: members.get('Ashen Vale'),
-      fromUserId: from.id,
-      toUserId: to.id,
-      name: 'Ashen Vale',
-    });
-    expect(await systemMessages(from.id)).toContain(
-      'An admin moved Ashen Vale to l3to.',
-    );
-    expect(await systemMessages(to.id)).toContain(
-      'An admin gave you Ashen Vale.',
-    );
+    await expectReassignTrail(ashen, from.id, to.id);
   });
 
   it('refuses a non-admin (403)', async () => {
