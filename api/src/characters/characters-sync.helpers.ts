@@ -52,7 +52,7 @@ async function fetchRealmProfile(
  *
  * Equipment + professions are fetched in parallel. Adapters without the
  * optional `fetchProfessions` method resolve to `null`, which the
- * orchestrator interprets as "leave the prior `professions` column alone."
+ * orchestrator interprets as "leave the prior `armory_professions` alone."
  * @param apiNamespacePrefix - The game's namespace prefix (null for retail)
  */
 export async function fetchFullProfile(
@@ -91,8 +91,10 @@ export async function fetchFullProfile(
 /** Optional sync fields whose presence in a record is conditional. */
 export interface OptionalSyncFields {
   /**
-   * `null` signals a non-404 adapter failure (5xx, timeout) — the column is
-   * omitted so the prior DB value is preserved (architect §3). Otherwise spread.
+   * The Blizzard `/professions` payload. Written to `armoryProfessions` only —
+   * the user-entered `professions` column is never touched by a sync
+   * (ROK-2107). `null` signals a non-404 adapter failure (5xx, timeout) — the
+   * key is omitted so the prior DB value is preserved (architect §3).
    */
   professions: ExternalCharacterProfessions | null;
   equipment: unknown;
@@ -104,8 +106,10 @@ export interface OptionalSyncFields {
  * spread so each new optional column is added here once instead of at every
  * call site.
  *
- * `equipment` and `talents` are always applied; `professions` is applied only
- * when non-null (a null means "leave the prior value alone").
+ * `equipment` and `talents` are always applied; the Blizzard professions go to
+ * `armoryProfessions` only when non-null (a null means "leave the prior value
+ * alone"). No `professions` key is ever emitted: that column is user-entered
+ * (ROK-2107).
  */
 export function applyOptionalSyncFields(
   record: Record<string, unknown>,
@@ -115,15 +119,15 @@ export function applyOptionalSyncFields(
     ...record,
     equipment,
     talents,
-    ...(professions !== null ? { professions } : {}),
+    ...(professions !== null ? { armoryProfessions: professions } : {}),
   };
 }
 
 /**
  * Build the set fields for a character sync update.
  *
- * The `professions` column is **only** included when the value is non-null.
- * A null signals that the adapter encountered a non-404 failure (5xx, timeout,
+ * The Blizzard professions (`armoryProfessions` column, ROK-2107) are **only**
+ * included when the value is non-null. A null signals that the adapter encountered a non-404 failure (5xx, timeout,
  * etc.) and the prior column value should be preserved (architect §3).
  */
 export function buildSyncUpdateFields(

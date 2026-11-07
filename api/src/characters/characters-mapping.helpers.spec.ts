@@ -36,6 +36,7 @@ function makeRow(overrides: Partial<CharacterRow> = {}): CharacterRow {
     equipment: null,
     talents: null,
     professions: null,
+    armoryProfessions: null,
     displayOrder: 0,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),

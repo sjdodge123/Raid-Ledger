@@ -5,6 +5,7 @@
  */
 import * as schema from '../drizzle/schema';
 import { GRACEFUL_DECLINE_HOURS } from './signup-cancel.helpers';
+import { effectiveProfessions } from '../characters/characters-professions.helpers';
 import type {
   SignupResponseDto,
   ConfirmationStatus,
@@ -12,7 +13,6 @@ import type {
   RosterRole,
   RosterAssignmentResponse,
   SignupCharacterDto,
-  CharacterProfessionsDto,
   AttendanceStatus,
 } from '@raid-ledger/contract';
 
@@ -96,8 +96,11 @@ export function buildCharacterDto(
     avatarUrl: character.avatarUrl,
     race: character.race,
     faction: character.faction as 'alliance' | 'horde' | null,
-    professions:
-      (character.professions as CharacterProfessionsDto | null) ?? null,
+    // ROK-2107: the effective value (manual or Armory per the switch).
+    professions: effectiveProfessions(
+      character.professions,
+      character.armoryProfessions,
+    ).value,
     // ROK-1761: the web draws the Forever portrait from the character's own game.
     gameId: character.gameId,
     gameVariant: character.gameVariant,

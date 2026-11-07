@@ -7,6 +7,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
+import {
+  effectiveProfessions,
+  parseProfessions,
+} from './characters-professions.helpers';
 
 /** Map core identity fields from a character row. */
 function mapCoreFields(row: typeof schema.characters.$inferSelect) {
@@ -29,6 +33,19 @@ function mapCoreFields(row: typeof schema.characters.$inferSelect) {
   };
 }
 
+/** ROK-2107: effective professions + provenance (manual vs Armory). */
+function mapProfessionFields(row: typeof schema.characters.$inferSelect) {
+  const { value, source } = effectiveProfessions(
+    row.professions,
+    row.armoryProfessions,
+  );
+  return {
+    professions: value,
+    professionsSource: source,
+    hasManualProfessions: parseProfessions(row.professions) !== null,
+  };
+}
+
 /** Map extended/optional fields from a character row. */
 function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
   return {
@@ -46,7 +63,7 @@ function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
     gameVariant: row.gameVariant ?? null,
     equipment: (row.equipment as CharacterDto['equipment']) ?? null,
     talents: row.talents ?? null,
-    professions: (row.professions as CharacterDto['professions']) ?? null,
+    ...mapProfessionFields(row),
     displayOrder: row.displayOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
