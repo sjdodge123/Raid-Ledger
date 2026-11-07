@@ -16,16 +16,19 @@ import type { JSX } from 'react';
 import type { WowRosterLastSeenDto } from '@raid-ledger/contract';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { FreshnessFooter } from './freshness-footer';
+import { useRosterVia } from '../hooks/use-guild-blizzard-roster';
 import { AwaySection, OnlineSection } from './last-seen-rows';
 import { useRosterInsights } from './use-roster-insights';
 
 /** The Last seen widget body (lazy-loaded). */
 export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JSX.Element {
     const { data, isPending, isError } = useRosterInsights(page.guild.id, false);
+    const rosterVia = useRosterVia(page.guild);
     if (isPending) return <div className="h-24 animate-pulse rounded-md bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
+    // Deliberate (ROK-1928 spec FLAG B-6, Codex P2-4 not fixed): presence columns keep the last export's values while `last_seen_at` moves.
     const lastSeen = data.lastSeen;
-    const footer = <Footer asOf={lastSeen?.snapshotAt ?? null} />;
+    const footer = <Footer asOf={lastSeen?.snapshotAt ?? null} rosterVia={rosterVia} />;
     if (lastSeen === undefined || lastSeen.reported === 0) return <NoExport footer={footer} />;
     if (lastSeen.onlineCount === 0 && lastSeen.away.length === 0) {
         return (
@@ -69,8 +72,8 @@ function Headline({ lastSeen }: { lastSeen: WowRosterLastSeenDto }): JSX.Element
 }
 
 /** `FreshnessFooter` dated by the guild snapshot (LedgerLink export), with its absolute time as the tooltip. */
-function Footer({ asOf }: { asOf: string | null }): JSX.Element {
-    if (asOf === null) return <FreshnessFooter freshness={null} />;
+function Footer({ asOf, rosterVia }: { asOf: string | null; rosterVia: 'Blizzard' | 'LedgerLink' }): JSX.Element {
+    if (asOf === null) return <FreshnessFooter freshness={null} rosterVia={rosterVia} />;
     const title = `Roster exported ${new Date(asOf).toLocaleString()}`;
-    return <FreshnessFooter freshness={{ source: 'roster', asOf }} title={title} />;
+    return <FreshnessFooter freshness={{ source: 'roster', asOf }} title={title} rosterVia={rosterVia} />;
 }

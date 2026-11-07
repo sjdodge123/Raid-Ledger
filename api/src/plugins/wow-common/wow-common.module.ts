@@ -2,10 +2,13 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
+import * as rosterSync from './guilds/blizzard-roster-sync.registration';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
 import { GuildContentController } from './guilds/guild-content.controller';
+import { GuildBlizzardRosterController } from './guilds/guild-blizzard-roster.controller';
+import { GuildBlizzardRosterService } from './guilds/guild-blizzard-roster.service';
 import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
@@ -91,6 +94,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     CharacterQuestsController,
     GuildsController,
     GuildContentController,
+    GuildBlizzardRosterController,
+    ...rosterSync.CONTROLLERS,
   ],
   providers: [
     BlizzardService,
@@ -126,6 +131,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     GuildPageService,
     GuildRaidsService,
     GuildAddonsService,
+    GuildBlizzardRosterService,
+    ...rosterSync.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,

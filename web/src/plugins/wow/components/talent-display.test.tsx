@@ -57,3 +57,23 @@ describe('TalentDisplay — Wowhead calculator (AC7, D5)', () => {
         });
     });
 });
+
+describe('TalentDisplay — Forever never reaches the Classic trees (ROK-2110 AC8)', () => {
+    const UNCONVERTED = {
+        format: 'classic',
+        summary: '3/0/0',
+        trees: [{ name: 'Arms', spentPoints: 3, talents: [{ name: 'Improved Heroic Strike', id: 124, rank: 3 }] }],
+    };
+
+    it('an unconverted classic payload on a Forever character renders through the Forever display with a bare Armory line', () => {
+        render(<TalentDisplay talents={UNCONVERTED} isArmoryImported characterClass="Warrior" gameVariant="wow_forever" />);
+        expect(screen.getByTestId('forever-talents-source').textContent).toBe('via Armory');
+        expect(screen.queryByText('3/0/0')).toBeNull();
+    });
+
+    it('the same payload on Classic Era still renders the Classic trees', () => {
+        render(<TalentDisplay talents={UNCONVERTED} isArmoryImported characterClass="Warrior" gameVariant="classic_era" />);
+        expect(screen.queryByTestId('forever-talents-source')).toBeNull();
+        expect(screen.getByText('3/0/0')).toBeTruthy();
+    });
+});

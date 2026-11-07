@@ -171,8 +171,20 @@ describe('realmless Forever equipment, professions, roster (ROK-2102)', () => {
     );
     expect(roster).toEqual({
       members: [
-        { name: 'Ana Forever', level: 24, classId: 8, rank: 0 },
-        { name: 'Bo Tester', level: 12, classId: 1, rank: 4 },
+        {
+          name: 'Ana Forever',
+          level: 24,
+          classId: 8,
+          rank: 0,
+          blizzardId: 900001,
+        },
+        {
+          name: 'Bo Tester',
+          level: 12,
+          classId: 1,
+          rank: 4,
+          blizzardId: 900002,
+        },
       ],
     });
   });

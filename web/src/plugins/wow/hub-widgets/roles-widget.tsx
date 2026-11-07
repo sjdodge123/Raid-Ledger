@@ -12,6 +12,7 @@ import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { ROLE_META } from '../hub/wow-guild.helpers';
 import { useRosterInsights } from './use-roster-insights';
 import { FreshnessFooter } from './freshness-footer';
+import { useRosterVia } from '../hooks/use-guild-blizzard-roster';
 import { BAND_ROLES, roleLinkLabel, type BandRole, type RoleBandKey, type RoleBands } from './roles.helpers';
 
 const BAND_TITLE: Record<RoleBandKey, string> = { dungeon: 'Dungeon-ready', raid: 'Raid-ready' };
@@ -49,12 +50,13 @@ function Band({ band, roles }: { band: RoleBandKey; roles: RoleBands }): JSX.Ele
 /** The widget body; core draws the card chrome and title. */
 export default function RolesWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const { data } = useRosterInsights(page.guild.id);
+    const rosterVia = useRosterVia(page.guild);
     if (data === undefined) return null;
     return (
         <div className="flex flex-col gap-3">
             <Band band="dungeon" roles={data.roles} />
             <Band band="raid" roles={data.roles} />
-            {data.freshness.roster !== null && <FreshnessFooter freshness={data.freshness.roster} testId="forever-roles-freshness" />}
+            {data.freshness.roster !== null && <FreshnessFooter freshness={data.freshness.roster} testId="forever-roles-freshness" rosterVia={rosterVia} />}
         </div>
     );
 }

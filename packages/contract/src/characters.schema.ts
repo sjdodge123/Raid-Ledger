@@ -108,8 +108,13 @@ export type ForeverTalentNodeDto = z.infer<typeof ForeverTalentNodeSchema>;
 /** Forever talents as rendered on the character page (`format: 'forever'`). */
 export const ForeverTalentsSchema = z.object({
     format: z.literal('forever'),
-    source: z.literal('addon'),
-    /** Snapshot capturedAt. */
+    /**
+     * ROK-2110: `addon` = LedgerLink snapshot; `blizzard` = the Blizzard
+     * `specializations` talents converted at read time (same value as
+     * ROK-2107's `professionsSource`). Output-only — additive widening.
+     */
+    source: z.enum(['addon', 'blizzard']),
+    /** Snapshot capturedAt (addon) or the character's lastSyncedAt (blizzard). */
     syncedAt: z.string().datetime(),
     configId: z.number().int().optional(),
     /** Carried, not used (non-goal). */
@@ -122,6 +127,8 @@ export const ForeverTalentsSchema = z.object({
             z.object({
                 index: z.number().int().min(0).max(2),
                 spent: z.number().int().min(0),
+                /** ROK-2110: tree name as Blizzard sent it (blizzard source only). */
+                name: z.string().max(64).optional(),
             }),
         )
         .max(3),

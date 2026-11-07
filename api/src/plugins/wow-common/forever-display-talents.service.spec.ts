@@ -193,3 +193,86 @@ describe('ForeverDisplayTalentsService origin sanity check (Druid ruling)', () =
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+describe('ForeverDisplayTalentsService Blizzard talents (ROK-2110)', () => {
+  const db = {} as PostgresJsDatabase<typeof schema>;
+  let service: ForeverDisplayTalentsService;
+  let warn: jest.SpyInstance;
+  const blizzardTalents = {
+    format: 'classic',
+    trees: [
+      {
+        name: 'Arms',
+        spentPoints: 3,
+        talents: [{ name: 'A', id: 11, rank: 3, tierIndex: 0, columnIndex: 0 }],
+      },
+    ],
+    summary: '3',
+  };
+  const NEWER = '2026-10-10T00:00:00.000Z';
+  const OLDER = '2026-10-01T00:00:00.000Z';
+
+  beforeEach(() => {
+    loadMock.mockReset();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    service = new ForeverDisplayTalentsService(db);
+  });
+  afterEach(() => warn.mockRestore());
+
+  it('(a) no snapshot → the Blizzard DTO dated lastSyncedAt', async () => {
+    loadMock.mockResolvedValue(null);
+    const dto = await service.resolve(
+      row({ talents: blizzardTalents, lastSyncedAt: OLDER }),
+    );
+    expect(dto).toMatchObject({
+      source: 'blizzard',
+      syncedAt: OLDER,
+      layout: 'grid',
+      trees: [{ index: 0, spent: 3, name: 'Arms' }],
+      nodes: [{ nodeId: 11, rank: 3, tree: 0, row: 0, col: 0 }],
+    });
+  });
+
+  it('(b) Blizzard synced after the capture → the Blizzard DTO', async () => {
+    loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
+    const dto = await service.resolve(
+      row({ talents: blizzardTalents, lastSyncedAt: NEWER }),
+    );
+    expect(dto?.source).toBe('blizzard');
+    expect(dto?.syncedAt).toBe(NEWER);
+  });
+
+  it('(c) snapshot newer than the Blizzard sync → the addon DTO', async () => {
+    loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
+    const dto = await service.resolve(
+      row({ talents: blizzardTalents, lastSyncedAt: OLDER }),
+    );
+    expect(dto?.source).toBe('addon');
+    expect(dto?.syncedAt).toBe(CAPTURED.toISOString());
+  });
+
+  it('(d) a snapshot with zero nodes → the Blizzard DTO', async () => {
+    loadMock.mockResolvedValue(snapshot([]));
+    const dto = await service.resolve(
+      row({ talents: blizzardTalents, lastSyncedAt: OLDER }),
+    );
+    expect(dto?.source).toBe('blizzard');
+  });
+
+  it('only the addon present (no stored talents) → the addon DTO', async () => {
+    loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
+    const dto = await service.resolve(row({ lastSyncedAt: NEWER }));
+    expect(dto?.source).toBe('addon');
+  });
+
+  it('a non-Forever / unknown-variant row never converts stored talents', async () => {
+    loadMock.mockResolvedValue(null);
+    const stored = { talents: blizzardTalents, lastSyncedAt: OLDER };
+    expect(
+      await service.resolve(row({ ...stored, gameVariant: 'classic_era' })),
+    ).toBeUndefined();
+    expect(
+      await service.resolve(row({ ...stored, gameVariant: null })),
+    ).toBeUndefined();
+  });
+});
