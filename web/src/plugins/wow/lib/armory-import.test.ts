@@ -5,7 +5,20 @@ import { isArmoryImportSupported, armoryClassicVariants, defaultArmoryClassicVar
 const FOREVER_ON: BlizzardCapabilitiesDto = { armoryImport: { wow_forever: true } };
 const FOREVER_OFF: BlizzardCapabilitiesDto = { armoryImport: { wow_forever: false } };
 
-describe('isArmoryImportSupported (ROK-1636, runtime caps ROK-1717)', () => {
+describe('isArmoryImportSupported (runtime caps ROK-1717, default on ROK-1722)', () => {
+    it('supports wow_forever once the capabilities load with the default (on) — the realmless route (ROK-1722)', () => {
+        expect(isArmoryImportSupported('wow_forever', FOREVER_ON)).toBe(true);
+    });
+
+    it('keeps the loading/failed state failing closed for wow_forever (D6, ruling FLAG C2)', () => {
+        expect(isArmoryImportSupported('wow_forever', undefined)).toBe(false);
+        expect(isArmoryImportSupported('wow_forever', null)).toBe(false);
+    });
+
+    it('treats the admin capability false as the kill switch', () => {
+        expect(isArmoryImportSupported('wow_forever', FOREVER_OFF)).toBe(false);
+    });
+
     it.each([
         ['undefined caps (loading/failed — fail closed)', undefined],
         ['the capability off', FOREVER_OFF],

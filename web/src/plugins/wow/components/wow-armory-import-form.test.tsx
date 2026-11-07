@@ -9,7 +9,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { renderWithProviders, createTestQueryClient } from '../../../test/render-helpers';
+import { ARMORY_UNAVAILABLE_NOTE } from '../lib/armory-import';
 import { WowArmoryImportForm } from './wow-armory-import-form';
 
 const REALMS_URL = 'http://localhost:3000/blizzard/realms';
@@ -136,5 +137,108 @@ describe('WowArmoryImportForm — search (ROK-1654)', () => {
         expect(message.closest('[role="alert"]')).not.toBeNull();
         expect(nameInput()).not.toHaveAttribute('aria-invalid', 'true');
         expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-invalid', 'true');
+    });
+});
+
+const IMPORT_URL = 'http://localhost:3000/users/me/characters/import/wow';
+const FOREVER_PREVIEW = {
+    name: 'Ana Forever', realm: null, class: 'Mage', spec: 'Frost', role: 'dps', level: 12, race: 'Human',
+    faction: 'alliance', itemLevel: null, avatarUrl: null, profileUrl: null,
+};
+
+/** Serves the Forever preview and records every preview query string. */
+function foreverPreviewLoad(): URLSearchParams[] {
+    const calls: URLSearchParams[] = [];
+    server.use(http.get(PREVIEW_URL, ({ request }) => {
+        calls.push(new URL(request.url).searchParams);
+        return HttpResponse.json(FOREVER_PREVIEW);
+    }));
+    return calls;
+}
+
+/** Records every import body; answers 400 so the test needs no full CharacterDto. */
+function importLoad(): unknown[] {
+    const bodies: unknown[] = [];
+    server.use(http.post(IMPORT_URL, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({ statusCode: 400, message: 'stop' }, { status: 400 });
+    }));
+    return bodies;
+}
+
+/** Renders the Forever form with the runtime capability seeded, so the first render already knows it. */
+function renderForever(enabled = true) {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(['blizzard', 'capabilities'], { armoryImport: { wow_forever: enabled } });
+    return renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />, { queryClient });
+}
+
+const firstName = () => screen.getByRole('textbox', { name: 'First name' });
+const secondName = () => screen.getByRole('textbox', { name: 'Second name' });
+
+describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
+    it('renders the Forever identity fields and no realm or single-name input', () => {
+        renderForever();
+        expect(screen.getByTestId('forever-identity-fields')).toBeInTheDocument();
+        expect(screen.getByRole('radiogroup', { name: 'Ruleset' })).toBeInTheDocument();
+        expect(firstName()).toBeInTheDocument();
+        expect(secondName()).toBeInTheDocument();
+        expect(screen.queryByLabelText('Realm')).not.toBeInTheDocument();
+        expect(screen.queryByPlaceholderText('e.g. Arthas')).not.toBeInTheDocument();
+    });
+
+    it('previews with no realm and the joined two-part name, shows the ruleset, and imports with realm null + the ruleset', async () => {
+        const previews = foreverPreviewLoad();
+        const imports = importLoad();
+        const user = userEvent.setup();
+        renderForever();
+        await user.click(screen.getByRole('radio', { name: /^PvP$/ }));
+        await user.type(firstName(), 'Ana');
+        await user.type(secondName(), 'Forever');
+        await user.click(searchButton());
+        expect(await screen.findByTestId('preview-location')).toHaveTextContent(/^PvP \(US\)$/);
+        expect(previews).toHaveLength(1);
+        const params = previews[0];
+        expect(params?.has('realm')).toBe(false);
+        expect(params?.get('name')).toBe('Ana Forever');
+        expect(params?.get('region')).toBe('us');
+        expect(params?.get('gameVariant')).toBe('wow_forever');
+        await user.click(screen.getByRole('button', { name: 'Save character' }));
+        await waitFor(() => expect(imports).toHaveLength(1));
+        expect(imports[0]).toEqual({ name: 'Ana Forever', realm: null, region: 'us', gameVariant: 'wow_forever', isMain: false, ruleset: 'pvp' });
+    });
+
+    it('sends the picked EU region in the preview query and the import body', async () => {
+        const previews = foreverPreviewLoad();
+        const imports = importLoad();
+        const user = userEvent.setup();
+        renderForever();
+        await user.selectOptions(screen.getByRole('combobox', { name: 'Region' }), 'eu');
+        await user.type(firstName(), 'Ana');
+        await user.type(secondName(), 'Forever');
+        await user.click(searchButton());
+        await screen.findByTestId('preview-location');
+        expect(previews).toHaveLength(1);
+        expect(previews[0]?.get('region')).toBe('eu');
+        await user.click(screen.getByRole('button', { name: 'Save character' }));
+        await waitFor(() => expect(imports).toHaveLength(1));
+        expect(imports[0]).toEqual({ name: 'Ana Forever', realm: null, region: 'eu', gameVariant: 'wow_forever', isMain: false, ruleset: 'normal' });
+    });
+
+    it('shows a one-word name as an inline error and sends no request', async () => {
+        const previews = foreverPreviewLoad();
+        const user = userEvent.setup();
+        renderForever();
+        await user.type(firstName(), 'Ana');
+        await user.click(searchButton());
+        expect(await screen.findByRole('alert')).toHaveTextContent('Enter a first and second name');
+        expect(previews).toHaveLength(0);
+    });
+
+    it('owns the kill switch: capability off shows the unavailable note and no search fields', () => {
+        renderForever(false);
+        expect(screen.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-identity-fields')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /search armory/i })).not.toBeInTheDocument();
     });
 });

@@ -12,7 +12,10 @@ import type { SettingKey } from '../../drizzle/schema/app-settings';
 export const WOW_FOREVER_NAMESPACE_PREFIX_KEY =
   'wow_forever_namespace_prefix' as SettingKey;
 
-/** `'true'` when Forever Armory import is enabled. Absent = disabled. */
+/**
+ * Forever Armory import kill switch (ROK-1722): `'false'` = disabled.
+ * Absent (or a legacy `'true'`) = enabled.
+ */
 export const WOW_FOREVER_ARMORY_IMPORT_KEY =
   'wow_forever_armory_import' as SettingKey;
 

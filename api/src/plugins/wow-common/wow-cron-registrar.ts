@@ -10,6 +10,8 @@ import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 /**
  * Registers cron jobs for WoW character auto-sync, boss data refresh and the
  * Forever namespace probe (ROK-1716). Only active when the plugin is enabled.
+ * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
+ * ruleset set, game_variant set); manual Forever rows are skipped (ROK-1722).
  */
 @Injectable()
 export class WowCronRegistrar implements CronRegistrar {

@@ -5,7 +5,8 @@
     }
   },
   "id": 900001,
-  "name": "Ana Forever",
+  "name": "Ana",
+  "surname": "Forever",
   "gender": { "type": "FEMALE", "name": "Female" },
   "faction": { "type": "ALLIANCE", "name": "Alliance" },
   "race": { "id": 1, "name": "Human" },

@@ -1,14 +1,19 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
-import { FOREVER_NAMESPACE_ALIAS } from '../forever-namespace.resolver';
-import { WOW_FOREVER_NAMESPACE_PREFIX_KEY } from '../forever.settings';
+import { isForeverArmoryImportEnabled } from '../forever-armory-switch';
+import {
+  FOREVER_NAMESPACE_ALIAS,
+  getForeverNamespacePrefix,
+} from '../forever-namespace.resolver';
 import { loadRosterRows } from '../guilds/guild-roster.helpers';
 import { AddonSnapshotFactSource } from './addon-snapshot.fact-source';
+import { BlizzardForeverFactSource } from './blizzard-forever.fact-source';
 import { CharacterRowFactSource } from './character-row.fact-source';
 import { resolveFacts } from './fact-precedence';
+import { dropShadowedBlizzard } from './fact-source.helpers';
 import { RosterFactSource } from './roster.fact-source';
 import {
   MAX_ROSTER_ROWS,
@@ -18,6 +23,8 @@ import {
   type WowFactCandidates,
   type WowFactSource,
 } from './wow-fact.types';
+
+type LoadedMap = Map<RosterKey, WowFactCandidates>;
 
 /** Resolved facts per roster key. */
 export type ResolvedRoster = Map<RosterKey, ResolvedWowFacts>;
@@ -33,19 +40,21 @@ export interface ResolvedRosterResult {
  * ROK-1910 — runs every active {@link WowFactSource} once per batch and
  * resolves each roster row through the per-field precedence table.
  *
- * Blizzard seam (H23): no Blizzard source ships yet. One registers through
- * {@link registerBlizzardSource} and is consulted only while the seam is
- * live: a source is registered AND the STORED override
- * `wow_forever_namespace_prefix` is set and isn't the `classicforever` alias.
- * It reads the stored override, NOT the effective prefix: since ROK-2102 the
- * effective prefix defaults to `forever` with the key absent, so the seam
- * stays off until an admin stores an override (whether to key it on the
- * effective prefix instead belongs to the story that first registers a
- * Blizzard source — ROK-2102 FLAG A1). It is not proof the probe currently
- * reports the namespace live. Only while the seam
- * is live do blizzard facts get the fresh-window override
- * (`fact-precedence.ts` rule 2); otherwise blizzard-labelled facts (an
- * Armory-synced `characters` row) compete on newest `asOf` only.
+ * Blizzard seam (H23, flipped by ROK-1920): {@link BlizzardForeverFactSource}
+ * registers itself through {@link registerBlizzardSource} at construction and
+ * is consulted only while the seam is live: a source is registered AND the
+ * EFFECTIVE Forever namespace prefix (`getForeverNamespacePrefix()`, hydrated
+ * from the stored setting by `ForeverConfigService.onModuleInit` and on every
+ * admin change) is not the `classicforever` alias AND the Forever Armory kill
+ * switch is on. Keying on the effective prefix rather than the STORED
+ * override `wow_forever_namespace_prefix` resolves ROK-2102 FLAG A1: since
+ * ROK-2102 the effective prefix defaults to `forever` with the key absent, so
+ * a stored-override test would keep the seam off on a default install. It is
+ * not proof the probe currently reports the namespace live. Only while it is
+ * live do blizzard facts get the fresh-window override (`fact-precedence.ts`
+ * rule 2) and does the Blizzard source shadow the row source's
+ * blizzard-labelled copies of the same fields; otherwise blizzard-labelled
+ * facts (an Armory-synced `characters` row) compete on newest `asOf` only.
  */
 @Injectable()
 export class WowFactsService {
@@ -59,7 +68,10 @@ export class WowFactsService {
     private readonly settings: SettingsService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
-  ) {}
+    @Optional() blizzardForever?: BlizzardForeverFactSource,
+  ) {
+    if (blizzardForever) this.registerBlizzardSource(blizzardForever);
+  }
 
   /**
    * Register the Blizzard source (once the Forever namespace is live).
@@ -98,10 +110,7 @@ export class WowFactsService {
     const loaded = await Promise.all(sources.map((s) => s.load(batch)));
     const facts: ResolvedRoster = new Map();
     for (const ref of batch) {
-      const perSource: WowFactCandidates[] = loaded.flatMap((m) => {
-        const c = m.get(ref.key);
-        return c ? [c] : [];
-      });
+      const perSource = this.candidatesFor(ref.key, sources, loaded);
       facts.set(ref.key, resolveFacts(perSource, now, live));
     }
     return { facts, truncated };
@@ -136,13 +145,33 @@ export class WowFactsService {
     return blizzardLive && this.blizzard ? [...core, this.blizzard] : core;
   }
 
-  /** A Blizzard source is registered and the namespace prefix looks live. */
+  /**
+   * Every source's candidates for one roster row; the row source's
+   * blizzard-labelled copies give way to the Blizzard source's own facts.
+   */
+  private candidatesFor(
+    key: RosterKey,
+    sources: WowFactSource[],
+    loaded: LoadedMap[],
+  ): WowFactCandidates[] {
+    const blizzardAt = this.blizzard ? sources.indexOf(this.blizzard) : -1;
+    const blizzard = blizzardAt >= 0 ? loaded[blizzardAt]?.get(key) : undefined;
+    const rowsAt = sources.indexOf(this.characterRows);
+    return loaded.flatMap((m, i) => {
+      const c = m.get(key);
+      if (!c) return [];
+      return [i === rowsAt ? dropShadowedBlizzard(c, blizzard) : c];
+    });
+  }
+
+  /** A Blizzard source is registered and the Forever namespace is live. */
   private async isBlizzardSeamLive(): Promise<boolean> {
     return this.blizzard !== null && (await this.isForeverNamespaceLive());
   }
 
+  /** Effective prefix is past the alias AND the Armory kill switch is on. */
   private async isForeverNamespaceLive(): Promise<boolean> {
-    const stored = await this.settings.get(WOW_FOREVER_NAMESPACE_PREFIX_KEY);
-    return !!stored && stored !== FOREVER_NAMESPACE_ALIAS;
+    if (getForeverNamespacePrefix() === FOREVER_NAMESPACE_ALIAS) return false;
+    return isForeverArmoryImportEnabled(this.settings);
   }
 }

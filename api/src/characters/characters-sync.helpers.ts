@@ -9,7 +9,8 @@ import type { ExternalCharacterProfessions } from '../plugins/plugin-host/extens
 export interface EnrichedProfile {
   profile: {
     name: string;
-    realm: string;
+    /** Null for a realmless WoW: Forever character (ROK-1722). */
+    realm: string | null;
     class: string;
     spec: string | null;
     role: 'tank' | 'healer' | 'dps' | null;
@@ -20,6 +21,10 @@ export interface EnrichedProfile {
     avatarUrl: string | null;
     renderUrl: string | null;
     profileUrl: string | null;
+    /** Blizzard character id, when the adapter surfaces one (ROK-1722). */
+    externalId?: string | null;
+    /** The body's raw `ruleset` value, unmapped (ROK-2100 maps it). */
+    rulesetRaw?: unknown;
   };
   talents: unknown;
   equipment: unknown;
@@ -27,13 +32,13 @@ export interface EnrichedProfile {
 }
 
 /**
- * ROK-2102: a realmless (Forever) body has no realm; this path always asks by
- * realm, so the requested realm stands in until the import path threads null.
+ * ROK-2102/1722: a body without a realm keeps the requested realm; a realmless
+ * (Forever) request asks with null and keeps null.
  */
 async function fetchRealmProfile(
   adapter: CharacterSyncAdapter,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   nsArg: string | undefined,
 ): Promise<EnrichedProfile['profile']> {
@@ -53,7 +58,7 @@ async function fetchRealmProfile(
 export async function fetchFullProfile(
   adapter: CharacterSyncAdapter,
   name: string,
-  realm: string,
+  realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
 ): Promise<EnrichedProfile> {
@@ -115,6 +120,22 @@ export function applyOptionalSyncFields(
 }
 
 /**
+ * Portrait/render URLs to write. A media miss (Blizzard serves 404 on
+ * `character-media` for a fresh or just-changed character, and
+ * `fetchCharacterMedia` turns any failure into null) keeps the stored URL
+ * instead of wiping it — all variants (FOREVER-MEDIA-STATIC §1a).
+ */
+function mediaFields(profile: EnrichedProfile['profile']): {
+  avatarUrl?: string;
+  renderUrl?: string;
+} {
+  return {
+    ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
+    ...(profile.renderUrl ? { renderUrl: profile.renderUrl } : {}),
+  };
+}
+
+/**
  * Build the set fields for a character sync update.
  *
  * The `professions` column is **only** included when the value is non-null.
@@ -133,8 +154,6 @@ export function buildSyncUpdateFields(
     spec: profile.spec,
     role: profile.role,
     itemLevel: profile.itemLevel,
-    avatarUrl: profile.avatarUrl,
-    renderUrl: profile.renderUrl,
     level: profile.level,
     race: profile.race,
     faction: profile.faction,
@@ -143,6 +162,7 @@ export function buildSyncUpdateFields(
     updatedAt: new Date(),
     ...(extra?.region ? { region: extra.region } : {}),
     ...(extra?.gameVariant ? { gameVariant: extra.gameVariant } : {}),
+    ...mediaFields(profile),
   };
   return applyOptionalSyncFields(base, { professions, equipment, talents });
 }

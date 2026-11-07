@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
+import { WowForeverNameSchema, WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
 import { CharacterLockoutsSchema } from './character-lockouts.schema.js';
 
 // ==========================================
@@ -357,10 +357,22 @@ export type WowGameVariant = z.infer<typeof WowGameVariantSchema>;
  */
 export const ImportWowCharacterSchema = z.object({
     name: z.string().min(1).max(100),
-    realm: z.string().min(1).max(100),
+    /** ROK-1722: null for a realmless WoW: Forever character. */
+    realm: z.string().min(1).max(100).nullable().default(null),
     region: WowRegionSchema,
     gameVariant: WowGameVariantSchema.optional().default('retail'),
     isMain: z.boolean().optional().default(false),
+    /** ROK-1722: WoW: Forever only — the ruleset the player picked. */
+    ruleset: WowForeverSelectableRulesetSchema.nullable().default(null),
+}).superRefine((dto, ctx) => {
+    if (dto.gameVariant !== 'wow_forever') {
+        if (dto.realm === null) ctx.addIssue({ code: 'custom', path: ['realm'], message: 'Realm is required' });
+        return;
+    }
+    if (dto.realm !== null) ctx.addIssue({ code: 'custom', path: ['realm'], message: 'WoW: Forever characters have no realm' });
+    if (dto.ruleset === null) ctx.addIssue({ code: 'custom', path: ['ruleset'], message: 'Pick a ruleset' });
+    if (!WowForeverNameSchema.safeParse(dto.name).success)
+        ctx.addIssue({ code: 'custom', path: ['name'], message: 'Enter a first and second name' });
 });
 
 export type ImportWowCharacterDto = z.infer<typeof ImportWowCharacterSchema>;
