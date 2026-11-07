@@ -10,6 +10,8 @@ import { GuildContentController } from './guild-content.controller';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 import { GuildsController } from './guilds.controller';
+import { CharacterOwnerAdminController } from './roster-claim/character-owner.admin.controller';
+import { CharacterOwnerAdminService } from './roster-claim/character-owner.admin.service';
 import { RosterClaimController } from './roster-claim/roster-claim.controller';
 import { RosterClaimService } from './roster-claim/roster-claim.service';
 
@@ -20,6 +22,7 @@ export const CONTROLLERS = [
   GuildBlizzardRosterController,
   ...rosterSync.CONTROLLERS,
   RosterClaimController,
+  CharacterOwnerAdminController,
 ];
 
 /** Hub services + the Blizzard roster sync + ROK-2128 roster claim. */
@@ -30,4 +33,5 @@ export const PROVIDERS = [
   GuildBlizzardRosterService,
   ...rosterSync.PROVIDERS,
   RosterClaimService,
+  CharacterOwnerAdminService,
 ];

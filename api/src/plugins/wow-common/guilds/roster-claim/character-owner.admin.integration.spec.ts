@@ -266,7 +266,9 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     expect(await systemMessages(from.id)).toContain(
       'An admin moved Ashen Vale to l3to.',
     );
-    expect(await systemMessages(to.id)).toContain('An admin gave you Ashen Vale.');
+    expect(await systemMessages(to.id)).toContain(
+      'An admin gave you Ashen Vale.',
+    );
   });
 
   it('refuses a non-admin (403)', async () => {
@@ -290,8 +292,12 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
   it('409 for the current owner, 404 for an unknown user, 400 for a bad body', async () => {
     const owner = await makeUser('l3same');
     const id = await claimAs(owner.token, 'Same Owner');
-    expect((await reassign(admin.token, id, { userId: owner.id })).status).toBe(409);
-    expect((await reassign(admin.token, id, { userId: 999_999 })).status).toBe(404);
+    expect((await reassign(admin.token, id, { userId: owner.id })).status).toBe(
+      409,
+    );
+    expect((await reassign(admin.token, id, { userId: 999_999 })).status).toBe(
+      404,
+    );
     expect((await reassign(admin.token, id, { userId: 'x' })).status).toBe(400);
   });
 });
@@ -309,7 +315,10 @@ describe('POST /admin/plugins/wow/characters/:id/unlink — roster rows (ROK-212
       await claimAudits('admin_unlinked_roster', owner.id),
       'unlink audit',
     );
-    expect(audit.metadata).toMatchObject({ characterId: id, name: 'Plain Row' });
+    expect(audit.metadata).toMatchObject({
+      characterId: id,
+      name: 'Plain Row',
+    });
     expect(await systemMessages(owner.id)).toContain(
       'An admin removed Plain Row from your characters.',
     );
