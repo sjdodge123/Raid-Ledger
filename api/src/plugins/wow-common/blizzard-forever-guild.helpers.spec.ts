@@ -2,6 +2,8 @@
  * ROK-2102 B.4 — Forever guild roster client: URL under the Forever profile
  * namespace, defensive member mapping, 404 → null, other non-2xx → 502.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BadGatewayException } from '@nestjs/common';
 import {
   fetchForeverGuildRoster,
@@ -75,8 +77,20 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
     );
     expect(roster).toEqual({
       members: [
-        { name: 'Ana Forever', level: 42, classId: 8, rank: 0 },
-        { name: 'Bo Tester', level: 12, classId: null, rank: 3 },
+        {
+          name: 'Ana Forever',
+          level: 42,
+          classId: 8,
+          rank: 0,
+          blizzardId: 7001,
+        },
+        {
+          name: 'Bo Tester',
+          level: 12,
+          classId: null,
+          rank: 3,
+          blizzardId: 7002,
+        },
       ],
     });
   });
@@ -136,5 +150,46 @@ describe('mapForeverGuildRoster (ROK-2102)', () => {
       ],
     });
     expect(roster.members).toEqual([]);
+  });
+});
+
+describe('mapForeverGuildRoster with the synthetic fixture (ROK-1928 B1)', () => {
+  const fixture: unknown = JSON.parse(
+    readFileSync(
+      join(__dirname, '__fixtures__', 'forever-guild-roster.json'),
+      'utf8',
+    ),
+  );
+
+  it('Given the fixture, When mapped, Then character.id becomes blizzardId and surname/slug are ignored', () => {
+    const roster = mapForeverGuildRoster(fixture);
+    expect(roster.members[0]).toEqual({
+      name: 'Ana Example',
+      level: 60,
+      classId: 8,
+      rank: 0,
+      blizzardId: 800001,
+    });
+  });
+
+  it('Given a member without character.id, When mapped, Then blizzardId is null and the member is kept', () => {
+    const roster = mapForeverGuildRoster(fixture);
+    expect(roster.members.find((m) => m.name === 'Di Noid')).toEqual({
+      name: 'Di Noid',
+      level: 9,
+      classId: null,
+      rank: 6,
+      blizzardId: null,
+    });
+  });
+
+  it('Given a member without a rank, When mapped, Then it is still dropped', () => {
+    const names = mapForeverGuildRoster(fixture).members.map((m) => m.name);
+    expect(names).toEqual([
+      'Ana Example',
+      'Bo Sample',
+      'Cy Placeholder',
+      'Di Noid',
+    ]);
   });
 });

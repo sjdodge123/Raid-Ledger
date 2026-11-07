@@ -1,0 +1,47 @@
+{
+  "_note": "UNVERIFIED synthetic shape, ROK-1928 B-0",
+  "_links": { "self": { "href": "https://example.invalid/data/wow/guild/example-guild/roster" } },
+  "guild": { "name": "Example Guild", "id": 900001, "faction": { "type": "ALLIANCE" } },
+  "members": [
+    {
+      "character": {
+        "name": "Ana Example",
+        "surname": "Exampleton",
+        "slug": "ana-example",
+        "id": 800001,
+        "level": 60,
+        "playable_class": { "id": 8 },
+        "playable_race": { "id": 1 }
+      },
+      "rank": 0
+    },
+    {
+      "character": {
+        "name": "Bo Sample",
+        "slug": "bo-sample",
+        "id": 800002,
+        "level": 42,
+        "playable_class": { "id": 1 },
+        "playable_race": { "id": 3 }
+      },
+      "rank": 2
+    },
+    {
+      "character": {
+        "name": "Cy Placeholder",
+        "id": 800003,
+        "level": 17,
+        "playable_class": { "id": 99 },
+        "playable_race": { "id": 4 }
+      },
+      "rank": 5
+    },
+    {
+      "character": { "name": "Di Noid", "level": 9, "playable_race": { "id": 2 } },
+      "rank": 6
+    },
+    {
+      "character": { "name": "Ed Norank", "id": 800005, "level": 30, "playable_class": { "id": 5 } }
+    }
+  ]
+}
