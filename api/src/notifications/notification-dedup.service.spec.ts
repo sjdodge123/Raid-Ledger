@@ -35,3 +35,34 @@ describe('NotificationDedupService.releaseKey', () => {
     expect(redis.del).toHaveBeenCalledWith('digest:weekly:42');
   });
 });
+
+/** Redis misses then fails to SET; the DB finds no row and accepts the insert. */
+function buildWarmFailingStores() {
+  const db = {
+    execute: jest
+      .fn()
+      .mockResolvedValueOnce([]) // findValidDbRecord → miss
+      .mockResolvedValueOnce([]) // stale-row delete
+      .mockResolvedValueOnce([{ id: 1 }]), // insert → won
+  };
+  const redis = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockRejectedValue(new Error('redis down')),
+  };
+  const service = new NotificationDedupService(
+    db as unknown as PostgresJsDatabase<typeof schema>,
+    redis as unknown as Redis,
+  );
+  return { db, redis, service };
+}
+
+describe('NotificationDedupService.checkAndMarkSent — cache warm failure (ROK-2100 Codex P2)', () => {
+  it('a won PG claim whose Redis warm fails still reports "not yet sent"', async () => {
+    const { db, redis, service } = buildWarmFailingStores();
+
+    await expect(service.checkAndMarkSent('k:1', 60)).resolves.toBe(false);
+
+    expect(db.execute).toHaveBeenCalledTimes(3);
+    expect(redis.set).toHaveBeenCalledWith('k:1', '1', 'EX', 60);
+  });
+});

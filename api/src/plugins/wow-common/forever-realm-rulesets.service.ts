@@ -6,11 +6,15 @@ import type {
 } from '@raid-ledger/contract';
 import { SettingsService } from '../../settings/settings.service';
 import type { DecodedAddonPaste } from './addon-import/addon-import.decoder';
+import { resolveExportName } from './addon-import/addon-import.binding-name';
 import {
   buildRealmRulesetIndex,
   inferForPaste,
+  pasteLead,
   sortRealmRulesets,
 } from './forever-realm-rulesets.helpers';
+import { inferRulesetFromRealmName } from './forever-ruleset-inference.helpers';
+import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
 import { WOW_FOREVER_REALM_RULESETS_KEY } from './forever.settings';
 
 /** Parse the stored JSON; corrupt or schema-invalid = null. */
@@ -35,7 +39,10 @@ export class ForeverRealmRulesetsService {
   /** The corrupt value last warned about — one warn per bad value, not per import. */
   private warnedCorrupt: string | null = null;
 
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly lookup: ForeverRulesetLookupService,
+  ) {}
 
   /** The stored map, sorted; absent or corrupt → no rows. */
   async getMap(): Promise<WowForeverRealmRulesetsDto> {
@@ -77,5 +84,31 @@ export class ForeverRealmRulesetsService {
   ): Promise<AddonImportRulesetInferenceDto | null> {
     const { entries } = await this.getMap();
     return inferForPaste(paste, buildRealmRulesetIndex(entries));
+  }
+
+  /**
+   * ROK-2100 — the CREATE resolution order for an export with a null
+   * ruleset: 1 the admin realm map, 2 the Blizzard profile's ruleset, 3 the
+   * realm name's tokens; null → `RULESET_REQUIRED` downstream (step 4). The
+   * update path ignores steps 2–3 (`updateInferenceRuleset`, F8). The
+   * lookup is cached, so running it for an update target is cheap (F9).
+   */
+  async resolveForPaste(
+    paste: DecodedAddonPaste,
+  ): Promise<AddonImportRulesetInferenceDto | null> {
+    const mapped = await this.inferForPaste(paste);
+    if (mapped) return mapped;
+    const lead = pasteLead(paste);
+    if (!lead || lead.who.ruleset !== null || !lead.region) return null;
+    const realmName = lead.who.raw.realmName ?? '';
+    const name = resolveExportName(lead.who);
+    const fromBlizzard = await this.lookup.lookup(name, lead.region);
+    if (fromBlizzard) {
+      return { ruleset: fromBlizzard, realmName, source: 'blizzard' };
+    }
+    const fromName = inferRulesetFromRealmName(lead.who.raw.realmName);
+    return fromName
+      ? { ruleset: fromName, realmName, source: 'realm-name' }
+      : null;
   }
 }

@@ -303,3 +303,54 @@ describe('parseImportRequest with the create-route schema (D1)', () => {
     ).toThrow('Validation failed');
   });
 });
+
+describe('createDtoFromExport — RULESET_REQUIRED detail (ROK-2100 B.2)', () => {
+  /** The `detail` of the AddonImportError `fn` throws (fails loudly otherwise). */
+  function detailOf(fn: () => unknown) {
+    try {
+      fn();
+    } catch (e: unknown) {
+      if (e instanceof AddonImportError) return e.detail;
+      throw e;
+    }
+    throw new Error('expected an AddonImportError, nothing was thrown');
+  }
+
+  /** The wire body of the AddonImportError `fn` throws. */
+  function bodyOf(fn: () => unknown): unknown {
+    try {
+      fn();
+    } catch (e: unknown) {
+      if (e instanceof AddonImportError) return e.getResponse();
+      throw e;
+    }
+    throw new Error('expected an AddonImportError, nothing was thrown');
+  }
+
+  it('carries the character name, realm and GUID; never in the body', () => {
+    const base = buildWho({ ruleset: null });
+    const who = buildWho({
+      ruleset: null,
+      raw: { ...base.raw, realmName: 'CAMWOW US2 Realm 9' },
+    });
+    expect(detailOf(() => createDtoFromExport(who, 'us', 7))).toEqual({
+      characterName: 'Ana Forever',
+      realmName: 'CAMWOW US2 Realm 9',
+      guid: who.guid,
+    });
+    const body = bodyOf(() => createDtoFromExport(who, 'us', 7));
+    expect(body).not.toHaveProperty('detail');
+    expect(JSON.stringify(body)).not.toContain(who.guid);
+  });
+
+  it('a blank realm name → realmName null', () => {
+    const base = buildWho({ ruleset: null });
+    const who = buildWho({
+      ruleset: null,
+      raw: { ...base.raw, realmName: ' ' },
+    });
+    expect(
+      detailOf(() => createDtoFromExport(who, 'us', 7))?.realmName,
+    ).toBeNull();
+  });
+});
