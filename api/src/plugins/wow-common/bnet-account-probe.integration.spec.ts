@@ -20,6 +20,8 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 const ADMIN_ROUTE = '/admin/plugins/blizzard/bnet-account-probe';
 const CALLBACK = '/plugins/blizzard/bnet-account-probe/callback';
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+// The split-dev redirect rule reads it; pin the nginx shape for these specs.
+const ORIGINAL_DISCORD_CALLBACK = process.env.DISCORD_CALLBACK_URL;
 
 let testApp: TestApp;
 let adminToken: string;
@@ -86,6 +88,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  delete process.env.DISCORD_CALLBACK_URL;
   fetchSpy = jest
     .spyOn(globalThis, 'fetch')
     .mockResolvedValue(new Response('{}', { status: 404 }));
@@ -104,6 +107,9 @@ afterEach(async () => {
   await testApp.app.get(SettingsService).setDemoMode(false);
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+  if (ORIGINAL_DISCORD_CALLBACK !== undefined) {
+    process.env.DISCORD_CALLBACK_URL = ORIGINAL_DISCORD_CALLBACK;
+  }
   testApp.seed = await truncateAllTables(testApp.db);
   testApp.app.get(SettingsService).invalidateCache(true);
 });
@@ -225,6 +231,31 @@ describe('GET /plugins/blizzard/bnet-account-probe/callback (AC8, AC9)', () => {
   it('403 when DEMO_MODE is off (AC9)', async () => {
     const { state, cookie } = await start();
     process.env.DEMO_MODE = 'false';
+    const res = await testApp.request
+      .get(CALLBACK)
+      .query({ state, code: 'c' })
+      .set('Cookie', cookie);
+    expect(res.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('callback prod-exposure gates (MINOR-4)', () => {
+  it('403 when the DEMO_MODE DB flag is off (env still on)', async () => {
+    const { state, cookie } = await start();
+    await testApp.app.get(SettingsService).setDemoMode(false);
+    expect(process.env.DEMO_MODE).toBe('true');
+    const res = await testApp.request
+      .get(CALLBACK)
+      .query({ state, code: 'c' })
+      .set('Cookie', cookie);
+    expect(res.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('403 when the blizzard plugin is inactive', async () => {
+    const { state, cookie } = await start();
+    await testApp.app.get(PluginRegistryService).deactivate('blizzard');
     const res = await testApp.request
       .get(CALLBACK)
       .query({ state, code: 'c' })

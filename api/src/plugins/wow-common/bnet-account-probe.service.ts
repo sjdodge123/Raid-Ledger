@@ -103,7 +103,10 @@ export class BnetAccountProbeService {
     if (code !== null) {
       this.logger.warn(`bnet account probe callback failed (${code})`);
     }
-    return bnetProbeReturnLocation(await getClientUrl(this.settings), code);
+    // A settings read failing here must not 500 the public route (D6): a
+    // relative Location lands on the same public origin behind nginx.
+    const clientUrl = await getClientUrl(this.settings).catch(() => '');
+    return bnetProbeReturnLocation(clientUrl, code);
   }
 
   private async complete(
@@ -197,7 +200,10 @@ export class BnetAccountProbeService {
   }
 
   private async redirectUri(): Promise<string> {
-    return buildBnetProbeRedirectUri(await getClientUrl(this.settings));
+    return buildBnetProbeRedirectUri(
+      await getClientUrl(this.settings),
+      process.env.DISCORD_CALLBACK_URL,
+    );
   }
 
   private now(): string {

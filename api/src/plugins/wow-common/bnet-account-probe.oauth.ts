@@ -12,12 +12,18 @@ export const BNET_OAUTH_HOST = 'oauth.battle.net';
 /** The only scope requested (spec F6). */
 export const BNET_PROBE_SCOPE = 'wow.profile';
 
+/** The callback route as Nest serves it (no global prefix). */
+const NEST_CALLBACK_PATH = '/plugins/blizzard/bnet-account-probe/callback';
+
 /**
  * Callback path as the browser sees it (nginx strips `/api` before Nest).
  * The operator registers `${CLIENT_URL}` + this in the Blizzard console.
  */
-export const BNET_PROBE_CALLBACK_PATH =
-  '/api/plugins/blizzard/bnet-account-probe/callback';
+export const BNET_PROBE_CALLBACK_PATH = `/api${NEST_CALLBACK_PATH}`;
+
+/** Discord's callback route on the api — its prefix is the api base. */
+const DISCORD_CALLBACK_SUFFIX = '/auth/discord/callback';
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /** Admin page the callback lands on (spec "Redirect target"). */
 export const BNET_PROBE_RETURN_PATH =
@@ -33,9 +39,45 @@ export interface BnetCallResult {
   body: unknown;
 }
 
-/** The trusted callback URL for an origin (from `getClientUrl`, never Host). */
-export function buildBnetProbeRedirectUri(clientUrl: string): string {
-  return `${clientUrl.replace(/\/+$/, '')}${BNET_PROBE_CALLBACK_PATH}`;
+function isLoopback(url: string): boolean {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** `http://localhost:3000` from `http://localhost:3000/auth/discord/callback`. */
+function apiBaseFromDiscordCallback(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\/+$/, '');
+    if (!/^https?:$/.test(parsed.protocol)) return null;
+    if (!path.endsWith(DISCORD_CALLBACK_SUFFIX)) return null;
+    return `${parsed.origin}${path.slice(0, -DISCORD_CALLBACK_SUFFIX.length)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The trusted callback URL (from `getClientUrl` + the deployer's
+ * `DISCORD_CALLBACK_URL` env, never Host). Behind nginx it is
+ * `${clientUrl}/api/...`. In the split dev env (web on a loopback port with
+ * no `/api` proxy) the api's own base comes from the Discord callback env,
+ * which already points at Nest (Codex P2) — never on a public client URL.
+ */
+export function buildBnetProbeRedirectUri(
+  clientUrl: string,
+  discordCallbackUrl: string | undefined,
+): string {
+  const apiBase = isLoopback(clientUrl)
+    ? apiBaseFromDiscordCallback(discordCallbackUrl)
+    : null;
+  return apiBase !== null
+    ? `${apiBase}${NEST_CALLBACK_PATH}`
+    : `${clientUrl.replace(/\/+$/, '')}${BNET_PROBE_CALLBACK_PATH}`;
 }
 
 /** Where the callback 302s: `?bnetProbe=ok` or `?bnetProbe=error&code=…`. */

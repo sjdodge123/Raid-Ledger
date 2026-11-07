@@ -329,6 +329,18 @@ describe('BnetAccountProbeService.handleCallback — PKCE retry + internal error
   });
 });
 
+describe('BnetAccountProbeService.handleCallback — never a 500 (D6, MINOR-3)', () => {
+  it('a failing client-URL read still resolves to a relative error redirect', async () => {
+    settings.get.mockRejectedValue(new Error('settings read failed'));
+    await expect(
+      service.handleCallback({ query: {}, cookieHash: undefined }),
+    ).resolves.toBe(
+      '/admin/settings/integrations/plugin/blizzard/blizzard-api?bnetProbe=error&code=state',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('BnetAccountProbeService — ID parity (AC10)', () => {
   it('checks exactly 10 of 12 characters and counts match / mismatch / 404 / 500', async () => {
     const outcomes = [
