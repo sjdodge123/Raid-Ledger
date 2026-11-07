@@ -345,6 +345,36 @@ describe('GET quest-readiness — payload (ROK-1911)', () => {
   });
 });
 
+describe('GET quest-readiness — Armory-only character (ROK-2109)', () => {
+  it('counts a Blizzard-completed pre-req as met and tags the cell blizzard', async () => {
+    const eventId = await createEvent(FOREVER_SLUG);
+    const charId = await seedForeverChar(users.ready.id, 'Armorya');
+    await testApp.db
+      .update(schema.characters)
+      .set({
+        armoryQuests: {
+          fetchedAt: CAPTURED_AT.toISOString(),
+          completed: [100, 200],
+        },
+      })
+      .where(eq(schema.characters.id, charId));
+    await signUp(eventId, users.ready.id, charId);
+    const res = await readiness(eventId, users.ready.token);
+    expect(res.status).toBe(200);
+    const row = (res.body as Body).signups.find(
+      (s) => s.characterId === charId,
+    );
+    const at = (q: number) => row?.perQuest.find((p) => p.questId === q);
+    expect(at(300)).toEqual({
+      questId: 300,
+      state: 'missing',
+      prereqsMet: true,
+      source: null,
+    });
+    expect(at(200)).toMatchObject({ state: 'done', source: 'blizzard' });
+  });
+});
+
 describe('GET quest-readiness — access + D7 (ROK-1911)', () => {
   it('is 200 for a guild member who is not signed up, and for staff', async () => {
     expect((await readiness(foreverEvent, users.member.token)).status).toBe(
