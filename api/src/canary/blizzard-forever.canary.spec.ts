@@ -44,6 +44,7 @@ describe('probeForeverNamespace (ROK-1716 canary)', () => {
       details: 'no Forever namespace yet',
     });
     const dataUrls = requested.filter((u) => u.includes('api.blizzard.com'));
+    // ROK-2103: no match → no static journal / class follow-ups either.
     expect(dataUrls).toHaveLength(7 * 4);
     expect(dataUrls.every((u) => u.startsWith('https://us.'))).toBe(true);
   });

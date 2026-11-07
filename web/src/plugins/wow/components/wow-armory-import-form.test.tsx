@@ -9,7 +9,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { renderWithProviders, createTestQueryClient } from '../../../test/render-helpers';
+import { ARMORY_UNAVAILABLE_NOTE } from '../lib/armory-import';
 import { WowArmoryImportForm } from './wow-armory-import-form';
 
 const REALMS_URL = 'http://localhost:3000/blizzard/realms';
@@ -165,12 +166,19 @@ function importLoad(): unknown[] {
     return bodies;
 }
 
+/** Renders the Forever form with the runtime capability seeded, so the first render already knows it. */
+function renderForever(enabled = true) {
+    const queryClient = createTestQueryClient();
+    queryClient.setQueryData(['blizzard', 'capabilities'], { armoryImport: { wow_forever: enabled } });
+    return renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />, { queryClient });
+}
+
 const firstName = () => screen.getByRole('textbox', { name: 'First name' });
 const secondName = () => screen.getByRole('textbox', { name: 'Second name' });
 
 describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
     it('renders the Forever identity fields and no realm or single-name input', () => {
-        renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />);
+        renderForever();
         expect(screen.getByTestId('forever-identity-fields')).toBeInTheDocument();
         expect(screen.getByRole('radiogroup', { name: 'Ruleset' })).toBeInTheDocument();
         expect(firstName()).toBeInTheDocument();
@@ -183,7 +191,7 @@ describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
         const previews = foreverPreviewLoad();
         const imports = importLoad();
         const user = userEvent.setup();
-        renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />);
+        renderForever();
         await user.click(screen.getByRole('radio', { name: /^PvP$/ }));
         await user.type(firstName(), 'Ana');
         await user.type(secondName(), 'Forever');
@@ -204,7 +212,7 @@ describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
         const previews = foreverPreviewLoad();
         const imports = importLoad();
         const user = userEvent.setup();
-        renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />);
+        renderForever();
         await user.selectOptions(screen.getByRole('combobox', { name: 'Region' }), 'eu');
         await user.type(firstName(), 'Ana');
         await user.type(secondName(), 'Forever');
@@ -220,10 +228,17 @@ describe('WowArmoryImportForm — WoW: Forever is realmless (ROK-1722)', () => {
     it('shows a one-word name as an inline error and sends no request', async () => {
         const previews = foreverPreviewLoad();
         const user = userEvent.setup();
-        renderWithProviders(<WowArmoryImportForm gameVariant="wow_forever" />);
+        renderForever();
         await user.type(firstName(), 'Ana');
         await user.click(searchButton());
         expect(await screen.findByRole('alert')).toHaveTextContent('Enter a first and second name');
         expect(previews).toHaveLength(0);
+    });
+
+    it('owns the kill switch: capability off shows the unavailable note and no search fields', () => {
+        renderForever(false);
+        expect(screen.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-identity-fields')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /search armory/i })).not.toBeInTheDocument();
     });
 });

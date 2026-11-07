@@ -42,8 +42,24 @@ interface ArmoryForm {
   search: Locator;
 }
 
+/** CI has no Blizzard keys: answer the status read with Blizzard configured (page-local) so the Armory tab mounts its form. */
+async function forceBlizzardConfigured(page: Page): Promise<void> {
+  await page.route(
+    (url) => url.pathname.endsWith("/system/status"),
+    async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as Record<string, unknown>;
+      await route.fulfill({
+        response,
+        json: { ...body, blizzardConfigured: true },
+      });
+    },
+  );
+}
+
 /** Open Add Character, pick WoW: Forever, switch to the Armory tab. */
 async function openForeverArmory(page: Page): Promise<ArmoryForm> {
+  await forceBlizzardConfigured(page);
   await page.goto("/profile/gaming/characters");
   await page.getByRole("button", { name: "Add Character" }).first().click();
   const dialog = page.getByRole("dialog", { name: "Add Character" });

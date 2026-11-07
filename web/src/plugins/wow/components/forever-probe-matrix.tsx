@@ -1,7 +1,8 @@
 /**
  * ROK-1716: the Forever probe's candidate x region matrix. Each cell holds one
  * status chip per probed endpoint (realm, connected-realm, playable-race,
- * profile, and ROK-2102's ruleset / profile-family / guild-roster), labelled
+ * profile, ROK-2102's ruleset / profile-family / guild-roster, and ROK-2103's
+ * static journal tiers / instances / classes), labelled
  * short in the legend. Matches are listed above the matrix: a ruleset-index
  * signal reads "ruleset index", a Skyborne one its race name. Collapsed by default; the table scrolls inside its own container
  * so a phone never gets page overflow. Table styling follows the admin logs /
@@ -14,12 +15,14 @@ import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = [
     'realm', 'connected-realm', 'playable-race', 'ruleset', 'profile',
     'profile-equipment', 'profile-professions', 'profile-quests', 'profile-media', 'guild-roster',
+    'journal-expansion', 'journal-instance', 'playable-class',
 ];
 /** Legend label per endpoint — the ROK-2102 additions get short names so the legend stays one line. */
 const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     realm: 'realm', 'connected-realm': 'connected-realm', 'playable-race': 'playable-race', ruleset: 'ruleset',
     profile: 'profile', 'profile-equipment': 'equip', 'profile-professions': 'prof', 'profile-quests': 'quests',
     'profile-media': 'media', 'guild-roster': 'guild',
+    'journal-expansion': 'Journal tiers', 'journal-instance': 'Journal instances', 'playable-class': 'Classes',
 };
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';
