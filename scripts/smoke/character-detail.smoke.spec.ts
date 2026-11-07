@@ -33,6 +33,8 @@ interface SeedCharacter {
         }>;
         syncedAt: string;
     } | null;
+    /** ROK-2107 — provenance of the effective `professions`. */
+    professionsSource?: 'manual' | 'blizzard' | null;
 }
 
 /**
@@ -215,6 +217,20 @@ test.describe('Character detail page', () => {
         await expect(
             page.getByRole('heading', { name: 'Professions' }),
         ).toBeVisible({ timeout: 10_000 });
+
+        // ROK-2107 (AC8) — the source pill next to the heading names where the
+        // shown professions came from (seeded rows carry a hand-entered value).
+        const expectedPill =
+            profChar!.professionsSource === 'blizzard' ? 'Armory' : 'Manual';
+        expect(
+            ['manual', 'blizzard'],
+            'the character DTO must report a professions source',
+        ).toContain(profChar!.professionsSource);
+        await expect(
+            page
+                .getByRole('region', { name: 'Professions' })
+                .getByText(expectedPill, { exact: true }),
+        ).toBeVisible({ timeout: 5_000 });
 
         // First primary profession name + its skill text render
         const firstPrimary = defined(
