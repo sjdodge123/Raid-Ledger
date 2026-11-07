@@ -120,6 +120,16 @@ export const ForeverProbeEndpointSchema = z.enum([
     'journal-expansion',
     'journal-instance',
     'playable-class',
+    // ROK-2108: keys-only profile sub-resources, guild summary, ruleset detail.
+    'profile-specializations',
+    'profile-encounters-raids',
+    'profile-encounters-dungeons',
+    'profile-reputations',
+    'profile-achievements',
+    'profile-statistics',
+    'profile-quests-completed',
+    'guild-summary',
+    'ruleset-detail',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
@@ -160,6 +170,19 @@ export const ForeverProbeNamedShapeSchema = z.object({
     names: z.array(z.string().max(120)).max(200),
 });
 export type ForeverProbeNamedShapeDto = z.infer<typeof ForeverProbeNamedShapeSchema>;
+
+/**
+ * ROK-2108: a keys-only shape for the profile extras, guild summary and ruleset
+ * detail — top-level keys plus, per top-level array, its first element's keys
+ * and its length. Never values. `entryCount` is always 0 for this shape.
+ */
+export const ForeverProbeDeepKeysShapeSchema = z.object({
+    topLevelKeys: z.array(z.string()),
+    entryCount: z.number().int().nonnegative(),
+    arrayKeys: z.record(z.string(), z.array(z.string())),
+    arrayLengths: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type ForeverProbeDeepKeysShapeDto = z.infer<typeof ForeverProbeDeepKeysShapeSchema>;
 
 export const ForeverProbeResultSchema = z.object({
     ranAt: z.string(),
