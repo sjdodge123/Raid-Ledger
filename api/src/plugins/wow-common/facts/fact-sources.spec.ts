@@ -142,6 +142,7 @@ const charRow = {
   itemLevel: 66,
   professions: { primary: [], secondary: [], syncedAt: T.toISOString() },
   armoryProfessions: null,
+  armoryQuests: null,
   lastSyncedAt: T,
   externalId: null,
   addonGuid: 'Player-1-abc',

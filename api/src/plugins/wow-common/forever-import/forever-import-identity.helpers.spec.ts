@@ -35,7 +35,12 @@ const profile: EnrichedProfile['profile'] = {
   renderUrl: null,
   profileUrl: null,
 };
-const noSync = { professions: null, equipment: null, talents: null };
+const noSync = {
+  professions: null,
+  armoryQuests: null,
+  equipment: null,
+  talents: null,
+};
 
 const dto = (over: Partial<ImportWowCharacterInput> = {}) =>
   ImportWowCharacterSchema.parse({
@@ -77,6 +82,7 @@ function row(over: Partial<Row> = {}): Row {
     talents: null,
     professions: null,
     armoryProfessions: null,
+    armoryQuests: null,
     displayOrder: 0,
     createdAt: now,
     updatedAt: now,

@@ -1,0 +1,1 @@
+ALTER TABLE "characters" ADD COLUMN "armory_quests" jsonb;

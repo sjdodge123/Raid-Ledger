@@ -246,3 +246,16 @@ describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
     expect([...realmRefusals.keys()]).toEqual([]);
   });
 });
+
+describe('BlizzardService.fetchCharacterQuests — Forever-only guard (ROK-2109)', () => {
+  it('returns null for a non-Forever namespace without requesting a token', async () => {
+    const { service, getAccessToken } = setup();
+    await expect(
+      service.fetchCharacterQuests('Androl', 'whitemane', 'us', null),
+    ).resolves.toBeNull();
+    await expect(
+      service.fetchCharacterQuests('Androl', 'whitemane', 'us', 'classic1x'),
+    ).resolves.toBeNull();
+    expect(getAccessToken).not.toHaveBeenCalled();
+  });
+});

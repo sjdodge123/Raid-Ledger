@@ -6,16 +6,24 @@ import { NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { CharacterQuestsService } from './character-quests.service';
-import { loadForeverCharSnapshot } from './forever-char-snapshot.query';
+import { effectiveQuests } from './forever-quest-source.helpers';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { buildCharacterQuests } from './character-quests.helpers';
 import { instanceName } from './dungeon-instance-names';
 
-jest.mock('./forever-char-snapshot.query');
+jest.mock('./forever-quest-source.query');
 jest.mock('./character-quests.helpers');
 
 const CHAR_ID = '6f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f';
 const CAPTURED = new Date('2026-10-01T12:00:00.000Z');
-const loader = jest.mocked(loadForeverCharSnapshot);
+const sources = jest.mocked(loadForeverQuestSources);
+/** Feed the mocked loader a snapshot (or none) through the real D4 helper. */
+const loader = {
+  mockResolvedValue(snap: { data: unknown; capturedAt: Date } | null): void {
+    const eff = effectiveQuests(snap, null, CAPTURED);
+    sources.mockResolvedValue(new Map(eff ? [[CHAR_ID, eff]] : []));
+  },
+};
 const builder = jest.mocked(buildCharacterQuests);
 
 const KNOWN_ROW = {
@@ -58,10 +66,10 @@ function makeDb(...results: unknown[][]): PostgresJsDatabase<typeof schema> {
   return { select } as unknown as PostgresJsDatabase<typeof schema>;
 }
 
-const snapshot = (data: Record<string, unknown>) =>
-  ({ data, capturedAt: CAPTURED }) as unknown as Awaited<
-    ReturnType<typeof loadForeverCharSnapshot>
-  >;
+const snapshot = (data: Record<string, unknown>) => ({
+  data,
+  capturedAt: CAPTURED,
+});
 
 const QUESTS = {
   completed: [5001, 99999],
@@ -76,7 +84,7 @@ describe('CharacterQuestsService.getForCharacter', () => {
     await expect(svc.getForCharacter(CHAR_ID)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(loader).not.toHaveBeenCalled();
+    expect(sources).not.toHaveBeenCalled();
   });
 
   it('returns null when the character has no Forever snapshot', async () => {
@@ -109,9 +117,14 @@ describe('CharacterQuestsService.getForCharacter', () => {
       makeDb([{ id: CHAR_ID }], [KNOWN_ROW]),
     );
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBe(built);
-    expect(loader).toHaveBeenCalledWith(expect.anything(), CHAR_ID);
+    expect(sources).toHaveBeenCalledWith(expect.anything(), [CHAR_ID]);
     expect(builder).toHaveBeenCalledWith(
-      { capturedAt: CAPTURED.toISOString(), quests: QUESTS },
+      {
+        capturedAt: CAPTURED.toISOString(),
+        quests: QUESTS,
+        source: 'addon',
+        inProgressSyncedAt: CAPTURED.toISOString(),
+      },
       [expect.objectContaining({ questId: 5001, dungeonInstanceId: 226 })],
       instanceName,
     );

@@ -1,0 +1,15 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/quests/completed?namespace=profile-forever-us"
+    }
+  },
+  "character": { "name": "Ana Forever", "id": 900001 },
+  "quests": [
+    { "key": { "href": "https://us.api.blizzard.com/data/wow/quest/7003" }, "name": "Invented Quest Three", "id": 7003 },
+    { "key": { "href": "https://us.api.blizzard.com/data/wow/quest/7001" }, "name": "Invented Quest One", "id": 7001 },
+    { "key": { "href": "https://us.api.blizzard.com/data/wow/quest/7002" }, "name": "Invented Quest Two", "id": 7002 },
+    { "key": { "href": "https://us.api.blizzard.com/data/wow/quest/7005" }, "name": "Invented Quest Five", "id": 7005 },
+    { "key": { "href": "https://us.api.blizzard.com/data/wow/quest/7004" }, "name": "Invented Quest Four", "id": 7004 }
+  ]
+}
