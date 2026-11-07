@@ -55,7 +55,11 @@ function normaliseIds(raw: unknown[]): {
   };
 }
 
-/** Parse a `quests/completed` body; `null` when it has no `quests` array. */
+/**
+ * Parse a `quests/completed` body; `null` when it has no `quests` array or no
+ * usable id — an empty list must not be stored, since the always-newer sync
+ * would otherwise shadow the addon's completed list.
+ */
 export function parseCompletedQuests(
   body: unknown,
   fetchedAt: string = new Date().toISOString(),
@@ -65,6 +69,7 @@ export function parseCompletedQuests(
   const { completed, truncated } = normaliseIds(
     parsed.data.quests.map((q) => q.id),
   );
+  if (completed.length === 0) return null;
   return {
     fetchedAt,
     completed,

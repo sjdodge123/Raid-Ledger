@@ -99,6 +99,11 @@ describe('parseCompletedQuests (ROK-2109 AC3)', () => {
     expect(parseCompletedQuests({ character: {} }, AT)).toBeNull();
     expect(parseCompletedQuests(null, AT)).toBeNull();
   });
+
+  it('returns null for an empty list so it never shadows the addon list', () => {
+    expect(parseCompletedQuests({ quests: [] }, AT)).toBeNull();
+    expect(parseCompletedQuests({ quests: [{ id: 0 }] }, AT)).toBeNull();
+  });
 });
 
 describe('fetchCharacterQuests (ROK-2109 AC2)', () => {
