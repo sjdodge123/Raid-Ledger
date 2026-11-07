@@ -29,7 +29,6 @@ import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { checkUpdateClaim } from './characters-update-claim.helpers';
 import { isRosterClaimed } from './characters-roster-claim.helpers';
-import { defined } from '../common/defined.helpers';
 import { withDisplayOverrides } from './characters-display-equipment.helpers';
 import * as policyH from './characters-external-policy.helpers';
 
@@ -180,10 +179,12 @@ export class CharactersService {
         .set({ isMain: true, updatedAt: new Date() })
         .where(crudH.ownedCharacter(userId, characterId))
         .returning();
+      // Moved to another owner mid-request: 404 (rolls back the demote).
+      if (!updated) throw new NotFoundException('Character not found');
       this.logger.log(
         `User ${userId} set character ${characterId} as main for game ${character.gameId}`,
       );
-      return mapCharacterToDto(defined(updated, 'updated character row'));
+      return mapCharacterToDto(updated);
     });
   }
 
