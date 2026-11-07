@@ -44,8 +44,14 @@ export function effectiveProfessions(
   const armory = parseProfessions(armoryRaw);
   const ordered: [CharacterProfessionsDto | null, ProfessionsSource][] =
     manualWins
-      ? [[manual, 'manual'], [armory, 'blizzard']]
-      : [[armory, 'blizzard'], [manual, 'manual']];
+      ? [
+          [manual, 'manual'],
+          [armory, 'blizzard'],
+        ]
+      : [
+          [armory, 'blizzard'],
+          [manual, 'manual'],
+        ];
   for (const [value, source] of ordered) {
     if (value !== null) return { value, source };
   }
