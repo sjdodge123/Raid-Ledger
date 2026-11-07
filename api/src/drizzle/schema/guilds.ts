@@ -66,6 +66,18 @@ export const guilds = pgTable(
     realmSlug: varchar('realm_slug', { length: 100 }),
     guildSlug: varchar('guild_slug', { length: 100 }),
     blizzardGuildId: bigint('blizzard_guild_id', { mode: 'number' }),
+    /** ROK-1928: when the last Blizzard roster sync applied (a 200). */
+    blizzardRosterSyncedAt: timestamp('blizzard_roster_synced_at', {
+      withTimezone: true,
+    }),
+    /**
+     * ROK-1928: the last Blizzard roster sync's outcome — `ok`, `not_found`,
+     * `error` or `skipped_empty` (`guilds_blizzard_roster_status_check`).
+     */
+    blizzardRosterStatus: varchar('blizzard_roster_status', {
+      length: 12,
+      enum: ['ok', 'not_found', 'error', 'skipped_empty'],
+    }),
     faction: varchar('faction', { length: 20 }),
     memberCount: integer('member_count').default(0).notNull(),
     /** addon_import | blizzard | pelican (ROK-1831 server hubs) */
@@ -223,6 +235,10 @@ export const guilds = pgTable(
     check(
       'guilds_crest_active_check',
       sql`${table.crestActive} IS NULL OR ${table.crestActive} IN ('upload', 'preset')`,
+    ),
+    check(
+      'guilds_blizzard_roster_status_check',
+      sql`${table.blizzardRosterStatus} IS NULL OR ${table.blizzardRosterStatus} IN ('ok', 'not_found', 'error', 'skipped_empty')`,
     ),
     check(
       'guilds_name_override_kind_check',
