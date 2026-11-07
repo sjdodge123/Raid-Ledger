@@ -18,6 +18,7 @@ import { ForeverNamespaceProbeController } from './forever-namespace-probe.contr
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
+import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
@@ -57,17 +58,15 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
-import { RosterFactSource } from './facts/roster.fact-source';
-import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
-import { CharacterRowFactSource } from './facts/character-row.fact-source';
-import { BlizzardForeverFactSource } from './facts/blizzard-forever.fact-source';
-import { WowFactsService } from './facts/wow-facts.service';
+import { WowFactsModule } from './facts/wow-facts.module';
 import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
 import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
 import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
+import { NotificationModule } from '../../notifications/notification.module';
 
 @Module({
   imports: [
@@ -75,6 +74,10 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     CharactersModule,
     GuildsCoreModule,
     CompanionIngestModule,
+    // ROK-2100 B.2: the companion's RULESET_REQUIRED in-app notice.
+    NotificationModule,
+    // ROK-1910/1920: roster fact sources + WowFactsService.
+    WowFactsModule,
   ],
   controllers: [
     BlizzardController,
@@ -100,6 +103,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     ForeverConfigService,
     ForeverNamespaceProbeService,
     ForeverRealmRulesetsService,
+    ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,
@@ -130,12 +134,6 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     GuildBlizzardRosterService,
     ...rosterSync.PROVIDERS,
     WowHubKindAdapter,
-    // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
-    RosterFactSource,
-    AddonSnapshotFactSource,
-    CharacterRowFactSource,
-    BlizzardForeverFactSource,
-    WowFactsService,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,
     RosterInsightsService,
@@ -143,6 +141,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     RecentDingsService,
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     WowLedgerlinkHandler,
+    LedgerlinkRulesetNoticeService,
   ],
   exports: [
     BlizzardService,
@@ -151,7 +150,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
-    WowFactsService,
+    WowFactsModule,
     GuildsCoreModule,
   ],
 })

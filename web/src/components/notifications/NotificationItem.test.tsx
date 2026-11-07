@@ -206,3 +206,25 @@ describe('NotificationItem — hub notifications', () => {
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 });
+
+describe('NotificationItem — LedgerLink ruleset notice (ROK-2100 B.4)', () => {
+    it('ROK-2100: the LedgerLink ruleset notice opens Characters and marks itself read', async () => {
+        const user = userEvent.setup();
+        renderItem(
+            makeNotification({
+                type: 'system',
+                title: 'Pick a ruleset for Ana Forever',
+                payload: {
+                    kind: 'ledgerlink_ruleset_required',
+                    guid: 'Player-4395-0000BEEF',
+                    characterName: 'Ana Forever',
+                    realmName: 'CAMWOW US2 Realm 9',
+                    link: '/profile/gaming/characters',
+                },
+            }),
+        );
+        await user.click(screen.getByRole('button'));
+        expect(mockNavigate).toHaveBeenCalledWith('/profile/gaming/characters');
+        expect(mockMarkRead).toHaveBeenCalledWith('n1');
+    });
+});

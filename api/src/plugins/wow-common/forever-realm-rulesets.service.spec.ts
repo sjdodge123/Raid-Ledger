@@ -9,6 +9,7 @@ import {
 } from './addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from './addon-import/testing/pin-export-clock';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
+import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
 import { WOW_FOREVER_REALM_RULESETS_KEY } from './forever.settings';
 
 pinExportClock();
@@ -27,16 +28,19 @@ async function setup(initial: Record<string, string> = {}) {
       return Promise.resolve();
     }),
   };
+  const lookup = { lookup: jest.fn().mockResolvedValue(null) };
   const moduleRef = await Test.createTestingModule({
     providers: [
       ForeverRealmRulesetsService,
       { provide: SettingsService, useValue: settings },
+      { provide: ForeverRulesetLookupService, useValue: lookup },
     ],
   }).compile();
   return {
     service: moduleRef.get(ForeverRealmRulesetsService),
     store,
     settings,
+    lookup,
   };
 }
 
@@ -128,5 +132,68 @@ describe('ForeverRealmRulesetsService.inferForPaste (ROK-1739)', () => {
       realmName: 'Bloodmoon',
       source: 'realm-map',
     });
+  });
+});
+
+describe('ForeverRealmRulesetsService.resolveForPaste order (ROK-2100)', () => {
+  const RP_PVP_REALM = 'CAMWOW US2 Realm 9 RP PvP';
+  const paste = (realmName: string, ruleset: 'pvp' | null = null) =>
+    decodeImportPaste(
+      buildImportString(
+        buildCharPayload({
+          who: buildWho({
+            ruleset,
+            raw: { getUnitName: 'Ana Forever', realmName },
+          }),
+        }),
+      ),
+    );
+
+  it('1: a map hit wins without calling the Blizzard lookup', async () => {
+    const { service, lookup } = await setup();
+    await service.saveMap({
+      entries: [{ region: 'us', realmName: RP_PVP_REALM, ruleset: 'normal' }],
+    });
+    expect(await service.resolveForPaste(paste(RP_PVP_REALM))).toEqual({
+      ruleset: 'normal',
+      realmName: RP_PVP_REALM,
+      source: 'realm-map',
+    });
+    expect(lookup.lookup).not.toHaveBeenCalled();
+  });
+
+  it('2: a map miss + Blizzard hit → blizzard (beats the realm name)', async () => {
+    const { service, lookup } = await setup();
+    lookup.lookup.mockResolvedValue('pvp');
+    expect(await service.resolveForPaste(paste(RP_PVP_REALM))).toEqual({
+      ruleset: 'pvp',
+      realmName: RP_PVP_REALM,
+      source: 'blizzard',
+    });
+    expect(lookup.lookup).toHaveBeenCalledWith('Ana Forever', 'us');
+  });
+
+  it('3: map + Blizzard miss → the realm name infers rppvp', async () => {
+    const { service } = await setup();
+    expect(await service.resolveForPaste(paste(RP_PVP_REALM))).toEqual({
+      ruleset: 'rppvp',
+      realmName: RP_PVP_REALM,
+      source: 'realm-name',
+    });
+  });
+
+  it('4: everything misses → null (RULESET_REQUIRED downstream)', async () => {
+    const { service } = await setup();
+    expect(
+      await service.resolveForPaste(paste('CAMWOW US2 Realm 9')),
+    ).toBeNull();
+  });
+
+  it('the export carries a ruleset → null, no lookup', async () => {
+    const { service, lookup } = await setup();
+    expect(
+      await service.resolveForPaste(paste(RP_PVP_REALM, 'pvp')),
+    ).toBeNull();
+    expect(lookup.lookup).not.toHaveBeenCalled();
   });
 });

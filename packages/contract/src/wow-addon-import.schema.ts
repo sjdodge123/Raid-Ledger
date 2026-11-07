@@ -195,12 +195,13 @@ export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResul
 /**
  * ROK-1739 — a ruleset inferred from the export's realm. `'blizzard'` is
  * declared now so the Blizzard realm-type lookup (slice 2) is not a contract
- * change.
+ * change. ROK-2100 adds `'realm-name'` — inferred from the realm's own name
+ * (e.g. "… RP PvP") when neither the admin map nor Blizzard knows it.
  */
 export const AddonImportRulesetInferenceSchema = z.object({
     ruleset: WowForeverRulesetSchema,
     realmName: z.string(),
-    source: z.enum(['realm-map', 'blizzard']),
+    source: z.enum(['realm-map', 'blizzard', 'realm-name']),
 });
 export type AddonImportRulesetInferenceDto = z.infer<typeof AddonImportRulesetInferenceSchema>;
 
