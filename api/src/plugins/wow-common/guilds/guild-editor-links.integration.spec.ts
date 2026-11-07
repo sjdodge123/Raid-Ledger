@@ -13,6 +13,8 @@ import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { hasConfirmedMemberGrant } from './guild-delegation.helpers';
+import { findLinkedMemberRows } from './guild-membership.helpers';
 
 const SNAP = new Date('2026-10-10T20:00:00.000Z');
 const BEFORE_ANY_LINK = new Date('2026-01-01T00:00:00.000Z');
@@ -286,5 +288,135 @@ describe('editor grants effective + linkedUsername (ROK-1794 review)', () => {
         effective: expected,
       });
     }
+  });
+});
+
+/**
+ * ROK-2128 AC7 / D4: a roster pick never confers a member grant made before
+ * it, and an admin Change owner never hands the old owner's grant to the new
+ * owner (review 1 MAJOR) — staff re-grant after seeing the new link.
+ */
+const FOREVER = 'world-of-warcraft-forever';
+let fGuild: number;
+
+async function foreverGame(): Promise<number> {
+  const [found] = await testApp.db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.slug, FOREVER));
+  if (found) return found.id;
+  const [made] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'World of Warcraft: Forever', slug: FOREVER })
+      .returning({ id: schema.games.id }),
+    'forever game',
+  );
+  return made.id;
+}
+
+async function rosterRow(name: string, guid: string): Promise<number> {
+  const [m] = nonEmpty(
+    await testApp.db
+      .insert(schema.guildMembers)
+      .values({
+        guildId: fGuild,
+        guid,
+        characterName: name,
+        rankIndex: 3,
+        source: 'addon_import',
+        lastSeenAt: SNAP,
+      })
+      .returning({ id: schema.guildMembers.id }),
+    'roster row',
+  );
+  return m.id;
+}
+
+async function player(handle: string): Promise<{ id: number; token: string }> {
+  const email = `${handle}@ac7.test`;
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username: handle,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash: await bcrypt.hash('TestPassword123!', 4),
+    userId: u.id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
+  return { id: u.id, token: res.body.access_token as string };
+}
+
+async function claimRow(memberId: number, token: string): Promise<string> {
+  const res = await testApp.request
+    .post(`/plugins/wow/roster-claim/members/${memberId}/claim`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ ruleset: 'normal' });
+  expect(res.status).toBe(201);
+  return res.body.id as string;
+}
+
+const grant = (memberId: number) =>
+  testApp.db
+    .insert(schema.guildEditors)
+    .values({ guildId: fGuild, kind: 'member', guildMemberId: memberId });
+
+/** The member grant, for a user who IS linked to exactly `memberId`. */
+async function grantHonoured(userId: number, memberId: number) {
+  const rows = await findLinkedMemberRows(testApp.db, userId, fGuild);
+  expect(rows.map((r) => r.memberId)).toEqual([memberId]);
+  return hasConfirmedMemberGrant(testApp.db, fGuild, rows);
+}
+
+describe('roster claim + Change owner vs member grants (ROK-2128 AC7)', () => {
+  beforeAll(async () => {
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.guilds)
+        .values({
+          gameId: await foreverGame(),
+          region: 'us',
+          name: 'AC7 Watch',
+          nameKey: 'ac7 watch',
+          source: 'addon_import',
+          lastSnapshotAt: SNAP,
+        })
+        .returning({ id: schema.guilds.id }),
+      'forever guild',
+    );
+    fGuild = g.id;
+  });
+
+  it('a member grant made BEFORE a roster claim is not honoured for the claimer', async () => {
+    const memberId = await rosterRow('Grant First', 'G-AC7-FIRST');
+    await grant(memberId);
+    const picker = await player('ac7picker');
+    await claimRow(memberId, picker.token);
+    expect(await grantHonoured(picker.id, memberId)).toBe(false);
+  });
+
+  it('Change owner does not hand the old owner’s grant to the new owner', async () => {
+    const memberId = await rosterRow('Moved Link', 'G-AC7-MOVED');
+    const from = await player('ac7from');
+    const to = await player('ac7to');
+    const characterId = await claimRow(memberId, from.token);
+    await grant(memberId); // staff confirm FROM's link
+    expect(await grantHonoured(from.id, memberId)).toBe(true);
+    const res = await testApp.request
+      .put(`/admin/plugins/wow/characters/${characterId}/owner`)
+      .set('Authorization', `Bearer ${tokens.admin}`)
+      .send({ userId: to.id });
+    expect(res.status).toBe(200);
+    expect(await grantHonoured(to.id, memberId)).toBe(false);
   });
 });

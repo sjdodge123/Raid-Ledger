@@ -329,7 +329,9 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     );
     expect((await reassign(admin.token, id, { userId: 'x' })).status).toBe(400);
   });
+});
 
+describe('PUT …/owner — WoW characters only (ROK-2128 review 1)', () => {
   it('404s a character of a non-WoW game and leaves it with its owner', async () => {
     const owner = await makeUser('l3otherfrom');
     const to = await makeUser('l3otherto');

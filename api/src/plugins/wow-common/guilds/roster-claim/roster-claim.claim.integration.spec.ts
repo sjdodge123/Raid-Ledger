@@ -12,11 +12,7 @@ import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { findLinkedMemberRows } from '../guild-membership.helpers';
-import {
-  claimWithin,
-  readMember,
-  ROSTER_ROW_CHANGED,
-} from './roster-claim.tx';
+import { claimWithin, readMember, ROSTER_ROW_CHANGED } from './roster-claim.tx';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const SNAPSHOT = new Date('2026-11-01T00:00:00Z');
