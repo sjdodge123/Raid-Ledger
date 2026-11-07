@@ -9,8 +9,12 @@ import { FOREVER_PROBE_TIMEOUT_MS } from './forever-namespace-probe.helpers';
 /** Global Battle.net OAuth host (spec D12 / F2); recorded in the result. */
 export const BNET_OAUTH_HOST = 'oauth.battle.net';
 
-/** The only scope requested (spec F6). */
-export const BNET_PROBE_SCOPE = 'wow.profile';
+/**
+ * Scopes requested, space-separated as OAuth2 requires. Spec F6 asked for
+ * `wow.profile` only; the operator ruling of 2026-11-07 adds `openid` so the
+ * probe can record what Blizzard's userinfo returns (keys only).
+ */
+export const BNET_PROBE_SCOPE = 'openid wow.profile';
 
 /** The callback route as Nest serves it (no global prefix). */
 const NEST_CALLBACK_PATH = '/plugins/blizzard/bnet-account-probe/callback';

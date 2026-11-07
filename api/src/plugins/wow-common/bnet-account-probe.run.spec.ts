@@ -89,7 +89,8 @@ describe('the run budget (callback must 302 inside nginx 60s)', () => {
     const captured: { signal: AbortSignal | null } = { signal: null };
     const fetchFn: BnetFetch = (url, init) => {
       seen.push(url);
-      if (url.startsWith('https://oauth.battle.net/token')) {
+      // The token call and userinfo both answer before the budget is spent.
+      if (url.startsWith('https://oauth.battle.net/')) {
         return Promise.resolve(json({ access_token: 'AT', expires_in: 1 }));
       }
       captured.signal = init.signal ?? null;
@@ -114,7 +115,8 @@ describe('the run budget (callback must 302 inside nginx 60s)', () => {
       clientId: 'cid',
       clientSecret: 'cs',
     });
-    expect(seen).toHaveLength(2);
+    // token, userinfo (before the budget is spent), first namespace.
+    expect(seen).toHaveLength(3);
     expect(captured.signal?.aborted).toBe(true);
     expect(result.namespaces.slice(1)).toEqual([
       expect.objectContaining({ status: null, error: 'timeout' }),
@@ -123,5 +125,82 @@ describe('the run budget (callback must 302 inside nginx 60s)', () => {
     ]);
     expect(getAppToken).not.toHaveBeenCalled();
     expect(result.idParity).toMatchObject({ checked: 2, errors: 2 });
+  });
+});
+
+const RUN_INPUT = {
+  at: '2026-11-07T00:00:00.000Z',
+  region: 'us',
+  code: 'c',
+  codeVerifier: 'v',
+  redirectUri: 'https://x.test/cb',
+  clientId: 'cid',
+  clientSecret: 'cs',
+} as const;
+
+function runWith(
+  route: (url: string) => Response | Promise<Response>,
+): ReturnType<typeof runBnetProbe> {
+  const fetchFn: BnetFetch = (url) => {
+    if (url.startsWith('https://oauth.battle.net/token')) {
+      return Promise.resolve(
+        json({ access_token: 'AT', scope: 'openid wow.profile' }),
+      );
+    }
+    return Promise.resolve(route(url));
+  };
+  return runBnetProbe(
+    {
+      fetchFn,
+      getAppToken: jest.fn().mockResolvedValue('app'),
+      foreverPrefix: 'forever',
+      signal: new AbortController().signal,
+    },
+    RUN_INPUT,
+  );
+}
+
+describe('the OpenID userinfo call (ruling 2026-11-07)', () => {
+  it('requests openid alongside wow.profile and records the granted scope', async () => {
+    const result = await runWith(() => json({}, 404));
+    expect(result.scopeRequested).toBe('openid wow.profile');
+    expect(result.token?.scope).toBe('openid wow.profile');
+  });
+
+  it('records the userinfo summary keys-only next to the namespaces', async () => {
+    const result = await runWith((url) =>
+      url === 'https://oauth.battle.net/userinfo'
+        ? json({ sub: '77', id: 77, battletag: 'Jaina#9999' })
+        : json(bodyWith([{ name: 'Hero One' }])),
+    );
+    expect(result.userinfo).toMatchObject({
+      answeredPath: '/userinfo',
+      keys: ['battletag', 'id', 'sub'],
+      idEqualsSub: true,
+    });
+    expect(result.namespaces).toHaveLength(4);
+    expect(JSON.stringify(result)).not.toContain('Jaina');
+  });
+
+  it('a 404 falls back to /oauth/userinfo', async () => {
+    const result = await runWith((url) =>
+      url.endsWith('/oauth/userinfo') ? json({ sub: '77' }) : json({}, 404),
+    );
+    expect(result.userinfo?.answeredPath).toBe('/oauth/userinfo');
+  });
+
+  it('a userinfo failure keeps the rest of the probe', async () => {
+    const result = await runWith((url) => {
+      if (url.includes('oauth.battle.net/')) {
+        return Promise.reject(new TypeError('fetch failed'));
+      }
+      return json(bodyWith([{ name: 'Hero One' }]));
+    });
+    expect(result.userinfo?.attempts).toEqual([
+      { path: '/userinfo', status: null, error: 'network' },
+    ]);
+    expect(result.error).toBeNull();
+    expect(result.namespaces[0]).toMatchObject({ status: 200 });
+    expect(result.idParity).not.toBeNull();
   });
 });

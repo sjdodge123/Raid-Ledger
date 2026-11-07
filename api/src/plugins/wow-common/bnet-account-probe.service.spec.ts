@@ -56,6 +56,15 @@ const okToken: Route = (url) =>
       })
     : null;
 
+const BATTLETAG = 'Thrall#4242';
+const USER_ID = 31337001;
+
+/** OpenID userinfo (2026-11-07 ruling): carries values that must never persist. */
+const userinfo: Route = (url) =>
+  url === 'https://oauth.battle.net/userinfo'
+    ? json({ sub: String(USER_ID), id: USER_ID, battletag: BATTLETAG })
+    : null;
+
 const userSummary =
   (n: number): Route =>
   (url) =>
@@ -150,7 +159,7 @@ describe('BnetAccountProbeService.start (AC6)', () => {
       response_type: 'code',
       client_id: 'cid',
       redirect_uri: `${CLIENT}/api/plugins/blizzard/bnet-account-probe/callback`,
-      scope: 'wow.profile',
+      scope: 'openid wow.profile',
       code_challenge_method: 'S256',
     });
     expect(p.state?.length).toBeGreaterThan(20);
@@ -389,6 +398,7 @@ describe('BnetAccountProbeService — ID parity (AC10)', () => {
 
 describe('BnetAccountProbeService — no secret leaves the request (AC11)', () => {
   it('no log line, persisted value or Sentry payload carries a token, code, state or name', async () => {
+    stubFetch(okToken, userinfo, userSummary(2));
     const logged: string[] = [];
     for (const level of ['log', 'warn', 'error', 'debug', 'verbose'] as const) {
       jest
@@ -412,7 +422,11 @@ describe('BnetAccountProbeService — no secret leaves the request (AC11)', () =
       JSON.stringify(jest.mocked(Sentry.captureException).mock.calls),
     ].join('\n');
     expect(persisted().length).toBeGreaterThan(0);
+    expect(persisted()).toContain('"keys":["battletag","id","sub"]');
     for (const secret of [
+      BATTLETAG,
+      'Thrall',
+      String(USER_ID),
       AT,
       RT,
       APP_TOKEN,

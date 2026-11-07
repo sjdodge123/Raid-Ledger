@@ -1,6 +1,6 @@
 /**
  * ROK-2129 L2: one Battle.net account-probe run after a verified callback —
- * exchange the code, ask `/profile/user/wow` in four namespaces, check ID
+ * exchange the code, ask OpenID userinfo (keys only, F2), ask `/profile/user/wow` in four namespaces, check ID
  * parity, and return a keys-only {@link BnetProbeResult}. The user access
  * token lives in this function's locals only (spec D7).
  */
@@ -25,6 +25,7 @@ import {
   summariseAccountSummary,
   summariseTokenResponse,
 } from './bnet-account-probe.summary';
+import { probeUserinfo } from './bnet-account-probe.userinfo';
 
 /**
  * Overall budget for one callback's Blizzard calls (MINOR-2): every proxy in
@@ -75,6 +76,7 @@ export function bnetProbeErrorResult(
     token: null,
     namespaces: [],
     idParity: null,
+    userinfo: null,
     error,
   };
 }
@@ -168,7 +170,8 @@ export async function runBnetProbe(
   if (!okStatus || accessToken === null) {
     return { ...base, token, error: 'exchange' };
   }
+  const userinfo = await probeUserinfo(deps.fetchFn, accessToken, deps.signal);
   const probed = await probeNamespaces(deps, input.region, accessToken);
   const idParity = await parity(deps, input.region, probed.foreverBody);
-  return { ...base, token, namespaces: probed.results, idParity };
+  return { ...base, token, userinfo, namespaces: probed.results, idParity };
 }

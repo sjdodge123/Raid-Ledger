@@ -129,7 +129,7 @@ describe('POST /admin/plugins/blizzard/bnet-account-probe/start (AC6)', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(
       `${client}/api/plugins/blizzard/bnet-account-probe/callback`,
     );
-    expect(url.searchParams.get('scope')).toBe('wow.profile');
+    expect(url.searchParams.get('scope')).toBe('openid wow.profile');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     const raw = JSON.stringify(res.headers['set-cookie']);
     expect(raw).toContain('rl_bnet_probe_r=');
