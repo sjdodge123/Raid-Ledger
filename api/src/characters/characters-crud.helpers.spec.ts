@@ -9,6 +9,8 @@ import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type * as schema from '../drizzle/schema';
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { prepareRefresh, syncAllCharacters } from './characters-crud.helpers';
+import { NO_EXTERNAL_POLICY } from './characters-external-policy.helpers';
+import { foreverExternalPolicy } from '../plugins/wow-common/forever-armory-switch';
 
 type Row = typeof schema.characters.$inferSelect;
 
@@ -65,7 +67,7 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
       mapCharacterToDto(row()),
       refreshDto,
       findAdapter,
-      true,
+      foreverExternalPolicy(true),
     );
     expect(out).toEqual({ region: 'us', gameVariant: 'wow_forever', adapter });
     expect(findAdapter).toHaveBeenCalledWith('wow_forever');
@@ -74,7 +76,12 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
   it('a manual row (variant null) takes the request variant', () => {
     const manual = mapCharacterToDto(row({ gameVariant: null }));
     expect(
-      prepareRefresh(manual, refreshDto, findAdapter, true).gameVariant,
+      prepareRefresh(
+        manual,
+        refreshDto,
+        findAdapter,
+        foreverExternalPolicy(true),
+      ).gameVariant,
     ).toBe('wow_forever');
   });
 
@@ -82,14 +89,24 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
     const manual = mapCharacterToDto(row({ gameVariant: null }));
     const retailDefault = RefreshCharacterSchema.parse({ region: 'us' });
     expect(retailDefault.gameVariant).toBe('retail');
-    const out = prepareRefresh(manual, retailDefault, findAdapter, true);
+    const out = prepareRefresh(
+      manual,
+      retailDefault,
+      findAdapter,
+      foreverExternalPolicy(true),
+    );
     expect(out.gameVariant).toBe('wow_forever');
     expect(findAdapter).toHaveBeenCalledWith('wow_forever');
   });
 
   it('403s a Forever refresh while the Armory kill switch is off', () => {
     expect(() =>
-      prepareRefresh(mapCharacterToDto(row()), refreshDto, findAdapter, false),
+      prepareRefresh(
+        mapCharacterToDto(row()),
+        refreshDto,
+        findAdapter,
+        foreverExternalPolicy(false),
+      ),
     ).toThrow(
       new ForbiddenException('Armory import for WoW: Forever is turned off'),
     );
@@ -98,7 +115,33 @@ describe('prepareRefresh — realmless Forever (ROK-1722)', () => {
 
   it('still 404s a row with neither realm nor ruleset', () => {
     const bare = mapCharacterToDto(row({ ruleset: null }));
-    expect(() => prepareRefresh(bare, refreshDto, findAdapter, true)).toThrow(
+    expect(() =>
+      prepareRefresh(
+        bare,
+        refreshDto,
+        findAdapter,
+        foreverExternalPolicy(true),
+      ),
+    ).toThrow(
+      new NotFoundException(
+        'Character has no realm — cannot refresh from external source',
+      ),
+    );
+    expect(findAdapter).not.toHaveBeenCalled();
+  });
+});
+
+describe('prepareRefresh — no identity provider (ROK-1722 boundary)', () => {
+  it('404s a realmless ruleset row when no provider owns realmless rows', () => {
+    const findAdapter = jest.fn();
+    expect(() =>
+      prepareRefresh(
+        mapCharacterToDto(row()),
+        refreshDto,
+        findAdapter,
+        NO_EXTERNAL_POLICY,
+      ),
+    ).toThrow(
       new NotFoundException(
         'Character has no realm — cannot refresh from external source',
       ),
@@ -144,7 +187,7 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
       db as never,
       () => adapter as never,
       logger,
-      true,
+      foreverExternalPolicy(true),
     );
     await jest.runAllTimersAsync();
     await expect(pending).resolves.toEqual({ synced: 1, failed: 0 });
@@ -159,6 +202,61 @@ describe('syncAllCharacters — realmless Forever (ROK-1722)', () => {
 });
 
 describe('syncAllCharacters — Forever kill switch off (ROK-1722)', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('still syncs a retail row next to the skipped Forever row', async () => {
+    jest.useFakeTimers();
+    const db = createDrizzleMock();
+    const retail = row({
+      id: 'char-retail',
+      name: 'Thrall',
+      realm: 'Area 52',
+      ruleset: null,
+      gameVariant: 'retail',
+    });
+    db.where.mockReturnValueOnce(Promise.resolve([row(), retail]));
+    db.limit.mockResolvedValueOnce([{ apiNamespacePrefix: null }]);
+    const fetchProfile = jest
+      .fn<Promise<unknown>, [string, string | null, string, string?]>()
+      .mockResolvedValue({
+        name: 'Thrall',
+        realm: 'Area 52',
+        class: 'Shaman',
+        spec: null,
+        role: null,
+        level: 80,
+        race: 'Orc',
+        faction: 'horde',
+        itemLevel: 600,
+        avatarUrl: null,
+        renderUrl: null,
+        profileUrl: null,
+      });
+    const adapter = {
+      fetchProfile,
+      fetchSpecialization: jest
+        .fn()
+        .mockResolvedValue({ spec: null, role: null, talents: null }),
+      fetchEquipment: jest.fn().mockResolvedValue(null),
+      fetchProfessions: jest.fn().mockResolvedValue(null),
+    };
+    const logger = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+    const pending = syncAllCharacters(
+      db as never,
+      () => adapter as never,
+      logger,
+      foreverExternalPolicy(false),
+    );
+    await jest.runAllTimersAsync();
+    await expect(pending).resolves.toEqual({ synced: 1, failed: 0 });
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+    expect(fetchProfile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'Thrall',
+      'Area 52',
+      'us',
+    ]);
+  });
+
   it('leaves Forever rows out: no Blizzard call, counted neither way', async () => {
     const db = createDrizzleMock();
     db.where.mockReturnValueOnce(Promise.resolve([row()]));
@@ -166,7 +264,12 @@ describe('syncAllCharacters — Forever kill switch off (ROK-1722)', () => {
     const findAdapter = jest.fn(() => ({ fetchProfile }) as never);
     const logger = { log: jest.fn(), warn: jest.fn(), debug: jest.fn() };
     await expect(
-      syncAllCharacters(db as never, findAdapter, logger, false),
+      syncAllCharacters(
+        db as never,
+        findAdapter,
+        logger,
+        foreverExternalPolicy(false),
+      ),
     ).resolves.toEqual({ synced: 0, failed: 0 });
     expect(findAdapter).not.toHaveBeenCalled();
     expect(fetchProfile).not.toHaveBeenCalled();

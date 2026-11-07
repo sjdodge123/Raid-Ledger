@@ -7,6 +7,7 @@
  */
 import { ForbiddenException } from '@nestjs/common';
 import type { SettingsService } from '../../settings/settings.service';
+import type { ExternalImportPolicy } from '../plugin-host/character-external-import.types';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from './forever.settings';
 
 /** 403 copy when an admin has turned Forever Armory import off. */
@@ -46,4 +47,20 @@ export function assertForeverArmoryImport(
 ): void {
   if (variant === 'wow_forever' && !enabled)
     throw new ForbiddenException(FOREVER_ARMORY_OFF_MESSAGE);
+}
+
+/** Game variant of an Armory-linked, realmless WoW: Forever row. */
+export const WOW_FOREVER_VARIANT = 'wow_forever';
+
+/**
+ * Forever's external-import policy for core (ROK-1722): realmless linked rows
+ * refresh as `wow_forever`; while the switch is off a Forever import/refresh
+ * 403s and the nightly sync leaves Forever rows out.
+ */
+export function foreverExternalPolicy(enabled: boolean): ExternalImportPolicy {
+  return {
+    realmlessVariant: WOW_FOREVER_VARIANT,
+    assertAllowed: (variant) => assertForeverArmoryImport(variant, enabled),
+    includeInBulkSync: (variant) => enabled || variant !== WOW_FOREVER_VARIANT,
+  };
 }

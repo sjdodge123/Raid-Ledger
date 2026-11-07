@@ -18,7 +18,13 @@ type Logger = {
 
 /** Raw profile shape from the Blizzard character API. */
 export interface RawBlizzardProfile {
+  /** Blizzard character id. */
+  id?: number;
   name: string;
+  /** WoW: Forever second name; the display name joins it (ROK-1722). */
+  surname?: string;
+  /** Forever ruleset as Blizzard sends it (shape unmapped until ROK-2100). */
+  ruleset?: unknown;
   level: number;
   character_class: { name: string };
   active_spec?: { name: string };
@@ -75,8 +81,10 @@ function buildProfileUrl(
 function extractCoreFields(profile: RawBlizzardProfile) {
   const specName = profile.active_spec?.name ?? null;
   return {
-    name: profile.name,
+    name: profile.surname ? `${profile.name} ${profile.surname}` : profile.name,
     realm: profile.realm?.name ?? null,
+    externalId: typeof profile.id === 'number' ? String(profile.id) : null,
+    rulesetRaw: profile.ruleset ?? null,
     class: profile.character_class.name,
     spec: specName,
     role: specName ? specToRole(specName) : null,

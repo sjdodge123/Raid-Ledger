@@ -181,9 +181,11 @@ describe('Forever Armory import (ROK-1722)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       userId,
+      name: 'Ana Forever',
       realm: null,
       ruleset: 'pvp',
       gameVariant: 'wow_forever',
+      externalId: '900001',
     });
   });
 
@@ -214,6 +216,28 @@ describe('Forever Armory import (ROK-1722)', () => {
       gameVariant: 'wow_forever',
       class: 'Mage',
     });
+  });
+
+  it('Main ticked on a merge promotes the row and demotes the old main', async () => {
+    const { token } = await memberToken('forevermainmerge');
+    const create = (name: string) =>
+      testApp.request
+        .post('/users/me/characters')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId, name, region: 'us', ruleset: 'normal', class: 'Mage' });
+    const oldMain = await create('Bea Forever');
+    expect(oldMain.status).toBe(201);
+    expect(oldMain.body.isMain).toBe(true);
+    const alt = await create('ana forever');
+    expect(alt.status).toBe(201);
+    expect(alt.body.isMain).toBe(false);
+
+    const res = await importAs(token, { ...importBody, isMain: true });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ id: alt.body.id, isMain: true });
+    const byId = new Map((await foreverRows()).map((r) => [r.id, r.isMain]));
+    expect(byId.get(String(alt.body.id))).toBe(true);
+    expect(byId.get(String(oldMain.body.id))).toBe(false);
   });
 
   it("409s when another player's row holds the region + name", async () => {

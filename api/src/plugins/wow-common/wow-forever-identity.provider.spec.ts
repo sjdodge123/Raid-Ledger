@@ -23,7 +23,7 @@ function createDto(over: Partial<CreateCharacterDto> = {}): CreateCharacterDto {
 }
 
 describe('WowForeverIdentityProvider', () => {
-  const provider = new WowForeverIdentityProvider();
+  const provider = new WowForeverIdentityProvider({ get: jest.fn() });
 
   it('claims the Forever slug only', () => {
     expect(provider.gameSlugs).toEqual(['world-of-warcraft-forever']);
@@ -85,7 +85,7 @@ describe('WowForeverIdentityProvider', () => {
 describe('WowCommonModule character-identity registration', () => {
   it('registers the identity provider for each of its slugs, nothing else', () => {
     const registerAdapter = jest.fn();
-    const identity = new WowForeverIdentityProvider();
+    const identity = new WowForeverIdentityProvider({ get: jest.fn() });
     const noSlugs = { gameSlugs: [] as string[] };
     const mod = new WowCommonModule(
       { registerAdapter } as never,
