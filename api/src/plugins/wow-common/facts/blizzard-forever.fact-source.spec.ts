@@ -57,6 +57,7 @@ function row(id: string, over: Record<string, unknown> = {}) {
     itemLevel: 64,
     equipment: EQUIPMENT,
     armoryProfessions: null,
+    armoryQuests: null,
     lastSyncedAt: SYNCED,
     ...over,
   };
