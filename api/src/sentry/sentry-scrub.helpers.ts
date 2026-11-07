@@ -21,7 +21,9 @@ export const REDACTED = '[redacted]';
 
 const SECRET_KEY =
   /token|secret|credential|authorization|code_verifier|password|cookie|api[-_]?key|device_?code|user_?code/i;
-const REQUEST_ONLY_KEYS = new Set(['code', 'state']);
+// ROK-2117: `key` is an API key in a request (query pairs, `{ key }` params),
+// but too generic to redact everywhere (hub widget ids, sort keys).
+const REQUEST_ONLY_KEYS = new Set(['code', 'state', 'key']);
 // ROK-2117: ITAD, Steam and Gemini send their API key as `?key=` (also
 // `api_key` / `apikey` / `api-key`). The `([?&#]|^)` anchor keeps `monkey=`
 // and `turkey=` out. Parity with `logs-scrub.patterns.ts` is pinned in the spec.

@@ -74,6 +74,30 @@ describe('scrubSecrets', () => {
     ]);
   });
 
+  it("redacts a ['key', value] query pair and a { key } request param (ROK-2117)", () => {
+    const event = {
+      request: {
+        query_string: [
+          ['key', SECRET],
+          ['appid', '440'],
+        ],
+        data: { key: SECRET, title: 'Hades' },
+      },
+    };
+    scrubSecrets(event);
+    expect(event.request.query_string).toEqual([
+      ['key', REDACTED],
+      ['appid', '440'],
+    ]);
+    expect(event.request.data).toEqual({ key: REDACTED, title: 'Hades' });
+  });
+
+  it('keeps a `key` field outside the request (ROK-2117)', () => {
+    const event = { extra: { key: 'forever-raid-progress' } };
+    scrubSecrets(event);
+    expect(event.extra.key).toBe('forever-raid-progress');
+  });
+
   it('keeps triage codes outside the request (Discord / Postgres `code`)', () => {
     const event = {
       extra: { code: 50007 },
