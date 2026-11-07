@@ -4090,3 +4090,7 @@ same day (#1278, #1279, #1280).
 ### 2026-11-06 — feat/rok-2106-bindings-grouped (surfaced during the ROK-2106 local admin vitest run)
 
 - low `web/src/components/admin/nas-only-route.test.tsx` ("cloud: the Demo Data panel never renders — the URL lands on General") — failed once in `npx vitest run src/components/admin src/pages/admin` (79 files, laptop), passed in isolation twice and on the next full rerun; file untouched by the branch. Looks load/timing-sensitive. Suggested: replace any implicit-timing read with `findBy*`/`waitFor` on the General-tab landmark and loop it with `--repeat 50`.
+
+### 2026-11-07 — fix/td-4082-dot-segments (overnight trivial fix)
+
+- **(resolved)** line 4082 `api/src/plugins/wow-common/blizzard-character.helpers.ts` — `assertNotDotSegment` rejects an empty or dots-only realm slug and character name with a 400 before percent-encoding; the 2904 encoding of other characters is unchanged. Spec: dot-only realm (`.`, `..`, `...`, ` . `) and name (`.`, `..`) cases.

@@ -11,7 +11,11 @@ import {
   CLASSIC_TALENT_TREE_ROLES,
 } from './blizzard.constants';
 import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
-import { buildForeverCharacterSlug } from './forever-character-slug';
+import {
+  assertNotDotSegment,
+  buildRealmSlug,
+  buildRealmlessCharName,
+} from './blizzard-character-path.helpers';
 
 const logger = new Logger('BlizzardCharacterHelpers');
 
@@ -29,23 +33,6 @@ export interface CharacterParams {
   charName: string;
   namespace: string;
   baseUrl: string;
-}
-
-/** Slugify + percent-encode a realm name into a URL path segment. */
-function buildRealmSlug(realm: string): string {
-  return encodeURIComponent(
-    realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim(),
-  );
-}
-
-/** Realmless Forever slug; a malformed stored name maps to a 400. */
-function buildRealmlessCharName(name: string): string {
-  try {
-    return buildForeverCharacterSlug(name);
-  } catch (err) {
-    if (err instanceof Error) throw new BadRequestException(err.message);
-    throw err;
-  }
 }
 
 /** Build API base params for character endpoints.
@@ -80,6 +67,7 @@ export function buildCharacterParams(
     };
   }
   const realmSlug = buildRealmSlug(realm);
+  assertNotDotSegment(name.toLowerCase(), 'Character name');
   const charName = encodeURIComponent(name.toLowerCase());
   const characterPath = `${realmSlug}/${charName}`;
   return { characterPath, realmSlug, charName, namespace, baseUrl };
