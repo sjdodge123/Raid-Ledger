@@ -40,7 +40,11 @@ export function realmlessSlugFromHref(href: unknown): string | null {
     }
     if (!url.pathname.startsWith(CHARACTER_PATH)) return null;
     const rest = url.pathname.slice(CHARACTER_PATH.length);
-    return rest.length > 0 && !rest.includes('/') ? rest : null;
+    if (rest.length === 0 || rest.includes('/')) return null;
+    // `pathname` keeps the percent-escapes; `buildProfileUrl` encodes again,
+    // so hand back the decoded slug (a malformed escape throws → null).
+    const slug = decodeURIComponent(rest);
+    return slug.includes('/') ? null : slug;
   } catch {
     return null;
   }
@@ -49,7 +53,8 @@ export function realmlessSlugFromHref(href: unknown): string | null {
 function nameSlug(name: unknown): string | null {
   if (typeof name !== 'string') return null;
   try {
-    return buildRealmlessCharName(name);
+    // The helper returns an encoded slug; `buildProfileUrl` encodes once.
+    return decodeURIComponent(buildRealmlessCharName(name));
   } catch {
     return null;
   }
@@ -76,10 +81,18 @@ export function parityTargets(body: unknown): ParityTarget[] {
 
 type Outcome = 'matched' | 'mismatched' | 'notFound' | 'errors';
 
+/** Lookup context; `signal` aborts once the run's overall budget is spent. */
+export interface ParityContext {
+  region: BnetProbeRegion;
+  prefix: string;
+  appToken: string;
+  signal: AbortSignal;
+}
+
 async function checkOne(
   fetchFn: BnetFetch,
   target: ParityTarget,
-  ctx: { region: BnetProbeRegion; prefix: string; appToken: string },
+  ctx: ParityContext,
 ): Promise<Outcome> {
   if (target.slug === null) return 'errors';
   const url = buildProfileUrl(target.slug, ctx.prefix, ctx.region);
@@ -92,11 +105,15 @@ async function checkOne(
   return res.body.id === target.id ? 'matched' : 'mismatched';
 }
 
-/** Sequentially check up to {@link BNET_PROBE_PARITY_CAP} characters. */
+/**
+ * Sequentially check up to {@link BNET_PROBE_PARITY_CAP} characters. Once
+ * `ctx.signal` aborts (run budget spent) the rest are not looked up and
+ * count as `errors` — a partial result, still `checked` in full.
+ */
 export async function runIdParity(
   fetchFn: BnetFetch,
   body: unknown,
-  ctx: { region: BnetProbeRegion; prefix: string; appToken: string },
+  ctx: ParityContext,
 ): Promise<BnetProbeIdParity> {
   const targets = parityTargets(body).slice(0, BNET_PROBE_PARITY_CAP);
   const out: BnetProbeIdParity = {
@@ -110,7 +127,8 @@ export async function runIdParity(
   };
   for (const target of targets) {
     out[target.via === 'href' ? 'viaHref' : 'viaName'] += 1;
-    out[await checkOne(fetchFn, target, ctx)] += 1;
+    const skipped = ctx.signal.aborted;
+    out[skipped ? 'errors' : await checkOne(fetchFn, target, ctx)] += 1;
   }
   return out;
 }

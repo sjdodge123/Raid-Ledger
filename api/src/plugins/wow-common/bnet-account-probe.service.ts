@@ -34,6 +34,7 @@ import {
   type BnetFetch,
 } from './bnet-account-probe.oauth';
 import {
+  BNET_PROBE_RUN_BUDGET_MS,
   bnetProbeErrorResult,
   runBnetProbe,
   type BnetProbeRunDeps,
@@ -141,6 +142,7 @@ export class BnetAccountProbeService {
       fetchFn: globalFetch,
       getAppToken: (r) => this.auth.getAccessToken(r),
       foreverPrefix: getForeverNamespacePrefix(),
+      signal: AbortSignal.timeout(BNET_PROBE_RUN_BUDGET_MS),
     };
     const result = await runBnetProbe(deps, {
       at: this.now(),
