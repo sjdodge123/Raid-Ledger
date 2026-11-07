@@ -271,19 +271,19 @@ describe('Forever Armory import (ROK-1722)', () => {
   });
 });
 
-describe('Forever Armory refresh + auto-sync (ROK-1722)', () => {
-  /** Import, then age the row so the refresh cooldown and the level change show. */
-  async function importAndAge(token: string): Promise<string> {
-    const res = await importAs(token);
-    expect(res.status).toBe(201);
-    const id = res.body.id as string;
-    await testApp.db
-      .update(schema.characters)
-      .set({ level: 1, lastSyncedAt: new Date('2026-01-01T00:00:00Z') })
-      .where(eq(schema.characters.id, id));
-    return id;
-  }
+/** Import, then age the row so the refresh cooldown and the level change show. */
+async function importAndAge(token: string): Promise<string> {
+  const res = await importAs(token);
+  expect(res.status).toBe(201);
+  const id = res.body.id as string;
+  await testApp.db
+    .update(schema.characters)
+    .set({ level: 1, lastSyncedAt: new Date('2026-01-01T00:00:00Z') })
+    .where(eq(schema.characters.id, id));
+  return id;
+}
 
+describe('Forever Armory refresh + auto-sync (ROK-1722)', () => {
   it('refresh re-reads the realmless profile and updates the row', async () => {
     const { token } = await memberToken('foreverrefresh');
     const id = await importAndAge(token);
@@ -384,5 +384,55 @@ describe('Forever Armory kill switch off (ROK-1722)', () => {
       .from(schema.characters)
       .where(eq(schema.characters.id, id));
     expect(row?.level).toBe(1);
+  });
+});
+
+describe('Forever professions provenance (ROK-2107)', () => {
+  it('a hand-entered profession survives a refresh; Blizzard lands in armory_professions (ROK-2107 AC3)', async () => {
+    const { token } = await memberToken('foreverprofs');
+    const id = await importAndAge(token);
+    const manual = {
+      primary: [
+        {
+          id: 165,
+          name: 'Leatherworking',
+          slug: 'leatherworking',
+          skillLevel: 60,
+          maxSkillLevel: 75,
+          tiers: [],
+        },
+      ],
+      secondary: [],
+      syncedAt: '2026-11-01T00:00:00.000Z',
+    };
+    const patch = await testApp.request
+      .patch(`/users/me/characters/${id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ professions: manual });
+    expect(patch.status).toBe(200);
+    const res = await testApp.request
+      .post(`/users/me/characters/${id}/refresh`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ region: 'us', gameVariant: 'wow_forever' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      professions: manual,
+      professionsSource: 'manual',
+      hasManualProfessions: true,
+    });
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, id)),
+      'refreshed row',
+    );
+    expect(row.professions).toEqual(manual);
+    const armory = row.armoryProfessions as {
+      primary: { name: string }[];
+      secondary: { name: string }[];
+    } | null;
+    expect(armory?.primary.map((p) => p.name)).toEqual(['Tailoring']);
+    expect(armory?.secondary.map((p) => p.name)).toEqual(['Cooking']);
   });
 });
