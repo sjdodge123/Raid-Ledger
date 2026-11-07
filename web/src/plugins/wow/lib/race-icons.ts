@@ -7,7 +7,8 @@
  * so zamimg is the host (already in CSP img-src). zamimg 404s `race_undead_*`;
  * the game-file token is `scourge`, hence the Undead mapping below.
  *
- * No allowlist beyond these races: an unmapped race (Skyborne, Goblin) returns
+ * No allowlist beyond these races: an unmapped race (Skyborne — Blizzard's
+ * `playable-race` names it "High Order Skyborne" — or Goblin) returns
  * null and the caller falls back to the class tile — a race icon is never guessed.
  */
 const RACE_ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/large';

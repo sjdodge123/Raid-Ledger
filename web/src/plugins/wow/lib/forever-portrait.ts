@@ -1,8 +1,10 @@
 /**
- * ROK-1761: the fallback portrait for a WoW: Forever character. Forever has no
- * Blizzard character render and the LedgerLink addon cannot export images, so a
- * Forever character without an avatar shows a token tile: the class icon plus a
- * race initial badge (operator ruling 2026-10-10 — no generated per-race art).
+ * ROK-1761: the fallback portrait for a WoW: Forever character without an avatar.
+ * Blizzard's character-media render works for Forever since the API went live
+ * (ROK-2102, `profile-forever-{region}`), but it can 404 for hours after a
+ * character is created, and the LedgerLink addon cannot export images — so such a
+ * character shows a token tile: the class icon plus a race initial badge
+ * (operator ruling 2026-10-10 — no generated per-race art).
  * ROK-1747: when the race AND gender map to a CDN race icon, the `race` kind
  * shows that icon with a class badge instead; the ROK-1761 tile is its fallback.
  *
