@@ -1,5 +1,5 @@
 {
-  "id": "2e0cb4b1-9329-4532-8c01-4eda442d88d5",
+  "id": "6ea529af-71f9-4080-bc85-a10a4119468b",
   "prevId": "bc042a6e-20a0-4d22-a285-c2bba65cf1f9",
   "version": "7",
   "dialect": "postgresql",
@@ -11423,7 +11423,7 @@
         },
         "blizzard_roster_status": {
           "name": "blizzard_roster_status",
-          "type": "varchar(12)",
+          "type": "varchar(16)",
           "primaryKey": false,
           "notNull": false
         },

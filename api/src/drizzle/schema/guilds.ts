@@ -75,7 +75,7 @@ export const guilds = pgTable(
      * `error` or `skipped_empty` (`guilds_blizzard_roster_status_check`).
      */
     blizzardRosterStatus: varchar('blizzard_roster_status', {
-      length: 12,
+      length: 16,
       enum: ['ok', 'not_found', 'error', 'skipped_empty'],
     }),
     faction: varchar('faction', { length: 20 }),
