@@ -2,8 +2,6 @@ import type { JSX } from 'react';
 import type { CharacterDto, PugRole } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
 import { WowArmoryImportForm } from '../../plugins/wow/components/wow-armory-import-form';
-import { useArmoryCapabilities } from '../../plugins/wow/hooks/use-armory-capabilities';
-import { isArmoryImportSupported } from '../../plugins/wow/lib/armory-import';
 import { StepIndicator, CharacterCard } from './invite-components';
 
 export interface CharacterStepProps {
@@ -79,10 +77,7 @@ export function CharacterStep(props: CharacterStepProps): JSX.Element {
 }
 
 function CharacterStepCard(props: CharacterStepProps): JSX.Element {
-    // Same capability gate as Add Character: the Forever kill switch (or caps still loading) falls back to manual roles.
-    const { data: caps } = useArmoryCapabilities();
-    const showImportForm = props.shouldShowImportForm && isArmoryImportSupported(props.gameInfo?.gameVariant, caps);
-    const requiresRole = props.hasRoles && !showImportForm && !props.shouldShowCharacterSelector;
+    const requiresRole = props.hasRoles && !props.shouldShowImportForm && !props.shouldShowCharacterSelector;
     return (
         <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
             {props.eventHeader}
@@ -92,10 +87,10 @@ function CharacterStepCard(props: CharacterStepProps): JSX.Element {
                     onSelectCharacter={props.onSelectCharacter} onSelectRole={props.onSelectRole}
                     onClaim={props.onClaim} onShowImportForm={props.onShowImportForm} />
             )}
-            {showImportForm && (
+            {props.shouldShowImportForm && (
                 <ImportFormSection gameInfo={props.gameInfo} onImportSuccess={props.onImportSuccess} onShowManualRoleSelector={props.onShowManualRoleSelector} />
             )}
-            {!showImportForm && !props.shouldShowCharacterSelector && (
+            {!props.shouldShowImportForm && !props.shouldShowCharacterSelector && (
                 <ManualRoleSelector selectedRole={props.selectedRole} isClaiming={props.isClaiming}
                     requiresRole={requiresRole} onSelectRole={props.onSelectRole} onClaim={props.onClaim} />
             )}
