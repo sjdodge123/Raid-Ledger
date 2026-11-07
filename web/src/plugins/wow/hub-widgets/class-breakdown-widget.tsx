@@ -69,7 +69,7 @@ export default function ClassBreakdownWidget({ page }: HubWidgetCtx): JSX.Elemen
     const [mainsOnly, setMainsOnly] = useState(false);
     const query = useRosterInsights(page.guild.id, mainsOnly);
     return (
-        <RosterWidgetShell query={query} mainsOnly={mainsOnly} onMainsOnly={setMainsOnly}>
+        <RosterWidgetShell guildId={page.guild.id} query={query} mainsOnly={mainsOnly} onMainsOnly={setMainsOnly}>
             {(insights) => <ClassBars insights={insights} />}
         </RosterWidgetShell>
     );

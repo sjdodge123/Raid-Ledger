@@ -89,7 +89,7 @@ export default function LevelProgressionWidget({ page }: HubWidgetCtx): JSX.Elem
     const [mainsOnly, setMainsOnly] = useState(false);
     const query = useRosterInsights(page.guild.id, mainsOnly);
     return (
-        <RosterWidgetShell query={query} mainsOnly={mainsOnly} onMainsOnly={setMainsOnly}>
+        <RosterWidgetShell guildId={page.guild.id} query={query} mainsOnly={mainsOnly} onMainsOnly={setMainsOnly}>
             {(insights) => <LevelBody insights={insights} />}
         </RosterWidgetShell>
     );

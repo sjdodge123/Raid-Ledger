@@ -43,11 +43,14 @@ export function memberCount(n: number): string {
     return `${n} ${n === 1 ? 'member' : 'members'}`;
 }
 
-/** The display name of a fact source; a guild roster export comes from LedgerLink. */
-export function sourceLabel(source: HubFactFreshness['source']): string {
+/**
+ * The display name of a fact source. A `roster` fact comes from LedgerLink
+ * unless `rosterVia` says the hub's roster last synced from Blizzard (ROK-1928).
+ */
+export function sourceLabel(source: HubFactFreshness['source'], rosterVia?: 'Blizzard' | 'LedgerLink'): string {
     if (source === 'blizzard') return 'Blizzard';
     if (source === 'manual') return 'manual entry';
-    return 'LedgerLink';
+    return rosterVia ?? 'LedgerLink';
 }
 
 /** Whether `asOf` is older than the stale window. Unknown age is not stale. */
