@@ -73,9 +73,12 @@ describe('fetchForeverRulesetRaw — non-200 (ROK-2100)', () => {
   });
 
   it('an aborted request (timeout) → error, never throws', async () => {
+    // What Node's fetch rejects with on AbortController.abort().
     jest
       .spyOn(global, 'fetch')
-      .mockRejectedValue(new DOMException('aborted', 'AbortError'));
+      .mockRejectedValue(
+        new DOMException('This operation was aborted', 'AbortError'),
+      );
     const log = logger();
     await expect(call(log)).resolves.toEqual({ kind: 'error' });
     expect(log.warn).toHaveBeenCalledWith(
@@ -87,6 +90,19 @@ describe('fetchForeverRulesetRaw — non-200 (ROK-2100)', () => {
     jest
       .spyOn(global, 'fetch')
       .mockRejectedValue(new TypeError('fetch failed'));
-    await expect(call()).resolves.toEqual({ kind: 'error' });
+    const log = logger();
+    await expect(call(log)).resolves.toEqual({ kind: 'error' });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Forever ruleset lookup failed: TypeError',
+    );
+  });
+
+  it('a thrown non-object → error, logged as unknown', async () => {
+    jest.spyOn(global, 'fetch').mockRejectedValue('boom');
+    const log = logger();
+    await expect(call(log)).resolves.toEqual({ kind: 'error' });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Forever ruleset lookup failed: unknown',
+    );
   });
 });

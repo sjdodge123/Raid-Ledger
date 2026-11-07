@@ -4,6 +4,10 @@ import type { SettingsService } from '../../settings/settings.service';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from './forever.settings';
 import { resetUnmappedRulesetWarnings } from './forever-ruleset-inference.helpers';
 import {
+  FOREVER_NAMESPACE_ALIAS,
+  setForeverNamespacePrefix,
+} from './forever-namespace.resolver';
+import {
   ForeverRulesetLookupService,
   RULESET_ERROR_TTL_MS,
   RULESET_HIT_TTL_MS,
@@ -56,7 +60,10 @@ beforeEach(() => {
   jest.useFakeTimers();
   resetUnmappedRulesetWarnings();
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => {
+  jest.useRealTimers();
+  setForeverNamespacePrefix(FOREVER_NAMESPACE_ALIAS);
+});
 
 describe('ForeverRulesetLookupService gates (ROK-2100)', () => {
   it('Blizzard not configured → null without a fetch', async () => {
@@ -173,6 +180,27 @@ describe('ForeverRulesetLookupService budget and invalidation (ROK-2100)', () =>
     fetchRaw.mockResolvedValue(found({ type: 'PVP' }));
     await service.lookup('Ana Forever', 'us');
     service.clearCache();
+    await service.lookup('Ana Forever', 'us');
+    expect(fetchRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('WOW_FOREVER_CONFIG_UPDATED (prefix change) clears the cache (Codex P2)', async () => {
+    const { service, fetchRaw } = setup();
+    fetchRaw.mockResolvedValue(found({ type: 'PVP' }));
+    await service.lookup('Ana Forever', 'us');
+    await service.lookup('Ana Forever', 'us');
+    expect(fetchRaw).toHaveBeenCalledTimes(1);
+    setForeverNamespacePrefix('classicforeverbeta');
+    service.onForeverConfigUpdated();
+    await service.lookup('Ana Forever', 'us');
+    expect(fetchRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('the cache key carries the effective prefix, even without the event', async () => {
+    const { service, fetchRaw } = setup();
+    fetchRaw.mockResolvedValue(found({ type: 'PVP' }));
+    await service.lookup('Ana Forever', 'us');
+    setForeverNamespacePrefix('classicforeverbeta');
     await service.lookup('Ana Forever', 'us');
     expect(fetchRaw).toHaveBeenCalledTimes(2);
   });

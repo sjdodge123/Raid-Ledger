@@ -6,6 +6,8 @@ import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import { BlizzardService } from './blizzard.service';
 import type { ForeverRulesetFetchOutcome } from './blizzard-forever-ruleset.fetch';
 import { isForeverArmoryImportEnabled } from './forever-armory-switch';
+import { getForeverNamespacePrefix } from './forever-namespace.resolver';
+import { WOW_FOREVER_CONFIG_UPDATED } from './forever.settings';
 import { rulesetFromBlizzard } from './forever-ruleset-inference.helpers';
 
 /** F5: hard budget for token + profile on an upload's ruleset lookup. */
@@ -29,7 +31,8 @@ interface CacheEntry {
  * Battle.net profile. Gated on a configured Blizzard integration AND the
  * Forever Armory switch (checked before the cache, so turning either off
  * stops cached Blizzard data at once); bounded by
- * {@link RULESET_LOOKUP_BUDGET_MS}; cached per `${region}:${lower(name)}` (hits 24h, misses 1h, errors 60s).
+ * {@link RULESET_LOOKUP_BUDGET_MS}; cached per `${prefix}:${region}:${lower(name)}` (hits 24h, misses 1h, errors 60s),
+ * `prefix` being the effective Forever namespace prefix.
  * `lookup` never throws.
  */
 @Injectable()
@@ -48,13 +51,22 @@ export class ForeverRulesetLookupService {
     this.cache.clear();
   }
 
+  /**
+   * Codex P2 — a new Forever namespace prefix points at another profile
+   * namespace, so earlier answers are stale. (The key carries the prefix too.)
+   */
+  @OnEvent(WOW_FOREVER_CONFIG_UPDATED)
+  onForeverConfigUpdated(): void {
+    this.clearCache();
+  }
+
   /** The Blizzard-reported ruleset, or null (off, miss, timeout, unknown shape). */
   async lookup(
     name: string,
     region: WowRegion,
   ): Promise<WowForeverRuleset | null> {
     if (!(await this.enabled())) return null;
-    const key = `${region}:${name.toLowerCase()}`;
+    const key = `${getForeverNamespacePrefix()}:${region}:${name.toLowerCase()}`;
     const cached = this.cache.get(key);
     if (cached && cached.until > Date.now()) return cached.ruleset;
     const outcome = await this.fetchWithinBudget(name, region);

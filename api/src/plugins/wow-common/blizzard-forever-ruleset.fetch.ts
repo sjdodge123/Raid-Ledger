@@ -25,6 +25,19 @@ function readRuleset(body: unknown): unknown {
   return 'ruleset' in body ? (body.ruleset ?? null) : null;
 }
 
+/**
+ * The thrown value's `name`, read structurally: Node's `fetch` rejects an
+ * abort with a `DOMException` named `AbortError`, which is not an `Error`
+ * from every realm's point of view (Jest's vm context), so `instanceof
+ * Error` alone reported it as `unknown`.
+ */
+export function errorName(err: unknown): string {
+  if (typeof err !== 'object' || err === null || !('name' in err)) {
+    return 'unknown';
+  }
+  return typeof err.name === 'string' && err.name ? err.name : 'unknown';
+}
+
 /** GET the realmless Forever profile and classify the outcome. */
 export async function fetchForeverRulesetRaw(
   name: string,
@@ -50,8 +63,7 @@ export async function fetchForeverRulesetRaw(
     }
     return { kind: 'found', ruleset: readRuleset(await res.json()) };
   } catch (err) {
-    const reason = err instanceof Error ? err.name : 'unknown';
-    logger.warn(`Forever ruleset lookup failed: ${reason}`);
+    logger.warn(`Forever ruleset lookup failed: ${errorName(err)}`);
     return { kind: 'error' };
   }
 }
