@@ -52,7 +52,7 @@ describe('FIELD_PRECEDENCE table', () => {
 });
 
 describe('resolveField — rule 1: manual override', () => {
-  it.each(['role', 'professions'] as WowFactField[])(
+  it.each(['role'] as WowFactField[])(
     '%s: a manual value beats a fresh blizzard and a newer addon value',
     (field) => {
       const manual = fact('manual', 'mine', ago(30 * 24 * HOUR));
@@ -65,6 +65,14 @@ describe('resolveField — rule 1: manual override', () => {
       expect(got).toEqual(manual);
     },
   );
+
+  // ROK-2107 ruling F0 (2026-11-07): Blizzard wins professions by default.
+  it('professions: a fresh blizzard value beats a manual entry; manual is the fallback', () => {
+    const bz = fact('blizzard', 'bz', ago(HOUR));
+    const manual = fact('manual', 'mine', null);
+    expect(resolveField('professions', [manual, bz], NOW, true)).toEqual(bz);
+    expect(resolveField('professions', [manual], NOW, true)).toEqual(manual);
+  });
 
   it('level: a manual value is not an override — fresh blizzard wins', () => {
     const got = resolveField(
@@ -263,7 +271,7 @@ describe('resolveField — blizzardFresh off (no registered Blizzard seam)', () 
   });
 });
 
-describe('professions with MANUAL_PROFESSIONS_WIN flipped off (ROK-2107 F0)', () => {
+describe('professions with MANUAL_PROFESSIONS_WIN flipped back on (ROK-2107 F0)', () => {
   const HELPERS = '../../../characters/characters-professions.helpers';
   let flipped: typeof resolveField | null = null;
 
@@ -271,7 +279,7 @@ describe('professions with MANUAL_PROFESSIONS_WIN flipped off (ROK-2107 F0)', ()
     jest.isolateModules(() => {
       jest.doMock(HELPERS, () => ({
         ...jest.requireActual<object>(HELPERS),
-        MANUAL_PROFESSIONS_WIN: false,
+        MANUAL_PROFESSIONS_WIN: true,
       }));
       // requireActual skips a mock of fact-precedence itself, but its own
       // import of HELPERS resolves through the doMock above.
@@ -283,21 +291,15 @@ describe('professions with MANUAL_PROFESSIONS_WIN flipped off (ROK-2107 F0)', ()
 
   afterAll(() => jest.dontMock(HELPERS));
 
-  it('a fresh blizzard value beats a manual entry', () => {
+  it('a manual entry beats a fresh blizzard and a newer addon value', () => {
     if (!flipped) throw new Error('isolated fact-precedence did not load');
-    const bz = fact('blizzard', 'bz', ago(HOUR));
+    const manual = fact('manual', 'mine', null);
     const got = flipped(
       'professions',
-      [fact('manual', 'mine', null), bz],
+      [fact('blizzard', 'bz', ago(HOUR)), fact('addon', 'ad', NOW), manual],
       NOW,
       true,
     );
-    expect(got).toEqual(bz);
-  });
-
-  it('the manual entry is still the fallback when nothing else is known', () => {
-    if (!flipped) throw new Error('isolated fact-precedence did not load');
-    const manual = fact('manual', 'mine', null);
-    expect(flipped('professions', [manual], NOW, true)).toEqual(manual);
+    expect(got).toEqual(manual);
   });
 });

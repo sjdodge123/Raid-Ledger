@@ -11,11 +11,12 @@ import {
 } from '@raid-ledger/contract';
 
 /**
- * Operator ruling F0 (2026-11-06): a hand-entered profession beats a fresh
- * Blizzard value (mirrors `role_override`). Flip to `false` and Blizzard wins
- * everywhere, with the manual entry as the fallback.
+ * Operator ruling F0 (2026-11-07): Blizzard wins — the Armory value is shown
+ * when present, the hand entry is the fallback. Flip to `true` and a
+ * hand-entered profession beats a fresh Blizzard value everywhere (as
+ * `role_override` does).
  */
-export const MANUAL_PROFESSIONS_WIN: boolean = true;
+export const MANUAL_PROFESSIONS_WIN: boolean = false;
 
 export type ProfessionsSource = 'manual' | 'blizzard';
 

@@ -68,13 +68,20 @@ describe('mapCharacterToDto professions provenance (ROK-2107)', () => {
   };
   const armory = { ...manual, syncedAt: '2026-11-05T00:00:00.000Z' };
 
-  it('serves the manual value (source manual) over the Armory one', () => {
+  // Ruling F0 (2026-11-07): Blizzard wins; the hand entry is the fallback.
+  it('serves the Armory value (source blizzard) over the manual one', () => {
     const dto = mapCharacterToDto(
       makeRow({ professions: manual, armoryProfessions: armory }),
     );
+    expect(dto.professions).toEqual(armory);
+    expect(dto.professionsSource).toBe('blizzard');
+    expect(dto.hasManualProfessions).toBe(true);
+  });
+
+  it('serves the manual value (source manual) when there is no Armory one', () => {
+    const dto = mapCharacterToDto(makeRow({ professions: manual }));
     expect(dto.professions).toEqual(manual);
     expect(dto.professionsSource).toBe('manual');
-    expect(dto.hasManualProfessions).toBe(true);
   });
 
   it('serves the Armory value (source blizzard) when there is no manual entry', () => {

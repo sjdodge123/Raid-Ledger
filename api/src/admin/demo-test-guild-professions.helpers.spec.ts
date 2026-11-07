@@ -56,7 +56,10 @@ describe('applyArmoryProfessions', () => {
       PROFS,
     );
     expect(db.update).toHaveBeenCalledTimes(1);
-    expect(db.set).toHaveBeenCalledWith({ armoryProfessions: PROFS });
+    expect(db.set).toHaveBeenCalledWith({
+      armoryProfessions: PROFS,
+      lastSyncedAt: new Date(PROFS.syncedAt),
+    });
   });
 
   it('writes nothing when the fixture carries no blob', async () => {

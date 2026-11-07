@@ -209,8 +209,8 @@ describe('AddonSnapshotFactSource — ilvl precision (ROK-1915)', () => {
   });
 });
 
-// ROK-2107 D6/F4: the hand entry wins per MANUAL_PROFESSIONS_WIN; the Armory
-// copy (blizzard, asOf lastSyncedAt) shows when there is no hand entry.
+// ROK-2107 D6/F4 + ruling F0 (2026-11-07): the Armory copy (blizzard, asOf
+// lastSyncedAt) wins on a synced row; the hand entry is the fallback.
 describe('professions provenance (ROK-2107)', () => {
   const MANUAL = { primary: [], secondary: [], syncedAt: T.toISOString() };
   const ARMORY = {
@@ -226,16 +226,40 @@ describe('professions provenance (ROK-2107)', () => {
     );
   };
 
-  it('both set: emits the manual entry (switch on)', async () => {
+  it('both set: emits the Armory copy as blizzard (Blizzard wins)', async () => {
     const got = await load({
       ...armoryRow,
       professions: MANUAL,
       armoryProfessions: ARMORY,
     });
     expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
+    });
+  });
+
+  it('manual only: emits the hand entry as manual, asOf null', async () => {
+    const got = await load({ ...armoryRow, professions: MANUAL });
+    expect(got?.professions).toEqual({
       value: MANUAL,
       source: 'manual',
       asOf: null,
+    });
+  });
+
+  // Codex P2: retail imports + a refreshed manual Forever row have no externalId.
+  it('a synced row without externalId still serves the Armory copy', async () => {
+    const got = await load({
+      ...charRow,
+      externalId: null,
+      professions: MANUAL,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
     });
   });
 
@@ -252,9 +276,10 @@ describe('professions provenance (ROK-2107)', () => {
     });
   });
 
-  it('ignores armory_professions on a row no longer Armory-linked', async () => {
+  it('ignores armory_professions on a row never Armory-synced', async () => {
     const got = await load({
       ...charRow,
+      lastSyncedAt: null,
       professions: null,
       armoryProfessions: ARMORY,
     });

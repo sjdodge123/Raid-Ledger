@@ -28,8 +28,8 @@ const MANUAL = profs('Tailoring');
 const ARMORY = profs('Mining');
 
 describe('MANUAL_PROFESSIONS_WIN (operator ruling F0)', () => {
-  it('defaults to manual beating Blizzard', () => {
-    expect(MANUAL_PROFESSIONS_WIN).toBe(true);
+  it('defaults to Blizzard beating manual (ruling 2026-11-07)', () => {
+    expect(MANUAL_PROFESSIONS_WIN).toBe(false);
   });
 });
 
@@ -55,19 +55,26 @@ describe('effectiveProfessions', () => {
     });
   });
 
-  it('manual beats Armory under the default switch', () => {
+  it('Armory beats manual under the default switch; manual is the fallback', () => {
     expect(effectiveProfessions(MANUAL, ARMORY)).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+    });
+    expect(effectiveProfessions(MANUAL, null)).toEqual({
       value: MANUAL,
       source: 'manual',
     });
   });
 
-  it('Armory beats manual when the switch is flipped; manual is the fallback', () => {
-    expect(effectiveProfessions(MANUAL, ARMORY, false)).toEqual({
-      value: ARMORY,
-      source: 'blizzard',
+  it('manual beats Armory when the switch is flipped back', () => {
+    expect(effectiveProfessions(MANUAL, ARMORY, true)).toEqual({
+      value: MANUAL,
+      source: 'manual',
     });
-    expect(effectiveProfessions(MANUAL, null, false)).toEqual({
+  });
+
+  it('ignores a malformed Armory jsonb and falls back to manual', () => {
+    expect(effectiveProfessions(MANUAL, { primary: 'nope' })).toEqual({
       value: MANUAL,
       source: 'manual',
     });

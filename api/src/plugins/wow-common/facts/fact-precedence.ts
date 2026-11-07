@@ -2,8 +2,9 @@
  * ROK-1910 — the per-field fact precedence rule (plan ROK-1905 §2.3). Pure:
  * no I/O, no clock reads (the caller passes `now`).
  *
- * 1. A `manual` value wins for the fields a user can edit (roleOverride, and
- *    professions while `MANUAL_PROFESSIONS_WIN` holds — ROK-2107 ruling F0).
+ * 1. A `manual` value wins for the fields a user can edit (roleOverride; and
+ *    professions only if `MANUAL_PROFESSIONS_WIN` is flipped back on — the
+ *    ROK-2107 ruling F0 of 2026-11-07 has Blizzard win, manual as fallback).
  * 2. Otherwise, only while the REGISTERED Blizzard seam is live
  *    (`blizzardFresh`), a `blizzard` value fresher than {@link FRESH_WINDOW_MS}
  *    wins. With the seam off, blizzard-labelled facts (e.g. an Armory-synced

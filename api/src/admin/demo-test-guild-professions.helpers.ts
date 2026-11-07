@@ -45,6 +45,11 @@ export async function applyArmoryProfessions(
   if (!professions || ids.length === 0) return;
   await db
     .update(schema.characters)
-    .set({ armoryProfessions: professions })
+    // Stamp the sync marker too, as a real Armory sync would — readers only
+    // trust armory_professions on a synced row (ROK-2107 review r2 MINOR 1).
+    .set({
+      armoryProfessions: professions,
+      lastSyncedAt: new Date(professions.syncedAt),
+    })
     .where(inArray(schema.characters.id, ids));
 }

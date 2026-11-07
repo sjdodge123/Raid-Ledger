@@ -39,14 +39,16 @@ function rowOrigin(row: CharRow): HubFactSource {
 }
 
 /**
- * Professions per the ROK-2107 switch: the hand entry is `manual` (asOf
- * unknown — a hand edit has no capture time); the Armory copy is `blizzard`,
- * asOf lastSyncedAt, only on an Armory-linked row (D6/F4 — so Armory
- * professions still show while the Blizzard source is off; when it is live
- * `dropShadowedBlizzard` removes this copy).
+ * Professions per the ROK-2107 switch (ruling F0: Blizzard wins, the hand
+ * entry is the fallback): the hand entry is `manual` (asOf unknown — a hand
+ * edit has no capture time); the Armory copy is `blizzard`, asOf
+ * lastSyncedAt, only on an Armory-synced row — `lastSyncedAt` set, which every
+ * Armory sync path stamps (retail imports and a refreshed manual Forever row
+ * never carry `externalId`). D6/F4: Armory professions still show while the
+ * Blizzard source is off; when it is live `dropShadowedBlizzard` removes this copy.
  */
 function professionsFact(row: CharRow, out: WowFactCandidates): void {
-  const armory = row.externalId ? row.armoryProfessions : null;
+  const armory = row.lastSyncedAt ? row.armoryProfessions : null;
   const { value, source } = effectiveProfessions(row.professions, armory);
   if (!value || !source) return;
   const asOf = source === 'manual' ? null : row.lastSyncedAt;
