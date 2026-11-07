@@ -32,7 +32,10 @@ import {
 } from './blizzard-forever-ruleset.fetch';
 import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
-import { resolveBlizzardNamespacePrefix } from './forever-namespace.resolver';
+import {
+  FOREVER_NAMESPACE_ALIAS,
+  resolveBlizzardNamespacePrefix,
+} from './forever-namespace.resolver';
 import type {
   ExternalCharacterProfessions,
   ExternalCharacterQuests,
@@ -159,6 +162,9 @@ export class BlizzardService {
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<ExternalCharacterQuests | null> {
+    // Forever-only: decide before touching the token, so a non-Forever sync
+    // neither spends an auth call nor fails on one (ROK-2109).
+    if (apiNamespacePrefix !== FOREVER_NAMESPACE_ALIAS) return null;
     const token = await this.auth.getAccessToken(region);
     return questH.fetchCharacterQuests(
       name,
