@@ -8,10 +8,9 @@ import type {
   QuestProgressDto,
   QuestProgressSource,
 } from '@raid-ledger/contract';
-import { readQuestsSlice } from './character-quests.service';
 import { walkChainInMemory } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
-import type { CharSnapshot } from './forever-char-snapshot.query';
+import type { EffectiveQuests } from './forever-quest-source.helpers';
 import { resolveQuestInstanceIds } from './forever-instance-aliases';
 import { dedupeVariantsByName } from './quest-variant-dedup.helpers';
 import {
@@ -91,17 +90,17 @@ export function selectEventQuests(
   return { eventQuests, lookup, knownIds };
 }
 
-/** Keep signups whose snapshot has a valid `quests` slice (schema ≥2). */
+/** Keep signups with effective quest data (addon slice or Armory list, ROK-2109). */
 export function buildMembers(
   signups: EventSignupChar[],
-  snapshots: Map<string, CharSnapshot>,
+  sources: Map<string, EffectiveQuests>,
 ): ForeverMember[] {
   return signups.flatMap((s) => {
-    const snap = snapshots.get(s.characterId);
-    const quests = snap ? readQuestsSlice(snap.data) : undefined;
-    if (!snap || !quests) return [];
-    const capturedAt = snap.capturedAt.toISOString();
-    return [{ ...s, snapshot: { quests, capturedAt } }];
+    const eff = sources.get(s.characterId);
+    if (!eff) return [];
+    const capturedAt = eff.capturedAt.toISOString();
+    const snapshot = { quests: eff.quests, capturedAt, source: eff.source };
+    return [{ ...s, snapshot }];
   });
 }
 

@@ -34,6 +34,10 @@ interface ForeverQuestLogInput {
 /** Snapshot slice this builder reads; the 1742 snapshot schema maps onto it. */
 export interface ForeverQuestSnapshotInput {
   capturedAt: string;
+  /** Source of the completed list (ROK-2109); defaults to `addon`. */
+  source?: 'addon' | 'blizzard' | undefined;
+  /** Capture time of the in-progress log (ROK-2109); null = no addon log. */
+  inProgressSyncedAt?: string | null | undefined;
   quests?: {
     completed: number[];
     completedTruncated?: boolean | undefined;
@@ -236,8 +240,12 @@ export function buildCharacterQuests(
   const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
   const inProgress = quests.inProgress.map((q) => toLogEntry(q, lookup, names));
   return CharacterQuestsDtoSchema.parse({
-    source: 'addon',
+    source: snapshot.source ?? 'addon',
     syncedAt: snapshot.capturedAt,
+    inProgressSyncedAt:
+      snapshot.inProgressSyncedAt === undefined
+        ? snapshot.capturedAt
+        : snapshot.inProgressSyncedAt,
     inProgress,
     completedKnown,
     counts: {

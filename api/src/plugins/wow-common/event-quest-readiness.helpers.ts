@@ -7,11 +7,10 @@ import type {
   EventQuestReadinessDto,
   QuestReadinessState,
 } from '@raid-ledger/contract';
-import { readQuestsSlice } from './character-quests.service';
 import { walkChainInMemory } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
-import type { CharSnapshot } from './forever-char-snapshot.query';
+import type { EffectiveQuests } from './forever-quest-source.helpers';
 import {
   deriveAddonProgress,
   doneLookupFromRows,
@@ -44,7 +43,8 @@ export interface ReadinessSignup {
 export interface ReadinessInput {
   quests: Pick<ForeverEventProgress, 'eventQuests' | 'lookup' | 'knownIds'>;
   signups: ReadinessSignup[];
-  snapshots: Map<string, CharSnapshot>;
+  /** Effective quest data per character (ROK-2109: addon or Armory). */
+  snapshots: Map<string, EffectiveQuests>;
   manual: ManualProgressRow[];
 }
 
@@ -60,11 +60,15 @@ function signupProgress(
   manual: ManualProgressRow[],
 ): SignupProgress {
   const snap = s.characterId ? input.snapshots.get(s.characterId) : undefined;
-  const quests = snap ? readQuestsSlice(snap.data) : undefined;
+  const quests = snap?.quests;
   const addon =
     snap && quests && s.characterId
       ? deriveAddonProgress(
-          { quests, capturedAt: snap.capturedAt.toISOString() },
+          {
+            quests,
+            capturedAt: snap.capturedAt.toISOString(),
+            source: snap.source,
+          },
           input.quests.knownIds,
           s.userId,
           s.characterId,

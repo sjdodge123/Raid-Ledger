@@ -27,7 +27,12 @@ export interface AddonQuestsSlice {
 export type AddonQuestSnapshot = {
   quests: AddonQuestsSlice;
   capturedAt: string;
+  /** Source of the completed list (ROK-2109 D6); defaults to `addon`. */
+  source?: AutoProgressSource | undefined;
 };
+
+/** Sources a derived (non-manual) progress row can carry (ROK-2109). */
+export type AutoProgressSource = 'addon' | 'blizzard';
 
 /** Synthetic progress row derived from a snapshot (D6). */
 export interface AddonProgressRow {
@@ -36,7 +41,7 @@ export interface AddonProgressRow {
   characterId: string;
   pickedUp: boolean;
   completed: boolean;
-  source: 'addon';
+  source: AutoProgressSource;
   asOf: string;
 }
 
@@ -74,7 +79,8 @@ export interface QuestDoneState {
 export type QuestDoneFn = (questId: number) => QuestDoneState;
 
 /**
- * Derive addon progress rows from a snapshot (D6). Only quests in
+ * Derive addon progress rows from a snapshot (D6) — or from the Armory list
+ * when it won (ROK-2109: rows carry `source: 'blizzard'`). Only quests in
  * `knownQuestIds` are emitted; completed implies not picked up.
  */
 export function deriveAddonProgress(
@@ -96,7 +102,7 @@ export function deriveAddonProgress(
       characterId,
       pickedUp: !completed.has(questId),
       completed: completed.has(questId),
-      source: 'addon' as const,
+      source: snapshot.source ?? 'addon',
       asOf: snapshot.capturedAt,
     }));
 }

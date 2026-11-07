@@ -15,7 +15,7 @@ import {
   loadReadinessRoster,
 } from './event-quest-readiness.query';
 import { assertCanReadEvent } from './event-readiness.access';
-import { loadForeverCharSnapshots } from './forever-char-snapshot.query';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
 /**
@@ -50,7 +50,7 @@ export class EventQuestReadinessService {
       loadEventManualRows(this.db, eventId),
     ]);
     const charIds = signups.flatMap((s) => s.characterId ?? []);
-    const snapshots = await loadForeverCharSnapshots(this.db, charIds);
+    const snapshots = await loadForeverQuestSources(this.db, charIds);
     return buildQuestReadiness({ quests, signups, snapshots, manual });
   }
 }
