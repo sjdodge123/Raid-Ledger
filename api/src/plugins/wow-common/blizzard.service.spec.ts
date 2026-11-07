@@ -8,7 +8,10 @@ import {
   isNamespaceRefusal,
 } from './blizzard-upstream-error';
 
-import { setForeverNamespacePrefix } from './forever-namespace.resolver';
+import {
+  getForeverNamespacePrefix,
+  setForeverNamespacePrefix,
+} from './forever-namespace.resolver';
 
 jest.mock('./blizzard-instance.helpers');
 
@@ -236,7 +239,7 @@ describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
     fetchRealms.mockRejectedValueOnce(refused());
     await rejectionOf(service.fetchRealmList('eu', 'classicforever'));
 
-    service.purgeNamespace('classicforever');
+    service.purgeNamespace(getForeverNamespacePrefix());
 
     const { realmCache, realmRefusals } = service as unknown as RealmMaps;
     expect([...realmCache.keys()]).toEqual(['us:classicann']);
