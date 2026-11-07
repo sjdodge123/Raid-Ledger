@@ -25,6 +25,10 @@ import { isClaimableGuild, isRowUnclaimed } from './roster-claim.queries';
  */
 export const CLAIMED_FIRST = 'Someone claimed this first';
 
+/** The roster row was renamed / re-GUIDed between the read and the locks. */
+export const ROSTER_ROW_CHANGED =
+  'That roster character changed; reload and retry.';
+
 const { guilds, guildMembers, characters } = schema;
 
 type CharacterRow = typeof characters.$inferSelect;
@@ -82,7 +86,12 @@ async function lockClaim(tx: AddonImportTx, m: ClaimMember): Promise<void> {
 
 /**
  * Locked re-check: the row is still in a claimable guild's latest snapshot
- * (else 404) and still unclaimed (D2, else 409). Locks the member row.
+ * (else 404), still carries the name + GUID the locks were keyed on (a
+ * concurrent apply/sync rename → 409, reload) and is still unclaimed (D2,
+ * else 409). Locks the member row. MUST run as a statement AFTER the advisory
+ * locks: under READ COMMITTED a `FOR UPDATE` wait re-checks only the locked
+ * row, so the `NOT EXISTS` would keep a pre-wait snapshot and miss the
+ * winner's insert — the row lock alone is not enough.
  */
 async function recheckUnderLock(
   tx: AddonImportTx,
@@ -90,7 +99,11 @@ async function recheckUnderLock(
 ): Promise<void> {
   const unclaimed = isRowUnclaimed() ?? sql`true`;
   const [row] = await tx
-    .select({ unclaimed: sql<boolean>`(${unclaimed})` })
+    .select({
+      name: guildMembers.characterName,
+      guid: guildMembers.guid,
+      unclaimed: sql<boolean>`(${unclaimed})`,
+    })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .where(
@@ -102,6 +115,8 @@ async function recheckUnderLock(
     )
     .for('update', { of: guildMembers });
   if (!row) throw new NotFoundException('That roster character is gone');
+  if (row.name !== m.name || row.guid !== m.guid)
+    throw new ConflictException(ROSTER_ROW_CHANGED);
   if (!row.unclaimed) throw new ConflictException(CLAIMED_FIRST);
 }
 
