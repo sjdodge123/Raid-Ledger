@@ -96,7 +96,6 @@ describe('BlizzardRosterSyncJob.run (ROK-1928 C2)', () => {
       status: 'ok',
       updated: 1,
       inserted: 0,
-      stale: false,
     });
     const tally = await job.run();
     expect(sync.syncForeverGuildRoster.mock.calls).toEqual([[2]]);
@@ -134,12 +133,30 @@ describe('BlizzardRosterSyncJob.syncNow (ROK-1928 C3)', () => {
       status: 'ok',
       updated: 4,
       inserted: 1,
-      stale: false,
     });
     await expect(job.syncNow(7)).resolves.toEqual({
       status: 'ok',
       syncedAt: '2026-11-06T10:00:00.000Z',
       members: 5,
     });
+  });
+
+  it('200 stale: a newer snapshot is stored → status stale, members 0', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue({ status: 'stale' });
+    await expect(job.syncNow(7)).resolves.toEqual({
+      status: 'stale',
+      syncedAt: '2026-11-06T10:00:00.000Z',
+      members: 0,
+    });
+  });
+});
+
+describe('BlizzardRosterSyncJob.run — stale outcome (ROK-1928 MINOR 15)', () => {
+  it('counts a stale guild under skipped', async () => {
+    sync.syncForeverGuildRoster
+      .mockResolvedValueOnce({ status: 'stale' })
+      .mockResolvedValueOnce({ status: 'ok', updated: 1, inserted: 0 });
+    const tally = await job.run();
+    expect(tally).toEqual({ ok: 1, notFound: 0, error: 0, skipped: 1 });
   });
 });

@@ -149,6 +149,7 @@ export class BlizzardRosterSyncJob {
     }
     if (res.status === 'skipped')
       throw new NotFoundException('Guild not found');
+    // `stale` (newer snapshot already stored) is a 200 with members 0.
     const after = await this.readGuild(guildId);
     return {
       status: res.status,
@@ -196,9 +197,9 @@ export class BlizzardRosterSyncJob {
   }
 }
 
-/** Bucket one service result into the tally. */
+/** Bucket one service result into the tally (`stale` counts as skipped). */
 function countResult(tally: RosterSyncTally, res: RosterSyncResult): void {
   if (res.status === 'ok') tally.ok += 1;
   else if (res.status === 'not_found') tally.notFound += 1;
-  else tally.skipped += 1;
+  else tally.skipped += 1; // skipped / disabled / skipped_empty / stale
 }

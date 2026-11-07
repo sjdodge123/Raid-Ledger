@@ -21,8 +21,10 @@ import { isForeverGuildHub } from './guild-slug.helpers';
 
 /** One sync's outcome; `skipped`/`disabled` write nothing. */
 export type RosterSyncResult =
-  | { status: 'skipped' | 'disabled' | 'not_found' | 'skipped_empty' }
-  | { status: 'ok'; updated: number; inserted: number; stale: boolean };
+  | {
+      status: 'skipped' | 'disabled' | 'not_found' | 'skipped_empty' | 'stale';
+    }
+  | { status: 'ok'; updated: number; inserted: number };
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -93,13 +95,10 @@ export class BlizzardRosterSyncService {
     const res = await this.db.transaction((tx) =>
       applyForeverRoster(tx, guild, roster.members, now),
     );
+    // A newer snapshot already stored → nothing written, no status (MINOR 15).
+    if (res.stale) return { status: 'stale' };
     await this.flagIfNeeded(res);
-    return {
-      status: 'ok',
-      updated: res.updated,
-      inserted: res.inserted,
-      stale: res.stale,
-    };
+    return { status: 'ok', updated: res.updated, inserted: res.inserted };
   }
 
   /** 404 → `not_found`; empty 200 → `skipped_empty` (B-4); roster untouched. */

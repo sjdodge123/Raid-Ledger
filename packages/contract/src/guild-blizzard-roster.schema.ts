@@ -53,12 +53,24 @@ export type GuildBlizzardRosterView = z.infer<
 >;
 
 /**
+ * A manual run's outcome: a stored status, or `stale` — the guild already holds
+ * a newer roster snapshot, so nothing was written (never stored as a status).
+ */
+export const BlizzardRosterSyncOutcomeSchema = z.enum([
+  ...BLIZZARD_ROSTER_STATUSES,
+  "stale",
+]);
+export type BlizzardRosterSyncOutcome = z.infer<
+  typeof BlizzardRosterSyncOutcomeSchema
+>;
+
+/**
  * `POST /plugins/wow/guilds/:id/blizzard-roster/sync` (ROK-1928 C3) — the
- * manual run's outcome; `members` = roster rows the sync applied.
+ * manual run's outcome; `members` = roster rows the sync applied (0 when stale).
  */
 export const GuildBlizzardRosterSyncResultSchema = z
   .object({
-    status: BlizzardRosterStatusSchema,
+    status: BlizzardRosterSyncOutcomeSchema,
     syncedAt: isoDate.nullable(),
     members: z.number().int().nonnegative(),
   })

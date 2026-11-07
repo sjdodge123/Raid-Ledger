@@ -6,19 +6,13 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import {
     GuildBlizzardRosterViewSchema,
-    type BlizzardRosterStatus,
+    GuildBlizzardRosterSyncResultSchema,
+    type GuildBlizzardRosterSyncResult,
     type GuildBlizzardRosterView,
     type GuildSummary,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { guildPageKey } from '../../../components/hub/api/use-guild';
-
-/** `POST …/blizzard-roster/sync` → the run's outcome (ROK-1928 C3). */
-export interface BlizzardRosterSyncResult {
-    status: BlizzardRosterStatus;
-    syncedAt: string | null;
-    members: number;
-}
 
 const rosterUrl = (guildId: number): string => `/plugins/wow/guilds/${guildId}/blizzard-roster`;
 
@@ -56,10 +50,10 @@ export function useSetBlizzardRosterSlug(guildId: number): UseMutationResult<Gui
 }
 
 /** "Sync now" — runs the Blizzard roster sync for this hub once. */
-export function useSyncBlizzardRoster(guildId: number): UseMutationResult<BlizzardRosterSyncResult, Error, void> {
+export function useSyncBlizzardRoster(guildId: number): UseMutationResult<GuildBlizzardRosterSyncResult, Error, void> {
     const invalidate = useInvalidateRoster(guildId);
     return useMutation({
-        mutationFn: () => fetchApi<BlizzardRosterSyncResult>(`${rosterUrl(guildId)}/sync`, { method: 'POST' }),
+        mutationFn: () => fetchApi(`${rosterUrl(guildId)}/sync`, { method: 'POST' }, GuildBlizzardRosterSyncResultSchema),
         onSettled: invalidate,
     });
 }
