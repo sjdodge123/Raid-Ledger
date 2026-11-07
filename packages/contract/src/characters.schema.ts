@@ -219,7 +219,12 @@ export const CharacterSchema = z.object({
     talents: z.unknown().nullable(),
     /** ROK-1743: addon saved instances (read-time, Forever only). */
     lockouts: CharacterLockoutsSchema.optional(),
+    /** ROK-2107: the EFFECTIVE value — manual or Armory, per the server switch. */
     professions: CharacterProfessionsSchema.nullable(),
+    /** ROK-2107: where `professions` came from (null when there are none). */
+    professionsSource: z.enum(['manual', 'blizzard']).nullable().optional(),
+    /** ROK-2107: true when the user has a hand-entered professions value. */
+    hasManualProfessions: z.boolean().optional(),
     /** Cached enrichment data from third-party APIs (ROK-269) */
     enrichments: z.array(z.object({
         enricherKey: z.string(),

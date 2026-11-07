@@ -53,6 +53,9 @@ const PROFESSIONS = {
   syncedAt: SYNCED.toISOString(),
 };
 
+/** ROK-2107: what the Armory sync wrote (sync-only column). */
+const ARMORY_PROFESSIONS = { ...PROFESSIONS, primary: [], secondary: [] };
+
 let testApp: TestApp;
 let facts: WowFactsService;
 let settings: SettingsService;
@@ -113,6 +116,7 @@ async function seedAll(): Promise<void> {
     itemLevel: 64,
     equipment: EQUIPMENT,
     professions: PROFESSIONS,
+    armoryProfessions: ARMORY_PROFESSIONS,
     addonGuid: 'Player-7-0000BF01',
   });
   ids.manual = await seedChar('manual', {
@@ -178,6 +182,12 @@ describe('BlizzardForeverFactSource.load (real DB)', () => {
       source: 'blizzard',
       asOf: SYNCED,
     });
+    // ROK-2107 (supersedes ROK-1920 F11): professions from armory_professions.
+    expect(got.get('armory')?.professions).toEqual({
+      value: ARMORY_PROFESSIONS,
+      source: 'blizzard',
+      asOf: SYNCED,
+    });
   });
 });
 
@@ -203,7 +213,8 @@ describe('WowFactsService.resolveFacts — Blizzard Forever seam (real DB)', () 
     ]);
     expect(got?.quests?.source).toBe('addon');
     expect(got?.lockouts?.source).toBe('addon');
-    expect(got?.professions?.source).toBe('manual');
+    // ROK-2107 F0 (2026-11-07): Blizzard wins professions; manual is the fallback.
+    expect(got?.professions?.source).toBe('blizzard');
   });
 
   it('live: the manual Forever row gets nothing blizzard-sourced', async () => {

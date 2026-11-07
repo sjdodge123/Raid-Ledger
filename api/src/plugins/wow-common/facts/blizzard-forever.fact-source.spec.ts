@@ -29,6 +29,20 @@ const EQUIPMENT = {
   ],
   syncedAt: '2026-11-05T09:00:00.000Z',
 };
+const PROFS = {
+  primary: [
+    {
+      id: 164,
+      name: 'Blacksmithing',
+      slug: 'blacksmithing',
+      skillLevel: 300,
+      maxSkillLevel: 300,
+      tiers: [],
+    },
+  ],
+  secondary: [],
+  syncedAt: '2026-11-05T09:00:00.000Z',
+};
 const GEAR = [
   { slot: 1, itemId: 12640, ilvl: 63, bonusIds: [], name: 'Lionheart Helm' },
 ];
@@ -42,6 +56,7 @@ function row(id: string, over: Record<string, unknown> = {}) {
     role: 'tank',
     itemLevel: 64,
     equipment: EQUIPMENT,
+    armoryProfessions: null,
     lastSyncedAt: SYNCED,
     ...over,
   };
@@ -67,9 +82,26 @@ describe('toForeverCandidates', () => {
     });
   });
 
-  it('never emits professions, quests, lockouts or lastOnline', () => {
+  // ROK-2107 (supersedes ROK-1920 F11): professions come from armory_professions.
+  it('serves armory_professions as blizzard professions, asOf = lastSyncedAt', () => {
+    const got = toForeverCandidates(row('c1', { armoryProfessions: PROFS }));
+    expect(got.professions).toEqual({
+      value: PROFS,
+      source: 'blizzard',
+      asOf: SYNCED,
+    });
+  });
+
+  it('emits no professions for a null or malformed armory_professions', () => {
+    for (const armoryProfessions of [null, { primary: 'nope' }]) {
+      const got = toForeverCandidates(row('c1', { armoryProfessions }));
+      expect(got).not.toHaveProperty('professions');
+    }
+  });
+
+  it('never emits quests, lockouts or lastOnline', () => {
     const keys = Object.keys(toForeverCandidates(row('c1')));
-    for (const f of ['professions', 'quests', 'lockouts', 'lastOnline']) {
+    for (const f of ['quests', 'lockouts', 'lastOnline']) {
       expect(keys).not.toContain(f);
     }
   });
@@ -116,6 +148,7 @@ describe('BlizzardForeverFactSource.load', () => {
       'ilvl',
       'gear',
       'enchantsReported',
+      'professions',
     ]);
   });
 

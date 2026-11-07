@@ -132,20 +132,23 @@ describe('AddonSnapshotFactSource enchantsReported (ROK-1915)', () => {
   });
 });
 
+const charRow = {
+  id: 'c1',
+  level: 60,
+  class: 'Priest',
+  race: 'Human',
+  role: 'dps',
+  roleOverride: 'healer',
+  itemLevel: 66,
+  professions: { primary: [], secondary: [], syncedAt: T.toISOString() },
+  armoryProfessions: null,
+  lastSyncedAt: T,
+  externalId: null,
+  addonGuid: 'Player-1-abc',
+};
+
 describe('CharacterRowFactSource', () => {
-  const row = {
-    id: 'c1',
-    level: 60,
-    class: 'Priest',
-    race: 'Human',
-    role: 'dps',
-    roleOverride: 'healer',
-    itemLevel: 66,
-    professions: { primary: [], secondary: [], syncedAt: T.toISOString() },
-    lastSyncedAt: T,
-    externalId: null,
-    addonGuid: 'Player-1-abc',
-  };
+  const row = charRow;
 
   it('loads 2000 characters in ONE query', async () => {
     db.where.mockResolvedValue([]);
@@ -203,5 +206,83 @@ describe('AddonSnapshotFactSource — ilvl precision (ROK-1915)', () => {
       source: 'addon',
       asOf: T,
     });
+  });
+});
+
+// ROK-2107 D6/F4 + ruling F0 (2026-11-07): the Armory copy (blizzard, asOf
+// lastSyncedAt) wins on a synced row; the hand entry is the fallback.
+describe('professions provenance (ROK-2107)', () => {
+  const MANUAL = { primary: [], secondary: [], syncedAt: T.toISOString() };
+  const ARMORY = {
+    primary: [],
+    secondary: [],
+    syncedAt: '2026-11-01T00:00:00.000Z',
+  };
+  const armoryRow = { ...charRow, externalId: '123', addonGuid: null };
+  const load = async (r: object) => {
+    db.where.mockResolvedValue([r]);
+    return (await new CharacterRowFactSource(db as never).load([ref(1)])).get(
+      'm1',
+    );
+  };
+
+  it('both set: emits the Armory copy as blizzard (Blizzard wins)', async () => {
+    const got = await load({
+      ...armoryRow,
+      professions: MANUAL,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
+    });
+  });
+
+  it('manual only: emits the hand entry as manual, asOf null', async () => {
+    const got = await load({ ...armoryRow, professions: MANUAL });
+    expect(got?.professions).toEqual({
+      value: MANUAL,
+      source: 'manual',
+      asOf: null,
+    });
+  });
+
+  // Codex P2: retail imports + a refreshed manual Forever row have no externalId.
+  it('a synced row without externalId still serves the Armory copy', async () => {
+    const got = await load({
+      ...charRow,
+      externalId: null,
+      professions: MANUAL,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
+    });
+  });
+
+  it('Armory only: emits the Armory copy as blizzard, asOf lastSyncedAt', async () => {
+    const got = await load({
+      ...armoryRow,
+      professions: null,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
+    });
+  });
+
+  it('ignores armory_professions on a row never Armory-synced', async () => {
+    const got = await load({
+      ...charRow,
+      lastSyncedAt: null,
+      professions: null,
+      armoryProfessions: ARMORY,
+    });
+    expect(got).not.toHaveProperty('professions');
   });
 });

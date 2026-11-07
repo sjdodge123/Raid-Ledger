@@ -2,8 +2,9 @@
  * ROK-1910 — the per-field fact precedence rule (plan ROK-1905 §2.3). Pure:
  * no I/O, no clock reads (the caller passes `now`).
  *
- * 1. A `manual` value wins for the fields a user can edit (roleOverride,
- *    professions).
+ * 1. A `manual` value wins for the fields a user can edit (roleOverride; and
+ *    professions only if `MANUAL_PROFESSIONS_WIN` is flipped back on — the
+ *    ROK-2107 ruling F0 of 2026-11-07 has Blizzard win, manual as fallback).
  * 2. Otherwise, only while the REGISTERED Blizzard seam is live
  *    (`blizzardFresh`), a `blizzard` value fresher than {@link FRESH_WINDOW_MS}
  *    wins. With the seam off, blizzard-labelled facts (e.g. an Armory-synced
@@ -14,6 +15,7 @@
  *    only the fallback after that.
  * 4. Otherwise the fact is unknown (`null`).
  */
+import { MANUAL_PROFESSIONS_WIN } from '../../../characters/characters-professions.helpers';
 import {
   type Fact,
   type ResolvedWowFacts,
@@ -39,8 +41,10 @@ const DEFAULT_ROW: FieldPrecedence = {
 };
 
 /**
- * The per-field table. Professions never come from Blizzard: the classic
- * Profile API has no professions endpoint (`blizzard-professions.helpers.ts`).
+ * The per-field table. Professions come from Blizzard too (ROK-2107): the
+ * Armory sync writes `characters.armory_professions` (retail + Forever serve a
+ * `/professions` endpoint). Whether a hand entry beats it is the ONE switch
+ * `MANUAL_PROFESSIONS_WIN`, shared with the character DTO so they never disagree.
  */
 export const FIELD_PRECEDENCE: Readonly<Record<WowFactField, FieldPrecedence>> =
   {
@@ -50,7 +54,10 @@ export const FIELD_PRECEDENCE: Readonly<Record<WowFactField, FieldPrecedence>> =
     role: { manualOverride: true, blizzardAllowed: true },
     ilvl: DEFAULT_ROW,
     gear: DEFAULT_ROW,
-    professions: { manualOverride: true, blizzardAllowed: false },
+    professions: {
+      manualOverride: MANUAL_PROFESSIONS_WIN,
+      blizzardAllowed: true,
+    },
     quests: DEFAULT_ROW,
     lockouts: DEFAULT_ROW,
     lastOnline: DEFAULT_ROW,

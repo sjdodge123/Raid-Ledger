@@ -44,6 +44,7 @@ function row(over: Partial<Row> = {}): Row {
     equipment: null,
     talents: null,
     professions: null,
+    armoryProfessions: null,
     displayOrder: 0,
     createdAt: now,
     updatedAt: now,

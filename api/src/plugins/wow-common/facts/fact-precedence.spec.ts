@@ -1,3 +1,4 @@
+import { MANUAL_PROFESSIONS_WIN } from '../../../characters/characters-professions.helpers';
 import {
   FIELD_PRECEDENCE,
   FRESH_WINDOW_MS,
@@ -30,7 +31,10 @@ describe('FIELD_PRECEDENCE table', () => {
     const editable = WOW_FACT_FIELDS.filter(
       (f) => FIELD_PRECEDENCE[f].manualOverride,
     );
-    expect(editable.sort()).toEqual(['professions', 'role']);
+    // ROK-2107 F0: professions joins the list only while the switch is on.
+    expect(editable.sort()).toEqual(
+      MANUAL_PROFESSIONS_WIN ? ['professions', 'role'] : ['role'],
+    );
   });
 
   it('ROK-1915: enchantsReported uses the default row (no override, blizzard allowed)', () => {
@@ -40,13 +44,18 @@ describe('FIELD_PRECEDENCE table', () => {
     });
   });
 
-  it('never sources professions from blizzard', () => {
-    expect(FIELD_PRECEDENCE.professions.blizzardAllowed).toBe(false);
+  // ROK-2107 product decision: Blizzard now answers professions (Armory sync
+  // writes armory_professions); the override is the shared switch.
+  it('lets blizzard answer professions, override driven by MANUAL_PROFESSIONS_WIN', () => {
+    expect(FIELD_PRECEDENCE.professions).toEqual({
+      manualOverride: MANUAL_PROFESSIONS_WIN,
+      blizzardAllowed: true,
+    });
   });
 });
 
 describe('resolveField — rule 1: manual override', () => {
-  it.each(['role', 'professions'] as WowFactField[])(
+  it.each(['role'] as WowFactField[])(
     '%s: a manual value beats a fresh blizzard and a newer addon value',
     (field) => {
       const manual = fact('manual', 'mine', ago(30 * 24 * HOUR));
@@ -59,6 +68,14 @@ describe('resolveField — rule 1: manual override', () => {
       expect(got).toEqual(manual);
     },
   );
+
+  // ROK-2107 ruling F0 (2026-11-07): Blizzard wins professions by default.
+  it('professions: a fresh blizzard value beats a manual entry; manual is the fallback', () => {
+    const bz = fact('blizzard', 'bz', ago(HOUR));
+    const manual = fact('manual', 'mine', null);
+    expect(resolveField('professions', [manual, bz], NOW, true)).toEqual(bz);
+    expect(resolveField('professions', [manual], NOW, true)).toEqual(manual);
+  });
 
   it('level: a manual value is not an override — fresh blizzard wins', () => {
     const got = resolveField(
@@ -78,7 +95,7 @@ describe('resolveField — rule 1: manual override', () => {
 
 describe('resolveField — rule 2: fresh blizzard', () => {
   const blizzardFields = WOW_FACT_FIELDS.filter(
-    (f) => !FIELD_PRECEDENCE[f].manualOverride && f !== 'professions',
+    (f) => !FIELD_PRECEDENCE[f].manualOverride,
   );
 
   it.each(blizzardFields)(
@@ -107,10 +124,11 @@ describe('resolveField — rule 2: fresh blizzard', () => {
     expect(got?.source).toBe('addon');
   });
 
-  it('professions: a fresh blizzard value is dropped entirely', () => {
+  it('professions: a fresh blizzard value wins when no manual value exists', () => {
+    const bz = fact('blizzard', 'bz', ago(HOUR));
     expect(
-      resolveField('professions', [fact('blizzard', 'bz', NOW)], NOW, true),
-    ).toBeNull();
+      resolveField('professions', [fact('addon', 'ad', NOW), bz], NOW, true),
+    ).toEqual(bz);
   });
 });
 
@@ -253,5 +271,38 @@ describe('resolveField — blizzardFresh off (no registered Blizzard seam)', () 
     ];
     expect(resolveFacts(perSource, NOW, false).level?.source).toBe('addon');
     expect(resolveFacts(perSource, NOW, true).level?.source).toBe('blizzard');
+  });
+});
+
+describe('professions with MANUAL_PROFESSIONS_WIN flipped back on (ROK-2107 F0)', () => {
+  const HELPERS = '../../../characters/characters-professions.helpers';
+  let flipped: typeof resolveField | null = null;
+
+  beforeAll(() => {
+    jest.isolateModules(() => {
+      jest.doMock(HELPERS, () => ({
+        ...jest.requireActual<object>(HELPERS),
+        MANUAL_PROFESSIONS_WIN: true,
+      }));
+      // requireActual skips a mock of fact-precedence itself, but its own
+      // import of HELPERS resolves through the doMock above.
+      flipped = jest.requireActual<{ resolveField: typeof resolveField }>(
+        './fact-precedence',
+      ).resolveField;
+    });
+  });
+
+  afterAll(() => jest.dontMock(HELPERS));
+
+  it('a manual entry beats a fresh blizzard and a newer addon value', () => {
+    if (!flipped) throw new Error('isolated fact-precedence did not load');
+    const manual = fact('manual', 'mine', null);
+    const got = flipped(
+      'professions',
+      [fact('blizzard', 'bz', ago(HOUR)), fact('addon', 'ad', NOW), manual],
+      NOW,
+      true,
+    );
+    expect(got).toEqual(manual);
   });
 });
