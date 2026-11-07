@@ -7,7 +7,7 @@
  * linked + snapshotted rows so the character/snapshot fact queries run.
  */
 import * as bcrypt from 'bcrypt';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { WowRosterInsightsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -524,7 +524,16 @@ describe('roster-insights on a 2000-member roster', () => {
         .insert(schema.guildMembers)
         .values(rows.slice(i, i + 500));
     await linkBigRoster();
+    // The guard measures the computation, not planner statistics: after the
+    // shard's earlier specs churn these tables (TRUNCATE + bulk insert), the
+    // planner can still hold empty-table stats and pick a bad plan (p95 went
+    // 80-200 ms -> 0.8-1.8 s at shard scale). Production autovacuum keeps them
+    // analyzed, so refresh them here and run one untimed warm-up compute.
+    await testApp.db.execute(
+      sql`ANALYZE ${schema.guildMembers}, ${schema.characters}, ${schema.characterAddonSnapshots}`,
+    );
     const svc = testApp.app.get(RosterInsightsService);
+    await svc.compute(big, 'member', false);
     const times: number[] = [];
     for (let run = 0; run < 10; run += 1) {
       const t0 = performance.now();
