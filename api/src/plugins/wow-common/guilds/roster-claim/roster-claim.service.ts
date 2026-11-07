@@ -96,7 +96,8 @@ export class RosterClaimService {
     this.logger.log(
       `User ${userId} claimed roster member ${memberId} as ${row.id}`,
     );
-    return this.refreshAfterCommit(row);
+    // The claim just wrote its `roster_claimed` audit (admin slot self-filter).
+    return { ...(await this.refreshAfterCommit(row)), rosterClaimed: true };
   }
 
   /** The tx; a unique-index backstop violation maps to 409 OUTSIDE it. */

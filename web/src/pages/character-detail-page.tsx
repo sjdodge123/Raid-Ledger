@@ -154,8 +154,7 @@ function CharacterRoleBadge({ character, isOwner }: { character: { id: string; e
 /** Admin-only header actions (ROK-1756, ROK-2128); a plugin filler self-filters, e.g. to roster-linked characters. */
 function CharacterAdminActions({ character }: { character: CharacterDto }) {
     const addonLinked = character.addonLinked;
-    // ROK-2128: `rosterClaimed` is an additive optional CharacterDto field; read it only when the API sent it.
-    const rosterClaimed = 'rosterClaimed' in character && character.rosterClaimed === true;
+    const rosterClaimed = character.rosterClaimed === true;
     return (
         <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
             <PluginSlot name="character-detail:admin-actions" context={{ characterId: character.id, name: character.name, userId: character.userId, addonLinked, rosterClaimed }} />

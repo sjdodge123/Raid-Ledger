@@ -1,4 +1,5 @@
 import * as schema from '../../../../drizzle/schema';
+import { CHARACTER_CLAIM_ENTITY } from '../../../../characters/characters-roster-claim.helpers';
 import type { AddonImportTx } from '../../addon-import/addon-import-apply.types';
 
 /**
@@ -7,7 +8,7 @@ import type { AddonImportTx } from '../../addon-import/addon-import-apply.types'
  * the same convention as `GUID_AUDIT_ENTITY`; the character id rides in
  * `metadata` because characters are uuid-keyed.
  */
-export const CHARACTER_CLAIM_ENTITY = 'character_claim';
+export { CHARACTER_CLAIM_ENTITY } from '../../../../characters/characters-roster-claim.helpers';
 
 export type CharacterClaimAction =
   'roster_claimed' | 'admin_reassigned' | 'admin_unlinked_roster';

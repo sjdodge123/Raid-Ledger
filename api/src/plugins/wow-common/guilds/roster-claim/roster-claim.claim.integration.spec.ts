@@ -259,7 +259,9 @@ describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
     expect(detail.status).toBe(200);
     expect(detail.body.rosterClaimed).toBe(true);
   });
+});
 
+describe('CharacterDto.rosterClaimed (ROK-2128)', () => {
   it('a manually added character is not rosterClaimed on the detail read', async () => {
     const owner = await makeUser('l2manual');
     const [row] = nonEmpty(
@@ -278,7 +280,9 @@ describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
     expect(detail.status).toBe(200);
     expect(detail.body.rosterClaimed).toBe(false);
   });
+});
 
+describe('roster claim: conflicts (ROK-2128)', () => {
   it('a claimed row is 409 "Someone claimed this first" for the next caller', async () => {
     const first = await makeUser('l2cinderA');
     const second = await makeUser('l2cinderB');

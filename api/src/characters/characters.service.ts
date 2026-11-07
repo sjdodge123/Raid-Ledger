@@ -28,6 +28,7 @@ import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { checkUpdateClaim } from './characters-update-claim.helpers';
+import { isRosterClaimed } from './characters-roster-claim.helpers';
 import { defined } from '../common/defined.helpers';
 import { withDisplayOverrides } from './characters-display-equipment.helpers';
 import * as policyH from './characters-external-policy.helpers';
@@ -287,11 +288,14 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = await withDisplayOverrides(
-      mapCharacterToDto(character),
-      this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
-      this.logger,
-    );
+    const dto = {
+      ...(await withDisplayOverrides(
+        mapCharacterToDto(character),
+        this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
+        this.logger,
+      )),
+      rosterClaimed: await isRosterClaimed(this.db, characterId),
+    };
     const enrichmentRows =
       await this.enrichmentsService.getEnrichmentsForEntity(
         'character',
