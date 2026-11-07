@@ -1,12 +1,13 @@
 /**
- * ROK-2107 (F7): migration 0281 moves Blizzard-written professions out of the
+ * ROK-2107 (F7): the `characters_armory_professions` migration (0282 after the
+ * ROK-1928 renumber) moves Blizzard-written professions out of the
  * user-entered column. Seeds OLD-shape rows — professions set,
- * armory_professions NULL (the state before 0281) — then re-executes 0281's
+ * armory_professions NULL (the state before it) — then re-executes its
  * UPDATE against the test DB (precedent:
  * discord-bot/services/voice-attendance-late-backfill.integration.spec.ts).
  * The ADD COLUMN is skipped: the harness DB already has the column.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -51,13 +52,21 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
-/** Run migration 0281's UPDATE statements against the current test DB. */
+const MIGRATION_SUFFIX = '_characters_armory_professions.sql';
+
+/** The backfill migration, found by suffix so a renumber cannot orphan this spec. */
+function backfillMigrationPath(): string {
+  const dir = join(__dirname, '../drizzle/migrations');
+  const names = readdirSync(dir).filter((n) => n.endsWith(MIGRATION_SUFFIX));
+  expect(names).toHaveLength(1);
+  const [name] = names;
+  if (!name) throw new Error(`no *${MIGRATION_SUFFIX} migration in ${dir}`);
+  return join(dir, name);
+}
+
+/** Run the backfill migration's UPDATE statements against the current test DB. */
 async function runBackfill(): Promise<void> {
-  const file = join(
-    __dirname,
-    '../drizzle/migrations/0281_characters_armory_professions.sql',
-  );
-  const statements = readFileSync(file, 'utf8')
+  const statements = readFileSync(backfillMigrationPath(), 'utf8')
     .split('--> statement-breakpoint')
     .map((s) => s.replace(/^--.*$/gm, '').trim())
     .filter((s) => s.startsWith('UPDATE'));
@@ -117,7 +126,7 @@ async function columns(id: string) {
   return row;
 }
 
-describe('migration 0281 professions backfill (ROK-2107 D7)', () => {
+describe('armory_professions migration backfill (ROK-2107 D7)', () => {
   // Codex P2: retail imports and a refreshed manual Forever row never carry
   // external_id — the sync marker is last_synced_at.
   it.each<[string, string, string | null]>([
