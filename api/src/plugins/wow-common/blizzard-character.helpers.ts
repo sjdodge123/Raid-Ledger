@@ -11,7 +11,11 @@ import {
   CLASSIC_TALENT_TREE_ROLES,
 } from './blizzard.constants';
 import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
-import { buildForeverCharacterSlug } from './forever-character-slug';
+import {
+  assertNotDotSegment,
+  buildRealmSlug,
+  buildRealmlessCharName,
+} from './blizzard-character-path.helpers';
 
 const logger = new Logger('BlizzardCharacterHelpers');
 
@@ -29,38 +33,6 @@ export interface CharacterParams {
   charName: string;
   namespace: string;
   baseUrl: string;
-}
-
-/**
- * A path segment that is empty or dots only survives percent-encoding
- * (`encodeURIComponent('..') === '..'`) and fetch normalises it to another
- * Blizzard path with the app's token (tech-debt 4082; 2904 covered slashes).
- */
-function assertNotDotSegment(segment: string, label: string): void {
-  if (segment.length === 0 || /^\.+$/.test(segment)) {
-    throw new BadRequestException(`${label} is not a valid path segment`);
-  }
-}
-
-/** Slugify + percent-encode a realm name into a URL path segment. */
-function buildRealmSlug(realm: string): string {
-  const slug = realm
-    .toLowerCase()
-    .replace(/'/g, '')
-    .replace(/\s+/g, '-')
-    .trim();
-  assertNotDotSegment(slug, 'Realm');
-  return encodeURIComponent(slug);
-}
-
-/** Realmless Forever slug; a malformed stored name maps to a 400. */
-function buildRealmlessCharName(name: string): string {
-  try {
-    return buildForeverCharacterSlug(name);
-  } catch (err) {
-    if (err instanceof Error) throw new BadRequestException(err.message);
-    throw err;
-  }
 }
 
 /** Build API base params for character endpoints.
