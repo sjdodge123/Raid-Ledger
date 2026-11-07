@@ -12,7 +12,7 @@ const logger = new Logger('GuildPinnedAddons');
 const LEDGERLINK_CURSEFORGE_URL =
   'https://www.curseforge.com/wow/addons/ledger-link';
 
-/** The pre-ROK-2134 LedgerLink link, any case, optional `www.` / trailing slash. */
+/** The pre-ROK-2134 LedgerLink link: http(s), any case, optional `www.` / trailing slash. */
 const LEDGERLINK_GITHUB_URL =
   /^https?:\/\/(www\.)?github\.com\/sjdodge123\/ledger-link\/?$/i;
 
@@ -46,6 +46,21 @@ function upgradeLegacyUrl(addon: PinnedAddon): PinnedAddon {
     : addon;
 }
 
+/**
+ * Upgrade legacy LedgerLink urls, then keep only the first LedgerLink
+ * CurseForge entry — a list holding both the old GitHub and the CurseForge
+ * pin must not read as two identical rows.
+ */
+function upgradeStoredList(list: PinnedAddon[]): PinnedAddon[] {
+  let seenLedgerLink = false;
+  return list.map(upgradeLegacyUrl).filter((addon) => {
+    if (addon.url !== LEDGERLINK_CURSEFORGE_URL) return true;
+    if (seenLedgerLink) return false;
+    seenLedgerLink = true;
+    return true;
+  });
+}
+
 function fallback(): PinnedAddon[] {
   return DEFAULT_PINNED_ADDONS.map((a) => ({ ...a, flavors: [...a.flavors] }));
 }
@@ -71,7 +86,7 @@ export function parsePinnedAddons(raw: string | null): PinnedAddon[] {
     logger.warn('guild_pinned_addons failed validation; using the default');
     return fallback();
   }
-  return parsed.data.map(upgradeLegacyUrl);
+  return upgradeStoredList(parsed.data);
 }
 
 /** Typed reader: pass `settingsService.get.bind(settingsService)`. */

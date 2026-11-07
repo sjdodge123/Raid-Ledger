@@ -55,7 +55,9 @@ describe('parsePinnedAddons', () => {
     expect(parsePinnedAddons(null)).toEqual(DEFAULT_PINNED_ADDONS);
     expect(parsePinnedAddons('  ')).toEqual(DEFAULT_PINNED_ADDONS);
   });
+});
 
+describe('parsePinnedAddons — stored LedgerLink url upgrade', () => {
   it.each([
     'https://github.com/sjdodge123/ledger-link',
     'https://github.com/sjdodge123/ledger-link/',
@@ -72,6 +74,18 @@ describe('parsePinnedAddons', () => {
     },
   );
 
+  it('keeps only the first LedgerLink CurseForge entry after the upgrade', () => {
+    const stored = [
+      storedLedgerLink('https://github.com/sjdodge123/ledger-link'),
+      MAILWORTHY,
+      storedLedgerLink(LEDGERLINK_CURSEFORGE),
+    ];
+    expect(parsePinnedAddons(JSON.stringify(stored))).toEqual([
+      storedLedgerLink(LEDGERLINK_CURSEFORGE),
+      MAILWORTHY,
+    ]);
+  });
+
   it('does not inject Mailworthy into a stored list', () => {
     const stored = [storedLedgerLink(LEDGERLINK_CURSEFORGE)];
     expect(parsePinnedAddons(JSON.stringify(stored))).toEqual(stored);
@@ -83,7 +97,9 @@ describe('parsePinnedAddons', () => {
     ];
     expect(parsePinnedAddons(JSON.stringify(custom))).toEqual(custom);
   });
+});
 
+describe('parsePinnedAddons — validation', () => {
   it('returns the stored list when it validates', () => {
     expect(parsePinnedAddons(JSON.stringify([MAILWORTHY]))).toEqual([
       MAILWORTHY,
