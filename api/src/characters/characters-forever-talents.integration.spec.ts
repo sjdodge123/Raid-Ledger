@@ -16,6 +16,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { WowItemMetaService } from '../plugins/wow-common/wowhead-item/wow-item-meta.service';
+import { blizzardToForeverTalents } from '../plugins/wow-common/forever-blizzard-talents.adapter';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const CLASSIC_SLUG = 'world-of-warcraft-classic';
@@ -235,7 +236,7 @@ describe('Forever addon talents on GET /characters/:id (integration)', () => {
     ]);
   });
 
-  it('D4: stored talents synced after the capture are returned untouched', async () => {
+  it('D4: stored talents synced after the capture win as the converted Armory DTO (ROK-2110)', async () => {
     const id = await seedCharacter({
       gameVariant: 'wow_forever',
       talents: STORED_CLASSIC_TALENTS,
@@ -243,7 +244,14 @@ describe('Forever addon talents on GET /characters/:id (integration)', () => {
     });
     await seedSnapshot(id, warriorNodes());
 
-    expect((await get(id)).body.talents).toEqual(STORED_CLASSIC_TALENTS);
+    // ROK-2110: a stored Blizzard tree newer than the capture is served as the
+    // Forever DTO (source 'blizzard'), never as the raw classic shape.
+    expect((await get(id)).body.talents).toEqual(
+      blizzardToForeverTalents(
+        STORED_CLASSIC_TALENTS,
+        '2026-09-20T00:00:00.000Z',
+      ),
+    );
   });
 
   it('D4: stored talents synced before the capture lose to the addon DTO', async () => {

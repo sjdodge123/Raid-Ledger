@@ -1,5 +1,6 @@
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
-import { foreverTreeNames, formatForeverRank } from '../lib/forever-talent-trees';
+import { formatForeverRank } from '../lib/forever-talent-trees';
+import { armoryTreeNames } from '../lib/forever-armory-placement';
 
 type PositionedNode = ForeverTalentNodeDto & { tree: number; row: number; col: number };
 
@@ -56,7 +57,8 @@ function treeSpent(talents: ForeverTalentsDto, index: number, nodes: PositionedN
  * render nothing. Expects `layout === 'grid'` (every node positioned).
  */
 export function ForeverTalentGrid({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
-    const names = foreverTreeNames(characterClass);
+    // ROK-2110 (D4/F3): Blizzard's `trees[].name` wins over the class table.
+    const names = armoryTreeNames(talents, characterClass);
     const positioned = talents.nodes.filter(isPositioned);
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
