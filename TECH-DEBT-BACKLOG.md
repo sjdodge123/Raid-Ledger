@@ -4098,3 +4098,12 @@ same day (#1278, #1279, #1280).
 ### 2026-11-07 — fix/rok-2107-professions-provenance (surfaced during the fleet `--only-e2e` gate, task 492b87b308a1)
 
 - `low` `scripts/smoke/character-detail.smoke.spec.ts:114` / `:218` — the whole spec is hollow against a demo-seeded env: `Running 15 tests using 3 workers` → `15 skipped` (`No character with metadata in seed data`, `No seeded WoW character with non-null professions`). After global setup's `POST /admin/test/reset-to-seed` the env has 113 characters, 0 owned by admin@local, 0 with `class`+`level`, 0 with `professions` (`rl_db_query` on env rok-2107), and the spec only looks at `/users/me/characters` of the storage-state admin. Pre-existing: the skip guards date from ROK-1130 and the demo seed never gave admin@local a character — the same `reset-to-seed` runs in GitHub CI, so the spec most likely skips there too (the github reporter does not list per-test skips; main's shards show 94–153 skipped each). The ROK-2107 pill assertion added to this spec therefore never ran on the fleet. `Suggested:` make the spec self-seeding — create a guild via `POST /admin/test/wow/seed-guild` and a character for admin@local with `professions` (or `armoryProfessions`) in `beforeAll`, then assert on that id instead of scanning the demo seed.
+
+### 2026-11-07 — resolved / filed (morning Lead; /readlogs + /triage sweep, operator-approved "mark resolved, keep")
+Existing entries are left in place; this records their status. Line numbers are at origin/main `6f13b768e`.
+- L2288 `api/src/events/signups-signup.helpers.ts` `checkAutoBench` counts tentatives — **resolved** on main (`hasDisplaceableTentative`, per the readlogs lane).
+- L2476 `web/src/components/lineups/LineupStatusBadge.tsx:15` raw blue `decided` pill — **resolved** by PR #1993 (`bg-busy/10 text-busy`).
+- L2803 `api/src/backup/` pg_dump-only — **resolved** by the uploads archive (#1949/#1951/#1954).
+- L2867 `api/src/ai/providers/google.helpers.ts:51` Gemini key sent as `?key=` and not redacted — **filed** as ROK-2117 (same root cause as the ITAD `?key=` leak).
+- L3588 rl-infra gc-sweeper `builder_prune` rung — **filed** as ROK-2111.
+- L3617 `rl-infra/docker-compose.yml:156` registry never garbage-collected — **filed** as ROK-2111 (registry retention is in its ruled scope).

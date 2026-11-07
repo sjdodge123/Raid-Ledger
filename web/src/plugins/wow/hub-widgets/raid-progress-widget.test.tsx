@@ -18,7 +18,6 @@ import type { HubWidgetCtx } from '../../hub-game-widgets';
 import RaidProgressWidget from './raid-progress-widget';
 import { raidProgressWidget, useRaidProgressVisible } from './raid-progress.register';
 import { firstKillLine } from './raid-progress.helpers';
-import { EventsSeeAll } from './see-all-actions';
 import { useRosterInsights } from './use-roster-insights';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -176,11 +175,11 @@ describe('useRaidProgressVisible', () => {
 });
 
 describe('raidProgressWidget registration', () => {
-    it('is the Forever guild "Raid progress" card at order 89, span 2, with the Events see-all action', () => {
+    it('is the Forever guild "Raid progress" card at order 89, span 2, with no see-all action (the card expands in place)', () => {
         expect(raidProgressWidget).toMatchObject({
             id: 'forever-raid-progress', title: 'Raid progress', order: 89, span: 2, audience: 'everyone',
             games: ['world-of-warcraft-forever'], kinds: ['wow_guild'],
         });
-        expect(raidProgressWidget.action).toBe(EventsSeeAll);
+        expect(raidProgressWidget.action).toBeUndefined();
     });
 });
