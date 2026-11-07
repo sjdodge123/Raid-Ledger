@@ -146,7 +146,12 @@ describe('migration 0281 professions backfill (ROK-2107 D7)', () => {
     ],
     [
       'an Armory classic_era row',
-      { name: 'c', synced: true, externalId: '333', gameVariant: 'classic_era' },
+      {
+        name: 'c',
+        synced: true,
+        externalId: '333',
+        gameVariant: 'classic_era',
+      },
     ],
     [
       'a row with no game variant',
@@ -178,7 +183,12 @@ describe('migration 0281 professions backfill (ROK-2107 D7)', () => {
 
   it('leaves a row with both columns already set untouched', async () => {
     const id = await seed(
-      { name: 'both', synced: true, externalId: '666', gameVariant: 'wow_forever' },
+      {
+        name: 'both',
+        synced: true,
+        externalId: '666',
+        gameVariant: 'wow_forever',
+      },
       ARMORY,
     );
     await runBackfill();

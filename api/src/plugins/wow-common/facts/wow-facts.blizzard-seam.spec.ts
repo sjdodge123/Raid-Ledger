@@ -206,4 +206,29 @@ describe('dropShadowedBlizzard', () => {
     expect(got).toEqual({ class: ROW.class, role: ROW.role });
     expect(ROW).toHaveProperty('level');
   });
+
+  // ROK-2107 review r2 MINOR 2: the shadowing contract for professions.
+  it("drops the row's blizzard professions copy the source answered; keeps a manual one", () => {
+    const bz = {
+      value: { primary: [], secondary: [], syncedAt: NOW.toISOString() },
+      source: 'blizzard' as const,
+      asOf: NOW,
+    };
+    const answered = { professions: bz };
+    expect(dropShadowedBlizzard({ ...ROW, professions: bz }, answered)).toEqual(
+      {
+        class: ROW.class,
+        role: ROW.role,
+        level: ROW.level,
+      },
+    );
+    const manual = {
+      value: { primary: [], secondary: [], syncedAt: NOW.toISOString() },
+      source: 'manual' as const,
+      asOf: null,
+    };
+    expect(
+      dropShadowedBlizzard({ ...ROW, professions: manual }, answered),
+    ).toHaveProperty('professions', manual);
+  });
 });

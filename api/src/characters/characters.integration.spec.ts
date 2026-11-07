@@ -635,6 +635,7 @@ describe('Characters & User Management (integration)', () =>
 // the `RequirePlugin('blizzard')` HTTP guard.
 // =====================================================================
 
+import { CharacterProfessionsSchema } from '@raid-ledger/contract';
 import { CharactersService } from './characters.service';
 import { BlizzardService } from '../plugins/wow-common/blizzard.service';
 
@@ -853,9 +854,11 @@ function describeProfessionSync() {
     expect(spy).toHaveBeenCalledTimes(2);
     expect(reloaded.armoryProfessions).toEqual(second);
     // Defensive: not a concat / not duplicated
-    const professions = reloaded.armoryProfessions as ProfessionFixture | null;
-    expect(professions?.primary).toHaveLength(1);
-    expect(professions?.primary[0]?.name).toBe('Enchanting');
+    const professions = CharacterProfessionsSchema.parse(
+      reloaded.armoryProfessions,
+    );
+    expect(professions.primary).toHaveLength(1);
+    expect(professions.primary[0]?.name).toBe('Enchanting');
   });
 
   it('leaves prior professions untouched when service returns null (5xx — architect §3)', async () => {
