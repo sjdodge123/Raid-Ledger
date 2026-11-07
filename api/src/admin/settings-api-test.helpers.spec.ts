@@ -38,12 +38,14 @@ describe('testItadApiKey', () => {
     await testItadApiKey('secret-key');
 
     const [url, init] = onlyCall(mock);
-    expect(init.headers['ITAD-API-Key']).toBe('secret-key');
+    // URL first: before ROK-2117 fetch got no init, so this is the line
+    // that names the leak.
     expect(url).not.toContain('key=');
     expect(url).not.toContain('secret-key');
     expect(url).toBe(
       'https://api.isthereanydeal.com/games/lookup/v1?appid=440',
     );
+    expect(init.headers['ITAD-API-Key']).toBe('secret-key');
   });
 
   it('reports a valid key on 200', async () => {
