@@ -26,6 +26,7 @@ export default function LastSeenWidget({ page }: Pick<HubWidgetCtx, 'page'>): JS
     const rosterVia = useRosterVia(page.guild);
     if (isPending) return <div className="h-24 animate-pulse rounded-md bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load last seen.</p>;
+    // Deliberate (ROK-1928 spec FLAG B-6, Codex P2-4 not fixed): presence columns keep the last export's values while `last_seen_at` moves.
     const lastSeen = data.lastSeen;
     const footer = <Footer asOf={lastSeen?.snapshotAt ?? null} rosterVia={rosterVia} />;
     if (lastSeen === undefined || lastSeen.reported === 0) return <NoExport footer={footer} />;

@@ -66,5 +66,6 @@ export function useSyncBlizzardRoster(guildId: number): UseMutationResult<GuildB
  */
 export function useRosterVia(guild: Pick<GuildSummary, 'id' | 'kind'>): 'Blizzard' | 'LedgerLink' {
     const { data } = useGuildBlizzardRoster(guild.id, guild.kind === 'wow_guild');
+    // Deliberate (ROK-1928 spec D-1, Codex P2-5 not fixed): the footer label follows the last sync outcome.
     return data?.status === 'ok' ? 'Blizzard' : 'LedgerLink';
 }
