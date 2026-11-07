@@ -6,7 +6,7 @@ import {
   buildQuestReadiness,
   type ReadinessSignup,
 } from './event-quest-readiness.helpers';
-import type { CharSnapshot } from './forever-char-snapshot.query';
+import type { EffectiveQuests } from './forever-quest-source.helpers';
 
 const quest = (
   questId: number,
@@ -48,14 +48,18 @@ const signup = (
   ...extra,
 });
 
-const snap = (completed: number[], inProgress: number[]): CharSnapshot => ({
-  data: {
-    quests: {
-      completed,
-      inProgress: inProgress.map((questId) => ({ questId })),
-    },
-  } as unknown as CharSnapshot['data'],
+const snap = (
+  completed: number[],
+  inProgress: number[],
+  source: EffectiveQuests['source'] = 'addon',
+): EffectiveQuests => ({
+  quests: {
+    completed,
+    inProgress: inProgress.map((questId) => ({ questId })),
+  },
   capturedAt: AT,
+  source,
+  inProgressAsOf: source === 'addon' ? AT : null,
 });
 
 const manual = (userId: number, questId: number, completed: boolean) => ({

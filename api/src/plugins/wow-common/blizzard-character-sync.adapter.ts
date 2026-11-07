@@ -19,6 +19,7 @@ import type {
   ExternalInferredSpecialization,
   ExternalCharacterEquipment,
   ExternalCharacterProfessions,
+  ExternalCharacterQuests,
 } from '../plugin-host/extension-types';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
 
@@ -128,6 +129,21 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     gameVariant?: string | null,
   ): Promise<ExternalCharacterProfessions | null> {
     return this.blizzardService.fetchCharacterProfessions(
+      name,
+      realm,
+      region,
+      gameVariant ?? null,
+    );
+  }
+
+  /** ROK-2109: Forever completed quest ids; null = leave armory_quests alone. */
+  async fetchQuests(
+    name: string,
+    realm: string | null,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterQuests | null> {
+    return this.blizzardService.fetchCharacterQuests(
       name,
       realm,
       region,

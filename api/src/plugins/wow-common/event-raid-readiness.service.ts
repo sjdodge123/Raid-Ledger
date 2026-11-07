@@ -27,7 +27,7 @@ import { questEvidence } from './event-raid-readiness.evidence';
 import type { ResolvedRoster } from './facts/wow-facts.service';
 import { WowFactsService } from './facts/wow-facts.service';
 import type { RosterCharRef } from './facts/wow-fact.types';
-import { loadForeverCharSnapshots } from './forever-char-snapshot.query';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { loadRosterMemberIds } from './guilds/guild-roster.helpers';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
@@ -112,7 +112,7 @@ export class EventRaidReadinessService {
     ]);
     const charIds = signups.flatMap((s) => s.characterId ?? []);
     const [snapshots, members] = await Promise.all([
-      loadForeverCharSnapshots(this.db, charIds),
+      loadForeverQuestSources(this.db, charIds),
       loadMemberIds(this.db, event.guildId, charIds),
     ]);
     const qr = buildQuestReadiness({ quests, signups, snapshots, manual });

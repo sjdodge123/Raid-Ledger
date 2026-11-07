@@ -8,9 +8,12 @@ import { ItemComparison } from '../components/item-comparison';
 import { WowItemCard } from '../components/wow-item-card';
 import { REWARD_TO_EQUIP_SLOT, formatGold } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
-import { formatAddonSourceLine } from '../lib/addon-source-line';
+import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
-/** The viewer's chain state for this quest + the addon snapshot date (ROK-1748). */
+/**
+ * The viewer's chain state for this quest + its quest data date: addon
+ * snapshot or Armory list (ROK-1748, ROK-2109).
+ */
 export interface QuestCardPrereqs { state: QuestPrereqState; asOf: string | null }
 
 interface QuestCardProps {
@@ -182,22 +185,27 @@ function QuestCoverageStatus({ coveredByMe, coveredByOthers, isCovered, questCov
 }
 
 /**
- * Latest addon snapshot date among addon-sourced coverage entries, or null
- * when no entry came from the addon (manual / Classic coverage).
+ * Newest dated coverage entry (addon or Armory), or null when no entry carries a
+ * snapshot source (manual / Classic coverage). ROK-2109 adds the Armory.
  */
-function latestAddonAsOf(questCoverage: QuestCoverageEntry | undefined): string | null {
-    const addon = questCoverage?.coveredBy.filter((c) => c.source === 'addon') ?? [];
-    if (addon.length === 0) return null;
-    return addon.reduce<string>((max, c) => (c.asOf && c.asOf > max ? c.asOf : max), '');
+function latestDatedCoverage(questCoverage: QuestCoverageEntry | undefined): { source: DatedSource; asOf: string } | null {
+    let latest: { source: DatedSource; asOf: string } | null = null;
+    for (const c of questCoverage?.coveredBy ?? []) {
+        const source = asDatedSource(c.source);
+        if (!source) continue;
+        const asOf = c.asOf ?? '';
+        if (!latest || asOf > latest.asOf) latest = { source, asOf };
+    }
+    return latest;
 }
 
-/** "via addon · <date>" under the coverage status when coverage came from the addon (ROK-1748 §5). */
+/** "via addon · <date>" / "via Armory · <date>" under the coverage status (ROK-1748 §5, ROK-2109). */
 function CoverageSourceLine({ questCoverage }: { questCoverage: QuestCoverageEntry | undefined }) {
-    const asOf = latestAddonAsOf(questCoverage);
-    if (asOf === null) return null;
+    const latest = latestDatedCoverage(questCoverage);
+    if (latest === null) return null;
     return (
         <span className="text-xs text-muted" data-testid="quest-coverage-source">
-            {formatAddonSourceLine(asOf)}
+            {formatSourceLine(latest.source, latest.asOf)}
         </span>
     );
 }

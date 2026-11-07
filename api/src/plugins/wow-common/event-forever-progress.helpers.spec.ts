@@ -64,18 +64,22 @@ describe('buildMembers', () => {
   };
   const at = new Date('2026-10-01T00:00:00.000Z');
 
-  it('drops characters without a snapshot or with a schema-1 (no quests) one', () => {
-    const snaps = new Map([['c1', { data: { gear: [] }, capturedAt: at }]]);
-    expect(buildMembers([signup], snaps as never)).toEqual([]);
+  it('drops characters without effective quest data', () => {
     expect(buildMembers([signup], new Map())).toEqual([]);
   });
 
-  it('keeps a character whose snapshot has a quests slice', () => {
-    const data = { quests: { completed: [5], inProgress: [{ questId: 6 }] } };
-    const snaps = new Map([['c1', { data, capturedAt: at }]]);
-    const [m] = buildMembers([signup], snaps as never);
+  it('keeps a character with quest data and carries its source (ROK-2109)', () => {
+    const quests = { completed: [5], inProgress: [{ questId: 6 }] };
+    const eff = {
+      quests,
+      capturedAt: at,
+      source: 'blizzard' as const,
+      inProgressAsOf: null,
+    };
+    const [m] = buildMembers([signup], new Map([['c1', eff]]));
     expect(m?.snapshot.capturedAt).toBe(at.toISOString());
     expect(m?.snapshot.quests.completed).toEqual([5]);
+    expect(m?.snapshot.source).toBe('blizzard');
   });
 });
 

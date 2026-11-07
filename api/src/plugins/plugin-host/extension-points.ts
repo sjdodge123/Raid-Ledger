@@ -9,6 +9,7 @@ import type {
   ExternalInferredSpecialization,
   ExternalCharacterEquipment,
   ExternalCharacterProfessions,
+  ExternalCharacterQuests,
   ExternalRealm,
   ExternalContentInstance,
   ExternalContentInstanceDetail,
@@ -85,6 +86,16 @@ export interface CharacterSyncAdapter {
     region: string,
     gameVariant?: string | null,
   ): Promise<ExternalCharacterProfessions | null>;
+  /**
+   * ROK-2109: completed quest ids (Forever only). `null` = leave the stored
+   * `armory_quests` alone (skip, 404, non-OK, parse failure).
+   */
+  fetchQuests?(
+    name: string,
+    realm: string | null,
+    region: string,
+    gameVariant?: string | null,
+  ): Promise<ExternalCharacterQuests | null>;
   /**
    * Equipment to DISPLAY on the public character detail (ROK-1727, D1):
    * lets a plugin substitute data from a table it owns. `undefined` = no

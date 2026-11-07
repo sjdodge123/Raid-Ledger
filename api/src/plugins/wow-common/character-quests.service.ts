@@ -1,41 +1,24 @@
 /**
  * ROK-1745: quest section of a WoW: Forever character page. Reads the
- * LedgerLink `char` snapshot's `quests` slice and intersects it with the known
+ * LedgerLink `char` snapshot's `quests` slice (or, ROK-2109, the Armory
+ * `quests/completed` list when newer) and intersects it with the known
  * dungeon-quest table. The raw completed-id list never leaves this service.
  */
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  AddonQuestsSchema,
-  type CharacterQuestsDto,
-} from '@raid-ledger/contract';
+import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import {
-  buildCharacterQuests,
-  type ForeverQuestSnapshotInput,
-} from './character-quests.helpers';
+import { buildCharacterQuests } from './character-quests.helpers';
 import { instanceName } from './dungeon-instance-names';
 import { VARIANT_EXPANSIONS, toDto } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
-import { loadForeverCharSnapshot } from './forever-char-snapshot.query';
+import { readQuestsSlice } from './forever-quest-source.helpers';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 
-type QuestsSlice = NonNullable<ForeverQuestSnapshotInput['quests']>;
-
-/**
- * Read `data.quests` (snapshot schema 2) through the ROK-1742 wire schema
- * (`AddonQuestsSchema`) the import path already validated it with. Schema-1
- * rows (no `quests`) and malformed slices return `undefined` (section hidden)
- * instead of a 500.
- */
-export function readQuestsSlice(data: unknown): QuestsSlice | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const parsed = AddonQuestsSchema.safeParse(
-    (data as { quests?: unknown }).quests,
-  );
-  return parsed.success ? (parsed.data satisfies QuestsSlice) : undefined;
-}
+/** Re-exported: the slice reader moved beside the effective helper (ROK-2109). */
+export { readQuestsSlice };
 
 @Injectable()
 export class CharacterQuestsService {
@@ -52,10 +35,14 @@ export class CharacterQuestsService {
       .where(eq(schema.characters.id, id))
       .limit(1);
     if (!row) throw new NotFoundException(`Character ${id} not found`);
-    const snapshot = await loadForeverCharSnapshot(this.db, id);
-    const quests = snapshot ? readQuestsSlice(snapshot.data) : undefined;
-    if (!snapshot || !quests) return null;
-    const input = { capturedAt: snapshot.capturedAt.toISOString(), quests };
+    const eff = (await loadForeverQuestSources(this.db, [id])).get(id);
+    if (!eff) return null;
+    const input = {
+      capturedAt: eff.capturedAt.toISOString(),
+      quests: eff.quests,
+      source: eff.source,
+      inProgressSyncedAt: eff.inProgressAsOf?.toISOString() ?? null,
+    };
     return buildCharacterQuests(input, await this.loadKnown(), instanceName);
   }
 

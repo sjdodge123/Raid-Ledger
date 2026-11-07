@@ -86,6 +86,8 @@ export const characters = pgTable(
     professions: jsonb('professions'),
     /** Normalized professions from the Blizzard `/professions` sync only (ROK-2107) */
     armoryProfessions: jsonb('armory_professions'),
+    /** Blizzard quests/completed ids, Forever only, written by the Armory sync (ROK-2109) */
+    armoryQuests: jsonb('armory_quests'),
     /** Display order for drag-to-reorder UI */
     displayOrder: integer('display_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
