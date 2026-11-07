@@ -51,6 +51,24 @@ describe('buildCharacterParams', () => {
     expect(result.realmSlug).not.toContain('/');
   });
 
+  it.each(['.', '..', '...'])(
+    'rejects a dot-only realm segment %j with a 400 (4082)',
+    (realm) => {
+      expect(() => buildCharacterParams('Thrall', realm, 'us', null)).toThrow(
+        BadRequestException,
+      );
+    },
+  );
+
+  it.each(['.', '..'])(
+    'rejects a dot-only character name %j with a 400 (4082)',
+    (name) => {
+      expect(() => buildCharacterParams(name, 'Area 52', 'us', null)).toThrow(
+        BadRequestException,
+      );
+    },
+  );
+
   it('leaves a plain ASCII name and realm unchanged', () => {
     const result = buildCharacterParams('Thrall', 'Area 52', 'us', null);
     expect(result.charName).toBe('thrall');
