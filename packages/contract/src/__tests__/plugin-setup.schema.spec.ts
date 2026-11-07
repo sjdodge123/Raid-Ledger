@@ -162,6 +162,14 @@ describe('Raid Ledger Companion marker (ROK-2056)', () => {
     expect(addon.rlCompanion).toBeUndefined();
   });
 
+  it('links LedgerLink on CurseForge first, GitHub second (ROK-2134)', () => {
+    const addon = must(all.find((r) => r.id === 'ledgerlink-addon'), 'ledgerlink-addon');
+    expect(addon.links).toEqual([
+      { label: 'LedgerLink on CurseForge', url: 'https://www.curseforge.com/wow/addons/ledger-link' },
+      { label: 'LedgerLink on GitHub', url: 'https://github.com/sjdodge123/ledger-link' },
+    ]);
+  });
+
   it('every marker names a shipped Companion contract', () => {
     for (const r of all) {
       if (r.rlCompanion === undefined) continue;
