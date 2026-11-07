@@ -124,6 +124,21 @@ function duplicateWarning(key: string, rows: ExistingRosterRow[]): string {
   return `Forever roster: ${rows.length} rows share name "${key}"; updating row ${kept?.id ?? '?'} (newest last_seen_at), ignoring ${ignored}`;
 }
 
+/** The stored row a member pairs with, plus the name group it came from. */
+function findHit(
+  member: ForeverGuildMember,
+  byId: Map<number, ExistingRosterRow>,
+  byName: Map<string, ExistingRosterRow[]>,
+): { hit: ExistingRosterRow | undefined; dupes: ExistingRosterRow[] } {
+  const idHit =
+    member.blizzardId === null ? undefined : byId.get(member.blizzardId);
+  if (idHit !== undefined) return { hit: idHit, dupes: [] };
+  const group = (byName.get(nameKey(member.name)) ?? []).filter((r) =>
+    nameMatchable(r, member),
+  );
+  return { hit: group[0], dupes: group.length > 1 ? group : [] };
+}
+
 /**
  * Pair API members with stored rows: by `blizzard_character_id` first, else
  * by lower(name). When several rows share a name the newest `last_seen_at`
@@ -144,19 +159,13 @@ export function matchRosterMembers(
     warnings: [],
   };
   for (const member of incoming) {
-    const idHit =
-      member.blizzardId === null ? undefined : byId.get(member.blizzardId);
-    const key = nameKey(member.name);
-    const group = (byName.get(key) ?? []).filter((r) =>
-      nameMatchable(r, member),
-    );
-    const hit = idHit ?? group[0];
+    const { hit, dupes } = findHit(member, byId, byName);
     if (hit === undefined || used.has(hit.id)) {
       result.unmatched.push(member);
       continue;
     }
-    if (idHit === undefined && group.length > 1) {
-      result.warnings.push(duplicateWarning(key, group));
+    if (dupes.length > 0) {
+      result.warnings.push(duplicateWarning(nameKey(member.name), dupes));
     }
     used.add(hit.id);
     result.matched.push({ existingId: hit.id, member });

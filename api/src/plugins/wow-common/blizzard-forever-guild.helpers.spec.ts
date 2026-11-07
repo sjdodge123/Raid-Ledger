@@ -38,6 +38,13 @@ const ROSTER_BODY = {
   ],
 };
 
+const MAPPED_ROSTER = {
+  members: [
+    { name: 'Ana Forever', level: 42, classId: 8, rank: 0, blizzardId: 7001 },
+    { name: 'Bo Tester', level: 12, classId: null, rank: 3, blizzardId: 7002 },
+  ],
+};
+
 let previousPrefix: string;
 let fetchSpy: jest.SpyInstance;
 
@@ -75,24 +82,7 @@ describe('fetchForeverGuildRoster (ROK-2102)', () => {
     expect(requestedUrl()).toBe(
       'https://us.api.blizzard.com/data/wow/guild/lantern-watch/roster?namespace=profile-forever-us&locale=en_US',
     );
-    expect(roster).toEqual({
-      members: [
-        {
-          name: 'Ana Forever',
-          level: 42,
-          classId: 8,
-          rank: 0,
-          blizzardId: 7001,
-        },
-        {
-          name: 'Bo Tester',
-          level: 12,
-          classId: null,
-          rank: 3,
-          blizzardId: 7002,
-        },
-      ],
-    });
+    expect(roster).toEqual(MAPPED_ROSTER);
   });
 
   it('percent-encodes the slug so it cannot change the path', async () => {
