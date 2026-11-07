@@ -23,17 +23,18 @@ function MultiMonitorNote(): JSX.Element {
     );
 }
 
-function GroupHeader({ group }: { group: ChannelBindingGroup }): JSX.Element {
+function GroupHeader({ group, headingId }: { group: ChannelBindingGroup; headingId: string }): JSX.Element {
     const count = group.bindings.length;
     return (
         <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="flex-shrink-0"><ChannelTypeIcon type={group.channelType} /></span>
-            <span data-testid="channel-binding-group-name" className="text-sm font-medium text-foreground break-all min-w-0">
+            <h3 id={headingId} data-testid="channel-binding-group-name"
+                className="text-sm font-medium text-foreground break-all min-w-0">
                 #{group.displayName}
-            </span>
-            <span aria-label={`${count} ${count === 1 ? 'binding' : 'bindings'}`}
+            </h3>
+            <span data-testid="channel-binding-group-count"
                 className="px-2 py-0.5 text-xs rounded-full bg-overlay text-muted">
-                {count}
+                {count}<span className="sr-only"> {count === 1 ? 'binding' : 'bindings'}</span>
             </span>
         </div>
     );
@@ -49,10 +50,11 @@ interface ChannelBindingGroupCardProps {
 
 /** A channel card: header, channel-level lifecycle + notice once, then the binding rows. */
 export function ChannelBindingGroupCard({ group, pin, children }: ChannelBindingGroupCardProps): JSX.Element {
+    const headingId = `channel-binding-group-${group.key.replace(/[^A-Za-z0-9_-]/g, '-')}`;
     return (
-        <section data-testid="channel-binding-group" aria-label={`#${group.displayName}`}
-            className="p-3 sm:p-4 rounded-lg border border-edge bg-panel/50">
-            <GroupHeader group={group} />
+        <section data-testid="channel-binding-group" aria-labelledby={headingId}
+            className="p-4 rounded-lg border border-edge bg-panel/50">
+            <GroupHeader group={group} headingId={headingId} />
             {group.lifecycleBinding && <ChannelBindingLifecycleCell binding={group.lifecycleBinding} pin={pin} />}
             {group.hasMultiMonitor && <MultiMonitorNote />}
             <div className="space-y-2 mt-3">{children}</div>

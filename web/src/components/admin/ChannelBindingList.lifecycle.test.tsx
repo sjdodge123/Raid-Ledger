@@ -22,8 +22,8 @@ const MANUAL = binding({ id: 'manual', channelId: 'c2', channelName: 'general' }
 
 function renderList(onUpdate = vi.fn(), isUpdating = false) {
     render(<ChannelBindingList bindings={[AUTO, MANUAL]} onUpdate={onUpdate} onDelete={vi.fn()} isUpdating={isUpdating} isDeleting={false} />);
-    const rows = screen.getAllByTestId('channel-binding-group');
-    return { auto: at(rows, 0), manual: at(rows, 1), onUpdate };
+    const groups = screen.getAllByTestId('channel-binding-group');
+    return { auto: at(groups, 0), manual: at(groups, 1), onUpdate };
 }
 
 describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
@@ -72,12 +72,12 @@ describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
         const props = { onUpdate, onDelete: vi.fn(), isDeleting: false };
         const { rerender } = render(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating={false} {...props} />);
         // ROK-2106: the lifecycle cell lives on the channel group header, once per channel.
-        const rows = (): HTMLElement[] => screen.getAllByTestId('channel-binding-group');
-        await userEvent.click(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' }));
+        const groups = (): HTMLElement[] => screen.getAllByTestId('channel-binding-group');
+        await userEvent.click(within(at(groups(), 1)).getByRole('button', { name: 'Pin #elden-ring' }));
         rerender(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating updateError="Pin refused" {...props} />);
-        expect(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' })).toHaveAttribute('aria-busy', 'true');
-        expect(within(at(rows(), 0)).getByRole('button', { name: 'Pin #baldurs-gate-3' })).not.toHaveAttribute('aria-busy');
-        expect(within(at(rows(), 1)).getByText('Pin refused')).toBeInTheDocument();
+        expect(within(at(groups(), 1)).getByRole('button', { name: 'Pin #elden-ring' })).toHaveAttribute('aria-busy', 'true');
+        expect(within(at(groups(), 0)).getByRole('button', { name: 'Pin #baldurs-gate-3' })).not.toHaveAttribute('aria-busy');
+        expect(within(at(groups(), 1)).getByText('Pin refused')).toBeInTheDocument();
         expect(screen.getAllByText('Pin refused')).toHaveLength(1);
     });
 });
