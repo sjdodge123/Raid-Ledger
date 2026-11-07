@@ -5,6 +5,7 @@ import * as schema from '../../../drizzle/schema';
 import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
 import { lockGuildName } from './addon-import.locks';
+import { adoptionKey, matchGuidlessRows } from './addon-import-guild.adopt';
 import {
   fromUnix,
   type AddonApplyContext,
@@ -110,10 +111,11 @@ export async function lockGuildImport(
   await lockGuildName(ctx.tx, ctx.gameId, ctx.region, nameKey);
 }
 
-/** A live roster row: its id, GUID (null for Blizzard-only rows) and any member grant. */
+/** A live roster row: its id, GUID (null for Blizzard-only rows), name and any member grant. */
 export interface LiveRosterRow {
   id: number;
   guid: string | null;
+  name: string;
   grantId: number | null;
 }
 
@@ -126,6 +128,7 @@ async function liveRoster(
     .select({
       id: guildMembers.id,
       guid: guildMembers.guid,
+      name: guildMembers.characterName,
       grantId: guildEditors.id,
     })
     .from(guildMembers)
@@ -135,11 +138,16 @@ async function liveRoster(
 }
 
 /**
- * Which live rows a snapshot keeps: by GUID (addon) or by stored member id
- * (Blizzard sync, whose rows may carry no GUID; `members` = roster size).
+ * Which live rows a snapshot keeps: by GUID (addon; `names` maps each GUID
+ * to its {@link adoptionKey} so GUID-less Blizzard rows can be matched) or
+ * by stored member id (Blizzard sync; `members` = roster size).
  */
 export type RosterPresence =
-  | { by: 'guid'; guids: ReadonlySet<string> }
+  | {
+      by: 'guid';
+      guids: ReadonlySet<string>;
+      names?: ReadonlyMap<string, string>;
+    }
   | { by: 'id'; ids: ReadonlySet<number>; members: number };
 
 /** Everything a roster check needs (ROK-1928: payload-free). */
@@ -158,26 +166,46 @@ export interface RosterMovement {
 }
 
 /**
- * Pure. By GUID, legacy rows without one can't be matched to a snapshot and
- * are not counted; by id, every live row counts and a member matched to a
- * not-live row counts as added.
+ * Pure. By id, every live row counts and a member matched to a not-live row
+ * counts as added. By GUID, see {@link movementByGuid}.
  */
 export function rosterMovement(
   live: LiveRosterRow[],
   presence: RosterPresence,
 ): RosterMovement {
-  if (presence.by === 'id') {
-    const kept = live.filter((r) => presence.ids.has(r.id)).length;
-    const gone = live.filter((r) => !presence.ids.has(r.id));
-    return { counted: live, gone, added: presence.members - kept };
-  }
-  const counted = live.filter((r) => r.guid !== null);
-  const liveGuids = new Set(counted.map((r) => r.guid));
-  const gone = counted.filter(
+  if (presence.by === 'guid') return movementByGuid(live, presence);
+  const kept = live.filter((r) => presence.ids.has(r.id)).length;
+  const gone = live.filter((r) => !presence.ids.has(r.id));
+  return { counted: live, gone, added: presence.members - kept };
+}
+
+/**
+ * By GUID. Without `names`, GUID-less rows are not counted. With them
+ * (ROK-1928 review MAJOR), a live GUID-less row that a new GUID's name will
+ * adopt is kept (not re-counted as added — the sync already audited it), and
+ * one the snapshot drops counts as removed.
+ */
+function movementByGuid(
+  live: LiveRosterRow[],
+  presence: Extract<RosterPresence, { by: 'guid' }>,
+): RosterMovement {
+  const withGuid = live.filter((r) => r.guid !== null);
+  const liveGuids = new Set(withGuid.map((r) => r.guid));
+  const fresh = [...presence.guids].filter((g) => !liveGuids.has(g));
+  const gone = withGuid.filter(
     (r) => r.guid !== null && !presence.guids.has(r.guid),
   );
-  const added = [...presence.guids].filter((g) => !liveGuids.has(g)).length;
-  return { counted, gone, added };
+  const { names } = presence;
+  if (names === undefined) {
+    return { counted: withGuid, gone, added: fresh.length };
+  }
+  const freshKeys = fresh.flatMap((g) => names.get(g) ?? []);
+  const m = matchGuidlessRows(
+    live.filter((r) => r.guid === null),
+    freshKeys,
+  );
+  const added = fresh.length - m.kept.length;
+  return { counted: live, gone: [...gone, ...m.gone], added };
 }
 
 export const ROSTER_AUDIT_ENTITY = 'guild';
@@ -310,11 +338,13 @@ export async function checkRosterReplace(
   payload: AddonGuildExport,
   order: SnapshotOrder,
 ): Promise<RosterCheck> {
-  const guids = new Set(payload.data.members.map((m) => m.guid));
+  const { members } = payload.data;
+  const guids = new Set(members.map((m) => m.guid));
+  const names = new Map(members.map((m) => [m.guid, adoptionKey(m.name)]));
   return checkRosterChange(ctx.tx, {
     guildId,
     order,
-    presence: { by: 'guid', guids },
+    presence: { by: 'guid', guids, names },
     actor: userActor(ctx),
   });
 }

@@ -26,7 +26,10 @@ export interface Adoption {
   guid: string;
 }
 
-const key = (name: string): string => normalizeName(name).toLowerCase();
+/** The name key adoption matches on: normalized, lower-cased. */
+export const adoptionKey = (name: string): string =>
+  normalizeName(name).toLowerCase();
+const key = adoptionKey;
 const seenMs = (r: AdoptableRow): number =>
   r.lastSeenAt === null ? -Infinity : r.lastSeenAt.getTime();
 
@@ -96,4 +99,31 @@ export async function adoptGuidlessMembers(
       .where(and(eq(guildMembers.id, a.id), eq(guildMembers.guildId, guildId)));
   }
   return adoptions.length;
+}
+
+/** GUID-less live rows split by whether an incoming new member adopts them. */
+export interface GuidlessMatch<T> {
+  kept: T[];
+  gone: T[];
+}
+
+/**
+ * Pure (ROK-1928 review MAJOR): which GUID-less live rows the coming
+ * adoption keeps. Each incoming name key keeps at most one row.
+ * @param rows - Live GUID-less rows.
+ * @param freshKeys - Name keys ({@link adoptionKey}) of incoming GUIDs the guild does not know.
+ */
+export function matchGuidlessRows<T extends { name: string }>(
+  rows: readonly T[],
+  freshKeys: readonly string[],
+): GuidlessMatch<T> {
+  const left = new Map<string, number>();
+  for (const k of freshKeys) left.set(k, (left.get(k) ?? 0) + 1);
+  const out: GuidlessMatch<T> = { kept: [], gone: [] };
+  for (const r of rows) {
+    const n = left.get(adoptionKey(r.name)) ?? 0;
+    if (n > 0) left.set(adoptionKey(r.name), n - 1);
+    (n > 0 ? out.kept : out.gone).push(r);
+  }
+  return out;
 }

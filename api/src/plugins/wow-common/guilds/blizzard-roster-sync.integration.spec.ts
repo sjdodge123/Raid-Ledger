@@ -6,7 +6,7 @@
  */
 import * as Sentry from '@sentry/nestjs';
 import * as bcrypt from 'bcrypt';
-import { and, count, eq, isNotNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull } from 'drizzle-orm';
 import { BadGatewayException } from '@nestjs/common';
 import type { AddonGuildMember } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -17,6 +17,7 @@ import { PluginRegistryService } from '../../plugin-host/plugin-registry.service
 import { ROSTER_FLAG_TITLE } from '../addon-import/addon-import-guild.flag';
 import { ROSTER_AUDIT_ACTION } from '../addon-import/addon-import-guild.guard';
 import {
+  FIXTURE_EXPORTED_AT,
   buildGuildPayload,
   buildImportString,
   buildMember,
@@ -157,6 +158,36 @@ const auditCount = async (): Promise<number> => {
   return row?.n ?? 0;
 };
 
+/**
+ * The sync stamps real wall-clock time while fixture exports are pinned to
+ * 2026-09-21, so no export could ever be newer than it. Move the sync's
+ * instant T back to seed + `secs` so a later export is NEWER (review MAJOR).
+ */
+async function rewindSync(guildId: number, secs: number): Promise<void> {
+  const t = (await guildRow(guildId)).lastSnapshotAt;
+  if (t === null) throw new Error('sync stamped no snapshot');
+  const to = new Date((FIXTURE_EXPORTED_AT + secs) * 1000);
+  const m = schema.guildMembers;
+  await testApp.db
+    .update(m)
+    .set({ lastSeenAt: to })
+    .where(and(eq(m.guildId, guildId), eq(m.lastSeenAt, t)));
+  await testApp.db
+    .update(schema.guilds)
+    .set({ lastSnapshotAt: to, blizzardRosterSyncedAt: to })
+    .where(eq(schema.guilds.id, guildId));
+}
+
+const lastAudit = async () => {
+  const rows = await testApp.db
+    .select()
+    .from(schema.activityLog)
+    .where(eq(schema.activityLog.action, ROSTER_AUDIT_ACTION))
+    .orderBy(desc(schema.activityLog.id))
+    .limit(1);
+  return nonEmpty(rows, 'roster audit')[0].metadata;
+};
+
 /** API view of the 5-member seed minus Member4, plus a newcomer. */
 const fourPlusOne = () => [
   apiMember('Ana'),
@@ -291,5 +322,32 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     await sync(guild.id);
     const dings = await testApp.db.select().from(schema.guildMemberLevelEvents);
     expect(dings.map((d) => [d.fromLevel, d.toLevel])).toEqual([[58, 60]]);
+  });
+
+  it('(9) sync adds 3 Blizzard-only rows, a NEWER addon import adopts them → no flag, added=0', async () => {
+    const { who, guild } = await seedGuild(addonRoster(20));
+    const extras = ['Extra1', 'Extra2', 'Extra3'];
+    const seeded = await liveNames(guild.id);
+    stubRoster([...seeded, ...extras].map((n) => apiMember(n)));
+    expect((await sync(guild.id)).status).toBe('ok');
+    expect(await liveNames(guild.id)).toHaveLength(23);
+    await rewindSync(guild.id, 120);
+    const fresh = extras.map((name, i) => buildMember(200 + i, { name }));
+    const res = await addonImport(who, [...addonRoster(20), ...fresh], 5);
+    expect(res.status).toBe(200);
+    expect(res.body.status).not.toBe('stale');
+    expect(await liveNames(guild.id)).toHaveLength(23);
+    const rows = await allRows();
+    expect(rows).toHaveLength(23);
+    const adopted = rows.filter((r) => extras.includes(r.characterName));
+    expect(adopted.map((r) => r.guid).sort()).toEqual(
+      fresh.map((m) => m.guid).sort(),
+    );
+    expect(await lastAudit()).toMatchObject({ added: 0, removed: 0 });
+    const flags = await testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.title, ROSTER_FLAG_TITLE));
+    expect(flags).toEqual([]);
   });
 });

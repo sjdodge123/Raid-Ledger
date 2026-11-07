@@ -95,9 +95,14 @@ describe('wholesaleFlag (ROK-2066 — applied, flagged to staff)', () => {
 });
 
 describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
-  const row = (id: number, guid: string | null): LiveRosterRow => ({
+  const row = (
+    id: number,
+    guid: string | null,
+    name = `M${id}`,
+  ): LiveRosterRow => ({
     id,
     guid,
+    name,
     grantId: null,
   });
   const live = [row(1, 'g1'), row(2, 'g2'), row(3, null)];
@@ -110,6 +115,44 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
     expect(m.counted.map((r) => r.id)).toEqual([1, 2]);
     expect(m.gone.map((r) => r.id)).toEqual([2]);
     expect(m.added).toBe(1);
+  });
+
+  it('by GUID with names: a GUID-less row a new member adopts is kept, not added', () => {
+    const rows = [row(1, 'g1'), row(3, null, 'Blizz'), row(4, null, 'Gone')];
+    const m = rosterMovement(rows, {
+      by: 'guid',
+      guids: new Set(['g1', 'g8', 'g9']),
+      names: new Map([
+        ['g1', 'm1'],
+        ['g8', 'blizz'],
+        ['g9', 'fresh'],
+      ]),
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 3, 4]);
+    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.added).toBe(1);
+  });
+
+  it('by GUID with names: one incoming name keeps at most one GUID-less row', () => {
+    const rows = [row(3, null, 'Twin'), row(4, null, 'twin')];
+    const m = rosterMovement(rows, {
+      by: 'guid',
+      guids: new Set(['g8']),
+      names: new Map([['g8', 'twin']]),
+    });
+    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.added).toBe(0);
+  });
+
+  it('by GUID with names and no GUID-less rows: same as without names', () => {
+    const rows = [row(1, 'g1'), row(2, 'g2')];
+    const guids = new Set(['g1', 'g9']);
+    const withNames = rosterMovement(rows, {
+      by: 'guid',
+      guids,
+      names: new Map([['g9', 'm2']]),
+    });
+    expect(withNames).toEqual(rosterMovement(rows, { by: 'guid', guids }));
   });
 
   it('by id: every live row counts, GUID-less ones included', () => {
