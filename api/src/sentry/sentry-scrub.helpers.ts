@@ -13,6 +13,7 @@
  *   `state` params too (a span's description/data/attributes carry the
  *   request URL). Elsewhere `code` is a Discord / Postgres error code that
  *   triage needs.
+ * - Blizzard character profile paths lose their realm/name segments (ROK-2129).
  * - Every string (URLs, query strings, messages, exception values) loses its
  *   secret query params (incl. `?key=` API keys, ROK-2117) and JSON-ish
  *   `"…token": "…"` / `"apiKey": "…"` values.
@@ -51,6 +52,10 @@ const CALENDAR_PATH =
 // segment of every CalDAV URL, partition hosts included.
 const CALDAV_PATH =
   /((?:p\d{1,3}-)?caldav\.icloud\.com(?::\d+)?\/)\d{4,}(?=\/)/g;
+// ROK-2129: a Blizzard character profile URL names the realm and character
+// in its PATH (`/profile/wow/character/<realm>/<name>` or a realmless
+// `<slug>`); native-fetch spans/breadcrumbs record it. Sub-routes are folded in.
+const BLIZZARD_CHARACTER_PATH = /(\/profile\/wow\/character\/)[^?#\s"']+/g;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
@@ -71,6 +76,7 @@ export function scrubString(value: string): string {
     .replace(PATH_SECRET, `$1${REDACTED}`)
     .replace(CALENDAR_PATH, `$1${REDACTED}`)
     .replace(CALDAV_PATH, `$1${REDACTED}`)
+    .replace(BLIZZARD_CHARACTER_PATH, `$1${REDACTED}`)
     .replace(VALHEIM_LINK_TOKEN, REDACTED)
     .replace(COMPANION_DEVICE_TOKEN, REDACTED)
     .replace(COMPANION_LINK_PATH, `$1${REDACTED}`)
