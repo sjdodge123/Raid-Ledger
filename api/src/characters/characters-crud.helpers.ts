@@ -9,7 +9,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, isNotNull, or } from 'drizzle-orm';
+import { eq, and, asc, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
@@ -273,4 +273,19 @@ export function isUniqueViolation(
   const causeMsg =
     error.cause instanceof Error ? (error.cause.message ?? '') : '';
   return msg.includes(constraintName) || causeMsg.includes(constraintName);
+}
+
+/**
+ * ROK-2128 (Codex P1) — the by-id filter for a self-service write, made
+ * owner-conditional so a row an admin moved after the ownership read is
+ * never touched.
+ */
+export function ownedCharacter(userId: number, characterId: string): SQL {
+  return defined(
+    and(
+      eq(schema.characters.id, characterId),
+      eq(schema.characters.userId, userId),
+    ),
+    'owned character filter',
+  );
 }

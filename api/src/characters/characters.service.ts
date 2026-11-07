@@ -144,22 +144,24 @@ export class CharactersService {
     const [updated] = await this.db
       .update(schema.characters)
       .set({ ...prepared, updatedAt: new Date() })
-      .where(eq(schema.characters.id, characterId))
+      .where(crudH.ownedCharacter(userId, characterId))
       .returning()
       .catch((error: unknown) => {
         const name = prepared.name ?? character.name;
         identity?.rethrowIdentityViolation(error, name, character.region);
         throw error;
       });
+    // An admin Change owner committed after findOne (ROK-2128 Codex P1).
+    if (!updated) throw new NotFoundException('Character not found');
     this.logger.log(`User ${userId} updated character ${characterId}`);
-    return mapCharacterToDto(defined(updated, 'updated character row'));
+    return mapCharacterToDto(updated);
   }
 
   async delete(userId: number, characterId: string): Promise<void> {
     const character = await this.findOne(userId, characterId);
     await this.db
       .delete(schema.characters)
-      .where(eq(schema.characters.id, characterId));
+      .where(crudH.ownedCharacter(userId, characterId));
     await crudH.autoPromoteAfterDelete(
       this.db,
       userId,
@@ -176,7 +178,7 @@ export class CharactersService {
       const [updated] = await tx
         .update(schema.characters)
         .set({ isMain: true, updatedAt: new Date() })
-        .where(eq(schema.characters.id, characterId))
+        .where(crudH.ownedCharacter(userId, characterId))
         .returning();
       this.logger.log(
         `User ${userId} set character ${characterId} as main for game ${character.gameId}`,

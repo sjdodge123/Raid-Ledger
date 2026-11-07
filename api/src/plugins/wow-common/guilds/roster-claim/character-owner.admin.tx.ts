@@ -207,7 +207,7 @@ export async function reassignWithin(
   await tx
     .update(characters)
     .set({ userId: args.toUserId, isMain, updatedAt: new Date() })
-    .where(eq(characters.id, row.id));
+    .where(and(eq(characters.id, row.id), eq(characters.userId, row.userId)));
   await autoPromoteAfterDelete(tx, row.userId, row.gameId, args.logger);
   await auditReassign(tx, row, args);
   return { row, toUserId: args.toUserId, toName };
