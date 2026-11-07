@@ -27,7 +27,7 @@ function flagMessage(guildName: string, flag: RosterFlag): string {
  */
 export async function flagRosterChange(
   db: Db,
-  importerId: number,
+  importerId: number | null,
   flag: RosterFlag,
   logger: Logger,
 ): Promise<void> {
@@ -68,7 +68,7 @@ const staffRecipients = and(
 
 async function insertFlags(
   db: Db,
-  importerId: number,
+  importerId: number | null,
   flag: RosterFlag,
 ): Promise<void> {
   const [guild] = await db

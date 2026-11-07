@@ -7,6 +7,8 @@ import {
   MASS_REMOVAL_MIN,
   isMassRemoval,
   receivedSnapshotAt,
+  rosterMovement,
+  type LiveRosterRow,
   wholesaleFlag,
   windowVerdict,
 } from './addon-import-guild.guard';
@@ -89,5 +91,35 @@ describe('wholesaleFlag (ROK-2066 — applied, flagged to staff)', () => {
   it('a small change raises no flag', () => {
     const v = windowVerdict(40, none, { removed: 1, added: 2 });
     expect(wholesaleFlag(7, v, false)).toBeNull();
+  });
+});
+
+describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
+  const row = (id: number, guid: string | null): LiveRosterRow => ({
+    id,
+    guid,
+    grantId: null,
+  });
+  const live = [row(1, 'g1'), row(2, 'g2'), row(3, null)];
+
+  it('by GUID: GUID-less rows are not counted; unknown GUIDs are added', () => {
+    const m = rosterMovement(live, {
+      by: 'guid',
+      guids: new Set(['g1', 'g9']),
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 2]);
+    expect(m.gone.map((r) => r.id)).toEqual([2]);
+    expect(m.added).toBe(1);
+  });
+
+  it('by id: every live row counts, GUID-less ones included', () => {
+    const m = rosterMovement(live, {
+      by: 'id',
+      ids: new Set([1, 3, 7]),
+      members: 4,
+    });
+    expect(m.counted.map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(m.gone.map((r) => r.id)).toEqual([2]);
+    expect(m.added).toBe(2);
   });
 });

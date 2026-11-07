@@ -3,7 +3,7 @@
  * transaction, idempotent re-apply, stale/first import) is proven in
  * `addon-import-guild-dings.integration.spec.ts`.
  */
-import { levelUps, type PriorLevel } from './addon-import-guild.dings';
+import { levelUps, levelUpsById, type PriorLevel } from './addon-import-guild.dings';
 import { buildMember } from './testing/addon-fixture.builder';
 
 const prior = (id: number, level: number | null): PriorLevel => ({
@@ -55,6 +55,23 @@ describe('levelUps', () => {
     ];
     expect(levelUps(stored, members)).toEqual([
       { guildMemberId: 902, fromLevel: 10, toLevel: 12 },
+    ]);
+  });
+});
+
+describe('levelUpsById (ROK-1928 — shared with the Blizzard sync)', () => {
+  it('keys on the member id and skips unknown or null priors', () => {
+    const prior = [
+      { id: 1, level: 58 },
+      { id: 2, level: null },
+    ];
+    const next = [
+      { id: 1, level: 60 },
+      { id: 2, level: 60 },
+      { id: 3, level: 60 },
+    ];
+    expect(levelUpsById(prior, next)).toEqual([
+      { guildMemberId: 1, fromLevel: 58, toLevel: 60 },
     ]);
   });
 });

@@ -44,24 +44,44 @@ export async function loadPriorLevels(
   return rows.flatMap((r) => (r.guid === null ? [] : [{ ...r, guid: r.guid }]));
 }
 
+/** A member's level keyed by its stored row id. */
+export interface LevelById {
+  id: number;
+  level: number | null;
+}
+
+/**
+ * Pure, member-id keyed (ROK-1928: shared by the addon import and the
+ * Blizzard roster sync): rows whose new level exceeds a known prior level.
+ */
+export function levelUpsById(
+  prior: readonly LevelById[],
+  next: readonly { id: number; level: number }[],
+): LevelUp[] {
+  const byId = new Map(prior.map((p) => [p.id, p.level]));
+  return next.flatMap((n) => {
+    const before = byId.get(n.id);
+    if (before === undefined || before === null || n.level <= before) return [];
+    return [{ guildMemberId: n.id, fromLevel: before, toLevel: n.level }];
+  });
+}
+
 /** Pure: members whose new level exceeds a known, non-null prior level. */
 export function levelUps(
   prior: PriorLevel[],
   members: AddonGuildMember[],
 ): LevelUp[] {
-  const byGuid = new Map(prior.map((p) => [p.guid, p]));
-  return members.flatMap((m) => {
-    const before = byGuid.get(m.guid);
-    if (!before || before.level === null || m.level <= before.level) return [];
-    return [
-      { guildMemberId: before.id, fromLevel: before.level, toLevel: m.level },
-    ];
+  const idByGuid = new Map(prior.map((p) => [p.guid, p.id]));
+  const next = members.flatMap((m) => {
+    const id = idByGuid.get(m.guid);
+    return id === undefined ? [] : [{ id, level: m.level }];
   });
+  return levelUpsById(prior, next);
 }
 
 /** Insert the dings at `occurredAt`; a repeat `(member, to_level)` is a no-op. */
 export async function insertDings(
-  ctx: AddonApplyContext,
+  ctx: Pick<AddonApplyContext, 'tx'>,
   guildId: number,
   dings: LevelUp[],
   occurredAt: Date,
