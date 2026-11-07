@@ -30,7 +30,7 @@ const charIds = {} as Record<Who, string>;
 
 interface Member {
   name: string;
-  linkedAccount?: { username: string; linkedSince: string };
+  linkedAccount?: { username: string; linkedSince: string; linkVia?: string };
 }
 interface Editor {
   kind: string;
@@ -180,6 +180,7 @@ describe('roster linkedAccount — staff only (ROK-1794 review)', () => {
       expect(byName.get('gm')?.linkedAccount).toEqual({
         username: 'gm',
         linkedSince: await charCreatedAt('gm'),
+        linkVia: 'import',
       });
       expect(byName.get('Unlinked')).not.toHaveProperty('linkedAccount');
       // A later GUID claim moves the confirmed-link time past the character's creation.
@@ -206,6 +207,45 @@ describe('roster linkedAccount — staff only (ROK-1794 review)', () => {
     const res = await get(`/${guildId}`, 'outsider');
     expect(res.status).toBe(403);
     expect(res.body).not.toHaveProperty('ranks');
+  });
+});
+
+describe('roster linkedAccount.linkVia — picked-from-roster marker (ROK-2128 FLAG 3)', () => {
+  it('marks a roster-claimed link roster_pick and every other link import', async () => {
+    // 'plain' claimed its row from the roster pick list (holds no grant).
+    await testApp.db.insert(schema.activityLog).values({
+      entityType: 'character_claim',
+      entityId: 1,
+      action: 'roster_claimed',
+      metadata: {
+        characterId: charIds.plain,
+        guildId,
+        memberId: memberIds.plain,
+      },
+    });
+    // A non-claim audit naming 'gm' must not mark it.
+    await testApp.db.insert(schema.activityLog).values({
+      entityType: 'character_claim',
+      entityId: 1,
+      action: 'admin_reassigned',
+      metadata: { characterId: charIds.gm },
+    });
+    const members = await rosterAs('admin');
+    const via = Object.fromEntries(
+      members.map((m) => [m.name, m.linkedAccount?.linkVia ?? null]),
+    );
+    expect(via).toMatchObject({
+      plain: 'roster_pick',
+      gm: 'import',
+      deleg: 'import',
+      repin: 'import',
+      Unlinked: null,
+    });
+  });
+
+  it('a non-staff viewer still gets no linkedAccount (so no linkVia)', async () => {
+    const members = await rosterAs('plain');
+    expect(members.some((m) => 'linkedAccount' in m)).toBe(false);
   });
 });
 

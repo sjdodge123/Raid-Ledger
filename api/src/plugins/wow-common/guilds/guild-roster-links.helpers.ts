@@ -1,6 +1,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
+import {
+  CHARACTER_CLAIM_ENTITY,
+  ROSTER_CLAIMED_ACTION,
+} from '../../../characters/characters-roster-claim.helpers';
 import { GUID_AUDIT_ENTITY } from '../addon-import/addon-import.guid-audit';
 import type { RawRosterRow, RosterLinks } from './guild-roster.helpers';
 
@@ -25,8 +29,22 @@ export function linkConfirmedAt() {
 }
 
 /**
+ * ROK-2128 (FLAG 3): true when the character was claimed from a guild roster
+ * pick (a `roster_claimed` audit names it) — a self-asserted link. Evaluated
+ * per row inside the page's single select, so the roster stays one query.
+ */
+export function rosterPicked() {
+  return sql<boolean>`exists(select 1 from ${al} where ${and(
+    eq(al.entityType, CHARACTER_CLAIM_ENTITY),
+    eq(al.action, ROSTER_CLAIMED_ACTION),
+    sql`${al.metadata}->>'characterId' = ${c.id}::text`,
+  )})`;
+}
+
+/**
  * STAFF-ONLY (the caller gates it): the RL account behind each linked roster
- * row and since when, keyed by linked character id.
+ * row, since when, and how it was linked (`linkVia`, ROK-2128), keyed by
+ * linked character id.
  */
 export async function loadRosterLinks(
   db: Db,
@@ -37,14 +55,23 @@ export async function loadRosterLinks(
   ];
   if (ids.length === 0) return new Map();
   const found = await db
-    .select({ id: c.id, username: users.username, since: linkConfirmedAt() })
+    .select({
+      id: c.id,
+      username: users.username,
+      since: linkConfirmedAt(),
+      picked: rosterPicked(),
+    })
     .from(c)
     .innerJoin(users, eq(users.id, c.userId))
     .where(inArray(c.id, ids));
   return new Map(
     found.map((r) => [
       r.id,
-      { username: r.username, linkedSince: new Date(r.since).toISOString() },
+      {
+        username: r.username,
+        linkedSince: new Date(r.since).toISOString(),
+        linkVia: r.picked ? ('roster_pick' as const) : ('import' as const),
+      },
     ]),
   );
 }
