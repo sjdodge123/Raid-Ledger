@@ -12,6 +12,7 @@ import type { CharactersTx } from './characters-create.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
+import { SettingsService } from '../settings/settings.service';
 
 const game = { id: 1, slug: 'some-game', name: 'Some Game' };
 const row = {
@@ -110,6 +111,10 @@ describe('CharactersService.createWithin (ROK-1738)', () => {
           },
         },
         { provide: EnrichmentsService, useValue: {} },
+        {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
       ],
     }).compile();
     service = module.get(CharactersService);

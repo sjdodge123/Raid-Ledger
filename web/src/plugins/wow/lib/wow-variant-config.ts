@@ -25,6 +25,12 @@ export interface WowVariantIntegrations {
     talentCalc: 'classic3tree' | 'retailTraits' | 'foreverTraits';
     /** Whether the Blizzard Armory can import this variant (ROK-1717 makes it runtime). */
     armoryImport: boolean;
+    /**
+     * Whether an empty talents/equipment panel points at the Raid Ledger addon
+     * (operator-approved copy, OQ2) instead of the Armory copy. A variant
+     * property, independent of `armoryImport` (ROK-1722).
+     */
+    addonHints: boolean;
     /** apiNamespacePrefix forms accepted wherever a variant is. */
     namespaceAliases: readonly string[];
 }
@@ -34,18 +40,19 @@ const CLASSIC_WOWHEAD: WowheadDomain = { urlBase: 'www.wowhead.com/classic', too
 const FOREVER_WOWHEAD: WowheadDomain = { urlBase: 'www.wowhead.com/forever', tooltipDomain: 'forever' };
 
 export const WOW_VARIANT_INTEGRATIONS: Readonly<Record<WowVariant, WowVariantIntegrations>> = {
-    retail: { label: null, wowhead: RETAIL_WOWHEAD, talentCalc: 'retailTraits', armoryImport: true, namespaceAliases: [] },
-    classic_era: { label: 'Era', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, namespaceAliases: ['classic1x'] },
+    retail: { label: null, wowhead: RETAIL_WOWHEAD, talentCalc: 'retailTraits', armoryImport: true, addonHints: false, namespaceAliases: [] },
+    classic_era: { label: 'Era', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, namespaceAliases: ['classic1x'] },
     // The 'classic' namespace prefix equals this key, so it needs no alias.
-    classic: { label: 'Cata', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, namespaceAliases: [] },
+    classic: { label: 'Cata', wowhead: CLASSIC_WOWHEAD, talentCalc: 'classic3tree', armoryImport: true, addonHints: false, namespaceAliases: [] },
     classic_anniversary: {
         label: 'TBC',
         wowhead: { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' },
         talentCalc: 'classic3tree',
         armoryImport: true,
+        addonHints: false,
         namespaceAliases: ['classicann'],
     },
-    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: false, namespaceAliases: ['classicforever'] },
+    wow_forever: { label: 'Forever', wowhead: FOREVER_WOWHEAD, talentCalc: 'foreverTraits', armoryImport: true, addonHints: true, namespaceAliases: ['classicforever'] },
 };
 
 /** The retail Wowhead domain — the fallback for any unrecognised variant or expansion. */

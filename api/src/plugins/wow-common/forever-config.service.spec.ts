@@ -48,11 +48,12 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
     await expect(service.getConfig()).resolves.toEqual({
       namespacePrefix: 'forever',
       namespacePrefixIsDefault: true,
-      armoryImportEnabled: false,
+      armoryImportEnabled: true,
       wowheadResolverEnabled: true,
     });
+    // ROK-1722: Armory import is on by default (absent key = enabled).
     await expect(service.getCapabilities()).resolves.toEqual({
-      armoryImport: { wow_forever: false },
+      armoryImport: { wow_forever: true },
     });
   });
 });
@@ -60,32 +61,51 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
 describe('ForeverConfigService writes (ROK-1717)', () => {
   afterEach(() => setForeverNamespacePrefix(null));
 
-  it('persists an override + the Armory flag and emits the change', async () => {
+  it('persists an override + the Armory kill switch and emits the change (ROK-1722)', async () => {
     const { service, store, events } = setup();
     const res = await service.updateConfig({
       namespacePrefix: 'foo',
-      armoryImportEnabled: true,
+      armoryImportEnabled: false,
     });
     expect(store.get(WOW_FOREVER_NAMESPACE_PREFIX_KEY)).toBe('foo');
-    expect(store.get(WOW_FOREVER_ARMORY_IMPORT_KEY)).toBe('true');
+    expect(store.get(WOW_FOREVER_ARMORY_IMPORT_KEY)).toBe('false');
     expect(res).toEqual({
       namespacePrefix: 'foo',
       namespacePrefixIsDefault: false,
-      armoryImportEnabled: true,
+      armoryImportEnabled: false,
       wowheadResolverEnabled: true,
     });
     expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
       namespacePrefix: 'foo',
     });
     await expect(service.getCapabilities()).resolves.toEqual({
-      armoryImport: { wow_forever: true },
+      armoryImport: { wow_forever: false },
     });
   });
 
-  it('treats any stored flag value other than "true" as disabled', async () => {
-    const { service } = setup({ [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'false' });
+  it('deletes both keys when saved back to the defaults (import on)', async () => {
+    const { service, store } = setup({
+      [WOW_FOREVER_NAMESPACE_PREFIX_KEY]: 'foo',
+      [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'false',
+    });
+    const res = await service.updateConfig({
+      namespacePrefix: 'classicforever',
+      armoryImportEnabled: true,
+    });
+    expect([...store.keys()]).toEqual([]);
+    expect(res.armoryImportEnabled).toBe(true);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+  ])('reads a stored flag of "%s" as wow_forever=%s', async (stored, on) => {
+    const { service } = setup({ [WOW_FOREVER_ARMORY_IMPORT_KEY]: stored });
     await expect(service.getCapabilities()).resolves.toEqual({
-      armoryImport: { wow_forever: false },
+      armoryImport: { wow_forever: on },
+    });
+    await expect(service.getConfig()).resolves.toMatchObject({
+      armoryImportEnabled: on,
     });
   });
 
@@ -93,7 +113,7 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     const { service, store } = setup();
     const base = {
       namespacePrefix: 'classicforever',
-      armoryImportEnabled: false,
+      armoryImportEnabled: true,
     };
     const off = await service.updateConfig({
       ...base,
@@ -139,11 +159,12 @@ describe('ForeverConfigService default prefix (ROK-2102)', () => {
     async (namespacePrefix) => {
       const { service, store, events } = setup({
         [WOW_FOREVER_NAMESPACE_PREFIX_KEY]: 'foo',
-        [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'true',
+        [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'false',
       });
+      // ROK-1722: the Armory default is ON, so "back to the defaults" = enabled.
       const res = await service.updateConfig({
         namespacePrefix,
-        armoryImportEnabled: false,
+        armoryImportEnabled: true,
       });
       expect([...store.keys()]).toEqual([]);
       expect(res.namespacePrefix).toBe('forever');

@@ -4,9 +4,10 @@ import { CharacterDetailController } from './character-detail.controller';
 import { CharactersService } from './characters.service';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { EnrichmentsModule } from '../enrichments/enrichments.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [DrizzleModule, EnrichmentsModule],
+  imports: [DrizzleModule, EnrichmentsModule, SettingsModule],
   controllers: [CharactersController, CharacterDetailController],
   providers: [CharactersService],
   exports: [CharactersService],

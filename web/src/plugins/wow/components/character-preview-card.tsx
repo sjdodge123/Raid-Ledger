@@ -16,12 +16,14 @@ export interface CharacterPreviewCardProps {
     error: string;
     /** When true, pulse the action buttons to draw attention */
     highlightActions?: boolean;
+    /** ROK-1722: shown where the realm goes when `preview.realm` is null (WoW: Forever's "PvP (US)"). */
+    realmFallback?: string | null | undefined;
 }
 
 /** Character preview card with faction styling and import actions */
 export function CharacterPreviewCard({
     preview, setAsMain, onSetAsMainChange,
-    onImport, onBack, isImporting, error, highlightActions,
+    onImport, onBack, isImporting, error, highlightActions, realmFallback,
 }: CharacterPreviewCardProps) {
     const factionColor = preview.faction === 'alliance' ? 'text-blue-400' : 'text-red-400';
     const factionBg = preview.faction === 'alliance'
@@ -33,7 +35,7 @@ export function CharacterPreviewCard({
         <div className="space-y-2">
             <div className={`rounded-lg border overflow-hidden ${factionBg}`}>
                 <div className="flex">
-                    <CharacterInfoSection preview={preview} factionColor={factionColor} factionBg={factionBg} roleEmoji={roleEmoji} />
+                    <CharacterInfoSection preview={preview} location={preview.realm ?? realmFallback ?? null} factionColor={factionColor} factionBg={factionBg} roleEmoji={roleEmoji} />
                     <ActionButtons
                         setAsMain={setAsMain} onSetAsMainChange={onSetAsMainChange}
                         onImport={onImport} onBack={onBack}
@@ -58,8 +60,8 @@ function CharacterNameLine({ preview, factionColor, factionBg }: { preview: Bliz
 }
 
 /** Character info section with avatar, name, class/race details */
-function CharacterInfoSection({ preview, factionColor, factionBg, roleEmoji }: {
-    preview: BlizzardCharacterPreviewDto; factionColor: string; factionBg: string; roleEmoji: string;
+function CharacterInfoSection({ preview, location, factionColor, factionBg, roleEmoji }: {
+    preview: BlizzardCharacterPreviewDto; location: string | null; factionColor: string; factionBg: string; roleEmoji: string;
 }) {
     return (
         <div className="flex-1 min-w-0 flex flex-col">
@@ -68,7 +70,7 @@ function CharacterInfoSection({ preview, factionColor, factionBg, roleEmoji }: {
                     <CharacterAvatar preview={preview} />
                     <div className="flex-1 min-w-0">
                         <CharacterNameLine preview={preview} factionColor={factionColor} factionBg={factionBg} />
-                        <p className="text-secondary text-sm">{preview.realm}</p>
+                        {location && <p className="text-secondary text-sm" data-testid="preview-location">{location}</p>}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm">
                             <span className="text-muted">{preview.race}</span>
                             <span className="text-foreground font-medium">{preview.class}</span>

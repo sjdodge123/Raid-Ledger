@@ -129,4 +129,22 @@ describe('buildProfileResult — body without realm (ROK-2102)', () => {
     expect(result.faction).toBe('alliance');
     expect(result.profileUrl).toBeNull();
   });
+
+  it('joins a Forever surname onto the first name (ROK-1722)', () => {
+    const body = { ...realmless, name: 'Rok', surname: 'Androl' };
+    const args = [null, null, null, 'classicforever', 'us', null, 'x'] as const;
+    expect(buildProfileResult(body, ...args).name).toBe('Rok Androl');
+    expect(buildProfileResult(realmless, ...args).name).toBe('Ana Forever');
+  });
+
+  it('threads the body id + raw ruleset through (ROK-1722)', () => {
+    const body = { ...realmless, id: 900001, ruleset: { type: 'PVP' } };
+    const args = [null, null, null, 'classicforever', 'us', null, 'x'] as const;
+    const result = buildProfileResult(body, ...args);
+    expect(result.externalId).toBe('900001');
+    expect(result.rulesetRaw).toEqual({ type: 'PVP' });
+    const bare = buildProfileResult(realmless, ...args);
+    expect(bare.externalId).toBeNull();
+    expect(bare.rulesetRaw).toBeNull();
+  });
 });

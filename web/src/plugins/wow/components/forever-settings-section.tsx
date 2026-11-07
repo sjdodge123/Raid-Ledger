@@ -160,7 +160,8 @@ function ArmoryToggle({
                     Armory import for WoW Forever
                 </p>
                 <p id={hintId} className="text-sm text-secondary">
-                    Offer “Import from Armory” for Forever characters.
+                    On by default. Turn off to hide “Import from Armory” for
+                    Forever characters.
                 </p>
             </div>
             <Switch

@@ -164,8 +164,8 @@ function EquipmentEmptyState({ isArmoryImported, gameVariant }: { isArmoryImport
 
 function equipmentEmptyHint(isArmoryImported: boolean, gameVariant: string | null): string {
     if (isArmoryImported) return 'Equipment data may not be available for this character. Try refreshing.';
-    // A variant the Armory cannot import (WoW: Forever) gets the addon hint, not the Armory copy (AC5).
-    if (getWowVariantIntegrations(gameVariant)?.armoryImport === false) return FOREVER_ADDON_HINT_EQUIPMENT;
+    // A variant whose data comes from the addon (WoW: Forever) gets the addon hint (AC5).
+    if (getWowVariantIntegrations(gameVariant)?.addonHints === true) return FOREVER_ADDON_HINT_EQUIPMENT;
     return 'Equipment data is only available for characters imported from the Blizzard Armory.';
 }
 

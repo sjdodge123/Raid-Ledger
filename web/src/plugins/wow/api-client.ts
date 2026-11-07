@@ -81,11 +81,12 @@ export async function fetchWowRealms(
  */
 export async function previewWowCharacter(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string,
 ): Promise<BlizzardCharacterPreviewDto> {
-    const params = new URLSearchParams({ name, realm, region });
+    // ROK-1722: a realmless WoW: Forever lookup omits the realm param entirely.
+    const params = new URLSearchParams({ name, ...(realm !== null ? { realm } : {}), region });
     if (gameVariant) params.set('gameVariant', gameVariant);
     return fetchApi(`/blizzard/character-preview?${params}`);
 }

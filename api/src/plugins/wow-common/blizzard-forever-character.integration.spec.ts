@@ -117,6 +117,8 @@ describe('realmless Forever character profile (ROK-2102)', () => {
       avatarUrl: 'https://render.example.invalid/ana-forever-avatar.jpg',
       renderUrl: 'https://render.example.invalid/ana-forever-main-raw.png',
       profileUrl: null,
+      externalId: '900001',
+      rulesetRaw: null,
     });
     expect(apiUrls()).toEqual([`${CHAR}${NS}`, `${CHAR}/character-media${NS}`]);
   });
