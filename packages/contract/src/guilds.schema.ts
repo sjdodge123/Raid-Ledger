@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CharacterRoleSchema } from "./characters.schema.js";
 import { GameServerStateSchema } from "./game-servers.schema.js";
+import { GuildBlizzardRosterSchema } from "./guild-blizzard-roster.schema.js";
 import { GuildCrestSchema } from "./guild-crest.schema.js";
 import {
   HubAutoMembershipModeSchema,
@@ -126,6 +127,8 @@ export const GuildSummarySchema = z
      * left the gallery). Sent on the hub page only; absent elsewhere.
      */
     crestMediaId: z.number().int().positive().nullable().optional(),
+    /** ROK-1928 — Forever `wow_guild` hubs only; optional so older fixtures parse. */
+    blizzardRoster: GuildBlizzardRosterSchema.optional(),
   })
   .strict();
 export type GuildSummary = z.infer<typeof GuildSummarySchema>;
