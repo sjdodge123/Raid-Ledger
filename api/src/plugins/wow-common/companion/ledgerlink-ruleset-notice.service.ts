@@ -70,20 +70,38 @@ export class LedgerlinkRulesetNoticeService {
       this.warn(userId, err);
       return;
     }
+    if (!(await this.sendNotice(userId, detail)))
+      await this.release(userId, key);
+  }
+
+  /**
+   * Create the notice; false when nothing was stored — in-app `system`
+   * notifications disabled (`create` → null) or the insert threw (Codex P2).
+   */
+  private async sendNotice(
+    userId: number,
+    detail: AddonImportRulesetDetail,
+  ): Promise<boolean> {
     try {
-      await this.notifications.create({
+      const created = await this.notifications.create({
         userId,
         type: 'system',
         ...buildRulesetNotice(detail),
         expiresAt: new Date(Date.now() + EXPIRY_MS),
         skipDiscord: true,
       });
+      return created !== null;
     } catch (err: unknown) {
       this.warn(userId, err);
-      await this.dedup
-        .releaseKey(key)
-        .catch((e: unknown) => this.warn(userId, e));
+      return false;
     }
+  }
+
+  /** Give the 7-day claim back so a later upload retries; never throws. */
+  private async release(userId: number, key: string): Promise<void> {
+    await this.dedup
+      .releaseKey(key)
+      .catch((e: unknown) => this.warn(userId, e));
   }
 
   private warn(userId: number, err: unknown): void {

@@ -145,6 +145,34 @@ describe('LedgerlinkRulesetNoticeService.notifyRulesetRequired', () => {
     expect(dedup.releaseKey).toHaveBeenCalledWith(KEY);
   });
 
+  it('create → null (in-app system disabled) gives the claim back so a later upload retries (Codex P2)', async () => {
+    const create = jest.fn().mockResolvedValue(null);
+    const { svc, dedup } = serviceWith(create);
+    await expect(svc.notifyRulesetRequired(7, DETAIL)).resolves.toBeUndefined();
+    expect(dedup.releaseKey).toHaveBeenCalledWith(KEY);
+    await svc.notifyRulesetRequired(7, DETAIL);
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('a throwing create releases the claim, so the next upload attempts again', async () => {
+    const create = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce({});
+    const { svc, dedup } = serviceWith(create);
+    await expect(svc.notifyRulesetRequired(7, DETAIL)).resolves.toBeUndefined();
+    await svc.notifyRulesetRequired(7, DETAIL);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(dedup.releaseKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failing release is swallowed too', async () => {
+    const create = jest.fn().mockResolvedValue(null);
+    const { svc, dedup } = serviceWith(create);
+    dedup.releaseKey.mockRejectedValueOnce(new Error('pg down'));
+    await expect(svc.notifyRulesetRequired(7, DETAIL)).resolves.toBeUndefined();
+  });
+
   it('a failing dedup claim is swallowed and sends nothing', async () => {
     const { svc, create, dedup } = serviceWith();
     dedup.checkAndMarkSent.mockRejectedValueOnce(new Error('redis down'));
