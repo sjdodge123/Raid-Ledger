@@ -118,11 +118,11 @@ export function getWowVariantLabel(variant: string | null | undefined): string |
 
 /** Empty-state hint for a WoW: Forever character with no equipment (operator-approved copy, OQ2). */
 export const FOREVER_ADDON_HINT_EQUIPMENT =
-    "WoW: Forever gear isn't on the Blizzard Armory yet. It will appear here once you import it with the Raid Ledger addon.";
+    'Import from the Armory or keep it manual. Gear appears here after an Armory import or a Raid Ledger addon export.';
 
 /** Empty-state hint for a WoW: Forever character with no talents. */
 export const FOREVER_ADDON_HINT_TALENTS =
-    "WoW: Forever talents aren't on the Blizzard Armory yet. They will appear here once you import them with the Raid Ledger addon.";
+    'Import from the Armory or keep it manual. Talents appear here after an Armory import or a Raid Ledger addon export.';
 
 /**
  * Map an event's game slug to the variant the boss/loot and quest APIs take.

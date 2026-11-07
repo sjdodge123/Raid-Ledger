@@ -25,7 +25,7 @@ const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     realm: 'realm', 'connected-realm': 'connected-realm', 'playable-race': 'playable-race', ruleset: 'ruleset',
     profile: 'profile', 'profile-equipment': 'equip', 'profile-professions': 'prof', 'profile-quests': 'quests',
     'profile-media': 'media', 'guild-roster': 'guild',
-    'journal-expansion': 'Journal tiers', 'journal-instance': 'Journal instances', 'playable-class': 'Classes',
+    'journal-expansion': 'tiers', 'journal-instance': 'instances', 'playable-class': 'classes',
     // ROK-2108: keys-only profile sub-resources, guild summary and ruleset detail.
     'ruleset-detail': 'ruleset detail', 'profile-specializations': 'specs', 'profile-encounters-raids': 'raids',
     'profile-encounters-dungeons': 'dungeons', 'profile-reputations': 'reps', 'profile-achievements': 'achievements',
