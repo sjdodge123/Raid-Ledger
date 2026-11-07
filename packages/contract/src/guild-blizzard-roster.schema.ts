@@ -51,3 +51,18 @@ export const GuildBlizzardRosterViewSchema = GuildBlizzardRosterSchema.extend({
 export type GuildBlizzardRosterView = z.infer<
   typeof GuildBlizzardRosterViewSchema
 >;
+
+/**
+ * `POST /plugins/wow/guilds/:id/blizzard-roster/sync` (ROK-1928 C3) — the
+ * manual run's outcome; `members` = roster rows the sync applied.
+ */
+export const GuildBlizzardRosterSyncResultSchema = z
+  .object({
+    status: BlizzardRosterStatusSchema,
+    syncedAt: isoDate.nullable(),
+    members: z.number().int().nonnegative(),
+  })
+  .strict();
+export type GuildBlizzardRosterSyncResult = z.infer<
+  typeof GuildBlizzardRosterSyncResultSchema
+>;

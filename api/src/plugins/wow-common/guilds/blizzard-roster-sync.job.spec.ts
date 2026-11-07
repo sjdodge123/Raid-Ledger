@@ -1,0 +1,145 @@
+import { Test } from '@nestjs/testing';
+import {
+  BadGatewayException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { SettingsService } from '../../../settings/settings.service';
+import { FOREVER_ARMORY_OFF_MESSAGE } from '../forever-armory-switch';
+import {
+  BlizzardRosterSyncJob,
+  RUNNING_ROSTER_SYNCS,
+  type ManualSyncGuild,
+} from './blizzard-roster-sync.job';
+import { BlizzardRosterSyncService } from './blizzard-roster-sync.service';
+
+let job: BlizzardRosterSyncJob;
+let sync: { syncForeverGuildRoster: jest.Mock };
+let settings: { get: jest.Mock };
+let listSpy: jest.SpyInstance;
+let readSpy: jest.SpyInstance;
+
+/** A Forever `wow_guild` hub as `readGuild` returns it. */
+function hub(slug: string | null): ManualSyncGuild {
+  return {
+    kind: 'wow_guild',
+    gameSlug: 'world-of-warcraft-forever',
+    guildSlug: slug,
+    blizzardRosterSyncedAt: new Date('2026-11-06T10:00:00Z'),
+  };
+}
+
+beforeEach(async () => {
+  RUNNING_ROSTER_SYNCS.clear();
+  sync = { syncForeverGuildRoster: jest.fn() };
+  settings = { get: jest.fn().mockResolvedValue(null) };
+  const mod = await Test.createTestingModule({
+    providers: [
+      BlizzardRosterSyncJob,
+      { provide: DrizzleAsyncProvider, useValue: {} },
+      { provide: BlizzardRosterSyncService, useValue: sync },
+      { provide: SettingsService, useValue: settings },
+    ],
+  }).compile();
+  job = mod.get(BlizzardRosterSyncJob);
+  listSpy = jest.spyOn(job, 'listDueGuildIds').mockResolvedValue([1, 2]);
+  readSpy = jest.spyOn(job, 'readGuild').mockResolvedValue(hub('ye-olde'));
+});
+
+describe('BlizzardRosterSyncJob.run (ROK-1928 C2)', () => {
+  it('kill switch off → no guild list, no fetch', async () => {
+    settings.get.mockResolvedValue('false');
+    await job.run();
+    expect(listSpy).not.toHaveBeenCalled();
+    expect(sync.syncForeverGuildRoster).not.toHaveBeenCalled();
+  });
+
+  it('syncs every due guild sequentially', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue({ status: 'not_found' });
+    await job.run();
+    expect(sync.syncForeverGuildRoster.mock.calls).toEqual([[1], [2]]);
+  });
+
+  it('one guild throwing does not stop the next', async () => {
+    sync.syncForeverGuildRoster
+      .mockRejectedValueOnce(new Error('upstream 503'))
+      .mockResolvedValueOnce({ status: 'skipped_empty' });
+    await expect(job.run()).resolves.toEqual({
+      ok: 0,
+      notFound: 0,
+      error: 1,
+      skipped: 1,
+    });
+    expect(sync.syncForeverGuildRoster).toHaveBeenCalledTimes(2);
+    expect(RUNNING_ROSTER_SYNCS.size).toBe(0);
+  });
+
+  it('an overlapping run is skipped', async () => {
+    let release: (v: { status: 'not_found' }) => void = () => undefined;
+    sync.syncForeverGuildRoster.mockImplementationOnce(
+      () => new Promise((r) => (release = r)),
+    );
+    sync.syncForeverGuildRoster.mockResolvedValue({ status: 'not_found' });
+    const first = job.run();
+    await expect(job.run()).resolves.toBeNull();
+    await Promise.resolve();
+    release({ status: 'not_found' });
+    await first;
+    expect(sync.syncForeverGuildRoster).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips a guild a manual sync is already running', async () => {
+    RUNNING_ROSTER_SYNCS.add(1);
+    sync.syncForeverGuildRoster.mockResolvedValue({
+      status: 'ok',
+      updated: 1,
+      inserted: 0,
+      stale: false,
+    });
+    const tally = await job.run();
+    expect(sync.syncForeverGuildRoster.mock.calls).toEqual([[2]]);
+    expect(tally).toEqual({ ok: 1, notFound: 0, error: 0, skipped: 1 });
+  });
+});
+
+describe('BlizzardRosterSyncJob.syncNow (ROK-1928 C3)', () => {
+  it('403 with the kill-switch copy when off', async () => {
+    settings.get.mockResolvedValue('false');
+    await expect(job.syncNow(7)).rejects.toThrow(
+      new ForbiddenException(FOREVER_ARMORY_OFF_MESSAGE),
+    );
+  });
+
+  it('404 when the guild has no slug', async () => {
+    readSpy.mockResolvedValue(hub(null));
+    await expect(job.syncNow(7)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('409 while that guild is already syncing', async () => {
+    RUNNING_ROSTER_SYNCS.add(7);
+    await expect(job.syncNow(7)).rejects.toBeInstanceOf(ConflictException);
+    expect(sync.syncForeverGuildRoster).not.toHaveBeenCalled();
+  });
+
+  it('502 when the service rethrows, and frees the guild', async () => {
+    sync.syncForeverGuildRoster.mockRejectedValue(new Error('503'));
+    await expect(job.syncNow(7)).rejects.toBeInstanceOf(BadGatewayException);
+    expect(RUNNING_ROSTER_SYNCS.has(7)).toBe(false);
+  });
+
+  it('200 summary: status, syncedAt, members applied', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue({
+      status: 'ok',
+      updated: 4,
+      inserted: 1,
+      stale: false,
+    });
+    await expect(job.syncNow(7)).resolves.toEqual({
+      status: 'ok',
+      syncedAt: '2026-11-06T10:00:00.000Z',
+      members: 5,
+    });
+  });
+});
