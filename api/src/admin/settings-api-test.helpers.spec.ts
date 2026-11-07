@@ -41,7 +41,9 @@ describe('testItadApiKey', () => {
     expect(init.headers['ITAD-API-Key']).toBe('secret-key');
     expect(url).not.toContain('key=');
     expect(url).not.toContain('secret-key');
-    expect(url).toBe('https://api.isthereanydeal.com/games/lookup/v1?appid=440');
+    expect(url).toBe(
+      'https://api.isthereanydeal.com/games/lookup/v1?appid=440',
+    );
   });
 
   it('reports a valid key on 200', async () => {

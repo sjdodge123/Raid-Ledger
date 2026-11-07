@@ -38,7 +38,9 @@ interface GeminiMappedMessages {
 }
 
 /**
- * Fetch helper for Gemini API calls with API key in query param.
+ * Fetch helper for Gemini API calls. The API key goes in the documented
+ * `x-goog-api-key` header, never the URL, so it stays out of Sentry fetch
+ * breadcrumbs and error messages (ROK-2117).
  * @throws LlmQuotaExhaustedError on quota/spend-cap responses (ROK-1376),
  *         plain Error on any other non-OK response.
  */
@@ -47,10 +49,9 @@ export async function fetchGemini<T>(
   path: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
-  const separator = path.includes('?') ? '&' : '?';
-  const url = `${GEMINI_BASE}${path}${separator}key=${apiKey}`;
+  const url = `${GEMINI_BASE}${path}`;
   const options: RequestInit = {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
   };
   if (body) {
     options.method = 'POST';

@@ -27,7 +27,7 @@ const logger = new Logger('ItadHttp');
 const USER_AGENT =
   'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)';
 
-/** Strip API key from URL for safe logging. */
+/** Strip any stray `key=` from a URL for safe logging (keys travel in a header). */
 function redactUrl(url: string): string {
   return url.replace(/key=[^&]+/, 'key=***');
 }
@@ -81,9 +81,12 @@ export async function itadFetch<T>(
   params: Record<string, string>,
   opts: ItadFetchOptions = {},
 ): Promise<T | null> {
-  const init: RequestInit = { headers: { 'User-Agent': USER_AGENT } };
+  const { query, keyHeader } = splitApiKey(params);
+  const init: RequestInit = {
+    headers: { 'User-Agent': USER_AGENT, ...keyHeader },
+  };
   if (opts.signal) init.signal = opts.signal;
-  const url = buildUrl(path, params);
+  const url = buildUrl(path, query);
   const data = await requestWithRetry<T>(path, url, init, 'ITAD', opts);
   if (data === EXHAUSTED && opts.throwOnExhausted) {
     throw new ItadRetriesExhaustedError(path);
@@ -104,14 +107,19 @@ export async function itadPost<T>(
   body: unknown,
   opts: Pick<ItadFetchOptions, 'maxPauseWaitMs'> = {},
 ): Promise<T | null> {
+  const { query, keyHeader } = splitApiKey(params);
   const init: RequestInit = {
     method: 'POST',
-    headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Content-Type': 'application/json',
+      ...keyHeader,
+    },
     body: JSON.stringify(body),
   };
   const data = await requestWithRetry<T>(
     path,
-    buildUrl(path, params),
+    buildUrl(path, query),
     init,
     'ITAD POST',
     opts,
@@ -119,9 +127,25 @@ export async function itadPost<T>(
   return data === EXHAUSTED ? null : data;
 }
 
+/** ITAD's documented header alternative to the `?key=` query param. */
+const ITAD_API_KEY_HEADER = 'ITAD-API-Key';
+
+/**
+ * Move the caller's `key` param into the `ITAD-API-Key` header (ROK-2117), so
+ * the API key never reaches a URL — and with it a log line or a Sentry fetch
+ * breadcrumb. Every other param stays in the query string.
+ */
+function splitApiKey(params: Record<string, string>): {
+  query: Record<string, string>;
+  keyHeader: Record<string, string>;
+} {
+  const { key, ...query } = params;
+  return { query, keyHeader: key ? { [ITAD_API_KEY_HEADER]: key } : {} };
+}
+
 function buildUrl(path: string, params: Record<string, string>): string {
   const qs = new URLSearchParams(params).toString();
-  return `${ITAD_BASE_URL}${path}?${qs}`;
+  return qs ? `${ITAD_BASE_URL}${path}?${qs}` : `${ITAD_BASE_URL}${path}`;
 }
 
 interface FetchResult<T> {
