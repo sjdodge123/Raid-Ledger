@@ -21,6 +21,10 @@ export interface EnrichedProfile {
     avatarUrl: string | null;
     renderUrl: string | null;
     profileUrl: string | null;
+    /** Blizzard character id, when the adapter surfaces one (ROK-1722). */
+    externalId?: string | null;
+    /** The body's raw `ruleset` value, unmapped (ROK-2100 maps it). */
+    rulesetRaw?: unknown;
   };
   talents: unknown;
   equipment: unknown;

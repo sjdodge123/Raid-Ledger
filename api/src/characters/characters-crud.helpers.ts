@@ -20,7 +20,7 @@ import {
 } from './characters-sync.helpers';
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
-import { assertForeverArmoryImport } from '../plugins/wow-common/forever-armory-switch';
+import type { ExternalImportPolicy } from '../plugins/plugin-host/character-external-import.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -72,30 +72,44 @@ export function enforceCooldown(lastSyncedAt: string | null): void {
   }
 }
 
+/** Thrown when a row has no realm and no provider-owned realmless variant. */
+function noRealm(): never {
+  throw new NotFoundException(
+    'Character has no realm — cannot refresh from external source',
+  );
+}
+
+/**
+ * Variant a refresh runs under. A realmless row (ruleset set) is owned by the
+ * identity provider that declares a realmless variant (ROK-1722), so the
+ * request's 'retail' default is never stamped onto it.
+ */
+function refreshVariant(
+  character: CharacterDto,
+  dto: RefreshCharacterDto,
+  policy: ExternalImportPolicy,
+): string {
+  if (character.realm) return character.gameVariant ?? dto.gameVariant;
+  if (!character.ruleset) return noRealm();
+  return policy.realmlessVariant ?? noRealm();
+}
+
 /**
  * Prepare refresh parameters and validate.
- * @param foreverEnabled the Forever Armory kill switch (ROK-1722); a Forever
- *   refresh 403s while it is off.
+ * @param policy external-import policy from the identity providers; its gate
+ *   may refuse the variant (e.g. a plugin kill switch).
  */
 export function prepareRefresh(
   character: CharacterDto,
   dto: RefreshCharacterDto,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
-  foreverEnabled: boolean,
+  policy: ExternalImportPolicy,
 ): { region: string; gameVariant: string; adapter: CharacterSyncAdapter } {
-  // ROK-1722: a realmless Forever row (ruleset set) refreshes by region + name.
-  if (!character.realm && !character.ruleset)
-    throw new NotFoundException(
-      'Character has no realm — cannot refresh from external source',
-    );
+  if (!character.realm && !character.ruleset) noRealm();
   enforceCooldown(character.lastSyncedAt);
   const region = character.region ?? dto.region;
-  // A realmless row is Forever by construction (only Forever drops the realm),
-  // so the request's 'retail' default must never be stamped onto it.
-  const gameVariant = character.realm
-    ? (character.gameVariant ?? dto.gameVariant)
-    : 'wow_forever';
-  assertForeverArmoryImport(gameVariant, foreverEnabled);
+  const gameVariant = refreshVariant(character, dto, policy);
+  policy.assertAllowed(gameVariant);
   const adapter = findAdapter(gameVariant);
   if (!adapter)
     throw new NotFoundException(
@@ -143,19 +157,19 @@ export async function findOneOwned(
 
 /**
  * Sync all externally-linked characters.
- * @param includeForever the Forever Armory kill switch (ROK-1722): when off,
- *   Forever rows are left out entirely (counted neither synced nor failed).
+ * @param policy external-import policy: rows it excludes from the bulk sync
+ *   are left out entirely (counted neither synced nor failed).
  */
 export async function syncAllCharacters(
   db: Db,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
-  includeForever: boolean,
+  policy: ExternalImportPolicy,
 ): Promise<{ synced: number; failed: number }> {
   const linked = await findSyncableCharacters(db);
-  const externalCharacters = includeForever
-    ? linked
-    : linked.filter((c) => c.gameVariant !== 'wow_forever');
+  const externalCharacters = linked.filter((c) =>
+    policy.includeInBulkSync(c.gameVariant),
+  );
   let synced = 0;
   let failed = 0;
   for (const char of externalCharacters) {
@@ -178,8 +192,8 @@ async function findSyncableCharacters(
       and(
         isNotNull(schema.characters.region),
         // ROK-1722: Armory-linked rows only (game_variant set). A manual
-        // Forever row keeps game_variant NULL and stays out; an imported one
-        // (realm NULL, ruleset set) syncs by region + name.
+        // realmless row keeps game_variant NULL and stays out; an imported
+        // one (realm NULL, ruleset set) syncs by region + name.
         isNotNull(schema.characters.gameVariant),
         or(
           isNotNull(schema.characters.realm),

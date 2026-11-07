@@ -75,13 +75,23 @@ describe('WowFactsService — Blizzard registration seam', () => {
     expect(got.facts.get('m1')?.level?.source).toBe('addon');
   });
 
-  it('is not consulted while the namespace is the default alias', async () => {
-    const { service } = build(null);
-    const blizzard = blizzardAt(NOW);
-    service.registerBlizzardSource(blizzard);
-    const got = await service.resolveFacts([REF], NOW);
-    expect(blizzard.load).not.toHaveBeenCalled();
-    expect(got.facts.get('m1')?.level?.source).toBe('addon');
+  // Since ROK-2102 step 2 (#1979) the default prefix resolves to `forever`,
+  // so with the default prefix the Armory switch alone decides the seam.
+  it('with the default prefix: consulted while the switch is on, not while it is off', async () => {
+    const on = build(null);
+    const live = blizzardAt(NOW);
+    on.service.registerBlizzardSource(live);
+    const gotOn = await on.service.resolveFacts([REF], NOW);
+    expect(live.load).toHaveBeenCalledTimes(1);
+    expect(gotOn.facts.get('m1')?.level?.source).toBe('blizzard');
+
+    const off = build(null);
+    off.settings.get.mockResolvedValue('false');
+    const idle = blizzardAt(NOW);
+    off.service.registerBlizzardSource(idle);
+    const gotOff = await off.service.resolveFacts([REF], NOW);
+    expect(idle.load).not.toHaveBeenCalled();
+    expect(gotOff.facts.get('m1')?.level?.source).toBe('addon');
   });
 
   it('no blizzard source is registered by default', async () => {

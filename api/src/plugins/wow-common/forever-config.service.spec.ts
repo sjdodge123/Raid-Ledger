@@ -43,10 +43,10 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
     expect(getForeverNamespacePrefix()).toBe('foo');
   });
 
-  it('reports the defaults when nothing is stored', async () => {
+  it('reports the forever default when nothing is stored (ROK-2102)', async () => {
     const { service } = setup();
     await expect(service.getConfig()).resolves.toEqual({
-      namespacePrefix: 'classicforever',
+      namespacePrefix: 'forever',
       namespacePrefixIsDefault: true,
       armoryImportEnabled: true,
       wowheadResolverEnabled: true,
@@ -147,9 +147,38 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     const { service, blizzard } = setup();
     service.handleConfigUpdated({ namespacePrefix: 'foo' });
     expect(getForeverNamespacePrefix()).toBe('foo');
-    expect(blizzard.purgeNamespace.mock.calls).toEqual([
-      ['classicforever'],
-      ['foo'],
-    ]);
+    expect(blizzard.purgeNamespace.mock.calls).toEqual([['forever'], ['foo']]);
+  });
+});
+
+describe('ForeverConfigService default prefix (ROK-2102)', () => {
+  afterEach(() => setForeverNamespacePrefix(null));
+
+  it.each(['forever', 'classicforever'])(
+    'deletes both keys when saved back to the defaults with %p (ROK-2102)',
+    async (namespacePrefix) => {
+      const { service, store, events } = setup({
+        [WOW_FOREVER_NAMESPACE_PREFIX_KEY]: 'foo',
+        [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'false',
+      });
+      // ROK-1722: the Armory default is ON, so "back to the defaults" = enabled.
+      const res = await service.updateConfig({
+        namespacePrefix,
+        armoryImportEnabled: true,
+      });
+      expect([...store.keys()]).toEqual([]);
+      expect(res.namespacePrefix).toBe('forever');
+      expect(res.namespacePrefixIsDefault).toBe(true);
+      expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
+        namespacePrefix,
+      });
+    },
+  );
+
+  it('an alias save moves the resolver back to forever', () => {
+    const { service } = setup();
+    setForeverNamespacePrefix('foo');
+    service.handleConfigUpdated({ namespacePrefix: 'classicforever' });
+    expect(getForeverNamespacePrefix()).toBe('forever');
   });
 });

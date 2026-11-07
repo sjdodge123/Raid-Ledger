@@ -46,11 +46,15 @@ export interface ResolvedRosterResult {
  * EFFECTIVE Forever namespace prefix (`getForeverNamespacePrefix()`, hydrated
  * from the stored setting by `ForeverConfigService.onModuleInit` and on every
  * admin change) is not the `classicforever` alias AND the Forever Armory kill
- * switch is on. Only while it is live do blizzard facts get the fresh-window
- * override (`fact-precedence.ts` rule 2) and does the Blizzard source shadow
- * the row source's blizzard-labelled copies of the same fields; otherwise
- * blizzard-labelled facts (an Armory-synced `characters` row) compete on
- * newest `asOf` only.
+ * switch is on. Keying on the effective prefix rather than the STORED
+ * override `wow_forever_namespace_prefix` resolves ROK-2102 FLAG A1: since
+ * ROK-2102 the effective prefix defaults to `forever` with the key absent, so
+ * a stored-override test would keep the seam off on a default install. It is
+ * not proof the probe currently reports the namespace live. Only while it is
+ * live do blizzard facts get the fresh-window override (`fact-precedence.ts`
+ * rule 2) and does the Blizzard source shadow the row source's
+ * blizzard-labelled copies of the same fields; otherwise blizzard-labelled
+ * facts (an Armory-synced `characters` row) compete on newest `asOf` only.
  */
 @Injectable()
 export class WowFactsService {

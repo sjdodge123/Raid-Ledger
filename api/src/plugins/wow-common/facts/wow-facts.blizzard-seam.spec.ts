@@ -91,18 +91,25 @@ describe('WowFactsService — Blizzard Forever seam liveness', () => {
     );
   });
 
-  it.each<[string, string | null]>([
-    ['null (alias)', null],
-    ['the explicit alias', FOREVER_NAMESPACE_ALIAS],
+  // Since ROK-2102 step 2 (#1979) a null/alias prefix resolves to `forever`,
+  // so the default prefix never turns the seam off: the switch alone decides.
+  it.each<[string, string | null, string | null, boolean]>([
+    ['null (default)', null, null, true],
+    ['the stored alias', FOREVER_NAMESPACE_ALIAS, null, true],
+    ['null (default)', null, 'false', false],
+    ['the stored alias', FOREVER_NAMESPACE_ALIAS, 'false', false],
   ])(
-    'effective prefix %s → not consulted, even with a stored "forever"',
-    async (_l, prefix) => {
-      const { service, blizzard } = build({ prefix, blizzard: level60 });
-      expect((await service.activeSources()).map((s) => s.id)).not.toContain(
-        'blizzard',
-      );
+    'prefix %s resolves to forever; switch %p → consulted: %p',
+    async (_l, prefix, switchValue, consulted) => {
+      const { service, blizzard } = build({
+        prefix,
+        switchValue,
+        blizzard: level60,
+      });
+      const ids = (await service.activeSources()).map((s) => s.id);
+      expect(ids.includes('blizzard')).toBe(consulted);
       await service.resolveFacts([REF], NOW);
-      expect(blizzard.load).not.toHaveBeenCalled();
+      expect(blizzard.load).toHaveBeenCalledTimes(consulted ? 1 : 0);
     },
   );
 
