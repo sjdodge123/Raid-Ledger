@@ -12,6 +12,8 @@ import { ADDON_REGION_MAP } from './addon-import/addon-import.binding-name';
 import { authoritativeSectionIndex } from './addon-import/addon-import.binding-paste';
 import type { DecodedAddonPaste } from './addon-import/addon-import.decoder';
 import { pasteSections } from './addon-import/addon-import.paste-run';
+import { AddonImportError } from './addon-import/addon-import.errors';
+import { HARDCORE_CREATE_MESSAGE } from './addon-import/addon-import-create.helpers';
 
 /**
  * Pure realm → ruleset lookup for the admin-maintained Forever map
@@ -52,23 +54,51 @@ export function inferRuleset(
   return { ruleset, realmName, source: 'realm-map' };
 }
 
+/** The paste's AUTHORITATIVE section's `who` + region (ROK-1737). */
+export function pasteLead(
+  paste: DecodedAddonPaste,
+): { who: AddonWho; region: WowRegion | undefined } | null {
+  const payloads = pasteSections(paste).map((s) => s.payload);
+  const lead = payloads[authoritativeSectionIndex(payloads)];
+  if (!lead) return null;
+  return { who: lead.who, region: ADDON_REGION_MAP[lead.client.region] };
+}
+
 /** {@link inferRuleset} on the paste's AUTHORITATIVE section (ROK-1737). */
 export function inferForPaste(
   paste: DecodedAddonPaste,
   index: RealmRulesetIndex,
 ): AddonImportRulesetInferenceDto | null {
-  const payloads = pasteSections(paste).map((s) => s.payload);
-  const lead = payloads[authoritativeSectionIndex(payloads)];
+  const lead = pasteLead(paste);
   if (!lead) return null;
-  return inferRuleset(lead.who, ADDON_REGION_MAP[lead.client.region], index);
+  return inferRuleset(lead.who, lead.region, index);
 }
 
-/** The inferred ruleset a CREATE may fall back to — never Hardcore (D6). */
+/**
+ * The inferred ruleset a CREATE may fall back to — never Hardcore (D6). A
+ * Hardcore from Blizzard or the realm name (ROK-2100 F10) with no member
+ * pick is refused with the truthful Hardcore reason, not `RULESET_REQUIRED`.
+ */
 export function createFallbackRuleset(
   inference: AddonImportRulesetInferenceDto | null | undefined,
+  picked?: WowForeverSelectableRuleset,
 ): WowForeverSelectableRuleset | undefined {
-  if (!inference || inference.ruleset === 'hardcore') return undefined;
-  return inference.ruleset;
+  if (!inference) return undefined;
+  if (inference.ruleset !== 'hardcore') return inference.ruleset;
+  if (inference.source !== 'realm-map' && picked === undefined) {
+    throw new AddonImportError('INVALID_PAYLOAD', HARDCORE_CREATE_MESSAGE);
+  }
+  return undefined;
+}
+
+/**
+ * ROK-2100 F8: only the admin realm map may re-ruleset an EXISTING
+ * character; a Blizzard / realm-name inference is create-only.
+ */
+export function updateInferenceRuleset(
+  inference: AddonImportRulesetInferenceDto | null | undefined,
+): WowForeverRuleset | undefined {
+  return inference?.source === 'realm-map' ? inference.ruleset : undefined;
 }
 
 function compareText(a: string, b: string): number {

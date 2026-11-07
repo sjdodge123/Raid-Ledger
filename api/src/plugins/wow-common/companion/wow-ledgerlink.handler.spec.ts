@@ -13,6 +13,7 @@ import type {
 import type { CompanionAfterCommitContext } from '../../../companion/ingest/companion-handler.registry';
 import type { AddonImportCreateService } from '../addon-import/addon-import-create.service';
 import { AddonImportError } from '../addon-import/addon-import.errors';
+import type { LedgerlinkRulesetNoticeService } from './ledgerlink-ruleset-notice.service';
 import { WowLedgerlinkHandler } from './wow-ledgerlink.handler';
 import {
   WOW_LEDGERLINK_EXPORT_PATH,
@@ -50,7 +51,10 @@ function result(status: AddonImportNewResultDto['status']) {
 
 function handlerWith(importNew: jest.Mock) {
   const service = { importNew } as unknown as AddonImportCreateService;
-  return new WowLedgerlinkHandler(service);
+  const notice = {
+    notifyRulesetRequired: jest.fn(),
+  } as unknown as LedgerlinkRulesetNoticeService;
+  return new WowLedgerlinkHandler(service, notice);
 }
 
 /** The HttpException `p` rejects with (fails loudly otherwise). */

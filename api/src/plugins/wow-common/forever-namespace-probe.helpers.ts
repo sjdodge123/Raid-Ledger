@@ -17,6 +17,7 @@ import {
   type ProbeTarget,
 } from './forever-namespace-probe.forever';
 import * as staticProbe from './forever-namespace-probe.static';
+import * as extraProbe from './forever-namespace-probe.profile-extra';
 
 /**
  * Candidate prefixes. `forever` (the confirmed prefix, ROK-2102) comes first so
@@ -297,10 +298,31 @@ function makePhase(
   };
 }
 
+/** Static indexes (ROK-2103) + guild summary and ruleset detail (ROK-2108). */
+function matchExtraUrls(
+  t: ProbeTarget,
+  input: RunProbeInput,
+  run: ProbeRun,
+): ProbeUrl[] {
+  return [
+    ...staticProbe.buildStaticUrls(t),
+    ...extraProbe.buildMatchExtraUrls(t, input.guildPath, run.shapes),
+  ];
+}
+
+/** The four ROK-2102 profile sub-resources + the seven ROK-2108 extras. */
+function profileSubUrls(characterPath: string, t: ProbeTarget): ProbeUrl[] {
+  return [
+    ...buildProfileDetailUrls(characterPath, t.prefix, t.region),
+    ...extraProbe.buildProfileExtraUrls(characterPath, t),
+  ];
+}
+
 /**
  * Probe every (candidate, region, endpoint); then, per deduped match, the
- * profile + guild roster; then the static journal / class indexes (ROK-2103);
- * then profile sub-resources where the profile is 200.
+ * profile + guild roster; then the static journal / class indexes (ROK-2103),
+ * guild summary + ruleset detail (ROK-2108); then profile sub-resources where
+ * the profile is 200.
  */
 export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
   const { characterPath, guildPath } = input;
@@ -320,14 +342,12 @@ export async function runProbe(input: RunProbeInput): Promise<ProbeRun> {
     ),
   );
   await phase(
-    targets.flatMap((t) => toTasks(t, staticProbe.buildStaticUrls(t))),
+    targets.flatMap((t) => toTasks(t, matchExtraUrls(t, input, run))),
   );
   if (!characterPath) return run;
   const answered = targets.filter((t) => profileAnswered(run.cells, t));
   await phase(
-    answered.flatMap((t) =>
-      toTasks(t, buildProfileDetailUrls(characterPath, t.prefix, t.region)),
-    ),
+    answered.flatMap((t) => toTasks(t, profileSubUrls(characterPath, t))),
   );
   return run;
 }

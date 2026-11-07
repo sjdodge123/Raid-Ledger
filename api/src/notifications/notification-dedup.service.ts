@@ -168,8 +168,15 @@ export class NotificationDedupService {
     `);
 
     if (result.length > 0) {
-      // Insert succeeded — we are the winner
-      await this.warmRedisCache(dedupKey, ttlSeconds);
+      // Insert succeeded — we are the winner. The PG row IS the claim; Redis is
+      // only a cache, so a failed warm must not turn a won claim into a throw
+      // (ROK-2100 Codex P2: the caller would skip the send yet the persisted
+      // row would suppress every retry for the whole TTL).
+      await this.warmRedisCache(dedupKey, ttlSeconds).catch((err: unknown) =>
+        this.logger.warn(
+          `dedup cache warm failed key=${dedupKey}: ${err instanceof Error ? err.message : 'unknown error'}`,
+        ),
+      );
       return false;
     }
 
