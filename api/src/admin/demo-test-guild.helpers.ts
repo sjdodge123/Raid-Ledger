@@ -15,6 +15,8 @@ import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
+import type { CharacterProfessionsDto } from '@raid-ledger/contract';
+import { parseArmoryProfessionsFlag } from './demo-test-guild-professions.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -40,6 +42,8 @@ export interface SeedGuildInput {
   withGear: boolean;
   /** ROK-1917: also seed LedgerLink raid-export boss pulls (Raid progress). */
   withPulls: boolean;
+  /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
+  armoryProfessions?: CharacterProfessionsDto;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -105,6 +109,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   const raw = (body ?? {}) as RawSeedFlags & {
     name?: unknown;
     gameSlug?: unknown;
+    armoryProfessions?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -115,7 +120,12 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof gameSlug !== 'string' || !ALL_WOW_GAME_SLUGS.includes(gameSlug)) {
     throw new BadRequestException('gameSlug must be a WoW game slug');
   }
-  return { name: raw.name, gameSlug, ...parseSeedFlags(raw) };
+  return {
+    name: raw.name,
+    gameSlug,
+    ...parseSeedFlags(raw),
+    ...parseArmoryProfessionsFlag(raw),
+  };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */

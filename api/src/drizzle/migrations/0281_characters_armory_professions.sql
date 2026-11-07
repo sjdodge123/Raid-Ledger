@@ -3,6 +3,8 @@ ALTER TABLE "characters" ADD COLUMN "armory_professions" jsonb;--> statement-bre
 -- sync wrote into "professions". For Armory-synced retail/Forever rows move that
 -- value to "armory_professions" so "professions" holds only user entries.
 -- Classic rows never received Blizzard professions and stay manual.
+-- Accepted cost (spec F2): an Armory value the user hand-edited after the last
+-- sync is indistinguishable here, so it moves too and loses its Manual label.
 UPDATE "characters"
 SET "armory_professions" = "professions", "professions" = NULL
 WHERE "external_id" IS NOT NULL

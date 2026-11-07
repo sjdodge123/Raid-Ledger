@@ -88,6 +88,7 @@ import {
   type SeededRoster,
 } from './demo-test-guild.response';
 import { seedGuildPulls } from './demo-test-guild-pulls.helpers';
+import { applyArmoryProfessions } from './demo-test-guild-professions.helpers';
 import {
   seedGuildDings,
   type SeededGuildDings,
@@ -139,7 +140,7 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917). */
+  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917). */
   private async seedOptional(
     input: SeedGuildInput,
     ctx: RosterCtx,
@@ -147,6 +148,7 @@ export class DemoTestGuildController {
   ): Promise<SeedGuildExtras> {
     const { users, unlinked } = roster;
     const gm = users.gm.userId;
+    await applyArmoryProfessions(this.db, users, input.armoryProfessions);
     const content = input.withContent
       ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
       : null;

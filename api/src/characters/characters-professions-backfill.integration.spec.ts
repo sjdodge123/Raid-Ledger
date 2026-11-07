@@ -73,7 +73,12 @@ interface Seed {
   gameVariant: string | null;
 }
 
-async function seed({ name, externalId, gameVariant }: Seed): Promise<string> {
+const ARMORY = { ...PROFS, syncedAt: '2026-09-01T00:00:00.000Z' };
+
+async function seed(
+  { name, externalId, gameVariant }: Seed,
+  armoryProfessions: typeof PROFS | null = null,
+): Promise<string> {
   const [row] = nonEmpty(
     await testApp.db
       .insert(schema.characters)
@@ -85,7 +90,7 @@ async function seed({ name, externalId, gameVariant }: Seed): Promise<string> {
         externalId,
         gameVariant,
         professions: PROFS,
-        armoryProfessions: null,
+        armoryProfessions,
       })
       .returning({ id: schema.characters.id }),
     name,
@@ -141,5 +146,31 @@ describe('migration 0281 professions backfill (ROK-2107 D7)', () => {
     const id = await seed(s);
     await runBackfill();
     expect(await columns(id)).toEqual({ professions: PROFS, armory: null });
+  });
+
+  it('is idempotent — a second run changes nothing', async () => {
+    const moved = await seed({
+      name: 'r',
+      externalId: '555',
+      gameVariant: 'retail',
+    });
+    const manual = await seed({
+      name: 'm2',
+      externalId: null,
+      gameVariant: 'wow_forever',
+    });
+    await runBackfill();
+    await runBackfill();
+    expect(await columns(moved)).toEqual({ professions: null, armory: PROFS });
+    expect(await columns(manual)).toEqual({ professions: PROFS, armory: null });
+  });
+
+  it('leaves a row with both columns already set untouched', async () => {
+    const id = await seed(
+      { name: 'both', externalId: '666', gameVariant: 'wow_forever' },
+      ARMORY,
+    );
+    await runBackfill();
+    expect(await columns(id)).toEqual({ professions: PROFS, armory: ARMORY });
   });
 });
