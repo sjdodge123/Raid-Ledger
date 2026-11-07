@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AddonCharacterUnlinkResult } from './addon-import.unlink.types';
 import { autoPromoteAfterDelete } from '../../../characters/characters-crud.helpers';
@@ -45,6 +45,13 @@ const characterById = (tx: AddonImportTx, id: string) =>
 
 type CharacterRow = typeof schema.characters.$inferSelect;
 
+/** Owner-conditional by-id filter: never deletes a row moved to someone else. */
+const ownedBy = (row: CharacterRow) =>
+  and(
+    eq(schema.characters.id, row.id),
+    eq(schema.characters.userId, row.userId),
+  );
+
 /** Same lock class + key as the import apply paths: serialises with them. */
 async function lockGuid(tx: AddonImportTx, row: CharacterRow, guid: string) {
   const key = `${row.gameId}:${row.region}:${guid}`;
@@ -61,12 +68,13 @@ async function unlinkGuidRow(
   guid: string,
 ): Promise<void> {
   await lockGuid(tx, row, guid);
-  // A concurrent apply may have changed the row between the read and the lock.
-  const [locked] = await characterById(tx, row.id);
-  if (locked?.addonGuid !== guid) {
+  // A concurrent apply or admin Change owner (which keeps the GUID) may have
+  // changed the row between the read and the lock: re-check both, locked.
+  const [locked] = await characterById(tx, row.id).for('update');
+  if (locked?.addonGuid !== guid || locked.userId !== row.userId) {
     throw new ConflictException('That character changed; reload and retry.');
   }
-  await tx.delete(schema.characters).where(eq(schema.characters.id, row.id));
+  await tx.delete(schema.characters).where(ownedBy(row));
   await logGuidAudit(tx, {
     action: 'addon_guid_admin_unlinked',
     actorId: adminId,
@@ -89,7 +97,7 @@ async function unlinkRosterRow(
   if (row.addonGuid) await unlinkGuidRow(tx, adminId, row, row.addonGuid);
   else {
     await lockCharacter(tx, row);
-    await tx.delete(schema.characters).where(eq(schema.characters.id, row.id));
+    await tx.delete(schema.characters).where(ownedBy(row));
   }
   await logCharacterClaimAudit(tx, {
     action: 'admin_unlinked_roster',
