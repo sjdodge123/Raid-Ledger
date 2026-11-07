@@ -253,7 +253,32 @@ describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
     expect(await findLinkedMemberRows(testApp.db, picker.id, guildId)).toEqual(
       [],
     );
+    // CharacterDto.rosterClaimed: the admin slot's self-filter for a no-GUID row.
+    expect(res.body.rosterClaimed).toBe(true);
+    const detail = await testApp.request.get(`/characters/${row.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.rosterClaimed).toBe(true);
   });
+
+  it('a manually added character is not rosterClaimed on the detail read', async () => {
+    const owner = await makeUser('l2manual');
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.characters)
+        .values({
+          userId: owner.id,
+          gameId: foreverId,
+          name: 'Manual Only',
+          region: 'us',
+        })
+        .returning(),
+      'manual row',
+    );
+    const detail = await testApp.request.get(`/characters/${row.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.rosterClaimed).toBe(false);
+  });
+
   it('a claimed row is 409 "Someone claimed this first" for the next caller', async () => {
     const first = await makeUser('l2cinderA');
     const second = await makeUser('l2cinderB');
