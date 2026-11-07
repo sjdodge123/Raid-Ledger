@@ -1,6 +1,6 @@
 {
-  "id": "74079a1a-e5bd-42e5-a4ab-0b8772a705c1",
-  "prevId": "6ea529af-71f9-4080-bc85-a10a4119468b",
+  "id": "6f92837f-e021-4b57-9fc6-450bba5c510c",
+  "prevId": "74079a1a-e5bd-42e5-a4ab-0b8772a705c1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1839,6 +1839,12 @@
         },
         "armory_professions": {
           "name": "armory_professions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "armory_quests": {
+          "name": "armory_quests",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -11421,18 +11427,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "blizzard_roster_synced_at": {
-          "name": "blizzard_roster_synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "blizzard_roster_status": {
-          "name": "blizzard_roster_status",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "faction": {
           "name": "faction",
           "type": "varchar(20)",
@@ -11911,10 +11905,6 @@
         "guilds_crest_active_check": {
           "name": "guilds_crest_active_check",
           "value": "\"guilds\".\"crest_active\" IS NULL OR \"guilds\".\"crest_active\" IN ('upload', 'preset')"
-        },
-        "guilds_blizzard_roster_status_check": {
-          "name": "guilds_blizzard_roster_status_check",
-          "value": "\"guilds\".\"blizzard_roster_status\" IS NULL OR \"guilds\".\"blizzard_roster_status\" IN ('ok', 'not_found', 'error', 'skipped_empty')"
         },
         "guilds_name_override_kind_check": {
           "name": "guilds_name_override_kind_check",
