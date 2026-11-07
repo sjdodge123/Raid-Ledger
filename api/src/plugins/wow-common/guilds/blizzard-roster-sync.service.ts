@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { BlizzardRosterStatus } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { findHubGuild } from '../../../guilds/guild-core.queries';
@@ -17,10 +18,6 @@ import {
   type SyncGuild,
 } from './blizzard-roster-sync.tx';
 import { isForeverGuildHub } from './guild-slug.helpers';
-
-/** The stored `guilds.blizzard_roster_status` values (CHECK constraint). */
-export type BlizzardRosterStatus =
-  'ok' | 'not_found' | 'error' | 'skipped_empty';
 
 /** One sync's outcome; `skipped`/`disabled` write nothing. */
 export type RosterSyncResult =
