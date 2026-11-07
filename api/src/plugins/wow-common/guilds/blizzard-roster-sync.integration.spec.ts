@@ -4,7 +4,7 @@
  * is seeded by a real LedgerLink import (harness from
  * `addon-import-guild-dings.integration.spec.ts`). Fleet-only.
  */
-import * as Sentry from '@sentry/nestjs';
+import type * as SentryModule from '@sentry/nestjs';
 import * as bcrypt from 'bcrypt';
 import { and, count, desc, eq, isNotNull } from 'drizzle-orm';
 import { BadGatewayException } from '@nestjs/common';
@@ -28,10 +28,14 @@ import { BlizzardService } from '../blizzard.service';
 import { BlizzardRosterSyncService } from './blizzard-roster-sync.service';
 import { inLatestSnapshot } from './guild-membership.helpers';
 
-jest.mock('@sentry/nestjs', () => ({
-  ...jest.requireActual<object>('@sentry/nestjs'),
-  captureException: jest.fn(),
-}));
+/**
+ * Spy on the live CJS module, NOT `jest.mock`: `setupFilesAfterEnv` loads
+ * AppModule → this service → the real `@sentry/nestjs` before a hoisted
+ * `jest.mock` registers, so a module mock never reaches the service (same
+ * trap as `game-role-reconcile.integration.spec.ts`).
+ */
+const sentry = jest.requireActual<typeof SentryModule>('@sentry/nestjs');
+const captureException = jest.spyOn(sentry, 'captureException');
 
 pinExportClock();
 
@@ -223,7 +227,12 @@ beforeEach(async () => {
     testApp.app.get(BlizzardService),
     'fetchForeverGuildRoster',
   );
-  jest.mocked(Sentry.captureException).mockClear();
+  captureException.mockClear();
+  captureException.mockReturnValue('event-id');
+});
+
+afterAll(() => {
+  captureException.mockRestore();
 });
 
 afterEach(async () => {
@@ -319,7 +328,7 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     expect(stored.blizzardRosterStatus).toBe('error');
     expect(stored.lastSnapshotAt).toEqual(guild.lastSnapshotAt);
     expect(await liveNames(guild.id)).toHaveLength(5);
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
       tags: { guildId: String(guild.id), region: guild.region },
     });
   });
