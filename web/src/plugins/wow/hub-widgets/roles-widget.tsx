@@ -50,7 +50,7 @@ function Band({ band, roles }: { band: RoleBandKey; roles: RoleBands }): JSX.Ele
 /** The widget body; core draws the card chrome and title. */
 export default function RolesWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const { data } = useRosterInsights(page.guild.id);
-    const rosterVia = useRosterVia(page.guild.id);
+    const rosterVia = useRosterVia(page.guild);
     if (data === undefined) return null;
     return (
         <div className="flex flex-col gap-3">

@@ -66,9 +66,11 @@ export function useSyncBlizzardRoster(guildId: number): UseMutationResult<Blizza
 
 /**
  * Which source the roster footer names: "Blizzard" once the last sync landed,
- * else "LedgerLink". Reuses the GET above — no second fetch path.
+ * else "LedgerLink". Reuses the GET above — no second fetch path. Only a
+ * `wow_guild` hub has the route: the roster widgets also mount on Forever
+ * `game_community` hubs, where the GET would 404 on every mount.
  */
-export function useRosterVia(guildId: number): 'Blizzard' | 'LedgerLink' {
-    const { data } = useGuildBlizzardRoster(guildId);
+export function useRosterVia(guild: Pick<GuildSummary, 'id' | 'kind'>): 'Blizzard' | 'LedgerLink' {
+    const { data } = useGuildBlizzardRoster(guild.id, guild.kind === 'wow_guild');
     return data?.status === 'ok' ? 'Blizzard' : 'LedgerLink';
 }
