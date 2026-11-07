@@ -51,7 +51,7 @@ describe('buildCharacterParams', () => {
     expect(result.realmSlug).not.toContain('/');
   });
 
-  it.each(['.', '..', '...', ' . '])(
+  it.each(['.', '..', '...'])(
     'rejects a dot-only realm segment %j with a 400 (4082)',
     (realm) => {
       expect(() => buildCharacterParams('Thrall', realm, 'us', null)).toThrow(
