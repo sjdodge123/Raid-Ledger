@@ -34,12 +34,12 @@ function serveCandidates(list: RosterClaimListResponseDto): { calls: () => numbe
     return { calls: () => n };
 }
 
-function Harness({ gameSlug, existing = [] }: { gameSlug: string; existing?: CharacterDto[] }) {
+function Harness({ gameSlug, existing = [], loading = false }: { gameSlug: string; existing?: CharacterDto[]; loading?: boolean }) {
     const [tab, setTab] = useState<'manual' | 'import' | 'roster'>('manual');
     return (
         <>
             <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} gameId={GAME_ID} activeTab={tab}
-                onTabChange={setTab} existingCharacters={existing} />
+                onTabChange={setTab} existingCharacters={existing} charactersLoading={loading} />
             <span data-testid="active-tab">{tab}</span>
         </>
     );
@@ -63,6 +63,15 @@ describe('CharacterCreateImportForm — Guild roster option (ROK-2128)', () => {
         await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('roster'));
         expect(rosterOption()).toHaveAttribute('aria-pressed', 'true');
         expect(await screen.findByText('Ashen Vale')).toBeInTheDocument();
+    });
+
+    it('does not treat still-loading characters as "none" — no roster default yet (Codex P2)', async () => {
+        const api = serveCandidates(ONE);
+        renderWithProviders(<Harness gameSlug={FOREVER} loading />);
+        await waitFor(() => expect(api.calls()).toBeGreaterThan(0));
+        await waitFor(() => expect(rosterOption()).toBeInTheDocument());
+        expect(rosterOption()).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('active-tab')).not.toHaveTextContent('roster');
     });
 
     it('offers the option but keeps it off the default when the user already owns a Forever character', async () => {

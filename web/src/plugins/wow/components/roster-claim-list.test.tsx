@@ -10,7 +10,12 @@ import { http, HttpResponse } from 'msw';
 import type { CharacterDto, RosterClaimListResponseDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { invalidateAllHubMemberships } from '../../../components/hub/community/invalidate-hub-membership';
 import { RosterClaimList } from './roster-claim-list';
+
+vi.mock('../../../components/hub/community/invalidate-hub-membership', () => ({
+    invalidateAllHubMemberships: vi.fn(() => Promise.resolve()),
+}));
 
 const API_BASE = 'http://localhost:3000';
 const GAME_ID = 7;
@@ -79,6 +84,8 @@ describe('RosterClaimList (ROK-2128)', () => {
         await waitFor(() => expect(onClaimed).toHaveBeenCalledTimes(1));
         expect(claimedId).toBe('11');
         expect(body).toEqual({ ruleset: 'pvp', isMain: false });
+        // Codex P2: a claim can make the player a guild member — hub caches refetch.
+        expect(invalidateAllHubMemberships).toHaveBeenCalled();
     });
 
     it('removes the row when someone claimed it first (409)', async () => {
@@ -100,5 +107,24 @@ describe('RosterClaimList (ROK-2128)', () => {
         expect(await screen.findByText('Showing the first 1000 — search to narrow.')).toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: /add it manually/i }));
         expect(onSwitchTab).toHaveBeenCalledWith('manual');
+    });
+});
+
+describe('RosterClaimList — server-side search (ROK-2128 Codex P2)', () => {
+    it('sends the search to the server so a row past the 1000 cap is findable (Codex P2)', async () => {
+        const seen: (string | null)[] = [];
+        const PAST_CAP = { truncated: false, guilds: [{ guildId: 9, guildName: 'Zz Big Guild', region: 'us', candidates: [
+            { memberId: 99, name: 'Big 1000', class: null, level: null, source: 'addon_import' as const },
+        ] }] };
+        server.use(http.get(`${API_BASE}/plugins/wow/roster-claim/candidates`, ({ request }) => {
+            const q = new URL(request.url).searchParams.get('q');
+            seen.push(q);
+            return HttpResponse.json(q ? PAST_CAP : { ...LIST, truncated: true });
+        }));
+        renderList();
+        await screen.findByText('Ashen Vale');
+        await userEvent.type(screen.getByRole('searchbox', { name: /search guild roster/i }), 'big 1000');
+        expect(await screen.findByText('Big 1000')).toBeInTheDocument();
+        expect(seen).toContain('big 1000');
     });
 });
