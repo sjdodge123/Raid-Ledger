@@ -1,7 +1,8 @@
 /**
  * ROK-1428 (L10, story ROK-1434) — the channel-automation admin page at
  * /admin/settings/discord/lifecycle and the bindings list's Lifecycle cell,
- * desktop + mobile.
+ * desktop + mobile. Since ROK-2106 the bindings list is grouped by channel:
+ * the Lifecycle cell + Pin sit on the CHANNEL CARD, not on a binding row.
  *
  * Seeds per project via POST /admin/test/channel-lifecycle/seed (names carry
  * the project + a run stamp so the two projects never share a game):
@@ -169,9 +170,13 @@ test.describe('Admin Discord — channel automation (ROK-1428)', () => {
             await route.fulfill({ response });
         });
         await page.goto('/admin/settings/discord/channels');
-        const row = page.getByTestId('channel-binding-row').filter({ hasText: seeds.managed.gameName });
-        const cell = row.getByTestId('binding-lifecycle-cell');
+        // ROK-2106: one card per channel; the Lifecycle cell is on the card,
+        // its binding rows (game · purpose) underneath. Each seed owns its channel.
+        const card = channelCard(page, seeds.managed.gameName);
+        const cell = card.getByTestId('binding-lifecycle-cell');
         await expect(cell).toContainText('Managed', { timeout: 15_000 });
+        await expect(card.getByTestId('channel-binding-row').filter({ hasText: seeds.managed.gameName })
+            .getByTestId('binding-lifecycle-cell')).toHaveCount(0);
         await expect(cell).not.toContainText('Pinned');
         const patched = page.waitForResponse((r) => r.request().method() === 'PATCH'
             && r.url().endsWith(`/admin/discord/bindings/${rows.managed.id}`));
@@ -182,10 +187,18 @@ test.describe('Admin Discord — channel automation (ROK-1428)', () => {
         expect(body.data).toMatchObject({ id: rows.managed.id, autoManaged: true, pinned: true });
         await expect(cell.getByRole('button', { name: /^Unpin/ })).toBeVisible({ timeout: 15_000 });
         await expect(cell).toContainText('Pinned');
-        await expect(page.getByTestId('channel-binding-row').filter({ hasText: seeds.manual.gameName })
-            .getByTestId('binding-lifecycle-cell')).toHaveCount(0);
+        const manualCard = channelCard(page, seeds.manual.gameName);
+        await expect(manualCard).toBeVisible();
+        await expect(manualCard.getByTestId('binding-lifecycle-cell')).toHaveCount(0);
+        await expect(manualCard.getByRole('button', { name: /^(Un)?pin #/i })).toHaveCount(0);
     });
 });
+
+/** The channel card (ROK-2106) holding the binding row for this game. */
+function channelCard(page: Page, gameName: string) {
+    return page.getByTestId('channel-binding-group')
+        .filter({ has: page.getByTestId('channel-binding-row').filter({ hasText: gameName }) });
+}
 
 /** A seeded binding as GET /admin/discord/bindings would list it (contract shape). */
 function bindingRow(s: Seeded, autoManaged: boolean): ChannelBindingDto {

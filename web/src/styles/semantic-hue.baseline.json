@@ -1,7 +1,7 @@
 {
   "__total": 636,
   "components/RootRedirect.tsx": 1,
-  "components/admin/ChannelBindingList.tsx": 2,
+  "components/admin/ChannelBindingRow.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
   "components/admin/DynamicCategoryCard.tsx": 2,
   "components/admin/admin-sidebar.tsx": 2,
