@@ -2,7 +2,8 @@
  * ROK-1716: the Forever probe's candidate x region matrix. Each cell holds one
  * status chip per probed endpoint (realm, connected-realm, playable-race,
  * profile, ROK-2102's ruleset / profile-family / guild-roster, and ROK-2103's
- * static journal tiers / instances / classes), labelled
+ * static journal tiers / instances / classes, ROK-2108's keys-only profile
+ * extras / guild summary / ruleset detail), labelled
  * short in the legend. Matches are listed above the matrix: a ruleset-index
  * signal reads "ruleset index", a Skyborne one its race name. Collapsed by default; the table scrolls inside its own container
  * so a phone never gets page overflow. Table styling follows the admin logs /
@@ -16,6 +17,8 @@ const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = [
     'realm', 'connected-realm', 'playable-race', 'ruleset', 'profile',
     'profile-equipment', 'profile-professions', 'profile-quests', 'profile-media', 'guild-roster',
     'journal-expansion', 'journal-instance', 'playable-class',
+    'ruleset-detail', 'profile-specializations', 'profile-encounters-raids', 'profile-encounters-dungeons',
+    'profile-reputations', 'profile-achievements', 'profile-statistics', 'profile-quests-completed', 'guild-summary',
 ];
 /** Legend label per endpoint — the ROK-2102 additions get short names so the legend stays one line. */
 const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
@@ -23,6 +26,10 @@ const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     profile: 'profile', 'profile-equipment': 'equip', 'profile-professions': 'prof', 'profile-quests': 'quests',
     'profile-media': 'media', 'guild-roster': 'guild',
     'journal-expansion': 'Journal tiers', 'journal-instance': 'Journal instances', 'playable-class': 'Classes',
+    // ROK-2108: keys-only profile sub-resources, guild summary and ruleset detail.
+    'ruleset-detail': 'ruleset detail', 'profile-specializations': 'specs', 'profile-encounters-raids': 'raids',
+    'profile-encounters-dungeons': 'dungeons', 'profile-reputations': 'reps', 'profile-achievements': 'achievements',
+    'profile-statistics': 'stats', 'profile-quests-completed': 'quests done', 'guild-summary': 'guild summary',
 };
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';

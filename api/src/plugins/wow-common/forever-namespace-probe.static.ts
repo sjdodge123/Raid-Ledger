@@ -11,6 +11,10 @@ import {
   type ProbeTarget,
 } from './forever-namespace-probe.forever';
 import type { ProbeUrl, ShapeSummary } from './forever-namespace-probe.helpers';
+import {
+  isDeepKeysEndpoint,
+  summariseDeepKeys,
+} from './forever-namespace-probe.profile-extra';
 
 /** Static index endpoint → its `data/wow` path. */
 export const STATIC_ENDPOINTS: readonly [ForeverProbeEndpoint, string][] = [
@@ -95,15 +99,19 @@ function isStaticEndpoint(endpoint: ForeverProbeEndpoint): boolean {
 
 /** True when the endpoint's shape is keys-only or a static named shape. */
 export function hasCustomShape(endpoint: ForeverProbeEndpoint): boolean {
-  return isKeysOnlyEndpoint(endpoint) || isStaticEndpoint(endpoint);
+  return (
+    isKeysOnlyEndpoint(endpoint) ||
+    isStaticEndpoint(endpoint) ||
+    isDeepKeysEndpoint(endpoint)
+  );
 }
 
-/** The keys-only or static named shape for an endpoint {@link hasCustomShape} accepts. */
+/** The keys-only, deep-keys (ROK-2108) or static named shape for an endpoint {@link hasCustomShape} accepts. */
 export function summariseCustomShape(
   endpoint: ForeverProbeEndpoint,
   body: unknown,
 ): NamedShapeSummary {
-  return isStaticEndpoint(endpoint)
-    ? summariseStaticShape(endpoint, body)
-    : summariseKeys(body);
+  if (isStaticEndpoint(endpoint)) return summariseStaticShape(endpoint, body);
+  if (isDeepKeysEndpoint(endpoint)) return summariseDeepKeys(body); // ROK-2108
+  return summariseKeys(body);
 }

@@ -120,6 +120,16 @@ export const ForeverProbeEndpointSchema = z.enum([
     'journal-expansion',
     'journal-instance',
     'playable-class',
+    // ROK-2108: keys-only profile sub-resources, guild summary, ruleset detail.
+    'profile-specializations',
+    'profile-encounters-raids',
+    'profile-encounters-dungeons',
+    'profile-reputations',
+    'profile-achievements',
+    'profile-statistics',
+    'profile-quests-completed',
+    'guild-summary',
+    'ruleset-detail',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 

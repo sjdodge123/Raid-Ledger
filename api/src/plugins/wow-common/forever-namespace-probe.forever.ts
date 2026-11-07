@@ -35,7 +35,11 @@ const PROFILE_DETAILS: readonly [ForeverProbeEndpoint, string][] = [
 ];
 
 /** `?namespace=<kind>-<prefix>-<region>&locale=en_US`. */
-function query(kind: string, prefix: string, region: string): string {
+export function probeQuery(
+  kind: string,
+  prefix: string,
+  region: string,
+): string {
   return `?namespace=${kind}-${prefix}-${region}&locale=en_US`;
 }
 
@@ -52,12 +56,12 @@ export function buildRulesetUrl(prefix: string, region: string): ProbeUrl {
   const base = `https://${region}.api.blizzard.com/data/wow`;
   return {
     endpoint: 'ruleset',
-    url: `${base}/ruleset/index${query('dynamic', prefix, region)}`,
+    url: `${base}/ruleset/index${probeQuery('dynamic', prefix, region)}`,
   };
 }
 
 /** Profile root (no query) for `<realm>/<name>` or a realmless `<slug>`. */
-function profileRoot(path: string, region: string): string {
+export function profileRoot(path: string, region: string): string {
   return `https://${region}.api.blizzard.com/profile/wow/character/${encodePath(path)}`;
 }
 
@@ -67,7 +71,7 @@ export function buildProfileUrl(
   prefix: string,
   region: string,
 ): string {
-  return `${profileRoot(path, region)}${query('profile', prefix, region)}`;
+  return `${profileRoot(path, region)}${probeQuery('profile', prefix, region)}`;
 }
 
 /** The four profile sub-resource URLs (same namespace as the profile). */
@@ -77,7 +81,7 @@ export function buildProfileDetailUrls(
   region: string,
 ): ProbeUrl[] {
   const root = profileRoot(path, region);
-  const q = query('profile', prefix, region);
+  const q = probeQuery('profile', prefix, region);
   return PROFILE_DETAILS.map(([endpoint, sub]) => ({
     endpoint,
     url: `${root}/${sub}${q}`,
@@ -91,7 +95,7 @@ export function buildGuildRosterUrl(
   region: string,
 ): string {
   const base = `https://${region}.api.blizzard.com/data/wow/guild`;
-  return `${base}/${encodePath(path)}/roster${query('profile', prefix, region)}`;
+  return `${base}/${encodePath(path)}/roster${probeQuery('profile', prefix, region)}`;
 }
 
 /** Profile + guild roster URLs for one matched target (each only if set). */
