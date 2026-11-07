@@ -35,11 +35,14 @@ export interface ResolvedRosterResult {
  *
  * Blizzard seam (H23): no Blizzard source ships yet. One registers through
  * {@link registerBlizzardSource} and is consulted only while the seam is
- * live: a source is registered AND `wow_forever_namespace_prefix` is set and
- * isn't the `classicforever` alias (the same test as
- * `forever-config.service.ts::namespacePrefixIsDefault`). That prefix check is
- * a PROXY for "the admin set the prefix after the ROK-1716 probe" — it is not
- * proof the probe currently reports the namespace live. Only while the seam
+ * live: a source is registered AND the STORED override
+ * `wow_forever_namespace_prefix` is set and isn't the `classicforever` alias.
+ * It reads the stored override, NOT the effective prefix: since ROK-2102 the
+ * effective prefix defaults to `forever` with the key absent, so the seam
+ * stays off until an admin stores an override (whether to key it on the
+ * effective prefix instead belongs to the story that first registers a
+ * Blizzard source — ROK-2102 FLAG A1). It is not proof the probe currently
+ * reports the namespace live. Only while the seam
  * is live do blizzard facts get the fresh-window override
  * (`fact-precedence.ts` rule 2); otherwise blizzard-labelled facts (an
  * Armory-synced `characters` row) compete on newest `asOf` only.

@@ -194,18 +194,18 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
 };
 
 /**
- * The WoW: Forever namespace ALIAS + default (ROK-1563, ROK-1717). Blizzard has
- * NOT published the real Forever namespace yet (launch 2026-11-04). This value
+ * The WoW: Forever namespace ALIAS (ROK-1563, ROK-1717, ROK-2102). This value
  * is what the games row stores and what `variantToNamespacePrefix` returns; it
- * is resolved to the admin setting `wow_forever_namespace_prefix` only at the
- * Blizzard-call edge (`getNamespacePrefixes`, via forever-namespace.resolver).
- * On ship day an admin changes the setting — no deploy, no constant edit.
+ * is resolved only at the Blizzard-call edge (`getNamespacePrefixes`, via
+ * forever-namespace.resolver) to the admin setting
+ * `wow_forever_namespace_prefix`, or to `forever` when none is set — the prefix
+ * the ROK-2102 probe confirmed on 2026-11-06 (`static-forever-*` → 200).
  *
- * A wrong prefix makes the Blizzard API answer 403 (not 404 — observed
- * 2026-09, ROK-1636) for both the profile and realm-index calls. That surfaces
- * as a 502 "Blizzard's API doesn't serve … for this game version yet" (see
- * blizzard-upstream-error.ts), not "character not found". Mapping the variant
- * to `null` instead would silently read RETAIL data, which is strictly worse.
+ * History: before that probe the alias itself was sent and Blizzard answered
+ * 403 (not 404 — observed 2026-09, ROK-1636), surfacing as a 502 "Blizzard's
+ * API doesn't serve … for this game version yet" (blizzard-upstream-error.ts).
+ * Mapping the variant to `null` instead would silently read RETAIL data,
+ * which is strictly worse — never do it.
  */
 export const WOW_FOREVER_NAMESPACE_PREFIX = FOREVER_NAMESPACE_ALIAS;
 

@@ -43,10 +43,10 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
     expect(getForeverNamespacePrefix()).toBe('foo');
   });
 
-  it('reports the defaults when nothing is stored', async () => {
+  it('reports the forever default when nothing is stored (ROK-2102)', async () => {
     const { service } = setup();
     await expect(service.getConfig()).resolves.toEqual({
-      namespacePrefix: 'classicforever',
+      namespacePrefix: 'forever',
       namespacePrefixIsDefault: true,
       armoryImportEnabled: false,
       wowheadResolverEnabled: true,
@@ -80,18 +80,6 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     await expect(service.getCapabilities()).resolves.toEqual({
       armoryImport: { wow_forever: true },
     });
-  });
-
-  it('deletes both keys when saved back to the defaults', async () => {
-    const { service, store } = setup({
-      [WOW_FOREVER_NAMESPACE_PREFIX_KEY]: 'foo',
-      [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'true',
-    });
-    await service.updateConfig({
-      namespacePrefix: 'classicforever',
-      armoryImportEnabled: false,
-    });
-    expect([...store.keys()]).toEqual([]);
   });
 
   it('treats any stored flag value other than "true" as disabled', async () => {
@@ -139,9 +127,37 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     const { service, blizzard } = setup();
     service.handleConfigUpdated({ namespacePrefix: 'foo' });
     expect(getForeverNamespacePrefix()).toBe('foo');
-    expect(blizzard.purgeNamespace.mock.calls).toEqual([
-      ['classicforever'],
-      ['foo'],
-    ]);
+    expect(blizzard.purgeNamespace.mock.calls).toEqual([['forever'], ['foo']]);
+  });
+});
+
+describe('ForeverConfigService default prefix (ROK-2102)', () => {
+  afterEach(() => setForeverNamespacePrefix(null));
+
+  it.each(['forever', 'classicforever'])(
+    'deletes both keys when saved back to the defaults with %p (ROK-2102)',
+    async (namespacePrefix) => {
+      const { service, store, events } = setup({
+        [WOW_FOREVER_NAMESPACE_PREFIX_KEY]: 'foo',
+        [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'true',
+      });
+      const res = await service.updateConfig({
+        namespacePrefix,
+        armoryImportEnabled: false,
+      });
+      expect([...store.keys()]).toEqual([]);
+      expect(res.namespacePrefix).toBe('forever');
+      expect(res.namespacePrefixIsDefault).toBe(true);
+      expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
+        namespacePrefix,
+      });
+    },
+  );
+
+  it('an alias save moves the resolver back to forever', () => {
+    const { service } = setup();
+    setForeverNamespacePrefix('foo');
+    service.handleConfigUpdated({ namespacePrefix: 'classicforever' });
+    expect(getForeverNamespacePrefix()).toBe('forever');
   });
 });
