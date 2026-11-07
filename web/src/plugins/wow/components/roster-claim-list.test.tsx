@@ -11,6 +11,7 @@ import type { CharacterDto, RosterClaimListResponseDto } from '@raid-ledger/cont
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { invalidateAllHubMemberships } from '../../../components/hub/community/invalidate-hub-membership';
+import { withoutMember } from '../lib/roster-claim';
 import { RosterClaimList } from './roster-claim-list';
 
 vi.mock('../../../components/hub/community/invalidate-hub-membership', () => ({
@@ -35,6 +36,23 @@ const LIST: RosterClaimListResponseDto = {
 
 function serveList(list: RosterClaimListResponseDto = LIST): void {
     server.use(http.get(`${API_BASE}/plugins/wow/roster-claim/candidates`, () => HttpResponse.json(list)));
+}
+
+/**
+ * The server side of a lost race: the claim 409s, and from then on the
+ * candidates refetch the 409 triggers no longer lists the row (a static LIST
+ * would hand the row back and race the optimistic drop).
+ */
+function serveLostRace(memberId: number): void {
+    let claimedElsewhere = false;
+    server.use(
+        http.get(`${API_BASE}/plugins/wow/roster-claim/candidates`, () => HttpResponse.json(
+            claimedElsewhere ? { ...LIST, guilds: withoutMember(LIST.guilds, memberId) } : LIST)),
+        http.post(`${API_BASE}/plugins/wow/roster-claim/members/:memberId/claim`, () => {
+            claimedElsewhere = true;
+            return HttpResponse.json({ message: 'Someone claimed this first' }, { status: 409 });
+        }),
+    );
 }
 
 function renderList(opts: { existing?: CharacterDto[]; onClaimed?: () => void; onSwitchTab?: (t: 'manual' | 'import') => void } = {}) {
@@ -89,9 +107,7 @@ describe('RosterClaimList (ROK-2128)', () => {
     });
 
     it('removes the row when someone claimed it first (409)', async () => {
-        serveList();
-        server.use(http.post(`${API_BASE}/plugins/wow/roster-claim/members/:memberId/claim`, () =>
-            HttpResponse.json({ message: 'Someone claimed this first' }, { status: 409 })));
+        serveLostRace(12);
         const onClaimed = vi.fn();
         renderList({ onClaimed });
         await userEvent.click(await screen.findByRole('button', { name: 'Claim Brine Hollow' }));
