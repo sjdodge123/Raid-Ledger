@@ -115,7 +115,8 @@ export function CharacterDetailSections({
             <CharacterQuestsSection characterId={characterId} variant={variant} />
             <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}
-                isOwner={isOwner} characterId={characterId} gameId={gameId} />
+                isOwner={isOwner} characterId={characterId} gameId={gameId}
+                source={character?.professionsSource ?? null} />
         </>
     );
 }

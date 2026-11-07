@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { at } from '../../../test/defined';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
 import { CharacterProfessionsPanel } from './CharacterProfessionsPanel';
@@ -144,5 +144,39 @@ describe('CharacterProfessionsPanel — Discard really drops the draft (ROK-1655
 
         await user.click(screen.getByRole('button', { name: /^edit$/i }));
         expect(skillInputs()[0]?.value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
+    });
+});
+
+describe('CharacterProfessionsPanel — professions source pill (ROK-2107 AC8)', () => {
+    const panel = () => screen.getByRole('region', { name: 'Professions' });
+
+    it.each([
+        ['blizzard', 'Armory'],
+        ['manual', 'Manual'],
+    ] as const)('source %s → a "%s" pill next to the heading', (source, label) => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false}
+            characterId="c1" gameId={1} source={source} />);
+        const pill = within(panel()).getByText(label, { exact: true });
+        expect(pill.closest('[data-tone]'), `the ${label} label must render as a Pill`).not.toBeNull();
+        expect(pill.closest('[data-tone]')?.getAttribute('title')).toMatch(source === 'blizzard' ? /Armory/ : /by hand/);
+    });
+
+    it.each([null, undefined])('source %j → no pill', (source) => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner
+            characterId="c1" gameId={1} {...(source === null ? { source } : {})} />);
+        expect(panel().querySelector('[data-tone]'), 'unknown provenance renders no pill').toBeNull();
+    });
+
+    it('no pill on the empty owner CTA even when a source is set', () => {
+        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" gameId={1} source="blizzard" />);
+        expect(within(panel()).queryByText('Armory', { exact: true })).toBeNull();
+        expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
+    });
+
+    it('keeps the manual Edit flow on an Armory-sourced value', async () => {
+        const user = userEvent.setup();
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} source="blizzard" />);
+        await user.click(screen.getByRole('button', { name: /^edit$/i }));
+        expect(screen.getByRole('dialog', { name: 'Edit Professions' })).toBeInTheDocument();
     });
 });

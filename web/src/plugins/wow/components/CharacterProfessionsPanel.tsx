@@ -1,17 +1,25 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type {
+    CharacterDto,
     CharacterProfessionsDto,
     ProfessionEntryDto,
     ProfessionTierDto,
 } from '@raid-ledger/contract';
 import { getProfessionIconUrl } from '../lib/profession-icons';
 import { EditProfessionsModal } from './EditProfessionsModal';
+import { Pill } from '../../../components/hub/hub-bits';
+import { sourceLabel } from '../hub-widgets/professions.helpers';
+
+/** ROK-2107 — where the shown (effective) professions came from; null/undefined = unknown. */
+export type ProfessionsSource = CharacterDto['professionsSource'];
 
 interface CharacterProfessionsPanelProps {
     professions: CharacterProfessionsDto | null;
     isOwner: boolean;
     characterId: string;
     gameId: number;
+    /** ROK-2107 — provenance of `professions`; renders an "Armory" / "Manual" pill when set. */
+    source?: ProfessionsSource;
 }
 
 function hasProfessionData(professions: CharacterProfessionsDto | null): professions is CharacterProfessionsDto {
@@ -19,18 +27,20 @@ function hasProfessionData(professions: CharacterProfessionsDto | null): profess
 }
 
 export function CharacterProfessionsPanel({
-    professions, isOwner, characterId, gameId,
+    professions, isOwner, characterId, gameId, source,
 }: CharacterProfessionsPanelProps) {
     const [isEditing, setIsEditing] = useState(false);
+    const headingId = useId();
     const hasData = hasProfessionData(professions);
     if (!hasData && !isOwner) return null;
     const openEdit = () => setIsEditing(true);
     return (
         <>
-            <div className="bg-panel border border-edge rounded-lg p-6">
-                <PanelHeader showEdit={isOwner && hasData} onEdit={openEdit} />
+            <section aria-labelledby={headingId} className="bg-panel border border-edge rounded-lg p-6">
+                <PanelHeader headingId={headingId} showEdit={isOwner && hasData} onEdit={openEdit}
+                    source={hasData ? source ?? null : null} />
                 {hasData ? <ProfessionsBody professions={professions} /> : <AddProfessionsCta onAdd={openEdit} />}
-            </div>
+            </section>
             {/* Mounted only while editing: the drafts are useState initialisers, so
                 every open (after Discard, or after Save + refetch) starts from `professions`. */}
             {isOwner && isEditing && (
@@ -41,10 +51,31 @@ export function CharacterProfessionsPanel({
     );
 }
 
-function PanelHeader({ showEdit, onEdit }: { showEdit: boolean; onEdit: () => void }) {
+interface PanelHeaderProps {
+    headingId: string;
+    showEdit: boolean;
+    onEdit: () => void;
+    source: ProfessionsSource | null;
+}
+
+const SOURCE_TITLE = {
+    blizzard: 'Synced from the Blizzard Armory',
+    manual: 'Entered by hand; the Armory sync does not change it',
+} as const;
+
+/** "Armory" / "Manual" — the hub widget's per-member source copy, capitalised. */
+function professionsSourceLabel(source: 'manual' | 'blizzard'): string {
+    const label = sourceLabel(source);
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function PanelHeader({ headingId, showEdit, onEdit, source }: PanelHeaderProps) {
     return (
         <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Professions</h2>
+            <div className="flex items-center gap-2">
+                <h2 id={headingId} className="text-lg font-semibold text-foreground">Professions</h2>
+                {source && <Pill title={SOURCE_TITLE[source]}>{professionsSourceLabel(source)}</Pill>}
+            </div>
             {showEdit && (
                 <button type="button" onClick={onEdit}
                     className="text-sm text-indigo-400 hover:text-indigo-300">

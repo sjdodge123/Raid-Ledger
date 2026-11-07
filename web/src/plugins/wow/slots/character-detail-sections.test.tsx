@@ -14,7 +14,10 @@ import { CharacterDetailSections } from './character-detail-sections';
 import { FOREVER_ADDON_HINT_EQUIPMENT, FOREVER_ADDON_HINT_TALENTS } from '../lib/wow-variant-config';
 
 vi.mock('../hooks/use-wowhead-tooltips', () => ({ useWowheadTooltips: vi.fn() }));
-vi.mock('../components/CharacterProfessionsPanel', () => ({ CharacterProfessionsPanel: () => null }));
+const panelProps = vi.hoisted(() => vi.fn());
+vi.mock('../components/CharacterProfessionsPanel', () => ({
+    CharacterProfessionsPanel: (props: unknown) => { panelProps(props); return null; },
+}));
 
 const ARMORY_EQUIPMENT = 'Equipment data is only available for characters imported from the Blizzard Armory.';
 const ARMORY_TALENTS = 'Talent data is only available for characters imported from the Blizzard Armory.';
@@ -194,5 +197,21 @@ describe('CharacterDetailSections — Forever portrait in the equipment render s
         quietQuests();
         renderSections({ ...forever, renderUrl: 'https://render.example/main-raw.png' });
         expect(screen.queryByTestId('equipment-portrait')).toBeNull();
+    });
+});
+
+describe('CharacterDetailSections — professions source (ROK-2107 AC8)', () => {
+    const lastSource = () => (panelProps.mock.lastCall?.[0] as { source?: unknown } | undefined)?.source;
+
+    it.each([
+        ['wow_forever', 'blizzard'], ['wow_forever', 'manual'], ['retail', 'blizzard'], ['retail', 'manual'],
+    ])('%s character with professionsSource %s → the panel gets that source', (gameVariant, source) => {
+        renderSections({ gameVariant, character: { professionsSource: source } });
+        expect(lastSource(), `panel source for ${gameVariant}`).toBe(source);
+    });
+
+    it('a character without professionsSource → the panel gets null (no pill)', () => {
+        renderSections({ gameVariant: 'retail' });
+        expect(lastSource()).toBeNull();
     });
 });
