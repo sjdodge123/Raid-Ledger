@@ -375,4 +375,18 @@ describe('fetchCharacterProfessions — tier-only header (Forever 0/0 fix)', () 
     expect(mining.skillLevel).toBe(0);
     expect(mining.maxSkillLevel).toBe(0);
   });
+
+  // ROK-2130 review MINOR-2: never mix a header value with a tier value.
+  it('does not take the tier when one top-level value is present', async () => {
+    const result = await fetchPrimaries([
+      {
+        profession: { id: 186, name: 'Mining' },
+        skill_points: 0,
+        tiers: [tier(186, 'Mining', 95, 150)],
+      },
+    ]);
+    const mining = at(result?.primary ?? [], 0);
+    expect(mining.skillLevel).toBe(0);
+    expect(mining.maxSkillLevel).toBe(0);
+  });
 });
