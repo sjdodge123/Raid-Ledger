@@ -94,7 +94,9 @@ function memberId(name: string): number {
 async function makeUser(
   handle: string,
 ): Promise<{ id: number; token: string }> {
-  const email = `${handle}@roster-claim-l2.test`;
+  // Login looks the credential up by the LOWER-cased email, so it is stored
+  // lower-cased here (a mixed-case handle like 'l2raceA' otherwise 401s).
+  const email = `${handle}@roster-claim-l2.test`.toLowerCase();
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
@@ -110,7 +112,11 @@ async function makeUser(
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
-  return { id: user.id, token: res.body.access_token as string };
+  const token: unknown = res.body.access_token;
+  if (typeof token !== 'string') {
+    throw new Error(`makeUser(${handle}): /auth/local ${res.status}, no token`);
+  }
+  return { id: user.id, token };
 }
 
 async function seedRoster(): Promise<void> {
