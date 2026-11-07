@@ -6,6 +6,8 @@ import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
 import { GuildContentController } from './guilds/guild-content.controller';
+import { GuildBlizzardRosterController } from './guilds/guild-blizzard-roster.controller';
+import { GuildBlizzardRosterService } from './guilds/guild-blizzard-roster.service';
 import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
@@ -87,6 +89,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     CharacterQuestsController,
     GuildsController,
     GuildContentController,
+    GuildBlizzardRosterController,
   ],
   providers: [
     BlizzardService,
@@ -121,6 +124,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     GuildPageService,
     GuildRaidsService,
     GuildAddonsService,
+    GuildBlizzardRosterService,
     WowHubKindAdapter,
     // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
     RosterFactSource,

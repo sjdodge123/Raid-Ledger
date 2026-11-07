@@ -60,6 +60,8 @@ const hubRow: schema.GuildSelect = {
   blurb: 'Act 3 runs',
   proposedBy: 5,
   blizzardGuildId: null,
+  blizzardRosterSyncedAt: null,
+  blizzardRosterStatus: null,
   reviewedBy: null,
   reviewedAt: null,
   archivedAt: null,

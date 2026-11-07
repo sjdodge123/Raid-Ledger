@@ -74,6 +74,8 @@ const HUB: schema.GuildSelect = {
   blurb: '',
   proposedBy: 1,
   blizzardGuildId: null,
+  blizzardRosterSyncedAt: null,
+  blizzardRosterStatus: null,
   reviewedBy: 1,
   reviewedAt: AT,
   archivedAt: null,
