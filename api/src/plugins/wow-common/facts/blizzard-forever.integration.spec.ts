@@ -213,7 +213,8 @@ describe('WowFactsService.resolveFacts — Blizzard Forever seam (real DB)', () 
     ]);
     expect(got?.quests?.source).toBe('addon');
     expect(got?.lockouts?.source).toBe('addon');
-    expect(got?.professions?.source).toBe('manual');
+    // ROK-2107 F0 (2026-11-07): Blizzard wins professions; manual is the fallback.
+    expect(got?.professions?.source).toBe('blizzard');
   });
 
   it('live: the manual Forever row gets nothing blizzard-sourced', async () => {
