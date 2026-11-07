@@ -17,6 +17,7 @@ import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
 import { SearchInput } from '../../../components/ui/search-input';
+import { useDebouncedValue } from '../../../hooks/use-debounced-value';
 import { ModalEmptyState } from '../../../components/ui/modal-helpers';
 import { toast } from '../../../lib/toast';
 import { httpStatusOf } from '../../../lib/api/api-error';
@@ -129,9 +130,10 @@ function useClaimHandler(gameId: number, existing: CharacterDto[], ruleset: WowF
 
 /** The "Guild roster" body of the Add character dialog (WoW: Forever only). */
 export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, onClaimed, onSwitchTab }: RosterClaimListProps): JSX.Element {
-    const { data, isLoading } = useRosterClaimCandidates(gameId, true);
-    const [ruleset, setRuleset] = useState<WowForeverSelectableRuleset>(() => defaultClaimRuleset(existingCharacters));
     const [query, setQuery] = useState('');
+    // Codex P2: the server filters by name BEFORE its 1000-row cap; the local filter narrows while typing.
+    const { data, isLoading } = useRosterClaimCandidates(gameId, true, useDebouncedValue(query, 300));
+    const [ruleset, setRuleset] = useState<WowForeverSelectableRuleset>(() => defaultClaimRuleset(existingCharacters));
     const visible = useMemo(() => filterRosterGuilds(data?.guilds ?? [], query), [data, query]);
     const { onClaim, pendingId } = useClaimHandler(gameId, existingCharacters, ruleset, onClaimed);
     return (

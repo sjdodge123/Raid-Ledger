@@ -111,14 +111,14 @@ function MmoFields({ form, updateField, showRealm }: { form: FormState; updateFi
 function useCharacterStepState(preselectedGame: GameRegistryDto) {
     const createMutation = useCreateCharacter();
     const deleteMutation = useDeleteCharacter();
-    const { data: myCharsData } = useMyCharacters(preselectedGame.id);
+    const { data: myCharsData, isLoading: charsLoading } = useMyCharacters(preselectedGame.id);
     const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'roster'>('manual');
     const [form, setForm] = useState<FormState>(EMPTY_FORM);
     const [errors, setErrors] = useState<StepErrors>({});
     const existingChars = myCharsData?.data ?? [];
     function updateField<K extends keyof FormState>(field: K, value: FormState[K]) { setForm((prev) => ({ ...prev, [field]: value })); }
     function resetForm() { setForm(EMPTY_FORM); setErrors({}); setActiveTab('manual'); }
-    return { createMutation, deleteMutation, activeTab, setActiveTab, form, errors, setErrors, existingChars, updateField, resetForm };
+    return { createMutation, deleteMutation, activeTab, setActiveTab, form, errors, setErrors, existingChars, charsLoading, updateField, resetForm };
 }
 
 /** Step: Create a Character for a specific game. */
@@ -155,7 +155,7 @@ function CharacterStepForm({ s, identity, preselectedGame, onRegisterValidator, 
 }) {
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
-            {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, gameId: preselectedGame.id, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
+            {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, gameId: preselectedGame.id, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, charactersLoading: s.charsLoading, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
                     {identity ? <identity.Fields value={identityValueOf(identity, s.form)} onChange={(v) => s.updateField('identity', v)} errors={s.errors.identity} /> : (
