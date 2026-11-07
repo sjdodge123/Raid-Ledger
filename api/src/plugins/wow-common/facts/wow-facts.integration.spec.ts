@@ -7,6 +7,8 @@
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { SettingsService } from '../../../settings/settings.service';
+import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { WowFactsService } from './wow-facts.service';
 
 const SNAP = new Date('2026-11-04T20:00:00.000Z');
@@ -220,7 +222,15 @@ async function seedArmoryCharacter(): Promise<string> {
 }
 
 describe('WowFactsService.resolveFacts — CharacterRow Armory row (real DB)', () => {
-  it('a recent blizzard-labelled row loses to a newer addon snapshot while the seam is off', async () => {
+  afterEach(() =>
+    testApp.app.get(SettingsService).set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'true'),
+  );
+
+  it('a recent blizzard-labelled row loses to a newer addon snapshot while the Armory switch is off', async () => {
+    // Since #1979 the alias and a null prefix both resolve to `forever`; only the kill switch turns the seam off.
+    await testApp.app
+      .get(SettingsService)
+      .set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'false');
     const characterId = await seedArmoryCharacter();
     const got = await facts.resolveFacts(
       [{ key: 'armory', memberId: null, characterId }],

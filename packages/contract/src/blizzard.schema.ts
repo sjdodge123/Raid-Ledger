@@ -116,6 +116,20 @@ export const ForeverProbeEndpointSchema = z.enum([
     'profile-quests',
     'profile-media',
     'guild-roster',
+    // ROK-2103: static-namespace journal + class indexes per matched target.
+    'journal-expansion',
+    'journal-instance',
+    'playable-class',
+    // ROK-2108: keys-only profile sub-resources, guild summary, ruleset detail.
+    'profile-specializations',
+    'profile-encounters-raids',
+    'profile-encounters-dungeons',
+    'profile-reputations',
+    'profile-achievements',
+    'profile-statistics',
+    'profile-quests-completed',
+    'guild-summary',
+    'ruleset-detail',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
@@ -146,6 +160,30 @@ export const ForeverProbeFoundSchema = z.object({ prefix: z.string(), at: z.stri
 export type ForeverProbeFoundDto = z.infer<typeof ForeverProbeFoundSchema>;
 
 /** Latest probe run, as stored and as the admin panel shows it. */
+/**
+ * ROK-2103: a static-index shape — keys-only plus the entries' public names
+ * (journal tiers, journal instances, classes). Never ids, hrefs or a sample.
+ */
+export const ForeverProbeNamedShapeSchema = z.object({
+    topLevelKeys: z.array(z.string()),
+    entryCount: z.number().int().nonnegative(),
+    names: z.array(z.string().max(120)).max(200),
+});
+export type ForeverProbeNamedShapeDto = z.infer<typeof ForeverProbeNamedShapeSchema>;
+
+/**
+ * ROK-2108: a keys-only shape for the profile extras, guild summary and ruleset
+ * detail — top-level keys plus, per top-level array, its first element's keys
+ * and its length. Never values. `entryCount` is always 0 for this shape.
+ */
+export const ForeverProbeDeepKeysShapeSchema = z.object({
+    topLevelKeys: z.array(z.string()),
+    entryCount: z.number().int().nonnegative(),
+    arrayKeys: z.record(z.string(), z.array(z.string())),
+    arrayLengths: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type ForeverProbeDeepKeysShapeDto = z.infer<typeof ForeverProbeDeepKeysShapeSchema>;
+
 export const ForeverProbeResultSchema = z.object({
     ranAt: z.string(),
     durationMs: z.number().int().nonnegative(),
@@ -170,9 +208,11 @@ export type ForeverProbeStateDto = z.infer<typeof ForeverProbeStateSchema>;
 /**
  * A probe path: Classic `<realmOrRuleset>/<name>` OR a realmless Forever slug
  * `<name-surname>` (ROK-2102). A dot-only name (`.`/`..`) would resolve to
- * another Blizzard path, so it is rejected.
+ * another Blizzard path, so it is rejected. Letters are Unicode (`\p{L}`, `u`
+ * flag — ROK-2104) so an accented realmless name like `Zoë-Ashbringer` is
+ * expressible; the probe percent-encodes each segment before calling Blizzard.
  */
-export const FOREVER_PROBE_PATH_RE = /^(?:[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}|[a-z0-9-]{1,64})$/i;
+export const FOREVER_PROBE_PATH_RE = /^(?:[\p{L}\p{N}-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}|[\p{L}\p{N}-]{1,64})$/iu;
 
 /** Admin PUT body: extra candidate prefixes + optional character / guild probe paths. */
 export const ForeverProbeConfigSchema = z.object({

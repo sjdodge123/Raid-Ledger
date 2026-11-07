@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { WOW_FOREVER_NAMESPACE_PREFIX_KEY } from '../forever.settings';
+import { setForeverNamespacePrefix } from '../forever-namespace.resolver';
+import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { WowFactsService } from './wow-facts.service';
 import {
   MAX_ROSTER_ROWS,
@@ -26,7 +27,11 @@ function fakeSource(
   };
 }
 
+afterEach(() => setForeverNamespacePrefix(null));
+
+/** `prefix` is the EFFECTIVE Forever prefix (ROK-1920 seam). */
 function build(prefix: string | null) {
+  setForeverNamespacePrefix(prefix);
   const roster = fakeSource('roster', {
     level: { value: 58, source: 'roster', asOf: ago(3 * HOUR) },
   });
@@ -60,7 +65,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
       source: 'blizzard',
       asOf: ago(20 * HOUR),
     });
-    expect(settings.get).toHaveBeenCalledWith(WOW_FOREVER_NAMESPACE_PREFIX_KEY);
+    expect(settings.get).toHaveBeenCalledWith(WOW_FOREVER_ARMORY_IMPORT_KEY);
   });
 
   it('a stale blizzard value loses to a newer addon value', async () => {
@@ -70,13 +75,23 @@ describe('WowFactsService — Blizzard registration seam', () => {
     expect(got.facts.get('m1')?.level?.source).toBe('addon');
   });
 
-  it('is not consulted while the namespace is the default alias', async () => {
-    const { service } = build(null);
-    const blizzard = blizzardAt(NOW);
-    service.registerBlizzardSource(blizzard);
-    const got = await service.resolveFacts([REF], NOW);
-    expect(blizzard.load).not.toHaveBeenCalled();
-    expect(got.facts.get('m1')?.level?.source).toBe('addon');
+  // Since ROK-2102 step 2 (#1979) the default prefix resolves to `forever`,
+  // so with the default prefix the Armory switch alone decides the seam.
+  it('with the default prefix: consulted while the switch is on, not while it is off', async () => {
+    const on = build(null);
+    const live = blizzardAt(NOW);
+    on.service.registerBlizzardSource(live);
+    const gotOn = await on.service.resolveFacts([REF], NOW);
+    expect(live.load).toHaveBeenCalledTimes(1);
+    expect(gotOn.facts.get('m1')?.level?.source).toBe('blizzard');
+
+    const off = build(null);
+    off.settings.get.mockResolvedValue('false');
+    const idle = blizzardAt(NOW);
+    off.service.registerBlizzardSource(idle);
+    const gotOff = await off.service.resolveFacts([REF], NOW);
+    expect(idle.load).not.toHaveBeenCalled();
+    expect(gotOff.facts.get('m1')?.level?.source).toBe('addon');
   });
 
   it('no blizzard source is registered by default', async () => {
