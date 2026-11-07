@@ -316,8 +316,13 @@ export async function insertOrMergeImport(
   isUniqueViolation: (err: unknown, name: string) => boolean,
   identity?: Identity,
 ): Promise<CharacterDto> {
-  const { profile, equipment, talents, professions } = fetched;
-  const sync: OptionalSyncFields = { equipment, talents, professions };
+  const { profile, equipment, talents, professions, armoryQuests } = fetched;
+  const sync: OptionalSyncFields = {
+    equipment,
+    talents,
+    professions,
+    armoryQuests,
+  };
   try {
     return await db.transaction((tx) =>
       executeImportTx(tx, userId, gameId, profile, dto, sync, logger, identity),

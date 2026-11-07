@@ -17,7 +17,7 @@ import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-poin
 import { EnrichmentsService } from '../enrichments/enrichments.service';
 import {
   fetchFullProfile,
-  buildSyncUpdateFields,
+  buildSyncUpdateFieldsFromSync,
 } from './characters-sync.helpers';
 import {
   mapCharacterToDto,
@@ -234,23 +234,17 @@ export class CharactersService {
       await policyH.loadExternalPolicy(this.pluginRegistry),
     );
     const nsPrefix = await crudH.resolveNsPrefix(this.db, character.gameId);
-    const { profile, talents, equipment, professions } = await fetchFullProfile(
+    const fetched = await fetchFullProfile(
       adapter,
       character.name,
       character.realm,
       region,
       nsPrefix,
     );
-    const fields = buildSyncUpdateFields(
-      profile,
-      equipment,
-      talents,
-      professions,
-      {
-        region,
-        gameVariant,
-      },
-    );
+    const fields = buildSyncUpdateFieldsFromSync(fetched.profile, fetched, {
+      region,
+      gameVariant,
+    });
     const result = await crudH.applyRefreshUpdate(
       this.db,
       userId,

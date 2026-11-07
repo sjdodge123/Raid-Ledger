@@ -21,6 +21,7 @@ import { BlizzardAuthService } from './blizzard-auth.service';
 import * as profileH from './blizzard-profile.helpers';
 import * as equipH from './blizzard-equipment.helpers';
 import * as profH from './blizzard-professions.helpers';
+import * as questH from './blizzard-quests.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as guildH from './blizzard-forever-guild.helpers';
 import * as instH from './blizzard-instance.helpers';
@@ -32,7 +33,10 @@ import {
 import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
 import { resolveBlizzardNamespacePrefix } from './forever-namespace.resolver';
-import type { ExternalCharacterProfessions } from '../plugin-host/extension-types';
+import type {
+  ExternalCharacterProfessions,
+  ExternalCharacterQuests,
+} from '../plugin-host/extension-types';
 
 // Re-export types for backward compatibility
 export type {
@@ -139,6 +143,24 @@ export class BlizzardService {
   ): Promise<ExternalCharacterProfessions | null> {
     const token = await this.auth.getAccessToken(region);
     return profH.fetchCharacterProfessions(
+      name,
+      realm,
+      region,
+      apiNamespacePrefix,
+      token,
+      this.logger,
+    );
+  }
+
+  /** ROK-2109: Forever completed quest ids (null = leave the column alone). */
+  async fetchCharacterQuests(
+    name: string,
+    realm: string | null,
+    region: string,
+    apiNamespacePrefix: string | null = null,
+  ): Promise<ExternalCharacterQuests | null> {
+    const token = await this.auth.getAccessToken(region);
+    return questH.fetchCharacterQuests(
       name,
       realm,
       region,
