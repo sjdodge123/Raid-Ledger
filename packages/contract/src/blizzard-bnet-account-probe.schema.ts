@@ -99,6 +99,57 @@ export const BnetProbeIdParitySchema = z.object({
 });
 export type BnetProbeIdParity = z.infer<typeof BnetProbeIdParitySchema>;
 
+/** A userinfo field's JSON type; `absent` = the key is missing. */
+export const BnetProbeJsonTypeSchema = z.enum([
+    'string',
+    'number',
+    'boolean',
+    'object',
+    'array',
+    'null',
+    'absent',
+]);
+export type BnetProbeJsonType = z.infer<typeof BnetProbeJsonTypeSchema>;
+
+/** The userinfo paths tried, in order (`/oauth/userinfo` only after a 404). */
+export const BnetProbeUserinfoPathSchema = z.enum([
+    '/userinfo',
+    '/oauth/userinfo',
+]);
+export type BnetProbeUserinfoPath = z.infer<typeof BnetProbeUserinfoPathSchema>;
+
+/** One userinfo call: status, or a transport error. */
+export const BnetProbeUserinfoAttemptSchema = z.object({
+    path: BnetProbeUserinfoPathSchema,
+    status: z.number().int().nullable(),
+    error: z.enum(['timeout', 'network']).nullable(),
+});
+export type BnetProbeUserinfoAttempt = z.infer<
+    typeof BnetProbeUserinfoAttemptSchema
+>;
+
+/**
+ * The OpenID `userinfo` answer, KEYS ONLY (operator ruling 2026-11-07): key
+ * names, the JSON type of `id`/`sub`/`battletag`, and whether `id` equals
+ * `sub` as strings. Never the BattleTag, id or sub value.
+ */
+export const BnetProbeUserinfoSummarySchema = z.object({
+    attempts: z.array(BnetProbeUserinfoAttemptSchema),
+    /** The path that answered 2xx; null when none did. */
+    answeredPath: BnetProbeUserinfoPathSchema.nullable(),
+    keys: z.array(z.string()),
+    idType: BnetProbeJsonTypeSchema,
+    subType: BnetProbeJsonTypeSchema,
+    battletagType: BnetProbeJsonTypeSchema,
+    /** `String(id) === String(sub)`; null unless both are strings/numbers. */
+    idEqualsSub: z.boolean().nullable(),
+    /** OAuth error code of a failed answer (`invalid_token`), else null. */
+    errorCode: z.string().nullable(),
+});
+export type BnetProbeUserinfoSummary = z.infer<
+    typeof BnetProbeUserinfoSummarySchema
+>;
+
 /** One probe run — the latest is persisted, overwriting the previous (D10). */
 export const BnetProbeResultSchema = z.object({
     at: z.string(),
@@ -107,6 +158,8 @@ export const BnetProbeResultSchema = z.object({
     token: BnetProbeTokenSummarySchema.nullable(),
     namespaces: z.array(BnetProbeNamespaceResultSchema),
     idParity: BnetProbeIdParitySchema.nullable(),
+    /** Additive (2026-11-07): absent on runs recorded before the ruling. */
+    userinfo: BnetProbeUserinfoSummarySchema.nullable().optional(),
     error: BnetProbeErrorCodeSchema.nullable(),
 });
 export type BnetProbeResult = z.infer<typeof BnetProbeResultSchema>;
