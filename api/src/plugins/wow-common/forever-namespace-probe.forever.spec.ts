@@ -189,16 +189,33 @@ describe('runProbe — Forever follow-ups (ROK-2102)', () => {
       .filter((c) => c.prefix === 'forever' && c.status === 200)
       .map((c) => c.endpoint)
       .sort();
+    // ROK-2108: + the seven profile extras and the first ruleset's detail.
     expect(endpoints).toEqual([
       'guild-roster',
       'profile',
+      'profile-achievements',
+      'profile-encounters-dungeons',
+      'profile-encounters-raids',
       'profile-equipment',
       'profile-media',
       'profile-professions',
       'profile-quests',
+      'profile-quests-completed',
+      'profile-reputations',
+      'profile-specializations',
+      'profile-statistics',
       'ruleset',
+      'ruleset-detail',
     ]);
     expect(calls).toContain(`${API}/data/wow/guild/raid-ledger/roster${NS}`);
+    expect(calls).toContain(`${API}/data/wow/guild/raid-ledger${NS}`);
+    expect(run.shapes['forever:us:profile-reputations']).toEqual({
+      topLevelKeys: ['secret', 'members'],
+      entryCount: 0,
+      sample: [],
+      arrayKeys: { members: ['id'] },
+      arrayLengths: { members: 1 },
+    });
     expect(run.shapes['forever:us:profile']).toEqual({
       topLevelKeys: ['name', 'id'],
       entryCount: 0,
@@ -210,6 +227,17 @@ describe('runProbe — Forever follow-ups (ROK-2102)', () => {
       sample: [],
     });
     expect(JSON.stringify(run.shapes)).not.toContain('Thrall');
+  });
+});
+
+describe('runProbe — live Forever shapes, two signals (ROK-2102)', () => {
+  const input = (fetchFn: ProbeFetch, guildPath: string | null) => ({
+    fetchFn,
+    token: 't',
+    candidates: ['forever', 'classic'],
+    regions: ['us'],
+    characterPath: 'Thrall-Stormborn',
+    guildPath,
   });
 
   it('probes the profile once per prefix:region even with two signals', async () => {
