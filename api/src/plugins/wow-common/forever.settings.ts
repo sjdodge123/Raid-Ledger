@@ -58,9 +58,17 @@ export const WOW_FOREVER_PROBE_CHARACTER_KEY =
 export const WOW_FOREVER_PROBE_GUILD_KEY =
   'wow_forever_probe_guild' as SettingKey;
 
-/** The probe's five setting keys, for the plugin manifest. */
+/**
+ * JSON `BnetProbeResult` — the latest DEMO_MODE Battle.net account-link
+ * probe run (ROK-2129, D10). Keys, counts and booleans only.
+ */
+export const WOW_FOREVER_BNET_PROBE_LAST_RESULT_KEY =
+  'wow_forever_bnet_probe_last_result' as SettingKey;
+
+/** The probes' six setting keys, for the plugin manifest. */
 export const WOW_FOREVER_PROBE_SETTING_KEYS: string[] = [
   WOW_FOREVER_PROBE_LAST_RESULT_KEY,
+  WOW_FOREVER_BNET_PROBE_LAST_RESULT_KEY,
   WOW_FOREVER_PROBE_FOUND_KEY,
   WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY,
   WOW_FOREVER_PROBE_CHARACTER_KEY,
