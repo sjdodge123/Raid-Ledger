@@ -1,17 +1,45 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   MAX_ROSTER_CLAIM_CANDIDATES,
+  RefreshCharacterSchema,
   RosterClaimCandidatesQuerySchema,
+  RosterClaimRequestSchema,
+  type CharacterDto,
   type RosterClaimCandidateDto,
   type RosterClaimGuildDto,
   type RosterClaimListResponseDto,
 } from '@raid-ledger/contract';
+import { isUniqueViolation } from '../../../../characters/characters-crud.helpers';
+import { mapCharacterToDto } from '../../../../characters/characters-mapping.helpers';
+import { CharactersService } from '../../../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
-import { isForeverGame } from '../../wow-forever-identity.helpers';
+import {
+  isForeverGame,
+  rethrowForeverViolation,
+} from '../../wow-forever-identity.helpers';
 import { loadCandidates, type CandidateRow } from './roster-claim.queries';
+import {
+  CLAIMED_FIRST,
+  claimWithin,
+  readMember,
+  type ClaimArgs,
+  type ClaimMember,
+} from './roster-claim.tx';
+
+type CharacterRow = typeof schema.characters.$inferSelect;
+
+/** Backstop index for a GUID pinned by a racing LedgerLink apply. */
+const ADDON_GUID_INDEX = 'idx_characters_addon_guid';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -20,11 +48,16 @@ const EMPTY: RosterClaimListResponseDto = { guilds: [], truncated: false };
 /**
  * ROK-2128 — "Add character → Guild roster" (WoW: Forever only, FLAG 8).
  * Lists the unclaimed roster characters of every claimable guild (FLAG 1).
- * L2 adds the one-click claim to this service.
+ * `claim` is the one-click claim (D3–D5), then a best-effort Armory refresh.
  */
 @Injectable()
 export class RosterClaimService {
-  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+  private readonly logger = new Logger(RosterClaimService.name);
+
+  constructor(
+    @Inject(DrizzleAsyncProvider) private readonly db: Db,
+    private readonly characters: CharactersService,
+  ) {}
 
   /** `?gameId=` → the grouped candidates; a non-Forever game lists nothing. */
   async listCandidates(query: unknown): Promise<RosterClaimListResponseDto> {
@@ -38,6 +71,67 @@ export class RosterClaimService {
     const truncated = rows.length > MAX_ROSTER_CLAIM_CANDIDATES;
     const kept = rows.slice(0, MAX_ROSTER_CLAIM_CANDIDATES);
     return { guilds: groupByGuild(kept), truncated };
+  }
+
+  /**
+   * Claim roster row `memberId` for `userId`: 400 bad body, 404 row gone /
+   * not visible / not Forever, 409 claimed first. The refresh runs AFTER the
+   * commit and never fails the claim (D3).
+   */
+  async claim(
+    userId: number,
+    memberId: number,
+    body: unknown,
+  ): Promise<CharacterDto> {
+    const parsed = RosterClaimRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException('ruleset must be a selectable ruleset');
+    }
+    const member = await readMember(this.db, memberId);
+    if (!(await this.isForever(member.gameId))) {
+      throw new NotFoundException('That roster character is gone');
+    }
+    const args: ClaimArgs = { userId, memberId, ...parsed.data };
+    const row = await this.commitClaim(member, args);
+    this.logger.log(
+      `User ${userId} claimed roster member ${memberId} as ${row.id}`,
+    );
+    return this.refreshAfterCommit(row);
+  }
+
+  /** The tx; a unique-index backstop violation maps to 409 OUTSIDE it. */
+  private async commitClaim(
+    member: ClaimMember,
+    args: ClaimArgs,
+  ): Promise<CharacterRow> {
+    try {
+      return await this.db.transaction((tx) => claimWithin(tx, member, args));
+    } catch (error) {
+      rethrowForeverViolation(error, member.name, member.region);
+      if (isUniqueViolation(error, ADDON_GUID_INDEX)) {
+        throw new ConflictException(CLAIMED_FIRST);
+      }
+      throw error;
+    }
+  }
+
+  /** D3: best-effort Forever Armory refresh; any failure keeps the claim. */
+  private async refreshAfterCommit(row: CharacterRow): Promise<CharacterDto> {
+    const dto = RefreshCharacterSchema.safeParse({ region: row.region });
+    if (!dto.success) return mapCharacterToDto(row);
+    try {
+      return await this.characters.refreshExternal(
+        row.userId,
+        row.id,
+        dto.data,
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Armory refresh after roster claim ${row.id} skipped: ${reason}`,
+      );
+      return mapCharacterToDto(row);
+    }
   }
 
   private async isForever(gameId: number): Promise<boolean> {

@@ -70,7 +70,12 @@ async function insertMember(gid: number, seed: MemberSeed): Promise<number> {
   const [m] = nonEmpty(
     await testApp.db
       .insert(schema.guildMembers)
-      .values({ guildId: gid, source: 'addon_import', lastSeenAt: SNAPSHOT, ...seed })
+      .values({
+        guildId: gid,
+        source: 'addon_import',
+        lastSeenAt: SNAPSHOT,
+        ...seed,
+      })
       .returning({ id: schema.guildMembers.id }),
     'member',
   );
@@ -85,7 +90,9 @@ function memberId(name: string): number {
 }
 
 /** A local-login member; returns its id and access token. */
-async function makeUser(handle: string): Promise<{ id: number; token: string }> {
+async function makeUser(
+  handle: string,
+): Promise<{ id: number; token: string }> {
   const email = `${handle}@roster-claim-l2.test`;
   const [user] = nonEmpty(
     await testApp.db
@@ -121,11 +128,23 @@ async function seedRoster(): Promise<void> {
     class: 'Priest',
     level: 42,
   });
-  await insertMember(guildId, { characterName: 'Cinder Mark', guid: 'G-L2-CINDER' });
-  await insertMember(guildId, { characterName: 'Race Prize', guid: 'G-L2-RACE' });
+  await insertMember(guildId, {
+    characterName: 'Cinder Mark',
+    guid: 'G-L2-CINDER',
+  });
+  await insertMember(guildId, {
+    characterName: 'Race Prize',
+    guid: 'G-L2-RACE',
+  });
   await insertMember(guildId, { characterName: 'Own Name' });
-  await insertMember(guildId, { characterName: 'Gone Away', lastSeenAt: STALE });
-  await insertMember(hiddenGuildId, { characterName: 'Hidden Row', guid: 'G-L2-H' });
+  await insertMember(guildId, {
+    characterName: 'Gone Away',
+    lastSeenAt: STALE,
+  });
+  await insertMember(hiddenGuildId, {
+    characterName: 'Hidden Row',
+    guid: 'G-L2-H',
+  });
 }
 
 beforeAll(async () => {
@@ -150,7 +169,12 @@ async function charactersNamed(name: string) {
   return testApp.db
     .select()
     .from(schema.characters)
-    .where(and(eq(schema.characters.gameId, foreverId), eq(schema.characters.name, name)));
+    .where(
+      and(
+        eq(schema.characters.gameId, foreverId),
+        eq(schema.characters.name, name),
+      ),
+    );
 }
 
 async function auditRows(entityType: string, action: string, ownerId: number) {
@@ -183,9 +207,20 @@ describe('POST /plugins/wow/roster-claim/members/:memberId/claim (ROK-2128)', ()
       level: 60,
       isMain: true,
     });
-    const [guidAudit] = await auditRows('addon_guid', 'addon_guid_claimed', picker.id);
-    expect(guidAudit?.metadata).toMatchObject({ via: 'roster_pick', guid: 'G-L2-ASHEN' });
-    const [claimAudit] = await auditRows('character_claim', 'roster_claimed', picker.id);
+    const [guidAudit] = await auditRows(
+      'addon_guid',
+      'addon_guid_claimed',
+      picker.id,
+    );
+    expect(guidAudit?.metadata).toMatchObject({
+      via: 'roster_pick',
+      guid: 'G-L2-ASHEN',
+    });
+    const [claimAudit] = await auditRows(
+      'character_claim',
+      'roster_claimed',
+      picker.id,
+    );
     expect(claimAudit?.metadata).toMatchObject({
       characterId: row.id,
       guildId,
@@ -196,21 +231,35 @@ describe('POST /plugins/wow/roster-claim/members/:memberId/claim (ROK-2128)', ()
     const links = await findLinkedMemberRows(testApp.db, picker.id, guildId);
     expect(links.map((l) => l.memberId)).toEqual([memberId('Ashen Vale')]);
   });
+});
 
+describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
   it('claims a Blizzard row: sets external_id, no GUID, not yet a member', async () => {
     const picker = await makeUser('l2brine');
     const res = await claim(memberId('Brine Hollow'), picker.token);
     expect(res.status).toBe(201);
-    const [row] = nonEmpty(await charactersNamed('Brine Hollow'), 'claimed row');
-    expect(row).toMatchObject({ userId: picker.id, externalId: '9555', addonGuid: null });
-    expect(await auditRows('addon_guid', 'addon_guid_claimed', picker.id)).toEqual([]);
-    expect(await findLinkedMemberRows(testApp.db, picker.id, guildId)).toEqual([]);
+    const [row] = nonEmpty(
+      await charactersNamed('Brine Hollow'),
+      'claimed row',
+    );
+    expect(row).toMatchObject({
+      userId: picker.id,
+      externalId: '9555',
+      addonGuid: null,
+    });
+    expect(
+      await auditRows('addon_guid', 'addon_guid_claimed', picker.id),
+    ).toEqual([]);
+    expect(await findLinkedMemberRows(testApp.db, picker.id, guildId)).toEqual(
+      [],
+    );
   });
-
   it('a claimed row is 409 "Someone claimed this first" for the next caller', async () => {
     const first = await makeUser('l2cinderA');
     const second = await makeUser('l2cinderB');
-    expect((await claim(memberId('Cinder Mark'), first.token)).status).toBe(201);
+    expect((await claim(memberId('Cinder Mark'), first.token)).status).toBe(
+      201,
+    );
     const res = await claim(memberId('Cinder Mark'), second.token);
     expect(res.status).toBe(409);
     expect(res.body.message).toBe('Someone claimed this first');
@@ -241,11 +290,15 @@ describe('POST /plugins/wow/roster-claim/members/:memberId/claim (ROK-2128)', ()
     expect(res.status).toBe(409);
     expect(await charactersNamed('Own Name')).toEqual([]);
   });
+});
 
+describe('roster claim refusals (ROK-2128)', () => {
   it('404s an unknown member, a hidden guild row and a soft-removed row', async () => {
     const picker = await makeUser('l2notfound');
     expect((await claim(2_000_000_000, picker.token)).status).toBe(404);
-    expect((await claim(memberId('Hidden Row'), picker.token)).status).toBe(404);
+    expect((await claim(memberId('Hidden Row'), picker.token)).status).toBe(
+      404,
+    );
     expect((await claim(memberId('Gone Away'), picker.token)).status).toBe(404);
     expect(await charactersNamed('Hidden Row')).toEqual([]);
     expect(await charactersNamed('Gone Away')).toEqual([]);
@@ -253,8 +306,12 @@ describe('POST /plugins/wow/roster-claim/members/:memberId/claim (ROK-2128)', ()
 
   it('400s a body without a selectable ruleset', async () => {
     const picker = await makeUser('l2badbody');
-    expect((await claim(memberId('Gone Away'), picker.token, {})).status).toBe(400);
-    const hc = await claim(memberId('Gone Away'), picker.token, { ruleset: 'hardcore' });
+    expect((await claim(memberId('Gone Away'), picker.token, {})).status).toBe(
+      400,
+    );
+    const hc = await claim(memberId('Gone Away'), picker.token, {
+      ruleset: 'hardcore',
+    });
     expect(hc.status).toBe(400);
   });
 

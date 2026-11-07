@@ -22,6 +22,8 @@ export interface GuidAuditEntry {
   name: string;
   gameId: number;
   region: string | null;
+  /** ROK-2128: how the GUID was claimed — `roster_pick` = self-asserted from the guild roster (FLAG 3). */
+  via?: 'roster_pick';
 }
 
 export async function logGuidAudit(
