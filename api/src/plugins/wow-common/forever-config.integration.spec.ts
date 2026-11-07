@@ -121,7 +121,7 @@ describe('/admin/plugins/blizzard/forever guards (ROK-1717)', () => {
       .get(ADMIN_ROUTE)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(cfg.body).toEqual({
-      namespacePrefix: 'classicforever',
+      namespacePrefix: 'forever',
       namespacePrefixIsDefault: true,
       armoryImportEnabled: false,
       wowheadResolverEnabled: true,

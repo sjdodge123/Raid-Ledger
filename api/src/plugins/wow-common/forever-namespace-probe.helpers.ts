@@ -18,10 +18,14 @@ import {
 } from './forever-namespace-probe.forever';
 import * as staticProbe from './forever-namespace-probe.static';
 
-/** Candidate prefixes. `classic` is a known-200 control, never a bare match (D3). */
+/**
+ * Candidate prefixes. `forever` (the confirmed prefix, ROK-2102) comes first so
+ * `matches[0]` is deterministic; `classicforever` stays as a negative control;
+ * `classic` is a known-200 control, never a bare match (D3).
+ */
 export const DEFAULT_FOREVER_CANDIDATES: readonly string[] = [
-  'classicforever',
   'forever',
+  'classicforever',
   'classicfe',
   'classic2x',
   'classicplus',
