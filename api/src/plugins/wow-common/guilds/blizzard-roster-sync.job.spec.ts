@@ -10,6 +10,7 @@ import { SettingsService } from '../../../settings/settings.service';
 import { FOREVER_ARMORY_OFF_MESSAGE } from '../forever-armory-switch';
 import {
   BlizzardRosterSyncJob,
+  ROSTER_SYNC_SUPERSEDED_MESSAGE,
   RUNNING_ROSTER_SYNCS,
   type ManualSyncGuild,
 } from './blizzard-roster-sync.job';
@@ -148,6 +149,24 @@ describe('BlizzardRosterSyncJob.syncNow (ROK-1928 C3)', () => {
       syncedAt: '2026-11-06T10:00:00.000Z',
       members: 0,
     });
+  });
+});
+
+describe('BlizzardRosterSyncJob — superseded outcome (ROK-1928 review R3)', () => {
+  it('manual run: 409 with the run-again copy when the slug changed mid-fetch', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue({ status: 'superseded' });
+    await expect(job.syncNow(7)).rejects.toThrow(
+      new ConflictException(ROSTER_SYNC_SUPERSEDED_MESSAGE),
+    );
+    expect(RUNNING_ROSTER_SYNCS.has(7)).toBe(false);
+  });
+
+  it('cron: counts a superseded guild under skipped', async () => {
+    sync.syncForeverGuildRoster
+      .mockResolvedValueOnce({ status: 'superseded' })
+      .mockResolvedValueOnce({ status: 'ok', updated: 1, inserted: 0 });
+    const tally = await job.run();
+    expect(tally).toEqual({ ok: 1, notFound: 0, error: 0, skipped: 1 });
   });
 });
 

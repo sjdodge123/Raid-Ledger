@@ -20,10 +20,16 @@ import {
 } from './blizzard-roster-sync.tx';
 import { isForeverGuildHub } from './guild-slug.helpers';
 
-/** One sync's outcome; `skipped`/`disabled` write nothing. */
+/** One sync's outcome; `skipped`/`disabled`/`stale`/`superseded` write nothing. */
 export type RosterSyncResult =
   | {
-      status: 'skipped' | 'disabled' | 'not_found' | 'skipped_empty' | 'stale';
+      status:
+        | 'skipped'
+        | 'disabled'
+        | 'not_found'
+        | 'skipped_empty'
+        | 'stale'
+        | 'superseded';
     }
   | { status: 'ok'; updated: number; inserted: number };
 
@@ -52,7 +58,8 @@ export class BlizzardRosterSyncService {
    * Sync one guild (steps 1–10).
    * @param guildId - `guilds.id`.
    * @returns `skipped` (not a Forever guild with a slug), `disabled` (kill
-   *   switch off), `not_found`, `skipped_empty` or `ok`.
+   *   switch off), `not_found`, `skipped_empty`, `stale`, `superseded`
+   *   (slug changed mid-fetch) or `ok`.
    * @throws whatever the fetch or apply threw, after recording `error`.
    */
   async syncForeverGuildRoster(guildId: number): Promise<RosterSyncResult> {
@@ -98,7 +105,7 @@ export class BlizzardRosterSyncService {
       applyForeverRoster(tx, guild, slug, roster.members, now),
     );
     // Slug changed/cleared mid-fetch → the roster is the old slug's (P2-2).
-    if (res.superseded) return { status: 'skipped' };
+    if (res.superseded) return { status: 'superseded' };
     // A newer snapshot already stored → nothing written, no status (MINOR 15).
     if (res.stale) return { status: 'stale' };
     // After the commit, never inside the tx (Codex P2-3).

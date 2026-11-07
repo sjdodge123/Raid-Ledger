@@ -33,6 +33,10 @@ type Db = PostgresJsDatabase<typeof schema>;
  */
 export const RUNNING_ROSTER_SYNCS = new Set<number>();
 
+/** 409 copy when the guild's slug changed while a manual sync was fetching. */
+export const ROSTER_SYNC_SUPERSEDED_MESSAGE =
+  "The guild's Blizzard slug changed while syncing — run it again";
+
 /** One cron run's outcome counts (summary log). */
 export interface RosterSyncTally {
   ok: number;
@@ -149,6 +153,8 @@ export class BlizzardRosterSyncJob {
     }
     if (res.status === 'skipped')
       throw new NotFoundException('Guild not found');
+    if (res.status === 'superseded')
+      throw new ConflictException(ROSTER_SYNC_SUPERSEDED_MESSAGE);
     // `stale` (newer snapshot already stored) is a 200 with members 0.
     const after = await this.readGuild(guildId);
     return {
@@ -197,9 +203,9 @@ export class BlizzardRosterSyncJob {
   }
 }
 
-/** Bucket one service result into the tally (`stale` counts as skipped). */
+/** Bucket one service result into the tally (`stale`/`superseded` count as skipped). */
 function countResult(tally: RosterSyncTally, res: RosterSyncResult): void {
   if (res.status === 'ok') tally.ok += 1;
   else if (res.status === 'not_found') tally.notFound += 1;
-  else tally.skipped += 1; // skipped / disabled / skipped_empty / stale
+  else tally.skipped += 1; // skipped / disabled / skipped_empty / stale / superseded
 }

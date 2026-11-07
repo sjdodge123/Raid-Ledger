@@ -403,7 +403,7 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     expect(await auditCount()).toBe(audits);
   });
 
-  it('(12) slug cleared between fetch and apply → skipped, nothing written (Codex P2-2)', async () => {
+  it('(12) slug cleared between fetch and apply → superseded, nothing written (Codex P2-2)', async () => {
     const { guild } = await seedGuild(addonRoster(5));
     const live = await liveNames(guild.id);
     const audits = await auditCount();
@@ -414,7 +414,7 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
         .where(eq(schema.guilds.id, guild.id));
       return { members: fourPlusOne() };
     });
-    expect(await sync(guild.id)).toEqual({ status: 'skipped' });
+    expect(await sync(guild.id)).toEqual({ status: 'superseded' });
     expect(await liveNames(guild.id)).toEqual(live);
     expect(await allRows()).toHaveLength(5);
     const stored = await guildRow(guild.id);

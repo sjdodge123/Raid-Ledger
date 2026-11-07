@@ -1,6 +1,6 @@
 /**
  * ROK-1928 Codex P2-2 / P2-3 — the sync service's post-apply wiring: a
- * superseded apply (slug changed mid-fetch) reports `skipped` and touches
+ * superseded apply (slug changed mid-fetch) reports `superseded` and touches
  * nothing; an applied (`ok`) run drops the guild's cached roster insights
  * AFTER the transaction has committed.
  */
@@ -105,12 +105,12 @@ describe('BlizzardRosterSyncService post-apply wiring', () => {
     expect(order).toEqual(['commit', `invalidate:${GUILD.id}`]);
   });
 
-  it('a superseded apply reports skipped and invalidates nothing', async () => {
+  it('a superseded apply reports superseded and invalidates nothing', async () => {
     jest
       .mocked(applyForeverRoster)
       .mockResolvedValue(applied({ superseded: true, updated: 0 }));
     expect(await service.syncForeverGuildRoster(GUILD.id)).toEqual({
-      status: 'skipped',
+      status: 'superseded',
     });
     expect(invalidateGuild).not.toHaveBeenCalled();
   });

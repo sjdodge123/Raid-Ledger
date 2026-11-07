@@ -53,12 +53,15 @@ export type GuildBlizzardRosterView = z.infer<
 >;
 
 /**
- * A manual run's outcome: a stored status, or `stale` — the guild already holds
- * a newer roster snapshot, so nothing was written (never stored as a status).
+ * A sync's outcome: a stored status, `stale` — the guild already holds a newer
+ * roster snapshot — or `superseded` — the guild's Blizzard slug changed while
+ * the roster was being fetched. Neither of the last two writes anything or is
+ * ever stored as a status (the manual route answers `superseded` with a 409).
  */
 export const BlizzardRosterSyncOutcomeSchema = z.enum([
   ...BLIZZARD_ROSTER_STATUSES,
   "stale",
+  "superseded",
 ]);
 export type BlizzardRosterSyncOutcome = z.infer<
   typeof BlizzardRosterSyncOutcomeSchema

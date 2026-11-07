@@ -218,12 +218,19 @@ export async function applyForeverRoster(
   const inserted = match.unmatched.length;
   const counts = { members: members.length, newMembers: inserted, delta };
   await auditRosterChange(tx, guild.id, BLIZZARD_ACTOR, counts);
-  const updated = match.matched.length;
+  return appliedResult(match, flag);
+}
+
+/** The result of a roster that was written (neither stale nor superseded). */
+function appliedResult(
+  match: ReturnType<typeof matchRosterMembers>,
+  flag: RosterApplyResult['flag'],
+): RosterApplyResult {
   return {
     stale: false,
     superseded: false,
-    updated,
-    inserted,
+    updated: match.matched.length,
+    inserted: match.unmatched.length,
     flag,
     warnings: match.warnings,
   };
