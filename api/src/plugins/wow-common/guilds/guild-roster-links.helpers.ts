@@ -29,14 +29,17 @@ export function linkConfirmedAt() {
 }
 
 /**
- * ROK-2128 (FLAG 3): true when the character was claimed from a guild roster
- * pick (a `roster_claimed` audit names it) — a self-asserted link. Evaluated
- * per row inside the page's single select, so the roster stays one query.
+ * ROK-2128 (FLAG 3): true when the CURRENT owner claimed the character from a
+ * guild roster pick (a `roster_claimed` audit names it, filed under the
+ * owner) — a self-asserted link. After an admin Change owner the new owner
+ * picked nothing, so it reads as an import (review 2 MINOR). Evaluated per
+ * row inside the page's single select, so the roster stays one query.
  */
 export function rosterPicked() {
   return sql<boolean>`exists(select 1 from ${al} where ${and(
     eq(al.entityType, CHARACTER_CLAIM_ENTITY),
     eq(al.action, ROSTER_CLAIMED_ACTION),
+    eq(al.entityId, c.userId),
     sql`${al.metadata}->>'characterId' = ${c.id}::text`,
   )})`;
 }

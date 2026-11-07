@@ -27,6 +27,7 @@ let guildId: number;
 const tokens = {} as Record<Who | 'admin', string>;
 const memberIds = {} as Record<Who, number>;
 const charIds = {} as Record<Who, string>;
+const userIds = {} as Record<Who, number>;
 
 interface Member {
   name: string;
@@ -89,6 +90,7 @@ async function seedUser(who: Who, rankIndex: number | null) {
     'character',
   );
   charIds[who] = char.id;
+  userIds[who] = user.id;
   if (rankIndex !== null)
     memberIds[who] = await insertMember(guid, who, rankIndex);
   const res = await testApp.request
@@ -215,13 +217,21 @@ describe('roster linkedAccount.linkVia — picked-from-roster marker (ROK-2128 F
     // 'plain' claimed its row from the roster pick list (holds no grant).
     await testApp.db.insert(schema.activityLog).values({
       entityType: 'character_claim',
-      entityId: 1,
+      entityId: userIds.plain,
       action: 'roster_claimed',
       metadata: {
         characterId: charIds.plain,
         guildId,
         memberId: memberIds.plain,
       },
+    });
+    // 'deleg' was roster-picked by ANOTHER player, then moved to deleg by an
+    // admin Change owner: deleg picked nothing (review 2 MINOR) → import.
+    await testApp.db.insert(schema.activityLog).values({
+      entityType: 'character_claim',
+      entityId: userIds.gm,
+      action: 'roster_claimed',
+      metadata: { characterId: charIds.deleg, guildId },
     });
     // A non-claim audit naming 'gm' must not mark it.
     await testApp.db.insert(schema.activityLog).values({
