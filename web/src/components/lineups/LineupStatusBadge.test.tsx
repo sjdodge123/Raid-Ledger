@@ -22,6 +22,11 @@ describe('LineupStatusBadge', () => {
         expect(screen.getByText('Scheduling')).toBeInTheDocument();
     });
 
+    it('uses the busy token pair for decided status, never a raw hue', () => {
+        render(<LineupStatusBadge status="decided" />);
+        expect(screen.getByText('Scheduling')).toHaveClass('bg-busy/10', 'text-busy');
+    });
+
     it('renders "Archived" text for archived status', () => {
         render(<LineupStatusBadge status="archived" />);
         expect(screen.getByText('Archived')).toBeInTheDocument();
