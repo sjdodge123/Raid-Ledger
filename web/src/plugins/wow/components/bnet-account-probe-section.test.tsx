@@ -83,7 +83,6 @@ afterEach(() => {
     Object.defineProperty(window, 'location', { configurable: true, writable: true, value: originalLocation });
 });
 
-const heading = (): HTMLElement => screen.getByRole('heading', { name: 'Battle.net account probe' });
 
 describe('BnetAccountProbeSection — DEMO_MODE gate (AC13)', () => {
     it('renders nothing and never reads the probe state when demoMode is false', async () => {
