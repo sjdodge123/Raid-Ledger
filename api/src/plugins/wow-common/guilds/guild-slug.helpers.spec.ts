@@ -1,3 +1,4 @@
+import { BLIZZARD_GUILD_SLUG_PATTERN } from '@raid-ledger/contract';
 import { blizzardRosterFor, slugifyGuildName } from './guild-slug.helpers';
 
 describe('slugifyGuildName (ROK-1928 A-1)', () => {
@@ -15,6 +16,12 @@ describe('slugifyGuildName (ROK-1928 A-1)', () => {
 
   it('keeps non-ASCII letters', () => {
     expect(slugifyGuildName('Über Gilde')).toBe('über-gilde');
+  });
+
+  it('drops punctuation so the suggestion fits the slug pattern', () => {
+    const slug = slugifyGuildName('Dr. Pepper, Salt & Co');
+    expect(slug).toBe('dr-pepper-salt--co');
+    expect(slug).toMatch(BLIZZARD_GUILD_SLUG_PATTERN);
   });
 });
 

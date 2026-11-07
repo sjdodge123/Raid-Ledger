@@ -7,11 +7,18 @@ import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
 
 /**
  * Suggest a Blizzard guild slug from the in-game name (FLAG A-1): lowercase,
- * trimmed, apostrophes dropped, whitespace runs → `-`. Only a prefill — the
+ * trimmed, apostrophes dropped, whitespace runs → `-`, then anything but a
+ * letter, digit or `-` dropped so it always fits `BLIZZARD_GUILD_SLUG_PATTERN`
+ * (punctuation like `.`, `,`, `&` would fail it). Only a prefill — the
  * officer confirms it; the sync never derives a slug on its own.
  */
 export function slugifyGuildName(name: string): string {
-  return name.trim().toLowerCase().replace(/'/g, '').replace(/\s+/g, '-');
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/'/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}-]/gu, '');
 }
 
 /** The guild columns `blizzardRosterFor` reads. */
