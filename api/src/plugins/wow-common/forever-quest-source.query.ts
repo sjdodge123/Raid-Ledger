@@ -53,11 +53,7 @@ export async function loadForeverQuestSources(
   ]);
   const out = new Map<string, EffectiveQuests>();
   for (const id of ids) {
-    const eff = effectiveQuests(
-      snapshots.get(id) ?? null,
-      armory.get(id),
-      now,
-    );
+    const eff = effectiveQuests(snapshots.get(id) ?? null, armory.get(id), now);
     if (eff) out.set(id, eff);
   }
   return out;

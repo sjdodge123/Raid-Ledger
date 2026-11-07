@@ -18,10 +18,8 @@ import {
 import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { assertCanReadEvent } from './event-readiness.access';
 import { WowFactsService } from './facts/wow-facts.service';
-import {
-  loadForeverCharSnapshot,
-  loadForeverCharSnapshots,
-} from './forever-char-snapshot.query';
+import { loadForeverCharSnapshot } from './forever-char-snapshot.query';
+import { loadForeverQuestSources } from './forever-quest-source.query';
 import { loadRosterMemberIds } from './guilds/guild-roster.helpers';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
@@ -29,6 +27,7 @@ jest.mock('./event-forever-progress.query');
 jest.mock('./event-quest-readiness.query');
 jest.mock('./event-readiness.access');
 jest.mock('./forever-char-snapshot.query');
+jest.mock('./forever-quest-source.query');
 jest.mock('./guilds/guild-roster.helpers');
 
 const DB_METHODS = ['select', 'insert', 'update', 'delete', 'execute'];
@@ -70,7 +69,7 @@ async function readinessFor(count: number) {
   });
   jest.mocked(loadReadinessRoster).mockResolvedValue(signups);
   jest.mocked(loadEventManualRows).mockResolvedValue([]);
-  jest.mocked(loadForeverCharSnapshots).mockResolvedValue(new Map());
+  jest.mocked(loadForeverQuestSources).mockResolvedValue(new Map());
   jest.mocked(loadRosterMemberIds).mockResolvedValue(new Map());
   resolveFacts.mockResolvedValue({ facts: new Map(), truncated: false });
   const moduleRef = await Test.createTestingModule({
@@ -99,7 +98,7 @@ describe('EventRaidReadinessService — batched loads (ROK-1926 AC2)', () => {
       loadEventQuestSet,
       loadReadinessRoster,
       loadEventManualRows,
-      loadForeverCharSnapshots,
+      loadForeverQuestSources,
       loadRosterMemberIds,
     ]) {
       expect(jest.mocked(loader)).toHaveBeenCalledTimes(1);

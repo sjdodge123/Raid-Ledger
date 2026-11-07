@@ -94,6 +94,21 @@ describe('deriveAddonProgress (D6)', () => {
     const rows = deriveAddonProgress(both, new Set([10]), 1, CHAR);
     expect(rows).toEqual([addon(10, { completed: true })]);
   });
+
+  it('carries a blizzard source from an Armory list; a manual row still wins (ROK-2109)', () => {
+    const armory = { ...snapshot, source: 'blizzard' as const };
+    const rows = deriveAddonProgress(armory, new Set([10, 20]), 1, CHAR);
+    expect(rows.map((r) => r.source)).toEqual(['blizzard', 'blizzard']);
+    const merged = mergeProgress(
+      [manual(10, { completed: false, pickedUp: true })],
+      rows,
+    );
+    expect(merged.find((r) => r.questId === 10)).toMatchObject({
+      source: 'manual',
+      completed: false,
+    });
+    expect(merged.find((r) => r.questId === 20)?.source).toBe('blizzard');
+  });
 });
 
 describe('mergeProgress (D5)', () => {

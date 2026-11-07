@@ -219,6 +219,18 @@ function countKnown(
   ).length;
 }
 
+/** Source + dates of the DTO; an input without them is a plain addon snapshot. */
+function provenance(snapshot: ForeverQuestSnapshotInput) {
+  return {
+    source: snapshot.source ?? 'addon',
+    syncedAt: snapshot.capturedAt,
+    inProgressSyncedAt:
+      snapshot.inProgressSyncedAt === undefined
+        ? snapshot.capturedAt
+        : snapshot.inProgressSyncedAt,
+  };
+}
+
 /**
  * Build the character quest section DTO, or `null` when the snapshot carries
  * no quest data (absent block, or both lists empty — R-6).
@@ -240,12 +252,7 @@ export function buildCharacterQuests(
   const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
   const inProgress = quests.inProgress.map((q) => toLogEntry(q, lookup, names));
   return CharacterQuestsDtoSchema.parse({
-    source: snapshot.source ?? 'addon',
-    syncedAt: snapshot.capturedAt,
-    inProgressSyncedAt:
-      snapshot.inProgressSyncedAt === undefined
-        ? snapshot.capturedAt
-        : snapshot.inProgressSyncedAt,
+    ...provenance(snapshot),
     inProgress,
     completedKnown,
     counts: {
