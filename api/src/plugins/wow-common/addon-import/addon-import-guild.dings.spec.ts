@@ -3,7 +3,11 @@
  * transaction, idempotent re-apply, stale/first import) is proven in
  * `addon-import-guild-dings.integration.spec.ts`.
  */
-import { levelUps, levelUpsById, type PriorLevel } from './addon-import-guild.dings';
+import {
+  levelUps,
+  levelUpsById,
+  type PriorLevel,
+} from './addon-import-guild.dings';
 import { buildMember } from './testing/addon-fixture.builder';
 
 const prior = (id: number, level: number | null): PriorLevel => ({
