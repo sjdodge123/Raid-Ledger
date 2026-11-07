@@ -103,7 +103,7 @@ beforeAll(async () => {
 // No truncate here: the shared integration setup closes the pool in its own
 // afterAll, and the next spec truncates in beforeAll.
 
-const patch = (id: number, token: string, body: unknown) =>
+const patch = (id: number, token: string, body: Record<string, unknown>) =>
   testApp.request
     .patch(url(id))
     .set('Authorization', `Bearer ${token}`)
