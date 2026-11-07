@@ -7,7 +7,10 @@ import type {
   AddonWho,
   WowForeverRuleset,
 } from '@raid-ledger/contract';
-import { createFallbackRuleset } from '../forever-realm-rulesets.helpers';
+import {
+  createFallbackRuleset,
+  updateInferenceRuleset,
+} from '../forever-realm-rulesets.helpers';
 import type { CharactersService } from '../../../characters/characters.service';
 import {
   rethrowForeverViolation,
@@ -130,7 +133,9 @@ export async function previewImport(
   const character =
     target.action === 'update' ? target.character : previewCharacter(input);
   const inferred =
-    target.action === 'update' ? input.inference?.ruleset : undefined;
+    target.action === 'update'
+      ? updateInferenceRuleset(input.inference)
+      : undefined;
   const result = await db.transaction((tx) =>
     runBound(tx, input, character, inferred),
   );
@@ -171,7 +176,7 @@ async function runCreate(
     query.region,
     query.gameId,
     request.ruleset,
-    createFallbackRuleset(input.inference),
+    createFallbackRuleset(input.inference, request.ruleset),
   );
   phase.creating = true;
   const created = await creator.createWithin(tx, input.userId, dto);
@@ -186,7 +191,8 @@ async function runCreate(
 }
 
 /**
- * `update` target: bind the EXISTING row with the realm map's inference —
+ * `update` target: bind the EXISTING row with the realm map's inference only
+ * (ROK-2100 F8) —
  * a differing one is the opt-in `RULESET_CHANGED` (ROK-1739 D4).
  */
 async function runUpdate(
@@ -194,7 +200,7 @@ async function runUpdate(
   input: CreateImportInput,
   target: Extract<ImportTarget, { action: 'update' }>,
 ): Promise<AddonImportNewResultDto> {
-  const inferred = input.inference?.ruleset;
+  const inferred = updateInferenceRuleset(input.inference);
   const result = await runBound(tx, input, target.character, inferred);
   const dto = targetDto(target, input.who, input.query.region);
   return { ...result, target: dto };

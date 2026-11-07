@@ -25,6 +25,10 @@ import * as specH from './blizzard-spec.helpers';
 import * as guildH from './blizzard-forever-guild.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
+import {
+  fetchForeverRulesetRaw,
+  type ForeverRulesetFetchOutcome,
+} from './blizzard-forever-ruleset.fetch';
 import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
 import { resolveBlizzardNamespacePrefix } from './forever-namespace.resolver';
@@ -93,6 +97,19 @@ export class BlizzardService {
       data.realmSlug,
       data.charName,
     );
+  }
+
+  /**
+   * ROK-2100: the realmless Forever profile's raw `ruleset` (profile call
+   * only). Never throws; the token fetch is raced by the caller's budget.
+   */
+  async fetchForeverRulesetRaw(
+    name: string,
+    region: string,
+    signal: AbortSignal,
+  ): Promise<ForeverRulesetFetchOutcome> {
+    const token = await this.auth.getAccessToken(region);
+    return fetchForeverRulesetRaw(name, region, token, signal, this.logger);
   }
 
   /** Fetch character equipment from the Blizzard API. */

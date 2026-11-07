@@ -170,7 +170,8 @@ export class AddonImportCreateService {
       request,
       who,
       query: { userId, gameId, region, guid: who.guid, name },
-      inference: await this.realmRulesets.inferForPaste(paste),
+      // ROK-2100: map → Blizzard → realm name (create-only beyond the map).
+      inference: await this.realmRulesets.resolveForPaste(paste),
     };
   }
 }
