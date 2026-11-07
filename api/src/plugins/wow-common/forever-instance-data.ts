@@ -1,17 +1,20 @@
 /**
  * ROK-1719: hand-seeded WoW: Forever instances (9 new dungeons, 2 new raids).
  *
- * HAND SEED — replace when the Forever journal namespace is live
- * (ROK-1716/1717). Until then Blizzard's journal does not expose these, so
- * the `wow_forever` instance list appends them to the vanilla Classic set.
- * Once the journal publishes a `Forever`-expansion row with the same name,
- * `mergeForeverSeed` drops the seed copy ("journal wins") with no code change.
+ * HAND SEED — the Forever namespace is live (ROK-2102, `static-forever-{region}`)
+ * but its journal is empty: `journal-expansion/index` and `journal-instance/index`
+ * answer 200 with EMPTY collections in every region (ROK-2103 probe evidence,
+ * 2026-11-07 01:12Z). So the `wow_forever` instance list still appends these to
+ * the vanilla Classic set. Once the journal publishes a `Forever`-expansion row
+ * with the same name, `mergeForeverSeed` drops the seed copy ("journal wins")
+ * with no code change — that is the upgrade path, not a rewrite.
  *
  * Sources (fetched 2026-10-04):
  * - Names, raid sizes: Blizzard "World of Warcraft: Forever — What's Next"
  *   panel recap (news.blizzard.com/en-us/article/24303862).
  * - Level ranges: community only (classicwow.gg/forever/dungeons,
- *   wowclassicforever.info, endgametools.com); Blizzard has published none.
+ *   wowclassicforever.info, endgametools.com); Blizzard has published none —
+ *   the live `static-forever` journal is still empty (ROK-2103).
  * - "Excavation Site: Wetlands" is a placeholder — Blizzard only says
  *   "an excavation site above Whelgar's Excavation".
  *
