@@ -22,12 +22,12 @@ const MANUAL = binding({ id: 'manual', channelId: 'c2', channelName: 'general' }
 
 function renderList(onUpdate = vi.fn(), isUpdating = false) {
     render(<ChannelBindingList bindings={[AUTO, MANUAL]} onUpdate={onUpdate} onDelete={vi.fn()} isUpdating={isUpdating} isDeleting={false} />);
-    const rows = screen.getAllByTestId('channel-binding-row');
+    const rows = screen.getAllByTestId('channel-binding-group');
     return { auto: at(rows, 0), manual: at(rows, 1), onUpdate };
 }
 
 describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
-    it('shows the cell on the auto row only', () => {
+    it('shows the cell on the auto channel's group only', () => {
         const { auto, manual } = renderList();
         expect(within(auto).getByTestId('binding-lifecycle-cell')).toBeInTheDocument();
         expect(within(auto).getByText(/^Archived [A-Z][a-z]{2} \d{1,2}$/)).toHaveAttribute('data-tone', 'neutral');
@@ -71,7 +71,8 @@ describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
         const onUpdate = vi.fn(() => new Promise<unknown>(() => {}));
         const props = { onUpdate, onDelete: vi.fn(), isDeleting: false };
         const { rerender } = render(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating={false} {...props} />);
-        const rows = (): HTMLElement[] => screen.getAllByTestId('channel-binding-row');
+        // ROK-2106: the lifecycle cell lives on the channel group header, once per channel.
+        const rows = (): HTMLElement[] => screen.getAllByTestId('channel-binding-group');
         await userEvent.click(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' }));
         rerender(<ChannelBindingList bindings={[AUTO, AUTO2]} isUpdating updateError="Pin refused" {...props} />);
         expect(within(at(rows(), 1)).getByRole('button', { name: 'Pin #elden-ring' })).toHaveAttribute('aria-busy', 'true');
