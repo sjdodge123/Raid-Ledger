@@ -31,7 +31,10 @@ describe('FIELD_PRECEDENCE table', () => {
     const editable = WOW_FACT_FIELDS.filter(
       (f) => FIELD_PRECEDENCE[f].manualOverride,
     );
-    expect(editable.sort()).toEqual(['professions', 'role']);
+    // ROK-2107 F0: professions joins the list only while the switch is on.
+    expect(editable.sort()).toEqual(
+      MANUAL_PROFESSIONS_WIN ? ['professions', 'role'] : ['role'],
+    );
   });
 
   it('ROK-1915: enchantsReported uses the default row (no override, blizzard allowed)', () => {
