@@ -22,6 +22,7 @@ import * as profileH from './blizzard-profile.helpers';
 import * as equipH from './blizzard-equipment.helpers';
 import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
+import * as guildH from './blizzard-forever-guild.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
 import { foreverSeedOnlyList } from './forever-instance-data';
@@ -69,7 +70,7 @@ export class BlizzardService {
    */
   async fetchCharacterProfile(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterProfile> {
@@ -97,7 +98,7 @@ export class BlizzardService {
   /** Fetch character equipment from the Blizzard API. */
   async fetchCharacterEquipment(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<BlizzardCharacterEquipment | null> {
@@ -115,7 +116,7 @@ export class BlizzardService {
   /** Fetch character professions from the Blizzard API. */
   async fetchCharacterProfessions(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<ExternalCharacterProfessions | null> {
@@ -133,7 +134,7 @@ export class BlizzardService {
   /** Fetch character specializations from the Blizzard API. */
   async fetchCharacterSpecializations(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     characterClass: string,
     apiNamespacePrefix: string | null = null,
@@ -145,6 +146,22 @@ export class BlizzardService {
       region,
       characterClass,
       apiNamespacePrefix,
+      token,
+      this.logger,
+    );
+  }
+
+  /** Fetch a WoW: Forever guild roster (ROK-2102); null on 404.
+   * @param guildSlug - Guild slug as given (rules unverified, FLAG B4)
+   */
+  async fetchForeverGuildRoster(
+    guildSlug: string,
+    region: string,
+  ): Promise<guildH.ForeverGuildRoster | null> {
+    const token = await this.auth.getAccessToken(region);
+    return guildH.fetchForeverGuildRoster(
+      guildSlug,
+      region,
       token,
       this.logger,
     );

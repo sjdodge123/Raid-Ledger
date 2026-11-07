@@ -72,7 +72,8 @@ export interface ExternalCharacterProfessions {
 /** Character profile data returned from an external game API */
 export interface ExternalCharacterProfile {
   name: string;
-  realm: string;
+  /** Null for a realmless WoW: Forever character (ROK-2102). */
+  realm: string | null;
   class: string;
   spec: string | null;
   role: 'tank' | 'healer' | 'dps' | null;

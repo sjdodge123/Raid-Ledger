@@ -1,0 +1,32 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever?namespace=profile-forever-us"
+    }
+  },
+  "id": 900001,
+  "name": "Ana Forever",
+  "gender": { "type": "FEMALE", "name": "Female" },
+  "faction": { "type": "ALLIANCE", "name": "Alliance" },
+  "race": { "id": 1, "name": "Human" },
+  "character_class": { "id": 8, "name": "Mage" },
+  "active_spec": { "id": 64, "name": "Frost" },
+  "guild": { "name": "Lantern Watch", "id": 900101 },
+  "level": 24,
+  "experience": 1200,
+  "last_login_timestamp": 1700000000000,
+  "average_item_level": 21,
+  "equipped_item_level": 22,
+  "equipment": {
+    "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/equipment?namespace=profile-forever-us"
+  },
+  "media": {
+    "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/character-media?namespace=profile-forever-us"
+  },
+  "professions": {
+    "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/professions?namespace=profile-forever-us"
+  },
+  "quests": {
+    "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/quests?namespace=profile-forever-us"
+  }
+}

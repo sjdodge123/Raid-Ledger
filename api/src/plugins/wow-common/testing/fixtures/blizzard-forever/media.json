@@ -1,0 +1,22 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/character-media?namespace=profile-forever-us"
+    }
+  },
+  "character": { "name": "Ana Forever", "id": 900001 },
+  "assets": [
+    {
+      "key": "avatar",
+      "value": "https://render.example.invalid/ana-forever-avatar.jpg"
+    },
+    {
+      "key": "inset",
+      "value": "https://render.example.invalid/ana-forever-inset.jpg"
+    },
+    {
+      "key": "main-raw",
+      "value": "https://render.example.invalid/ana-forever-main-raw.png"
+    }
+  ]
+}

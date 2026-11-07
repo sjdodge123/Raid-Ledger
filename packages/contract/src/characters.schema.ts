@@ -402,7 +402,8 @@ export type WowRealmListResponseDto = z.infer<typeof WowRealmListResponseSchema>
 
 export const BlizzardCharacterPreviewSchema = z.object({
     name: z.string(),
-    realm: z.string(),
+    /** Null for a realmless WoW: Forever character (ROK-2102). */
+    realm: z.string().nullable(),
     class: z.string(),
     spec: z.string().nullable(),
     role: z.enum(['tank', 'healer', 'dps']).nullable(),

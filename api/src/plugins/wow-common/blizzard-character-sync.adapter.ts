@@ -67,7 +67,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
 
   async fetchProfile(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string,
   ): Promise<ExternalCharacterProfile> {
@@ -81,7 +81,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
 
   async fetchSpecialization(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     characterClass: string,
     gameVariant?: string,
@@ -97,7 +97,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
 
   async fetchEquipment(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string,
   ): Promise<ExternalCharacterEquipment> {
@@ -123,7 +123,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
    */
   async fetchProfessions(
     name: string,
-    realm: string,
+    realm: string | null,
     region: string,
     gameVariant?: string | null,
   ): Promise<ExternalCharacterProfessions | null> {
