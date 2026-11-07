@@ -41,6 +41,25 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 0 4 * * 0',
         handler: () => this.handleBossDataRefresh(),
       },
+      ...this.foreverProbeJobs(),
+      {
+        name: 'wowhead-item-retry',
+        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
+        cronExpression: '0 15 5 * * *',
+        handler: () => this.itemMeta.retryDue().then(() => undefined),
+      },
+      {
+        name: 'forever-guild-roster-sync',
+        // Every 6h at :20 — Forever guild rosters from Blizzard (ROK-1928 C)
+        cronExpression: '0 20 */6 * * *',
+        handler: () => this.rosterSync.run().then(() => undefined),
+      },
+    ];
+  }
+
+  /** The daily + launch-window Forever namespace probe jobs (ROK-1716 D7). */
+  private foreverProbeJobs(): CronJobDefinition[] {
+    return [
       {
         name: 'forever-namespace-probe',
         // Daily at 5:00 AM (ROK-1716 D7)
@@ -53,18 +72,6 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 30 * * * *',
         handler: async () =>
           throwOnProbeError(await this.foreverProbe.runIfInLaunchWindow()),
-      },
-      {
-        name: 'wowhead-item-retry',
-        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
-        cronExpression: '0 15 5 * * *',
-        handler: () => this.itemMeta.retryDue().then(() => undefined),
-      },
-      {
-        name: 'forever-guild-roster-sync',
-        // Every 6h at :20 — Forever guild rosters from Blizzard (ROK-1928 C)
-        cronExpression: '0 20 */6 * * *',
-        handler: () => this.rosterSync.run().then(() => undefined),
       },
     ];
   }

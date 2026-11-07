@@ -147,7 +147,8 @@ export class BlizzardRosterSyncJob {
     if (res.status === 'disabled') {
       throw new ForbiddenException(FOREVER_ARMORY_OFF_MESSAGE);
     }
-    if (res.status === 'skipped') throw new NotFoundException('Guild not found');
+    if (res.status === 'skipped')
+      throw new NotFoundException('Guild not found');
     const after = await this.readGuild(guildId);
     return {
       status: res.status,

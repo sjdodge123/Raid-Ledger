@@ -2,8 +2,7 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
-import { BlizzardRosterSyncService } from './guilds/blizzard-roster-sync.service';
-import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
+import * as rosterSync from './guilds/blizzard-roster-sync.registration';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
@@ -92,6 +91,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     GuildsController,
     GuildContentController,
     GuildBlizzardRosterController,
+    ...rosterSync.CONTROLLERS,
   ],
   providers: [
     BlizzardService,
@@ -127,8 +127,7 @@ import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
     GuildRaidsService,
     GuildAddonsService,
     GuildBlizzardRosterService,
-    BlizzardRosterSyncService,
-    BlizzardRosterSyncJob,
+    ...rosterSync.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1910: roster fact sources + resolver (H5 roster-insights injects it).
     RosterFactSource,
