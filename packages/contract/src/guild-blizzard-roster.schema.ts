@@ -40,3 +40,14 @@ export const GuildBlizzardRosterUpdateSchema = z
 export type GuildBlizzardRosterUpdate = z.infer<
   typeof GuildBlizzardRosterUpdateSchema
 >;
+
+/**
+ * `GET /plugins/wow/guilds/:id/blizzard-roster` — the stored slug + last sync
+ * outcome, plus `suggestedSlug` derived from the guild name (FLAG A-1 prefill).
+ */
+export const GuildBlizzardRosterViewSchema = GuildBlizzardRosterSchema.extend({
+  suggestedSlug: z.string(),
+}).strict();
+export type GuildBlizzardRosterView = z.infer<
+  typeof GuildBlizzardRosterViewSchema
+>;

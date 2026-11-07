@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   GuildBlizzardRosterUpdateSchema,
+  type GuildBlizzardRosterView,
   type GuildSummary,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -23,7 +24,11 @@ import {
   FOREVER_ARMORY_OFF_MESSAGE,
   isForeverArmoryImportEnabled,
 } from '../forever-armory-switch';
-import { blizzardRosterFor, isForeverGuildHub } from './guild-slug.helpers';
+import {
+  blizzardRosterFor,
+  isForeverGuildHub,
+  slugifyGuildName,
+} from './guild-slug.helpers';
 
 /**
  * ROK-1928 A2 — sets (or clears) the Blizzard guild slug a WoW: Forever
@@ -55,6 +60,21 @@ export class GuildBlizzardRosterService {
     }
     const guild = await this.write(hub.guild, parsed.data.guildSlug);
     return this.summary({ guild, gameSlug: hub.gameSlug });
+  }
+
+  /**
+   * The stored slug + last sync outcome and a slug suggested from the guild
+   * name (the settings input's prefill). Any hub-visible member may read it.
+   * @throws NotFoundException not a Forever `wow_guild` hub
+   */
+  async getRoster(guildId: number): Promise<GuildBlizzardRosterView> {
+    const { guild } = await this.findForeverHub(guildId);
+    return {
+      guildSlug: guild.guildSlug,
+      status: guild.blizzardRosterStatus,
+      syncedAt: guild.blizzardRosterSyncedAt?.toISOString() ?? null,
+      suggestedSlug: slugifyGuildName(guild.name),
+    };
   }
 
   private async findForeverHub(guildId: number): Promise<HubGuildRow> {

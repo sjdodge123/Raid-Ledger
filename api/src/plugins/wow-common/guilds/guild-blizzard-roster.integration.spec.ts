@@ -166,3 +166,30 @@ describe('PATCH /plugins/wow/guilds/:id/blizzard-roster (ROK-1928)', () => {
     }
   });
 });
+
+const get = (id: number, token: string) =>
+  testApp.request.get(url(id)).set('Authorization', `Bearer ${token}`);
+
+describe('GET /plugins/wow/guilds/:id/blizzard-roster (ROK-1928)', () => {
+  it('a non-editor member reads the slug, status and suggested slug', async () => {
+    await patch(foreverGuildId, adminToken, { guildSlug: 'ye-olde-guild' });
+    const res = await get(foreverGuildId, plainToken);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      guildSlug: 'ye-olde-guild',
+      status: null,
+      syncedAt: null,
+      suggestedSlug: 'ye-olde-guild',
+    });
+  });
+
+  it('a non-Forever guild is 404', async () => {
+    const res = await get(otherGuildId, plainToken);
+    expect(res.status).toBe(404);
+  });
+
+  it('no token is 401', async () => {
+    const res = await testApp.request.get(url(foreverGuildId));
+    expect(res.status).toBe(401);
+  });
+});
